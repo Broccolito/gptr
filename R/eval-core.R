@@ -196,7 +196,8 @@ eval_run = function(st) {
 #' Harness options, the anonymous-file sink and plot capture (undone by eval_restore()); the
 #' message sink in use is noted, so one the code leaves open is undone. Teed output is split to the
 #' console as R prints it, except in the console margin, where eval_echo() shows it (D-245); the
-#' evaluation's frame (`st$frame`) is where that display looks for the writer below it
+#' evaluation's frame (`st$frame`) is where that display looks for the writer below it. During a T
+#' console's call isig is on while the code runs, so Ctrl-C interrupts it (tty_isig_on())
 #' @noRd
 eval_open = function(st) {
   force(st)
@@ -221,6 +222,7 @@ eval_open = function(st) {
   st$ps = plot_begin(st$plots, st$human)
   st$hook = eval_plot_hook(st)
   for (h in eval_hook_names) setHook(h, st$hook, "append")
+  st$tty = tty_isig_on()
   invisible(st)
 }
 
@@ -642,6 +644,8 @@ eval_finish = function(st) {
 eval_restore = function(st) {
   if (isTRUE(st$restored)) return(invisible())
   st$restored = TRUE
+  tty_isig_off(st$tty)
+  st$tty = NULL
   setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
   if (!is.null(st$hook)) {
     for (h in eval_hook_names) {

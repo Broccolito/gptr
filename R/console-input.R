@@ -92,20 +92,25 @@ console_trigger = function(line) {
 #' `rd` (`rd$compose`, console_compose()) for session `s`: a message is queued as its kind says
 #' (policy_enqueue(): a steer for the next step boundary, a follow-up in `rd$typed` for the next
 #' prompt) and Up takes back the newest one (console_newest()); the live row is drawn again where
-#' it shows. Tab completes nothing yet
+#' it shows. Tab completes nothing yet. Ctrl-C, a key in character mode (tty_call()), interrupts
+#' as SIGINT would, after the keys before it; the keys after it in the batch are dropped
 #' @noRd
 console_keys = function(rd, s, chars) {
-  if (!nzchar(chars)) return(invisible(NULL))
-  res = console_compose(rd$compose, chars, reactor_now(), setting_get("type_ahead", s),
-                        function(line, end) character())
-  rd$compose = res$state
-  act = res$action
-  if (identical(act$type, "send")) {
-    policy_enqueue(s, act$text, act$kind, source = "repl")
-  } else if (identical(act$type, "take_back")) {
-    rd$compose$draft = console_newest(s, rd, take = TRUE)$text %||% ""
+  ctrl_c = regexpr("\003", chars, fixed = TRUE)
+  if (ctrl_c > 0L) chars = substr(chars, 1L, ctrl_c - 1L)
+  if (nzchar(chars)) {
+    res = console_compose(rd$compose, chars, reactor_now(), setting_get("type_ahead", s),
+                          function(line, end) character())
+    rd$compose = res$state
+    act = res$action
+    if (identical(act$type, "send")) {
+      policy_enqueue(s, act$text, act$kind, source = "repl")
+    } else if (identical(act$type, "take_back")) {
+      rd$compose$draft = console_newest(s, rd, take = TRUE)$text %||% ""
+    }
+    if (isTRUE(the$live_row$shown)) the$live_row$draw()
   }
-  if (isTRUE(the$live_row$shown)) the$live_row$draw()
+  if (ctrl_c > 0L) rlang::interrupt()
   invisible(NULL)
 }
 
@@ -133,14 +138,19 @@ console_idle = function(rd, prompt) {
                          "\033[K", if (nzchar(sym$band)) "\033[0m"))
       keys = console_typed_chars(rd, -1L)
       if (!nzchar(keys)) break
-      if (identical(keys, "\t") && is.null(console_trigger(draft))) next
-      res = console_compose(rd$compose, keys, reactor_now(), "steer",
-                            function(line, end) character())
-      rd$compose = res$state
-      if (identical(res$action$type, "send")) {
-        line = res$action$text
-        break
+      # Ctrl-C is a key in character mode: the keys before it count
+      ctrl_c = regexpr("\003", keys, fixed = TRUE)
+      if (ctrl_c > 0L) keys = substr(keys, 1L, ctrl_c - 1L)
+      if (nzchar(keys) && (!identical(keys, "\t") || !is.null(console_trigger(draft)))) {
+        res = console_compose(rd$compose, keys, reactor_now(), "steer",
+                              function(line, end) character())
+        rd$compose = res$state
+        if (identical(res$action$type, "send")) {
+          line = res$action$text
+          break
+        }
       }
+      if (ctrl_c > 0L) break
     }
   }, interrupt = function(e) NULL)
   console_cat("\r\033[K")

@@ -66,7 +66,7 @@ keys_once = function(batches, when) {
   }
 }
 
-char_mode = c("-icanon", "-echo", "-iexten", "min", "1", "time", "0")
+char_mode = c("-icanon", "-echo", "-iexten", "-isig", "min", "1", "time", "0")
 
 last_message = function(req) req$messages[[length(req$messages)]]
 
@@ -579,7 +579,8 @@ test_that("a T console's call reads keys in character mode; its modes return aft
   tty = local_keys(function() "")
   err = utils::capture.output(invisible(typing_console(fake, c("go", "fail", "/exit"))),
                              type = "message")
-  # isig and opost stay on; `min 1` keeps a tool that reads stdin blocking
+  # Ctrl-C is a key the composer reads; opost stays on; `min 1` keeps a tool that reads stdin
+  # blocking
   expect_identical(during[[1L]], list(log = c("-g", char_mode), saved = "SAVED"))
   expect_identical(during[[2L]]$log, c("-g", char_mode, "SAVED", "-g", char_mode))
   expect_true(any(startsWith(err, "Error: ")))
@@ -689,6 +690,40 @@ test_that("Tab sends a follow-up, the next prompt; Up takes it back and Ctrl-U d
   expect_identical(last_user, c("go", "then plot"))
   expect_true("peter[auto]> then plot" %in% res$out)
   expect_false("peter[auto]> oops" %in% res$out)
+})
+
+test_that("Ctrl-C is a key the composer reads: it pauses after the keys before it (review)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$reader = console_reader()
+  rs$sending = quote(peter())
+  .gptr_repl = rs
+  # a calling handler resumes, as the pause menu's [c] does; the keys after Ctrl-C are dropped
+  paused = function(chars) {
+    seen = NULL
+    resume = function(e) {
+      seen <<- rs$reader$compose$draft
+      invokeRestart("resume")
+    }
+    utils::capture.output(withCallingHandlers(console_keys(rs$reader, s, chars),
+                                              interrupt = resume))
+    seen
+  }
+  expect_identical(paused("use base\003x"), "use base")
+  expect_identical(rs$reader$compose$draft, "use base")
+  # a message sent before Ctrl-C in the same batch is queued first
+  expect_identical(paused(" R\r\003"), "")
+  expect_identical(session_data(s)$queue$steer[[1L]]$text, "use base R")
+})
+
+test_that("in-process R code runs with isig on, so Ctrl-C interrupts it (review)", {
+  skip_on_cran()
+  local_console_test()
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "zz = 1")), "done"))
+  tty = local_keys(function() "")
+  typing_console(fake, c("go", "/exit"))
+  expect_identical(tty$log, c("-g", char_mode, "isig", "-isig", "SAVED"))
 })
 
 test_that("Up takes back the newest message the person queued, of either kind (D-242)", {

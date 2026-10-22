@@ -891,7 +891,12 @@ Commit: `feat(console): one live row at the bottom for status, queue and input`.
 Decisions:
 - Terminal modes:
   - In T, `console_send()` sets `stty -icanon -echo -iexten min 1 time 0`:
-    - isig stays on, for Ctrl-C;
+    - isig stays on, for Ctrl-C (amended in the review of Tasks 16-21: `-isig` too, and Ctrl-C is a
+      key the composer reads, after the keys before it in the batch, which interrupts as SIGINT
+      would (`rlang::interrupt()`, so the pause menu resumes); the idle editor keeps the draft on
+      it. Under load a SIGINT was lost in 6 of 19 runs at load average 40-57, during a streamed
+      answer and at the idle editor. isig is on while in-process R code runs (`eval_open()`,
+      `tty_isig_on()`), so Ctrl-C interrupts the code; questions read with the saved modes;
     - opost stays on;
     - `min 1` means a tool reading stdin blocks and does not see EOF.
   - D keeps `-echo`.
@@ -1310,9 +1315,10 @@ Decisions:
   - S8, degradations: NO_COLOR=1, TERM=dumb, LANG=C, 50 columns, an Rscript pipe.
   - S10, Ctrl-C under load (amended in the visual review: at load average about 300, 5 of 22 runs of
     0ee69a0 lost a Ctrl-C typed while an answer streamed; none at normal load): the visual scenario's
-    run C 30 times beside 2 x nproc busy processes; `Paused` appears within 1 s of every ^C. Fix only
-    once this fails, with Task 18's fallback: `-isig` in character mode while no tool runs, the reactor
-    opening the menu on byte 0x03, isig back on around tools.
+    run C 30 times beside 2 x nproc busy processes; `Paused` appears within 1 s of every ^C, and `kept
+    in history` within 1 s of a ^C at the idle editor. (Amended in the review of Tasks 16-21: it failed,
+    6 of 19 runs at load average 40-57, so Task 18's fallback is in: `-isig` in character mode, the
+    composer reading byte 0x03, isig back on while in-process R code runs; S10 checks it.)
   - S9, the maintainer's manual checks:
     - RStudio console: the popup appears only on triggers; editor completion works while peter
       waits; a stale line is routed at a question; there is no band.

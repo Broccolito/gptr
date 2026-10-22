@@ -3344,6 +3344,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     gave the whole transcript the input's colour there (blue since Task 17), and R.app's `\r` erases a line printed
     just before it. Contract-visible: 04 §15.10 IC-82, 03 §6.17. Tests: test-console-wait.R "R.app draws no live
     row: a carriage return there restyles what follows (review)".
+  - In a T console Ctrl-C is a key the composer reads (`tty_call()` adds `-isig`): `console_keys()` interrupts
+    after the keys before it (`rlang::interrupt()`, so the pause menu resumes as from SIGINT) and the idle editor
+    keeps the draft. A SIGINT was lost under load (6 of 19 runs at load average 40-57, during a streamed answer
+    and at the idle editor; the plan had deferred the fallback to Task 28 until it failed). isig is on while
+    in-process R code runs (`tty_isig_on()` in `eval_open()`), so Ctrl-C interrupts the code; questions read with
+    the saved modes. Contract-visible: 04 §7.1. Tests: test-console-typing.R "Ctrl-C is a key the composer reads:
+    it pauses after the keys before it (review)", "in-process R code runs with isig on, so Ctrl-C interrupts it
+    (review)"; test-console-input.R "an emptied draft hands over to readline at the same prompt; Ctrl-C keeps it
+    first"; the pty cases G and I.
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

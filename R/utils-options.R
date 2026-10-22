@@ -104,10 +104,11 @@ tty_modes = function(modes = "-g") {
 }
 
 #' Set the terminal modes of a console call (IC-76, D-243), the saved ones (`stty -g`) kept: a T
-#' console's composer reads keys as typed, `-icanon -echo -iexten min 1 time 0` (isig and opost stay
-#' on, and `min 1` keeps a tool that reads stdin waiting, never at an end of input); a D console
-#' only turns the echo off (`keys` FALSE). `the$tty` holds `saved`, `set` and `keys` until
-#' tty_restore(), which also runs at q() (a finalizer, onexit); nothing is set when stty fails
+#' console's composer reads keys as typed, `-icanon -echo -iexten -isig min 1 time 0` (Ctrl-C is a
+#' key it reads, as a signal could be lost under load; opost stays on, and `min 1` keeps a tool
+#' that reads stdin waiting, never at an end of input); a D console only turns the echo off (`keys`
+#' FALSE). `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which also runs at q() (a
+#' finalizer, onexit); nothing is set when stty fails
 #' @noRd
 tty_call = function(keys) {
   saved = tty_modes()
@@ -115,7 +116,11 @@ tty_call = function(keys) {
   tty = new.env(parent = emptyenv())
   tty$saved = saved
   tty$keys = keys
-  tty$set = if (keys) c("-icanon", "-echo", "-iexten", "min", "1", "time", "0") else "-echo"
+  tty$set = if (keys) {
+    c("-icanon", "-echo", "-iexten", "-isig", "min", "1", "time", "0")
+  } else {
+    "-echo"
+  }
   reg.finalizer(tty, tty_restore, onexit = TRUE)
   the$tty = tty
   tty_modes(tty$set)
@@ -130,6 +135,27 @@ tty_restore = function(tty = the$tty) {
   if (is.null(saved)) return(invisible(NULL))
   tty$saved = NULL
   tty_modes(saved)
+  invisible(NULL)
+}
+
+#' Turn isig on while R code is evaluated during a T console's call, so Ctrl-C interrupts the code
+#' (the composer reads Ctrl-C as a key otherwise, D-243): the call's `tty` to hand back to
+#' tty_isig_off(), or NULL where isig was on
+#' @noRd
+tty_isig_on = function() {
+  tty = the$tty
+  if (!"-isig" %in% tty$set) return(NULL)
+  tty$set = tty$set[tty$set != "-isig"]
+  tty_modes("isig")
+  tty
+}
+
+#' Turn isig off again after tty_isig_on() (`tty` NULL: nothing to do)
+#' @noRd
+tty_isig_off = function(tty) {
+  if (is.null(tty)) return(invisible(NULL))
+  tty$set = c(tty$set, "-isig")
+  if (!is.null(tty$saved)) tty_modes("-isig")
   invisible(NULL)
 }
 

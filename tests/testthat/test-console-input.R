@@ -372,7 +372,7 @@ idle_read = function(draft, keys, answers = character()) {
        draft = rd$compose$draft)
 }
 
-keys_mode = "-icanon -echo -iexten min 1 time 0"
+keys_mode = "-icanon -echo -iexten -isig min 1 time 0"
 
 ctrl_c = function() {
   signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
@@ -420,4 +420,8 @@ test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C ke
   expect_identical(r$kept, "and plot")
   expect_null(r$draft)
   expect_identical(r$stty, c("-g", keys_mode, "SAVED"))
+  # in character mode Ctrl-C is a key read like any other; the keys before it count (review)
+  r = idle_read("and plot", list(" it\003x"), "next")
+  expect_identical(r$rows, c(kept_line("and plot it"), ""))
+  expect_identical(r$kept, "and plot it")
 })
