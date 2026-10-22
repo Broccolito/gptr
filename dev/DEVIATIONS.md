@@ -3405,11 +3405,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     identical transcripts. The held row now continues after the menu, which goes between whole rows; an abort, and
     the menu's [b], still end the stream. Contract-visible: 04 §15.10 IC-82. Tests: test-console-interrupt.R "the
     pause menu leaves the answer's held row to continue after it (visual review)".
-  - A cut answer ends at its last whole word, marked: an abort (`console_render_pause()`), the pause menu's [b] and a
-    run that ends other than idle finish the stream with `cut`, which drops the word still held and ends the row
-    with a dim `…`. An abort had flushed the held row as it was, `...cars are also the heaviest, so par`, which
-    read as a garbled answer. Contract-visible: 04 §7.14 (`render_markdown_stream()`'s row). Tests:
-    test-console-render.R "a cut answer ends at its last whole word, the cut marked (visual review)", "a prompt or
+  - A cut answer is marked: an answer that ends aborted, failed or truncated (its `stop_reason`, at `message_end`,
+    where `run_abort()` ends it), the pause menu's [b], `console_render_pause()` and a run that ends other than idle
+    finish the stream with `cut`, which writes all it received and ends the row with a dim `…`. An abort had
+    flushed the held row as it was, `...cars are also the heaviest, so par`, which read as a garbled answer. (The
+    first version dropped the word still held, to end at a whole word; that hid received text, the redactor's
+    tail after an abort among it, and missed RStudio's abort, which `message_end` ends first.) Contract-visible: 04 §7.14 (`render_markdown_stream()`'s row). Tests:
+    test-console-render.R "a cut answer keeps what it received, the cut marked (visual review)", "a prompt or
     pause in a tool's evaluation ends partial lines on the console (D-188)"; test-console-abort-stream.R "abort
     labels a redactor tail received after a pause without printing it twice".
   - What R code prints in the console margin (the `r` tool, `!code`) is shown as result rows: at column 4, escaped,

@@ -117,8 +117,8 @@ console_notice = function(..., .error = FALSE) {
 #' Chunk-invariant markdown stream renderer (contract 7.14)
 #'
 #' Returns an environment with `write(delta)` and `finish(cut = FALSE)`, writing to stdout; a cut
-#' (an abort, an unusual end) drops the word still held and marks the held row with a dim ellipsis,
-#' so it ends at its last whole word.
+#' (an abort, an unusual end) writes all it received and ends a non-empty held row with a dim
+#' ellipsis.
 #' Styling (bold, italic within one token, inline code in the blue accent, link URLs, quotes,
 #' rules and fence lines in the grey, headings, bullets, highlighted fenced code) is used when
 #' `cli::num_ansi_colors() > 1` at creation. The Markdown is read in the console margin at every
@@ -443,9 +443,8 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   }
   r$finish = function(cut = FALSE) {
     refresh_width()
-    if (cut && !st$fence && !length(st$table)) st$buf = ""
     ingest("", final = TRUE)
-    if (cut && !st$line_start) emit(sym$dim(sym$ellipsis))
+    if (cut && !st$line_start && !st$fence) emit(sym$dim(sym$ellipsis))
     end_block()
     flush(stdout())
     utils::flush.console()
@@ -1095,8 +1094,8 @@ console_result_block = function(rec, call, result) {
   invisible(NULL)
 }
 
-#' message_end: close the streamed answer, or print it whole when nothing was streamed; for a
-#' tool result, its result lines
+#' message_end: close the streamed answer, cut (finish(cut = TRUE)) when it was aborted, failed or
+#' truncated, or print it whole when nothing was streamed; for a tool result, its result lines
 #' @noRd
 console_on_message_end = function(event, ctx) {
   rec = console_record(event)
@@ -1110,7 +1109,7 @@ console_on_message_end = function(event, ctx) {
     if (is.null(rec$md)) {
       console_print_text(console_msg_text(msg), console_stream_output(rec))
     } else {
-      rec$md$finish()
+      rec$md$finish(cut = isTRUE(msg$stop_reason %in% c("aborted", "error", "length")))
     }
     rec$think = NULL
     rec$md = NULL

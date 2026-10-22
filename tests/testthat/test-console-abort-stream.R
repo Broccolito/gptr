@@ -31,10 +31,11 @@ test_that("abort labels a redactor tail received after a pause without printing 
     run_abort(run, "user")
     run_abort(run, "user")
   })
-  # the abort's pause marks the cut; the redactor's tail follows under its label
-  expect_identical(utils::head(out, 3L), c("Hello...", "[gptr] final received text:", "world"))
+  # the pause marks the cut; the redactor's tail follows under its label, the aborted answer's end
+  # marked too
+  expect_identical(utils::head(out, 3L), c("Hello...", "[gptr] final received text:", "world..."))
   expect_identical(sum(out == "[gptr] final received text:"), 1L)
-  expect_identical(sum(out == "world"), 1L)
+  expect_identical(sum(out == "world..."), 1L)
   expect_identical(msg_text(utils::tail(run$shell$messages, 1L)[[1L]]), "Hello world")
   expect_null(console_record(list(run = run$id)))
 })

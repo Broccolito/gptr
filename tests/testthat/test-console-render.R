@@ -1095,7 +1095,7 @@ test_that("verbosity 1 reports tool calls and the end as progress messages", {
     "gptr: done - 0 requests", fixed = TRUE)
 })
 
-test_that("a cut answer ends at its last whole word, the cut marked (visual review)", {
+test_that("a cut answer keeps what it received, the cut marked (visual review)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   cut = function(text, cut = TRUE) {
     utils::capture.output({
@@ -1105,7 +1105,7 @@ test_that("a cut answer ends at its last whole word, the cut marked (visual revi
     })
   }
   expect_identical(cut("Heavy cars are also the heaviest, so par"),
-                   "Heavy cars are also the heaviest, so...")
+                   "Heavy cars are also the heaviest, so par...")
   expect_identical(cut("Heavy cars, so par", cut = FALSE), "Heavy cars, so par")
   expect_identical(cut("Heavy cars.\n"), "Heavy cars.")
   # an aborted run's answer ends so, an idle one whole
@@ -1118,7 +1118,21 @@ test_that("a cut answer ends at its last whole word, the cut marked (visual revi
                                      delta = "Heavy cars, so par"),
                           hook_event("agent_end", s, status = status, usage = NULL)))[[1L]]
   }
-  expect_identical(c(ended("aborted"), ended("idle")), c("Heavy cars, so...", "Heavy cars, so par"))
+  expect_identical(c(ended("aborted"), ended("idle")),
+                   c("Heavy cars, so par...", "Heavy cars, so par"))
+  # run_abort() ends the partial answer with stop_reason "aborted" before agent_end (visual review:
+  # RStudio's abort showed `already` unmarked); a truncated or failed answer is cut too
+  stopped = function(reason) {
+    msg = assistant_msg("Heavy cars, so par")
+    msg$stop_reason = reason
+    render_events(s, list(hook_event("agent_start", s),
+                          hook_event("message_update", s, index = 1L, kind = "text",
+                                     delta = "Heavy cars, so par"),
+                          hook_event("message_end", s, role = "assistant", message = msg)))[[1L]]
+  }
+  expect_identical(vapply(c("aborted", "error", "length", "stop"), stopped, ""),
+                   c(aborted = "Heavy cars, so par...", error = "Heavy cars, so par...",
+                     length = "Heavy cars, so par...", stop = "Heavy cars, so par"))
 })
 
 test_that("the status line names an unusual end and sums the usage rows", {
@@ -1277,8 +1291,8 @@ test_that("a prompt or pause in a tool's evaluation ends partial lines on the co
     res = eval_r("tool(pause)", home, plots = "none", tee = FALSE)
   }), collapse = "\n")
   expect_match(bytes, "thinking", fixed = TRUE)
-  # the abort's pause ends the held row at its last whole word, the cut marked
-  expect_match(bytes, "\r +\rFanning out\\.\\.\\.$")
+  # the abort's pause ends the held row, the cut marked
+  expect_match(bytes, "\r +\rFanning out HELDWORD\\.\\.\\.$")
   expect_null(rec$spinner)
   expect_false(grepl("\r|HELDWORD", text(res)))
 })
