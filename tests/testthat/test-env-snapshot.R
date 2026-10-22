@@ -167,6 +167,12 @@ test_that("env_snap_size() counts each part and each string once (D-247)", {
   expect_identical(env_snap_size(NULL), 0)
 })
 
+test_that("a classed vector counts its stored length, not what its length() method reports", {
+  registerS3method("length", "p09_badlen", function(x) 1L, envir = environment(env_snap_size))
+  x = structure(numeric(1e5), class = "p09_badlen")
+  expect_equal(env_snap_size(x), 800048 + 56 + env_snap_size("p09_badlen"))
+})
+
 test_that("env_snap_size() counts what environments and closures hold, not code or homes (D-247)", {
   e = new.env()
   e$v = numeric(1e5)

@@ -128,7 +128,7 @@ env_size_walk = function(x, st) {
     logical = , integer = , double = , complex = , raw = if (env_compact_seq(x)) {
       length(serialize_leaf(x))
     } else {
-      env_size_vec(length(x), switch(t, raw = 1, logical = , integer = 4, double = 8, 16))
+      env_size_code(x, an)
     },
     character = {  # the pointers; the distinct strings go to the store, counted once at the end
       st$nstr = st$nstr + 1L
@@ -231,9 +231,9 @@ env_size_env = function(e, st) {
   b + env_size_walk(parent.env(e), st)
 }
 
-#' Bytes of code and other parts (calls, formulas, pairlists, external pointers): object.size()
-#' without its attributes, which the walk adds (object.size() counts 112 bytes per attribute
-#' besides the value)
+#' Bytes of vectors, code and other parts (calls, formulas, pairlists, external pointers):
+#' object.size(), which reads a vector's stored length (length() dispatches), without the
+#' attributes, which the walk adds (object.size() counts 112 bytes per attribute besides the value)
 #' @noRd
 env_size_code = function(x, an) {
   b = as.numeric(utils::object.size(x))
