@@ -460,6 +460,10 @@ Decisions:
   margin) and holds the partial row. This is Codex's newline-gated `markdown_stream`.
 - The `\r` redraw of fenced lines goes away.
 - One mode everywhere, so no half line ever sits where the live row is drawn.
+- Other output (a queue line, a notice, a question) goes between whole rows, and the held row continues after
+  it: a typed line clears only the waiting row, keeping its clock, and pauses nothing. `reset_line()` is
+  deleted (amended in the review of Tasks 8-15: a queued steer had ended the held row as a short row and
+  restarted the waiting row at 0 s inside the answer).
 
 Tests (`test-console-render.R`), RED first:
 - Nothing is written for a row before it is complete. Today partial rows are written, and in the

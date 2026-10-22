@@ -170,12 +170,13 @@ test_that("blank lines collapse and nested lists keep their indentation (D-186)"
                      "     \u25e6 y", "", "  end"))
 })
 
-test_that("a row ended by other output is written then and continues at the margin, nesting kept", {
+test_that("other output goes between whole rows; the held row continues, nesting kept (D-245)", {
   withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE, gptr.verbose = 2L)
-  reset = function(r) r$reset_line()
-  expect_identical(render_writes(list("keeps streaming ", reset, "slowly on.\n- a\n  ", reset,
+  note = function(r) console_cat("(note)\n")
+  expect_identical(render_writes(list("keeps streaming ", note, "slowly on.\n- a\n  ", note,
                                       "- b")),
-                   c("", "  keeps streaming\n", "  slowly on.\n  - a\n", "", "", "    - b\n"))
+                   c("", "(note)\n", "  keeps streaming slowly on.\n  - a\n", "(note)\n", "",
+                     "    - b\n"))
 })
 
 test_that("pipe tables are aligned on an interactive console and stay valid Markdown (D-186)", {
@@ -301,7 +302,6 @@ test_that("a fenced line broken by other output is written once, after it (D-245
   out = utils::capture.output({
     r = render_markdown_stream(60L)
     r$write("```python\nif x:\n    y = foo(")
-    r$reset_line()
     cat("  (a notice)\n")
     r$write("bar)\n```\n")
     r$finish()
@@ -381,19 +381,6 @@ test_that("ordinary notices use stdout and actual errors use stderr", {
   })
   expect_identical(out, character())
   expect_identical(err, "Error: failure")
-})
-
-test_that("reset_line() ends a partial line and finish() closes it", {
-  withr::local_options(cli.num_colors = 1L)
-  out = utils::capture.output({
-    r = render_markdown_stream(80L)
-    r$write("partial answer ")
-    r$write("continues")
-    r$reset_line()
-    r$write(" next line")
-    r$finish()
-  })
-  expect_identical(out, c("partial answer", "continues next line"))
 })
 
 test_that("console_print_text() prints a whole reply and skips empty text", {
@@ -1125,7 +1112,7 @@ test_that("the spinner runs as a reactor task until the first rendered row (D-24
   console_drop("u0000test")
 })
 
-test_that("the console UI ends a partial answer line before it prompts (D-186)", {
+test_that("the console UI prompts between whole rows; the held row waits (D-186, D-245)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
@@ -1139,7 +1126,7 @@ test_that("the console UI ends a partial answer line before it prompts (D-186)",
                                          delta = "partial "), ctx)
     ans = ui_console_permission(req, read = function(...) "y")
   })
-  expect_identical(out, c("partial", "  | r  x = 1", "  ? Allow r?  y yes - n no - ? more"))
+  expect_identical(out, c("  | r  x = 1", "  ? Allow r?  y yes - n no - ? more"))
   expect_identical(ans$decision, "allow")
   expect_false("permission_request" %in% vapply(console_hooks(), function(h) h$event, ""))
 })
@@ -1170,9 +1157,8 @@ test_that("a prompt or pause in a tool's evaluation ends partial lines on the co
                                          delta = "Fanning out HELDWORD"), ctx)
     res = eval_r("ans = tool(ask)", home, plots = "none", tee = FALSE)
   })
-  # the held word continues after the prompt (D-186), never in the tool result
-  expect_identical(out, c("Fanning out", "  | r  x = 1",
-                          "  ? sub-agent a: allow r?  y yes - n no - ? more"))
+  # the held row continues after the prompt (D-186, D-245), never in the tool result
+  expect_identical(out, c("  | r  x = 1", "  ? sub-agent a: allow r?  y yes - n no - ? more"))
   expect_identical(home$ans$decision, "allow")
   expect_false(grepl("HELDWORD|x = 1", text(res)))
   withr::local_options(cli.dynamic = TRUE)
@@ -1184,7 +1170,7 @@ test_that("a prompt or pause in a tool's evaluation ends partial lines on the co
     res = eval_r("tool(pause)", home, plots = "none", tee = FALSE)
   }), collapse = "\n")
   expect_match(bytes, "thinking", fixed = TRUE)
-  expect_match(bytes, "\r +\rHELDWORD$")
+  expect_match(bytes, "\r +\rFanning out HELDWORD$")
   expect_null(rec$spinner)
   expect_false(grepl("\r|HELDWORD", text(res)))
 })

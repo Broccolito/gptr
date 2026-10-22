@@ -2826,7 +2826,7 @@ res = s1_request(model_resolve("jev"), states, q, list())
 | `builtin_console(gptr)` | `console-repl.R` | registers the `frontend` `console`, the route `console` (order 30), the renderer hooks (process-wide notify hooks on `message_update`, `message_end`, `tool_execution_start`, `tool_execution_end`, `agent_end` that render only for the foreground session when `verbosity() >= 2`, a hook on `artifact_start` printing `artifact  <id>  ->  <url>   (running in background)` (NS-8), a hook on `turn_end`, emitted just before the loop polls steers, that runs `console_typed()` (a terminal REPL reads what was typed and queues it), so a line sent before a step boundary reaches it (D-242), a hook on `queue_update` that prints a user's message the run takes as the person's line `› <text>` at that boundary (D-242), tool `render` functions and `renderer` records, IC-69, IC-71), the service `console.interrupt_policy`, and the command specs of §6.17 of `03` | P02 load |
 | `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s`; first-use setup per §6.1.1 before its banner/input; returns the session invisibly on `/exit`, or `NULL` when setup returns before starting it | P08 (route) |
 | `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu (`[s]teer`, `[f]ollow-up`, `[c]ontinue`, `[a]bort`, `[b]ackground` for foreground calls when P21 is loaded) writes to stderr and resumes through the `resume` restart; a second Ctrl-C aborts; `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Rgui, IDE consoles) | P06, P08 |
-| `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)`, `finish()`, `reset_line()`; chunk-invariant; writes whole rows only, each at its line end or its wrap (`reset_line()` and `finish()` end the held partial row; a fenced line is written once, at its line end) [D-245]; untrusted text never used as a format string | P14 |
+| `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)` and `finish()`; chunk-invariant; writes whole rows only, each at its line end or its wrap (`finish()` ends the held partial row; other output goes between whole rows and the held row continues after it; a fenced line is written once, at its line end) [D-245]; untrusted text never used as a format string | P14 |
 | `builtin_jsonl(gptr)`, `jsonl_sink(session, con)` | `console-jsonl.R` | the `frontend` `jsonl`: subscribes to the session's events and writes one redacted JSON object per line in the §4.5 JSON form (event names verbatim) | P19 (worker children), P24 |
 
 Example calls:
@@ -5440,6 +5440,14 @@ its part in its own commit, and Task 27 finalises them.
     strings, numbers and constants (`TRUE`, `NA`, `NULL`) blue; calls bold; comments dim; operators, brackets and
     symbols in ink. At 256 colours `function` is `38;5;167` and `"s"` `38;5;67`; at 16 colours `31` and `34`. R
     that does not parse and every other language are shown as written, between dim fences.
+  - Whole rows (Task 10; review of Tasks 8-15): nothing of a streamed answer's held row is on screen, so other
+    output goes between whole rows and the held row continues after it. `render_markdown_stream()` has no
+    `reset_line()`. `console_before_message()` (a notice, a launch, a question, a sub-agent line) and the routing
+    of typed lines (`console_typed_route()`, whose queue lines and notices sit between the answer's rows) only
+    clear the foreground records' waiting rows, keeping their clock and task; nothing pauses or resumes the
+    rendering for them. This replaces "ends partial lines" in IC-76 (the notices and their
+    `console_render_pause()`) and IC-77 item 1. The pause menu and an abort still end the stream
+    (`console_render_pause()`).
   - Tool calls (Task 11): `console_tool_kind(name, spec)` gives `"read"` for a tool annotated read-only
     (`annotations$read_only`; a trusted MCP server's `readOnlyHint` arrives as it), `"agent"` for a sub-agent call
     (Codex's collab call, `codex_agent`; gptr's own sub-agents are `peter()` calls in `r`), else `"act"`. The

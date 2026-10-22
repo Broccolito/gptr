@@ -220,8 +220,8 @@ console_queue_line = function(s, text, as) {
 
 #' A line typed before a console question (readline_answer()): routed as a line typed during the
 #' run of this call (console_typed_route(): /command and !code wait for the next prompt, the
-#' others are queued as `type_ahead` says; the question resumes nothing), else added to the
-#' console history; never an answer (IC-75, D-243). Without a REPL reader it is queued.
+#' others are queued as `type_ahead` says), else added to the console history; never an answer
+#' (IC-75, D-243). Without a REPL reader it is queued.
 #' @noRd
 console_typed_ahead = function(text) {
   target = Find(function(t) !is.null(t$session), policy_targets(policy_find()$runs))

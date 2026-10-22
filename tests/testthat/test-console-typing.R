@@ -127,6 +127,31 @@ test_that("the person's line is on the band; a queue line is dim and cut to thre
   expect_true(all(cli::ansi_nchar(c(queued, shown), type = "width") <= 39L))
 })
 
+test_that("a line queued while an answer streams goes between its whole rows (D-245)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.width = 40L, cli.num_colors = 1L)
+  words = paste(sprintf("word%02d", 1:40), collapse = " ")
+  fake = gptr_fake_provider(list(list(text = words, chunk = 8L, gap = 0.02), "second"))
+  looks = 0L
+  local_typed(typed_once("use base R", function() {
+    looks <<- looks + 1L
+    looks >= 4L
+  }))
+  res = typing_console(fake, c("go", "/exit"))
+  whole = utils::capture.output(console_print_text(words))
+  # the screen's rows: what follows the last carriage return of each line
+  rows = sub(".*\r", "", res$out)
+  first = grep("word01", rows, fixed = TRUE)
+  last = grep("word40", rows, fixed = TRUE)
+  q = which(rows == queue_line("steer", "use base R"))
+  expect_true(length(q) == 1L && first < q && q < last)
+  # the paragraph is not cut at the queue line, and no waiting row comes back inside it
+  expect_identical(rows[setdiff(first:last, q)], whole)
+  expect_false(any(grepl("thinking", res$out[(first + 1L):last], fixed = TRUE)))
+})
+
 test_that("on a CLI route the queue line says the steer is sent after the CLI's answer", {
   skip_on_cran()
   local_console_test()
@@ -329,34 +354,6 @@ test_that("/commands and !code typed during a run run after the answer; text sti
   expect_true(any(grepl("[gptr] after this answer: '/status', '!x = 1'", res$out, fixed = TRUE)))
   expect_true(all(c("peter[auto]> /status", "peter[auto]> !x = 1") %in% res$out))
   expect_true(any(startsWith(res$out, "session   ")))
-})
-
-test_that("the held-lines notice ends the streamed line first (render pause)", {
-  skip_on_cran()
-  local_console_test()
-  log = character()
-  pause = console_render_pause
-  resume = console_render_resume
-  notice = console_notice
-  local_mocked_bindings(
-    console_render_pause = function() {
-      log <<- c(log, "pause")
-      pause()
-    },
-    console_render_resume = function(runs) {
-      log <<- c(log, "resume")
-      resume(runs)
-    },
-    console_notice = function(..., .error = FALSE) {
-      log <<- c(log, paste0(...))
-      notice(..., .error = .error)
-    })
-  fake = slow_first()
-  local_typed(typed_once("/status", function() length(fake_requests(fake)) == 1L))
-  typing_console(fake, c("go", "/exit"))
-  i = grep("after this answer", log, fixed = TRUE)
-  expect_length(i, 1L)
-  expect_identical(log[c(i - 1L, i + 1L)], c("pause", "resume"))
 })
 
 test_that("lines typed in one batch (a paste) are one message", {

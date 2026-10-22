@@ -589,7 +589,7 @@ console_typed = function(drain = FALSE) {
     part = lines[[length(lines)]]
     lines = lines[-length(lines)]
   }
-  if (console_typed_route(rd, target$session, lines, part)) console_render_resume(pol$runs)
+  console_typed_route(rd, target$session, lines, part)
   0.1
 }
 
@@ -597,8 +597,8 @@ console_typed = function(drain = FALSE) {
 #' lines that continue a held !code line still incomplete (typed_code_open()), wait in the reader
 #' for the next prompt; the others become one message queued on `s` as the `type_ahead` setting
 #' says (a follow-up waits with the held lines, after those typed before its first line); a
-#' partial line `part` goes to the console history. When there is anything to route the
-#' rendering is paused first (console_render_pause()) and TRUE returned; the caller resumes it
+#' partial line `part` goes to the console history. Their lines go between the answer's whole
+#' rows: only the waiting row is cleared, keeping its clock (D-245)
 #' @noRd
 console_typed_route = function(rd, s, lines, part = "") {
   later = logical(length(lines))
@@ -606,8 +606,8 @@ console_typed_route = function(rd, s, lines, part = "") {
     later[[i]] = grepl("^\\s*[/!]", lines[[i]]) || typed_code_open(c(rd$typed, lines[later]))
   }
   text = paste(lines[!later], collapse = "\n")
-  if (!any(later) && !nzchar(trimws(paste0(text, part)))) return(FALSE)
-  console_render_pause()
+  if (!any(later) && !nzchar(trimws(paste0(text, part)))) return(invisible(NULL))
+  console_before_message(kind = NULL, tools = TRUE)
   if (any(later)) {
     console_notice("[gptr] after this answer: ",
                    paste(console_escape(paste0("'", lines[later], "'"), FALSE), collapse = ", "))
@@ -617,7 +617,6 @@ console_typed_route = function(rd, s, lines, part = "") {
   if (nzchar(trimws(text))) policy_enqueue(s, text, setting_get("type_ahead", s), source = "repl")
   rd$typed = c(rd$typed, lines[later & !before])
   if (nzchar(trimws(part))) console_keep(part)
-  TRUE
 }
 
 #' Text the person typed that gptr will not send: added to the console history in order

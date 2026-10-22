@@ -112,7 +112,7 @@ console_notice = function(..., .error = FALSE) {
 
 #' Chunk-invariant markdown stream renderer (contract 7.14)
 #'
-#' Returns an environment with `write(delta)`, `finish()` and `reset_line()`, writing to stdout.
+#' Returns an environment with `write(delta)` and `finish()`, writing to stdout.
 #' Styling (bold, italic within one token, inline code, dim link URLs, headings, bullets, dim
 #' quotes and rules, highlighted fenced code) is used when `cli::num_ansi_colors() > 1` at
 #' creation; without it the markdown characters are kept. Fenced code stays Markdown: fence lines
@@ -121,7 +121,8 @@ console_notice = function(..., .error = FALSE) {
 #' indentation is kept, pipe tables are aligned, blank lines collapse to one between blocks (none
 #' before or after a reply); elsewhere the plain mode only wraps at `width` display columns. Rows
 #' are written whole, each at its line end or its wrap, so no half row sits where the waiting row
-#' is drawn (D-245). A word is held until the next blank or line end, so the output does not
+#' is drawn and other output goes between whole rows, the held row continuing after it (D-245).
+#' A word is held until the next blank or line end, so the output does not
 #' depend on how the text was chunked at a fixed width. When width is omitted, each write and
 #' final flush sample the current console width; an explicit width stays fixed.
 #' @noRd
@@ -436,10 +437,6 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     utils::flush.console()
     invisible()
   }
-  r$reset_line = function() {
-    end_block()
-    invisible()
-  }
   r
 }
 
@@ -466,8 +463,7 @@ console_print_text = function(text, before_output = NULL) {
 #' bold title's markers, dim and cut with an ellipsis to the width within the margin (D-186,
 #' D-207), printed as a block once its line end comes or it passes the width, or by finish(),
 #' after clearing the waiting row, which keeps its clock; Codex's reasoning items so show as
-#' progress lines (D-192). Nothing is on screen before that, so reset_line() has no partial line
-#' to end.
+#' progress lines (D-192). Nothing is on screen before that.
 #' @noRd
 console_think_line = function(rec, width = cli::console_width()) {
   width = width - nchar(console_pad())
@@ -484,7 +480,6 @@ console_think_line = function(rec, width = cli::console_width()) {
     st$open = FALSE
     invisible(NULL)
   }
-  st$reset_line = function() invisible(NULL)
   st$write = function(delta) {
     if (!st$open) return(invisible(NULL))
     st$text = sub("^[[:space:]]+", "", paste0(st$text, paste(delta, collapse = "")))
@@ -665,15 +660,17 @@ console_spinner_stop = function(rec) {
   invisible(NULL)
 }
 
-#' Other output is about to appear: end the partial lines of the foreground records of `runs`
-#' (every tracked run when NULL) and clear their waiting rows, keeping the pending request's
-#' clock and task so waiting resumes by itself; the output opens a block of `kind` (none when
-#' NULL). TRUE when a foreground record was found
+#' Other output is about to appear: clear the waiting rows of the foreground records of `runs`
+#' (every tracked run when NULL), keeping the pending request's clock and task so waiting
+#' resumes by itself; the output opens a block of `kind` (none when NULL). A streamed answer has
+#' nothing on screen to end: its held row continues after the output (D-245). TRUE when a
+#' foreground record was found
 #'
 #' Called by the outer blocking policy without handling or changing the condition, by a launch
-#' boundary (`kind = NULL`), and with `tools` by the console UI before it prompts and by the
-#' sub-agent lines, which also end the lines of a run whose tool executes (a sub-agent asking
-#' during the parent's `r` code; its writes never enter captured output, D-188). Before a prompt
+#' boundary and a typed line's queue line (`kind = NULL`), and with `tools` by the console UI
+#' before it prompts and by the sub-agent lines, which also clear the row of a run whose tool
+#' executes (a sub-agent asking during the parent's `r` code; its writes never enter captured
+#' output, D-188). Before a prompt
 #' a terminal REPL first drains what was typed for the run (console_typed(drain = TRUE)): the
 #' lines typed for the run (routed as console_typed() routes them) and the partial line the
 #' question would take as its answer (IC-76).
@@ -689,8 +686,6 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
   for (rec in recs) {
     if (is.null(rec) || !console_foreground(rec, tools)) next
     found = TRUE
-    if (!is.null(rec$think)) rec$think$reset_line()
-    if (!is.null(rec$md)) rec$md$reset_line()
     if (!is.null(rec$spinner)) rec$spinner$clear()
     if (!is.null(kind)) console_gap(rec, kind)
   }

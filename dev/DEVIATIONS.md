@@ -3207,3 +3207,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `codex_agent` (plan amended). Contract-visible: 04 §15.10 IC-82, 03 §6.17. Tests: test-console-render.R "tool
   calls are cursor strips tinted by kind (D-245)"; test-console-message-stream.R "an edit's diff is red and blue
   while a failed edit says error: (D-245)".
+- Review fixes of Tasks 8-15 (2026-10-21):
+  - A line typed while an answer streams no longer cuts the answer. Its routing (`console_typed_route()`) paused
+    the rendering, which wrote the held row as a short row, ended the Markdown block and, on resume, started a new
+    waiting row at 0 s inside the answer. Nothing of the held row is on screen since Task 10, so the queue line now
+    goes between whole rows and only the waiting row is cleared (keeping its clock); `reset_line()` is gone, so a
+    notice or a question no longer ends the held row either: it continues after them. Contract-visible: 04 §7.14
+    and §15.10 IC-82, 03 §6.8.3 and §6.17. Tests: test-console-typing.R "a line queued while an answer streams
+    goes between its whole rows (D-245)"; test-console-render.R "other output goes between whole rows; the held
+    row continues, nesting kept (D-245)", "the console UI prompts between whole rows; the held row waits (D-186,
+    D-245)".

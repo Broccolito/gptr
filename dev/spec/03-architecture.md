@@ -1504,7 +1504,7 @@ tree [IC-52]); `n` optionally takes feedback text that becomes the tool result; 
 (`  ? sub-agent alpha: allow r?`; a nested `peter()` by its quoted prompt and number). Choices and inputs (the `ask`
 tool's questions among them) use the same frame: `? <title>` in bold, details dim under it, numbered choices
 (`    1  dplyr`, the number bold), a dim hint (`Choose a number, or type your own answer; Enter = base`; an input's
-`Enter = <default>`), then `› `. Every console prompt first ends partial lines and clears the waiting row, and its
+`Enter = <default>`), then `› `. Every console prompt first clears the waiting row (an answer's held row continues after it, D-245), and its
 lines reach the console, in its colours, even from inside the parent's `r` evaluation (never its tool result). An
 invalid answer is explained (`a` or `p` where nothing can be remembered says why); five (`?` is none) end in a
 refusal whose feedback tells the model that no valid answer was given [IC-77; D-188].
@@ -1979,8 +1979,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   italics within one token (`*x*`; an unmatched `*` prints), dim link URLs, quotes and rules, bold headings (H1 underlined); R
   that parses is highlighted by `cli::code_highlight()` in the user's `cli.code_theme`, else in the style table's
   R theme (reserved words red; strings, numbers and constants blue; calls bold; comments dim) [IC-82, D-245];
-  other R and other languages are shown as written. The console UI itself ends partial lines and
-  clears waiting rows, keeping their task, before it prompts (D-186).
+  other R and other languages are shown as written. The console UI itself clears waiting rows,
+  keeping their task, before it prompts (D-186); a question, a notice or a queue line goes between
+  an answer's whole rows and its held row continues after it, unsplit [D-245].
   Fenced code stays Markdown in every mode: fence lines as written (dim when styled), the body
   verbatim, unwrapped and de-indented by the opener's indentation (CommonMark: a fence indented
   under a list item closes), so a copied block is Markdown whose body runs; a fenced line is
@@ -2000,7 +2001,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   block shows the cut (D-207). Console output draws no box characters (D-187).
   Every renderer write and console control (prompts, notices, the pause menu) goes through
   `gptr_message_write()`: inside an `r` evaluation it reaches the console, never the tool result,
-  whatever `tee` is; prompts and sub-agent lines first end partial lines, also while a tool
+  whatever `tee` is; prompts and sub-agent lines first clear the waiting row, also while a tool
   executes (conditions raised inside a tool leave the waiting row alone). Children never render;
   a foreground root shows one line per sub-agent start and end at verbosity 1+ unless quiet
   (`  ▌ sub-agent a (kid/kid-1) started`, `  ▌ sub-agent a done (1/2) · 2 turns · 12 s` or
