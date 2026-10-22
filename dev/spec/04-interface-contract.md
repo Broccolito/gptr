@@ -5653,7 +5653,9 @@ its part in its own commit, and Task 27 finalises them.
     - One collapse rule: whole terms go from the right, the hint's (`ctrl-c pause`, `tab follow-up`, `enter
       steer`; the queue view's `↑ edit`), then `question waiting`, then `<n> queued`; then the queued message
       is cut with `…`, keeping its head; at least `▌ <elapsed>`; the draft keeps its tail (review of Tasks 16-21:
-      a character cut ended a whole message in `…` and cut `ctrl-c…`). The row is fitted to width - 1 as the console draws it (`live_fit()`: R's widths; in a CJK
+      a character cut ended a whole message in `…` and cut `ctrl-c…`). With a draft the status is padded to the
+      widest it was this run (`console_live()` keeps `status_w`), so the draft never moves left: it jumped 7
+      columns when `thinking 17s` became `r 15s`. The row is fitted to width - 1 as the console draws it (`live_fit()`: R's widths; in a CJK
       locale, whose terminals draw East Asian ambiguous widths wide, every character outside ASCII that R
       counts as one column counted as two), so it never wraps; it is empty where not even the block and the
       time fit.

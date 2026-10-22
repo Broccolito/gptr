@@ -3433,6 +3433,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     options say 1 colour: a redraw caused by a notice or a sub-agent line from the agent's `r` code wrote the
     block and the words in full ink. Tests: test-console-input.R "the live row keeps the console's colours when
     drawn inside an evaluation (review)".
+  - With a draft on the live row the status is padded to the widest it was this run (`status_w`, kept by
+    `console_live()`), so the person's text moves right at most a few times a run and never back; it jumped 7
+    columns left when `thinking 17s` became `r 15s` and back 0.3 s later. Contract-visible: 04 §15.10 IC-82. Tests:
+    test-console-input.R "the draft keeps its column as the status changes; the status only widens (review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

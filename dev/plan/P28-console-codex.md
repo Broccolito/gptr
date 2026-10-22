@@ -838,7 +838,9 @@ Decisions:
   draft keeps its tail. (Amended in the review of Tasks 16-21: whole terms go first, from the right: the
   hint's `ctrl-c pause`, `tab follow-up`, `enter steer`, or the queue view's `↑ edit`, then `question
   waiting`, then `n queued`; only then is the queued message cut, keeping its head. Cutting characters ended a
-  whole message in `…` and left `ctrl-c…`, a key without its verb.)
+  whole message in `…` and left `ctrl-c…`, a key without its verb. With a draft the status is padded to the
+  widest it was this run, so the draft moves right at most a few times a run and never back: it jumped 7
+  columns left when `thinking 17s` became `r 15s`.)
 - Writing:
   - T: `\r` + band + row + `\033[K\033[0m`, cut to `console_width() - 1` by
     `cli::ansi_nchar(type = "width")`, with ambiguous widths counted as 2 (amended in Task 17: every

@@ -167,9 +167,10 @@ test_that("Tab completes a trigger word and never queues it; other drafts go as 
 
 # ---- Task 17: the live row ---------------------------------------------------------------------
 
-# The live row's text for each state at `width`, as a named list a difference names
+# The live row's text for each state at `width`, as a named list a difference names (c() drops
+# the status width a row with a draft carries)
 live_rows = function(states, width) {
-  stats::setNames(lapply(states, console_live_row, width = width), names(states))
+  stats::setNames(lapply(states, function(s) c(console_live_row(s, width))), names(states))
 }
 
 live_states = list(
@@ -245,6 +246,24 @@ test_that("the live row says what the run does, its queue and the person's draft
   ))
 })
 
+test_that("the draft keeps its column as the status changes; the status only widens (review)", {
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L)
+  rows = function(...) {
+    widest = 0L
+    vapply(list(...), function(s) {
+      row = console_live_row(c(s, draft = "and label the axes", status_w = widest), 80L)
+      widest <<- max(widest, attr(row, "status_w"))
+      c(row)
+    }, "")
+  }
+  r = rows(list(what = "thinking", secs = 5), list(what = "r", secs = 5),
+           list(what = "thinking", secs = 12), list(what = "r", secs = 13))
+  # `r 5s` keeps `thinking 5s`'s column; a wider status moves the draft right once, never back
+  expect_identical(c(regexpr("›", r, fixed = TRUE)), c(17L, 17L, 18L, 18L))
+  expect_identical(r[[2L]], "▌ r 5s          › and label the axes")
+})
+
 test_that("in a CJK locale every character outside ASCII counts two columns (D-243)", {
   local_utf8_glyphs()
   withr::local_options(cli.num_colors = 1L)
@@ -260,7 +279,7 @@ test_that("in a CJK locale every character outside ASCII counts two columns (D-2
 test_that("the live row's block is the agent's blue, its words dim and the draft ink (D-243)", {
   local_utf8_glyphs()
   withr::local_options(cli.num_colors = 256L)
-  expect_identical(console_live_row(live_states$question, 80L), paste0(
+  expect_identical(c(console_live_row(live_states$question, 80L)), paste0(
     "\033[38;5;67m▌\033[39m \033[38;5;244medit 11s · question waiting\033[39m",
     "   › and plot the residu"))
   withr::local_options(cli.num_colors = 16L)
