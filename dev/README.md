@@ -68,7 +68,7 @@ Task evidence written during implementation: what ran, what passed, and the comm
 | Path | Holds | Status |
 |---|---|---|
 | `P01.md`..`P26.md` | One log per plan: task evidence and plan acceptance. P27 is recorded in `HANDOFF.md` and `PROGRESS.md`. | historical |
-| `fixes.md` | Follow-up fixes made outside plan tasks: FIX-1..FIX-12, PERF-1 and PERF-2, then the hosted-CI rounds from CI-15 on. | current |
+| `fixes.md` | Follow-up fixes made outside plan tasks: FIX-1..FIX-14, PERF-1 and PERF-2, then the hosted-CI rounds from CI-15 on. | current |
 | `infra.md` | Hosted CI, tooling and Linux portability: rounds CI-1 to CI-20. | historical |
 | `simplicity-plan.md`, `simplicity.md` | The D-135 simplicity pass and `peter()` rename: the execution plan, then one section per package. | historical |
 | `rename-inventory.md`, `rename/rename.py` | The D-135 rename survey and the mechanical rename script. | historical |
@@ -112,12 +112,12 @@ up to date with `main`: every job of `R-CMD-check.yaml` and the two gates of `Wi
 | `R-CMD-check.yaml` | push to `main`, pull request | `macos-latest (release)`; `ubuntu-latest` with R `devel`, `release`, `oldrel-1` and `oldrel-4`; `ubuntu-latest (release, no Suggests)`, `ubuntu-latest (release, LC_ALL=C)`, `ubuntu-latest (devel, NOT_CRAN=false)`, `copy-safety (release)`, `copy-safety (devel)`, `connections left open`, `token benchmark` | all 12 jobs |
 | `Windows-check.yaml` | push to `main`, pull request | `windows-latest (<r>, shard <n>/4)`: `R CMD check --as-cran` with R `release` and `oldrel-4`, each in four serial shards (D-239) | the gates `windows-latest (release)` and `windows-latest (oldrel-4)`, which pass only when the latest attempt of each of their four shards passed |
 | `pkgdown.yaml` | push to `main` or `codex/skipped-platform-tests`, manual | build, validate and publish the pkgdown site | none |
-| `Plan-gates.yaml` | manual (`source_sha`); push to `codex/skipped-platform-tests` that changes `TESTING_PLAN.md` | the four plan checks, serially | none |
+| `Plan-gates.yaml` | manual (`source_sha`); push to `codex/skipped-platform-tests` that changes `TESTING_PLAN.md` or this workflow | the four plan checks, serially | none |
 | `Exact-tarball.yaml` | manual (`source_sha`) | one source tarball, checked on Windows (release, devel), macOS (release) and Ubuntu (release, devel); optional dependency profiles | none |
 | `Optional-integrations.yaml` | manual | offline optional integrations on Windows and Ubuntu | none |
 | `windows-by-file.yaml` | manual | the suite one file at a time on Windows; optional mode also on Ubuntu | none |
 | `rscript-native.yaml` | manual | native workers, artifacts and Python on macOS, Windows and Ubuntu | none |
-| `callr-native-environment.yaml` | manual; push to `codex/skipped-platform-tests` that changes the callr patch | the pinned callr patch in `upstream/` on Windows and Ubuntu | none |
+| `callr-native-environment.yaml` | manual; push to `codex/skipped-platform-tests` that changes the callr patch, its `dev/ci` scripts, its tests or this workflow | the pinned callr patch in `upstream/` on Windows and Ubuntu | none |
 | `rhub.yaml` | manual | R-hub platforms (default `linux,windows,macos`) | none |
 
 Linux jobs install the Ubuntu system libraries of the R dependencies with the local action
