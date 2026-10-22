@@ -805,7 +805,8 @@ console_preview = function(input) {
   } else if (is.character(input$path) && length(input$path)) {
     input$path[[1L]]
   } else if (is.list(input$questions)) {
-    paste0(length(input$questions), " question(s)")
+    n = length(input$questions)
+    paste0(n, if (n == 1L) " question" else " questions")
   } else if (length(input)) {
     tryCatch(json_encode(input), error = function(e) "")
   } else {

@@ -600,6 +600,12 @@ test_that("tool calls are cursor strips tinted by kind (D-245)", {
   expect_identical(substr(kids[[2L]], 1L, nchar(done)), done)
 })
 
+test_that("the ask tool's call line counts its questions in words (visual review)", {
+  q = list(id = "fit", question = "Which fit?", options = list("lm", "loess"))
+  expect_identical(console_preview(list(questions = list(q))), "1 question")
+  expect_identical(console_preview(list(questions = list(q, q))), "2 questions")
+})
+
 # ---------------------------------------------------------------- Task 2: renderer hooks
 
 # A real, idle session that never ran (its prompt waits in the queue): the hooks only read it
