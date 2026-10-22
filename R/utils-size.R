@@ -8,8 +8,8 @@
 #' Parts are attributes (S4 slots, S7 properties), list elements, a closure's environment, an
 #' environment's bindings (no promise forced, no active binding called) and its enclosure. A
 #' vector counts R's allocation (a compact sequence its serialized state), each string (CHARSXP)
-#' once by content, an environment 56 bytes a binding. Not counted: code (a closure's formals and
-#' body; a call or formula counts object.size()) and what lives anyway: top-level environments
+#' once by content, an environment 56 bytes a binding. Not counted: code (a closure's formals, body
+#' and srcref; a call or formula counts object.size()) and what lives anyway: top-level environments
 #' (global, base, empty, namespaces, packages), `home` and the frames of running calls with their
 #' enclosures, and an S7 class copy's environments. With `shared` (a checkpoint image against the
 #' current value) the parts and strings `shared` reaches count 0. Long lists and environments are
@@ -121,6 +121,7 @@ env_size_walk = function(x, st) {
     return(as.numeric(utils::object.size(x)))
   }
   an = if (t != "environment") env_size_attr_names(x)
+  if (t == "closure") an = an[an != "srcref"]
   st$parts = st$parts + length(an)
   st$depth = st$depth + 1L
   b = switch(t,

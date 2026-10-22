@@ -127,9 +127,7 @@ test_that("every value has a size; promises and active bindings rank last (D-247
                     S7_class = structure(function() NULL, pad = numeric(1e5)))
   e$fn = local({
     big = numeric(2e5)
-    f = function() big
-    attr(f, "srcref") = NULL   # its srcfile would add this file's parse data
-    f
+    function() big
   })
   e$env = new.env()
   e$env$v = numeric(3e5)
@@ -194,6 +192,7 @@ test_that("env_snap_size() counts what environments and closures hold, not code 
   expect_lt(env_snap_size(sum), 100)
   expect_lt(env_snap_size(environment(sum)), 100)
   expect_lt(env_snap_size(stats::lm), 1000)
+  expect_equal(env_snap_size(eval(parse(text = "function() 1", keep.source = TRUE), baseenv())), 56)
   expect_true(rlang::env_binding_are_lazy(e, "p"))
 })
 

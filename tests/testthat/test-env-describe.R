@@ -204,7 +204,6 @@ test_that("a description's size leaves out the home it describes in, as the work
   evalq({
     big = numeric(1e6)
     f = function() big
-    attr(f, "srcref") = NULL
   }, home)
   expect_match(describe_binding("f", home)[1], "^f: <function> function\\(\\); [0-9]+ lines, 56 B$")
   expect_match(describe_binding("big", home)[1], "^big: <numeric> length 1,000,000, 7.6 MB$")
