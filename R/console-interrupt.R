@@ -259,14 +259,16 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
 #' colours. It is a block of the person's lines (console_gap()), except right under a question
 #' whose read routed it; while an answer of the session's foreground run streams, it waits in the
 #' run's record (`rec$queued`) for the answer's block to end, so it never splits a sentence (D-245).
-#' Where a T console's composer reads keys, the live row shows the queue while it is up (D-243).
+#' Where a T console's composer reads keys, the live row shows the queue while it is up (D-243), so
+#' only a CLI route's steer prints its line then.
 #' @noRd
 console_queue_line = function(s, text, as) {
-  if (isTRUE(the$tty$keys) && isTRUE(the$live_row$shown)) return(invisible(NULL))
-  rlang::local_options(cli.num_colors = console_colors())
-  sym = console_style()
   steer = identical(as, "steer")
   on_cli = steer && identical(session_live(s)$run$model[["type"]], "cli")
+  # the live row shows the queue, but not that a CLI route's steer waits for the CLI's answer
+  if (!on_cli && isTRUE(the$tty$keys) && isTRUE(the$live_row$shown)) return(invisible(NULL))
+  rlang::local_options(cli.num_colors = console_colors())
+  sym = console_style()
   text = the$echoed %||% text
   rows = sym$dim(console_person_rows(sym$queued, paste0(
     if (steer) "steer" else "follow-up", if (nzchar(text)) paste0(sym$sep, text),

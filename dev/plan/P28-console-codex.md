@@ -930,7 +930,8 @@ Decisions:
     completes nothing until Task 22.
 - In T the `↳` queue line is not printed; the live row is the queue view. (Amended in Task 18:)
   This applies while the row is up. Where the row is cleared, as under a question, the line is
-  printed.
+  printed. (Amended in the review of Tasks 16-21: a CLI route's steer prints its line while the row is
+  up too, as only the line says ` · after the CLI's answer`.)
 - (Amended in Task 18:) A question's drain in T gives what waits on fd 0 to the composer. A partial
   line therefore stays the draft, where Task 2 kept it in the history.
 - (Amended in Task 18:) A draft left when the REPL returns to its prompt (no follow-up left to send)

@@ -5351,7 +5351,8 @@ its part in its own commit, and Task 27 finalises them.
   - Queued and delivered messages (Task 13). Queueing (`policy_enqueue()`: typed lines, a line a question reads
     past, the pause menu's [s] and [f]) prints one dim line at column 0, `↳ steer · <text>` or
     `↳ follow-up · <text>` (ASCII `-> steer - <text>`); on a CLI route (model type `"cli"`) a steer adds
-    ` · after the CLI's answer`. The text is escaped and wrapped inside the console width (width - 1), later rows
+    ` · after the CLI's answer`, and prints its line in a T console while the live row is up too (review of
+    Tasks 16-21). The text is escaped and wrapped inside the console width (width - 1), later rows
     under the text, and cut to three rows, the last ending in `…`; inside an evaluation the line has the
     console's colours. It replaces the notices `[gptr] steering: ...` and `[gptr] follow-up queued: ...` above.
     A line a question read past (IC-75, `console_typed_ahead()`) is on screen already, after the question's

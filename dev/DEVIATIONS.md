@@ -3416,6 +3416,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     run forever. The cure names no key: Esc at RStudio's readline interrupts R. Contract-visible: 04 §15.10 IC-77.
     Tests: test-console-ui.R "in an IDE console an answer of several words names the draft left on the input
     line".
+  - A CLI route's steer prints its queue line, ` · after the CLI's answer`, in a T console while the live row is
+    up too: the row is the queue view there, so the plan's caveat was never shown and a terminal user was not
+    told the steer waits for the CLI's whole answer. Contract-visible: 04 §15.10 IC-76. Tests:
+    test-console-typing.R "a T console's steer on a CLI route still says it waits for the CLI's answer (review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

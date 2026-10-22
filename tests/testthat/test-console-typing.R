@@ -204,6 +204,22 @@ test_that("on a CLI route the queue line says the steer is sent after the CLI's 
   expect_identical(roles, c("user", "assistant", "operator", "assistant"))
 })
 
+test_that("a T console's steer on a CLI route still says it waits for the CLI's answer (review)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE, cli.num_colors = 1L, cli.width = 80L)
+  local_mocked_bindings(front_end = function() "terminal")
+  f = local_fake_cli("claude", "toolstream")
+  local_keys(keys_once("use base R\r", function() length(fake_log(f, "turn")) == 1L))
+  res = typing_console(f$model, c("go", "/exit"))
+  local_cli_cleanup(res$s)
+  # the live row cannot say it, so the queue line is printed above the row
+  rows = term_rows(paste(res$out, collapse = "\n"))
+  expect_true(paste0(queue_line("steer", "use base R"), console_style()$sep,
+                     "after the CLI's answer") %in% rows)
+})
+
 test_that("type_ahead = 'follow_up' sends the line as the next prompt, its own run (D-242)", {
   skip_on_cran()
   local_console_test()
