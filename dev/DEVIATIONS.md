@@ -3391,6 +3391,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     answer].` (`Please enter one of the numbers shown.` in ink), a paste's notice and the pause menu's hint (dim at
     column 2). Contract-visible: 04 §15.10 IC-76 and IC-77. Tests: test-console-ui.R "every question asks again in
     one style: dim rows at column 4 (review)" and the re-ask expectations; test-console-interrupt.R's menu block.
+  - The live row's key hint has one grammar, the key and its verb as the composer's keys read (`enter steer ·
+    tab follow-up · ctrl-c pause`): without a composer `· ctrl-c pause` or `· esc stop` (it was `pauses`,
+    `stops`), so TERM=dumb, RStudio, Positron and the terminals read as one design. Contract-visible: 04 §15.10
+    IC-82, 03 §6.17. Tests: the live-row rows of test-console-input.R, test-console-wait.R, test-console-notice.R,
+    test-console-render.R and test-console-spinner-*.R.
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

@@ -31,7 +31,7 @@ test_that("the live row's words are those of the old waiting row's place, in low
                        cli.width = 80L)
   local_mocked_bindings(front_end = function() "rgui")
   out = sub(" +$", "", live_draw(list(what = "thinking", secs = 12, key = "Esc"))[[1L]])
-  expect_identical(out, "\r# thinking 12s - esc stops")
+  expect_identical(out, "\r# thinking 12s - esc stop")
   expect_false(grepl("Ctrl-C to|\\(", out))
 })
 
@@ -40,7 +40,7 @@ test_that("an ANSI terminal erases to the line end and keeps the cursor after th
                        cli.num_colors = 1L, cli.width = 80L)
   local_mocked_bindings(front_end = function() "terminal")
   out = live_draw(list(what = "thinking", secs = 3, key = "Ctrl-C", pause = TRUE))
-  expect_identical(out, c("\r# thinking 3s - ctrl-c pauses\033[K", "\r\033[K"))
+  expect_identical(out, c("\r# thinking 3s - ctrl-c pause\033[K", "\r\033[K"))
 })
 
 test_that("a console too narrow for the block and the time gets an empty row", {

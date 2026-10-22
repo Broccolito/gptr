@@ -56,7 +56,7 @@ test_that("a CLI notice clears the live row and goes above it, which keeps its c
   expect_identical(out[[1L]], "")
   expect_match(out[[2L]], "^  The claude-cli route is experimental:")
   # the notice's rows, then the row redrawn below them
-  expect_identical(out[[length(out)]], "# thinking 0s - ctrl-c stops")
+  expect_identical(out[[length(out)]], "# thinking 0s - ctrl-c stop")
   notice = out[-c(1L, length(out))]
   expect_true(all(startsWith(notice, "  ")))
   expect_true(all(nchar(notice, type = "width") <= 78L))

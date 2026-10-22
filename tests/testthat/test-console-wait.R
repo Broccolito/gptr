@@ -100,7 +100,7 @@ test_that("the live row replaces the old waiting text, at column 0 (D-243)", {
   local_mocked_bindings(front_end = function() "terminal")
   w = wait_record()
   out = utils::capture.output(invisible(wait_request(w)))
-  expect_identical(sub(" +$", "", out), "\r\u258c thinking 0s \u00b7 ctrl-c stops")
+  expect_identical(sub(" +$", "", out), "\r\u258c thinking 0s \u00b7 ctrl-c stop")
   expect_false(any(grepl("Ctrl-C to|steer or stop|\\(0s", out)))
   # it names the running tool, then thinks again at the next request
   withr::local_options(cli.ansi = TRUE)
@@ -109,9 +109,9 @@ test_that("the live row replaces the old waiting text, at column 0 (D-243)", {
   tool = ev_new("tool_execution_start", run = w$run$id, tool_call_id = "c1", tool_name = "r",
                 input = list(code = "zz = 1"))
   out = utils::capture.output(invisible(console_on_tool_start(tool, w$ctx)))
-  expect_identical(out[[length(out)]], paste0("\r\u258c r 0s \u00b7 ctrl-c stops", "\033[K"))
+  expect_identical(out[[length(out)]], paste0("\r\u258c r 0s \u00b7 ctrl-c stop", "\033[K"))
   out = utils::capture.output(invisible(wait_request(w)))
-  expect_identical(out, paste0("\r\u258c thinking 0s \u00b7 ctrl-c stops", "\033[K"))
+  expect_identical(out, paste0("\r\u258c thinking 0s \u00b7 ctrl-c stop", "\033[K"))
 })
 
 test_that("the live row is drawn at once and stays under the rows of an answer (D-243)", {
@@ -129,7 +129,7 @@ test_that("the live row is drawn at once and stays under the rows of an answer (
   bytes = written(function() wait_delta(w, "\nx = 1\n"))
   # cleared, the rows written, then the row again below them
   expect_true(startsWith(bytes, "\r\033[K"))
-  expect_identical(term_rows(bytes), c("", "  ```r", "  x = 1", "# thinking 0s - ctrl-c stops"))
+  expect_identical(term_rows(bytes), c("", "  ```r", "  x = 1", "# thinking 0s - ctrl-c stop"))
   expect_identical(the$live_row, row)
   expect_true(row$shown)
 })
@@ -180,12 +180,12 @@ test_that("an abort-only IDE console advertises its stop key without promising a
   local_live_console("L")
   # RStudio honours \033[K, so no padding stays in its transcript (visual review)
   expect_identical(utils::capture.output(invisible(wait_request(w))),
-                   "\r# thinking 0s - esc stops\033[K")
+                   "\r# thinking 0s - esc stop\033[K")
   # Positron's console erases by writing spaces, so its row is padded as R.app's
   testthat::local_mocked_bindings(front_end = function() "positron")
   utils::capture.output(console_live_stop())
   expect_identical(sub(" +$", "", utils::capture.output(invisible(wait_request(w)))),
-                   "\r# thinking 0s - ctrl-c pauses")
+                   "\r# thinking 0s - ctrl-c pause")
 })
 
 test_that("continue and queued pause messages restore a pending request's live row", {
@@ -238,7 +238,7 @@ test_that("a prompt clears the live row, keeps its task and a later tick redraws
     expect_identical(the$live_row$task, task)
     redraw = utils::capture.output(invisible(get(task, envir = reactor_get()$tasks)$fn()))
     # the row is no block: it comes back right under the question's last row
-    expect_identical(sub(" +$", "", redraw), "\r# thinking 0s - ctrl-c stops")
+    expect_identical(sub(" +$", "", redraw), "\r# thinking 0s - ctrl-c stop")
   }
   clear = paste0("\r", strrep(" ", 79L), "\r")
   expect_true(startsWith(seen[[1L]], paste0(clear, "\n  | r  gptr_mcp_serve()")))

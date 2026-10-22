@@ -190,8 +190,8 @@ test_that("the live row says what the run does, its queue and the person's draft
   local_utf8_glyphs()
   withr::local_options(cli.num_colors = 1L)
   expect_identical(live_rows(live_states, 80L), list(
-    rstudio = "▌ thinking 6s · 1 queued · esc stops",
-    menu = "▌ r 1m 05s · ctrl-c pauses",
+    rstudio = "▌ thinking 6s · 1 queued · esc stop",
+    menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer · tab follow-up · ctrl-c pause",
     follow = "▌ thinking 6s   enter follow-up · tab steer · ctrl-c pause",
     queue = paste("▌ thinking 6s · 2 queued   ↳ steer · use log(mpg) instead",
@@ -202,8 +202,8 @@ test_that("the live row says what the run does, its queue and the person's draft
   ))
   # one collapse rule: the status is cut from the right, down to the time; the draft keeps its tail
   expect_identical(live_rows(live_states, 40L), list(
-    rstudio = "▌ thinking 6s · 1 queued · esc stops",
-    menu = "▌ r 1m 05s · ctrl-c pauses",
+    rstudio = "▌ thinking 6s · 1 queued · esc stop",
+    menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer · tab foll…",
     follow = "▌ thinking 6s   enter follow-up · tab…",
     queue = "▌ thinking 6s · 2 queued   ↳ steer · u…",
@@ -213,7 +213,7 @@ test_that("the live row says what the run does, its queue and the person's draft
   ))
   expect_identical(live_rows(live_states, 30L), list(
     rstudio = "▌ thinking 6s · 1 queued · e…",
-    menu = "▌ r 1m 05s · ctrl-c pauses",
+    menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer…",
     follow = "▌ thinking 6s   enter follow…",
     queue = "▌ thinking 6s · 2 queued   ↳…",
@@ -257,14 +257,14 @@ test_that("the live row's block is the agent's blue, its words dim and the draft
     "   › and plot the residu"))
   withr::local_options(cli.num_colors = 16L)
   expect_identical(console_live_row(live_states$menu, 80L),
-                   "\033[34m▌\033[39m \033[2mr 1m 05s · ctrl-c pauses\033[22m")
+                   "\033[34m▌\033[39m \033[2mr 1m 05s · ctrl-c pause\033[22m")
 })
 
 test_that("the live row is drawn with \\r and erased to the line end, or padded (D-243)", {
   local_utf8_glyphs()
   withr::local_options(cli.num_colors = 1L, cli.width = 40L)
   state = live_states$menu
-  row = "▌ r 1m 05s · ctrl-c pauses"
+  row = "▌ r 1m 05s · ctrl-c pause"
   draws = function(cls) {
     lv = console_live(cls)
     c(written(function() lv$draw(state)), written(lv$clear), written(lv$clear))
@@ -295,7 +295,7 @@ test_that("a console write clears the live row and redraws it after its whole li
   withr::local_options(cli.num_colors = 1L, cli.width = 40L, cli.ansi = TRUE)
   local_mocked_bindings(front_end = function() "terminal",
                         console_live_state = function(rec) live_states$menu)
-  row = "\r▌ r 1m 05s · ctrl-c pauses\033[K"
+  row = "\r▌ r 1m 05s · ctrl-c pause\033[K"
   writes = function(...) written(function() for (x in list(...)) gptr_message_write(x, "stdout"))
   draw = function() written(function() the$live_row$draw())
   withr::defer(assign("live_row", NULL, envir = the))

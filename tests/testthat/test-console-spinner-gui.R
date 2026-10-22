@@ -8,7 +8,7 @@ test_that("dynamic front ends, R GUIs too, draw and clear the live row without a
     local_mocked_bindings(front_end = function() frontend)
     row = console_live("L")
     drawn = written(function() row$draw(state))
-    expect_true(startsWith(drawn, "\r# thinking 3s - esc stops"), info = frontend)
+    expect_true(startsWith(drawn, "\r# thinking 3s - esc stop"), info = frontend)
     cleared = written(row$clear)
     expect_true(startsWith(cleared, "\r"), info = frontend)
     expect_false(grepl("\n", paste0(drawn, cleared), fixed = TRUE), info = frontend)

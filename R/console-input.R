@@ -236,13 +236,13 @@ console_newest = function(s, rd, take = FALSE) {
 #' shown in place of the status words), `draft` (the composer's text; NULL where no composer reads
 #' keys), `enter` (the kind Enter queues, the `type_ahead` setting), `key` (the console's interrupt
 #' key) and `pause` (TRUE where the key pauses, else it stops). In the style table's glyphs:
-#' without a composer the status ends with the key, `<sep>esc stops`; with an empty draft the
-#' newest message follows, `<queued> steer<sep><text><sep><up> edit`, or the keys,
-#' `enter steer<sep>tab follow-up<sep>ctrl-c pause`; else `<person> <draft>`. The block is the
-#' agent's blue and the words dim; the draft is ink. One collapse
-#' rule: the status part is cut from the right with an ellipsis, down to the block and the elapsed
-#' time, and the draft keeps its tail. Widths are counted as the console draws them (live_fit()), so
-#' the row never wraps; where not even the block and the time fit, the row is empty.
+#' without a composer the status ends with the key and its verb, as the composer's keys read,
+#' `<sep>esc stop`; with an empty draft the newest message follows, `<queued> steer<sep><text><sep>
+#' <up> edit`, or the keys, `enter steer<sep>tab follow-up<sep>ctrl-c pause`; else `<person>
+#' <draft>`. The block is the agent's blue and the words dim; the draft is ink. One collapse rule:
+#' the status part is cut from the right with an ellipsis, down to the block and the elapsed time,
+#' and the draft keeps its tail. Widths are counted as the console draws them (live_fit()), so the
+#' row never wraps; where not even the block and the time fit, the row is empty.
 #' @noRd
 console_live_row = function(state, width) {
   sym = console_style()
@@ -261,7 +261,7 @@ console_live_row = function(state, width) {
   enter = state$enter %||% "steer"
   draft = state$draft
   hint = if (is.null(draft)) {
-    paste0(sym$sep, key, if (isTRUE(state$pause)) " pauses" else " stops")
+    paste0(sym$sep, key, if (isTRUE(state$pause)) " pause" else " stop")
   } else if (!nzchar(draft)) {
     paste0("   ", if (is.null(state$newest)) {
       paste0("enter ", kind(enter), sym$sep, "tab ", kind(setdiff(c("steer", "follow_up"), enter)),

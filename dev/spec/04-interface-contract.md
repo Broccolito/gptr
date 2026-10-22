@@ -5631,14 +5631,15 @@ its part in its own commit, and Task 27 finalises them.
     - Text: `▌ <state> <elapsed>[ · <n> queued][ · question waiting]`, then, where a composer reads keys (T,
       Task 18), `   › <draft tail>`, or with an empty draft `   ↳ <kind> · <newest text> · ↑ edit` (a queue) or
       `   enter steer · tab follow-up · ctrl-c pause` (swapped under `type_ahead = "follow_up"`); without a
-      composer ` · <key> pauses` where the pause menu is offered (`console_menu_available()`: terminals,
-      Positron) or ` · <key> stops` (RStudio, Rgui; the key from `console_interrupt_key()`, lower case).
+      composer ` · <key> pause` where the pause menu is offered (`console_menu_available()`: terminals,
+      Positron) or ` · <key> stop` (RStudio, Rgui; the key from `console_interrupt_key()`, lower case): the
+      key and its verb, as the composer's keys read (review of Tasks 16-21: `pauses`, `stops`).
       `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`
       while a sub-agent it shows runs; `<elapsed>` the run's time, `0s`, `59s`, `1m 05s`; `<n> queued` the
       person's messages waiting for the session (its user-source queue items, those the console holds, the
       REPL's held lines); `question waiting` while a question waits for typing to pause (IC-76, Task 19).
       Completion candidates (Task 22) replace the status words. The block is the blue accent, the words and
-      hints dim, only the draft ink. ASCII: `# thinking 6s - ctrl-c pauses`.
+      hints dim, only the draft ink. ASCII: `# thinking 6s - ctrl-c pause`.
     - One collapse rule: the status part is cut from the right with `…`, down to `▌ <elapsed>`; the draft keeps
       its tail. The row is fitted to width - 1 as the console draws it (`live_fit()`: R's widths; in a CJK
       locale, whose terminals draw East Asian ambiguous widths wide, every character outside ASCII that R

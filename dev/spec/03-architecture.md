@@ -1986,7 +1986,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   blocks in a row [D-208], but not a question from the tool block it is asked in [D-243], nor the tool blocks of
   consecutive requests, which group as those of one response [D-245]) and follows the input
   and status lines. Separators are written on finished lines only. The live row (`console_live()`, IC-82
-  [D-243]: `▌ thinking 6s · ctrl-c pauses`, the block blue and the words dim) is no block: at column 0 under the
+  [D-243]: `▌ thinking 6s · ctrl-c pause`, the block blue and the words dim) is no block: at column 0 under the
   transcript's last row, it is cleared before every console write (`\r\033[K` where that ends the line, an
   ANSI terminal and RStudio; spaces in Rgui, TERM=dumb and Positron, whose console erases with spaces; none in R.app; no
   LF follows a cleared row, R GUIs included) and redrawn after a whole line where `\033[K` erases it; where it is padded the first
