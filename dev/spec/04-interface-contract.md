@@ -5476,7 +5476,10 @@ its part in its own commit, and Task 27 finalises them.
 
     Below 256 colours cli maps both blues to grey `90`, so basic red and blue are named there. The band cells are
     raw grey-ramp cells, because cli maps greys into the colour cube; truecolor gets the same cells. `NO_COLOR`
-    keeps the glyphs and drops every SGR. The background (`console_background()`) is read once into
+    keeps the glyphs and drops every SGR. In the margin the renderer reads the Markdown at every depth (inline code
+    and emphasis lose their markers, bullets are `•`, headings lose `#`), so the text, and where it wraps, is that of
+    a colour console; only the plain mode without colour keeps the markdown characters (visual review: NO_COLOR,
+    TERM=dumb and R.app wrapped paragraphs at other words). The background (`console_background()`) is read once into
     `the$background`: `"dark"` or `"light"` from the last field of `COLORFGBG` (0-6 or 8 dark, 7 or 9-15 light),
     else NA, and an unknown background has no band. Task 25 adds the terminal probe.
   - R code (Task 9): R in answer fences and in tool calls is highlighted by `console_code()` above 1 colour only,

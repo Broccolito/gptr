@@ -3345,3 +3345,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     around it. Code rows are not wrapped by the stream, and a table wider than 100 columns prints verbatim as one too
     wide for the console does. Contract-visible: 04 §7.14, 03 §6.17. Tests: test-console-render.R "prose wraps at
     100 columns at most, however wide the console (visual review)".
+  - In the console margin the renderer reads the Markdown at every colour depth: without colour (NO_COLOR, TERM=dumb,
+    R.app) inline code kept its backticks, emphasis its stars, headings their `#` and bullets were `-` in a UTF-8
+    console, so paragraphs wrapped at other words and the text differed from every colour console, although only
+    colour capability differs between them. Now only the SGR differs; the plain mode without colour (pipes, knitr,
+    Rscript) keeps the markdown characters. Contract-visible: 04 §15.10 IC-82, 03 §6.17. Tests:
+    test-console-render.R "a console shows the same text at any colour depth; only SGR differs (visual review)",
+    "blank lines collapse and nested lists keep their indentation (D-186)".

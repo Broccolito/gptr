@@ -1981,7 +1981,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   (when malformed or too wide, verbatim and unwrapped like fenced code so a copied table stays valid,
   each row printed as it ends once the rows so far rule alignment out)
   and a reply's leading, trailing and repeated blank lines
-  collapse; `NO_COLOR` removes colours and styles only. Rscript (verbosity 1), knitr, jsonl and
+  collapse; `NO_COLOR` removes colours and styles only: the Markdown is read at every depth there, so a
+  console without colour (`NO_COLOR`, TERM=dumb, R.app) shows the text a colour console shows, without
+  SGR [D-245]. Rscript (verbosity 1), knitr, jsonl and
   tests (verbosity 0) and non-dynamic outputs (pipes, Jupyter) keep the plain layout (no margin,
   block gaps, table alignment or notice wrapping). Styling adds
   italics within one token (`*x*`; an unmatched `*` prints), inline code in the blue accent (D-245), dim link URLs,

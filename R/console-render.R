@@ -119,9 +119,10 @@ console_notice = function(..., .error = FALSE) {
 #' Returns an environment with `write(delta)` and `finish()`, writing to stdout.
 #' Styling (bold, italic within one token, inline code in the blue accent, link URLs, quotes,
 #' rules and fence lines in the grey, headings, bullets, highlighted fenced code) is used when
-#' `cli::num_ansi_colors() > 1` at creation; without it the markdown characters are kept. Fenced
-#' code stays Markdown: fence lines as written (dim), the body unwrapped and de-indented by the
-#' opener's indentation (D-187).
+#' `cli::num_ansi_colors() > 1` at creation. The Markdown is read in the console margin at every
+#' depth, so a console without colour shows the same text (no SGR); only the plain mode without
+#' colour keeps the markdown characters. Fenced code stays Markdown: fence lines as written (dim),
+#' the body unwrapped and de-indented by the opener's indentation (D-187).
 #' Where console_pad() gives a margin (D-186) lines get two columns on both sides, nested list
 #' indentation is kept, pipe tables are aligned, blank lines collapse to one between blocks (none
 #' before or after a reply); elsewhere the plain mode only wraps at `width` display columns. Prose
@@ -137,6 +138,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   style = cli::num_ansi_colors() > 1L
   pad = console_pad()
   lay = nzchar(pad)
+  md = lay || style
   sym = console_style()
   st = new.env(parent = emptyenv())
   set_width = function(w) st$width = max(20L, min(as.integer(w) - 2L * nchar(pad), 100L))
@@ -215,7 +217,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     st$out = FALSE
   }
   inline = function(tok) {
-    if (!style) return(list(text = tok, width = vis_width(tok)))
+    if (!md) return(list(text = tok, width = vis_width(tok)))
     out = character()
     w = 0L
     i = 1L
@@ -253,15 +255,15 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     lead = strrep(" ", n)
     if (grepl("^#{1,6}$", tok)) {
       st$on[[if (nchar(tok) == 1L) "h1" else "h"]] = TRUE
-      return(list(text = if (style) restyle() else paste0(tok, " "),
-                  width = if (style) 0L else nchar(tok) + 1L))
+      return(list(text = if (md) restyle() else paste0(tok, " "),
+                  width = if (md) 0L else nchar(tok) + 1L))
     }
-    if (style && grepl("^(-{3,}|\\*{3,}|_{3,})$", tok) && !grepl("^[ \t]", after)) {
+    if (md && grepl("^(-{3,}|\\*{3,}|_{3,})$", tok) && !grepl("^[ \t]", after)) {
       return(list(text = sym$dim(strrep("-", st$width)), width = st$width))
     }
     if (tok %in% c("-", "*", "+")) {
       st$indent = n + 2L
-      mark = if (!style) "- " else paste0(if (n > 0L) sym$nested else sym$bullet, " ")
+      mark = if (!md) "- " else paste0(if (n > 0L) sym$nested else sym$bullet, " ")
       return(list(text = paste0(lead, mark), width = st$indent))
     }
     if (grepl("^[0-9]+[.)]$", tok)) {

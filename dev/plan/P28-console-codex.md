@@ -410,7 +410,8 @@ Decisions:
 
 Tests (`test-console-render.R`), RED first:
 - Exact bytes for each depth (16777216, 256, 16, 1) and each background (dark, light, NA).
-- `NO_COLOR` keeps the glyphs and drops all SGR.
+- `NO_COLOR` keeps the glyphs and drops all SGR. In the margin the Markdown is read at every depth, so
+  a console without colour shows the text a colour console shows (amended in the visual review).
 - ASCII with `is_windows()` mocked and `WT_SESSION` unset.
 - No `U+25CF` and no Braille anywhere in `R/`.
 

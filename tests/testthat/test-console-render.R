@@ -170,15 +170,34 @@ test_that("an interactive console keeps a two-column margin at 40 columns (D-186
 
 test_that("blank lines collapse and nested lists keep their indentation (D-186)", {
   skip_on_cran()
-  withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE, gptr.verbose = 2L)
+  withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE, gptr.verbose = 2L,
+                       cli.unicode = FALSE)
   text = "\n\n# T\n\n\n- a\n  - b\n    - c\n1. x\n   - y\n\nend\n\n"
-  expect_identical(render_chunks(text), c("  # T", "", "  - a", "    - b", "      - c",
+  expect_identical(render_chunks(text), c("  T", "", "  - a", "    - b", "      - c",
                                           "  1. x", "     - y", "", "  end"))
   skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "symbols need a UTF-8 locale")
-  withr::local_options(cli.num_colors = 256L, cli.unicode = TRUE)
-  expect_identical(cli::ansi_strip(render_chunks(text)),
-                   c("  T", "", "  \u2022 a", "    \u25e6 b", "      \u25e6 c", "  1. x",
-                     "     \u25e6 y", "", "  end"))
+  # the same rows at every colour depth: without colour too the Markdown is read (visual review)
+  for (colours in c(1L, 256L)) {
+    withr::local_options(cli.num_colors = colours, cli.unicode = TRUE)
+    expect_identical(cli::ansi_strip(render_chunks(text)),
+                     c("  T", "", "  \u2022 a", "    \u25e6 b", "      \u25e6 c", "  1. x",
+                       "     \u25e6 y", "", "  end"), info = paste(colours))
+  }
+})
+
+test_that("a console shows the same text at any colour depth; only SGR differs (visual review)", {
+  skip_on_cran()
+  local_mocked_bindings(code_highlight = function(code, ...) code, .package = "cli")
+  withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L)
+  for (unicode in c(TRUE, FALSE)) {
+    withr::local_options(cli.unicode = unicode, cli.num_colors = 256L)
+    styled = cli::ansi_strip(render_chunks(render_rich))
+    withr::local_options(cli.num_colors = 1L)
+    expect_identical(render_chunks(render_rich), styled, info = paste(unicode))
+  }
+  withr::local_options(cli.num_colors = 1L)
+  expect_identical(render_chunks("Use `mtcars` and **bold** *it* here."),
+                   "  Use mtcars and bold it here.")
 })
 
 test_that("other output goes between whole rows; the held row continues, nesting kept (D-245)", {
