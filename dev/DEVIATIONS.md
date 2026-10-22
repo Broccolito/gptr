@@ -3385,6 +3385,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     follow-up · ctrl-c pause` (59 columns) became `ctrl-c…`. Contract-visible: 04 §15.10 IC-82. Tests:
     test-console-input.R "the live row says what the run does, its queue and the person's draft (D-243)", "in a
     CJK locale every character outside ASCII counts two columns (D-243)".
+  - A question asks again in one style: every re-ask row is dim at column 4, under the question's text as its keys
+    row (`ui_hint()`): the approval's `Not an answer`, hint, `a and p are not offered` and 5-tries rows (ink at
+    column 2, under the `?`, louder than the question), a choice's `Not an answer. Type a number[, or your own
+    answer].` (`Please enter one of the numbers shown.` in ink), a paste's notice and the pause menu's hint (dim at
+    column 2). Contract-visible: 04 §15.10 IC-76 and IC-77. Tests: test-console-ui.R "every question asks again in
+    one style: dim rows at column 4 (review)" and the re-ask expectations; test-console-interrupt.R's menu block.
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

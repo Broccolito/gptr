@@ -132,6 +132,13 @@ ui_keys = function(keys, what, width) {
   gsub("\u00a0", " ", console_wrap(paste0("    ", opts), width), fixed = TRUE)
 }
 
+#' A question's hint when it reads again (D-243): dim rows at column 4, under the question's text as
+#' its keys row, word-wrapped at `width`
+#' @noRd
+ui_hint = function(text, width = ui_width()) {
+  console_style()$dim(console_wrap(paste0("    ", text), width))
+}
+
 #' The question of an approval (D-243): `Allow <tool>?`, or `<who>: allow <tool>?` for a sub-agent
 #' @noRd
 ui_permission_question = function(request) {
@@ -263,7 +270,8 @@ ui_console_read = function(prompt, secret = FALSE) {
     more = if (!is.null(rd)) rd$waiting()
     if (!length(more)) return(ans)
     kept = !secret && console_history_add(paste(c(ans, more), collapse = "\n"))
-    console_write(paste0("  A pasted block is not an answer", if (kept) " (kept in history)", "."))
+    console_write(ui_hint(paste0("A pasted block is not an answer", if (kept) " (kept in history)",
+                                 ".")))
   }
 }
 
@@ -329,7 +337,8 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
       next
     }
     if (allow_other && nzchar(trimws(ans))) return(structure(NA_integer_, other = trimws(ans)))
-    console_write("  Please enter one of the numbers shown.")
+    console_write(ui_hint(paste0("Not an answer. Type ", if (multiple) "numbers separated by commas"
+                                 else "a number", if (allow_other) ", or your own answer", ".")))
   }
   NA_integer_
 }
@@ -367,7 +376,7 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 #' returns (D-243); a remembered answer adds a dim line naming the rule; an
 #' invalid answer is quoted (kept in the console history in an interactive session) above a hint
 #' that names the question, which may have scrolled away, and its keys; an empty one gets the hint
-#' alone, both wrapped at the prompt rows' width; five (`?` is none) end in a refusal whose
+#' alone, both dim at column 4 (ui_hint()); five (`?` is none) end in a refusal whose
 #' feedback says so (D-188, D-243)
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
@@ -404,18 +413,18 @@ ui_console_permission = function(request, read = ui_console_read) {
     }
     bad = bad + 1L
     if (low %in% c("a", "always", "p", "project")) {
-      msg = paste0("  a and p are not offered: ", why, "; answer y, n or ?.")
+      msg = paste0("a and p are not offered: ", why, "; answer y, n or ?.")
     } else {
       kept = nzchar(a) && gptr_is_interactive() && console_history_add(a)
       msg = c(if (nzchar(a)) {
-        paste0("  Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'",
+        paste0("Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'",
                if (kept) " (kept in history)", ".")
-      }, paste0("  ", ui_permission_question(request), " Type ", if (can) "y, a, p or n" else
+      }, paste0(ui_permission_question(request), " Type ", if (can) "y, a, p or n" else
         "y or n", " (n <text> says what to do instead), or ?."))
     }
-    console_write(console_wrap(msg, ui_width()))
+    console_write(ui_hint(msg))
   }
-  console_write("  No valid answer after 5 tries; refused.")
+  console_write(ui_hint("No valid answer after 5 tries; refused."))
   ui_answer("deny", feedback = "no valid answer was given at the approval prompt")
 }
 

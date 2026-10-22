@@ -135,7 +135,7 @@ test_that("the pause menu is a console question: its keys under it, read at the 
   # again: text meant as a steer never aborts
   local_abort_log()
   m = menu(c("add a legend", "continue"), mode = "repl")
-  expect_identical(m$out[-(1:3)], as.character(sym$dim("  Paused. Type s, f, c or a.")))
+  expect_identical(m$out[-(1:3)], as.character(sym$dim("    Paused. Type s, f, c or a.")))
   expect_length(m$prompts, 2L)
   withr::local_options(cli.num_colors = 1L)
   # the session's id only when more than one session is paused

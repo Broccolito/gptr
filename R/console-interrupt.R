@@ -195,9 +195,8 @@ policy_menu = function(cnd, pol) {
       })
       next
     }
-    console_write(console_style()$dim(console_wrap(paste0(
-      "  Paused. Type ", paste(k[-length(k)], collapse = ", "), " or ", k[[length(k)]], "."
-    ), ui_width())))
+    console_write(ui_hint(paste0("Paused. Type ", paste(k[-length(k)], collapse = ", "), " or ",
+                                 k[[length(k)]], ".")))
   }
 }
 

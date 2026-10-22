@@ -189,7 +189,7 @@ test_that("a and p are offered only with a suggested rule; a and p say why not (
   out = console_try(function() ui_console_permission(req), c("?", "a", "p", "y"))
   expect_identical(out$result, list(decision = "allow", remember = NULL, feedback = NULL))
   expect_false(any(grepl("[a] always", out$shown, fixed = TRUE)))
-  expect_identical(sum(out$shown == paste0("  a and p are not offered: no rule covers these ",
+  expect_identical(sum(out$shown == paste0("    a and p are not offered: no rule covers these ",
                                            "calls; answer y, n or ?.")), 2L)
   expect_null(ui_answer_norm(list(decision = "allow", remember = "session"), req)$remember)
 })
@@ -515,7 +515,7 @@ test_that("a block pasted at the approval prompt never answers it nor steers (IC
   out = utils::capture.output(repl_main(rs))
   expect_null(e$zz)
   expect_identical(sum(fd0$prompts == ">> "), 2L)
-  expect_identical(sum(out == "  A pasted block is not an answer (kept in history)."), 1L)
+  expect_identical(sum(out == "    A pasted block is not an answer (kept in history)."), 1L)
   expect_identical(kept, '"""\ny\npasted line two\npasted line three\n"""')
   expect_false(any(grepl("Not an answer", out, fixed = TRUE)))
   reqs = fake_requests(fake)
@@ -589,30 +589,45 @@ test_that("invalid answers are explained and kept; five end in a refusal the mod
                                     feedback = "no valid answer was given at the approval prompt"))
   # the hint names the question, as it may have scrolled away (visual review), the prompt's own
   # letters and how to deny with feedback
-  hint = "  Allow r? Type y, a, p or n (n <text> says what to do instead), or ?."
-  expect_identical(c(sum(out$shown == "  Not an answer: 'zz' (kept in history)."),
+  hint = "    Allow r? Type y, a, p or n (n <text> says what to do instead), or ?."
+  expect_identical(c(sum(out$shown == "    Not an answer: 'zz' (kept in history)."),
                      sum(out$shown == hint)), c(5L, 5L))
   expect_identical(out$kept, rep("zz", 5L))
-  expect_identical(utils::tail(out$shown, 1L), "  No valid answer after 5 tries; refused.")
+  expect_identical(utils::tail(out$shown, 1L), "    No valid answer after 5 tries; refused.")
   # asking for details is not an invalid answer
   out = console_try(function() ui_console_permission(req), c("?", "?", "zz", "?", "zz", "?", "y"))
   expect_identical(out$result$decision, "allow")
   out = console_try(function() ui_console_permission(crit), c("maybe \033", "", "n"))
-  expect_true("  Not an answer: 'maybe <U+001B>' (kept in history)." %in% out$shown)
+  expect_true("    Not an answer: 'maybe <U+001B>' (kept in history)." %in% out$shown)
   # an empty answer only gets the hint, and is not kept
   expect_false(any(grepl("Not an answer: ''", out$shown, fixed = TRUE)))
-  hint = "  Allow r? Type y or n (n <text> says what to do instead), or ?."
+  hint = "    Allow r? Type y or n (n <text> says what to do instead), or ?."
   expect_identical(sum(out$shown == hint), 2L)
   expect_identical(out$kept, "maybe \033")
   sub = console_try(function() ui_console_permission(modifyList(req, list(agent = "a"))),
                     c("zz", "y"))
-  expect_match(paste(sub$shown, collapse = " "), "  sub-agent a: allow r? Type y, a, p or n (n",
+  expect_match(paste(sub$shown, collapse = " "), "    sub-agent a: allow r? Type y, a, p or n (n",
                fixed = TRUE)
   # nothing is kept where there is no console history (a piped .stdin session)
   local_mocked_bindings(gptr_is_interactive = function() FALSE)
   out = console_try(function() ui_console_permission(req), c("zz", "y"))
-  expect_true("  Not an answer: 'zz'." %in% out$shown)
+  expect_true("    Not an answer: 'zz'." %in% out$shown)
   expect_identical(out$kept, character())
+})
+
+test_that("every question asks again in one style: dim rows at column 4 (review)", {
+  root = local_project()
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  withr::local_options(cli.num_colors = 256L)
+  dim = console_style()$dim
+  out = console_try(function() ui_console_select("Pick", c("a", "b")), c("x", "1"))
+  expect_true(dim("    Not an answer. Type a number.") %in% out$shown)
+  pick = function() ui_console_select("Pick", c("a", "b"), multiple = TRUE, allow_other = TRUE)
+  out = console_try(pick, c("", "1"))
+  expect_true(dim("    Not an answer. Type numbers separated by commas, or your own answer.") %in%
+                out$shown)
+  out = console_try(function() ui_console_permission(ui_request("zz = 1")), c("zz", "y"))
+  expect_true(dim("    Not an answer: 'zz' (kept in history).") %in% out$shown)
 })
 
 test_that("with gptr.history off nothing is kept and no notice says it was (D-243)", {
@@ -620,11 +635,11 @@ test_that("with gptr.history off nothing is kept and no notice says it was (D-24
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
   local_gptr_options(history = FALSE)
   out = console_try(function() ui_console_permission(ui_request("zz = 1")), c("zz", "y"))
-  expect_true("  Not an answer: 'zz'." %in% out$shown)
+  expect_true("    Not an answer: 'zz'." %in% out$shown)
   rd = list(waiting = function() "b")
   local_mocked_bindings(console_repl_find = function() list(reader = rd))
   out2 = console_try(function() ui_console_read("Q: "), "a")
-  expect_identical(out2$shown, "  A pasted block is not an answer.")
+  expect_identical(out2$shown, "    A pasted block is not an answer.")
   expect_identical(c(out$kept, out2$kept), character())
 })
 
@@ -637,10 +652,10 @@ test_that("a long invalid answer's notice wraps inside the approval's width (P28
   req = ui_request("zz = 1", rule = "r(level<=1)")
   out = console_try(function() ui_console_permission(req), c(a, "y"))
   rows = out$shown[seq(grep("Not an answer", out$shown, fixed = TRUE), length.out = 4L)]
-  expect_identical(rows, c("  Not an answer: 'please use base R graphics for this",
-                           "  plot' (kept in history).",
-                           "  Allow r? Type y, a, p or n (n <text> says what to do",
-                           "  instead), or ?."))
+  expect_identical(rows, c("    Not an answer: 'please use base R graphics for this",
+                           "    plot' (kept in history).",
+                           "    Allow r? Type y, a, p or n (n <text> says what to do",
+                           "    instead), or ?."))
   expect_lte(max(nchar(out$shown)), 58L)
   expect_identical(out$kept, a)
 })

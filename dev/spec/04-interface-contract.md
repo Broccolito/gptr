@@ -5454,7 +5454,7 @@ its part in its own commit, and Task 27 finalises them.
     all the same, and other text read too soon is kept in the history, never sent (review of Tasks 16-21). A key or its word
     answers, as an approval reads `y` or `yes`, and an empty answer continues; anything else (a steer typed at
     the chevron, `add a legend`, which the first-letter rule read as `a`) gets the dim hint
-    `  Paused. Type s, f, c, a or b.` and the menu reads again. [s] and [f] read their text at the same chevron
+    `    Paused. Type s, f, c, a or b.` (at column 4, `ui_hint()`) and the menu reads again. [s] and [f] read their text at the same chevron
     and queue it with `policy_enqueue()` as Enter and Tab do (source `pause_menu`), which keeps the reader's
     `sent`, so Up then takes back the menu's message as the composer's; blank text queues nothing and the run
     continues. While the menu is up its records' last block is a question's (`prompt`), so the queue line sits
@@ -5512,6 +5512,12 @@ its part in its own commit, and Task 27 finalises them.
     hint names the question and its keys, `  Allow r? Type y, a, p or n (n <text> says what to do instead), or ?.`
     (`y or n` without a rule; a sub-agent's `sub-agent a: allow r?`), as the question may have scrolled away
     (visual review: in RStudio and R.app a draft left on the input line turned `y` into an invalid answer).
+    Every row a question writes when it asks again is dim at column 4, under its text as the keys row
+    (`ui_hint()`, review of Tasks 16-21): the approval's `Not an answer`, hint, `a and p are not offered` and
+    `No valid answer after 5 tries; refused.`, a choice's `Not an answer. Type a number[, or your own
+    answer].` (it was `  Please enter one of the numbers shown.` in ink), a paste's `A pasted block is not an
+    answer`, and the pause menu's `Paused. Type s, f, c, a or b.`; at column 2, under the `?`, they read as a
+    new item.
   - A question and the tool block it is asked in are one block (`console_gap()`): no blank line between a call
     line, its ask and its result lines.
   - In a T console a question is drawn once typing has paused for a second, the live row saying
