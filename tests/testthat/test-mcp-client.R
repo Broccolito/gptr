@@ -192,6 +192,8 @@ test_that("a server log rotates at 5 MB, replacing the older generation", {
 })
 
 test_that("a modern stdio server is found by the probe, listed with pagination and called", {
+  # the probe alone, however long a cold start takes (D-165 item 5)
+  withr::local_options(gptr.mcp_probe_timeout = 30)
   fx = local_mcp_fixture("modern", "stdio", n_extra = 60L)
   conn = mcp_connect(fx$spec)
   expect_s3_class(conn, "gptr_mcp_conn")
@@ -251,6 +253,28 @@ test_that("a stale cached era is probed again once, in both directions, over bot
     expect_identical(sum(fx$log()$method == "server/discover"), 1L)
     mcp_close(conn)
   }
+})
+
+test_that("a modern server that answers the probe late is probed again after refusing initialize", {
+  withr::local_options(gptr.mcp_probe_timeout = 2)
+  fx = local_mcp_fixture("modern", "stdio", delay = 4)
+  conn = mcp_connect(fx$spec)
+  expect_identical(c(conn$era, mcp_era_get(fx$spec)$era), c("modern", "modern"))
+  expect_length(mcp_tools(conn), 5L)
+  expect_identical(fx$log()$method, c("server/discover", "notifications/cancelled", "initialize",
+                                      "server/discover", "tools/list"))
+  mcp_close(conn)
+})
+
+test_that("a forced modern server's probe waits as long as any request", {
+  withr::local_options(gptr.mcp_probe_timeout = 0.5)
+  fx = local_mcp_fixture("modern", "stdio", delay = 2)
+  fx$spec$protocol = "modern"
+  conn = mcp_connect(fx$spec)
+  expect_identical(conn$era, "modern")
+  expect_length(mcp_tools(conn), 5L)
+  expect_identical(fx$log()$method, c("server/discover", "tools/list"))
+  mcp_close(conn)
 })
 
 test_that("progress re-arms the idle timer; without progress a call times out and is cancelled", {

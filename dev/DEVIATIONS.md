@@ -2024,10 +2024,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
      interrupt the pause menu resumes keeps the call (03 interrupt policy, G3), and `notifications/cancelled`
      is written once the pump has unwound (inside an outer pump P04 queues it for that pump).
   4. `mcp_ui()` is inlined in `mcp_elicit()` (the HTTP branches Task 4 deferred landed with Task 5, D-171).
+  5. (2026-10-22) A probe left unanswered is not proof of the legacy era: its window opens before the first write,
+     so it also holds the server's own start and, on Windows, the stdin writer's cold start (up to 5.24 s on
+     hosted runners, D-246). A server that then refuses `initialize` has started, so it is probed once more in the
+     probe window; the plan took the timeout as legacy, so a modern-only server that started slowly never
+     connected. With `protocol: "modern"` nothing falls back, so its probe waits the request timeout.
 - Contract-visible: none.
 - Tests: test-mcp-client.R "a stale cached era is probed again once, in both directions, ..." (+6), "time spent
   answering a legacy server request does not time the call out" (+1), "an interrupt can be resumed (G3); ..."
-  (+1, and waits for the cancel without pumping). Evidence: progress/P18.md Task 4.
+  (+1, and waits for the cancel without pumping), "a modern server that answers the probe late is probed again
+  after refusing initialize" (+3; its second probe has 2 s, and a ready writer's first ACK took at most 0.57 s,
+  D-246) and "a forced modern server's probe waits as long as any request" (+3). "a modern stdio server is found
+  by the probe, ..." asserts that no `initialize` is sent, so it probes for 30 s, the fixture's request timeout
+  and 5.7 times the 5.24 s cold start, instead of 5 s. Evidence: progress/P18.md Task 4; progress/fixes.md Task
+  CI-90.
 
 ## D-166 - P19 gptr_parallel(): the contract example's member name `plan` is an accessor (IC-71) (2026-10-06)
 - Rule: member names equal to a session accessor are refused (IC-71); `plan` is one (04 section 5.1), so 04
