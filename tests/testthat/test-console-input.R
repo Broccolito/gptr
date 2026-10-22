@@ -196,7 +196,7 @@ test_that("the live row says what the run does, its queue and the person's draft
     follow = "▌ thinking 6s   enter follow-up · tab steer · ctrl-c pause",
     queue = paste("▌ thinking 6s · 2 queued   ↳ steer · use log(mpg) instead",
                   "· ↑ edit"),
-    draft = "▌ thinking 6s…   › and plot the residuals against the fitted values please",
+    draft = "▌ thinking 6s · 1…   › and plot the residuals against the fitted values please",
     question = "▌ edit 11s · question waiting   › and plot the residu",
     complete = "▌ @mtcars  @mtcars_copy   › use @mtc"
   ))
@@ -204,33 +204,49 @@ test_that("the live row says what the run does, its queue and the person's draft
   expect_identical(live_rows(live_states, 40L), list(
     rstudio = "▌ thinking 6s · 1 queued · esc stops",
     menu = "▌ r 1m 05s · ctrl-c pauses",
-    hint = "▌ thinking 6s   enter steer · tab f…",
-    follow = "▌ thinking 6s   enter follow-up · t…",
-    queue = "▌ thinking 6s · 2 queued   ↳ steer…",
-    draft = "▌ 6s   › …t the fitted values please",
-    question = "▌ edit 11s…   › and plot the residu",
+    hint = "▌ thinking 6s   enter steer · tab foll…",
+    follow = "▌ thinking 6s   enter follow-up · tab…",
+    queue = "▌ thinking 6s · 2 queued   ↳ steer · u…",
+    draft = "▌ 6s   › …inst the fitted values please",
+    question = "▌ edit 11s · q…   › and plot the residu",
     complete = "▌ @mtcars  @mtcars_copy   › use @mtc"
   ))
   expect_identical(live_rows(live_states, 30L), list(
-    rstudio = "▌ thinking 6s · 1 queued…",
+    rstudio = "▌ thinking 6s · 1 queued · e…",
     menu = "▌ r 1m 05s · ctrl-c pauses",
-    hint = "▌ thinking 6s   enter stee…",
-    follow = "▌ thinking 6s   enter foll…",
-    queue = "▌ thinking 6s · 2 queued…",
-    draft = "▌ 6s   › …ed values please",
-    question = "▌ 11s   › …plot the residu",
-    complete = "▌ @mtcars  @…   › use @mtc"
+    hint = "▌ thinking 6s   enter steer…",
+    follow = "▌ thinking 6s   enter follow…",
+    queue = "▌ thinking 6s · 2 queued   ↳…",
+    draft = "▌ 6s   › …itted values please",
+    question = "▌ 11s   › and plot the residu",
+    complete = "▌ @mtcars  @mtc…   › use @mtc"
   ))
-  # a character outside ASCII counts two columns, so the row never wraps where they are wide
+  # every row fits width - 1 as the terminal draws it: the glyphs are one column, wide
+  # characters two (review: each glyph counted two and cut rows that fitted)
+  expect_true(all(nchar(unlist(live_rows(live_states, 60L)), type = "width") <= 59L))
+  expect_identical(live_rows(live_states["hint"], 60L)$hint,
+                   "▌ thinking 6s   enter steer · tab follow-up · ctrl-c pause")
   wide = live_rows(list(a = list(secs = 0, draft = "数据 été αβ")), 20L)
-  expect_identical(wide$a, "▌ 0s   › …αβ")
-  expect_lte(live_fit(wide$a), 19L)
-  expect_identical(console_live_row(list(secs = 0), 5L), "")
+  expect_identical(wide$a, "▌ 0s   › …据 été αβ")
+  expect_identical(nchar(wide$a, type = "width"), 19L)
+  expect_identical(console_live_row(list(secs = 0), 4L), "")
   withr::local_options(cli.unicode = FALSE)
   expect_identical(live_rows(live_states[c("queue", "draft")], 80L), list(
     queue = "# thinking 6s - 2 queued   -> steer - use log(mpg) instead - Up edit",
     draft = "# thinking 6s...   >> and plot the residuals against the fitted values please"
   ))
+})
+
+test_that("in a CJK locale every character outside ASCII counts two columns (D-243)", {
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L)
+  ok = suppressWarnings(withr::with_locale(c(LC_CTYPE = "ja_JP.UTF-8"), Sys.getlocale("LC_CTYPE")))
+  skip_if_not(grepl("^ja", ok), "no ja_JP.UTF-8 locale")
+  withr::local_locale(c(LC_CTYPE = "ja_JP.UTF-8"))
+  # a terminal there draws East Asian ambiguous widths (the glyphs, Greek, accents) wide
+  wide = live_rows(list(a = list(secs = 0, draft = "数据 été αβ")), 20L)
+  expect_identical(wide$a, "▌ 0s   › …αβ")
+  expect_lte(live_fit(wide$a), 19L)
 })
 
 test_that("the live row's block is the agent's blue, its words dim and the draft ink (D-243)", {
@@ -394,7 +410,7 @@ test_that("a draft a run left is edited at the prompt; Enter returns it as readl
   # a draft wider than the row shows its tail; Enter writes the whole line
   withr::local_options(cli.width = 30L)
   r = idle_read("and label both of the axes", "\r")
-  expect_match(r$out, "\rpeter> …bel both of the axes\033[K", fixed = TRUE)
+  expect_match(r$out, "\rpeter> …abel both of the axes\033[K", fixed = TRUE)
   expect_identical(r$rows, c("peter> and label both of the axes", ""))
   # the row is on the input band where the background is known
   withr::local_options(cli.num_colors = 256L)

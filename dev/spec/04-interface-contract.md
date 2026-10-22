@@ -5634,9 +5634,10 @@ its part in its own commit, and Task 27 finalises them.
       Completion candidates (Task 22) replace the status words. The block is the blue accent, the words and
       hints dim, only the draft ink. ASCII: `# thinking 6s - ctrl-c pauses`.
     - One collapse rule: the status part is cut from the right with `…`, down to `▌ <elapsed>`; the draft keeps
-      its tail. The row is fitted to width - 1, every character outside ASCII that R counts as one column counted
-      as two (East Asian ambiguous widths drawn wide), so it never wraps; it is empty where not even the block
-      and the time fit.
+      its tail. The row is fitted to width - 1 as the console draws it (`live_fit()`: R's widths; in a CJK
+      locale, whose terminals draw East Asian ambiguous widths wide, every character outside ASCII that R
+      counts as one column counted as two), so it never wraps; it is empty where not even the block and the
+      time fit.
     - Writing: where `\033[K` ends the line (an ANSI terminal; RStudio; visual review: a padded row left about 57
       trailing spaces on each RStudio row that replaced it), `\r` + row + `\033[K`, on the band in a T console
       where it is known, then `\033[0m`; elsewhere (Rgui, TERM=dumb, and Positron, whose console erases by

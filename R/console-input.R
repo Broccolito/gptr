@@ -241,9 +241,8 @@ console_newest = function(s, rd, take = FALSE) {
 #' `enter steer<sep>tab follow-up<sep>ctrl-c pause`; else `<person> <draft>`. The block is the
 #' agent's blue and the words dim; the draft is ink. One collapse
 #' rule: the status part is cut from the right with an ellipsis, down to the block and the elapsed
-#' time, and the draft keeps its tail. A character outside ASCII that R counts as one column counts
-#' two (live_fit()), as a terminal drawing East Asian ambiguous widths wide shows it, so the row
-#' never wraps; where not even the block and the time fit, the row is empty.
+#' time, and the draft keeps its tail. Widths are counted as the console draws them (live_fit()), so
+#' the row never wraps; where not even the block and the time fit, the row is empty.
 #' @noRd
 console_live_row = function(state, width) {
   sym = console_style()
@@ -292,14 +291,17 @@ console_live_row = function(state, width) {
   row
 }
 
-#' Plain text fitted to `n` columns as the live row counts them (a character outside ASCII that R
-#' counts as one column counts two): with `n` NULL its columns; else the text when it fits, or it
-#' cut with `ell` at its end, or its tail after `ell` (`tail`), no blank or separator at the cut
+#' Plain text fitted to `n` columns as the live row counts them (in a CJK locale, whose terminals
+#' draw East Asian ambiguous widths wide, a character outside ASCII that R counts as one column
+#' counts two): with `n` NULL its columns; else the text when it fits, or it cut with `ell` at its
+#' end, or its tail after `ell` (`tail`), no blank or separator at the cut
 #' @noRd
 live_fit = function(x, n = NULL, ell = "", tail = FALSE) {
   ch = strsplit(x, "", fixed = TRUE)[[1L]]
   w = nchar(ch, type = "width")
-  w = w + (w == 1L & nchar(ch, type = "bytes") > 1L)
+  if (grepl("^(ja|ko|zh)", Sys.getlocale("LC_CTYPE"))) {
+    w = w + (w == 1L & nchar(ch, type = "bytes") > 1L)
+  }
   if (is.null(n)) return(sum(w))
   if (sum(w) <= n) return(x)
   n = n - live_fit(ell)

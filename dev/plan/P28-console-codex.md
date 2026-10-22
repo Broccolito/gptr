@@ -838,7 +838,9 @@ Decisions:
   - T: `\r` + band + row + `\033[K\033[0m`, cut to `console_width() - 1` by
     `cli::ansi_nchar(type = "width")`, with ambiguous widths counted as 2 (amended in Task 17: every
     character outside ASCII that R counts as one column counts two, `live_fit()`; R has no ambiguous-width
-    table, and a draft's Greek or accented letters are as likely to be drawn wide).
+    table, and a draft's Greek or accented letters are as likely to be drawn wide; amended in the review of
+    Tasks 16-21: only in a CJK locale, `LC_CTYPE` `ja`, `ko` or `zh`, whose terminals draw them wide;
+    elsewhere they are one column, and counting the style table's glyphs two cut rows that fitted).
   - Redrawn on every key and once a second. The block is static (no blink, no spinner).
   - The block is the agent's blue, the status words and hints dim; only the draft is ink (amended in the
     visual review: the waiting row's ink block and ink sentence were the loudest row on screen).

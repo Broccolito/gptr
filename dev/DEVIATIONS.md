@@ -3379,6 +3379,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     right on the next prompt. Contract-visible: 04 §15.10 IC-76. Tests: test-console-interrupt.R "[b]ackground
     hands a foreground run to bg.register (P21) and resumes", "a [b]ackground refusal is a notice and the menu
     asks again".
+  - The live row counts a character outside ASCII as two columns only in a CJK locale (`LC_CTYPE` `ja`, `ko`,
+    `zh`), whose terminals draw East Asian ambiguous widths wide (`live_fit()`); elsewhere R's widths. Counting
+    the style table's own glyphs two cut rows that fitted: at 60 columns `▌ thinking 25s   enter steer · tab
+    follow-up · ctrl-c pause` (59 columns) became `ctrl-c…`. Contract-visible: 04 §15.10 IC-82. Tests:
+    test-console-input.R "the live row says what the run does, its queue and the person's draft (D-243)", "in a
+    CJK locale every character outside ASCII counts two columns (D-243)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
