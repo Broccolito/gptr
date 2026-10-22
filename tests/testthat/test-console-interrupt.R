@@ -109,7 +109,8 @@ test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
   # the queue lines of typed lines (D-242), not the old notices
   lines = c(queue_line("steer", "use only mpg"), queue_line("follow-up", "then plot it"))
   expect_true(all(lines %in% err))
-  expect_false(any(grepl("[gptr] steering|follow-up queued", err)))
+  expect_false(any(grepl("[gptr] steering", err, fixed = TRUE) |
+                     grepl("follow-up queued", err, fixed = TRUE)))
 })
 
 test_that("in the console margin the menu's prompts keep it, as its notices do (D-186)", {
