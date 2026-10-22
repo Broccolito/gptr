@@ -834,7 +834,10 @@ Decisions:
 - Completion candidates (Task 22) replace the status words until the next key, so the terminal
   cursor stays at the end of the draft.
 - One collapse rule: cut the status part from the right with `…`, down to `▌ <elapsed>`. The
-  draft keeps its tail.
+  draft keeps its tail. (Amended in the review of Tasks 16-21: whole terms go first, from the right: the
+  hint's `ctrl-c pause`, `tab follow-up`, `enter steer`, or the queue view's `↑ edit`, then `question
+  waiting`, then `n queued`; only then is the queued message cut, keeping its head. Cutting characters ended a
+  whole message in `…` and left `ctrl-c…`, a key without its verb.)
 - Writing:
   - T: `\r` + band + row + `\033[K\033[0m`, cut to `console_width() - 1` by
     `cli::ansi_nchar(type = "width")`, with ambiguous widths counted as 2 (amended in Task 17: every

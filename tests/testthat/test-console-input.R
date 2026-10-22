@@ -196,31 +196,39 @@ test_that("the live row says what the run does, its queue and the person's draft
     follow = "▌ thinking 6s   enter follow-up · tab steer · ctrl-c pause",
     queue = paste("▌ thinking 6s · 2 queued   ↳ steer · use log(mpg) instead",
                   "· ↑ edit"),
-    draft = "▌ thinking 6s · 1…   › and plot the residuals against the fitted values please",
+    draft = "▌ thinking 6s   › and plot the residuals against the fitted values please",
     question = "▌ edit 11s · question waiting   › and plot the residu",
     complete = "▌ @mtcars  @mtcars_copy   › use @mtc"
   ))
-  # one collapse rule: the status is cut from the right, down to the time; the draft keeps its tail
+  # one collapse rule: whole terms go from the right (the hint's, then the queue and a waiting
+  # question), then the queued message is cut, keeping its head; the draft keeps its tail
   expect_identical(live_rows(live_states, 40L), list(
     rstudio = "▌ thinking 6s · 1 queued · esc stop",
     menu = "▌ r 1m 05s · ctrl-c pause",
-    hint = "▌ thinking 6s   enter steer · tab foll…",
-    follow = "▌ thinking 6s   enter follow-up · tab…",
-    queue = "▌ thinking 6s · 2 queued   ↳ steer · u…",
+    hint = "▌ thinking 6s   enter steer",
+    follow = "▌ thinking 6s   enter follow-up",
+    queue = "▌ thinking 6s   ↳ steer · use log(mpg)…",
     draft = "▌ 6s   › …inst the fitted values please",
-    question = "▌ edit 11s · q…   › and plot the residu",
+    question = "▌ edit 11s   › and plot the residu",
     complete = "▌ @mtcars  @mtcars_copy   › use @mtc"
   ))
   expect_identical(live_rows(live_states, 30L), list(
-    rstudio = "▌ thinking 6s · 1 queued · e…",
+    rstudio = "▌ thinking 6s · 1 queued",
     menu = "▌ r 1m 05s · ctrl-c pause",
-    hint = "▌ thinking 6s   enter steer…",
-    follow = "▌ thinking 6s   enter follow…",
-    queue = "▌ thinking 6s · 2 queued   ↳…",
+    hint = "▌ thinking 6s   enter steer",
+    follow = "▌ thinking 6s",
+    queue = "▌ thinking 6s   ↳ steer · us…",
     draft = "▌ 6s   › …itted values please",
     question = "▌ 11s   › and plot the residu",
     complete = "▌ @mtcars  @mtc…   › use @mtc"
   ))
+  # a whole message never ends in an ellipsis; the time is the floor
+  follow_up = list(what = "thinking", secs = 28, queued = 1, draft = "",
+                   newest = list(kind = "follow_up", text = "then save the plot as plot.png"))
+  expect_identical(console_live_row(follow_up, 80L),
+                   "▌ thinking 28s · 1 queued   ↳ follow-up · then save the plot as plot.png")
+  expect_identical(console_live_row(follow_up, 25L), "▌ thinking 28s")
+  expect_identical(console_live_row(follow_up, 12L), "▌ 28s")
   # every row fits width - 1 as the terminal draws it: the glyphs are one column, wide
   # characters two (review: each glyph counted two and cut rows that fitted)
   expect_true(all(nchar(unlist(live_rows(live_states, 60L)), type = "width") <= 59L))
@@ -233,7 +241,7 @@ test_that("the live row says what the run does, its queue and the person's draft
   withr::local_options(cli.unicode = FALSE)
   expect_identical(live_rows(live_states[c("queue", "draft")], 80L), list(
     queue = "# thinking 6s - 2 queued   -> steer - use log(mpg) instead - Up edit",
-    draft = "# thinking 6s...   >> and plot the residuals against the fitted values please"
+    draft = "# thinking 6s   >> and plot the residuals against the fitted values please"
   ))
 })
 

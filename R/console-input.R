@@ -240,9 +240,10 @@ console_newest = function(s, rd, take = FALSE) {
 #' `<sep>esc stop`; with an empty draft the newest message follows, `<queued> steer<sep><text><sep>
 #' <up> edit`, or the keys, `enter steer<sep>tab follow-up<sep>ctrl-c pause`; else `<person>
 #' <draft>`. The block is the agent's blue and the words dim; the draft is ink. One collapse rule:
-#' the status part is cut from the right with an ellipsis, down to the block and the elapsed time,
-#' and the draft keeps its tail. Widths are counted as the console draws them (live_fit()), so the
-#' row never wraps; where not even the block and the time fit, the row is empty.
+#' whole terms go from the right, the hint's, then the queue and a waiting question, then the
+#' queued message is cut keeping its head, down to the block and the elapsed time; the draft keeps
+#' its tail, so an ellipsis always marks cut text. Widths are counted as the console draws them
+#' (live_fit()), so the row never wraps; where not even the block and the time fit, it is empty.
 #' @noRd
 console_live_row = function(state, width) {
   sym = console_style()
@@ -250,37 +251,58 @@ console_live_row = function(state, width) {
   kind = function(k) if (identical(k, "follow_up")) "follow-up" else "steer"
   secs = as.integer(max(0, state$secs %||% 0))
   clock = if (secs < 60L) paste0(secs, "s") else sprintf("%dm %02ds", secs %/% 60L, secs %% 60L)
-  base = paste(state$what %||% "thinking", clock)
-  words = paste0(base, if (isTRUE(state$queued > 0)) paste0(sym$sep, state$queued, " queued"),
-                 if (isTRUE(state$question)) paste0(sym$sep, "question waiting"))
-  if (length(state$candidates)) {
-    base = ""
-    words = paste(vapply(state$candidates, line, ""), collapse = "  ")
-  }
+  words = c(paste(state$what %||% "thinking", clock),
+            if (isTRUE(state$queued > 0)) paste0(state$queued, " queued"),
+            if (isTRUE(state$question)) "question waiting")
   key = tolower(state$key %||% "Ctrl-C")
   enter = state$enter %||% "steer"
   draft = state$draft
-  hint = if (is.null(draft)) {
-    paste0(sym$sep, key, if (isTRUE(state$pause)) " pause" else " stop")
+  # the hint's terms; a queued message (`said`) is the one text cut, the others are dropped whole
+  said = NULL
+  terms = if (is.null(draft)) {
+    paste(key, if (isTRUE(state$pause)) "pause" else "stop")
+  } else if (!nzchar(draft) && is.null(state$newest)) {
+    c(paste("enter", kind(enter)), paste("tab", kind(setdiff(c("steer", "follow_up"), enter))),
+      paste(key, "pause"))
   } else if (!nzchar(draft)) {
-    paste0("   ", if (is.null(state$newest)) {
-      paste0("enter ", kind(enter), sym$sep, "tab ", kind(setdiff(c("steer", "follow_up"), enter)),
-             sym$sep, key, " pause")
-    } else {
-      paste0(sym$queued, " ", kind(state$newest$kind), sym$sep, line(state$newest$text), sym$sep,
-             sym$up, " edit")
-    })
+    said = paste0(sym$queued, " ", kind(state$newest$kind), sym$sep, line(state$newest$text))
+    c(said, paste(sym$up, "edit"))
+  }
+  hint = function(terms) {
+    if (!length(terms)) "" else if (is.null(draft)) paste0(sym$sep, terms) else
+      paste0("   ", paste(terms, collapse = sym$sep))
   }
   lead = paste0(sym$agent, " ")
   gap = paste0("   ", sym$person, " ")
   input = if (nzchar(draft %||% "")) line(draft)
   room = width - 1L - live_fit(lead)
   if (room < live_fit(clock)) return("")
-  status = paste0(words, hint)
   fit = if (is.null(input)) room else max(live_fit(clock), room - live_fit(gap) - live_fit(input))
-  if (live_fit(status) > fit) {
-    status = live_fit(status, fit, sym$ellipsis)
-    if (!startsWith(status, base)) status = clock
+  if (length(state$candidates)) {
+    status = live_fit(paste(vapply(state$candidates, line, ""), collapse = "  "), fit, sym$ellipsis)
+  } else {
+    # dropped whole, from the right: the hint's terms, then the queue and a waiting question;
+    # then the queued message is cut, keeping its head; at least the block and the time
+    repeat {
+      status = paste0(paste(words, collapse = sym$sep), hint(terms))
+      if (live_fit(status) <= fit) break
+      if (length(terms) > !is.null(said)) {
+        terms = terms[-length(terms)]
+      } else if (length(words) > 1L) {
+        words = words[-length(words)]
+      } else if (!is.null(said)) {
+        cut = live_fit(said, fit - live_fit(words) - 3L, sym$ellipsis)
+        if (startsWith(cut, paste0(sym$queued, " ", kind(state$newest$kind), sym$sep))) {
+          status = paste0(words, hint(cut))
+          break
+        }
+        said = NULL
+        terms = character()
+      } else {
+        status = clock
+        break
+      }
+    }
   }
   row = paste0(sym$blue(sym$agent), " ", sym$dim(status))
   if (is.null(input)) return(row)

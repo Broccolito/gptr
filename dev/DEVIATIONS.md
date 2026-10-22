@@ -3403,6 +3403,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Contract-visible: 04 §15.10 IC-76. Tests: test-console-interrupt.R "steer and follow-up queue the text with
     source pause_menu (IC-55)", "in the console margin the menu's rows are an approval's, its prompt at column 0";
     test-console-typing.R "pause-menu text passes the input event with source steer".
+  - The live row's collapse drops whole terms before it cuts text: the hint's terms from the right (`ctrl-c pause`,
+    `tab follow-up`, `enter steer`; the queue view's `↑ edit`), then `question waiting`, then `<n> queued`; only
+    then is the queued message cut, keeping its head, down to the block and the time. Cutting characters ended a
+    whole message in `…` (`↳ follow-up · then save the plot as plot.png…` at 80 columns, where only ` · ↑ edit`
+    was dropped) and cut keys from their verbs (`ctrl-c…`). Contract-visible: 04 §15.10 IC-82. Tests:
+    test-console-input.R "the live row says what the run does, its queue and the person's draft (D-243)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

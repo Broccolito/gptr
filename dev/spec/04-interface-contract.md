@@ -5642,8 +5642,10 @@ its part in its own commit, and Task 27 finalises them.
       REPL's held lines); `question waiting` while a question waits for typing to pause (IC-76, Task 19).
       Completion candidates (Task 22) replace the status words. The block is the blue accent, the words and
       hints dim, only the draft ink. ASCII: `# thinking 6s - ctrl-c pause`.
-    - One collapse rule: the status part is cut from the right with `…`, down to `▌ <elapsed>`; the draft keeps
-      its tail. The row is fitted to width - 1 as the console draws it (`live_fit()`: R's widths; in a CJK
+    - One collapse rule: whole terms go from the right, the hint's (`ctrl-c pause`, `tab follow-up`, `enter
+      steer`; the queue view's `↑ edit`), then `question waiting`, then `<n> queued`; then the queued message
+      is cut with `…`, keeping its head; at least `▌ <elapsed>`; the draft keeps its tail (review of Tasks 16-21:
+      a character cut ended a whole message in `…` and cut `ctrl-c…`). The row is fitted to width - 1 as the console draws it (`live_fit()`: R's widths; in a CJK
       locale, whose terminals draw East Asian ambiguous widths wide, every character outside ASCII that R
       counts as one column counted as two), so it never wraps; it is empty where not even the block and the
       time fit.
