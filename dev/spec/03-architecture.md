@@ -306,7 +306,7 @@ declares, if any.
 | File | Layer | Responsibility | Builtin | Plan |
 |---|---|---|---|---|
 | `aaa-state.R` | L0 | `the`, `on_load()`, `on_unload()`, the bootstrap service table (`ext_service_set/get/has()`), the redaction hook (`redactor_set()`, `redact_hook()`), the internal `%||%`; collates first [IC-32, IC-34] | - | P01 |
-| `utils-conditions.R` | L0 | `gptr_abort()/gptr_warn()/gptr_inform()` with the `gptr_error_<class>` scheme; `msg_verbatim()` (safe rendering of untrusted text) | - | P01 |
+| `utils-conditions.R` | L0 | `gptr_abort()/gptr_warn()/gptr_inform()` with the `gptr_error_<class>` scheme; `msg_verbatim()` (safe rendering of untrusted text); the console's L0 helpers (`gptr_message_write()`, `console_pad()`, `console_colors()`, the style table `console_style()`) | - | P01 |
 | `utils-hash.R` | L0 | sha256 via `cli::hash_sha256()`, `canonical_json()` (radix key order), RNG-free ids (session, entry, block), sampled fingerprints, `with_seed_preserved()`, `port_candidates()` [IC-61] | - | P01 |
 | `utils-encoding.R` | L0 | `as_utf8()` at every ingress [IC-62], UTF-8 marking before every parse/serialise, `os_bytes()`, binary-connection text I/O, C-locale guards | - | P01 |
 | `utils-options.R` | L0 | documented `gptr.*` option defaults; `gptr_has_human()`, `gptr_can_prompt()` [IC-43], front-end detection, verbosity, `supervise_default()`; mockable `gptr_is_interactive()`, `gptr_readline()`, `gptr_confirm()`; `setting_get()` (contract IC-09) | - | P01 |

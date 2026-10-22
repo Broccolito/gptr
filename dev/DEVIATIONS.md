@@ -3431,3 +3431,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   - A blank line of printed output is an empty row: `eval_echo()` styled every row, so at 256 colours an empty line
     carried an empty grey SGR pair. Tests: test-console-message-stream.R "in the console margin what R code prints is
     dim rows at column 4, cut (visual review)".
+  - The style table (`console_style()`, `console_background()`) is in `utils-conditions.R` (L0), beside
+    `console_colors()` and `console_pad()`: the evaluator's display of printed output (`eval_echo()`, `eval-core.R`,
+    L4) calls it, and from `console-render.R` (L5) that was a layering violation the layering test caught. Contract-
+    visible: 03 §3.2 (the file's row). Tests: test-arch-layers.R.

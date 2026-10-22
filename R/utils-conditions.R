@@ -124,6 +124,54 @@ console_pad = function() {
 #' @noRd
 console_colors = function() console_eval_value(".gptr_console_colors") %||% cli::num_ansi_colors()
 
+#' The console's style table (IC-82, D-245): the glyphs of the logo's cursor vocabulary (the
+#' person's chevron, a tool call's thin strip, the agent's block), the logo's red and a darker
+#' logo blue (basic red and blue below 256 colours; cli drops them at 1 colour, `NO_COLOR`), the
+#' one grey `dim` (halfway between the logo's ink and cream where 256 colours show, as consoles
+#' that ignore SGR 2 show it too; else SGR 2), the input band where the background is known and
+#' 256 colours show it, and the R code theme in those colours. ASCII where the output is not
+#' UTF-8 and in Windows consoles outside Windows Terminal and RStudio (Rgui among them), whose
+#' fonts lack U+258E and U+21B3 (WGL4); there the person's chevron is doubled, `>>`, so an answer
+#' never reads as R's own prompt. Here in L0, so an evaluation's display of its output can use it
+#' (eval_echo(); visual review).
+#' @noRd
+console_style = function() {
+  ascii = !cli::is_utf8_output() ||
+    (is_windows() && !nzchar(Sys.getenv("WT_SESSION")) && front_end() != "rstudio")
+  glyphs = if (ascii) {
+    list(person = ">>", tool = "|", agent = "#", queued = "->", up = "Up", bullet = "-",
+         nested = "-", sep = " - ", ellipsis = "...")
+  } else {
+    list(person = "\u203a", tool = "\u258e", agent = "\u258c", queued = "\u21b3", up = "\u2191",
+         bullet = "\u2022", nested = "\u25e6", sep = " \u00b7 ", ellipsis = "\u2026")
+  }
+  deep = cli::num_ansi_colors() >= 256L
+  red = if (deep) "#b85450" else "red"
+  blue = if (deep) "#557ea8" else "blue"
+  grey = if (deep) "#878787" else "dim"
+  bands = c(dark = "\033[48;5;237m", light = "\033[48;5;254m")
+  bg = console_background()
+  c(glyphs, list(
+    red = cli::make_ansi_style(red),
+    blue = cli::make_ansi_style(blue),
+    dim = cli::make_ansi_style(grey),
+    band = if (deep && !is.na(bg)) bands[[bg]] else "",
+    code = list(reserved = red, string = blue, number = blue, null = blue, call = "bold",
+                comment = grey)
+  ))
+}
+
+#' The terminal's background, "dark", "light" or NA, read once into `the$background`: the last
+#' field of COLORFGBG, 0-6 or 8 dark, 7 or 9-15 light (IC-82)
+#' @noRd
+console_background = function() {
+  if (is.null(the$background)) {
+    i = suppressWarnings(as.integer(sub(".*;", "", Sys.getenv("COLORFGBG"))))
+    the$background = if (i %in% c(0:6, 8L)) "dark" else if (i %in% 0:15) "light" else NA_character_
+  }
+  the$background
+}
+
 #' Notice lines inside the console margin; a line that does not fit is word-wrapped at the
 #' content width and keeps its indentation (D-186); unchanged without a margin
 #' @noRd

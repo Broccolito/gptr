@@ -141,7 +141,7 @@ working directory restored. Plan-specific rules:
 | `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21 |
 | `R/console-complete.R` (new) | 22, 23 |
 | `R/utils-options.R` (`readline_answer()`, tty wrappers, `console_class()`) | 2, 3, 17, 18, 25 |
-| `R/utils-conditions.R` (`console_colors()`; `gptr_message_write()` clears and redraws the live row) | 11, 17 |
+| `R/utils-conditions.R` (`console_colors()`, `console_style()`; `gptr_message_write()` clears and redraws the live row) | 8, 11, 17 |
 | `R/eval-core.R` (an evaluation holds the console's colours; printed output as result rows, visual review) | 11 |
 | `R/gptr-config.R` (`type_ahead` description) | 18 |
 | `R/console-commands.R` (`/help`, `/context`), `tests/testthat/test-console-commands.R` | 26, 27 |
@@ -422,7 +422,9 @@ Tests (`test-console-render.R`), RED first:
 
 Spec: IC-82 glyph and palette tables, 03 §6.17.
 
-Files: `R/console-render.R` (`console_style()`, `console_background()`), every caller of
+Files: `R/console-render.R` (`console_style()`, `console_background()`; moved to `R/utils-conditions.R`,
+L0, beside `console_colors()` in the visual review, so the evaluator's display of printed output, L4,
+uses the one style table), every caller of
 `console_symbols()` and `cli::symbol$ellipsis` (`R/console-render.R`, `R/console-repl.R`,
 `R/console-ui.R`), `tests/testthat/test-console-render.R`, and the tests that expect the old glyphs
 (`test-console-{spinner-width,fences,jupyter-progress}.R`, `test-cli-{codex,claude}.R`). Amended in
