@@ -140,6 +140,44 @@ test_that("q bound to data where the code runs is not refused as a value; calls 
   expect_equal(eval_guard(ex("summary(q)"), e)$blocked, "q")
 })
 
+test_that("q bound to data is refused where a base function looks it up as a function", {
+  skip_on_cran()
+  ex = function(code) parse(text = code, keep.source = FALSE)
+  e = new.env()
+  e$q = stats::quantile(1:10)
+  # Each quits R: the callee's match.fun() (Vectorize's formals()) finds base::q by name
+  forms = c("Negate(q)('no')", "base::Negate(f = q)", "sweep(m, 1, s, q)", "eapply(env, q)",
+            ".mapply(q, list('no'), NULL)", ".S3method('print', 'foo', q)", "Negate('q')('no')",
+            "Vectorize('q')('no')")
+  for (code in forms) expect_equal(eval_guard(ex(code), e)$blocked, "q", label = code)
+  # Neither looks q up: Vectorize() of data returns it, Recall() passes the value on
+  expect_null(eval_guard(ex("Vectorize(q); f = function(x) Recall(q)"), e)$reason)
+  expect_null(eval_guard(ex("sweep(q, 1, 2); Negate(is.na)(q)"), e)$reason)
+})
+
+test_that("the function-argument table names every base function that match.fun()s one", {
+  skip_on_cran()
+  mf = function(x, fm) {
+    if (!is.call(x)) return(character())
+    if (identical(x[[1L]], as.name("match.fun")) && length(x) >= 2L && is.symbol(x[[2L]]) &&
+          as.character(x[[2L]]) %in% fm) return(as.character(x[[2L]]))
+    out = character()
+    for (i in seq_along(x)) {
+      el = x[[i]]
+      if (!missing(el)) out = c(out, mf(el, fm))
+    }
+    out
+  }
+  found = character()
+  for (n in ls(baseenv(), all.names = TRUE)) {
+    f = get(n, envir = baseenv())
+    if (is.function(f) && !is.primitive(f)) found[n] = unique(mf(body(f), names(formals(f))))[1L]
+  }
+  found = found[!is.na(found)]
+  expect_true(all(c("lapply", "Negate", "sweep") %in% names(found)))
+  expect_identical(eval_guard_fun_arg[names(found)], found)
+})
+
 test_that("model code reads a q bound to data in the session's workspace", {
   skip_on_cran()
   e = new.env()

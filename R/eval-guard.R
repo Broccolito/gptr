@@ -16,20 +16,20 @@ eval_guard_blocked = c(
 #' @noRd
 eval_guard_assign_ops = c("=", paste0("<", "-"), "<<-")
 
-#' Calls whose string arguments name functions
-#' @noRd
-eval_guard_indirect = c(
-  "do.call", "match.fun", "get", "get0", "getExportedValue", "lapply", "sapply", "vapply",
-  "Map", "mapply", "Reduce", "Filter", "Find", "Position", "apply", "tapply", "outer", "Recall"
-)
-
-#' The function argument of the indirect calls that take one: match.fun() looks a non-function
-#' value up by name, so `q = 1; sapply("no", q)` still calls base::q()
+#' The function argument of do.call() and of every base function that applies match.fun() to
+#' one, which looks a non-function value up by name: `q = 1; sapply("no", q)` calls base::q()
 #' @noRd
 eval_guard_fun_arg = c(
   do.call = "what", match.fun = "FUN", lapply = "FUN", sapply = "FUN", vapply = "FUN",
-  mapply = "FUN", apply = "FUN", tapply = "FUN", outer = "FUN", Map = "f", Reduce = "f",
-  Filter = "f", Find = "f", Position = "f"
+  mapply = "FUN", .mapply = "FUN", apply = "FUN", tapply = "FUN", eapply = "FUN", outer = "FUN",
+  sweep = "FUN", Map = "f", Reduce = "f", Filter = "f", Find = "f", Position = "f", Negate = "f",
+  .S3method = "method"
+)
+
+#' Calls whose string arguments name functions (Vectorize() looks its string up in formals())
+#' @noRd
+eval_guard_indirect = c(
+  names(eval_guard_fun_arg), "Vectorize", "get", "get0", "getExportedValue", "Recall"
 )
 
 #' Standard-input readers and the argument naming their connection. "stdin" opens standard

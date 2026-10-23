@@ -3136,8 +3136,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule (guard-1): `eval_guard(exprs, envir = NULL)`; `eval_r()` passes its `envir`. `q` or `quit` used as a value
   passes when, looked up from `envir` as R looks up a value (its parents in order), it is bound to data: not a
   function, and not a promise or active binding (never forced). Calls (`q()`, `base::q`, `do.call("q")`) and the
-  function argument (`sapply(x, q)`, which `match.fun()` resolves to `base::q`) stay refused whatever is bound.
-  Formerly `summary(q)` on the user's quantile vector was refused as quitting R (finding 25). The plan named
+  function argument of `do.call()` and of every base function that applies `match.fun()` to one (`sapply(x, q)`,
+  `Negate(q)`, `sweep(m, 1, s, q)`, which resolve to `base::q`; a test scans base) stay refused whatever is bound,
+  as do their string arguments and `Vectorize("q")`'s (its `formals()` looks the name up); `Vectorize(q)` and
+  `Recall(q)` pass, as neither looks a value up. Formerly `summary(q)` on the user's quantile vector was refused as quitting R (finding 25). The plan named
   `binding_env()`; it is an L3 function and not R's lookup.
 - Rule (team-1): a team, fan-out or `gptr_parallel()` team whose children did not all end idle takes the first such
   child's status and stored condition, `$reason` `"k of n sub-agents did not finish: a (blocked), ..."`, and the
@@ -3223,7 +3225,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
   and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame); session-object
   "a fork's change report names the source objects its code changed in place"; eval-guard "q bound to data where the
-  code runs ...", "model code reads a q bound to data ..."; subagent-team "a team or fan-out takes a failed member's
+  code runs ...", "q bound to data is refused where a base function looks it up ...", "the function-argument table
+  names every base function ...", "model code reads a q bound to data ..."; subagent-team "a team or fan-out takes a failed member's
   status ...", injection-e2e "a worker's forwarded permission request ..."; session-store "a settled team or fan-out
   lists and resumes idle ..."; agent-background "a resumed session is told the user can now approve the call", "...
   whose ask tool was blocked is told to ask again", "a message piped into a waiting session is delivered with the
@@ -3237,5 +3240,5 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   default only at the console ...", "an artifact in a temporary workspace is announced once"; prompt-context "the
   Artifacts line says a workspace without .gptr/ is temporary"; ext-registry "gptr_register() of the same kind and
   name again replaces your earlier record".
-  Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1, gate-hint, tpl-1, tpl-2,
+  Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, guard-1b, team-1, team-4, bg-1, gate-hint, tpl-1, tpl-2,
   sessions-23, ident-1, mcp-trusted, art-1, art-2, reg-1.

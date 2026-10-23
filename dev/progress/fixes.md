@@ -2322,3 +2322,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^(agent-background|console-ui|perm-ask|tool-ask|agent-dispatch)$` PASS 600; after bg-1b to bg-1c the full
   suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35504. Lint clean; plan checks pass.
 - Deviations: D-252 (bg-1 quote amended). Open: none.
+
+### guard-1b - A q bound to data is refused wherever a base function looks it up as a function
+- Follow-up of guard-1. Red: `^eval-guard$` FAIL 9 PASS 139: with `q` bound to `quantile(1:10)` in `envir`,
+  `Negate(q)('no')`, `base::Negate(f = q)`, `sweep(m, 1, s, q)`, `eapply(env, q)`, `.mapply(q, ...)`,
+  `.S3method('print', 'foo', q)`, `Negate('q')('no')` and `Vectorize('q')('no')` passed, and a scan of base found
+  `.mapply`, `.S3method`, `eapply`, `Negate` and `sweep` missing from the function-argument table.
+- Cause: the table and the string list were hand lists of the apply family. Each form above quits a child R whose
+  global `q` is data, because the callee's `match.fun()` (for a string, `Vectorize()`'s `formals()`) finds `base::q`.
+- Fix: `eval_guard_fun_arg` holds `do.call()` and every base function that applies `match.fun()` to a formal;
+  `eval_guard_indirect` is its names plus `Vectorize`, `get`, `get0`, `getExportedValue` and `Recall`. `Vectorize(q)`
+  (returns the data) and `Recall(q)` (passes the value to the calling function, as `f(q)` does) still pass: a probe
+  shows neither reaches `base::q`, so neither is refused.
+- Green: `^eval-guard$` PASS 148; eval-*, copy-eval, copy-tools, tool-r, arch-layers, lint-rules, s1-* PASS 2454;
+  full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35516. Lint clean.
+- Deviations: D-252 (guard-1 rule extended). Open: stats functions that `match.fun()` an argument (`integrate`,
+  `aggregate`, `dendrapply`) and user functions that do still pass a data `q` (advisory guard).
