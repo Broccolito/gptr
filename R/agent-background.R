@@ -236,7 +236,7 @@ bg_ui_spec = function(name, id) {
       if (!bg_ticking()) return(bg_ui_target(name)$permission(request))
       bg_park(id, "permission", bg_request_summary(request))
       list(decision = "deny", remember = NULL, feedback = bg_pending_text("approval"),
-           how = "Nothing ran and nobody declined; repeat the call when the session continues.")
+           how = "Nothing ran and nobody declined.")
     }
   )
 }

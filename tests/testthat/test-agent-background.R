@@ -454,7 +454,7 @@ test_that("a resumed session is told the user can now approve the call (finding 
                                       "approved (r: z = 3) with the same input"), fixed = TRUE)
   roles = vapply(msgs, function(m) m$role, "")
   denial = msg_text(msgs[[max(which(roles == "tool_result"))]])
-  expect_match(denial, "Nothing ran and nobody declined", fixed = TRUE)
+  expect_match(denial, "and the user will be asked. Nothing ran and nobody declined.", fixed = TRUE)
   expect_false(grepl("choose another approach", denial, fixed = TRUE))
 })
 

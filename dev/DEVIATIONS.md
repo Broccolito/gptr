@@ -3153,12 +3153,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule (bg-1): a waiting background session's resumed run opens with a steer from the user (`api_user`, so before
   re-queued follow-ups): "I am at the console now. Repeat the call that could not be approved (<summary>) with the
   same input; I will be asked to approve it.", or "I am at the console now; ask again." for a question; a resume
-  that cannot start restores the queue. Only the sweep's `bg_resume()` starts it: `sdk_check()` starts nothing for
-  a `waiting` session, so a message piped in meanwhile waits for that run, and `gptr_step()` leaves the session
+  that cannot start restores the queue. Only the sweep's `bg_resume()` starts it: `sdk_check()` starts nothing for a
+  `waiting` session, so a message piped in meanwhile waits for that run, and `gptr_step()` leaves the session
   waiting (`gptr_wait()` continues it). A `ui` record's `permission()` denial may carry `how = chr(1)`, kept by
   `ui_answer_norm()` for a denial only and used by `perm_ask()` as the denial text's last sentence; the idle-tick
-  wrapper's is "Nothing ran and nobody declined; repeat the call when the session continues." Formerly the run
-  resumed on the stale "Permission denied ... Explain what you need or choose another approach." and GPT ended
+  wrapper's is "Nothing ran and nobody declined." (the pending text already says to repeat the call). Formerly the
+  run resumed on the stale "Permission denied ... Explain what you need or choose another approach." and GPT ended
   without asking in 7 of 8 runs.
 - Rule (gate-hint): the `how_to_allow` (and message) of a call nobody can approve starts `Mode "<m>" comes from
   <where>.` while the run keeps the mode the gateway recorded in a top-level call's `opts$mode_from`: "this call's
