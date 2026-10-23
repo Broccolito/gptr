@@ -843,14 +843,19 @@ mention_line = function(said) {
 
 #' One prompt through console_send(), after the line naming what its @mentions resolved to
 #' (mention_line()); the answer is printed here when the renderer hooks did not stream it
-#' (verbosity < 2), any other value is printed
+#' (verbosity < 2), any other value is printed. A prompt to a session that runs (in the
+#' background: after the pause menu's [b], or `background = TRUE`) steers it (route_continue()),
+#' so its queue line says so, `<queued glyph> steer<sep><text>` (console_queue_line()), once sent
 #' @noRd
 repl_turn = function(rs, text) {
   men = repl_mentions(text, repl_eval_env(rs))
   if (length(men$said)) console_notice(mention_line(men$said))
+  s = rs$session
+  steer = !is.null(s) && session_data(s)$status %in% c("running", "waiting")
   res = console_send(rs, text, men)
   if (identical(res$status, "error")) return(repl_error(res$error))
   if (!identical(res$status, "ok")) return(invisible(NULL))
+  if (steer) return(console_queue_line(s, text, "steer"))
   value = res$value
   if (!inherits(value, "gptr_session")) {
     console_out(print_lines(value))

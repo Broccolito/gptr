@@ -3117,6 +3117,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     (`interrupted_after`). Tests: test-eval-core.R "a resumed interrupt is not reported; one that ends the code
     is (steering review)"; test-console-interrupt.R "an r call the pause menu resumed returns its output, then
     the steer (steering review)".
+  - The pause menu's [b] keeps what the REPL held in the history, and a prompt to the background run says it
+    steers. [b] ends no run in the foreground, so `console_queue_left()` never settled the REPL's held lines:
+    after it the reader sent each held follow-up as a new prompt, which `route_continue()` turned into a silent
+    steer of the running session (a Tab follow-up joined the run, which a follow-up never does), and every later
+    prompt did the same with no line. `console_background_settle()` now lists the held lines and the draft once
+    as kept in the history, as an abort does, after the `running in the background` row; and `repl_turn()`
+    writes `↳ steer · <text>` once such a prompt is sent. No `/wait` command: `gptr_wait()` brings the run
+    back. Contract-visible: 04 §15.10 IC-76. Tests: test-console-interrupt.R "[b] keeps the REPL's held lines
+    and draft in the history, not sent (steering review)"; test-console-repl.R "a prompt to a session that
+    runs, in the background, says it steers (steering review)".
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

@@ -5397,7 +5397,11 @@ its part in its own commit, and Task 27 finalises them.
     list follows the run's status line, and the blank row before the prompt follows the list. `policy_abort()`
     prints `[gptr] aborted; the session is kept.` only when no status line said `aborted` (verbosity 0, or no run
     in the foreground). The composer's draft joins this list (Task 18). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
-    layering test (12.2).
+    layering test (12.2). The pause menu's [b] ends no run in the foreground, so it settles the REPL's held lines
+    and the draft itself (`console_background_settle()`, steering review): one such list after its `running in
+    the background` row and before the blank row, and an empty composer; queued steers stay for the run. A
+    prompt to the REPL's session while it runs or waits in the background steers it (`route_continue()`), and
+    once sent its queue line says so, `↳ steer · <text>` (`repl_turn()`).
   - The composer's key machine (Task 16; pure, in `console-input.R`; Tasks 18-21 feed it the keys typed while
     the agent works). `console_compose(state, chars, now, enter_kind, complete)` applies one read batch (the text
     `conn_read_chars()` decodes) at time `now` to `state` (`list(draft, esc, t)`) and returns the new state and

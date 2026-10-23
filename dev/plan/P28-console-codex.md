@@ -775,6 +775,14 @@ Decisions:
 - The draft joins this list once the composer holds it (Task 20). Until then gptr holds no draft: a
   partial line stays in the terminal.
 - The notices `dropped typed lines` and `dropped queued messages` are deleted.
+- The pause menu's [b] (amended in the steering review): no run ends in the foreground, so the REPL's
+  held lines and the draft would be the next prompts while the run goes on, and a prompt to a running
+  session is a steer (`route_continue()`), so a Tab follow-up would join the run. [b] settles them as
+  an abort does (`console_background_settle()`): one kept list after its `running in the background`
+  row, before the blank row above the prompt, and an empty composer; steers already queued stay for
+  the run. A prompt typed afterwards to the session that runs (or waits) in the background still
+  steers it, and once sent its queue line says so, `↳ steer · <text>` (`repl_turn()`). No `/wait`
+  command: `gptr_wait()` brings the run back.
 
 Tests (`test-console-typing.R`, `test-console-interrupt.R`), RED first:
 - An abort keeps the texts in the history mock, the dropped steer first, then the held lines, in one
@@ -1433,7 +1441,11 @@ Decisions:
   - (amended in the steering review) Esc pauses in RStudio and R.app: `?peter`'s "Ctrl-C while an
     answer runs opens a pause menu in supported terminal front ends and Positron" and the vignette's
     pause-menu paragraph name their Esc, and say that a line typed there during a run is the next
-    prompt, as RStudio's live row does.
+    prompt, as RStudio's live row does;
+  - (amended in the steering review) after background, what was queued for after the answer and the
+    draft go to the history, unsent, as after an abort, and another prompt steers the run (the
+    vignette's background paragraph says the last already; `?peter`'s `[b]ackground` sentence says
+    neither).
 - Update `/help`, the interactive-console vignette and the README console section. (Amended in Task 23:)
   the vignette's completion paragraph, stale since Tasks 22 and 23 (it names `!` only and says RStudio's
   console completes R code at `peter>`), takes `?peter`'s. (Amended in Task 24:) its mention paragraph

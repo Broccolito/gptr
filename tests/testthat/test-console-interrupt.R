@@ -426,6 +426,44 @@ test_that("[b]ackground hands a foreground run to bg.register (P21) and resumes"
   expect_false(any(grepl("b background", err, fixed = TRUE)))
 })
 
+test_that("[b] keeps the REPL's held lines and draft in the history, not sent (steering review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  old = the$services
+  withr::defer({
+    the$services = old
+  })
+  ext_service_set("bg.register", function(session) invisible(session), provided_by = "test")
+  rd = new.env(parent = emptyenv())
+  rd$typed = "summarise after"
+  rd$compose = list(draft = "a draft")
+  rs = new.env(parent = emptyenv())
+  rs$reader = rd
+  local_mocked_bindings(console_repl_prompt = function() rs)
+  local_gptr_options(history = TRUE)
+  kept = character()
+  local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
+                        .package = "utils")
+  local_menu_answers("b")
+  err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  expect_identical(kept, c("summarise after", "a draft"))
+  # listed once, after the menu's last row and before the blank row above the prompt
+  expect_identical(utils::tail(err, 3L), c(
+    "  running in the background - gptr_wait() brings it back",
+    kept_line(c("summarise after", "a draft")), ""))
+  expect_identical(rd$typed, character())
+  expect_null(rd$compose)
+  # nothing reaches the session: its queue holds the deferred prompt only
+  q = session_data(s)$queue
+  expect_identical(vapply(c(q$steer, q$follow_up), function(it) it$text, ""), "hello")
+  # with nothing held there is no list
+  rd$compose = list(draft = "")
+  local_menu_answers("b")
+  err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  expect_false(any(grepl("kept in history", err, fixed = TRUE)))
+  expect_identical(kept, c("summarise after", "a draft"))
+})
+
 test_that("a steer typed while a tool runs is queued once no tool is on the stack", {
   s = policy_session()
   tool_run = stand_in_run("u0000tool")

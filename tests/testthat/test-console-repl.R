@@ -572,6 +572,29 @@ test_that("one dim line under a sent prompt names what its @mentions resolved to
   expect_identical(written(function() repl_turn(rs, "hello there")), "")
 })
 
+test_that("a prompt to a session that runs, in the background, says it steers (steering review)", {
+  local_console_test()
+  local_utf8_glyphs()
+  s = peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
+  rs = repl_state(s, new.env())
+  sent = list(status = "ok", value = s)
+  local_mocked_bindings(console_send = function(rs, text, ...) sent)
+  d = session_data(s)
+  d$status = "running"
+  expect_identical(written(function() repl_turn(rs, "now compare the groups")),
+                   paste0(queue_line("steer", "now compare the groups"), "\n"))
+  d$status = "waiting"
+  expect_match(written(function() repl_turn(rs, "x")), queue_line("steer", "x"), fixed = TRUE)
+  # a refused send shows its error alone
+  sent = list(status = "error", error = simpleError("refused"))
+  out = written(function() utils::capture.output(repl_turn(rs, "x"), type = "message"))
+  expect_identical(out, "")
+  # a session that does not run takes the prompt as its next run
+  sent = list(status = "ok", value = s)
+  d$status = "idle"
+  expect_no_match(written(function() repl_turn(rs, "x")), "steer")
+})
+
 test_that("console_send() keeps the session of a failed call and reports the error", {
   skip_on_cran()
   local_project()

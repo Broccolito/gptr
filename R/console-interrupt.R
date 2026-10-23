@@ -131,7 +131,8 @@ console_ask = function(accept = NULL) {
 #' a dim hint naming the keys. [s] and [f] read their text at the chevron of their own question, `?
 #' Steer` or `? Follow-up`, and queue it as Enter and Tab do (policy_enqueue()), their queue line,
 #' without the text it shows under, right under it, as under any question. [b] says
-#' in dim rows that the run went to the background (with the service's notices), or in red why not.
+#' in dim rows that the run went to the background (with the service's notices), then lists what
+#' the REPL held for after the run as kept (console_background_settle()), or in red why not.
 #' It resumes the interrupted computation, the next block a blank row below the menu and the live
 #' row with a T console's draft drawn again (console_asked()), or returns to let the policy's
 #' exiting handler abort. It clears the live row only: an answer's held row stays in its stream and
@@ -201,6 +202,7 @@ policy_menu = function(cnd, pol) {
         tty_question(FALSE)
         console_render_pause()
         say(paste0("running in the background", sym$sep, "gptr_wait() brings it back"))
+        console_background_settle()
         console_write("")
         invokeRestart("resume")
       }, error = function(e) {
@@ -212,6 +214,22 @@ policy_menu = function(cnd, pol) {
     console_write(ui_hint(paste0("Paused. Type ", paste(k[-length(k)], collapse = ", "), " or ",
                                  k[[length(k)]], ".")))
   }
+}
+
+#' After [b] (policy_menu()) no run ends in the foreground, so the follow-ups, `/cmd` and `!code`
+#' lines the REPL held for after it (the reader's `typed` lines) and a T console's draft would be
+#' the next prompts while the run goes on, a prompt a steer of it (route_continue()). As after an
+#' abort (console_queue_left()) they go to the console history, listed once (console_keep();
+#' nothing when nothing is held), and the composer starts empty
+#' @noRd
+console_background_settle = function() {
+  rd = console_repl_prompt()$reader
+  if (is.null(rd)) return(invisible(NULL))
+  draft = rd$compose$draft
+  texts = c(rd$typed, draft[nzchar(draft)])
+  rd$typed = character()
+  rd$compose = NULL
+  console_keep(texts)
 }
 
 #' The REPL whose prompt runs, unless it is piped (`.stdin`, `jsonl`), or NULL: its reader's
