@@ -1091,6 +1091,8 @@ route_continue = function(call) {
     session_enqueue(s, gateway_prompt_secrets(call$prompt), as = "steer", source = "pipe")
     return(invisible(s))
   }
+  # a replayed script pipes a steer its replayed block recorded: it is not a new turn
+  if (replay_note_take(s, call$prompt)) return(invisible(s))
   gateway_run(call, s)
 }
 

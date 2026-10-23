@@ -1193,9 +1193,9 @@ replay_key = function(block, child = NULL) if (is.null(child)) block else paste0
 
 #' Advance a piped session in place for a fresh recorded block (IC-46)
 #' A session rebuilt from its JSONL moves to the end of the block's turn (replay_seek()); one
-#' reconstructed from its document gains the block's turn from `doc` (replay_turn_append()). Records
-#' the block (replay_mark()) and returns the same object, so a replayed pipe chain keeps
-#' `identical(chain_result, first_result)`.
+#' reconstructed from its document gains the block's turn from `doc` (replay_turn_append()). The
+#' block's steers become notes (replay_notes_add()). Records the block (replay_mark()) and returns
+#' the same object, so a replayed pipe chain keeps `identical(chain_result, first_result)`.
 #' @noRd
 session_replay_apply = function(s, block, header, text = NULL, doc = NULL) {
   check_class(s, "gptr_session", "s")
@@ -1211,6 +1211,7 @@ session_replay_apply = function(s, block, header, text = NULL, doc = NULL) {
       replay_turn_append(s, header, doc, d$turns + 1L)
       added = TRUE
     }
+    replay_notes_add(s, doc)
   }
   replay_mark(s, block, header, text, advance = !added)
   s
@@ -1253,8 +1254,48 @@ replay_adopt = function(s, block, header, doc) {
     d$doc = list(path = doc$path, format = doc$format %||% NA_character_, site = NULL,
                  blocks = block)
   }
+  replay_notes_add(s, doc)
   replay_mark(s, block, header, doc$text, advance = FALSE)
   s
+}
+
+#' The texts of a replayed block's `## Steer:` and `## Follow-up:` lines (`doc$steps`) become the
+#' session's notes: a replayed script sends them again, and replay_note_take() keeps them from
+#' reaching the model twice. A matching item the script queued before the call that took it is
+#' taken back now.
+#' @noRd
+replay_notes_add = function(s, doc) {
+  notes = Filter(function(st) st$type %in% c("steer", "follow_up"), doc$steps %||% list())
+  if (!length(notes)) return(invisible(s))
+  d = session_data(s)
+  d$replay_notes = c(d$replay_notes, vapply(notes, function(st) st$text, ""))
+  q = d$queue
+  for (which in c("steer", "follow_up")) {
+    q[[which]] = Filter(function(it) {
+      !(it$source %in% c("api_user", "pipe") && replay_note_take(s, it$text))
+    }, q[[which]])
+  }
+  if (!identical(q, d$queue)) {
+    d$queue = q
+    session_emit(s, "queue_update", steer = length(q$steer), follow_up = length(q$follow_up))
+  }
+  invisible(s)
+}
+
+#' TRUE when `text`, a steer or follow-up a script sends to an idle replayed session, is one of its
+#' notes (as the document writer normalises it, either kind), which it then consumes
+#' @noRd
+replay_note_take = function(s, text) {
+  d = session_data(s)
+  if (!length(d$replay_notes) || !identical(d$status, "idle") || !rlang::is_string(text)) {
+    return(FALSE)
+  }
+  i = match(doc_one_line(redact(as_utf8(text), "context")), d$replay_notes)
+  if (is.na(i)) return(FALSE)
+  d$replay_notes = d$replay_notes[-i]
+  gptr_inform(paste0("A steer this script sends is already recorded in the replayed block; it was ",
+                     "not sent again."), "notice", .once = "replay_steer_recorded")
+  TRUE
 }
 
 #' Check the header fields that name things before anything is looked up or recorded: `session`
@@ -1464,12 +1505,13 @@ replay_turn_append = function(s, header, doc, turn) {
 }
 
 #' A replayed session continues live (run_start()): the one-time notice of a reconstructed history
-#' (IC-46), and a later replayed block no longer moves the session along its recorded path
-#' (replay_seek()), which the live turn has left
+#' (IC-46); a later replayed block no longer moves the session along its recorded path
+#' (replay_seek()), which the live turn has left, and a later steer equal to a note is sent
 #' @noRd
 replay_notice = function(s) {
   d = session_data(s)
   d$replay_tip = NULL
+  d$replay_notes = NULL
   if (!identical(d$history_source, "reconstructed")) return(invisible(NULL))
   gptr_inform(paste0("session ", d$id, " continues from a history reconstructed from its ",
                      "document; earlier tool calls and answers are approximate"),

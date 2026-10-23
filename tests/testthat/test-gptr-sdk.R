@@ -83,6 +83,22 @@ test_that("gptr_steer() queues a follow-up delivered when the agent would stop",
   expect_identical(s$text, "second")
 })
 
+test_that("a turn started from queued input says once that the bound document misses it", {
+  local_gw()
+  slot = "message:sdk_turn_unrecorded"
+  if (exists(slot, envir = the$once, inherits = FALSE)) rm(list = slot, envir = the$once)
+  local_gptr_options(quiet = FALSE, replay = "auto")
+  fake = local_fake_provider(list("one", "two", "three", "four", "five"))
+  s = peter("Summarise mtcars", model = fake, envir = new.env())
+  more = function() gptr_wait(gptr_steer(s, "And the median?", as = "follow_up"))
+  expect_no_message(more())
+  local_doc_binding(file.path(getwd(), "analysis.R"))
+  withr::with_options(list(gptr.replay = "replay"), expect_no_message(more()))
+  expect_message(more(), "not recorded in the bound document", class = "gptr_message_notice")
+  expect_no_message(more())
+  expect_length(fake_requests(fake), 5L)
+})
+
 test_that("gptr_steer() redacts with the context profile and queues an api_user item", {
   local_gw()
   fake = local_fake_provider(list("ok"))

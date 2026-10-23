@@ -43,6 +43,12 @@ sdk_launch = function(s, chk, envir = NULL) {
   opts = gateway_pending_take(session_data(s)$id)
   if (is.null(opts)) {
     opts = list()
+    # no peter() statement started this turn, so it has no document site to record into
+    if (!is.null(the$doc_binding$path) && !identical(replay_mode(), "replay")) {
+      gptr_inform(paste0("This turn starts from queued input, so it is not recorded in the bound ",
+                         "document. Continue the session with `session |> peter(\"...\")` to ",
+                         "record it."), "notice", .once = "sdk_turn_unrecorded")
+    }
     if (is.null(session_home(s)) && is.environment(envir)) {
       call = call_new(envir = unmask_env(envir), args = list(run = TRUE))
       call_hold(call, s)
@@ -192,7 +198,9 @@ gptr_wait = function(x, timeout = Inf) {
 #' The one enqueue function behind the pipe into a running session, the pause menu and
 #' `ctx$send()`. A steer reaches the model after the current tool results, as "The user sent this
 #' message while you were working: ..."; a follow-up when the agent would otherwise stop. On an
-#' idle session the item is taken when the next run starts.
+#' idle session the item is taken when the next run starts. The queue lives in the R process;
+#' items still queued when it ends are not saved. In a script replayed from its document, a steer
+#' the replayed block already recorded is not sent again.
 #'
 #' @param s A session.
 #' @param text The message (secrets are redacted before it is queued).
@@ -208,7 +216,9 @@ gptr_steer = function(s, text, as = c("steer", "follow_up")) {
   check_string(text, "text")
   kind = check_choice(as, c("steer", "follow_up"), "as")
   session_control_check("gptr_steer", s)
-  session_enqueue(s, redact(as_utf8(text), "context"), as = kind, source = "api_user")
+  if (!replay_note_take(s, text)) {
+    session_enqueue(s, redact(as_utf8(text), "context"), as = kind, source = "api_user")
+  }
   invisible(s)
 }
 

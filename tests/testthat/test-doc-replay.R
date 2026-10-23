@@ -2608,6 +2608,90 @@ test_that("a replayed session keeps the recorded steers and every replayed turn 
   expect_identical(vapply(msgs[c(4, 7, 12)], function(m) m$origin_text, ""), unname(steers))
 })
 
+# Record `lines` as a script, then replay it in replay mode: no request, the file unchanged, the
+# session's queue empty; returns the replay's environment
+doc_steer_replay = function(x, lines, note, .env = parent.frame()) {
+  f = file.path(x$root, "steer.R")
+  writeLines(lines, f)
+  doc_e2e_source(f)
+  recorded = readLines(f)
+  expect_true(note %in% recorded)
+  n = length(fake_requests(x$fake))
+  local_gptr_options(replay = "replay", .env = .env)
+  e = doc_e2e_source(f)
+  expect_length(fake_requests(x$fake), n)
+  expect_identical(readLines(f), recorded)
+  expect_identical(session_data(e$s)$queue, list(steer = list(), follow_up = list()))
+  e
+}
+
+doc_bg_script = list(fake_tool("r", code = "a = 1"), fake_tool("r", code = "e = a + 100"),
+                     fake_text("Done."))
+
+test_that("replaying a script does not send a follow-up its block recorded again", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "k = 42"), fake_text("Stored k."),
+                         fake_tool("r", code = "k2 = k * 2"), fake_text("Stored k2.")))
+  doc_steer_replay(x, c("s = peter(\"Store k = 42.\", .run = FALSE)",
+                        "gptr_steer(s, \"Then double it into k2.\", as = \"follow_up\")",
+                        "gptr_wait(s)"), "## Follow-up: Then double it into k2.")
+})
+
+# The background script whose steer statement is `steer`
+doc_bg_lines = function(steer) {
+  c("s = peter(\"Store a = 1.\", background = TRUE)", steer, "gptr_wait(s)")
+}
+
+test_that("replaying a background script does not send its gptr_steer() again", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  x = local_doc_e2e(doc_bg_script)
+  doc_steer_replay(x, doc_bg_lines("gptr_steer(s, \"Also store e = a + 100.\")"),
+                   "## Steer: Also store e = a + 100.")
+})
+
+test_that("replaying a background script does not send its pipe steer again", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  x = local_doc_e2e(doc_bg_script)
+  doc_steer_replay(x, doc_bg_lines("s |> peter(\"Also store e = a + 100.\")"),
+                   "## Steer: Also store e = a + 100.")
+})
+
+test_that("a steer left over from one run stays recorded once in the block that took it", {
+  skip_on_cran()
+  x = local_doc_e2e(function(request) {
+    if (request$n %% 2L == 1L) fake_tool("r", code = paste0("x", request$n, " = 1")) else "ok"
+  })
+  f = file.path(x$root, "left.R")
+  writeLines(c("s = peter(\"Store x1.\")", "gptr_steer(s, \"left over after run 1\")",
+               "s |> peter(\"Store x3.\")"), f)
+  doc_e2e_source(f)
+  expect_identical(sum(readLines(f) == "## Steer: left over after run 1"), 1L)
+  writeLines(c(readLines(f), "s |> peter(\"Store x5.\")"), f)
+  n = length(fake_requests(x$fake))
+  e = doc_e2e_source(f)
+  expect_length(fake_requests(x$fake), n + 2L)
+  expect_identical(sum(readLines(f) == "## Steer: left over after run 1"), 1L)
+  expect_identical(session_data(e$s)$queue, list(steer = list(), follow_up = list()))
+})
+
+test_that("a replayed script still sends a steer that its blocks did not record", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  x = local_doc_e2e(doc_bg_script)
+  f = file.path(x$root, "new.R")
+  writeLines(doc_bg_lines("gptr_steer(s, \"Also store e = a + 100.\")"), f)
+  doc_e2e_source(f)
+  n = length(fake_requests(x$fake))
+  txt = readLines(f)
+  txt[txt == "gptr_steer(s, \"Also store e = a + 100.\")"] = "gptr_steer(s, \"Also store g.\")"
+  writeLines(txt, f)
+  local_gptr_options(replay = "replay")
+  doc_e2e_source(f)
+  expect_gt(length(fake_requests(x$fake)), n)
+})
+
 test_that("two values of an interpolated {gene} never replay each other's block (IC-45)", {
   skip_on_cran()
   skip_if_not_installed("knitr")

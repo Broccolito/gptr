@@ -1598,7 +1598,9 @@ The one enqueue function behind the pipe into a running session, the pause menu 
 `text`: `chr(1)` (redacted with the `context` profile at ingress). Appends `list(text, blocks = list(), source,
 t)` to the session's `steer` or `follow_up` FIFO and returns `invisible(s)` at once. Steers are delivered only
 after a complete tool-result message as an operator relay; follow-ups when the agent would otherwise stop; on an
-idle session the item is taken at the next run start. Emits `queue_update`.
+idle session the item is taken at the next run start. Emits `queue_update`. The queue lives in the R process;
+items still queued when it ends are not saved. On an idle replayed session a text equal to one of the steer or
+follow-up notes its replayed blocks recorded is not queued (IC-55).
 
 ```r
 s = peter("Summarise mtcars", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
@@ -4660,6 +4662,13 @@ working: <text>`. `extension` items are user-role data `Extension <name> sent th
 <text>`; `agent` items are delivered as `<agent_report from="<name>">...</agent_report>` user-role data, never
 as steers. `ctx$send()` and `gptr_steer()` called from model-evaluated code of the same session tree are refused
 with `gptr_error_permission`. Test: a child agent's text never appears in an operator message.
+A replay (IC-46) keeps the texts of a replayed block's `## Steer:` and `## Follow-up:` lines on the session as
+notes, and takes back a queued `api_user` or `pipe` item equal to one. While the session is idle, `gptr_steer()`
+and a pipe into it drop a text equal to a note (as `doc_one_line()` writes it, either kind; the note is consumed)
+with one `notice`, "A steer this script sends is already recorded in the replayed block; it was not sent again.",
+so a replayed script does not send its recorded steers twice; a live run clears the notes. A run that
+`gptr_step()` or `gptr_wait()` starts from queued input has no document site: under a `gptr_doc()` binding,
+outside replay mode, it informs one `notice` that its turn is not recorded.
 
 **IC-56 Pending-plan hand-off.** (safe-19) The plan is handed only to the **next** `peter()` call of the same R
 process and environment within one hour, and only when that call is top-level (not nested, not in a run, not in

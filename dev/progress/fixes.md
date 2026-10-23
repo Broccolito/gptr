@@ -2621,3 +2621,27 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-249 (extended). Not as planned: both paths give the same 14 messages (the plan's 18
   had context messages in the recorded turns); a live run also stops the seek. Open: a
   `gptr.replay` marker of an earlier block stays off the path once the next block moves on.
+
+### steer-doc-5 - Replaying a script does not send its recorded steers again
+- Steering review finding 0 (medium: the console never writes a `gptr_steer()` statement), and finding
+  4's residual sentence for `?gptr_steer`.
+- Red: FAIL 5 in `^(doc-replay|gptr-sdk)$` (PASS 888): replaying a recorded `.run = FALSE` +
+  `gptr_steer(as = "follow_up")` + `gptr_wait()` script, and `background = TRUE` ones with
+  `gptr_steer()` or a pipe steer, each made one more request under `replay = "replay"`; in auto mode
+  a steer left over after run 1 was recorded again in an appended block; a turn `gptr_wait()` started
+  from queued input under a binding said nothing. A steer with new text was sent (control).
+- Cause: replay kept nothing of a block's steer lines; `gptr_steer()` queued and `route_continue()`
+  started a run on the idle replayed session; `sdk_launch()` gives such a run no document site.
+- Fix: a replayed block's steer and follow-up texts become session notes (`replay_notes_add()`, which
+  takes back a matching queued item); `gptr_steer()` and `route_continue()` drop an equal text on an
+  idle session with one notice (`replay_note_take()`); a live run clears the notes; `sdk_launch()`
+  informs once. `doc_one_line()` moves to `utils-text.R` (L0). `?gptr_steer`, 04 §6.5, IC-55, vignette.
+- Green: `^(doc-replay|gptr-sdk)$` PASS 893; `^(doc-replay|gptr-sdk|session-object|gptr-gateway|
+  agent-background|doc-blocks|utils-text|arch-layers|lint-rules)$` PASS 2474 (NOT_CRAN=true). Full
+  suite `.`: FAIL 4 SKIP 64 PASS 35558, the 4 a `ps` memory sample refused (`access_denied`) under
+  load in `proc-marker-family` and `proc-rscript-native`, which alone pass (PASS 213). Lint clean;
+  Rd regenerated; `precompute.R script-as-history` byte-identical to the edited `.Rmd`.
+- Deviations: D-249 (extended). Not as planned: the notes reach the session through the replay
+  functions' `doc` (an L4 file calls only the kernel SDK); a live run clears them in `run_start()`
+  (`replay_notice()`), not `gateway_run_start()`; the drain takes back only `api_user` and `pipe`
+  items, never a typed steer. Open: at the P28 merge the drain emits `queue_emit(s, "withdraw", ...)`.

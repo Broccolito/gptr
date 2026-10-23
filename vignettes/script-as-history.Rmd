@@ -118,7 +118,9 @@ gptr_doc(FALSE)
 A missing block makes a model request, and the executed code is recorded below the call.
  The header identifies the block, model, date and prompt hash; the body hash identifies
 its recorded code. `## Decision:` retains a model-supplied note, and `#>` retains bounded
-output. A note is a model explanation, not proof that the code is correct.
+output. A note is a model explanation, not proof that the code is correct. `## Steer:` and
+`## Follow-up:` lines keep what was sent while the call ran. A replayed session's history
+includes them, and a `gptr_steer()` or pipe statement that sends one again is not sent twice.
 
 The document must be writable, and recording needs consent. `gptr_doc(path)` supplies that
 consent explicitly; `record = "off"` prevents automatic recording into discovered documents.

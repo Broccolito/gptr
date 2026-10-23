@@ -292,7 +292,7 @@ doc_replay_header = function(header, site, mode) {
 }
 
 #' Replay a fresh block (IC-46): the piped session advanced in place (one reconstructed from its
-#' document gains the block's turn), else a replayed session
+#' document gains the block's turn; the block's steers become notes), else a replayed session
 #' (the live one holding the header's id, the JSONL cut at the recorded turn, or the history
 #' reconstructed from the document); a fork block is bound to its id for gptr_resume(block =).
 #' No provider is called and no model is discovered (IC-74).
@@ -304,9 +304,8 @@ doc_replay_call = function(call, site, mode = "replay") {
   answer = doc_s2_answer(s2_get(s2_key(rel, b$id, "", h$prompt %||% "", h$args %||% "")))
   header = doc_replay_header(h, site, mode)
   s = if (!is.null(call$session)) {
-    built = identical(session_data(call$session)$history_source, "reconstructed")
     session_replay_apply(call$session, b$id, header, text = answer,
-                         doc = if (built) doc_replay_doc(site, call, b$id, answer))
+                         doc = doc_replay_doc(site, call, b$id, answer))
   } else {
     session_replay_new(b$id, header, call$envir,
                        doc = doc_replay_doc(site, call, b$id, answer))
