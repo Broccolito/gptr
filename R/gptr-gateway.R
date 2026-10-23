@@ -580,11 +580,12 @@ gateway_plugin_names = function(call) {
 
 #' Applies a call's registry filters (`plugins = "-builtin:x"`, `"+builtin:x"` to undo), merged
 #' into the session settings key `filters` (P02 has no per-session filter scope), once the call
-#' passed its checks (D-251); refused from model code unless approved (IC-53 items 3-4)
+#' passed its model checks (D-251); refused from model code unless approved (IC-53 items 3-4).
+#' Returns the function that announces them, called once the call passed its other checks too.
 #' @noRd
 gateway_filters_apply = function(call) {
   filters = grep("^[+-]", gateway_plugin_names(call), value = TRUE)
-  if (!length(filters)) return(invisible(NULL))
+  if (!length(filters)) return(function() invisible(NULL))
   session_control_check("gptr_config")
   cur = as.character(unlist(settings_read("session")$filters))
   for (f in filters) {
@@ -593,11 +594,12 @@ gateway_filters_apply = function(call) {
   }
   settings_write("session", list(filters = cur))
   registry_filters_set(cur, scope = "session")
-  gptr_inform(paste0("The filters ", paste(filters, collapse = ", "), " apply to every later ",
-                     "peter() call of this R session; remove them with ",
-                     "gptr_config(filters = NULL, .scope = \"session\")."), "notice",
-              .once = paste0("call_filters:", paste(cur, collapse = ",")))
-  invisible(cur)
+  function() {
+    gptr_inform(paste0("The filters ", paste(filters, collapse = ", "), " apply to every later ",
+                       "peter() call of this R session; remove them with ",
+                       "gptr_config(filters = NULL, .scope = \"session\")."), "notice",
+                .once = paste0("call_filters:", paste(cur, collapse = ",")))
+  }
 }
 
 #' Registers the call's specs at rank 0 for the session, loads its extensions and enables named
@@ -712,7 +714,8 @@ gateway_continue_envir = function(call, s) {
 #' `safety` a model the call cannot reach (gateway_guards()); its images on the model it runs,
 #' `background = TRUE` without later; then its registry filters apply, an unknown or untrusted
 #' `skills =` preload is refused (builtin:workspace renders the `<skill_content>` blocks, IC-38)
-#' and, last, the prompt's secrets are redacted or asked about. Returns list(ref, prompt, images).
+#' and, last, the prompt's secrets are redacted or asked about; only then are the filters
+#' announced. Returns list(ref, prompt, images).
 #' @noRd
 gateway_checks = function(call, s, first, safety) {
   d = session_data(s)
@@ -733,9 +736,11 @@ gateway_checks = function(call, s, first, safety) {
     gptr_abort("background = TRUE needs the later package.", "missing_package",
                package = "later", feature = "background sessions")
   }
-  gateway_filters_apply(call)
+  announce = gateway_filters_apply(call)
   for (nm in as.character(unlist(call$ids$skills))) ext_service_get("skill.body")(nm)
-  list(ref = ref, prompt = gateway_prompt_secrets(call$prompt), images = images)
+  prompt = gateway_prompt_secrets(call$prompt)
+  announce()
+  list(ref = ref, prompt = prompt, images = images)
 }
 
 #' Applies a checked continuation's changes: model `ref`, or `.opts$thinking` alone, an explicit

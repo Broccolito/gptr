@@ -3935,6 +3935,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Open: a recorded No is silent afterwards, unlike the undecided notice; `readline_answer()` drops a pasted line
   without saying so (finding 46, follow-ups); the sheet's card is S03.
 
+### gateway-1b - A refused call does not announce its registry filters (2026-10-23)
+- Last validation of gateway-1 (low). Red: FAIL 2 in `^gptr-gateway$` (PASS 480): a continuation with
+  `plugins = "-builtin:memory"` refused for an unknown `skills =` preload printed "The filters -builtin:memory
+  apply to every later peter() call of this R session ..." and used up its `.once` key, so the next accepted call
+  with that filter said nothing.
+- Cause: `gateway_filters_apply()` informed as it applied the filters, before the preload and prompt-secret
+  checks that can still refuse the call (and undo them).
+- Fix: it returns the announcement, which `gateway_checks()` makes after its last check.
+- Green: `^(gptr-gateway|gptr-config|ext-registry|ext-plugins|arch-layers|lint-rules)$` PASS 1792. Lint clean.
+- Deviations: none. Open: none.
+
 ## Task FIX-19 - Cheat-sheet review: orchestration (2026-10-22, #PR)
 
 ### ws-1 - A team, fan-out or nested child's <workspace> block lists the caller objects it can read

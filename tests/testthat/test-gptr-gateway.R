@@ -1527,6 +1527,29 @@ test_that("every refusal before a turn starts undoes what the call registered (D
   expect_null(settings_read("session")$filters)
 })
 
+test_that("a call's filters notice comes with its first accepted call, not a refused one (D-251)", {
+  local_gw()
+  local_gptr_options(quiet = FALSE)
+  key = "message:call_filters:-builtin:memory"
+  rm(list = intersect(key, names(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect(key, names(the$once)), envir = the$once))
+  fake = local_fake_provider(list("one", "two"))
+  s = peter("hello", model = fake, envir = new.env())
+  notice = "The filters -builtin:memory apply to every later"
+  refused = function(why, ...) {
+    expect_no_message(expect_error(peter(s, ..., plugins = "-builtin:memory"), why),
+                      message = notice)
+  }
+  refused("No skill", "U1", skills = "no-such-skill-zz")
+  local({
+    local_mocked_bindings(gptr_confirm = function(question, default = FALSE) FALSE)
+    local_gptr_options(prompt_secrets = "ask", interactive = TRUE)
+    refused("secret-looking", paste("U2 uses", paste0("sk-", "ant-api03-", strrep("FAKEant0", 11),
+                                                        "xxxxxAA")))
+  })
+  expect_message(s |> peter("second", plugins = "-builtin:memory"), notice, fixed = TRUE)
+})
+
 test_that("a router's choice without a key stops the run, not the default model (D-251)", {
   local_gw()
   local_gptr_options(replay = "auto", model = "fake/fake-1")

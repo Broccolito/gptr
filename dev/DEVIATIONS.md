@@ -3563,6 +3563,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `?gptr_security` (a computed `system()` command). 04 §4.6 `gptr.frozen`, §6.5 `gptr_resume()`; `?gptr_sessions`.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "every refusal before a turn starts undoes ...",
+  "a call's filters notice comes with its first accepted call ...",
   "a router's choice without a key stops the run ...", "a built session needs no key until a run starts it ...",
   "a call, gptr_step() and a parallel member each discover an Ollama model once ...",
   "a continuation switches to a provider spec that only its session knows ...",
