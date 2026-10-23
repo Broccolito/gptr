@@ -2278,3 +2278,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-252 (extended). The rule removes every earlier `user` record of the key, including one from a
   user directory, user `mcp.json` or user-scope extension, so the explicit registration wins in either order.
   Open: none.
+
+### bg-1b - A message piped into a waiting session still opens the resumed run with the console note
+- Review of bg-1 (medium). Red: `^agent-background$` FAIL 2 PASS 203: after a manual-mode background session
+  parked, `s |> peter("also say hi")` then `gptr_step(s)` started the run itself, and the second request held the
+  stale denial and "also say hi" but no "I am at the console now" note.
+- Cause: a piped message (or a follow-up `bg_park_session()` re-queued) made `sdk_check()` see queued input, so
+  `gptr_wait()`/`gptr_step()` started the run through `gateway_run_start()` and the sweep only cleared the ask.
+- Fix: `sdk_check()` returns NULL for a `waiting` session; `gptr_wait()` keeps pumping while it waits and the
+  sweep's `bg_resume()` queues the note and starts the run. `gptr_step()` leaves a waiting session as it is (as
+  with nothing queued); `?gptr_step` and 04 §6.5 say so, 04 §7.21 names `bg_resume()`.
+- Green: `^(agent-background|gptr-sdk)$` PASS 300; with gptr-gateway, agent-run, injection-e2e, arch-layers,
+  lint-rules, zzz (NOT_CRAN=true) PASS 1753. Lint clean; plan checks pass; `gptr_step.Rd` regenerated.
+- Deviations: D-252 (extended). Open: none.

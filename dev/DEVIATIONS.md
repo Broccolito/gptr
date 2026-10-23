@@ -3152,7 +3152,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule (bg-1): a waiting background session's resumed run opens with a steer from the user (`api_user`, so before
   re-queued follow-ups): "I am at the console now. Repeat the call that could not be approved (<summary>) with the
   same input; I will be asked to approve it.", or "I am at the console now; ask again." for a question; a resume
-  that cannot start restores the queue. A `ui` record's `permission()` denial may carry `how = chr(1)`, kept by
+  that cannot start restores the queue. Only the sweep's `bg_resume()` starts it: `sdk_check()` starts nothing for
+  a `waiting` session, so a message piped in meanwhile waits for that run, and `gptr_step()` leaves the session
+  waiting (`gptr_wait()` continues it). A `ui` record's `permission()` denial may carry `how = chr(1)`, kept by
   `ui_answer_norm()` for a denial only and used by `perm_ask()` as the denial text's last sentence; the idle-tick
   wrapper's is "Nothing ran and nobody declined; repeat the call when the session continues." Formerly the run
   resumed on the stale "Permission denied ... Explain what you need or choose another approach." and GPT ended
@@ -3215,23 +3217,24 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `gptr_trust()` (tpl-2; its read, sessions-23), `gptr_register()` and §10.1 ties (reg-1; also 03 §4.3), §5.12
   `gptr_mcp_servers` `trusted` (mcp-trusted), §9.4 `app` (art-1; also 03 §4.2), 03 §5.7 (temporary root, art-2),
   §6.1.2 and `gptr_parallel()` (team-1), §7.0 and §7.17 `templates.sync` (tpl-1), §7.6 `opts$mode_from` and
-  `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7,
-  IC-52 (when the trust question is asked), IC-57; `?gptr-background`, `?gptr_trust`.
+  `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and `eval_guard()`, §6.5 `gptr_step()` and §7.21 (bg-1),
+  §10.2 row 22 (`how`), §15.7, IC-52 (when the trust question is asked), IC-57; `?gptr-background`, `?gptr_trust`.
 - Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
-  and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame);
-  session-object "a fork's change report names the source objects its code changed in place"; eval-guard "q bound
-  to data where the code runs ...", "model code reads a q bound to data ..."; subagent-team "a team or fan-out
-  takes a failed member's status ...", injection-e2e "a worker's forwarded permission request ..."; session-store
-  "a settled team or fan-out lists and resumes idle ..."; agent-background "a resumed session is told the user can
-  now approve the call", "... whose ask tool was blocked is told to ask again"; console-ui "a denial keeps the
-  UI's how ..."; agent-dispatch "a blocked call's hint names where its mode came from"; console-commands "template
-  commands exist before the first prompt ...", "a template command is the console's first input (end to end)";
-  gptr-config "a project whose only resource is prompt templates gets the trust notice", "a trusted prompts-only
-  project registers its templates", "every project skill, agent and instruction location counts ...", "a relative
-  skills.paths directory counts, and the question names skills", "a changed trust-gated file makes the project
-  untrusted again"; gptr-capture "a bare hyphenated name is refused with its quoted form"; mcp-config "gptr_mcp()'s
-  trusted is the spec's ..."; artifact-app "peter$app() launches by default only at the console ...", "an artifact in
-  a temporary workspace is announced once"; prompt-context "the Artifacts line says a workspace without .gptr/ is
-  temporary"; ext-registry "gptr_register() of the same kind and name again replaces your earlier record".
+  and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame); session-object
+  "a fork's change report names the source objects its code changed in place"; eval-guard "q bound to data where the
+  code runs ...", "model code reads a q bound to data ..."; subagent-team "a team or fan-out takes a failed member's
+  status ...", injection-e2e "a worker's forwarded permission request ..."; session-store "a settled team or fan-out
+  lists and resumes idle ..."; agent-background "a resumed session is told the user can now approve the call", "...
+  whose ask tool was blocked is told to ask again", "a message piped into a waiting session is delivered with the
+  console note"; console-ui "a denial keeps the UI's how ..."; agent-dispatch "a blocked call's hint names where its
+  mode came from"; console-commands "template commands exist before the first prompt ...", "a template command is
+  the console's first input (end to end)"; gptr-config "a project whose only resource is prompt templates gets the
+  trust notice", "a trusted prompts-only project registers its templates", "every project skill, agent and
+  instruction location counts ...", "a relative skills.paths directory counts, and the question names skills", "a
+  changed trust-gated file makes the project untrusted again"; gptr-capture "a bare hyphenated name is refused with
+  its quoted form"; mcp-config "gptr_mcp()'s trusted is the spec's ..."; artifact-app "peter$app() launches by
+  default only at the console ...", "an artifact in a temporary workspace is announced once"; prompt-context "the
+  Artifacts line says a workspace without .gptr/ is temporary"; ext-registry "gptr_register() of the same kind and
+  name again replaces your earlier record".
   Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1, gate-hint, tpl-1, tpl-2,
   sessions-23, ident-1, mcp-trusted, art-1, art-2, reg-1.

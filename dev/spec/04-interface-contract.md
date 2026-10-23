@@ -1559,9 +1559,9 @@ gptr_step(s, turns = 1L)
 
 `s`: `<session>`; `turns`: `int(1)` >= 1 or `Inf`. If `s` is idle with queued input (`.run = FALSE`, a queued
 follow-up or steer), starts a run; then pumps the reactor until `turns` `turn_end` events of `s` have occurred or
-the run settles. A running (background) session is advanced the same way. Returns `invisible(s)`. Conditions:
-`invalid_argument`; the §6.1.2 terminal-status conditions when the run settles in that status. Emits the run's
-events.
+the run settles. A running (background) session is advanced the same way; a `waiting` one is left as it is
+(`gptr_wait()` continues it, §7.21, D-252). Returns `invisible(s)`. Conditions: `invalid_argument`; the §6.1.2
+terminal-status conditions when the run settles in that status. Emits the run's events.
 
 ```r
 s = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")), .run = FALSE,
@@ -2972,7 +2972,7 @@ pcli_version(path)
 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
-| `bg_register(s)` (service `bg.register`) | `agent-background.R` | requires later (`gptr_error_missing_package`); marks the run background, adds a `session` job, ensures the `later` pump (50 ms timer calling `reactor_pump(slice_ms = 0)`, a no-op while the reactor is on the stack, IC-57); R tools of background runs run at idle ticks (`gptr.background_tools = "idle"`) or wait for `gptr_wait()`; an ask moves the run to `waiting` and is shown at the next blocking gptr call, whose resumed run opens with a steer from the user (`api_user`): "I am at the console now. Repeat the call that could not be approved (<summary>) with the same input; I will be asked to approve it.", or "I am at the console now; ask again." for a question (D-252); a tool that changed bindings at an idle tick prints one notice | P08, P14 (`[b]ackground`) |
+| `bg_register(s)` (service `bg.register`) | `agent-background.R` | requires later (`gptr_error_missing_package`); marks the run background, adds a `session` job, ensures the `later` pump (50 ms timer calling `reactor_pump(slice_ms = 0)`, a no-op while the reactor is on the stack, IC-57); R tools of background runs run at idle ticks (`gptr.background_tools = "idle"`) or wait for `gptr_wait()`; an ask moves the run to `waiting` and is shown at the next blocking gptr call, whose resumed run (always started by the sweep's `bg_resume()`, also when a message was piped in meanwhile) opens with a steer from the user (`api_user`): "I am at the console now. Repeat the call that could not be approved (<summary>) with the same input; I will be asked to approve it.", or "I am at the console now; ask again." for a question (D-252); a tool that changed bindings at an idle tick prints one notice | P08, P14 (`[b]ackground`) |
 
 Example calls:
 

@@ -469,6 +469,25 @@ test_that("a resumed session whose ask tool was blocked is told to ask again (fi
   expect_identical(msg_text(last), "I am at the console now; ask again.")
 })
 
+test_that("a message piped into a waiting session is delivered with the console note", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  local_scripted_ui(answers = list())
+  local_gptr_options(background_tools = "idle", record = "off", verbose = 0L)
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "z = 3")), "done"))
+  s = peter("do it", model = fake, mode = "manual", envir = new.env(), background = TRUE)
+  expect_true(bg_pump_until(function() identical(s$status, "waiting")))
+  s |> peter("also say hi")
+  gptr_step(s)
+  expect_identical(s$status, "waiting")
+  gptr_wait(s, timeout = 20)
+  expect_identical(s$status, "idle")
+  texts = vapply(fake$log$requests[[2L]]$messages, msg_text, "")
+  expect_true(any(grepl("also say hi", texts, fixed = TRUE)))
+  expect_true(any(grepl("I am at the console now. Repeat the call", texts, fixed = TRUE)))
+})
+
 test_that("gptr_jobs(kill = TRUE) cancels a waiting background session", {
   skip_on_cran()
   skip_if_not_installed("later")
