@@ -1083,8 +1083,9 @@ test_that("direct tools return Pi's texts", {
   expect_identical(format(r), paste0("Successfully wrote to ", f))
   expect_identical(r$details$created, TRUE)
   r = tool_read_execute(list(path = f), NULL)
-  expect_identical(format(r), "x = 1\ny = 2\n")
-  expect_identical(r$details$lines_total, 3L)
+  # Pi counts the final newline as an empty third line (D-248)
+  expect_identical(format(r), "x = 1\ny = 2")
+  expect_identical(r$details$lines_total, 2L)
   r = tool_edit_execute(list(path = f, edits = list(list(oldText = "y = 2", newText = "y = 3"))),
                         NULL)
   expect_identical(format(r), paste0("Successfully replaced 1 block(s) in ", f, "."))

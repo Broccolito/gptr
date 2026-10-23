@@ -482,7 +482,8 @@ read_decode_lines = function(txt, encoding, lossy) {
 
 #' Line window of a file up to 16 MiB: raw newline index, decode and split only the window
 #' The encoding is decided on the whole file; any NUL in a UTF-8 or 8-bit file makes it binary
-#' (ripgrep), found with grepRaw() because rawToChar() silently drops trailing NULs.
+#' (ripgrep), found with grepRaw() because rawToChar() silently drops trailing NULs. A final newline
+#' ends the last line, as readLines() counts (D-248; Pi's split("\n") counts one more).
 #' @noRd
 read_window_small = function(abs, offset, n) {
   b = read_raw(abs)
@@ -491,6 +492,7 @@ read_window_small = function(abs, offset, n) {
   if (nzchar(bom) && bom != "UTF-8") {
     d = decode_raw(b)
     lines = split_lines_js(d$text)
+    if (length(lines) > 1L && !nzchar(lines[length(lines)])) lines = lines[-length(lines)]
     total = length(lines)
     last = if (is.null(n)) total else min(total, as.numeric(offset) + n - 1)
     sel = if (offset > total) character() else lines[offset:last]
@@ -505,7 +507,7 @@ read_window_small = function(abs, offset, n) {
   d = if (validUTF8(all_txt)) list(encoding = "UTF-8", lossy = FALSE) else decode_raw(b)
   b = body
   nl = grepRaw(as.raw(10L), b, fixed = TRUE, all = TRUE)
-  total = length(nl) + 1L
+  total = length(nl) + 1L - (length(b) && b[length(b)] == as.raw(10L))
   if (offset > total) {
     return(list(binary = FALSE, lines = character(), total = total, encoding = d$encoding,
                 lossy = d$lossy, eol = "\n"))
@@ -520,7 +522,8 @@ read_window_small = function(abs, offset, n) {
 }
 
 #' Sparse line index: 0-based byte offsets of lines 1, every + 1, 2 * every + 1, ... and the total
-#' line count (JS semantics), in one streaming grepRaw() pass (report 21 section 2.2)
+#' line count (a final newline ends the last line), in one streaming grepRaw() pass (report 21
+#' section 2.2)
 #' @noRd
 read_line_index_build = function(abs, every = read_index_every, chunk = read_chunk) {
   con = file(fs_path(abs), "rb")
@@ -529,9 +532,11 @@ read_line_index_build = function(abs, every = read_index_every, chunk = read_chu
   k = 1L
   line = 1
   base = 0
+  last = as.raw(0L)
   repeat {
     r = readBin(con, "raw", chunk)
     if (!length(r)) break
+    last = r[length(r)]
     p = grepRaw(as.raw(10L), r, fixed = TRUE, all = TRUE)
     if (length(p)) {
       want = which(((line + seq_along(p) - 1) %% every) == 0)
@@ -543,7 +548,8 @@ read_line_index_build = function(abs, every = read_index_every, chunk = read_chu
     }
     base = base + length(r)
   }
-  list(every = every, offsets = as.numeric(unlist(offs)), total = as.integer(line))
+  list(every = every, offsets = as.numeric(unlist(offs)),
+       total = as.integer(line - (last == as.raw(10L))))
 }
 
 #' The sparse index of a file; one file above 20 MB is cached per process (key: path, size, mtime,

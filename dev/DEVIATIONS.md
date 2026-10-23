@@ -3152,13 +3152,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   peter$plot() only with record = false." only when a document is bound (`ctx$input$document`),
   the freeze input that gives `r` its `record` argument; without one, `record` read as an argument
   of those helpers (`peter$help("edit", record = FALSE)`: unused argument).
+- Rule: `read` and `peter$read()` count lines as `readLines()` does: a final newline ends the last
+  line (in-memory, UTF-16/32 and sparse-index paths), so a 3-line file written by `writeLines()`
+  has total 3, not Pi's 4 (`split("\n")`), and the notices, `lines_total`, the `total` attribute
+  and the window lose the phantom empty line; an empty file stays empty and "\n" alone is one
+  empty line. The read text of such a file no longer ends in "\n".
 - Contract-visible: 04 §4.4 call record (`tool` NULL when not offered), §7.6 `dispatch_tools()`,
   §9.3 suffix order, §5.10 `gptr_patch` (`reasons`, print), §7.10 `edit_file()` (fuzzy splice),
-  IC-48 (`record = false` sentence); 03 §7.3 (`out` without a document).
+  IC-48 (`record = false` sentence), §7.10 `read_file()` (line count); 03 §7.3 (`out` without a
+  document).
 - Tests: test-agent-dispatch.R "the offered tools (D-248)" (3 blocks) and the frozen-schema block;
   test-bridge-lang.R, test-bridge-sh.R through-run refusals; test-prompt-context.R mode suffixes;
   test-tool-edit.R "edit errors number edits from 1", "an edit without oldText or newText";
   test-tool-namespace.R `peter$help("edit")`; test-tool-edit.R "a fuzzy match changes only its
   span" and "gptr_patch prints the message"; test-tool-namespace.R "the out fragment names record =
-  false only when the r tool takes it". Evidence: progress/fixes.md Task FIX-15 tools-1, tools-5,
-  tools-6, tools-7, tools-8, tools-9.
+  false only when the r tool takes it"; test-tool-read.R "a final newline ends the last line".
+  Evidence: progress/fixes.md Task FIX-15 tools-1, tools-5, tools-6, tools-7, tools-8, tools-9,
+  tools-10.

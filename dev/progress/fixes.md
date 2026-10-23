@@ -2016,3 +2016,22 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   text); `^(tool-namespace|tool-r|prompt-.*|northstar|bench-context|doc-formats|lint-rules|
   arch-layers)$` PASS 2031. Lint clean; Rd unchanged.
 - Deviations: D-248 (03 §7.3, IC-48). Open: none.
+
+### tools-10 - read and peter$read count lines as readLines() does
+- Red: FAIL 14 in `tool-read` (PASS 221): a 3-line `writeLines()` file read total 4 with a final
+  "", "[2 more lines ...]" at limit 2, offset 4 accepted; 3000 lines at offset 2990, limit 5 said
+  7 more; 2500 lines "of 2501"; `writeLines("done")` at limit 1 said 1 more (finding 5).
+- Cause: Pi's `split("\n")` count, kept on all three paths: `length(nl) + 1L` in
+  `read_window_small()`, `split_lines_js()` on UTF-16/32, the newline count plus one in
+  `read_line_index_build()`. Every fixture was built with `paste(collapse = "\n")`.
+- Fix: a final newline ends the last line on each path (subtract it; drop a final "" of more than
+  one element); "" stays empty and "\n" alone is one empty line. Vignette: `read()` returns the
+  file's lines, without line numbers (.Rmd and .Rmd.orig).
+- Green: `tool-read` PASS 235 (Pi's count moved in seven tests: UTF-16, BOM CRLF, streaming
+  index, BM text, cap, giant line, non-ASCII index); `tool-namespace` PASS 417 ("direct tools return Pi's texts" now
+  "x = 1\ny = 2", total 2); `^(tool-.*|console-render|context-prefix|ext-api|ext-events|mcp-
+  namespace|mcp-server|prompt-.*|session-object|skill-.*|doc-.*|lint-rules|arch-layers)$` PASS
+  7261 SKIP 2 before that pin; full suite (NOT_CRAN=true) FAIL 2 SKIP 64 PASS 35324, both
+  `proc-windows-backpressure` (a ps `access_denied` memory sample under load; the file alone PASS
+  254). Lint clean; Rd unchanged.
+- Deviations: D-248 (04 §7.10 `read_file()`). Open: none.

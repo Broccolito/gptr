@@ -70,7 +70,8 @@ peter$find(pattern, path = ".", sort = c("path", "mtime", "size", "relevance"),
 peter$ls(path = ".", sort = c("name", "mtime", "size"), long = FALSE)
 ```
 
-`read()` returns numbered lines and can attach supported images to a model's running `r` result.
+`read()` returns the file's lines, without line numbers, and can attach supported images to a
+model's running `r` result.
 `write()` replaces a file and returns its path invisibly. `edit()` takes a list of replacements
 (`oldText`, `newText`) or a supported patch envelope. It replaces exact text first; when an
 `oldText` has no exact match, it falls back to a match that ignores trailing spaces and quote, dash
