@@ -628,7 +628,7 @@ test_that("a console that shows a secret as typed says so once (cheat-sheet revi
   old = the$once
   the$once = new.env(parent = emptyenv())
   withr::defer(assign("once", old, envir = the))
-  local_readline(rep("sk-typed", 6L))
+  local_readline(rep("sk-typed", 7L))
   note = c("    This console shows the key as you type; gptr_env() loads keys from a file",
            "    instead.")
   shown = function(cls, secret = TRUE) {
@@ -652,6 +652,10 @@ test_that("a console that shows a secret as typed says so once (cheat-sheet revi
   # a terminal that reads it without echo says nothing
   local_mocked_bindings(tty_modes = function(modes = "-g") if (identical(modes, "-g")) "SAVED")
   expect_identical(shown("T"), character())
+  # Emacs' comint (M-x shell, ESS) shows and keeps what is typed whatever the tty's echo (review of
+  # Tasks 22-27)
+  withr::local_envvar(INSIDE_EMACS = "29.1,comint")
+  expect_identical(shown("D"), note)
 })
 
 test_that("a terminal: gptr_login() reads a key without showing it (cheat-sheet review)", {

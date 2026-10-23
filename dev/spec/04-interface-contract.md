@@ -5562,7 +5562,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     R's readline (echo on, Enter required; a secret input that no rstudioapi dialog asks reads with the echo
     off where R reads its own terminal, T or D: `gptr_readline()` sets `-echo` as the last mode before readline
     and restores the modes saved before it (a console call's, else `stty -g`) first on exit, an interrupt too,
-    writing the newline of Enter after the answer; elsewhere, or where stty fails, a dim row above the chevron
+    writing the newline of Enter after the answer; elsewhere, or where stty fails, and in Emacs' comint (M-x
+    shell, ESS; `INSIDE_EMACS` names it), whose buffer shows and keeps what is typed whatever the tty's echo
+    (review of Tasks 22-27), a dim row above the chevron
     says once in the session `This console shows the key as you type; gptr_env() loads keys from a file
     instead.`, cheat-sheet review);
     answers are unchanged, but a choice's or an input's free-text answer

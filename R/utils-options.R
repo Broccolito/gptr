@@ -175,10 +175,15 @@ tty_question = function(on) {
 #' reads a terminal of its own (T, D): a console call's saved ones (tty_call()), in which its
 #' questions read, else the terminal's (`stty -g`); NULL where stty fails or R reads no terminal
 #' (R.app, Windows, IRkernel, radian; RStudio and Positron, which ask in their own dialog where
-#' rstudioapi is installed, ui_console_input()), whose console shows what is typed
+#' rstudioapi is installed, ui_console_input()), whose console shows what is typed, as does the
+#' comint mode of Emacs (M-x shell, ESS: `INSIDE_EMACS` names it), whose buffer shows and keeps it
+#' whatever the tty's echo
 #' @noRd
 tty_secret = function() {
-  if (!console_class() %in% c("T", "D")) return(NULL)
+  if (!console_class() %in% c("T", "D") ||
+        grepl("comint", Sys.getenv("INSIDE_EMACS"), fixed = TRUE)) {
+    return(NULL)
+  }
   modes = the$tty$saved %||% tty_modes()
   if (length(modes) == 1L) modes
 }

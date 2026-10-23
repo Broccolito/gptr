@@ -3666,6 +3666,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   relay tests); test-mcp-server.R "a served call the person denies with text says it is theirs (cheat-sheet
   review)".
 - Review fixes of Tasks 22-27 (2026-10-23):
+  - A secret read in Emacs' comint (M-x shell, ESS: `INSIDE_EMACS` names it) is no hidden read (`tty_secret()`
+    gives NULL), so the dim row says once that this console shows the key as typed: comint's buffer shows the text
+    and keeps it in its input ring whatever the tty's echo, while gptr set `-echo` there and said nothing.
+    Contract-visible: 04 §15.10 IC-77. Tests: test-console-ui.R "a console that shows a secret as typed says so
+    once (cheat-sheet review)".
   - The width the live row pads its status to (`status_w`) counts the lasting words only, not `keys wait` or
     `question waiting`, which go when `r` returns or the question is asked: one row with both kept every later
     draft of the run 20 columns from its status (`▌ thinking 27s                       › then save ...`).
