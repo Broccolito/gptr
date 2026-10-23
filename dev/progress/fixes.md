@@ -2035,3 +2035,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `proc-windows-backpressure` (a ps `access_denied` memory sample under load; the file alone PASS
   254). Lint clean; Rd unchanged.
 - Deviations: D-248 (04 §7.10 `read_file()`). Open: none.
+
+### tools-11 - A finished background job's run time stops growing
+- Red: FAIL 1 in `bridge-sh` (PASS 286): with `reactor_now()` mocked 100 s later, a waited-on
+  done job and a killed one read `peter$jobs()` seconds and `read()` footers 101, 101, 100, 100
+  instead of 1, 1, 0, 0 (finding 6; live GPT called a 2 s job 48 s).
+- Cause: a `gptr_job` kept only `.started`; the footer and the `seconds` column measured to now
+  whatever the status.
+- Fix: `bridge_job_status()` sets `.ended` the first time it sees the process dead;
+  `bridge_job_seconds()` (end, else now, minus start) serves both reports; `wait()`'s `settled()`
+  asks the status, so a waited-on job stops within one 200 ms pump.
+- Green: `bridge-sh` PASS 287 SKIP 2; `^(bridge-sh|bridge-lang|proc-supervise|gptr-jobs|
+  copy-bridge|lint-rules|arch-layers)$` PASS 648 SKIP 6. Lint clean; Rd unchanged.
+- Deviations: none (the contract does not define `seconds`). Open: a job nobody looks at until
+  long after it ended (including after `kill()`) stops at that first look, an upper bound.
