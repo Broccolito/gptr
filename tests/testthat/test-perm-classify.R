@@ -633,6 +633,8 @@ test_that("G5's 46 polyglot calls are classified through their arguments (G5 p08
   )
   expect_length(cases, 46L)
   for (cs in cases) expect_identical(bridge(cs[[2]]), cs[[1]], label = cs[[2]])
+  # a background job is classified by its command, as peter$sh() is (D-251)
+  expect_identical(gptr_risk("peter$bg('rm -rf ~')", root = root)$level, 4L)
 })
 
 test_that("file connections opened for writing are file writes (plan mode stays read-only)", {
@@ -967,6 +969,21 @@ test_that("the plan-mode allowlist admits only known read-only calls (IC-54)", {
   expect_identical(risk_plan_disallowed("gptr_artifacts()", root), character())
   expect_true("read.csv" %in% risk_plan_disallowed("x = read.csv('https://x.org/a.csv')", root))
   expect_identical(risk_plan_disallowed("this is not R (", root), character())
+  # console output and a lookup of a literal function, unless the scan flags or cannot see a write
+  expect_identical(risk_plan_disallowed(paste("cat('a\\n'); base::cat(nrow(df), file = stdout());",
+                                              "writeLines('b'); dput(1:3)"), root), character())
+  expect_identical(risk_plan_disallowed("do.call(rbind, lapply(split(df$a, df$g), summary))", root),
+                   character())
+  for (code in c("cat('a', file = 'x.txt')", "cat('a', file = tempfile())",
+                 "f = 'x.txt'; cat('a', file = f)", "cat('a'); cat('b', file = 'y.txt')",
+                 "lapply(1, cat, file = 'x.txt')", "do.call(cat, list('a', file = 'x.txt'))")) {
+    expect_true("cat" %in% risk_plan_disallowed(code, root), info = code)
+  }
+  expect_true("writeLines" %in% risk_plan_disallowed("writeLines('a', 'y.txt')", root))
+  expect_true("write" %in% risk_plan_disallowed("write(1:3)", root))
+  expect_true("sink" %in% risk_plan_disallowed("sink('s.txt')", root))
+  expect_true("system" %in% risk_plan_disallowed("do.call('system', list('ls'))", root))
+  expect_true("do.call" %in% risk_plan_disallowed("g = 'system'; do.call(g, list('ls'))", root))
 })
 
 test_that("a read of a path the classifier cannot resolve is level 1, as outside one", {

@@ -52,9 +52,12 @@ disposable sandboxes.
 The risk levels come from a static classifier (\code{\link[=gptr_risk]{gptr_risk()}}). It is advisory and it is not a
 security boundary: R code can compute function names, call compiled code or load packages
 whose effects the classifier cannot see, and R has no sandbox for code that runs inside your
-session. In \code{auto} and \code{yolo} mode a model can delete or overwrite files and objects. Use them
-only in projects you can restore (version control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns),
-and run untrusted prompts or untrusted projects in a disposable container or virtual machine.
+session. Deny and ask \verb{sh:} rules see a command computed at run time only in a \code{peter$sh()} or
+\code{peter$bg()} call, so \verb{cmd = paste("rm", "-rf", "build"); system(cmd)} runs in \code{auto} and
+\code{yolo} mode despite a deny rule \verb{r(sh:rm *)}. In \code{auto} and \code{yolo} mode a model can delete or
+overwrite files and objects. Use them only in projects you can restore (version control,
+backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run untrusted prompts or untrusted projects in
+a disposable container or virtual machine.
 }
 
 \section{Sub-agents, workers and child processes}{

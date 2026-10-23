@@ -676,10 +676,14 @@ risk_can_dash = function(x) {
   isTRUE(tryCatch(any(grepl(rx, c("-", "@"), perl = TRUE)), error = function(e) TRUE))
 }
 
+#' The base name of a program word without `.exe` in any case (Windows names are case-insensitive)
+#' @noRd
+risk_cmd_name = function(x) sub("\\.exe\\z", "", risk_base(x), perl = TRUE, ignore.case = TRUE)
+
 #' Known programs: a row of the commands table or a program the classifier models
 #' @noRd
 risk_cmd_known = function(x) {
-  x = tolower(sub("\\.exe\\z", "", risk_base(x), perl = TRUE))
+  x = tolower(risk_cmd_name(x))
   x %in% c(risk_table("commands")$command, risk_cmd_interpreters, risk_cmd_builds,
            risk_cmd_download, risk_cmd_delete, risk_cmd_copy, risk_cmd_wrappers)
 }
@@ -1012,7 +1016,7 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       next
     }
     if (grepl("[/\\\\]", w[1L]) || nzchar(dyn[1L])) break
-    p = tolower(sub("\\.exe\\z", "", w[1L], perl = TRUE))
+    p = tolower(risk_cmd_name(w[1L]))
     if (p %in% c("export", "declare", "typeset", "local", "readonly")) {
       v = w[-1L]
       asg = v[grepl(assign_re, v)]
@@ -1050,7 +1054,7 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
     break
   }
   path_prog = grepl("[/\\\\]", w[1L]) || nzchar(dyn[1L])
-  p = tolower(sub("\\.exe\\z", "", risk_base(w[1L]), perl = TRUE))
+  p = tolower(risk_cmd_name(w[1L]))
   if (!risk_cmd_known(p) && risk_cmd_known(sub("\\..*", "", p))) p = sub("\\..*", "", p)
   a = w[-1L]
   da = dyn[-1L]
@@ -1076,7 +1080,16 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
   if (path_prog) {
     add(3L, "process")
     control(c(w[1L], a[!nzchar(da)]))
-    if (!nzchar(dyn[1L])) later(c(risk_base(w[1L]), a), c("", da)) else later(a, da)
+    if (nzchar(dyn[1L])) {
+      later(a, da)
+    } else if (risk_cmd_known(w[1L])) {
+      # a literal path to a known program is also read as that program, for deny, ask and
+      # category rules; the process row keeps an allow rule from covering the path
+      out[[length(out) + 1L]] = risk_cmd_simple(
+        c(risk_cmd_name(w[1L]), a), root, dirs, c("", da), quoted)
+    } else {
+      later(c(risk_base(w[1L]), a), c("", da))
+    }
     return(done())
   }
   sub_cmd = a[!startsWith(a, "-")][1L] %if_na% "*"
@@ -2280,7 +2293,8 @@ risk_bound = function(exprs) {
   list(fun = setdiff(fun, val), val = unique(val), all = unique(c(all, fun)))
 }
 
-#' The one parse walk (IC-31): list(flags, targets, calls, sizes)
+#' The one parse walk (IC-31): list(flags, targets, sizes, calls, values); `values` names the
+#' functions used as values (in a function slot or an assignment), whose arguments it cannot see
 #' @noRd
 risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
   on.exit(assign("envir", NULL), add = TRUE)
@@ -2290,6 +2304,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
             remove = character(), super = character(), files = character(),
             unknown = character(), process = character())
   calls = list(fn = character(), package = character(), line = integer())
+  values = character()
   # Paths held in names: every value a name may hold, NA for one the code computes. A
   # straight-line assignment replaces them (the code stops at its first error) unless the code
   # assigns the name with <<- (a function may do so later); one in a branch, loop or call adds
@@ -2587,6 +2602,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     }
     if (!slot && is.null(risk_lookup(r$name, r$pkg))) return(invisible())
     add_call(r$name, r$pkg, ctx$line)
+    values <<- c(values, r$name)
     use_fun(r$name, r$pkg, NULL, ctx)
   }
 
@@ -2712,7 +2728,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
   fl = if (length(flags)) do.call(risk_flags_bind, flags) else risk_flags_empty()
   list(flags = fl, targets = lapply(tg, function(x) unique(x[!is.na(x)])), sizes = sizes,
        calls = data.frame(fn = calls$fn, package = calls$package, line = calls$line,
-                          stringsAsFactors = FALSE))
+                          stringsAsFactors = FALSE), values = unique(values))
 }
 
 #' Flags of a gateway member call (04 section 9.4); every row's fn is `peter$<member>`; a path
@@ -2738,15 +2754,18 @@ risk_member_flags = function(member, e, root, known = NULL) {
   }
   if (member %in% c("help", "search", "describe", "plot", "out")) return(row(0L, "read"))
   if (member == "jobs") return(row(if (isFALSE(risk_arg(a, "kill", 1L) %||% FALSE)) 0L else 3L))
-  if (startsWith(member, "mcp$") || member %in% c("bg", "script", "app")) return(row(3L))
-  code = switch(member, sh = risk_fold(risk_arg(a, "cmd", 1L)),
+  if (startsWith(member, "mcp$") || member %in% c("script", "app")) return(row(3L))
+  code = switch(member, sh = , bg = risk_fold(risk_arg(a, "cmd", 1L)),
                 py = risk_fold(risk_arg(a, "code", 1L)), sql = risk_fold(risk_arg(a, "query", 1L)),
                 knit = risk_fold(risk_arg(a, "code", 2L)))
-  if (member %in% c("sh", "py", "sql", "knit") && is.null(code)) {
+  if (member %in% c("sh", "bg", "py", "sql", "knit") && is.null(code)) {
     return(row(3L, "dynamic", paste0(txt, "(<code the code computes>)")))
   }
   eng = risk_fold(risk_arg(a, "engine", 1L))
   f = switch(member, sh = risk_command(code, root),
+             # a background job is level 3 whatever it runs; its row carries the command for rules
+             bg = risk_flags_bind(risk_command(code, root),
+                                  row(3L, call = paste(code, collapse = " "))),
              py = risk_python(paste(code, collapse = "\n"), root),
              sql = risk_sql(paste(code, collapse = "\n"), root),
              knit = if (isTRUE(eng %in% c("bash", "sh", "zsh", "powershell", "cmd"))) {
@@ -2790,15 +2809,20 @@ code_targets = function(code) {
 #'
 #' Every call head and function value must be plan syntax, a level-0 `read` row of the risk
 #' table, `gptr_describe()`, a nested `peter()` (its child inherits plan mode) or a peter$ read
-#' member whose own classification is level 0, and no call may be flagged at level 2 or more
-#' (a read row used to write, such as `file("a.csv", "w")`, or a network read). Returns the
-#' offending names (empty = allowed).
+#' member whose own classification is level 0; a `file_write` row whose risk is its path
+#' argument (`cat()` to the console) or a lookup of a literal function (`do.call(rbind, ...)`,
+#' whose function is checked as a call of its own) passes when the scan flags none of its calls
+#' and, for the path row, never uses it as a value, whose arguments it cannot see. No call may be
+#' flagged at level 2 or more (a read row used to write, such as `file("a.csv", "w")`, or a
+#' network read). Returns the offending names (empty = allowed).
 #' @noRd
 risk_plan_disallowed = function(code, root = project_root()) {
   parsed = risk_parse(code)
   if (!is.null(parsed$error)) return(character())
   scan = risk_scan(parsed$exprs, envir = NULL, root = root, depth = 0L)
   calls = scan$calls
+  fl = scan$flags
+  flagged = fl$fn[!is.na(fl$fn) & fl$level > 0L]
   gw = paste0(risk_gateway, "$")
   bad = character()
   for (i in seq_len(nrow(calls))) {
@@ -2811,9 +2835,11 @@ risk_plan_disallowed = function(code, root = project_root()) {
     }
     row = risk_lookup(fn, pkg)
     if (!is.null(row) && identical(row$level, 0L) && identical(row$category, "read")) next
+    if (!is.null(row) && !fn %in% flagged &&
+          ((row$category == "file_write" && nzchar(row$path_arg) && !fn %in% scan$values) ||
+             (row$category == "dynamic" && fn %in% names(risk_lookups)))) next
     bad = c(bad, if (is.na(pkg)) fn else paste0(pkg, "::", fn))
   }
-  fl = scan$flags
   member = !is.na(fl$fn) & startsWith(fl$fn, gw)
   unique(c(bad, fl$fn[member & fl$level > 0L], fl$fn[!is.na(fl$fn) & !member & fl$level >= 2L]))
 }

@@ -37,8 +37,9 @@ session of this process, or \code{NULL} when no session was created in this proc
 the last lines of each file.
 
 \code{gptr_resume()} returns the live object when one exists in this process; otherwise it rebuilds
-the session from its JSONL file (leaf = the last entry; status \code{idle} when the tail is a final
-answer, else \code{interrupted}) with home \code{envir}. A rebuilt fork always gets a fresh overlay of
+the session from its JSONL file (leaf = the last entry; the mode it last ran with, or the \code{mode}
+setting for a file that records none; status \code{idle} when the tail is a final answer, else
+\code{interrupted}) with home \code{envir}. A rebuilt fork always gets a fresh overlay of
 \code{envir}. A detached copy (from \code{saveRDS()}, a knitr cache or callr) is attached under the
 split-brain rules. \verb{block =} returns the session that a document replay bound to that block.
 Resuming restores conversation state, not a complete analysis workspace, and does not

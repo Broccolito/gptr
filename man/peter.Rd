@@ -19,13 +19,21 @@ peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default. A call made by the
 agent's own R code, and a team or fan-out it starts, uses the running session's model instead.}
 
-\item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default.}
+\item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default.
+The plan a \code{plan} run proposes goes once, as a \verb{<plan>} block, to the next top-level
+\code{peter()} call from the same environment, within an hour and in another mode, whatever that
+call asks: a script runs the plan with \code{peter("Go ahead.", mode = auto)}. Another \code{peter()}
+call first, or a next call inside a loop or a run, discards it;
+\code{options(gptr.plan_handoff = FALSE)} turns the hand-off off.}
 
 \item{skills, plugins, extensions}{Names (bare or quoted) of skills to preload, plugins and
 extensions to enable for this session; \code{extensions} also takes \verb{function(gptr)} factories and
 file paths.}
 
-\item{tools}{Tool names, \code{"+name"}/\code{"-name"} modifiers, a preset name, or \code{\link[=gptr_tool]{gptr_tool()}} specs.}
+\item{tools}{Tool names, \code{"+name"}/\code{"-name"} modifiers, one preset name, or \code{\link[=gptr_tool]{gptr_tool()}} specs.
+A bare tool name adds the tool, like \code{"+name"}; to narrow the set, choose a preset such as
+\code{readonly} or remove tools with \code{"-name"}. A name that is neither a tool nor a preset is
+refused.}
 
 \item{agents}{A named list of agent definitions for a team (\code{agent()} means \code{\link[=gptr_agent]{gptr_agent()}}).
 A decision model refuses it and \code{parallel}: it answers in one call.}
@@ -56,19 +64,29 @@ for a \code{gptr_error_s1_uncertain} error. It has no effect without \code{min_c
 
 \item{envir}{Where the agent evaluates R code and creates objects. A call made by the agent's
 own R code without \code{envir} evaluates in a new environment whose parent is the caller's,
-\code{res$envir}: it reads the caller's objects and keeps the ones it creates there.}
+\code{res$envir}: it reads the caller's objects and keeps the ones it creates there. A function
+frame (the default inside a function, or \code{environment()}) serves only that call, so the
+session keeps no workspace for later turns; pass \code{envir = new.env()} to keep one.}
 
 \item{background}{Experimental: return the running session at once (needs later).}
 
-\item{budget}{\code{list(tokens =, cost =, turns =)} limits for this call.}
+\item{budget}{\code{list(tokens =, cost =, turns =)} limits for this call. \code{turns} counts model
+requests, retries and sub-agents' requests included; \code{session$turns} counts prompts instead.
+\code{cost} counts priced requests only: a model without prices (such as Codex, or a
+\code{\link[=gptr_provider]{gptr_provider()}} without \code{prices}) has an unknown cost that counts nothing, so the call says
+once that its cost limit is not enforced; the \code{tokens} and \code{turns} limits still apply.}
 
 \item{replay}{Document replay mode: \code{"auto"}, \code{"replay"}, \code{"live"} or \code{"record"}.}
 
 \item{.opts}{Rare switches such as \code{thinking}, \code{max_turns}, \code{context}, \code{returns}, \code{images},
-\code{preset}, and entries named by a plugin namespace.}
+\code{preset}, and entries named by a plugin namespace. \code{thinking} applies to this call and to the
+session's later turns; \code{max_turns} caps this call's model requests.}
 
 \item{.run}{\code{FALSE} builds the session with the prompt queued and returns it (see
-\code{\link[=gptr_step]{gptr_step()}}).}
+\code{\link[=gptr_step]{gptr_step()}}). Building checks egress and replay only; \code{\link[=gptr_step]{gptr_step()}} and \code{\link[=gptr_wait]{gptr_wait()}} check
+the model's provider and key before they start the run. A piped \code{.run = FALSE} call applies
+its model, mode and tools at once; a \code{\link[=gptr_step]{gptr_step()}} or \code{\link[=gptr_wait]{gptr_wait()}} that then refuses leaves
+them, with no turn.}
 
 \item{.stdin}{Drive the console from piped standard input.}
 }
@@ -98,15 +116,24 @@ The dots take, in order: at most one leading session to continue, the prompt (th
 unnamed string literal, else the first unnamed length-1 character value), and context objects
 (unnamed ones are labeled by their expression, named ones by name). Conversational context
 bindings refer to objects where they live; descriptions are budgeted separately from
-in-memory R computation. Every other argument is matched by its exact name only.
+in-memory R computation. Every other argument is matched by its exact name only: a named
+object whose name abbreviates one and whose value fits it, such as \code{mo = "plan"}, stays context
+and warns (\code{gptr_warning_partial_name}).
 
 A literal prompt gets \code{{name}} interpolation from \code{envir} (atomic vectors of 1 to 50 values;
 \verb{\{\{} and \verb{\}\}} are literal braces); \code{.opts = list(interpolate = FALSE)} switches it off.
 
 Terminal statuses become conditions carrying the session as \verb{$session}: \code{error} signals
 \code{gptr_error_provider}, \code{blocked} \code{gptr_error_permission}, \code{budget} \verb{gptr_error_budget_<kind>}
-and \code{max_turns} \code{gptr_error_max_turns}. \code{peter()} with no prompt opens the console when someone
-can answer, and signals \code{gptr_error_noninteractive} otherwise.
+and \code{max_turns} \code{gptr_error_max_turns}. A call whose model cannot be reached (no egress
+acknowledgement, replay mode, a disabled provider, a missing key) is refused before its run:
+no turn, no model or mode switch, no new \code{\link[=gptr_last]{gptr_last()}} and no \verb{$session}. So is a call with
+an unknown plugin or \verb{skills =} name, \code{.opts$images} its model does not take, or a
+secret-looking prompt you decline to send. A piped call loads its \code{extensions}, \code{plugins} and
+specs first, since they can define that model, and unloads them again when it is refused;
+registry filters (\code{plugins = "-x"}) stay on the R session only once a call is accepted.
+\code{peter()} with no prompt opens the console when someone can answer, and signals
+\code{gptr_error_noninteractive} otherwise.
 
 A new interactive console without an explicit or configured model first offers CLI selection
 or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;

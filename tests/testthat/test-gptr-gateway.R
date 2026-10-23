@@ -569,6 +569,26 @@ test_that("a continuation evaluates in the kept home and fails fast on a hidden 
   expect_identical(s$turns, 2L)
 })
 
+test_that("a continuation of a session that kept no workspace says where it evaluates", {
+  local_gw()
+  local_gptr_options(quiet = FALSE, verbose = 0L)
+  fake = local_fake_provider(list("ok"))
+  f = function() peter("Create z.", model = fake, mode = "auto")
+  s = f()
+  expect_null(s$envir)
+  cnd = expect_message(s |> peter("Report z."), class = "gptr_message_home_not_kept")
+  expect_match(conditionMessage(cnd), "frame of f()", fixed = TRUE)
+  g = function() {
+    s2 = peter("a", model = fake, mode = "auto")
+    expect_no_message(s2 |> peter("b"), class = "gptr_message_home_not_kept")
+  }
+  g()
+  e = new.env()
+  s3 = (function() peter("a", model = fake, mode = "auto", envir = e))()
+  expect_identical(s3$envir, e)
+  expect_no_message(s3 |> peter("b"), class = "gptr_message_home_not_kept")
+})
+
 test_that("a first remote use without an acknowledgement is refused, then replay guards", {
   local_gw()
   withr::local_envvar(GPTR_REPLAY = "replay")
@@ -736,6 +756,21 @@ test_that("a run that reaches max_turns signals gptr_error_max_turns", {
   cnd = expect_error(peter("loop", model = fake, tools = list(again), envir = new.env(),
                           .opts = list(max_turns = 2L)), class = "gptr_error_max_turns")
   expect_identical(cnd$session$status, "max_turns")
+})
+
+test_that("budget turns and max_turns count model requests; session$turns counts prompts", {
+  local_gw()
+  script = list(fake_tool("r", code = "t1 = 1"), fake_tool("r", code = "t2 = 2"),
+                fake_tool("r", code = "t3 = 3"), "Done.")
+  e = new.env()
+  fake = local_fake_provider(script)
+  cnd = expect_error(peter("x", model = fake, mode = "auto", envir = e,
+                           budget = list(turns = 2)), class = "gptr_error_budget_turns")
+  expect_identical(c(cnd$session$turns, nrow(cnd$session$usage)), c(1L, 2L))
+  fake2 = local_fake_provider(script, name = "fake2")
+  cnd = expect_error(peter("x", model = fake2, mode = "auto", envir = e,
+                           .opts = list(max_turns = 2L)), class = "gptr_error_max_turns")
+  expect_identical(c(cnd$session$turns, nrow(cnd$session$usage)), c(1L, 2L))
 })
 
 test_that("blocked and budget statuses map to their conditions (contract 6.1.2)", {
@@ -1318,6 +1353,296 @@ test_that("router:<name> names a registered router; an unknown one is refused", 
   expect_identical(gateway_model_ref("router:pick4", session = s$id), "router:pick4")
   s = s |> peter("again", model = "router:pick4")
   expect_identical(c(s$model, s$text), c("router:pick4", "second"))
+})
+
+test_that("an unknown name in tools = is refused with the closest preset or tool (D-251)", {
+  local_gw()
+  refused = function(tools, hint) {
+    f = gptr_fake_provider(list("ok"))
+    expect_error(peter("x", model = f, mode = auto, tools = !!tools, envir = new.env()),
+                 class = "gptr_error_invalid_argument", regexp = hint)
+    expect_identical(f$log$n, 0L)
+  }
+  refused("extendd", "\"extended\"")
+  refused("Extended", "\"extended\"")
+  refused("-wirte", "\"write\"")
+  refused("+gerp", "\"grep\"")
+  f = gptr_fake_provider(list("ok"))
+  expect_error(peter("x", model = f, mode = auto, tools = c(readonly, extended)),
+               class = "gptr_error_invalid_argument", regexp = "more than one preset")
+  f = gptr_fake_provider(list("ok", "two"))
+  expect_no_warning(peter("x", model = f, mode = auto, tools = c("-write", "+grep"),
+                          envir = new.env()))
+  expect_identical(f$log$requests[[1L]]$tools, c("read", "r", "edit", "grep"))
+  expect_error(gptr_last() |> peter("y", model = f, tools = "+gerp"),
+               class = "gptr_error_invalid_argument", regexp = "\"grep\"")
+  expect_identical(f$log$n, 1L)
+  # a continuation naming two presets is refused before its model or mode switches
+  s = gptr_last()
+  state = function() {
+    d = session_data(s)
+    list(d$model, d$mode, length(d$entries))
+  }
+  before = state()
+  f2 = gptr_fake_provider(list("no"), name = "fb")
+  expect_error(s |> peter("z", model = f2, mode = plan, tools = c(readonly, extended)),
+               class = "gptr_error_invalid_argument", regexp = "more than one preset")
+  expect_identical(state(), before)
+  expect_identical(f2$log$n, 0L)
+})
+
+test_that("a continuation's .opts$thinking applies without model = and stays (D-251)", {
+  local_gw()
+  fake = local_fake_provider(as.list(paste("reply", 1:7)))
+  s = peter("x", model = fake, .opts = list(thinking = "high"), envir = new.env())
+  s |> peter("y", .opts = list(thinking = "low"))
+  s |> peter("z")
+  expect_identical(session_data(s)$thinking, "low")
+  t = peter("x", model = fake, envir = new.env())
+  t |> peter("y", .opts = list(thinking = "high"))
+  # a router session keeps its model and records no model_change; its choice gets the level
+  pick = gptr_router("pick_th", route = function(request, ctx) "fake/fake-1")
+  r = peter("x", model = pick, envir = new.env())
+  changes = function(x) {
+    sum(vapply(session_data(x)$entries, function(e) e$type, "") == "model_change")
+  }
+  n = changes(r)
+  r |> peter("y", .opts = list(thinking = "low"))
+  expect_identical(c(r$model, session_data(r)$thinking), c("router:pick_th", "low"))
+  expect_identical(changes(r), n)
+  th = vapply(fake_requests(fake), function(q) q$params$thinking %||% NA_character_, "")
+  expect_identical(th, c("high", "low", "low", NA, "high", NA, "low"))
+})
+
+test_that("a call refused before its run changes neither the session nor gptr_last() (D-251)", {
+  local_gw()
+  local_gptr_options(replay = "auto")
+  withr::local_envvar(GPTR_TEST_ABSENT_KEY = NA)
+  fake = local_fake_provider(list("one", "two"))
+  s = peter("hello", model = fake, envir = new.env())
+  state = function() {
+    d = session_data(s)
+    list(d$model, d$mode, d$turns, d$status, length(d$entries), identical(gptr_last(), s))
+  }
+  before = state()
+  refused = function(class, ...) {
+    expect_error(peter(...), class = class)
+    expect_identical(state(), before)
+  }
+  corp = gptr_provider("corp", api = "fake",
+                       models = list(list(id = "corp-1", ref = "corp/corp-1")))
+  refused("gptr_error_egress", s, "UNSENT", model = corp, mode = "plan")
+  refused("gptr_error_egress", "UNSENT", model = corp, envir = new.env())
+  settings_write("user", list(egress = list(corp = "ack")))
+  refused("gptr_error_not_recorded", s, "UNSENT", model = corp, mode = "plan", replay = "replay")
+  keyless = gptr_provider("keyless", "openai-completions", base_url = "https://keyless.invalid/v1",
+                          auth = "GPTR_TEST_ABSENT_KEY",
+                          models = list(list(id = "m", tool_call = TRUE)))
+  none = list(context = "none")
+  seen = new.env()
+  seen$n = 0L
+  hook = gptr_hook("agent_start", function(event, ctx) {
+    seen$n = seen$n + 1L
+    NULL
+  })
+  ext = function(gptr) gptr$register(hook)
+  # a refused call keeps none of its extensions, tools, specs or registry filters
+  probe = test_tool("probe", function(ctx) "probed")
+  refused("gptr_error_no_key", s, "UNSENT", model = keyless, extensions = ext, tools = list(probe),
+          plugins = "-builtin:memory", .opts = none)
+  refused("gptr_error_no_key", "UNSENT", model = keyless, plugins = "-builtin:memory",
+          envir = new.env(), .opts = none)
+  expect_null(settings_read("session")$filters)
+  expect_false("probe" %in% registry_names("tool", session = session_data(s)$id))
+  gptr_config(providers = list(openai = list(enabled = FALSE)), .scope = "session")
+  refused("gptr_error_not_available", s, "UNSENT", model = "openai/gpt-6-sol", .opts = none)
+  expect_identical((s |> peter("second"))$text, "two")
+  expect_identical(seen$n, 0L)
+  sent = fake_requests(fake)[[2L]]$messages
+  expect_identical(vapply(sent, function(m) m$role, ""), c("user", "assistant", "user"))
+  expect_false(any(grepl("UNSENT", vapply(sent, msg_text, ""), fixed = TRUE)))
+  # a spec the refused call replaced comes back
+  script = gptr_fake_provider(list("hi", "corp answer"), name = "corp")
+  big = gptr_provider("corp", api = "fake", models = list(list(id = "big")))
+  t = peter("hi", model = big, envir = new.env())
+  keyless_big = gptr_provider("corp", "openai-completions", base_url = "https://keyless.invalid/v1",
+                              auth = "GPTR_TEST_ABSENT_KEY", models = list(list(id = "big")))
+  expect_error(t |> peter("UNSENT", model = keyless_big, .opts = none), class = "gptr_error_no_key")
+  expect_identical((t |> peter("again"))$text, "corp answer")
+})
+
+test_that("every refusal before a turn starts undoes what the call registered (D-251)", {
+  local_gw()
+  local_gptr_options(replay = "auto")
+  settings_write("user", list(egress = list(corp = "ack")))
+  fake = local_fake_provider(list("one", "two"))
+  script = gptr_fake_provider(list("corp answer"), name = "corp")
+  corp = gptr_provider("corp", api = "fake", models = list(list(id = "corp-big")))
+  s = peter("hello", model = fake, envir = new.env())
+  sid = session_data(s)$id
+  state = function() {
+    d = session_data(s)
+    list(d$model, d$mode, d$turns, length(d$entries), identical(gptr_last(), s))
+  }
+  before = state()
+  seen = new.env()
+  seen$n = 0L
+  good = function(gptr) {
+    gptr$register(gptr_hook("agent_start", function(event, ctx) {
+      seen$n = seen$n + 1L
+      NULL
+    }))
+  }
+  probe = test_tool("probe", function(ctx) "probed")
+  refused = function(why, ...) {
+    expect_error(peter(...), why, class = "gptr_error_invalid_argument")
+  }
+  # refused while it registers: an unknown plugin name after an extension it loaded
+  refused("No plugin", s, "U1", mode = "plan", extensions = list(good, "no-such-plugin-zz"),
+          tools = list(probe), plugins = "-builtin:memory")
+  refused("No plugin", s, "U1", extensions = good, tools = list(probe),
+          plugins = c("-builtin:memory", "no-such-plugin-zz"))
+  # refused after its model passed the checks: an unknown skills = preload, an image refusal and
+  # a secret-looking prompt the person declines to send
+  refused("No skill", s, "U2", model = corp, mode = "plan", extensions = good,
+          tools = list(probe), plugins = "-builtin:memory", skills = "no-such-skill-zz")
+  refused("image", s, "U3", model = corp, mode = "plan", extensions = good, tools = list(probe),
+          .opts = list(images = "plot.txt"))
+  local({
+    local_mocked_bindings(gptr_confirm = function(question, default = FALSE) FALSE)
+    local_gptr_options(prompt_secrets = "ask", interactive = TRUE)
+    u5 = paste("U5 uses", paste0("sk-", "ant-api03-", strrep("FAKEant0", 11), "xxxxxAA"))
+    refused("secret-looking", s, u5, model = corp, mode = "plan", extensions = good,
+            tools = list(probe), plugins = "-builtin:memory")
+  })
+  expect_identical(state(), before)
+  expect_null(settings_read("session")$filters)
+  expect_false("probe" %in% registry_names("tool", session = sid))
+  expect_identical((s |> peter("second"))$text, "two")
+  expect_identical(c(seen$n, script$log$n), c(0L, 0L))
+  # a refused new call keeps the previous gptr_last() and none of its registry filters
+  refused("No skill", "U4", model = fake, plugins = "-builtin:memory",
+          skills = "no-such-skill-zz", envir = new.env())
+  expect_identical(gptr_last(), s)
+  expect_null(settings_read("session")$filters)
+})
+
+test_that("a router's choice without a key stops the run, not the default model (D-251)", {
+  local_gw()
+  local_gptr_options(replay = "auto", model = "fake/fake-1")
+  withr::local_envvar(GPTR_TEST_ABSENT_KEY = NA)
+  fake = local_fake_provider(list("fallback answer"))
+  keyless = gptr_provider("keyless", "openai-completions", base_url = "https://keyless.invalid/v1",
+                          auth = "GPTR_TEST_ABSENT_KEY", models = list(list(id = "m")))
+  off = list(gptr_register(keyless),
+             gptr_register(gptr_router("to_keyless", route = function(request, ctx) "keyless/m")))
+  withr::defer(for (o in off) o())
+  expect_error(peter("x", model = "router:to_keyless", envir = new.env(),
+                     .opts = list(context = "none")), class = "gptr_error_no_key")
+  expect_length(fake_requests(fake), 0L)
+})
+
+test_that("a built session needs no key until a run starts it (D-251)", {
+  local_gw()
+  local_gptr_options(replay = "auto")
+  withr::local_envvar(ANTHROPIC_API_KEY = NA)
+  settings_write("user", list(egress = list(anthropic = "ack")))
+  fake = local_fake_provider(list("fine"))
+  opus = "anthropic/claude-opus-5-5"
+  s = peter("x", model = opus, envir = new.env(), .run = FALSE)
+  expect_identical(c(s$status, s$model), c("idle", opus))
+  expect_error(gptr_step(s), class = "gptr_error_no_key")
+  expect_identical(list(s$status, s$turns), list("idle", 0L))
+  team = gptr_parallel(a = peter("x", model = opus, envir = new.env()),
+                       b = peter("y", model = fake, envir = new.env()))
+  expect_identical(c(team$a$status, team$b$status, team$b$text), c("error", "idle", "fine"))
+  expect_s3_class(session_data(team$a)$condition, "gptr_error_no_key")
+})
+
+test_that("a call, gptr_step() and a parallel member each discover an Ollama model once (D-251)", {
+  local_gw()
+  local_gptr_options(replay = "auto")
+  settings_write("user", list(egress = list(ollama = "ack")))
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  # a window the standard preset fits in (the fixture's num_ctx is 8192)
+  models = ollama_fixture()
+  models$`qwen3:1.7b`$show$parameters = "num_ctx 40960"
+  srv = local_ollama_server(models)
+  # the fake api plays the Ollama model's replies through the live fake named "ollama"; each
+  # request's model carries what discovery found (tool calling), not the catalog's guess
+  engine = gptr_fake_provider(list("local answer"), name = "ollama")
+  seen = new.env()
+  seen$tool_call = logical()
+  off = gptr_register(gptr_adapter("openai-completions", "inprocess",
+                                   stream = function(model, context, opts) {
+                                     seen$tool_call = c(seen$tool_call, model$tool_call)
+                                     fake_stream(model, context, opts)
+                                   }))
+  withr::defer(off())
+  qwen = "ollama/qwen3:1.7b"
+  shows = function() sum(endsWith(srv$calls, "/api/show"))
+  team = gptr_parallel(a = peter("x", model = qwen, envir = new.env()))
+  expect_identical(c(team$a$status, team$a$text), c("idle", "local answer"))
+  expect_identical(shows(), 1L)
+  # each route again without evidence, as in a fresh process: building prepares nothing
+  catalog_reset(discovered = TRUE)
+  s = peter("y", model = qwen, envir = new.env(), .run = FALSE)
+  expect_identical(shows(), 1L)
+  gptr_step(s)
+  expect_identical(list(s$status, shows()), list("idle", 2L))
+  catalog_reset(discovered = TRUE)
+  s = peter("z", model = qwen, envir = new.env())
+  expect_identical(list(s$status, shows()), list("idle", 3L))
+  expect_identical(seen$tool_call, rep(TRUE, 3L))
+  # a member whose model cannot be prepared ends `error`; the team still returns
+  catalog_reset(discovered = TRUE)
+  srv$down = TRUE
+  team = gptr_parallel(a = peter("x", model = qwen, envir = new.env()))
+  expect_identical(team$a$status, "error")
+  expect_s3_class(session_data(team$a)$condition, "gptr_error_network")
+})
+
+test_that("a continuation switches to a provider spec that only its session knows (D-251)", {
+  local_gw()
+  local_gptr_options(replay = "auto")
+  settings_write("user", list(egress = list(corp = "ack")))
+  fake = local_fake_provider(list("one"))
+  # the fake api finds its script through the live fake of the same name
+  script = gptr_fake_provider(list("corp answer", "low answer"), name = "corp")
+  corp = gptr_provider("corp", api = "fake",
+                       models = list(list(id = "corp-big", thinking_levels = c("low", "high"))))
+  s = peter("hello", model = fake, envir = new.env())
+  s |> peter("next", model = corp)
+  changes = Filter(function(e) identical(e$type, "model_change"), session_data(s)$entries)
+  expect_identical(c(s$model, s$text), c("corp/corp-big", "corp answer"))
+  expect_identical(vapply(changes, function(e) e$gptr$ref, ""), "corp/corp-big")
+  s |> peter("more", .opts = list(thinking = "low"))
+  expect_identical(c(s$text, session_data(s)$thinking), c("low answer", "low"))
+  expect_identical(script$log$n, 2L)
+})
+
+test_that("a named dot that abbreviates an argument warns and stays context (D-251)", {
+  local_gw()
+  fake = local_fake_provider(as.list(paste("reply", 1:5)))
+  attached = function() {
+    blocks = fake_requests(fake)[[fake$log$n]]$messages[[1L]]$content
+    paste(vapply(blocks, function(b) if (identical(b$kind, "attached")) b$text else "", ""),
+          collapse = "\n")
+  }
+  cnd = expect_warning(peter("x", mo = "plan", model = fake), class = "gptr_warning_partial_name")
+  expect_match(conditionMessage(cnd), "`model =` or `mode =`", fixed = TRUE)
+  expect_match(attached(), "<attached name=\"mo\">", fixed = TRUE)
+  expect_warning(peter("x", mod = "fake/fake-1", model = fake), "`model =`", fixed = TRUE,
+                 class = "gptr_warning_partial_name")
+  expect_warning(peter("x", tool = "-r", model = fake), "`tools =`", fixed = TRUE,
+                 class = "gptr_warning_partial_name")
+  expect_warning(peter("x", .opt = list(max_turns = 1), model = fake), "`.opts =`", fixed = TRUE,
+                 class = "gptr_warning_partial_name")
+  expect_match(attached(), "<attached name=\".opt\">", fixed = TRUE)
+  expect_no_warning(peter("x", mod = lm(mpg ~ wt, mtcars), m = mtcars, data = mtcars,
+                          a = list(1), p = "a title", model = fake))
+  expect_identical(fake$log$n, 5L)
 })
 
 # Task 12: append

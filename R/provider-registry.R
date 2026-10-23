@@ -1124,6 +1124,19 @@ stream_conversational = function(model, adapter) {
   driver
 }
 
+#' A disabled provider is refused, then the request preflight runs (IC-74); `prepare = TRUE`
+#' first discovers an Ollama route's model through model_prepare() (the gateway's check, D-251)
+#' @noRd
+provider_ready = function(model, provider, safety = NULL, prepare = FALSE) {
+  if (isFALSE(provider[["enabled"]])) {
+    pid = provider[["id"]] %||% provider[["name"]]
+    gptr_abort(paste0("Provider ", pid, " is disabled in the settings (providers.", pid,
+                      ".enabled)."), "not_available", member = pid, provided_by = "settings")
+  }
+  if (prepare && catalog_ollama_route(model, provider)) return(model_prepare(model$ref, safety))
+  provider_preflight(model, provider, safety)
+}
+
 #' Start one model request on the reactor (contract sections 7.5 and 8.4)
 #' Refusals (model type, adapter, disabled provider, preflight IC-74, key) signal before anything
 #' starts; later failures end the stream with an `error` event, and `done(msg)` runs once.
@@ -1139,12 +1152,7 @@ provider_stream = function(model, context, opts, emit, done, run = NULL) {
   driver = stream_conversational(model, adapter)
   provider = provider_effective(scoped("provider", model[["provider"]])) %||%
     provider_get(model[["provider"]])
-  if (isFALSE(provider[["enabled"]])) {
-    pid = provider[["id"]] %||% provider[["name"]]
-    gptr_abort(paste0("Provider ", pid, " is disabled in the settings (providers.", pid,
-                      ".enabled)."), "not_available", member = pid, provided_by = "settings")
-  }
-  model = provider_preflight(model, provider, stream_safety(opts, run))
+  model = provider_ready(model, provider, stream_safety(opts, run))
   opts$credential = provider_credential(provider)
   opts$base_url = if (is.null(provider)) NULL else provider_base_url(provider)
   opts$provider = provider

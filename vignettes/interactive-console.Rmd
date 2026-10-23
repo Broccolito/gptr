@@ -201,8 +201,8 @@ written, `n` to deny, and `?` for details. A sub-agent's prompt starts with its
 name (`sub-agent A > r  ...`); an answer that is none of these is explained, and five such answers
 refuse the action. `edits` allows project file edits
 while still asking about R changes unless an allow rule applies; `auto` allows ordinary actions
-while retaining critical and secret guards. `plan` offers read-only tools and level-1 R
-exploration in a scratch environment, where intermediate bindings can change while the user
+while retaining critical and secret guards. `plan` offers read-only tools and R calls known to
+be read-only in a scratch environment, where intermediate bindings can change while the user
 workspace is preserved. Settings and policies are described in
 [Configuration](configuration.html) and `?gptr_security`.
 

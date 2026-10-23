@@ -53,11 +53,25 @@ gptr_config()$budget
 gptr_config(mode = previous$mode, budget = previous$budget, .scope = "session")
 ```
 
-Create the project workspace and choose whether to trust its executable resources:
+Create the project workspace. At the console, `gptr_init()` then asks whether to trust the
+project (its settings, extensions and MCP servers); the default is No:
 
 ```{r, eval = FALSE}
 gptr_init("/path/to/project")
+```
+
+Run that line on its own: the question takes a line pasted after it, ignores it and asks again,
+so the pasted line never runs. In a script, where nobody can answer, no decision is recorded;
+record one there, or change an earlier answer, with `gptr_trust()`, which without `trust`
+reads it back as `TRUE`, `FALSE` or `NA`:
+
+```{r, eval = FALSE}
 gptr_trust("/path/to/project", trust = TRUE)
+```
+
+Then choose settings for every project and for this one:
+
+```{r, eval = FALSE}
 gptr_config(model = "openai/gpt-6-sol", .scope = "user")
 # Run from the project after inspecting its contents:
 gptr_config(context = "names", record = "off", .scope = "project")

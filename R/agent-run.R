@@ -387,7 +387,7 @@ freeze_fallback = function(s) {
                                  list(preset = d$preset, t0 = "", t1 = "",
                                       toolsJson = fr$tools_json,
                                       toolNames = I(fr$tool_names), sections = list(),
-                                      model = d$model)))
+                                      model = d$model, mode = d$mode)))
   invisible(fr)
 }
 
@@ -445,7 +445,9 @@ input_insert_blocks = function(input, blocks) {
 
 #' The model record of the next request: a pending `ctx$set_model()` switch first, then the router
 #' (`router.call`, IC-69) for `router:` models, else the session's model
-#' A decision-only model is refused before any request is built (IC-74, D-017).
+#' A decision-only model is refused before any request is built (IC-74, D-017). The run's first
+#' request to the session's model prepares it, as the gateway's checks do (model_prepare()
+#' discovers an Ollama model only without current evidence, D-251).
 #' @noRd
 run_target = function(run) {
   d = session_data(run$shell)
@@ -454,6 +456,7 @@ run_target = function(run) {
   if (is.null(run$model) || !identical(run$model_key, d$model)) {
     rec = run_model_ready(run, d$model)
     stream_chat_model(rec)
+    if (catalog_ollama_route(rec, NULL)) rec = model_prepare(rec$ref, run$opts$safety)
     run$model = rec
     run$model_key = d$model
   }
@@ -1111,7 +1114,10 @@ run_request = function(run, check_compact = TRUE) {
   if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
   req = run_build(run, target)
   hit = budget_check(s, req$tokens_est)
-  if (!is.null(hit) && !run_budget_extend(run, hit)) return(run_stop_budget(run, hit))
+  while (!is.null(hit)) {
+    if (!run_budget_extend(run, hit)) return(run_stop_budget(run, hit))
+    hit = budget_check(s, req$tokens_est)
+  }
   if (ext_service_has("prefix.guard")) {
     # gptr.check_prefix = "error" (04 section 3.1) ends the run; other failures are diagnostics
     tryCatch(ext_service_get("prefix.guard")(s, target, req$view), error = function(e) {
@@ -1218,16 +1224,20 @@ run_on_done = function(run, msg) {
 }
 
 #' Account, append and hand the response to the loop (or to recovery when it failed)
-#' Reported usage is kept as reported, unknown counts NA (IC-74); only a reply with no count at all
-#' is estimated (`estimated = TRUE`, 04 section 4.3).
+#' Reported usage is kept as reported, unknown counts NA (IC-74); a reply with no count at all is
+#' estimated (`estimated = TRUE`, 04 section 4.3), unless no provider bills it (D-251).
 #' @noRd
 run_response = function(run, msg) {
   s = run$shell
   d = session_data(s)
   run_flush_deltas(run)
   if (!run_usage_reported(msg[["usage"]])) {
-    msg$usage = usage_new(input = run$tokens_est %||% 0,
-                          output = est_tokens(msg_text(msg), "prose"), estimated = TRUE)
+    msg$usage = if (run_unbilled(run, msg)) {
+      usage_new(input = 0, output = 0)
+    } else {
+      usage_new(input = run$tokens_est %||% 0, output = est_tokens(msg_text(msg), "prose"),
+                estimated = TRUE)
+    }
   }
   row = usage_row(msg, session = d$id, agent = run$opts$agent %||% "main",
                   parent_id = d$parent_id %||% NA_character_, started = run$request_started,
@@ -1266,6 +1276,16 @@ run_usage_reported = function(usage) {
   counts = vapply(c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h"),
                   function(f) as.numeric(u[[f]]), 1)
   any(!is.na(counts) & counts > 0)
+}
+
+#' Did no provider bill a failed reply? It has no content, and its request was rejected (an HTTP
+#' status of 400 or more) or never received (a network error or connect timeout) (D-251)
+#' @noRd
+run_unbilled = function(run, msg) {
+  if (!identical(msg[["stop_reason"]], "error") || length(msg[["content"]])) return(FALSE)
+  st = err_status(run$last_error)
+  if (!is.na(st)) return(st >= 400L)
+  err_class(run$last_error) %in% c("network", "timeout_connect")
 }
 
 #' Recovery of a failed request: one compact-and-retry on overflow, at most two agent-level
@@ -1310,11 +1330,11 @@ run_overflow_stop = function(run, msg) {
 }
 
 #' The prompt tokens the provider reported for an overflowing request, else NA: gptr's own
-#' estimate (`estimated = TRUE`) is not the provider's count (IC-74)
+#' estimate (`estimated = TRUE`) and the zeros of an unbilled request are not its count (IC-74)
 #' @noRd
 run_overflow_tokens = function(msg) {
   u = msg[["usage"]]
-  if (!is.list(u) || isTRUE(u[["estimated"]])) return(NA_real_)
+  if (!is.list(u) || isTRUE(u[["estimated"]]) || !run_usage_reported(u)) return(NA_real_)
   overflow_count(u, "input")
 }
 
@@ -1419,6 +1439,19 @@ run_budget_amount = function(kind, x) {
   switch(kind, tokens = format_count(x), cost = format_cost(x), format(x))
 }
 
+#' Why a budget stops the run: the next request's estimate when it, not the usage, crosses a token
+#' budget; else the budget reached
+#' @noRd
+run_budget_reason = function(hit) {
+  amt = function(x) run_budget_amount(hit$kind, x)
+  if (identical(hit$kind, "tokens") && hit$used < hit$budget) {
+    return(paste0("the next request (~", amt(hit$estimate), " tokens) would exceed the tokens ",
+                  "budget of this call (", amt(hit$budget), "; used ", amt(hit$used), ")"))
+  }
+  paste0("the ", hit$kind, " budget of this call (", amt(hit$budget), ") is reached (used ",
+         amt(hit$used), ")")
+}
+
 #' Ask to extend a reached budget by the same amount (ask_human: the run's UI only)
 #' @noRd
 run_budget_extend = function(run, hit) {
@@ -1426,9 +1459,9 @@ run_budget_extend = function(run, hit) {
   ui = run_ui(run)
   if (is.null(ui) || !isTRUE(tryCatch(ui$has_ui(), error = function(e) FALSE))) return(FALSE)
   who = agent_label(run)
-  title = paste0(if (!identical(who, "main")) paste0("sub-agent ", who, ": "), "The ", hit$kind,
-                 " budget of this call (", run_budget_amount(hit$kind, hit$budget),
-                 ") is reached.")
+  reason = run_budget_reason(hit)
+  title = paste0(if (!identical(who, "main")) paste0("sub-agent ", who, ": "),
+                 toupper(substr(reason, 1L, 1L)), substring(reason, 2L), ".")
   ans = tryCatch(ui$select(title, c("Extend it by the same amount", "Stop the run"), default = 2L),
                  error = function(e) NA_integer_)
   if (!identical(suppressWarnings(as.integer(ans)), 1L)) return(FALSE)
@@ -1448,14 +1481,11 @@ run_budget_extend = function(run, hit) {
 run_stop_budget = function(run, hit) {
   s = run$shell
   d = session_data(s)
-  session_append(s, entry_custom("gptr.budget", list(kind = hit$kind, budget = hit$budget,
-                                                     used = hit$used)))
-  run_emit(run, "budget_exceeded", kind = hit$kind, budget = hit$budget, used = hit$used)
-  run$condition = gptr_condition(
-    paste0("the ", hit$kind, " budget of this call (", run_budget_amount(hit$kind, hit$budget),
-           ") is reached (used ", run_budget_amount(hit$kind, hit$used), ")"),
-    c(paste0("budget_", hit$kind), "budget"), "error",
-    list(kind = hit$kind, budget = hit$budget, used = hit$used, session = d$id))
+  session_append(s, entry_custom("gptr.budget", hit))
+  run_emit(run, "budget_exceeded", kind = hit$kind, budget = hit$budget, used = hit$used,
+           estimate = hit$estimate)
+  run$condition = gptr_condition(run_budget_reason(hit), c(paste0("budget_", hit$kind), "budget"),
+                                 "error", c(hit, list(session = d$id)))
   run_settle(run, "budget")
 }
 
@@ -1790,7 +1820,7 @@ ctx_kernel = function() {
       if (is.null(run) || isTRUE(run$settled)) {
         kernel_model_switch(s, ref, thinking, reason)
       } else {
-        kernel_model_ref(ref, thinking)
+        kernel_model_ref(ref, thinking, session_data(s)$id)
         run$pending_model = list(ref = ref, thinking = thinking, reason = reason)
       }
       invisible(NULL)
@@ -1911,8 +1941,8 @@ ctx_state_restorable = function(prior) {
 #' Pure resolution (IC-74) that refuses what session_set_model() refuses (D-017); the level
 #' travels as a `:<level>` suffix, except for a router, which chooses its own.
 #' @noRd
-kernel_model_ref = function(ref, thinking = NULL) {
-  m = model_canonical(ref, strict = TRUE)
+kernel_model_ref = function(ref, thinking = NULL, session = NULL) {
+  m = model_canonical(ref, strict = TRUE, session = session)
   stream_chat_model(m)
   if (is.null(thinking) || startsWith(m$ref, "router:")) return(ref)
   paste0(m$ref, ":", thinking)
@@ -1921,7 +1951,7 @@ kernel_model_ref = function(ref, thinking = NULL) {
 #' Switch a session's model (and thinking level) now: one `model_change` entry and `model_select`
 #' @noRd
 kernel_model_switch = function(s, ref, thinking = NULL, reason = "plugin") {
-  target = kernel_model_ref(ref, thinking)
+  target = kernel_model_ref(ref, thinking, session_data(s)$id)
   session_set_model(s, target, reason)
   if (!is.null(thinking) && startsWith(target, "router:")) {
     d = session_data(s)

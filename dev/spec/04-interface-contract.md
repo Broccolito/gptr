@@ -278,7 +278,8 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `internal` | - | `detail` | any | a broken invariant (a bug) |
 
 Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `deprecated` (P02), `two_prompts` (P08;
-two unnamed string literals), `replay_downgraded` (P15; live/stale regeneration downgraded under `source()`),
+two unnamed string literals), `partial_name` (P08; a named context dot abbreviates a `peter()` argument its value
+fits, D-251), `replay_downgraded` (P15; live/stale regeneration downgraded under `source()`),
 `doc_conflict` (P15; md5 conflict after three attempts), `s1_errors` (P13; failed elements in a vectorised call;
 field `errors`),
 `readline_limit` (P14), `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only
@@ -291,6 +292,8 @@ Messages (`gptr_message_<name>`): `alias_shadowed` (P08), `plan_handoff` (P11), 
 session when a data frame is split into several states, naming `I(x)`),
 `billing_env` (P03/P20; names of removed billing variables), `notice`
 (one-time notices: experimental routes, Codex overhead, uncalibrated emulation), `value_rebound` (P06),
+`home_not_kept` (P08; once per session, IC-40), `budget_unpriced` (P06; once per call whose own cost
+limit meets a request of unknown cost, IC-66, D-251),
 `progress` (P14, verbosity 1), `interpolated` (P08, echo of the interpolated prompt at verbosity >= 2),
 `thinking_clamped` (P05/P06; a requested thinking level the model lacks was replaced by the nearest it has;
 once per model and level; D-250).
@@ -513,7 +516,7 @@ Per assistant message (`msg$usage`):
 | `images` | num(1) | `gptr.images` (estimated image tokens in the input) |
 | `total` | num(1) | `totalTokens` = input + output + cache_read + cache_write_5m + cache_write_1h |
 | `cost` | list(input, output, cache_read, cache_write, total) num(1) each, USD | `cost` |
-| `estimated` | lgl(1) | `gptr.estimated`: TRUE when the provider reported nothing and the estimator filled the row |
+| `estimated` | lgl(1) | `gptr.estimated`: TRUE when the provider reported nothing and the estimator filled the row; a failed reply without content whose request was rejected (HTTP status >= 400) or never received (`network`, `timeout_connect`) records known zeros instead, FALSE (D-251) |
 
 `usage_new(...)` (P05) builds it with zeros for missing fields.
 
@@ -531,7 +534,7 @@ Per request (one row of `.d$usage`, a `data.frame`; §5.5 of `03`):
 | `stop_reason` | chr | as in §4.2 |
 | `started` | POSIXct | request start |
 | `seconds` | num | wall time |
-| `estimated` | lgl | provider reported nothing |
+| `estimated` | lgl | provider reported nothing (a request no provider billed has zeros, FALSE; D-251) |
 | `multiplier` | num | EWMA estimator multiplier in force (§12.5 of `03`) |
 
 The token ledger (`gptr_usage(s, detail = TRUE)`) adds, per request, one row per component with columns
@@ -630,7 +633,7 @@ has `type`, `id` (8 hex), `parentId` (id or `null` for the first entry), `timest
 
 | Name | Written by | `data` |
 |---|---|---|
-| `gptr.frozen` | P07 | `{preset, t0, t1, toolsJson, toolNames, sections: [{name, tier, hash, tokens}], model}`; first entry of every session, so resume reproduces the byte-exact prefix |
+| `gptr.frozen` | P07 | `{preset, t0, t1, toolsJson, toolNames, sections: [{name, tier, hash, tokens}], model, mode}`; first entry of every session, so resume reproduces the byte-exact prefix; `mode` is the session's mode at the freeze, the mode a rebuild starts from (D-251) |
 | `gptr.mode_change` | P06 | `{from, to, source}` |
 | `gptr.value` | P06 | `{turn, mode: "name"\|"copy"\|"box", name, address, class, bytes}` (never the value) |
 | `gptr.doc_block` | P15 | `{doc, format, block, action: "insert"\|"replace"\|"stale-regenerate"\|"undone", prompt, sha, lines: [from, to], backend: "file"\|"deferred"\|"rstudio"\|"positron"\|"vscode"\|"transcript"}` |
@@ -647,7 +650,7 @@ has `type`, `id` (8 hex), `parentId` (id or `null` for the first entry), `timest
 | `gptr.image_elision` | P06 | `{images: [ids]}`: older images projected as omitted (IC-67) |
 | `gptr.scrub` | P03 | `{date, secrets, count}`: `gptr_scrub()` rewrote this file (IC-70) |
 | `gptr.ext` | P02 | `{plugin, state}`: a plugin's JSON-able per-session state (`ctx$state()` persistence) |
-| `gptr.budget` | P06 | `{kind, budget, used}` when a budget stops a run |
+| `gptr.budget` | P06 | `{kind, budget, used, estimate}` when a budget stops a run (`estimate`: the next request's estimated input tokens) |
 
 ### 4.7 Session header line
 
@@ -780,8 +783,8 @@ the valid names):
 
 | Name | Returns |
 |---|---|
-| `text` | chr(1): last final assistant text; `NA_character_` before the first turn; team sessions: the joined `### <name> (<model>)` reports; fan-out: the named chr of child texts |
-| `value` | the latest designated value by turn (§5.1 of `03` value policy); `NULL` when none; name-held values are resolved with `get0(name, home, inherits = FALSE)` (a message `value_rebound` if the address changed); team/fan-out: named list of child values |
+| `text` | chr(1): last final assistant text; `NA_character_` before the first turn; until a continuation gives a team or fan-out its own answer (D-251): team sessions the joined `### <name> (<model>)` reports (a member that did not end `idle` says `(ended with status <status>)` under its heading), fan-out the named chr of child texts |
+| `value` | the latest designated value by turn (§5.1 of `03` value policy); `NULL` when none; name-held values are resolved with `get0(name, home, inherits = FALSE)` (a message `value_rebound` if the address changed); team/fan-out without a value of its own (D-251): named list of child values |
 | `values` | df `turn`, `mode`, `name`, `class`, `bytes` |
 | `usage` | a `gptr_usage` df (§5.12) of this session and its children |
 | `cost` | num(1) USD |
@@ -789,7 +792,7 @@ the valid names):
 | `messages` | list of messages on the active branch (R shape, unprojected) |
 | `model`, `mode`, `status`, `reason`, `id`, `kind`, `file` | chr(1) |
 | `turns` | int(1) |
-| `envir` | the kept home environment, or `NULL` |
+| `envir` | the kept home environment, or `NULL` (a session started in a function frame [R2], a detached copy) |
 | `children` | named list of child sessions |
 | `ext` | named list of plugin state |
 | `plan` | chr(1) or `NULL` |
@@ -802,7 +805,7 @@ the valid names):
 
 | Method | Behaviour |
 |---|---|
-| `print(x, ...)` | the last answer through `msg_verbatim()` (rendered markdown when the console renderer is available), then a dim footer `status . model . turns . tokens . cost . id` (a replayed session's status reads `replayed` until a request adds usage, and its tokens and cost read unknown while it holds no stored request; IC-46, IC-74); returns `invisible(x)`; never touches user objects |
+| `print(x, ...)` | the last answer through `msg_verbatim()` (rendered markdown when the console renderer is available), then a dim footer `status . model . turns . tokens . cost . id` (a replayed session's status reads `replayed` until a request adds usage, and its tokens and cost read unknown while it holds no stored request; IC-46, IC-74); a team or fan-out without its own answer shows each child's report under `### <name> (<model>)`, as a team's `$text` joins them (D-251; also the notebook repr); returns `invisible(x)`; never touches user objects |
 | `format(x, ...)`, `as.character(x, ...)` | `$text` |
 | `summary(object, ...)` | complete `gptr_session_summary` table with a detached character-only metadata snapshot; no model request |
 | `print.gptr_session_summary(x, n = 8L, ...)` | recent messages, omitted count and session metadata at current console width; safe display copy; `n = Inf` shows all rows |
@@ -1029,7 +1032,10 @@ peter = function(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 ```
 
 `peter` carries class `c("gptr_gateway", "function")` (§5.3). All formals follow `...`, so they match only by
-exact name.
+exact name. A named context dot whose name (two characters or more) is a prefix of a formal or that formal plus
+`s`, and whose value fits it (character: `model`, `mode`, `skills`, `plugins`, `extensions`, `tools`, `prompt`,
+`replay`; a plain list: `.opts`, `budget`, `agents`; a function or spec: `model`, `extensions`, `tools`), stays
+context and signals the warning `partial_name` naming each such formal (D-251).
 
 | Argument | Type / default | Meaning and validation |
 |---|---|---|
@@ -1037,7 +1043,7 @@ exact name.
 | `model` | identifier, `<spec:provider>`, `<spec:router>` or `NULL` | resolved by §6.1.3; `NULL` = settings default (§8.4 of `03`); from model code (a call, team or fan-out started inside a run) `NULL` = the running session's model, and a child gets that session's own spec of its model's provider or router (D-210) |
 | `mode` | identifier or `NULL` | one of `plan`, `manual`, `edits`, `auto`, `yolo` (IC-78); a continuation may only keep or change it explicitly; children only tighten |
 | `skills`, `plugins`, `extensions` | identifiers (`c(a, b)`) or `NULL` | names resolved by §6.1.3 (normalised, IC-42); `extensions` also accepts `function(gptr)` factories (loaded with `ext_load(rank = 0L, session = <id>)`, visible to this session only, IC-69) and file paths; plugins and named extensions are enabled for the session through P17's `plugin.enable` service (`gptr_error_not_available` before P17); skills are preloaded as `<skill_content>` through `skill.body` |
-| `tools` | chr, identifiers, `<spec:tool>` list, or `NULL` | tool names; `"+grep"`/`"-write"` modifiers; a preset name (`"minimal"`, `"standard"`, `"readonly"`, `"extended"`); tool specs are registered at rank 0 for this session |
+| `tools` | chr, identifiers, `<spec:tool>` list, or `NULL` | tool names (a bare name adds, as `"+name"`); `"+grep"`/`"-write"` modifiers; one preset name (`"minimal"`, `"standard"`, `"readonly"`, `"extended"`; two are `gptr_error_invalid_argument`, before a continuation switches anything); tool specs are registered at rank 0 for this session; a name (`+`/`-` stripped) that names no tool of the session when its prompt freezes, or at a continuation, is `gptr_error_invalid_argument` with the closest preset or tool (D-251), while names in settings `tools.enable`/`tools.disable` stay a `missing_tool` diagnostic |
 | `agents` | named list or `NULL` | evaluated in a mask where `agent` is `gptr_agent`; names must be unique syntactic names that are not accessor names (IC-71) |
 | `parallel` | `int(1)` >= 1 or `NULL` | fan out one list-like context object over at most `parallel` concurrent children; with `.opts$context = "none"` (which would drop each child's element) `gptr_error_invalid_argument` before any child starts (D-212) |
 | `choices` | chr (>= 2, unique, no logical-looking labels) or factor or `NULL` | System 1 choice question |
@@ -1048,9 +1054,9 @@ exact name.
 | `prompt` | `chr(1)` or `NULL` | explicit prompt; wins over positional selection |
 | `envir` | `env` | where `r` evaluates and objects persist (D-04); a magrittr mask is replaced by its parent [12 §2.B4]; for a continuation an explicit `envir` (tested with `missing(envir)`) beats the session's kept home, which beats the caller frame (IC-40); a new call made inside a run without `envir` evaluates in `overlay_new(<caller>, <running session id>)`, so it reads the caller's objects and keeps its own in `res$envir`, unless the caller is a function frame [R2] (IC-77) |
 | `background` | `lgl(1)` | [experimental] return the running session at once (needs later; P21) |
-| `budget` | `list(tokens =, cost =, turns =)` or `NULL` | per-call limits; each element `num(1)` or `NULL` |
+| `budget` | `list(tokens =, cost =, turns =)` or `NULL` | per-call limits; each element `num(1)` or `NULL`; `turns` counts model requests (retries and children's included, as `run_used()` does), not the prompt turns of `s$turns`; `cost` counts priced requests only, and a request of unknown cost (a model without prices) makes the call inform once that its cost limit is not enforced (`budget_unpriced`, IC-66, D-251) |
 | `replay` | `chr(1)` or `NULL` | `"auto"`, `"replay"`, `"live"`, `"record"` (document replay mode, P15) |
-| `.opts` | named list | rare switches: `thinking` (chr(1)), `max_turns` (int(1)), `context` (`"summary"`, `"names"`, `"none"`), `record` (lgl(1)), `interpolate` (lgl(1)), `timeout` (num(1), seconds for `r`), `output` (`"factor"`), `system` (chr(1) replacing `preamble`/`tools`/`rules`, or a named list overriding sections, `NULL` elements remove), `preset` (a registered `preset` name), `returns` (a JSON Schema list: structured final answer, INFRA-25), `max_active` (int(1)), `backend` (a registered `backend` name or `"auto"`), `frontend` (a registered `frontend` name), `images` (list of image paths, `ggplot` or `recordedplot` objects, IC-44), `seed` (int(1): reproducible sub-agent RNG streams, IC-61), and entries named by a plugin namespace (validated by that plugin's `setting` specs, IC-44); other unknown names signal `gptr_error_invalid_argument` |
+| `.opts` | named list | rare switches: `thinking` (chr(1); on a continuation without `model =` it switches the session's level for this and later turns, as `model = "<ref>:<level>"` does, D-251), `max_turns` (int(1): this call's model requests), `context` (`"summary"`, `"names"`, `"none"`), `record` (lgl(1)), `interpolate` (lgl(1)), `timeout` (num(1), seconds for `r`), `output` (`"factor"`), `system` (chr(1) replacing `preamble`/`tools`/`rules`, or a named list overriding sections, `NULL` elements remove), `preset` (a registered `preset` name), `returns` (a JSON Schema list: structured final answer, INFRA-25), `max_active` (int(1)), `backend` (a registered `backend` name or `"auto"`), `frontend` (a registered `frontend` name), `images` (list of image paths, `ggplot` or `recordedplot` objects, IC-44), `seed` (int(1): reproducible sub-agent RNG streams, IC-61), and entries named by a plugin namespace (validated by that plugin's `setting` specs, IC-44); other unknown names signal `gptr_error_invalid_argument` |
 | `.run` | `lgl(1)` | `FALSE`: build the session with the prompt queued and return it (SDK) |
 | `.stdin` | `lgl(1)` | drive the console from piped standard input [18 §4.2] |
 
@@ -1121,6 +1127,21 @@ exact name.
   `gptr_error_max_turns`. Each condition carries the session as `cnd$session`, and the session is also
   `gptr_last()`. An interrupt (Ctrl-C abort) persists the partial turn and re-signals R's `interrupt` condition so
   loops stop [15 §4.7].
+- A call refused before its run starts, because its model cannot be reached (egress §3.1, the replay guard, a
+  decision-only model, a disabled provider, the preflight with an Ollama model prepared first, a missing key),
+  records nothing: no turn, no model, level, mode or tool change on a piped session, and `gptr_last()` stays as it
+  was; its condition carries no session (D-251). So does a call refused for its arguments: a continuation's unknown
+  tool name, an unknown plugin or `skills =` name, two presets, `.opts$images` its model does not take,
+  `background = TRUE` without later, or a secret-looking prompt the person declines to send. A piped call's
+  `extensions`, `plugins` and rank-0 specs (`model =`, `tools =`) register first, since the checks read them, and
+  are removed again when it is refused, also while it registers; a call's registry filters (`plugins = "-x"`) stay
+  on the R session only once it is accepted. Building a session (`.run = FALSE`, a `gptr_parallel()` member) checks
+  egress and replay only: `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a member
+  that cannot reach its model ends `error` (`on_error`). A run's first request to its session's model prepares it
+  as the checks do (`model_prepare()` discovers an Ollama model only without current evidence), so a plain call,
+  `gptr_step()`, `gptr_wait()` and a member each discover an Ollama model once, a member at its first request. A
+  piped `.run = FALSE` call applies its model, mode and tools at once; a `gptr_step()` or `gptr_wait()` that then
+  refuses leaves them, with no turn.
 
 #### 6.1.3 Identifier resolution (D-07, `resolve_identifier()`, P08)
 
@@ -1151,11 +1172,11 @@ disables it. The call record keeps `template` (written to documents, hashed for 
 
 Conditions: `invalid_argument`, `invalid_identifier`, `noninteractive`, `not_available`, `unknown_model`,
 `no_key`, `egress`, `permission`, `provider` (and subclasses), `budget_*`, `max_turns`, `not_recorded`,
-`stale_block`, `missing_package` (background without later), the System 1 errors of §2.2; warning `two_prompts`.
-Side effects: creates or continues sessions; appends to their JSONL store (workspace or `tempdir()`); may
-evaluate model-written R code in `envir` (gated); may write the bound document (P15); may start processes (CLI
-providers, MCP servers, workers) that end with the run or the session. Emits: `route`, `model_select`,
-`session_start` (new sessions), `input`, then the run's events (§10.4).
+`stale_block`, `missing_package` (background without later), the System 1 errors of §2.2; warnings `two_prompts`,
+`partial_name`. Side effects: creates or continues sessions; appends to their JSONL store (workspace or
+`tempdir()`); may evaluate model-written R code in `envir` (gated); may write the bound document (P15); may start
+processes (CLI providers, MCP servers, workers) that end with the run or the session. Emits: `route`,
+`model_select`, `session_start` (new sessions), `input`, then the run's events (§10.4).
 Copy-safety: [R1][R2][R3] (the gateway is the principal entry point of the tracemem suite, `test-copy-gateway.R`).
 
 ```r
@@ -1710,14 +1731,14 @@ gptr_parallel(..., .list = NULL, max_active = NULL, on_error = c("return", "stop
 an unstarted session, or a session created with `.run = FALSE`; `.list` is a named list of such sessions. All run
 concurrently on one reactor (at most `max_active`, default `gptr.subagents.max_active`, IC-71). Returns a **team session**
 (`kind = "team"`, children named by the argument names; `$text` joins the reports under `### <name> (<model>)`,
-`$value` is the named list of child values). `on_error = "stop"` signals the first child's condition after all
+`$value` is the named list of child values, until a continuation gives the team its own, §5.1). `on_error = "stop"` signals the first child's condition after all
 children settled; `"return"` leaves failed children with status `error`.
 
 `gptr_map()` is **internal** (IC-36; S-1 keeps one gateway): the function behind `parallel =`, one inline (or
 `backend`) child per element of `.x` (a list, atomic vector or data frame rows), each receiving the prompt and its
 element alone, for every backend: bound in the child's overlay as `.x`, a named list of one (`list(A = <element>)`),
 and attached as `.x[["A"]]` (D-212); it returns a **fan-out session** (`kind = "fanout"`;
-`$text` a named chr, `[[i]]`/`$name` child sessions). Users write `peter("Summarise this", cohorts, parallel = 4)`.
+`$text` a named chr, printed under `### <name> (<model>)` headings (D-251), `[[i]]`/`$name` child sessions). Users write `peter("Summarise this", cohorts, parallel = 4)`.
 Copy-safety: [R1][R3] (an inline or cli child does not copy the element; the bound list is removed and defused when
 the child settles, as checkpoint images are [R6]; `test-copy-subagent.R`; after a worker fan-out the caller's next edit
 still copies it once, D-212).
@@ -1742,8 +1763,9 @@ gptr_last()
 in that store. Reads only the header and last lines of each file.
 
 `gptr_resume()`: `x` = `NULL` (the most recently updated stored session), a session id, a file path, or a detached
-`<session>` (from `saveRDS()`/knitr cache/callr). Returns the live object if one exists in this process;
-otherwise rebuilds the session from its JSONL (leaf = last entry; status `idle` when the tail is a final answer,
+`<session>` (from `saveRDS()`/knitr cache/callr). Returns the live object if one exists in this process; otherwise
+rebuilds the session from its JSONL (leaf = last entry; mode = the last one its active path records, a `gptr.frozen`
+`mode` or a `gptr.mode_change` `to`, else the `mode` setting (D-251); status `idle` when the tail is a final answer,
 else `interrupted`) with home `envir`; a rebuilt **fork** always gets a fresh `new.env(parent = envir)` overlay
 (IC-46). A file from another machine or tracked by git is rebuilt with a freshly frozen prompt and its user turns
 marked `imported` (IC-52). A detached copy follows the split-brain rules of §5.1 of `03` (`gptr_error_split_brain`).
@@ -2520,7 +2542,8 @@ reactor_pump(until = function() done, slice_ms = 100L)
 | `handoff_transform(messages, target)` | `provider-transform.R` | same model: keeps signatures and opaque blocks; otherwise thinking becomes text (or is dropped when `target` lacks reasoning replay), opaque blocks dropped, tool ids normalised to the target api's rules (Mistral 9 chars, etc.) | P06, P20 |
 | `provider_get(id)` | `provider-registry.R` | `<spec:provider>` or `NULL` | P05, P08, P13, P20 |
 | `adapter_get(api)` | `provider-registry.R` | `<spec:adapter>` or `gptr_error_not_available` | P06, P13, P20 |
-| `provider_credential(provider)` | `provider-registry.R` | a handle bound to the provider's configured origin, resolved in the order explicit > vault > credential store > keyring > environment table (§8 of `03`); `NULL` for providers without auth; `gptr_error_no_key` otherwise | P05, P13 |
+| `provider_credential(provider)` | `provider-registry.R` | a handle bound to the provider's configured origin, resolved in the order explicit > vault > credential store > keyring > environment table (§8 of `03`); `NULL` for providers without auth; `gptr_error_no_key` otherwise | P05, P08, P13 |
+| `provider_ready(model, provider, safety = NULL, prepare = FALSE)` | `provider-registry.R` | a disabled provider is `gptr_error_not_available`, then `provider_preflight()`; `prepare = TRUE` goes through `model_prepare()` for an Ollama route; the gateway's check before a call changes anything (D-251) | P05, P08 |
 | `provider_stream(model, context, opts, emit, done, run = NULL)` | `provider-registry.R` | starts one model request on the reactor through the model's adapter (§8.1); returns the transfer/task id; calls `emit(ev)` for every INFRA-02 event and `done(msg)` exactly once with the final assistant message; never throws after it returns (INFRA-02) | P06, P07 (compaction), P13 (emulation) |
 | `builtin_providers(gptr)` | `provider-registry.R` | registers the provider records of §8.1-8.2 of `03` as data; P05 also declares `builtin:fake` (IC-08) | P02 load |
 | `usage_new(...)`, `usage_cost(usage, model, when = Sys.Date())`, `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)` | `provider-usage.R` | §4.3 records; cost from the dated price tier in force on `when`; TTL-split cache writes (1 h at 2x input, 5 min at 1.25x) | P06, P12, P13, P20 |
@@ -2556,7 +2579,7 @@ row = usage_row(msg, session = s$id, agent = "main", parent_id = NA_character_, 
 | `session_home(s)` | the kept home or `NULL` | P09, P16, P19 |
 | `session_append(s, entry)` | appends an entry (R shape) to `.d$entries` and the store (`persist` redaction at ingress, inside `suspendInterrupts()`), moves the leaf, returns the entry id invisibly | all plans that write entries |
 | `session_record_initial_model(s)` | on an empty session, resolves its already-selected model (including session-only specs; routers remain deferred), refuses decision-only models, and records one typed initial `model_change`; no request, prompt freeze or `model_select` event | P19 |
-| `session_set_model(s, ref, reason = "user")` | resolves `ref`, appends `model_change`, emits `model_select` | P08, P14 |
+| `session_set_model(s, ref, reason = "user")` | resolves `ref` (session-only specs included), appends `model_change`, emits `model_select` | P08, P14 |
 | `session_set_mode(s, mode, source = "user")` | appends `gptr.mode_change`; the next user message (idle) or an operator message after the current tool results (running) carries the new `<mode>` block | P08, P11, P14 |
 | `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())` | the queue behind `gptr_steer()`; `source` in `pipe`, `pause_menu`, `repl`, `api_user`, `extension`, `agent`; only user sources become operator relays; a call from model code of the same session tree is refused (IC-55) | P08, P14, P19 |
 | `session_value_set(s, label, value, name = NULL, forced_home = NULL)` | the §5.1 value policy of `03`; appends `gptr.value` | P08 (`gptr_return()`), P15 (replay `value=`), P19 (child values) |
@@ -2585,7 +2608,7 @@ adopting the recorded id, from the JSONL or reconstructed from the document with
 `session_replay_bind(block, s, child = NULL)` and `replay_lookup(block, child = NULL)` (the `the$replay_blocks`
 table behind `gptr_resume(block =)`). Consumers: P15, P19.
 
-**`session-budget.R`**: `budget_check(s, estimate = 0)` -> `NULL` or `list(kind, budget, used)`;
+**`session-budget.R`**: `budget_check(s, estimate = 0)` -> `NULL` or `list(kind, budget, used, estimate)`;
 `ledger_add(s, request_id, components)`; `gptr_usage()` (§6.5).
 
 **`agent-run.R`**
@@ -2616,7 +2639,7 @@ snapshot of IC-53), `root` (the root session id for budgets, IC-66).
 | Function | Contract | Consumers |
 |---|---|---|
 | `dispatch_tools(run, calls)` | executes a turn's tool calls in source order; for each: lookup (unknown, or not in the tools the session offered the model, the frozen array and every `tool_change` addition -> error result `Tool <name> not found`; D-248), `tool_validate()`, `tool_call` hooks, `perm_check()`, checkpointers' `before`, execute (sequential tools through `reactor_enqueue_tool()`; concurrent ones as reactor work), checkpointers' `after`, `tool_result` hooks; never throws; a `length`/`refusal` stop fails every call unrun; returns `list(results = list(<gptr_tool_result>), terminate = lgl(1))` | P06 |
-| `dispatch_nested(name, input, ctx)` | the nested entry for `peter$...` calls made while an `r` evaluation runs: if the outer code's static analysis listed this function at a level no higher than the level approved for the outer call and `call_risk()` of the actual input is no higher either (IC-78), runs without a second prompt; otherwise `perm_check()`; records into the outer result's `details$nested` (at most 20); returns the tool result's `value` (or signals the tool's error as an R error of class `gptr_error_tool` inside the model's code) | P10, P18, P22, P23 |
+| `dispatch_nested(name, input, ctx)` | the nested entry for `peter$...` calls made while an `r` evaluation runs: if the outer code's static analysis listed this function at a level no higher than the level approved for the outer call and `call_risk()` of the actual input is no higher either (IC-78), runs without a second prompt; otherwise `perm_check()`; the command of a `sh` or `bg` call meets the deny and ask rules first, whatever its level, as the literal call would, an ask offering no `[a]lways` rule (D-251); records into the outer result's `details$nested` (at most 20); returns the tool result's `value` (or signals the tool's error as an R error of class `gptr_error_tool` inside the model's code) | P10, P18, P22, P23 |
 | `tool_validate(tool, input)` | `schema_validate()` of the tool's `parameters`; `{"INVALID_JSON": raw}` when the final strict parse failed | P06, P18 |
 | `perm_check(call, run)` (IC-04, IC-53) | `list(decision = "allow" \| "deny" \| "ask" \| "ask_human" \| "modify", reason = chr(1), input = named list, risk = <gptr_risk> \| NULL, rule = chr(1) \| NULL)`: every `policy` spec's `check(call, ctx)` (deny > ask_human > ask > modify > allow; a throwing policy denies; **no active `mode` policy = ask**, fail closed, unless the run's snapshot has `gptr.unsafe_no_permissions`); a `modify` is re-classified and re-checked once (a second modify denies); an `ask` goes to `permission_request` hooks (first decision; error = deny), then to `ui$permission()` when `gptr_can_prompt()` holds in the run's snapshot; an `ask_human` skips the hooks; without anyone to prompt: `gptr.noninteractive_ask = "stop"` stops the run with status `blocked` (the gateway raises `gptr_error_permission` with `action` and `how_to_allow`), `"deny"` returns a denial the model sees | P06, P20 (through the injected `opts$gate`, IC-33), P18 (server calls) |
 | `tool_result_message(result, call)` | the `tool_result` message of §4.4 | P06, P20 (through the injected `opts$tool_result`, IC-33) |
@@ -3420,7 +3443,7 @@ the remaining `r` budget when called inside `r`.
 | `out` | P10 (only owner, IC-36) | `peter$out(id, stream = c("stdout", "stderr"), lines = NULL)` | chr (the stored full text from the session store, the process store or the spill file, or `lines` of it); `record = FALSE` | 0 |
 | `sh` | P22 | `peter$sh(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE, check = FALSE, max_tokens = NULL)` (`cmd` chr: length > 1 = argv without a shell; length 1 = a command line through `shell_resolve()` when it has shell syntax) | `gptr_cmd` | command classifier (G5 levels); computed commands 3 |
 | `script` | P22 | `peter$script(path, args = character(), interpreter = NULL, ...)` | `gptr_cmd` | 3 |
-| `bg` | P22 | `peter$bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)` | `gptr_job` (added to the job table) | 3 |
+| `bg` | P22 | `peter$bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)` | `gptr_job` (added to the job table) | 3, or the command classifier's level when higher (D-251); computed commands 3 |
 | `jobs` | P22 | `peter$jobs(kill = FALSE)` | df of `bg` jobs | 0 (kill: 3) |
 | `py` | P22 | `peter$py(code, name = NULL, max_rows = 10L)` | `gptr_py`; reticulate (Suggests) | Python classifier |
 | `sql` | P22 | `peter$sql(query, name = NULL, con = NULL, n = 10L)` | data frame (all rows; prints dims + `n` rows); `name` = a data frame registered in an in-memory duckdb under its expression label (`name = mtcars` -> table `mtcars`) or a named list of data frames (one copy on the next edit of each, R9); without `name`, `con` or the DBI connection found by name in the evaluation environment | SQL classifier (select 0, drop 3) |
@@ -3570,7 +3593,7 @@ name and semantics follow Pi `1b347794`; `gptr` means gptr-specific. Handlers mu
 | `route`, `model_select` | gptr, pi | notify | `route`, `router`, `model`, `reason`; `from`, `to`, `reason` | - | P08, P06 (router switches, IC-69) |
 | `subagent_start`, `subagent_end` | gptr | notify | `child`, `agent`, `backend`, `model`; end: `status`, `usage` | - | P19 |
 | `artifact_start`, `artifact_stop` | gptr | notify | `id`, `url`, `version`; stop: `reason` | - | P23 |
-| `usage`, `budget_near`, `budget_exceeded` | gptr | notify | `row`; `kind`, `budget`, `used` | - | P06 |
+| `usage`, `budget_near`, `budget_exceeded` | gptr | notify | `row`; `kind`, `budget`, `used`; exceeded: `estimate` | - | P06 |
 | `cache_break` | gptr | notify | `provider`, `model`, `first_diff`, `entry`, `culprit` | - | P07 |
 | `bridge_call` | gptr | notify | `bridge`, `id`, `cmd` (redacted), `level`, `status`, `seconds`, `bytes_out`, `bytes_err`, `spill`, `digest` | - | P22 |
 | `checkpoint` | gptr | notify | `tool_call_id`, `objects`, `files`, `restorable` (counts) | - | P16 |
@@ -4414,7 +4437,9 @@ every element and run `parallel`/`max_active` at a time (P19 acceptance: 20 elem
 earlier `envir`, or a fork overlay) > the caller frame (`parent.frame()`). Context symbols of the call are read
 from the call's frame; when a symbol label is not visible from the run's evaluation environment with the same
 object address, the gateway fails fast with `gptr_error_invalid_argument` naming the object and suggesting
-`envir =` or a named value. P08 test: `f = function(s, d) s |> peter("filter d", d)`.
+`envir =` or a named value. P08 test: `f = function(s, d) s |> peter("filter d", d)`. A session without a
+kept home whose first call ran in a function frame [R2] gives a once-per-session `home_not_kept` message when
+a continuation without `envir =` evaluates in an environment with another label (`home_label()`, D-251).
 
 **IC-41 Capture without forcing symbol dots.** (req-4) For a dot whose expression in `sys.call()` is a plain
 symbol (top level, data-first pipe, continuation with context), the gateway computes the facts with a leaf
@@ -4683,8 +4708,11 @@ P24's `test-injection-e2e.R` adds an injected model trying each path above; ever
   httr2 and curl) is at least level 2 (delete verbs 3). User and plugin `risk_rule` rows (IC-69) may lower
   levels explicitly.
 - Plan mode evaluates an `r` call only when every call in it resolves to an allowlisted read-only function
-  (level-0 `read` rows, base/stats/utils getters and summaries, describers, gptr read members); otherwise the
-  call is denied with "not known to be read-only in plan mode".
+  (level-0 `read` rows, base/stats/utils getters and summaries, describers, gptr read members), to a `file_write`
+  row whose risk is its path argument called directly (`cat()`, `writeLines()` or `dput()` to the console), or to
+  a lookup of a literal function (`do.call(rbind, ...)`, whose function is checked as a call of its own), the
+  last two only when the scan flags none of their calls; otherwise the call is denied with "not known to be
+  read-only in plan mode" (D-251).
 - `path_class()` gains `control` (level 4, `ask_human`, never pre-approved by rules): `.gptr/settings*.json`,
   `.gptr/mcp.json`, `.gptr/extensions/`, `.gptr/plugins/`, `.gptr/SYSTEM.md`, `.gptr/APPEND_SYSTEM.md`,
   `.gptr/agents/`, all of `R_user_dir("gptr", "config")`, `.git/hooks/`, `.git/config`, `.Rprofile` anywhere,
@@ -4925,6 +4953,12 @@ document are exact.
 **IC-66 Budgets.** (safe-11) Settings default `budget = {cost: 5, tokens: 2000000, turns: null}` per top-level
 call (per prompt at the console); `budget_near` at 80%; reaching it asks to extend by the same amount
 (`ask_human`) interactively and stops with status `budget` otherwise; `null` set explicitly disables a limit.
+The token limit counts the next request's estimated input: when that, not the usage, crosses it, the question and
+the stop say so ("the next request (~3.9k tokens) would exceed the tokens budget of this call (9.0k; used 5.8k)";
+D-251), and an extended budget is checked again before the request is sent.
+A request of unknown cost (a model without prices) counts nothing toward a cost limit (D-025), so a cost
+limit the call sets itself informs once that it is not enforced (`gptr_message_budget_unpriced`, fields
+`budget`, `model`; a team or fan-out says it once; the settings default says nothing; D-251).
 Budgets are hierarchical: every request's check walks to the root session and charges the root, and children
 start with `min(<their share>, <root remaining>)`. Caps: `gptr.max_nested_calls` (20 `peter()` calls per `r`
 evaluation; a team or fan-out counts as one) and `gptr.s1_max_elements` (10,000 elements per System 1 call; error

@@ -176,6 +176,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   3. `budget_check(s, estimate)` refuses an estimate that is not one nonnegative number (`gptr_error_invalid_argument`, `arg = "estimate"`); Task 10 passes `req$tokens_est %||% 0`.
 - Contract-visible: `used` in the `budget_near`/`budget_exceeded` events (contract 10.4) and the `gptr.budget` session entry (contract 4.6) is a lower bound when usage is unknown; no section amended.
 - Tests: test-session-budget.R: "an unknown cost neither reaches nor counts toward a cost budget (IC-74, D-025)", "a token budget counts the known tokens of a row with an unknown column (IC-74)", "budget_check() refuses an estimate that is not a nonnegative number". Evidence: progress/P06.md Task 5.
+- Amended by D-251 (sessions-10): a cost limit the call sets itself informs once that it is not enforced when a
+  request of unknown cost meets it (`gptr_message_budget_unpriced`); item 2 is unchanged.
 
 ## D-026 - P12 check_adapter(): no normaliser condition escapes, http_json goldens skipped, classifier replay (2026-10-04)
 - Rule: `check_adapter()` (`R/provider-anthropic.R`, the `check.adapter` service behind `gptr_check()`, contract 6.7/7.12), stream adapters (P12 Task 3):
@@ -3442,3 +3444,139 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   factor answer keeps the call's meta, which its failure warning points to (D-250)", "a decision model refuses
   agents = and parallel = before any request (D-250)". Evidence:
   progress/fixes.md Task FIX-17.
+
+## D-251 - P08 Cheat-sheet review: sessions (2026-10-22)
+- Rule (tools-3): a name of a `peter()` call's `tools =` (`+`/`-` stripped) that names no tool of the session is
+  `gptr_error_invalid_argument` naming the closest preset or tool (`utils::adist()`, case-insensitive, at most 2),
+  when the prompt freezes (run options that carry the call, after `session_start` registered extension and MCP
+  tools; no request is sent) and at a continuation (after the call's specs register). Was a `missing_tool`
+  diagnostic, the name ignored. Names in settings `tools.enable`/`tools.disable` and in an agent definition's
+  allowlist keep that diagnostic. Two presets in `tools =` are refused (the first won), at a continuation before its
+  model or mode switches. A bare name adds, as `+name`.
+- Rule (sessions-3): a continuation's `.opts$thinking` without `model =` switches the session's level through
+  `kernel_model_switch()` (clamped; a `model_change` only when it changes; a router session keeps its model and
+  takes the level), for this and later turns. Was validated and dropped.
+- Rule (gateway-1): before a call's run records anything, `gateway_guards()` refuses a model it cannot reach: egress,
+  replay, a decision-only model, a disabled provider and the preflight (`provider_ready()`, also `provider_stream()`'s
+  backstop; an Ollama model is prepared through `model_prepare()`), a missing key (`provider_credential(register =
+  FALSE)`). A continuation guards its target before its model, level, mode or tools change, after the call's
+  extensions, plugins and rank-0 specs register (the checks read them: a `model =` spec, a provider an extension
+  registers). `gateway_checks()` holds every other refusal before a turn starts too: a continuation's unknown tool
+  name, two presets, `.opts$images` its model does not take, `background = TRUE` without later, an unknown
+  `skills =` preload and, last, a secret-looking prompt the person declines to send (`"ask"`). A refusal there, or
+  while the call registers (an unknown plugin name), undoes the registrations (`gateway_undo()`,
+  `registry_session_undo()`) and the call's registry filters, which apply before the preload check, so a refused
+  call keeps none; a refused new call keeps the previous `gptr_last()`. Was: those changed first, and key and
+  provider refusals came at the first request, after the turn and its prompt were recorded (resent with the next
+  prompt), and a refused call kept its registrations and filters; then (r3 to r4) a refusal while registering kept
+  them, and the images, preload and prompt refusals came after the switch and `gptr_last()`. A router's choice
+  keeps egress and replay only (`ready = FALSE`), and its request refuses the rest, as before (a keyless choice:
+  `gptr_error_no_key`, no request). So does building a session (`.run = FALSE`, a `gptr_parallel()` member):
+  `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a member that cannot reach its model
+  ends `error` (kept by `on_error = "return"`). A run's first request to its session's model prepares it as the
+  guards do (`run_target()`; `model_prepare()` discovers an Ollama model only without current evidence), so a plain
+  call, `gptr_step()`, `gptr_wait()` and a member each discover an Ollama model once, a member at its first request
+  and with the discovered record (was, once building stopped preparing: a member refused for "no current discovery
+  evidence"). A piped `.run = FALSE` call applies its model, mode and tools at once; a `gptr_step()` or `gptr_wait()`
+  that then refuses leaves them, with no turn. A failure after a request (HTTP 4xx/5xx) keeps INFRA-04. A switch
+  resolves the target as its session sees it (`model_canonical(strict = TRUE, session =)` through
+  `run_model_resolve()`), so a piped `model =` provider spec and a later `.opts$thinking` on it switch (were
+  `gptr_error_unknown_model`).
+- Rule (sessions-4): a continuation without `envir =` of a session with no kept home whose `home_label` is a
+  function frame (R2) informs once per session (`gptr_message_home_not_kept`) when `home_label(call$envir)`
+  differs, naming both and `envir = new.env()`. Was silent. R2 and the IC-40 precedence are unchanged.
+- Rule (sessions-5): a named context dot whose name (2+ characters) is a prefix of a `peter()` formal, or the formal
+  plus `s`, and whose value fits it (character, plain list, function or spec; 04 §6.1) warns
+  (`gptr_warning_partial_name`, naming each formal) from facts only, and stays context. Was silent (`mo = "plan"`).
+- Rule (sessions-6): a failed reply with no content and no reported usage whose request was rejected (HTTP status
+  >= 400) or never received (class `network` or `timeout_connect`) records `usage_new(input = 0, output = 0)`, not
+  estimated: cost 0 (NA for a model without prices), nothing toward token or cost budgets, still one request toward
+  `turns`. Was the whole prompt's estimate at the catalog price (a refused connection to Opus: $0.0479 over 3
+  requests; a 401: $0.0080), which ended a run as `gptr_error_budget_*` instead of retrying. A partial reply, idle
+  and first-byte timeouts and a success without usage keep the estimate; an overflow's `tokens` stays NA.
+- Rule (sessions-8): a `budget_check()` hit carries `estimate` (the next request's estimated input tokens), and so
+  do the `gptr.budget` entry, the `budget_exceeded` event and the condition. A token hit with used < budget reads
+  "the next request (~3.9k tokens) would exceed the tokens budget of this call (9.0k; used 5.8k)", others "is
+  reached (used X)", in the stop and the extend question alike. Was "(9.0k) is reached (used 5.8k)", even "(500) is
+  reached (used 0)"; the question named no usage. After "Extend" the budgets are checked again (was: sent unchecked).
+- Rule (sessions-10): a call's own cost limit (`opts$budget$cost`, not the settings default) that meets a request of
+  unknown cost since its run started informs once (`gptr_message_budget_unpriced`, fields `budget`, `model`; once per
+  team or fan-out pool): "The cost budget of this call ($0.0100) is not enforced: <provider/model> has no prices, so
+  its cost is unknown; tokens and turns limits still apply." D-025 item 2 stands (unknown counts nothing; no fail
+  closed). Was silent, the footer's "unknown cost" aside (Versa and Codex models, `gptr_provider()` without prices).
+- Rule (sessions-11): a team or fan-out answers for itself once it has its own answer: `$text` (print, format,
+  as.character, the notebook repr) is its `last_text` when set, else the joined reports or the named chr; `$value`
+  is its own designated value when it has one, else the named list of the children's values. Was by kind alone, so
+  `team |> peter("Reconcile ...")` kept showing the reports and child values. Rewinding resets `last_text` only.
+- Rule (team-2): a team's joined reports say `(ended with status <status>)` under the heading of a member that did
+  not end `idle`, as the `agent_reports` block does; until a team or fan-out has its own answer, `print()` and the
+  notebook repr show each child's report under `### <name> (<model>)`, so a fan-out's too. A fan-out's `$text`,
+  `format()` and `as.character()` stay the named chr, and `knit_print` still joins its answers without names. Was:
+  a failed member's section empty, and a fan-out printed its answers one after another without names, leaving out
+  a child without an answer.
+- Rule (tools-2): a session frozen with the `readonly` preset keeps `read` and `r` outside plan mode; only Execute
+  in the plan menu declares `edit` and `write` (`plan_execute()`). Was: P11's `agent_start` hook
+  (`plan_on_agent_start()`, removed) declared them at every run outside plan mode, so `tools = readonly` was told
+  "New tools are available from now on: edit, write." from its first request. `r` can still change files there.
+- Rule (sessions-15): plan mode's allowlist (IC-54) also admits a `file_write` row whose risk is its path argument
+  called directly (`cat("a\n")`, `writeLines()`, `dput()`, `write.table()` to the console) and a lookup of a
+  literal function (`do.call(rbind, ...)`, `get("x")`; the function is checked as a call of its own), when the
+  scan flags none of their calls. A path function used as a value (`lapply(1, cat, file = "x")`), whose arguments
+  the scan cannot see, stays refused. Was: refused although `gptr_risk()` scores them 0 (GPT lost a turn to it).
+- Rule (sessions-17): a command whose program is a literal path to a program gptr knows (`/bin/rm`, `./rm`,
+  `C:\bin\rm.exe`; `.exe` stripped in any case, so `C:\bin\RM.EXE` reads as `RM`, and a bare `RM.EXE` as `rm`) is
+  read as that program too, all its rows beside the level-3 `process` row, so deny and ask `sh:` (as written) and
+  `category:` rules match it and `gptr_risk()` names its categories (`/usr/bin/git push`: network); levels are
+  unchanged. Was: only its level-4 rows, so `r(sh:rm *)` and `r(category:file_delete)` missed `/bin/rm -rf build` in
+  auto and yolo. An allow rule must cover the path row as well, so `r(sh:/bin/rm -rf*)`, the former `[a]lways` rule,
+  no longer approves it, and such a call is offered no `[a]lways` rule.
+- Rule (sessions-18): `peter$bg()` is classified as `peter$sh()` is: a literal command's rows plus a level-3
+  `process` row carrying the command text, so `sh:` rules match it and `[a]lways` offers `r(sh:rm -rf*)`; a
+  computed command is the `dynamic` level-3 row. Was one `peter$bg` row at level 3, which `r(sh:rm *)` never matched
+  (the job ran in auto and yolo) and for which `[a]lways` offered `r(sh:peter$bg*)`; `peter$bg('rm -rf ~')` is 4.
+- Rule (nested-1): a nested `peter$sh()` or `peter$bg()` call meets the `rules` policy with its actual command, read
+  as the literal call (`peter$sh("rm -rf build")`), whatever its level: a deny rule refuses it, an ask rule asks
+  through `perm_ask()` and offers no `[a]lways` rule (an answer would have stored an allow `sh`); allow rules are not
+  applied there, and `gptr.unsafe_no_permissions` skips it. Was: re-checked only above the outer call's approved
+  level and then as tool `sh`, which no `r(sh:)` rule matches, so `cmd = "rm -rf build"; peter$sh(cmd)` ran in auto
+  and yolo under `r(sh:rm *)`.
+- Open (nested-1): a computed command run through base `system()` or `system2()` (`cmd = paste("rm", "-rf",
+  "build"); system(cmd)`) is one `dynamic` level-3 row that no `sh:` rule matches, so it still runs in auto and yolo
+  under a deny `r(sh:rm *)`; only nested `peter$sh` and `peter$bg` calls are re-checked. The gate is advisory;
+  `?gptr_security` names the limit. No code change.
+- Rule (sessions-22): the `gptr.frozen` entry records `mode`, the session's mode at the freeze (P07's and the
+  fallback's), and a rebuild (`gptr_resume()`, console `/resume`, a replay cut) takes the last mode its active path
+  records, a `gptr.frozen` `mode` or a `gptr.mode_change` `to` that is one of the five modes, else the `mode`
+  setting. Was: the last `gptr.mode_change`, else the resuming process's setting, so a session started in `auto`
+  came back `manual` (a script stopped at its first write) and one started in `plan` came back under a looser
+  setting (`auto`: a write ran). A file that records no mode (written before) behaves as before.
+- Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`, §7.6
+  `session_set_model()`; `?peter`
+  `tools`, `.opts`, `.run` and refusals, `?gptr_wait`. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter`
+  `envir`, `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and
+  row). 04 §4.6 `gptr.budget`, §7.6 `budget_check()`, §10.4 `budget_exceeded`, IC-66. 04 §2.2 messages, §6.1
+  `budget` row, IC-66; `?peter` `budget`. 04 §5.1 `text` and `value` rows, §6.5 `gptr_parallel()`, 03 §4.1.6;
+  `?session-accessors`, `?gptr_parallel`, vignette teams-and-background. 04 §5.1 `text` row and `print` method, §6.5
+  `gptr_map()`, 03 §4.1.6; `?print.gptr_session`, `?session-accessors`, `?gptr_parallel`, the same vignette. 03 §6.8
+  (the execute menu). 04 IC-54 (the plan allowlist). `gptr_risk()`'s rows and categories of a program given by its
+  path (no spec text describes them). 04 §9.4 `bg` risk cell. 03 §6.8.4, 04 §7.6 `dispatch_nested()`;
+  `?gptr_security` (a computed `system()` command). 04 §4.6 `gptr.frozen`, §6.5 `gptr_resume()`; `?gptr_sessions`.
+- Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
+  "a call refused before its run changes neither ...", "every refusal before a turn starts undoes ...",
+  "a router's choice without a key stops the run ...", "a built session needs no key until a run starts it ...",
+  "a call, gptr_step() and a parallel member each discover an Ollama model once ...",
+  "a continuation switches to a provider spec that only its session knows ...",
+  "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
+  prompt-sections "the tool array skips unavailable and missing tools ..."; agent-run "a request rejected or never
+  received costs nothing ...", "a reported usage keeps its unknown counts ...", "an overflow condition carries the
+  provider's prompt count ...", "an extended token budget is checked again ..."; session-budget "a token budget the
+  next request would exceed says so ...", "a call's own cost limit says once that an unknown cost counts nothing
+  ...", "peter() with a cost limit on a model without prices ..."; subagent-team "NS-6: a team through peter() ...",
+  "a continued gptr_parallel() team or fan-out answers ...", "printing a team or fan-out shows each child under its
+  name ..."; perm-plan "a readonly session keeps read and r outside plan mode ...", "plan mode runs console
+  output such as cat() ..."; perm-classify "the plan-mode allowlist admits only known read-only calls (IC-54)";
+  perm-rules "sh: and category: rules see a program given by its path", "sh: rules read the command of a
+  background job"; perm-classify "G5's 46 polyglot calls ..."; perm-gate "a deny rule stops a program given by its
+  path or in a background job ...", "deny and ask rules see the command a nested sh or bg call computes ...";
+  session-store "a rebuilt session keeps the mode it ran with".
+  Evidence: progress/fixes.md Task FIX-18.

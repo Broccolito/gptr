@@ -670,9 +670,11 @@ accessor are rejected. `backend = "auto"` everywhere: inline, except `cli` for C
 `codex`) [15 verifier resolved]. `parallel = n` runs one inline child per element, `n` at a time (every element is
 queued; the 8-task cap applies only to fan-outs started by model code [IC-39]), each given its element alone as `.x`
 (`list(A = cohorts[["A"]])`, attached as `.x[["A"]]`, no copy; `.opts$context = "none"` is refused) [D-212]. Team and fan-out sessions are sessions (`kind = "team"`/`"fanout"`): `$text` joins the children's
-reports under `### <name> (<model>)` headings, `$value` is the named list of child values, `$<name>` and
+reports under `### <name> (<model>)` headings (a fan-out's is their named chr, printed so; a child that did not end
+`idle` says `(ended with status <status>)`) [D-251], `$value` is the named list of child values, `$<name>` and
 `[[` return child sessions, and piping the team continues it with the reports attached as a user-role
-`<agent_reports>` block (sub-agent output is data) [P-A §6.12, P-C §5.1].
+`<agent_reports>` block (sub-agent output is data) [P-A §6.12, P-C §5.1]; from then on `$text` and
+`$value` are the team's own answer and value, once it has them [D-251].
 
 ### 4.2 The gateway namespace `peter$...`
 
@@ -1500,7 +1502,10 @@ whose feedback tells the model that no valid answer was given [IC-77; D-188].
 A `peter$...` call made while an `r` evaluation runs enters `dispatch_nested()`: if the static analysis of the
 outer code listed the same function at a level no higher than the level the user approved for the outer call,
 and the member's own classification of its actual input (`call_risk()`: a patch's Delete File, a command computed
-at run time) is no higher either, it runs without a second prompt; otherwise it passes the gate [IC-78]. Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
+at run time) is no higher either, it runs without a second prompt; otherwise it passes the gate [IC-78].
+The command of a `peter$sh()` or `peter$bg()` call meets the deny and ask rules first, whatever its level,
+as the literal call would; allow rules are not applied there, and an ask offers no `[a]lways` rule [D-251].
+Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
 
 #### 6.8.5 Non-interactive runs and plan mode (NS-12)
 
@@ -1519,7 +1524,9 @@ a reference, R2) within the same R process and one hour receives it once as a `<
 "using the plan from session <id>" and the plan's step list printed before the first action, and its block header
 records `plan=<id>`; only a top-level call (not nested, not in a run, not in a loop body) may consume it, and any
 other `peter()` call in between discards it [IC-56]. Interactively the plan run ends
-with "Execute: [a]uto / [e]dits / [m]anual / [k]eep planning", which continues the same session.
+with "Execute: [a]uto / [e]dits / [m]anual / [k]eep planning", which continues the same session. Choosing
+to execute is what declares `edit` and `write` for a session frozen with the `readonly` preset; one that is
+not executed keeps `read` and `r` in every mode (D-251).
 `options(gptr.plan_handoff = FALSE)` disables the hand-off [P-C §9.4].
 
 ### 6.9 Persistence
