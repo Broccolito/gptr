@@ -2401,3 +2401,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   before `gptr_init()` or one recorded without an answer gives the same miss. Open: a piped replay keeps the
   previous turn's `$text` when its block's answer is missing (no notice there); a bare `/resume` still lists
   "# 0 rows" without the hint.
+
+### replay-2b - A knitted first render shows a recorded gptr_return() with its block id
+- Review of replay-2 (`R/doc-knitr.R`, medium).
+- Red: FAIL 3 in `^doc-knitr$` (PASS 74): `knit_print()` of a live turn whose code ends in
+  `gptr_return(coef(fit))` showed `` `.gptr_value_@@GPTR_BLOCK@@` = (coef(fit)) `` in its code
+  fence, with and without a `gptr.doc_block` entry, and so did a first `knitr::knit()` (fake
+  provider) of a report whose agent runs `gptr_return(n * 2)`.
+- Cause: replay-2's rewrite leaves the hidden name backquoted with a token until `doc_prepare()`
+  fills in the block id; `doc_knit_code()` printed `doc_turn_body()`'s body before that step.
+- Fix: `doc_fill_id()` (both substitutions, shared with `doc_prepare()`); `doc_knit_code()` fills
+  in the id of the turn's newest `gptr.doc_block` entry, else shows the line as the
+  `gptr_return()` call it records.
+- Green: `^doc-knitr$` PASS 77; `^(doc-.*|arch-layers|lint-rules)$` PASS 2656 SKIP 2 (repr;
+  NOT_CRAN=true). Lint clean. The knit writes the block before the chunk prints, so the first
+  render shows `.gptr_value_<id> = (n * 2)`.
+- Deviations: none (the shown code is the block's). Open: none.

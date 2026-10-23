@@ -1538,6 +1538,16 @@ doc_header_set_sha = function(line, sha) {
   paste0(lead, kv)
 }
 
+#' Recorded lines with the block id filled in: the hidden value name loses its backquotes and the
+#' token becomes `id`; without an id (no block written yet) that assignment reads as the
+#' gptr_return() call it records
+#' @noRd
+doc_fill_id = function(lines, id = NULL) {
+  hidden = paste0("`", doc_value_name, "`")
+  if (is.null(id)) return(sub(paste0(hidden, " = "), "gptr_return", lines, fixed = TRUE))
+  gsub(doc_block_token, id, gsub(hidden, doc_value_name, lines, fixed = TRUE), fixed = TRUE)
+}
+
 #' Choose the block id, fill it into the body and header, render, and pass the document_write event:
 #' list(id, rendered, action, sha, prompt) or list(skip = <reason>, id)
 #' @noRd
@@ -1558,9 +1568,7 @@ doc_prepare = function(fmt, site, up, text, taken = character()) {
     return(list(skip = "user-edited", id = id))
   }
   if (!replace) id = id_block(c(existing, taken))
-  body = gsub(paste0("`", doc_value_name, "`"), doc_value_name, as.character(up$lines),
-              fixed = TRUE)
-  body = gsub(doc_block_token, id, body, fixed = TRUE)
+  body = doc_fill_id(as.character(up$lines), id)
   header = lapply(up$header, function(v) {
     if (is.character(v)) gsub(doc_block_token, id, v, fixed = TRUE) else v
   })
