@@ -203,8 +203,9 @@ console_reader = function(stdin = FALSE, echo = stdin) {
 #' query after it, whose reply ends the wait (tty_query()); an answer sets `the$background`
 #' (background_reply()), else COLORFGBG decides (console_background()). Not asked where no band
 #' shows, below 256 colours (`NO_COLOR` too), nor on the Linux console. Keys typed meanwhile are
-#' the reader `rd`'s, read as the composer reads them (console_compose()): the lines they end are
-#' its next prompts, the rest a draft at the prompt (console_idle())
+#' the reader `rd`'s, each line read as the composer reads it (console_line_text()): each line they
+#' end that is not blank is a next prompt of its own, as readline would have read it, the rest a
+#' draft at the prompt (console_idle()). Asked after the first-use setup, whose menu reads first
 #' @noRd
 repl_background = function(rd) {
   if (cli::num_ansi_colors() < 256L || identical(Sys.getenv("TERM"), "linux")) {
@@ -213,12 +214,13 @@ repl_background = function(rd) {
   got = tty_query("\033]11;?\033\\\033[c")
   bg = background_reply(got)
   if (!is.na(bg)) the$background = bg
-  keys = tty_unreply(got)
-  if (nzchar(keys)) {
-    res = console_compose(list(), keys, reactor_now(), "steer", console_complete)
-    if (identical(res$action$type, "send")) rd$typed = c(rd$typed, res$action$text)
-    if (nzchar(res$state$draft)) rd$compose = res$state
-  }
+  lines = console_typed_split(tty_unreply(got))
+  part = isTRUE(attr(lines, "partial"))
+  typed = vapply(lines, console_line_text, "", USE.NAMES = FALSE)
+  ended = typed[seq_along(typed) < length(typed) + !part]
+  rd$typed = c(rd$typed, ended[nzchar(trimws(ended))])
+  draft = if (part) typed[[length(typed)]] else ""
+  if (nzchar(draft)) rd$compose = list(draft = draft)
   invisible(NULL)
 }
 
@@ -935,7 +937,6 @@ repl_main = function(rs) {
   piped = rs$session
   on.exit(repl_close(rs), add = TRUE)
   rs$reader = console_reader(rs$stdin)
-  if (!rs$stdin && console_class() == "T") repl_background(rs$reader)
   # completion only after the trigger characters (IC-81) where R's completion calls the custom
   # completer (console_completes()); on R's own Unix readline on a tty (an IDE's terminal tab too)
   # ! breaks its words, so the R code after !/!! is completed; a caller-owned completer keeps its
@@ -967,6 +968,7 @@ repl_main = function(rs) {
     on.exit(options(old), add = TRUE)
   }
   if (!repl_setup(rs)) return(invisible(NULL))
+  if (!rs$stdin && console_class() == "T") repl_background(rs$reader)
   repl_banner(rs)
   repeat {
     if (rs$exit) break

@@ -134,10 +134,7 @@ console_ask = function(accept = NULL) {
 console_ahead = function(rd, accept) {
   x = rd$after_interrupt %||% ""
   if (!nzchar(x)) return(NULL)
-  edit = function(keys) {
-    res = console_compose(list(), keys, 0, "steer", console_complete)
-    res$action$text %||% res$state$draft
-  }
+  edit = console_line_text
   keep = function(texts) console_keep(texts[nzchar(trimws(texts))])
   lines = console_typed_split(x)
   part = if (isTRUE(attr(lines, "partial"))) lines[[length(lines)]]

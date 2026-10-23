@@ -5753,9 +5753,11 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     weighs it (0.299 red, 0.587 green, 0.114 blue), is below 0.5, else light (`background_reply()`). It is not
     asked below 256 colours (`NO_COLOR` too), where no band shows, or on the Linux console (TERM=linux). Without
     an answer the last field of `COLORFGBG` decides, read once (0-6 or 8 dark, 7 or 9-15 light); else the
-    background is unknown and there is no band. Keys typed before or during the probe are the REPL reader's, read
-    as the composer reads them (`console_compose()`): the lines they end are its next prompts, the rest a draft at
-    the prompt (`console_idle()`); the probe never drops them. On the band readline reads at
+    background is unknown and there is no band. Keys typed before or during the probe are the REPL reader's, each
+    line read as the composer reads it (`console_line_text()`): each line they end that is not blank is a next
+    prompt of its own, as readline would have read it, the rest a draft at the prompt (`console_idle()`); the probe
+    never drops them, and it asks after the first-use setup, whose menu reads typed lines first (review of Tasks
+    22-27: all ended lines were one message, so `hello` and `/exit` went to the model together). On the band readline reads at
     `\001<band>\002<prompt>\001\033[K\002` (`peter> `, `... ` and `+ `): readline counts only the prompt's
     text, the typed text inherits the band and its row is shaded to its end; after every read, also at Ctrl-C and
     an end of input, `\033[0m\033[K` resets the attributes and erases the band the line's end gave the row below.

@@ -1113,6 +1113,22 @@ test_that("keys typed before or during the probe are the reader's, never lost (I
   got = probe("summary(fuel)\nplox\177t it\033[?1;2c")
   expect_identical(got, list(typed = "summary(fuel)", draft = "plot it"))
   expect_identical(probe("\033[?1;2c"), list(typed = character(), draft = NULL))
+  # each ended line is a prompt of its own, as readline would have read them (review of Tasks 22-27)
+  expect_identical(probe("hello\n\n/exit\n\033[?1;2c"),
+                   list(typed = c("hello", "/exit"), draft = NULL))
+  # the probe asks after the first-use setup, whose menu reads typed lines first
+  asked = 0L
+  local_mocked_bindings(console_class = function() "T", tty_query = function(...) {
+    asked <<- asked + 1L
+    ""
+  }, repl_banner = function(rs) NULL, repl_close = function(rs) NULL,
+  repl_read_logical = function(rd, prompt) NA_character_)
+  local_mocked_bindings(repl_setup = function(rs) FALSE)
+  repl_main(repl_state(NULL, new.env()))
+  expect_identical(asked, 0L)
+  local_mocked_bindings(repl_setup = function(rs) TRUE)
+  repl_main(repl_state(NULL, new.env()))
+  expect_identical(asked, 1L)
 })
 
 test_that("on the input band readline reads after the band's prompt, reset after (IC-82)", {

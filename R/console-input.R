@@ -93,6 +93,14 @@ console_compose = function(state, chars, now, enter_kind, complete, paste = FALS
   out(if (nzchar(lines)) send(sub("\n$", "", lines), enter_kind), esc, t)
 }
 
+#' The text of keys `keys` once their edit keys act (console_compose()): the message they end, else
+#' the draft they leave
+#' @noRd
+console_line_text = function(keys) {
+  res = console_compose(list(), keys, 0, "steer", console_complete)
+  res$action$text %||% res$state$draft
+}
+
 #' The word at the end of `line` that Tab completes (D-244), or NULL where it is no trigger word:
 #' the last word of a line starting with ! or !!, a word starting with @ or peter$, or a first
 #' word starting with /. A word ends at whitespace and readline's break characters, ! among them

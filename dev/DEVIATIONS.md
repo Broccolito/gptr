@@ -4079,6 +4079,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     §7.1 (`tty_query()`) and §15.10 IC-82. Tests: test-console-repl.R "a terminal answering the probe late still has
     the answer read by it (review)"; test-console-input.R "cursor keys and other sequences are dropped up to their
     final byte".
+  - Keys typed before or during the background probe are read line by line (`console_line_text()`, which
+    `console_ahead()` shares): each ended line is a next prompt of its own, the rest the draft. The composer's paste
+    rule made them one message, so `hello` and `/exit` reached the model together and `/exit` never ran. The
+    probe asks after the first-use setup (`repl_main()`), whose menu reads typed lines first, as before the probe.
+    Contract-visible: 04 §15.10 IC-82. Tests: test-console-repl.R "keys typed before or during the probe are the
+    reader's, never lost (IC-82)".
   - The status line, the banner's rows, the mention line and a question's key rows wrap between whole terms
     (`console_terms()`, which the mention line's loop became): a row ends at a term and the next starts with the
     next one, never after a separator; a term wider than a row is cut. Word wrapping split `98% context left`

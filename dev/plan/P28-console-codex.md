@@ -1455,7 +1455,9 @@ Decisions:
     digits a component are read; the luminance is weighed as Codex's `is_light()` (0.299, 0.587, 0.114).
   - Keys typed before or during the probe are read with the replies. They are the REPL reader's, read as
     the composer reads them: the lines they end are its next prompts, the rest a draft at the prompt's
-    editor. Dropped, they would be lost: the person types while gptr starts.
+    editor. Dropped, they would be lost: the person types while gptr starts. (Amended in the review of Tasks
+    22-27: each ended line is a prompt of its own, as the composer's paste rule had made them one message, and
+    the probe asks after the first-use setup, whose menu reads typed lines first.)
   - The reader puts the band around readline's prompt (`peter> `, `... `, `+ `), not `repl_prompt()`,
     whose text it also echoes; it echoes a held line (a follow-up, the editor's line) row by row on the band
     (`console_band()`), as a delivered steer is written.
