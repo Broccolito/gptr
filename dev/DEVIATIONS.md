@@ -3149,13 +3149,23 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   an idle end, else `interrupted` (as a stored blocked chat); a later synthesis turn decides by itself. A listed row
   with no answer naming the model takes it as `rebuild_model()` does (`model_change`, `gptr.frozen`). Formerly
   every settled team or fan-out listed and resumed `interrupted` with model NA, while the live object was idle.
-- Contract-visible: 03 §4.3 (fork), §5.1 (resume status), §6.12 (also the guard), §6.18 and §7.5 `<workspace>`; 04
-  §4.6 (`gptr.container_end`), `gptr_fork(envir)`, `gptr_resume()`, §6.1.2 and `gptr_parallel()` (team-1), §7.9
-  `env_view_snapshot()` and `eval_guard()`, §15.7.
+- Rule (bg-1): a waiting background session's resumed run opens with a steer from the user (`api_user`, so before
+  re-queued follow-ups): "I am at the console now. Repeat the call that could not be approved (<summary>) with the
+  same input; I will be asked to approve it.", or "I am at the console now; ask again." for a question; a resume
+  that cannot start restores the queue. A `ui` record's `permission()` denial may carry `how = chr(1)`, kept by
+  `ui_answer_norm()` for a denial only and used by `perm_ask()` as the denial text's last sentence; the idle-tick
+  wrapper's is "Nothing ran and nobody declined; repeat the call when the session continues." Formerly the run
+  resumed on the stale "Permission denied ... Explain what you need or choose another approach." and GPT ended
+  without asking in 7 of 8 runs.
+- Contract-visible: 03 §4.3 (fork), §5.1 (resume status), §6.2 (background asks), §6.12 (also the guard), §6.18 and
+  §7.5 `<workspace>`; 04 §4.6 (`gptr.container_end`), `gptr_fork(envir)`, `gptr_resume()`, §6.1.2 and
+  `gptr_parallel()` (team-1), §7.9 `env_view_snapshot()` and `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7,
+  IC-57; `?gptr-background`.
 - Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
   and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame);
   session-object "a fork's change report names the source objects its code changed in place"; eval-guard "q bound
   to data where the code runs ...", "model code reads a q bound to data ..."; subagent-team "a team or fan-out
   takes a failed member's status ...", injection-e2e "a worker's forwarded permission request ..."; session-store
-  "a settled team or fan-out lists and resumes idle ...". Evidence: progress/fixes.md Task FIX-19 ws-1,
-  sessions-20, guard-1, team-1, team-4.
+  "a settled team or fan-out lists and resumes idle ..."; agent-background "a resumed session is told the user can
+  now approve the call", "... whose ask tool was blocked is told to ask again"; console-ui "a denial keeps the
+  UI's how ...". Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1.

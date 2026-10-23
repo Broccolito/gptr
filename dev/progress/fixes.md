@@ -2026,3 +2026,30 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-252 (extended). The plan's copy-under-another-id check cannot work (a durable usage
   record is bound to its header id), so the test cuts a copy for the negative case and resumes the
   real files after dropping the live sessions. Open: a `gptr_parallel()` row's title is still empty.
+
+### bg-1 - A resumed background session tells the model the user can now be asked
+- Findings 191, 204. Red: `^agent-background$` FAIL 6 PASS 194: with a fake model that does not
+  repeat the call, the resumed request ended on the stale tool result "Permission denied: the user
+  could not be asked ... Explain what you need or choose another approach." (for a blocked `ask`,
+  "Tool execution was blocked: ..."); no message said the user was there.
+- Cause: `bg_resume()` called `run_start(s, NULL)` with no input, so the run went on from the
+  denial, and the denial's `how` was lost (`ui_answer_norm()` rebuilt the answer without it,
+  `perm_ask()` passed none), so `perm_denial_text()` added "choose another approach". GPT read it
+  as final: 7 of 8 runs ended without asking.
+- Fix: `bg_resume()` queues a steer from the user (`api_user`) before `run_start()`,
+  `bg_resume_text()`: "I am at the console now. Repeat the call that could not be approved
+  (<summary>) with the same input; I will be asked to approve it." or "I am at the console now;
+  ask again."; a resume that cannot start restores the queue. The idle-tick `permission()` answer
+  carries `how = "Nothing ran and nobody declined; repeat the call when the session continues."`,
+  which `ui_answer_norm()` keeps for a denial and `perm_ask()` gives `perm_result()`.
+  ?gptr-background and the teams vignette say so; 03 §6.2, 04 §7.21, §10.2 row 22, IC-57.
+- Green: `^agent-background$` PASS 200; with agent-dispatch, console-ui, perm-*, tool-ask,
+  subagent-worker, injection-e2e, ext-specs, agent-run, agent-loop PASS 3293 SKIP 1; full suite
+  (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35354. Lint clean; plan checks pass. Live (m$gpt, manual
+  mode, `peter("Check fit.", fit, background = TRUE)` at an interactive pty console): parked
+  "waiting for approval", then `gptr_wait(b)` raised the allow? prompt in 3 of 3 runs (the
+  verifier's baseline: 1 of 6).
+- Deviations: D-252 (extended). `R/console-ui.R` (not in the plan's files) had to keep `how`. The
+  "cannot continue" test now fails `run_start()` with a mock: a queued note gives its finished
+  session something to run. Open: P28's sessions-16 also edits `perm_ask()` and `bg_ui_spec()`
+  (the second merge keeps both); no notice backs up a model that still does not repeat the call.

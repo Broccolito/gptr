@@ -1238,7 +1238,8 @@ prompt; programmatic calls re-signal the interrupt. While the menu waits streams
 `later` callbacks pump the reactor while the console is idle (timer polling every 50 ms; the pump is a no-op while
 the reactor is already on the stack [IC-57]; no `later_fd`, which LIKELY cannot watch processx pipes on Windows,
 inferred from its documentation and untested [15 verifier]). An ask raised by a background run never prompts from
-a callback: the session moves to status `waiting` and the question is shown at the next blocking gptr call. A SIGINT inside a later callback reaches the same
+a callback: the session moves to status `waiting` and the question is shown at the next blocking gptr call, whose
+resumed run opens with a user message saying that the user is at the console (D-252). A SIGINT inside a later callback reaches the same
 calling handler, so the pause menu works [G3 p6]. Piping into the running session steers it; `gptr_wait()`,
 `gptr_cancel()` and `gptr_jobs()` operate on it. R tools of background runs execute at idle ticks (the console
 is busy for their duration; `options(gptr.background_tools = "wait")` defers them to `gptr_wait()`). Under

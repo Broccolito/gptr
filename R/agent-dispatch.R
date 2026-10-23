@@ -628,7 +628,11 @@ perm_ask = function(call, run, out, risk) {
       return(perm_result("deny", "the user aborted the run", call$input, risk, "user",
                          how = "The run stops here."))
     }
-    return(perm_result("deny", ans$feedback %||% "the user declined", call$input, risk, "user"))
+    # a UI may say what to do instead (P21's idle-tick answer: repeat the call later)
+    how = ans[["how"]]
+    if (!rlang::is_string(how) || !nzchar(how)) how = NULL
+    return(perm_result("deny", ans$feedback %||% "the user declined", call$input, risk, "user",
+                       how = how))
   }
   if (identical(snap$noninteractive_ask, "deny")) {
     return(perm_result("deny", "no one can approve this action in this run", call$input, risk,
