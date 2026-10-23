@@ -3181,11 +3181,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   scan flags none of their calls. A path function used as a value (`lapply(1, cat, file = "x")`), whose arguments
   the scan cannot see, stays refused. Was: refused although `gptr_risk()` scores them 0 (GPT lost a turn to it).
 - Rule (sessions-17): a command whose program is a literal path to a program gptr knows (`/bin/rm`, `./rm`,
-  `C:\bin\rm.exe`; `.exe` stripped) is read as that program too, all its rows beside the level-3 `process` row, so
-  deny and ask `sh:` and `category:` rules match it and `gptr_risk()` names its categories (`/usr/bin/git push`:
-  network); levels are unchanged. Was: only its level-4 rows, so `r(sh:rm *)` and `r(category:file_delete)` missed
-  `/bin/rm -rf build` in auto and yolo. An allow rule must cover the path row as well, so `r(sh:/bin/rm -rf*)`, the
-  former `[a]lways` rule, no longer approves it, and such a call is offered no `[a]lways` rule.
+  `C:\bin\rm.exe`; `.exe` stripped in any case, so `C:\bin\RM.EXE` reads as `RM`, and a bare `RM.EXE` as `rm`) is
+  read as that program too, all its rows beside the level-3 `process` row, so deny and ask `sh:` (as written) and
+  `category:` rules match it and `gptr_risk()` names its categories (`/usr/bin/git push`: network); levels are
+  unchanged. Was: only its level-4 rows, so `r(sh:rm *)` and `r(category:file_delete)` missed `/bin/rm -rf build` in
+  auto and yolo. An allow rule must cover the path row as well, so `r(sh:/bin/rm -rf*)`, the former `[a]lways` rule,
+  no longer approves it, and such a call is offered no `[a]lways` rule.
 - Rule (sessions-18): `peter$bg()` is classified as `peter$sh()` is: a literal command's rows plus a level-3
   `process` row carrying the command text, so `sh:` rules match it and `[a]lways` offers `r(sh:rm -rf*)`; a
   computed command is the `dynamic` level-3 row. Was one `peter$bg` row at level 3, which `r(sh:rm *)` never matched

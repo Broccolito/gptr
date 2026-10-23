@@ -2247,10 +2247,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   program keeps `later()`. Levels are unchanged.
 - Green: `^perm-(rules|gate)$` PASS 292; `^(perm-|bridge-|agent-dispatch|tool-r|ckpt-|arch-layers|lint-rules|zzz)`
   PASS 3349 SKIP 12. Full suite (NOT_CRAN=true) FAIL 0 PASS 35455 SKIP 64. Lint and check-plans clean.
+- Review: r1 (low) applied. `.exe` was stripped case-sensitively before `tolower()`, so `C:\bin\RM.EXE -rf build`
+  was not a known program and kept `later()`: `r(category:file_delete)` and `r(sh:RM *)` missed it (and a bare
+  `RM.EXE` was one `process` row). `risk_cmd_name()` strips it in any case at the four sites. Red FAIL 2. Green
+  `^perm-` PASS 1345; `^(bridge-|agent-dispatch$|tool-r$|ckpt-|arch-layers$|lint-rules$|zzz$)` PASS 1816 SKIP 12.
+  Lint and check-plans clean.
 - Deviations: D-251 (extended). From the plan: the rules test also covers `./rm` and `C:\bin\rm.exe`, which
   the decision names. No live check (the fake run is the gate end to end).
 - Open: such a call whose reading is flagged gets no `[a]lways` rule (no one `sh:` glob covers the path and the
-  name); `peter$bg` is sessions-18; a computed command (`cmd = "rm -rf build"; peter$sh(cmd)`) is nested-1.
+  name); `peter$bg` is sessions-18; a computed command (`cmd = "rm -rf build"; peter$sh(cmd)`) is nested-1. `sh:`
+  globs match a name as written, so `r(sh:rm *)` misses a bare `rm.exe` or `RM.EXE` and `C:\bin\RM.EXE` (`RM`).
 
 ### sessions-18 - Classify peter$bg() commands like peter$sh()
 - Red: FAIL 9 in `^perm-(rules|gate|classify)$` (PASS 1198; finding 45): `r(sh:rm *)` deny and ask matched neither

@@ -142,6 +142,11 @@ test_that("sh: and category: rules see a program given by its path", {
     expect_identical(rule_match(list(allow = "r(sh:rm *)"), call)$allow, character(), label = code)
     expect_identical(call$risk$level, 3L, label = code)
   }
+  # a Windows name in another case is that program too; an sh: glob matches it as written
+  call = r_call("system2('C:\\\\bin\\\\RM.EXE', c('-rf', 'build'))")
+  for (rule in c("r(sh:RM *)", "r(category:file_delete)")) {
+    expect_identical(rule_match(list(deny = rule), call)$deny, rule)
+  }
 })
 
 test_that("sh: rules read the command of a background job", {

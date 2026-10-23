@@ -676,10 +676,14 @@ risk_can_dash = function(x) {
   isTRUE(tryCatch(any(grepl(rx, c("-", "@"), perl = TRUE)), error = function(e) TRUE))
 }
 
+#' The base name of a program word without `.exe` in any case (Windows names are case-insensitive)
+#' @noRd
+risk_cmd_name = function(x) sub("\\.exe\\z", "", risk_base(x), perl = TRUE, ignore.case = TRUE)
+
 #' Known programs: a row of the commands table or a program the classifier models
 #' @noRd
 risk_cmd_known = function(x) {
-  x = tolower(sub("\\.exe\\z", "", risk_base(x), perl = TRUE))
+  x = tolower(risk_cmd_name(x))
   x %in% c(risk_table("commands")$command, risk_cmd_interpreters, risk_cmd_builds,
            risk_cmd_download, risk_cmd_delete, risk_cmd_copy, risk_cmd_wrappers)
 }
@@ -1012,7 +1016,7 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       next
     }
     if (grepl("[/\\\\]", w[1L]) || nzchar(dyn[1L])) break
-    p = tolower(sub("\\.exe\\z", "", w[1L], perl = TRUE))
+    p = tolower(risk_cmd_name(w[1L]))
     if (p %in% c("export", "declare", "typeset", "local", "readonly")) {
       v = w[-1L]
       asg = v[grepl(assign_re, v)]
@@ -1050,7 +1054,7 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
     break
   }
   path_prog = grepl("[/\\\\]", w[1L]) || nzchar(dyn[1L])
-  p = tolower(sub("\\.exe\\z", "", risk_base(w[1L]), perl = TRUE))
+  p = tolower(risk_cmd_name(w[1L]))
   if (!risk_cmd_known(p) && risk_cmd_known(sub("\\..*", "", p))) p = sub("\\..*", "", p)
   a = w[-1L]
   da = dyn[-1L]
@@ -1082,7 +1086,7 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       # a literal path to a known program is also read as that program, for deny, ask and
       # category rules; the process row keeps an allow rule from covering the path
       out[[length(out) + 1L]] = risk_cmd_simple(
-        c(sub("\\.exe\\z", "", risk_base(w[1L]), perl = TRUE), a), root, dirs, c("", da), quoted)
+        c(risk_cmd_name(w[1L]), a), root, dirs, c("", da), quoted)
     } else {
       later(c(risk_base(w[1L]), a), c("", da))
     }
