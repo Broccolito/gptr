@@ -2710,7 +2710,10 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   (no pile-up), also from replay_adopt(); replay_note_take() takes a text from the block holding
   it. IC-55 and D-249 amended.
 - Green: `^(doc-replay|gptr-sdk)$` PASS 947; `^(session-object|gptr-gateway|agent-background|
-  doc-blocks|utils-text|arch-layers|lint-rules)$` PASS 1598 (NOT_CRAN=true). Lint clean.
+  doc-blocks|utils-text|arch-layers|lint-rules)$` PASS 1598 (NOT_CRAN=true). Lint clean. Live,
+  installed build (GPT-5.6 Sol, Claude Opus 4.8, Ollama qwen3.8:27b): the follow-up script and a
+  `background = TRUE` one with a pipe steer, recorded, then sourced three more times in that
+  process with gptr_source() (auto, replay, auto): no request, the file unchanged, the queue empty.
 - Deviations: D-249 (extended). Open: none.
 
 ### steer-doc-4b - A rebuilt session seeks each block's own record, not the file's last entry
@@ -2724,7 +2727,10 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   (replay_block_record(), shared with replay_holds_block()), else cuts from the tip as before;
   session_replay_apply() and replay_rebuild() pass the block. IC-46 and D-249 amended.
 - Green: `^session-object$` PASS 547; `^(doc-.*|session-.*|agent-run|mcp-recording|arch-layers|
-  lint-rules)$` PASS 5004 SKIP 2 (repr; NOT_CRAN=true). Lint clean.
+  lint-rules)$` PASS 5004 SKIP 2 (repr; NOT_CRAN=true). Lint clean. Live, the three routes: a
+  two-statement chain recorded, its first block replayed alone in a second process (the file's
+  last entry then a `gptr.replay` on turn 1's branch) and the whole file in a third: `turns` 2,
+  8 messages, `$text` the second answer; a live call then named a = 1 and b = 2.
 - Deviations: D-249 (extended). Open: a block without a record (a team child, a nested call)
   still seeks along the rebuilt path.
 
@@ -2738,7 +2744,9 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Fix: only a leftover in a later top-level expression, or inside a function literal (which may
   be called later), denies it. `?gptr_return`, IC-48 and D-249 amended.
 - Green: `^(doc-blocks|doc-replay|doc-io|doc-export|mcp-recording)$` PASS 2217; `^(gptr-sdk|
-  arch-layers|lint-rules)$` PASS 194 (NOT_CRAN=true). Lint clean; Rd regenerated.
+  arch-layers|lint-rules)$` PASS 194 (NOT_CRAN=true). Lint clean; Rd regenerated. Live, the
+  three routes ran that code as asked: the block got `value=`, and a later process replayed the
+  coefficients without a notice.
 - Deviations: D-249 (extended). Open: none.
 
 ### replay-2h - No false no-value notice when the recording session replays its own value
@@ -2750,6 +2758,9 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Fix: it takes the session and is silent when it holds a value of its turn (replay_value()'s
   test). `?gptr_return` (the notice is a later R session's), IC-46 and D-249 amended.
 - Green: `^(doc-replay|doc-blocks|doc-io|gptr-sdk|subagent-team|session-object|arch-layers|
-  lint-rules)$` PASS 3027 (NOT_CRAN=true); the later-process shapes keep their notice. Lint
-  clean; Rd regenerated.
+  lint-rules)$` PASS 3027 (NOT_CRAN=true); the later-process shapes keep their notice. Full suite
+  `.` after the four round-2 units: FAIL 0 SKIP 64 PASS 35689. Lint clean; Rd regenerated. Live
+  (GPT-5.6 Sol, Claude Opus 4.8): that code replayed in the recording
+  process to 2 without a notice, in a later one to NULL with it; Ollama ran it with
+  `record = false`, so its block holds no code and its replays say nothing.
 - Deviations: D-249 (extended). Open: none.
