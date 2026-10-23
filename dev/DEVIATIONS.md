@@ -3054,7 +3054,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-console-typing.R "a delivered steer is the person's line at its boundary, before the next text (D-242)",
   "the person's line is on the band; a queue line is dim and cut to three rows (D-245)", the CLI, follow-up and
   question-order cases and both pty cases; test-console-interrupt.R "steer and follow-up queue the text with source
-  pause_menu (IC-55)". Pending: Tasks 14, 15.
+  pause_menu (IC-55)".
 - Task 14: in the REPL a follow-up is the next prompt. While a prompt of a REPL that is not piped runs,
   `policy_enqueue()` holds a follow-up (a typed line under `type_ahead = "follow_up"`, a line a question reads past,
   the pause menu's [f]), and any text starting with `/` or `!` (the pause menu's [s] too, as D-242 says a `/` or `!`
@@ -3064,7 +3064,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   line for a follow-up the run takes now shows only there. Contract-visible: 04 section 15.10 (IC-76); 03 sections
   6.2 and 6.17. Tests: test-console-typing.R "type_ahead = 'follow_up' sends the line as the next prompt, its own
   run (D-242)", "follow-ups wait with the /commands and !code typed around them, in order (D-242)", "the pause
-  menu's [f] in the REPL is the next prompt; a /, ! draft never steers". Pending: Task 15.
+  menu's [f] in the REPL is the next prompt; a /, ! draft never steers".
 - Task 15: nothing queued is lost. At the end of a foreground run the console's `agent_end` hook
   (`console_queue_left()`) settles what the person queued and the run did not take: after status `idle` or
   `max_turns` the user steers still queued (`session_unqueue()`) or held while a tool ran are the next prompts of
@@ -3144,9 +3144,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     and `bg_park_session()`'s re-queue keep them). Contract-visible: 04 §15.10 IC-55. Tests:
     test-session-object.R "session_enqueue() refuses blank text unless it has attachments (steering review)";
     test-gptr-sdk.R "a blank steer is refused by gptr_steer() and by a pipe into a running session".
+- Task 27 (documentation): `?peter` (the console table, the two kinds and their keys, the CLI-route and IDE
+  console limits, `insert_matching`, `stty sane`), `/help`'s keys, the interactive-console vignette, the README,
+  the NEWS console bullets and the configuration vignette's `type_ahead` row say D-242..D-245 as built; these
+  four entries are final. Tests: test-console-commands.R "/help lists the commands and the input syntax".
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
-- Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue
+- Rule (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue
   and the draft; a question drains typed-ahead input, waits for typing to pause and keeps the draft; stale lines
   are queued and invalid answers kept; approvals ask under the call they gate. Amends D-184, D-188 and D-222's
   layout; D-221 stays for terminals without ANSI.
@@ -3639,7 +3643,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
-- Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
+- Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
   natural language; `!`, `/` and `@` show what they do. Amends D-183.
 - Task 22: in terminal R (R's own Unix readline on a tty, `R_COMPLETION` not FALSE) Tab completes only after the
   trigger characters. `console_complete(line, end)` (new `console-complete.R`) gives full words: R's own
@@ -3706,7 +3710,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   consoles keep completion options unchanged" (a Positron with a tty stdin).
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
-- Pending (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three
+- Rule (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three
   tool kinds, R-only highlighting, whole transcript rows and a status line with the model and the context left.
   Amends D-186, D-187 and D-206.
 - Task 8: one style table, `console_style()`, replaces `console_symbols()`. It holds the logo's cursor glyphs (`›`

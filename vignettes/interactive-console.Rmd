@@ -90,9 +90,12 @@ conversation while retaining workspace objects, model and mode.
 
 Ask in ordinary language. `@x` attaches a visible R object by name, and `@analysis.R` adds the
 beginning of a text file. Quote a path containing spaces as `@"analysis notes.txt"`.
+A mention is a word that starts with `@`, so `me@example.org` stays text.
 Files take precedence when a mention matches both a file and an object. A file mention sends
 at most its first 40 lines; binary files contribute a description rather than their contents.
-For a larger file, ask the agent to read the relevant section.
+For a larger file, ask the agent to read the relevant section. Under the prompt you send, a dim
+line says what each mention attached, such as `@ mtcars (data.frame, 32 x 11)` or
+`@ analysis.R (first 40 lines)`, or that a name was not found and was sent as text.
 
 ```text
 peter> Compare @mtcars columns mpg and wt.
@@ -111,9 +114,15 @@ still part of the workspace that later calls can inspect or describe. Neither pr
 through the model's permission gate: you are explicitly running your own R code. Do not paste
 unreviewed code merely because the agent suggested it.
 
-In terminal R with readline, R in an IDE's Terminal tab included, Tab completes R names and
-file paths after `!` and `!!`. RStudio's console completes R code at `peter>` too; radian and
-Positron's console offer no completion there.
+Tab completes only after `@` (objects, then files), `@obj$` (its members), `peter$`, a leading
+`/` (commands) and on a `!` or `!!` line (R code), never in plain text. This holds in terminal
+R, R in an IDE's Terminal tab, Windows' Rgui and Rterm, and RStudio's console, which completes
+only what its popup inserts as offered: the commands after `/` and R code after `!`, not words
+holding `@` or `$`, which it would wrap in backticks. In a terminal Tab completes a draft typed
+while Peter works the same way. R.app, radian and Positron's console keep their own completion.
+gptr never changes RStudio's preferences: as you type in its console, RStudio adds closing
+brackets and quotes unless `insert_matching` is off, and opens completions unless
+`console_code_completion` is off (Tools > Global Options > Code).
 
 ```text
 peter> !fit = lm(mpg ~ wt, data = mtcars)
@@ -135,9 +144,9 @@ history and the question asked again. A last pasted line without a newline waits
 the next prompt, so a two-line paste without a final newline answers with its first line.
 Homebrew or conda R, Linux terminals, RStudio, R.app, Positron and Windows deliver pasted lines
 one at a time, so wrap a multi-line paste in `"""` there. Lines typed, pasted or run from a
-script before a question appears (an approval, a choice, the pause menu) never answer it: while
-an answer runs they are queued for the agent as `type_ahead` says (a `/command` or `!code` line
-waits for the next prompt), otherwise they go to the console history. Answer after the prompt.
+script before a question appears (an approval, a choice) never answer it: while an answer runs
+they are queued for the agent as `type_ahead` says (a `/command` or `!code` line waits for the
+next prompt), otherwise they go to the console history. Answer after the prompt.
 
 ```text
 peter> """
@@ -194,57 +203,102 @@ Undo and rewind report partial restores when something cannot be captured or res
 side effects are not generally reversible. See `?gptr_rewind` and `?gptr_security` before relying
 on restoration.
 
-## Approve, interrupt and continue
+## Approve changes
 
 In `manual`, known read-only actions and actions covered by existing allow rules run directly;
 other changes ask for approval under the call they gate, and you type the answer on the row
 below. The question lists the flagged calls, riskiest first (at most five; `?` shows all), and
 offers `y` for this action, `a` for a session rule covering them when one can be written (`p` for
-the same rule in this project), `n` to deny, and `?` for details. A sub-agent's question names
-it (`? sub-agent A: allow r?`); an answer that is none of these is explained, and five such answers
-refuse the action. `edits` allows project file edits
+the same rule in this project), `n` to deny, and `?` for details. `n <text>` (or `no, <text>`)
+denies the action and gives the agent your text as its instruction. A sub-agent's question names
+it (`? sub-agent A: allow r?`); an answer that is none of these is explained, and five such
+answers refuse the action. `edits` allows project file edits
 while still asking about R changes unless an allow rule applies; `auto` allows ordinary actions
 while retaining critical and secret guards. `plan` offers read-only tools and level-1 R
 exploration in a scratch environment, where intermediate bindings can change while the user
 workspace is preserved. Settings and policies are described in
 [Configuration](configuration.html) and `?gptr_security`.
 
-In a terminal (terminal R or an IDE's Terminal tab; not Windows), a line you type while an
-answer runs steers it: the agent reads it at its next step, after the current tool results.
-gptr shows it on a dim line that names its kind (`steer`), then as your own line, at column 0,
-when the agent reads it. Lines typed or pasted together are one message. The terminal does not
-echo while an answer runs: a typed line shows after Enter, on its dim line, and never mixes into
-the answer.
-With `gptr_config(type_ahead = "follow_up", .scope = "user")` each is a follow-up instead: the
-next prompt, sent once the answer ends. `/commands` and `!code` typed during an answer also run
-at the next prompt, in the order typed. A steer the answer did not take (it ended first) is the
-next prompt too; after an interrupt or an error nothing you queued is sent: it goes to the
-console history, and Up recalls it. On the CLI routes (`claude-cli`, `codex`) a steer reaches the model
-after the CLI's current response. The RStudio, Positron and R.app consoles hold typed input
-until R reads again, so there a line typed during an answer becomes the next prompt;
-type-ahead during `peter("...")` at R's prompt stays R's next input.
+## Type while Peter works
 
-While an answer or tool runs in a supported terminal, Ctrl-C opens a pause menu:
+A message you type while Peter works is queued as one of two kinds. A **steer** reaches the
+agent at its next step boundary: when the response in flight ends, after the results of all its
+tool calls. The agent reads it on its very next request, and an answer that was about to end
+gets one more request; a steer never interrupts a request or a tool. A **follow-up** waits for
+the whole answer and is then sent as the next prompt, its own run. What you type, and the key
+that pauses Peter, depend on the console:
 
-- **Steer** delivers a new instruction after the current tool results.
-- **Follow-up** queues a prompt: in the chat it is the next prompt, sent once the answer ends;
-  in a `peter("...")` call it is sent when the agent would otherwise stop. In the chat a
-  `/command` or `!code` line typed at Steer or Follow-up runs at the next prompt.
-- **Continue** resumes the current work.
-- **Abort** stops it and retains the partial session; what you queued goes to the history, unsent.
+| Console | Typed while Peter works | Pause key |
+|---|---|---|
+| Terminal R on macOS or Linux, an IDE's Terminal tab | a draft: Enter steers, Tab sends a follow-up | Ctrl-C |
+| TERM=dumb, Emacs shell, ESS | each line, as `type_ahead` says | Ctrl-C |
+| RStudio, R.app | the next prompt, unless a question reads it | Esc |
+| Positron | R code, run after `peter()` returns | Ctrl-C |
+| Windows Rterm | the next prompt, unless a question reads it | Ctrl-C |
+| Windows Rgui, Jupyter | the next input | none: the key stops the answer |
 
-A foreground call, including a chat turn, can also offer **background** when that experimental
-capability is available. It returns to `peter>` while the run remains active. Another prompt
-steers the running session; `!!gptr::gptr_wait(gptr::gptr_last())` waits for completion without
-adding a code/output note to the next prompt. Returning to the chat prompt does not guarantee
-progress while it waits for input. Under Rscript, background runs advance only inside blocking
-gptr calls. Inline R tools still occupy the same R process while they execute.
+In terminal R and an IDE's Terminal tab what you type is a draft on the bottom row, under the
+transcript, so it never mixes into the answer; a block pasted there is one message. The row also
+shows what Peter is doing and how many messages are queued. Enter sends the draft as a steer,
+and it shows as your own line where the agent reads it. Tab sends it as a follow-up, which
+appears at the next `peter>` prompt. With `gptr_config(type_ahead = "follow_up", .scope =
+"user")` the two keys swap. A draft that starts with `/` or `!` is always a follow-up:
+`/commands` and `!code` run at the next prompt, in the order typed. Up on an empty draft takes
+back the newest message not yet delivered, to edit and send again; Ctrl-U clears the draft. A
+recording document keeps what you sent, steers included
+([Script as history](script-as-history.html)).
+
+A question (an approval, a choice) waits until you stop typing for a second, or three seconds
+while the draft has text, so a key meant for the draft never answers it. The draft stays through
+questions, through Ctrl-C and the pause menu, and to the next prompt, where Enter sends it. Keys
+typed while R code runs in this R process (the `r` tool) show when it returns. A steer the answer
+did not take (it ended first) is the next prompt. After an abort or an error nothing you queued
+is sent: the queued text and the draft go to the console history, and Up recalls them. On the
+CLI routes (`claude-cli`, `codex`) the agent reads a steer after the CLI's answer, which is often
+the whole run.
+
+RStudio, R.app, Positron and Windows consoles hold what you type until R reads again, so gptr
+cannot read it while Peter works:
+
+- In RStudio, R.app and Windows consoles a line typed during an answer is the next prompt, one
+  prompt per line, unless a question comes first: the question reads the line, queues it as
+  `type_ahead` says and asks again. RStudio hides such a line at its next output, and its bottom
+  row says `typed lines run next`.
+- Positron's console keeps typed text as R code, which runs after `peter()` returns, and clears
+  it at Ctrl-C.
+- To steer in these consoles, pause and press `s` (Windows' Rgui cannot pause). In RStudio an
+  Esc first closes RStudio's own completion list, if open, then clears a line being typed, so the
+  menu comes at the next Esc.
+
+During `peter("...")` at R's prompt, outside the chat, typed lines stay R's next input in every
+console.
+
+## Pause, continue and leave
+
+The pause key opens a pause menu while an answer or tool runs:
+
+- `s` **steer** asks for a new instruction and delivers it at the next step boundary.
+- `f` **follow-up** queues a prompt: in the chat it is the next prompt, sent once the answer
+  ends; in a `peter("...")` call it is sent when the agent would otherwise stop.
+- `c` **continue** resumes the work as if it had not paused.
+- `a` **abort** stops it and retains the partial session; what you queued and the draft go to
+  the history, unsent.
+- `b` **background**, for a foreground call (a chat turn included) when that experimental
+  capability is available, returns to `peter>` while the run goes on.
+
+A key typed right after the pause key answers the menu, and pressing the pause key again aborts.
+After background, what was queued for after the answer and the draft go to the history, unsent,
+as after an abort. Another prompt steers the running session;
+`!!gptr::gptr_wait(gptr::gptr_last())` waits for completion without adding a code/output note
+to the next prompt. Returning to the chat prompt does not guarantee progress while it waits for
+input. Under Rscript, background runs advance only inside blocking gptr calls. Inline R tools
+still occupy the same R process while they execute.
 
 At the chat prompt, one interrupt prints a hint; two consecutive interrupts leave the chat.
-Use Ctrl-C in a terminal, an IDE's Terminal tab included, and in Positron's console, and the
-front end's interrupt key in other IDE consoles: Esc in RStudio, R.app and RGui. IDEs that cannot resume an
-interrupted evaluation use an abort fallback; pause/resume behavior is not uniformly verified
-across front ends.
+Where an interrupt cannot be resumed (Windows' Rgui, Jupyter) the key stops the answer instead.
+In a terminal the chat reads keys with the echo off and restores it when it returns, on an
+error, at an interrupt and at `q()`. If R is killed or crashes while Peter works, type
+`stty sane` and press Enter to get the echo back.
 
 The equivalent session verbs work from R:
 

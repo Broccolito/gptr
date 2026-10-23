@@ -5085,7 +5085,7 @@ Ollama requires no Jev key and is not a structured-chat emulation fallback.
 Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier sections.
 
 **IC-75 Console input: paste joining and stale answers** (P26 Task 2, D-184; Task 19, D-220).
-P28 amends this item in §15.10 (pending; D-243): a stale answer is queued, not discarded, and invalid answers
+P28 amends this item in §15.10 (D-243): a stale answer is queued, not discarded, and invalid answers
 and pastes are kept in the console history.
 - Paste joining, macOS terminal only (`is_macos()` and R's own readline reading a tty: Unix, interactive,
   `cledit`, `stdin_tty()`): after a prompt, slash or `!code` line is read, the lines waiting on fd 0 join it,
@@ -5121,7 +5121,7 @@ and pastes are kept in the console history.
   opener's length (CommonMark).
 
 **IC-76 Typed lines steer a running console call** (P26 Task 3, D-185).
-P28 amends this item in §15.10 (pending; D-242, D-243): a steer reaches the first step boundary and a follow-up
+P28 amends this item in §15.10 (D-242, D-243): a steer reaches the first step boundary and a follow-up
 is the next prompt, as D-242 states now; the notices and the follow-up delivery below are replaced.
 - Scope: `repl_terminal(rs)`: not `.stdin`, not Windows (processx cannot poll a console handle),
   `gptr_is_interactive()` and `stdin_tty()`, so an IDE's Terminal tab qualifies while IDE consoles, R.app, RGui
@@ -5161,7 +5161,7 @@ is the next prompt, as D-242 states now; the notices and the follow-up delivery 
   model after the CLI's current response.
 
 **IC-77 Console controls and the asking agent** (P26 Task 6).
-P28 amends this item in §15.10 (pending; D-243, D-245): approvals ask under the call they gate, and the run
+P28 amends this item in §15.10 (D-243, D-245): approvals ask under the call they gate, and the run
 totals line names the model and the context left.
 1. Console writer: an evaluation's `.gptr_message_write(text, stream, margin, k)` lifts its own
    capture sink when it is on top (never a user's), hands the text to
@@ -5310,8 +5310,8 @@ totals line names the model and the context left.
 
 ### 15.10 Codex-style console (IC-81, IC-82, 2026-10-21)
 
-Written by `dev/plan/P28-console-codex.md`; these items win over earlier sections. Pending: each P28 task writes
-its part in its own commit, and Task 27 finalises them.
+Written by `dev/plan/P28-console-codex.md`; these items win over earlier sections. Each P28 task wrote its part,
+and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console")` describe them for users.
 
 - IC-55 amended (D-242; P28 Task 4): each poll of the steer FIFO (run start, after `turn_end`) takes every queued
   steer, in order, and `queue_item_message()` makes each its own message, so a step boundary delivers them all to

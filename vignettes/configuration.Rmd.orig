@@ -142,7 +142,7 @@ Recording and replay are separate controls; see [Script as history](script-as-hi
 | `mcp` | `exposure = "r"`, `budget = 1500`, and an `import` list of supported harness configuration names. |
 | `subagents` | `max_depth = 1`, `max_active = 8`, `max_workers = NULL`, `max_cli = 4`, `max_tasks = 8`; workers default to at most four. |
 | `ui`, `frontend` | `NULL` selects by context; set the name of a registered UI or front end. |
-| `type_ahead` | `"steer"`: a line typed in a terminal console while an answer runs steers it; `"follow_up"` sends it as the next prompt once the answer ends. |
+| `type_ahead` | What Enter does with a message typed in a terminal console while the agent works (Tab does the other); in other consoles, what a typed line does: `"steer"` reaches the agent at its next step, `"follow_up"` is the next prompt once the run ends. |
 | `store`, `evaluator` | `"jsonl"` and `"r"`; extension selection for session storage and R evaluation. |
 
 [Extending gptr](extending-gptr.html) explains registered components. MCP tools are

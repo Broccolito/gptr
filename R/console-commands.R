@@ -128,12 +128,20 @@ cmd_help = function(args, ctx) {
                "a block of R code (like !)",
                "a multi-line prompt; a trailing \\ also continues a line"),
              width = width, indent = 19L),
-    paste0("Keys: ", console_interrupt_key(), " pauses a running answer in supported terminals ",
-           "(steer, follow-up, continue, abort; background when available); ",
-           "twice at the prompt leaves. Other front ends may abort without a pause menu. ",
-           "In a terminal (not Windows) a line typed while an answer runs steers it (setting ",
-           "type_ahead; on the CLI routes after the CLI's response); /commands and !code typed ",
-           "then run after the answer. Other consoles keep typed lines for the next prompt."))
+    "Keys:",
+    formatDL(paste0("  ", c("Enter", "Tab", "Up", console_interrupt_key())),
+             c(paste("in a terminal, send what you typed while peter works as a steer: the agent",
+                     "reads it at its next step"),
+               paste("send it as a follow-up instead: the next prompt, once the answer ends",
+                     "(type_ahead swaps the two); after @, !, !!, / or peter$, complete the word"),
+               "on an empty draft, take back the newest message not yet delivered",
+               paste0(if (console_menu_available()) {
+                 "pause the answer: s steer, f follow-up, c continue, a abort, b background"
+               } else {
+                 "stop the answer"
+               }, "; twice at the prompt leaves")),
+             width = width, indent = 19L),
+    "In other consoles a line typed while peter works is the next prompt.")
 }
 
 #' /exit, /quit, /q

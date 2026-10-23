@@ -2086,8 +2086,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   templates as `/<name> args`. Commands are recorded as comments in transcripts. Their output, like a
   prompt over 200 bytes or wider than a content row, is word-wrapped in the console margin; the listings
   they print are formatted at width - 4 (`print_lines()`), so they are not wrapped again, and `/help` wraps
-  each description under its column (`formatDL()`). The Ctrl-C notices at the prompt and of the pause menu
-  start with a line end (D-225).
+  each description under its column (`formatDL()`); its keys are Enter (a steer), Tab (a follow-up, or completion
+  after `@`, `!`, `!!`, `/` and `peter$`), Up (take one back) and the console's pause key [D-242, D-244]. The
+  Ctrl-C notices at the prompt and of the pause menu start with a line end (D-225).
 - **UI backends** (`ui` specs): `console`, `none`, `scripted` (tests), `rstudio` (dialogs; a timed-out dialog
   is a denial with a notice). The UI abstraction is how Shiny or RPC front ends replace the console. Whether anyone
   can be prompted is `gptr_can_prompt()`: true in IRkernel, where `interactive()` is false but `readline()` works

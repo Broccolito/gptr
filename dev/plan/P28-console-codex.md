@@ -1566,6 +1566,20 @@ Decisions:
 - Finalise D-242..D-245, §15.10 and the amended IC-75..IC-77.
 - Re-run the cross-plan checks.
 - Update report 18's Verification log rows for type-ahead, completion and the band.
+- (Amended in Task 27:)
+  - The documents are ASCII (the R sources, vignettes, README and NEWS are checked), so they name no glyph and
+    write the menu's keys as `s` steer, `f` follow-up, `c` continue, `a` abort and `b` background.
+  - `/help`'s keys are a `Keys:` list like its `Input:` one: Enter, Tab (also completion after the trigger
+    characters), Up and the console's own interrupt key, whose row says `stop the answer` where no menu is
+    offered; one line says a line typed in other consoles is the next prompt.
+  - `?peter`'s console table is a `\tabular` (console, what typing does, the pause key), the vignette's a
+    Markdown table; `?peter`'s and the vignette's paste paragraphs drop the pause menu from the questions a line
+    typed before them never answers (steer-8: a key typed right after the pause key answers the menu).
+  - The README has no console section: one sentence follows `Connect a model`'s code, and the `Learn more` row
+    names steering.
+  - Also stale, and fixed here: NEWS.md's console bullets (typing, a paste at a question, completion, fences,
+    the approval's keys) and `vignettes/configuration.Rmd.orig`'s `type_ahead` row, which Task 18 updated in
+    the knitted `configuration.Rmd` only. 03 §6.17's `/help` line names the keys.
 
 Tests, RED first: a new expectation in `test-console-commands.R` that `/help` names Enter, Tab,
 Up, the two kinds and the trigger characters fails until `/help` is updated. Then
@@ -1574,7 +1588,9 @@ Up, the two kinds and the trigger characters fails until `/help` is updated. The
 Files: `R/gptr-gateway.R` and `R/console-repl.R` roxygen (`?peter`), `R/console-commands.R`
 (`/help`), `vignettes/interactive-console.Rmd`, `README.Rmd`, `README.md`, `dev/DEVIATIONS.md`,
 `dev/spec/03-architecture.md`, `dev/spec/04-interface-contract.md`, `dev/research/18-*.md`
-Verification log, `tests/testthat/test-console-commands.R`.
+Verification log, `tests/testthat/test-console-commands.R`. (Amended in Task 27:) also `man/peter.Rd`,
+`vignettes/interactive-console.Rmd.orig`, `vignettes/configuration.Rmd.orig` and `NEWS.md`; `R/gptr-gateway.R`
+is unchanged.
 
 Commit: `docs(console): the Codex-style peter() console`.
 

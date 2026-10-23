@@ -133,8 +133,12 @@ test_that("/help lists the commands and the input syntax", {
   out = run_command(repl_state(NULL, new.env()), "/help")$out
   expect_true(any(grepl("^  /mode", out)))
   expect_true(any(grepl("!!code", out, fixed = TRUE)))
-  # the reader of typed lines needs a pollable terminal (repl_terminal(), IC-76)
-  expect_true(any(grepl("In a terminal (not Windows) a line typed", out, fixed = TRUE)))
+  # the keys of the composer, the two kinds of queued message and the trigger characters (D-242,
+  # D-244)
+  text = paste(trimws(out), collapse = " ")
+  for (word in c("Enter", "Tab", "Up", "steer", "follow-up", "@, !, !!, / or peter$")) {
+    expect_true(grepl(word, text, fixed = TRUE), info = word)
+  }
   expect_identical(run_command(repl_state(NULL, new.env()), "/help mode")$out,
                    "/mode  Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]")
 })

@@ -78,19 +78,22 @@ works on the objects already in memory.
   asked before deleting files outside the project or protected files, `rm(list = ls())`,
   quitting R, `options(gptr.*)` and sending a secret over the network; a one-time notice says
   so. The classifier reads code; it is not a sandbox.
-* In a terminal, lines typed while the agent works steer it at its next step (setting
-  `type_ahead`: `"steer"` or `"follow_up"`); `/command` and `!code` lines wait for the next
-  prompt. The terminal does not echo them into the answer; each shows once in its notice. On
-  the CLI routes a steer is sent after the CLI's current response.
+* In a terminal, what you type while the agent works is a draft on the bottom row: Enter sends
+  it as a steer, which the agent reads at its next step, and Tab as a follow-up, the next prompt
+  (setting `type_ahead` swaps the two); Up takes back a message not yet delivered, and
+  `/command` and `!code` lines wait for the next prompt. A question waits for typing to pause
+  and keeps the draft. On the CLI routes a steer is sent after the CLI's answer. In RStudio and
+  R.app (Esc) and Positron (Ctrl-C) the pause menu steers.
 * A block pasted at the `peter>` prompt of a macOS terminal is sent as one message, and a line
   typed or pasted before a question (an approval, a choice or a yes/no confirmation) never
-  answers it. A block pasted at an approval or a choice is dropped, not read as the answer, and
-  pasted fences and `"""` blocks are read at once.
+  answers it. A block pasted at an approval or a choice is kept in the console history, not read
+  as the answer, and pasted fences and `"""` blocks are read at once.
 * R in the Terminal tab of RStudio or Positron is treated as a terminal (completion, pause menu,
-  interrupt key), and `!code` completes R code at `peter>` there and in RStudio's console.
+  interrupt key). Tab completes only after `@`, `!`, `!!`, `/` and `peter$`, never in plain
+  text.
 * The console keeps answers, tool calls, notices and prompts in a two-column margin with one
-  blank line between them, aligns Markdown tables, keeps nested lists and highlights code. Code
-  blocks and multi-line tool code are shown as Markdown fences that copy and run as written.
+  blank line between them, aligns Markdown tables, keeps nested lists and highlights R code.
+  Code blocks in answers are shown as Markdown fences that copy and run as written.
 * A sub-agent's approval prompt reaches the console even while the parent's R code runs and
   names the sub-agent; an invalid answer is explained. Fan-outs, teams and `gptr_parallel()`
   print one line when each sub-agent starts and ends.
@@ -125,7 +128,7 @@ works on the objects already in memory.
 * The delete guard also covers a path held in a variable assigned from literals, as in
   `p = normalizePath("../x.txt"); file.remove(p)`.
 * Console layout: the approval prompt lists at most five flagged calls, one per line, and offers
-  `[a]` only when it has a rule to suggest; result lines and errors wrap in the margin, and a
+  `a` and `p` only when it has a rule to suggest; result lines and errors wrap in the margin, and a
   failed `r` call still lists its objects; sub-agent failures give their reason and count, and
   repeated nested prompts are numbered; command output and long prompts stay in the margin;
   Codex commands show without their shell wrapper and Codex messages without a held last word; a
