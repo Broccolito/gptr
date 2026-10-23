@@ -4418,3 +4418,14 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   refusing them would be a deliberate over-refusal.
 - Green: `^eval-guard$` PASS 151. Lint clean.
 - Deviations: none. Open: none.
+
+### guard-1f - The guard does not keep a function-frame home alive in the installed package (2026-10-23)
+- Found by the integration branch's R CMD check (orchestration tip alone too, from guard-1's 86a35bc7). Red:
+  `test-copy-eval.R` and `test-copy-tools.R` against the installed (byte-compiled) package FAIL 5 PASS 36: "1 copies
+  of `big` (allowed 0)" after `eval_r()` in a function-frame home. `devtools::test()` loads uncompiled code and
+  passed.
+- Cause: guard-1 passes the evaluation environment to `eval_guard()`, and a byte-compiled `for` loop calling a
+  closure (`eval_guard_walk()`) keeps that frame, and so the user's frame, referenced after the call.
+- Fix: the loop is a `while` loop, as `gateway_check_visible()` already does for the same reason.
+- Green: the two files installed PASS 41; `^(eval-.*|copy-.*|arch-layers|lint-rules)$` PASS 815. Lint clean.
+- Deviations: none. Open: none.

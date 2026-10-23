@@ -252,7 +252,13 @@ eval_guard = function(exprs, envir = NULL) {
   acc$values = character()
   acc$secrets = character()
   acc$stdin = FALSE
-  for (i in seq_along(exprs)) eval_guard_walk(exprs[[i]], acc)
+  # a `while` loop: a byte-compiled `for` loop calling closures pins this frame, and with it the
+  # user frame in `envir` (tracemem-verified)
+  i = 0L
+  while (i < length(exprs)) {
+    i = i + 1L
+    eval_guard_walk(exprs[[i]], acc)
+  }
   funs = eval_guard_fun_defs(exprs)
   vals = setdiff(acc$values, eval_assign_targets(exprs))
   if (!is.null(envir)) vals = vals[!vapply(vals, eval_guard_is_data, TRUE, envir = envir)]
