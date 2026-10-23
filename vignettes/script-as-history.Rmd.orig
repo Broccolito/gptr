@@ -306,9 +306,9 @@ interpolate `{name}` values ("interpolated inputs need review"), mixed `peter()`
 pipelines, shared-line statements, missing, stale or edited blocks and secret-marked records. A
 raw export refuses later ordinary code that reads a session handle, such as `session$value`
 or `session$text`, and a function that names one, wherever it is defined; put needed results in
-ordinary R objects, or retain the `format = "peter"` output. Earlier unrecorded console input is not reconstructed. Preserved user code can still
-require gptr or other packages, read or write files, or call the network. Export is a source
-transformation, not verified replay.
+ordinary R objects, or retain the `format = "peter"` output. Earlier unrecorded console input is not
+reconstructed. Preserved user code can still require gptr or other packages, read or write files, or
+call the network. Export is a source transformation, not verified replay.
 
 ## Asking Peter to summarize a completed workflow
 

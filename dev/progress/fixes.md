@@ -2677,9 +2677,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   session-object|session-store|mcp-recording|tool-r|northstar|ckpt-rewind|console-commands|
   copy-tools|arch-layers|lint-rules)$` PASS 4707 SKIP 2 (repr; NOT_CRAN=true). Lint clean; Rd
   regenerated; plan checks unchanged from HEAD. Installed build, fake `r` call, a self-bound
-  `analysis.R` per shape recorded by `Rscript` and replayed by `GPTR_REPLAY=replay Rscript`, with and
-  without `gptr_init()`: the seven top-level shapes print the coefficients, the three nested ones the
-  notice and NULL, files unchanged; under auto a nested one adds the outside-a-run notice.
+  `analysis.R` per shape recorded by `Rscript` and replayed by `GPTR_REPLAY=replay Rscript`, with
+  and without `gptr_init()`: the seven top-level shapes print the coefficients, the three nested
+  ones the notice and NULL, files unchanged; under auto a nested one adds the outside-a-run notice.
 - Deviations: D-249 (extended). Open: a team or fan-out child that designates an expression inside
   another expression still replays NULL without a word (its code is recorded only with a value or
   exports); a nested bare name keeps `value=<name>`, as before.
+
+### export-2c - The script-as-history export paragraph is wrapped at 100 columns
+- Second validation of export-2b (low).
+- Red: none (docs): `vignettes/script-as-history.Rmd` line 331 and its `.Rmd.orig` line 309 were
+  145 columns.
+- Cause: export-2b added the sentence on functions that name a handle without re-wrapping.
+- Fix: the paragraph's last lines re-wrapped to 100 columns, identically in both files (longer lines
+  remain only in a table row and the logo data); two lines of the replay-2f record wrapped too.
+- Green: `precompute.R --check script-as-history` 0 problems; its knitted `.Rmd` is byte-identical
+  to the edited one.
+- Deviations: none. Open: none.
