@@ -301,7 +301,8 @@ console_newest = function(s, rd, take = FALSE) {
 #' key), `pause` (TRUE where the key pauses, else it stops), `steer` (TRUE where only the pause
 #' menu steers: Positron's console holds what is typed as R code) and `typed` (TRUE where a line
 #' typed during the run is the next prompt: RStudio's console), `frozen` (TRUE while R code runs
-#' in this process: no clock, and with an empty draft `<sep>keys show when r returns`), `band`
+#' in this process: no clock, and the keys wait, `<sep>keys show when r returns` with an empty
+#' draft, else `keys wait` among the status words before the queue), `band`
 #' (TRUE on the input band, its words in the band's grey) and `status_w` (the widest status a row
 #' with a draft had this run: the status is padded to it, so the draft never moves left; attr
 #' "status_w" of the result is this row's, 0 for a row of completions, which shows until the next
@@ -328,6 +329,7 @@ console_live_row = function(state, width) {
   frozen = isTRUE(state$frozen)
   if (frozen) clock = what
   words = c(if (frozen) what else paste(what, clock),
+            if (frozen && nzchar(state$draft %||% "")) "keys wait",
             if (isTRUE(state$queued > 0)) paste0(state$queued, " queued"),
             if (isTRUE(state$question)) "question waiting")
   key = tolower(state$key %||% "Ctrl-C")

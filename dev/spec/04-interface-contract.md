@@ -5755,7 +5755,10 @@ its part in its own commit, and Task 27 finalises them.
       while a sub-agent it shows runs; while the `r` tool evaluates in this process (`rec$frozen`, set by
       `console_on_tool_start()` and cleared at its end or the next request) the row has no clock, which cannot
       tick, and with an empty draft says `<sep>keys show when r returns` (review of Tasks 16-21: it read `r 0s`
-      for the whole call and showed none of what was typed); `<elapsed>` the run's time, `0s`, `59s`, `1m 05s`; `<n> queued` the
+      for the whole call and showed none of what was typed), with a draft `keys wait` as a status word
+      after `r` and before the queue, `▌ r · keys wait · 1 queued   › <draft>` (steering review: the row with a
+      draft gave no sign that further keys would not show), dropped whole as the queue is; `<elapsed>` the
+      run's time, `0s`, `59s`, `1m 05s`; `<n> queued` the
       person's messages waiting for the session (its user-source queue items, those the console holds, the
       REPL's held lines); `question waiting` while a question waits for typing to pause (IC-76, Task 19).
       Completion candidates (Task 22) replace the status words. The block is the blue accent, the words and

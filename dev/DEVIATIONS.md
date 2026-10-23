@@ -3554,6 +3554,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     the prompt (steering review)", "a terminal: keys read with Ctrl-C answer the pause menu (steering review)";
     test-console-interrupt.R "keys read with Ctrl-C answer the pause menu and its text question (steering
     review)", "the pause menu is a console question: its keys under it, read at the chevron (D-243)".
+  - While the `r` tool evaluates in this process the live row says `keys wait` with a draft too, a status word
+    after `r` and before the queue (`▌ r · keys wait · 1 queued   › p1 third line`); only an empty draft had a
+    cue (`keys show when r returns`), so the row with a draft, kept from before the call or over a question,
+    stayed the same while further keys did not show, which invited typing them again. The cue goes whole
+    before the draft's tail is cut, and the frozen row is still drawn once. Contract-visible: 04 §15.10 IC-82.
+    Tests: test-console-input.R "while R code runs in this process the row has no clock and says keys wait
+    (review)", "a leading ! takes the chevron's place; / and ! drafts say when they run (D-244)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

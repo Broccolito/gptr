@@ -62,6 +62,8 @@ a leftover steer older than any follow-up still opens the run.)
 Typing during an in-process `r` tool:
 - Keys wait in the terminal buffer and are read when the tool returns. (Amended in the review of Tasks
   16-21: the live row says so, `▌ r · keys show when r returns`, without a clock, which cannot tick then.)
+  (Amended in the steering review: with a draft too, `▌ r · keys wait   › <draft>`, the cue among the
+  status words before the queue; the row with a draft said nothing while further keys did not show.)
 - The console reads typed input at `turn_end`, before the loop polls steers (Task 7). So a
   message sent before a boundary reaches that boundary.
 - (Amended in the steering review: a pause-menu answer that resumes, s, f, c or b, leaves the call's

@@ -288,10 +288,22 @@ test_that("while R code runs in this process the row has no clock and says keys 
   local_utf8_glyphs()
   withr::local_options(cli.num_colors = 1L)
   r = list(what = "r", secs = 5, frozen = TRUE, key = "Ctrl-C", pause = TRUE)
-  states = list(keys = c(r, draft = ""), draft = c(r, draft = "and plot"), ide = r)
-  expect_identical(live_rows(states, 80L),
-                   list(keys = "▌ r · keys show when r returns", draft = "▌ r   › and plot",
-                        ide = "▌ r · ctrl-c pause"))
+  states = list(keys = c(r, draft = ""), draft = c(r, draft = "and plot"), ide = r,
+                queued = c(r, queued = 1, draft = "p1 third line"),
+                all = c(r, queued = 2, question = TRUE, draft = "and plot"),
+                widest = c(r, draft = "and plot", status_w = 26L))
+  # with a draft the status words say keys wait too, before the queue (steering review)
+  expect_identical(live_rows(states, 80L), list(
+    keys = "▌ r · keys show when r returns", draft = "▌ r · keys wait   › and plot",
+    ide = "▌ r · ctrl-c pause", queued = "▌ r · keys wait · 1 queued   › p1 third line",
+    all = "▌ r · keys wait · 2 queued · question waiting   › and plot",
+    widest = paste0("▌ r · keys wait", strrep(" ", 13L), "   › and plot")
+  ))
+  # a long draft keeps its tail; the cue and the queue go whole
+  long = strrep("abcdefghij", 12L)
+  states = list(long = c(r, queued = 1, draft = long))
+  expect_identical(live_rows(states, 80L)$long, paste0("▌ r   › …", substring(long, 51L)))
+  expect_identical(live_rows(states, 40L)$long, paste0("▌ r   › …", substring(long, 91L)))
 })
 
 test_that("the draft keeps its column as the status changes; the status only widens (review)", {
@@ -354,9 +366,10 @@ test_that("a leading ! takes the chevron's place; / and ! drafts say when they r
     }, "")
   }
   expect_identical(rows(60L), c("▌ thinking 4s   ! summary(fuel$mpg)",
-                                "▌ r             ! summary(fuel$mpg)",
-                                "▌ thinking 5s   ! summary(fuel$mpg)"))
-  expect_identical(rows(80L)[[2L]], "▌ r             runs after this answer   ! summary(fuel$mpg)")
+                                "▌ r · keys wait   ! summary(fuel$mpg)",
+                                "▌ thinking 5s     ! summary(fuel$mpg)"))
+  expect_identical(rows(80L)[[2L]],
+                   "▌ r · keys wait   runs after this answer   ! summary(fuel$mpg)")
   # the ! bold and red, as Codex's shell mode; plain text is never restyled
   withr::local_options(cli.num_colors = 256L)
   expect_identical(c(console_live_row(states$bang, 80L)), paste0(
