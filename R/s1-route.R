@@ -654,10 +654,18 @@ s1_abstain = function(out, q, a, states) {
   if (!any(unsure)) return(out)
   u = a$uncertain
   if (identical(u, "stop")) {
-    gptr_abort(paste0(sum(unsure), " System 1 answer(s) fall inside the uncertain band ",
-                      "(confidence below ", mc, if (any(unknown)) " or unknown", ")."),
-               c("s1_uncertain", "s1"), prob = unname(gptr_prob(out)[unsure]),
-               min_confidence = mc)
+    idx = unname(which(unsure))
+    nm = names(out)[idx]
+    who = if (is.null(nm)) as.character(idx) else ifelse(nzchar(nm), nm, idx)
+    shown = paste(who[seq_len(min(10L, length(who)))], collapse = ", ")
+    if (length(who) > 10L) shown = paste(shown, "and", length(who) - 10L, "more")
+    gptr_abort(c(paste0(length(idx), " System 1 answer(s) fall inside the uncertain band ",
+                        "(confidence below ", mc, if (any(unknown)) " or unknown", "): ", shown,
+                        "."),
+                 "The error's $value holds every answer; uncertain = NA keeps the others."),
+               c("s1_uncertain", "s1"), index = idx, names = nm,
+               confidence = unname(conf[idx]), prob = unname(gptr_prob(out)[unsure]),
+               min_confidence = mc, value = out)
   }
   value = s1_bare(out)
   if (is.function(u)) {
@@ -914,17 +922,30 @@ s1_run = function(prompt, parts, target, args, session = NULL, call = NULL) {
   s1_record(out, prompt, q, meta, session, call)
   if (identical(q$type, "choice") &&
         (isTRUE(q$factor) || identical(args[["opts"]][["output"]], "factor"))) {
-    return(factor(s1_bare(out), levels = q$options))
+    # only the errors that s1_failures() points to: a factor prints every attribute, and
+    # per-element probabilities would go stale under [<-.factor
+    f = factor(s1_bare(out), levels = q$options)
+    if (!is.null(meta$errors)) attr(f, "meta") = list(errors = meta$errors)
+    return(f)
   }
   out
 }
 
 # ---- entry points -------------------------------------------------------------------------------
 
-#' The classifier route's run() (contract 7.13). No closure and no tryCatch() in this frame: it
-#' is the caller of s1_inputs(), which reads the user's values (copy safety).
+#' The classifier route's run() (contract 7.13); it matches before the team and fan-out routes,
+#' so it refuses their arguments rather than drop them (IC-74 section 4, D-250). No closure and no
+#' tryCatch() in this frame: it is the caller of s1_inputs(), which reads the user's values (copy
+#' safety).
 #' @noRd
 s1_call = function(call) {
+  given = c(agents = length(call$ids$agents) > 0L, parallel = !is.null(call$args$parallel))
+  if (any(given)) {
+    arg = names(given)[given][1L]
+    gptr_abort(paste0("`", arg, " =` starts sub-agents, but a decision model answers in one call ",
+                      "(an answer per input element); drop `", arg, " =`."),
+               "invalid_argument", arg = arg, expected = "no agents = or parallel =")
+  }
   target = s1_ready(s1_target(call$ids$model), replay = call$args$replay)
   parts = s1_inputs(call)
   s1_run(call$prompt, parts, target, call$args, session = call$session, call = call)

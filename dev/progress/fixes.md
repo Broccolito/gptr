@@ -2961,3 +2961,474 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   process to 2 without a notice, in a later one to NULL with it; Ollama ran it with
   `record = false`, so its block holds no code and its replays say nothing.
 - Deviations: D-249 (extended). Open: none.
+
+## Task FIX-17 - Cheat-sheet review: models (2026-10-22, #PR)
+
+### catalog-1 - Convert each models.dev price tier once, and reconvert caches written by the old converter
+- Red: `^catalog-models$` FAIL 5, PASS 410: a 200k tier plus the legacy field gave `default, >200k, >200k`
+  and `prices_df()` refused it ("Invalid prices; expected unique date/tier thresholds."); a converter-less
+  cache was read, and the refresh sent its ETag and kept no `converter`.
+- Cause: `catalog_prices_from()` added a `>Nk` row per context tier, then a `>200k` row from
+  `context_over_200k`, which models.dev now ships as a copy of the first tier (620 of 620 models). A 200k tier
+  doubled (31 refreshed models unresolvable); a 272k or 256k tier gained a `>200k` premium (76 models). The
+  cache stores converted rows behind an ETag and models.dev answers 304, so a code fix alone never reached it.
+- Fix: the legacy field is read only without a context tier, and a repeated tier label is dropped;
+  `catalog_snapshot()` stamps `converter = 2L`; `catalog_read_cache()` ignores a cache of another converter
+  (`catalog_read_base()` falls back to the snapshot) and `catalog_refresh()` sends `If-None-Match` only for a
+  current one. `prices_df()` stays strict. NEWS entry; 04 §11.9, §11.10 amended.
+- Green: `^catalog-models$` PASS 420; with provider-registry, provider-usage, s1-ollama, gptr-gateway,
+  gptr-config, arch-layers and lint-rules PASS 2601. Lint clean. Live (models.dev, 2026-10-22, an old
+  converter-less cache plus a stale ETag in place): the snapshot was used, the refresh downloaded in full, 693
+  refs resolve with 0 failures; grok-4.7 `default, >200k`, gpt-5.6-terra `default, >272k` at $2/M for 250k.
+- Deviations: D-250. Open: the maintainer's online `dev/catalog/build_models.R` run, after prompt-1; the
+  shipped snapshot is not converter-checked.
+
+### catalog-2 - An alias with no model in the catalog is an unknown-model error, not a fuzzy match
+- Finding 35. Red: `^catalog-models$` FAIL 3, PASS 422: with the seed catalog `model_resolve("gemini")` and
+  `"gemini:high"` returned google/gemini-3.8-flash, and `strict = FALSE` returned it instead of NULL.
+- Cause: the seed has no Gemini Pro, so the `gemini` alias target is NA; `model_match()` then went on to the
+  provider and fuzzy steps, whose substring match picked Flash, and `model_resolve()`'s alias error covered only
+  a target whose provider is not registered.
+- Fix: `model_match()` stops at an alias name without a model (either case) and carries the alias;
+  `model_lookup()` keeps it behind a thinking suffix; `model_resolve()` says the alias names no model and to run
+  `gptr_models(refresh = TRUE)` or name a `provider/id`. The orchestration skill's two `"gemini"` examples use
+  `"flash"`. NEWS entry; 04 §11.10 amended.
+- Green: `^catalog-models$` PASS 425 (a models.dev-shaped gemini-3.1-pro-preview resolves as `gemini`); with
+  provider-registry, provider-usage, s1-ollama, gptr-gateway, gptr-capture, gptr-config, subagent-backends,
+  agent-run, arch-layers and lint-rules PASS 3779. Lint clean.
+- Review fix: the alias stop came before IC-19's provider step, so a registered provider named like an alias
+  without a model (`gptr_provider("gemini", models = corp-gemini)`) raised the alias error instead of running
+  gemini/corp-gemini, as main did. It now follows the provider step and still precedes the fuzzy step. Red
+  `^catalog-models$` ERROR 1, PASS 455; green PASS 457; catalog-*, provider-registry, gptr-gateway,
+  gptr-config, subagent-backends, agent-run, arch-layers and lint-rules PASS 3062. Lint clean; 04 §11.10 and
+  the D-250 rule amended.
+- Deviations: D-250 (catalog-2 rule). Open: none.
+
+### prompt-1 - Cap the output reserve at half the window, and blame compact_at when it sets the threshold
+- Findings 51, 160 (sessions-25). Red: `^prompt-compact$` FAIL 4, PASS 344: `compact_threshold()` of (524288,
+  524288), (262144, 262144) and (131072, 131072) gave -8,000; `^prompt-sections$` FAIL 11, PASS 383: `peter()` on a
+  fake model with context = max_output = 131072 was refused at freeze ("too small", threshold -8,000), a
+  1,050,000-token model with `compact_at = 5000` was refused with `arg = "model"`, and both refusals hinted
+  `preset = "minimal" or context = "names"`.
+- Cause: `compact_threshold()` reserved `max(16384, max_output + 2 * r_cap)` with max_output unbounded, and
+  models.dev often gives the whole window as max_output (40 refreshed models refused); the request builders sent
+  that value as `max_tokens`. `prompt_floor_check()` used the compact_at wording only for an unknown window, and
+  `peter()` takes `preset =` and `context =` as context objects (`context = "names"` never lowers the floor).
+- Fix: `model_output_cap()` (`R/prompt-compact.R`), min(max_output, window / 2), in `compact_threshold()`,
+  `prompt_request_context()` and `request_fallback()`; the refusal names compact_at when the threshold equals the
+  cap alone, and hints `tools = "minimal"` (none for the minimal preset). The ten architecture-6.11 expectations
+  hold; no shipped model's max_output exceeds half its window. NEWS entry; 03 §6.11, 04 §7.7, §8.1, §15 amended.
+- Green: `^prompt-compact$` PASS 351, `^prompt-sections$` PASS 398; prompt-*, agent-*, arch-layers, lint-rules,
+  gptr-gateway, gptr-sdk and catalog-models PASS 3199. Lint clean; no Rd change.
+- Deviations: D-250 (prompt-1 rule; pointer lines under D-067 and D-069). Open: the refusal does not compute the
+  smallest passing compact_at (the floor rises with the 25% re-injection cut).
+
+### ollama-1 - Ollama refusals name gptr_models(), not the unexported model_prepare()
+- Finding 54. Red: `^(catalog-models|provider-registry)$` FAIL 8, PASS 1153: the missing-evidence refusal
+  (`provider_preflight()` and `provider_stream()`) named `model_prepare()`, the endpoint-change refusal named
+  only it ("prepare it again with model_prepare()"), and the not-installed text said "then prepare it again".
+- Cause: `provider_preflight()` built both evidence refusals around `model_prepare()`, which is `@noRd` and not
+  exported; two tests pinned that wording.
+- Fix: missing evidence says `run gptr_models(provider = "<pid>", refresh = TRUE) while the server runs with
+  the model installed`, stale evidence `<why>; run gptr_models(provider = "<pid>", refresh = TRUE) again`, not
+  installed `then call again`. NEWS entry.
+- Green: `^(catalog-models|provider-registry)$` PASS 1161; catalog-*, provider-*, s1-*, gptr-gateway,
+  gptr-config, gptr-capture, arch-layers and lint-rules PASS 5943. Lint clean; no Rd change.
+- Deviations: none (message text; 07 §2.1 asks only for actionable failures). Open: a new R session still
+  needs discovery before its first Ollama call (ollama-2).
+
+### ollama-2 - System 2 prepares a selected Ollama model on a live call, as System 1 does
+- Findings 23, 33, 113, 115. Red: `^catalog-models$` FAIL 7, PASS 435: `peter("p", model = "ollama/qwen3:1.7b")`
+  reached `provider_stream()` with the undiscovered record (tool_call FALSE) and no server call, so the real
+  preflight refused it in every new R session; a router's fallback default under replay was not refused.
+- Cause: only System 1 prepared (`s1_ready()` -> `model_prepare()`). `run_target()` and `run_route()` used
+  `run_model_resolve()` and `provider_stream()` runs only the pure `provider_preflight()`, while discovery
+  evidence lives in memory only (07 §2.1); a saved default Ollama model failed in each new session.
+- Fix: `run_model_ready()` (`R/agent-run.R`) for `run_target()`, `route_answer()` and `route_default()`: an
+  Ollama route not named by a session-only provider passes `replay_guard()`, then `model_prepare(ref, safety =
+  stream_safety(NULL, run))`; a router's thinking is clamped to the prepared levels. 07 §2.1 and the 04
+  `model_prepare()` row amended; NEWS entry.
+- Green: `^catalog-models$` PASS 443; agent-*, catalog-*, provider-*, s1-*, session-*, prompt-*,
+  compaction-*, subagent-*, gptr-gateway, gptr-config, arch-layers and lint-rules PASS 10890 (SKIP 1, Windows
+  only). Lint clean; no Rd change. Live (Ollama 0.40.8, fresh process, no `gptr_models()`):
+  `ollama/qwen3.8:27b` answered "OK" (24.7 s), evidence held for that model only, and a tool run returned
+  20.091 (20.0 s).
+- Deviations: D-250 (ollama-2 rule). Beyond the plan: the `replay_guard()` line, since `route_default()` (after
+  `router.call` fails, as under replay) has no earlier guard, and the test fixture drops `num_ctx` (8K is below
+  the standard preset's compaction floor). Open: that fallback still sends a non-Ollama default's request
+  under replay (by reading; pre-existing). The lmstudio/llamacpp/vllm tools note is sheet entry S17.
+
+### catalog-3 - An unknown model on a route with no catalog models says a refresh fills it
+- Findings 30, 41. Red: `^catalog-models$` FAIL 1, PASS 443: with the seed catalog `model_resolve("groq/llama-x")`
+  said only "Unknown model reference 'groq/llama-x'." (no suggestions, no remedy).
+- Cause: the shipped snapshot is seed-only (anthropic 4, google 1, ollama 2, openai 2, typesafe 1), so every
+  openrouter, groq, deepseek, mistral, together, xai, cerebras, fireworks, azure or bedrock id is unknown until
+  `gptr_models(refresh = TRUE)`, and `model_resolve()` gave no hint; the provider-scoped suggestions are empty.
+- Fix: `model_resolve()` adds "The catalog lists no <pid> models yet; gptr_models(refresh = TRUE) downloads them
+  from models.dev." when the reference names a models.dev route (`catalog_modelsdev_ids()`) with no catalog row,
+  also with a thinking suffix. 04 `model_resolve()` row amended; NEWS entry.
+- Green: `^catalog-models$` PASS 452 (anthropic/claude-nope keeps its suggestions and no hint; a user-registered
+  provider gets no hint); catalog-*, provider-registry, gptr-gateway, agent-run, s1-client, session-object,
+  console-commands, arch-layers and lint-rules PASS 3283. Lint clean; no Rd change. On the shipped snapshot:
+  groq/llama-3.3-70b-versatile, azure/gpt-x, openrouter/openai/gpt-5-mini and xai/grok-4.7:high carry the hint.
+- Deviations: D-250 (catalog-3 rule). The plan's condition ("a known provider with no catalog rows") is
+  narrowed to models.dev routes, since a refresh brings nothing for a provider the user registered. Open: the
+  maintainer's online `dev/catalog/build_models.R` run so the shipped snapshot carries these routes (release
+  step, after catalog-1 and prompt-1); the refresh-scope wording is sheet entries S16 and S18.
+
+### provider-2 - Model records accept prices as a list of records and check them at registration
+- Finding 85. Red: `^ext-specs$` FAIL 1, PASS 305: `gptr_provider(..., models = list(list(id = "m", prices =
+  list(list(input = 5, output = 25)))))` failed "field 'models[[1]].prices' must be a data frame".
+- Cause: `spec_model_rules()` typed `prices` as `df` and `spec_model_metadata()` never normalised it, while
+  `prices_df()` (and `gptr_config(providers =)`) take a list of records; a string price or duplicate tiers passed
+  registration and failed at the first call with no provider, model or field named.
+- Fix: `prices = f("df|list")`; `spec_model_metadata()` normalises it and re-raises a bad table as
+  `invalid_spec` naming `models[[i]].prices` ("must be a data frame or a list of price records: invalid
+  price.input, expected ..."). `?gptr_provider` documents the price shape. NEWS entry; 04 §7.0, §10.2 amended.
+- Green: `^(ext-specs|aaa-state)$` PASS 354; ext-*, aaa-state, provider-*, catalog-*, session-budget,
+  arch-layers, lint-rules, gptr-config, gptr-gateway and agent-run PASS 6972. Lint clean; Rd regenerated.
+- Review fix (docs): `?gptr_provider` gave `tier` as `"default"` or `">200k"`, while `price_threshold()`
+  takes any `">Nk"` (catalog-1 makes `>272k` and `>256k`); it now reads `">Nk"` for prompts above N thousand
+  tokens. `^(ext-specs|zzz|lint-rules)$` PASS 503. Lint clean; `man/gptr_provider.Rd` regenerated,
+  `tools::checkRd()` clean.
+- Deviations: D-250 (provider-2 rule). The plan's direct `prices_df()` call fails the layering test (ext-specs.R
+  is L0, provider-usage.R L1), so P05 provides `prices_df()` as the `prices.table` service (IC-09), the pattern
+  of `check.adapter`; without the service the table is checked when the model is resolved, as before. Open: a
+  second user registration of the same provider id is ignored silently (verifier's side finding; not this unit).
+
+### provider-3 - A provider without a valid base URL names the variable that sets it
+- Finding 37. Red: `^provider-registry$` FAIL 5, PASS 735: with `AZURE_OPENAI_ENDPOINT` unset or `"not a url"`,
+  `provider_credential(provider_get("azure"))` said "needs a valid configured origin before credentials can be
+  bound" with `variables = character()`; a provider without env said the same.
+- Cause: the no-origin branch of `provider_credential()` ignored the record's `compat$base_url_env`.
+- Fix: "Provider <id> has no valid base URL: set <env> (for example with gptr_env()) or providers$<id>$base_url
+  with gptr_config()." (`env` joined with " or "; without one only the `gptr_config()` clause), `variables =
+  env`, class `no_key` kept. With the endpoint set and no key, "Set AZURE_OPENAI_API_KEY" is unchanged. NEWS entry.
+- Green: `^provider-registry$` PASS 740; provider-*, catalog-models, gptr-config, gptr-gateway, s1-*, auth-*,
+  arch-layers and lint-rules PASS 6985 (SKIP 3, platform). Lint clean; no Rd change.
+- Deviations: none (message text; 04 §2.2 `no_key` already carries `variables`). Open: the key variable is still
+  reported only after the endpoint is fixed (the verifier's optional one-error variant was not planned).
+
+### config-1 - A higher settings layer's array replaces the lower one's
+- Finding 39. Red: `^gptr-config$` FAIL 4, PASS 518: `settings_combine()` of two `list(a = list(xs = <array>))`
+  kept the lower `xs`; with user-scope `providers.bedrock.models` (`user-id`), `options(gptr.providers =)`
+  (`opt-id`) and a session declaration (`session-id`) were both ignored, and `model_resolve("bedrock/session-id")`
+  raised `unknown_model` ("Did you mean: bedrock/user-id?") while the source read "session".
+- Cause: `settings_combine()` delegated to `utils::modifyList()`, which recurses into any two lists and applies
+  nothing from an unnamed one, so every nested array resolved to the lowest layer that set it.
+- Fix: an explicit merge that recurses only where both sides are named lists and otherwise takes the higher
+  value; a NULL still removes the key (`budget = list(cost = NULL)`). Every other case matches `modifyList()`.
+  NEWS entry.
+- Green: `^gptr-config$` PASS 524 (the user `region` is kept); full suite (NOT_CRAN) PASS 35357, SKIP 64. Lint
+  clean; no Rd change.
+- Deviations: none (restores the rule of the function's doc and `?gptr_config`). Open: none.
+
+### config-2 - gptr_config() warns when an untrusted project will not apply a saved setting
+- Finding 32. Red: `^gptr-config$` FAIL 2, PASS 524: in an untrusted project `gptr_config(providers =
+  list(bedrock = list(models = list(m))))` raised no condition, while `settings_get("providers")$bedrock` stayed
+  NULL.
+- Cause: with a `.gptr/` workspace the default scope is the project, whose non-tightening keys
+  `settings_project_value()` drops while it is untrusted; `gptr_config()` saved them silently, and a recorded "no"
+  skips even the one-time trust notice, so `peter()` failed later with a bare "Unknown model reference".
+- Fix: `settings_untrusted_warn()` runs after a project write when `trust_get()` is FALSE and warns
+  `untrusted_setting` (fields `keys`, `path`; once per root and keys) for each key whose untrusted contribution
+  differs from the trusted one (`providers` counts as written, so no base-URL question is asked), naming
+  `gptr_trust("<root>", trust = TRUE)` and `.scope = "session"`. The write is kept. 04 `gptr_config()` and §2.2
+  warnings amended; NEWS entry.
+- Green: `^gptr-config$` PASS 535; with the 13 other test files that call `gptr_config()`, arch-layers and
+  lint-rules PASS 4280. Lint clean; no Rd change.
+- Review fix: `permissions` was reported whole, though an untrusted project applies its deny and ask rules
+  (`settings_project_value()`, `perm_rules_table()`) and drops only allow. A write with allow rules now names
+  `permissions.allow`; deny or ask alone stays silent. Red `^gptr-config$` FAIL 2, PASS 569; green PASS 571;
+  with perm-*, arch-layers and lint-rules PASS 1915. Lint clean; NEWS, 04 `gptr_config()` and the D-250 rule
+  amended.
+- Deviations: D-250 (config-2 rule). Open: a project value that loosens a tighten key (`mode = yolo`) is dropped
+  silently, trusted or not (§11.2, not a trust matter).
+
+### config-3 - gptr_config() warns when a saved model setting names no known model
+- Finding 58. Red: `^gptr-config$` FAIL 2, PASS 535: `gptr_config(model = opuss, .scope = "session")` raised no
+  condition.
+- Cause: `model`, `small_model` and `system1` pass `resolve_identifier()`, which returns an unknown unbound symbol
+  as its literal name, and the `ident` validator is only `check_string()`; nothing read the catalog until the
+  next bare `peter()` (in every later session, for a user-scope value), while the console's `/model` checks with
+  `model_canonical(strict = TRUE)`.
+- Fix: `settings_model_warn()` runs after the write: each of the three keys (`system1` less `emulate:`; a
+  registered router or `router:` passes) goes through `model_canonical(strict = TRUE)`, and an `unknown_model`
+  becomes warning `unknown_model_setting` (fields `key`, `ref`) quoting that message and the undo call. The value
+  is kept. 04 `gptr_config()` and §2.2 warnings amended; NEWS entry.
+- Green: `^gptr-config$` PASS 546 (opus, haiku, `emulate:sonnet`, `ollama/any-tag:1b`, a router by name and as
+  `router:` stay silent); 20 neighbour files PASS 5657; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 64, PASS 35379.
+  Lint clean; no Rd change.
+- Review fix: only `unknown_model` was caught, so another resolution error escaped after the save (a declared
+  `bedrock/m1` with two default price rows: `invalid_argument` "Invalid prices", yet the session held the
+  value; main was silent). Any other `gptr_error` is now ignored and left to the call that uses the model. Red
+  `^gptr-config$` FAIL 1, PASS 566; green PASS 568; with catalog-models, provider-usage, arch-layers and
+  lint-rules PASS 1334. Lint clean; 04 `gptr_config()` and the D-250 rule amended.
+- Deviations: D-250 (config-3 rule). The warning quotes the `unknown_model` message instead of rebuilding its
+  suggestions, so catalog-2's alias and catalog-3's refresh hints carry over. Open: the use-time error of a bad
+  saved model still does not name its settings layer (the verifier's optional step 2, not planned).
+
+### config-4 - A gptr_init() project no longer pins mode and record, and a trusted project may set mode
+- Finding 16 (items 2 and 3). Red: `^gptr-config$` FAIL 9, PASS 553: after `gptr_config(mode = auto, record =
+  "auto", .scope = "user")` and `gptr_init()`, `gptr_config()` gave `manual` and `ask` from `[project]`; a trusted
+  project's `{"mode": "auto"}`, and `gptr_config(mode = auto)` at the default project scope, resolved `manual`;
+  `gptr_config(mode = yolo)` was saved to the project; the template read `version, mode, record`.
+- Cause: the template pinned the defaults `"mode": "manual"` and `"record": "ask"`, and `settings_project_value()`
+  applies a tighten-type key from any project, so the pinned `manual` beat a user-level `auto`; its tighten branch
+  also ran for a trusted project, which could never loosen the mode it saved.
+- Fix: the template is `{"version": 1}`; a trusted project's `mode` applies as written unless it is `yolo` (or no
+  mode); `settings_config_value()` refuses `mode = yolo` at project scope (`invalid_argument`, naming `.scope =
+  "user"` and `"session"`). config-2's warning now names `mode` when an untrusted project saves a looser one.
+  `?gptr_config`, the configuration vignette (.Rmd and .Rmd.orig), 04 and 03 amended; NEWS entry.
+- Green: `^gptr-config$` PASS 566 (the template pin is now `list(version = 1L)`); full suite (NOT_CRAN) FAIL 0,
+  WARN 0, SKIP 64, PASS 35399. Lint clean; `man/gptr_config.Rd` regenerated; plan checks pass.
+- Deviations: D-250 (config-4 rule). Narrower than planned: the plan freed every tighten-type key of a trusted
+  project; only `mode` is freed, since a project `record = "auto"` would be write consent, which IC-45 reserves to
+  the person (req-7, P15 acceptance 5), and `context` bounds what reaches providers. Beyond the plan: the
+  write-time refusal of a project `yolo`, because `settings_guard()`, which the plan said refuses it, covers only
+  `providers`; the value was dropped silently. Open: the blocked-run hint (item 4) is orchestration's gate-hint;
+  projects made earlier keep their pinned file (NEWS says to delete the two keys); a project `record = "auto"` or
+  a looser `context` is still saved without a word in a trusted project.
+
+### thinking-1 - bedrock-converse sends the thinking level to Claude models
+- Findings 40, 79 and 88. Red: `^provider-bedrock$` FAIL 3, PASS 152: with `thinking = "high"`, an adaptive and a
+  budget Claude record got no `additionalModelRequestFields`.
+- Cause: `bedrock_build()` read only `params$max_tokens` and `temperature`, though `prompt_request_context()` puts
+  the level in `params$thinking`; D-193 cut the request side, so every level, `:max` and `off` sent one body and
+  nothing said so, while the normaliser already decoded and replayed signed reasoning.
+- Fix: `bedrock_thinking()` gives a Claude id (`anthropic.claude`) the fields of `anthropic_thinking()` in
+  `additionalModelRequestFields`; `anthropic_thinking()` now holds the budget clamp (moved from `anthropic_build()`)
+  and returns `max_tokens`, which a budget sets as `inferenceConfig.maxTokens`. Another model's level gives a
+  `notice` once per model. `?gptr_provider`'s example declares `reasoning` and the adaptive capabilities; IC-80
+  amended; NEWS entry.
+- Green: `^provider-bedrock$` PASS 163; provider-anthropic, ext-specs, live-bedrock and lint-rules PASS 1096
+  (SKIP 2, live); full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 65, PASS 35413. Live on the Versa gateway:
+  `^live-bedrock$` PASS 6 (Opus 4.8 declared adaptive returns signed thinking at `high`); Sonnet 4.6 on a budget
+  with `anthropic_beta` returns signed thinking. Lint clean; `man/gptr_provider.Rd` regenerated.
+- Review fix (docs): the NEWS bullet's first line was 101 columns, over the 100-column rule; rewrapped (no NEWS
+  line now exceeds 100).
+- Deviations: D-250 (thinking-1 rule), pointer under D-193. Beyond the plan: test-live-bedrock.R registers its
+  endpoint through one local helper for both live tests. Open: an Opus 4.8 record declared without
+  `capabilities` and given a level now gets the provider's HTTP 400 ("Use thinking.type.adaptive ...") instead
+  of a silent no-op (fixed by thinking-1b); `:max` still clamps to `high` on a
+  record without `thinking_levels` (thinking-4); `usage$reasoning` stays 0 on Converse.
+
+### thinking-3 - A string that is not one of the choices is reported as such
+- Finding 161. Red: `^utils-conditions$` FAIL 3, PASS 64: `check_choice("ultra", c("off", "high"),
+  "thinking")` said "must be one of "off", "high", not a character of length 1." and `"HIGH"` got no hint.
+- Cause: `check_choice()` and `gateway_choice()` fell through to `arg_abort()`, which describes class and length
+  only, so a right-typed value that is not a choice read as a type error (`.opts$thinking`, `.opts$context`,
+  `replay`, `.scope`).
+- Fix: `choice_abort()` (`R/utils-conditions.R`), called by both: a string gets "...; the string given is not
+  one of them." plus "Did you mean "<choice>"?" when it equals a choice but for case (the hint names the choice,
+  never the value); anything else keeps `arg_abort()`. 04 §1.1 amended; NEWS entry.
+- Green: `^utils-conditions$` PASS 70 (a fake key is still never quoted; `peter(.opts = list(thinking =
+  "ultra"))` gives the new text); gptr-capture, gptr-config, gptr-gateway, doc-replay, arch-layers and
+  lint-rules PASS 2039. Lint clean; no Rd change.
+- Deviations: D-250 (thinking-3 rule). Open: NA still reads "not a character of length 1" (not a string).
+
+### thinking-4 - A clamped thinking level is announced once
+- Finding 167. Red: `^(agent-run|catalog-models)$` FAIL 2, PASS 1120: `peter("x", model = "fake/fake-1", .opts =
+  list(thinking = "max"))` (levels off..high) sent `high` and `model_resolve("opus:off")` gave `low`, both with
+  no message.
+- Cause: `model_clamp_thinking()` moves a level the model lacks to the nearest it has (IC-74, by design), and
+  its callers (`run_target()`, `run_model_resolve()`, `route_answer()`, `model_resolve()`) did it silently; a
+  reasoning record without `thinking_levels` gets off..high, which `?gptr_provider` never said.
+- Fix: `model_clamp_thinking(levels, level, ref)` informs `thinking_clamped` ("<ref> has no thinking level
+  "<asked>"; using "<got>".") once per model and level when the level changes; the four callers pass the
+  model's ref, `prompt_request_context()` stays silent. Same clamp in four lines (1179 level/subset cases equal
+  the old body). `?gptr_provider` documents `thinking_levels`. 04 §2.2 and §4.9 `thinking` row, 03 §8.4 amended;
+  NEWS entry.
+- Green: `^(agent-run|catalog-models)$` PASS 1122 (a second identical call and `high` stay silent); full
+  suite (NOT_CRAN) FAIL 2, WARN 0, SKIP 65, PASS 35417, both in `proc-rscript-native` artifact-cancel (a `ps`
+  memory sample of the cancelled child got `access_denied`, with three other worktrees' suites running), which
+  alone passes (PASS 132). Lint clean; `man/gptr_provider.Rd` regenerated.
+- Deviations: D-250 (thinking-4 rule). Open: the sheet line is entry S15; the session still records the
+  requested level (`session_data()$thinking`).
+
+### bedrock-docs - Say that bedrock-converse requests no prompt caching
+- Finding 89 (docs only). The verifier measured 0 cache reads over 7 requests on Opus 4.8 through the Versa
+  gateway; with three injected `cachePoint`s the same run read 36,145 cached tokens (about 70% less input
+  cost), so the gateway accepts them.
+- Cause: `bedrock_caps()` declares `cache = "none"` and `bedrock_build()` writes no `cachePoint` (IC-80, D-193,
+  P26 open item), while NEWS promised prompt caching "where the model supports them", which Claude on Bedrock
+  does.
+- Fix: the NEWS providers bullet says "not yet through `api = "bedrock-converse"`"; `?gptr_provider`'s
+  bedrock-converse example and the language-models vignette (.Rmd and .Rmd.orig, which now also points to
+  `api = "bedrock-converse"` for SigV4) say the adapter requests no caching, so each request sends the full
+  prompt at the uncached rate.
+- Green: `^(ext-specs|zzz)$` PASS 457; `tools::checkRd()` clean. Lint clean; `man/gptr_provider.Rd`
+  regenerated.
+- Deviations: none (the specs already state it). Open: Converse `cachePoint`s (plan anchors, the four-point
+  limit, `cacheDetails[].ttl` attribution in the normaliser), a feature.
+
+### capture-1 - A spec bound to an alias name gets the alias-shadowed notice
+- Finding 92. Red: `^gptr-capture$` FAIL 2, PASS 361: `opus = gptr_fake_provider(...)` and `grep =
+  gptr_tool("mygrep", ...)` resolved to the alias "opus" and the built-in "grep" with no `alias_shadowed`.
+- Cause: `ident_shadow_notice()` spoke only for a character variable. The known identifier wins by design
+  (packages export `claude`, `plan`, `write`), but a spec, which only a gptr user makes, was dropped silently.
+- Fix: a spec the argument accepts (`ident_spec_ok()`) counts as its `name`, then the character rule applies;
+  a function or another object stays silent. 03 §4.1.3 and 04 §6.1.3 amended; NEWS entry.
+- Green: `^gptr-capture$` PASS 363; with gptr-gateway and gptr-config PASS 1284; full suite (NOT_CRAN) FAIL 0,
+  WARN 0, SKIP 65, PASS 35437. Lint clean; no Rd change.
+- Deviations: D-250 (capture-1 rule). The plan's trigger (every accepted spec) also fired for
+  `local = gptr_provider("local", ...)` registered and passed as `model = local` (measured), which names the
+  same provider; comparing `name` keeps it silent. Open: a call such as `model = if (x) haiku else opus` is
+  evaluated in the alias mask and stays silent (by design, 03 §4.1.3).
+
+### s1-1 - System 1 arguments on a conversational model are refused, as .opts$system1_images is
+- Finding 132. Red: `^gptr-gateway$` FAIL 3, PASS 355: `peter("Which?", model = fake, choices = c("a",
+  "b"))`, and the same with `levels`, `threshold = 0.7`, `min_confidence` or `uncertain`, returned a session
+  without a word.
+- Cause: `gateway_args()` validates the five arguments, but only the classifier route reads them; the
+  nested, continue and new routes refused only `.opts$system1_images` (`route_refuse_s1_images()`, IC-74 §4).
+- Fix: `route_refuse_s1_args()` replaces it at its three call sites. After the images check it refuses the
+  first of `choices`, `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain` as
+  `invalid_argument` naming it, pointing to `jev` or `"ollama/clef-flash"` (after `gptr_config(system1 =
+  "emulate:<ref>")`, `model = jev` runs a chat model). The continue route and a configured default chat model
+  refuse too; an explicit `threshold = 0.5` runs. `?peter`, 03 §4.1 and 04 §6.1.1 step 5 amended; NEWS entry.
+- Green: `^gptr-gateway$` PASS 384; with s1-route and arch-layers PASS 720; full suite (NOT_CRAN) FAIL
+  0, WARN 0, SKIP 65, PASS 35466. Lint clean; `man/peter.Rd` regenerated, `tools::checkRd()` clean.
+- Review fix: the remedy said to opt into emulation with `gptr_config(system1 = "emulate:<ref>")`, but
+  emulation answers only `model = jev` or `"emulate:<ref>"` (`s1_target()`), so the setting alone left the
+  call refused with the same advice. It now names `model = jev` (also `expected`, `?peter`, NEWS, 04, D-250;
+  03 §4.1 never named the setting). Red `^gptr-gateway$` FAIL 5, PASS 381; green PASS 386; with s1-route,
+  arch-layers, zzz and lint-rules PASS 937. Lint clean; `man/peter.Rd` regenerated, `tools::checkRd()` clean.
+- Deviations: D-250 (s1-1 rule). Open: the `team` and `fanout` routes (`agents =`, `parallel =`) still drop
+  these arguments and `.opts$system1_images` (measured: `parallel = 2, choices =` ran two sub-agents; fixed
+  by s1-1b). The sheet's System 1 card can say these arguments need a decision model (the sheet is edited
+  later).
+
+### s1-2 - The uncertain = "stop" error names the uncertain inputs and carries the answers
+- Finding 127. Red: `^s1-route$` FAIL 10, PASS 299: for `c(trial, weeks, chose, pilot)` with P(yes) 0.98,
+  0.12, 0.05, 0.32 and `min_confidence = 0.8`, the error had no `index`, `names`, `confidence` or `value`,
+  and its message ended "(confidence below 0.8)." without naming an input.
+- Cause: `s1_abstain()` built the condition from `prob = unname(gptr_prob(out)[unsure])` only: P(yes) or the
+  chosen option's probability, not the confidence the band tests, and the abort before `s1_record()`
+  discarded every other answer.
+- Fix: the condition adds `index`, `names` (`NULL` for unnamed input), `confidence` and `value` (the whole
+  answer); `prob` stays (the IC-74 test pins it). The message lists the first ten names, a position where a
+  name is empty, "and N more" beyond, and a second line: "The error's $value holds every answer;
+  uncertain = NA keeps the others." 04 §2.2 row amended; NEWS entry.
+- Green: `^s1-route$` PASS 309 (unnamed input lists "2, 4"; a choice reports its stored confidence 0.91,
+  not the chosen 0.94); the `s1-*` files PASS 1435. Lint clean; no Rd change.
+- Deviations: D-250 (s1-2 rule). The plan's second line, "e$value holds every answer", names a variable the
+  user may not have; it reads "The error's $value". Open: the system-one vignette does not describe the
+  fields (the message does).
+
+### s1-3 - as.data.frame() of a score names its probability columns by level
+- Finding 125. Red: `^s1-types$` FAIL 2, PASS 217: a score with levels "Very negative", "Neutral", "Very
+  positive" gave the columns `p_0`, `p_1`, `p_2`, while `gptr_prob(x, "probabilities")` and a choice use the
+  level names.
+- Cause: `as.data.frame.gptr_s1()` named a score's columns by 0-based level index, against 04 §5.2's
+  `p_<level>`; P13's test copied that deviation, and no user doc mentioned it.
+- Fix: every type takes `colnames()` of the stored matrix (levels are unique, `s1-client.R`). NEWS entry.
+- Green: `^s1-types$` PASS 219 (the new test ties both accessors for a choice and a score); the `s1-*`,
+  `copy-s1` and `s11-conformance` files PASS 1504. Lint clean; no Rd change.
+- Deviations: none (the contract already says `p_<level>`). Open: none.
+
+### s1-4 - A factor-returning choice keeps its errors, and the factor result is documented
+- Finding 131. Red: `^s1-route$` FAIL 1, PASS 314: with the mocked /systemone answering one of two states
+  without probabilities, `choices = factor(c("liver", "lung", "other"))` warned "see attr(x,
+  "meta")$errors" and returned a factor whose `meta` was NULL.
+- Cause: `s1_run()` returns `factor(s1_bare(out), levels = q$options)` (by design, P13, INFRA-18), and
+  `s1_bare()` strips every attribute after `s1_failures()` has warned; no user doc said a factor comes back.
+- Fix: the factor keeps `meta = list(errors = <df>)` when elements failed and nothing else. `?peter` (System
+  1 arguments paragraph), `?gptr_prob` and the system-one vignette (.Rmd and .Rmd.orig) say that factor
+  `choices` or `.opts = list(output = "factor")` return a plain factor without probabilities. 03 §4.1.5
+  amended; NEWS entry.
+- Green: `^s1-route$` PASS 316 (an answer without failures has only names, levels and class);
+  s1-route, s1-types and gptr-gateway PASS 919; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 65, PASS
+  35492. Lint clean; `man/peter.Rd` and `man/gptr_prob.Rd` regenerated, `tools::checkRd()` clean.
+- Deviations: D-250 (s1-4 rule). The plan kept the whole `meta`, which `print.factor()` prints with every
+  answer (63 lines for two elements, measured, instead of 3); only `errors`, and only on failure, makes the
+  warning true without that. Open: `gptr_prob()` on a factor still says only that `x` is not a `gptr_s1`.
+
+### s1-5 - Say what confidence means where min_confidence is offered
+- Findings 121 and 128. Red: `^s1-types$` FAIL 1, PASS 221: the guard's numbers already held
+  (`s1_confidence_choice(c(.9, .05, .05))` 0.85, `s1_ollama_confidence()` 0.641), but `man/gptr_prob.Rd` did
+  not give that example; `?peter` covered `min_confidence` and `uncertain` only as "System 1 answer shape and
+  abstention".
+- Cause: no user doc defined confidence. For yes/no it is `abs(2 * p - 1)`, so 0.8 abstains for 0.1 < p < 0.9,
+  not "80% sure"; for choices and scores each engine keeps its own measure (D-078 item 2, D-120), Jev's
+  peak or MAD formula against Clef's entropy, and `?gptr_prob` and the vignette said only "concentration".
+- Fix: docs only. `?peter` splits out `min_confidence` (the definition, the 0.8 band, the engine's own scale)
+  and `uncertain` (`NA`, `TRUE`/`FALSE` for yes/no only, `function(state, answer)`, `"stop"`; no effect
+  without `min_confidence`). `?gptr_prob` @details gives the three formulas and the 0.85 vs 0.64 example; the
+  system-one vignette (.Rmd and .Rmd.orig) adds the example and "re-tune `min_confidence` when you switch
+  engine".
+- Green: `^s1-types$` PASS 222; s1-types and gptr-gateway PASS 606; lint-rules, zzz, s1-client and s1-ollama
+  PASS 834. Lint clean; `man/peter.Rd` and `man/gptr_prob.Rd` regenerated, `tools::checkRd()` clean.
+- Deviations: none (04 §6.1 already defines the band). The guard also reads `man/gptr_prob.Rd` (skipped when
+  installed, as test-agent-background.R does), so the example cannot drift from the code. The verifier's "the
+  same value is stricter on Clef" is not used: 0.50/0.50/0 gives 0.25 on Jev and 0.37 on Clef (measured).
+- Open: the sheet's S14 caption is applied by the sheet commit. `peter("Is it?", "p=0.85", model = <System 1
+  model>)` still warns `two_prompts` "the second is context" (finding 121's side note; measured at HEAD, not
+  planned).
+
+### thinking-1b - An undeclared Claude record on bedrock-converse gets no thinking, never an HTTP 400
+- Review of thinking-1 (high). Red: `^provider-bedrock$` FAIL 3, PASS 160: a record shaped like the live `m$claude`
+  (`us.anthropic.claude-opus-4-8`, `reasoning = TRUE`, no `capabilities`) got `thinking` `enabled` with a
+  budget at `high` and `max`, and no notice.
+- Cause: `model_capabilities()` fills undeclared flags with `FALSE`, so thinking-1 sent every Claude record
+  without `adaptive_thinking` a budget; Opus 4.8 refuses it ("thinking.type.enabled is not supported for this
+  model", HTTP 400, `gptr_error_provider`), where main sent nothing and answered.
+- Fix: `bedrock_thinking()` sends thinking only to a Claude record declaring `adaptive_thinking` (adaptive
+  fields); any other model gets none and a notice once per model naming `capabilities = list(adaptive_thinking =
+  TRUE, effort = TRUE)`. The budget path and `anthropic_beta` leave `bedrock_build()`. IC-80, `?gptr_provider`'s
+  example comment, NEWS and the D-250 rule (why: no budget declaration, no id inference) amended.
+- Green: `^provider-bedrock$` PASS 163; provider-bedrock, provider-anthropic, ext-specs, live-bedrock,
+  lint-rules, zzz and arch-layers PASS 1285 (SKIP 3, live); full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 66,
+  PASS 35503. Lint clean; `man/gptr_provider.Rd` regenerated. Live (Versa gateway, installed branch): `m$claude`
+  at `high`, `max` and `:high` answers "ready" (one notice; `max` also the thinking-4 clamp message); Opus 4.8
+  declared adaptive at `high` returns a thinking block; `^live-bedrock$` PASS 7 (+1: an undeclared record
+  answers at `high`).
+- Review fix (simplicity): with the budget path gone, thinking-1's refactor of the anthropic-messages adapter
+  (the budget clamp moved from `anthropic_build()` into `anthropic_thinking()`, which returned `max_tokens`) had
+  no second caller, so it is reverted: `R/provider-anthropic.R` is main's again, and `bedrock_thinking()` reads
+  only the `thinking` and `effort` that main's `anthropic_thinking()` returns. provider-anthropic,
+  provider-bedrock and arch-layers PASS 782; the D-250 sentence about the clamp is deleted.
+- Deviations: D-250 (thinking-1 rule rewritten in place; D-193 pointer). Open: Claude 4.5 and earlier on
+  Converse get no thinking (no budget declaration exists); `usage$reasoning` stays 0 on Converse.
+
+### s1-1b - Teams and fan-outs refuse System 1 arguments too
+- s1-1's open item. Red: `^subagent-team$` FAIL 7, PASS 347: `peter("Which tissue?", b, parallel = 2, choices =
+  c("liver", "lung"))`, a team (`agents = list(a = agent(...))`) with `levels =`, and a fan-out with
+  `.opts$system1_images` returned sessions (5 fake requests), while `?peter` says a conversational model
+  refuses them.
+- Cause: only P08's `nested`, `continue` and `new` routes call `route_refuse_s1_args()`; the `team` (15) and
+  `fanout` (16) routes match first on `agents =` / `parallel =`, and the layering test kept P19 (L4) from the P08
+  helper.
+- Fix: `subagent_route_checks()` ends with `route_refuse_s1_args(call)` (the same error, before any child
+  starts); `arch_contract_edges()` admits subagent -> `route_refuse_s1_args`. 04 §6.1.1 step 5 names both routes
+  and the edge; NEWS bullet amended. `?peter` already states the behaviour.
+- Green: `^subagent-team$` PASS 354; gptr-gateway, arch-layers, s1-route, lint-rules, subagent-backends,
+  subagent-defs, copy-subagent and zzz PASS 1245; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 66, PASS 35510.
+  Lint clean; `devtools::document()` changes nothing. Live (installed branch): `m$gpt`, `m$claude` and
+  `m$ollama` with `choices =, parallel = 2` and with `levels =, agents =` (two members) each raise
+  `invalid_argument` naming the argument in 0.2 to 0.3 s; `gptr_usage()` has no row.
+- Deviations: D-250 (s1-1 rule edited in place). Open: the classifier route (order 10) ignored `agents =`
+  and `parallel =` given with a decision model (measured offline: a classifier fake with `parallel = 2` or
+  `agents =` returned a `gptr_decision`), where this refusal's advice led; fixed by s1-1c.
+
+### s1-1c - A decision model refuses agents = and parallel =, and a call without a model is "this call"
+- Review of s1-1b (low). Red: `^s1-route$` FAIL 5, PASS 316: with a classifier fake, `peter("Is it fine?", x,
+  model = judge, agents = list(a = agent(...)))` and the same with `parallel = 2` returned a `gptr_decision`
+  (one fake request, the argument ignored); `^subagent-team$` FAIL 1: a team naming no model was told "the
+  model of this call is conversational".
+- Cause: the classifier route (order 10) matches before `team` (15) and `fanout` (16) and never read
+  `agents` or `parallel`, so s1-1b's advice "Use a decision model" led to a silent drop (IC-74 section 4);
+  `route_refuse_s1_args()` named the call's model when the call had none.
+- Fix: `s1_call()` refuses `agents =` (`length(call$ids$agents)`), then `parallel =`, as `invalid_argument`
+  naming it ("... a decision model answers in one call (an answer per input element); drop `agents =`."),
+  before `s1_ready()`; with no model the refusal says "this call is conversational". `?peter` (`agents`), 03
+  §4.1, 04 §6.1.1 step 5 and the NEWS bullet amended.
+- Green: `^s1-route$` PASS 321; s1-route, subagent-team, gptr-gateway, arch-layers, lint-rules, zzz, copy-s1
+  and s1-types PASS 1522; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 66, PASS 35515. Lint clean;
+  `man/peter.Rd` regenerated, `tools::checkRd()` clean. Live (installed branch): a team naming no model with
+  `levels =` on `m$gpt`, `m$claude` and `m$ollama` reads "this call is conversational"; `"ollama/clef-flash"`
+  and `jev` emulated on `m$gpt` and `m$claude` refuse `agents =` and `parallel = 2` naming the argument in 0.1
+  to 0.3 s with no usage row; dropping them, `jev` on `m$gpt` answers a `gptr_decision` (the local clef-flash
+  copy answered HTTP 400 "format that is no longer supported", a stale Ollama download).
+- Deviations: D-250 (s1-1 rule edited in place). The reviewer's smaller alternative (a team wording in
+  `subagent_route_checks()`) is not used: it would leave the drop. Open: none.

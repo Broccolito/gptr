@@ -662,14 +662,18 @@ settings_nest = function(path, value) {
   value
 }
 
-#' Combines a lower and a higher layer: objects merge recursively, anything else is replaced
+#' Combines a lower and a higher layer: objects merge recursively, anything else (an array
+#' included) is replaced, and a NULL in the higher layer removes the key
 #' @noRd
 settings_combine = function(lower, higher) {
-  if (is.list(lower) && !is.object(lower) && is.list(higher) && !is.object(higher) &&
-      !is.null(names(higher))) {
-    return(utils::modifyList(lower, higher))
+  obj = function(x) is.list(x) && !is.object(x) && !is.null(names(x))
+  if (!obj(lower) || !obj(higher)) return(higher)
+  for (k in names(higher)[nzchar(names(higher))]) {
+    v = higher[[k]]
+    lower[k] = list(if (k %in% names(lower)) settings_combine(lower[[k]], v) else v)
+    if (is.null(v)) lower[[k]] = NULL
   }
-  higher
+  lower
 }
 
 #' What one layer may contribute to a top-level key: in `providers`, `local_only` FALSE comes only
@@ -728,9 +732,10 @@ settings_perm_union = function(base, add, lists) {
   out
 }
 
-#' The value a project settings file contributes (IC-52): tighten-type keys only tighten;
-#' permissions add deny and ask rules (allow too when trusted); providers follow
-#' settings_project_providers(); other keys apply only in a trusted project
+#' The value a project settings file contributes (IC-52): tighten-type keys only tighten, except
+#' that a trusted project sets `mode` to anything but yolo (D-250); permissions add deny and ask
+#' rules (allow too when trusted); providers follow settings_project_providers(); other keys apply
+#' only in a trusted project
 #' @noRd
 settings_project_value = function(key, spec, current, new, trusted, root) {
   if (identical(key, "permissions")) {
@@ -741,6 +746,10 @@ settings_project_value = function(key, spec, current, new, trusted, root) {
     return(settings_project_providers(current, new, trusted, root))
   }
   tighten = spec$tighten
+  if (trusted && identical(key, "mode")) {
+    ok = is.character(new) && length(new) == 1L && new %in% setdiff(tighten, "yolo")
+    return(if (ok) new else current)
+  }
   if (!is.null(tighten)) {
     if (!is.character(new) || length(new) != 1L || !(new %in% tighten)) return(current)
     now = match(if (is.character(current)) current[1L] else NA, tighten)
@@ -1241,7 +1250,8 @@ settings_relaxed_ids = function(value) {
 }
 
 #' Checks a validated value before anything is written: `filters` in registry_filters_set()'s form
-#' (04 10.1), and no project `providers.<id>.local_only = FALSE` (IC-74, 07 section 5)
+#' (04 10.1), no project `mode = yolo` (IC-78, D-250) and no project
+#' `providers.<id>.local_only = FALSE` (IC-74, 07 section 5)
 #' @noRd
 settings_config_value = function(key, value, scope) {
   if (identical(key, "filters") && length(value) &&
@@ -1249,6 +1259,12 @@ settings_config_value = function(key, value, scope) {
     gptr_abort(paste0("Invalid filter; use -builtin:<name>, -plugin:<name> or -<kind>:<name>, ",
                       "and a leading + to undo one."), "invalid_argument", arg = "filters",
                expected = "filters of the form -builtin:<name>, -plugin:<name>, -<kind>:<name>")
+  }
+  if (identical(key, "mode") && identical(value, "yolo") && identical(scope, "project")) {
+    gptr_abort(c(paste0("A project cannot select mode yolo; only your user settings or this R ",
+                        "session can."),
+                 "Use gptr_config(mode = yolo, .scope = \"user\") or .scope = \"session\"."),
+               "invalid_argument", arg = ".scope", expected = "\"user\" or \"session\"")
   }
   ids = if (identical(key, "providers") && identical(scope, "project")) {
     settings_relaxed_ids(value)
@@ -1266,19 +1282,68 @@ settings_config_value = function(key, value, scope) {
   invisible(value)
 }
 
+#' Warns when keys just written to an untrusted project's file cannot apply there (IC-52): those
+#' whose untrusted contribution (settings_project_value()) is not what trust would apply. Trusted,
+#' `providers` applies as written, a `base_url` once confirmed (not asked here); of `permissions`
+#' only the allow rules are dropped.
+#' @noRd
+settings_untrusted_warn = function(patch) {
+  root = project_root()
+  if (isTRUE(trust_get(root))) return(invisible())
+  lost = character()
+  for (k in names(patch)) {
+    v = patch[[k]]
+    if (is.null(v)) next
+    if (identical(k, "permissions")) {
+      if (length(unlist(v[["allow"]]))) lost = c(lost, "permissions.allow")
+      next
+    }
+    sp = settings_spec(k)
+    full = if (identical(k, "providers")) v else settings_project_value(k, sp, NULL, v, TRUE, root)
+    if (!identical(settings_project_value(k, sp, NULL, v, FALSE, root), full)) lost = c(lost, k)
+  }
+  if (!length(lost)) return(invisible())
+  gptr_warn(paste0("Saved to ", settings_path("project"), " but not applied while this project ",
+                   "is not trusted: ", paste0("`", lost, "`", collapse = ", "), ". Trust it with ",
+                   "gptr_trust(", encodeString(root, quote = "\""), ", trust = TRUE), or for this ",
+                   "R session only pass .scope = \"session\"."),
+            "untrusted_setting", keys = lost, path = root,
+            .once = paste0("untrusted_setting:", path_key(root), ":", paste(lost, collapse = ",")))
+}
+
+#' Warns when a saved model setting names no model this session resolves; it is kept, since a
+#' provider registered later or a catalog refresh can make it valid (04 6.1.3). Routers and the
+#' `emulate:` prefix of `system1` are not models. Advisory: another error never fails the write.
+#' @noRd
+settings_model_warn = function(patch, scope) {
+  for (k in intersect(names(patch), c("model", "small_model", "system1"))) {
+    v = patch[[k]]
+    if (is.null(v)) next
+    ref = if (identical(k, "system1")) sub("^emulate:", "", v) else v
+    if (!is.null(registry_get("router", ref))) next
+    tryCatch(model_canonical(ref, strict = TRUE), gptr_error_unknown_model = function(e) {
+      gptr_warn(paste0("`", k, "` = ", encodeString(v, quote = "\""), " was saved to the ", scope,
+                       " settings, but gptr does not know that model in this session: ",
+                       conditionMessage(e), " Undo with gptr_config(", k, " = NULL, .scope = \"",
+                       scope, "\")."), "unknown_model_setting", key = k, ref = v)
+    }, gptr_error = function(e) NULL)
+  }
+}
+
 #' Show or change gptr's settings
 #'
 #' With no arguments, returns the effective settings with the layer each value came from:
 #' package defaults < user `settings.json` < project `.gptr/settings.json` (an untrusted project
-#' only tightens `mode`, `context`, `record`, permission rules and local-only inference) < the
-#' user-level project file < `options(gptr.*)` < this R session. With named arguments, sets
-#' those keys in one scope.
+#' only tightens `mode`, `context`, `record`, permission rules and local-only inference; a trusted
+#' one also sets `mode`, while `context` and `record` still only tighten) < the user-level project
+#' file < `options(gptr.*)` < this R session. With named arguments, sets those keys in one scope.
 #'
 #' `model`, `small_model`, `system1`, `mode` and `preset` take bare names (`mode = plan`); `NULL`
 #' removes a key from the scope. `egress` (the providers you allow automatic context to go to) is
-#' accepted only at user scope. Local-only Ollama inference (`providers = list(ollama =
-#' list(local_only = FALSE))`) can be turned off only at user or session scope; a project can only
-#' keep it on. Called from model code during a run, it is refused.
+#' accepted only at user scope. `mode = yolo` and turning off local-only Ollama inference
+#' (`providers = list(ollama = list(local_only = FALSE))`) are accepted only at user or session
+#' scope; a project can only keep local-only inference on. Called from model code during a run, it
+#' is refused.
 #'
 #' The `"session"` scope means this R process, not one conversation. User settings live at
 #' `tools::R_user_dir("gptr", "config")/settings.json`; project settings live in `.gptr/`.
@@ -1355,6 +1420,8 @@ gptr_config = function(..., .scope = NULL) {
       gateway_filters_sync()
     }
   }
+  if (identical(scope, "project")) settings_untrusted_warn(patch)
+  settings_model_warn(patch, scope)
   invisible(prev)
 }
 

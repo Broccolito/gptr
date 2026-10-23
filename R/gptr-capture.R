@@ -262,14 +262,7 @@ gateway_opts_names = function() {
 #' first element (match.arg())
 #' @noRd
 gateway_choice = function(x, choices, arg) {
-  if (!is.character(x) || length(x) != 1L || is.na(x) || !x %in% choices) {
-    expected = if (length(choices)) {
-      paste0("one of ", paste0("\"", choices, "\"", collapse = ", "))
-    } else {
-      "a registered name (none is registered)"
-    }
-    arg_abort(x, arg, expected)
-  }
+  if (!rlang::is_string(x) || !x %in% choices) choice_abort(x, choices, arg)
   x
 }
 
@@ -683,11 +676,13 @@ ident_combine = function(parts) {
 }
 
 #' The once-per-session `alias_shadowed` message: a known identifier won over a character variable
-#' of the same name holding a different value
+#' of the same name holding a different value, or a spec the argument accepts with a different name
 #' @noRd
 ident_shadow_notice = function(nm, hit, arg, envir) {
   if (!exists(nm, envir = envir, inherits = TRUE)) return(invisible(NULL))
   v = get0(nm, envir = envir, inherits = TRUE)
+  # only a gptr user makes a spec, so unlike a package's function it is worth naming
+  if (inherits(v, "gptr_spec") && ident_spec_ok(v, arg)) v = v$name
   if (is.character(v) && !identical(as.character(v), hit)) {
     gptr_inform(paste0("`", nm, "` was read as the ", ident_noun(arg), " \"", hit, "\", not as ",
                        "your variable of the same name; write !!", nm, " to use the variable."),

@@ -302,6 +302,39 @@ test_that("s1_build() and s1_abstain() follow the threshold and the uncertain ba
   expect_error(s1_abstain(ch, cq, bad_args, list(list())), class = "gptr_error_invalid_argument")
 })
 
+test_that("uncertain = \"stop\" names the uncertain inputs and carries every answer (D-250)", {
+  skip_on_cran()
+  q = list(type = "noul", options = NULL)
+  ans = list(list(prob = 0.98), list(prob = 0.12), list(prob = 0.05), list(prob = 0.32))
+  stop_args = s1_check_args(q, list(min_confidence = 0.8, uncertain = "stop"))
+  out = s1_build(q, ans, c("trial", "weeks", "chose", "pilot"), 0.5, list())
+  err = expect_error(s1_abstain(out, q, stop_args, list()), class = "gptr_error_s1_uncertain")
+  expect_identical(err$index, c(2L, 4L))
+  expect_identical(err$names, c("weeks", "pilot"))
+  expect_equal(err$confidence, c(0.76, 0.36))
+  expect_identical(err$prob, c(0.12, 0.32))
+  expect_identical(err$value, out)
+  expect_match(conditionMessage(err), "(confidence below 0.8): weeks, pilot.\n", fixed = TRUE)
+  expect_match(conditionMessage(err), "uncertain = NA keeps the others", fixed = TRUE)
+  bare = s1_build(q, ans, NULL, 0.5, list())
+  err = expect_error(s1_abstain(bare, q, stop_args, list()), class = "gptr_error_s1_uncertain")
+  expect_null(err$names)
+  expect_match(conditionMessage(err), "): 2, 4.\n", fixed = TRUE)
+  many = s1_build(q, rep(list(list(prob = 0.5)), 12L), NULL, 0.5, list())
+  err = expect_error(s1_abstain(many, q, stop_args, list()), class = "gptr_error_s1_uncertain")
+  expect_match(conditionMessage(err), "): 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 and 2 more.\n",
+               fixed = TRUE)
+  # a choice reports the confidence the band tests, not the chosen option's probability
+  cq = list(type = "choice", options = c("x", "y"))
+  cans = list(list(choice = "y", probabilities = c(x = 0.06, y = 0.94), confidence = 0.91))
+  ch = s1_build(cq, cans, "cell", 0.5, list())
+  cargs = s1_check_args(cq, list(min_confidence = 0.95, uncertain = "stop"))
+  err = expect_error(s1_abstain(ch, cq, cargs, list()), class = "gptr_error_s1_uncertain")
+  expect_identical(err$confidence, unname(attr(ch, "confidence")))
+  expect_identical(err$prob, 0.94)
+  expect_identical(err$names, "cell")
+})
+
 test_that("summaries match the document line format of contract 11.5", {
   d = new_gptr_decision(c(TRUE, TRUE, FALSE, NA), c(0.9, 0.8, 0.1, NA))
   meta = list(model = "jev-1.13.0", date = "2026-09-29")
@@ -868,6 +901,54 @@ test_that("INFRA-18: choices give a classed character with a plain ==; a factor 
   expect_error(peter("Which tissue?", x, model = tissue_model, choices = c("TRUE", "maybe")),
                class = "gptr_error_s1_labels")
   expect_identical(nrow(srv$log()), n)
+})
+
+test_that("a factor answer keeps the call's meta, which its failure warning points to (D-250)", {
+  # the second state gets an answer without probabilities, so it fails and is NA; the server
+  # starts before s1_fresh() moves the working directory into a temporary project
+  srv = local_mock_server("systemone", answers = function(body) {
+    if (!grepl("liver", unlist(body$state), fixed = TRUE)) {
+      return(list(answer = list(type = "choice", choice = "kidney")))
+    }
+    list(answer = list(type = "choice", choice = "liver",
+                       probabilities = list(liver = 0.8, lung = 0.1, other = 0.1)))
+  })
+  s1_fresh()
+  x = c(s1 = "hepatocytes from the liver", s2 = "a blood sample")
+  seen = new.env()
+  f = withCallingHandlers(
+    peter("Which tissue?", x, model = srv$provider, choices = factor(c("liver", "lung", "other"))),
+    gptr_warning_s1_errors = function(w) {
+      seen$w = w
+      invokeRestart("muffleWarning")
+    }
+  )
+  expect_match(conditionMessage(seen$w), "see attr(x, \"meta\")$errors", fixed = TRUE)
+  expect_identical(class(f), "factor")
+  expect_identical(levels(f), c("liver", "lung", "other"))
+  expect_identical(unname(as.character(f)), c("liver", NA))
+  expect_identical(attr(f, "meta")$errors$index, 2L)
+  expect_null(attr(f, "probabilities"))
+  # an answer without failures is a plain factor, which prints no attribute
+  ok = peter("Which tissue?", x[1L], model = srv$provider, .opts = list(output = "factor"),
+             choices = c("liver", "lung", "other"))
+  expect_identical(names(attributes(ok)), c("names", "levels", "class"))
+})
+
+test_that("a decision model refuses agents = and parallel = before any request (D-250)", {
+  skip_on_cran()
+  s1_fresh()
+  judge = local_fake_provider(list(0.9), name = "judge", type = "classifier")
+  x = list(a = "fine", b = "broken")
+  cnd = expect_error(peter("Is it fine?", x, model = judge,
+                           agents = list(a = agent(model = "fake/fake-1"))),
+                     "a decision model answers in one call", fixed = TRUE,
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "agents")
+  cnd = expect_error(peter("Is it fine?", x, model = judge, parallel = 2),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "parallel")
+  expect_length(fake_requests(judge), 0L)
 })
 
 # ---- Task 11: the jev-router example (IC-69) ----------------------------------------------------

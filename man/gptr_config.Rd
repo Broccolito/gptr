@@ -19,15 +19,17 @@ invisibly (a named list; \code{NULL} where the key was unset).
 \description{
 With no arguments, returns the effective settings with the layer each value came from:
 package defaults < user \code{settings.json} < project \code{.gptr/settings.json} (an untrusted project
-only tightens \code{mode}, \code{context}, \code{record}, permission rules and local-only inference) < the
-user-level project file < \verb{options(gptr.*)} < this R session. With named arguments, sets
-those keys in one scope.
+only tightens \code{mode}, \code{context}, \code{record}, permission rules and local-only inference; a trusted
+one also sets \code{mode}, while \code{context} and \code{record} still only tighten) < the user-level project
+file < \verb{options(gptr.*)} < this R session. With named arguments, sets those keys in one scope.
 }
 \details{
 \code{model}, \code{small_model}, \code{system1}, \code{mode} and \code{preset} take bare names (\code{mode = plan}); \code{NULL}
 removes a key from the scope. \code{egress} (the providers you allow automatic context to go to) is
-accepted only at user scope. Local-only Ollama inference (\code{providers = list(ollama = list(local_only = FALSE))}) can be turned off only at user or session scope; a project can only
-keep it on. Called from model code during a run, it is refused.
+accepted only at user scope. \code{mode = yolo} and turning off local-only Ollama inference
+(\code{providers = list(ollama = list(local_only = FALSE))}) are accepted only at user or session
+scope; a project can only keep local-only inference on. Called from model code during a run, it
+is refused.
 
 The \code{"session"} scope means this R process, not one conversation. User settings live at
 \code{tools::R_user_dir("gptr", "config")/settings.json}; project settings live in \verb{.gptr/}.

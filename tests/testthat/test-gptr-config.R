@@ -504,7 +504,7 @@ test_that("an untrusted project only tightens (IC-52)", {
   expect_null(p$allow)
 })
 
-test_that("a trusted project applies every key, but tighten-type keys only tighten", {
+test_that("a trusted project applies every key, but never a project mode yolo", {
   skip_on_cran()
   proj = local_gw()
   writeLines('{"mode": "yolo", "preset": "extended", "permissions": {"allow": ["write(**)"]}}',
@@ -515,6 +515,43 @@ test_that("a trusted project applies every key, but tighten-type keys only tight
   settings_write("user", list(mode = "auto"))
   expect_identical(settings_get("mode"), "auto")
   expect_identical(settings_get("permissions")$allow, "write(**)")
+})
+
+test_that("a trusted project sets mode; context, record and untrusted modes only tighten (D-250)", {
+  skip_on_cran()
+  proj = local_gw()
+  p = file.path(proj, ".gptr", "settings.json")
+  settings_write("user", list(mode = "edits", context = "names"))
+  writeLines('{"mode": "auto", "context": "summary", "record": "auto"}', p)
+  expect_identical(settings_get("mode"), "edits")
+  gptr_trust(proj, TRUE)
+  expect_identical(settings_get("mode"), "auto")
+  expect_identical(unname(attr(gptr_config(), "sources")["mode"]), "project")
+  # write consent and context never loosen from a project file (IC-45)
+  expect_identical(settings_get("context"), "names")
+  expect_identical(settings_get("record"), "ask")
+  writeLines('{"mode": "plan"}', p)
+  expect_identical(settings_get("mode"), "plan")
+  writeLines('{"mode": "yolo"}', p)
+  expect_identical(settings_get("mode"), "edits")
+  gptr_trust(proj, TRUE)
+  expect_identical(settings_get("mode"), "edits")
+})
+
+test_that("gptr_config(mode = ) in a trusted project applies there; yolo is refused (D-250)", {
+  skip_on_cran()
+  proj = local_gw()
+  gptr_trust(proj, TRUE)
+  expect_no_warning(gptr_config(mode = auto))
+  expect_identical(gptr_config()$mode, "auto")
+  expect_true(trust_get(proj))
+  cnd = expect_error(gptr_config(mode = yolo), class = "gptr_error_invalid_argument")
+  expect_match(conditionMessage(cnd), "gptr_config(mode = yolo, .scope = \"user\")", fixed = TRUE)
+  expect_identical(settings_read("project")$mode, "auto")
+  gptr_trust(proj, FALSE)
+  cnd = expect_warning(gptr_config(mode = edits), class = "gptr_warning_untrusted_setting")
+  expect_match(conditionMessage(cnd), "`mode`", fixed = TRUE)
+  expect_identical(gptr_config()$mode, "manual")
 })
 
 test_that("an invalid user mode does not let a project loosen past the default", {
@@ -799,6 +836,28 @@ test_that("a layer whose providers the guard drops entirely contributes nothing"
   expect_identical(r$source, "session")
   expect_identical(settings_resolve("providers.corp.enabled"),
                    list(value = TRUE, source = "session"))
+})
+
+test_that("a higher layer's array replaces the lower one's; objects still merge (D-250)", {
+  skip_on_cran()
+  expect_identical(settings_combine(list(a = list(xs = list(list(id = "a")))),
+                                    list(a = list(xs = list(list(id = "b")))))$a$xs[[1]]$id, "b")
+  local_gw()
+  models = function(id) list(models = list(list(id = id, tool_call = TRUE)))
+  ids = function() vapply(gptr_config()$providers$bedrock$models, `[[`, "", "id")
+  gptr_config(providers = list(bedrock = c(list(region = "eu-west-1"), models("user-id"))),
+              .scope = "user")
+  withr::with_options(list(gptr.providers = list(bedrock = models("opt-id"))), {
+    expect_identical(ids(), "opt-id")
+  })
+  gptr_config(providers = list(bedrock = models("session-id")), .scope = "session")
+  expect_identical(ids(), "session-id")
+  expect_identical(gptr_config()$providers$bedrock$region, "eu-west-1")
+  expect_identical(model_resolve("bedrock/session-id")$id, "session-id")
+  settings_write("session", list(budget = list(cost = NULL)))
+  budget = settings_get("budget")
+  expect_false("cost" %in% names(budget))
+  expect_identical(budget$tokens, 2000000)
 })
 
 # Task 4: replay mode, the replay guard and the egress acknowledgement.
@@ -1148,12 +1207,71 @@ test_that("gptr_config() takes bare identifiers and returns the previous values"
   expect_identical(gptr_config()$mode, "manual")
 })
 
+test_that("gptr_config() warns when a saved model setting names no known model (D-250)", {
+  skip_on_cran()
+  local_gw(workspace = FALSE)
+  cnd = expect_warning(gptr_config(model = opuss, .scope = "session"),
+                       class = "gptr_warning_unknown_model_setting")
+  expect_match(conditionMessage(cnd), "Unknown model reference 'opuss'", fixed = TRUE)
+  expect_match(conditionMessage(cnd), "gptr_config(model = NULL, .scope = \"session\")",
+               fixed = TRUE)
+  expect_identical(settings_read("session")$model, "opuss")
+  expect_warning(gptr_config(small_model = hakiu, .scope = "session"),
+                 class = "gptr_warning_unknown_model_setting")
+  expect_warning(gptr_config(system1 = "emulate:opuss", .scope = "session"),
+                 class = "gptr_warning_unknown_model_setting")
+  expect_identical(settings_read("session")$system1, "emulate:opuss")
+  # a name that resolves, an Ollama tag, a router: nothing to say
+  off = gptr_register(gptr_router("cheapest", route = function(request, ctx) "fake/fake-1"))
+  withr::defer(off())
+  expect_no_warning(gptr_config(model = opus, small_model = haiku, system1 = "emulate:sonnet",
+                                .scope = "session"))
+  expect_no_warning(gptr_config(model = "ollama/any-tag:1b", .scope = "session"))
+  expect_no_warning(gptr_config(model = cheapest, .scope = "session"))
+  expect_no_warning(gptr_config(model = "router:cheapest", .scope = "session"))
+  # the check is advisory: a model that fails to resolve for another reason never fails the write
+  twice = list(list(input = 1, output = 2), list(input = 3, output = 4))
+  gptr_config(providers = list(bedrock = list(models = list(list(id = "m1", tool_call = TRUE,
+                                                                 prices = twice)))),
+              .scope = "session")
+  expect_silent(gptr_config(model = "bedrock/m1", .scope = "session"))
+  expect_identical(settings_read("session")$model, "bedrock/m1")
+})
+
 test_that("gptr_config(.scope = NULL) writes the project file when a workspace exists (IC-71)", {
   skip_on_cran()
   local_gw()
   gptr_config(mode = manual)
   expect_identical(settings_read("project")$mode, "manual")
   expect_null(settings_read("session")$mode)
+})
+
+test_that("gptr_config() warns when an untrusted project will not apply what it saved (D-250)", {
+  skip_on_cran()
+  proj = local_gw()
+  m = list(id = "my-id", tool_call = TRUE)
+  cnd = expect_warning(gptr_config(providers = list(bedrock = list(models = list(m)))),
+                       class = "gptr_warning_untrusted_setting")
+  expect_match(conditionMessage(cnd), "`providers`", fixed = TRUE)
+  expect_match(conditionMessage(cnd), paste0("gptr_trust(\"", proj, "\", trust = TRUE)"),
+               fixed = TRUE)
+  expect_identical(settings_read("project")$providers$bedrock$models[[1]]$id, "my-id")
+  expect_null(settings_get("providers")$bedrock)
+  # tightening applies untrusted, so it is silent
+  expect_no_warning(gptr_config(mode = plan, permissions = list(deny = "r(fn:unlink)")))
+  expect_identical(settings_get("mode"), "plan")
+  # deny and ask rules apply untrusted too; only the allow rules are named
+  rules = list(allow = "r(level<=1)", deny = "r(fn:system)")
+  cnd = expect_warning(gptr_config(permissions = rules), class = "gptr_warning_untrusted_setting")
+  expect_identical(cnd$keys, "permissions.allow")
+  expect_match(conditionMessage(cnd), "`permissions.allow`", fixed = TRUE)
+  # a recorded "no" shows no trust notice at all, so the warning is the only signal
+  gptr_trust(proj, FALSE)
+  cnd = expect_warning(gptr_config(model = opus), class = "gptr_warning_untrusted_setting")
+  expect_match(conditionMessage(cnd), "`model`", fixed = TRUE)
+  gptr_trust(proj, TRUE)
+  expect_no_warning(gptr_config(providers = list(bedrock = list(models = list(m)))))
+  expect_identical(settings_get("providers")$bedrock$models[[1]]$id, "my-id")
 })
 
 test_that("gptr_config() validates keys, scopes and values", {
@@ -1245,11 +1363,22 @@ test_that("gptr_init(path) writes the templates once and never overwrites them",
                   c(".gitignore", "agents", "prompts", "settings.json", "skills", "vignette.Rmd"))
   settings = json_decode(paste(readLines(file.path(ws, "settings.json"), encoding = "UTF-8"),
                                collapse = "\n"))
-  expect_identical(settings, list(version = 1L, mode = "manual", record = "ask"))
+  expect_identical(settings, list(version = 1L))
   expect_true("sessions/" %in% readLines(file.path(ws, ".gitignore"), encoding = "UTF-8"))
   writeLines("{}", file.path(ws, "settings.json"))
   gptr_init(d)
   expect_identical(readLines(file.path(ws, "settings.json"), encoding = "UTF-8"), "{}")
+})
+
+test_that("a gptr_init() project leaves mode and record to the user's settings (D-250)", {
+  skip_on_cran()
+  proj = local_gw(workspace = FALSE)
+  gptr_config(mode = auto, record = "auto", .scope = "user")
+  gptr_init(proj)
+  cfg = gptr_config()
+  expect_identical(cfg$mode, "auto")
+  expect_identical(cfg$record, "auto")
+  expect_identical(unname(attr(cfg, "sources")[c("mode", "record")]), c("user", "user"))
 })
 
 test_that("gptr_init() in a package source offers the .Rbuildignore line, never writes it", {

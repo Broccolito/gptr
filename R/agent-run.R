@@ -452,15 +452,31 @@ run_target = function(run) {
   run_apply_pending_model(run)
   if (startsWith(d$model, "router:")) return(run_route(run, "turn"))
   if (is.null(run$model) || !identical(run$model_key, d$model)) {
-    rec = run_model_resolve(d$model, d$id)
+    rec = run_model_ready(run, d$model)
     stream_chat_model(rec)
     run$model = rec
     run$model_key = d$model
   }
   if (!is.null(d$thinking)) {
-    run$model$thinking = model_clamp_thinking(run$model$thinking_levels, d$thinking)
+    run$model$thinking = model_clamp_thinking(run$model$thinking_levels, d$thinking, run$model$ref)
   }
   run$model
+}
+
+#' The model record of `ref` for the run's next request: a selected Ollama model is prepared
+#' (discovered when its evidence is missing or stale, then resolved again; 07 section 2), as System
+#' 1 does; a provider registered for the session only is left to provider_stream()'s preflight
+#' @noRd
+run_model_ready = function(run, ref) {
+  sid = session_data(run$shell)$id
+  rec = run_model_resolve(ref, sid)
+  if (!catalog_ollama_route(rec, provider_get(rec$provider)) ||
+      !is.null(registry_model_spec(ref, sid))) {
+    return(rec)
+  }
+  # nothing replay-guards a router's fallback default before this; discovery never replays
+  replay_guard(rec, mode = replay_mode(run[["opts"]][["call"]][["args"]][["replay"]]))
+  model_prepare(ref, safety = stream_safety(NULL, run))
 }
 
 #' Resolve a model reference for a session: P05's catalog, else a provider spec registered for
@@ -482,7 +498,7 @@ run_model_resolve = function(ref, sid) {
       if (level %in% catalog_thinking_levels) {
         rec = session_model_resolve(pr, substr(mid, 1L, pos - 1L))
         if (!is.null(rec)) {
-          rec$thinking = model_clamp_thinking(rec$thinking_levels, level)
+          rec$thinking = model_clamp_thinking(rec$thinking_levels, level, rec$ref)
           return(rec)
         }
       }
@@ -514,7 +530,7 @@ run_route = function(run, reason = "turn") {
   ans = if (inherits(res, "error")) {
     list(why = paste0("failed: ", conditionMessage(res)))
   } else {
-    route_answer(res, d$id)
+    route_answer(res, run)
   }
   path = entries_path(d)
   state = NULL
@@ -522,7 +538,7 @@ run_route = function(run, reason = "turn") {
   if (is.null(rec)) {
     registry_diagnostic("session", "router", "router_fallback",
                         paste0("router ", router, " ", ans$why, "; using the default model"))
-    rec = route_default(router, d)
+    rec = route_default(router, run)
     state = path_custom(path, "gptr.router")$data$state
   } else if (is.list(res)) {
     state = res[["state"]]
@@ -546,12 +562,12 @@ run_route = function(run, reason = "turn") {
 #' The model record of a router's answer (`list(model, thinking, state)` or a model reference),
 #' as `list(rec)`, or `list(why)` when the answer is unusable
 #' @noRd
-route_answer = function(res, sid) {
+route_answer = function(res, run) {
   ref = if (is.list(res)) res[["model"]] else res
   if (!rlang::is_string(ref) || !nzchar(ref)) {
     return(list(why = "gave no model"))
   }
-  rec = tryCatch(run_model_resolve(ref, sid), error = function(e) e)
+  rec = tryCatch(run_model_ready(run, ref), error = function(e) e)
   if (inherits(rec, "error")) {
     return(list(why = paste0("chose a model that does not resolve (", ref, "): ",
                              conditionMessage(rec))))
@@ -562,20 +578,20 @@ route_answer = function(res, sid) {
   }
   th = if (is.list(res)) res[["thinking"]] else NULL
   if (rlang::is_string(th)) {
-    rec$thinking = model_clamp_thinking(rec$thinking_levels, th)
+    rec$thinking = model_clamp_thinking(rec$thinking_levels, th, rec$ref)
   }
   list(rec = rec)
 }
 
 #' The default chat model a router falls back to (a decision-only default is refused)
 #' @noRd
-route_default = function(router, d) {
+route_default = function(router, run) {
   ref = model_default("chat")
   if (is.null(ref)) {
     gptr_abort(paste0("router ", router, " gave no model and no default model is configured"),
-               "unknown_model", ref = d$model, suggestions = character())
+               "unknown_model", ref = session_data(run$shell)$model, suggestions = character())
   }
-  rec = run_model_resolve(ref, d$id)
+  rec = run_model_ready(run, ref)
   stream_chat_model(rec)
   rec
 }
@@ -616,7 +632,7 @@ request_fallback = function(run, target) {
   msgs = images_elide(s, msgs, target)
   tools = lapply(fr$tool_names %||% character(), function(n) tool_lookup(n, d$id))
   tools = Filter(Negate(is.null), tools)
-  max_out = suppressWarnings(as.numeric(target$max_output %||% NA))
+  max_out = model_output_cap(target[["context"]], target[["max_output"]])
   context = list(system = list(t0 = fr$t0 %||% "", t1 = fr$t1 %||% ""),
                  tools_json = json_verbatim(fr$tools_json %||% "[]"), tools = tools,
                  messages = msgs,

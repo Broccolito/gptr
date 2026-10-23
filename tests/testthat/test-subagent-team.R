@@ -517,6 +517,25 @@ test_that("a fan-out with context = \"none\" is refused before any child starts"
   expect_length(fake_requests(fake), 0L)
 })
 
+test_that("teams and fan-outs refuse System 1 arguments before any child starts (D-250)", {
+  fake = local_team_fake()
+  b = list(A = 1:3, B = letters)
+  cnd = expect_error(peter("Which tissue?", b, parallel = 2, choices = c("liver", "lung")),
+                     "`choices` shapes a System 1 decision", fixed = TRUE,
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "choices")
+  cnd = expect_error(peter("Which?", agents = list(a = agent(model = "fake/fake-1")),
+                           levels = c("lo", "hi")),
+                     "`levels` shapes a System 1 decision; this call is conversational",
+                     fixed = TRUE, class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "levels")
+  img = list(list(data = as.raw(c(0x89, 0x50, 0x4e, 0x47)), mime = "image/png"))
+  cnd = expect_error(peter("Is it ok?", b, parallel = 2, .opts = list(system1_images = img)),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, ".opts$system1_images")
+  expect_length(fake_requests(fake), 0L)
+})
+
 test_that("teams and fan-outs started in an r evaluation are children of the running session", {
   skip_on_cran()
   local_team_fake(function(request) {

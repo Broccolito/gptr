@@ -3,6 +3,15 @@
 # the model, writes the user's messages, objects with their code, decisions, files, skills and
 # the plan. keep_recent = 0: the compaction entry replaces everything before it.
 
+#' A model's output reserve: `max_output`, at most half of a known window (D-250)
+#' models.dev often gives the whole window as max_output; `NA` when max_output is unknown.
+#' @noRd
+model_output_cap = function(window, max_output) {
+  mo = suppressWarnings(as.numeric(max_output %||% NA_real_))[1]
+  window = suppressWarnings(as.numeric(window %||% NA_real_))[1]
+  if (is.na(window)) mo else min(mo, window / 2)
+}
+
 #' Compaction threshold (contract section 7.7; architecture section 6.11)
 #' The cap is setting `compact_at` (process-wide, contract 5: no session); null, `NA` or `Inf`
 #' disables it (contract 11.2). An unknown window gives the cap alone.
@@ -11,7 +20,8 @@ compact_threshold = function(window, max_output, r_cap = 4000) {
   cap = setting_get("compact_at")
   cap = if (!length(cap) || is.na(cap[[1]])) Inf else as.numeric(cap[[1]])
   if (!length(window) || is.na(window)) return(cap)
-  mo = if (!length(max_output) || is.na(max_output)) 0 else max_output
+  mo = model_output_cap(window, max_output)
+  if (is.na(mo)) mo = 0
   min(window - min(max(30000, 0.10 * window), 0.25 * window),
       window - max(16384, mo + 2 * r_cap), cap)
 }

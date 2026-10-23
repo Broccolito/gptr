@@ -712,7 +712,7 @@ test_that("a model with an 8K window is refused for the standard preset (IC-71)"
     list(ref = "tiny/tiny-8k", provider = "tiny", id = "tiny-8k", api = "fake", context = 8192,
          max_output = 1024)
   })
-  expect_error(prompt_freeze(s, list(interactive = FALSE)), "preset = \"minimal\"",
+  expect_error(prompt_freeze(s, list(interactive = FALSE)), "Use tools = \"minimal\"",
                class = "gptr_error_invalid_argument")
   expect_null(session_data(s)$frozen)
   # refused before anything is stored: no gptr.frozen entry either
@@ -730,6 +730,44 @@ test_that("the floor check cuts re-injection budgets before it refuses (IC-71)",
   big = fr
   big$sections = data.frame(tokens = 16000)
   expect_error(prompt_floor_check(big, 500, 0), class = "gptr_error_invalid_argument")
+})
+
+test_that("the floor check blames compact_at when it sets the threshold (D-250)", {
+  frozen = list(model = "m", preset = "standard", tools_json = "",
+                sections = data.frame(tokens = 4608))
+  window = 1050000
+  local_mocked_bindings(prompt_model = function(ref) list(context = window, max_output = 128000))
+  local_gptr_options(compact_at = 5000)
+  cap = tryCatch(prompt_floor_check(frozen, 0, 0), error = identity)
+  expect_identical(cap$arg, "compact_at")
+  expect_match(conditionMessage(cap), "compact_at (5,000 tokens)", fixed = TRUE)
+  expect_no_match(conditionMessage(cap), "context window of", fixed = TRUE)
+  local_gptr_options(compact_at = Inf)
+  window = 32768
+  frozen$sections = data.frame(tokens = 16000)
+  small = tryCatch(prompt_floor_check(frozen, 0, 0), error = identity)
+  expect_identical(small$arg, "model")
+  # the hints are spelled as peter() takes them; context = "names" does not lower the floor
+  for (msg in c(conditionMessage(cap), conditionMessage(small))) {
+    expect_match(msg, "tools = \"minimal\"", fixed = TRUE)
+    expect_no_match(msg, "preset = \"minimal\"", fixed = TRUE)
+    expect_no_match(msg, "context = \"names\"", fixed = TRUE)
+  }
+})
+
+test_that("a model whose max_output is its whole window runs and asks for half of it (D-250)", {
+  skip_on_cran()
+  local_gw()
+  fake = gptr_fake_provider(list("hi"))
+  fake$models[[1]]$context = 131072
+  fake$models[[1]]$max_output = 131072
+  off = gptr_register(fake)
+  withr::defer(off())
+  s = peter("Say hi.", model = fake, envir = new.env())
+  expect_identical(s$text, "hi")
+  expect_identical(fake_requests(fake)[[1]]$params$max_tokens, 65536L)
+  req = request_fallback(list(shell = s, opts = list()), model_resolve("fake/fake-1"))
+  expect_identical(req$context$params$max_tokens, 65536L)
 })
 
 test_that("a 200K window passes the floor check with the full re-injection budgets", {

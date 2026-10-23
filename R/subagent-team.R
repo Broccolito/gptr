@@ -233,7 +233,8 @@ gptr_parallel = function(..., .list = NULL, max_active = NULL, on_error = c("ret
 
 # ---- teams and fan-outs: common parts (contract 6.1.1, IC-39, IC-47, IC-55) ---------------------
 
-#' Team and fan-out calls run to completion in the foreground and start new agents
+#' Team and fan-out calls run to completion in the foreground, start new agents and take no
+#' System 1 arguments, which their conversations would ignore (P08's check, D-250)
 #' @noRd
 subagent_route_checks = function(call) {
   if (isTRUE(call$args$background) || !isTRUE(call$args$run)) {
@@ -248,7 +249,7 @@ subagent_route_checks = function(call) {
                  "Pipe the team into peter() without agents = to continue it."),
                "invalid_argument", arg = "agents", expected = "no piped session")
   }
-  invisible(TRUE)
+  route_refuse_s1_args(call)
 }
 
 #' The replayed session of a fresh team or fan-out block from P15's doc.replay service (NULL

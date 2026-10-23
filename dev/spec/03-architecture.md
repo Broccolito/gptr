@@ -538,8 +538,10 @@ labelled by their expression, named ones by name). `model`, `mode`, `skills`, `p
 (`"minimal"`, `"standard"`, `"readonly"`, `"extended"`) or `gptr_tool()` specs (rank 0). `agents`: named list
 of agent definitions (`agent()` is bound to `gptr_agent()` inside it). `parallel = n`: fan a list/vector/data
 frame context out over `n` concurrent sub-agents. `choices`, `levels`, `threshold`, `min_confidence`,
-`uncertain`: System 1 answer shape and abstention (§4.1.5). `envir`: where code runs and objects persist
-(D-04). `background = TRUE`: experimental, returns the running session at once (needs `later`). `budget =
+`uncertain`: System 1 answer shape and abstention (§4.1.5); a conversational model refuses them (a `threshold`
+other than 0.5 included) rather than ignore them; a decision model refuses `agents` and `parallel` (D-250).
+`envir`: where code runs and objects persist (D-04).
+`background = TRUE`: experimental, returns the running session at once (needs `later`). `budget =
 list(tokens =, cost =, turns =)`. `replay`: document replay mode (`"auto"`, `"replay"`, `"live"`, `"record"`).
 `.opts`: rare switches: `thinking`, `max_turns`, `context` (`"summary"`, `"names"`, `"none"`), `record`,
 `interpolate`, `timeout`, `output = "factor"`, `system` (string replaces preamble/tools/rules; named list
@@ -621,7 +623,7 @@ Capture is base R (§6.4 R3; G3 t2b verified including forwarded dots). Resoluti
 |---|---|
 | `NULL` | the default from settings |
 | string literal (`"opus"`) | itself |
-| symbol that is a **known identifier** (catalog alias, registered provider/model/router, mode, preset, skill, plugin, extension, agent; skill, plugin, extension and agent names compared after mapping `_` and `.` to `-` and lower-casing, so `skills = single_cell` finds `single-cell` [IC-42]) | the name: **the known identifier wins over a same-named variable**, as `library(pkg)` does, so packages exporting `claude`, `codex` or `plan` cannot hijack it [12 §2.D1, 10 Q4]; a once-per-session notice when a character variable of that name holds a different value ("used the alias; write !!sonnet") |
+| symbol that is a **known identifier** (catalog alias, registered provider/model/router, mode, preset, skill, plugin, extension, agent; skill, plugin, extension and agent names compared after mapping `_` and `.` to `-` and lower-casing, so `skills = single_cell` finds `single-cell` [IC-42]) | the name: **the known identifier wins over a same-named variable**, as `library(pkg)` does, so packages exporting `claude`, `codex` or `plan` cannot hijack it [12 §2.D1, 10 Q4]; a once-per-session notice when a character variable of that name holds a different value, or a spec of the kind the argument accepts has a different name (D-250) ("used the alias; write !!sonnet") |
 | `!!x` | the value of `x` (explicit escape for a shadowed alias) |
 | `I(x)` | the value of `x` |
 | other symbol, bound where the call's promise is evaluated | the formal's promise is forced in a leaf: a character value is used; a spec object (`gptr_fake_provider()`, `gptr_tool()`, `gptr_agent()`) is registered at rank 0; any other class is a classed error naming the class ("`mice` is a data.frame, not a model name") |
@@ -651,7 +653,8 @@ message naming `I(x)` when it splits a data frame into several states [IC-71]). 
 `as_state(s)`: its last answer (at most 2,000 characters) plus value facts; no turn is added and a
 `gptr.decision` custom entry is appended [G3 (12)]. Question type: `choices` -> choice, `levels` -> score,
 else a boolean (wire name `noul`, never the public `bool` [04a]). Results: `gptr_decision` (logical),
-`gptr_choice` (classed character; a factor only when `choices` is a factor or `.opts$output = "factor"`),
+`gptr_choice` (classed character; a factor only when `choices` is a factor or `.opts$output = "factor"`, a
+plain factor without probabilities whose `meta` attribute holds only `errors`, when elements failed [D-250]),
 `gptr_score` (double), probabilities as attributes (§5.6). Choice labels that `if()` would read as logical
 (`"TRUE"`, `"T"`, `"false"`) are rejected at request time [04 verification]. `threshold` (0.5) turns P(yes)
 into TRUE/FALSE; abstention is **off by default**. `min_confidence` defines an uncertain band; `uncertain`
@@ -1125,10 +1128,11 @@ in `res$envir`; an explicit `envir =` shares, and a function-frame caller is unc
 
 Layers, lowest to highest: package defaults < user `R_user_dir("gptr", "config")/settings.json` < project
 `.gptr/settings.json` (an untrusted project contributes only tightening of `mode`, `permissions`, `context` and
-`record`; a trusted one every key, with tighten-type keys still only tightening; `egress` is read from the user
-file only) < the user-level project file `R_user_dir("gptr", "config")/projects/<hash>.json` (remembered
-permission answers, transcript target, record consent; never in the project tree [IC-52]) < `options(gptr.*)` <
-`gptr_config(.scope = "session")` < call arguments. Safety options are snapshotted per run [IC-53]. Keys: `model`, `small_model`, `system1`, `mode`,
+`record`; a trusted one every key, with tighten-type keys other than `mode` still only tightening and never
+`mode = yolo` [D-250]; `egress` is read from the user file only) < the user-level project file
+`R_user_dir("gptr", "config")/projects/<hash>.json` (remembered permission answers, transcript target, record
+consent; never in the project tree [IC-52]) < `options(gptr.*)` < `gptr_config(.scope = "session")` < call
+arguments. Safety options are snapshotted per run [IC-53]. Keys: `model`, `small_model`, `system1`, `mode`,
 `preset`, `tools{enable, disable}`, `permissions{allow, ask, deny}`, `context`, `record`, `replay`,
 `transcript`, `plugins`, `filters`, `skills{paths}`, `mcp{exposure}`, `subagents{max_depth, max_active,
 max_workers, max_cli, max_tasks}`, `output_tokens`, `plot{width, height, res}`, `budget{tokens, cost}` (default 2e6
@@ -1443,8 +1447,8 @@ computes or a loop that assigns the name makes it computed [D-211]. The classifi
 not a security boundary; in-process R cannot be sandboxed [18 §2.5].
 
 `yolo` [IC-78] is the loosest mode (plan < manual < edits < auto < yolo): only the person selects it (`peter(mode =)`,
-`/mode`, user or session settings, `options(gptr.mode)` outside a run); project settings, nested calls and
-children only tighten. A delete keeps the category `file_delete` and a control target shows in its
+`/mode`, user or session settings, `options(gptr.mode)` outside a run); no project file sets it [D-250], nested
+calls and children only tighten. A delete keeps the category `file_delete` and a control target shows in its
 `path_class`, so the control check still sees it; the edit tool's `*** Delete File:` takes the level an
 `unlink()` of the same path has when that is 4, with the category `file_delete`, so in yolo a control path
 written by the same patch does not hide it. Entering yolo (a session, `/mode`, a console start) shows a
@@ -1468,11 +1472,11 @@ start, so model code cannot change them mid-run. A `modify` is re-classified and
 `rules` (grammar `tool(spec)`, e.g. `write(results/**)`, `r(fn:write.csv)`, `r(level<=1)`, `r(sh:git
 status*)`, `r(sql:select)`), `critical_guard`, `secret_guard`, `protect_size`. Allow rules never loosen plan
 and never pre-approve level 4; only `r(secret:NAME)` rules pre-approve the secret guard; project settings may
-only tighten; no filter from any source disables `builtin:permissions`, `builtin:plan` or the two guards, and
-inside a run filters that remove policies or hooks are refused [G1 §3.6; IC-53]. Every call made while a run is
-active inherits the running mode (only tightened) whatever its route, and the parent re-classifies every
-permission request forwarded by a worker (the worker backend is not an isolation boundary). `modify` changes the
-arguments the tool sees and is recorded.
+only tighten, a trusted project's `mode` excepted [D-250]; no filter from any source disables
+`builtin:permissions`, `builtin:plan` or the two guards, and inside a run filters that remove policies or hooks
+are refused [G1 §3.6; IC-53]. Every call made while a run is active inherits the running mode (only tightened)
+whatever its route, and the parent re-classifies every permission request forwarded by a worker (the worker
+backend is not an isolation boundary). `modify` changes the arguments the tool sees and is recorded.
 
 #### 6.8.3 The prompt
 
@@ -1722,8 +1726,9 @@ byte prefix emits `cache_break` naming the first differing element and the culpr
 on `session_tree` (rewind) [G4 §4.3.5, G7].
 
 **Compaction** (`compactor` spec, replaceable) [G4 §4.4, G2]:
-`threshold = min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, max_output +
-2 * r_cap), gptr.compact_at = 200000)`, plus the cold rule (idle beyond the tail TTL and context >= 100k:
+`threshold = min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, mo + 2 * r_cap),
+gptr.compact_at = 200000)` with `mo = min(max_output, window / 2)`, the output reserve also sent as `max_tokens`
+[D-250], plus the cold rule (idle beyond the tail TTL and context >= 100k:
 compact first). Checks run between tool rounds, before a new prompt and after an overflow error (one
 compact-and-retry, INFRA-26). The checkpoint request is sent in-conversation (a cache read; `max_tokens =
 2048`; a tool-calling reply is rejected) with G4's verbatim `<compaction_request>` prompt; the compaction
@@ -2421,7 +2426,8 @@ after a known `provider/`) [09 §4]. A registered provider named
 alone means its first declared model in every resolver (`claude-cli`, `codex`, `codex-cli`), alias names normalise
 like ids (`claude-code` is `claude_code`), `/model` checks a reference before the first prompt, and `/model` and `/status` show a built-in CLI's `default` with
 the full id it runs (`claude-cli/default (claude-sonnet-5-5)`) [IC-19, IC-79]. Thinking levels are clamped
-to the model's map. The default chat model is taken from the first available route: an Anthropic key ->
+to the model's map, and a changed level is announced once per model and level (D-250). The default chat model
+is taken from the first available route: an Anthropic key ->
 `anthropic/claude-sonnet-5-5` (the north-star banner; $2/$10 vs $4/$20 for Opus 5.5); OpenAI ->
 `openai/gpt-6-sol`; Gemini -> `google/gemini-3.8-flash`; otherwise a detected CLI. `small_model` serves
 compaction, emulation and cheap sub-agents. CLI invocations always receive full ids (CLI aliases lag the

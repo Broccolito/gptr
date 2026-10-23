@@ -37,9 +37,10 @@ works on the objects already in memory.
   are reached through `peter$sh()`, `peter$py()`, `peter$sql()` and `peter$knit()`.
 * Providers are implemented in R: Anthropic, OpenAI, Google Gemini, OpenAI-compatible
   endpoints and local Ollama servers, with streaming, tool calls, images, reasoning controls,
-  prompt caching and cost accounting where the model supports them. The Claude plan (through
-  the `claude` command-line tool, experimental) and the ChatGPT plan (through `codex`) are
-  supported without keys. See `gptr_providers()` and `gptr_models()`.
+  prompt caching (not yet through `api = "bedrock-converse"`) and cost accounting where the
+  model supports them. The Claude plan (through the `claude` command-line tool, experimental)
+  and the ChatGPT plan (through `codex`) are supported without keys. See `gptr_providers()`
+  and `gptr_models()`.
 * System 1 decisions: with a typed decision model, TypeSafe AI's Jev or Clef and Clef Flash on a
   local Ollama server (0.35.1 or later), `peter()` returns logical, choice or score vectors with
   their probabilities (`gptr_prob()`) that work inside `if`, `for` and `while`, one element per
@@ -132,6 +133,81 @@ works on the objects already in memory.
   Codex commands show without their shell wrapper and Codex messages without a held last word; a
   cut code block says so inside its fence; wide pipe tables stream verbatim; `/model` and
   `/status` name the model behind a CLI's `default`.
+* `gptr_models(refresh = TRUE)` reads each models.dev price tier once, so models with a
+  200k-token price tier resolve and a 272k tier no longer gains a premium from 200k tokens. A
+  catalog refreshed by an earlier build is set aside until the next refresh downloads it again.
+* A model alias with no model in the catalog is an unknown model, not a guess: offline,
+  `model = "gemini"` (Google's newest Gemini Pro) no longer runs Gemini Flash and asks for
+  `gptr_models(refresh = TRUE)` or a `provider/id`.
+* Models whose catalog gives the whole context window as their output limit (common after
+  `gptr_models(refresh = TRUE)`, for example MiniMax-M3 and gpt-oss-120b) are no longer refused
+  as too small: gptr reserves and requests at most half the window for output. A `compact_at`
+  too small for the preset is named as the cause instead of the model, and the hint reads
+  `tools = "minimal"`.
+* An Ollama model refused for missing or outdated discovery names
+  `gptr_models(provider = "ollama", refresh = TRUE)` as the remedy, not the internal
+  `model_prepare()`.
+* `peter(model = "ollama/<model>")` asks the Ollama server about that model before its first
+  request in each R session, as System 1 calls already did, instead of refusing until
+  `gptr_models(provider = "ollama", refresh = TRUE)` had run. A saved default Ollama model now
+  works in a new session.
+* An unknown `provider/id` on a route the catalog lists no models for yet (before a refresh,
+  for example OpenRouter, Groq, xAI or Azure) says that `gptr_models(refresh = TRUE)` downloads
+  them from models.dev.
+* `gptr_provider()` and `gptr_spec("model")` accept a model's `prices` as a list of price records
+  as well as a data frame, as `gptr_config(providers =)` does, and check the table when the spec
+  is built, naming the field, instead of failing at the first call.
+* A provider without a valid base URL, such as `azure/` before `AZURE_OPENAI_ENDPOINT` is set, names
+  the variable that sets it (or `providers$<id>$base_url` in `gptr_config()`).
+* An unnamed list in a higher settings layer, such as a provider's `models` set with
+  `gptr_config(.scope = "session")` or `options(gptr.providers =)`, replaces the one in a lower
+  layer (for example the user file) instead of being ignored; named lists still merge.
+* `gptr_config()` warns when it saves a setting to a project that is not trusted and so does not
+  apply it (for example `providers` or `model`), naming `gptr_trust()` and `.scope = "session"`;
+  settings that only tighten, such as `mode = plan` or `deny` rules, stay silent (a `permissions`
+  write names only its `allow` rules).
+* `gptr_config(model = opuss)` (or `small_model`, `system1`) warns when the name is not a model
+  gptr knows in this session, as the console's `/model` already checked, with the reason and how
+  to undo it; the value is still saved, since a provider registered later or a catalog refresh
+  can make it valid.
+* `gptr_init()` no longer writes `"mode": "manual"` and `"record": "ask"` into
+  `.gptr/settings.json`, which overrode a user-level `mode = auto` or `record = "auto"` in every
+  initialised project. In a project made by an earlier build, delete those two keys from the file
+  to let your user settings apply.
+* A trusted project's `mode` applies, so `gptr_config(mode = auto)` in a trusted project no longer
+  saves a value that is silently ignored; an untrusted project still only tightens the mode, and
+  `context` and `record` still only tighten in any project. A project cannot select `yolo`:
+  `gptr_config(mode = yolo)` at project scope is refused, naming `.scope = "user"` and `"session"`.
+* Providers declared with `api = "bedrock-converse"` send thinking levels
+  (`.opts = list(thinking =)` or a `:high` suffix) to a Claude model whose record declares
+  `capabilities = list(adaptive_thinking = TRUE, effort = TRUE)` (Claude 4.6 and later; see
+  `?gptr_provider`); formerly every level was dropped without a word. Any other model, an
+  undeclared Claude record included, still runs without thinking and now says so once.
+* A string that is not one of an argument's choices, such as `.opts = list(thinking = "ultra")`,
+  is reported as such ("the string given is not one of them", with "Did you mean" when it differs
+  from a choice only in case) instead of "not a character of length 1".
+* A thinking level the model does not offer still becomes the nearest one it has, and gptr now
+  says so once per model and level: for example `"opus:off"` runs at `low`, and `thinking = "max"`
+  on a model whose levels end at `high` runs at `high`. `?gptr_provider` documents
+  `thinking_levels`; a reasoning model declared without it gets `off` to `high`.
+* A known name, such as a model alias or a built-in tool, still wins over a variable of the same
+  name, and gptr now says so when the variable holds a spec the argument takes (a provider or
+  router for `model`, a tool for `tools`), as it did for a character value: after
+  `opus = gptr_fake_provider(...)`, `model = opus` uses the alias and suggests `!!opus`.
+* `choices`, `levels`, `threshold`, `min_confidence` and `uncertain` given to a conversational
+  model, also with `agents =` or `parallel =`, are refused, naming the argument; they were ignored,
+  and the call returned a session on which `sum()`, `[` and `gptr_prob()` then failed. Use a
+  decision model such as `jev`; after `gptr_config(system1 = "emulate:<ref>")`, `model = jev` runs
+  it through a chat model. A decision model, which ignored `agents =` and `parallel =`, refuses
+  them: it answers every input in one call.
+* The `uncertain = "stop"` error names the uncertain inputs (the first ten) and carries their
+  positions (`$index`), `$names` and `$confidence`, the confidence the band tests, and every answer
+  (`$value`), which it used to discard; `$prob` is unchanged.
+* `as.data.frame()` of a System 1 score names its probability columns by level (`p_<level>`), as
+  `gptr_prob(x, "probabilities")` and choices do; they were `p_0`, `p_1`, ...
+* `choices` given as a factor, or `.opts = list(output = "factor")`, return a plain factor without
+  probabilities, as `?peter`, `?gptr_prob` and the System 1 vignette now say. When elements fail,
+  the factor keeps `attr(x, "meta")$errors`, which the failure warning points to.
 
 # gptr 0.7.0
 

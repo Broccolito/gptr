@@ -117,7 +117,7 @@ service_plans = c(
   "checkpoint.own_write" = "P16",
   "agent_def.get" = "P17", "skill.catalog" = "P17", "skill.body" = "P17",
   "plugin.enable" = "P17", "mcp.catalog" = "P18", "mcp.dispatch_local" = "P18",
-  "bg.register" = "P21", "check.adapter" = "P12",
+  "bg.register" = "P21", "check.adapter" = "P12", "prices.table" = "P05",
   "trust.get" = "P08", "identifier.resolve" = "P08", "secret.lookup" = "P03",
   "ctx.kernel" = "P06", "ctx.input" = "P07", "ns.names" = "P10", "eval.r" = "P09",
   "describe" = "P09", "router.call" = "P08", "session.add_tools" = "P07",

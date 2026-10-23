@@ -734,6 +734,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: none (contract 7.7 `compact_threshold(window, max_output, r_cap = 4000)` and the formula unchanged).
 - Tests: test-prompt-compact.R: 3 blocks (8 expectations), incl. "compact_threshold keeps the contract 7.7 signature" and "compact_at
   comes from the settings service; a null setting disables the cap"; final PASS 18. Evidence: progress/P07.md Task 6.
+- Amended by D-250 (prompt-1): the formula's `max_output` is capped at half the window.
 
 ## D-068 - P15 recorded block content: character cuts, exact secret literals, emptied chunks, unknown usage (2026-10-04)
 - Rule: block content (`R/doc-blocks.R`); contract 7.15 `doc_block_lines(session, turn, site, call_ordinal)` and its attributes are unchanged; `doc_drop_ranges()` may return `NULL`:
@@ -757,6 +758,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-prompt-sections.R (12 expectations, final PASS 222): "the floor counts the project instructions the frozen audience will be sent (IC-52)", "cut
   re-injection budgets are recorded in gptr.frozen and survive a restore (IC-71)"; FIX-3: test-session-store.R 3 blocks, test-session-object.R
   "a replay cut takes the frozen audience and budget cut of its own path (FIX-3)". Evidence: progress/P07.md Task 7; progress/fixes.md Task FIX-3.
+- Amended by D-250 (prompt-1): the refusal names `compact_at` when it sets the threshold and hints `tools = "minimal"`.
 
 ## D-070 - P15 document formats: knitr chunks and labels, unterminated chunks, per-statement agent chunks, inert (2026-10-04)
 - Rule: `R/doc-formats.R`; the contract 10.2 row 18 `doc_format` functions and listed helpers keep names and arguments; `doc_rmd_chunks()` gains column `closed`:
@@ -2411,6 +2413,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: provider-bedrock (new), live-bedrock (opt-in), arch-layers (122 files), auth-secrets (the key id is a
   secret name); `setup.R` clears the key-pair variables; the scripted wire of `replay_helpers.R` takes raw
   bodies; `fixtures/sse/bedrock-converse/` (tool_use, throttled). Evidence: progress/P26.md Task 11.
+- Amended by D-250 (thinking-1): Claude models declared adaptive get thinking in `additionalModelRequestFields`.
 
 ## D-200 - P26 CLI usage is the increase of the CLIs' running totals (2026-10-18)
 - Rule: claude-cli's `total_cost_usd` is the CLI session's running total, also after `--resume` (seurat-claude: each
@@ -3289,3 +3292,153 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the seek along piped blocks; test-gptr-sdk: the unrecorded-turn notice. Evidence: progress/fixes.md Task FIX-16
   doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-2c to -2h, replay-3, replay-4b,
   replay-5, export-2, export-2b, store-1, doc-1b, steer-doc-1 to -5, steer-doc-4b, steer-doc-5b.
+
+## D-250 - FIX-17 Cheat-sheet review: models (2026-10-22)
+- Rule (catalog-1): `catalog_prices_from()` turns each models.dev context tier into one `>Nk` row and reads the
+  legacy `cost.context_over_200k` only when no context tier is given (models.dev now ships it as a copy of
+  `tiers[[1]]`, 620 of 620 models); a repeated tier label is dropped. Formerly a 200k tier gave two `>200k` rows,
+  which `prices_df()` rejects (31 refreshed models failed to resolve), and a 272k or 256k tier gained a `>200k`
+  premium row (76 models). `prices_df()` stays strict for declared prices. `catalog_snapshot()` stamps
+  `converter = 2L` (`catalog_converter`); a refreshed cache without it is ignored in favour of the snapshot and
+  is refreshed without `If-None-Match`, because models.dev answers 304 and kept the old rows. The shipped
+  snapshot is not checked; `schema_version` stays 1.
+- Rule (catalog-2): `model_match()` ends at an alias name that has no model (target NA, or a provider that is not
+  registered) after IC-19's provider step (a registered provider of that name runs its first declared model)
+  and before the fuzzy step; `model_resolve()` raises `unknown_model` naming the alias, also with a thinking
+  suffix. Formerly offline `"gemini"` (no Gemini Pro in the seed) ran google/gemini-3.8-flash by substring.
+  The shipped orchestration skill uses `"flash"`.
+- Rule (prompt-1): `model_output_cap(window, max_output)` = `min(max_output, window / 2)` when both are known
+  (models.dev often gives the whole window as max_output); `compact_threshold()` reserves it, and
+  `prompt_request_context()` and `request_fallback()` send it as `max_tokens`. Formerly max_output = context gave
+  a threshold of -8,000 (40 refreshed models refused, e.g. MiniMax-M3, gpt-oss-120b) and `max_tokens` equal to
+  the window. `prompt_floor_check()` names `compact_at` (`arg = "compact_at"`) when the window is unknown or the
+  threshold equals the cap alone, and both refusals hint `tools = "minimal"`, not `preset =` or `context =
+  "names"`; formerly a 1,050,000-token model was "too small" for `compact_at = 5000`.
+- Rule (ollama-2): `run_target()` and `run_route()` take a live request's model from `run_model_ready()`, which
+  prepares a selected Ollama route (`model_prepare()` with the run's safety record) unless a provider registered
+  for the session only names it, after `replay_guard()` (a router's fallback default had no earlier guard).
+  Formerly System 2 never prepared, so evidence, held in memory only, needed `gptr_models(refresh = TRUE)` in
+  every R session, and a saved default Ollama model failed in each new one.
+- Rule (catalog-3): `model_resolve()`'s unknown-model error for `<pid>/<id>`, where `<pid>` is a models.dev route
+  (`catalog_modelsdev_ids()`) with no catalog row, adds "The catalog lists no <pid> models yet;
+  gptr_models(refresh = TRUE) downloads them from models.dev." Formerly the seed-only snapshot (no openrouter,
+  groq, deepseek, mistral, together, xai, cerebras, fireworks, azure or bedrock rows) gave a bare "Unknown model
+  reference". A route with rows, or a provider the user registered, keeps the plain message.
+- Rule (provider-2): a model record's `prices` (in `gptr_provider(models =)` and `gptr_spec("model")`) is a
+  data frame or a list of price records; `spec_model_metadata()` normalises it with `prices_df()` through the new
+  `prices.table` service (P05; L0 may not call L1, IC-09, IC-33) and re-raises a bad table as `invalid_spec`
+  naming `<prefix>prices`. Formerly only a data frame passed (the list form works in `gptr_config(providers =)`),
+  and a string price or duplicate tiers passed registration and failed at the first call without context.
+- Rule (config-2): `gptr_config()` keeps a project write and then, when the project is not trusted (a recorded
+  "no" included), warns `untrusted_setting` (once per root and keys) naming each key whose untrusted contribution
+  (`settings_project_value()`) is not what trust would apply, with `gptr_trust("<root>", trust = TRUE)` and
+  `.scope = "session"` as the ways out. Tightening (`mode = plan`, deny and ask rules) stays silent; a
+  `permissions` write with allow rules is named `permissions.allow`, the one list an untrusted project drops.
+  Formerly the value was saved without a word and, for a recorded "no", nothing ever mentioned trust.
+- Rule (config-3): after any write, `gptr_config()` checks `model`, `small_model` and `system1` (less
+  `emulate:`; a router name or `router:` passes) with `model_canonical(strict = TRUE)` and on `unknown_model`
+  warns `unknown_model_setting` with that message and the undo call; the value is kept (a later
+  `gptr_register()` or refresh can make it valid, §6.1.3). Another `gptr_error` (an invalid declared price
+  table) is left to the call that uses the model: the check never fails a saved write. Formerly a typo such as
+  `model = opuss` saved at user scope was silent and failed every later bare `peter()`, while the console's
+  `/model` checks at once.
+- Rule (config-4): `inst/templates/settings.json`, which `gptr_init()` writes, is `{"version": 1}`. It held
+  `"mode": "manual"` and `"record": "ask"` (the defaults), which as a project layer beat a user-level
+  `mode = auto` or `record = "auto"` in every initialised project, since a tighten key applies from any
+  project. A trusted project's `mode` now applies as written unless it is `yolo` (`settings_project_value()`);
+  an untrusted project still only tightens it, and `gptr_config(mode = yolo)` at project scope is
+  `invalid_argument` naming `.scope = "user"` and `"session"`. Formerly a trusted project's `mode = auto`, which
+  `gptr_config(mode = auto)` writes at the default project scope, and a project `yolo` were saved and silently
+  ignored. The plan freed every tighten key of a trusted project; `context`, `record` and plugin tighten
+  settings still only tighten, because a project `record = "auto"` would be write consent, which IC-45 (req-7)
+  reserves to the person, and `context` bounds what reaches providers. Projects made earlier keep their file;
+  NEWS says to delete the two keys.
+- Rule (thinking-1): `bedrock_build()` sends a Claude model (id containing `anthropic.claude`) whose record
+  declares `capabilities$adaptive_thinking` the adaptive fields of `anthropic_thinking()` in
+  `additionalModelRequestFields` (`thinking`, `output_config.effort`); every other model, an undeclared Claude
+  record included, gets no thinking field and, for a level other than `off`, a `notice` once per model naming
+  `capabilities = list(adaptive_thinking = TRUE, effort = TRUE)`. Why no budget and no id inference: a record
+  cannot say it thinks on a budget (`model_capabilities()` fills undeclared flags with `FALSE`), Opus 4.8 refuses
+  `enabled` with HTTP 400 and Claude 4.5 and earlier have no adaptive mode, so any guess fails a call for asking
+  more reasoning, while sending nothing answers as before; an id rule would also go stale with each release.
+  Formerly every level, `:max` and `off` sent the same body (D-193 cut thinking out); the first round sent an
+  undeclared record a budget, which broke `versa-bedrock/us.anthropic.claude-opus-4-8` at `high`. Measured on
+  the Versa gateway: Opus 4.8 declared adaptive returns signed thinking; undeclared at `high` answers without
+  thinking.
+- Rule (thinking-3): `check_choice()` and `gateway_choice()` report a string that is not a choice through
+  `choice_abort()`: "`<arg>` must be one of ...; the string given is not one of them.", plus "Did you mean
+  "<choice>"?" for a choice equal to it but for case. The value is never quoted; a non-string keeps
+  `arg_abort()`'s class and length. Formerly `thinking = "ultra"` read "not a character of length 1".
+- Rule (thinking-4): `model_clamp_thinking(levels, level, ref = NULL)` still gives the nearest level the model
+  has (upwards first, IC-74); given `ref` and a changed level it informs `thinking_clamped` once per model and
+  level. `run_target()`, `run_model_resolve()`, `route_answer()` and `model_resolve()` pass the model's ref;
+  `prompt_request_context()`'s estimate does not. Formerly `opus:off` ran at `low` and `thinking = "max"` on a
+  reasoning record without `thinking_levels` (off..high, now documented in `?gptr_provider`) ran at `high`
+  without a word.
+- Rule (capture-1): `ident_shadow_notice()` also informs `alias_shadowed` when the shadowed variable holds a
+  spec the argument accepts (`ident_spec_ok()`) whose `name` is not the identifier; the identifier still wins
+  and a function stays silent (packages export `claude`, `plan`, `write`). Formerly `opus =
+  gptr_fake_provider(...)` then `model = opus` ran the alias's model without a word. The plan named every
+  accepted spec; comparing `name` keeps a provider registered under its variable's name silent, as an equal
+  character value is.
+- Rule (s1-1): `route_refuse_s1_args()` (was `route_refuse_s1_images()`, whose refusal still comes first) runs
+  in the `nested`, `continue` and `new` routes, and through `subagent_route_checks()` in the `team` and
+  `fanout` routes (P19, L4; a contract edge of the layering test); it refuses the first of `choices`,
+  `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain` as `invalid_argument` naming it,
+  before any request, and points to a decision model (`model = jev`, which runs through a chat model after
+  `gptr_config(system1 = "emulate:<ref>")`; the setting alone moves no call to emulation). An explicit
+  `threshold = 0.5` passes (no `missing()` tracking); a call that names no model is "this call". The
+  `classifier` route (order 10, before `team` and `fanout`) refuses `agents =`, then `parallel =`, as
+  `invalid_argument` naming it, since a decision model answers in one call. Formerly they were validated and
+  dropped: a chat model returned a session, on which `sum()`, `[` and `gptr_prob()` failed, `parallel = 2,
+  choices =` ran two sub-agents, and a decision model ignored `agents =` and `parallel =`.
+- Rule (s1-2): `s1_abstain()`'s `uncertain = "stop"` condition adds `index`, `names` (`NULL` for unnamed
+  input), `confidence` (what the band tests: `abs(2 * p - 1)` for decisions, the stored confidence otherwise)
+  and `value` (every answer, since the abort runs before `s1_record()`); `prob` and `min_confidence` stay.
+  The message lists the first ten names, or positions where a name is empty, and says that `$value` holds
+  every answer and `uncertain = NA` keeps the others. Formerly it carried only `prob` (P(yes) or the chosen
+  option's probability) and no way to tell which inputs were uncertain.
+- Rule (s1-4): the factor that `s1_run()` returns for factor `choices` or `.opts$output = "factor"` (P13,
+  INFRA-18) carries `attr(, "meta") = list(errors = <df>)` when elements failed; otherwise it has only
+  names and levels. Formerly every attribute was dropped after `s1_failures()` had warned "see attr(x,
+  "meta")$errors". The plan kept the whole `meta`, but `print.factor()` prints every attribute other than
+  levels and class (R 4.6): a two-element factor with `s1_meta()`'s fields printed 63 lines instead of 3
+  (measured), on every call. Probabilities stay off, as planned: `[<-.factor` keeps attributes, so they
+  would go stale.
+- Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
+  model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal); 07
+  §2.1 and the 04 `model_prepare()` row (P06 prepares); the 04 `model_resolve()` row (the empty-route hint); 04
+  §7.0 (`prices.table`) and §10.2 rows 1 and 3 (`prices`), `?gptr_provider`; 04 `gptr_config()` and §2.2
+  warnings (`untrusted_setting`, `unknown_model_setting`); 04 `gptr_config()` project scope, §10.2 row
+  24, §11.2 text and `mode` row, §11.16, §15 IC-53 item 1 and IC-78, 03 §5.9, §6.8.1 and §6.8.2,
+  `?gptr_config` and the configuration vignette (a trusted project's `mode`; the template); 04 §15 IC-80
+  (thinking) and `?gptr_provider`'s bedrock-converse example (`reasoning`, `capabilities`); 04 §1.1 (a
+  string that is not a choice); 04 §2.2 messages (`thinking_clamped`), §4.9 `thinking` row, 03 §8.4 model
+  references and `?gptr_provider` (`thinking_levels`); 03 §4.1.3 and 04 §6.1.3 (`alias_shadowed` for a
+  spec); 03 §4.1, 04 §6.1.1 step 5 and `?peter` (System 1 arguments on a conversational route; `agents` and
+  `parallel` on a decision model); 04 §2.2 `s1_uncertain` row (its fields); 03 §4.1.5, `?peter`, `?gptr_prob`
+  and the system-one vignette (the factor result).
+- Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
+  gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
+  match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
+  "the floor check blames compact_at when it sets the threshold (D-250)", "a model whose max_output is its whole
+  window runs and asks for half of it (D-250)"; test-catalog-models.R "a System 2 call prepares its selected
+  Ollama model as System 1 does", "an unknown id on a route with no catalog models says a refresh fills it
+  (D-250)"; test-ext-specs.R "model prices are a data frame or a list of price records, checked at
+  registration"; test-aaa-state.R (40 services); test-gptr-config.R "gptr_config() warns when an untrusted
+  project will not apply what it saved (D-250)", "gptr_config() warns when a saved model setting names no known
+  model (D-250)", "a trusted project sets mode; context, record and untrusted modes only tighten (D-250)",
+  "gptr_config(mode = ) in a trusted project applies there; yolo is refused (D-250)", "a gptr_init() project
+  leaves mode and record to the user's settings (D-250)"; test-provider-bedrock.R "a Claude model
+  declared adaptive gets the thinking level; others get none (D-250)"; test-live-bedrock.R (opt-in) "thinking =
+  'high' on an adaptive Claude model is signed", "a Claude record not declared adaptive answers at 'high'";
+  test-utils-conditions.R "a string that is not one of the choices is reported as such, never quoted (D-250)";
+  test-agent-run.R "a thinking level the model lacks is announced once per model and level (D-250)";
+  test-catalog-models.R "a thinking suffix the model lacks is announced with the level used (D-250)";
+  test-gptr-capture.R "an alias shadowed by a spec the argument accepts gets the message (D-250)";
+  test-gptr-gateway.R "System 1 arguments are refused on a conversational route (D-250)";
+  test-subagent-team.R "teams and fan-outs refuse System 1 arguments before any child starts (D-250)";
+  test-s1-route.R "uncertain = \"stop\" names the uncertain inputs and carries every answer (D-250)", "a
+  factor answer keeps the call's meta, which its failure warning points to (D-250)", "a decision model refuses
+  agents = and parallel = before any request (D-250)". Evidence:
+  progress/fixes.md Task FIX-17.

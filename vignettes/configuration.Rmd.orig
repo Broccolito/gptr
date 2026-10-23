@@ -65,9 +65,9 @@ gptr_config(context = "names", record = "off", .scope = "project")
 
 Creating `.gptr/` consents to storage there; trust is a separate decision. An untrusted project
 can tighten mode, context, recording, permission rules and local-only inference, but its other
-settings and executable resources are ignored. Even a trusted project cannot loosen settings
-marked for tightening. Changes to trust-gated files require renewed trust. Project provider
-endpoint overrides also require a separate confirmation.
+settings and executable resources are ignored. A trusted project may also set the mode, though
+never to `"yolo"`, but it still cannot loosen context or recording. Changes to trust-gated files
+require renewed trust. Project provider endpoint overrides also require a separate confirmation.
 
 `gptr_permissions(scope = "project")` stores personal project rules in the user configuration
 directory, not the shared project tree.
@@ -83,7 +83,7 @@ layers when settings are resolved. The file's `version` field is format metadata
 | `model` | `NULL`: try configured Anthropic, OpenAI, Google, Claude Code CLI, then Codex CLI routes in that order. Set a canonical reference for other routes or reproducible routing. |
 | `small_model` | `NULL`: the main model's small sibling when available, otherwise the main model. |
 | `system1` | `NULL`: hosted Jev when its key exists, otherwise a verified local decision model already discovered. Set an explicit typed model or opt-in `"emulate:<model>"` route. |
-| `mode` | `"manual"`; also `"plan"`, `"edits"`, `"auto"`, `"yolo"`. A project file can only tighten it. |
+| `mode` | `"manual"`; also `"plan"`, `"edits"`, `"auto"`, `"yolo"`. An untrusted project file can only tighten it; a trusted one sets any mode but `"yolo"`. |
 | `preset` | `"standard"`; built-in alternatives are `"minimal"`, `"readonly"`, `"extended"`. |
 | `tools` | Enable/disable lists and model-glob preset mappings: `list(enable = ..., disable = ..., presets = ...)`. |
 | `budget` | `list(tokens = 2000000, cost = 5, turns = NULL)` per top-level call; `NULL` entries remove individual limits. |

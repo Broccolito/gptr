@@ -106,7 +106,9 @@ Every exported function validates its arguments on entry with the internal check
 (P01) and signals `gptr_error_invalid_argument` with fields `arg` (the argument name) and `expected` (a short
 phrase), never including the argument's value (it may be large or secret; only `class(x)[1]` and `length(x)` may
 appear). Checkers never use `match.arg()` (copy-safety rule R3); `check_choice()` does exact matching and accepts
-the first element of the default vector when the argument is missing.
+the first element of the default vector when the argument is missing. A string that is not one of the choices is
+reported as such ("the string given is not one of them"), with "Did you mean" and the choice it equals but for
+case (D-250).
 
 ```r
 check_string(x, arg, null = FALSE, empty = FALSE)          # chr(1), not NA
@@ -259,7 +261,7 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `doc_write` | - | `path`, `reason` | P15 | a document write failed or was blocked and the caller asked for strictness |
 | `s1` | - | `status`, `error_type`, `request_id`, `model` | P13 | System 1 failure, parent of the next rows |
 | `s1_auth`, `s1_validation`, `s1_rate_limit`, `s1_overloaded`, `s1_connection`, `s1_response` | `s1` | as `s1` | P13 | classified as in 04 §4.12 (scalar calls; vectorised calls give `NA` + one warning) |
-| `s1_uncertain` | `s1` | `prob`, `min_confidence` | P13 | `uncertain = "stop"` inside the uncertain band |
+| `s1_uncertain` | `s1` | `index`, `names` (`NULL` for unnamed input), `confidence`, `prob`, `min_confidence`, `value` (every answer) | P13 | `uncertain = "stop"` inside the uncertain band; the message names the first ten inputs |
 | `s1_labels` | `s1` | `labels` | P13 | a choice label `if()` would read as logical |
 | `mcp` | - | `server` | P18 | parent of MCP errors |
 | `mcp_auth_required` | `mcp` | `server`, `login` | P18 | OAuth needed; names `gptr_login("mcp:<name>")` |
@@ -281,13 +283,17 @@ two unnamed string literals), `replay_downgraded` (P15; live/stale regeneration 
 field `errors`),
 `readline_limit` (P14), `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only
 when `options(gptr.check_prefix = "warn")`), `secret_late` (P03; a newly registered secret already occurs in live
-session entries; field `counts`).
+session entries; field `counts`), `untrusted_setting` (P08; `gptr_config()` saved keys an untrusted project does
+not apply; fields `keys`, `path`; D-250), `unknown_model_setting` (P08; `gptr_config()` saved a model setting
+that does not resolve; fields `key`, `ref`; D-250).
 
 Messages (`gptr_message_<name>`): `alias_shadowed` (P08), `plan_handoff` (P11), `egress_ack` (P08, IC-71), `s1_split` (P13; once per
 session when a data frame is split into several states, naming `I(x)`),
 `billing_env` (P03/P20; names of removed billing variables), `notice`
 (one-time notices: experimental routes, Codex overhead, uncalibrated emulation), `value_rebound` (P06),
-`progress` (P14, verbosity 1), `interpolated` (P08, echo of the interpolated prompt at verbosity >= 2).
+`progress` (P14, verbosity 1), `interpolated` (P08, echo of the interpolated prompt at verbosity >= 2),
+`thinking_clamped` (P05/P06; a requested thinking level the model lacks was replaced by the nearest it has;
+once per model and level; D-250).
 
 Transport, adapter and System 1 failures are condition **objects** created (not signalled) by P04, P12 and P13
 with the classes above; they travel in `error` events and in the run. The gateway (P08) signals the stored object
@@ -691,7 +697,7 @@ UTF-8 first (§6.6 of `03`).
 | `context`, `max_output` | num(1)\|NA | tokens |
 | `reasoning` | lgl(1) | supports thinking |
 | `thinking_levels` | chr | levels the model accepts (subset of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) |
-| `thinking` | chr(1)\|NULL | the clamped level requested with `:level` or `.opts$thinking` |
+| `thinking` | chr(1)\|NULL | the clamped level requested with `:level` or `.opts$thinking`: a level the model lacks becomes the nearest it has (upwards first), with a `thinking_clamped` message once per model and level (D-250) |
 | `input` | chr | `text`, `image`, `pdf` |
 | `tool_call`, `structured_output` | lgl(1) | |
 | `prices` | df(`from` Date, `tier` chr, `input`, `output`, `cache_read`, `cache_write_5m`, `cache_write_1h` USD per million) | dated price tiers |
@@ -1081,7 +1087,14 @@ exact name.
    `console` route signals `gptr_error_not_available`. Every call made while `run_current()` is non-NULL inherits
    the running mode (only tightened) and filters whatever route handles it (IC-53). Top-level team and fan-out
    statements own one document block (IC-47); in replay mode their children pass `replay_guard()`, so
-   `GPTR_REPLAY=replay` still proves that a script makes no model calls.
+   `GPTR_REPLAY=replay` still proves that a script makes no model calls. The `team`, `fanout`, `nested`,
+   `continue` and `new` routes refuse the System 1 arguments before anything starts: `.opts$system1_images`,
+   then the first of `choices`, `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain`, as
+   `gptr_error_invalid_argument` naming it, since a conversation would ignore them; a decision model serves
+   them, and `model = jev` runs through a chat model after `gptr_config(system1 = "emulate:<ref>")`, which
+   alone moves no call to emulation (IC-74, D-250). P19's call of P08's `route_refuse_s1_args()` is a
+   contract edge of the layering test (12.2). The `classifier` route, which matches first, refuses `agents`,
+   then `parallel`, as `gptr_error_invalid_argument` naming it: a decision model answers in one call.
 
    The console's first-use setup runs before its banner or chat input only for a new interactive
    console without an explicit or effective configured model. It offers the expected Codex and
@@ -1115,7 +1128,7 @@ exact name.
 |---|---|
 | `NULL` | the settings default |
 | string literal | itself |
-| symbol that is a **known identifier** (catalog alias, registered provider/model/router id, mode, preset, skill, plugin, extension, agent name; `identifier_known()`; skill, plugin, extension and agent names compare after `name_norm()` = lower case with `_` and `.` mapped to `-`, IC-42) | its canonical name; a once-per-session `alias_shadowed` message when a *character* variable of that name holds a different value ("used the alias; write !!sonnet"); an ambiguous normalised match is `gptr_error_invalid_identifier` listing the candidates |
+| symbol that is a **known identifier** (catalog alias, registered provider/model/router id, mode, preset, skill, plugin, extension, agent name; `identifier_known()`; skill, plugin, extension and agent names compare after `name_norm()` = lower case with `_` and `.` mapped to `-`, IC-42) | its canonical name; a once-per-session `alias_shadowed` message when a *character* variable of that name holds a different value, or a spec the argument accepts (a provider or router for `model`, a tool for `tools`, an agent for `agents`) has a different `name` (D-250) ("used the alias; write !!sonnet"); an ambiguous normalised match is `gptr_error_invalid_identifier` listing the candidates |
 | `!!x`, `I(x)` | the value of `x` (must be character or a spec) |
 | other symbol bound where the call's promise is evaluated | the formal's promise is forced in a leaf: character -> its value; `<spec:provider>`, `<spec:router>`, `<spec:tool>`, `<spec:agent>` -> registered at rank 0; any other class -> `gptr_error_invalid_identifier` ("`mice` is a data.frame, not a model name") |
 | unknown unbound symbol | the literal name, validated later (`gptr_error_unknown_model` with `adist()` suggestions) |
@@ -1195,10 +1208,18 @@ list). Keys are the registered `setting` specs (core keys of §11.2 plus plugin 
 `gptr_error_invalid_argument`. `model`, `small_model`, `system1`, `mode`, `preset` take bare identifiers
 (§6.1.3); a `NULL` value removes the key from the scope. Scopes: `"session"` = this R process; `"project"` =
 `.gptr/settings.json` (needs a workspace, `gptr_error_workspace` otherwise; values that would loosen a `tighten`
-setting are stored but never applied, and other keys apply only in a trusted project, §11.2); `"user"` =
+setting are stored but never applied, a trusted project's `mode` excepted, and other keys apply only in a
+trusted project, §11.2; `mode = yolo` there is `gptr_error_invalid_argument`, D-250); `"user"` =
 `R_user_dir("gptr", "config")/settings.json`. `egress` is accepted only at user scope. Files are written
 atomically with top-level keys merged. Conditions: `invalid_argument`, `workspace`,
-`invalid_identifier`. Emits nothing.
+`invalid_identifier`; after a write to an untrusted project, warning `untrusted_setting` (fields `keys`,
+`path`; once per root and keys) naming the keys its file holds but untrusted cannot apply (those whose
+§11.2 project contribution differs from a trusted one, and `permissions.allow` for permission rules, whose deny
+and ask rules apply untrusted; D-250); and warning `unknown_model_setting` (fields `key`,
+`ref`; D-250) for a saved `model`, `small_model` or `system1` (less `emulate:`) that is not a router and that
+`model_resolve()` reports as `unknown_model` in this session, quoting that message and the undo call; the value
+is kept, since a later registration or catalog refresh can make it valid (§6.1.3), and another resolution error is
+left to the call that uses the model. Emits nothing.
 
 ```r
 old = gptr_config(mode = plan)
@@ -2209,6 +2230,7 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `mcp.dispatch_local` | P18 | `cli-claude`, `cli-codex` (P20) | `function(message, session) list` (JSON-RPC response) |
 | `bg.register` | P21 | `peter(background = TRUE)` (P08), the pause menu (P14) | `function(session) invisible(session)` |
 | `check.adapter` | P12 | `gptr_check()` (P02) | `function(adapter, fixtures = NULL) <gptr_check>` |
+| `prices.table` | P05 | provider and model spec validation (P02) | `prices_df()`: `function(x) df` (§4.9 `prices`), `gptr_error_invalid_argument` for a bad table; fallback: the value unchecked until the model is resolved (D-250) |
 | `trust.get` | P08 | P03 (`.env` discovery), P07 (SYSTEM.md, instruction authority), P17, P18 (IC-33) | `function(path = getwd()) lgl(1)`; fallback `FALSE` |
 | `identifier.resolve` | P08 | `gptr_agent()` capture (P02), agent files (P17) | `function(expr, arg, envir) chr or spec`; fallback: literal names |
 | `secret.lookup` | P03 | `ctx$secret()` (P02) | `function(name, ctx = NULL) <handle> or NULL`; fallback `NULL` |
@@ -2504,8 +2526,8 @@ reactor_pump(until = function() done, slice_ms = 100L)
 | `usage_new(...)`, `usage_cost(usage, model, when = Sys.Date())`, `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)` | `provider-usage.R` | §4.3 records; cost from the dated price tier in force on `when`; TTL-split cache writes (1 h at 2x input, 5 min at 1.25x) | P06, P12, P13, P20 |
 | `usage_log_append(row)`, `usage_log()` | `provider-usage.R` | the process System 1 accounting log (append-only) | P13, P06 |
 | `catalog_get()` | `catalog-models.R` | the merged catalog (§11.10) | P05, P07 |
-| `model_resolve(ref, strict = TRUE)` | `catalog-models.R` | a model record (§4.9) for `provider/id[:thinking]`, an alias (dynamic by family and release date), or a provider-less id; `strict = TRUE` signals `gptr_error_unknown_model` with `adist()` suggestions (only the named provider's references after a known `provider/`); local providers accept unknown ids | P06, P08, P13, P17, P19 |
-| `model_prepare(ref, safety = NULL)` | `catalog-models.R` | explicit selected-model preparation: discovers missing/stale Ollama evidence, then resolves and preflights; no discovery during replay (IC-74; `07-local-ollama.md` section 2.1) | P08, P13 |
+| `model_resolve(ref, strict = TRUE)` | `catalog-models.R` | a model record (§4.9) for `provider/id[:thinking]`, an alias (dynamic by family and release date), or a provider-less id; `strict = TRUE` signals `gptr_error_unknown_model` with `adist()` suggestions (only the named provider's references after a known `provider/`; a models.dev route with no catalog model yet adds that `gptr_models(refresh = TRUE)` downloads them, D-250); local providers accept unknown ids | P06, P08, P13, P17, P19 |
+| `model_prepare(ref, safety = NULL)` | `catalog-models.R` | explicit selected-model preparation: discovers missing/stale Ollama evidence, then resolves and preflights; no discovery during replay (IC-74; `07-local-ollama.md` section 2.1) | P06, P08, P13 |
 | `provider_preflight(model, provider, safety = NULL)` | `catalog-models.R` | pure no-I/O check before payload/state/image serialization and credential lookup; private discovery evidence binds endpoint/path/model/server/lifecycle; missing protected safety means local-only TRUE (IC-74; `07-local-ollama.md` section 2.1) | P05, P08, P13 |
 | `catalog_aliases()` | `catalog-models.R` | chr of alias names (for `identifier_known()`) | P08 |
 | `model_default(role = c("chat", "small", "system1"))` | `catalog-models.R` | `chr(1)` ref from settings, else the first available route (§8.4 of `03`), else `NULL` | P08, P07, P13 |
@@ -2622,7 +2644,7 @@ session_enqueue(s, "use TPM", as = "steer", source = "pipe")
 | `context_turn_blocks(s, input)` | `prompt-context.R` | the leading blocks of a later user message (`placement = "turn"` or `"both"` specs: `workspace_changes`, `attached`, mode changes, skill activations); only non-empty blocks; a block whose text hash equals the last one emitted under the same name in this session is skipped (IC-38) | P06 (through the §7.0 services) |
 | `request_build(s, target, extra = NULL)` | `prompt-cache.R` | `list(context, view, tokens_est, components)`: `context` is the adapter context of §8.1 for `target` (a model record): `system`, `tools_json`, `tools`, `messages` (`project_messages()` + the `extra` tail, e.g. the compaction request), `cache_plan` (the `cache_policy` spec's plan for the api), `params`, ids; `view` is the element summary for the prefix guard; `tokens_est` and `components` feed the budget check and the ledger | P06 (through the §7.0 services) |
 | `prefix_guard(s, target, view)` | `prompt-cache.R` | compares with the previous request to the same (provider, model); on a break emits `cache_break`, appends `gptr.cache_break` and acts per `gptr.check_prefix`; resets on `session_tree` | P06 (through the §7.0 services) |
-| `compact_threshold(window, max_output, r_cap = 4000)` | `prompt-compact.R` | `min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, max_output + 2 * r_cap), gptr.compact_at)` | P07 (behind `compact.should`) |
+| `compact_threshold(window, max_output, r_cap = 4000)` | `prompt-compact.R` | `min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, mo + 2 * r_cap), gptr.compact_at)` with `mo = min(max_output, window / 2)` (`model_output_cap()`; models.dev often gives the whole window as `max_output`) [D-250] | P07 (behind `compact.should`) |
 | `compact_should(s, tokens, idle_s)` | `prompt-compact.R` | `lgl(1)`: threshold or cold rule (the `compact.should` service); the checkpoint compactor's rules never trigger for a CLI model (`type = "cli"`), which compacts its own conversation [D-202] | P06 (through the service) |
 | `extract_state(entries)` | `prompt-compact.R` | harness state for the checkpoint (user messages incl. steering, objects with creating code, decisions, files, skills, plan) | P07, P16 |
 | `builtin_prompt(gptr)`, `builtin_context(gptr)`, `builtin_compaction(gptr)` | | register P07's sections (`preamble`, `tools`, the closing lines of `rules`, the core of `r_session`, `r_performance`, `modes`, `context`, `addendum`; IC-68), the four `preset` records, the gap `cache_policy`, the default `estimator`, the context blocks `project_instructions` (rendered `trusted="false"` in an untrusted project, IC-52), `environment`, `mode`, `plan`, and the checkpoint `compactor` (with the post-compaction floor check, IC-71) | P02 load |
@@ -3026,7 +3048,7 @@ only caller of adapters for System 2 requests; `s1_request()` (P13) is the only 
 | `tools` | list of `<spec:tool>` | the same direct tools as specs (array order) |
 | `messages` | list of `<msg>` | projected and handed off for this target (§7.5) |
 | `cache_plan` | list(`anchors` = chr element ids (`"t0"`, `"project"`), `tail_ttl` = `"5m"` \| `"1h"`, `key` = chr(1) prompt-cache key) | from the `cache_policy` spec for the api |
-| `params` | list(`max_tokens` int(1), `thinking` chr(1)\|NULL, `effort` chr(1)\|NULL, `tool_choice` `"auto"` \| `"none"` \| list, `returns` JSON Schema\|NULL, `temperature` num(1)\|NULL) | |
+| `params` | list(`max_tokens` int(1), `thinking` chr(1)\|NULL, `effort` chr(1)\|NULL, `tool_choice` `"auto"` \| `"none"` \| list, `returns` JSON Schema\|NULL, `temperature` num(1)\|NULL) | `max_tokens` is the target's `max_output`, at most half its window, else 8192 [D-250] |
 | `session_id`, `request_id` | chr(1) | |
 
 **Options** passed to every adapter function (`opts`):
@@ -3446,9 +3468,9 @@ also has `kind`, `name` and `api_version` (the extension API version it was writ
 
 | # | Kind | Resolve / order | Fields (type) | Contract and failure rule | Defined by |
 |---|---|---|---|---|---|
-| 1 | `provider` | first | `id` (= name, `^[a-z0-9][a-z0-9-]*$`), `api` chr(1), `base_url` chr(1)\|NULL, `auth` (chr of environment-variable names, or `function()` returning a handle or `NULL`, or `NULL` for none), `models` list of model records\|NULL, `compat` named list, `type` (`chat`, `classifier`, `cli`), `headers` named list of non-secret strings, `discover` `function()` -> df\|NULL, `status` `function()` -> named list\|NULL (reads cached data only unless `check = TRUE`), `aliases` chr, `local` lgl(1) (loopback server: unknown model ids allowed, no egress acknowledgement), `offline` lgl(1) (no remote model is called: exempt from `replay_guard()`; the fake provider and the mock-server and fake-CLI test providers, IC-45), `rate` `list(requests_per_s, tokens_per_s)`\|NULL (static limits feeding the token bucket, IC-64) | data; `auth` is evaluated per request (INFRA-22); `discover` runs only on request | P02 |
+| 1 | `provider` | first | `id` (= name, `^[a-z0-9][a-z0-9-]*$`), `api` chr(1), `base_url` chr(1)\|NULL, `auth` (chr of environment-variable names, or `function()` returning a handle or `NULL`, or `NULL` for none), `models` list of model records\|NULL (a record's `prices` is a data frame or a list of price records, checked and normalised to the §4.9 df by the `prices.table` service, D-250), `compat` named list, `type` (`chat`, `classifier`, `cli`), `headers` named list of non-secret strings, `discover` `function()` -> df\|NULL, `status` `function()` -> named list\|NULL (reads cached data only unless `check = TRUE`), `aliases` chr, `local` lgl(1) (loopback server: unknown model ids allowed, no egress acknowledgement), `offline` lgl(1) (no remote model is called: exempt from `replay_guard()`; the fake provider and the mock-server and fake-CLI test providers, IC-45), `rate` `list(requests_per_s, tokens_per_s)`\|NULL (static limits feeding the token bucket, IC-64) | data; `auth` is evaluated per request (INFRA-22); `discover` runs only on request | P02 |
 | 2 | `adapter` | first (name = `api`) | `api`, `transport`, `build`, `parse`, `stream`, `classify`, `capabilities` (§8.1) | never throws after `start` (§8.1); a thrown error becomes `stop_reason = "error"` | P02 |
-| 3 | `model` | first (name = `provider/id`) | the §4.9 record fields | data | P02 |
+| 3 | `model` | first (name = `provider/id`) | the §4.9 record fields (`prices` as for `provider`) | data | P02 |
 | 4 | `router` | first | `route` `function(request, ctx)` -> chr(1) model ref or `list(model, thinking = NULL, state = NULL)`; `description`; `timeout` num(1) (default 2 s) | usable as `model = <name>`; called by P06 before every request and at compaction (IC-69); `request` = `list(prompt, messages (projected, read-only), state, previous, reason = "turn" \| "compaction" \| "direct", session)`; a timeout, an error or a non-registered result falls back to the default model with a diagnostic and a `route` event; System 1 through `ctx$decide()`; each switch appends `model_change` and a `gptr.router` state entry | P02 |
 | 5 | `tool` | first (name, or `<namespace>/<name>`) | §9.1 | §9.1; failures become error results | P02 |
 | 6 | `interpreter` | first | `ext` chr, `programs` chr (candidates, first found wins), `args` `function(path, args)` -> chr, `windows_only` lgl(1) | used by `peter$script()` | P22 (through `kind`) |
@@ -3469,7 +3491,7 @@ also has `kind`, `name` and `api_version` (the extension API version it was writ
 | 21 | `agent` | first | the `gptr_agent()` fields (§6.8) | data; invalid files skipped with a diagnostic | P02 |
 | 22 | `ui` | first (selected by `gptr.ui`/settings) | `has_ui` `function()` -> lgl(1); `select(title, choices, default = NULL, details = NULL, multiple = FALSE, allow_other = FALSE)` -> int (NA = cancelled; `attr(, "other")` = free text); `input(prompt, default = "", secret = FALSE)` -> chr(1)\|NA; `questions(qs)` -> `list(answers = named list, cancelled = lgl(1))`; `notify(text, level = "info")`; `permission(request)` -> `list(decision = "allow" \| "deny" \| "abort", remember = NULL \| "session" \| "project", feedback = chr(1) \| NULL)` | a failing dialog is not an approval; `permission` defaults to one built from `select` | P02 |
 | 23 | `frontend` [experimental] | first | `run` `function(session, ...)` -> session | owns the loop it runs | P02 |
-| 24 | `setting` | first (name = dotted key, e.g. `subagents.max_depth`) | `default`, `description`, `scope` (`both`, `user`), `validate` `function(value)` -> value (or `gptr_error_invalid_argument`), `tighten` (NULL or chr: the ordered values from strictest to loosest) | values through `gptr_config()`; a project layer may only move a `tighten` setting towards the strict end | P02 |
+| 24 | `setting` | first (name = dotted key, e.g. `subagents.max_depth`) | `default`, `description`, `scope` (`both`, `user`), `validate` `function(value)` -> value (or `gptr_error_invalid_argument`), `tighten` (NULL or chr: the ordered values from strictest to loosest) | values through `gptr_config()`; a project layer may only move a `tighten` setting towards the strict end (a trusted project's core `mode` excepted, D-250) | P02 |
 | 25 | `secret_source` | all | `resolve` `function(name, ctx)` -> chr(1)\|NULL (registered with `secret_register()` at once); `list` `function(ctx)` -> chr; `store`, `forget` (optional) | never logs values | P02 |
 | 26 | `redaction_rule` | all | `pattern` chr(1) (PCRE), `anchor` chr, `marker` chr(1) (the id inside `[secret:<id>]`), `profiles` chr | combined into one alternation; must not match its own marker | P02 |
 | 27 | `env_alias` | all (name = canonical) | `aliases` chr | used by `gptr_env()` and ambient discovery | P02 |
@@ -3723,10 +3745,10 @@ Layers, lowest to highest: package defaults < user `settings.json` < project `.g
 user-level project file `projects/<hash>.json` (IC-52) < `options(gptr.*)` < `gptr_config(.scope = "session")` <
 call arguments. An **untrusted** project contributes only changes that tighten `tighten`-type settings (a stricter
 `mode`, added `permissions.deny`/`permissions.ask` rules, a stricter `context`, `record = "off"`); a **trusted**
-project contributes every key, but `tighten`-type settings still only tighten and project `permissions.allow`
-rules never loosen `plan` or pre-approve level 4. A legacy `.gptr/settings.local.json` contributes only
-deny/ask additions and only in a trusted project. `egress` is read only from the user file. Safety options are
-snapshotted per run (IC-53).
+project contributes every key, but `tighten`-type settings other than `mode` still only tighten (its `mode`
+applies unless it is `yolo`, D-250) and project `permissions.allow` rules never loosen `plan` or pre-approve
+level 4. A legacy `.gptr/settings.local.json` contributes only deny/ask additions and only in a trusted project.
+`egress` is read only from the user file. Safety options are snapshotted per run (IC-53).
 
 | Key | Type | Default | Tighten order (strict -> loose) | Owner |
 |---|---|---|---|---|
@@ -3734,7 +3756,7 @@ snapshotted per run (IC-53).
 | `model` | chr\|null | `null` (first available route, §8.4 of `03`) | | P08 |
 | `small_model` | chr\|null | `null` (the catalog's small sibling of `model`) | | P08 |
 | `system1` | chr\|null | `null` (= `typesafe/jev-latest` when a key is found); `"emulate:<ref>"` opts into emulation | | P13 |
-| `mode` | chr | `"manual"` | `plan`, `manual`, `edits`, `auto`, `yolo` (project files only tighten) | P08/P11 |
+| `mode` | chr | `"manual"` | `plan`, `manual`, `edits`, `auto`, `yolo` (an untrusted project file only tightens; no project file sets `yolo`, D-250) | P08/P11 |
 | `preset` | chr | `"standard"` | | P07 |
 | `tools` | `{enable: [chr], disable: [chr], presets: {<model glob>: <preset>}}` | `{}` | | P07 |
 | `permissions` | `{allow: [rule], ask: [rule], deny: [rule]}` | `{}` | deny/ask additions tighten | P11 |
@@ -3924,7 +3946,7 @@ under `egress` (§11.2).
 | System 2 answers (P15) | `<root>/cache/s2/<2hex>/<sha256>.json` | `hash_sha256(canonical_json(list(schema = 2L, doc = <path relative to root>, block = <id>, part = <"" \| child name \| "n<ordinal>">, prompt = <prompt hash>, args = <args hash or "">)))` (IC-45, IC-47) | `{"block", "doc", "part", "prompt", "model", "answer" (redacted final text), "usage", "cost", "session", "turn", "date"}` |
 | Spill files (P01) | `<root>/cache/tmp/gptr-output-<id>.txt` | the out id | redacted full text |
 | Deferred document writes (P15) | `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json` (`<root>` the document's project `.gptr/`; outside one `R_user_dir("gptr", "cache")/pending/`, D-249) | document path | `list(doc, base_md5, upserts = list(list(block_id, lines, site)), session, pid, time)` (IC-51); never pruned automatically |
-| Model catalog (P05) | `R_user_dir("gptr", "cache")/models.json`, `models.etag` | ETag | the refreshed catalog (§11.10 shape) |
+| Model catalog (P05) | `R_user_dir("gptr", "cache")/models.json`, `models.etag` | ETag (sent only for a cache of the current `converter`) | the refreshed catalog (§11.10 shape) |
 | MCP tool lists (P18) | `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json` | `hash_sha256(canonical_json(command + args, or URL origin + path))` | `{"tools", "fetched_at", "ttl_ms", "cache_scope"}` (not stored when `cacheScope` is `private` and credentials are not the user's own) |
 | MCP era (P18) | `R_user_dir("gptr", "cache")/mcp-era/<hash>.json` | as above | `{"era": "modern" \| "legacy", "version", "date"}`, 7-day expiry |
 | Serialised entries (P06/P07) | memory (`live$memo`) | `<entry id>\|<api>\|<same model>\|<caps hash>` | the entry's JSON text for that api |
@@ -3933,7 +3955,7 @@ under `egress` (§11.2).
 ### 11.10 `inst/extdata/models.json.gz` (P05)
 
 ```json
-{"schema_version": 1, "generated": "2026-09-29", "source": "models.dev (MIT) + gptr overrides",
+{"schema_version": 1, "converter": 2, "generated": "2026-09-29", "source": "models.dev (MIT) + gptr overrides",
  "providers": {"anthropic": {"api": "anthropic-messages", "base_url": "https://api.anthropic.com",
                              "env": ["ANTHROPIC_API_KEY"], "compat": {}, "local": false}},
  "models": [{"provider": "anthropic", "id": "claude-sonnet-5-5", "name": "Claude Sonnet 5.5",
@@ -3955,10 +3977,16 @@ under `egress` (§11.2).
              "codex": {"ref": "codex/default"}}}
 ```
 
-(Values shown are illustrative except the structure.) A family alias resolves to the newest `active` model of the
-family by `release_date`; `claude-cli/default` and `codex/default` resolve through the CLI provider's `status()` to
-a full id before any invocation (CLI invocations always receive full ids). Merge order: snapshot < cache <
-overrides < user config `providers.*.models` < live discovery of local servers.
+(Values shown are illustrative except the structure.) `converter` versions the models.dev price conversion: a
+context tier `size` becomes a `>Nk` row, the legacy `context_over_200k` (a copy of the first tier) is read only
+when no context tier is given, and a repeated tier label is dropped. A refreshed cache of another `converter` is
+ignored (the snapshot is used) and the next refresh downloads it in full (D-250). A family alias resolves to the
+newest `active` model of the family by `release_date`; an alias with no such model, or whose provider is not
+registered, is `gptr_error_unknown_model` unless a registered provider of that name runs its first declared
+model (IC-19), and never reaches the fuzzy step (D-250);
+`claude-cli/default` and `codex/default` resolve through the CLI provider's `status()` to a full id before any
+invocation (CLI invocations always receive full ids). Merge order: snapshot < cache < overrides < user config
+`providers.*.models` < live discovery of local servers.
 
 ### 11.11 Worker protocol (P19; 15 §3.6)
 
@@ -4031,7 +4059,7 @@ additive `risk_rule` records (§10.2 row 33; the highest level wins on duplicate
 `inst/templates/vignette.Rmd`: an R Markdown document with a YAML header (`title: "Project instructions"`,
 `output: html_document`), a first line `@AGENTS.md` comment hint (as an HTML comment), and sections "Data",
 "Conventions", "Do not" with placeholder bullets; it contains no executable chunks. `inst/templates/settings.json`:
-`{"version": 1, "mode": "manual", "record": "ask"}`.
+`{"version": 1}` (no `mode` or `record`, so the user's settings apply; D-250).
 
 
 ---
@@ -4610,9 +4638,9 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    human). `builtin:permissions`, `builtin:plan` and the `critical_guard` and `secret_guard` policies cannot be
    disabled by filters from any source; filters that would remove `policy` or `hook` records are refused inside a
    run. The only escape is `options(gptr.unsafe_no_permissions = TRUE)` set outside a run (documented for
-   sandboxed CI). The `yolo` mode (IC-78) is a partial opt-out that only the person selects: project settings,
-   nested calls and children only tighten, and from model code in another mode `gptr_config(mode =)` and
-   `options(gptr.mode)` are control actions.
+   sandboxed CI). The `yolo` mode (IC-78) is a partial opt-out that only the person selects: no project file sets
+   it (D-250), nested calls and children only tighten, and from model code in another mode
+   `gptr_config(mode =)` and `options(gptr.mode)` are control actions.
 2. `run_start()` snapshots `gptr.ui`, `gptr.interactive`, `gptr.critical_guard`, `gptr.secret_guard`,
    `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode` and `gptr.unsafe_no_permissions`; the run's gate
    reads only the snapshot.
@@ -5045,7 +5073,7 @@ calls and suggests `GPTR_REPLAY=replay`.
 | OAuth | refuse AS metadata without `code_challenge_methods_supported` or without S256; validate `iss` (RFC 9207) when advertised; own callback reader keeping `iss`; state and redirect checks; negative mock cases in P18 [16 §4 item 8, fact-check] | fid-17 |
 | frontmatter | scalars of the string keys (`name`, `description`, `version`, `model`, `tools`, `argument-hint`) keep their source text (YAML 1.1 turns `yes`/`on`/`1.0` into logicals and numbers; verified) | fid-19 |
 | describers | methods for classes of packages outside Suggests (Matrix, SeuratObject, SingleCellExperiment, arrow, ggplot2) use only base generics, `methods::slot()`/`slotNames()`, `attr()`, `dim()`, guarded by `isNamespaceLoaded()`; never `pkg::fun()` | cran-21 |
-| compaction floor | at freeze the post-compaction floor (static prefix + project instructions + re-injection budgets + 634) is compared with the threshold; if it is not below it, skill and project re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `preset = "minimal"` or `context = "names"`; an unknown window still checks a finite `compact_at` floor and reports an insufficient cap as `arg = "compact_at"`; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the window, or 20% of the finite effective cap for an unknown window with finite measured current and post-checkpoint counts compared on the same current estimator-multiplier basis (missing multiplier defaults to 1; invalid multiplier/counts provide no growth evidence); a `plan-cli` reply's usage (a turn's sum over the CLI's model calls) anchors no projection and updates no multiplier, and a CLI model triggers neither rule [D-202] | safe-20 |
+| compaction floor | at freeze the post-compaction floor (static prefix + project instructions + re-injection budgets + 634) is compared with the threshold; if it is not below it, skill and project re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `tools = "minimal"` (`context = "names"` does not lower the floor) [D-250]; an unknown window still checks a finite `compact_at` floor, and an insufficient cap (an unknown window, or a threshold equal to the cap alone) is reported as `arg = "compact_at"` [D-250]; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the window, or 20% of the finite effective cap for an unknown window with finite measured current and post-checkpoint counts compared on the same current estimator-multiplier basis (missing multiplier defaults to 1; invalid multiplier/counts provide no growth evidence); a `plan-cli` reply's usage (a turn's sum over the CLI's model calls) anchors no projection and updates no multiplier, and a CLI model triggers neither rule [D-202] | safe-20 |
 | concurrent writers | read-modify-write of `auth.json`, settings, trust, MCP and user-level project files (and the OAuth refresh) under one short `mkdir` lock (`<file>.lock/`, pid + creation time, 50 x 100 ms retries); a lock is stale when `pid_alive()` is `FALSE` or it is older than 30 s, never when it has vanished (the taker retries); checkpoint blob GC prunes only blobs unreferenced by every session file of the project and older than `gptr.checkpoint_days`, and skips while another live pid holds a session lock in the project | safe-17 |
 | artifact access | each launch gets a 128-bit token (`openssl::rand_bytes(16)`, else `/dev/urandom` on Unix; on Windows without openssl no token and a notice); the wrapper app rejects sessions whose URL lacks `gptr_token=<hex>`; the handle's URL carries it; static checks flag reads of `secret_file` paths at level 3 | safe-22 |
 | knobs | one knob per limit: options `gptr.subagents.max_depth`, `.max_active`, `.max_workers`, `.max_cli`, `.max_tasks` mirror the settings keys; `gptr.max_active` is HTTP transfers only; `gptr_parallel(max_active = NULL)` defaults to `gptr.subagents.max_active` | cons-20 |
@@ -5242,8 +5270,9 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
 
 - `session_modes` is `plan < manual < edits < auto < yolo`; every literal mode list uses it (the L1 CLI adapters
   name `"yolo"` explicitly). `peter(mode =)`, `/mode`, user and session settings, `options(gptr.mode)` and agent
-  specs accept it; project settings, nested calls and children only tighten (IC-52, IC-53 item 4). A project
-  value is compared with the default when the user's value is not a valid mode.
+  specs accept it; no project file sets it (an untrusted one only tightens the mode, D-250), nested calls and
+  children only tighten (IC-52, IC-53 item 4). A project value is compared with the default when the user's
+  value is not a valid mode.
 - Gate: the `mode` policy allows every call; `critical_guard` takes the level of the flagged rows that are not
   `control`, except `options(gptr.*)`, which could switch the guard off, and asks a person at level 4 while the
   guard is on; `secret_guard` asks only for secret-to-network flows; `protect_size` is skipped as in auto; deny
@@ -5317,6 +5346,14 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   instruction (IC-71) joins the last user message. With no tools to send, past tool calls and results are text
   (Converse refuses `toolUse` and `toolResult` blocks without `toolConfig`). No tool choice and no cache points
   are sent (capabilities `forced_tool_choice = FALSE`, `cache = "none"`).
+- Thinking (D-250): a model whose id contains `anthropic.claude` and whose record declares
+  `capabilities$adaptive_thinking` gets the adaptive fields of `anthropic_thinking()` (report 07 section 2.6) in
+  `additionalModelRequestFields`: `thinking` `adaptive` (none for `off`) and, with `effort`,
+  `output_config.effort`. Any other model, an undeclared Claude record included, is sent no thinking field and
+  `maxTokens` as asked; a level other than `off` gives a `notice` once per model naming
+  `capabilities = list(adaptive_thinking = TRUE, effort = TRUE)`. No budget is sent: a record cannot say it
+  thinks on a budget (undeclared capabilities are `FALSE`), and Opus 4.8 refuses `enabled` with HTTP 400. Converse
+  reports no reasoning tokens, so `usage$reasoning` keeps the legacy zero of an absent field (IC-74).
 - Signing: with a credential, `build()` returns `sign` (04 section 8.1): AWS Signature Version 4 for service
   `bedrock` and the provider record's `compat$region` (required), signed headers `host`, `x-amz-content-sha256`
   (the body's SHA-256), `x-amz-date` and, with a session token, `x-amz-security-token`; the canonical URI is the

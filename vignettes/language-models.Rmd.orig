@@ -148,6 +148,9 @@ implement AWS SigV4 signing, AWS profile credentials or the general Bedrock Conv
 An AWS credentials file alone therefore does not authenticate it, and the route does not imply
 support for every Bedrock model. These remote providers need the egress acknowledgment
 described above, using provider ids `azure` and `bedrock`.
+For SigV4 and the Converse API, declare a provider with `api = "bedrock-converse"` (see
+`?gptr_provider`). The bedrock-converse adapter does not request prompt caching, so each
+request sends the full prompt at the uncached rate.
 
 ### Subscription command-line tools
 

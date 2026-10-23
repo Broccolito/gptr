@@ -423,6 +423,30 @@ test_that("an alias shadowed by a character variable wins, with a message (contr
   expect_identical(resolve_identifier(bang, "model", e), "my-own-model")
 })
 
+test_that("an alias shadowed by a spec the argument accepts gets the message (D-250)", {
+  skip_on_cran()
+  keys = paste0("message:alias_shadowed:", c("model:opus", "model:fe", "tools:grep", "tools:write"))
+  rm(list = intersect(keys, names(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect(keys, names(the$once)), envir = the$once))
+  fe = gptr_fake_provider(list("x"), name = "fe")
+  off = gptr_register(fe)
+  withr::defer(off())
+  e = new.env()
+  e$opus = fe
+  e$fe = fe
+  e$grep = gptr_tool("mygrep", "My grep.", fun = function(pattern) "hit")
+  e$write = function(...) NULL
+  local_gptr_options(quiet = FALSE)
+  expect_message(expect_identical(resolve_identifier(quote(opus), "model", e), "opus"),
+                 class = "gptr_message_alias_shadowed")
+  bang = quote(!!opus)
+  expect_s3_class(resolve_identifier(bang, "model", e), "gptr_provider")
+  expect_message(resolve_identifier(quote(grep), "tools", e), class = "gptr_message_alias_shadowed")
+  # a function, and a spec bound to its own registered name, shadow nothing
+  expect_no_message(resolve_identifier(quote(write), "tools", e))
+  expect_no_message(resolve_identifier(quote(fe), "model", e))
+})
+
 test_that("skill names compare after name_norm() (IC-42)", {
   d = withr::local_tempdir()
   writeLines(c("---", "name: single-cell", "description: Single-cell analysis", "---"),

@@ -27,14 +27,30 @@ file paths.}
 
 \item{tools}{Tool names, \code{"+name"}/\code{"-name"} modifiers, a preset name, or \code{\link[=gptr_tool]{gptr_tool()}} specs.}
 
-\item{agents}{A named list of agent definitions for a team (\code{agent()} means \code{\link[=gptr_agent]{gptr_agent()}}).}
+\item{agents}{A named list of agent definitions for a team (\code{agent()} means \code{\link[=gptr_agent]{gptr_agent()}}).
+A decision model refuses it and \code{parallel}: it answers in one call.}
 
 \item{parallel}{Fan one list-like context object out over this many concurrent sub-agents.
 Each child gets its element alone as \code{.x}, a named list of one attached as \code{.x[["A"]]};
 \code{.opts = list(context = "none")}, which would drop it, is refused. A child that succeeds
 keeps only the values it returned with \code{\link[=gptr_return]{gptr_return()}}, so they must be self-contained.}
 
-\item{choices, levels, threshold, min_confidence, uncertain}{System 1 answer shape and abstention.}
+\item{choices, levels, threshold}{System 1 answer shape, for a decision model (\code{jev},
+\code{"ollama/clef-flash"}; after \code{gptr_config(system1 = "emulate:<ref>")}, \code{model = jev} runs it
+through a chat model). A conversational model refuses them, \code{min_confidence} and \code{uncertain}
+(\code{threshold} only when it is not 0.5) rather than ignore them. \code{choices} given as a factor, or
+\code{.opts = list(output = "factor")}, return a plain factor with those levels and no
+probabilities or confidence.}
+
+\item{min_confidence}{A number from 0 to 1. An answer whose confidence is below it is
+uncertain, as is an unknown confidence unless it is 0. A decision's confidence is
+\code{abs(2 * p - 1)}, so 0.8 keeps only P(yes) at most 0.1 or at least 0.9. For choices and
+scores it is the engine's own scale, so a value tuned on Jev abstains differently on Clef
+(see \code{\link[=gptr_prob]{gptr_prob()}}).}
+
+\item{uncertain}{What an uncertain answer becomes: \code{NA} (the default), \code{TRUE} or \code{FALSE} (yes/no
+only), \verb{function(state, answer)} returning one replacement of the answer's type, or \code{"stop"}
+for a \code{gptr_error_s1_uncertain} error. It has no effect without \code{min_confidence}.}
 
 \item{prompt}{An explicit prompt; wins over positional selection.}
 
