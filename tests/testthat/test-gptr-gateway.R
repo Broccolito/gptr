@@ -1338,6 +1338,18 @@ test_that("an unknown name in tools = is refused with the closest preset or tool
   expect_error(gptr_last() |> peter("y", model = f, tools = "+gerp"),
                class = "gptr_error_invalid_argument", regexp = "\"grep\"")
   expect_identical(f$log$n, 1L)
+  # a continuation naming two presets is refused before its model or mode switches
+  s = gptr_last()
+  state = function() {
+    d = session_data(s)
+    list(d$model, d$mode, length(d$entries))
+  }
+  before = state()
+  f2 = gptr_fake_provider(list("no"), name = "fb")
+  expect_error(s |> peter("z", model = f2, mode = plan, tools = c(readonly, extended)),
+               class = "gptr_error_invalid_argument", regexp = "more than one preset")
+  expect_identical(state(), before)
+  expect_identical(f2$log$n, 0L)
 })
 
 test_that("a continuation's .opts$thinking applies without model = and stays (D-251)", {

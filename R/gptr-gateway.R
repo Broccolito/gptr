@@ -654,9 +654,9 @@ gateway_continue_envir = function(call, s) {
   invisible(call)
 }
 
-#' Applies a continuation's changes after refusing an unknown tool name and, under `safety`, a
-#' model the call cannot reach (gateway_guards(), D-251): model, or `.opts$thinking` alone, an
-#' explicit `mode =` (tightened inside a run) and tools through session.add_tools (IC-69).
+#' Applies a continuation's changes after refusing an unknown tool name or two presets and, under
+#' `safety`, a model the call cannot reach (gateway_guards(), D-251): model, or `.opts$thinking`
+#' alone, an explicit `mode =` (tightened inside a run) and tools through session.add_tools (IC-69).
 #' An inherited mode is never written to the session (IC-53 item 4).
 #' @noRd
 gateway_continue_session = function(call, s, cur, safety) {
@@ -664,6 +664,7 @@ gateway_continue_session = function(call, s, cur, safety) {
   before = registry_names("tool", session = d$id)
   gateway_register(call, s)
   prompt_tools_check(gateway_tool_mods(call$ids$tools), d$id)
+  gateway_preset(call) # for its refusal only
   th = call$args$opts$thinking
   ref = if (is.null(call$ids$model)) d$model else gateway_model_ref(call$ids$model, th, d$id)
   gateway_guards(call, s, safety, list(provider = gateway_provider_id(ref), ref = ref))

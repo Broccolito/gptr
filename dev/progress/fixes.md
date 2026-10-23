@@ -1931,6 +1931,11 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   call's specs register. `gateway_preset()` refuses two presets. `?peter` `tools`: a bare name adds.
 - Green: `^gptr-gateway$` PASS 368, `^prompt-sections$` PASS 387;
   `^(prompt-|gptr-|subagent-|arch-layers$|lint-rules$)` PASS 3383 SKIP 1. Lint clean.
+- Review: r1 (low) applied. A continuation's `tools = c(readonly, extended)` passed `prompt_tools_check()` (presets
+  dropped) and was refused only in `gateway_run_opts()`, after its model and mode switched (2 entries). It now calls
+  `gateway_preset()` beside `prompt_tools_check()`. Red FAIL 1 (model `fb/fb-1`, mode `plan`, 5 entries for 3).
+  Green `^gptr-gateway$` PASS 409; `^(gptr-|prompt-sections$|subagent-team$|copy-gateway$|arch-layers$|
+  lint-rules$)` PASS 2254. Lint and check-plans clean.
 - Deviations: D-251. From the plan: an agent definition's allowlist (sub-agent run options carry no
   call) stays unchecked, so a file agent's `mcp__` tool that is not loaded still degrades quietly.
   Open: a preset named in a continuation's `tools =` is still ignored; `gptr_config(preset =)` still
@@ -1967,14 +1972,14 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   suite FAIL 4 PASS 35297 SKIP 64: three load-timing failures in `proc-windows-backpressure` (alone PASS 254) and
   `console-render` "a failed sub-agent line ...", whose session is now made before it mocks the key away. Lint and
   check-plans clean.
-- Deviations: D-251 (extended). From the plan: the continuation guards its target whether or not it changes and
-  `gateway_run()` guards only a new session (one check per switch); `session_new()` sets `gptr_last()`, so a
-  refused new call restores it.
 - Review: r1 (high) applied. `router_guards()` ran the new readiness checks too, so a keyless router choice raised
   in `router_call()` and `run_route()` sent the turn to the default model, unchecked for egress (1 request). It
   keeps egress and replay only (`gateway_guards(ready = FALSE)`): the choice stops with `gptr_error_no_key` after
   0 requests, as on main. Red FAIL 2 (the router test, rewritten). Green `^gptr-gateway$` PASS 406;
   `^(gptr-|agent-run$|prompt-compact$|subagent-|provider-registry$|arch-layers$|lint-rules$)` PASS 4183 SKIP 1.
+- Deviations: D-251 (extended). From the plan: the continuation guards its target whether or not it changes and
+  `gateway_run()` guards only a new session (one check per switch); `session_new()` sets `gptr_last()`, so a
+  refused new call restores it.
 - Open: the `.opts$images` and `prompt_secrets` "ask" refusals still follow the switch (`gateway_input()`); a
   continuation to a provider spec not registered globally still fails in `session_set_model()` (finding 80 aside);
   a router choice refused for egress or replay still falls back through `route_default()`, which checks no egress
@@ -2276,17 +2281,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `gptr.unsafe_no_permissions`, as `perm_check()` is.
 - Green: `^perm-gate$` PASS 154; `^(perm-|bridge-|agent-dispatch|tool-r|ckpt-|arch-layers|lint-rules|zzz)` PASS
   3370 SKIP 12. Full suite (NOT_CRAN=true) FAIL 0 PASS 35476 SKIP 64. Lint and check-plans clean.
-- Deviations: D-251 (extended); 03 §6.8.4 and 04 §7.6 `dispatch_nested()` amended. From the plan:
-  `perm_policy_rules()` and `risk_command()` are L4, which L2's `agent-dispatch.R` may not call (arch-layers), so
-  the registry's `rules` record is asked through `ext_policy_decide()` and the command is read through the literal
-  call (the reading of sessions-17 and sessions-18, `bg`'s `process` row included). No live check (the fake run is
-  the gate end to end).
 - Review: r1 (medium) applied. The question offered `[a]lways r(sh:rm -rf*)`, but `perm_on_remember()` recomputes
   from tool `sh` and stored the allow rule `sh` (every nested shell call the level gate asks about; in project
   settings for `[p]`), and allow rules are not applied here anyway. `nested_rules()` clears `suggested_rule` before
   `perm_ask()`, so an ask rule asks every time and offers no `[a]lways`. Red FAIL 1 (an `a` answer: allow `sh`).
   Green `^perm-gate$` PASS 156; `^(perm-|agent-dispatch$|bridge-|tool-r$|console-ui$|arch-layers$|lint-rules$)`
   PASS 2428 SKIP 12. Lint and check-plans clean. 03 §6.8.4 and 04 §7.6 say so.
+- Deviations: D-251 (extended); 03 §6.8.4 and 04 §7.6 `dispatch_nested()` amended. From the plan:
+  `perm_policy_rules()` and `risk_command()` are L4, which L2's `agent-dispatch.R` may not call (arch-layers), so
+  the registry's `rules` record is asked through `ext_policy_decide()` and the command is read through the literal
+  call (the reading of sessions-17 and sessions-18, `bg`'s `process` row included). No live check (the fake run is
+  the gate end to end).
 - Open: none.
 
 ### sessions-22 - Keep a resumed session's mode

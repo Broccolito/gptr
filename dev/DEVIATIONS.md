@@ -3126,7 +3126,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   when the prompt freezes (run options that carry the call, after `session_start` registered extension and MCP
   tools; no request is sent) and at a continuation (after the call's specs register). Was a `missing_tool`
   diagnostic, the name ignored. Names in settings `tools.enable`/`tools.disable` and in an agent definition's
-  allowlist keep that diagnostic. Two presets in `tools =` are refused (the first won). A bare name adds, as `+name`.
+  allowlist keep that diagnostic. Two presets in `tools =` are refused (the first won), at a continuation before its
+  model or mode switches. A bare name adds, as `+name`.
 - Rule (sessions-3): a continuation's `.opts$thinking` without `model =` switches the session's level through
   `kernel_model_switch()` (clamped; a `model_change` only when it changes; a router session keeps its model and
   takes the level), for this and later turns. Was validated and dropped.
