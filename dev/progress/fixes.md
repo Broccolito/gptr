@@ -2006,3 +2006,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `a = list(1)` or `p = "a title"` would otherwise warn as `agents =`, `prompt =` or `plugins =`.
 - Open: an unbound bare value (`mo = auto`) still stops in capture with "object 'auto' not found", not naming `mo`
   (the verifier's optional `dot_get()` change, not planned).
+
+### sessions-6 - Charge nothing for a request that was rejected or never connected
+- Red: FAIL 13 in `^agent-run$` (PASS 661; findings 47, 95, 135): on a fake priced at $4/$20 per M, a 401 recorded
+  2626 estimated input tokens and $0.011; a 529 under `budget = list(cost = 0.001)` ended as
+  `gptr_error_budget_cost` after 1 request, not `gptr_error_overloaded` after 3; a refused connection to
+  127.0.0.1:9 on the real HTTP transport did the same, not `gptr_error_network`; the fake 400 and overflow 400 rows
+  were estimated, and `run_overflow_tokens()` read an all-zero record as 0.
+- Cause: `run_response()` gave every reply without reported usage the whole prompt's estimate (`run$tokens_est`,
+  `estimated = TRUE`), failed requests included; `usage_row()` priced it at the catalog rate, and `run_used()`
+  counted it before the retry's `budget_check()`.
+- Fix: `run_unbilled()`: a failed reply with no content whose request was rejected (`err_status() >= 400`) or never
+  received (`err_class()` `network` or `timeout_connect`) records `usage_new(input = 0, output = 0)`, chosen inside
+  the unreported branch (an all-zero record reads as unreported). `run_overflow_tokens()` also requires
+  `run_usage_reported()`. 04 §4.3 `estimated` (message and row).
+- Green: `^agent-run$` PASS 674. Full suite (NOT_CRAN=true) FAIL 6 PASS 35323 SKIP 64, all load timing in
+  `proc-windows-backpressure` (`^(agent-run|proc-windows-backpressure)$` PASS 928). Lint and check-plans clean.
+- Deviations: D-251 (extended). From the plan: the optional loopback check is the last part of the new test (port 9,
+  `gptr.max_attempts = 1`); a priced 500 after 2 deltas stays estimated with cost > 0.
+- Open: acceptance is not tracked (finding 135's `stream_http()` route, not chosen), so a stream the provider took
+  and then lost (curl or adapter `network` class) before any content block also counts zero. A zero row of a model
+  without prices is still "unknown cost" (`usage_row()` prices nothing without a tier). `turns` still counts each
+  retry, as documented.

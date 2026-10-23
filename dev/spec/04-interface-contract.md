@@ -509,7 +509,7 @@ Per assistant message (`msg$usage`):
 | `images` | num(1) | `gptr.images` (estimated image tokens in the input) |
 | `total` | num(1) | `totalTokens` = input + output + cache_read + cache_write_5m + cache_write_1h |
 | `cost` | list(input, output, cache_read, cache_write, total) num(1) each, USD | `cost` |
-| `estimated` | lgl(1) | `gptr.estimated`: TRUE when the provider reported nothing and the estimator filled the row |
+| `estimated` | lgl(1) | `gptr.estimated`: TRUE when the provider reported nothing and the estimator filled the row; a failed reply without content whose request was rejected (HTTP status >= 400) or never received (`network`, `timeout_connect`) records known zeros instead, FALSE (D-251) |
 
 `usage_new(...)` (P05) builds it with zeros for missing fields.
 
@@ -527,7 +527,7 @@ Per request (one row of `.d$usage`, a `data.frame`; §5.5 of `03`):
 | `stop_reason` | chr | as in §4.2 |
 | `started` | POSIXct | request start |
 | `seconds` | num | wall time |
-| `estimated` | lgl | provider reported nothing |
+| `estimated` | lgl | provider reported nothing (a request no provider billed has zeros, FALSE; D-251) |
 | `multiplier` | num | EWMA estimator multiplier in force (§12.5 of `03`) |
 
 The token ledger (`gptr_usage(s, detail = TRUE)`) adds, per request, one row per component with columns

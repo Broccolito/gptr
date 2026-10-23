@@ -1598,11 +1598,50 @@ test_that("a reported usage keeps its unknown counts; only an unreported one is 
   msgs = s$messages
   expect_identical(msgs[[2L]]$usage$input, 120)
   expect_true(is.na(msgs[[2L]]$usage$output))
-  expect_identical(u$estimated[2:3], c(TRUE, TRUE))
-  expect_true(all(u$input[2:3] > 0))
+  expect_identical(u$estimated[2:3], c(TRUE, FALSE))
+  expect_true(u$input[[2L]] > 0)
+  expect_identical(c(u$input[[3L]], u$output[[3L]]), c(0, 0))
   expect_true(isTRUE(msgs[[4L]]$usage$estimated))
-  expect_true(isTRUE(msgs[[6L]]$usage$estimated))
+  expect_false(isTRUE(msgs[[6L]]$usage$estimated))
   expect_identical(s$status, "error")
+})
+
+test_that("a request rejected or never received costs nothing; a broken one is estimated", {
+  skip_on_cran()
+  local_permissive()
+  local_fast_retry()
+  spec = gptr_fake_provider(c(list(fake_error("unauthorized", 401L)),
+                              rep(list(fake_error("overloaded", 529L)), 3L),
+                              rep(list(fake_error("died", 500L, after = 2L)), 3L)))
+  spec$models[[1L]]$prices[c("input", "output")] = list(4, 20)
+  off = gptr_register(spec)
+  withr::defer(off())
+  s = test_session()
+  run_text(s, "one")
+  expect_s3_class(session_data(s)$condition, "gptr_error_auth")
+  expect_identical(c(s$usage$input, s$usage$output, s$cost), c(0, 0, 0))
+  expect_false(s$usage$estimated)
+  s = test_session()
+  run_text(s, "two", list(budget = list(cost = 0.001)))
+  expect_s3_class(session_data(s)$condition, "gptr_error_overloaded")
+  expect_identical(nrow(s$usage), 3L)
+  expect_identical(c(sum(s$usage$input), s$cost), c(0, 0))
+  s = test_session()
+  run_text(s, "three")
+  expect_true(all(s$usage$estimated) && all(s$usage$input > 0))
+  expect_gt(s$cost, 0)
+  # a refused connection on the real HTTP transport (nothing listens on port 9)
+  withr::local_envvar(no_proxy = "127.0.0.1", NO_PROXY = "127.0.0.1")
+  local_gptr_options(max_attempts = 1L)
+  spec = mock_provider("stream", "http://127.0.0.1:9")
+  spec$models[[1L]]$prices[c("input", "output")] = list(4, 20)
+  off_mock = gptr_register(spec)
+  withr::defer(off_mock())
+  s = test_session(model = "mock/mock-1")
+  run_text(s, "four", list(budget = list(cost = 0.001)))
+  expect_s3_class(session_data(s)$condition, "gptr_error_network")
+  expect_identical(nrow(s$usage), 3L)
+  expect_identical(c(sum(s$usage$input), s$cost), c(0, 0))
 })
 
 test_that("an overflow condition carries the provider's prompt count, never gptr's estimate", {
@@ -1611,6 +1650,7 @@ test_that("an overflow condition carries the provider's prompt count, never gptr
   expect_identical(run_overflow_tokens(list(usage = usage_new(input = 5000, estimated = TRUE))),
                    NA_real_)
   expect_identical(run_overflow_tokens(list(usage = usage_as(NULL))), NA_real_)
+  expect_identical(run_overflow_tokens(list(usage = usage_new(input = 0, output = 0))), NA_real_)
   expect_identical(run_overflow_tokens(list()), NA_real_)
   local_without_services(c("compact.should", "compact.run"))
   local_permissive()
@@ -1620,7 +1660,7 @@ test_that("an overflow condition carries the provider's prompt count, never gptr
   cnd = session_data(s)$condition
   expect_s3_class(cnd, "gptr_error_context_overflow")
   expect_identical(cnd$tokens, NA_real_)
-  expect_true(isTRUE(s$messages[[2L]]$usage$estimated))
+  expect_identical(s$messages[[2L]]$usage$input, 0)
 })
 
 test_that("a decision-only model or a refused request preflight ends the run before any request", {

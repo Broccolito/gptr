@@ -3141,10 +3141,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule (sessions-5): a named context dot whose name (2+ characters) is a prefix of a `peter()` formal, or the formal
   plus `s`, and whose value fits it (character, plain list, function or spec; 04 §6.1) warns
   (`gptr_warning_partial_name`, naming each formal) from facts only, and stays context. Was silent (`mo = "plan"`).
+- Rule (sessions-6): a failed reply with no content and no reported usage whose request was rejected (HTTP status
+  >= 400) or never received (class `network` or `timeout_connect`) records `usage_new(input = 0, output = 0)`, not
+  estimated: cost 0 (NA for a model without prices), nothing toward token or cost budgets, still one request toward
+  `turns`. Was the whole prompt's estimate at the catalog price (a refused connection to Opus: $0.0479 over 3
+  requests; a 401: $0.0080), which ended a run as `gptr_error_budget_*` instead of retrying. A partial reply, idle
+  and first-byte timeouts and a success without usage keep the estimate; an overflow's `tokens` stays NA.
 - Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
   `tools`, `.opts` and refusals. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter` `envir`,
-  `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots.
+  `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and row).
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...",
   "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
-  prompt-sections "the tool array skips unavailable and missing tools ...". Evidence: progress/fixes.md Task FIX-18.
+  prompt-sections "the tool array skips unavailable and missing tools ..."; agent-run "a request rejected or never
+  received costs nothing ...", "a reported usage keeps its unknown counts ...", "an overflow condition carries the
+  provider's prompt count ...". Evidence: progress/fixes.md Task FIX-18.

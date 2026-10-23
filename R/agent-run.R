@@ -1202,16 +1202,20 @@ run_on_done = function(run, msg) {
 }
 
 #' Account, append and hand the response to the loop (or to recovery when it failed)
-#' Reported usage is kept as reported, unknown counts NA (IC-74); only a reply with no count at all
-#' is estimated (`estimated = TRUE`, 04 section 4.3).
+#' Reported usage is kept as reported, unknown counts NA (IC-74); a reply with no count at all is
+#' estimated (`estimated = TRUE`, 04 section 4.3), unless no provider bills it (D-251).
 #' @noRd
 run_response = function(run, msg) {
   s = run$shell
   d = session_data(s)
   run_flush_deltas(run)
   if (!run_usage_reported(msg[["usage"]])) {
-    msg$usage = usage_new(input = run$tokens_est %||% 0,
-                          output = est_tokens(msg_text(msg), "prose"), estimated = TRUE)
+    msg$usage = if (run_unbilled(run, msg)) {
+      usage_new(input = 0, output = 0)
+    } else {
+      usage_new(input = run$tokens_est %||% 0, output = est_tokens(msg_text(msg), "prose"),
+                estimated = TRUE)
+    }
   }
   row = usage_row(msg, session = d$id, agent = run$opts$agent %||% "main",
                   parent_id = d$parent_id %||% NA_character_, started = run$request_started,
@@ -1250,6 +1254,16 @@ run_usage_reported = function(usage) {
   counts = vapply(c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h"),
                   function(f) as.numeric(u[[f]]), 1)
   any(!is.na(counts) & counts > 0)
+}
+
+#' Did no provider bill a failed reply? It has no content, and its request was rejected (an HTTP
+#' status of 400 or more) or never received (a network error or connect timeout) (D-251)
+#' @noRd
+run_unbilled = function(run, msg) {
+  if (!identical(msg[["stop_reason"]], "error") || length(msg[["content"]])) return(FALSE)
+  st = err_status(run$last_error)
+  if (!is.na(st)) return(st >= 400L)
+  err_class(run$last_error) %in% c("network", "timeout_connect")
 }
 
 #' Recovery of a failed request: one compact-and-retry on overflow, at most two agent-level
@@ -1294,11 +1308,11 @@ run_overflow_stop = function(run, msg) {
 }
 
 #' The prompt tokens the provider reported for an overflowing request, else NA: gptr's own
-#' estimate (`estimated = TRUE`) is not the provider's count (IC-74)
+#' estimate (`estimated = TRUE`) and the zeros of an unbilled request are not its count (IC-74)
 #' @noRd
 run_overflow_tokens = function(msg) {
   u = msg[["usage"]]
-  if (!is.list(u) || isTRUE(u[["estimated"]])) return(NA_real_)
+  if (!is.list(u) || isTRUE(u[["estimated"]]) || !run_usage_reported(u)) return(NA_real_)
   overflow_count(u, "input")
 }
 
