@@ -2298,3 +2298,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   with the sheet (entry S12). Whether an imported (foreign) file may restore `yolo` (possible through
   `gptr.mode_change` before). A fork cut before a later mode change of its source runs in the source's mode
   (`edits`), but its file records the mode at the cut (`plan`), which its own rebuild reads (measured).
+
+### sessions-24 - Say that gptr_init() asks the trust question
+- Red: none, a docs unit (finding 46). In a pty `gptr_init(".")` itself asks "Trust this project (its settings,
+  extensions and MCP servers)? [y/N]"; pasted as one block, the next line is taken by that question and dropped
+  by `readline_answer()`'s 0.1 s guard (IC-75), so `gptr_trust(".", trust = TRUE)` never runs (verifier's
+  reproduction).
+- Cause: the configuration vignette (`.Rmd` and `.Rmd.orig`) showed `gptr_init()`, `gptr_trust()` and two
+  `gptr_config()` lines as one block, without the question `gptr_init()` asks when `gptr_can_prompt()`.
+- Fix: three blocks: `gptr_init()` alone, with "at the console it asks whether to trust the project; the default is
+  No" and "run that line on its own"; `gptr_trust(path, trust = TRUE)` for a script, which records no decision, or
+  to change an earlier answer, read back as `TRUE`, `FALSE` or `NA`; then the `gptr_config()` lines.
+- Green: `^(zzz|lint-rules|doc-)` PASS 2589 SKIP 2; the vignette renders. Lint and check-plans clean.
+- Deviations: none (no contract change; `?gptr_init` already says it asks). From the plan: no
+  `gptr_init(trust =)` argument.
+- Open: a recorded No is silent afterwards, unlike the undecided notice; `readline_answer()` drops a pasted line
+  without saying so (finding 46, follow-ups); the sheet's card is S03.
