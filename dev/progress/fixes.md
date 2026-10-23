@@ -1935,3 +1935,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   refs resolve with 0 failures; grok-4.7 `default, >200k`, gpt-5.6-terra `default, >272k` at $2/M for 250k.
 - Deviations: D-250. Open: the maintainer's online `dev/catalog/build_models.R` run, after prompt-1; the
   shipped snapshot is not converter-checked.
+
+### catalog-2 - An alias with no model in the catalog is an unknown-model error, not a fuzzy match
+- Finding 35. Red: `^catalog-models$` FAIL 3, PASS 422: with the seed catalog `model_resolve("gemini")` and
+  `"gemini:high"` returned google/gemini-3.8-flash, and `strict = FALSE` returned it instead of NULL.
+- Cause: the seed has no Gemini Pro, so the `gemini` alias target is NA; `model_match()` then went on to the
+  provider and fuzzy steps, whose substring match picked Flash, and `model_resolve()`'s alias error covered only
+  a target whose provider is not registered.
+- Fix: `model_match()` stops at an alias name without a model (either case) and carries the alias;
+  `model_lookup()` keeps it behind a thinking suffix; `model_resolve()` says the alias names no model and to run
+  `gptr_models(refresh = TRUE)` or name a `provider/id`. The orchestration skill's two `"gemini"` examples use
+  `"flash"`. NEWS entry; 04 §11.10 amended.
+- Green: `^catalog-models$` PASS 425 (a models.dev-shaped gemini-3.1-pro-preview resolves as `gemini`); with
+  provider-registry, provider-usage, s1-ollama, gptr-gateway, gptr-capture, gptr-config, subagent-backends,
+  agent-run, arch-layers and lint-rules PASS 3779. Lint clean.
+- Deviations: D-250 (catalog-2 rule). Open: none.

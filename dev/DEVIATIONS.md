@@ -3127,6 +3127,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `converter = 2L` (`catalog_converter`); a refreshed cache without it is ignored in favour of the snapshot and
   is refreshed without `If-None-Match`, because models.dev answers 304 and kept the old rows. The shipped
   snapshot is not checked; `schema_version` stays 1.
-- Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule).
+- Rule (catalog-2): `model_match()` ends at an alias name that has no model (target NA, or a provider that is not
+  registered) instead of reaching the provider and fuzzy steps; `model_resolve()` raises `unknown_model` naming
+  the alias, also with a thinking suffix. Formerly offline `"gemini"` (no Gemini Pro in the seed) ran
+  google/gemini-3.8-flash by substring. The shipped orchestration skill uses `"flash"`.
+- Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
+  model).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
-  gptr is ignored and downloaded again in full". Evidence: progress/fixes.md Task FIX-17.
+  gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
+  match". Evidence: progress/fixes.md Task FIX-17.

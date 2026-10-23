@@ -134,6 +134,9 @@ works on the objects already in memory.
 * `gptr_models(refresh = TRUE)` reads each models.dev price tier once, so models with a
   200k-token price tier resolve and a 272k tier no longer gains a premium from 200k tokens. A
   catalog refreshed by an earlier build is set aside until the next refresh downloads it again.
+* A model alias with no model in the catalog is an unknown model, not a guess: offline,
+  `model = "gemini"` (Google's newest Gemini Pro) no longer runs Gemini Flash and asks for
+  `gptr_models(refresh = TRUE)` or a `provider/id`.
 
 # gptr 0.7.0
 

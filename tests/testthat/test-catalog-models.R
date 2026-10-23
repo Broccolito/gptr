@@ -291,6 +291,27 @@ test_that("unknown references fail with suggestions, or NULL when not strict", {
   expect_error(model_resolve("claude_code"), "claude-cli", class = "gptr_error_unknown_model")
 })
 
+test_that("an alias with no model in the catalog is unknown, not a fuzzy match", {
+  local_catalog(catalog_snapshot(generated = "2026-10-22")$models)
+  for (ref in c("gemini", "gemini:high")) {
+    expect_error(model_resolve(ref), "alias 'gemini' .*gptr_models\\(refresh = TRUE\\)",
+                 class = "gptr_error_unknown_model")
+  }
+  expect_null(model_resolve("gemini", strict = FALSE))
+  expect_identical(model_resolve("flash")$ref, "google/gemini-3.8-flash")
+  premium = list(input = 4, output = 18, cache_read = 0.4)
+  pro = list(id = "gemini-3.1-pro-preview", name = "Gemini 3.1 Pro Preview", family = "gemini-pro",
+             tool_call = TRUE, reasoning = TRUE, release_date = "2026-02-19",
+             limit = list(context = 1048576, output = 65536),
+             modalities = list(input = list("text", "image"), output = list("text")),
+             cost = list(input = 2, output = 12, cache_read = 0.2, context_over_200k = premium,
+                         tiers = list(c(premium, list(tier = list(type = "context",
+                                                                  size = 200000))))))
+  api = list(google = list(id = "google", models = list(`gemini-3.1-pro-preview` = pro)))
+  local_catalog(catalog_snapshot(api, generated = "2026-10-22")$models)
+  expect_identical(model_resolve("gemini")$ref, "google/gemini-3.1-pro-preview")
+})
+
 test_that("a reference that names a provider gets suggestions from that provider only (#44)", {
   local_catalog()
   ids = paste0("gpt-5.6-", c("sol", "luna", "terra"), "-2026-07-09")

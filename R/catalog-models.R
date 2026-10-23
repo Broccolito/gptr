@@ -729,6 +729,10 @@ model_match = function(pat, ctg) {
   if (!is.null(r)) return(r)
   e = model_alias_entry(alias, ctg)
   if (!is.null(e)) return(list(entry = e, how = "alias"))
+  # an alias with no model is not guessed ("gemini" with no Gemini Pro is no Gemini Flash)
+  if (catalog_norm_id(pat) %in% catalog_norm_id(names(targets))) {
+    return(list(entry = NULL, how = "alias without a model", alias = pat))
+  }
   pv = model_provider_id(pat, ctg)
   models = if (!is.na(pv)) provider_get(pv)$models
   e = if (length(models)) model_alias_entry(paste0(pv, "/", models[[1L]]$id), ctg)
@@ -760,7 +764,7 @@ model_lookup = function(text, ctg) {
         hit2$thinking = suffix
         return(hit2)
       }
-      if (!is.null(hit2$provider)) {
+      if (!is.null(hit2$provider) || !is.null(hit2$alias)) {
         hit = hit2
         thinking = suffix
       }
@@ -879,11 +883,17 @@ model_resolve = function(ref, strict = TRUE) {
   hit = model_lookup(ref, ctg)
   if (is.null(hit$entry)) {
     if (!strict) return(NULL)
-    target = model_alias_target(ref, ctg$alias_targets)
-    if (!is.na(target)) {
-      gptr_abort(paste0("The model alias '", ref, "' points to ", target, ", but its provider ",
-                        sub("/.*$", "", target), " is not registered."),
-                 "unknown_model", ref = ref, suggestions = character())
+    if (!is.null(hit$alias)) {
+      target = model_alias_target(hit$alias, ctg$alias_targets)
+      why = if (is.na(target)) {
+        paste("names no model in this catalog; run gptr_models(refresh = TRUE) or name one as",
+              "provider/id.")
+      } else {
+        paste0("points to ", target, ", but its provider ", sub("/.*$", "", target),
+               " is not registered.")
+      }
+      gptr_abort(paste0("The model alias '", hit$alias, "' ", why), "unknown_model", ref = ref,
+                 suggestions = character())
     }
     sugg = model_suggestions(ref, ctg, hit$candidates)
     lead = if (identical(hit$how, "ambiguous")) {
