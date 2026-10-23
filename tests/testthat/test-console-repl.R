@@ -388,6 +388,17 @@ test_that("@mentions: files become <file> blocks, bound names become objects", {
   expect_match(men$files, "<file path=\"data/notes.txt\">\nline one\nline two\n</file>",
                fixed = TRUE)
   expect_identical(repl_mentions("use @c and @nothing", e)$objects, character())
+  # what each resolved to, for the line under the sent prompt (D-244); an @ inside a word is
+  # text, as for completion
+  expect_identical(men$said, c("@ tbl (data.frame, 3 x 1)", "@ data/notes.txt (2 lines)"))
+  e$fit = structure(list(), class = c("lm", "x"))
+  men = repl_mentions("see @fit, @data, @data/, @fit2, x@tbl, (@tbl) and @\"no such.R\"", e)
+  expect_identical(men$objects, c("fit", "tbl"))
+  expect_identical(men$said, c("@ fit (lm)", "@data is a folder, sent as text",
+                               "@data/ is a folder, sent as text", "@fit2 not found, sent as text",
+                               "@ tbl (data.frame, 3 x 1)",
+                               "@\"no such.R\" not found, sent as text"))
+  expect_identical(repl_mentions("hello there", e)$said, character())
 })
 
 test_that("a binary @file is announced, not inlined", {
@@ -395,6 +406,7 @@ test_that("a binary @file is announced, not inlined", {
   writeBin(as.raw(c(0x50, 0x00, 0x01)), file.path(root, "blob.bin"))
   men = repl_mentions("look at @blob.bin", new.env())
   expect_match(men$files, "binary=\"true\" bytes=\"3\"", fixed = TRUE)
+  expect_identical(men$said, "@ blob.bin (binary, 3 bytes)")
 })
 
 test_that("a long @file is marked truncated even when the first cut line is blank", {
@@ -403,6 +415,7 @@ test_that("a long @file is marked truncated even when the first cut line is blan
   block = repl_mentions("see @long.R", new.env())$files
   expect_match(block, "<file path=\"long.R\" truncated=\"true\">\nl1\n", fixed = TRUE)
   expect_match(block, "\nl40\n</file>", fixed = TRUE)
+  expect_identical(repl_mentions("see @long.R", new.env())$said, "@ long.R (first 40 lines)")
 })
 
 test_that("!code runs in the REPL environment and leaves a note; !!code does not", {
@@ -510,6 +523,36 @@ test_that("console_send() attaches @objects by name and @files as a block", {
   expect_identical(unname(blocks[["text"]]), "explain @a.R using @my_cars")
 })
 
+test_that("one dim line under a sent prompt names what its @mentions resolved to (D-244)", {
+  skip_on_cran()
+  local_utf8_glyphs()
+  local_console_test()
+  local_scripted_ui()
+  e = new.env(parent = globalenv())
+  e$my_cars = mtcars
+  local_console_stdin(c("hello there", "use @my_cars and @fit2", "/exit"))
+  out = utils::capture.output(
+    peter(.stdin = TRUE, model = gptr_fake_provider(list("one", "two")), envir = e)
+  )
+  expect_identical(out[match("peter> use @my_cars and @fit2", out) + 0:1],
+                   c("peter> use @my_cars and @fit2",
+                     "@ my_cars (data.frame, 32 x 11) · @fit2 not found, sent as text"))
+  # no line for a prompt without @
+  expect_identical(out[match("peter> hello there", out) + 0:1], c("peter> hello there", "one"))
+  # at column 2 where the console margin applies, dim, wrapped between its terms, a term wider
+  # than the content cut
+  local_mocked_bindings(console_pad = function() "  ",
+                        console_send = function(rs, text, ...) list(status = "interrupt"))
+  withr::local_options(cli.num_colors = 256L, cli.width = 40L)
+  rs = repl_state(NULL, e)
+  said = written(function() repl_turn(rs, "use @my_cars, @fit2 and @fit2_with_a_long_name"))
+  expect_identical(said,
+                   paste0("  \033[38;5;244m@ my_cars (data.frame, 32 x 11)\033[39m\n",
+                          "  \033[38;5;244m@fit2 not found, sent as text\033[39m\n",
+                          "  \033[38;5;244m@fit2_with_a_long_name not found, s…\033[39m\n"))
+  expect_identical(written(function() repl_turn(rs, "hello there")), "")
+})
+
 test_that("console_send() keeps the session of a failed call and reports the error", {
   skip_on_cran()
   local_project()
@@ -549,11 +592,11 @@ test_that("the console call's arguments reach the first prompt, also on a piped 
   s = peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
   call = list(ids = list(mode = "auto"), args = list(), context = list())
   rs = repl_state(s, new.env(), call = call)
-  cl = console_call(rs, "go")
+  cl = console_call(rs, "go", list())
   console_call_release(rs)
   expect_identical(cl$mode, "auto")
   expect_identical(cl[[2L]], quote(.gptr_session))
-  cl2 = console_call(rs, "again")
+  cl2 = console_call(rs, "again", list())
   console_call_release(rs)
   expect_null(cl2$mode)
 })

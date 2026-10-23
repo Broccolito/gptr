@@ -336,19 +336,23 @@ attr_escape = function(x) {
 }
 
 #' The <file> block of an @file mention: the first 40 lines of a text file (redacted with the
-#' `context` profile), or a one-line note for a binary file (report 18 section 4.3)
+#' `context` profile), or a one-line note for a binary file (report 18 section 4.3); attr "said"
+#' names what it holds (`2 lines`, `first 40 lines`, `binary, 3 bytes`)
 #' @noRd
 repl_file_block = function(path, shown, max_lines = 40L) {
   head_raw = readBin(path, "raw", n = 8192L)
   if (any(head_raw == as.raw(0L))) {
-    return(paste0("<file path=\"", attr_escape(shown), "\" binary=\"true\" bytes=\"",
-                  format(file.size(path), scientific = FALSE), "\"/>"))
+    bytes = format(file.size(path), scientific = FALSE)
+    return(structure(paste0("<file path=\"", attr_escape(shown), "\" binary=\"true\" bytes=\"",
+                            bytes, "\"/>"), said = paste0("binary, ", bytes, " bytes")))
   }
   x = readLines(path, n = max_lines + 1L, warn = FALSE, encoding = "UTF-8")
   more = length(x) > max_lines
+  n = min(length(x), max_lines)
   x = redact(clean_terminal(utils::head(x, max_lines)), profile = "context")
-  paste0("<file path=\"", attr_escape(shown), "\"", if (more) " truncated=\"true\"" else "",
-         ">\n", paste(x, collapse = "\n"), "\n</file>")
+  structure(paste0("<file path=\"", attr_escape(shown), "\"", if (more) " truncated=\"true\"",
+                   ">\n", paste(x, collapse = "\n"), "\n</file>"),
+            said = paste0(if (more) "first ", n, if (n == 1L) " line" else " lines"))
 }
 
 #' The objects an @mention names: those bound in `env` and its parents up to the global
@@ -366,26 +370,47 @@ console_objects = function(env, all = TRUE) {
   sort(unique(out), method = "radix")
 }
 
-#' Resolve @mentions: files (relative to the working directory or the project root, or
-#' absolute/home paths) become <file> blocks; syntactic names bound in `env` become context
-#' objects passed by name (never read here). Other mentions (e-mail addresses) stay text.
+#' Resolve @mentions, words starting with @ (readline's word breaks before it, as for completion,
+#' so an e-mail address stays text): files (relative to the working directory or the project root,
+#' or absolute/home paths) become <file> blocks; syntactic names bound in `env` become context
+#' objects passed by name. `said` names what each mention resolved to, in order (D-244): `@ notes.md
+#' (2 lines)`, `@ fit (lm)` or `@ tbl (data.frame, 32 x 11)` (its class and dimensions), or
+#' `@fit2 not found, sent as text` (`is a folder` for a directory)
 #' @noRd
 repl_mentions = function(text, env) {
-  pattern = "@(\"[^\"]+\"|[A-Za-z0-9_./~-]*[A-Za-z0-9_/~-])"
-  toks = regmatches(text, gregexpr(pattern, text))[[1L]]
+  pattern = "(?<![^\\s\"'\\\\`><=%;,|&{()}!])@(\"[^\"]+\"|[A-Za-z0-9_./~-]*[A-Za-z0-9_/~-])"
+  toks = regmatches(text, gregexpr(pattern, text, perl = TRUE))[[1L]]
   files = character()
   objects = character()
+  said = character()
   for (t in unique(toks)) {
     nm = gsub("^@\"?|\"$", "", t)
     cand = unique(c(path.expand(nm), file.path(project_root(), nm)))
-    hit = cand[path_info(cand)$isdir %in% FALSE]
+    dir = path_info(cand)$isdir
+    hit = cand[dir %in% FALSE]
     if (length(hit)) {
-      files = c(files, repl_file_block(hit[[1L]], path_rel(hit[[1L]])))
+      shown = path_rel(hit[[1L]])
+      block = repl_file_block(hit[[1L]], shown)
+      files = c(files, block)
+      said = c(said, paste0("@ ", shown, " (", attr(block, "said"), ")"))
     } else if (identical(make.names(nm), nm) && nm %in% console_objects(env)) {
       objects = c(objects, nm)
+      said = c(said, paste0("@ ", nm, " (", mention_kind(nm, env), ")"))
+    } else {
+      said = c(said, paste0(t, if (any(dir %in% TRUE)) " is a folder" else " not found",
+                            ", sent as text"))
     }
   }
-  list(files = files, objects = objects)
+  list(files = files, objects = objects, said = said)
+}
+
+#' An @object's class and dimensions, `data.frame, 32 x 11`: a leaf returning a string, so no
+#' frame keeps the object (architecture 6.4 R4)
+#' @noRd
+mention_kind = function(nm, env) {
+  x = get0(nm, envir = env)
+  d = paste(dim(x), collapse = " x ")
+  paste0(class(x)[[1L]], if (nzchar(d)) ", ", d)
 }
 
 #' The note an `!expr` leaves for the next prompt: the code and its output as #> lines
@@ -538,11 +563,10 @@ console_abort_stray = function(s) {
 #' bound in the mask `rs$mask`, whose parent is the evaluation environment, so @objects reach
 #' the gateway as plain symbols (read by name, never forced, IC-41). The literal prompt gets
 #' `{identifier}` interpolation like a typed one; the gateway shows the interpolated text at
-#' verbosity 2 (03 section 4.1.4).
+#' verbosity 2 (03 section 4.1.4). `men`: the prompt's @mentions (repl_mentions()).
 #' @noRd
-console_call = function(rs, text) {
+console_call = function(rs, text, men) {
   env = repl_eval_env(rs)
-  men = repl_mentions(text, env)
   first = is.null(rs$session)
   # the console call's identifiers and objects go with the first prompt of a new session and
   # with the first prompt on a piped-in session (`s |> peter(mode = auto)`)
@@ -686,10 +710,10 @@ typed_code_open = function(held) {
 #' else a new gptr_last()); a stray run left by an early interrupt is aborted. On a terminal the
 #' call's console_typed() task reads what is typed, in the call's modes until it ends (tty_call():
 #' a T console's keys, a D console's lines without echo; IC-76, D-243); the end of its run settles
-#' what it held (console_queue_left()).
+#' what it held (console_queue_left()). `men`: the prompt's @mentions.
 #' @return list(status = "ok" | "error" | "interrupt", value, error); `rs$session` is updated.
 #' @noRd
-console_send = function(rs, text) {
+console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) {
   .gptr_repl = rs
   .gptr_interrupt_barrier = TRUE
   force(.gptr_repl)
@@ -702,7 +726,7 @@ console_send = function(rs, text) {
     on.exit(tty_restore(), add = TRUE)
     tty_call(console_class() == "T")
   }
-  cl = console_call(rs, text)
+  cl = console_call(rs, text, men)
   rs$sending = cl
   before = gptr::gptr_last()
   res = tryCatch(list(status = "ok", value = eval(cl, envir = rs$mask)),
@@ -765,11 +789,30 @@ repl_error = function(e) {
   console_notice("Error: ", console_escape(conditionMessage(e)), .error = TRUE)
 }
 
-#' One prompt through console_send(); the answer is printed here when the renderer hooks did not
-#' stream it (verbosity < 2), any other value is printed
+#' The line under a sent prompt that names what its @mentions resolved to (D-244): dim, the
+#' escaped terms `said` (repl_mentions()) joined by the separator, wrapped between terms at the
+#' console's content width (a term wider than it cut)
+#' @noRd
+mention_line = function(said) {
+  sym = console_style()
+  width = max(20L, cli::console_width() - 4L)
+  said = console_escape(said, FALSE)
+  rows = said[[1L]]
+  for (x in said[-1L]) {
+    joined = paste0(rows[[length(rows)]], sym$sep, x)
+    if (nchar(joined, type = "width") <= width) rows[[length(rows)]] = joined else rows = c(rows, x)
+  }
+  paste(sym$dim(console_cut(rows, width)), collapse = "\n")
+}
+
+#' One prompt through console_send(), after the line naming what its @mentions resolved to
+#' (mention_line()); the answer is printed here when the renderer hooks did not stream it
+#' (verbosity < 2), any other value is printed
 #' @noRd
 repl_turn = function(rs, text) {
-  res = console_send(rs, text)
+  men = repl_mentions(text, repl_eval_env(rs))
+  if (length(men$said)) console_notice(mention_line(men$said))
+  res = console_send(rs, text, men)
   if (identical(res$status, "error")) return(repl_error(res$error))
   if (!identical(res$status, "ok")) return(invisible(NULL))
   value = res$value

@@ -1923,7 +1923,11 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 - **REPL** (`frontend` "console"): `readline()` when interactive, one persistent `file("stdin")` under
   `.stdin = TRUE`; input grammar: natural language, `/command`, `!expr` (evaluated in `envir`, added to the
   next prompt's context within 300 tokens [IC-73]) and `!!expr` (not added), fenced ```` ```r ```` blocks, `"""` multi-line prompts,
-  trailing backslash, `@file` and `@object` mentions; a warning near the readline line limit (4,095 bytes on
+  trailing backslash, `@file` and `@object` mentions (a word starting with `@`, so an e-mail address stays text;
+  after a sent prompt one dim line names what they resolved to, `@ mtcars_copy (data.frame, 32 x 11) · @ notes.md
+  (first 40 lines) · @fit2 not found, sent as text`, wrapped between its terms, and none without a mention
+  [D-244]); a warning
+  near the readline line limit (4,095 bytes on
   R < 4.5, 8,190 on R >= 4.5 [18 fact-check]); optional history through `utils::timestamp()`
   (`gptr.history`). Banner: `gptr 1.0.0 | model ... | mode ... | .gptr/ found` plus the workspace summary.
 - **REPL completion** [D-183, D-244]: completion comes only after gptr's trigger characters, never on natural
@@ -1962,7 +1966,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 - **Typing during an answer** [IC-76, D-185]: on a terminal (not `.stdin`, not Windows, interactive, a tty
   stdin; any front end), a reactor task of each prompt call reads what is typed while the call's session runs,
   every 0.05 s: in a T console, in character mode (`stty -icanon -echo -iexten min 1 time 0`), the keys go to the
-  composer, whose draft the live row shows (Up on an empty draft takes back the newest message waiting) [D-243];
+  composer, whose draft the live row shows (Up on an empty draft takes back the newest message waiting) [D-243],
+  a draft starting with `/` or `!` after the hint `runs after this answer` and a leading `!` as the bold red shell
+  glyph in the chevron's place (at the prompt's editor below, bold red after the prompt) [D-244];
   in a D console (TERM=dumb, Emacs) the complete lines. Enter steers (setting `type_ahead`: `"steer"`), or, with
   `"follow_up"`, makes the next prompt, and Tab does the other [D-242]; one batch (a paste) is one message;
   `/command` and `!code` lines wait for the next prompt, shown as follow-ups, in the order typed with them; after

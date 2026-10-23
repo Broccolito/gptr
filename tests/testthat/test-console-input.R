@@ -284,6 +284,55 @@ test_that("the draft keeps its column as the status changes; the status only wid
            list(what = "thinking", secs = 5, candidates = c("@fuel", "@fuel.csv")),
            list(what = "thinking", secs = 6))
   expect_identical(c(regexpr("›", r, fixed = TRUE)), c(17L, 22L, 17L))
+  # so does the hint of a / or ! draft (D-244)
+  r = rows(list(what = "thinking", secs = 5),
+           list(what = "thinking", secs = 5, draft = "/mode"),
+           list(what = "thinking", secs = 6))
+  expect_identical(c(regexpr("›", r, fixed = TRUE)), c(17L, 42L, 17L))
+})
+
+test_that("a leading ! takes the chevron's place; / and ! drafts say when they run (D-244)", {
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L)
+  states = list(
+    bang = list(what = "thinking", secs = 6, draft = "!summary(fuel$mpg)"),
+    twice = list(what = "thinking", secs = 6, draft = "!!x = 1"),
+    slash = list(what = "thinking", secs = 6, queued = 1, draft = "/mode"),
+    spaced = list(what = "thinking", secs = 6, draft = "  /mode"),
+    text = list(what = "thinking", secs = 6, draft = "wow! /x")
+  )
+  expect_identical(live_rows(states, 80L), list(
+    bang = "▌ thinking 6s   runs after this answer   ! summary(fuel$mpg)",
+    twice = "▌ thinking 6s   runs after this answer   ! !x = 1",
+    slash = "▌ thinking 6s · 1 queued   runs after this answer   › /mode",
+    spaced = "▌ thinking 6s   runs after this answer   ›   /mode",
+    text = "▌ thinking 6s   › wow! /x"
+  ))
+  # the hint is the first term to go
+  expect_identical(live_rows(states["bang"], 40L)$bang, "▌ thinking 6s   ! summary(fuel$mpg)")
+  # it goes with the draft where it fits beside the status at its widest this run, so it does not
+  # come and go with the status words (visual check: at 60 columns the draft jumped each time)
+  rows = function(width) {
+    widest = 0L
+    steps = list(list(what = "thinking", secs = 4), list(what = "r", frozen = TRUE),
+                 list(what = "thinking", secs = 5))
+    vapply(steps, function(s) {
+      row = console_live_row(c(s, draft = "!summary(fuel$mpg)", status_w = widest), width)
+      widest <<- max(widest, attr(row, "status_w"))
+      c(row)
+    }, "")
+  }
+  expect_identical(rows(60L), c("▌ thinking 4s   ! summary(fuel$mpg)",
+                                "▌ r             ! summary(fuel$mpg)",
+                                "▌ thinking 5s   ! summary(fuel$mpg)"))
+  expect_identical(rows(80L)[[2L]], "▌ r             runs after this answer   ! summary(fuel$mpg)")
+  # the ! bold and red, as Codex's shell mode; plain text is never restyled
+  withr::local_options(cli.num_colors = 256L)
+  expect_identical(c(console_live_row(states$bang, 80L)), paste0(
+    "\033[38;5;67m▌\033[39m \033[38;5;244mthinking 6s   runs after this answer\033[39m",
+    "   \033[1m\033[38;5;167m!\033[39m\033[22m summary(fuel$mpg)"))
+  expect_identical(c(console_live_row(states$text, 80L)), paste0(
+    "\033[38;5;67m▌\033[39m \033[38;5;244mthinking 6s\033[39m   › wow! /x"))
 })
 
 test_that("in a CJK locale every character outside ASCII counts two columns (D-243)", {
@@ -502,8 +551,16 @@ test_that("a draft a run left is edited at the prompt; Enter returns it as readl
   withr::local_options(cli.width = 80L)
   r = idle_read("abc \u202efed", "\r")
   expect_match(r$out, "\rpeter> abc <U+202E>fed\033[K", fixed = TRUE)
-  # the row is on the input band where the background is known
+  # a leading ! is the shell glyph, bold red, after the prompt; the line is written as typed
+  # (D-244)
   withr::local_options(cli.num_colors = 256L)
+  local_mocked_bindings(console_background = function() NA)
+  r = idle_read("!summ", list("ary(x)", "\r"))
+  expect_match(r$out, "\rpeter> \033[1m\033[38;5;167m!\033[39m\033[22msummary(x)\033[K",
+               fixed = TRUE)
+  expect_identical(r$rows, c("peter> !summary(x)", ""))
+  expect_match(r$out, "peter> !summary(x)\n", fixed = TRUE)
+  # the row is on the input band where the background is known
   local_mocked_bindings(console_background = function() "dark")
   r = idle_read("x", "\r")
   expect_match(r$out, "\r\033[48;5;237mpeter> x\033[K\033[0m", fixed = TRUE)

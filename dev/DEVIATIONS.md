@@ -3502,6 +3502,25 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-console-completion.R "Windows' console completion completes only the triggers (IC-81)", "RStudio's
   console completes only the triggers; its editor gets R's (IC-81)", "unsupported input modes and IDE consoles
   keep completion options unchanged" (rewritten: IDE consoles get the scoped completer).
+- Task 24: `!`, `/` and `@` show what they do. On a T console's live row a draft starting with `/` or `!` (a
+  follow-up whatever the key) follows the hint `runs after this answer`, and a leading `!` takes the chevron's
+  place, bold red (`▌ thinking 6s   runs after this answer   ! summary(fuel$mpg)`), as Codex's shell mode; the
+  hint shows where it fits beside the status at its widest this run, so it neither widens the padded status nor
+  comes and goes with the status words. At the prompt's editor the `!` after the prompt is bold red, with no hint,
+  as nothing runs (the plan named the idle composer for both). After a prompt is sent, in every class, one dim
+  line under it names what its mentions resolved to (`repl_mentions()`'s `said`):
+  `@ fuel (data.frame, 32 x 4) · @ notes.md (6 lines) · @fit2 not found, sent as text`, `(first 40 lines)` or
+  `(binary, 3 bytes)` for a file, `is a folder` for a directory, none without a mention. It wraps between its
+  terms where it does not fit (the plan said one line; its own example is 99 columns, and a cut at 80 hid `not
+  found`). A mention is now a word starting with `@`, as for completion: `x@tbl` attached `tbl`, and an e-mail
+  address would have been reported `not found`. Contract-visible: 04 §15.10 IC-76 and IC-82, 03 §6.17. Tests:
+  test-console-input.R "a leading ! takes the chevron's place; / and ! drafts say when they run (D-244)", "the
+  draft keeps its column as the status changes; the status only widens (review)", "a draft a run left is edited at
+  the prompt; Enter returns it as readline would"; test-console-repl.R "@mentions: files become <file> blocks,
+  bound names become objects", "a binary @file is announced, not inlined", "a long @file is marked truncated even
+  when the first cut line is blank", "one dim line under a sent prompt names what its @mentions resolved to
+  (D-244)"; test-console-typing.R "Tab completes a trigger word; several show on the live row until a key
+  (IC-81)".
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Pending (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three

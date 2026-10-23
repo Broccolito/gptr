@@ -139,7 +139,7 @@ working directory restored. Plan-specific rules:
 | `R/console-ui.R` | 2, 3, 8, 12, 19, 20 |
 | `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 17, 18, 20, 21, 22, 23, 24, 25, 26 |
 | `R/console-interrupt.R` | 3, 13, 14, 15, 17, 18, 20 |
-| `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21, 22 |
+| `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21, 22, 24 |
 | `R/console-complete.R` (new) | 22, 23 |
 | `R/utils-options.R` (`readline_answer()`, tty wrappers, `console_class()`) | 2, 3, 17, 18, 25 |
 | `R/utils-conditions.R` (`console_colors()`, `console_style()`; `gptr_message_write()` clears and redraws the live row) | 8, 11, 17 |
@@ -149,7 +149,7 @@ working directory restored. Plan-specific rules:
 | `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress,message-stream,setup,notice,process-launch}.R`, `helper-console-input.R` | their tasks |
 | `tests/testthat/test-cli-{codex,claude}.R` (expected tool lines), `fixtures/cli/claude-toolstream.ndjson` (rows) | 8, 10, 11, 12 |
 | `tests/testthat/test-subagent-team.R`, `test-gptr-gateway.R` (expected sub-agent lines) | 11, 12 |
-| `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19, 22 |
+| `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19, 22, 24 |
 | `tests/testthat/test-agent-{run,loop,dispatch}.R`, `fixtures/oracles/report02/loop.json`, `test-session-object.R`, `test-provider-transform.R` | 4, 5, 6 |
 | `tests/testthat/helper-arch.R` (the console's contract edges; new files' layer rows), `test-arch-layers.R` | 15, 16, 22 |
 | `tests/testthat.R` (CRAN list, D-240) | 16 |
@@ -1243,16 +1243,39 @@ Decisions:
   found, sent as text`. It reuses `repl_mentions()`.
 - Readline's echo is not restyled while the person types: there is no per-key hook. The composer
   does no per-token colouring either, so text looks the same at every phase.
+- (Amended in Task 24:)
+  - The hint applies where the composer always sends a follow-up: a draft starting with optional spaces,
+    then `/` or `!`. It goes with the draft, before its glyph, and shows where it fits beside the status at
+    its widest this run (`status_w`), so it never widens the padded status (a later draft keeps its column)
+    and does not come and go as the status words change: in the visual check at 60 columns, the draft jumped
+    25 columns at each change between `thinking` and `r`. Where it does not fit it goes first. The `!` in
+    the glyph's place is followed by the rest of the draft, `! summary(x)`, as Codex shows `! ls`.
+  - At the idle composer the prompt stands where the glyph is, and nothing runs: the `!` after the prompt is
+    bold red, and there is no hint. Enter writes the line plain, as readline leaves it.
+  - `repl_mentions()` returns `said`: a file `@ notes.md (6 lines)`, `(first 40 lines)` or `(binary, 3
+    bytes)`; an object its class and dimensions, read in a leaf (`mention_kind()`, 03 §6.4 R4); a directory
+    `is a folder, sent as text`. `repl_turn()` writes the line and passes the mentions to `console_send()`
+    (`console_call()` takes them), so they are resolved once.
+  - The line wraps between its terms at the console's content width; a term wider than that is cut. "One
+    line" does not fit: the example above is 99 columns, and a cut at 80 columns hid `not found`.
+  - A mention is a word starting with `@` (readline's break characters before it, as `console_trigger()`).
+    `x@tbl` attached `tbl` before, and the line would have reported an e-mail address as `not found`.
 
 Tests (`test-console-input.R`, `test-console-repl.R`), RED first:
 - The `!` row bytes and the hint.
 - The mention line for an object, a file and a missing name.
 - No line for a prompt without `@`.
+- (Amended in Task 24:) the idle composer's `!`; the hint keeps a later draft's column; a folder, `x@tbl`
+  and an e-mail address; the wrap; the hint's column as the status words change. Task 22's composer case
+  in `test-console-typing.R` now has the hint.
 
-Spec: 03 §6.17 grammar.
+Spec: 03 §6.17 grammar. (Amended in Task 24:) Also 04 §15.10 IC-76 (the idle editor) and IC-82 (the live
+row's text), and D-244's Task 24 note.
 
 Files: `R/console-input.R`, `R/console-repl.R` (`repl_turn()`, `repl_mentions()`),
-`tests/testthat/test-console-input.R`, `tests/testthat/test-console-repl.R`.
+`tests/testthat/test-console-input.R`, `tests/testthat/test-console-repl.R`. (Amended in Task 24:) Also
+`R/console-repl.R` (`repl_file_block()`, `console_call()`, `console_send()`) and
+`tests/testthat/test-console-typing.R`.
 
 Commit: `feat(console): !, / and @ show what they do`.
 
@@ -1357,7 +1380,8 @@ Decisions:
     `[a]bort`, `[b]ackground` becomes `s steer · f follow-up · c continue · a abort · b background`.
 - Update `/help`, the interactive-console vignette and the README console section. (Amended in Task 23:)
   the vignette's completion paragraph, stale since Tasks 22 and 23 (it names `!` only and says RStudio's
-  console completes R code at `peter>`), takes `?peter`'s.
+  console completes R code at `peter>`), takes `?peter`'s. (Amended in Task 24:) its mention paragraph
+  names the line under a sent prompt, and that a mention starts a word.
 - Finalise D-242..D-245, §15.10 and the amended IC-75..IC-77.
 - Re-run the cross-plan checks.
 - Update report 18's Verification log rows for type-ahead, completion and the band.

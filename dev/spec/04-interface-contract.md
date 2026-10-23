@@ -5474,7 +5474,8 @@ its part in its own commit, and Task 27 finalises them.
   - A draft left at the end of a run stays until sent (Task 21; T class). The REPL reader's read
     (`rd$read(prompt)`) returns its held and `typed` lines first; then, while the composer holds a draft,
     `console_idle(rd, prompt)` edits it at the prompt: `\r`, the band (as the live row's), the prompt and the
-    draft's tail fitted to `width - 1` (`live_fit()`), `\033[K` (then `\033[0m` on the band), drawn again
+    draft's tail fitted to `width - 1` (`live_fit()`; a leading `!` bold red, the shell glyph of the live row,
+    IC-82, Task 24), `\033[K` (then `\033[0m` on the band), drawn again
     after every key, in character mode (`tty_call(TRUE)`, the saved modes back on return, error and
     interrupt), reading fd 0 without a time limit (`console_typed_chars(rd, -1L)`). The keys are the
     composer's (`console_compose()`); Up and Ctrl-D do nothing, and Tab does nothing unless on a trigger word,
@@ -5584,7 +5585,7 @@ its part in its own commit, and Task 27 finalises them.
     key (IC-82; they do not widen the padded status, so the draft moves only while they show), or, at the idle
     editor, are listed on a dim row at column 2 above the prompt's row; none does nothing, and Tab on a trigger
     word never queues.
-- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25); Task 25 pending.
+- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 24, 25); Task 25 pending.
   - One style table (Task 8): `console_style()` holds the glyphs, the two accents, dim and the input band, and
     every console glyph comes from it. The glyphs come from the logo's cursor shapes: the person's chevron, a tool
     call's thin strip, the agent's block. ASCII applies where `cli::is_utf8_output()` is FALSE, and in Windows
@@ -5683,7 +5684,12 @@ its part in its own commit, and Task 27 finalises them.
     last row. It is no block (`console_gap()` has no waiting kind), so it takes no blank line before it, and the
     next block writes the blank it owes on the cleared row.
     - Text: `▌ <state> <elapsed>[ · <n> queued][ · question waiting]`, then, where a composer reads keys (T,
-      Task 18), `   › <draft tail>`, or with an empty draft `   ↳ <kind> · <newest text> · ↑ edit` (a queue) or
+      Task 18), `   › <draft tail>` (Task 24, D-244: a draft starting with optional spaces then `/` or `!`, a
+      follow-up whatever the key, after the hint `   runs after this answer` where that fits beside the status
+      at its widest this run, so it does not come and go with the status words; a leading `!` in the
+      chevron's place, bold red, `   ! <draft tail after the !>`, as Codex's shell mode; other text is never
+      restyled),
+      or with an empty draft `   ↳ <kind> · <newest text> · ↑ edit` (a queue) or
       `   enter steer · tab follow-up · ctrl-c pause` (swapped under `type_ahead = "follow_up"`); without a
       composer ` · <key> pause` where the pause menu is offered (`console_menu_available()`: terminals,
       Positron) or ` · <key> stop` (RStudio, Rgui; the key from `console_interrupt_key()`, lower case): the
@@ -5701,12 +5707,14 @@ its part in its own commit, and Task 27 finalises them.
       hints dim, only the draft ink; on the input band the words take the band's grey (`console_style()$band_dim`:
       `#6c6c6c`, 256 colours `38;5;242`, on the light band; `#a8a8a8`, `38;5;247`, on the dark one), as the one
       grey was about 2.8:1 and 3.2:1 there (review of Tasks 16-21). ASCII: `# thinking 6s - ctrl-c pause`.
-    - One collapse rule: whole terms go from the right, the hint's (`ctrl-c pause`, `tab follow-up`, `enter
-      steer`; the queue view's `↑ edit`), then `question waiting`, then `<n> queued`; then the queued message
+    - One collapse rule: the `/` and `!` hint goes first; then whole terms go from the right, the hint's
+      (`ctrl-c pause`, `tab follow-up`, `enter steer`; the queue view's `↑ edit`), then `question waiting`, then
+      `<n> queued`; then the queued message
       is cut with `…`, keeping its head; at least `▌ <elapsed>`; the draft keeps its tail (review of Tasks 16-21:
       a character cut ended a whole message in `…` and cut `ctrl-c…`). With a draft the status is padded to the
       widest it was this run (`console_live()` keeps `status_w`), so the draft never moves left: it jumped 7
-      columns when `thinking 17s` became `r 15s`. The row is fitted to width - 1 as the console draws it (`live_fit()`: R's widths; in a CJK
+      columns when `thinking 17s` became `r 15s`. Completion candidates and the `/` and `!` hint do not count
+      towards that width, so they move the draft only while they show. The row is fitted to width - 1 as the console draws it (`live_fit()`: R's widths; in a CJK
       locale, whose terminals draw East Asian ambiguous widths wide, every character outside ASCII that R
       counts as one column counted as two), so it never wraps; it is empty where not even the block and the
       time fit.

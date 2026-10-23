@@ -127,9 +127,10 @@ console_keys = function(rd, s, chars) {
 }
 
 #' The REPL reader `rd`'s read at `prompt` of a T console's draft a run left (D-243): the prompt
-#' and the draft's tail are one row (on the input band, as the live row), edited with the
-#' composer's keys in character mode (tty_call()) and drawn again after every key; the row is
-#' cleared when the read ends. Enter returns the line, which the reader echoes after the prompt
+#' and the draft's tail are one row (on the input band, as the live row; a leading ! bold red, the
+#' shell glyph, D-244), edited with the composer's keys in character mode (tty_call()) and drawn
+#' again after every key; the row is cleared when the read ends. Enter returns the line, which the
+#' reader echoes after the prompt
 #' as readline() leaves it; Up and Ctrl-D do nothing, nor does Tab but on a trigger word, which it
 #' completes (console_complete()), several candidates listed on a dim row at column 2 above the
 #' prompt's row, as readline lists them. Once the
@@ -147,9 +148,13 @@ console_idle = function(rd, prompt) {
       draft = rd$compose$draft %||% ""
       if (!nzchar(draft)) break
       room = cli::console_width() - 1L - live_fit(prompt)
-      console_cat(paste0("\r", sym$band, prompt,
-                         live_fit(live_text(draft), room, sym$ellipsis, tail = TRUE),
-                         "\033[K", if (nzchar(sym$band)) "\033[0m"))
+      shown = live_fit(live_text(draft), room, sym$ellipsis, tail = TRUE)
+      # a leading ! is the shell glyph, as on the live row
+      if (startsWith(shown, "!")) {
+        shown = paste0(cli::style_bold(sym$red("!")), substring(shown, 2L))
+      }
+      console_cat(paste0("\r", sym$band, prompt, shown, "\033[K",
+                         if (nzchar(sym$band)) "\033[0m"))
       keys = console_typed_chars(rd, -1L)
       if (!nzchar(keys)) break
       # Ctrl-C (a key in character mode), and a cursor key only readline edits with, hand the draft
@@ -273,9 +278,12 @@ console_newest = function(s, rd, take = FALSE) {
 #' without a composer the status ends with the key and its verb, as the composer's keys read,
 #' `<sep>esc stop`; with an empty draft the newest message follows, `<queued> steer<sep><text><sep>
 #' <up> edit`, or the keys, `enter steer<sep>tab follow-up<sep>ctrl-c pause`; else `<person>
-#' <draft>`. The block is the agent's blue and the words dim; the draft is ink. One collapse rule:
-#' whole terms go from the right, the hint's, then the queue and a waiting question, then the
-#' queued message is cut keeping its head, down to the block and the elapsed time; the draft keeps
+#' <draft>`, after the hint `runs after this answer` where the draft starts with / or ! (a
+#' follow-up, whatever the key) and the hint fits beside the status at its widest, and a leading !
+#' takes the person's glyph's place, bold red (Codex's shell mode, D-244). The block is the agent's
+#' blue and the words dim; the draft is ink. One collapse rule: whole terms go from the right, the
+#' hint's, then the queue and a waiting question, then the queued message is cut keeping its head,
+#' down to the block and the elapsed time; the draft keeps
 #' its tail, so an ellipsis always marks cut text. Widths are counted as the console draws them
 #' (live_fit()), so the row never wraps; where not even the block and the time fit, it is empty.
 #' @noRd
@@ -312,10 +320,19 @@ console_live_row = function(state, width) {
       paste0("   ", paste(terms, collapse = sym$sep))
   }
   lead = paste0(sym$agent, " ")
-  gap = paste0("   ", sym$person, " ")
-  input = if (nzchar(draft %||% "")) live_text(draft)
+  # a leading ! takes the chevron's place, as Codex's shell mode
+  bang = startsWith(draft %||% "", "!")
+  gap = paste0("   ", if (bang) "!" else sym$person, " ")
+  input = if (nzchar(draft %||% "")) live_text(if (bang) substring(draft, 2L) else draft)
   room = width - 1L - live_fit(lead)
   if (room < live_fit(clock)) return("")
+  # a / or ! draft (a follow-up whatever the key) says so before its glyph where that fits beside
+  # the status at its widest this run, so the hint does not come and go with the status words
+  after = "   runs after this answer"
+  later = grepl("^\\s*[/!]", draft %||% "") && !length(state$candidates) &&
+    max(live_fit(paste(words, collapse = sym$sep)), state$status_w %||% 0L) + live_fit(after) +
+      live_fit(gap) + live_fit(input) <= room
+  if (later) gap = paste0(after, gap)
   fit = if (is.null(input)) room else max(live_fit(clock), room - live_fit(gap) - live_fit(input))
   if (length(state$candidates)) {
     status = live_candidates(state$candidates, fit)
@@ -348,10 +365,11 @@ console_live_row = function(state, width) {
   # the draft stays where it was this run: the status keeps the widest width it had (`status_w`)
   shown = live_fit(status)
   status = paste0(status, strrep(" ", max(0L, min(fit, state$status_w %||% 0L) - shown)))
-  row = paste0(sym$blue(sym$agent), " ", grey(status))
+  row = paste0(sym$blue(sym$agent), " ", grey(paste0(status, if (later) after)))
   left = room - live_fit(status) - live_fit(gap)
   if (left > live_fit(sym$ellipsis)) {
-    row = paste0(row, gap, live_fit(input, left, sym$ellipsis, tail = TRUE))
+    glyph = if (bang) cli::style_bold(sym$red("!")) else sym$person
+    row = paste0(row, "   ", glyph, " ", live_fit(input, left, sym$ellipsis, tail = TRUE))
   }
   # completions show until the next key: they move the draft only while they show
   structure(row, status_w = if (length(state$candidates)) 0L else shown)
