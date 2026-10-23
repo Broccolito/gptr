@@ -311,6 +311,24 @@ preset_tools = function(preset, human, model = NULL, modifiers = character(), mo
   prompt_tool_order(tools)
 }
 
+#' Refuses a name of the call's `tools =` (`+`/`-` stripped) that names no tool of the session,
+#' hinting the closest preset or tool; settings `tools.enable`/`tools.disable` stay unchecked
+#' @noRd
+prompt_tools_check = function(mods, session_id) {
+  for (m in mods) {
+    nm = sub("^[+-]", "", m)
+    if (nzchar(nm) && !is.null(registry_get("tool", nm, session = session_id))) next
+    known = c(registry_names("preset", session = session_id),
+              registry_names("tool", session = session_id))
+    d = utils::adist(nm, known, ignore.case = TRUE)[1L, ]
+    hint = if (length(d) && min(d) <= 2) paste0("; did you mean \"", known[which.min(d)], "\"?")
+    gptr_abort(paste0("`tools =` names '", nm, "', which is neither a tool nor a preset",
+                      hint %||% "."), "invalid_argument", arg = "tools",
+               expected = "tool names, \"+name\"/\"-name\" or one preset")
+  }
+  invisible(TRUE)
+}
+
 #' Shipped `tools.presets` defaults (IC-73), applied only past break-even
 #' @noRd
 presets_shipped = c("google/gemini-3*" = "extended", "anthropic/claude-haiku-4-5*" = "extended")
@@ -620,6 +638,8 @@ prompt_compose_preset = function(s, ctx, name, opts, model, mode, human, doc, ro
   rec = preset_record(name, sid)
   mods = as.character(opts$tools %||% character())
   mods = mods[!is.na(mods)]
+  # a peter() call's own names; an agent definition's allowlist degrades quietly
+  if (!is.null(opts$call)) prompt_tools_check(mods, sid)
   tool_names = preset_tools(name, human, model, mods, mode, session = sid)
   removed = c(substring(mods[startsWith(mods, "-")], 2L),
               as.character(unlist(setting_get("tools", session = sid)$disable)))

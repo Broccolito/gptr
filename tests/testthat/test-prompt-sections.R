@@ -428,13 +428,19 @@ test_that("the tool array skips unavailable and missing tools and adds plugin di
                          parameters = list(type = "object", properties = json_obj()),
                          execute = function(input, ctx) "ok", exposure = "direct"),
                source = "session", rank = 0L, session = sid)
-  fr = prompt_compose(s, list(interactive = FALSE, tools = c("+needs_ui", "+nope")))
+  # a peter() call's own unknown name is refused (D-251); a setting's degrades to a diagnostic
+  expect_error(prompt_compose(s, list(interactive = FALSE, call = list(),
+                                      tools = c("+needs_ui", "+nope"))),
+               class = "gptr_error_invalid_argument", regexp = "'nope'")
+  local_gptr_options(tools = list(enable = "nope"))
+  fr = prompt_compose(s, list(interactive = FALSE, call = list(), tools = "+needs_ui"))
   expect_identical(fr$tool_names, c("read", "r", "edit", "write", "zz_lookup"))
   arr = json_decode(fr$tools_json)
   expect_identical(vapply(arr, function(x) x$name, ""),
                    c("read", "r", "edit", "write", "zz_lookup"))
   d = gptr_registry(diagnostics = TRUE)
   expect_true(any(grepl("Tool 'nope' is not registered", d$message, fixed = TRUE)))
+  expect_false(any(grepl("needs_ui", d$message, fixed = TRUE)))
   fr2 = prompt_compose(s, list(interactive = FALSE, tools = "-zz_lookup"))
   expect_false("zz_lookup" %in% fr2$tool_names)
 })

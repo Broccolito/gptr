@@ -25,7 +25,10 @@ agent's own R code, and a team or fan-out it starts, uses the running session's 
 extensions to enable for this session; \code{extensions} also takes \verb{function(gptr)} factories and
 file paths.}
 
-\item{tools}{Tool names, \code{"+name"}/\code{"-name"} modifiers, a preset name, or \code{\link[=gptr_tool]{gptr_tool()}} specs.}
+\item{tools}{Tool names, \code{"+name"}/\code{"-name"} modifiers, one preset name, or \code{\link[=gptr_tool]{gptr_tool()}} specs.
+A bare tool name adds the tool, like \code{"+name"}; to narrow the set, choose a preset such as
+\code{readonly} or remove tools with \code{"-name"}. A name that is neither a tool nor a preset is
+refused.}
 
 \item{agents}{A named list of agent definitions for a team (\code{agent()} means \code{\link[=gptr_agent]{gptr_agent()}}).}
 

@@ -3117,3 +3117,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `env_snapshot()` and `workspace_lines()`; `?gptr_options`, `?gptr_risk`, `?gptr_artifacts`, `?gptr_rewind`.
 - Tests: env-snapshot, env-describe, ckpt-objects, ckpt-rewind, perm-classify, gptr-capture, session-object (a
   ggplot2 guard), utils-options, subagent-team, copy-eval, arch-layers. Evidence: progress/fixes.md Task FIX-13.
+
+## D-251 - P08 Cheat-sheet review: sessions (2026-10-22)
+- Rule (tools-3): a name of a `peter()` call's `tools =` (`+`/`-` stripped) that names no tool of the session is
+  `gptr_error_invalid_argument` naming the closest preset or tool (`utils::adist()`, case-insensitive, at most 2),
+  when the prompt freezes (run options that carry the call, after `session_start` registered extension and MCP
+  tools; no request is sent) and at a continuation (after the call's specs register). Was a `missing_tool`
+  diagnostic, the name ignored. Names in settings `tools.enable`/`tools.disable` and in an agent definition's
+  allowlist keep that diagnostic. Two presets in `tools =` are refused (the first won). A bare name adds, as `+name`.
+- Contract-visible: 04 §6.1 `tools` row; `?peter` `tools`.
+- Tests: gptr-gateway "an unknown name in tools = is refused ..."; prompt-sections "the tool array skips unavailable
+  and missing tools ...". Evidence: progress/fixes.md Task FIX-18.

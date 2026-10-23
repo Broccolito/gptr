@@ -68,7 +68,10 @@
 #' @param skills,plugins,extensions Names (bare or quoted) of skills to preload, plugins and
 #'   extensions to enable for this session; `extensions` also takes `function(gptr)` factories and
 #'   file paths.
-#' @param tools Tool names, `"+name"`/`"-name"` modifiers, a preset name, or [gptr_tool()] specs.
+#' @param tools Tool names, `"+name"`/`"-name"` modifiers, one preset name, or [gptr_tool()] specs.
+#'   A bare tool name adds the tool, like `"+name"`; to narrow the set, choose a preset such as
+#'   `readonly` or remove tools with `"-name"`. A name that is neither a tool nor a preset is
+#'   refused.
 #' @param agents A named list of agent definitions for a team (`agent()` means [gptr_agent()]).
 #' @param parallel Fan one list-like context object out over this many concurrent sub-agents.
 #'   Each child gets its element alone as `.x`, a named list of one attached as `.x[["A"]]`;
@@ -468,15 +471,20 @@ gateway_model_record = function(s) {
   model_resolve(d$model, strict = FALSE)
 }
 
-#' The preset asked for by the call (`.opts$preset`, or a preset name among `tools =`)
+#' The preset asked for by the call (`.opts$preset`, or the one preset name among `tools =`)
 #' @noRd
 gateway_preset = function(call) {
   p = call$args$opts$preset
   if (!is.null(p)) return(p)
   t = call$ids$tools
   if (is.character(t)) {
-    hit = t[t %in% unique(c(gateway_presets(), registry_names("preset")))]
-    if (length(hit)) return(hit[1L])
+    hit = unique(t[t %in% unique(c(gateway_presets(), registry_names("preset")))])
+    if (length(hit) > 1L) {
+      gptr_abort(paste0("`tools =` names more than one preset (", paste(hit, collapse = ", "),
+                        "); choose one."), "invalid_argument", arg = "tools",
+                 expected = "tool names, \"+name\"/\"-name\" or one preset")
+    }
+    if (length(hit)) return(hit)
   }
   NULL
 }
@@ -616,14 +624,15 @@ gateway_continue_envir = function(call, s) {
   invisible(call)
 }
 
-#' Applies a continuation's changes: model, an explicit `mode =` (tightened inside a run) and tools
-#' through session.add_tools (IC-69). An inherited mode is never written to the session (IC-53
-#' item 4).
+#' Applies a continuation's changes after refusing an unknown tool name: model, an explicit
+#' `mode =` (tightened inside a run) and tools through session.add_tools (IC-69). An inherited
+#' mode is never written to the session (IC-53 item 4).
 #' @noRd
 gateway_continue_session = function(call, s, cur) {
   d = session_data(s)
   before = registry_names("tool", session = d$id)
   gateway_register(call, s)
+  prompt_tools_check(gateway_tool_mods(call$ids$tools), d$id)
   if (!is.null(call$ids$model)) {
     ref = gateway_model_ref(call$ids$model, call$args$opts$thinking, session = d$id)
     if (!identical(ref, d$model)) session_set_model(s, ref, reason = "user")

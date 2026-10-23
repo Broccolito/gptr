@@ -1281,6 +1281,30 @@ test_that("router:<name> names a registered router; an unknown one is refused", 
   expect_identical(c(s$model, s$text), c("router:pick4", "second"))
 })
 
+test_that("an unknown name in tools = is refused with the closest preset or tool (D-251)", {
+  local_gw()
+  refused = function(tools, hint) {
+    f = gptr_fake_provider(list("ok"))
+    expect_error(peter("x", model = f, mode = auto, tools = !!tools, envir = new.env()),
+                 class = "gptr_error_invalid_argument", regexp = hint)
+    expect_identical(f$log$n, 0L)
+  }
+  refused("extendd", "\"extended\"")
+  refused("Extended", "\"extended\"")
+  refused("-wirte", "\"write\"")
+  refused("+gerp", "\"grep\"")
+  f = gptr_fake_provider(list("ok"))
+  expect_error(peter("x", model = f, mode = auto, tools = c(readonly, extended)),
+               class = "gptr_error_invalid_argument", regexp = "more than one preset")
+  f = gptr_fake_provider(list("ok", "two"))
+  expect_no_warning(peter("x", model = f, mode = auto, tools = c("-write", "+grep"),
+                          envir = new.env()))
+  expect_identical(f$log$requests[[1L]]$tools, c("read", "r", "edit", "grep"))
+  expect_error(gptr_last() |> peter("y", model = f, tools = "+gerp"),
+               class = "gptr_error_invalid_argument", regexp = "\"grep\"")
+  expect_identical(f$log$n, 1L)
+})
+
 # Task 12: append
 
 test_that("NAMESPACE exports P08's ten names and registers its S3 methods", {

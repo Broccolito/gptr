@@ -1914,3 +1914,24 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the probe nor accepts `initialize`), and a dual-era server that starts slowly is still taken as
   legacy (cached for 7 days), which works. A hung server forced modern now fails after the request
   timeout instead of 5 s.
+
+## Task FIX-18 - Cheat-sheet review: sessions (2026-10-22, #PR)
+
+### tools-3 - Unknown names in tools = are refused, not silently ignored
+- Red: FAIL 11 in `^gptr-gateway$` (PASS 357; finding 8): `tools = extendd`, `"Extended"`, `"-wirte"`
+  and `"+gerp"` raised nothing and sent the request with the standard preset's tools,
+  `c(readonly, extended)` ran `readonly`, and a continuation's `"+gerp"` ran.
+- Cause: an unknown bare symbol is a literal string (`ident_symbol()`), `gateway_tool_mods()` passes
+  every non-preset name on, `preset_tools()` unions or drops it and `prompt_tool_array()` leaves an
+  unregistered name out with only a `missing_tool` diagnostic; `gateway_preset()` took the first preset.
+- Fix: `prompt_tools_check()` refuses a call's name (`+`/`-` stripped) that names no tool of the
+  session, hinting the closest preset or tool (`utils::adist()`, case-insensitive, at most 2). It runs
+  in `prompt_compose_preset()` for run options that carry the call (after `session_start`; the run's
+  startup failure re-signals it before any request) and in `gateway_continue_session()` after the
+  call's specs register. `gateway_preset()` refuses two presets. `?peter` `tools`: a bare name adds.
+- Green: `^gptr-gateway$` PASS 368, `^prompt-sections$` PASS 387;
+  `^(prompt-|gptr-|subagent-|arch-layers$|lint-rules$)` PASS 3383 SKIP 1. Lint clean.
+- Deviations: D-251. From the plan: an agent definition's allowlist (sub-agent run options carry no
+  call) stays unchecked, so a file agent's `mcp__` tool that is not loaded still degrades quietly.
+  Open: a preset named in a continuation's `tools =` is still ignored; `gptr_config(preset =)` still
+  accepts an unknown preset (finding 8, in passing).
