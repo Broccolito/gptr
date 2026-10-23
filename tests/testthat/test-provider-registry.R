@@ -848,7 +848,9 @@ test_that("an Ollama chat model fails before egress unless locality is establish
   }
   qwen = model_resolve("ollama/qwen3:1.7b")
   err = expect_error(go(qwen), class = "gptr_error_not_available")
-  expect_match(conditionMessage(err), "model_prepare()", fixed = TRUE)
+  expect_match(conditionMessage(err), 'gptr_models(provider = "ollama", refresh = TRUE)',
+               fixed = TRUE)
+  expect_no_match(conditionMessage(err), "model_prepare", fixed = TRUE)
   expect_error(go(model_resolve("ollama/qwen3:1.7b-cloud")), class = "gptr_error_untrusted")
   relaxed = local_run()
   relaxed$opts = list(safety = list(ollama_local_only = FALSE))

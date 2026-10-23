@@ -1423,7 +1423,7 @@ catalog_ollama_discover = function(p, safety = NULL, only = NULL) {
     if (!length(tags)) {
       catalog_unavailable_abort(target, paste0(
         "it is not installed on the Ollama server at ", ep$origin, ". Install it yourself ",
-        "(for example `ollama pull ", only, "`), then prepare it again; gptr never downloads ",
+        "(for example `ollama pull ", only, "`), then call again; gptr never downloads ",
         "models"), paste0("ollama pull ", only))
     }
   }
@@ -1561,14 +1561,13 @@ provider_preflight = function(model, provider, safety = NULL) {
   if (is.null(ev)) {
     catalog_unavailable_abort(ref, paste0(
       "there is no current discovery evidence from the Ollama server at ", ep$origin,
-      "; prepare it with model_prepare() (or list the server with gptr_models(provider = \"",
-      pid, "\", refresh = TRUE)) while the server runs with the model installed"),
-      "Ollama discovery")
+      "; run gptr_models(provider = \"", pid, "\", refresh = TRUE) while the server runs with ",
+      "the model installed"), "Ollama discovery")
   }
   stale = catalog_evidence_stale(ev, model, provider, ep)
   if (!is.null(stale)) {
-    catalog_unavailable_abort(ref, paste0(stale, "; prepare it again with model_prepare()"),
-                              "Ollama discovery")
+    catalog_unavailable_abort(ref, paste0(stale, "; run gptr_models(provider = \"", pid,
+                                          "\", refresh = TRUE) again"), "Ollama discovery")
   }
   if (local_only && !identical(ev[["locality"]], "local")) {
     catalog_local_only_abort(ref, ep$origin, "discovery did not establish local execution")

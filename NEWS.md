@@ -142,6 +142,9 @@ works on the objects already in memory.
   as too small: gptr reserves and requests at most half the window for output. A `compact_at`
   too small for the preset is named as the cause instead of the model, and the hint reads
   `tools = "minimal"`.
+* An Ollama model refused for missing or outdated discovery names
+  `gptr_models(provider = "ollama", refresh = TRUE)` as the remedy, not the internal
+  `model_prepare()`.
 
 # gptr 0.7.0
 

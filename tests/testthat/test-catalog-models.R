@@ -917,7 +917,9 @@ test_that("provider_preflight() is pure and passes other providers' models throu
                class = "gptr_error_invalid_argument")
   err = expect_error(provider_preflight(model_resolve("ollama/qwen3:1.7b"), provider_get("ollama")),
                      class = "gptr_error_not_available")
-  expect_match(conditionMessage(err), "model_prepare", fixed = TRUE)
+  expect_match(conditionMessage(err), 'gptr_models(provider = "ollama", refresh = TRUE)',
+               fixed = TRUE)
+  expect_no_match(conditionMessage(err), "model_prepare", fixed = TRUE)
   expect_error(provider_preflight(model_resolve("ollama/qwen3:1.7b"), provider_get("lmstudio")),
                class = "gptr_error_invalid_argument")
 })
@@ -1004,6 +1006,9 @@ test_that("discovery evidence is bound to endpoint, path, registry lifecycle and
       err = expect_error(provider_preflight(m, provider_get("ollama")),
                          class = "gptr_error_not_available")
       expect_match(conditionMessage(err), "endpoint", fixed = TRUE)
+      expect_match(conditionMessage(err), 'gptr_models(provider = "ollama", refresh = TRUE) again',
+                   fixed = TRUE)
+      expect_no_match(conditionMessage(err), "model_prepare", fixed = TRUE)
     })
   }
   local({
@@ -1081,7 +1086,8 @@ test_that("model_prepare() discovers only missing or stale evidence and fails be
   expect_identical(model_prepare("sonnet")$ref, "anthropic/claude-sonnet-5-5")
   expect_length(srv$calls, n)
   err = expect_error(model_prepare("ollama/llama3.2:3b"), class = "gptr_error_not_available")
-  expect_match(conditionMessage(err), "ollama pull llama3.2:3b", fixed = TRUE)
+  expect_match(conditionMessage(err), "ollama pull llama3.2:3b`), then call again", fixed = TRUE)
+  expect_no_match(conditionMessage(err), "prepare it", fixed = TRUE)
   catalog_reset(discovered = TRUE)
   srv$down = TRUE
   err = expect_error(model_prepare("ollama/qwen3:1.7b"), class = "gptr_error_network")

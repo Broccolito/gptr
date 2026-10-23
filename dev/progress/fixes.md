@@ -1969,3 +1969,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   gptr-gateway, gptr-sdk and catalog-models PASS 3199. Lint clean; no Rd change.
 - Deviations: D-250 (prompt-1 rule; pointer lines under D-067 and D-069). Open: the refusal does not compute the
   smallest passing compact_at (the floor rises with the 25% re-injection cut).
+
+### ollama-1 - Ollama refusals name gptr_models(), not the unexported model_prepare()
+- Finding 54. Red: `^(catalog-models|provider-registry)$` FAIL 8, PASS 1153: the missing-evidence refusal
+  (`provider_preflight()` and `provider_stream()`) named `model_prepare()`, the endpoint-change refusal named
+  only it ("prepare it again with model_prepare()"), and the not-installed text said "then prepare it again".
+- Cause: `provider_preflight()` built both evidence refusals around `model_prepare()`, which is `@noRd` and not
+  exported; two tests pinned that wording.
+- Fix: missing evidence says `run gptr_models(provider = "<pid>", refresh = TRUE) while the server runs with
+  the model installed`, stale evidence `<why>; run gptr_models(provider = "<pid>", refresh = TRUE) again`, not
+  installed `then call again`. NEWS entry.
+- Green: `^(catalog-models|provider-registry)$` PASS 1161; catalog-*, provider-*, s1-*, gptr-gateway,
+  gptr-config, gptr-capture, arch-layers and lint-rules PASS 5943. Lint clean; no Rd change.
+- Deviations: none (message text; 07 §2.1 asks only for actionable failures). Open: a new R session still
+  needs discovery before its first Ollama call (ollama-2).
