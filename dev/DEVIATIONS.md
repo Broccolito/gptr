@@ -3140,10 +3140,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the window. `prompt_floor_check()` names `compact_at` (`arg = "compact_at"`) when the window is unknown or the
   threshold equals the cap alone, and both refusals hint `tools = "minimal"`, not `preset =` or `context =
   "names"`; formerly a 1,050,000-token model was "too small" for `compact_at = 5000`.
+- Rule (ollama-2): `run_target()` and `run_route()` take a live request's model from `run_model_ready()`, which
+  prepares a selected Ollama route (`model_prepare()` with the run's safety record) unless a provider registered
+  for the session only names it, after `replay_guard()` (a router's fallback default had no earlier guard).
+  Formerly System 2 never prepared, so evidence, held in memory only, needed `gptr_models(refresh = TRUE)` in
+  every R session, and a saved default Ollama model failed in each new one.
 - Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
-  model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal).
+  model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal); 07
+  §2.1 and the 04 `model_prepare()` row (P06 prepares).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
   match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
   "the floor check blames compact_at when it sets the threshold (D-250)", "a model whose max_output is its whole
-  window runs and asks for half of it (D-250)". Evidence: progress/fixes.md Task FIX-17.
+  window runs and asks for half of it (D-250)"; test-catalog-models.R "a System 2 call prepares its selected
+  Ollama model as System 1 does". Evidence: progress/fixes.md Task FIX-17.

@@ -1983,3 +1983,24 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   gptr-config, gptr-capture, arch-layers and lint-rules PASS 5943. Lint clean; no Rd change.
 - Deviations: none (message text; 07 §2.1 asks only for actionable failures). Open: a new R session still
   needs discovery before its first Ollama call (ollama-2).
+
+### ollama-2 - System 2 prepares a selected Ollama model on a live call, as System 1 does
+- Findings 23, 33, 113, 115. Red: `^catalog-models$` FAIL 7, PASS 435: `peter("p", model = "ollama/qwen3:1.7b")`
+  reached `provider_stream()` with the undiscovered record (tool_call FALSE) and no server call, so the real
+  preflight refused it in every new R session; a router's fallback default under replay was not refused.
+- Cause: only System 1 prepared (`s1_ready()` -> `model_prepare()`). `run_target()` and `run_route()` used
+  `run_model_resolve()` and `provider_stream()` runs only the pure `provider_preflight()`, while discovery
+  evidence lives in memory only (07 §2.1); a saved default Ollama model failed in each new session.
+- Fix: `run_model_ready()` (`R/agent-run.R`) for `run_target()`, `route_answer()` and `route_default()`: an
+  Ollama route not named by a session-only provider passes `replay_guard()`, then `model_prepare(ref, safety =
+  stream_safety(NULL, run))`; a router's thinking is clamped to the prepared levels. 07 §2.1 and the 04
+  `model_prepare()` row amended; NEWS entry.
+- Green: `^catalog-models$` PASS 443; agent-*, catalog-*, provider-*, s1-*, session-*, prompt-*,
+  compaction-*, subagent-*, gptr-gateway, gptr-config, arch-layers and lint-rules PASS 10890 (SKIP 1, Windows
+  only). Lint clean; no Rd change. Live (Ollama 0.40.8, fresh process, no `gptr_models()`):
+  `ollama/qwen3.8:27b` answered "OK" (24.7 s), evidence held for that model only, and a tool run returned
+  20.091 (20.0 s).
+- Deviations: D-250 (ollama-2 rule). Beyond the plan: the `replay_guard()` line, since `route_default()` (after
+  `router.call` fails, as under replay) has no earlier guard, and the test fixture drops `num_ctx` (8K is below
+  the standard preset's compaction floor). Open: that fallback still sends a non-Ollama default's request
+  under replay (by reading; pre-existing). The lmstudio/llamacpp/vllm tools note is sheet entry S17.

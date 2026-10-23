@@ -145,6 +145,10 @@ works on the objects already in memory.
 * An Ollama model refused for missing or outdated discovery names
   `gptr_models(provider = "ollama", refresh = TRUE)` as the remedy, not the internal
   `model_prepare()`.
+* `peter(model = "ollama/<model>")` asks the Ollama server about that model before its first
+  request in each R session, as System 1 calls already did, instead of refusing until
+  `gptr_models(provider = "ollama", refresh = TRUE)` had run. A saved default Ollama model now
+  works in a new session.
 
 # gptr 0.7.0
 

@@ -1112,6 +1112,44 @@ test_that("model_prepare() discovers only missing or stale evidence and fails be
   })
 })
 
+test_that("a System 2 call prepares its selected Ollama model as System 1 does", {
+  local_catalog()
+  # no num_ctx: an unknown window (8K is below the standard preset's compaction floor)
+  fx = ollama_fixture()
+  fx[["qwen3:1.7b"]]$show$parameters = NULL
+  srv = local_ollama_server(fx)
+  seen = new.env(parent = emptyenv())
+  local_mocked_bindings(provider_stream = function(model, context, opts, emit, done, run = NULL) {
+    seen$model = model
+    gptr_abort("no request in this test", "network")
+  })
+  ask = function(replay = "auto") {
+    peter("p", model = "ollama/qwen3:1.7b", replay = replay, .opts = list(context = "none"))
+  }
+  root = "http://127.0.0.1:11434"
+  found = c(paste0("GET ", root, c("/api/version", "/api/tags")),
+            paste0("POST ", root, "/api/show"))
+  expect_error(ask(), class = "gptr_error_network")
+  expect_identical(srv$calls, found)
+  expect_true(seen$model$tool_call)
+  expect_identical(seen$model$locality, "local")
+  expect_error(ask(), class = "gptr_error_network")
+  expect_identical(srv$calls, found)
+  gptr_reload()
+  expect_error(ask(), class = "gptr_error_network")
+  expect_identical(srv$calls, rep(found, 2L))
+  catalog_reset(discovered = TRUE)
+  expect_error(ask("replay"), class = "gptr_error_not_recorded")
+  # a router's fallback default passes no replay guard before its preparation
+  local_service("router.call", function(s, reason) stop("router crashed"))
+  local_mocked_bindings(model_default = function(role = "chat") "ollama/qwen3:1.7b")
+  run = run_new(session_new("router:r", "auto", home = new.env()), list(), NULL)
+  expect_error(run_target(run), class = "gptr_error_not_recorded")
+  local_settings(providers = list(ollama = list(base_url = "http://192.0.2.10:11434/v1")))
+  expect_error(ask(), class = "gptr_error_untrusted")
+  expect_identical(srv$calls, rep(found, 2L))
+})
+
 test_that("model_default('system1') uses a verified local classifier without discovering", {
   local_catalog()
   srv = local_ollama_server()
