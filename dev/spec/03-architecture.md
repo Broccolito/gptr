@@ -1769,8 +1769,8 @@ stored and listed for `peter$plot(k)`, image tokens count against the output bud
 projected as omitted when a request would exceed the provider's image limits [IC-67]; `peter$plot()` sends a
 larger view;
 state diff from snapshots before and after plus static assignment targets (replacement functions, `assign()`,
-`:=`, `set*()`, `<<-`), of `env_view_snapshot()` for an overlay, where a modified object below the overlay (or
-shared by its new binding) reads `~ dt <data.table> modified (in the source workspace)` (D-252); checkpoint hooks around mutating evaluations (§6.16); `rng_swap()` swaps a per-agent
+`:=`, `set*()`, `<<-`), of `env_view_snapshot()` for an overlay, where a modified object that was below the overlay
+(and still is, or is shared by its new binding) reads `~ dt <data.table> modified (in the source workspace)` (D-252); checkpoint hooks around mutating evaluations (§6.16); `rng_swap()` swaps a per-agent
 L'Ecuyer stream in for inline sub-agents and restores the user's `.Random.seed` [IC-61]. The evaluator is the
 built-in record `r` of the `evaluator` kind, so a plugin can supply a remote or sandboxed one [IC-69]. Model text: output, messages, warnings, error and traceback, "[plot N
 attached]", state-change lines (`~ pbmc <Seurat> modified`, `+ markers <data.frame 4,211 x 7>`), a status

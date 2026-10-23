@@ -797,7 +797,8 @@ test_that("a fork's change report names the source objects its code changed in p
   if (has_dt) home$dt = data.table::data.table(a = 1:3)
   code = paste(c(if (has_dt) "dt[, z := 1]", "e$flag = 'x'", "v <<- 2", "w = 3", "k = 5"),
                collapse = "\n")
-  fake = local_fake_provider(list("A", fake_tool("r", code = code), "done"))
+  fake = local_fake_provider(list("A", fake_tool("r", code = code), fake_tool("r", code = "rm(k)"),
+                                  "done"))
   s = peter("a", model = fake, mode = "auto", envir = home)
   file = session_data(s)$file
   md5 = tools::md5sum(file)
@@ -815,8 +816,12 @@ test_that("a fork's change report names the source objects its code changed in p
   expect_match(text, "~ v <numeric> modified (in the source workspace)", fixed = TRUE)
   expect_match(text, "~ e <environment> modified (in the source workspace)", fixed = TRUE)
   expect_match(text, "+ w <numeric length 1>", fixed = TRUE)
-  # a rebinding shadows the source's object without touching it
+  # a rebinding shadows the source's object without touching it, and removing it un-shadows it
   expect_match(text, "~ k <numeric> modified\n", fixed = TRUE)
+  expect_identical(home$k, 1)
+  text = msg_text(tool_results(b)[[2L]])
+  expect_match(text, "~ k <numeric> modified", fixed = TRUE)
+  expect_false(grepl("in the source workspace", text, fixed = TRUE))
 })
 
 test_that("gptr_fork(at =) cuts at a turn, at 0 or at an entry id", {

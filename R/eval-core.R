@@ -718,7 +718,8 @@ eval_plots_done = function(st) {
 
 #' Object changes of an evaluation with their model-facing lines
 #' An added promise or active binding shows its kind, never its class; lines are valid UTF-8. A
-#' modified object below an overlay, or one its new binding shares, is the source's (D-252).
+#' modified object that was below an overlay, and still is or is shared by its new binding, is the
+#' source's (D-252).
 #' @noRd
 eval_objects = function(old, new, assigned) {
   d = env_diff(old, new, assigned)
@@ -734,7 +735,7 @@ eval_objects = function(old, new, assigned) {
   if (length(j)) {
     cls = ifelse(is.na(new$class[j]), new$kind[j], new$class[j])
     k = match(d$modified, old$name)
-    src = !new$own[j] | (!old$own[k] & env_same(old$address[k], new$address[j]))
+    src = !old$own[k] & (!new$own[j] | env_same(old$address[k], new$address[j]))
     mod = sprintf("~ %s <%s> modified%s", env_text(d$modified), env_text(cls),
                   ifelse(src, " (in the source workspace)", ""))
   }

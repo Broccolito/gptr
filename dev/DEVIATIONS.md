@@ -3130,8 +3130,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule (sessions-20): an overlay isolates bindings only; data.table `:=`/`set*()`, environment and R6 field writes,
   `<<-` and `assign(envir =)` change the source's objects (`gptr_fork()` doc, interactive-console vignette). The
   evaluator diffs `env_view_snapshot(sizes = FALSE)` (new column `own`), so such a change is `modified`, an alias
-  (`e$f = 1` binds the source's `e` in the overlay) is not `added`, and a modified row not `own`, or whose new own
-  binding shares the old row's object, reads `(in the source workspace)`. Formerly `e` was added and nothing else.
+  (`e$f = 1` binds the source's `e` in the overlay) is not `added`, and a modified row whose old binding was not
+  `own` and whose new binding is not `own` or shares that object reads `(in the source workspace)`; a rebinding
+  (`k = 5`) and an `rm()` that un-shadows a source binding stay unmarked. Formerly `e` was added and nothing else.
 - Rule (guard-1): `eval_guard(exprs, envir = NULL)`; `eval_r()` passes its `envir`. `q` or `quit` used as a value
   passes when, looked up from `envir` as R looks up a value (its parents in order), it is bound to data: not a
   function, and not a promise or active binding (never forced). Calls (`q()`, `base::q`, `do.call("q")`) and the

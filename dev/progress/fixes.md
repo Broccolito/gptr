@@ -2291,3 +2291,14 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^(agent-background|gptr-sdk)$` PASS 300; with gptr-gateway, agent-run, injection-e2e, arch-layers,
   lint-rules, zzz (NOT_CRAN=true) PASS 1753. Lint clean; plan checks pass; `gptr_step.Rd` regenerated.
 - Deviations: D-252 (extended). Open: none.
+
+### sessions-20b - Removing a fork's shadowing binding is not reported as a change to the source
+- Review of sessions-20 (low). Red: `^session-object$` FAIL 1 PASS 541: after the fork ran `k = 5`, a second `r`
+  call `rm(k)` read `~ k <numeric> modified (in the source workspace)` while `home$k` was still 1.
+- Cause: the mark took any modified row whose new binding is not `own`, so the source's binding reappearing under
+  a removed overlay binding read as a change to it.
+- Fix: `src = !old$own[k] & (!new$own[j] | env_same(...))`: only a row that was the source's before the code ran
+  and still is, or whose new binding shares its object (`e$flag = 'x'`). `v <<- 2` and `:=` keep the mark; a
+  rebinding and an un-shadowing `rm()` read `~ k <numeric> modified`. 03 §6.12 and 04 §7.9 amended.
+- Green: `^(session-object|eval-core|tool-r|env-snapshot|copy-eval)$` PASS 1196. Lint clean; plan checks pass.
+- Deviations: D-252 (extended). Open: none.
