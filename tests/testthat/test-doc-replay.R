@@ -2242,6 +2242,13 @@ test_that("gptr_return(<expression>) is recorded so a replay restores $value (ac
                    c("fit = lm(mpg ~ wt, mtcars)", paste(hidden, "= (coef(fit))")))
   want = coef(lm(mpg ~ wt, mtcars))
   expect_equal(e$s$value, want)
+  # into another environment, first: the recording session keeps its held value (FIX-16)
+  e3 = new.env(parent = globalenv())
+  gptr_source(f, replay = "replay", envir = e3)
+  expect_identical(e3$s, e$s)
+  withr::with_options(list(gptr.quiet = FALSE),
+                      expect_no_message(e3$s$value, message = "not bound"))
+  expect_equal(e3$s$value, want)
   out = gptr_source(f, replay = "replay", envir = e)
   expect_identical(out$action, "replayed")
   withr::with_options(list(gptr.quiet = FALSE),

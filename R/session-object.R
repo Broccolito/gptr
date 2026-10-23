@@ -1315,7 +1315,9 @@ replay_holds_block = function(d, block) {
 }
 
 #' Designate the replayed block's `value=` name: through the value policy when the name is bound
-#' in the kept home, else held by name only (resolved when first read)
+#' in the kept home, else held by name only (resolved when first read), unless the session holds
+#' a value of this turn already: the recording session, replayed into another environment of this
+#' process, where the name is bound only after the replay and outside its home
 #' @noRd
 replay_value = function(s, name) {
   home = session_home(s)
@@ -1325,6 +1327,8 @@ replay_value = function(s, name) {
   }
   d = session_data(s)
   vals = d$values
+  held = vapply(vals, function(v) !is.null(v$value) && as.integer(v$turn) == d$turns, NA)
+  if (any(held)) return(invisible(NULL))
   vals[[length(vals) + 1L]] = list(turn = d$turns, mode = "name", name = name,
                                    address = NA_character_, class = NA_character_,
                                    bytes = NA_real_, value = NULL)

@@ -3140,7 +3140,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   0), so `gptr_blocks()` lists `0` there and `NA` only when the cost is unknown or not recorded (IC-74).
 - Rule: a replay adds no turn to a session whose active path holds the block's `gptr.doc_block` entry, not undone
   (the session that recorded it, replayed in the same process: was one more turn per block, so later turns, `turn=`
-  and `gptr_fork(at =)` were off); it still records `gptr.replay`, `seen` and the `value=` name (IC-46).
+  and `gptr_fork(at =)` were off); it still records `gptr.replay`, `seen` and the `value=` name, unless the session
+  holds a value of that turn: replayed into another environment of the recording process, it keeps the recorded
+  value (was a name bound only there: `$value` NULL, "`.gptr_value_<id>` ... is not bound") (IC-46).
 - Rule: a top-level `gptr_return(<expression>)` (one unnamed argument, not a bare name; also `<expression> |>
   gptr_return()` on one line) is recorded as `.gptr_value_<block id> = (<expression>)` with
   `value=.gptr_value_<block id>`, so every replay and a plain export recompute it (was `value=<its label>` and the
@@ -3178,12 +3180,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-doc-io: the user-cache sidecar, the cross-process kernel and killed-run sync, the live-run sync;
   test-doc-replay: the other-binding notice and its four silent cases; test-doc-formats: the machine-log line with
   and without `.gptr/`; test-doc-blocks: recorded `#>` cuts, the known-zero cost; test-tool-r: per-expression
-  outputs; test-doc-replay: the listed zero cost, the in-process replay; test-session-object: a held or undone
-  block; test-doc-blocks, test-doc-replay, test-doc-io, test-doc-export, test-mcp-recording: a recorded
-  `gptr_return(<expression>)`; test-doc-replay: fan-out and team children's values in the recording process, an
-  in-process replay and two simulated later processes, a three-field `children=` entry; test-session-object: the
-  replayed footer;
+  outputs; test-doc-replay: the listed zero cost, the in-process replay, one into another environment;
+  test-session-object: a held or undone block; test-doc-blocks, test-doc-replay, test-doc-io, test-doc-export,
+  test-mcp-recording: a recorded `gptr_return(<expression>)`; test-doc-replay: fan-out and team children's values in
+  the recording process, an in-process replay and two simulated later processes, a three-field `children=` entry;
+  test-session-object: the replayed footer;
   test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself, handle position;
   test-session-store: the resume hint; test-doc-replay: the no-answer notice in process, under `Rscript` and for
   fan-out children. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1,
-  replay-2, replay-2c, replay-2d, replay-3, replay-5, export-2, store-1.
+  replay-2, replay-2c, replay-2d, replay-2e, replay-3, replay-5, export-2, store-1.

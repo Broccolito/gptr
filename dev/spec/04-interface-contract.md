@@ -4437,8 +4437,9 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 - **Piped session**: when `call$session` is non-NULL, `session_replay_apply(s, block, header)` (P06) advances
   that **same object**: appends `gptr.replay`, adds the block id to `.d$seen` (a block already in `seen` adds no
   turn), increments `turns` unless the active path holds the block's `gptr.doc_block` entry, not undone (the
-  session that recorded it, also as `session_replay_new()` finds it live), sets the value by name from `value=` under the value policy, sets `last_text` from
-  the S2 cache when present, and returns `s`. So `identical(chain_result, first_result)` holds for a replayed
+  session that recorded it, also as `session_replay_new()` finds it live), sets the value by name from `value=` under
+  the value policy unless the session holds a value of that turn (the recording session replayed into another
+  environment of the process keeps its own), sets `last_text` from the S2 cache when present, and returns `s`. So `identical(chain_result, first_result)` holds for a replayed
   pipe chain.
 - **No piped session**: `session_replay_new(block, header, envir)` returns a live session holding the header's
   `session=` id if one exists in this process; otherwise a `replayed` session that adopts the recorded id when

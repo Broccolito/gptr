@@ -2453,3 +2453,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   cli-claude|arch-layers|lint-rules)$` PASS 2913 SKIP 1 (Windows only; NOT_CRAN=true). Lint clean;
   plan checks pass. The relayed-Codex test's bare `gptr_return(beta)` is unchanged.
 - Deviations: D-249 (extended). Open: none.
+
+### replay-2e - A replay into another environment of the recording process keeps the value
+- Validation of replay-2 (low; not a regression: main gave NULL in every case).
+- Red: FAIL 2 in `^doc-replay$` (PASS 704): after `gptr_source(f, envir = e)` recorded
+  `gptr_return(coef(fit))`, `gptr_source(f, replay = "replay", envir = e3)` gave `e3$s$value` NULL
+  with "value `.gptr_value_<id>` (turn 1) is not bound in this R process".
+- Cause: the header's session is live here, so the replay marks it; `replay_value()` runs before
+  the block's code, finds the hidden name unbound in the session's home `e`, and adds a name-only
+  record at turn 1, which shadows the turn's held box. The code then binds the name in `e3`, where
+  the record is never resolved.
+- Fix: `replay_value()` adds no name-only record when the session holds a value of that turn; the
+  recording session keeps its own. IC-46 says so.
+- Green: `^doc-replay$` PASS 706; `^(doc-.*|session-.*|subagent-.*|copy-subagent|northstar|
+  ckpt-rewind|console-commands|mcp-recording|gptr-sdk|tool-r|arch-layers|lint-rules)$` PASS 5747
+  SKIP 3 (repr; Windows worker; NOT_CRAN=true). Lint clean; plan checks pass.
+- Deviations: D-249 (extended). Open: a bare `gptr_return(fit)` replayed into another environment
+  still gives the recording home's `fit`, as replay-2 left it.
