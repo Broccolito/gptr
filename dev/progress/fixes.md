@@ -2159,3 +2159,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Open: the transcript still does not see R's own `>` prompt (no task callback; P15/IC-49). The
   verdict's other passing bug, `eval_guard()` refusing a `q` bound to a non-function, is the
   orchestration group's guard-1.
+
+### doc-10 - Mark every cut of recorded #> output with the right count
+- Finding 24.
+- Red: FAIL 9 in `^(doc-blocks|tool-r)$` (PASS 451), fake `peter()` into a bound `.R`: `for (i in
+  1:30) print(i)` and `summary(fit)` kept 12 lines with no marker; three expressions said "(3 more
+  lines)" for 11; `doc$output_lines = 30` with the option unset still kept 12; `peter$describe(x)`'s
+  two lines stayed under `sum(x)`; `r_doc_outputs()` returned a flat vector.
+- Cause: `r_doc_outputs()` cut each expression to the option's 12 lines silently and flattened them;
+  `doc_output_lines()` cut again and counted only the survivors, and `doc_turn_r()`'s `outs[kept]`
+  never met a per-expression list.
+- Fix: `r_doc_outputs()` keeps `list(lines, n)` per expression, capped by `doc_max_output_lines()`
+  (moved to `eval-format.R`, as an L4 service file may be called from `tool-r.R`); `doc_output_lines()`
+  shows lines up to the first cut one, cuts once and counts `sum(n)`; a flat vector still renders.
+- Green: `^(doc-blocks|tool-r)$` PASS 460; `^(doc-.*|eval-format|tool-r|mcp-server|arch-layers|
+  lint-rules)$` PASS 2879 SKIP 2 (repr), `^(mcp-recording|eval-core)$` PASS 346 (NOT_CRAN=true). Lint
+  clean; plan checks pass. `local_doc_e2e()` and `doc_e2e_source()` moved to `helper-doc.R`.
+- Deviations: D-249 (extended; 04 §4.4 `outputs`, §11.5). Open: none.

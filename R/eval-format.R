@@ -132,18 +132,30 @@ format_eval_result = function(res, budget_tokens) {
        out_id = tr$out_id, spill = tr$spill)
 }
 
-#' Printed-output lines of the completed expressions for `#>` comments: at most
-#' gptr.doc_output_lines per expression, 76 characters each (contract section 4.4)
+#' Lines recorded per execution: gptr.doc_output_lines when set, else setting doc$output_lines
+#' @noRd
+doc_max_output_lines = function() {
+  opt = getOption("gptr.doc_output_lines")
+  if (!is.null(opt)) return(as.integer(opt))
+  doc = tryCatch(setting_get("doc", default = list()), error = function(e) NULL)
+  as.integer((if (is.list(doc)) doc$output_lines) %||% gptr_opt("doc_output_lines"))
+}
+
+#' Printed output of the completed expressions for `#>` comments, one entry per expression
+#' (contract section 4.4): list(lines, n), its first doc_max_output_lines() non-empty lines of
+#' 76 characters and the count of all of them, so the document can say how many it leaves out
 #' @noRd
 r_doc_outputs = function(res) {
   outs = res$outputs %||% list()
   n = min(length(outs), as.integer(res$n_done %||% 0L))
-  if (!n) return(character())
-  cap = as.integer(gptr_opt("doc_output_lines"))
-  lines = unlist(lapply(outs[seq_len(n)], function(o) {
-    o = as.character(o)
-    o = utils::head(o[nzchar(o)], cap)
-    ifelse(nchar(o) > 76L, paste0(substr(o, 1L, 73L), "..."), o)
-  }), use.names = FALSE)
-  as_utf8(as.character(lines))
+  if (!n) return(list())
+  cap = doc_max_output_lines()
+  lapply(outs[seq_len(n)], function(o) {
+    o = as_utf8(as.character(o))
+    o = o[nzchar(o)]
+    lines = utils::head(o, cap)
+    long = nchar(lines) > 76L
+    lines[long] = paste0(substr(lines[long], 1L, 73L), "...")
+    list(lines = lines, n = length(o))
+  })
 }

@@ -970,27 +970,26 @@ doc_history_code = function(lines) {
   list(lines = out, secrets = secrets)
 }
 
-#' Lines recorded per execution: gptr.doc_output_lines when set, else setting doc$output_lines
-#' @noRd
-doc_max_output_lines = function() {
-  opt = getOption("gptr.doc_output_lines")
-  if (!is.null(opt)) return(as.integer(opt))
-  doc = doc_setting("doc", list())
-  as.integer((if (is.list(doc)) doc$output_lines) %||% gptr_opt("doc_output_lines"))
-}
-
-#' Printed output (a character vector, or P09's list of output per top-level expression) as
-#' `#> ` lines of at most 76 characters, then `#> ... (N more lines)`
+#' Printed output as `#> ` lines of at most 76 characters, then `#> ... (N more lines)` counting
+#' every line not shown. `outputs` is a character vector or a list of output per top-level
+#' expression, each its lines or r_doc_outputs()'s list(lines, n); no line follows a cut one.
 #' @noRd
 doc_output_lines = function(outputs, max_lines = NULL, width = 76L) {
-  out = as.character(unlist(outputs, use.names = FALSE))
-  out = unlist(strsplit(as_utf8(out), "\n", fixed = TRUE), use.names = FALSE)
-  if (!length(out)) return(character())
-  max_lines = max_lines %||% doc_max_output_lines()
-  extra = length(out) - max_lines
-  if (extra > 0L) out = out[seq_len(max_lines)]
-  out = paste0("#> ", substr(out, 1L, width))
-  if (extra > 0L) out = c(out, paste0("#> ... (", as.integer(extra), " more lines)"))
+  out = character()
+  total = 0L
+  for (o in if (is.list(outputs)) outputs else list(outputs)) {
+    held = is.list(o) && !is.null(o$n)
+    n = if (held) as.integer(o$n) else 0L
+    o = as_utf8(as.character(unlist(if (held) o$lines else o, use.names = FALSE)))
+    o = unlist(strsplit(o, "\n", fixed = TRUE), use.names = FALSE)
+    if (length(out) == total) out = c(out, o)
+    total = total + max(n, length(o))
+  }
+  if (!total) return(character())
+  out = utils::head(out, max_lines %||% doc_max_output_lines())
+  extra = total - length(out)
+  out = if (length(out)) paste0("#> ", substr(out, 1L, width)) else character()
+  if (extra > 0L) out = c(out, paste0("#> ... (", extra, " more lines)"))
   out
 }
 

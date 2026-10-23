@@ -488,6 +488,32 @@ test_that("printed output becomes at most gptr.doc_output_lines #> lines of 76 c
                    c("#> [1] 4", "#> x", "#> y"))
   local_gptr_options(doc_output_lines = 1L)
   expect_identical(doc_output_lines(c("a", "b")), c("#> a", "#> ... (1 more lines)"))
+  cut = list(list(lines = list("a", "b"), n = 5L), list(lines = "c", n = 1L))
+  expect_identical(doc_output_lines(cut, max_lines = 12L),
+                   c("#> a", "#> b", "#> ... (4 more lines)"))
+})
+
+test_that("recorded #> output marks every cut with the count of the lines not shown", {
+  rec = function(code) {
+    x = local_doc_e2e(list(fake_tool("r", code = code), fake_text("Done.")))
+    f = file.path(x$root, "analysis.R")
+    writeLines("res = peter(\"Run it\")", f)
+    doc_e2e_source(f)
+    grep("^#>", readLines(f), value = TRUE)
+  }
+  expect_identical(rec("for (i in 1:30) print(i)"),
+                   c(paste("#> [1]", 1:12), "#> ... (18 more lines)"))
+  fit = rec("fit = lm(mpg ~ wt, mtcars)\nsummary(fit)")
+  expect_length(fit, 13L)
+  expect_identical(fit[13L], "#> ... (2 more lines)")
+  expect_identical(rec("print(1:5); print(letters); for (i in 1:20) print(i)")[13L],
+                   "#> ... (11 more lines)")
+  expect_identical(rec("x = c(1, 2, 3)\npeter$describe(x)\nsum(x)"), "#> [1] 6")
+  withr::local_options(gptr.doc_output_lines = NULL)
+  old = the$settings_session
+  withr::defer(assign("settings_session", old, envir = the))
+  gptr_config(doc = list(outputs = TRUE, output_lines = 30L), .scope = "session")
+  expect_identical(rec("for (i in 1:30) print(i)"), paste("#> [1]", 1:30))
 })
 
 test_that("turn entries follow P06's turn stamps", {
@@ -530,8 +556,8 @@ test_that("the output of a dropped expression is dropped with it when outputs ar
                                                                 "[1] \"line\""))))
   lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
   expect_identical(as.character(lines), "fit = lm(mpg ~ wt, data = mtcars)")
-  # P10 flattens outputs into one character vector: the code is still dropped, the printed
-  # line stays as a #> comment (it cannot be told apart)
+  # a flat vector (sessions recorded before outputs were kept per expression): the code is still
+  # dropped, the printed line stays as a #> comment (it cannot be told apart)
   flat = doc_test_session(list(doc_test_turn(code, outputs = "[1] \"line\"")))
   flat_lines = doc_block_lines(flat, 1L, list(format = "r", template = "count rows"), 1L)
   expect_identical(as.character(flat_lines),

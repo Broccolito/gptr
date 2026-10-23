@@ -3132,8 +3132,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: a transcript's `# machine log:` names the session log only outside `tempdir()/gptr`, which R deletes at
   exit; else, or without a log, it reads `none kept (gptr_init() keeps session logs in .gptr/)` (was the dead
   absolute path, or `(none)`).
-- Contract-visible: 04 §6.4 `gptr_doc()`, §11.5 transcript, §11.9, §15.3 IC-45, IC-51; 03 §4.3, §6.9.1;
-  `?gptr_doc`; vignette script-as-history.
+- Rule: the `r` tool's `details$outputs` holds one `list(lines, n)` per recorded expression, its first lines (the
+  option, else the setting `doc$output_lines`) and their count (was one flat vector cut per expression without a
+  mark); the block cuts once and `#> ... (N more lines)` counts every line not shown, so a dropped expression's
+  output is dropped with it. A flat vector of an older session still renders.
+- Contract-visible: 04 §4.4 `r` details `outputs`, §6.4 `gptr_doc()`, §11.5 body and transcript, §11.9, §15.3
+  IC-45, IC-51; 03 §4.3, §6.9.1; `?gptr_doc`; vignette script-as-history.
 - Tests: test-doc-io: the user-cache sidecar, the cross-process kernel and killed-run sync, the live-run sync;
   test-doc-replay: the other-binding notice and its four silent cases; test-doc-formats: the machine-log line with
-  and without `.gptr/`. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8.
+  and without `.gptr/`; test-doc-blocks: recorded `#>` cuts; test-tool-r: per-expression outputs. Evidence:
+  progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10.

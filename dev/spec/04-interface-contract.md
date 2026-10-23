@@ -569,7 +569,7 @@ and produce `gptr_tool_result` objects (§5.7) that `tool_result_message(result,
 | `elapsed` | num(1) | seconds |
 | `out_id` | chr(1)\|NULL | `peter$out()` id when truncated |
 | `spill` | chr(1)\|NULL | spill file path when truncated |
-| `outputs` | chr | printed-output lines of each successful recorded expression group, for `#>` comments (at most `gptr.doc_output_lines` per group, 76 characters each) |
+| `outputs` | list | printed output of each successful recorded top-level expression, for `#>` comments: `list(lines, n)`, its first non-empty lines (at most `gptr.doc_output_lines`, else the setting `doc$output_lines`; 76 characters each) and the count of all of them |
 | `nested` | list | at most 20 `list(tool, summary, is_error, level)` |
 | `bridge` | chr | `#>` digests of bridge calls (`#> sh git status --porcelain: exit 0, 6 lines`) |
 | `artifacts` | chr | paths of artifacts written (`.gptr/artifacts/<id>/app.R`) |
@@ -3818,8 +3818,8 @@ Values containing spaces are double-quoted with R escapes. Header keys, in this 
 **Body**, in emission order: the code of each successful `r` call with `record = TRUE`, verbatim except that
 top-level `gptr_return()` calls and calls of `record = FALSE` members are dropped and top-level `<-` is rewritten to
 `=` where safe (IC-48); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
-(excluded from `prompt` and `sha`, IC-49); after each such call that printed something, its output as `#> ` lines (at most `gptr.doc_output_lines` lines of 76 characters,
-then `#> ... (N more lines)`), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
+(excluded from `prompt` and `sha`, IC-49); after each such call that printed something, its output as `#> ` lines (at most `gptr.doc_output_lines` lines, else the setting `doc$output_lines`, of 76
+characters, then `#> ... (N more lines)` counting every line not shown), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
 (`#> sh git status --porcelain: exit 0, 6 lines`); artifact references (`#> [app] .gptr/artifacts/<id>/app.R`,
 `#> [plot] <path>`); a block whose code needed a secret gets `# gptr: block needs secrets that are not recorded`.
 Code passes `code_for_history()` (literal secrets -> `Sys.getenv("NAME")`). Failed executions and plan-mode code
