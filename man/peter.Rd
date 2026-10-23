@@ -43,7 +43,9 @@ keeps only the values it returned with \code{\link[=gptr_return]{gptr_return()}}
 
 \item{envir}{Where the agent evaluates R code and creates objects. A call made by the agent's
 own R code without \code{envir} evaluates in a new environment whose parent is the caller's,
-\code{res$envir}: it reads the caller's objects and keeps the ones it creates there.}
+\code{res$envir}: it reads the caller's objects and keeps the ones it creates there. A function
+frame (the default inside a function, or \code{environment()}) serves only that call, so the
+session keeps no workspace for later turns; pass \code{envir = new.env()} to keep one.}
 
 \item{background}{Experimental: return the running session at once (needs later).}
 

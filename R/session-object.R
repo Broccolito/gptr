@@ -273,7 +273,9 @@ final_text = function(path) {
 #' `children`, `ext`, `plan`, `last_rewind`, `editor_text`, and the names of child sessions.
 #' Sessions are changed only through `peter()` and the `gptr_*()` verbs, so `$<-` and `[[<-`
 #' signal `gptr_error_readonly`. Usage a provider did not report stays unknown: `cost` is `NA`
-#' when the cost of any request is unknown.
+#' when the cost of any request is unknown, as for a model without prices. `envir` is the
+#' session's kept workspace: `NULL` for a session started inside a function without `envir =`
+#' (a function frame is never kept), whose later turns evaluate in their caller's frame.
 #' `history` is the complete recorded-message table with a concise display, like
 #' `summary(x)`. Use `print(x$history, n = Inf)` to show all rows or `as.data.frame(x$history)`
 #' to obtain an ordinary data frame.

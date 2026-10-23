@@ -569,6 +569,26 @@ test_that("a continuation evaluates in the kept home and fails fast on a hidden 
   expect_identical(s$turns, 2L)
 })
 
+test_that("a continuation of a session that kept no workspace says where it evaluates", {
+  local_gw()
+  local_gptr_options(quiet = FALSE, verbose = 0L)
+  fake = local_fake_provider(list("ok"))
+  f = function() peter("Create z.", model = fake, mode = "auto")
+  s = f()
+  expect_null(s$envir)
+  cnd = expect_message(s |> peter("Report z."), class = "gptr_message_home_not_kept")
+  expect_match(conditionMessage(cnd), "frame of f()", fixed = TRUE)
+  g = function() {
+    s2 = peter("a", model = fake, mode = "auto")
+    expect_no_message(s2 |> peter("b"), class = "gptr_message_home_not_kept")
+  }
+  g()
+  e = new.env()
+  s3 = (function() peter("a", model = fake, mode = "auto", envir = e))()
+  expect_identical(s3$envir, e)
+  expect_no_message(s3 |> peter("b"), class = "gptr_message_home_not_kept")
+})
+
 test_that("a first remote use without an acknowledgement is refused, then replay guards", {
   local_gw()
   withr::local_envvar(GPTR_REPLAY = "replay")

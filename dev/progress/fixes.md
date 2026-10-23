@@ -1972,3 +1972,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   refused new call restores it; a router's choice gets the same checks and an unreachable one falls back.
 - Open: the `.opts$images` and `prompt_secrets` "ask" refusals still follow the switch (`gateway_input()`); a
   continuation to a provider spec not registered globally still fails in `session_set_model()` (finding 80 aside).
+
+### sessions-4 - Say when a continued session has no kept workspace
+- Red: FAIL 2 in `^gptr-gateway$` (PASS 387; findings 97, 134, 143): `s = f(); s |> peter("Report z.")` for a
+  session started inside `f()` (`s$envir` NULL) evaluated in the caller's environment and said nothing.
+- Cause: R2 (`home_keep()`) never keeps a function frame, and `gateway_continue_envir()` fell back to the caller
+  frame silently; `gptr_fork()` already informs for the same condition.
+- Fix: without `envir =`, a session with no kept home whose `home_label` is a function frame informs once
+  (`home_not_kept`) when `home_label(call$envir)` differs, naming both and `envir = new.env()`; a pipe inside the
+  same function stays silent. `?session-accessors` (`envir` NULL inside a function, `cost` NA without prices),
+  `?peter` `envir`; 04 §2.2, §5.1, IC-40.
+- Green: `^gptr-gateway$` PASS 392; `^(gptr-|session-|subagent-|doc-|copy-gateway|console-render|agent-run|env-|
+  arch-layers|lint-rules)` PASS 7623 SKIP 3. Full suite FAIL 5 PASS 35302 SKIP 64, all load timing in
+  `proc-windows-backpressure` (alone PASS 254). Lint, Rd and check-plans clean.
+- Deviations: D-251 (extended). From the plan: `?peter` `envir` also says a function frame, `environment()`
+  included, is not kept (finding 143).
+- Open: labels compare by name, so a session made in one call of `f()` and continued in another call of `f()`
+  stays silent; the sheet's `s$envir` line is entry S07.

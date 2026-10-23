@@ -84,7 +84,9 @@
 #' @param prompt An explicit prompt; wins over positional selection.
 #' @param envir Where the agent evaluates R code and creates objects. A call made by the agent's
 #'   own R code without `envir` evaluates in a new environment whose parent is the caller's,
-#'   `res$envir`: it reads the caller's objects and keeps the ones it creates there.
+#'   `res$envir`: it reads the caller's objects and keeps the ones it creates there. A function
+#'   frame (the default inside a function, or `environment()`) serves only that call, so the
+#'   session keeps no workspace for later turns; pass `envir = new.env()` to keep one.
 #' @param background Experimental: return the running session at once (needs later).
 #' @param budget `list(tokens =, cost =, turns =)` limits for this call.
 #' @param replay Document replay mode: `"auto"`, `"replay"`, `"live"` or `"record"`.
@@ -618,12 +620,24 @@ gateway_new_session = function(call, cur) {
 }
 
 #' The IC-40 precedence for a continuation's evaluation environment: an explicit `envir =` (kept
-#' in `call$envir`) > the session's kept home > the caller frame (already in `call$envir`)
+#' in `call$envir`) > the session's kept home > the caller frame (already in `call$envir`); a
+#' session that started in a function frame (never kept, R2) says so once when a turn runs elsewhere
 #' @noRd
 gateway_continue_envir = function(call, s) {
-  if (!isTRUE(call$args$envir_given)) {
-    home = session_home(s)
-    if (!is.null(home)) call$envir = home
+  if (isTRUE(call$args$envir_given)) return(invisible(call))
+  home = session_home(s)
+  if (!is.null(home)) {
+    call$envir = home
+    return(invisible(call))
+  }
+  d = session_data(s)
+  here = home_label(call$envir)
+  if (startsWith(d$home_label %||% "", "frame of ") && !identical(here, d$home_label)) {
+    gptr_inform(c(paste0("Session ", d$id, " started in the ", d$home_label, ", which it does not ",
+                         "keep, so this turn evaluates in its caller's environment (", here,
+                         ") and cannot see the objects earlier turns created."),
+                  "Start a session with envir = new.env() to keep a workspace for later turns."),
+                "home_not_kept", .once = paste0("home_not_kept:", d$id))
   }
   invisible(call)
 }

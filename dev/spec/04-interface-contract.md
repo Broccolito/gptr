@@ -287,6 +287,7 @@ Messages (`gptr_message_<name>`): `alias_shadowed` (P08), `plan_handoff` (P11), 
 session when a data frame is split into several states, naming `I(x)`),
 `billing_env` (P03/P20; names of removed billing variables), `notice`
 (one-time notices: experimental routes, Codex overhead, uncalibrated emulation), `value_rebound` (P06),
+`home_not_kept` (P08; once per session, IC-40),
 `progress` (P14, verbosity 1), `interpolated` (P08, echo of the interpolated prompt at verbosity >= 2).
 
 Transport, adapter and System 1 failures are condition **objects** created (not signalled) by P04, P12 and P13
@@ -782,7 +783,7 @@ the valid names):
 | `messages` | list of messages on the active branch (R shape, unprojected) |
 | `model`, `mode`, `status`, `reason`, `id`, `kind`, `file` | chr(1) |
 | `turns` | int(1) |
-| `envir` | the kept home environment, or `NULL` |
+| `envir` | the kept home environment, or `NULL` (a session started in a function frame [R2], a detached copy) |
 | `children` | named list of child sessions |
 | `ext` | named list of plugin state |
 | `plan` | chr(1) or `NULL` |
@@ -4375,7 +4376,9 @@ every element and run `parallel`/`max_active` at a time (P19 acceptance: 20 elem
 earlier `envir`, or a fork overlay) > the caller frame (`parent.frame()`). Context symbols of the call are read
 from the call's frame; when a symbol label is not visible from the run's evaluation environment with the same
 object address, the gateway fails fast with `gptr_error_invalid_argument` naming the object and suggesting
-`envir =` or a named value. P08 test: `f = function(s, d) s |> peter("filter d", d)`.
+`envir =` or a named value. P08 test: `f = function(s, d) s |> peter("filter d", d)`. A session without a
+kept home whose first call ran in a function frame [R2] gives a once-per-session `home_not_kept` message when
+a continuation without `envir =` evaluates in an environment with another label (`home_label()`, D-251).
 
 **IC-41 Capture without forcing symbol dots.** (req-4) For a dot whose expression in `sys.call()` is a plain
 symbol (top level, data-first pipe, continuation with context), the gateway computes the facts with a leaf
