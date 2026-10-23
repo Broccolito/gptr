@@ -1178,6 +1178,29 @@ test_that("gptr_config(.scope = NULL) writes the project file when a workspace e
   expect_null(settings_read("session")$mode)
 })
 
+test_that("gptr_config() warns when an untrusted project will not apply what it saved (D-250)", {
+  skip_on_cran()
+  proj = local_gw()
+  m = list(id = "my-id", tool_call = TRUE)
+  cnd = expect_warning(gptr_config(providers = list(bedrock = list(models = list(m)))),
+                       class = "gptr_warning_untrusted_setting")
+  expect_match(conditionMessage(cnd), "`providers`", fixed = TRUE)
+  expect_match(conditionMessage(cnd), paste0("gptr_trust(\"", proj, "\", trust = TRUE)"),
+               fixed = TRUE)
+  expect_identical(settings_read("project")$providers$bedrock$models[[1]]$id, "my-id")
+  expect_null(settings_get("providers")$bedrock)
+  # tightening applies untrusted, so it is silent
+  expect_no_warning(gptr_config(mode = plan, permissions = list(deny = "r(fn:unlink)")))
+  expect_identical(settings_get("mode"), "plan")
+  # a recorded "no" shows no trust notice at all, so the warning is the only signal
+  gptr_trust(proj, FALSE)
+  cnd = expect_warning(gptr_config(model = opus), class = "gptr_warning_untrusted_setting")
+  expect_match(conditionMessage(cnd), "`model`", fixed = TRUE)
+  gptr_trust(proj, TRUE)
+  expect_no_warning(gptr_config(providers = list(bedrock = list(models = list(m)))))
+  expect_identical(settings_get("providers")$bedrock$models[[1]]$id, "my-id")
+})
+
 test_that("gptr_config() validates keys, scopes and values", {
   skip_on_cran()
   local_gw()

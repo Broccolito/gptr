@@ -2065,3 +2065,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^gptr-config$` PASS 524 (the user `region` is kept); full suite (NOT_CRAN) PASS 35357, SKIP 64. Lint
   clean; no Rd change.
 - Deviations: none (restores the rule of the function's doc and `?gptr_config`). Open: none.
+
+### config-2 - gptr_config() warns when an untrusted project will not apply a saved setting
+- Finding 32. Red: `^gptr-config$` FAIL 2, PASS 524: in an untrusted project `gptr_config(providers =
+  list(bedrock = list(models = list(m))))` raised no condition, while `settings_get("providers")$bedrock` stayed
+  NULL.
+- Cause: with a `.gptr/` workspace the default scope is the project, whose non-tightening keys
+  `settings_project_value()` drops while it is untrusted; `gptr_config()` saved them silently, and a recorded "no"
+  skips even the one-time trust notice, so `peter()` failed later with a bare "Unknown model reference".
+- Fix: `settings_untrusted_warn()` runs after a project write when `trust_get()` is FALSE and warns
+  `untrusted_setting` (fields `keys`, `path`; once per root and keys) for each key whose untrusted contribution
+  differs from the trusted one (`providers` counts as written, so no base-URL question is asked), naming
+  `gptr_trust("<root>", trust = TRUE)` and `.scope = "session"`. The write is kept. 04 `gptr_config()` and §2.2
+  warnings amended; NEWS entry.
+- Green: `^gptr-config$` PASS 535; with the 13 other test files that call `gptr_config()`, arch-layers and
+  lint-rules PASS 4280. Lint clean; no Rd change.
+- Deviations: D-250 (config-2 rule). Open: a project value that loosens a tighten key (`mode = yolo`) is dropped
+  silently, trusted or not (§11.2, not a trust matter).

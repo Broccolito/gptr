@@ -160,6 +160,9 @@ works on the objects already in memory.
 * An unnamed list in a higher settings layer, such as a provider's `models` set with
   `gptr_config(.scope = "session")` or `options(gptr.providers =)`, replaces the one in a lower
   layer (for example the user file) instead of being ignored; named lists still merge.
+* `gptr_config()` warns when it saves a setting to a project that is not trusted and so does not
+  apply it (for example `providers` or `model`), naming `gptr_trust()` and `.scope = "session"`;
+  settings that only tighten, such as `mode = plan`, stay silent.
 
 # gptr 0.7.0
 

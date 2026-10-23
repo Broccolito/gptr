@@ -1270,6 +1270,30 @@ settings_config_value = function(key, value, scope) {
   invisible(value)
 }
 
+#' Warns when keys just written to an untrusted project's file cannot apply there (IC-52): those
+#' whose untrusted contribution (settings_project_value()) is not what trust would apply. Trusted,
+#' `providers` applies as written, a `base_url` once confirmed (not asked here).
+#' @noRd
+settings_untrusted_warn = function(patch) {
+  root = project_root()
+  if (isTRUE(trust_get(root))) return(invisible())
+  lost = character()
+  for (k in names(patch)) {
+    v = patch[[k]]
+    if (is.null(v)) next
+    sp = settings_spec(k)
+    full = if (identical(k, "providers")) v else settings_project_value(k, sp, NULL, v, TRUE, root)
+    if (!identical(settings_project_value(k, sp, NULL, v, FALSE, root), full)) lost = c(lost, k)
+  }
+  if (!length(lost)) return(invisible())
+  gptr_warn(paste0("Saved to ", settings_path("project"), " but not applied while this project ",
+                   "is not trusted: ", paste0("`", lost, "`", collapse = ", "), ". Trust it with ",
+                   "gptr_trust(", encodeString(root, quote = "\""), ", trust = TRUE), or for this ",
+                   "R session only pass .scope = \"session\"."),
+            "untrusted_setting", keys = lost, path = root,
+            .once = paste0("untrusted_setting:", path_key(root), ":", paste(lost, collapse = ",")))
+}
+
 #' Show or change gptr's settings
 #'
 #' With no arguments, returns the effective settings with the layer each value came from:
@@ -1359,6 +1383,7 @@ gptr_config = function(..., .scope = NULL) {
       gateway_filters_sync()
     }
   }
+  if (identical(scope, "project")) settings_untrusted_warn(patch)
   invisible(prev)
 }
 

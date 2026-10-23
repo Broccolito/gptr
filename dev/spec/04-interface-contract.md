@@ -281,7 +281,8 @@ two unnamed string literals), `replay_downgraded` (P15; live/stale regeneration 
 field `errors`),
 `readline_limit` (P14), `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only
 when `options(gptr.check_prefix = "warn")`), `secret_late` (P03; a newly registered secret already occurs in live
-session entries; field `counts`).
+session entries; field `counts`), `untrusted_setting` (P08; `gptr_config()` saved keys an untrusted project does
+not apply; fields `keys`, `path`; D-250).
 
 Messages (`gptr_message_<name>`): `alias_shadowed` (P08), `plan_handoff` (P11), `egress_ack` (P08, IC-71), `s1_split` (P13; once per
 session when a data frame is split into several states, naming `I(x)`),
@@ -1197,7 +1198,9 @@ list). Keys are the registered `setting` specs (core keys of §11.2 plus plugin 
 setting are stored but never applied, and other keys apply only in a trusted project, §11.2); `"user"` =
 `R_user_dir("gptr", "config")/settings.json`. `egress` is accepted only at user scope. Files are written
 atomically with top-level keys merged. Conditions: `invalid_argument`, `workspace`,
-`invalid_identifier`. Emits nothing.
+`invalid_identifier`; after a write to an untrusted project, warning `untrusted_setting` (fields `keys`,
+`path`; once per root and keys) naming the keys its file holds but untrusted cannot apply (those whose
+§11.2 project contribution differs from a trusted one; D-250). Emits nothing.
 
 ```r
 old = gptr_config(mode = plan)
