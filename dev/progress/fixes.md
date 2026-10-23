@@ -2238,8 +2238,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   name is empty, "and N more" beyond, and a second line: "The error's $value holds every answer;
   uncertain = NA keeps the others." 04 §2.2 row amended; NEWS entry.
 - Green: `^s1-route$` PASS 309 (unnamed input lists "2, 4"; a choice reports its stored confidence 0.91,
-  not the chosen 0.94); all System 1 files (`s1-*`, `copy-s1`, `s11-conformance`) PASS 1435. Lint clean;
-  no Rd change.
+  not the chosen 0.94); the `s1-*` files PASS 1435. Lint clean; no Rd change.
 - Deviations: D-250 (s1-2 rule). The plan's second line, "e$value holds every answer", names a variable the
   user may not have; it reads "The error's $value". Open: the system-one vignette does not describe the
   fields (the message does).
+
+### s1-3 - as.data.frame() of a score names its probability columns by level
+- Finding 125. Red: `^s1-types$` FAIL 2, PASS 217: a score with levels "Very negative", "Neutral", "Very
+  positive" gave the columns `p_0`, `p_1`, `p_2`, while `gptr_prob(x, "probabilities")` and a choice use the
+  level names.
+- Cause: `as.data.frame.gptr_s1()` named a score's columns by 0-based level index, against 04 §5.2's
+  `p_<level>`; P13's test copied that deviation, and no user doc mentioned it.
+- Fix: every type takes `colnames()` of the stored matrix (levels are unique, `s1-client.R`). NEWS entry.
+- Green: `^s1-types$` PASS 219 (the new test ties both accessors for a choice and a score); the `s1-*`,
+  `copy-s1` and `s11-conformance` files PASS 1504. Lint clean; no Rd change.
+- Deviations: none (the contract already says `p_<level>`). Open: none.

@@ -199,6 +199,8 @@ works on the objects already in memory.
 * The `uncertain = "stop"` error names the uncertain inputs (the first ten) and carries their
   positions (`$index`), `$names` and `$confidence`, the confidence the band tests, and every answer
   (`$value`), which it used to discard; `$prob` is unchanged.
+* `as.data.frame()` of a System 1 score names its probability columns by level (`p_<level>`), as
+  `gptr_prob(x, "probabilities")` and choices do; they were `p_0`, `p_1`, ...
 
 # gptr 0.7.0
 

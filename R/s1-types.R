@@ -395,8 +395,7 @@ as.data.frame.gptr_s1 = function(x, ...) {
   } else {
     df$confidence = attr(x, "confidence", exact = TRUE)
     m = attr(x, "probabilities", exact = TRUE)
-    cols = if (inherits(x, "gptr_choice")) colnames(m) else as.character(seq_len(ncol(m)) - 1L)
-    for (j in seq_len(ncol(m))) df[[paste0("p_", cols[j])]] = m[, j]
+    for (j in seq_len(ncol(m))) df[[paste0("p_", colnames(m)[j])]] = m[, j]
   }
   if (!is.null(rn)) {
     row.names(df) = rn

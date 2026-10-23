@@ -143,7 +143,15 @@ test_that("as.data.frame gives one row per element with probability columns", {
   expect_identical(names(df), c("value", "confidence", "p_liver", "p_lung", "p_other"))
   expect_identical(row.names(df), c("x", "y"))
   expect_identical(names(as.data.frame(s1_dec())), c("value", "prob"))
-  expect_identical(names(as.data.frame(s1_sco())), c("value", "confidence", "p_0", "p_1", "p_2"))
+  expect_identical(names(as.data.frame(s1_sco())),
+                   c("value", "confidence", "p_Very negative", "p_Neutral", "p_Very positive"))
+})
+
+test_that("as.data.frame names the probability columns as gptr_prob() does (D-250)", {
+  for (x in list(s1_cho(), s1_sco())) {
+    expect_identical(names(as.data.frame(x))[-(1:2)],
+                     paste0("p_", colnames(gptr_prob(x, "probabilities"))))
+  }
 })
 
 test_that("as.data.frame and Summary take the generics' row.names and na.rm through ...", {
