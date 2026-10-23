@@ -1989,7 +1989,9 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Cause: `edit_splice_fuzzy()` (Pi's applyReplacementsPreservingUnchangedLines()) rebuilt each
   touched line group from the fuzzy view; `new_gptr_patch()` dropped `edit_reasons()`, which only
   the model saw.
-- Fix: the splice landed (sheet entry S31 takes the "changes only the matched text" wording).
+- Fix: the splice landed (sheet entry S31 takes the vignette's wording: "changes only the matched
+  text, unless the match starts or ends inside a ligature or between two letters with combining
+  accents on one line; those lines are rewritten in normalised form").
   `fuzzy_offsets()` maps a fuzzy-view offset back to the original line by per-character
   normalisation (`fuzzy_normalize_lines(strip = FALSE)`) aligned with the line's own from both
   ends, and newText (file line ending) is spliced into the original bytes. When a boundary cannot
@@ -2001,11 +2003,15 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   doc-blocks|utils-paths|json-schema)$` PASS 2129 SKIP 1; every existing fuzzy expectation (tws.txt
   included: covered trailing spaces go) unchanged. 20,000 fuzzy matches with replace_all: 1.8 s
   (was 2.7 s). Lint clean; Rd unchanged.
-- Reviews: r1 (2) the first version sent a whole edit to the line rewrite when one combining
-  sequence sat anywhere on a touched line: `cafe\u0301 \u2018x\u2019 \u2018y\u2019` edited
-  `'x'` -> `'z'` composed the accent and straightened the other quote (red FAIL 2 in `tool-edit`,
-  PASS 194). Aligning from both ends: `tool-edit` PASS 196; the neighbours above PASS 2137 SKIP 1;
-  20,000 matches 1.7 s (1.4 s before, same run). Lint clean.
+- Reviews: r1 2 findings (low), both applied. (1) The vignette sentence said "still changes only
+  the matched text" with no exception for the fallback, and left out NFKC compatibility forms
+  (ligatures, full-width letters, U+00B5, with stringi): both vignette files now name them and the
+  exception, and say the printed result names the normalisation. (2) The first version sent a
+  whole edit to the line rewrite when one combining sequence sat anywhere on a touched line:
+  `cafe\u0301 \u2018x\u2019 \u2018y\u2019` edited `'x'` -> `'z'` composed the accent and
+  straightened the other quote (red FAIL 2 in `tool-edit`, PASS 194). Aligned from both ends:
+  `tool-edit` PASS 196; the neighbours above PASS 2137 SKIP 1; 20,000 matches 1.7 s (1.4 s before,
+  same run). Lint clean.
 - Deviations: D-248 (04 §5.10, §7.10). Open: the fallback still rewrites the lines when a boundary
   lies between two combining accents on its line or inside a ligature (said in the reasons); a
   non-fuzzy deviation (CRLF, re-encoding) still prints only the message.
