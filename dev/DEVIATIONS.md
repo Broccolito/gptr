@@ -3138,10 +3138,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule (sessions-4): a continuation without `envir =` of a session with no kept home whose `home_label` is a
   function frame (R2) informs once per session (`gptr_message_home_not_kept`) when `home_label(call$envir)`
   differs, naming both and `envir = new.env()`. Was silent. R2 and the IC-40 precedence are unchanged.
+- Rule (sessions-5): a named context dot whose name (2+ characters) is a prefix of a `peter()` formal, or the formal
+  plus `s`, and whose value fits it (character, plain list, function or spec; 04 §6.1) warns
+  (`gptr_warning_partial_name`, naming each formal) from facts only, and stays context. Was silent (`mo = "plan"`).
 - Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
   `tools`, `.opts` and refusals. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter` `envir`,
-  `?session-accessors`.
+  `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...",
-  "a continuation of a session that kept no workspace ...";
+  "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
   prompt-sections "the tool array skips unavailable and missing tools ...". Evidence: progress/fixes.md Task FIX-18.

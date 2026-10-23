@@ -141,6 +141,32 @@ select_prompt = function(nms, facts, kinds, have_prompt) {
        context = context, two = !have_prompt && length(lits) >= 2L)
 }
 
+#' Warns for each named dot of `idx` whose name is a prefix of a peter() argument its value fits,
+#' or that argument plus "s"; reads facts only. One-letter names (`a`, `p`), common context names,
+#' are skipped.
+#' @noRd
+warn_partial_names = function(nms, facts, idx) {
+  for (j in idx[nchar(nms[idx]) >= 2L]) {
+    cl = facts[[j]]$class
+    fits = if ("character" %in% cl) {
+      c("model", "mode", "skills", "plugins", "extensions", "tools", "prompt", "replay")
+    } else if (identical(cl, "list")) {
+      c(".opts", "budget", "agents")
+    } else if (any(c("function", "gptr_spec") %in% cl)) {
+      c("model", "extensions", "tools")
+    } else {
+      character()
+    }
+    hit = fits[startsWith(fits, nms[j]) | nms[j] == paste0(fits, "s")]
+    if (length(hit)) {
+      gptr_warn(c(paste0("`", nms[j], " =` is attached as a context object, not read as ",
+                         paste0("`", hit, " =`", collapse = " or "), "."),
+                  "Name the argument in full, or rename the object if it is context."),
+                "partial_name")
+    }
+  }
+}
+
 #' Context items of the call record (contract 7.8): label, kind, name (symbols), slot (values and
 #' literals in `values`), address (symbols; IC-40) and facts
 #' @noRd

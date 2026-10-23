@@ -1989,3 +1989,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   included, is not kept (finding 143).
 - Open: labels compare by name, so a session made in one call of `f()` and continued in another call of `f()`
   stays silent; the sheet's `s$envir` line is entry S07.
+
+### sessions-5 - Warn when a misspelled peter() argument becomes context
+- Red: FAIL 2 in `^gptr-gateway$` (PASS 392; finding 144): `peter("x", mo = "plan", model = fake)` warned nothing
+  (its message check then errored); `mo`, `mod`, `tool` and `.opt` were attached as context in silence.
+- Cause: every formal follows `...`, so only exact names match; `select_prompt()` and `gateway_context_items()` take
+  any other named dot as context, and nothing compared its name with the formals.
+- Fix: `warn_partial_names()` (gptr-capture.R), called after `select_prompt()`, reads facts only: a named context dot
+  whose name is a prefix of a formal, or the formal plus `s`, and whose value fits it (character, plain list,
+  function or spec) warns `partial_name`, naming each formal; the dot stays context. `?peter` dots; 04 §2.2, §6.1,
+  §6.1.5.
+- Green: `^gptr-gateway$` PASS 401; `^(gptr-|session-|subagent-|doc-|copy-gateway|console-|agent-|env-|arch-layers|
+  lint-rules)` PASS 9741 SKIP 4. Full suite (NOT_CRAN=true) FAIL 0 PASS 35316 SKIP 64. Lint, Rd and check-plans
+  clean.
+- Deviations: D-251 (extended). From the plan: names of one character stay silent, as the verifier advised, since
+  `a = list(1)` or `p = "a title"` would otherwise warn as `agents =`, `prompt =` or `plugins =`.
+- Open: an unbound bare value (`mo = auto`) still stops in capture with "object 'auto' not found", not naming `mo`
+  (the verifier's optional `dot_get()` change, not planned).

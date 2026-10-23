@@ -24,7 +24,9 @@
 #' unnamed string literal, else the first unnamed length-1 character value), and context objects
 #' (unnamed ones are labeled by their expression, named ones by name). Conversational context
 #' bindings refer to objects where they live; descriptions are budgeted separately from
-#' in-memory R computation. Every other argument is matched by its exact name only.
+#' in-memory R computation. Every other argument is matched by its exact name only: a named
+#' object whose name abbreviates one and whose value fits it, such as `mo = "plan"`, stays context
+#' and warns (`gptr_warning_partial_name`).
 #'
 #' A literal prompt gets `{name}` interpolation from `envir` (atomic vectors of 1 to 50 values;
 #' `{{` and `}}` are literal braces); `.opts = list(interpolate = FALSE)` switches it off.
@@ -157,6 +159,7 @@ peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugin
   }
   p_arg = check_string(prompt, "prompt", null = TRUE)
   sel = select_prompt(nms, facts, kinds, !is.null(p_arg))
+  warn_partial_names(nms, facts, sel$context)
   args = gateway_args(parallel, choices, levels, threshold, min_confidence, uncertain, background,
                       budget, replay, .opts, .run, .stdin)
   args$run = isTRUE(args$run) && !gateway_deferring()

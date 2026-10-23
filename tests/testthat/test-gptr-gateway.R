@@ -1396,6 +1396,29 @@ test_that("a router's choice that cannot be reached falls back to the default mo
   expect_identical(s$text, "fallback answer")
 })
 
+test_that("a named dot that abbreviates an argument warns and stays context (D-251)", {
+  local_gw()
+  fake = local_fake_provider(as.list(paste("reply", 1:5)))
+  attached = function() {
+    blocks = fake_requests(fake)[[fake$log$n]]$messages[[1L]]$content
+    paste(vapply(blocks, function(b) if (identical(b$kind, "attached")) b$text else "", ""),
+          collapse = "\n")
+  }
+  cnd = expect_warning(peter("x", mo = "plan", model = fake), class = "gptr_warning_partial_name")
+  expect_match(conditionMessage(cnd), "`model =` or `mode =`", fixed = TRUE)
+  expect_match(attached(), "<attached name=\"mo\">", fixed = TRUE)
+  expect_warning(peter("x", mod = "fake/fake-1", model = fake), "`model =`", fixed = TRUE,
+                 class = "gptr_warning_partial_name")
+  expect_warning(peter("x", tool = "-r", model = fake), "`tools =`", fixed = TRUE,
+                 class = "gptr_warning_partial_name")
+  expect_warning(peter("x", .opt = list(max_turns = 1), model = fake), "`.opts =`", fixed = TRUE,
+                 class = "gptr_warning_partial_name")
+  expect_match(attached(), "<attached name=\".opt\">", fixed = TRUE)
+  expect_no_warning(peter("x", mod = lm(mpg ~ wt, mtcars), m = mtcars, data = mtcars,
+                          a = list(1), p = "a title", model = fake))
+  expect_identical(fake$log$n, 5L)
+})
+
 # Task 12: append
 
 test_that("NAMESPACE exports P08's ten names and registers its S3 methods", {

@@ -276,7 +276,8 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `internal` | - | `detail` | any | a broken invariant (a bug) |
 
 Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `deprecated` (P02), `two_prompts` (P08;
-two unnamed string literals), `replay_downgraded` (P15; live/stale regeneration downgraded under `source()`),
+two unnamed string literals), `partial_name` (P08; a named context dot abbreviates a `peter()` argument its value
+fits, D-251), `replay_downgraded` (P15; live/stale regeneration downgraded under `source()`),
 `doc_conflict` (P15; md5 conflict after three attempts), `s1_errors` (P13; failed elements in a vectorised call;
 field `errors`),
 `readline_limit` (P14), `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only
@@ -1023,7 +1024,10 @@ peter = function(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 ```
 
 `peter` carries class `c("gptr_gateway", "function")` (§5.3). All formals follow `...`, so they match only by
-exact name.
+exact name. A named context dot whose name (two characters or more) is a prefix of a formal or that formal plus
+`s`, and whose value fits it (character: `model`, `mode`, `skills`, `plugins`, `extensions`, `tools`, `prompt`,
+`replay`; a plain list: `.opts`, `budget`, `agents`; a function or spec: `model`, `extensions`, `tools`), stays
+context and signals the warning `partial_name` naming each such formal (D-251).
 
 | Argument | Type / default | Meaning and validation |
 |---|---|---|
@@ -1142,11 +1146,11 @@ disables it. The call record keeps `template` (written to documents, hashed for 
 
 Conditions: `invalid_argument`, `invalid_identifier`, `noninteractive`, `not_available`, `unknown_model`,
 `no_key`, `egress`, `permission`, `provider` (and subclasses), `budget_*`, `max_turns`, `not_recorded`,
-`stale_block`, `missing_package` (background without later), the System 1 errors of §2.2; warning `two_prompts`.
-Side effects: creates or continues sessions; appends to their JSONL store (workspace or `tempdir()`); may
-evaluate model-written R code in `envir` (gated); may write the bound document (P15); may start processes (CLI
-providers, MCP servers, workers) that end with the run or the session. Emits: `route`, `model_select`,
-`session_start` (new sessions), `input`, then the run's events (§10.4).
+`stale_block`, `missing_package` (background without later), the System 1 errors of §2.2; warnings `two_prompts`,
+`partial_name`. Side effects: creates or continues sessions; appends to their JSONL store (workspace or
+`tempdir()`); may evaluate model-written R code in `envir` (gated); may write the bound document (P15); may start
+processes (CLI providers, MCP servers, workers) that end with the run or the session. Emits: `route`,
+`model_select`, `session_start` (new sessions), `input`, then the run's events (§10.4).
 Copy-safety: [R1][R2][R3] (the gateway is the principal entry point of the tracemem suite, `test-copy-gateway.R`).
 
 ```r
