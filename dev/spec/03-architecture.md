@@ -1513,7 +1513,8 @@ the same rule for the project, both offered only when the request suggests one; 
 line, `    allowed r(fn:FindNeighbors,FindClusters) for this session` (or `project`). `?` opens the detail view (code,
 flagged calls with levels, paths, "cannot be undone" when no checkpoint is possible, and "always in this project",
 written to the user-level project file `R_user_dir("gptr", "config")/projects/<hash>.json`, never into the project
-tree [IC-52]); `n` optionally takes feedback text that becomes the tool result; Ctrl-C aborts the run. Never
+tree [IC-52]); `n` optionally takes feedback text that becomes the tool result (`n use base R`; also `no, use
+base R` or `No. Use base R`: punctuation right after `n` or `no` is part of the key); Ctrl-C aborts the run. Never
 `askYesNo()`, `menu()` or `select.list()` for gptr's own prompts [18 §2.1]. A sub-agent's question names it
 (`  ? sub-agent alpha: allow r?`; a nested `peter()` by its quoted prompt and number). Choices and inputs (the `ask`
 tool's questions among them) use the same frame: `? <title>` in bold, details dim under it, numbered choices

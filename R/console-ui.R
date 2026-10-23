@@ -411,8 +411,9 @@ ui_console_permission = function(request, read = ui_console_read) {
                                    scope)))
       return(ui_answer("allow", scope))
     }
-    if (grepl("^no?(\\s|$)", low)) {
-      fb = trimws(sub("^no?", "", a, ignore.case = TRUE))
+    # `no, use base R` too: punctuation right after the key is no part of the text
+    if (grepl("^no?[,.;:!]*(\\s|$)", low)) {
+      fb = trimws(sub("^no?[,.;:!]*", "", a, ignore.case = TRUE))
       return(ui_answer("deny", feedback = if (nzchar(fb)) fb))
     }
     if (low == "?") {

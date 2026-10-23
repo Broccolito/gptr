@@ -269,6 +269,35 @@ test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3
   expect_identical(out$asked, 2L)
 })
 
+test_that("an approval takes `no, <text>` and `No. <text>` as n <text> (steering review)", {
+  skip_on_cran()
+  root = local_project()
+  req = ui_request("write.csv(df, 'out.csv')", rule = "r(fn:write.csv)")
+  answer = function(a) {
+    out = console_try(function() ui_console_permission(req), c(a, "y"))
+    list(decision = out$result$decision, feedback = out$result$feedback, asked = out$asked)
+  }
+  deny = function(fb = NULL) list(decision = "deny", feedback = fb, asked = 1L)
+  again = list(decision = "allow", feedback = NULL, asked = 2L)
+  # punctuation right after n or no belongs to the key; the text keeps its paths and brackets
+  cases = list(
+    "no, use base graphics" = deny("use base graphics"),
+    "No. Use base graphics" = deny("Use base graphics"),
+    "NO: use base graphics" = deny("use base graphics"),
+    "n; use base graphics" = deny("use base graphics"),
+    "No! use base graphics" = deny("use base graphics"),
+    "n, .Rprofile is off limits" = deny(".Rprofile is off limits"),
+    "n ~/data is off limits" = deny("~/data is off limits"),
+    "n (use base R)" = deny("(use base R)"),
+    "No." = deny(),
+    nope = again, nothing = again, "n/a" = again, "no-op" = again, n_rows = again,
+    "no.na(x)" = again, "no?" = again, normal = again,
+    # a conditional yes would approve a call the person limited
+    "y, but only fuel.csv" = again, "yes." = again, "yes, but not the second file" = again
+  )
+  expect_identical(stats::setNames(lapply(names(cases), answer), names(cases)), cases)
+})
+
 test_that("the keys are a row under the question, a and p only with a rule (D-243)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)

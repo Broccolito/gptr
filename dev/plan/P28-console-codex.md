@@ -624,7 +624,9 @@ Decisions:
 - The answer prompt is `› ` at column 0, read with R's readline, echo on, Enter required.
 - Answers are unchanged:
   - `y`, `a`, `p`, `n`;
-  - `n <text>` denies with feedback;
+  - `n <text>` denies with feedback (amended in the steering review: also `no, <text>` and `No. <text>`;
+    punctuation right after `n` or `no` belongs to the key, so `n, .Rprofile is off limits` keeps the
+    path whole, and `nope`, `n/a` or `yes.` are still no answer);
   - `?` shows the detail view;
   - Ctrl-C aborts.
 - A remembered answer adds one dim line naming the rule it adds:
