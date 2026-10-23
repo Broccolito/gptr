@@ -392,9 +392,14 @@ test_that("/compact reports its saving and /context names the compaction request
     as.numeric(gsub("[^0-9]", "", grep(pattern, out, value = TRUE)))
   }
   ctx_out = run_command(rs, "/context")$out
-  expect_match(ctx_out[[1L]], "^Last request q[0-9a-f]+ \\(the compaction request\\):$")
+  # the estimate is a ledger row, its value in the column of the others (review of Tasks 22-27)
+  expect_match(ctx_out[[1L]],
+               "^Last request q[0-9a-f]+ \\(the compaction request; the next is an estimate\\):$")
   compaction_total = figure(ctx_out, "^  total ")
-  expect_lt(figure(ctx_out, "^  next request: about [0-9,]+ tokens$"), compaction_total)
+  expect_match(ctx_out, "^  next request +[0-9,]+$", all = FALSE)
+  expect_identical(unique(nchar(grep("^  (total|next request|context left) ", ctx_out,
+                                     value = TRUE))), 26L)
+  expect_lt(figure(ctx_out, "^  next request "), compaction_total)
   s = peter(s, "q3")
   ctx_out = run_command(rs, "/context")$out
   expect_match(ctx_out[[1L]], "^Last request q[0-9a-f]+:$")

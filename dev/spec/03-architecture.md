@@ -2080,7 +2080,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 - **Slash commands** (`command` specs): `/help`, `/exit`, `/model`, `/mode`, `/plan`, `/tools`, `/env`,
   `/compact [focus]`, `/cost` (by agent, one total), `/context` (token ledger and the context left, as the
   status line says it [D-245]; on a CLI route instead the CLI's reported turn input, D-206; after `/compact` it names
-  the compaction request and the next request's estimate, from which it measures the context left [D-245]),
+  the compaction request and the next request's estimate as a ledger row, from which it measures the context
+  left [D-245]),
   `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
   templates as `/<name> args`. Commands are recorded as comments in transcripts. Their output, like a

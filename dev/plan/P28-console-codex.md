@@ -1531,7 +1531,9 @@ Decisions:
 - (Amended in the cheat-sheet review, console-4:) after `/compact` the last request is the compaction request:
   `/context` says so in its header, adds `  next request: about <n> tokens` (the compaction entry's
   `tokens_after`) and measures the context left from that; `/compact` reports `Conversation compacted: <before> ->
-  <after> tokens.`.
+  <after> tokens.`. (Amended in the review of Tasks 22-27: the estimate is a ledger row, `  next request
+  <n>`, its value in the column of the others, and the header says `(the compaction request; the next is an
+  estimate)`.)
 
 Tests (`test-console-render.R`, `test-console-repl.R`, `test-console-commands.R`), RED first:
 - The status text.
