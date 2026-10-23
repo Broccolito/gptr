@@ -190,16 +190,20 @@ env_snapshot = function(envir, previous = NULL) {
 }
 
 #' Snapshot of what code in `envir` reads: an overlay's own rows, then each lower overlay's and
-#' the first other environment's (binding_env()), a nearer binding shadowing a farther (D-252)
+#' the first other environment's (binding_env()), a nearer binding shadowing a farther; column
+#' `own` is TRUE for a binding of `envir` itself (D-252)
 #' @noRd
-env_view_snapshot = function(envir, previous = NULL) {
-  snap = env_snapshot(envir, previous)
+env_view_snapshot = function(envir, previous = NULL, sizes = TRUE) {
+  check_env(envir, "envir")
+  snap = env_snapshot_rows(envir, previous, sizes)
+  n = nrow(snap)
   while (!is.null(attr(envir, "gptr_overlay", exact = TRUE))) {
     envir = parent.env(envir)
-    snap = rbind(snap, env_snapshot_rows(envir, previous))
+    snap = rbind(snap, env_snapshot_rows(envir, previous, sizes))
   }
   # Dropped first: `[.data.frame` left this frame referenced, pinning a function-frame home (R2)
   envir = NULL
+  snap$own = seq_len(nrow(snap)) <= n
   snap[!duplicated(snap$name), , drop = FALSE]
 }
 

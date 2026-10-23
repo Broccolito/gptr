@@ -1939,3 +1939,22 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-252 (new). Open: finding 126's container status and `$text` synthesis are
   sessions-11's; the extra line sits outside `workspace_lines()`'s budget (the block's truncation
   still applies).
+
+### sessions-20 - A fork's change report names the source objects its code changed in place
+- Findings 99, 110. Red: `^session-object$` FAIL 4 PASS 534: after the fork ran
+  `dt[, z := 1]; e$flag = 'x'; v <<- 2; w = 3`, its r result had `added` = e, w and `modified`
+  empty, while home's dt, e and v had changed (the source's turns and file md5 did not).
+- Cause: `gptr_fork(envir = "overlay")` is `new.env(parent = home)`, which isolates bindings only,
+  and `eval_run()` diffed snapshots of the overlay alone, so in-place edits below it were invisible
+  and `e$flag = 'x'` (which binds the source's `e` in the overlay) looked new.
+- Fix: `eval_run()` diffs `env_view_snapshot(sizes = FALSE)` (new `sizes` argument and `own`
+  column); `eval_objects()` adds `(in the source workspace)` to a modified row not `own`, or whose
+  new own binding shares the old row's object (a rebinding `k = 5` stays unmarked). The
+  `gptr_fork()` doc and interactive-console vignette say in-place edits reach the source's objects.
+- Green: `^session-object$` PASS 538; session-object, env-snapshot, eval-core, eval-format,
+  eval-guard, copy-eval, copy-tools and tool-r PASS 1366; full suite (NOT_CRAN=true) FAIL 0 SKIP 64
+  PASS 35300. Lint clean; plan checks pass. Live (m$gpt, the finding's data.table fork): the model
+  ran `dt[, logmpg := log(mpg)]` and its result read `~ dt <data.table> modified (in the source
+  workspace)`.
+- Deviations: D-252 (extended). Open: no fork-scoped policy asks before `:=` or `<<-` (plan); an
+  object a fork creates in the source with `<<-` is still listed as `+ name` without the mark.

@@ -799,8 +799,9 @@ gptr_checkpoints(s, all = FALSE)
 
 `gptr_steer()` is the one enqueue function behind the pipe, the pause menu and `ctx$send()`. `gptr_fork()`
 creates a new session whose store file copies the path to `at` (default: the last closed boundary) and whose
-workspace is an overlay `new.env(parent = s$envir)` by default: reads are zero-copy, writes stay in the fork,
-and nothing live (listeners, queues, connections, processes, locks, usage) is shared (INFRA-14) [G3 (6),
+workspace is an overlay `new.env(parent = s$envir)` by default: reads are zero-copy, assignments stay in the
+fork (in-place edits of reference objects, data.table `:=` and `<<-` reach the source's objects; D-252), and
+nothing live (listeners, queues, connections, processes, locks, usage) is shared (INFRA-14) [G3 (6),
 P-B §4.2]. `gptr_rewind()` is G7's branch-in-place on the same object (§6.16). `gptr_usage(detail = TRUE)`
 returns the per-request token ledger. `gptr_parallel()` returns a team session; fan-outs come from
 `peter(prompt, x, parallel = n)` (the former `gptr_map()` is internal: one gateway, S-1 [IC-36]).
@@ -1761,7 +1762,8 @@ stored and listed for `peter$plot(k)`, image tokens count against the output bud
 projected as omitted when a request would exceed the provider's image limits [IC-67]; `peter$plot()` sends a
 larger view;
 state diff from snapshots before and after plus static assignment targets (replacement functions, `assign()`,
-`:=`, `set*()`, `<<-`); checkpoint hooks around mutating evaluations (§6.16); `rng_swap()` swaps a per-agent
+`:=`, `set*()`, `<<-`), of `env_view_snapshot()` for an overlay, where a modified object below the overlay (or
+shared by its new binding) reads `~ dt <data.table> modified (in the source workspace)` (D-252); checkpoint hooks around mutating evaluations (§6.16); `rng_swap()` swaps a per-agent
 L'Ecuyer stream in for inline sub-agents and restores the user's `.Random.seed` [IC-61]. The evaluator is the
 built-in record `r` of the `evaluator` kind, so a plugin can supply a remote or sandboxed one [IC-69]. Model text: output, messages, warnings, error and traceback, "[plot N
 attached]", state-change lines (`~ pbmc <Seurat> modified`, `+ markers <data.frame 4,211 x 7>`), a status
@@ -2001,7 +2003,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 | 11 allow/deny/ask/modify hooks, modes, fail closed | §6.8, `perm-gate.R`, `ext-events.R` | 18's mode x risk matrix; `modify` visible in the transcript; denial with reason; throwing policy denies (`test-perm-gate.R`; P11) |
 | 12 own loop with steering after tool results, `max_turns`, stepwise | `agent-loop.R`, §6.2 | report 02's 24 loop checks; a steer enqueued during a tool is on the wire after the tool-result message; `max_turns = 3` stops with `gptr_error_max_turns` status (`test-agent-loop.R`; P06) |
 | 13 append-only JSONL tree, RNG-free ids, crash-safe | §6.9.2 `session-store.R` | SIGKILL mid-stream then resume: file parses, last complete message present, nothing duplicated; SIGKILL mid-append, resume, three appends: all present and the tree connected; no connection left open; `.Random.seed` identical over 1,000 appends; fork replays to the source path's context (`test-session-store.R`; P06) |
-| 14 session semantics for `\|>`; fork shares nothing | §5.1, `session-object.R` | `s2 = gptr_fork(s)`: a listener on `s2` never fires for `s`; different leaves; overlay writes do not reach `s$envir` (`test-session-object.R`; P06) |
+| 14 session semantics for `\|>`; fork shares nothing | §5.1, `session-object.R` | `s2 = gptr_fork(s)`: a listener on `s2` never fires for `s`; different leaves; overlay assignments do not reach `s$envir` (`test-session-object.R`; P06) |
 | 15 no package-global run state | §2.2 rule 5 | two concurrent sessions with the same model: each usage equals its own requests; tool context correct in interleaved tools (`test-agent-run.R`; P06) |
 | 16 one reactor for streams and children; background serviced by later | §6.1, §6.2, §6.13 | 15's `p10_mixed` shape: 2 inline + 2 worker interleave within about the slowest agent's wall time and tools never overlap (`test-subagent-backends.R`; P19); the CLI leg (a fake CLI joining them) in `test-cli-codex.R` (P20) [IC-36]; background run progresses at an idle console (`test-agent-background.R`, manual/CI-only; P21) |
 | 17 providers as data + closed adapter set, versioned interface | `provider-registry.R`, `gptr_provider()`, `gptr_adapter()` | Ollama added by data only; the fake provider and a plugin adapter pass `gptr_check()` (`test-provider-registry.R`; P05) |

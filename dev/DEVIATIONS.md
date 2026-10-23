@@ -3127,7 +3127,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `<workspace_changes>` and the `agent_end` and `session_tree` baselines use the same view, so inherited objects
   are never reported as added or removed. Formerly every member was told `objects="0"` `(no objects)` while
   `summary(fit)` worked in it.
-- Contract-visible: 03 §7.5 `<workspace>`; 04 §7.9 `env_view_snapshot()`.
+- Rule (sessions-20): an overlay isolates bindings only; data.table `:=`/`set*()`, environment and R6 field writes,
+  `<<-` and `assign(envir =)` change the source's objects (`gptr_fork()` doc, interactive-console vignette). The
+  evaluator diffs `env_view_snapshot(sizes = FALSE)` (new column `own`), so such a change is `modified`, an alias
+  (`e$f = 1` binds the source's `e` in the overlay) is not `added`, and a modified row not `own`, or whose new own
+  binding shares the old row's object, reads `(in the source workspace)`. Formerly `e` was added and nothing else.
+- Contract-visible: 03 §4.3 (fork), §6.12, §6.18 and §7.5 `<workspace>`; 04 `gptr_fork(envir)`, §7.9
+  `env_view_snapshot()`.
 - Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
-  and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame). Evidence:
-  progress/fixes.md Task FIX-19 ws-1.
+  and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame);
+  session-object "a fork's change report names the source objects its code changed in place". Evidence:
+  progress/fixes.md Task FIX-19 ws-1, sessions-20.

@@ -945,7 +945,10 @@ session_root_id = function(s) {
 #' ids. Nothing live is shared (listeners, queue, run, lock, usage); the fork's file is written
 #' lazily at its first own message, with `parentSession` and `gptr.forkOf` in its header. The
 #' fork's workspace is an overlay of the source's kept home: it reads every object of the source
-#' at zero cost, and its writes stay in the overlay.
+#' at zero cost, and its ordinary assignments stay in the overlay, but code that modifies an
+#' object by reference (data.table `:=` and `set*()`, environments and R6 objects, `<<-`,
+#' `assign(envir =)`) changes the source's object too; copy such objects first, for example with
+#' `data.table::copy()`, when a branch must not touch them.
 #'
 #' @param s A `gptr_session`: the source.
 #' @param at `NULL` (the last closed boundary; a running source is cut there), an integer `k >= 0`
