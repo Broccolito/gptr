@@ -893,9 +893,26 @@ resolve_identifier = function(expr, arg, envir) {
       }
       return(ident_whole(paste0(as.character(head), inner), arg))
     }
+    nm = if (identical(head, as.name("-"))) ident_hyphen_name(expr)
+    if (!is.null(nm)) {
+      gptr_abort(paste0("`", nm, "` reads as subtraction; quote the name: ", arg, " = \"", nm,
+                        "\"."), c("invalid_identifier", "invalid_argument"), arg = arg,
+                 .data = list(class = "call"))
+    }
     return(ident_mask(expr, arg, envir))
   }
   ident_accept(expr, arg, ident_label(expr))
+}
+
+#' The name a bare hyphenated identifier spells (`high-performance-r` parses as subtraction): its
+#' symbol and number leaves joined by `-`, else NULL
+#' @noRd
+ident_hyphen_name = function(expr) {
+  if (is.symbol(expr) || (is.numeric(expr) && length(expr) == 1L)) return(as.character(expr))
+  if (!is.call(expr) || !identical(expr[[1L]], as.name("-")) || length(expr) != 3L) return(NULL)
+  l = ident_hyphen_name(expr[[2L]])
+  r = ident_hyphen_name(expr[[3L]])
+  if (!is.null(l) && !is.null(r)) paste0(l, "-", r)
 }
 
 #' TRUE when the gateway must force the formal's promise (evaluated in its own environment, G3

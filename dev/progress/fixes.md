@@ -2189,3 +2189,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `diag` callback (new `skill_parse()` argument), not from the latest diagnostic as planned: a cached skip
   whose diagnostic left the log (1,000 rows, a swapped registry) would have had none. Open: `read
   skill:nodesc/SKILL.md` still says "Unknown skill" (`skill_file_path()` in R/tool-read.R drops the reason).
+
+### ident-1 - A bare hyphenated name gets a gptr error naming the quoted form
+- Finding 112. Red: `^gptr-capture$` FAIL 1 PASS 357: `resolve_identifier(high-performance-r, "skills")` raised
+  base R's simpleError "object 'high' not found" from `eval(expr, mask)`.
+- Cause: R parses the name as `(high - performance) - r`; `resolve_identifier()` treats only unary `+`/`-`
+  specially, so the binary call reached `ident_mask()`, which binds whole identifiers only (with numbers bound to
+  the pieces, the error suggested quoting "high - performance - r").
+- Fix: before the mask, a binary `-` whose leaves are names or numbers (`ident_hyphen_name()`) is refused with
+  `gptr_error_invalid_identifier` "`high-performance-r` reads as subtraction; quote the name: skills =
+  "high-performance-r"." Nothing is evaluated, so bound pieces change nothing. 03 §4.1.3, 04 §6.1.3.
+- Green: `^gptr-capture$` PASS 364 (`peter(skills = high-performance-r)` sends no request; `c(+grep, -write)` and
+  `shiny_bslib` unchanged); with gptr-*, copy-gateway, subagent-defs, skill-discover, arch-layers, lint-rules PASS
+  1819. Lint clean; plan checks pass; Rd unchanged.
+- Deviations: D-252 (extended). The test spells the call `high - performance - r` (the same parse) or builds it
+  with `str2lang()`, as lintr's infix rule refuses the bare spelling. Open: none.

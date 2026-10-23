@@ -3185,12 +3185,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   matches (`trust_holds()$record`), as the run treats it: undecided, asked again (IC-52). A recorded `FALSE` stays
   `FALSE`; the write and its invisible previous value are unchanged. Formerly the read said `TRUE` while the run
   printed the untrusted notice and dropped the changed `SYSTEM.md` (finding 52).
-- Contract-visible: 03 §4.3 (fork), §5.1 (resume status), §6.2 (background asks), §6.10 (trust gates, tpl-2),
-  §6.12 (also the guard), §6.17 (templates), §6.18 and §7.5 `<workspace>`; 04 §4.6 (`gptr.container_end`),
-  `gptr_fork(envir)`, `gptr_resume()`, `gptr_init()` and `gptr_trust()` (tpl-2; its read, sessions-23), §6.1.2
-  and `gptr_parallel()` (team-1), §7.0 and §7.17 `templates.sync` (tpl-1), §7.6 `opts$mode_from` and
-  `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7,
-  IC-52 (when the trust question is asked), IC-57; `?gptr-background`, `?gptr_trust`.
+- Rule (ident-1): an identifier argument written as a binary `-` whose leaves are names or numbers
+  (`skills = high-performance-r`, `model = claude-opus-4-6`) is refused before any evaluation with
+  `gptr_error_invalid_identifier` "`high-performance-r` reads as subtraction; quote the name: skills =
+  "high-performance-r"." (`ident_hyphen_name()`); unary `+name`/`-name` is unchanged. Formerly the alias mask
+  evaluated it and base R's "object 'high' not found" escaped, or with numbers bound to the pieces the error
+  suggested the quoted name "high - performance - r" (finding 112).
+- Contract-visible: 03 §4.1.3 and 04 §6.1.3 (identifier table, ident-1), 03 §4.3 (fork), §5.1 (resume status), §6.2
+  (background asks), §6.10 (trust gates, tpl-2), §6.12 (also the guard), §6.17 (templates), §6.18 and §7.5
+  `<workspace>`; 04 §4.6 (`gptr.container_end`), `gptr_fork(envir)`, `gptr_resume()`, `gptr_init()` and
+  `gptr_trust()` (tpl-2; its read, sessions-23), §6.1.2 and `gptr_parallel()` (team-1), §7.0 and §7.17
+  `templates.sync` (tpl-1), §7.6 `opts$mode_from` and `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and
+  `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7, IC-52 (when the trust question is asked), IC-57;
+  `?gptr-background`, `?gptr_trust`.
 - Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
   and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame);
   session-object "a fork's change report names the source objects its code changed in place"; eval-guard "q bound
@@ -3203,6 +3210,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   gptr-config "a project whose only resource is prompt templates gets the trust notice", "a trusted prompts-only
   project registers its templates", "every project skill, agent and instruction location counts ...", "a relative
   skills.paths directory counts, and the question names skills", "a changed trust-gated file makes the project
-  untrusted again".
+  untrusted again"; gptr-capture "a bare hyphenated name is refused with its quoted form".
   Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1, gate-hint, tpl-1,
-  tpl-2, sessions-23.
+  tpl-2, sessions-23, ident-1.

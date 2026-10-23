@@ -627,6 +627,7 @@ Capture is base R (§6.4 R3; G3 t2b verified including forwarded dots). Resoluti
 | other symbol, bound where the call's promise is evaluated | the formal's promise is forced in a leaf: a character value is used; a spec object (`gptr_fake_provider()`, `gptr_tool()`, `gptr_agent()`) is registered at rank 0; any other class is a classed error naming the class ("`mice` is a data.frame, not a model name") |
 | unknown unbound symbol | the literal name, validated later with `adist()` suggestions [09] |
 | `c(a, "b")`, `+name`, `-name` | element-wise |
+| a binary `-` of names and numbers (`high-performance-r`) | a classed error naming the quoted form, never evaluated (D-252) |
 | other calls (`if (hard) opus else haiku`) | evaluated in an alias mask (known names bound to strings, parent = the caller); the mask's parent is reset to `emptyenv()` after evaluation (§6.4 R3) |
 
 Model references containing a decimal typed as a symbol (`gpt5.1`) are echoed once; documents always receive

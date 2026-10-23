@@ -1124,6 +1124,7 @@ exact name.
 | other symbol bound where the call's promise is evaluated | the formal's promise is forced in a leaf: character -> its value; `<spec:provider>`, `<spec:router>`, `<spec:tool>`, `<spec:agent>` -> registered at rank 0; any other class -> `gptr_error_invalid_identifier` ("`mice` is a data.frame, not a model name") |
 | unknown unbound symbol | the literal name, validated later (`gptr_error_unknown_model` with `adist()` suggestions) |
 | `c(a, "b")`, `+name`, `-name` | element-wise |
+| a binary `-` of names and numbers (`high-performance-r`, `claude-opus-4-6`) | `gptr_error_invalid_identifier`, never evaluated: "`high-performance-r` reads as subtraction; quote the name: skills = "high-performance-r"." |
 | other calls (`if (hard) opus else haiku`) | evaluated in an alias mask (known identifiers bound to their names; parent = the caller); the mask's parent is reset to `emptyenv()` afterwards |
 
 A symbol that looks like a decimal model version (`gpt5.1`) is echoed once; documents always record quoted
