@@ -3127,6 +3127,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `available()`) gets `Tool <name> not found` before hooks and the permission check, so an
   undeclared `ask` no longer stops a non-interactive auto run. `dispatch_nested()` still resolves
   `peter$` members in the registry under every preset; the MCP door already served declared tools.
+  A direct call of an undeclared bridge (`sh`, `script`, `bg`, `jobs`, `py`, `sql`, `knit`) now
+  reads `Tool <name> not found` before any hook; the S-4 hook text is reached only when a session
+  declares the bridge by value (`tools = "+sh"`).
 - Rule: with `gptr.noninteractive_ask = "deny"` a non-interactive mode block ends with the deny
   suffix in every mode, manual included (`context_mode_body()` tests deny first): a manual run's
   `ask` call is denied and the run goes on, so "questions asked with the ask tool, stop the run"
@@ -3166,7 +3169,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: 04 §4.4 call record (`tool` NULL when not offered), §7.6 `dispatch_tools()`,
   §9.3 suffix order, §5.10 `gptr_patch` (`reasons`, print), §7.10 `edit_file()` (fuzzy splice),
   IC-48 (`record = false` sentence), §7.10 `read_file()` (line count); 03 §7.3 (`out` without a
-  document); P22 Task 7 provisioning guard (`managed`).
+  document); P22 Task 5 S-4 refusal (an undeclared bridge is not found first), P22 Task 7
+  provisioning guard (`managed`).
 - Tests: test-agent-dispatch.R "the offered tools (D-248)" (3 blocks) and the frozen-schema block;
   test-bridge-lang.R, test-bridge-sh.R through-run refusals; test-prompt-context.R mode suffixes;
   test-tool-edit.R "edit errors number edits from 1", "an edit without oldText or newText";

@@ -1938,6 +1938,10 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   through-run tests (py, sql, knit, sh) now read "Tool <name> not found", still refused before the
   permission check; the S-4 text "is an R function, not a tool" is now reached only by a bridge a
   continued session adds by value (`tools = "+sh"`, measured) and keeps its unit test.
+- Reviews: r1 1 finding (low), applied: D-248 recorded the new refusal of an undeclared bridge
+  only here; its first Rule now states it (`Tool <name> not found` before any hook; the S-4 hook
+  text only for a bridge declared by value), Contract-visible lists P22 Task 5, and P22's S-4
+  paragraph and self-review item 10 point to it. Plan checks pass.
 - Open: the fixed preamble still says "with the r tool" when r is removed (by decision);
   `tool_change` declarations count after a switch to a provider that cannot take additions.
 
