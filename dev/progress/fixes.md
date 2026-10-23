@@ -2236,3 +2236,42 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   global one) still resolves `value=` in the recording home ("not bound"; a bare name gets the
   object of recording time); a `gptr_return(<expression>)` inside braces or a branch, or with its
   name split over lines, is not rewritten and its value is not recorded.
+
+### replay-3 - Record team and fan-out child code and values for replay
+- Findings 66, 65, 119 (their fan-out and team half; replay-2 has expressions, store-1 `$text`).
+- Red: FAIL 17 in `^doc-replay$` (PASS 670): a fake fan-out
+  `f = peter("Average .x", list(a = c(1, 2, 3), b = c(10, 20)), parallel = 1)` whose children ran
+  `m = mean(.x[[1]]); gptr_return(m)`, recorded through `gptr_source()`, wrote
+  `children="a:<sid>,b:<sid>"` and no child code, and `f$value` was `list(a = NULL, b = NULL)` in a
+  simulated later process with and without the session store and S2 answers; the same for
+  `gptr_return(mean(.x[[1]]))`; a one-agent team running `n = nrow(mtcars); gptr_return(n)` gave
+  `tm$x$value` NULL with and without `export = "n"`; a three-field `children=` entry was skipped.
+- Cause: `doc_team_block_lines()` wrote a child's code only when it had exports and never its value
+  name; `doc_replay_team()` built each child with no `value=`, and a replayed fan-out child's home
+  had no `.x`.
+- Fix: `doc_session_code()` also gives the latest `value=` name; a child with one gets its code in
+  `local({...}, envir = gptr_resume(block =, child =)$envir)` and the entry
+  `<name>:<session id>:<value>` (replay-2's hidden name for an expression, its token filled in with
+  the header's). `doc_replay_team()` reads two or three fields and passes the third as the child's
+  `value=`. `route_fanout_run()` binds each replayed child's element as `.x` in its home
+  (`subagent_fanout_element()`, shared with `subagent_fanout_spec()`). `replay_rebuild()` keeps no
+  value record past the recorded turn: the same-process replay advanced a team child and stored a
+  turn-2 copy record without its payload, which hid the value in the next process (the last red,
+  FAIL 1: no exports, store kept). 04 §11.5 `children` and body, IC-46, IC-47; 03 §6.9.3; P15; the
+  one teams-and-background paragraph.
+- Green: `^doc-replay$` PASS 689; `^(doc-.*|session-.*|subagent-.*|copy-subagent|northstar|
+  ckpt-rewind|arch-layers|lint-rules|console-commands|mcp-recording|gptr-sdk|tool-r)$` PASS 5687
+  SKIP 3 (repr; Windows worker; NOT_CRAN=true). Lint clean; no Rd change; plan checks pass.
+  Installed build, fake provider, a self-bound `analysis.R` in a `gptr_init()` project with that
+  fan-out and team: recording printed `2 15`, `32`, sum 17 (6 requests); the same-process replay, a
+  `GPTR_REPLAY=replay Rscript` run and one without `.gptr/sessions` and `.gptr/cache/s2` printed the
+  same with 0 requests, rc 0, file unchanged.
+- Deviations: D-249 (extended). Not as planned: the fan-out route (P19) binds `.x`, as
+  `doc_replay_team()` may not call the fan-out helpers (IC-33), and binds only `.x`, all a live
+  child's home holds (`.e1` stays in its private values environment); `replay_rebuild()`
+  (session-object.R) was not in the plan; later processes are simulated in the tests (live table,
+  replay table, and for the last one store and S2 cleared), the subprocess is the live check.
+- Open: a same-process replay still advances a live team child one turn (replay-1 covers blocks); a
+  replayed fan-out child keeps `.x` in its home (a live one's is removed when it settles); a child
+  name holding `:` or `,` has no replayable entry; a child value whose code was not recorded replays
+  "not bound", as a block's does.

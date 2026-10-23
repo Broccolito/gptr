@@ -1594,8 +1594,8 @@ the turn [IC-49], bridge digests (`#> sh git status --porcelain: exit 0, 6 lines
 turns replay inside `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`, which finds the fork that
 replay created for that block and never falls back to the caller's frame, so they never clobber the workspace
 [IC-46]. A top-level team or fan-out statement owns one block with a line per child and, for children with
-exports, their code in child overlays plus one assignment per export [IC-47]. Rmd/qmd get a
-separate chunk labelled `gptr-<id>` after the owning chunk, without `#>` lines; ipynb gets a cell with id
+exports or a designated value (`children=<name>:<session id>:<value>`), their code in child overlays plus one
+assignment per export [IC-47]. Rmd/qmd get a separate chunk labelled `gptr-<id>` after the owning chunk, without `#>` lines; ipynb gets a cell with id
 `gptr-<id>` and `metadata.gptr`, written by gptr's own serializer (Python float repr, byte-identical round trip
 [14 fact-check]) and never while the notebook is open (in Jupyter the block is shown as the cell output and kept
 pending until `gptr_doc(path, sync = TRUE)` [IC-50]). A top-level System 1 call gets a one-line block

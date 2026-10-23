@@ -1323,19 +1323,22 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
 }
 
 #' Recorded code of every turn of a (child) session, without outputs or comment lines (team
-#' blocks); attribute `secrets` when a marker stays in it
+#' blocks); attribute `secrets` when a marker stays in it, `value` the name the latest turn that
+#' designated one gave (as a block's `value=`), else none
 #' @noRd
 doc_session_code = function(session) {
   d = session_data(session)
   code = character()
   secrets = FALSE
+  value = NULL
   for (k in seq_len(d$turns %||% 0L)) {
     tb = doc_turn_body(doc_turn_entries(session, k), with_out = FALSE,
                        plan_mode = identical(d$mode, "plan"))
     code = c(code, tb$code)
     secrets = secrets || tb$secrets
+    value = tb$value %||% value
   }
-  structure(code, secrets = secrets)
+  structure(code, secrets = secrets, value = value)
 }
 
 #' Header facts common to every block
@@ -1389,7 +1392,8 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
 }
 
 #' The lines of a team or fan-out block (IC-47): one `## Agent` line per child in name order;
-#' children with exports get their code in a child overlay plus one assignment per export
+#' children with exports or a designated value get their code in a child overlay, plus one
+#' assignment per export; `children=` holds `<name>:<session id>[:<value name>]` per child
 #' @noRd
 doc_team_block_lines = function(team, site, call_ordinal) {
   d = session_data(team)
@@ -1411,16 +1415,19 @@ doc_team_block_lines = function(team, site, call_ordinal) {
     body = c(body, sub("[ \t]+$", "", paste0("## Agent ", nm, " (", cd$model, "): ",
                                              doc_one_line(first))))
     exports = as.character(cd$exports %||% character())
-    if (length(exports)) {
-      code = doc_session_code(kids[[nm]])
+    code = doc_session_code(kids[[nm]])
+    value = attr(code, "value")
+    if (length(exports) || !is.null(value)) {
       secrets = secrets || isTRUE(attr(code, "secrets"))
       body = c(body, doc_wrap_local(as.character(code), child = nm))
+    }
+    if (length(exports)) {
       body = c(body, paste0(exports, " = gptr_resume(block = \"", doc_block_token,
                             "\", child = ", doc_str_literal(nm), ")$envir$", exports))
     }
     children[[nm]] = list(text = txt, session = cd$id, model = cd$model,
                           turn = cd$turns %||% 1L)
-    ids = c(ids, cd$id)
+    ids = c(ids, paste0(cd$id, if (!is.null(value)) paste0(":", value)))
   }
   if (secrets) body = c(doc_secret_flag, body)
   model = if (length(nms)) session_data(kids[[nms[1L]]])$model else d$model

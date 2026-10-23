@@ -74,8 +74,8 @@ specification:
   `HEADER_KV   = ([A-Za-z_][A-Za-z0-9_.]*)=("([^"\\]|\\.)*"|[^ \t]+)`; header keys in the order `model`, `date`,
   `prompt`, `sha` ("first 8 hex of sha256 of the body lines as last written"), `call`, `tokens`, `cost`, `session`,
   `turn`, `value`, `fork` (`<parent session id>:<turn>`), `plan`, `status` (`undone`), `args`, `kind` (`team` or
-  `fanout`), `children` (`"<name>:<session id>,..."`, quoted); block ids from P01's `id_block()` (6 hex with a letter,
-  grown on collision, RNG-free).
+  `fanout`), `children` (`"<name>:<session id>[:<value>],..."`, quoted); block ids from P01's `id_block()` (6 hex
+  with a letter, grown on collision, RNG-free).
 - Block body (04 §11.5, IC-48, IC-49): "the code of each successful `r` call with `record = TRUE`, verbatim except
   that top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members are dropped, a top-level
   `gptr_return(<expression>)` with one unnamed argument becomes `.gptr_value_<block id> = (<expression>)` and
@@ -1123,7 +1123,8 @@ becomes `Sys.getenv("NAME")` and anything that stays a marker flags the block (G
 one `## Plan: <path>` line (IC-48); steers and follow-ups delivered during the turn give `## Steer:`/`## Follow-up:`
 lines (IC-49); an overlay fork's body is wrapped `local({ ... }, envir = gptr_resume(block = "<id>")$envir)` and
 its header gets `fork=<parent>:<turn>` (IC-46); team and fan-out sessions give one `## Agent` line per child in name
-order plus overlay code and export assignments for children with exports (IC-47).
+order plus overlay code for children with exports or a designated value (its name the third `children=` field)
+and export assignments for children with exports (IC-47).
 
 Two facts of the dependency plans shape the rest. P10's `r` tool flattens `details$outputs` into one character vector
 (`r_doc_outputs()`, 04 §4.4 "`outputs` chr"), so the output of a dropped expression can be dropped only when an
@@ -5634,10 +5635,10 @@ The decision table is architecture §6.9.3 (`live` = "ask afresh and regenerate"
 blocks"), report 14 §4.4.2 (a user-edited block wins in `auto` and `replay`, and asks before it is overwritten) and
 the undone row of G7 §3.8; a block is fresh only when both `prompt=` and `args=` match (IC-45). `peter()` never runs
 a recorded block: replay returns a session with zero requests and the document's own code runs next (report 14
-§4.4.1). Team and fan-out replay builds one replayed child per `children=` entry from its S2 text, each in a fresh
-overlay of the caller's environment (so `local({...}, envir = gptr_resume(block =, child =)$envir)` never writes the
-caller's frame), binds them with `session_replay_bind(block, child, child = name)`, then replays the team session
-itself and binds it to the block.
+§4.4.1). Team and fan-out replay builds one replayed child per `children=` entry from its S2 text (its value
+designated by the entry's third field), each in a fresh overlay of the caller's environment (so `local({...}, envir =
+gptr_resume(block =, child =)$envir)` never writes the caller's frame), binds them with `session_replay_bind(block,
+child, child = name)`, then replays the team session itself and binds it to the block.
 
 - [ ] **Step 1: Write the failing test**
 

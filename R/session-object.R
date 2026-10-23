@@ -1323,6 +1323,7 @@ replay_value = function(s, name) {
 }
 
 #' Rebuild a replayed session from its JSONL, the leaf moved back to the end of the recorded turn
+#' and no value record of a later turn kept
 #' @noRd
 replay_rebuild = function(path, header, envir) {
   s = store_rebuild(path, envir)
@@ -1336,6 +1337,10 @@ replay_rebuild = function(path, header, envir) {
       d$values = Filter(function(v) as.integer(v$turn) <= cut$turn, d$values)
       d$status = "idle"
     }
+  } else if (!is.na(turn)) {
+    # no later turn, but a replay that advanced the live session (a team child) recorded a value
+    # of the next turn, whose copy is not stored: it would hide the block's value
+    d$values = Filter(function(v) as.integer(v$turn) <= turn, d$values)
   }
   s
 }

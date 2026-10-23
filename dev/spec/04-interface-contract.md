@@ -3813,7 +3813,7 @@ Values containing spaces are double-quoted with R escapes. Header keys, in this 
 | `status` | undone blocks | `undone` |
 | `args` | when the prompt was interpolated | 8 hex of sha256 of the sorted interpolated `name=value` pairs; part of freshness (IC-45) |
 | `kind` | team and fan-out blocks | `team` or `fanout` (IC-47) |
-| `children` | team and fan-out blocks | `"<name>:<session id>,..."` (quoted) |
+| `children` | team and fan-out blocks | `"<name>:<session id>[:<value>],..."` (quoted); `<value>` is the child's `value=` name, written when it designated one (IC-47) |
 
 **Body**, in emission order: the code of each successful `r` call with `record = TRUE`, verbatim except that
 top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members are dropped, a top-level
@@ -3826,8 +3826,8 @@ characters, then `#> ... (N more lines)` counting every line not shown), not in 
 Code passes `code_for_history()` (literal secrets -> `Sys.getenv("NAME")`). Failed executions and plan-mode code
 are not recorded (a plan-mode turn gives one `## Plan: <plans path>` line). Overlay-fork turns are wrapped
 `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)` (IC-46). Team and fan-out blocks hold one
-`## Agent <name> (<model>): <first line>` line per child and, for children with exports, the child's code wrapped
-`local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` plus one
+`## Agent <name> (<model>): <first line>` line per child and, for children with exports or a designated value, the
+child's code wrapped `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` plus one
 `<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per export (IC-47). Indentation copies the owning
 statement's first line. Ownership: the run of blocks starting at the first non-blank line after the statement
 (blank lines between blocks allowed); the k-th call owns the block whose `prompt=` matches, else the one with
@@ -4439,11 +4439,11 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   pipe chain.
 - **No piped session**: `session_replay_new(block, header, envir)` returns a live session holding the header's
   `session=` id if one exists in this process; otherwise a `replayed` session that adopts the recorded id when
-  no live session holds it. Its transcript comes from the session JSONL truncated at the recorded turn when the
-  file exists, else it is **reconstructed** from the document (the template as the user message, the recorded
-  code as the assistant's `r` call, the `#>` lines as its result, the S2 answer text if cached) with
-  `.d$history_source = "reconstructed"`. A later live continuation of a reconstructed session prints a one-time notice
-  that the history is reconstructed.
+  no live session holds it. Its transcript comes from the session JSONL truncated at the recorded turn (no value
+  record of a later turn kept) when the file exists, else it is **reconstructed** from the document (the template
+  as the user message, the recorded code as the assistant's `r` call, the `#>` lines as its result, the S2 answer
+  text if cached) with `.d$history_source = "reconstructed"`. A later live continuation of a reconstructed session
+  prints a one-time notice that the history is reconstructed.
 - **Fork blocks** (`fork=` header): the replay result is bound to the block id with `session_replay_bind(block,
   s)` in a process table `the$replay_blocks` (gptr-created sessions only, never user frames; replaced on
   re-source). Recorded fork turns are wrapped `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`;
@@ -4456,15 +4456,18 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 **IC-47 Recording teams, fan-outs and block-nested calls.** (req-6)
 
 - A top-level team or fan-out statement owns **one block**: header `kind=team|fanout`,
-  `children="<name>:<session id>,..."`, `session=<team id>`, `turn`; body per child in name order:
-  `## Agent <name> (<model>): <first line of its report>`; for a child with exports, its recorded code wrapped
-  `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` followed by one
-  `<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per exported name. Child texts
+  `children="<name>:<session id>[:<value>],..."` (the third field is the name the child designated with
+  `gptr_return()`, as a block's `value=`), `session=<team id>`, `turn`; body per child in name order:
+  `## Agent <name> (<model>): <first line of its report>`; for a child with exports or a designated value, its
+  recorded code wrapped `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` followed by
+  one `<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per exported name. Child texts
   are cached in S2 under `(doc, block, "<name>")`. Replay returns a team or fan-out session of replayed children
-  with zero requests; the "team and fan-out calls own no document block" note is deleted. Because the `team` and
-  `fanout` routes (15, 16) run before `document` (50), they first call the `doc.replay` service (P15; absent
-  before P15, then they run live) and return its replayed session when the statement's block is fresh, and they
-  pass their session to P15's writer through `run$opts$doc` like any other top-level call.
+  with zero requests, each child's value designated by the third field (an entry of two fields designates none)
+  and, for a fan-out, each child's element bound as `.x` in its home as for a live child, so the recorded code
+  that follows rebinds the value; the "team and fan-out calls own no document block" note is deleted. Because the
+  `team` and `fanout` routes (15, 16) run before `document` (50), they first call the `doc.replay` service (P15;
+  absent before P15, then they run live) and return its replayed session when the statement's block is fresh, and
+  they pass their session to P15's writer through `run$opts$doc` like any other top-level call.
 - **Block-nested calls**: a `peter()` statement located directly inside an agent block's body (`site$in_block`)
   is replayed from S2 under `(doc, block, "n<ordinal>")` in `auto` and `replay` (zero requests; a miss under
   `replay` errors `not_recorded`) and runs live only in `live`. When a block is written, the final texts of the

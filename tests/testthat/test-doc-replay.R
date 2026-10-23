@@ -559,6 +559,20 @@ test_that("children entries without a name or a session id are skipped", {
   expect_identical(session_data(team)$last_text, "### stats (fake/fake-1)\n")
 })
 
+test_that("a children= entry's third field names the value the child designated", {
+  local_project()
+  local_replay_table()
+  site = doc_replay_fixture(prompt = "Review", header = list(
+    kind = "team", session = "s6666666666",
+    children = "code:s1212121212:res,stats:s3434343434,odd:s5656565656:a:b"))
+  doc_replay_team(doc_test_call(prompt = "Review"), site, "replay")
+  code = gptr_resume(block = "abc123", child = "code")
+  assign("res", 41, envir = code$envir)
+  expect_identical(code$value, 41)
+  expect_null(gptr_resume(block = "abc123", child = "stats")$value)
+  expect_error(gptr_resume(block = "abc123", child = "odd"), class = "gptr_error_replay_unbound")
+})
+
 # ---- Task 13: the document route, the doc.* services and the hooks (IC-45..IC-49) -------------
 
 # An environment whose peter() builds the call record as P08 does and runs only the document
@@ -2163,6 +2177,98 @@ test_that("gptr_return(<expression>) is recorded so a replay restores $value (ac
                       expect_no_message(e$s$value, message = "not bound"))
   expect_equal(e$s$value, want)
   expect_length(fake_requests(x$fake), 2L)
+})
+
+# Record the team or fan-out statement `stmt` into analysis.R through gptr_source(), with fake
+# sub-agents that each run `code` and then answer "Done."; then replay it in this process (its
+# live sessions), as a later process that keeps the session store, and as one that has neither
+# the store nor the S2 answers. `read(env)` is read right after each run, while its sessions are
+# live: its value and the messages reading it gave. Returns the recorded lines and block, the
+# number of requests after recording and after the replays, the document after them, and per run
+# (`record`, `same`, `store`, `bare`) the value, the messages and the environment.
+doc_kids_e2e = function(stmt, code, read, .env = parent.frame()) {
+  x = local_doc_e2e(function(request) {
+    if (length(request$last_results)) "Done." else fake_tool("r", code = code)
+  }, .env = .env)
+  old = mget(c("live", "replay_blocks"), envir = the)
+  withr::defer(list2env(old, envir = the), envir = .env)
+  f = file.path(x$root, "analysis.R")
+  writeLines(stmt, f)
+  out = list(values = list(), notes = list(), envs = list())
+  for (run in c("record", "same", "store", "bare")) {
+    if (run %in% c("store", "bare")) {
+      the$live = new.env(parent = emptyenv())
+      the$replay_blocks = new.env(parent = emptyenv())
+    }
+    if (identical(run, "bare")) {
+      unlink(file.path(x$root, ".gptr", c("sessions", file.path("cache", "s2"))), recursive = TRUE)
+    }
+    e = new.env(parent = globalenv())
+    gptr_source(f, replay = if (identical(run, "record")) "auto" else "replay", envir = e)
+    if (identical(run, "record")) {
+      out$txt = readLines(f)
+      out$recorded = length(fake_requests(x$fake))
+    }
+    out$notes[[run]] = withr::with_options(list(gptr.quiet = FALSE),
+                                           testthat::capture_messages(read(e)))
+    out$values[[run]] = read(e)
+    out$envs[[run]] = e
+  }
+  out$block = doc_find_blocks(out$txt)
+  out$requests = length(fake_requests(x$fake))
+  out$file = readLines(f)
+  out
+}
+
+test_that("a fan-out block records each child's code and value, so replay restores $value", {
+  skip_on_cran()
+  r = doc_kids_e2e("f = peter(\"Average .x\", list(a = c(1, 2, 3), b = c(10, 20)), parallel = 1)",
+                   "m = mean(.x[[1]])\ngptr_return(m)", function(e) e$f$value)
+  sid = "s[0-9a-f]{10}"
+  expect_match(r$block$header[[1L]]$children, paste0("^a:", sid, ":m,b:", sid, ":m$"))
+  body = doc_block_body(r$txt, r$block)
+  for (nm in c("a", "b")) {
+    expect_true(any(body == paste0("}, envir = gptr_resume(block = \"", r$block$id,
+                                   "\", child = \"", nm, "\")$envir)")))
+  }
+  expect_true(any(body == "  m = mean(.x[[1]])"))
+  for (run in names(r$values)) {
+    expect_identical(r$values[[run]], list(a = 2, b = 15), info = run)
+    expect_identical(r$notes[[run]], character(), info = run)
+  }
+  expect_identical(r$requests, r$recorded)
+  expect_identical(r$file, r$txt)
+})
+
+test_that("a fan-out child's gptr_return(<expression>) replays through the block's hidden name", {
+  skip_on_cran()
+  r = doc_kids_e2e("f = peter(\"Average .x\", list(a = c(1, 2, 3), b = c(10, 20)), parallel = 1)",
+                   "gptr_return(mean(.x[[1]]))", function(e) e$f$value)
+  hidden = paste0(".gptr_value_", r$block$id)
+  expect_match(r$block$header[[1L]]$children, paste0(":", hidden, ",b:"), fixed = TRUE)
+  expect_true(any(doc_block_body(r$txt, r$block) == paste0("  ", hidden, " = (mean(.x[[1]]))")))
+  for (run in names(r$values)) {
+    expect_identical(r$values[[run]], list(a = 2, b = 15), info = run)
+  }
+  expect_identical(r$requests, r$recorded)
+})
+
+test_that("a team child's gptr_return() value replays, with and without exports", {
+  skip_on_cran()
+  for (agent in c("agent(model = \"fake/fake-1\")",
+                  "agent(model = \"fake/fake-1\", export = \"n\")")) {
+    local({
+      r = doc_kids_e2e(paste0("tm = peter(\"Count the rows\", agents = list(x = ", agent, "))"),
+                       "n = nrow(mtcars)\ngptr_return(n)",
+                       function(e) list(x = e$tm$x$value, team = e$tm$value))
+      expect_match(r$block$header[[1L]]$children, "^x:s[0-9a-f]{10}:n$")
+      for (run in names(r$values)) {
+        expect_identical(r$values[[run]], list(x = 32L, team = list(x = 32L)), info = run)
+      }
+      if (grepl("export", agent, fixed = TRUE)) expect_identical(r$envs$bare$n, 32L)
+      expect_identical(r$requests, r$recorded)
+    })
+  }
 })
 
 test_that("documents are written only with consent; a project cannot grant it (acceptance 5)", {

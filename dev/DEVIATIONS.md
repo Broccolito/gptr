@@ -3145,12 +3145,24 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `.gptr_value_<block id> = (<expression>)` with `value=.gptr_value_<block id>`, so every replay and a plain export
   recompute it (was `value=<its label>` and the line dropped: replay said "not bound" and `$value` was NULL);
   `gptr_return(<name>)` is unchanged; `value=` holds one name, never an expression's label, else is omitted (11.5).
+- Rule: a team or fan-out block records the code of each child that designated a value with `gptr_return()` in its
+  child overlay, as for a child with exports (was only with exports), and `children=` entries are
+  `<name>:<session id>[:<value>]`, the third field the child's `value=` name (a bare name or
+  `.gptr_value_<block id>`); replay designates it and the fan-out route binds each replayed child's element as `.x`
+  in its home, so `f$value` and `tm$x$value` replay in any process (were NULL outside the recording one, without a
+  word). An entry of two fields, as written before, replays as before; a child name holding `:` or `,` still has no
+  replayable entry (IC-47).
+- Rule: a session rebuilt from its JSONL for a replay keeps no value record of a turn after the recorded one (a
+  replay in the recording process advanced a team child and stored a value record without its copy, which hid the
+  child's value in every later process; IC-46).
 - Contract-visible: 04 §4.4 `r` details `outputs` and `value`, §6.4 `gptr_doc()`, §7.15 `doc_block_lines()`, §11.5
-  `cost`, `value`, body and transcript, §11.9, §15.3 IC-45, IC-46, IC-48, IC-51; 03 §4.3, §6.9.1, §6.9.3;
-  `?gptr_doc`, `?gptr_blocks`, `?gptr_return`; vignette script-as-history.
+  `cost`, `value`, `children`, body and transcript, §11.9, §15.3 IC-45, IC-46, IC-47, IC-48, IC-51; 03 §4.3,
+  §6.9.1, §6.9.3; `?gptr_doc`, `?gptr_blocks`, `?gptr_return`; vignettes script-as-history, teams-and-background.
 - Tests: test-doc-io: the user-cache sidecar, the cross-process kernel and killed-run sync, the live-run sync;
   test-doc-replay: the other-binding notice and its four silent cases; test-doc-formats: the machine-log line with
   and without `.gptr/`; test-doc-blocks: recorded `#>` cuts, the known-zero cost; test-tool-r: per-expression
   outputs; test-doc-replay: the listed zero cost, the in-process replay; test-session-object: a held or undone
-  block; test-doc-blocks, test-doc-replay, test-doc-io, test-doc-export: a recorded `gptr_return(<expression>)`.
-  Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2.
+  block; test-doc-blocks, test-doc-replay, test-doc-io, test-doc-export: a recorded `gptr_return(<expression>)`;
+  test-doc-replay: fan-out and team children's values in the recording process, an in-process replay and two
+  simulated later processes, a three-field `children=` entry.
+  Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-3.

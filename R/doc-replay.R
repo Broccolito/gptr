@@ -311,9 +311,10 @@ doc_run_block_nested = function(call, site, mode) {
   session_replay_new(part, header, call$envir, doc = doc)
 }
 
-#' Replay a fresh team or fan-out block (IC-47): one replayed child per `children=` entry, with
-#' its cached S2 text, in a fresh overlay of the caller's environment, bound to (block, child)
-#' for gptr_resume(block =, child =); then the team session itself, bound to the block. Zero
+#' Replay a fresh team or fan-out block (IC-47): one replayed child per `children=` entry
+#' (`<name>:<session id>`, and the child's `value=` name as an optional third field), with its
+#' cached S2 text, in a fresh overlay of the caller's environment, bound to (block, child) for
+#' gptr_resume(block =, child =); then the team session itself, bound to the block. Zero
 #' requests (IC-74: no provider, no discovery).
 #' @noRd
 doc_replay_team = function(call, site, mode) {
@@ -323,11 +324,12 @@ doc_replay_team = function(call, site, mode) {
   pairs = strsplit(strsplit(h$children %||% "", ",", fixed = TRUE)[[1L]], ":", fixed = TRUE)
   texts = character()
   for (kv in pairs) {
-    if (length(kv) != 2L || !all(nzchar(kv))) next
+    if (!length(kv) %in% 2:3 || !all(nzchar(kv))) next
     rec = s2_get(s2_key(rel, b$id, kv[1L], h$prompt %||% "", h$args %||% ""))
     answer = doc_s2_answer(rec)
     child_header = list(model = rec$model %||% h$model, session = kv[2L],
                         turn = as.character(rec$turn %||% 1L), doc = rel, mode = mode)
+    child_header$value = if (length(kv) == 3L) kv[3L]
     overlay = new.env(parent = call$envir)
     child = session_replay_new(paste0(b$id, "/", kv[1L]), child_header, overlay,
                                doc = list(path = site$path, format = site$format,

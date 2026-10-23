@@ -522,8 +522,7 @@ subagent_fanout_names = function(shape) {
 #' that an inline or cli child releases after its first message (a worker's parent keeps it)
 #' @noRd
 subagent_fanout_spec = function(call, fan, agent, target, i, key, backend) {
-  x = call_value(call, target$index)
-  el = if (identical(target$shape$kind, "rows")) x[i, , drop = FALSE] else x[[i]]
+  el = subagent_fanout_element(call, target, i)
   values = new.env(parent = emptyenv())
   assign(".e1", el, envir = values)
   assign(".x", stats::setNames(list(el), key), envir = values)
@@ -575,11 +574,29 @@ gptr_map = function(call, target = subagent_fanout_item(call)) {
   subagent_run_children(fan, items, call$args$parallel, call)
 }
 
-#' `run()` of the fan-out route: a replayed block (IC-47), else gptr_map()
+#' Element `i` of a fan-out's list-like item: a row of a data frame, else `[[i]]`
+#' @noRd
+subagent_fanout_element = function(call, target, i) {
+  x = call_value(call, target$index)
+  if (identical(target$shape$kind, "rows")) x[i, , drop = FALSE] else x[[i]]
+}
+
+#' `run()` of the fan-out route: a replayed block (IC-47), else gptr_map(). Each replayed child
+#' gets its element bound as `.x` in its home, as a live child has it, so the child code the
+#' block records (`local({ ... }, envir = gptr_resume(block =, child =)$envir)`) runs again.
 #' @noRd
 route_fanout_run = function(call) {
   subagent_route_checks(call)
   target = subagent_fanout_item(call)
-  subagent_value(subagent_doc_replay(call, subagent_fanout_names(target$shape), "fanout") %||%
-                   gptr_map(call, target))
+  keys = subagent_fanout_names(target$shape)
+  fan = subagent_doc_replay(call, keys, "fanout")
+  if (is.null(fan)) return(subagent_value(gptr_map(call, target)))
+  kids = session_data(fan)$children
+  for (i in seq_along(keys)) {
+    home = if (!is.null(kids[[keys[i]]])) session_home(kids[[keys[i]]])
+    if (!is.environment(home)) next
+    assign(".x", stats::setNames(list(subagent_fanout_element(call, target, i)), keys[i]),
+           envir = home)
+  }
+  subagent_value(fan)
 }
