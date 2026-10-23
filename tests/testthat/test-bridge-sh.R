@@ -728,11 +728,12 @@ test_that("a tool call named sh is refused before the permission check: no shell
   )
   fake = local_fake_provider(script)
   # manual mode without a human: a call that reached the permission check would stop the run
-  # (gptr.noninteractive_ask = "stop"), so finishing idle shows the hook blocked it first
+  # (gptr.noninteractive_ask = "stop"), so finishing idle shows it was refused first: sh is not
+  # declared to the model (D-248)
   s = peter("run it", model = fake, envir = new.env(), mode = "manual")
   res = tool_results(s, "sh")[[1L]]
   expect_true(isTRUE(res$is_error))
-  expect_match(msg_text(res), "is an R function, not a tool", fixed = TRUE)
+  expect_identical(msg_text(res), "Tool sh not found")
   expect_false(file.exists(marker))
   expect_identical(s$status, "idle")
 })

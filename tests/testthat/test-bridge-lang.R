@@ -313,7 +313,7 @@ test_that("tool calls named py, sql or knit are refused before the permission ch
   expect_identical(vapply(res, function(m) m$tool_name, ""), c("py", "sql", "knit"))
   for (m in res) {
     expect_true(isTRUE(m$is_error))
-    expect_match(msg_text(m), "is an R function, not a tool", fixed = TRUE)
+    expect_identical(msg_text(m), paste("Tool", m$tool_name, "not found"))
   }
   expect_identical(s$status, "idle")
 })

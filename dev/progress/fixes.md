@@ -1914,3 +1914,29 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the probe nor accepts `initialize`), and a dual-era server that starts slowly is still taken as
   legacy (cached for 7 days), which works. A hung server forced modern now fails after the request
   timeout instead of 5 s.
+
+## Task FIX-15 - Cheat-sheet review: tools (2026-10-22, #PR)
+
+### tools-1 - Dispatch refuses a direct call to a tool the session did not offer
+- Red: FAIL 7 in `agent-dispatch` (PASS 221), mode auto with the fake provider: `write` under
+  `tools = "-write"` wrote w.txt, `r` under `"-r"` bound `made_here`, `grep` under standard ran,
+  and a non-interactive `ask` stopped the run with `gptr_error_noninteractive` (findings 12, 17).
+- Cause: `call_record()` resolved a call with `tool_lookup()`, the registry alone (registered,
+  `execute`, not hidden), never what the session declared; presets, `-name`, `tools.disable`,
+  deferred and unavailable tools only shaped the array, and only the mode stood in the way.
+- Fix: `run_tools()` takes the offered names once per batch (the frozen array plus every
+  `tool_change` addition on the path and in the queue, `prompt_tools_known()`) and
+  `call_record(run, block, offered)` resolves only those; any other name is "Tool <name> not
+  found" before hooks and the permission check. `dispatch_nested()` is unchanged. The report02
+  harness's `dispatch()` freezes the blocks' declarations (`freeze_tool_decl()`) when unfrozen.
+- Green: `agent-dispatch` PASS 228; `^(agent-dispatch|agent-run|dispatch-elapsed|bridge-lang|
+  bridge-sh|arch-layers|lint-rules)$` PASS 1383 SKIP 6; full suite (NOT_CRAN=true) FAIL 4 SKIP 64
+  PASS 35277, all four the bridge tests below, then fixed. Lint clean. Live (Claude Opus 4.8,
+  `tools = "-r"`, auto, 3 runs): 2 called `r`, got "Tool r not found" and wrote the code to a
+  file instead; `sds` never created; all idle.
+- Deviations: D-248. The frozen-schema test starts from the harness's freeze. The bridge
+  through-run tests (py, sql, knit, sh) now read "Tool <name> not found", still refused before the
+  permission check; the S-4 text "is an R function, not a tool" is now reached only by a bridge a
+  continued session adds by value (`tools = "+sh"`, measured) and keeps its unit test.
+- Open: the fixed preamble still says "with the r tool" when r is removed (by decision);
+  `tool_change` declarations count after a switch to a provider that cannot take additions.

@@ -3117,3 +3117,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `env_snapshot()` and `workspace_lines()`; `?gptr_options`, `?gptr_risk`, `?gptr_artifacts`, `?gptr_rewind`.
 - Tests: env-snapshot, env-describe, ckpt-objects, ckpt-rewind, perm-classify, gptr-capture, session-object (a
   ggplot2 guard), utils-options, subagent-team, copy-eval, arch-layers. Evidence: progress/fixes.md Task FIX-13.
+
+## D-248 - FIX-15 A tool the session did not offer is not dispatched (2026-10-22)
+- Rule: a direct tool call resolves only when its name is among the tools the session offered the
+  model: the frozen array plus the `tool_add` declarations of every `tool_change` operator message
+  on the active path and in the queue (`prompt_tools_known()`), taken once per batch by
+  `run_tools()` and passed to `call_record(run, block, offered)`. Any other name (a registered tool
+  removed with `-name`, left out by a preset, disabled through `tools.disable`, deferred or not
+  `available()`) gets `Tool <name> not found` before hooks and the permission check, so an
+  undeclared `ask` no longer stops a non-interactive auto run. `dispatch_nested()` still resolves
+  `peter$` members in the registry under every preset; the MCP door already served declared tools.
+- Contract-visible: 04 §4.4 call record (`tool` NULL when not offered), §7.6 `dispatch_tools()`.
+- Tests: test-agent-dispatch.R "the offered tools (D-248)" (3 blocks) and the frozen-schema block;
+  test-bridge-lang.R, test-bridge-sh.R through-run refusals. Evidence: progress/fixes.md Task
+  FIX-15 tools-1.
