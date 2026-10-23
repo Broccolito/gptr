@@ -693,7 +693,7 @@ test_that("every question asks again in one style: dim rows at column 4 (review)
 test_that("in an IDE console an answer of several words names the draft left on the input line", {
   root = local_project()
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
-  cause = "    Text typed during the run is still on the input line; clear it first."
+  cause = "    A draft typed during the run joins your answer; clear the line first."
   local_live_console("L")
   out = console_try(function() ui_console_permission(ui_request("zz = 1")),
                     c("and label the axesy", "zz", "y"))
@@ -704,6 +704,18 @@ test_that("in an IDE console an answer of several words names the draft left on 
   out = console_try(function() ui_console_permission(ui_request("zz = 1")),
                     c("and label the axesy", "y"))
   expect_false(cause %in% out$shown)
+})
+
+test_that("an IDE console's draft row is a rule, not a claim about this answer (steering review)", {
+  root = local_project()
+  local_live_console("L")
+  # typed at the question, not during the run: the row must hold either way
+  out = console_try(function() ui_console_permission(ui_request("zz = 1")),
+                    c("yes please go ahead", "y"))
+  rows = grep("draft typed during the run", out$shown, value = TRUE, fixed = TRUE)
+  expect_length(rows, 1L)
+  expect_false(any(grepl("is still on", out$shown, fixed = TRUE)))
+  expect_lte(nchar(rows, type = "width"), 78L)
 })
 
 test_that("with gptr.history off nothing is kept and no notice says it was (D-243)", {

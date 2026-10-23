@@ -5557,10 +5557,12 @@ its part in its own commit, and Task 27 finalises them.
     `No valid answer after 5 tries; refused.`, a choice's `Not an answer. Type a number[, or your own
     answer].` (it was `  Please enter one of the numbers shown.` in ink), a paste's `A pasted block is not an
     answer`, and the pause menu's `Paused. Type s, f, c, a or b.`; at column 2, under the `?`, they read as a
-    new item. In an IDE console (class L) an invalid approval answer of several words adds `Text typed during
-    the run is still on the input line; clear it first.`: RStudio and R.app keep a draft typed while R was busy
-    on their input line, so `y` became `and label the axesy` (review of Tasks 16-21). It still counts as one of
-    the 5 tries.
+    new item. In an IDE console (class L) an invalid approval answer of several words adds `A draft typed
+    during the run joins your answer; clear the line first.`: RStudio and R.app keep a draft typed while R was
+    busy on their input line, so `y` became `and label the axesy` (review of Tasks 16-21). The reader gets one
+    finished line and cannot tell such a draft from text typed at the question, so the row states the rule
+    (steering review: it read `Text typed during the run is still on the input line; clear it first.`, false
+    for text typed at the question). It still counts as one of the 5 tries.
   - A question and the tool block it is asked in are one block (`console_gap()`): no blank line between a call
     line, its ask and its result lines.
   - In a T console a question is drawn once typing has paused for a second (three while the composer holds

@@ -3442,13 +3442,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     whole message in `…` (`↳ follow-up · then save the plot as plot.png…` at 80 columns, where only ` · ↑ edit`
     was dropped) and cut keys from their verbs (`ctrl-c…`). Contract-visible: 04 §15.10 IC-82. Tests:
     test-console-input.R "the live row says what the run does, its queue and the person's draft (D-243)".
-  - In an IDE console (class L) an invalid approval answer of several words adds `Text typed during the run is
-    still on the input line; clear it first.`: RStudio keeps a draft typed while R was busy on its input line, so
-    the person's `y` became `and label the axesy`, and the hint named the question but not the cause. Such an
+  - In an IDE console (class L) an invalid approval answer of several words adds `A draft typed during the run
+    joins your answer; clear the line first.`: RStudio keeps a draft typed while R was busy on its input line, so
+    the person's `y` became `and label the axesy`, and the hint named the question but not the cause. The row
+    states the rule (steering review: it said the text was still on the input line, false for text typed at the
+    question; the reader cannot tell the two apart, and an answer ending in a key, as `okay` does, is no sign of
+    a draft). Such an
     answer still counts as one of the 5 tries, as visual review Fix 11 kept: not counting it would let a question
     run forever. The cure names no key: Esc at RStudio's readline interrupts R. Contract-visible: 04 §15.10 IC-77.
     Tests: test-console-ui.R "in an IDE console an answer of several words names the draft left on the input
-    line".
+    line", "an IDE console's draft row is a rule, not a claim about this answer (steering review)".
   - A CLI route's steer prints its queue line, ` · after the CLI's answer`, in a T console while the live row is
     up too: the row is the queue view there, so the plan's caveat was never shown and a terminal user was not
     told the steer waits for the CLI's whole answer. Contract-visible: 04 §15.10 IC-76. Tests:

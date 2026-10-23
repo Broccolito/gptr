@@ -388,7 +388,7 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 #' invalid answer is quoted (kept in the console history in an interactive session) above a hint
 #' that names the question, which may have scrolled away, and its keys; an empty one gets the hint
 #' alone, both dim at column 4 (ui_hint()), and in an IDE console an answer of several words a row
-#' naming the likely cause, a draft left on the input line; five (`?` is none) end in a refusal
+#' noting that a draft typed during the run joins an answer; five (`?` is none) end in a refusal
 #' whose feedback says so (D-188, D-243)
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
@@ -434,9 +434,10 @@ ui_console_permission = function(request, read = ui_console_read) {
                if (kept) " (kept in history)", ".")
       }, paste0(ui_permission_question(request), " Type ", if (can) "y, a, p or n" else
         "y or n", " (n <text> says what to do instead), or ?."),
-      # an IDE console keeps a draft typed during the run on its input line, before the answer
+      # an IDE console keeps a draft typed during the run on its input line, before the answer;
+      # the reader cannot tell it from text typed at the question, so the row states the rule
       if (grepl("\\s", trimws(a)) && console_class() == "L") {
-        "Text typed during the run is still on the input line; clear it first."
+        "A draft typed during the run joins your answer; clear the line first."
       })
     }
     console_write(ui_hint(msg))
