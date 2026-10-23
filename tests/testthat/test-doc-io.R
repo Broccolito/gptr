@@ -980,7 +980,10 @@ test_that("a sync never writes the script of a run that is still alive (IC-51)",
   # the run is killed before its exit writes the block: the next sync applies it
   p$kill()
   expect_false(pid_alive(rec$pid, rec$create_time))
-  expect_identical(doc_sync(f), 1L)
+  expect_message({
+    n = doc_sync(f)
+  }, "Wrote 1 block(s) into job.R.", fixed = TRUE, class = "gptr_message_notice")
+  expect_identical(n, 1L)
   expect_identical(doc_find_blocks(readLines(f))$id, "aaaaaa")
   expect_null(doc_sidecar_read(f))
 })
@@ -1491,6 +1494,55 @@ test_that("gptr_return() and peter$out() calls re-source cleanly under Rscript a
   src = doc_child_run(root, driver, replay = "replay")
   expect_identical(src$status, 0L)
   expect_match(src$stdout, "REQUESTS 0", fixed = TRUE)
+})
+
+test_that("a document outside a .gptr/ project keeps its sidecar in the user cache (IC-51)", {
+  root = local_project(gptr = FALSE)
+  side = doc_sidecar_path(file.path(root, "analysis.ipynb"))
+  expect_true(path_inside(side, gptr_user_dir("cache")))
+  expect_false(path_inside(side, file.path(tempdir(), "gptr")))
+  ws = local_project()
+  expect_identical(path_key(dirname(doc_sidecar_path(file.path(ws, "analysis.ipynb")))),
+                   path_key(file.path(ws, ".gptr", "cache", "tmp")))
+})
+
+test_that("another R process syncs a closed kernel's and a killed run's blocks without .gptr/", {
+  skip_on_cran()
+  root = local_project(gptr = FALSE)
+  local_gptr_options(quiet = FALSE)
+  local_doc_pending()
+  local_doc_binding(file.path(root, "none.R"))
+  synced = function(path, text) {
+    expect_message(gptr_doc(path, sync = TRUE), text, fixed = TRUE, class = "gptr_message_notice")
+  }
+  # a Jupyter kernel queues the block of its cell and exits; R deletes its tempdir()
+  nb = file.path(root, "analysis.ipynb")
+  doc_io_nb_write(nb, "a = peter('first step')")
+  kernel = file.path(root, "kernel.R")
+  doc_child_script(kernel, doc_two_steps, c(
+    sprintf("Sys.setenv(JPY_SESSION_NAME = %s)", deparse(nb)),
+    "options(jupyter.in_kernel = TRUE)", sprintf("gptr_doc(%s)", deparse(nb)),
+    "a = peter('first step')"))
+  res = doc_child_run(root, kernel)
+  expect_identical(res$status, 0L)
+  expect_match(res$stdout, "n1 = 1", fixed = TRUE)
+  expect_length(nb_parse(doc_read(nb)$lines)$cells, 1L)
+  synced(nb, "Wrote 1 block(s) into analysis.ipynb.")
+  cells = nb_parse(doc_read(nb)$lines)$cells
+  expect_match(cells[[2]]$id, "^gptr-[0-9a-f]{6}$")
+  expect_false(is.null(cells[[2]]$metadata$gptr))
+  expect_identical(nrow(gptr_blocks(nb)), 1L)
+  synced(nb, "No pending blocks for analysis.ipynb.")
+  # an Rscript run is killed after recording a call: no exit finalizer writes its block
+  f = file.path(root, "job.R")
+  doc_child_script(f, doc_two_steps, c(
+    "a = peter('first step')",
+    "tools::pskill(Sys.getpid(), if (is.na(tools::SIGKILL)) tools::SIGTERM else tools::SIGKILL)"))
+  before = readLines(f)
+  expect_false(identical(doc_child_run(root, f)$status, 0L))
+  expect_identical(readLines(f), before)
+  synced(f, "Wrote 1 block(s) into job.R.")
+  expect_identical(nrow(gptr_blocks(f)), 1L)
 })
 # ---- Plain-data recovery sidecars (storage audit) --------------------------------------------
 

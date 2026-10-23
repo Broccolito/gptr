@@ -1457,7 +1457,8 @@ gptr_doc(path = NULL, format = NULL, sync = FALSE)
 `path = NULL`: returns the current binding `list(path, format)` or `NULL`, visibly. A path binds every `peter()`
 call of this R process (console and script) to that document, which is explicit consent to write it (IC-45);
 `FALSE` unbinds. `sync = TRUE` applies the pending blocks recorded for that document (a Jupyter notebook that was
-open while recording, or unapplied deferred-write sidecars) through the format's writer (IC-50, IC-51). `format`: `"r"`, `"rmd"`,
+open while recording, or unapplied deferred-write sidecars) through the format's writer (IC-50, IC-51) and informs a
+`notice`: "Wrote N block(s) into <doc>." or "No pending blocks for <doc>." (D-249). `format`: `"r"`, `"rmd"`,
 `"qmd"`, `"ipynb"`, `"transcript"`; `NULL` = from the extension. Returns the previous binding invisibly.
 Conditions: `invalid_argument`.
 
@@ -3907,7 +3908,7 @@ under `egress` (§11.2).
 | System 1 (P13) | memory (`the$s1_cache`) before a workspace; then `<root>/cache/s1/<2hex>/<sha256>.json` | `hash_sha256(canonical_json(list(schema = 2L, salt, endpoint, model, question, type, criteria, input)))` per element (`salt` from `cache/s1/salt`; `input` = the state; alias models keyed by the alias string) | `{"key", "model" (physical), "alias", "question_sha256", "input_hash" (salted), "answer", "prob", "probabilities", "confidence", "date", "usage": {"input_tokens", "output_tokens"}}`; never the input or the question text (IC-70); mtime touched on hit |
 | System 2 answers (P15) | `<root>/cache/s2/<2hex>/<sha256>.json` | `hash_sha256(canonical_json(list(schema = 2L, doc = <path relative to root>, block = <id>, part = <"" \| child name \| "n<ordinal>">, prompt = <prompt hash>, args = <args hash or "">)))` (IC-45, IC-47) | `{"block", "doc", "part", "prompt", "model", "answer" (redacted final text), "usage", "cost", "session", "turn", "date"}` |
 | Spill files (P01) | `<root>/cache/tmp/gptr-output-<id>.txt` | the out id | redacted full text |
-| Deferred document writes (P15) | `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.rds` | document path | `list(doc, base_md5, upserts = list(list(block_id, lines, site)), session, pid, time)` (IC-51); never pruned automatically |
+| Deferred document writes (P15) | `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json` (`<root>` the document's project `.gptr/`; outside one `R_user_dir("gptr", "cache")/pending/`, D-249) | document path | `list(doc, base_md5, upserts = list(list(block_id, lines, site)), session, pid, time)` (IC-51); never pruned automatically |
 | Model catalog (P05) | `R_user_dir("gptr", "cache")/models.json`, `models.etag` | ETag | the refreshed catalog (§11.10 shape) |
 | MCP tool lists (P18) | `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json` | `hash_sha256(canonical_json(command + args, or URL origin + path))` | `{"tools", "fetched_at", "ttl_ms", "cache_scope"}` (not stored when `cacheScope` is `private` and credentials are not the user's own) |
 | MCP era (P18) | `R_user_dir("gptr", "cache")/mcp-era/<hash>.json` | as above | `{"era": "modern" \| "legacy", "version", "date"}`, 7-day expiry |
@@ -4506,7 +4507,9 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
   instead of overwriting. Sidecars are never pruned automatically; `gptr_cache("info")` lists them. Under a
   document lock held by another live pid (array jobs) nothing is recorded and a notice is printed.
 - New sidecars use a versioned, closed plain-data JSON record at
-  `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json`. Required scalar/array/null fields,
+  `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json`, `<root>` being the `.gptr/` of the document's
+  project; a document outside one keeps it in `R_user_dir("gptr", "cache")/pending/`, never in a `tempdir()`, so
+  another process finds it after the writer exits or is killed (D-249). Required scalar/array/null fields,
   nested anchors and notebook block metadata are validated before recovery. Modern records have
   a fixed 16 MiB byte limit: readers reject oversize/missing/directory inputs and read at most
   that limit plus one byte even if the file grows; writers reject oversize encoded records

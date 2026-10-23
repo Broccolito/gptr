@@ -809,7 +809,10 @@ test_that("an open notebook and the running script are never written; inert mark
   expect_identical(doc_sidecar_read(nb)$upserts[[1]]$block_id, "7f3a21")
   expect_false(doc_set_inert(nb, "7f3a21"))
   withr::local_options(jupyter.in_kernel = FALSE)
-  expect_identical(doc_sync(nb), 1L)
+  expect_message({
+    n = doc_sync(nb)
+  }, "Wrote 1 block(s) into x.ipynb.", fixed = TRUE, class = "gptr_message_notice")
+  expect_identical(n, 1L)
   cell = nb_parse(readLines(nb, encoding = "UTF-8"))$cells[[4]]
   expect_identical(nb_cell_meta(cell)$status, "undone")
   expect_identical(nb_cell_lines(cell), "#~ a = 1")

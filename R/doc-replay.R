@@ -831,8 +831,10 @@ doc_console_append = function(lines, session = NULL) {
 #' to a history document, and is your explicit consent that gptr writes agent blocks into it.
 #' Nothing is written until a block is recorded. `gptr_doc(FALSE)` removes the binding and
 #' `gptr_doc()` shows it. `sync = TRUE` writes the blocks that were recorded while the document
-#' could not be written: a Jupyter notebook that was open, or the deferred writes of an `Rscript`
-#' run that was killed.
+#' could not be written, and says how many: a Jupyter notebook that was open (run it from another
+#' R session after closing the notebook), or the deferred writes of an `Rscript` run that was
+#' killed. Such blocks wait in the `.gptr/` of the document's project, else in
+#' `tools::R_user_dir("gptr", "cache")`, so any R process of the same user can apply them.
 #'
 #' Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
 #' or functions do not. Binding supplies recording consent even when automatic recording is
@@ -845,7 +847,8 @@ doc_console_append = function(lines, session = NULL) {
 #' @param format `NULL` (from the file extension) or the format of that extension: `"r"`,
 #'   `"rmd"`, `"qmd"` or `"ipynb"`; `"transcript"` records console turns into an `.R` file as
 #'   one steered session.
-#' @param sync `TRUE` applies the pending blocks of the document now.
+#' @param sync `TRUE` applies the pending blocks of the document now and reports how many it
+#'   wrote.
 #' @return With `path = NULL`, the binding `list(path, format)` or `NULL`, visibly. Otherwise the
 #'   previous binding, invisibly.
 #' @section Options:
@@ -890,8 +893,7 @@ gptr_doc = function(path = NULL, format = NULL, sync = FALSE) {
                arg = "path", expected = "a path in an existing directory")
   }
   the$doc_binding = list(path = full, format = fmt)
-  if (file.exists(full)) doc_recover(full)
-  if (sync) doc_sync(full)
+  if (sync) doc_sync(full) else if (file.exists(full)) doc_recover(full)
   invisible(old)
 }
 

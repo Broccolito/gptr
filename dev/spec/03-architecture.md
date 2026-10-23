@@ -1543,12 +1543,14 @@ tools::R_user_dir("gptr", "config")    settings.json, auth.json (0600), trust.js
                                        mcp.json, egress acks, projects/<hash>.json (per-project remembered answers,
                                        transcript target, record consent [IC-52])
 tools::R_user_dir("gptr", "cache")     refreshed model catalog (ETag), MCP tool and era caches, procs/ (tree
-                                       markers for the orphan sweep), pruned by gptr_cache("prune")
+                                       markers for the orphan sweep), pruned by gptr_cache("prune"); pending/
+                                       (sidecars of documents outside a `.gptr/` project, never pruned [IC-51])
 tempdir()/gptr/                        sessions, artifacts, caches, checkpoints and plans without a workspace
 ```
 
 Without a workspace nothing is written outside `tempdir()` except user-level settings the user sets
-explicitly; the System 1 cache stays in memory [13 §2.4]. Tests redirect `R_USER_*_DIR` [13 C-44].
+explicitly and the pending blocks of documents the user bound (`pending/` above); the System 1 cache stays in
+memory [13 §2.4]. Tests redirect `R_USER_*_DIR` [13 C-44].
 
 #### 6.9.2 Session store (INFRA-13) [02 §4.6, G3]
 

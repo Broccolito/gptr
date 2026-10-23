@@ -3117,3 +3117,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `env_snapshot()` and `workspace_lines()`; `?gptr_options`, `?gptr_risk`, `?gptr_artifacts`, `?gptr_rewind`.
 - Tests: env-snapshot, env-describe, ckpt-objects, ckpt-rewind, perm-classify, gptr-capture, session-object (a
   ggplot2 guard), utils-options, subagent-team, copy-eval, arch-layers. Evidence: progress/fixes.md Task FIX-13.
+
+## D-249 - P15 Cheat-sheet review of history documents (2026-10-22)
+- Rule: a document's deferred or pending sidecar is kept in the `.gptr/` of its project, else in
+  `R_user_dir("gptr", "cache")/pending/` (was `tempdir()/gptr`, which no other process sees and R deletes at exit:
+  a closed kernel's and a killed Rscript run's blocks were lost without a word). Same name, mode and checks;
+  `gptr_cache()` prune and clear never touch it (IC-51).
+- Rule: `gptr_doc(path, sync = TRUE)` informs a `notice`, "Wrote N block(s) into <doc>." or "No pending blocks for
+  <doc>.", and leaves a dead run's recovery to the sync, so the count includes it.
+- Contract-visible: 04 §6.4 `gptr_doc()`, §11.9, §15.3 IC-51; 03 §6.9.1; `?gptr_doc`; vignette
+  script-as-history.
+- Tests: test-doc-io: the user-cache sidecar, the cross-process kernel and killed-run sync, the live-run sync.
+  Evidence: progress/fixes.md Task FIX-16 doc-1.

@@ -186,12 +186,14 @@ format. Arrange the document's setup to load gptr, prepare its input data and se
 or replay mode. Plain R chunks still execute when the report is rendered.
 
 For Jupyter, bind the saved `.ipynb` path in the R kernel. Blocks become agent cells. Writes
-are queued while the notebook is open to avoid competing with the notebook editor; after
-closing it, apply the pending blocks:
+are queued while the notebook is open to avoid competing with the notebook editor. The queue
+is kept in the project's `.gptr/` or, outside one, in `tools::R_user_dir("gptr", "cache")`, so
+after closing the notebook any R session can apply it and report how many blocks it wrote:
 
 ```{r, eval = FALSE}
 gptr_doc("analysis.ipynb")
 # Run the notebook's `peter()` calls in its R kernel, then save and close the notebook.
+# In another R session:
 gptr_doc("analysis.ipynb", sync = TRUE)
 gptr_blocks("analysis.ipynb")
 gptr_doc(FALSE)

@@ -1959,3 +1959,28 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `prune`; the FIFO test's `ckpt_walk` mock takes it). Open: the prune pattern is fixed when the
   tracker is made, as its root is. `.gptr/` is pruned at any depth, so only `tempdir()/gptr` can
   escape it: when the root contains `tempdir()` and a `setwd()` mid-session leaves `.gptr/`.
+
+### doc-1 - Keep pending sidecars of documents outside .gptr/ where every process finds them
+- Findings 11, 15.
+- Red: FAIL 4 in `^doc-io$` (PASS 679): in a project without `.gptr/`, `doc_sidecar_path()` was
+  under `tempdir()/gptr`; a child Rscript acting as a Jupyter kernel queued its cell's block and
+  exited, then `gptr_doc(nb, sync = TRUE)` here said nothing and wrote no cell. With the old path
+  only, a child killed by SIGKILL after one recorded call: FAIL 2, "No pending blocks for job.R."
+  and 0 blocks.
+- Cause: `doc_sidecar_path()` fell back to `doc_root()`, `tempdir()/gptr`, when the document's
+  project had no `.gptr/` (`.git` or `DESCRIPTION` do not count): each process looked in its own
+  `tempdir()`, R deleted the kernel's at exit, a killed run's was orphaned. `doc_sync()` returned
+  0 silently and `gptr_doc()` dropped the count.
+- Fix: without `.gptr/` the sidecar is `R_user_dir("gptr", "cache")/pending/pending-<sha1>.json`
+  (`doc_sidecar_write()` already makes the folder and a 0600 file; trust checks and the legacy path
+  follow); `doc_sync()` informs "Wrote N block(s) into <doc>." or "No pending blocks for <doc>.";
+  `gptr_doc(sync = TRUE)` leaves a dead run's recovery to `doc_sync()`, so the count includes it.
+- Green: `^doc-io$` PASS 690; `^(doc-.*|arch-layers|lint-rules|utils-paths)$` PASS 2660 SKIP 3
+  (repr not installed; Windows only); `^(doc-io|doc-formats|doc-replay|doc-export)$` PASS 1756
+  (NOT_CRAN=true). Lint clean. Rd regenerated; plan checks pass.
+- Deviations: D-249 (new). Not in the plan: `gptr_doc(sync = TRUE)` no longer runs
+  `doc_recover()` first (it applied a killed run's blocks, and the sync then said "No pending
+  blocks"); two existing syncs in test-doc-io and test-doc-formats now assert the message.
+- Open: `gptr_cache("info")`, which the conflict warning names, lists only the workspace root's
+  sidecars, not `pending/`; `doc_lock_dir()` still uses this process's workspace root, so two
+  processes recording one document outside `.gptr/` do not exclude each other (finding 15).
