@@ -2599,7 +2599,11 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   decision 5. IC-49, P15 decision 5, the hook's roxygen, the script-as-history vignette and NEWS.
 - Green: `^doc-replay$` PASS 752; `^(doc-replay|doc-blocks|doc-formats|doc-export|arch-layers|
   lint-rules)$` PASS 1693 (NOT_CRAN=true). Lint clean; plan checks unchanged; `precompute.R
-  script-as-history` byte-identical to the edited `.Rmd`.
+  script-as-history` byte-identical to the edited `.Rmd`. Live, installed build (GPT-5.6 Sol,
+  Claude Opus 4.8, Ollama qwen3.8:27b): an `Rscript -e` console transcript of a steered
+  `background = TRUE` run stopped by `max_turns = 2`, then a piped turn, recorded the steer, both
+  runs' code and `## Run: max_turns`, and `s_<hex> |> peter(...)`; `GPTR_REPLAY=replay` re-sourced
+  it to `x_err`, `y_err`, `w_err` 21, 22, 42.
 - Deviations: D-249 (extended). Not as planned: no list of ended statuses, since `run_settle()` gives
   `agent_end` no other non-idle status. Open: the background `[b]` path is not tested.
 
@@ -2617,7 +2621,10 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   session gains each block's turn; `replay_seek()` moves a rebuilt one to each block's turn until a
   live run (`replay_notice()`). IC-46 and the 04 replay functions amended.
 - Green: `^(doc-replay|session-object)$` PASS 1319; `^(doc-.*|session-.*|agent-run|mcp-recording|
-  arch-layers|lint-rules)$` PASS 4914 SKIP 2 (NOT_CRAN=true). Lint clean.
+  arch-layers|lint-rules)$` PASS 4914 SKIP 2 (NOT_CRAN=true). Lint clean. Live, the three routes:
+  that transcript re-sourced in a new process, with its session log and as a clone without one
+  (`history_source` `store`, `reconstructed`), then continued live: each model quoted both prompts
+  and the steer and named the three variables.
 - Deviations: D-249 (extended). Not as planned: both paths give the same 14 messages (the plan's 18
   had context messages in the recorded turns); a live run also stops the seek. Open: a
   `gptr.replay` marker of an earlier block stays off the path once the next block moves on.
@@ -2640,7 +2647,10 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   agent-background|doc-blocks|utils-text|arch-layers|lint-rules)$` PASS 2474 (NOT_CRAN=true). Full
   suite `.`: FAIL 4 SKIP 64 PASS 35558, the 4 a `ps` memory sample refused (`access_denied`) under
   load in `proc-marker-family` and `proc-rscript-native`, which alone pass (PASS 213). Lint clean;
-  Rd regenerated; `precompute.R script-as-history` byte-identical to the edited `.Rmd`.
+  Rd regenerated; `precompute.R script-as-history` byte-identical to the edited `.Rmd`. Live, the
+  three routes: `Rscript analysis.R` bound to itself, a `background = TRUE` call plus `gptr_steer()`
+  and `gptr_wait()`, recorded the steer; rerun under `GPTR_REPLAY=replay` and under auto it exited
+  0 with the notice, one turn and the file unchanged.
 - Deviations: D-249 (extended). Not as planned: the notes reach the session through the replay
   functions' `doc` (an L4 file calls only the kernel SDK); a live run clears them in `run_start()`
   (`replay_notice()`), not `gateway_run_start()`; the drain takes back only `api_user` and `pipe`
