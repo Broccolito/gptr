@@ -2071,3 +2071,27 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-248 (P22 Task 7). Open: `use_python()`/`use_virtualenv()` without `py_config()`
   are still refused (accepting them needs reticulate internals or `RETICULATE_USE_MANAGED_VENV`
   handling, a later change); the cheat sheet takes sheet entry S32.
+
+### tools-13 - A broken fake-provider script fails at once instead of being retried as overloaded
+- Red: FAIL 7 in `provider-fake` (PASS 199): with `agent_retry_delay()` mocked to 0, a number
+  as reply 2 of a list script made 4 requests and signalled `gptr_error_overloaded` (finding 10:
+  "retrying in 2.0 s (overloaded)", then 4.0 s); a script function that stops ("boom 500
+  timeout") and an empty script made 3 each; the no-script error event had class "provider"; a
+  failing classifier script and a classifier with no script gave `gptr_error_s1_overloaded`.
+- Cause: `fake_script_reply()` and `fake_pick()` reported gptr's own script failures as status
+  500, which `fake_status_class()` names "overloaded", so `run_retryable()` retried them twice
+  against its own rule (never a local failure); `fake_missing_events()` sent class "provider"
+  with 500, which `err_class()` drops and reads back as overloaded; the classifier fake passed
+  500 to `fake_s1_error()`.
+- Fix: `fake_script_error()` gives a broken script's reply `status = NA` and class
+  "invalid_spec" (never retried, signalled as `gptr_error_provider`); `fake_plan()` takes
+  `reply$class` before the status; the no-script event is "invalid_spec" with no status. A
+  scripted `list(error =, status = 529L)` still retries. Beyond the plan, the classifier fake's
+  failures (a failing or empty script, no script found) follow through the same helper and an NA
+  status: `gptr_error_s1_response`, never retried. No construction-time check of list elements:
+  the request already names the misuse.
+- Green: `provider-fake` PASS 206; `^(provider-.*|agent-run|agent-loop.*|s1-.*|gptr-gateway|
+  lint-rules|arch-layers)$` PASS 5442; full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35358.
+  Lint clean; Rd unchanged (`@noRd`).
+- Deviations: none (04 §12.1 does not define a broken script; the fix restores
+  `run_retryable()`'s rule). Open: none.
