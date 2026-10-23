@@ -222,7 +222,8 @@ agent_sync = function(mode = NULL) {
   col = agent_collect(mode)
   df = col$rows
   if (any(!df$trusted & !df$usable)) {
-    gptr_inform("Some project agents were not loaded: the project is not trusted (gptr_trust()).",
+    gptr_inform(paste0("Some project agents were not loaded: the project is not trusted; ",
+                       "trust it with gptr_trust(\".\", trust = TRUE)."),
                 "notice", .once = paste0("agents-untrusted:", path_key(project_root())))
   }
   idx = which(df$usable & df$origin != "plugin")
@@ -275,7 +276,8 @@ agent_def_get = function(name = NULL, file = NULL) {
     hit = df[!df$trusted & res_norm(df$name) == res_norm(name), , drop = FALSE]
     if (nrow(hit)) {
       gptr_abort(paste0("This agent belongs to a project that is not trusted, and nobody can ",
-                        "confirm it here; trust the project with gptr_trust() to use it."),
+                        "confirm it here; trust the project with ",
+                        "gptr_trust(\".\", trust = TRUE) to use it."),
                  "untrusted", what = "agent", path = hit$path[1L], origin = "project")
     }
     gptr_abort("No agent definition with this name was found; gptr_agents() lists them.",

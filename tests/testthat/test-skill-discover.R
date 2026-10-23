@@ -387,6 +387,16 @@ test_that("trusted project skills enter the catalog; untrusted ones never do (IC
   expect_match(skill_body("manual-skill")$text, "Body.", fixed = TRUE)
 })
 
+test_that("untrusted-skill messages name the call that trusts the project", {
+  withr::defer(res_prune("skills:", character()))
+  local_gptr_options(quiet = FALSE)
+  p = local_project(trust = FALSE)
+  write_skill(file.path(p, ".gptr", "skills"), "x", skill_md("x", "A project skill."))
+  how = "gptr_trust(\".\", trust = TRUE)"
+  expect_message(skill_sync(), how, fixed = TRUE)
+  expect_error(skill_body("x"), how, class = "gptr_error_untrusted", fixed = TRUE)
+})
+
 test_that("over budget, least recently used descriptions go first, then entries", {
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)

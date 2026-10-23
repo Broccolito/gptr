@@ -2115,3 +2115,15 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   trust, which the plan's list lacked. `skills.paths` is read through `settings_layered()` (the layers skill
   discovery reads; a project settings file is itself gated) rather than the two files as written. `gptr_init()`
   asks the same question, so its text changed too (one test-gptr-config expectation). Open: none.
+
+### trust-msg - Untrusted-resource messages name the call that actually trusts
+- Motivated by findings 111, 147 (sheet units). Red: `^(skill-discover|ext-plugins)$` FAIL 3 PASS 562: the
+  untrusted skill notice, `skill_body()`'s `gptr_error_untrusted` and the untrusted-plugin notice said
+  `(gptr_trust())` or `trust it with gptr_trust()`, the read-only form, which returns `NA` and trusts nothing.
+- Cause: the advice named the function, not the call; with `trust = NULL`, `gptr_trust()` only reads.
+- Fix: all nine messages (skill notice and error, extension and plugin notices, `trust_resolve()`'s notice,
+  project MCP server, project instructions, agent notice and error) name `gptr_trust(".", trust = TRUE)`, the
+  form the sheet's Set up row uses. Text only.
+- Green: `^(skill-discover|ext-plugins)$` PASS 565; with mcp-config, gptr-config, prompt-context, subagent-defs,
+  lint-rules, arch-layers PASS 1538. Lint clean.
+- Deviations: none (the contract quotes none of these messages). Open: none.

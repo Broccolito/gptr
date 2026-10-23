@@ -1039,7 +1039,8 @@ extension_resolve = function(name) {
 extension_enable = function(ext, rank, session = NULL) {
   if (identical(ext$scope, "project") && !trust_ok()) {
     gptr_inform(paste0("Project extension ", ext$name,
-                       " was not loaded: the project is not trusted (see gptr_trust())."),
+                       " was not loaded: the project is not trusted; trust it with ",
+                       "gptr_trust(\".\", trust = TRUE)."),
                 "notice", .once = paste0("ext-untrusted:", ext$path))
     return(invisible(FALSE))
   }
@@ -1090,7 +1091,8 @@ plugin_enable = function(name, rank, session = NULL) {
                ids = character(), tokens = 0)
   if (!trusted) {
     gptr_inform(paste0("Plugin ", p$name, " lives in a project that is not trusted; ",
-                       "its resources and code were not loaded (see gptr_trust())."),
+                       "its resources and code were not loaded; trust it with ",
+                       "gptr_trust(\".\", trust = TRUE)."),
                 "notice", .once = paste0("plugin-untrusted:", p$path))
     plugin_entry_save(entry)
     return(invisible(FALSE))

@@ -298,7 +298,7 @@ context_instruction_items = function(inp, notify = TRUE) {
     if (notify) {
       gptr_inform(paste0("Project instructions were not sent: the project is not trusted and ",
                          "no one can confirm in mode '", inp$mode, "'. Trust it with ",
-                         "gptr_trust()."),
+                         "gptr_trust(\".\", trust = TRUE)."),
                   "notice", .once = paste0("gptr_untrusted_instructions:", root))
     }
     files = Filter(function(f) isTRUE(f$user), files)

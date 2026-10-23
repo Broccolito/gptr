@@ -626,7 +626,8 @@ mcp_server_get = function(name, session = NULL) {
   }
   if (isFALSE(s$startable)) {
     gptr_abort(paste0("MCP server ", name, " comes from a project you have not trusted; run ",
-                      "gptr_trust() to use it."), "untrusted", what = "project MCP server",
+                      "gptr_trust(\".\", trust = TRUE) to use it."), "untrusted",
+               what = "project MCP server",
                path = s$path %||% NA_character_, origin = NA_character_)
   }
   if (isTRUE(s$needs_input)) {

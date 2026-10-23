@@ -276,7 +276,7 @@ skill_sync = function() {
   df = col$rows
   if (any(df$origin == "project" & !df$trusted)) {
     gptr_inform(paste0("Project skills are listed but not used until the project is trusted ",
-                       "(gptr_trust())."), "notice",
+                       "(gptr_trust(\".\", trust = TRUE))."), "notice",
                 .once = paste0("skills-untrusted:", path_key(project_root())))
   }
   groups = skill_groups(df)
@@ -426,7 +426,8 @@ skill_body = function(name, session = NULL) {
     hit = df[!df$trusted & res_norm(df$name) == res_norm(name), , drop = FALSE]
     if (nrow(hit)) {
       gptr_abort(paste0("This skill belongs to a project that is not trusted; trust it with ",
-                        "gptr_trust() to use its skills."), "untrusted", what = "skill",
+                        "gptr_trust(\".\", trust = TRUE) to use its skills."), "untrusted",
+                 what = "skill",
                  path = hit$path[1L], origin = "project")
     }
     gptr_abort("No skill with this name is available; gptr_skills() lists them.",

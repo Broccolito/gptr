@@ -631,6 +631,16 @@ test_that("project plugin code and resources are ignored until gptr_trust()", {
   expect_false(is.null(registry_get("skill", "local-skill", session = sid)))
 })
 
+test_that("the untrusted-plugin notice names the call that trusts the project", {
+  local_gptr_options(quiet = FALSE)
+  files = list()
+  files[[".gptr/plugins/quietplug/plugin.json"]] = '{"name": "quietplug"}'
+  proj = local_project(trust = FALSE, files = files)
+  withr::defer(plugin_forget(file.path(proj, ".gptr", "plugins", "quietplug")))
+  expect_message(plugin_enable("quietplug", 0L, session = "s00000000e1"),
+                 "gptr_trust(\".\", trust = TRUE)", fixed = TRUE)
+})
+
 test_that("an unmet API requirement disables the plugin with a diagnostic", {
   skip_on_cran()
   d = withr::local_tempdir()

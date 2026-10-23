@@ -605,7 +605,8 @@ trust_resolve = function(root) {
   } else {
     why = if (is.null(since)) "" else paste0(" (changed since you trusted it: ", since, ")")
     gptr_inform(paste0("Project resources in ", root, " were not loaded because the project is ",
-                       "not trusted", why, ". Use gptr_trust() to trust it."), "notice",
+                       "not trusted", why, ". Use gptr_trust(\".\", trust = TRUE) to trust it."),
+                "notice",
                 .once = paste0("trust:", key, ":", fp$fp))
     decision = FALSE
   }
