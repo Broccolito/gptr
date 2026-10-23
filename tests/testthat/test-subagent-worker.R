@@ -36,6 +36,10 @@ test_that("a permission request goes to the parent and its answer comes back", {
   ans2 = worker_ui_permission(w$io, list(tool = "write", input = list(path = "a")))
   expect_identical(ans2$decision, "deny")
   expect_identical(ans2$feedback, "no")
+  # a parent's gate reason stays a reason, never the person's words (cheat-sheet review)
+  w$write(list(type = "permission", id = "p3", decision = "deny", reason = "deletes files"))
+  ans3 = worker_ui_permission(w$io, list(tool = "write", input = list(path = "a")))
+  expect_identical(ans3[c("feedback", "reason")], list(feedback = NULL, reason = "deletes files"))
 })
 
 test_that("questions, select and input are forwarded as ask lines", {
@@ -277,6 +281,8 @@ test_that("worker requests are re-classified by the parent's gate and answered (
     seen$call = call
     if (grepl("unlink", call$input$code, fixed = TRUE)) {
       list(decision = "deny", reason = "deletes files")
+    } else if (grepl("plot", call$input$code, fixed = TRUE)) {
+      list(decision = "deny", reason = "use base R", feedback = "use base R")
     } else if (grepl("rewrite", call$input$code, fixed = TRUE)) {
       list(decision = "allow", reason = "rewritten", input = list(code = "x = 2"))
     } else {
@@ -298,19 +304,25 @@ test_that("worker requests are re-classified by the parent's gate and answered (
   expect_identical(seen$call$input$code, "unlink('d')")
   expect_s3_class(seen$call$tool, "gptr_tool")
   expect_identical(st$replies[[1L]], list(type = "permission", id = "p1", decision = "allow",
-                                          feedback = NULL))
-  expect_identical(st$replies[[2L]]$decision, "deny")
-  expect_identical(st$replies[[2L]]$feedback, "deletes files")
+                                          feedback = NULL, reason = NULL))
+  # a policy's denial reaches the worker as a reason, the person's words as feedback
+  expect_identical(st$replies[[2L]][c("decision", "feedback", "reason")],
+                   list(decision = "deny", feedback = NULL, reason = "deletes files"))
+  worker_on_line(st, json_encode(list(type = "permission_request", id = "p4",
+                                      request = list(tool = "r", input = list(code = "plot(1)")))))
+  expect_identical(st$replies[[3L]][c("decision", "feedback")],
+                   list(decision = "deny", feedback = "use base R"))
   # an approval of a changed input is not one of the worker's call
   worker_on_line(st, json_encode(list(type = "permission_request", id = "p3",
                                       request = list(tool = "r", input = list(code = "rewrite")))))
-  expect_identical(st$replies[[3L]]$decision, "deny")
-  expect_match(st$replies[[3L]]$feedback, "changed this call", fixed = TRUE)
+  expect_identical(st$replies[[4L]][c("decision", "feedback")], list(decision = "deny",
+                                                                     feedback = NULL))
+  expect_match(st$replies[[4L]]$reason, "changed this call", fixed = TRUE)
   # non-JSON lines and the jsonl events (its permission_request event has no request) are ignored
   worker_on_line(st, "not json")
   worker_on_line(st, json_encode(list(type = "permission_request", tool = "r",
                                       input = list(code = "q()"))))
-  expect_length(st$replies, 3L)
+  expect_length(st$replies, 4L)
   worker_on_line(st, json_encode(list(type = "result", status = "idle", text = "done",
                                       usage = list(input = 10, output = 2), turns = 1L)))
   expect_identical(st$result$text, "done")

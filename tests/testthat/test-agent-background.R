@@ -113,8 +113,10 @@ test_that("a session UI wrapper delegates outside idle ticks and never prompts d
   expect_identical(ui$input("name?"), NA_character_)
   st$ticking = FALSE
   expect_identical(ans$decision, "deny")
-  expect_match(ans$feedback, "runs in the background", fixed = TRUE)
-  expect_match(ans$feedback, "call the tool again with the same input", fixed = TRUE)
+  # gptr's own denial: a reason, never the person's words (cheat-sheet review)
+  expect_null(ans$feedback)
+  expect_match(ans$reason, "runs in the background", fixed = TRUE)
+  expect_match(ans$reason, "call the tool again with the same input", fixed = TRUE)
   expect_identical(calls$n, 1L)
   ask = session_live(s)$background$ask
   expect_identical(ask$what, "permission")

@@ -491,6 +491,44 @@ test_that("the UI answers asks when the run's snapshot can prompt", {
   expect_true(run$abort_after_call)
 })
 
+test_that("a denial with the person's text tells the model it is theirs (cheat-sheet review)", {
+  local_gptr_options(interactive = TRUE)
+  ui = new.env()
+  local_service("ui.get", function(session = NULL) {
+    list(has_ui = function() TRUE, permission = function(request) ui$answer)
+  })
+  local_policy("mode", function(call, ctx) list(decision = "ask", reason = "level 2"))
+  local_tool("w", function(input, ctx) "written")
+  told = function(answer) {
+    ui$answer = answer
+    msg_text(dispatch(test_session(), list(tc("w")))$msgs[[1L]])
+  }
+  ui$answer = list(decision = "deny", feedback = "use the other file")
+  expect_identical(perm_check(a_call(), test_run(test_session()))$reason, "use the other file")
+  expect_identical(told(ui$answer),
+                   paste0("The user declined this call and said: \"use the other file\". This is ",
+                          "the user's own instruction: do that instead; any call it needs is ",
+                          "approved separately."))
+  expect_match(told(ui_answer("deny")), "^Permission denied: the user declined\\. ")
+  # a denial gptr writes itself is a reason, never the person's words
+  expect_match(told(ui_answer("deny", reason = "no valid answer was given at the approval prompt")),
+               "^Permission denied: no valid answer was given at the approval prompt\\. ")
+})
+
+test_that("the model reads n <text> as the person's; the next call is asked (cheat-sheet review)", {
+  skip_on_cran()
+  local_project()
+  ui = local_scripted_ui(list(list(decision = "deny", feedback = "run k2 = 7 instead"), "y"))
+  fake = local_fake_provider(list(fake_tool("r", code = "k2 = 100"),
+                                  fake_tool("r", code = "k2 = 7"), "7"))
+  e = new.env()
+  peter("Set k2.", model = fake, envir = e, mode = "manual")
+  expect_match(msg_text(fake_requests(fake)[[2L]]$last_results[[1L]]),
+               "^The user declined this call and said: \"run k2 = 7 instead\"\\. ")
+  expect_identical(ui$log$method, c("permission", "permission"))
+  expect_identical(e$k2, 7)
+})
+
 test_that("an option changed by model code mid-run does not change the run's gate (IC-53)", {
   withr::defer(options(gptr.unsafe_no_permissions = NULL))
   local_tool("loosen", function(input, ctx) {

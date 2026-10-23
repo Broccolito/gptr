@@ -259,7 +259,7 @@ test_that("a and p are offered only with a suggested rule; a and p say why not (
   req$risk = gptr_risk("x = 2", envir = e)
   expect_null(rule_suggest(list(name = "r", risk = req$risk)))
   out = console_try(function() ui_console_permission(req), c("?", "a", "p", "y"))
-  expect_identical(out$result, list(decision = "allow", remember = NULL, feedback = NULL))
+  expect_identical(out$result, ui_answer("allow"))
   expect_false(any(grepl("[a] always", out$shown, fixed = TRUE)))
   expect_identical(sum(out$shown == paste0("    a and p are not offered: no rule covers these ",
                                            "calls; answer y, n or ?.")), 2L)
@@ -320,7 +320,7 @@ test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3
   root = local_project()
   req = ui_request("write.csv(df, 'out.csv')", rule = "r(fn:write.csv)")
   out = console_try(function() ui_console_permission(req), "y")
-  expect_identical(out$result, list(decision = "allow", remember = NULL, feedback = NULL))
+  expect_identical(out$result, ui_answer("allow"))
   expect_match(out$shown[1L], "write.csv", fixed = TRUE)
   expect_identical(console_try(function() ui_console_permission(req), "a")$result$remember,
                    "session")
@@ -822,8 +822,8 @@ test_that("invalid answers are explained and kept; five end in a refusal the mod
   expect_identical(out$kept, character())
   req = ui_request("write.csv(df, 'out.csv')", rule = "r(fn:write.csv)")
   out = console_try(function() ui_console_permission(req), rep("zz", 5L))
-  expect_identical(out$result, list(decision = "deny", remember = NULL,
-                                    feedback = "no valid answer was given at the approval prompt"))
+  expect_identical(out$result, list(decision = "deny", remember = NULL, feedback = NULL,
+                                    reason = "no valid answer was given at the approval prompt"))
   # the hint names the question, as it may have scrolled away (visual review), the prompt's own
   # letters and how to deny with feedback
   hint = "    Allow r? Type y, a, p or n (n <text> says what to do instead), or ?."

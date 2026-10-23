@@ -718,7 +718,8 @@ test_that("the stdin UI answers selections and approvals from the reader", {
   })
   expect_identical(pick, 2L)
   expect_identical(a1$decision, "allow")
-  expect_identical(a2, list(decision = "deny", remember = NULL, feedback = "use base R"))
+  expect_identical(a2, list(decision = "deny", remember = NULL, feedback = "use base R",
+                            reason = NULL))
   expect_true(any(grepl("Not an answer: 'maybe'", out, fixed = TRUE)))
   expect_s3_class(ui, "gptr_ui")
 })

@@ -400,6 +400,22 @@ test_that("inside a running session the claude route gates through perm_check on
   expect_identical(results[[3L]]$last_results[[1L]]$content[[1L]]$text, "false")
 })
 
+test_that("a served call the person denies with text says it is theirs (cheat-sheet review)", {
+  probe = gptr_tool("probe", "Calls the MCP dispatcher the way the claude adapter does.",
+                    parameters = list(type = "object",
+                                      properties = list(code = list(type = "string"))),
+                    execute = function(input, ctx) {
+                      mcp_dispatch_local(r_call(input$code), ctx$session)$result$content[[1L]]$text
+                    })
+  off = gptr_register(probe)
+  withr::defer(off())
+  local_scripted_ui(list("y", list(decision = "deny", feedback = "use base R")))
+  fake = local_fake_provider(list(fake_tool("probe", code = "b = 2"), "done"), name = "probefake")
+  peter("Use the probe", model = fake, envir = new.env(), mode = "manual")
+  expect_match(fake_requests(fake)[[2L]]$last_results[[1L]]$content[[1L]]$text,
+               "^The user declined this call and said: \"use base R\"\\. ")
+})
+
 test_that("inside a running plan-mode session served r calls run in the run's scratch overlay", {
   probe = gptr_tool("planprobe", "Calls the MCP dispatcher the way the claude adapter does.",
                     parameters = list(type = "object",

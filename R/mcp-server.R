@@ -257,9 +257,9 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
     if (!is.null(st)) st$refused = d$reason %||% "not allowed"
-    return(gptr_tool_result(paste0("Permission denied: ", d$reason %||% "not allowed",
-                                   ". To allow it, run it yourself at the R prompt or add a ",
-                                   "rule with gptr_permissions(allow = ...)."), is_error = TRUE))
+    d$how = paste0("To allow it, run it yourself at the R prompt or add a rule with ",
+                   "gptr_permissions(allow = ...).")
+    return(gptr_tool_result(perm_denial_text(d), is_error = TRUE))
   }
   if (is.list(d$input)) call$input = d$input
   tokens = NULL

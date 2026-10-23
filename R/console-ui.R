@@ -49,10 +49,11 @@ ui_wrap = function(ui) {
   ui
 }
 
-#' A permission answer (contract section 10.2 row 22)
+#' A permission answer (contract section 10.2 row 22): `feedback` only what the person typed,
+#' `reason` a denial the UI writes itself
 #' @noRd
-ui_answer = function(decision, remember = NULL, feedback = NULL) {
-  list(decision = decision, remember = remember, feedback = feedback)
+ui_answer = function(decision, remember = NULL, feedback = NULL, reason = NULL) {
+  list(decision = decision, remember = remember, feedback = feedback, reason = reason)
 }
 
 #' Normalise a permission answer: anything unusable is a denial (a failing dialog is not an
@@ -60,13 +61,13 @@ ui_answer = function(decision, remember = NULL, feedback = NULL) {
 #' @noRd
 ui_answer_norm = function(ans, request) {
   if (!is.list(ans) || !isTRUE(ans[["decision"]] %in% c("allow", "deny", "abort"))) {
-    return(ui_answer("deny", feedback = "The approval dialog failed; nothing was done."))
+    return(ui_answer("deny", reason = "The approval dialog failed; nothing was done."))
   }
   rem = ans[["remember"]]
   keep = identical(ans[["decision"]], "allow") && isTRUE(rem %in% c("session", "project")) &&
     is.null(ui_no_rule(request))
-  fb = ans[["feedback"]]
-  ui_answer(ans[["decision"]], if (keep) rem, if (rlang::is_string(fb) && nzchar(fb)) fb)
+  text = function(x) if (rlang::is_string(x) && nzchar(x)) x
+  ui_answer(ans[["decision"]], if (keep) rem, text(ans[["feedback"]]), text(ans[["reason"]]))
 }
 
 #' Why an approval of this request cannot become a rule (IC-77 item 3), else NULL: never for
@@ -446,7 +447,7 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 #' that names the question, which may have scrolled away, and its keys; an empty one gets the hint
 #' alone, both dim at column 4 (ui_hint()), and in an IDE console an answer of several words a row
 #' noting that a draft typed during the run joins an answer; five (`?` is none) end in a refusal
-#' whose feedback says so (D-188, D-243)
+#' whose reason says so (D-188, D-243)
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())
@@ -500,7 +501,7 @@ ui_console_permission = function(request, read = ui_console_read) {
     console_write(ui_hint(msg))
   }
   console_write(ui_hint("No valid answer after 5 tries; refused."))
-  ui_answer("deny", feedback = "no valid answer was given at the approval prompt")
+  ui_answer("deny", reason = "no valid answer was given at the approval prompt")
 }
 
 #' questions() through select() and input() (report 18 ui_questions_via()); every choice
@@ -608,7 +609,7 @@ ui_scripted_spec = function(st, name = "scripted") {
               a = st$take("permission", ui_permission_lines(request)[1L])
               if (is.list(a)) return(a)
               if (!rlang::is_string(a)) {
-                return(ui_answer("deny", feedback = "The scripted UI has no answer left."))
+                return(ui_answer("deny", reason = "The scripted UI has no answer left."))
               }
               switch(a, y = ui_answer("allow"), a = ui_answer("allow", "session"),
                      p = ui_answer("allow", "project"), abort = ui_answer("abort"),

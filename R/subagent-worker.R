@@ -129,7 +129,8 @@ worker_request = function(io, prefix, msg, reply) {
 # ---- the child: the `worker` UI (contract 10.2 kind `ui`) ----------------------------------------
 
 #' `permission(request)`: forwarded as `permission_request` without the child's risk (the parent
-#' re-classifies `tool` and `input`); anything but `allow` denies, a cancel or end of input aborts
+#' re-classifies `tool` and `input`); anything but `allow` denies, with the parent's `feedback`
+#' (the person's text) and `reason`; a cancel or end of input aborts
 #' @noRd
 worker_ui_permission = function(io, request) {
   request$risk = NULL
@@ -137,7 +138,7 @@ worker_ui_permission = function(io, request) {
                          "permission")
   if (is.null(reply)) return(list(decision = "abort", remember = NULL, feedback = NULL))
   list(decision = if (identical(reply$decision, "allow")) "allow" else "deny", remember = NULL,
-       feedback = reply$feedback)
+       feedback = reply$feedback, reason = reply$reason)
 }
 
 #' `questions(qs)`: forwarded as `ask`; the parent answers `answer`
@@ -455,12 +456,14 @@ worker_on_line = function(st, line) {
                         tool = registry_get("tool", name, session = st$opts$session),
                         nested = FALSE))
     }, error = function(e) list(decision = "deny", reason = conditionMessage(e)))
-    # a policy that changed the input approved another call than the worker's: deny
+    # a policy that changed the input approved another call than the worker's: deny; only the
+    # person's text is feedback, so a policy's denial never reads as theirs
     allow = identical(dec$decision, "allow")
     changed = allow && !is.null(dec$input) && !identical(dec$input, input)
     worker_reply(st, list(type = "permission", id = obj$id,
                           decision = if (allow && !changed) "allow" else "deny",
-                          feedback = if (changed) {
+                          feedback = if (!allow) dec$feedback,
+                          reason = if (changed) {
                             "a policy changed this call, so it was not approved as sent"
                           } else if (!allow) {
                             dec$reason %||% "denied"

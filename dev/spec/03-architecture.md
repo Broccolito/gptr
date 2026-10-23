@@ -1518,8 +1518,8 @@ line, `    allowed r(fn:FindNeighbors,FindClusters) for this session` (or `proje
 (code, or a path tool's change, at most 40 rows, its path then in the first row; flagged calls with levels, paths,
 "cannot be undone" when no checkpoint is possible, and "always in this project", written to the user-level project
 file `R_user_dir("gptr", "config")/projects/<hash>.json`, never into the project tree [IC-52]); `n` optionally takes
-feedback text that becomes the tool result (`n use base R`; also `no, use base R` or `No. Use base R`: punctuation
-right after `n` or `no` is part of the key); Ctrl-C aborts the run. Never
+text that the tool result gives the model as the person's own instruction (`n use base R`; also `no, use base R` or
+`No. Use base R`: punctuation right after `n` or `no` is part of the key); Ctrl-C aborts the run. Never
 `askYesNo()`, `menu()` or `select.list()` for gptr's own prompts [18 §2.1]. A sub-agent's question names it
 (`  ? sub-agent alpha: allow r?`; a nested `peter()` by its quoted prompt and number). Choices and inputs (the `ask`
 tool's questions among them) use the same frame: `? <title>` in bold, details dim under it, numbered choices
@@ -1528,7 +1528,7 @@ tool's questions among them) use the same frame: `? <title>` in bold, details di
 title's later rows at column 4, a choice's under its label). Every console prompt first clears the live row (an
 answer's held row continues after it, D-245), and its lines reach the console, in its colours, even from inside the parent's `r` evaluation (never its tool result). An
 invalid answer is explained (`a` or `p` where nothing can be remembered says why); five (`?` is none) end in a
-refusal whose feedback tells the model that no valid answer was given [IC-77; D-188].
+refusal whose reason (not the person's text) tells the model that no valid answer was given [IC-77; D-188].
 
 #### 6.8.4 Nested gating
 

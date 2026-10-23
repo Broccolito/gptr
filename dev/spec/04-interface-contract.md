@@ -3268,7 +3268,9 @@ notices of 01 §3.6). Direct `find` and `ls` use Pi's output formats and notices
 tokens only when the fuzzy fallback, EOL or encoding normalisation changed what the model literally asked for);
 `r` returns `format_eval_result()` text plus image blocks; `ask` returns 18 §3.6's texts; unknown tool:
 `Tool <name> not found`; validation failure: `Invalid arguments for <tool>: <errors>`; denial: `Permission denied:
-<reason>. <how to proceed>`; hook block: `Tool execution was blocked: <reason>`; interrupted tool: `Interrupted after
+<reason>. <how to proceed>`, and one that carries the person's text (`n <text>`, IC-77 in §15.10): `The user declined
+this call and said: "<text>". This is the user's own instruction: do that instead; any call it needs is approved
+separately.`; hook block: `Tool execution was blocked: <reason>`; interrupted tool: `Interrupted after
 <s> s; side effects may have occurred.`; a `length`/`refusal` stop: `Tool call not executed: the response stopped
 (<reason>) before the call was complete.`
 
@@ -3462,7 +3464,7 @@ also has `kind`, `name` and `api_version` (the extension API version it was writ
 | 19 | `artifact_type` [experimental] | first | `build` `function(id, dir, data, ctx)`; `check` `function(dir, ctx)` -> `list(ok, messages)`; `launch` `function(version_dir, ctx)` -> `list(url, pid, stop)`; `stop` `function(handle)` | failures become tool results with the stage and a log tail | P02 |
 | 20 | `backend` | first | `start` `function(spec, ctx)` -> handle `list(session, fds = function() int, poll = function() NULL, cancel = function() NULL)`; `poll`, `cancel`; `capabilities` (`parallel` = `io`/`cpu`, `live_objects` lgl, `ask` = `queue`/`forward`/`none`) | never blocks the reactor > 50 ms; cancel kills the process tree; errors give the child status `error` | P02 |
 | 21 | `agent` | first | the `gptr_agent()` fields (§6.8) | data; invalid files skipped with a diagnostic | P02 |
-| 22 | `ui` | first (selected by `gptr.ui`/settings) | `has_ui` `function()` -> lgl(1); `select(title, choices, default = NULL, details = NULL, multiple = FALSE, allow_other = FALSE)` -> int (NA = cancelled; `attr(, "other")` = free text); `input(prompt, default = "", secret = FALSE)` -> chr(1)\|NA; `questions(qs)` -> `list(answers = named list, cancelled = lgl(1))`; `notify(text, level = "info")`; `permission(request)` -> `list(decision = "allow" \| "deny" \| "abort", remember = NULL \| "session" \| "project", feedback = chr(1) \| NULL)` | a failing dialog is not an approval; `permission` defaults to one built from `select` | P02 |
+| 22 | `ui` | first (selected by `gptr.ui`/settings) | `has_ui` `function()` -> lgl(1); `select(title, choices, default = NULL, details = NULL, multiple = FALSE, allow_other = FALSE)` -> int (NA = cancelled; `attr(, "other")` = free text); `input(prompt, default = "", secret = FALSE)` -> chr(1)\|NA; `questions(qs)` -> `list(answers = named list, cancelled = lgl(1))`; `notify(text, level = "info")`; `permission(request)` -> `list(decision = "allow" \| "deny" \| "abort", remember = NULL \| "session" \| "project", feedback = chr(1) \| NULL, reason = chr(1) \| NULL)` (`feedback` only text the person typed; `reason` a denial the UI writes itself) | a failing dialog is not an approval; `permission` defaults to one built from `select` | P02 |
 | 23 | `frontend` [experimental] | first | `run` `function(session, ...)` -> session | owns the loop it runs | P02 |
 | 24 | `setting` | first (name = dotted key, e.g. `subagents.max_depth`) | `default`, `description`, `scope` (`both`, `user`), `validate` `function(value)` -> value (or `gptr_error_invalid_argument`), `tighten` (NULL or chr: the ordered values from strictest to loosest) | values through `gptr_config()`; a project layer may only move a `tighten` setting towards the strict end | P02 |
 | 25 | `secret_source` | all | `resolve` `function(name, ctx)` -> chr(1)\|NULL (registered with `secret_register()` at once); `list` `function(ctx)` -> chr; `store`, `forget` (optional) | never logs values | P02 |
@@ -3959,7 +3961,8 @@ list(specs, plugins, filters))` (IC-69; the worker re-registers `registry` befor
 child runs `worker_main(spec_path, result_path)`; stdout carries one JSON object per line (the `jsonl` frontend:
 events with Pi names plus `{"type":"ask","id","questions"}`, `{"type":"permission_request","id","request"}`,
 `{"type":"result","status","text","usage","turns"}`); stdin carries `{"type":"answer","id","answers"}`,
-`{"type":"permission","id","decision","feedback"}`, `{"type":"cancel"}`. Exported objects come back through
+`{"type":"permission","id","decision","feedback","reason"}` (`feedback` the person's text, `reason` the parent gate's
+denial), `{"type":"cancel"}`. Exported objects come back through
 `result_path` (`save_rds()`), never the JSON stream. Non-JSON stdout lines are ignored.
 
 ### 11.12 Plugins: manifest and package fields [stable]
@@ -5176,8 +5179,8 @@ totals line names the model and the context left.
 3. Invalid answers: `a`/`p` where nothing can be remembered (level 4, control, the `ask` tool, no
    `suggested_rule`) say why; other text gives
    `Not an answer: '<text>'` and the letters allowed (`?` shows the detail view and is not
-   counted); after 5, `No valid answer after 5 tries; refused.` and a denial with feedback
-   `no valid answer was given at the approval prompt`.
+   counted); after 5, `No valid answer after 5 tries; refused.` and a denial with the reason (not
+   feedback, cheat-sheet review) `no valid answer was given at the approval prompt`.
 4. Progress: a child run (depth 1+) whose outermost run is in the foreground prints, at
    verbosity 1+ unless `gptr.quiet`, `  sub-agent <agent> started (<model>)` (the model the child
    calls, for a worker not its proxy's `worker/worker`) at `agent_start` and
@@ -5263,7 +5266,8 @@ totals line names the model and the context left.
   reference that starts with a known `provider/` gets suggestions from that provider's references only (D-226). The
   console and MCP edges (`cmd_model()` -> `model_canonical()`, `cmd_model_label()` -> `pcli_default_model()`,
   `mcp_serve_exec()` -> `tool_call_hook`, `tool_run`, `tool_execute_frame`, `checkpoint_before`,
-  `checkpoint_after`) are contract edges of the layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
+  `checkpoint_after`, `perm_denial_text`, which words a denial as the loop does, IC-77) are contract edges of the
+  layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
   the codex files-only fallback, the served-run mark and the `-32002` busy error (IC-57, IC-58).
 
 **IC-80 Bedrock Converse with SigV4** (P26 Task 11, D-193).
@@ -5598,6 +5602,16 @@ its part in its own commit, and Task 27 finalises them.
     `gptr wants to use edit on R/io.R (level 2)` (cheat-sheet review: the RStudio dialog has no call line above it).
     The console leaves out code rows (`code = FALSE`) when the call line just above is this request's and showed
     its code whole (at most 20 lines); the RStudio dialog keeps them and gets the text without SGR.
+  - An approval's `n <text>` (`no, <text>`, `No. <text>`) reaches the model as the person's instruction (cheat-sheet
+    review): an answer's `feedback` is only what the person typed, and the denials the UI writes itself (a failing
+    dialog, five invalid answers, a scripted UI out of answers, an ask an idle tick parks) are its `reason` (§10.2
+    row 22); a worker's parent relays its person's text as `feedback` and its gate's denial as `reason` (§11.11).
+    `perm_check()`'s denial keeps `reason` (the answer's reason, else the text, else `the user declined`) and adds
+    `feedback`; the model reads `The user declined this call and said: "<text>". This is the user's own
+    instruction: do that instead; any call it needs is approved separately.` (§9.2), also for a call served to a
+    CLI route in a live run, and every other denial `Permission denied: <reason>. <how>` as before. Before, the
+    text was `Permission denied: <text>. Explain what you need or choose another approach.`, which GPT, Claude and
+    qwen read as the harness's refusal and did not carry out.
   - Run totals (Task 26; amends item 6 and D-206): the status line is dim and written as a notice, at column 2
     and wrapped where the margin applies, `done · <model> · <n> requests · <tokens> tokens · <cost> · <k>%
     context left`, with `aborted: <reason>` or `error: <reason>` for `done` as before (the reason's line breaks one

@@ -224,7 +224,7 @@ bg_ui_spec = function(name, id) {
     permission = function(request) {
       if (!bg_ticking()) return(bg_ui_target(name)$permission(request))
       bg_park(id, "permission", bg_request_summary(request))
-      list(decision = "deny", remember = NULL, feedback = bg_pending_text("approval"))
+      list(decision = "deny", remember = NULL, reason = bg_pending_text("approval"))
     }
   )
 }

@@ -559,11 +559,13 @@ perm_decide = function(call, run) {
   perm_ask(call, run, out, risk)
 }
 
-#' A perm_check() result; `reason` is one string whatever a policy, hook or UI answered
+#' A perm_check() result; `reason` is one string whatever a policy, hook or UI answered;
+#' `feedback` the person's own text of a denial
 #' @noRd
-perm_result = function(decision, reason, input, risk = NULL, rule = NULL, how = NULL) {
+perm_result = function(decision, reason, input, risk = NULL, rule = NULL, how = NULL,
+                       feedback = NULL) {
   list(decision = decision, reason = perm_reason(reason), input = input, risk = risk, rule = rule,
-       how = how)
+       how = how, feedback = feedback)
 }
 
 #' A reason as one string: a character vector is joined with spaces, anything else is ""
@@ -620,9 +622,12 @@ perm_ask = function(call, run, out, risk) {
   if (!is.null(ui) && isTRUE(tryCatch(ui$has_ui(), error = function(e) FALSE))) {
     # a failing dialog or a non-list answer is no approval (04 section 10.2 row 22)
     ans = tryCatch(ui$permission(req), error = function(e) NULL)
-    if (!is.list(ans) || is.data.frame(ans)) ans = list(decision = "deny", feedback = NULL)
+    if (!is.list(ans) || is.data.frame(ans)) ans = list(decision = "deny")
+    # `feedback` is what the person typed, `reason` a denial the UI wrote itself
     fb = ans[["feedback"]]
-    if (!rlang::is_string(fb) || !nzchar(fb)) ans$feedback = NULL
+    if (!rlang::is_string(fb) || !nzchar(fb)) fb = NULL
+    why = ans[["reason"]]
+    if (!rlang::is_string(why) || !nzchar(why)) why = fb %||% "the user declined"
     if (identical(ans[["decision"]], "allow")) {
       # a `remember` answer is stored by P11's builtin:permissions, not here
       return(perm_result("allow", "approved by the user", call$input, risk, "user"))
@@ -632,7 +637,7 @@ perm_ask = function(call, run, out, risk) {
       return(perm_result("deny", "the user aborted the run", call$input, risk, "user",
                          how = "The run stops here."))
     }
-    return(perm_result("deny", ans$feedback %||% "the user declined", call$input, risk, "user"))
+    return(perm_result("deny", why, call$input, risk, "user", feedback = fb))
   }
   if (identical(snap$noninteractive_ask, "deny")) {
     return(perm_result("deny", "no one can approve this action in this run", call$input, risk,
@@ -722,9 +727,15 @@ perm_summary = function(call) {
   if (nchar(txt) > 200L) paste0(substr(txt, 1L, 200L), "...") else txt
 }
 
-#' The text the model sees for a denial
+#' The text the model sees for a denial; the person's text is marked as theirs, because models
+#' read `Permission denied: <text>` as the harness's refusal and did not do what it said
 #' @noRd
 perm_denial_text = function(dec) {
+  if (rlang::is_string(dec$feedback)) {
+    return(paste0("The user declined this call and said: \"", dec$feedback, "\". This is the ",
+                  "user's own instruction: do that instead; any call it needs is approved ",
+                  "separately."))
+  }
   paste0("Permission denied: ", dec$reason %||% "not allowed", ". ",
          dec$how %||% "Explain what you need or choose another approach.")
 }

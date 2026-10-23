@@ -3624,6 +3624,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (setup) and §15.10 IC-77. Tests: test-console-setup.R "the console menu offers Cancel, and Enter chooses it
   (cheat-sheet review)", "a call with a prompt resolves its model and never shows the setup menu";
   test-console-ui.R "a choice ends after five invalid answers, saying it is cancelled (cheat-sheet review)".
+- Cheat-sheet review (2026-10-23, sessions-16): an approval's `n <text>` reaches the model as the person's
+  instruction, `The user declined this call and said: "<text>". This is the user's own instruction: do that
+  instead; any call it needs is approved separately.`; before, `Permission denied: <text>. Explain what you need or
+  choose another approach.`, which GPT, Claude and qwen read as the harness's refusal (13 of 13 runs did not do
+  it). An answer's `feedback` is only what the person typed; the UI's own denials (a failing dialog, five invalid
+  answers, a scripted UI out of answers, a parked background ask) are its new `reason`, a worker's parent relays
+  its gate's denial as `reason`, so a policy is never quoted as the user. Every other denial reads as before.
+  Also on a call served to a CLI route in a live run, which asks the person too (the unit had excluded it as
+  getting no reply). Contract-visible: 04 §9.2, §10.2 row 22, §11.11, §15.10 IC-77; 03 §6.8.3. Tests:
+  test-agent-dispatch.R "a denial with the person's text tells the model it is theirs (cheat-sheet review)", "the
+  model reads n <text> as the person's; the next call is asked (cheat-sheet review)"; test-subagent-worker.R (both
+  relay tests); test-mcp-server.R "a served call the person denies with text says it is theirs (cheat-sheet
+  review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
