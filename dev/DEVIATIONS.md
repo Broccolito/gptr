@@ -3193,6 +3193,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   through `perm_ask()`; allow rules are not applied there, and `gptr.unsafe_no_permissions` skips it. Was: re-checked
   only above the outer call's approved level and then as tool `sh`, which no `r(sh:)` rule matches, so `cmd = "rm
   -rf build"; peter$sh(cmd)` ran in auto and yolo under `r(sh:rm *)`.
+- Rule (sessions-22): the `gptr.frozen` entry records `mode`, the session's mode at the freeze (P07's and the
+  fallback's), and a rebuild (`gptr_resume()`, console `/resume`, a replay cut) takes the last mode its active path
+  records, a `gptr.frozen` `mode` or a `gptr.mode_change` `to` that is one of the five modes, else the `mode`
+  setting. Was: the last `gptr.mode_change`, else the resuming process's setting, so a session started in `auto`
+  came back `manual` (a script stopped at its first write) and one started in `plan` came back under a looser
+  setting (`auto`: a write ran). A file that records no mode (written before) behaves as before.
 - Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
   `tools`, `.opts` and refusals. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter` `envir`,
   `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and row).
@@ -3202,6 +3208,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `gptr_map()`, 03 §4.1.6; `?print.gptr_session`, `?session-accessors`, `?gptr_parallel`, the same vignette.
   03 §6.8 (the execute menu). 04 IC-54 (the plan allowlist). `gptr_risk()`'s rows and categories of a program
   given by its path (no spec text describes them). 04 §9.4 `bg` risk cell. 03 §6.8.4, 04 §7.6 `dispatch_nested()`.
+  04 §4.6 `gptr.frozen`, §6.5 `gptr_resume()`; `?gptr_sessions`.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...",
   "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
@@ -3215,5 +3222,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   output such as cat() ..."; perm-classify "the plan-mode allowlist admits only known read-only calls (IC-54)";
   perm-rules "sh: and category: rules see a program given by its path", "sh: rules read the command of a
   background job"; perm-classify "G5's 46 polyglot calls ..."; perm-gate "a deny rule stops a program given by its
-  path or in a background job ...", "deny and ask rules see the command a nested sh or bg call computes ...".
+  path or in a background job ...", "deny and ask rules see the command a nested sh or bg call computes ...";
+  session-store "a rebuilt session keeps the mode it ran with".
   Evidence: progress/fixes.md Task FIX-18.

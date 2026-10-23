@@ -627,7 +627,7 @@ has `type`, `id` (8 hex), `parentId` (id or `null` for the first entry), `timest
 
 | Name | Written by | `data` |
 |---|---|---|
-| `gptr.frozen` | P07 | `{preset, t0, t1, toolsJson, toolNames, sections: [{name, tier, hash, tokens}], model}`; first entry of every session, so resume reproduces the byte-exact prefix |
+| `gptr.frozen` | P07 | `{preset, t0, t1, toolsJson, toolNames, sections: [{name, tier, hash, tokens}], model, mode}`; first entry of every session, so resume reproduces the byte-exact prefix; `mode` is the session's mode at the freeze, the mode a rebuild starts from (D-251) |
 | `gptr.mode_change` | P06 | `{from, to, source}` |
 | `gptr.value` | P06 | `{turn, mode: "name"\|"copy"\|"box", name, address, class, bytes}` (never the value) |
 | `gptr.doc_block` | P15 | `{doc, format, block, action: "insert"\|"replace"\|"stale-regenerate"\|"undone", prompt, sha, lines: [from, to], backend: "file"\|"deferred"\|"rstudio"\|"positron"\|"vscode"\|"transcript"}` |
@@ -1723,8 +1723,9 @@ gptr_last()
 in that store. Reads only the header and last lines of each file.
 
 `gptr_resume()`: `x` = `NULL` (the most recently updated stored session), a session id, a file path, or a detached
-`<session>` (from `saveRDS()`/knitr cache/callr). Returns the live object if one exists in this process;
-otherwise rebuilds the session from its JSONL (leaf = last entry; status `idle` when the tail is a final answer,
+`<session>` (from `saveRDS()`/knitr cache/callr). Returns the live object if one exists in this process; otherwise
+rebuilds the session from its JSONL (leaf = last entry; mode = the last one its active path records, a `gptr.frozen`
+`mode` or a `gptr.mode_change` `to`, else the `mode` setting (D-251); status `idle` when the tail is a final answer,
 else `interrupted`) with home `envir`; a rebuilt **fork** always gets a fresh `new.env(parent = envir)` overlay
 (IC-46). A file from another machine or tracked by git is rebuilt with a freshly frozen prompt and its user turns
 marked `imported` (IC-52). A detached copy follows the split-brain rules of §5.1 of `03` (`gptr_error_split_brain`).

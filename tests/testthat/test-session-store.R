@@ -974,6 +974,36 @@ test_that("a rebuilt session takes its mode, model and frozen prompt from its ac
   expect_identical(r$status, "interrupted")
 })
 
+# sessions-22 (D-251): the gptr.frozen entry records the mode the session started with, so a
+# rebuild keeps it whatever the resuming process's `mode` setting says
+test_that("a rebuilt session keeps the mode it ran with", {
+  skip_on_cran()
+  local_gw()
+  path = function(s) entries_path(session_data(s))
+  s = peter("hi", model = local_fake_provider(list("ok")), mode = "plan", envir = new.env())
+  gptr_config(mode = "auto", .scope = "session")
+  expect_identical(session_data(s)$entries[[1L]]$data[["mode"]], "plan")
+  expect_identical(rebuild_mode(path(s)), "plan")
+  session_set_mode(s, "edits")
+  expect_identical(rebuild_mode(path(s)), "edits")
+  a = peter("hi", model = local_fake_provider(list("ok")), mode = "auto", envir = new.env())
+  gptr_config(mode = "manual", .scope = "session")
+  expect_identical(rebuild_mode(path(a)), "auto")
+  # rebuilt from its file in this process: a plan session never takes a looser setting
+  p = peter("hi", model = local_fake_provider(list("ok")), mode = "plan", envir = new.env())
+  file = p$file
+  gptr_config(mode = "auto", .scope = "session")
+  other = test_session()
+  rm(s, a, p)
+  invisible(gc())
+  expect_identical(gptr_resume(file, envir = new.env())$mode, "plan")
+  # a file whose gptr.frozen records no mode (the 1.0.0 shape) takes the setting, as before; a
+  # recorded mode that is not one is skipped
+  old = list(entry_custom("gptr.frozen", list(preset = "standard", model = "fake/fake-1")),
+             entry_custom("gptr.mode_change", list(from = "plan", to = "bogus", source = "user")))
+  expect_identical(rebuild_mode(old), "auto")
+})
+
 # FIX-3 (the open item of D-069): P07's gptr.frozen entry also records the audience the prompt
 # was frozen for (`human`) and, when IC-71's floor check cut them, the re-injection budgets
 # (`reinject`). A session rebuilt from its file, a fork of it and that fork rebuilt from its own

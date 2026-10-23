@@ -795,11 +795,12 @@ prompt_reinject_read = function(r) {
   list(project = as.numeric(r$project), skills = as.numeric(r$skills))
 }
 
-#' The gptr.frozen custom entry (contract section 4.6)
+#' The gptr.frozen custom entry (contract section 4.6), with `mode`, the session's mode when the
+#' prompt froze, which a rebuild starts from (D-251)
 #' Extra keys (readers ignore them, contract 11): `human`, the frozen audience, and `reinject`,
 #' only when the floor check cut the budgets (IC-71).
 #' @noRd
-prompt_frozen_entry = function(frozen) {
+prompt_frozen_entry = function(frozen, mode) {
   secs = frozen$sections
   data = list(preset = frozen$preset, t0 = frozen$t0, t1 = frozen$t1,
               toolsJson = frozen$tools_json, toolNames = I(frozen$tool_names),
@@ -807,7 +808,7 @@ prompt_frozen_entry = function(frozen) {
                 list(name = secs$name[i], tier = secs$tier[i], hash = secs$hash[i],
                      tokens = secs$tokens[i])
               }),
-              model = frozen$model, human = frozen$human)
+              model = frozen$model, mode = mode, human = frozen$human)
   cut = prompt_reinject_read(frozen$reinject)
   if (!is.null(cut)) data$reinject = cut
   list(type = "custom", custom_type = "gptr.frozen", data = data)
@@ -899,7 +900,7 @@ prompt_freeze = function(s, opts = list()) {
   skills = if (is.null(registry_get("context_block", "skill_content", session = d$id))) 0 else 10000
   frozen = prompt_floor_check(frozen, proj_tokens, skills)
   d$frozen = frozen
-  session_append(s, prompt_frozen_entry(frozen))
+  session_append(s, prompt_frozen_entry(frozen, d$mode))
   invisible(frozen)
 }
 

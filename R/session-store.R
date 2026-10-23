@@ -477,12 +477,19 @@ rebuild_model = function(entries) {
   model
 }
 
-#' The mode of a rebuilt session: the last gptr.mode_change of the given entries (the active
-#' path), else the `mode` setting
+#' The mode of a rebuilt session: the last mode the given entries (the active path) record, the
+#' `mode` of a gptr.frozen entry or the `to` of a gptr.mode_change, else (a file written before
+#' gptr.frozen recorded it) the `mode` setting (D-251)
 #' @noRd
 rebuild_mode = function(entries) {
-  e = path_custom(entries, "gptr.mode_change")
-  if (is.null(e)) setting_get("mode", default = "manual") else e$data$to
+  mode = NULL
+  for (e in entries) {
+    if (!identical(e$type, "custom") || !is.list(e$data)) next
+    m = if (identical(e$custom_type, "gptr.frozen")) e$data[["mode"]]
+    if (identical(e$custom_type, "gptr.mode_change")) m = e$data[["to"]]
+    if (rlang::is_string(m) && m %in% session_modes) mode = m
+  }
+  mode %||% setting_get("mode", default = "manual")
 }
 
 #' `idle` when the path ends with a final answer, else `interrupted`
@@ -760,8 +767,9 @@ file_chunk_lines = function(path, from_end = FALSE, n = 65536) {
 
 #' @description
 #' `gptr_resume()` returns the live object when one exists in this process; otherwise it rebuilds
-#' the session from its JSONL file (leaf = the last entry; status `idle` when the tail is a final
-#' answer, else `interrupted`) with home `envir`. A rebuilt fork always gets a fresh overlay of
+#' the session from its JSONL file (leaf = the last entry; the mode it last ran with, or the `mode`
+#' setting for a file that records none; status `idle` when the tail is a final answer, else
+#' `interrupted`) with home `envir`. A rebuilt fork always gets a fresh overlay of
 #' `envir`. A detached copy (from `saveRDS()`, a knitr cache or callr) is attached under the
 #' split-brain rules. `block =` returns the session that a document replay bound to that block.
 #' Resuming restores conversation state, not a complete analysis workspace, and does not

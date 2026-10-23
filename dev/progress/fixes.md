@@ -2276,3 +2276,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Open: an `[a]lways` answer to such a question stores `sh` (`perm_on_remember()` recomputes from tool `sh`), an
   allow rule for every nested `sh` call the level gate asks about, not the shown `r(sh:rm -rf*)` (as for any
   nested question before; P11's code).
+
+### sessions-22 - Keep a resumed session's mode
+- Red: FAIL 5 in `^session-store$` (PASS 274; findings 148, 153): `peter(mode = "plan")`'s `gptr.frozen` held no
+  mode, and its path rebuilt as `auto` under an `auto` setting; an `auto` session as `manual` under `manual`;
+  `gptr_resume()` of the plan session's file came back `auto`; a stored `mode_change` to `"bogus"` was taken.
+- Cause: nothing recorded a session's starting mode (not the header, not `gptr.frozen`, no `gptr.mode_change` at
+  creation); `rebuild_mode()` took the last `gptr.mode_change`, else the resuming process's `mode` setting.
+  `path_fields()` (replay cut) used the same function.
+- Fix: `prompt_frozen_entry(frozen, mode)` and `freeze_fallback()` write `mode = d$mode` into `gptr.frozen`;
+  `rebuild_mode()` walks the active path in order and keeps the last `gptr.frozen` `mode` or `gptr.mode_change`
+  `to` that is one of `session_modes` (read with `[[`: `data$mode` partially matches `model`), else the setting.
+- Green: `^session-store$` PASS 279; `^(session-|agent-run|prompt-|ckpt-rewind|gptr-gateway|console-commands|
+  doc-replay|subagent-)` PASS 5457 SKIP 1. Two `Rscript` processes on one `.gptr/` project (fake provider): a
+  `plan` session resumed under `gptr_config(mode = "auto")` reports `plan`. Full suite (NOT_CRAN=true) FAIL 0 PASS
+  35482 SKIP 64. Lint and check-plans clean.
+- Deviations: D-251 (extended); 04 §4.6 `gptr.frozen` row and §6.5 `gptr_resume()` amended; `?gptr_sessions`.
+  From the plan: the in-process rebuild from the file is the test (no callr test); the 1.0.0 user message's `mode`
+  context block is not read, so such files keep the setting fallback.
+- Open: the second half of 148 is designed (without `.gptr/` the store is `tempdir()`); the `/resume` row says so
+  with the sheet (entry S12). Whether an imported (foreign) file may restore `yolo` (possible through
+  `gptr.mode_change` before). A fork cut before a later mode change of its source runs in the source's mode
+  (`edits`), but its file records the mode at the cut (`plan`), which its own rebuild reads (measured).

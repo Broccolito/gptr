@@ -387,7 +387,7 @@ freeze_fallback = function(s) {
                                  list(preset = d$preset, t0 = "", t1 = "",
                                       toolsJson = fr$tools_json,
                                       toolNames = I(fr$tool_names), sections = list(),
-                                      model = d$model)))
+                                      model = d$model, mode = d$mode)))
   invisible(fr)
 }
 
