@@ -460,6 +460,21 @@ test_that("session_value_get(turn =) returns the value of that turn or NULL", {
   expect_null(session_value_get(s, turn = 7L))
 })
 
+test_that("$value keeps the newest returned value through a turn that returns nothing", {
+  local_project()
+  local_fake_provider(list(fake_tool("r", code = "gptr_return(1)"), "one",
+                           fake_tool("r", code = "gptr_return(2)"), "two", "ok",
+                           fake_tool("r", code = "gptr_return(NULL)"), "cleared"))
+  s = peter("a", model = "fake/fake-1", mode = "auto", envir = new.env())
+  s |> peter("b")
+  s |> peter("c")
+  expect_identical(s$value, 2)
+  expect_identical(s$turns, 3L)
+  expect_identical(s$text, "ok")
+  s |> peter("d")
+  expect_null(s$value)
+})
+
 # ---------------------------------------------------------------- verbs
 
 test_that("session_set_model() appends model_change and emits model_select", {

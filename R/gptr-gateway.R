@@ -48,9 +48,9 @@
 #'
 #' @section Sessions and results:
 #' A pipe such as `session |> peter("Explain the result.")` adds work to the same session
-#' and kept workspace. Use [gptr_fork()] to branch explicitly. The final answer is
-#' `session$text`; `session$value` is the R value selected by [gptr_return()] during a tool
-#' call. Agent-created objects remain in `envir`.
+#' and kept workspace. Use [gptr_fork()] to branch explicitly. The last turn's answer is
+#' `session$text`; `session$value` is the newest R value selected by [gptr_return()] in any turn,
+#' so a turn that selects none keeps it. Agent-created objects remain in `envir`.
 #'
 #' @usage
 #' peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,

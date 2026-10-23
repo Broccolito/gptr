@@ -2289,3 +2289,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^(gptr-sdk|arch-layers|lint-rules)$` PASS 188 (NOT_CRAN=true). Lint clean; Rd
   regenerated; plan checks pass.
 - Deviations: none. Open: the notice goes to stdout, like every `gptr_inform()` display.
+
+### sessions-26 - Say that s$value keeps the newest returned value
+- Finding 164 (moved from the sessions group: it edits `?gptr_return` after replay-2 and replay-4).
+- Red: none (docs). The new session-level test passes on main: a fake session whose turns run
+  `gptr_return(1)`, `gptr_return(2)` and nothing reads `$value` 2, `$turns` 3, `$text` "ok"; a
+  fourth turn running `gptr_return(NULL)` reads NULL.
+- Cause: `session_value_get()` returns the newest designated value of any turn, by design (G3, the
+  existing "latest designated value" test), which a pipe such as `s |> peter("Explain the
+  result.")` relies on; `?gptr_return` and `?peter` called it the run's result.
+- Fix: `?gptr_return` says `$value` is the newest value designated in any turn, kept by a turn that
+  designates none (`$values` by turn; `gptr_return(NULL)` clears it); `?peter`'s "Sessions and
+  results" says the same, and that `$text` is the last turn's answer.
+- Green: `^(session-object|gptr-sdk|gptr-gateway|arch-layers|lint-rules)$` PASS 1078
+  (NOT_CRAN=true). Lint clean; Rd regenerated.
+- Deviations: none. Open: the sheet's S06 and S09 lines follow in the sheet commit.
