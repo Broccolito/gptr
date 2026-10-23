@@ -299,7 +299,8 @@ edit_route_document = function(path, edits, session = NULL) {
 ns_routed_patch = function(path, res) {
   if (inherits(res$value, "gptr_patch")) return(res$value)
   d = res$details %||% list()
-  new_gptr_patch(path, format(res), d$diff %||% character(), d$n_edits %||% 1L, d$fuzzy)
+  new_gptr_patch(path, format(res), d$diff %||% character(), d$n_edits %||% 1L, d$fuzzy,
+                 d$reasons %||% character())
 }
 
 #' `peter$edit(path, edits, replace_all = FALSE)`: a `gptr_patch`; an edit the document backend
@@ -314,7 +315,7 @@ member_edit = function(path, edits, replace_all = FALSE) {
     return(ns_routed_patch(path, routed))
   }
   ed = edit_file(path, edits, replace_all = replace_all)
-  new_gptr_patch(path, ed$message, ed$diff, ed$details$n_edits, ed$fuzzy)
+  new_gptr_patch(path, ed$message, ed$diff, ed$details$n_edits, ed$fuzzy, ed$details$reasons)
 }
 
 #' Behaviour of built-in members: `write` and `plot` return invisibly
@@ -1248,7 +1249,8 @@ tool_edit_execute = function(input, ctx) {
     return(routed)
   }
   ed = edit_file(input$path, edits, replace_all = isTRUE(input$replace_all %||% input$replaceAll))
-  value = new_gptr_patch(input$path, ed$message, ed$diff, ed$details$n_edits, ed$fuzzy)
+  value = new_gptr_patch(input$path, ed$message, ed$diff, ed$details$n_edits, ed$fuzzy,
+                         ed$details$reasons)
   gptr_tool_result(edit_result_text(ed), details = ed$details, value = value)
 }
 

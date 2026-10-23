@@ -3140,10 +3140,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `list(old =, new =)` said "oldText must not be empty" and an edit without newText deleted text.
 - Rule: `peter$help()` lists a member's schema arguments when they are among its formals (was:
   equal to them), with an array's item fields, so `edit` and `find` now show theirs.
+- Rule: a fuzzy edit changes only its matched span. `edit_splice_fuzzy()` maps each span boundary
+  back to the original bytes (`fuzzy_offsets()`: per-character normalisation) and splices newText
+  there, so the rest of a touched line keeps its bytes (curly quotes, ligatures, U+00B5, special
+  spaces, trailing spaces after the match). Pi rewrites the touched lines from the fuzzy view; that
+  stays as the fallback when a boundary cannot be mapped (a combining sequence on its line, or a
+  boundary inside a ligature), and then the reasons add "the touched lines were rewritten in
+  normalised form". A `gptr_patch` keeps the reasons (`reasons`, chr) and prints them bracketed
+  between the message and the diff when fuzzy, as the model reads them.
 - Contract-visible: 04 §4.4 call record (`tool` NULL when not offered), §7.6 `dispatch_tools()`,
-  §9.3 suffix order.
+  §9.3 suffix order, §5.10 `gptr_patch` (`reasons`, print), §7.10 `edit_file()` (fuzzy splice).
 - Tests: test-agent-dispatch.R "the offered tools (D-248)" (3 blocks) and the frozen-schema block;
   test-bridge-lang.R, test-bridge-sh.R through-run refusals; test-prompt-context.R mode suffixes;
   test-tool-edit.R "edit errors number edits from 1", "an edit without oldText or newText";
-  test-tool-namespace.R `peter$help("edit")`. Evidence: progress/fixes.md Task FIX-15 tools-1,
-  tools-5, tools-6, tools-7.
+  test-tool-namespace.R `peter$help("edit")`; test-tool-edit.R "a fuzzy match changes only its
+  span" and "gptr_patch prints the message". Evidence: progress/fixes.md Task FIX-15 tools-1,
+  tools-5, tools-6, tools-7, tools-8.

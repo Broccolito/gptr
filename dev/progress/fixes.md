@@ -1980,3 +1980,26 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   skill-.*|bridge-lang|bridge-sh)$` PASS 2968 SKIP 8; `^(console-commands|northstar)$` PASS 175.
   Lint clean; Rd unchanged.
 - Deviations: D-248. Open: none.
+
+### tools-8 - A fuzzy peter$edit changes only what it matched, and says why it was not exact
+- Red: FAIL 6 in `tool-edit` (PASS 188): `1 - 2` -> `1 to 2` against an en dash also straightened
+  a curly apostrophe later on the line, unfolded the fi ligature, turned U+00B5 into U+03BC and NBSP
+  into a space and dropped the trailing spaces; a printed fuzzy `gptr_patch` showed no reasons
+  line (finding 1).
+- Cause: `edit_splice_fuzzy()` (Pi's applyReplacementsPreservingUnchangedLines()) rebuilt each
+  touched line group from the fuzzy view; `new_gptr_patch()` dropped `edit_reasons()`, which only
+  the model saw.
+- Fix: the splice landed (sheet entry S31 takes the "changes only the matched text" wording).
+  `fuzzy_offsets()` maps a fuzzy-view offset back to the original line by per-character
+  normalisation (`fuzzy_normalize_lines(strip = FALSE)`), and newText (file line ending) is spliced
+  into the original bytes. When a boundary cannot be mapped (a combining sequence on its line, a
+  boundary inside a ligature) the old line rewrite runs and the reasons add "the touched lines
+  were rewritten in normalised form". `gptr_patch` gains `reasons` (all three call sites) and
+  prints them bracketed between the message and the diff when fuzzy. Vignette sentence corrected
+  in .Rmd and .Rmd.orig; Pi's not-found wording stays.
+- Green: `tool-edit` PASS 194; `^(tool-edit|tool-namespace|tool-r|doc-replay|doc-formats|
+  doc-blocks|utils-paths|json-schema)$` PASS 2129 SKIP 1; every existing fuzzy expectation (tws.txt
+  included: covered trailing spaces go) unchanged. 20,000 fuzzy matches with replace_all: 1.8 s
+  (was 2.7 s). Lint clean; Rd unchanged.
+- Deviations: D-248 (04 §5.10, §7.10). Open: the combining/ligature fallback still rewrites lines
+  (said in the reasons); a non-fuzzy deviation (CRLF, re-encoding) still prints only the message.

@@ -71,9 +71,11 @@ peter$ls(path = ".", sort = c("name", "mtime", "size"), long = FALSE)
 ```
 
 `read()` returns numbered lines and can attach supported images to a model's running `r` result.
-`write()` replaces a file and returns its path invisibly. `edit()` accepts a list of exact text
-replacements (`oldText`, `newText`) or a supported patch envelope. Review a write or edit before
-executing it. For example:
+`write()` replaces a file and returns its path invisibly. `edit()` takes a list of replacements
+(`oldText`, `newText`) or a supported patch envelope. It replaces exact text first; when an
+`oldText` has no exact match, it falls back to a match that ignores trailing spaces and quote, dash
+and special-space variants, still changes only the matched text, and its printed result says so
+and shows the diff. Review a write or edit before executing it. For example:
 
 ```{r, eval = FALSE}
 peter$read("analysis.R", offset = 1L, limit = 40L)

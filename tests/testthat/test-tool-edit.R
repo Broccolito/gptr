@@ -107,6 +107,28 @@ test_that("the fuzzy fallback normalises whitespace, quotes, dashes and special 
   expect_identical(rd(f), "after\nafter   \n")
 })
 
+test_that("a fuzzy match changes only its span; the rest of its lines keeps its bytes (D-248)", {
+  skip_on_cran()
+  td = withr::local_tempdir()
+  line = "lab = \"1 \u2013 2\"  # it\u2019s \ufb01rst, 5\u00a0\u00b5g   "
+  f = put_file(td, "collat.R", paste0(line, "\nother\n"))
+  ed = edit_file(f, e1("1 - 2", "1 to 2"))
+  expect_true(ed$fuzzy)
+  expect_identical(rd(f), paste0(sub("1 \u2013 2", "1 to 2", line, fixed = TRUE), "\nother\n"))
+  expect_identical(ed$details$reasons, "matched after whitespace, quote or dash normalisation")
+  f = put_file(td, "tail.R", "x = \u201chello\u201d   \r\ny = 1\r\n")
+  edit_file(f, e1("x = \"hello\"", "x = \"bye\"\n# was hello"))
+  expect_identical(rd(f), "x = \"bye\"\r\n# was hello   \r\ny = 1\r\n")
+  # A boundary inside a ligature cannot be mapped back: the touched lines are rewritten, and said so
+  skip_if_not_installed("stringi")
+  f = put_file(td, "lig.R", "# \ufb01rst \u2018a\u2019\nkeep \u2018b\u2019\n")
+  ed = edit_file(f, e1("irst 'a'", "irst 'c'"))
+  expect_identical(rd(f), "# first 'c'\nkeep \u2018b\u2019\n")
+  why = paste("[matched after whitespace, quote or dash normalisation;",
+              "the touched lines were rewritten in normalised form]")
+  expect_match(edit_result_text(ed), why, fixed = TRUE)
+})
+
 test_that("NFKC compatibility forms match through stringi", {
   skip_if_not_installed("stringi")
   td = withr::local_tempdir()
@@ -273,6 +295,18 @@ test_that("gptr_patch prints the message, and the diff only when fuzzy", {
   p$fuzzy = TRUE
   expect_identical(utils::capture.output(print(p)), c("Successfully replaced 1 block(s) in a.R.",
                                                       "@@ -1 +1 @@", "-a", "+b"))
+  # The user is told why a match was not exact, as the model is (D-248)
+  skip_on_cran()
+  td = withr::local_tempdir()
+  f = put_file(td, "q.R", "x = \u2018a\u2019\nz = \u2018a\u2019\ny = 1\n")
+  p = member_edit(f, e1("x = 'a'", "x = 'b'"))
+  why = "[matched after whitespace, quote or dash normalisation]"
+  expect_identical(utils::capture.output(print(p)), c(p$message, why, p$diff))
+  expect_identical(p$reasons, "matched after whitespace, quote or dash normalisation")
+  v = tool_edit_execute(list(path = f, edits = e1("z = 'a'", "z = 'c'")), NULL)$value
+  expect_identical(utils::capture.output(print(v)), c(v$message, why, v$diff))
+  p = member_edit(f, e1("y = 1", "y = 2"))
+  expect_identical(utils::capture.output(print(p)), p$message)
 })
 
 # Added by the implementation (D-053): defects of the plan-literal source found by probing
