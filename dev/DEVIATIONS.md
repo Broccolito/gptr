@@ -3157,10 +3157,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   wrapper's is "Nothing ran and nobody declined; repeat the call when the session continues." Formerly the run
   resumed on the stale "Permission denied ... Explain what you need or choose another approach." and GPT ended
   without asking in 7 of 8 runs.
+- Rule (gate-hint): the `how_to_allow` (and message) of a call nobody can approve starts `Mode "<m>" comes from
+  <where>.` while the run keeps the mode the gateway recorded in a top-level call's `opts$mode_from`: "this call's
+  mode argument", "the session this call continues", or the `settings_layered("mode")` layer holding it ("the
+  package default", "your user settings", ".gptr/settings.json", "options(gptr.mode)", "this R session's
+  settings"); while knitting it ends "... or a permission rule (gptr_permissions()); knitting cannot ask." in place
+  of ", or run interactively.". The `ask_human` text and `gateway_signal()`'s fallback are unchanged. Formerly the
+  hint named no layer (a `gptr_init()` project's `manual` overrode a user `auto` unseen) and told a knitting user to
+  run interactively. The gateway records the origin because `perm_ask()` (L2) may not call `settings_layered()` (L6).
 - Contract-visible: 03 §4.3 (fork), §5.1 (resume status), §6.2 (background asks), §6.12 (also the guard), §6.18 and
   §7.5 `<workspace>`; 04 §4.6 (`gptr.container_end`), `gptr_fork(envir)`, `gptr_resume()`, §6.1.2 and
-  `gptr_parallel()` (team-1), §7.9 `env_view_snapshot()` and `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7,
-  IC-57; `?gptr-background`.
+  `gptr_parallel()` (team-1), §7.6 `opts$mode_from` and `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and
+  `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7, IC-57; `?gptr-background`.
 - Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
   and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame);
   session-object "a fork's change report names the source objects its code changed in place"; eval-guard "q bound
@@ -3168,4 +3176,5 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   takes a failed member's status ...", injection-e2e "a worker's forwarded permission request ..."; session-store
   "a settled team or fan-out lists and resumes idle ..."; agent-background "a resumed session is told the user can
   now approve the call", "... whose ask tool was blocked is told to ask again"; console-ui "a denial keeps the
-  UI's how ...". Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1.
+  UI's how ..."; agent-dispatch "a blocked call's hint names where its mode came from". Evidence: progress/fixes.md
+  Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1, gate-hint.

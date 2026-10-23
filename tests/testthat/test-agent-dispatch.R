@@ -853,3 +853,35 @@ test_that("with no policy a mutating tool asks and the run ends blocked without 
   expect_s3_class(cnd, "gptr_error_permission")
   expect_identical(s$reason, conditionMessage(cnd))
 })
+
+test_that("a blocked call's hint names where its mode came from (finding 16)", {
+  local_gw()
+  local_gptr_options(interactive = FALSE, record = "off")
+  hint = function(...) {
+    fake = gptr_fake_provider(list(fake_tool("r", code = "z = 3"), "never"))
+    cnd = expect_error(peter("go", model = fake, envir = new.env(), ...),
+                       class = "gptr_error_permission")
+    expect_match(conditionMessage(cnd), cnd$how_to_allow, fixed = TRUE)
+    cnd
+  }
+  gptr_config(mode = "manual", .scope = "session")
+  expect_match(hint()$how_to_allow, "Mode \"manual\" comes from this R session's settings. ",
+               fixed = TRUE)
+  gptr_config(mode = NULL, .scope = "session")
+  gptr_config(mode = "auto", .scope = "user")
+  gptr_config(mode = "manual", .scope = "project")
+  expect_match(hint()$how_to_allow, "Mode \"manual\" comes from .gptr/settings.json. ",
+               fixed = TRUE)
+  cnd = hint(mode = "manual")
+  expect_match(cnd$how_to_allow, "Mode \"manual\" comes from this call's mode argument. ",
+               fixed = TRUE)
+  fake = gptr_fake_provider(list(fake_tool("r", code = "z = 4"), "never"))
+  cnd = expect_error(cnd$session |> peter("again", model = fake), class = "gptr_error_permission")
+  expect_match(cnd$how_to_allow, "Mode \"manual\" comes from the session this call continues.",
+               fixed = TRUE)
+  expect_match(cnd$how_to_allow, "or run interactively.", fixed = TRUE)
+  withr::local_options(knitr.in.progress = TRUE)
+  how = hint()$how_to_allow
+  expect_false(grepl("run interactively", how, fixed = TRUE))
+  expect_match(how, "knitting cannot ask", fixed = TRUE)
+})

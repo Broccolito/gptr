@@ -2053,3 +2053,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   "cannot continue" test now fails `run_start()` with a mock: a queued note gives its finished
   session something to run. Open: P28's sessions-16 also edits `perm_ask()` and `bg_ui_spec()`
   (the second merge keeps both); no notice backs up a model that still does not repeat the call.
+
+### gate-hint - A blocked call's hint names where its mode came from, and knitting is not sent to the console
+- Finding 16, item 4 (doc-4 holds the id). Red: `^agent-dispatch$` FAIL 6 PASS 229: a manual-mode `r` call
+  under `gptr.interactive = FALSE` raised `gptr_error_permission` whose `how_to_allow` was always "Allow it with
+  mode = "auto", a permission rule (gptr_permissions()), or run interactively.", naming no layer, the same
+  with the mode set at session scope, by a project file over a user `auto`, by the call or by the session it
+  continued, and with `knitr.in.progress = TRUE`.
+- Cause: `perm_ask()` built a fixed sentence; it never looked at the run's mode or its origin, nor at
+  `is_knitting()`, under which `gptr_can_prompt()` is FALSE even at a console.
+- Fix: `gateway_run_opts()` records a top-level call's `mode_from = list(mode, from)`
+  (`gateway_mode_from()`: the call's `mode =`, the continued session, else the `settings_layered("mode")`
+  layer when it holds that mode); `perm_blocked_how()` starts the hint `Mode "manual" comes from
+  .gptr/settings.json.` while the run keeps that mode, and while knitting ends "... or a permission rule
+  (gptr_permissions()); knitting cannot ask." The `ask_human` text and `gateway_signal()` are unchanged.
+  04 §7.6 (run options) and the `perm_check()` row amended.
+- Green: `^agent-dispatch$` PASS 235; with gptr-gateway, gptr-config, gptr-sdk, perm-gate, doc-replay,
+  mcp-server, northstar, agent-run, agent-background, subagent-team, injection-e2e, arch-layers, lint-rules
+  PASS 3704; full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35374. Lint clean; plan checks pass; Rd unchanged.
+- Deviations: D-252 (extended). The plan's `settings_layered()` call in `perm_ask()` would cross layers
+  (L2 to L6), so the gateway records the origin; a nested call's origin is not named (its run may have
+  tightened the mode); a continued session names itself, not a settings layer it no longer follows.
+  Open: none.

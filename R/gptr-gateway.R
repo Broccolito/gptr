@@ -812,8 +812,29 @@ gateway_run_opts = function(call, s, cur) {
                agent = if (is.null(cur)) "main" else "nested",
                background = isTRUE(call$args$background), preset = gateway_preset(call),
                tools = gateway_tool_mods(call$ids$tools), call = call,
-               root = if (is.null(cur)) d$id else (cur$opts$root %||% cur$session))
+               root = if (is.null(cur)) d$id else (cur$opts$root %||% cur$session),
+               mode_from = if (is.null(cur)) gateway_mode_from(call, d$mode))
   ropts[!vapply(ropts, is.null, NA)]
+}
+
+#' Where a top-level call's mode comes from, for the hint of a call nobody can approve
+#' (perm_ask()): `list(mode, from)` naming the call's `mode =`, the session it continues or the
+#' settings layer that holds the mode
+#' @noRd
+gateway_mode_from = function(call, mode) {
+  from = if (isTRUE(call$args$mode_given)) {
+    "this call's mode argument"
+  } else if (!is.null(call$session)) {
+    "the session this call continues"
+  } else {
+    st = settings_layered("mode")
+    if (identical(st$value, mode)) {
+      c(default = "the package default", user = "your user settings",
+        project = ".gptr/settings.json", option = "options(gptr.mode)",
+        session = "this R session's settings")[[st$source]]
+    }
+  }
+  if (!is.null(from)) list(mode = mode, from = from)
 }
 
 #' The protected safety record of a root run (IC-53 item 2; IC-74, 07 section 5): the option
