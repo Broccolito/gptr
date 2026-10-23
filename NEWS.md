@@ -175,6 +175,11 @@ works on the objects already in memory.
   saves a value that is silently ignored; an untrusted project still only tightens the mode, and
   `context` and `record` still only tighten in any project. A project cannot select `yolo`:
   `gptr_config(mode = yolo)` at project scope is refused, naming `.scope = "user"` and `"session"`.
+* Providers declared with `api = "bedrock-converse"` send thinking levels (`.opts = list(thinking =)`
+  or a `:high` suffix) to Claude models, as `api = "anthropic-messages"` does; formerly every level
+  was dropped without a word. Declare `capabilities = list(adaptive_thinking = TRUE, effort = TRUE)`
+  on Claude 4.6 and later models (see `?gptr_provider`); without it a token budget is sent, which
+  Claude Opus 4.8 refuses. Other Converse models say once that the level is not sent.
 
 # gptr 0.7.0
 

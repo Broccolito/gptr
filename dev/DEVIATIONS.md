@@ -2413,6 +2413,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: provider-bedrock (new), live-bedrock (opt-in), arch-layers (122 files), auth-secrets (the key id is a
   secret name); `setup.R` clears the key-pair variables; the scripted wire of `replay_helpers.R` takes raw
   bodies; `fixtures/sse/bedrock-converse/` (tool_use, throttled). Evidence: progress/P26.md Task 11.
+- Amended by D-250 (thinking-1): Claude models get thinking fields in `additionalModelRequestFields`.
 
 ## D-200 - P26 CLI usage is the increase of the CLIs' running totals (2026-10-18)
 - Rule: claude-cli's `total_cost_usd` is the CLI session's running total, also after `--resume` (seurat-claude: each
@@ -3176,13 +3177,23 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   settings still only tighten, because a project `record = "auto"` would be write consent, which IC-45 (req-7)
   reserves to the person, and `context` bounds what reaches providers. Projects made earlier keep their file;
   NEWS says to delete the two keys.
+- Rule (thinking-1): `bedrock_build()` sends a Claude model (id containing `anthropic.claude`) the fields of
+  `anthropic_thinking()` in `additionalModelRequestFields` (`thinking`, `output_config.effort`, `anthropic_beta`);
+  adaptive or budget follows the record's declared capabilities, as on anthropic-messages, never the id.
+  `anthropic_thinking()` now holds the budget clamp both adapters use (1024 <= budget_tokens < max_tokens <=
+  max_output, else no thinking) and returns `max_tokens`. Another Converse model's level other than `off` gives a
+  `notice` once per model. Formerly every level, `:max` and `off` sent the same body (D-193 cut thinking out).
+  Measured on the Versa gateway: Opus 4.8 declared adaptive and Sonnet 4.6 on a budget return signed thinking;
+  Opus 4.8 declared without the capability and given a level gets the provider's HTTP 400 for `enabled` (no id
+  inference, by plan); with no level its body is unchanged.
 - Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
   model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal); 07
   §2.1 and the 04 `model_prepare()` row (P06 prepares); the 04 `model_resolve()` row (the empty-route hint); 04
   §7.0 (`prices.table`) and §10.2 rows 1 and 3 (`prices`), `?gptr_provider`; 04 `gptr_config()` and §2.2
   warnings (`untrusted_setting`, `unknown_model_setting`); 04 `gptr_config()` project scope, §10.2 row
   24, §11.2 text and `mode` row, §11.16, §15 IC-53 item 1 and IC-78, 03 §5.9, §6.8.1 and §6.8.2,
-  `?gptr_config` and the configuration vignette (a trusted project's `mode`; the template).
+  `?gptr_config` and the configuration vignette (a trusted project's `mode`; the template); 04 §15 IC-80
+  (thinking) and `?gptr_provider`'s bedrock-converse example (`reasoning`, `capabilities`).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
   match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
@@ -3194,4 +3205,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   project will not apply what it saved (D-250)", "gptr_config() warns when a saved model setting names no known
   model (D-250)", "a trusted project sets mode; context, record and untrusted modes only tighten (D-250)",
   "gptr_config(mode = ) in a trusted project applies there; yolo is refused (D-250)", "a gptr_init() project
-  leaves mode and record to the user's settings (D-250)". Evidence: progress/fixes.md Task FIX-17.
+  leaves mode and record to the user's settings (D-250)"; test-provider-bedrock.R "a Claude model gets the
+  thinking level in additionalModelRequestFields (D-250)"; test-live-bedrock.R (opt-in) "thinking = 'high' on
+  an adaptive Claude model is signed". Evidence: progress/fixes.md Task FIX-17.

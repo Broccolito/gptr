@@ -2122,3 +2122,24 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `providers`; the value was dropped silently. Open: the blocked-run hint (item 4) is orchestration's gate-hint;
   projects made earlier keep their pinned file (NEWS says to delete the two keys); a project `record = "auto"` or
   a looser `context` is still saved without a word in a trusted project.
+
+### thinking-1 - bedrock-converse sends the thinking level to Claude models
+- Findings 40, 79 and 88. Red: `^provider-bedrock$` FAIL 3, PASS 152: with `thinking = "high"`, an adaptive and a
+  budget Claude record got no `additionalModelRequestFields`.
+- Cause: `bedrock_build()` read only `params$max_tokens` and `temperature`, though `prompt_request_context()` puts
+  the level in `params$thinking`; D-193 cut the request side, so every level, `:max` and `off` sent one body and
+  nothing said so, while the normaliser already decoded and replayed signed reasoning.
+- Fix: `bedrock_thinking()` gives a Claude id (`anthropic.claude`) the fields of `anthropic_thinking()` in
+  `additionalModelRequestFields`; `anthropic_thinking()` now holds the budget clamp (moved from `anthropic_build()`)
+  and returns `max_tokens`, which a budget sets as `inferenceConfig.maxTokens`. Another model's level gives a
+  `notice` once per model. `?gptr_provider`'s example declares `reasoning` and the adaptive capabilities; IC-80
+  amended; NEWS entry.
+- Green: `^provider-bedrock$` PASS 163; provider-anthropic, ext-specs, live-bedrock and lint-rules PASS 1096
+  (SKIP 2, live); full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 65, PASS 35413. Live on the Versa gateway:
+  `^live-bedrock$` PASS 6 (Opus 4.8 declared adaptive returns signed thinking at `high`); Sonnet 4.6 on a budget
+  with `anthropic_beta` returns signed thinking. Lint clean; `man/gptr_provider.Rd` regenerated.
+- Deviations: D-250 (thinking-1 rule), pointer under D-193. Beyond the plan: test-live-bedrock.R registers its
+  endpoint through one local helper for both live tests. Open: an Opus 4.8 record declared without
+  `capabilities` and given a level now gets the provider's HTTP 400 ("Use thinking.type.adaptive ...") instead
+  of a silent no-op (the plan rules out id inference; no gptr hint added); `:max` still clamps to `high` on a
+  record without `thinking_levels` (thinking-4); `usage$reasoning` stays 0 on Converse.

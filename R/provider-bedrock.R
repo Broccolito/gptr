@@ -389,6 +389,21 @@ bedrock_tools = function(tools) {
   })
 }
 
+#' Anthropic's thinking fields for a Claude model, sent in `additionalModelRequestFields` (the
+#' anthropic-messages rules, D-250); another model's level is not sent, said once per model
+#' @noRd
+bedrock_thinking = function(model, params) {
+  if (grepl("anthropic\\.claude", model$id)) return(anthropic_thinking(model, params))
+  level = params$thinking
+  if (!is.null(level) && !identical(level, "off")) {
+    ref = paste0(model$provider, "/", model$id)
+    gptr_inform(paste0("Thinking level \"", level, "\" is not sent to ", ref, ": api = ",
+                       "\"bedrock-converse\" sends thinking levels to Claude models only."),
+                "notice", .once = paste0("bedrock_thinking:", ref))
+  }
+  list()
+}
+
 #' build() of the bedrock-converse adapter (04 section 8.1; IC-80)
 #' Messages of one role in a row are one Converse message (tool results, operator text, the
 #' `returns` instruction); with a credential the spec carries the SigV4 `sign` for
@@ -400,12 +415,19 @@ bedrock_build = function(model, context, opts) {
   tools = if (adp_tools_on(model, context)) {
     adp_tools_json(opts, "bedrock-converse", context$tools_json, bedrock_tools)
   }
+  th = bedrock_thinking(model, params)
   inference = list()
-  if (!is.null(params$max_tokens)) inference$maxTokens = as.integer(params$max_tokens)
+  max_tokens = if (is.null(th$budget)) params$max_tokens else th$max_tokens
+  if (!is.null(max_tokens)) inference$maxTokens = as.integer(max_tokens)
   if (!is.null(params$temperature) && !isTRUE(model$reasoning)) {
     inference$temperature = params$temperature
   }
   head = if (length(inference)) list(inferenceConfig = inference) else list()
+  fields = list(thinking = th$thinking,
+                output_config = if (!is.null(th$effort)) list(effort = th$effort),
+                anthropic_beta = if (length(th$betas)) as.list(th$betas))
+  fields = Filter(Negate(is.null), fields)
+  if (length(fields)) head$additionalModelRequestFields = fields
 
   extra = character()
   sys = Filter(nzchar, c(context$system$t0 %||% "", context$system$t1 %||% ""))

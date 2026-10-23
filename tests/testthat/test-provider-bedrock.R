@@ -347,6 +347,42 @@ test_that("signed reasoning is replayed only to the model that produced it", {
   expect_identical(body$messages[[2L]]$content, list(list(text = "Done.")))
 })
 
+test_that("a Claude model gets the thinking level in additionalModelRequestFields (D-250)", {
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  body_of = function(model, thinking, max_tokens = 32000L) {
+    params = list(max_tokens = max_tokens, thinking = thinking, temperature = 0.2)
+    ctx = ctx_fixture(list(msg_user("q", timestamp = 1)), params = params)
+    json_decode(bedrock_build(model, ctx, list(base_url = "https://h.test"))$body)
+  }
+  today = c("inferenceConfig", "system", "toolConfig", "messages")
+  opus = test_model(api, id = "us.anthropic.claude-opus-4-8")
+  body = body_of(opus, "high")
+  expect_identical(body$additionalModelRequestFields,
+                   list(thinking = list(type = "adaptive", display = "omitted"),
+                        output_config = list(effort = "high")))
+  expect_identical(body$inferenceConfig, list(maxTokens = 32000L))
+  expect_identical(names(body_of(opus, "off")), today)
+  expect_identical(names(body_of(test_model(api, id = opus$id, reasoning = FALSE), "high")), today)
+  # a budget model: the budget fits below maxTokens, raised up to max_output (07 section 2.6)
+  haiku = test_model(api, id = "anthropic.claude-haiku-4-5", max_output = 64000,
+                     capabilities = list(adaptive_thinking = FALSE, effort = FALSE))
+  body = body_of(haiku, "high", 8192L)
+  extra = body$additionalModelRequestFields
+  expect_identical(extra$thinking$type, "enabled")
+  expect_lt(extra$thinking$budget_tokens, body$inferenceConfig$maxTokens)
+  expect_identical(extra$anthropic_beta, list("interleaved-thinking-2025-05-14"))
+  expect_null(extra$output_config)
+  expect_identical(names(body_of(haiku, NULL)), today)
+  expect_identical(body_of(haiku, "off")$inferenceConfig, list(maxTokens = 32000L))
+  # another Converse model gets no thinking field, and gptr says so once per model
+  nova = test_model(api, id = "amazon.nova-pro-v1:0")
+  withr::local_options(gptr.quiet = FALSE)
+  expect_message(expect_identical(names(body_of(nova, "high")), today), "not sent",
+                 class = "gptr_message_notice")
+  expect_no_message(body_of(nova, "high"))
+  expect_no_message(body_of(nova, "off"))
+})
+
 test_that("`returns =` adds the schema instruction to the last user message", {
   turn = msg_assistant(list(block_tool_call("toolu_1", "read", list(path = "a.R"))),
                        api = api, provider = "fixture", model = "fixture-1")
