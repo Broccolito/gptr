@@ -5667,7 +5667,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     Positron's console (although its ark has a tty stdin; Task 26), radian or R.app, which keep their own. There `repl_main()` sets the reader's `complete`,
     and the reader installs the adapter around its `readline()` (`peter>` and `... ` reads; not `+ `, which
     continues `!` code and keeps R's own completion), restoring the completer it found on exit. Questions, the
-    pause menu and tool `readline()` calls keep the caller's completion. On R's own readline the `!` word break
+    pause menu and tool `readline()` calls keep the caller's completion, except in RStudio's console, which asks
+    also while R is busy, in the evaluation's frames (a line typed during a run is the next prompt), and at
+    questions: `repl_main()` installs the adapter there for the REPL's whole life, the caller's completer kept
+    (the reader's `caller`) for its `+ ` reads (review of Tasks 22-27). On R's own readline the `!` word break
     of D-183 stays, and a caller-owned completer still keeps its words (no `!` break). gptr never writes
     RStudio's preferences; `?peter` names `insert_matching` and `console_code_completion`.
   - The composer (T): Tab on a trigger word calls the same completer (IC-76): the longest common prefix replaces

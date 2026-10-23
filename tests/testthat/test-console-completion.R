@@ -390,6 +390,29 @@ test_that("RStudio's console completes only the triggers; its editor gets R's (I
                    character())
 })
 
+test_that("RStudio's console has the triggers for the REPL's whole life, a run's too (IC-81)", {
+  # RStudio asks while R is busy too, in the evaluation's frames: a line typed during a run is the
+  # next prompt, and its popup or Tab would rewrite natural language there
+  local_completion_console(tty = FALSE, gui = "RStudio")
+  caller = function(env) env$comps = paste0(env$token, "_caller")
+  old = utils::rc.options(custom.completer = caller)
+  withr::defer(utils::rc.options(old))
+  local_mocked_bindings(registry_names = function(kind, session = NULL) {
+    if (kind == "command") c("mode", "model") else character()
+  })
+  seen = new.env(parent = emptyenv())
+  local_completion_repl(function(rs) TRUE)
+  local_mocked_bindings(repl_dispatch = function(rs, line) {
+    seen$run = list(rstudio_complete("check the summ", TRUE), rstudio_complete("/mo", TRUE),
+                    rstudio_complete("x = summ", FALSE))
+    rs$exit = TRUE
+  })
+  expect_null(repl_main(completion_repl_state()))
+  # outside a prompt read: the token alone for none, the triggers, the editor the caller's
+  expect_identical(seen$run, list("summ", c("mode", "model"), "summ_caller"))
+  expect_identical(utils::rc.getOption("custom.completer"), caller)
+})
+
 test_that("the adapter sets fileName first, so a failure completes nothing (IC-81)", {
   .gptr_repl = local_completing_repl()
   ce = utils::getFromNamespace(".CompletionEnv", "utils")
@@ -442,6 +465,14 @@ test_that("the reader completes around its prompt reads, not at + and not unflag
   .gptr_repl = local_completing_repl()
   expect_identical(host_complete("!summ", "summ", seen[["peter> "]]), "caller")
   expect_identical(host_complete("use @mtc", "@mtc", seen[["peter> "]]), "@mtcars_copy")
+  # RStudio: the REPL's own completer is installed for its whole life, the caller's kept
+  lifetime = console_completer(caller)
+  utils::rc.options(custom.completer = lifetime)
+  rd$caller = list(caller)
+  for (p in c("peter> ", "+ ")) rd$read(p)
+  expect_identical(seen[["+ "]], caller)
+  expect_identical(host_complete("!summ", "summ", seen[["peter> "]]), "caller")
+  expect_identical(utils::rc.getOption("custom.completer"), lifetime)
 })
 
 test_that("a terminal: Tab completes after @, / and ! and never natural language (IC-81)", {

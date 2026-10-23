@@ -3708,6 +3708,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   Positron's own completion never calls gptr's; `console_completes()` now asks `front_end()` first. Contract-visible:
   none (04 §15.10 IC-81 already excludes Positron). Tests: test-console-completion.R "unsupported input modes and IDE
   consoles keep completion options unchanged" (a Positron with a tty stdin).
+- Review fixes of Tasks 22-27 (2026-10-23):
+  - RStudio's console has the completer for the REPL's whole life (`repl_main()`, the caller's kept as the
+    reader's `caller` for `+ `): RStudio also asks while a run works, in the evaluation's frames, so its popup
+    opened on natural language typed for the next prompt and Enter or Tab took it (`then save the plot as
+    plot_png()`). Contract-visible: 04 §15.10 IC-81. Tests: test-console-completion.R "RStudio's console has the
+    triggers for the REPL's whole life, a run's too (IC-81)", "the reader completes around its prompt reads, not
+    at + and not unflagged (IC-81)".
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Rule (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three

@@ -1329,6 +1329,11 @@ Decisions:
     there; the `!` word break stays R's own readline's.
   - R.app's GUI-tools.R `rcompgen.completion()` does call `.completeToken()`, but how R.app replaces the word is
     unverified and the capture toolkit cannot send it Tab, so R.app stays out.
+- (Amended in the review of Tasks 22-27:) RStudio also asks while a run works, in the evaluation's frames, and
+  a line typed then is the next prompt, so with the completer only around the prompt reads its own popup opened on
+  natural language and Enter or Tab took it (`then save the plot as plot_png()`). `repl_main()` installs the
+  completer there for the REPL's whole life, the caller's kept for `+ ` (`rd$caller`); questions and the pause
+  menu then get the token for none, so no `(No matches)` popup.
 
 Tests (`test-console-completion.R`), RED first:
 - `.win32consoleCompletion()` (via `getFromNamespace`) on the trigger table.

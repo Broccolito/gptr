@@ -101,9 +101,10 @@ readline_limit = function() {
 #' `sent`, the kind of message queued last (policy_enqueue()), and `complete`, TRUE where the REPL
 #' completes after its trigger characters (repl_main(), IC-81): the console reader's readline()
 #' then has console_completer() as R's custom completer, the caller's kept for ! lines, but at
-#' `+ `, where the line continues !code and R's own completion applies. With `echo` the stdin
-#' reader writes the prompt and the escaped line (never a `secret` one) on `stream`, so a piped
-#' session reads like a terminal session.
+#' `+ `, where the line continues !code and R's own completion applies; `caller`, list() of the
+#' caller's completer where the REPL's is installed for its whole life (RStudio). With `echo` the
+#' stdin reader writes the prompt and the escaped line (never a `secret` one) on `stream`, so a
+#' piped session reads like a terminal session.
 #' @noRd
 console_reader = function(stdin = FALSE, echo = stdin) {
   rd = new.env(parent = emptyenv())
@@ -156,9 +157,11 @@ console_reader = function(stdin = FALSE, echo = stdin) {
       tty = rd$handed
       rd$handed = NULL
       on.exit(tty_restore(tty), add = TRUE)
-      if (isTRUE(rd$complete) && !identical(prompt, "+ ")) {
+      if (isTRUE(rd$complete)) {
         prev = utils::rc.getOption("custom.completer")
-        utils::rc.options(custom.completer = console_completer(prev))
+        caller = if (is.null(rd$caller)) prev else rd$caller[[1L]]
+        utils::rc.options(custom.completer = if (identical(prompt, "+ ")) caller else
+          console_completer(caller))
         on.exit(utils::rc.options(custom.completer = prev), add = TRUE)
       }
       # on the input band readline counts only the prompt's text; after the read the attributes are
@@ -939,6 +942,14 @@ repl_main = function(rs) {
   # ! breaks its words, so the R code after !/!! is completed; a caller-owned completer keeps its
   # words and completes the ! lines
   if (console_completes(rs$stdin)) rs$reader$complete = TRUE
+  # RStudio asks also while peter works, in the evaluation's frames, and a line typed then is the
+  # next prompt: its console has the completer for the REPL's whole life, the caller's kept
+  if (isTRUE(rs$reader$complete) && front_end() == "rstudio") {
+    caller = utils::rc.getOption("custom.completer")
+    rs$reader$caller = list(caller)
+    utils::rc.options(custom.completer = console_completer(caller))
+    on.exit(utils::rc.options(custom.completer = caller), add = TRUE)
+  }
   if (isTRUE(rs$reader$complete) && console_readline_tty()) {
     breaks = getOption("rl_word_breaks", " \t\n\"\\'`><=%;,|&{()}")
     if (!is.function(utils::rc.getOption("custom.completer")) &&
