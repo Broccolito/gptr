@@ -476,6 +476,67 @@ test_that("doc_drop_expr() drops the gptr::-qualified forms like the bare ones (
   expect_identical(as.character(doc_code_clean("gptr::peter$out(\"o1a2b3\"); y = 1")), "y = 1")
 })
 
+test_that("gptr_return(<expression>) is recorded as the block's hidden value; value= is a name", {
+  arrow = paste0("<", "-")
+  hidden = "`.gptr_value_@@GPTR_BLOCK@@` = "
+  out = doc_code_clean(c(paste("fit", arrow, "lm(mpg ~ wt, mtcars)"), "gptr_return(coef(fit))",
+                         "x = \"é\"; gptr::gptr_return(nchar(x)) # done"))
+  expect_identical(as.character(out), c("fit = lm(mpg ~ wt, mtcars)",
+                                        paste0(hidden, "(coef(fit))"),
+                                        paste0("x = \"é\"; ", hidden, "(nchar(x)) # done")))
+  expect_identical(attr(out, "kept"), c(TRUE, TRUE, TRUE, TRUE))
+  expect_true(attr(out, "returned"))
+  # the native pipe form, also after a chain and before a comment (FIX-16)
+  out = doc_code_clean(c("coef(fit) |> gptr_return()",
+                         "x = \"é\"; mtcars |> nrow() |>  gptr::gptr_return( ) # done"))
+  expect_identical(as.character(out), c(paste0(hidden, "(coef(fit))"),
+                                        paste0("x = \"é\"; ", hidden, "(mtcars |> nrow()) # done")))
+  expect_true(attr(out, "returned"))
+  # every layout of a top-level call, and its argument named x, keeps only the argument (FIX-16)
+  shapes = list(list(c("coef(fit) |>", "  gptr_return()"), paste0(hidden, "(coef(fit))")),
+                list(c("mtcars |> # data", "  nrow() |>", "  gptr::gptr_return() # n"),
+                     c(paste0(hidden, "(mtcars |> # data"), "  nrow()) # n")),
+                list(c("x = 1; gptr_return(", "  coef(fit)", "); y = 2"),
+                     paste0("x = 1; ", hidden, "(coef(fit)); y = 2")),
+                list("gptr_return(x = coef(fit))", paste0(hidden, "(coef(fit))")),
+                list("coef(fit) |> gptr_return(x = _)", paste0(hidden, "(coef(fit))")),
+                list(c("if (ok) gptr_return(1)", "gptr_return(coef(fit))"),
+                     c("if (ok) gptr_return(1)", paste0(hidden, "(coef(fit))"))))
+  for (sh in shapes) {
+    out = doc_code_clean(sh[[1L]])
+    expect_identical(as.character(out), sh[[2L]], info = sh[[2L]][1L])
+    expect_true(attr(out, "returned"), info = sh[[2L]][1L])
+  }
+  # a bare name stays value=<name>
+  for (code in c("gptr_return(fit)", "fit |> gptr_return()", "gptr_return(x = fit)")) {
+    out = doc_code_clean(code)
+    expect_identical(as.character(out), character(), info = code)
+    expect_false(attr(out, "returned"), info = code)
+  }
+  # inside another expression it is kept, and a chunk that keeps one names no hidden value
+  nested = list(list("if (ok) gptr_return(coef(fit))"), list("y = gptr_return(coef(fit))"),
+                list(c("{", "  gptr_return(coef(fit))", "}")),
+                list(c("gptr_return(coef(fit))", "if (ok) gptr_return(summary(fit))"),
+                     c(paste0(hidden, "(coef(fit))"), "if (ok) gptr_return(summary(fit))")),
+                # a function may be called after the last call
+                list(c("f = function() gptr_return(1)", "gptr_return(coef(fit))"),
+                     c("f = function() gptr_return(1)", paste0(hidden, "(coef(fit))"))))
+  for (sh in nested) {
+    out = doc_code_clean(sh[[1L]])
+    expect_identical(as.character(out), sh[[length(sh)]], info = sh[[1L]][1L])
+    expect_false(attr(out, "returned"), info = sh[[1L]][1L])
+  }
+  base = list(body = character(), code = character(), secrets = FALSE)
+  det = list(value = "coef(fit)", code = "gptr_return(coef(fit))")
+  expect_identical(doc_turn_r(base, det, list(), TRUE, FALSE)$value,
+                   ".gptr_value_@@GPTR_BLOCK@@")
+  expect_null(doc_turn_r(base, c(det, record = FALSE), list(), TRUE, FALSE)$value)
+  expect_null(doc_turn_r(base, list(value = "coef(fit)", code = "if (ok) gptr_return(coef(fit))"),
+                         list(), TRUE, FALSE)$value)
+  expect_identical(doc_turn_r(base, list(value = "b", code = "gptr_return(b)"), list(), TRUE,
+                              FALSE)$value, "b")
+})
+
 test_that("printed output becomes at most gptr.doc_output_lines #> lines of 76 characters", {
   out = doc_output_lines(as.character(1:20), max_lines = 12L)
   expect_length(out, 13L)
@@ -488,6 +549,32 @@ test_that("printed output becomes at most gptr.doc_output_lines #> lines of 76 c
                    c("#> [1] 4", "#> x", "#> y"))
   local_gptr_options(doc_output_lines = 1L)
   expect_identical(doc_output_lines(c("a", "b")), c("#> a", "#> ... (1 more lines)"))
+  cut = list(list(lines = list("a", "b"), n = 5L), list(lines = "c", n = 1L))
+  expect_identical(doc_output_lines(cut, max_lines = 12L),
+                   c("#> a", "#> b", "#> ... (4 more lines)"))
+})
+
+test_that("recorded #> output marks every cut with the count of the lines not shown", {
+  rec = function(code) {
+    x = local_doc_e2e(list(fake_tool("r", code = code), fake_text("Done.")))
+    f = file.path(x$root, "analysis.R")
+    writeLines("res = peter(\"Run it\")", f)
+    doc_e2e_source(f)
+    grep("^#>", readLines(f), value = TRUE)
+  }
+  expect_identical(rec("for (i in 1:30) print(i)"),
+                   c(paste("#> [1]", 1:12), "#> ... (18 more lines)"))
+  fit = rec("fit = lm(mpg ~ wt, mtcars)\nsummary(fit)")
+  expect_length(fit, 13L)
+  expect_identical(fit[13L], "#> ... (2 more lines)")
+  expect_identical(rec("print(1:5); print(letters); for (i in 1:20) print(i)")[13L],
+                   "#> ... (11 more lines)")
+  expect_identical(rec("x = c(1, 2, 3)\npeter$describe(x)\nsum(x)"), "#> [1] 6")
+  withr::local_options(gptr.doc_output_lines = NULL)
+  old = the$settings_session
+  withr::defer(assign("settings_session", old, envir = the))
+  gptr_config(doc = list(outputs = TRUE, output_lines = 30L), .scope = "session")
+  expect_identical(rec("for (i in 1:30) print(i)"), paste("#> [1]", 1:30))
 })
 
 test_that("turn entries follow P06's turn stamps", {
@@ -530,8 +617,8 @@ test_that("the output of a dropped expression is dropped with it when outputs ar
                                                                 "[1] \"line\""))))
   lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
   expect_identical(as.character(lines), "fit = lm(mpg ~ wt, data = mtcars)")
-  # P10 flattens outputs into one character vector: the code is still dropped, the printed
-  # line stays as a #> comment (it cannot be told apart)
+  # a flat vector (sessions recorded before outputs were kept per expression): the code is still
+  # dropped, the printed line stays as a #> comment (it cannot be told apart)
   flat = doc_test_session(list(doc_test_turn(code, outputs = "[1] \"line\"")))
   flat_lines = doc_block_lines(flat, 1L, list(format = "r", template = "count rows"), 1L)
   expect_identical(as.character(flat_lines),
@@ -587,6 +674,44 @@ test_that("steers and follow-ups delivered during the turn are recorded as comme
   expect_identical(as.character(lines), c("## Steer: use log scale", "x = 1", "## Steer: use TPM",
                                           "## Follow-up: and plot it"))
   expect_identical(attr(lines, "header")$turn, 1L)
+})
+
+test_that("recorded steer, follow-up and decision lines escape control characters", {
+  bad = paste("ctrl \u001b[31mred\u001b[0m bell\u0007 ff\u000c vt\u000b nel\u0085 ls\u2028",
+              "ps\u2029 caf\u00e9")
+  esc = "ctrl <U+001B>[31mred<U+001B>[0m bell<U+0007> ff<U+000C> vt<U+000B> nel  ls  ps  caf\u00e9"
+  expect_identical(doc_one_line(bad), esc)
+  expect_identical(withr::with_locale(c(LC_CTYPE = "C"), doc_one_line(bad)), esc)
+  expect_identical(doc_one_line("a\nb\r\nc\td e"), "a b c d e")
+  expect_identical(doc_one_line("use TPM"), "use TPM")
+  turn = doc_test_turn("x = 1", note = bad)
+  relay = list(type = "custom_message", message = msg_operator(
+    "steer_relay", paste("The user sent this message while you were working:", bad),
+    origin_text = bad))
+  follow = list(type = "message", message = msg_user(bad, source = "follow_up"))
+  s = doc_test_session(list(c(turn[1:3], list(relay), turn[4], list(follow))))
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
+  expect_identical(as.character(lines), c("x = 1", paste0("## Decision: ", esc),
+                                          paste0("## Steer: ", esc), paste0("## Follow-up: ", esc)))
+})
+
+test_that("a blank steer has no trailing space, and a steer line trimmed by hand stays fresh", {
+  local_project()
+  turn = doc_test_turn("x = 1")
+  relay = list(type = "custom_message", message = msg_operator(
+    "steer_relay", "The user sent this message while you were working: ", origin_text = "   "))
+  follow = list(type = "message", message = msg_user("", source = "follow_up"))
+  s = doc_test_session(list(c(turn[1:3], list(relay), turn[4], list(follow))))
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
+  expect_identical(as.character(lines), c("x = 1", "## Steer:", "## Follow-up:"))
+  expect_identical(doc_body_sha(c("x = 1", "## Steer:")), doc_body_sha("x = 1"))
+  # a document recorded with `## Steer: ` whose editor trimmed the space
+  f = file.path(getwd(), "history.R")
+  h = list(model = "fake/fake-1", prompt = prompt_hash("one"),
+           sha = doc_body_sha(c("x = 1", "## Steer: ")), session = "s0123456789ab", turn = 1L)
+  writeLines(c("s = peter(\"one\")", doc_render_block("abc123", h, c("x = 1", "## Steer:"))), f)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+  expect_no_error(gptr_export(f, file.path(getwd(), "plain.R")))
 })
 
 test_that("secret markers become Sys.getenv() and an unreplayable one flags the block", {
@@ -727,7 +852,7 @@ test_that("a local model keeps its tag and unknown usage is never summed (IC-74)
   h = attr(doc_block_lines(doc_test_session(list(turn)), 1L, site, 1L), "header")
   expect_identical(h$model, "ollama/qwen3:8b")
   expect_null(h$tokens)
-  expect_null(h$cost)
+  expect_identical(h$cost, "0")
   priced = doc_test_turn("x = 1")
   priced[[2L]]$message$usage$cost$total = 0.01
   priced[[4L]]$message$usage$cost$total = 0.0023
@@ -852,6 +977,34 @@ test_that("doc_upsert() writes nothing without consent and inserts, replaces and
   expect_identical(rep$action, "replace")
   expect_identical(readLines(f)[4], "n = 32")
   expect_identical(nrow(doc_find_blocks(readLines(f))), 1L)
+})
+
+test_that("only gptr's own lines take the block id; steer text and model code keep the token", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines("peter(\"count rows\")", f)
+  code = "tok = \"@@GPTR_BLOCK@@\"; nchar(tok)\ngptr_return(nchar(tok) + 1)"
+  turn = doc_test_turn(code, value = "nchar(tok) + 1")
+  steer = "`r 1+1` and @@GPTR_BLOCK@@ token"
+  relay = list(type = "custom_message", message = msg_operator(
+    "steer_relay", paste("The user sent this message while you were working:", steer),
+    origin_text = steer))
+  s = doc_test_session(list(c(turn[1:3], list(relay), turn[4])))
+  site = doc_file_site(f)
+  res = doc_upsert(site, doc_block_lines(s, 1L, site, 1L))
+  id = res$block_id
+  b = doc_find_blocks(readLines(f))
+  expect_identical(doc_block_body(readLines(f), b), c(
+    "tok = \"@@GPTR_BLOCK@@\"; nchar(tok)", paste0(".gptr_value_", id, " = (nchar(tok) + 1)"),
+    paste("## Steer:", steer)))
+  expect_identical(b$header[[1L]]$value, paste0(".gptr_value_", id))
+  wrapped = doc_fill_id(c(doc_wrap_local("tok = \"@@GPTR_BLOCK@@\"", child = "code"),
+                          paste0("tok = gptr_resume(block = \"", doc_block_token,
+                                 "\", child = \"code\")$envir$tok")), "abc123")
+  expect_identical(wrapped, c("local({", "  tok = \"@@GPTR_BLOCK@@\"",
+                              "}, envir = gptr_resume(block = \"abc123\", child = \"code\")$envir)",
+                              "tok = gptr_resume(block = \"abc123\", child = \"code\")$envir$tok"))
 })
 
 test_that("a hand-edited block is kept unless regenerating, and hooks can block or patch", {

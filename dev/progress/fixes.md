@@ -2111,3 +2111,853 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   Lint clean; Rd unchanged (`@noRd`).
 - Deviations: none (04 §12.1 does not define a broken script; the fix restores
   `run_retryable()`'s rule). Open: none.
+
+## Task FIX-16 - Cheat-sheet review: doc (2026-10-22, #PR)
+
+### paths-1 - Memoise the *.Rproj probe of project_root() by directory mtime
+- Findings 3, 36, 69, 83, 118, 159, 178; 60 and 157 (sessions-1, merged here).
+- Red: FAIL 2 in `^utils-paths$` (PASS 154), with the listing moved into `dir_list_rproj()` and
+  no memo: 11 walks from `a/b` listed `a` and `b` 22 times (expected 2), and an unpinned fake
+  `peter()` call from a marker-less temp dir listed an ancestor again at an unchanged mtime.
+- Cause: `project_root()` walks every ancestor up to `/` on each of the 80 to 160 calls of one
+  `peter()` call, and `is_project_dir()` listed each unmarked one for `*.Rproj`, uncached. Under
+  macOS `$TMPDIR` (79k to 107k entries) one listing takes 0.2 to 0.8 s: 9 to 66 s per offline call,
+  and a false "Checkpoint scans ... take longer than gptr.checkpoint_scan_budget" notice, as
+  `ckpt_prune()` walks inside the timed scan. The suite pins the root, so no test walked.
+- Fix: the four stat probes stay live; the listing's answer is kept per directory in `the$rproj`
+  and redone when `file.mtime(dir)` changes, as adding, removing or renaming an entry does.
+- Green: `^utils-paths$` PASS 156; `^(utils-paths|aaa-state|arch-layers|lint-rules|gptr-config|
+  ckpt-files)$` PASS 1052 (NOT_CRAN=true). Lint clean. Fake one-request call from a project under
+  `$TMPDIR` (79,229 entries): main 6.37 and 6.05 s, fix 1.08 and 1.01 s (86 and 83 walks; 11, then
+  0 listings).
+- Deviations: none. Open: an `*.Rproj` created within the mtime granularity of a cached listing
+  (2 s on FAT) is seen only at the directory's next change.
+
+### ckpt-1 - Time only the walk against gptr.checkpoint_scan_budget
+- Findings 150, 196.
+- Red: FAIL 2 in `^ckpt-files$` (PASS 251): with `ckpt_prune()` slowed by 0.3 s and the budget at
+  0.25 s, a fake `peter()` call in mode auto whose `r` call writes `out.txt` in an empty
+  marker-less project printed the "Checkpoint scans of ... take longer than
+  gptr.checkpoint_scan_budget" notice and set the tracker's `per_turn`.
+- Cause: `ckpt_files_after()` timed all of `ckpt_files_step()`, which includes
+  `ckpt_prune()` -> `workspace_root()` -> `project_root()` on every walk and every predicted path,
+  and the blob-store root while storing; a slow root lookup alone switched the session to per-turn
+  scans and the notice blamed the scan.
+- Fix: the tracker computes its prune pattern once (`ckpt_files_tr()`: `prune`); `ckpt_walk(root,
+  prune = ckpt_prune(root))` and `ckpt_walked()` use it; `ckpt_files_scan()` notes the walk's own
+  time in `tr$walk_secs`, which `ckpt_files_after()` compares with the budget.
+- Green: `^ckpt-files$` PASS 253, with a new guard that a walk slowed past the budget still
+  switches once with one notice; `^(ckpt-.*|utils-paths|windows-security|windows-link-policy|
+  arch-layers|lint-rules)$` PASS 974 SKIP 12 (Windows only; NOT_CRAN=true). Lint clean. One
+  `after()` in an empty project with `ckpt_prune()` slowed by 0.3 s (3 runs, load 11): before
+  0.31 to 0.37 s and per-turn mode, after 0.001 to 0.06 s (walk 0.001 to 0.046 s), no switch.
+- Deviations: none; the documented contract already says walk time (`gptr.checkpoint_scan_budget`
+  in `?gptr_options`, P16). Two tests follow the new signature (a hand-made tracker carries
+  `prune`; the FIFO test's `ckpt_walk` mock takes it). Open: the prune pattern is fixed when the
+  tracker is made, as its root is. `.gptr/` is pruned at any depth, so only `tempdir()/gptr` can
+  escape it: when the root contains `tempdir()` and a `setwd()` mid-session leaves `.gptr/`.
+
+### doc-1 - Keep pending sidecars of documents outside .gptr/ where every process finds them
+- Findings 11, 15.
+- Red: FAIL 4 in `^doc-io$` (PASS 679): in a project without `.gptr/`, `doc_sidecar_path()` was
+  under `tempdir()/gptr`; a child Rscript acting as a Jupyter kernel queued its cell's block and
+  exited, then `gptr_doc(nb, sync = TRUE)` here said nothing and wrote no cell. With the old path
+  only, a child killed by SIGKILL after one recorded call: FAIL 2, "No pending blocks for job.R."
+  and 0 blocks.
+- Cause: `doc_sidecar_path()` fell back to `doc_root()`, `tempdir()/gptr`, when the document's
+  project had no `.gptr/` (`.git` or `DESCRIPTION` do not count): each process looked in its own
+  `tempdir()`, R deleted the kernel's at exit, a killed run's was orphaned. `doc_sync()` returned
+  0 silently and `gptr_doc()` dropped the count.
+- Fix: without `.gptr/` the sidecar is `R_user_dir("gptr", "cache")/pending/pending-<sha1>.json`
+  (`doc_sidecar_write()` already makes the folder and a 0600 file; trust checks and the legacy path
+  follow); `doc_sync()` informs "Wrote N block(s) into <doc>." or "No pending blocks for <doc>.";
+  `gptr_doc(sync = TRUE)` leaves a dead run's recovery to `doc_sync()`, so the count includes it.
+- Green: `^doc-io$` PASS 690; `^(doc-.*|arch-layers|lint-rules|utils-paths)$` PASS 2660 SKIP 3
+  (repr not installed; Windows only); `^(doc-io|doc-formats|doc-replay|doc-export)$` PASS 1756
+  (NOT_CRAN=true). Lint clean. Rd regenerated; plan checks pass.
+- Deviations: D-249 (new). Not in the plan: `gptr_doc(sync = TRUE)` no longer runs
+  `doc_recover()` first (it applied a killed run's blocks, and the sync then said "No pending
+  blocks"); two existing syncs in test-doc-io and test-doc-formats now assert the message.
+- Open: `gptr_cache("info")`, which the conflict warning names, lists only the workspace root's
+  sidecars, not `pending/`; `doc_lock_dir()` still uses this process's workspace root, so two
+  processes recording one document outside `.gptr/` do not exclude each other (finding 15).
+
+### doc-2 - Say when a script call is not recorded because gptr_doc() bound another document
+- Findings 22, 149, 174.
+- Red: FAIL 2 in `^doc-replay$` (PASS 613): bound to `out.R`, non-interactive, `record` unset, a fake
+  `peter()` call in `fk.R` run by `source()` and one in `job.R` under a mocked `Rscript --file=` gave
+  no notice (out.R absent and both scripts unchanged, as expected).
+- Cause: `doc_locate()` sites a call in the document that holds it; the binding is consent for its own
+  path and the target only of calls in no document (console, `-e`, stdin). Unable to ask, `doc_keep()`
+  dropped the site before `doc_upsert()`, whose "no write consent" notice was never reached.
+- Fix: `doc_keep()` informs a `notice` once per document when a call that could record (record not
+  FALSE, not replay mode) gets no consent while a binding exists: "gptr did not record this call: it is
+  in fk.R, but gptr_doc() bound out.R. Calls are recorded into the document that holds them; run
+  gptr_doc("fk.R") to record them there." No binding stays silent (IC-45). `?gptr_doc`, 04 §6.4 and
+  IC-45, 03 §4.3 say what a binding covers; the help also how console turns are written (IC-49).
+- Green: `^doc-replay$` PASS 615 (dropping the guards fails the silent cases: no binding, record FALSE,
+  replay); `^(doc-.*|arch-layers|lint-rules)$` PASS 2519 SKIP 2 (NOT_CRAN=true). Lint clean. Rd
+  regenerated; plan checks pass. Installed build, real `Rscript driver.R`, fake provider: one notice for
+  two calls, no out.R, driver.R unchanged; a self-bound script records both blocks, no notice.
+- Deviations: D-249 (extended). Open: an interactive run whose answer for a document is a remembered
+  "off" also gets the notice once while another document is bound.
+
+### doc-3 - Sheet: gptr_doc() binds this R session; bind quarto and Knit documents in their setup chunk
+- Finding 19, its rendering half (doc-1 fixed the notebook and crash-recovery half).
+- Red: none (wording). Installed build, fake provider, quarto 1.10.18: a `.qmd` bound at the
+  console, then `quarto render`, got no block and no message; `rmarkdown::render()` of an `.Rmd`
+  in the binding session recorded one.
+- Cause: a binding is this R process's consent (`the$doc_binding`; 04 §6.4 already says "this R
+  process"). `quarto render`, `quarto::quarto_render()` and RStudio's Knit and Render buttons knit
+  in another process, which cannot ask, so `doc_keep()` drops the call and, unbound, says nothing
+  (IC-45). The vignette's "Bind the report, run it with its normal renderer" and "Use `quarto
+  render analysis.qmd`" was a recipe that records nothing.
+- Fix: `script-as-history` says a binding belongs to the process that made it, keeps the in-process
+  `rmarkdown::render()` example, and says to bind a document rendered elsewhere in its own setup
+  chunk, shown as `library(gptr); gptr_doc("analysis.qmd")`. The `.Rmd` is the knitted `.Rmd.orig`.
+- Green: a setup-chunk binding plus `quarto render` wrote `#| label: gptr-<id>`, outside and inside
+  a `gptr_init()` project. `precompute.R script-as-history`: 0 problems, output byte-identical to
+  the edited `.Rmd`. `^zzz$` PASS 145 (NOT_CRAN=true). Lint: the `.Rmd` is clean; the `.Rmd.orig`
+  keeps its one lint from main (`mode = auto` in an `eval = FALSE` chunk, line 338).
+- Deviations: none (the contract already binds this process). Not in the plan: no
+  `gptr_config(record = "auto")` alternative. Measured with `quarto render`, it records only at
+  user scope outside a `gptr_init()` project: the default scope is this session there, and inside
+  a project the template's `record: "ask"` holds against a user "auto", and an untrusted
+  project's own "auto" cannot loosen it. Open: none.
+
+### doc-4 - Sheet: recording under Rscript or render() needs auto mode or allow rules
+- Finding 16, its wording half (config-4 in the models group and gate-hint in the orchestration
+  group carry its code items).
+- Red: none (wording). Installed build, fake provider whose `r` call runs `fit = lm(mpg ~ wt,
+  data = mtcars)`, `Rscript` on a script that binds itself with `gptr_doc()`: with default
+  settings, rc 1, "The run stopped: `r` needs approval and no one can answer in this run", no
+  block; the same in a `gptr_init()` project whose user level is auto.
+- Cause: in the default manual mode a change waits for approval, and `gptr_can_prompt()` is FALSE
+  under `Rscript` and while knitting (`is_knitting()`), even from an interactive console, so the
+  gate stops the run before any block is written. The vignette's driver and its
+  `rmarkdown::render()` example never said a mode was needed.
+- Fix: `script-as-history` says recording needs the agent's code to run, that nobody can approve
+  under `Rscript` or in `rmarkdown::render()`, and to run `gptr_config(mode = auto, .scope =
+  "session")`, pass `mode = auto` or add `gptr_permissions()` rules; replays need no approval.
+  The R Markdown section points back to it. Session scope, because it holds inside a
+  `gptr_init()` project with or without config-4. The `.Rmd` is the knitted `.Rmd.orig`.
+- Green: session scope and the call's `mode = auto` each wrote the block (rc 0), also in that
+  `gptr_init()` project (effective mode manual there); `GPTR_REPLAY=replay` of the recorded
+  script in manual mode rebuilt `fit` without asking. `precompute.R script-as-history`: 0
+  problems, output byte-identical to the edited `.Rmd`. `^zzz$` PASS 145 (NOT_CRAN=true). Lint:
+  the `.Rmd` is clean; the `.Rmd.orig` keeps its one lint from main (`mode = auto`, now line 350).
+- Deviations: none (the gate is intended). Open: an empty block when the model passes
+  `record = false` is by design and rare, so neither the sheet nor the vignette mentions it.
+
+### doc-5 - The undone-block notice names replay = "record", the mode that regenerates it
+- Finding 13.
+- Red: FAIL 4 in `^doc-replay$` (PASS 625): under `auto` and `replay`, an undone team block's
+  notice said "or run live to regenerate it" and did not name `replay = "record"`.
+- Cause: G7 section 3.8's undone row gave the notice "run live to regenerate" while its `live`
+  column is "run, no write"; `doc_skip_undone()` copied the one, `doc_decide()` the other. So
+  `gptr_source(f, replay = "live")` called the model, left the block inert and wrote nothing.
+- Fix: the notice ends `or run it with replay = "record" to regenerate it.`; `?gptr_source`
+  and the `script-as-history` modes table say an undone block runs under `"live"` without being
+  rewritten and `"record"` regenerates it; G7 3.8 and the P15 plan's copy say the same.
+- Green: `^doc-replay$` PASS 629, with an end-to-end guard (fake provider, bound `.R`): an
+  undone block stays undone and byte-identical under `"live"`, then `"record"` gives
+  `regenerated` and `fresh`; `^(doc-.*|ckpt-rewind|arch-layers|lint-rules)$` PASS 2774 SKIP 2
+  (NOT_CRAN=true). Lint clean (the `.Rmd.orig` keeps its one lint from main, line 350). Rd
+  regenerated; plan checks pass. `precompute.R script-as-history`: 0 problems, output
+  byte-identical to the edited `.Rmd`.
+- Deviations: none (the G7 3.8 behaviour stands; only its notice text changed). Not in the plan:
+  the guard scripts six replies, as it makes three model runs.
+- Open: `gptr_source()` still lists the `"live"` run of an undone block as `NA`, which its
+  `@return` keeps for blocks no call touched; making `"live"` regenerate undone blocks is the
+  maintainer's call.
+
+### doc-6 - Sheet: say where replay = "live" re-asks the model
+- Finding 14, its driver half (doc-5 fixed the undone half; the sheet line is S26).
+- Red: none (wording). Installed build, fake provider, a self-bound `live.R` with
+  `peter(..., mode = "auto", replay = "live")`: the first `Rscript` made 2 requests and wrote
+  the block; the second made 0, warned "Block 2d55a7 of live.R was not regenerated: under
+  source() or Rscript the recorded code runs anyway, so it was replayed.", and left the file
+  byte-identical; `gptr_source("live.R")` then listed it `regenerated` with a new sha.
+- Cause: `doc_decide()` regenerates only under a driver that can skip the old block
+  (`gptr_source()`, knitr or Quarto, an IDE, Jupyter); under base `source()` or Rscript every
+  regeneration downgrades to replay with `replay_downgraded` (architecture 6.9.3). The modes
+  table said `"live"` rewrites recorded blocks without naming a driver.
+- Fix: the `script-as-history` live row names the four drivers and says a recorded block
+  replays with a warning under base `source()` or Rscript. It does not say "at the console": a
+  call typed there is a transcript turn and never re-asks a recorded block. The `.Rmd` is the
+  knitted `.Rmd.orig`.
+- Green: `precompute.R script-as-history`: 0 problems, output byte-identical to the edited
+  `.Rmd`. `^zzz$` PASS 145 (NOT_CRAN=true). Lint: the `.Rmd` is clean; the `.Rmd.orig` keeps its
+  one lint from main (`mode = auto`, line 350).
+- Deviations: none (the downgrade is intended). Open: the `replay_downgraded` warning itself says
+  "or run the call interactively to regenerate it", which holds in an IDE but not at a plain
+  console.
+
+### doc-7 - Transcript header names gptr_source(replay = "live")
+- Finding 44.
+- Red: FAIL 2 in `^doc-formats$` (PASS 252): a new transcript's fourth line was
+  `# options(gptr.replay = "live") re-asks the model.`. FAIL 1 in `^doc-replay$` (PASS 635) on the
+  same line of a console transcript recorded with the fake provider; its behaviour already held.
+- Cause: `doc_transcript_header()` pointed to the option, which only `gptr_source()`, knitr, an IDE
+  or Jupyter can honour; under `source()` or Rscript `doc_decide()` downgrades a regeneration to
+  replay with `replay_downgraded` (architecture 6.9.3), so following the hint never re-asked.
+- Fix: the line is `# gptr_source("<file name>", replay = "live") re-asks the model.`; the
+  `source()` line above it stays.
+- Green: `^(doc-formats|doc-replay)$` PASS 890, with a guard (fake provider): `source()` of the
+  recorded transcript under `gptr.replay = "live"` warns `replay_downgraded` and sends nothing,
+  `gptr_source(t, replay = "live")` sends two requests and gives `regenerated`;
+  `^(doc-.*|arch-layers|lint-rules)$` PASS 2541 SKIP 2 (NOT_CRAN=true). Lint clean.
+- Deviations: none (04 §11.5 names only the `source()` line). Open: the name is the file's at
+  recording; a renamed or moved transcript keeps the old one.
+
+### doc-8 - No temporary machine-log path in a transcript header
+- Finding 18.
+- Red: FAIL 2 in `^doc-formats$` (PASS 257): `doc_on_agent_end()` with a console site in a
+  project without `.gptr/` wrote `# machine log: /private/var/folders/.../Rtmp.../gptr/sessions/
+  <stamp>_<id>.jsonl`.
+- Cause: without `.gptr/`, `workspace_root()` is `tempdir()/gptr`, which R deletes at exit;
+  `doc_on_agent_end()` copied the session file's absolute path into `site$session_file`, and the
+  durable transcript named a file gone after exit.
+- Fix: `doc_on_agent_end()` leaves `session_file` NULL when the log is inside exactly
+  `tempdir()/gptr`; `doc_transcript_header()` then writes `# machine log: none kept (gptr_init()
+  keeps session logs in .gptr/)` (was `(none)`). 04 §11.5's transcript row says so.
+- Green: `^(doc-formats|doc-replay)$` PASS 895 (a `.gptr/` project under `tempdir()` keeps
+  `.gptr/sessions/<file>`); `^(doc-.*|arch-layers|lint-rules)$` PASS 2546 SKIP 2 (NOT_CRAN=true).
+  Lint clean; plan checks pass. Installed build, fake provider, an `Rscript -e` console turn bound
+  with `gptr_doc("log.R", format = "transcript")`: "none kept" outside `.gptr/`, the kept relative
+  log inside it.
+- Deviations: D-249 (extended). Open: replayed text comes from the S2 cache, also in
+  `tempdir()/gptr` without `.gptr/`, so a later process's replay has `text` NA; `doc_conflict`'s
+  "the session log has it" is equally untrue there after exit.
+
+### doc-9 - /doc and /status see a gptr_doc() binding before the first prompt
+- Finding 25.
+- Red: FAIL 4 in `^console-commands$` (PASS 97): with `gptr_doc("log.R")` bound and no session,
+  `cmd_doc_site(NULL)` was NULL, `/doc` said "No document is bound." and `/status` had no
+  `document` line.
+- Cause: `cmd_doc_site()` returned NULL for a NULL session without asking the doc.site service,
+  whose answer without a session is the `gptr_doc()` binding (`doc_site_service()`, which
+  `prompt_doc()` asks the same way); `cmd_status()` printed no document line before a session.
+- Fix: `cmd_doc_site()` asks the service with the session as given; `/status` before the first
+  prompt adds `document  <path>` or `(none)`. The `script-as-history` transcript paragraph says
+  an `.R` binding is the transcript (`format = "transcript"` only labels it); that it holds each
+  console `peter()` call and prompt as `s_<id> = peter("prompt", <context names>)` with its
+  block, the console's `!`, `!!` and fenced R lines under `# direct R (no model)` and slash
+  commands as comments; and that other code typed at R's `>` prompt is not recorded, so a
+  transcript using objects made there fails on replay: make them with `!code`. The `.Rmd` is the
+  knitted `.Rmd.orig`.
+- Green: `^console-commands$` PASS 101; `^(console-.*|perm-plan|doc-replay|arch-layers|
+  lint-rules)$` PASS 2690 SKIP 1 (INFRA-03, interactive R on CI; NOT_CRAN=true). Lint clean (the
+  `.Rmd.orig` keeps its one lint from main, now line 356). `precompute.R script-as-history`: 0
+  problems, output byte-identical to the edited `.Rmd`. Rd unchanged.
+- Deviations: none (03 §6.17 lists `/status` and `/doc` without their lines; the doc.site service
+  already answered the binding without a session). Not in the plan: `/status` before a session
+  gains the `document` line, as it had none to correct.
+- Open: the transcript still does not see R's own `>` prompt (no task callback; P15/IC-49). The
+  verdict's other passing bug, `eval_guard()` refusing a `q` bound to a non-function, is the
+  orchestration group's guard-1.
+
+### doc-10 - Mark every cut of recorded #> output with the right count
+- Finding 24.
+- Red: FAIL 9 in `^(doc-blocks|tool-r)$` (PASS 451), fake `peter()` into a bound `.R`: `for (i in
+  1:30) print(i)` and `summary(fit)` kept 12 lines with no marker; three expressions said "(3 more
+  lines)" for 11; `doc$output_lines = 30` with the option unset still kept 12; `peter$describe(x)`'s
+  two lines stayed under `sum(x)`; `r_doc_outputs()` returned a flat vector.
+- Cause: `r_doc_outputs()` cut each expression to the option's 12 lines silently and flattened them;
+  `doc_output_lines()` cut again and counted only the survivors, and `doc_turn_r()`'s `outs[kept]`
+  never met a per-expression list.
+- Fix: `r_doc_outputs()` keeps `list(lines, n)` per expression, capped by `doc_max_output_lines()`
+  (moved to `eval-format.R`, as an L4 service file may be called from `tool-r.R`); `doc_output_lines()`
+  shows lines up to the first cut one, cuts once and counts `sum(n)`; a flat vector still renders.
+- Green: `^(doc-blocks|tool-r)$` PASS 460; `^(doc-.*|eval-format|tool-r|mcp-server|arch-layers|
+  lint-rules)$` PASS 2879 SKIP 2 (repr), `^(mcp-recording|eval-core)$` PASS 346 (NOT_CRAN=true). Lint
+  clean; plan checks pass. `local_doc_e2e()` and `doc_e2e_source()` moved to `helper-doc.R`.
+- Deviations: D-249 (extended; 04 §4.4 `outputs`, §11.5). Open: none.
+
+### doc-11 - Write a known zero cost as cost=0 in block headers
+- Finding 122.
+- Red: FAIL 2 in `^(doc-blocks|doc-replay)$` (PASS 972): a turn whose answers cost a known `0`
+  had no `cost` header key; a fake `peter()` call recorded into `analysis.R` listed
+  `gptr_blocks(f)$cost` NA while `s$cost` was 0.
+- Cause: `doc_block_lines()` wrote `cost=` only when known and above 0, and `doc_block_row()` reads
+  a missing key as NA, the value IC-74 keeps for unknown.
+- Fix: the guard is `tb$cost_known`; an unknown cost stays omitted. `?gptr_blocks` says `cost` is
+  `0` for a known free route and `NA` when unknown or not recorded; 04 §11.5's `cost` row says when
+  it is written.
+- Green: `^(doc-.*|subagent-team|ckpt-rewind|session-object|mcp-recording|console-commands|
+  arch-layers|lint-rules)$` PASS 3820 SKIP 2 (repr; NOT_CRAN=true). Lint clean; Rd regenerated;
+  plan checks pass. The IC-74 test's local-model case now expects `"0"` (its cost was a known 0).
+- Deviations: D-249 (extended). Open: none.
+
+### replay-1 - Replaying into the session that recorded the block adds no turn
+- Finding 84.
+- Red: FAIL 5 in `^(doc-replay|session-object)$` (PASS 1171): a two-block pipe chain recorded with
+  `gptr_source(replay = "record")` read 4 turns after `gptr_source(replay = "replay")` in the same
+  process, the next live turn was 5 and the user turns 1, 2, 5; `session_replay_new()` advanced a
+  live session whose path held the block's `gptr.doc_block` entry.
+- Cause: `replay_mark(advance = TRUE)` (both `session_replay_apply()` and `session_replay_new()`'s
+  live-session branch) skipped only blocks in `seen`, which recording never fills, so the session
+  that already held the turn gained one per block.
+- Fix: `replay_mark()` advances only when `replay_holds_block()` finds no `gptr.doc_block` entry
+  for the block, not undone, on the active path; it still records `gptr.replay`, `seen` and
+  `value=` (a session rebuilt from JSONL holds the block and needs its value). IC-46 says so.
+- Green: `^(doc-replay|session-object)$` PASS 1176; `^(doc-.*|session-.*|subagent-team|ckpt-rewind|
+  arch-layers|lint-rules)$` PASS 4577 SKIP 2 (repr; NOT_CRAN=true). Lint clean; plan checks pass.
+- Deviations: D-249 (extended). Open: replaying block 1 into the live session after turn 2 records
+  its `gptr.replay` and `value=` at turn 2, the session's current turn.
+
+### replay-2 - Record gptr_return(<expression>) so replay restores the value
+- Findings 155, 151, 114 (their expression half; replay-3 has fan-out values, store-1 `$text`).
+- Red: FAIL 17 in `^(doc-blocks|doc-replay|doc-export|doc-io)$` (PASS 1894): fake `r` code `fit =
+  lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))` recorded `value=coef(fit)` and dropped the line; a
+  same-process `gptr_source(replay = "replay")` gave `$value` NULL with "value `coef(fit)` (turn 1)
+  is not bound in this R process"; a `GPTR_REPLAY=replay Rscript` replay failed its value check
+  with and without `.gptr/`; a plain export held no line computing it.
+- Cause: `gptr_return()` boxes an expression under its deparsed label, `r_new_value_name()` hands
+  the label on, `doc_turn_r()` wrote it as `value=` and `doc_drop_expr()` cut the call, so replay
+  looked the label up as a binding name and nothing in the document recomputed it.
+- Fix: `doc_rewrite_return()` turns a top-level `gptr_return(<one unnamed argument, not a name>)`
+  into `.gptr_value_<block id> = (<argument>)` (backquoted until `doc_prepare()` fills the id into
+  the body and header); `doc_turn_r()` writes that name, keeps a syntactic name and omits a label.
+  Replay uses the name path unchanged. `?gptr_return`, 04 §4.4, §7.15, §11.5, IC-48, 03 §6.9.3.
+- Green: PASS 1911; `^(doc-.*|gptr-sdk|subagent-team|session-object|session-store|mcp-recording|
+  tool-r|northstar|ckpt-rewind|console-commands|copy-tools|arch-layers|lint-rules)$` PASS 4442 SKIP
+  2 (repr; NOT_CRAN=true). Lint clean; Rd regenerated; plan checks pass. Installed build, fake
+  provider, a self-bound `analysis.R`: the block reads `.gptr_value_c5b47c = (coef(fit))`; the
+  same-process and `GPTR_REPLAY=replay Rscript` replays print the coefficients, 0 requests, file
+  unchanged.
+- Deviations: D-249 (extended). Not in the plan: the Rscript case is in test-doc-io.R, beside its
+  child-script helpers; the bare-name case is the existing acceptance-4 test; no test-doc-io case
+  assumed a dropped expression line.
+- Open: a same-process replay into an environment other than the recording one (and not the
+  global one) still resolves `value=` in the recording home ("not bound"; a bare name gets the
+  object of recording time); a `gptr_return(<expression>)` inside braces or a branch, or with its
+  name split over lines, is not rewritten and its value is not recorded.
+
+### replay-3 - Record team and fan-out child code and values for replay
+- Findings 66, 65, 119 (their fan-out and team half; replay-2 has expressions, store-1 `$text`).
+- Red: FAIL 17 in `^doc-replay$` (PASS 670): a fake fan-out
+  `f = peter("Average .x", list(a = c(1, 2, 3), b = c(10, 20)), parallel = 1)` whose children ran
+  `m = mean(.x[[1]]); gptr_return(m)`, recorded through `gptr_source()`, wrote
+  `children="a:<sid>,b:<sid>"` and no child code, and `f$value` was `list(a = NULL, b = NULL)` in a
+  simulated later process with and without the session store and S2 answers; the same for
+  `gptr_return(mean(.x[[1]]))`; a one-agent team running `n = nrow(mtcars); gptr_return(n)` gave
+  `tm$x$value` NULL with and without `export = "n"`; a three-field `children=` entry was skipped.
+- Cause: `doc_team_block_lines()` wrote a child's code only when it had exports and never its value
+  name; `doc_replay_team()` built each child with no `value=`, and a replayed fan-out child's home
+  had no `.x`.
+- Fix: `doc_session_code()` also gives the latest `value=` name; a child with one gets its code in
+  `local({...}, envir = gptr_resume(block =, child =)$envir)` and the entry
+  `<name>:<session id>:<value>` (replay-2's hidden name for an expression, its token filled in with
+  the header's). `doc_replay_team()` reads two or three fields and passes the third as the child's
+  `value=`. `route_fanout_run()` binds each replayed child's element as `.x` in its home
+  (`subagent_fanout_element()`, shared with `subagent_fanout_spec()`). `replay_rebuild()` keeps no
+  value record past the recorded turn: the same-process replay advanced a team child and stored a
+  turn-2 copy record without its payload, which hid the value in the next process (the last red,
+  FAIL 1: no exports, store kept). 04 §11.5 `children` and body, IC-46, IC-47; 03 §6.9.3; P15; the
+  one teams-and-background paragraph.
+- Green: `^doc-replay$` PASS 689; `^(doc-.*|session-.*|subagent-.*|copy-subagent|northstar|
+  ckpt-rewind|arch-layers|lint-rules|console-commands|mcp-recording|gptr-sdk|tool-r)$` PASS 5687
+  SKIP 3 (repr; Windows worker; NOT_CRAN=true). Lint clean; no Rd change; plan checks pass.
+  Installed build, fake provider, a self-bound `analysis.R` in a `gptr_init()` project with that
+  fan-out and team: recording printed `2 15`, `32`, sum 17 (6 requests); the same-process replay, a
+  `GPTR_REPLAY=replay Rscript` run and one without `.gptr/sessions` and `.gptr/cache/s2` printed the
+  same with 0 requests, rc 0, file unchanged.
+- Deviations: D-249 (extended). Not as planned: the fan-out route (P19) binds `.x`, as
+  `doc_replay_team()` may not call the fan-out helpers (IC-33), and binds only `.x`, all a live
+  child's home holds (`.e1` stays in its private values environment); `replay_rebuild()`
+  (session-object.R) was not in the plan; later processes are simulated in the tests (live table,
+  replay table, and for the last one store and S2 cleared), the subprocess is the live check.
+- Open: a same-process replay still advances a live team child one turn (replay-1 covers blocks); a
+  replayed fan-out child keeps `.x` in its home (a live one's is removed when it settles); a child
+  name holding `:` or `,` has no replayable entry; a child value whose code was not recorded replays
+  "not bound", as a block's does.
+
+### replay-4 - gptr_return() outside a run prints a one-time notice
+- Findings 138, 190.
+- Red: none (docs). The new test passes on main: with replay off, the first top-level
+  `gptr_return(1)` signals the `gptr_message_notice` "only designates a value", the second is
+  silent, and so is a call under `gptr.quiet`; the help page's own example prints it.
+- Cause: the code follows IC-48 (a once-per-session notice, silent while replaying); `?gptr_return`
+  and 03 §4.3 copied "returns its argument invisibly and does nothing else".
+- Fix: both say it designates nothing and the first such call in an R session prints a one-line
+  notice, silent while a document is replayed, with `options(gptr.quiet = TRUE)` or
+  `suppressMessages()`.
+- Green: `^(gptr-sdk|arch-layers|lint-rules)$` PASS 188 (NOT_CRAN=true). Lint clean; Rd
+  regenerated; plan checks pass.
+- Deviations: none. Open: the notice goes to stdout, like every `gptr_inform()` display.
+
+### sessions-26 - Say that s$value keeps the newest returned value
+- Finding 164 (moved from the sessions group: it edits `?gptr_return` after replay-2 and replay-4).
+- Red: none (docs). The new session-level test passes on main: a fake session whose turns run
+  `gptr_return(1)`, `gptr_return(2)` and nothing reads `$value` 2, `$turns` 3, `$text` "ok"; a
+  fourth turn running `gptr_return(NULL)` reads NULL.
+- Cause: `session_value_get()` returns the newest designated value of any turn, by design (G3, the
+  existing "latest designated value" test), which a pipe such as `s |> peter("Explain the
+  result.")` relies on; `?gptr_return` and `?peter` called it the run's result.
+- Fix: `?gptr_return` says `$value` is the newest value designated in any turn, kept by a turn that
+  designates none (`$values` by turn; `gptr_return(NULL)` clears it); `?peter`'s "Sessions and
+  results" says the same, and that `$text` is the last turn's answer.
+- Green: `^(session-object|gptr-sdk|gptr-gateway|arch-layers|lint-rules)$` PASS 1078
+  (NOT_CRAN=true). Lint clean; Rd regenerated.
+- Deviations: none. Open: the sheet's S06 and S09 lines follow in the sheet commit.
+
+### replay-5 - Footer marks a replayed session and never prints a known zero
+- Finding 21.
+- Red: FAIL 2 in `^session-object$` (PASS 539): a one-turn fake session forgotten and rebuilt from
+  its JSONL by `session_replay_new()` printed `idle . fake/fake-1 . 1 turn . 1.7k tokens . $0.0000`,
+  as the live run did; one reconstructed from a document alone printed `0 tokens . $0.0000`.
+- Cause: `session_footer()` never showed that a session was replayed, and a reconstruction holds no
+  usage row, which `format_count()` and `format_cost()` print as a known zero.
+- Fix: `replay_mark()` keeps the usage row count in `d$replay_rows`; while a replayed session
+  still has that many rows its footer status reads `replayed`, and with none its tokens and cost
+  read unknown. A live request adds a row and the footer is the usual one. `?print.gptr_session`,
+  04 §5.1 (`print`, `.d` `replay_rows`), 03 §5.1.
+- Green: `^session-object$` PASS 541; `^(doc-.*|session-.*|subagent-team|ckpt-rewind|
+  console-commands|mcp-recording|gptr-sdk|arch-layers|lint-rules)$` PASS 4900 SKIP 2 (repr;
+  NOT_CRAN=true). Lint clean; Rd regenerated; plan checks pass. Installed build, fake provider,
+  a self-bound `analysis.R` run by `Rscript`, then `GPTR_REPLAY=replay Rscript`: in a
+  `gptr_init()` project `replayed . fake/fake-1 . 1 turn . 3.7k tokens . $0.0000`, outside one
+  `replayed . ... . unknown tokens . unknown cost`; file unchanged both times.
+- Deviations: D-249 (extended). Open: the same-process replay into the recording session keeps
+  its live footer (not a replayed session); outside a project the shell replay still prints no
+  answer, as S2 lives in this process's `tempdir()`.
+
+### export-1 - Sheet: state what gptr_export() admits and refuses
+- Findings 26, 62 (the sheet's S27 lines follow in the sheet commit).
+- Red: none (wording). `doc_export_chain()` on 15 shapes: admitted `peter("a")`, `mode = "auto"`,
+  `1L, TRUE, NULL`, quoted `model`/`tools` and `peter("a") |> peter("b")`; refused a data object,
+  bare `mode = auto` and `model = opus`, `.opts = list(...)`, `budget = list(...)`, `-0.5`, `NA`,
+  `s |> peter("b")` and `peter("a", fit) |> peter("b")`. Fake provider: a recorded
+  `s = peter("Fit it.", mtcars, mode = auto)` block is fresh and refused as "mixed or non-literal
+  Peter expressions"; edited to `mode = "auto"` without the data object it stays fresh and exports
+  in both formats.
+- Cause: `doc_export_chain()` admits only arguments that are `NULL` or one non-`NA` atomic
+  constant, by design (`?gptr_export`). A symbol or a call is not one, nor is the session that a
+  later `s |> peter()` passes first. The vignette listed the other refusals but not this one, and
+  named only `session$value` for the raw export's handle refusal.
+- Fix: `script-as-history`'s export section names the admitted constants, the refused forms with
+  the refusal's words, that a one-statement pipeline is admitted, that quoting an argument keeps
+  the block fresh, `{name}` prompts ("interpolated inputs need review"), stale blocks, and
+  `session$text` beside `session$value`. The `.Rmd` is the knitted `.Rmd.orig`.
+- Green: `precompute.R script-as-history`: 0 problems, output byte-identical to the edited `.Rmd`.
+  `^(zzz|doc-export)$` PASS 358 (NOT_CRAN=true). Lint: the `.Rmd` is clean; the `.Rmd.orig` keeps
+  its one lint from main (`mode = auto`, now line 365).
+- Deviations: none (the refusals are intended). Not planned: naming the line and argument in the
+  refusal. Open: "later" code holds once export-2's position matching lands; until then the raw
+  export also refuses code before the binding, and after an ordinary rebinding, that names a handle.
+
+### export-2 - gptr_export() rebinds its gptr_doc() line and refuses only live handles
+- Findings 27, 62 (the position bug).
+- Red: FAIL 6 in `^doc-export$` (PASS 218): `gptr_doc("history.R")` and an absolute
+  `gptr::gptr_doc(path = ...)` were copied verbatim in both formats, one sharing a line was
+  admitted, and `gptr_source()` of the exported Peter script (fake provider, record "ask", not
+  interactive) recorded no block; the raw export refused `s = "earlier"; print(s)` before `s =
+  peter("one")` and `s = 1; print(s)` after it.
+- Cause: `doc_export_lines()` kept every non-Peter statement, so the export bound the source, whose
+  binding is consent for the source only (doc-2): its calls recorded nowhere and console turns went
+  into the source. Handle names were refused in any other statement, whatever its position.
+- Fix: `doc_export_bind()` finds a top-level `gptr_doc()` whose `path` literal (`match.call()`,
+  nothing evaluated) names the source from its directory or the working directory; raw R comments it
+  out, the Peter format writes the destination into the literal (only the file name in the same
+  directory, else the full path); one sharing a line, or not read by `doc_unquote()`, is refused.
+  One ordered pass keeps a handle live from its `peter()` statement until ordinary code assigns the
+  name. `?gptr_export` @details.
+- Green: `^doc-export$` PASS 224; `^(doc-export|doc-replay|doc-blocks|zzz|arch-layers|lint-rules)$`
+  PASS 1493 (NOT_CRAN=true). Lint clean; Rd regenerated. Probe: a three-line
+  `gptr_doc('sub/history.R', format = "transcript")` exported from the project root became
+  `"sub/p1.R"` (same directory), the full path (another one), three comment lines (raw R).
+- Deviations: D-249 (extended). From the plan: the working directory also resolves the literal (the
+  verifier's fix), the literal keeps its directory part, and the commented line has no `# removed by
+  gptr_export()` suffix. Open: a `gptr_doc()` assigned or with a computed path is kept; the handle
+  refusal still names neither the handle nor its line.
+
+### store-1 - Say that sessions and answers outlive R only in a .gptr/ workspace
+- Findings 124, 139, 152 (the `$text` halves of 114 and 119; the sheet's S03, S12, S23 lines follow in the
+  sheet commit).
+- Red: FAIL 5. `^session-store$`: `gptr_resume("s0123456789")` outside a workspace said only "no stored session
+  matches". `^doc-replay$`: a replay that restored no answer was silent in process, under `GPTR_REPLAY=replay
+  Rscript` (exit 0, `TEXT NA`) and for fan-out children whose answers were removed.
+- Cause: without `.gptr/`, `workspace_root()` is `tempdir()/gptr`, so the session store and the S2 answer cache end
+  with R (intended: gptr writes only where named). Nothing said so where the loss is felt.
+- Fix: both `resume_path()` store misses add "Without a .gptr/ workspace, sessions last until R exits;
+  gptr_init(\".\") keeps them." when `workspace_dir()` is NULL. `doc_replay_no_answer()`, called for a replayed call
+  and each team child, informs one `notice` per document and process when `$text` stays NA: "No recorded answer
+  for <doc>: replayed answers ($text) are NA.", plus " gptr_init(\".\") keeps answers in .gptr/ for later R
+  sessions." outside a workspace. NEWS: sessions are saved in `.gptr/` (without one, until R exits). 04 §6.5, IC-46.
+- Green: `^(doc-replay|session-store)$` PASS 982 (703 + 279); `^(doc-.*|session-.*|subagent-.*|ckpt-rewind|
+  console-commands|console-repl|mcp-recording|gptr-sdk|gptr-source|knitr.*|arch-layers|lint-rules|zzz)$` PASS 5884
+  SKIP 3 (NOT_CRAN=true). Lint clean; no Rd change. Installed build, fake provider, two `Rscript` runs: outside a
+  workspace the replay prints the notice with the hint, `TEXT NA`, exit 0, and `gptr_resume(id)` and
+  `gptr_resume()` carry the hint; after `gptr_init(".")` neither error has it, a replay restores the text, still
+  after `gptr_cache("clear", "s2")` (from the session file), and with `.gptr/sessions` removed too the notice comes
+  without the hint.
+- Deviations: D-249 (extended). From the plan: the notice keys on the outcome (`$text` NA after replay), not on a
+  missing S2 record, which in a workspace or a live session is no loss (the session file or the live session holds
+  the answer); the workspace text omits "the answer cache was cleared", as a copied document, a block recorded
+  before `gptr_init()` or one recorded without an answer gives the same miss. Open: a piped replay keeps the
+  previous turn's `$text` when its block's answer is missing (no notice there); a bare `/resume` still lists
+  "# 0 rows" without the hint.
+
+### replay-2b - A knitted first render shows a recorded gptr_return() with its block id
+- Review of replay-2 (`R/doc-knitr.R`, medium).
+- Red: FAIL 3 in `^doc-knitr$` (PASS 74): `knit_print()` of a live turn whose code ends in
+  `gptr_return(coef(fit))` showed `` `.gptr_value_@@GPTR_BLOCK@@` = (coef(fit)) `` in its code
+  fence, with and without a `gptr.doc_block` entry, and so did a first `knitr::knit()` (fake
+  provider) of a report whose agent runs `gptr_return(n * 2)`.
+- Cause: replay-2's rewrite leaves the hidden name backquoted with a token until `doc_prepare()`
+  fills in the block id; `doc_knit_code()` printed `doc_turn_body()`'s body before that step.
+- Fix: `doc_fill_id()` (both substitutions, shared with `doc_prepare()`); `doc_knit_code()` fills
+  in the id of the turn's newest `gptr.doc_block` entry, else shows the line as the
+  `gptr_return()` call it records.
+- Green: `^doc-knitr$` PASS 77; `^(doc-.*|arch-layers|lint-rules)$` PASS 2656 SKIP 2 (repr;
+  NOT_CRAN=true). Lint clean. The knit writes the block before the chunk prints, so the first
+  render shows `.gptr_value_<id> = (n * 2)`.
+- Deviations: none (the shown code is the block's). Open: none.
+
+### replay-2c - Record the native-pipe form `<expression> |> gptr_return()` too
+- Review of replay-2 (`R/doc-blocks.R`, medium).
+- Red: FAIL 2 in `^doc-blocks$` (PASS 349): `doc_code_clean()` kept `coef(fit) |> gptr_return()`
+  and `mtcars |> nrow() |> gptr::gptr_return( ) # done` as written, `returned` FALSE.
+- Cause: the pipe form parses to `gptr_return(<expression>)`, so `doc_drop_expr()` kept it, but
+  `doc_rewrite_return()` looked for the function name at the expression's start, found the
+  argument's, and skipped it: `value=` was omitted and every replay gave `$value` NULL without a
+  word, while the kept line printed the outside-a-run notice under `replay = "auto"`.
+- Fix: when the top-level expression's own `PIPE` token ends on its last line, the hidden name
+  and `(` go before the expression and the pipe with the call become `)`; a pipe split from its
+  call over lines is kept as written, as a split call name is. IC-48 says so.
+- Green: `^doc-blocks$` PASS 351 (a bare `fit |> gptr_return()` is still dropped);
+  `^(doc-.*|tool-r|mcp-recording|gptr-sdk|arch-layers|lint-rules)$` PASS 2933 SKIP 2 (repr;
+  NOT_CRAN=true). Lint clean; plan checks pass. Fake provider, `coef(fit) |> gptr_return()`
+  recorded through `gptr_source()`: `.gptr_value_<id> = (coef(fit))`, and a simulated later
+  process's replay returns the coefficients without a message.
+- Deviations: D-249 (extended). Open: none.
+
+### replay-2d - R served to a CLI route records what gptr_return() designated
+- Review of replay-2 (`R/mcp-server.R`, medium; the CLI-route root cause of findings 155, 151).
+- Red: FAIL 2 in `^mcp-recording$` (PASS 50): a fake model calling a probe tool that serves `fit =
+  lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))` through `mcp_dispatch_local()`, recorded with
+  `gptr_source()`, wrote the `.gptr_value_<id> = (coef(fit))` line but no `value=`, and a simulated
+  later process's replay gave `$value` NULL.
+- Cause: `mcp_serve_r()` (Claude Code, Codex) records a `gptr.mcp_r` entry without `value`, so
+  `doc_turn_r()` never wrote the hidden name, and `doc_turn_body()` skips the boxed `gptr.value`
+  record that could have named one.
+- Fix: `mcp_serve_r()` counts the session's value records before evaluating and adds
+  `value = r_new_value_name()` to the entry, as the `r` tool's `details$value`;
+  `r_new_value_name()` moves from `tool-r.R` to the L4 service file `eval-format.R` beside
+  `r_doc_outputs()`, as `mcp-server.R` may not call `tool-r.R` (IC-33).
+- Green: `^mcp-recording$` PASS 52; `^(mcp-.*|tool-r|eval-format|doc-blocks|doc-replay|cli-codex|
+  cli-claude|arch-layers|lint-rules)$` PASS 2913 SKIP 1 (Windows only; NOT_CRAN=true). Lint clean;
+  plan checks pass. The relayed-Codex test's bare `gptr_return(beta)` is unchanged.
+- Deviations: D-249 (extended). Open: none.
+
+### replay-2e - A replay into another environment of the recording process keeps the value
+- Validation of replay-2 (low; not a regression: main gave NULL in every case).
+- Red: FAIL 2 in `^doc-replay$` (PASS 704): after `gptr_source(f, envir = e)` recorded
+  `gptr_return(coef(fit))`, `gptr_source(f, replay = "replay", envir = e3)` gave `e3$s$value` NULL
+  with "value `.gptr_value_<id>` (turn 1) is not bound in this R process".
+- Cause: the header's session is live here, so the replay marks it; `replay_value()` runs before
+  the block's code, finds the hidden name unbound in the session's home `e`, and adds a name-only
+  record at turn 1, which shadows the turn's held box. The code then binds the name in `e3`, where
+  the record is never resolved.
+- Fix: `replay_value()` adds no name-only record when the session holds a value of that turn; the
+  recording session keeps its own. IC-46 says so.
+- Green: `^doc-replay$` PASS 706; `^(doc-.*|session-.*|subagent-.*|copy-subagent|northstar|
+  ckpt-rewind|console-commands|mcp-recording|gptr-sdk|tool-r|arch-layers|lint-rules)$` PASS 5747
+  SKIP 3 (repr; Windows worker; NOT_CRAN=true). Lint clean; plan checks pass.
+- Deviations: D-249 (extended). Open: a bare `gptr_return(fit)` replayed into another environment
+  still gives the recording home's `fit`, as replay-2 left it.
+
+### doc-1b - A document outside .gptr/ takes its lock beside its sidecar, and gptr_cache() lists both
+- Review of doc-1 (`R/doc-io.R`, medium; the lock and listing half of finding 15).
+- Red: FAIL 3 in `^doc-io$` (PASS 702): for a notebook in a project without `.gptr/`,
+  `doc_lock_dir()` was under `tempdir()/gptr`, not beside its sidecar in the user cache's
+  `pending/`, and `gptr_cache()` listed no row with the sidecar written there.
+- Cause: `doc_lock_dir()` used this process's `workspace_root()`, so two runs of one document
+  outside `.gptr/` shared doc-1's sidecar without sharing the lock that guards it (IC-51): either
+  run's write could replace the other's record, and the first run's exit unlink the second's.
+  `doc_cache_files("sidecar")` read only the workspace root's `cache/tmp`, which the conflict
+  warning ("see gptr_cache(\"info\")") and IC-51 point to.
+- Fix: `doc_pending_dir()`; `doc_lock_dir()` uses the document's `.gptr/` else that directory, as
+  `doc_sidecar_path()` does; the sidecar listing adds its `pending-*` files, and `gptr_cache()`
+  gives them a second `sidecar` row with that path. `?gptr_cache`, 04 §6.4, IC-51.
+- Green: `^(doc-io|doc-replay|storage-boundaries|windows-security)$` PASS 1548 SKIP 11;
+  `^(doc-.*|storage-boundaries|windows-.*|console-.*|zzz|arch-layers|lint-rules)$` PASS 4830
+  SKIP 14 (Windows filesystem; repr; INFRA-03; NOT_CRAN=true). Lint clean; Rd regenerated; plan
+  checks pass. Seven `gptr_cache()` expectations in test-doc-replay gain the fifth row.
+- Deviations: D-249 (extended). Not as suggested: the sidecar keeps doc-1's path (no shared
+  `cache/tmp` under `pending/`). Open: a document in a `.gptr/` project now locks in that `.gptr/`
+  also when this process works in another project (was this process's root).
+
+### doc-7b - The transcript header names the transcript from the project root
+- Review of doc-7 (`R/doc-formats.R`, low).
+- Red: FAIL 2 in `^doc-formats$` (PASS 258): a transcript at `.gptr/transcripts/gptr-session-
+  20260929-183000.R` read `# gptr_source("gptr-session-20260929-183000.R", replay = "live")`, a
+  file `gptr_source()` refuses from the project root; one outside the project gave its file name.
+- Cause: doc-7 built the literal from `basename(site$path)`, while console transcripts made by the
+  default choice (`doc_new_transcript()`) live in `.gptr/transcripts/`.
+- Fix: the literal is `doc_rel(site$path)`: relative to the project root, absolute outside it.
+- Green: `^doc-formats$` PASS 260; `^(doc-formats|doc-replay|console-.*|arch-layers|lint-rules)$`
+  PASS 2914 SKIP 1 (INFRA-03; NOT_CRAN=true). Lint clean. A root-level `log.R` still reads
+  `"log.R"`.
+- Deviations: none. Open: doc-7's, a moved transcript keeps the path it had when recorded.
+
+### doc-2b - The other-binding notice suggests gptr_doc() with the path it resolves
+- Review of doc-2 (`R/doc-replay.R`, low).
+- Red: FAIL 1 in `^doc-replay$` (PASS 707): run from `analysis/` of a project bound to `out.R`, a
+  fake `peter()` call in `analysis/driver.R` suggested `run gptr_doc("analysis/driver.R")`.
+- Cause: the literal came from `doc_rel()`, relative to the project root, while `gptr_doc()`
+  resolves its argument against the working directory (`analysis/analysis/driver.R`, refused as
+  not in an existing directory); it was also pasted without escaping.
+- Fix: the suggestion is `doc_str_literal(path_rel(site$path, getwd()))`: relative inside the
+  working directory, absolute outside it; the sentence keeps `doc_rel()` for both documents.
+- Green: `^(doc-.*|arch-layers|lint-rules)$` PASS 2672 SKIP 2 (repr; NOT_CRAN=true). Lint clean.
+- Deviations: none (the notice's form in D-249 stands). Open: none.
+
+### export-2b - A raw export refuses a function that names a session handle
+- Validation and review of export-2 (`R/doc-export.R`, low; one finding reported twice).
+- Red: FAIL 3 in `^doc-export$` (PASS 224): `report = function() cat(s$text)` before `s =
+  peter("one")` and `report()` after it exported, and so did `s = 1; report = \() s$text;
+  report()` before the call: the plain scripts fail with "object 's' not found" or report `1`.
+- Cause: export-2's ordered pass counts a read only after the handle's `peter()` statement; a
+  function reads its names when called, which `report()` does not show.
+- Fix: a statement whose `all.names()` hold `function` (also `\()`) is refused when it names any
+  handle a `peter()` statement of the document binds; direct reads keep the position rule.
+  `?gptr_export` and the `script-as-history` export paragraph say so.
+- Green: `^doc-export$` PASS 228; `^(doc-export|doc-replay|doc-blocks|zzz|arch-layers|lint-rules)$`
+  PASS 1522 (NOT_CRAN=true). Lint clean (the `.Rmd.orig` keeps its one lint from main, line 365);
+  Rd regenerated; plan checks pass. `precompute.R script-as-history`: 0 problems, output
+  byte-identical to the edited `.Rmd`.
+- Deviations: D-249 (extended). Open: a function whose own argument or local shares a handle's
+  name is refused too (conservative).
+
+### replay-4b - The gptr_return() notice is said to be silent in replay mode, as it is
+- Review of replay-4 (`R/gptr-sdk.R`, low).
+- Red: none (docs). The extended test passes before the change: with `gptr.replay = "replay"` the
+  first call is silent, and a file holding `gptr_return(1)` sourced under `"auto"` gives the notice.
+- Cause: replay-4 copied IC-48's "silent while a document is replayed" into `?gptr_return` and 03
+  §4.3; the code is silent only when `replay_mode()` is `"replay"` (P08 adaptation 13), so a
+  recorded `gptr_return()` that stays in the code (nested, or a pipe split over lines) prints it
+  when the document is sourced under the default `"auto"`.
+- Fix: `?gptr_return`, 03 §4.3, 04 §6.6 and IC-48 say "silent in replay mode (`replay = "replay"`
+  or `GPTR_REPLAY=replay`)".
+- Green: `^(gptr-sdk|arch-layers|lint-rules)$` PASS 189 (NOT_CRAN=true). Lint clean; Rd
+  regenerated; plan checks pass.
+- Deviations: D-249 (extended: the contract text now names the implemented rule). Open: none.
+
+### steer-doc-1 - A steer line reads the same with or without its trailing space; only gptr's lines get the block id
+- Steering review finding 5, the record half (its ingress half, refusing a blank steer, is P28's
+  steer-14).
+- Red: FAIL 6 in `^doc-blocks$` (PASS 352): a blank steer relay and an attachment-only follow-up
+  were written `## Steer: ` and `## Follow-up: `; a recorded block whose `## Steer: ` an editor
+  trimmed read `user-edited` in `gptr_blocks()` and `gptr_export()` refused it; a steer and r code
+  holding `@@GPTR_BLOCK@@` were written with the block id, also inside a child overlay.
+- Cause: `doc_re_steer` needed the space after the colon, the three writers kept it after an empty
+  text, and `doc_fill_id()` replaced the placeholder in every body line.
+- Fix: `doc_re_steer` ends `:( |$)`; the writers use `doc_steer_line()`, which drops a trailing
+  space; `doc_fill_id()` fills the id only into the hidden value name and `gptr_resume(block = `
+  homes (the header keeps its substitution). IC-49 and P15 amended.
+- Green: `^doc-blocks$` PASS 358; `^(doc-blocks|doc-replay|doc-export|doc-knitr)$` PASS 1371
+  (NOT_CRAN=true). Lint clean; plan checks pass (index findings unchanged). Live: see steer-doc-2.
+- Deviations: D-249 (extended). Open: with `.run = FALSE`, steers queued before the run go ahead of
+  the deferred prompt, so the first is the turn's first message and is not recorded, and the prompt
+  is recorded as `## Follow-up:` (seen live; steering audit finding 1, P28's).
+
+### steer-doc-2 - Recorded steer, follow-up, decision and agent lines escape control characters
+- Steering review finding 2 (partly confirmed: one line is the IC-49 design and a cut is
+  `source()`'s, not ours; raw control characters are real).
+- Red: FAIL 3 in `^doc-blocks$` (PASS 360): a turn whose `note`, steer relay and follow-up held ESC,
+  BEL, FF, VT, U+0085, U+2028 and U+2029 wrote them raw into its `## Decision:`, `## Steer:` and
+  `## Follow-up:` lines, also with `LC_CTYPE` C; `source(echo = TRUE)` then drew them.
+- Cause: `doc_one_line()` collapsed only `[\r\n\t]`.
+- Fix: it also turns U+0085, U+2028 and U+2029 into spaces and passes `ui_escape()` (rule C1),
+  which writes control, bidi and zero-width characters as `<U+XXXX>`; the `## Agent` line, an S1
+  block's `#>` line and a console command's `#` comment share it. Written blocks keep their bytes.
+  04 §11.5 amended.
+- Green: `^doc-blocks$` PASS 363; `^(doc-blocks|doc-replay|doc-export|doc-knitr|doc-io|arch-layers|
+  lint-rules)$` PASS 2171 (NOT_CRAN=true, the IC-49 menu-steer replay included). Lint clean.
+  Live, installed build, with steer-doc-1 (GPT-5.6 Sol, Claude Opus 4.8, Ollama qwen3.8:27b): a
+  `background = TRUE` script given `gptr_steer(s, "   ")` and a steer holding ESC, BEL and
+  `@@GPTR_BLOCK@@`, run by `gptr_source()`, recorded `## Steer:` and the escaped text with the token
+  kept; no raw control byte in the file or in `source(echo = TRUE)` of its export; `gptr_blocks()`
+  fresh with and without the trailing space.
+- Deviations: D-249 (extended). Open: none.
+
+### steer-doc-3 - A console transcript records a run that ended aborted, at max_turns or with an error
+- Steering review finding 10.
+- Red: FAIL 37 in `^doc-replay$` (PASS 714): for each of `aborted`, `error`, `max_turns`, `blocked`
+  and `budget`, a console turn's prompt, code and `## Steer:` were missing, the next turn was written
+  `s_<hex> = peter("predict")` and its partial answer cached; a transcript whose errored first run
+  set `x_err` failed to re-source with "object 'x_err' not found".
+- Cause: `doc_on_agent_end()` wrote only `idle` runs (P15 decision 5), a rule made for script blocks,
+  whose block caches the answer, and never weighed for a transcript, the history of what happened.
+- Fix: a console site records every settled run; one that did not end `idle` gets a last
+  `## Run: <status>` line (in the body and its sha) and no cached answer. Script documents keep
+  decision 5. IC-49, P15 decision 5, the hook's roxygen, the script-as-history vignette and NEWS.
+- Green: `^doc-replay$` PASS 752; `^(doc-replay|doc-blocks|doc-formats|doc-export|arch-layers|
+  lint-rules)$` PASS 1693 (NOT_CRAN=true). Lint clean; plan checks unchanged; `precompute.R
+  script-as-history` byte-identical to the edited `.Rmd`. Live, installed build (GPT-5.6 Sol,
+  Claude Opus 4.8, Ollama qwen3.8:27b): an `Rscript -e` console transcript of a steered
+  `background = TRUE` run stopped by `max_turns = 2`, then a piped turn, recorded the steer, both
+  runs' code and `## Run: max_turns`, and `s_<hex> |> peter(...)`; `GPTR_REPLAY=replay` re-sourced
+  it to `x_err`, `y_err`, `w_err` 21, 22, 42.
+- Deviations: D-249 (extended). Not as planned: no list of ended statuses, since `run_settle()` gives
+  `agent_end` no other non-idle status. Open: the background `[b]` path is not tested.
+
+### steer-doc-4 - A replayed session keeps the recorded steers and every replayed turn
+- Steering review finding 3 (understated: the whole second turn of a replayed chain was lost).
+- Red: FAIL 16 in `^(doc-replay|session-object)$` (PASS 1300): the live call after a replayed
+  two-block chain whose fake provider queued three `gptr_steer()` steers saw 9 messages with the
+  session file kept (block 2 a dead sibling branch) and 5 in a clone (one merged `r` call, no
+  steer, no block 2); a block with `## Steer:`/`## Follow-up:` lines between runs reconstructed
+  as one call; a rebuilt session replayed block 2 after a live turn by dropping that turn.
+- Cause: `doc_replay_doc()` kept only code lines, `replay_reconstruct()` wrote one `r` call, a piped
+  block only marked the session, and `replay_rebuild()` cut the leaf once, at the first block.
+- Fix: `doc_replay_steps()`; `replay_turn_append()` writes runs, steers as the live operator relay
+  (recorded back as the same line) and follow-ups after a placeholder answer; a reconstructed piped
+  session gains each block's turn; `replay_seek()` moves a rebuilt one to each block's turn until a
+  live run (`replay_notice()`). IC-46 and the 04 replay functions amended.
+- Green: `^(doc-replay|session-object)$` PASS 1319; `^(doc-.*|session-.*|agent-run|mcp-recording|
+  arch-layers|lint-rules)$` PASS 4914 SKIP 2 (NOT_CRAN=true). Lint clean. Live, the three routes:
+  that transcript re-sourced in a new process, with its session log and as a clone without one
+  (`history_source` `store`, `reconstructed`), then continued live: each model quoted both prompts
+  and the steer and named the three variables.
+- Deviations: D-249 (extended). Not as planned: both paths give the same 14 messages (the plan's 18
+  had context messages in the recorded turns); a live run also stops the seek. Open: a
+  `gptr.replay` marker of an earlier block stays off the path once the next block moves on.
+
+### steer-doc-5 - Replaying a script does not send its recorded steers again
+- Steering review finding 0 (medium: the console never writes a `gptr_steer()` statement), and finding
+  4's residual sentence for `?gptr_steer`.
+- Red: FAIL 5 in `^(doc-replay|gptr-sdk)$` (PASS 888): replaying a recorded `.run = FALSE` +
+  `gptr_steer(as = "follow_up")` + `gptr_wait()` script, and `background = TRUE` ones with
+  `gptr_steer()` or a pipe steer, each made one more request under `replay = "replay"`; in auto mode
+  a steer left over after run 1 was recorded again in an appended block; a turn `gptr_wait()` started
+  from queued input under a binding said nothing. A steer with new text was sent (control).
+- Cause: replay kept nothing of a block's steer lines; `gptr_steer()` queued and `route_continue()`
+  started a run on the idle replayed session; `sdk_launch()` gives such a run no document site.
+- Fix: a replayed block's steer and follow-up texts become session notes (`replay_notes_add()`, which
+  takes back a matching queued item); `gptr_steer()` and `route_continue()` drop an equal text on an
+  idle session with one notice (`replay_note_take()`); a live run clears the notes; `sdk_launch()`
+  informs once. `doc_one_line()` moves to `utils-text.R` (L0). `?gptr_steer`, 04 §6.5, IC-55, vignette.
+- Green: `^(doc-replay|gptr-sdk)$` PASS 893; `^(doc-replay|gptr-sdk|session-object|gptr-gateway|
+  agent-background|doc-blocks|utils-text|arch-layers|lint-rules)$` PASS 2474 (NOT_CRAN=true). Full
+  suite `.`: FAIL 4 SKIP 64 PASS 35558, the 4 a `ps` memory sample refused (`access_denied`) under
+  load in `proc-marker-family` and `proc-rscript-native`, which alone pass (PASS 213). Lint clean;
+  Rd regenerated; `precompute.R script-as-history` byte-identical to the edited `.Rmd`. Live, the
+  three routes: `Rscript analysis.R` bound to itself, a `background = TRUE` call plus `gptr_steer()`
+  and `gptr_wait()`, recorded the steer; rerun under `GPTR_REPLAY=replay` and under auto it exited
+  0 with the notice, one turn and the file unchanged.
+- Deviations: D-249 (extended). Not as planned: the notes reach the session through the replay
+  functions' `doc` (an L4 file calls only the kernel SDK); a live run clears them in `run_start()`
+  (`replay_notice()`), not `gateway_run_start()`; the drain takes back only `api_user` and `pipe`
+  items, never a typed steer. Open: at the P28 merge the drain emits `queue_emit(s, "withdraw", ...)`.
+
+### replay-2f - Every gptr_return() shape replays its value or says once why not
+- Second validation of replay-2 (medium; a regression: main said "not bound" for every expression).
+- Red: FAIL 24 in `^(doc-blocks|doc-replay|doc-io)$` (PASS 1885): recorded through `gptr_source()`
+  and replayed as a later process, `coef(fit) |>\n  gptr_return()`, a four-line chain with a
+  comment and `gptr_return(x = coef(fit))` gave `$value` NULL with no message, and so did
+  `if (TRUE) gptr_return(...)`, `y = gptr_return(...)` and braces; `gptr_return(coef(fit))` then
+  `if (TRUE) gptr_return(1)` replayed the coefficients, not 1; the same under `GPTR_REPLAY=replay
+  Rscript`, with and without `.gptr/`.
+- Cause: `doc_rewrite_return()` rewrote a call only when its name, or its pipe and call, sat on one
+  line, `doc_drop_expr()` dropped an `x =` call, and `returned` held once any call was rewritten;
+  `doc_turn_r()` then wrote no `value=` (or the wrong one), and nothing told the replay.
+- Fix: one rule: any top-level call, piped or over lines, its argument unnamed or `x`, becomes
+  `.gptr_value_<id> = (<argument>)` (checked by re-parsing), and `returned` holds only when no
+  `gptr_return()` is left in the code. A replayed block with no `value=` whose code still calls
+  `gptr_return()` informs once per block and process, "No recorded value for block <id> of <doc>: a
+  document records gptr_return() only as a top-level call, so $value is not replayed."
+  `?gptr_return`, 04 §11.5, IC-46, IC-48, 03 §6.9.3, P15.
+- Green: `^(doc-blocks|doc-replay|doc-io)$` PASS 1909; `^(doc-.*|gptr-sdk|subagent-team|
+  session-object|session-store|mcp-recording|tool-r|northstar|ckpt-rewind|console-commands|
+  copy-tools|arch-layers|lint-rules)$` PASS 4707 SKIP 2 (repr; NOT_CRAN=true). Lint clean; Rd
+  regenerated; plan checks unchanged from HEAD. Full suite `.`: FAIL 0 SKIP 64 PASS 35659. A
+  nested bare name, pinned after, replays by name without the notice (`^(doc-replay|gptr-sdk)$`
+  PASS 929); `?gptr_return` then said "such a value", not "argument". Installed build, fake `r`
+  call, a self-bound `analysis.R` per shape recorded by `Rscript` and replayed by
+  `GPTR_REPLAY=replay Rscript`, with and without `gptr_init()`: the seven top-level shapes print the
+  coefficients, the three nested ones the notice and NULL, files unchanged; under auto a nested one
+  adds the outside-a-run notice.
+- Deviations: D-249 (extended). Open: a team or fan-out child that designates an expression inside
+  another expression still replays NULL without a word (its code is recorded only with a value or
+  exports); a nested bare name keeps `value=<name>`, as before.
+
+### export-2c - The script-as-history export paragraph is wrapped at 100 columns
+- Second validation of export-2b (low).
+- Red: none (docs): `vignettes/script-as-history.Rmd` line 331 and its `.Rmd.orig` line 309 were
+  145 columns.
+- Cause: export-2b added the sentence on functions that name a handle without re-wrapping.
+- Fix: the paragraph's last lines re-wrapped to 100 columns, identically in both files (longer lines
+  remain only in a table row and the logo data); two lines of the replay-2f record wrapped too.
+- Green: `precompute.R --check script-as-history` 0 problems; its knitted `.Rmd` is byte-identical
+  to the edited one.
+- Deviations: none. Open: none.
+
+### steer-doc-5b - Every source of a script in one process keeps its recorded steers unsent
+- Second validation of steer-doc-5 (high).
+- Red: FAIL 7 in `^doc-replay$` (PASS 836): the follow-up, `gptr_steer()` and pipe-steer scripts,
+  each sourced again three times in the recording process (auto, replay, auto), sent the recorded
+  steer from the second source on (one or two more requests each), and the pipe steer wrote a
+  second block into the file.
+- Cause: session_replay_apply() set a block's notes only while the block was not yet `seen`, and
+  replay_note_take() used them up, so the live session that had seen the block got none again.
+- Fix: replay_notes_add(s, block, doc) sets the block's notes anew on every replay, keyed by block
+  (no pile-up), also from replay_adopt(); replay_note_take() takes a text from the block holding
+  it. IC-55 and D-249 amended.
+- Green: `^(doc-replay|gptr-sdk)$` PASS 947; `^(session-object|gptr-gateway|agent-background|
+  doc-blocks|utils-text|arch-layers|lint-rules)$` PASS 1598 (NOT_CRAN=true). Lint clean. Live,
+  installed build (GPT-5.6 Sol, Claude Opus 4.8, Ollama qwen3.8:27b): the follow-up script and a
+  `background = TRUE` one with a pipe steer, recorded, then sourced three more times in that
+  process with gptr_source() (auto, replay, auto): no request, the file unchanged, the queue empty.
+- Deviations: D-249 (extended). Open: none.
+
+### steer-doc-4b - A rebuilt session seeks each block's own record, not the file's last entry
+- Second validation of steer-doc-4 (medium).
+- Red: FAIL 3 in `^session-object$` (PASS 543): after a replay of b1 alone (forgotten, as at a
+  process exit), a rebuilt b1 piped into b2 had `turns` 2 but one user/assistant pair and `$text`
+  "first answer", and the next live call lacked turn 2.
+- Cause: replay_seek() could only cut back from the rebuilt leaf, the file's last entry, which a
+  replay that stopped sooner (one line run, an interrupt, the pre-fix code) left on turn 1's branch.
+- Fix: replay_seek(s, turn, block) moves to the block's last `gptr.doc_block` record not undone
+  (replay_block_record(), shared with replay_holds_block()), else cuts from the tip as before;
+  session_replay_apply() and replay_rebuild() pass the block. IC-46 and D-249 amended.
+- Green: `^session-object$` PASS 547; `^(doc-.*|session-.*|agent-run|mcp-recording|arch-layers|
+  lint-rules)$` PASS 5004 SKIP 2 (repr; NOT_CRAN=true). Lint clean. Live, the three routes: a
+  two-statement chain recorded, its first block replayed alone in a second process (the file's
+  last entry then a `gptr.replay` on turn 1's branch) and the whole file in a third: `turns` 2,
+  8 messages, `$text` the second answer; a live call then named a = 1 and b = 2.
+- Deviations: D-249 (extended). Open: a block without a record (a team child, a nested call)
+  still seeks along the rebuilt path.
+
+### replay-2g - A nested gptr_return() before the last top-level one keeps value=
+- Second validation of replay-2f (low; a regression from 2df56eaa).
+- Red: FAIL 3 in `^(doc-blocks|doc-replay)$` (PASS 1227): `if (FALSE) gptr_return(1)` then
+  `gptr_return(coef(fit))` was recorded without `value=`; replayed in a later process `$value` was
+  NULL with the false "only as a top-level call" notice.
+- Cause: doc_rewrite_return() denied `returned` for any gptr_return() left in the code, also one
+  that cannot run after the last rewritten call.
+- Fix: only a leftover in a later top-level expression, or inside a function literal (which may
+  be called later), denies it. `?gptr_return`, IC-48 and D-249 amended.
+- Green: `^(doc-blocks|doc-replay|doc-io|doc-export|mcp-recording)$` PASS 2217; `^(gptr-sdk|
+  arch-layers|lint-rules)$` PASS 194 (NOT_CRAN=true). Lint clean; Rd regenerated. Live, the
+  three routes ran that code as asked: the block got `value=`, and a later process replayed the
+  coefficients without a notice.
+- Deviations: D-249 (extended). Open: none.
+
+### replay-2h - No false no-value notice when the recording session replays its own value
+- Second validation of replay-2f (low).
+- Red: FAIL 1 in `^doc-replay$` (PASS 847): `if (TRUE) gptr_return(2)` recorded through
+  gptr_source() and re-sourced with `replay = "replay"` in the same process gave `$value` 2 and
+  yet "No recorded value for block <id> of analysis.R: ... so $value is not replayed."
+- Cause: doc_replay_no_value() read only the header and the code, not the replayed session.
+- Fix: it takes the session and is silent when it holds a value of its turn (replay_value()'s
+  test). `?gptr_return` (the notice is a later R session's), IC-46 and D-249 amended.
+- Green: `^(doc-replay|doc-blocks|doc-io|gptr-sdk|subagent-team|session-object|arch-layers|
+  lint-rules)$` PASS 3027 (NOT_CRAN=true); the later-process shapes keep their notice. Full suite
+  `.` after the four round-2 units: FAIL 0 SKIP 64 PASS 35689. Lint clean; Rd regenerated. Live
+  (GPT-5.6 Sol, Claude Opus 4.8): that code replayed in the recording
+  process to 2 without a notice, in a later one to NULL with it; Ollama ran it with
+  `record = false`, so its block holds no code and its replays say nothing.
+- Deviations: D-249 (extended). Open: none.

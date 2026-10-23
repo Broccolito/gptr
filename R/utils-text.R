@@ -236,6 +236,15 @@ ui_escape = function(x) {
   }, character(1), USE.NAMES = FALSE)
 }
 
+#' Collapse text to one comment-safe line: line breaks become spaces, and the control, bidi and
+#' zero-width characters that `source(echo = TRUE)` would draw are escaped as the console does.
+#' The document writer's normalisation (P15), here so a replay can match a steer against it (IC-46).
+#' @noRd
+doc_one_line = function(x) {
+  x = as_utf8(paste(as.character(x), collapse = " "))
+  ui_escape(trimws(gsub("[\r\n\t\u0085\u2028\u2029]+", " ", x)))
+}
+
 #' Clean terminal output: drop ANSI/OSC sequences, keep the last frame of \r progress lines,
 #' cap lines at 400 characters. Returns lines.
 #' @noRd

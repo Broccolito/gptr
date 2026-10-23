@@ -173,9 +173,9 @@ built-in command table.
 \section{Sessions and results}{
 
 A pipe such as \code{session |> peter("Explain the result.")} adds work to the same session
-and kept workspace. Use \code{\link[=gptr_fork]{gptr_fork()}} to branch explicitly. The final answer is
-\code{session$text}; \code{session$value} is the R value selected by \code{\link[=gptr_return]{gptr_return()}} during a tool
-call. Agent-created objects remain in \code{envir}.
+and kept workspace. Use \code{\link[=gptr_fork]{gptr_fork()}} to branch explicitly. The last turn's answer is
+\code{session$text}; \code{session$value} is the newest R value selected by \code{\link[=gptr_return]{gptr_return()}} in any turn,
+so a turn that selects none keeps it. Agent-created objects remain in \code{envir}.
 }
 
 \examples{

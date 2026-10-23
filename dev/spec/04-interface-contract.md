@@ -569,12 +569,12 @@ and produce `gptr_tool_result` objects (§5.7) that `tool_result_message(result,
 | `elapsed` | num(1) | seconds |
 | `out_id` | chr(1)\|NULL | `peter$out()` id when truncated |
 | `spill` | chr(1)\|NULL | spill file path when truncated |
-| `outputs` | chr | printed-output lines of each successful recorded expression group, for `#>` comments (at most `gptr.doc_output_lines` per group, 76 characters each) |
+| `outputs` | list | printed output of each successful recorded top-level expression, for `#>` comments: `list(lines, n)`, its first non-empty lines (at most `gptr.doc_output_lines`, else the setting `doc$output_lines`; 76 characters each) and the count of all of them |
 | `nested` | list | at most 20 `list(tool, summary, is_error, level)` |
 | `bridge` | chr | `#>` digests of bridge calls (`#> sh git status --porcelain: exit 0, 6 lines`) |
 | `artifacts` | chr | paths of artifacts written (`.gptr/artifacts/<id>/app.R`) |
 | `checkpoint` | chr(1)\|NULL | id of the `gptr.checkpoint` entry |
-| `value` | chr(1)\|NULL | name designated through `gptr_return()` during this call (the value itself is held by the session per §5.1) |
+| `value` | chr(1)\|NULL | name designated through `gptr_return()` during this call, for an expression its one-line label (the value itself is held by the session per §5.1) |
 
 `details` of `read`: `path`, `offset`, `limit`, `lines_total`, `truncated`, `image` (lgl), `encoding`, `eol`.
 Of `edit`: `path`, `n_edits`, `fuzzy` (lgl), `diff` (chr, the full unified diff), `document` (lgl: the path is a
@@ -754,6 +754,7 @@ returns the identical object (`identical(s |> peter("x"), s)`).
 | `home_label` | chr(1) | `"globalenv"`, `"overlay of s…"`, `"<environment>"`, `"frame of f()"` |
 | `plan` | chr(1)\|NULL | pending plan text (plan mode) |
 | `replayed` | lgl(1) | a replayed session |
+| `replay_rows` | int(1)\|NULL | its usage rows when a block was last replayed into it (the footer's `replayed`) |
 | `block` | chr(1)\|NULL | replayed block id |
 | `snapshot` | df\|NULL | last workspace snapshot (names, addresses, fingerprints; no values) |
 | `ext` | named list | per-plugin JSON-able state |
@@ -795,7 +796,7 @@ the valid names):
 
 | Method | Behaviour |
 |---|---|
-| `print(x, ...)` | the last answer through `msg_verbatim()` (rendered markdown when the console renderer is available), then a dim footer `status . model . turns . tokens . cost . id`; returns `invisible(x)`; never touches user objects |
+| `print(x, ...)` | the last answer through `msg_verbatim()` (rendered markdown when the console renderer is available), then a dim footer `status . model . turns . tokens . cost . id` (a replayed session's status reads `replayed` until a request adds usage, and its tokens and cost read unknown while it holds no stored request; IC-46, IC-74); returns `invisible(x)`; never touches user objects |
 | `format(x, ...)`, `as.character(x, ...)` | `$text` |
 | `summary(object, ...)` | complete `gptr_session_summary` table with a detached character-only metadata snapshot; no model request |
 | `print.gptr_session_summary(x, n = 8L, ...)` | recent messages, omitted count and session metadata at current console width; safe display copy; `n = Inf` shows all rows |
@@ -1454,11 +1455,15 @@ if (interactive()) {
 gptr_doc(path = NULL, format = NULL, sync = FALSE)
 ```
 
-`path = NULL`: returns the current binding `list(path, format)` or `NULL`, visibly. A path binds every `peter()`
-call of this R process (console and script) to that document, which is explicit consent to write it (IC-45);
-`FALSE` unbinds. `sync = TRUE` applies the pending blocks recorded for that document (a Jupyter notebook that was
-open while recording, or unapplied deferred-write sidecars) through the format's writer (IC-50, IC-51). `format`: `"r"`, `"rmd"`,
-`"qmd"`, `"ipynb"`, `"transcript"`; `NULL` = from the extension. Returns the previous binding invisibly.
+`path = NULL`: returns the current binding `list(path, format)` or `NULL`, visibly. A path binds that document to
+this R process, which is explicit consent to write it (IC-45): calls located in it record below themselves, and
+calls located in no document (console, `Rscript -e`, stdin) are appended to it unless it is a notebook (IC-49). A
+call located in another document needs that document's consent; when it cannot be asked, the call is not recorded
+and a `notice` names both documents, once per document (D-249). `FALSE` unbinds. `sync = TRUE` applies the pending
+blocks recorded for that document (a Jupyter notebook that was open while recording, or unapplied deferred-write
+sidecars) through the format's writer (IC-50, IC-51) and informs a `notice`: "Wrote N block(s) into <doc>." or "No
+pending blocks for <doc>." (D-249). `format`: `"r"`, `"rmd"`, `"qmd"`, `"ipynb"`, `"transcript"`; `NULL` = from the
+extension. Returns the previous binding invisibly.
 Conditions: `invalid_argument`.
 
 The binding lives in `the$doc_binding` for this R process; nothing is written until a block is recorded.
@@ -1512,7 +1517,8 @@ gptr_cache(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tm
 ```
 
 `info` returns a `gptr_cache_info` data frame (including unapplied document sidecars, which are never pruned
-automatically, IC-51); `prune` removes S2 entries of deleted blocks, S1 entries unused for
+automatically, IC-51: one row for the workspace root's, one for those of documents outside any `.gptr/` in
+`R_user_dir("gptr", "cache")/pending/`); `prune` removes S2 entries of deleted blocks, S1 entries unused for
 90 days (mtime touched on hit), `cache/tmp` files older than `gptr.spill_days`, the refreshed catalog cache beyond
 the newest, checkpoint blobs per G7 retention; `clear` removes the kind entirely. `prune`/`clear` return the number
 of files removed invisibly. Works on the workspace root (or `tempdir()/gptr`) and `R_user_dir("gptr", "cache")`.
@@ -1592,7 +1598,9 @@ The one enqueue function behind the pipe into a running session, the pause menu 
 `text`: `chr(1)` (redacted with the `context` profile at ingress). Appends `list(text, blocks = list(), source,
 t)` to the session's `steer` or `follow_up` FIFO and returns `invisible(s)` at once. Steers are delivered only
 after a complete tool-result message as an operator relay; follow-ups when the agent would otherwise stop; on an
-idle session the item is taken at the next run start. Emits `queue_update`.
+idle session the item is taken at the next run start. Emits `queue_update`. The queue lives in the R process;
+items still queued when it ends are not saved. On an idle replayed session a text equal to one of the steer or
+follow-up notes its replayed blocks recorded is not queued (IC-55).
 
 ```r
 s = peter("Summarise mtcars", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
@@ -1719,8 +1727,10 @@ else `interrupted`) with home `envir`; a rebuilt **fork** always gets a fresh `n
 (IC-46). A file from another machine or tracked by git is rebuilt with a freshly frozen prompt and its user turns
 marked `imported` (IC-52). A detached copy follows the split-brain rules of §5.1 of `03` (`gptr_error_split_brain`).
 `block = "<id>"` (and `child = "<name>"` for team blocks) returns the session that replay bound to that document
-block in this process, or signals `gptr_error_replay_unbound`; it never falls back to `envir` (IC-46). Conditions:
-`invalid_argument`, `split_brain`, `busy`, `replay_unbound`.
+block in this process, or signals `gptr_error_replay_unbound`; it never falls back to `envir` (IC-46). Without a
+workspace the store lasts until R exits: a store miss (`x = NULL` with no stored session, or an id no stored file
+matches) then adds the line "Without a .gptr/ workspace, sessions last until R exits; gptr_init(\".\") keeps them."
+to its `invalid_argument` error. Conditions: `invalid_argument`, `split_brain`, `busy`, `replay_unbound`.
 
 `gptr_last()`: the most recently active session of this process, held **strongly** (IC-71), including one whose
 call was interrupted before assignment, or `NULL`.
@@ -1805,7 +1815,7 @@ and forces `x` in a leaf; the session stores it under the §5.1 value policy of 
 below `gptr.value_copy_max` by `env_snap_size()`: deep copy, unless `duplicate()` returns the value itself or the
 copy holds as much of its own; otherwise name + address; anonymous or bound in a function-frame home: boxed;
 D-247), capped by `gptr.values_max_bytes`, and appends a `gptr.value` entry. Returns `invisible(NULL)`. Outside a run
-it returns `invisible(x)` and does nothing else (a once-per-session `notice`, silent while a document is replayed), so
+it returns `invisible(x)` and does nothing else (a once-per-session `notice`, silent in replay mode), so
 recorded code that still contains the call re-sources cleanly (IC-48). Copy-safety: [R1][leaf] (`test-copy-tools.R`
 rows for the three cases).
 
@@ -2544,8 +2554,9 @@ overlay `new.env(parent = home)`), `store_heartbeat(store)` (touches the lock ev
 timer). There is no `store_close()`: the lock is released when the session is collected or the package unloads
 (D-154). Consumers: P06, P15 (replay), P16.
 
-**Replay functions** (`session-object.R`, IC-46): `session_replay_apply(s, block, header, text = NULL)` (advances
-the piped session in place: `gptr.replay` entry, `seen`, `turns`, the `value=` name, `last_text`; returns `s`),
+**Replay functions** (`session-object.R`, IC-46): `session_replay_apply(s, block, header, text = NULL, doc = NULL)`
+(advances the piped session in place: `gptr.replay` entry, `seen`, `turns`, the `value=` name, `last_text`; a
+rebuilt session moves to the block's turn, a reconstructed one gains it from `doc`; returns `s`),
 `session_replay_new(block, header, envir, doc)` (the live session with the header's id, else a `replayed` session
 adopting the recorded id, from the JSONL or reconstructed from the document with `history_source =
 "reconstructed"`),
@@ -2842,7 +2853,7 @@ policy(function() session_run(s, msg_user("go"), list()), list(), mode = "call")
 | `builtin_documents(gptr)` | `doc-formats.R` | registers `doc_format` specs `r`, `rmd`, `qmd`, `ipynb`, `transcript`; the route `document` (order 50); the `documents` prompt section (IC-68); an `agent_end` hook that renders and writes the block when `run$opts$doc` is set; a `session_tree` hook that makes undone blocks inert; the services `doc.site`, `doc.edit`, `doc.s1_block` and `doc.replay` (owned by `builtin:documents`, so filtering it removes them, IC-34, IC-47) | P02 load |
 | `doc_locate(call)` | `doc-locate.R` | a site `list(kind = "srcref" \| "source_frame" \| "knitr" \| "quarto" \| "jupyter" \| "rscript" \| "ide" \| "console", path, format, stmt = int(2) \| NULL, expr = call \| NULL, occurrence = int(1), ordinal = int(1), backend = chr(1), top_level = lgl(1), in_block = chr(1) \| NULL (the agent block whose body holds the statement, IC-47), ide_id = chr(1) \| NULL, defer = lgl(1))` using the precedence of §6.9.3 of `03`; `source()` frames are read inside `tryCatch` only when `gptr.doc_source_frames` is `TRUE`; paths compared with `path_key()` | P15 |
 | `doc_decide(site, prompt_hash, args_hash, mode)` | `doc-replay.R` | `"replay"`, `"run"`, `"regenerate"`, `"skip"` (undone), or signals `not_recorded`/`stale_block` per the table of 14 §4.4.2 plus the undone row of G7 §3.8; a block is fresh only when both hashes match (IC-45); block-nested calls replay from S2 (IC-47) | P15 |
-| `doc_block_lines(session, turn, site, call_ordinal)` | `doc-blocks.R` | chr lines of a block in the §11.5 grammar for the site's format (code of successful `record = TRUE` `r` calls from `details$code` minus top-level `gptr_return()` calls and calls of `record = FALSE` members, with top-level `<-` rewritten to `=` where safe; `#>` outputs from `details$outputs`; `## Decision:`, `## Steer:` and `## Follow-up:` lines; bridge digests; artifact paths; redacted with `code_for_history()` and `persist`; IC-48, IC-49); team and fan-out blocks per IC-47; plan-mode turns give one `## Plan:` line | P15 |
+| `doc_block_lines(session, turn, site, call_ordinal)` | `doc-blocks.R` | chr lines of a block in the §11.5 grammar for the site's format (code of successful `record = TRUE` `r` calls from `details$code` minus top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members, with top-level `gptr_return(<expression>)` rewritten to `.gptr_value_<block id> = (<expression>)` and top-level `<-` to `=` where safe; `#>` outputs from `details$outputs`; `## Decision:`, `## Steer:` and `## Follow-up:` lines; bridge digests; artifact paths; redacted with `code_for_history()` and `persist`; IC-48, IC-49); team and fan-out blocks per IC-47; plan-mode turns give one `## Plan:` line | P15 |
 | `doc_upsert(site, block_lines, block_id = NULL)` | `doc-blocks.R` | checks write consent (IC-45; otherwise nothing is written), then idempotent insert/replace of the owned block through the site's backend, passing the `document_write` event (fail closed, patchable) first; md5 conflict check with re-locate and retry (3 times, then warning `doc_conflict`); deferred under Rscript through the sidecar of IC-51; never writes an open notebook (IC-50); returns `list(action, block_id, lines, backend)` and appends `gptr.doc_block`; caches child texts in S2 (IC-47) | P15, P16 |
 | `prompt_hash(template)`, `args_hash(interp)` | `doc-blocks.R` | 12 hex of sha256 of the normalised template (trimws, CRLF -> LF, whitespace around newlines removed); 8 hex of sha256 of the sorted interpolated `name=value` pairs, `NULL` without interpolation (IC-45) | P15 |
 | `s2_get(key)`, `s2_put(key, record)` | `doc-replay.R` | the S2 answer cache (§11.9) | P15 |
@@ -3801,30 +3812,34 @@ Values containing spaces are double-quoted with R escapes. Header keys, in this 
 | `sha` | recommended | first 8 hex of sha256 of the body lines as last written (user-edit detection) |
 | `call` | when > 1 | ordinal of the `peter()` call within the statement (pipelines) |
 | `tokens` | optional | `<input>/<output>` of the turn |
-| `cost` | optional | USD, plain number |
+| `cost` | optional | USD, plain number; written whenever the turn's cost is known (`0` for a free route), omitted when unknown (IC-74) |
 | `session` | recommended | session id |
 | `turn` | recommended | turn number in the session |
-| `value` | optional | the name designated with `gptr_return()` (replay binds `$value` to it) |
+| `value` | optional | the name designated with `gptr_return()` (replay binds `$value` to it): a bare name as written, `.gptr_value_<block id>` for an expression the body assigns, else omitted (one name, never an expression) |
 | `fork` | forks | `<parent session id>:<turn>` |
 | `plan` | when used | id of the session whose pending plan was consumed |
 | `status` | undone blocks | `undone` |
 | `args` | when the prompt was interpolated | 8 hex of sha256 of the sorted interpolated `name=value` pairs; part of freshness (IC-45) |
 | `kind` | team and fan-out blocks | `team` or `fanout` (IC-47) |
-| `children` | team and fan-out blocks | `"<name>:<session id>,..."` (quoted) |
+| `children` | team and fan-out blocks | `"<name>:<session id>[:<value>],..."` (quoted); `<value>` is the child's `value=` name, written when it designated one (IC-47) |
 
 **Body**, in emission order: the code of each successful `r` call with `record = TRUE`, verbatim except that
-top-level `gptr_return()` calls and calls of `record = FALSE` members are dropped and top-level `<-` is rewritten to
-`=` where safe (IC-48); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
-(excluded from `prompt` and `sha`, IC-49); after each such call that printed something, its output as `#> ` lines (at most `gptr.doc_output_lines` lines of 76 characters,
-then `#> ... (N more lines)`), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
+top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members are dropped, a top-level
+`gptr_return(<expression>)` (argument unnamed or `x`, called or piped, on any number of lines) becomes
+`.gptr_value_<block id> = (<expression>)` and top-level
+`<-` is rewritten to `=` where safe (IC-48); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
+(excluded from `prompt` and `sha`, IC-49); after each such call that printed something, its output as `#> ` lines (at most `gptr.doc_output_lines` lines, else the setting `doc$output_lines`, of 76
+characters, then `#> ... (N more lines)` counting every line not shown), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
 (`#> sh git status --porcelain: exit 0, 6 lines`); artifact references (`#> [app] .gptr/artifacts/<id>/app.R`,
 `#> [plot] <path>`); a block whose code needed a secret gets `# gptr: block needs secrets that are not recorded`.
 Code passes `code_for_history()` (literal secrets -> `Sys.getenv("NAME")`). Failed executions and plan-mode code
 are not recorded (a plan-mode turn gives one `## Plan: <plans path>` line). Overlay-fork turns are wrapped
 `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)` (IC-46). Team and fan-out blocks hold one
-`## Agent <name> (<model>): <first line>` line per child and, for children with exports, the child's code wrapped
-`local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` plus one
-`<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per export (IC-47). Indentation copies the owning
+`## Agent <name> (<model>): <first line>` line per child and, for children with exports or a designated value, the
+child's code wrapped `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` plus one
+`<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per export (IC-47). The text of a
+`## Steer:`, `## Follow-up:`, `## Decision:` or `## Agent` line is one line: line breaks (also U+0085, U+2028, U+2029)
+become spaces and control, bidi and zero-width characters are written `<U+XXXX>`, as the console shows them. Indentation copies the owning
 statement's first line. Ownership: the run of blocks starting at the first non-blank line after the statement
 (blank lines between blocks allowed); the k-th call owns the block whose `prompt=` matches, else the one with
 `call=k` (then stale). Only top-level calls own blocks (not inside `function`, `\(x)`, `for`, `while`, `repeat`,
@@ -3838,7 +3853,7 @@ statement's first line. Ownership: the run of blocks starting at the first non-b
 | `.Rmd` | a separate chunk `` ```{r gptr-<id>} `` directly after the owning chunk (fence and prefix copied), body with the markers, no `#>` lines |
 | `.qmd` | a chunk `` ```{r} `` whose first line is `#| label: gptr-<id>`, same body |
 | `.ipynb` | a code cell `{"cell_type": "code", "execution_count": null, "id": "gptr-<id>", "metadata": {"gptr": {"id", "model", "prompt", "date", "session", "turn", "value"}}, "outputs": [], "source": [...]}` after the calling cell; keys sorted; indentation copied from the file (Jupyter: 1 space); numbers kept as read (gptr writes no float of its own, so Jupyter's Python repr is preserved; D-158); only `source` and `metadata.gptr` change on rewrite; never written while the notebook is open: in Jupyter the block is shown as the cell output and kept pending until `gptr_doc(path, sync = TRUE)` (IC-50) |
-| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: a header comment (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, `# source() this file to replay ...`), `library(gptr)`, then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output; slash commands as comments (`# /model opus`) |
+| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: a header comment (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, or `none kept (gptr_init() keeps session logs in .gptr/)` when the log is in `tempdir()/gptr`, which R deletes at exit; `# source() this file to replay ...`), `library(gptr)`, then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output; slash commands as comments (`# /model opus`) |
 
 **Undone blocks** (G7 §3.8): header `status=undone`, every body line prefixed `#~ `; Rmd/qmd chunks get
 `eval=FALSE` (`#| eval: false`); ipynb `metadata.gptr.status = "undone"` plus `#~ ` source lines. A top-level System 1
@@ -3908,7 +3923,7 @@ under `egress` (§11.2).
 | System 1 (P13) | memory (`the$s1_cache`) before a workspace; then `<root>/cache/s1/<2hex>/<sha256>.json` | `hash_sha256(canonical_json(list(schema = 2L, salt, endpoint, model, question, type, criteria, input)))` per element (`salt` from `cache/s1/salt`; `input` = the state; alias models keyed by the alias string) | `{"key", "model" (physical), "alias", "question_sha256", "input_hash" (salted), "answer", "prob", "probabilities", "confidence", "date", "usage": {"input_tokens", "output_tokens"}}`; never the input or the question text (IC-70); mtime touched on hit |
 | System 2 answers (P15) | `<root>/cache/s2/<2hex>/<sha256>.json` | `hash_sha256(canonical_json(list(schema = 2L, doc = <path relative to root>, block = <id>, part = <"" \| child name \| "n<ordinal>">, prompt = <prompt hash>, args = <args hash or "">)))` (IC-45, IC-47) | `{"block", "doc", "part", "prompt", "model", "answer" (redacted final text), "usage", "cost", "session", "turn", "date"}` |
 | Spill files (P01) | `<root>/cache/tmp/gptr-output-<id>.txt` | the out id | redacted full text |
-| Deferred document writes (P15) | `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.rds` | document path | `list(doc, base_md5, upserts = list(list(block_id, lines, site)), session, pid, time)` (IC-51); never pruned automatically |
+| Deferred document writes (P15) | `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json` (`<root>` the document's project `.gptr/`; outside one `R_user_dir("gptr", "cache")/pending/`, D-249) | document path | `list(doc, base_md5, upserts = list(list(block_id, lines, site)), session, pid, time)` (IC-51); never pruned automatically |
 | Model catalog (P05) | `R_user_dir("gptr", "cache")/models.json`, `models.etag` | ETag | the refreshed catalog (§11.10 shape) |
 | MCP tool lists (P18) | `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json` | `hash_sha256(canonical_json(command + args, or URL origin + path))` | `{"tools", "fetched_at", "ttl_ms", "cache_scope"}` (not stored when `cacheScope` is `private` and credentials are not the user's own) |
 | MCP era (P18) | `R_user_dir("gptr", "cache")/mcp-era/<hash>.json` | as above | `{"era": "modern" \| "legacy", "version", "date"}`, 7-day expiry |
@@ -4409,9 +4424,10 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 - `document` (order 50) matches a **top-level** call located in a document (any `doc_locate()` site with a
   path) that **contains a block owned by this call**. Replay needs no write consent. Without a block it sets
   `call$doc` when write consent exists and passes.
-- **Write consent** is checked only in `doc_upsert()`: `gptr_doc(path)` in this process (binds that document for
-  every `peter()` call of the process, console or script), `options(gptr.record = "auto")`, user-scope setting
-  `record = "auto"`, or an interactive yes (remembered per document in the user-level project file, IC-52).
+- **Write consent** is checked only in `doc_upsert()`: `gptr_doc(path)` in this process (consent for that
+  document, which also receives console calls; never for another one, D-249), `options(gptr.record = "auto")`,
+  user-scope setting `record = "auto"`, or an interactive yes (remembered per document in the user-level project
+  file, IC-52).
   `record` is a tighten-type setting, so a project can only turn it off; the earlier "trusted `record = auto`"
   wording is deleted.
 - **Freshness** also covers interpolated values: header key `args=<8 hex>` = the first 8 hex of sha256 of the
@@ -4428,16 +4444,34 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 
 - **Piped session**: when `call$session` is non-NULL, `session_replay_apply(s, block, header)` (P06) advances
   that **same object**: appends `gptr.replay`, adds the block id to `.d$seen` (a block already in `seen` adds no
-  turn), increments `turns`, sets the value by name from `value=` under the value policy, sets `last_text` from
-  the S2 cache when present, and returns `s`. So `identical(chain_result, first_result)` holds for a replayed
-  pipe chain.
+  turn), increments `turns` unless the active path holds the block's `gptr.doc_block` entry, not undone (the
+  session that recorded it, also as `session_replay_new()` finds it live), sets the value by name from `value=` under
+  the value policy unless the session holds a value of that turn (the recording session replayed into another
+  environment of the process keeps its own), sets `last_text` from the S2 cache when present, and returns `s`. So `identical(chain_result, first_result)` holds for a replayed
+  pipe chain. A session rebuilt from its JSONL first moves to the end of the block's turn, at the block's last
+  `gptr.doc_block` entry not undone (else at its recorded turn along the path it was rebuilt with), so each piped
+  block brings its turn back, also after an earlier replay that stopped sooner, and a live call continues from the
+  last one; a live run ends this. A reconstructed session first gains the block's turn from `doc`, reconstructed as
+  below.
 - **No piped session**: `session_replay_new(block, header, envir)` returns a live session holding the header's
   `session=` id if one exists in this process; otherwise a `replayed` session that adopts the recorded id when
-  no live session holds it. Its transcript comes from the session JSONL truncated at the recorded turn when the
-  file exists, else it is **reconstructed** from the document (the template as the user message, the recorded
-  code as the assistant's `r` call, the `#>` lines as its result, the S2 answer text if cached) with
-  `.d$history_source = "reconstructed"`. A later live continuation of a reconstructed session prints a one-time notice
-  that the history is reconstructed.
+  no live session holds it. Its transcript comes from the session JSONL truncated at the recorded turn (no value
+  record of a later turn kept) when the file exists, else it is **reconstructed** from the document (the template
+  as the user message, then in body order each run of recorded code as an assistant `r` call with its `#>` lines as
+  the result, each `## Steer:` line as the operator relay a live steer arrives as, each `## Follow-up:` line as a
+  user message after a placeholder answer, then the S2 answer text if cached) with `.d$history_source =
+  "reconstructed"`. A steer or follow-up read from a document reaches the model with the user's authority, as the
+  template does. A later live continuation of a reconstructed session prints a one-time notice that the history is
+  reconstructed.
+- **No answer**: a replayed session, or a replayed team or fan-out child, whose `$text` stays `NA` (no S2 answer,
+  live session or session file holds it; outside a workspace the S2 cache and session files are in `tempdir()`)
+  informs one `notice` per document and process: "No recorded answer for <doc>: replayed answers ($text) are NA.", plus,
+  without a workspace, " gptr_init(\".\") keeps answers in .gptr/ for later R sessions."
+- **No value**: a replayed block whose header has no `value=` while its recorded code still calls `gptr_return()`
+  (of an expression inside another expression, which IC-48 does not record), replayed into a session that holds no
+  value of its turn (the live session that recorded it holds one), informs one `notice` per block and process:
+  "No recorded value for block <id> of <doc>: a document records gptr_return() only as a top-level call, so
+  $value is not replayed."
 - **Fork blocks** (`fork=` header): the replay result is bound to the block id with `session_replay_bind(block,
   s)` in a process table `the$replay_blocks` (gptr-created sessions only, never user frames; replaced on
   re-source). Recorded fork turns are wrapped `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`;
@@ -4450,15 +4484,18 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 **IC-47 Recording teams, fan-outs and block-nested calls.** (req-6)
 
 - A top-level team or fan-out statement owns **one block**: header `kind=team|fanout`,
-  `children="<name>:<session id>,..."`, `session=<team id>`, `turn`; body per child in name order:
-  `## Agent <name> (<model>): <first line of its report>`; for a child with exports, its recorded code wrapped
-  `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` followed by one
-  `<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per exported name. Child texts
+  `children="<name>:<session id>[:<value>],..."` (the third field is the name the child designated with
+  `gptr_return()`, as a block's `value=`), `session=<team id>`, `turn`; body per child in name order:
+  `## Agent <name> (<model>): <first line of its report>`; for a child with exports or a designated value, its
+  recorded code wrapped `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` followed by
+  one `<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per exported name. Child texts
   are cached in S2 under `(doc, block, "<name>")`. Replay returns a team or fan-out session of replayed children
-  with zero requests; the "team and fan-out calls own no document block" note is deleted. Because the `team` and
-  `fanout` routes (15, 16) run before `document` (50), they first call the `doc.replay` service (P15; absent
-  before P15, then they run live) and return its replayed session when the statement's block is fresh, and they
-  pass their session to P15's writer through `run$opts$doc` like any other top-level call.
+  with zero requests, each child's value designated by the third field (an entry of two fields designates none)
+  and, for a fan-out, each child's element bound as `.x` in its home as for a live child, so the recorded code
+  that follows rebinds the value; the "team and fan-out calls own no document block" note is deleted. Because the
+  `team` and `fanout` routes (15, 16) run before `document` (50), they first call the `doc.replay` service (P15;
+  absent before P15, then they run live) and return its replayed session when the statement's block is fresh, and
+  they pass their session to P15's writer through `run$opts$doc` like any other top-level call.
 - **Block-nested calls**: a `peter()` statement located directly inside an agent block's body (`site$in_block`)
   is replayed from S2 under `(doc, block, "n<ordinal>")` in `auto` and `replay` (zero requests; a miss under
   `replay` errors `not_recorded`) and runs live only in `live`. When a block is written, the final texts of the
@@ -4470,13 +4507,17 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 
 **IC-48 What recorded code contains.** (req-1, req-26, req-28)
 
-- `gptr_return(x)` outside a run returns `invisible(x)` with a once-per-session `notice`, suppressed while a
-  document is being replayed; `gptr_error_not_in_run` is removed.
+- `gptr_return(x)` outside a run returns `invisible(x)` with a once-per-session `notice`, suppressed in replay
+  mode (`replay = "replay"`, `GPTR_REPLAY=replay`); `gptr_error_not_in_run` is removed.
 - `doc_block_lines()` drops, at top-level-expression granularity (`getParseData()` of each recorded code chunk),
-  calls to `gptr_return()`/`gptr::gptr_return()` and to members whose spec has `record = FALSE`; a chunk that
-  becomes empty is omitted; the value stays in `value=`. `record = FALSE` is set for `out`, `plot`, `help`,
-  `search`, `describe`; with a document bound (when `r` has `record`), the `<r_session>` text tells the model to
-  use them only with `record = false` (D-248).
+  calls to `gptr_return()`/`gptr::gptr_return()` of a name (or with another named argument or none) and to members
+  whose spec has `record = FALSE`; a chunk that becomes empty is omitted; the value stays in `value=`. A call with
+  one expression, unnamed or `x` (called or piped, on any number of lines), becomes `.gptr_value_<block id> =
+  (<expression>)`, and `value=.gptr_value_<block id>` when no other `gptr_return()` left in the code can run after
+  it (one in a later top-level expression or inside a function can), so replay recomputes it. Such a call inside
+  another expression is kept as written and records no value (IC-46 says so on replay). `record = FALSE` is set
+  for `out`, `plot`, `help`, `search`, `describe`; with a document bound (when `r` has `record`), the `<r_session>`
+  text tells the model to use them only with `record = false` (D-248).
 - Plan-mode runs never record code (`record` forced `FALSE`); their block holds one `## Plan: <plans path>`
   comment.
 - S-9 best effort: `doc_block_lines()` rewrites `<-` to `=` for `LEFT_ASSIGN` tokens whose assignment is a
@@ -4489,8 +4530,11 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 as `s_<6 hex of the session id> = peter("...")`, later REPL turns as `s_<hex> |> peter("...")`. Steers and
 follow-ups delivered during a block's turn (pause menu, `gptr_steer()`, pipe into a running session, a line typed
 in a terminal console [IC-76]) are recorded
-inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`.
-P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one
+inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`; a
+blank text is written `## Steer:` without the trailing space, and a line is steering with or without it.
+A console transcript records every settled run; a run that ended `aborted`, `error`, `max_turns`, `blocked` or
+`budget` gets a last `## Run: <status>` line and caches no S2 answer (a script document records only `idle`
+runs). P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one
 session.
 
 **IC-50 Jupyter documents.** (req-11) With `front_end() == "jupyter"` gptr never writes the open notebook: the
@@ -4508,7 +4552,10 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
   instead of overwriting. Sidecars are never pruned automatically; `gptr_cache("info")` lists them. Under a
   document lock held by another live pid (array jobs) nothing is recorded and a notice is printed.
 - New sidecars use a versioned, closed plain-data JSON record at
-  `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json`. Required scalar/array/null fields,
+  `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json`, `<root>` being the `.gptr/` of the document's
+  project; a document outside one keeps it in `R_user_dir("gptr", "cache")/pending/`, never in a `tempdir()`, so
+  another process finds it after the writer exits or is killed (D-249). The document's lock is `locks/<sha1>` in
+  the same `.gptr/` or `pending/`, so every process recording the document takes the same one. Required scalar/array/null fields,
   nested anchors and notebook block metadata are validated before recovery. Modern records have
   a fixed 16 MiB byte limit: readers reject oversize/missing/directory inputs and read at most
   that limit plus one byte even if the file grows; writers reject oversize encoded records
@@ -4627,6 +4674,14 @@ working: <text>`. `extension` items are user-role data `Extension <name> sent th
 <text>`; `agent` items are delivered as `<agent_report from="<name>">...</agent_report>` user-role data, never
 as steers. `ctx$send()` and `gptr_steer()` called from model-evaluated code of the same session tree are refused
 with `gptr_error_permission`. Test: a child agent's text never appears in an operator message.
+Each replay of a block (IC-46), also a second source of its script in one process, sets the texts of the
+block's `## Steer:` and `## Follow-up:` lines on the session as its notes, and takes back a queued `api_user` or
+`pipe` item equal to one. While the session is idle, `gptr_steer()` and a pipe into it drop a text equal to a note
+(as `doc_one_line()` writes it, either kind; the note is consumed) with one `notice`, "A steer this script sends
+is already recorded in the replayed block; it was not sent again.", so a replayed script does not send its
+recorded steers twice; a live run clears the notes. A run that `gptr_step()` or `gptr_wait()` starts from queued
+input has no document site: under a `gptr_doc()` binding, outside replay mode, it informs one `notice` that its
+turn is not recorded.
 
 **IC-56 Pending-plan hand-off.** (safe-19) The plan is handed only to the **next** `peter()` call of the same R
 process and environment within one hour, and only when that call is top-level (not nested, not in a run, not in

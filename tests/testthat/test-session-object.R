@@ -460,6 +460,21 @@ test_that("session_value_get(turn =) returns the value of that turn or NULL", {
   expect_null(session_value_get(s, turn = 7L))
 })
 
+test_that("$value keeps the newest returned value through a turn that returns nothing", {
+  local_project()
+  local_fake_provider(list(fake_tool("r", code = "gptr_return(1)"), "one",
+                           fake_tool("r", code = "gptr_return(2)"), "two", "ok",
+                           fake_tool("r", code = "gptr_return(NULL)"), "cleared"))
+  s = peter("a", model = "fake/fake-1", mode = "auto", envir = new.env())
+  s |> peter("b")
+  s |> peter("c")
+  expect_identical(s$value, 2)
+  expect_identical(s$turns, 3L)
+  expect_identical(s$text, "ok")
+  s |> peter("d")
+  expect_null(s$value)
+})
+
 # ---------------------------------------------------------------- verbs
 
 test_that("session_set_model() appends model_change and emits model_select", {
@@ -1141,6 +1156,18 @@ test_that("session_replay_new() returns the live session holding the header's id
   expect_identical(r, s)
   expect_identical(s$turns, 1L)
   expect_identical(s$text, "cached")
+  # the session that recorded a block holds its turn already; an undone block's turn is gone
+  held = test_session()
+  block = function(id, action) {
+    session_append(held, list(type = "custom", custom_type = "gptr.doc_block",
+                              data = list(doc = "analysis.R", block = id, action = action)))
+  }
+  block("a1b2c3", "insert")
+  block("d4e5f6", "undone")
+  expect_identical(session_replay_new("a1b2c3", list(session = held$id), globalenv()), held)
+  expect_identical(held$turns, 0L)
+  session_replay_new("d4e5f6", list(session = held$id), globalenv())
+  expect_identical(held$turns, 1L)
 })
 
 test_that("session_replay_new() rebuilds from the JSONL, cut at the recorded turn", {
@@ -1167,6 +1194,41 @@ test_that("session_replay_new() rebuilds from the JSONL, cut at the recorded tur
   expect_identical(session_data(r)$doc$path, "analysis.R")
   expect_identical(roles(r), c("user", "assistant"))
   expect_true("gptr.replay" %in% replay_types(r))
+})
+
+test_that("each piped block moves a rebuilt session to its turn until a live run (IC-46)", {
+  skip_on_cran()
+  local_store()
+  local_permissive()
+  local_fake_provider(list("first answer", "second answer", "third answer", "live answer"))
+  s = test_session(home = globalenv())
+  for (k in 1:3) {
+    run_text(s, paste("prompt", k))
+    session_append(s, entry_custom("gptr.doc_block", list(doc = "analysis.R",
+                                                          block = paste0("b", k, "b2c3"))))
+  }
+  id = s$id
+  other = test_session()
+  rm(s)
+  invisible(gc())
+  expect_null(session_by_id(id))
+  h = function(k) list(session = id, turn = as.character(k), model = "fake/fake-1")
+  # a replay that stopped after b1 (one line run, an interrupt) leaves the file's last entry on
+  # turn 1's branch; a later process still finds turn 2 at b2's own record
+  first = session_replay_new("b1b2c3", h(1), envir = new.env(), doc = NULL)
+  lock_release(lock_path(session_data(first)$file))
+  live_forget(first)
+  rm(first)
+  invisible(gc())
+  r = session_replay_new("b1b2c3", h(1), envir = new.env(), doc = NULL)
+  expect_identical(list(r$turns, r$text), list(1L, "first answer"))
+  session_replay_apply(r, "b2b2c3", h(2))
+  expect_identical(list(r$turns, r$text), list(2L, "second answer"))
+  expect_identical(roles(r), rep(c("user", "assistant"), 2L))
+  run_text(r, "live prompt")
+  session_replay_apply(r, "b3b2c3", h(3))
+  expect_identical(msg_text(r$messages[[5L]]), "live prompt")
+  expect_identical(r$turns, 4L)
 })
 
 test_that("without a file the session is reconstructed from the document", {
@@ -1207,6 +1269,33 @@ test_that("a later live run of a reconstructed session gives a one-time notice",
   expect_message(run_text(r, "and then?"), "reconstructed", class = "gptr_message_notice")
   expect_identical(r$text, "continued")
   expect_no_message(run_text(r, "more"), message = "reconstructed")
+})
+
+test_that("the footer marks a replayed session until it runs, and never as a known zero", {
+  skip_on_cran()
+  local_store()
+  local_permissive()
+  local_fake_provider(list("first answer", "second answer", "continued"))
+  s = test_session(home = globalenv())
+  run_text(s, "one")
+  id = s$id
+  ids = s$usage$request_id
+  other = test_session()
+  rm(s)
+  invisible(gc())
+  r = session_replay_new("a1b2c3", list(session = id, turn = "1", model = "fake/fake-1"),
+                         envir = new.env())
+  expect_match(session_footer(r), "^replayed . fake/fake-1 . 1 turn . [0-9.]+k? tokens . \\$0")
+  expect_identical(r$usage$request_id, ids)
+  run_text(r, "two")
+  expect_match(session_footer(r), "^idle .")
+  expect_length(r$usage$request_id, 2L)
+  # reconstructed from the document: no request is known, so its usage is unknown, never zero
+  b = session_replay_new("d4e5f6", list(session = "s0123456788", turn = "1", model = "fake/fake-1"),
+                         envir = new.env(), doc = list(template = "Summarise d", text = "Done."))
+  expect_match(session_footer(b), "^replayed . .* . unknown tokens . unknown cost . s0123456788$")
+  run_text(b, "and then?")
+  expect_no_match(session_footer(b), "replayed|unknown")
 })
 
 # Added to the plan's replay tests: the header fields that name things are checked, `doc` is

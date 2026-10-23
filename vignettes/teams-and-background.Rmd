@@ -214,8 +214,10 @@ registered checkpointers, with conflicts and unsupported changes reported. It do
 arbitrary external services or uncaptured side effects. Check the report and restored data.
 Assigning a session to another name keeps the same object; use `gptr_fork()` for a branch.
 
-For a top-level team or fan-out call in a designated history document, child code is recorded
-under that statement and replay can reconstruct the children. Recording, answer caches and
+For a top-level team or fan-out call in a designated history document, the code of each child
+that exports objects or returns a value with `gptr_return()` is recorded under that statement.
+Replay reconstructs the children and reruns that code, so the exported objects and each child's
+`$value` (`f$value` of a fan-out) come back without a model call. Recording, answer caches and
 usable blocks must be present; a narrative team report alone is not a replayable workflow.
 See [Script as history](script-as-history.html) for recording and summary recipes, and
 [Token efficiency](token-efficiency.html) for shared budgets and usage.

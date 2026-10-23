@@ -770,8 +770,9 @@ gptr_cache(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tm
 gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)
 ```
 
-`gptr_doc()` binds every `peter()` call of the process to a document (explicit consent to write it), shows the
-binding, or (`sync = TRUE`) applies pending blocks of a notebook that was open while recording [IC-45, IC-50].
+`gptr_doc()` binds a document to the process (explicit consent to write it: its own calls and console calls record
+there, a call in another document needs that document's consent, D-249), shows the binding, or (`sync = TRUE`)
+applies pending blocks of a notebook that was open while recording [IC-45, IC-50].
 `gptr_source()` regenerates stale or live blocks without executing the old block, which base `source()`
 cannot do [14 §4.4.2]. `gptr_blocks()` lists blocks (id, prompt hash, fresh/stale/user-edited/undone, model,
 date, tokens, cost). `gptr_artifacts()` without `id` is a data frame; with `id` it returns a `gptr_artifact`
@@ -819,7 +820,9 @@ gptr_preimage(x, name, ctx, ...)
 ```
 
 `gptr_return()` designates the run's result under the value policy of §5.1; outside a run it returns
-`invisible(x)` and does nothing else, so recorded code re-sources cleanly [IC-48].
+`invisible(x)` and designates nothing; the first such call in an R session prints a one-line notice
+(silent in replay mode, `replay = "replay"` or `GPTR_REPLAY=replay`, with `options(gptr.quiet = TRUE)` or
+`suppressMessages()`) [IC-48].
 `gptr_describe()` is the S3 generic for compact descriptions (methods from any package through delayed
 `S3method(gptr::gptr_describe, cls)`). `gptr_risk()` is the advisory static classifier; it never evaluates and
 is documented as not a security boundary. `gptr_prompt()` shows a session's frozen system blocks, tool array
@@ -941,7 +944,8 @@ reactor holds a running session strongly until it settles.
 **Accessors** (`$.gptr_session`, `[[`, `.DollarNames`): `text`, `value`, `values`, `usage`, `cost`,
 `history` (data frame: turn, role, preview, tools, tokens), `messages`, `model`, `mode`, `status`, `id`,
 `turns`, `kind`, `envir` (the kept home or `NULL`), `ext`, and child names for teams (`reviews$stats`).
-`print()` shows the last answer and a dim footer `status . model . turns . tokens . cost . id`;
+`print()` shows the last answer and a dim footer `status . model . turns . tokens . cost . id` (status `replayed`
+until a replayed session makes a request; unknown usage while it holds no stored one);
 `format()`/`as.character()` return the text; `summary()` and `str()` never touch user objects; `knit_print`
 is registered lazily. `$<-` and `[[<-` are refused with `gptr_error_readonly`: state changes go through verbs
 (G3 t1).
@@ -1543,12 +1547,14 @@ tools::R_user_dir("gptr", "config")    settings.json, auth.json (0600), trust.js
                                        mcp.json, egress acks, projects/<hash>.json (per-project remembered answers,
                                        transcript target, record consent [IC-52])
 tools::R_user_dir("gptr", "cache")     refreshed model catalog (ETag), MCP tool and era caches, procs/ (tree
-                                       markers for the orphan sweep), pruned by gptr_cache("prune")
+                                       markers for the orphan sweep), pruned by gptr_cache("prune"); pending/
+                                       (sidecars of documents outside a `.gptr/` project, never pruned [IC-51])
 tempdir()/gptr/                        sessions, artifacts, caches, checkpoints and plans without a workspace
 ```
 
 Without a workspace nothing is written outside `tempdir()` except user-level settings the user sets
-explicitly; the System 1 cache stays in memory [13 §2.4]. Tests redirect `R_USER_*_DIR` [13 C-44].
+explicitly and the pending blocks of documents the user bound (`pending/` above); the System 1 cache stays in
+memory [13 §2.4]. Tests redirect `R_USER_*_DIR` [13 C-44].
 
 #### 6.9.2 Session store (INFRA-13) [02 §4.6, G3]
 
@@ -1583,15 +1589,16 @@ Header keys: `model`, `date`, `prompt` (12-hex hash of the prompt *template*), `
 interpolated values, so a parameterised report never replays another parameter's block [IC-45]), optional `sha`
 (body hash for user-edit detection), `call` (k-th call of a pipeline), `tokens`, `cost`, `session`, `turn`,
 `value` (the designated name), `fork=<parent>:<turn>`, `plan=<id>`, `kind`/`children` (team and fan-out blocks
-[IC-47]), `status=undone`. The body holds successful `record = TRUE` code (top-level `gptr_return()` calls and
-calls of `record = FALSE` members such as `peter$out()` dropped, top-level `<-` rewritten to `=` where safe
+[IC-47]), `status=undone`. The body holds successful `record = TRUE` code (top-level `gptr_return(<name>)` calls
+and calls of `record = FALSE` members such as `peter$out()` dropped, a top-level `gptr_return(<expression>)`
+rewritten to `.gptr_value_<block id> = (<expression>)`, which `value` names, top-level `<-` rewritten to `=` where safe
 [IC-48]), `#>` outputs (12 lines max), `## Decision:` notes, `## Steer:`/`## Follow-up:` lines for steering during
 the turn [IC-49], bridge digests (`#> sh git status --porcelain: exit 0, 6 lines`) and artifact paths. Overlay-fork
 turns replay inside `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`, which finds the fork that
 replay created for that block and never falls back to the caller's frame, so they never clobber the workspace
 [IC-46]. A top-level team or fan-out statement owns one block with a line per child and, for children with
-exports, their code in child overlays plus one assignment per export [IC-47]. Rmd/qmd get a
-separate chunk labelled `gptr-<id>` after the owning chunk, without `#>` lines; ipynb gets a cell with id
+exports or a designated value (`children=<name>:<session id>:<value>`), their code in child overlays plus one
+assignment per export [IC-47]. Rmd/qmd get a separate chunk labelled `gptr-<id>` after the owning chunk, without `#>` lines; ipynb gets a cell with id
 `gptr-<id>` and `metadata.gptr`, written by gptr's own serializer (Python float repr, byte-identical round trip
 [14 fact-check]) and never while the notebook is open (in Jupyter the block is shown as the cell output and kept
 pending until `gptr_doc(path, sync = TRUE)` [IC-50]). A top-level System 1 call gets a one-line block

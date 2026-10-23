@@ -283,13 +283,16 @@ mcp_serve_r = function(input, env, run, session = NULL) {
   budget = as.integer(gptr_opt("r_output_tokens"))
   timeout = input$timeout %||% (if (gptr_has_human()) NULL else gptr_opt("r_timeout"))
   plots = if (is.null(run)) "capture" else "auto"
+  n_values = if (is.null(session)) 0L else length(session_data(session)$values)
   res = ext_service_get("eval.r")(input$code, env, timeout = timeout, plots = plots,
                                   tee = FALSE, budget_tokens = budget, rng = run$opts$rng_state,
                                   record = record)
   if (record && identical(res$status, "ok") && mcp_r_recording(run, session)) {
-    session_append(session, list(type = "custom", custom_type = "gptr.mcp_r",
-      data = list(code = input$code, record = TRUE, status = res$status,
-                  outputs = r_doc_outputs(res))))
+    data = list(code = input$code, record = TRUE, status = res$status,
+                outputs = r_doc_outputs(res))
+    # what gptr_return() designated, as the r tool's details$value (doc_turn_r())
+    data$value = r_new_value_name(session, n_values)
+    session_append(session, list(type = "custom", custom_type = "gptr.mcp_r", data = data))
   }
   out = format_eval_result(res, budget)
   err = Filter(function(e) identical(e$type, "error"), res$events %||% list())

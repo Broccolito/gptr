@@ -9,18 +9,18 @@
 doc_re_open = "^([ \t]*)# >>> gptr:([0-9a-z]{6,16})(?:[ \t]+(.*))?$"
 doc_re_close = "^([ \t]*)# <<< gptr:([0-9a-z]{6,16})[ \t]*$"
 doc_re_kv = "([A-Za-z_][A-Za-z0-9_.]*)=(\"([^\"\\\\]|\\\\.)*\"|[^ \t]+)"
-doc_re_steer = "^[ \t]*## (Steer|Follow-up): "
+doc_re_steer = "^[ \t]*## (Steer|Follow-up):( |$)"
 doc_block_token = "@@GPTR_BLOCK@@"
+# what a recorded gptr_return(<expression>) assigns, and value= names (doc_rewrite_return())
+doc_value_name = paste0(".gptr_value_", doc_block_token)
 doc_header_keys = c("model", "date", "prompt", "sha", "call", "tokens", "cost", "session", "turn",
                     "value", "fork", "plan", "status", "args", "kind", "children")
 doc_quoted_keys = "children"
 
-#' Collapse text to one comment-safe line
+#' A `## Steer:` or `## Follow-up:` line; a blank text leaves no trailing space for an editor to
+#' trim
 #' @noRd
-doc_one_line = function(x) {
-  x = as_utf8(paste(as.character(x), collapse = " "))
-  trimws(gsub("[\r\n\t]+", " ", x))
-}
+doc_steer_line = function(kind, text) sub(" $", "", paste0("## ", kind, ": ", doc_one_line(text)))
 
 #' A string literal that both R and JSON read back as `x` (Python's json.dumps(ensure_ascii =
 #' False)); non-ASCII characters are kept, which encodeString() escapes in a C locale
@@ -736,15 +736,29 @@ doc_member_recorded = function(name) {
   !name %in% doc_unrecorded_members
 }
 
-#' Should a top-level expression of recorded code be dropped: gptr_return() or a call of a
-#' `record = FALSE` peter$ member (IC-48), bare or `gptr::`-qualified
+#' Is `e` a gptr_return() call, bare or `gptr::`-qualified?
+#' @noRd
+doc_is_return = function(e) {
+  is.call(e) && (identical(e[[1L]], quote(gptr_return)) ||
+                   identical(e[[1L]], quote(gptr::gptr_return)))
+}
+
+#' Does a gptr_return() call designate an expression (one argument, unnamed or `x`, not a bare
+#' name)? Recorded code keeps it as an assignment to the block's hidden name (doc_rewrite_return()).
+#' @noRd
+doc_return_value = function(e) {
+  doc_is_return(e) && length(e) == 2L && (is.null(names(e)) || names(e)[2L] %in% c("", "x")) &&
+    !is.symbol(e[[2L]])
+}
+
+#' Should a top-level expression of recorded code be dropped: gptr_return() of a name (another
+#' argument is kept, doc_return_value()) or a call of a `record = FALSE` peter$ member (IC-48),
+#' bare or `gptr::`-qualified
 #' @noRd
 doc_drop_expr = function(e) {
   if (!is.call(e)) return(FALSE)
   head = e[[1L]]
-  if (identical(head, quote(gptr_return)) || identical(head, quote(gptr::gptr_return))) {
-    return(TRUE)
-  }
+  if (doc_is_return(e)) return(!doc_return_value(e))
   if (is.call(head) && length(head) == 3L &&
       (identical(head[[1L]], as.name("$")) || identical(head[[1L]], as.name("[["))) &&
       (identical(head[[2L]], quote(peter)) || identical(head[[2L]], quote(gptr::peter)))) {
@@ -885,17 +899,72 @@ doc_rewrite_assign = function(lines) {
   lines
 }
 
-#' Recorded code of one r call: drop gptr_return() and record = FALSE members, rewrite the left
-#' arrow, trim blank edges (IC-48). The text is parsed as doc_parse_text() parses it (IC-62; parse
-#' data kept under sys.source()); a cut whose result does not parse to the kept expressions
-#' leaves the code as written. Attribute `kept`: one logical per top-level expression (NULL when
-#' the code does not parse; such code is kept as written).
+#' Rewrite each top-level gptr_return(<expression>) (doc_return_value()), called or piped and on
+#' any number of lines, as an assignment of its argument to the block's hidden name, so replay
+#' recomputes what value= names: `gptr_return(coef(fit))` and `coef(fit) |> gptr_return()` become
+#' `.gptr_value_<block id> = (coef(fit))`. The call's text around its argument (comments
+#' included) goes. The name stays backquoted until doc_prepare() fills in the block id, so the text
+#' parses meanwhile. Lines whose rewrite does not parse to the rewritten expressions are kept as
+#' written. Attribute `returned`: a call was rewritten and no gptr_return() left in the code can
+#' run after the last one (in a later expression, or in a function, which may be called later), so
+#' the hidden name holds the code's latest designated value.
+#' @noRd
+doc_rewrite_return = function(lines) {
+  none = structure(lines, returned = FALSE)
+  if (!any(grepl("gptr_return", lines, fixed = TRUE))) return(none)
+  exprs = tryCatch(doc_parse_text(lines), error = function(e) NULL)
+  hit = which(vapply(seq_along(exprs), function(i) doc_return_value(exprs[[i]]), NA))
+  pd = if (length(hit)) utils::getParseData(exprs)
+  if (is.null(pd)) return(none)
+  pd = pd[order(pd$line1, pd$col1, method = "radix"), , drop = FALSE]
+  byte = function(l, col, last) {
+    cols = doc_byte_cols(lines[l])
+    if (last) findInterval(col, cols) else match(col, cols)
+  }
+  cut = function(l, from, to = Inf) {
+    b = charToRaw(lines[l])
+    as_utf8(rawToChar(b[seq_along(b) >= from & seq_along(b) <= to]))
+  }
+  want = as.list(exprs)
+  for (i in rev(hit)) {
+    sr = attr(exprs, "srcref")[[i]]
+    top = pd$id[pd$parent == 0L & pd$line1 == sr[1L] & pd$col1 == sr[5L] & pd$token == "expr"]
+    if (length(top) != 1L) return(none)
+    kids = pd[pd$parent == top, , drop = FALSE]
+    # the argument: the left side of a pipe, else the call's last expression
+    arg = kids[kids$token == "expr", , drop = FALSE]
+    arg = arg[if (any(kids$token == "PIPE")) 1L else nrow(arg), ]
+    at = c(byte(sr[1L], sr[5L], FALSE), byte(sr[3L], sr[6L], TRUE),
+           byte(arg$line1, arg$col1, FALSE), byte(arg$line2, arg$col2, TRUE))
+    if (anyNA(at)) return(none)
+    n = arg$line2 - arg$line1 + 1L
+    body = lines[arg$line1:arg$line2]
+    body[n] = cut(arg$line2, 1L, at[4L])
+    body[1L] = cut(arg$line1, at[3L], if (n == 1L) at[4L] else Inf)
+    body[1L] = paste0(cut(sr[1L], 1L, at[1L] - 1L), "`", doc_value_name, "` = (", body[1L])
+    body[n] = paste0(body[n], ")", cut(sr[3L], at[2L] + 1L))
+    lines = c(lines[seq_len(sr[1L] - 1L)], body, lines[seq_along(lines) > sr[3L]])
+    want[[i]] = call("=", as.name(doc_value_name), call("(", exprs[[i]][[2L]]))
+  }
+  if (!doc_same_exprs(lines, want)) return(none)
+  left = vapply(want, function(e) "gptr_return" %in% all.names(e), NA)
+  fn = vapply(want, function(e) "function" %in% all.names(e), NA)
+  structure(lines, returned = !any(left & (seq_along(want) > max(hit) | fn)))
+}
+
+#' Recorded code of one r call: drop gptr_return() of a name and record = FALSE members, rewrite
+#' the left arrow and gptr_return(<expression>), trim blank edges (IC-48). The text is parsed as
+#' doc_parse_text() parses it (IC-62; parse data kept under sys.source()); a cut whose result does
+#' not parse to the kept expressions leaves the code as written. Attributes `kept`: one logical
+#' per top-level expression (NULL when the code does not parse; such code is kept as written);
+#' `returned`: the hidden name holds the code's designated value (doc_rewrite_return()).
 #' @noRd
 doc_code_clean = function(code) {
   lines = strsplit(as_utf8(paste(code, collapse = "\n")), "\n", fixed = TRUE)[[1L]]
   if (!length(lines)) return(character())
   exprs = tryCatch(doc_parse_text(lines), error = function(e) NULL)
   kept = NULL
+  returned = FALSE
   if (!is.null(exprs) && length(exprs)) {
     drop = vapply(seq_along(exprs), function(i) doc_drop_expr(exprs[[i]]), NA)
     if (any(drop)) {
@@ -903,12 +972,14 @@ doc_code_clean = function(code) {
       cut = doc_drop_ranges(lines, srcs[drop], srcs[!drop])
       if (!is.null(cut) && doc_same_exprs(cut, exprs[!drop])) lines = cut else drop[] = FALSE
     }
-    lines = doc_rewrite_assign(lines)
+    lines = doc_rewrite_return(doc_rewrite_assign(lines))
+    returned = attr(lines, "returned")
     kept = !drop
   }
+  lines = as.character(lines)
   while (length(lines) && !nzchar(trimws(lines[1L]))) lines = lines[-1L]
   while (length(lines) && !nzchar(trimws(lines[length(lines)]))) lines = lines[-length(lines)]
-  structure(lines, kept = kept)
+  structure(lines, kept = kept, returned = returned)
 }
 
 #' The flag line of a block whose code holds a secret that cannot be replayed (contract 11.5)
@@ -970,27 +1041,26 @@ doc_history_code = function(lines) {
   list(lines = out, secrets = secrets)
 }
 
-#' Lines recorded per execution: gptr.doc_output_lines when set, else setting doc$output_lines
-#' @noRd
-doc_max_output_lines = function() {
-  opt = getOption("gptr.doc_output_lines")
-  if (!is.null(opt)) return(as.integer(opt))
-  doc = doc_setting("doc", list())
-  as.integer((if (is.list(doc)) doc$output_lines) %||% gptr_opt("doc_output_lines"))
-}
-
-#' Printed output (a character vector, or P09's list of output per top-level expression) as
-#' `#> ` lines of at most 76 characters, then `#> ... (N more lines)`
+#' Printed output as `#> ` lines of at most 76 characters, then `#> ... (N more lines)` counting
+#' every line not shown. `outputs` is a character vector or a list of output per top-level
+#' expression, each its lines or r_doc_outputs()'s list(lines, n); no line follows a cut one.
 #' @noRd
 doc_output_lines = function(outputs, max_lines = NULL, width = 76L) {
-  out = as.character(unlist(outputs, use.names = FALSE))
-  out = unlist(strsplit(as_utf8(out), "\n", fixed = TRUE), use.names = FALSE)
-  if (!length(out)) return(character())
-  max_lines = max_lines %||% doc_max_output_lines()
-  extra = length(out) - max_lines
-  if (extra > 0L) out = out[seq_len(max_lines)]
-  out = paste0("#> ", substr(out, 1L, width))
-  if (extra > 0L) out = c(out, paste0("#> ... (", as.integer(extra), " more lines)"))
+  out = character()
+  total = 0L
+  for (o in if (is.list(outputs)) outputs else list(outputs)) {
+    held = is.list(o) && !is.null(o$n)
+    n = if (held) as.integer(o$n) else 0L
+    o = as_utf8(as.character(unlist(if (held) o$lines else o, use.names = FALSE)))
+    o = unlist(strsplit(o, "\n", fixed = TRUE), use.names = FALSE)
+    if (length(out) == total) out = c(out, o)
+    total = total + max(n, length(o))
+  }
+  if (!total) return(character())
+  out = utils::head(out, max_lines %||% doc_max_output_lines())
+  extra = total - length(out)
+  out = if (length(out)) paste0("#> ", substr(out, 1L, width)) else character()
+  if (extra > 0L) out = c(out, paste0("#> ... (", extra, " more lines)"))
   out
 }
 
@@ -1151,7 +1221,7 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
     e = ents[[i]]
     m = e$message
     if (identical(e$type, "custom_message") && identical(m$kind, "steer_relay")) {
-      out$body = c(out$body, paste0("## Steer: ", doc_one_line(m$origin_text %||% "")))
+      out$body = c(out$body, doc_steer_line("Steer", m$origin_text %||% ""))
     } else if (identical(e$type, "message") && identical(m$role, "user")) {
       for (blk in m$content) {
         if (identical(blk$type, "context") && identical(blk$kind, "plan")) {
@@ -1161,9 +1231,9 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
       if (i == 1L) next
       src = m$source %||% "prompt"
       if (identical(src, "follow_up")) {
-        out$body = c(out$body, paste0("## Follow-up: ", doc_one_line(msg_text(m))))
+        out$body = c(out$body, doc_steer_line("Follow-up", msg_text(m)))
       } else if (identical(src, "steer")) {
-        out$body = c(out$body, paste0("## Steer: ", doc_one_line(msg_text(m))))
+        out$body = c(out$body, doc_steer_line("Steer", msg_text(m)))
       }
     } else if (identical(e$type, "message") && identical(m$role, "assistant")) {
       out = doc_turn_assistant(out, m, results, with_out, plan_mode)
@@ -1229,9 +1299,14 @@ doc_turn_assistant = function(out, m, results, with_out, plan_mode) {
 #' @noRd
 doc_turn_r = function(out, det, args, with_out, plan_mode) {
   if (!identical(det$status %||% "ok", "ok")) return(out)
-  if (!is.null(det$value)) out$value = det$value
+  # value= is one name (11.5): an expression's label is not; its recorded assignment names one
+  named = rlang::is_string(det$value) && identical(make.names(det$value), det$value)
+  if (!is.null(det$value)) out$value = if (named) det$value
   if (plan_mode || isFALSE(det$record) || isFALSE(args$record)) return(out)
   chunk = doc_code_clean(det$code %||% args$code %||% "")
+  if (!is.null(det$value) && !named && isTRUE(attr(chunk, "returned"))) {
+    out$value = doc_value_name
+  }
   kept = attr(chunk, "kept")
   chunk = as.character(chunk)
   safe = doc_history_code(chunk)
@@ -1264,19 +1339,22 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
 }
 
 #' Recorded code of every turn of a (child) session, without outputs or comment lines (team
-#' blocks); attribute `secrets` when a marker stays in it
+#' blocks); attribute `secrets` when a marker stays in it, `value` the name the latest turn that
+#' designated one gave (as a block's `value=`), else none
 #' @noRd
 doc_session_code = function(session) {
   d = session_data(session)
   code = character()
   secrets = FALSE
+  value = NULL
   for (k in seq_len(d$turns %||% 0L)) {
     tb = doc_turn_body(doc_turn_entries(session, k), with_out = FALSE,
                        plan_mode = identical(d$mode, "plan"))
     code = c(code, tb$code)
     secrets = secrets || tb$secrets
+    value = tb$value %||% value
   }
-  structure(code, secrets = secrets)
+  structure(code, secrets = secrets, value = value)
 }
 
 #' Header facts common to every block
@@ -1317,7 +1395,7 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
   if (tb$tokens_known && any(tb$tokens > 0)) {
     header$tokens = sprintf("%.0f/%.0f", tb$tokens[1L], tb$tokens[2L])
   }
-  if (tb$cost_known && tb$cost > 0) header$cost = format(round(tb$cost, 4L), scientific = FALSE)
+  if (tb$cost_known) header$cost = format(round(tb$cost, 4L), scientific = FALSE)
   header$session = d$id
   header$turn = as.integer(turn)
   header$value = tb$value
@@ -1330,7 +1408,8 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
 }
 
 #' The lines of a team or fan-out block (IC-47): one `## Agent` line per child in name order;
-#' children with exports get their code in a child overlay plus one assignment per export
+#' children with exports or a designated value get their code in a child overlay, plus one
+#' assignment per export; `children=` holds `<name>:<session id>[:<value name>]` per child
 #' @noRd
 doc_team_block_lines = function(team, site, call_ordinal) {
   d = session_data(team)
@@ -1352,16 +1431,19 @@ doc_team_block_lines = function(team, site, call_ordinal) {
     body = c(body, sub("[ \t]+$", "", paste0("## Agent ", nm, " (", cd$model, "): ",
                                              doc_one_line(first))))
     exports = as.character(cd$exports %||% character())
-    if (length(exports)) {
-      code = doc_session_code(kids[[nm]])
+    code = doc_session_code(kids[[nm]])
+    value = attr(code, "value")
+    if (length(exports) || !is.null(value)) {
       secrets = secrets || isTRUE(attr(code, "secrets"))
       body = c(body, doc_wrap_local(as.character(code), child = nm))
+    }
+    if (length(exports)) {
       body = c(body, paste0(exports, " = gptr_resume(block = \"", doc_block_token,
                             "\", child = ", doc_str_literal(nm), ")$envir$", exports))
     }
     children[[nm]] = list(text = txt, session = cd$id, model = cd$model,
                           turn = cd$turns %||% 1L)
-    ids = c(ids, cd$id)
+    ids = c(ids, paste0(cd$id, if (!is.null(value)) paste0(":", value)))
   }
   if (secrets) body = c(doc_secret_flag, body)
   model = if (length(nms)) session_data(kids[[nms[1L]]])$model else d$model
@@ -1472,7 +1554,20 @@ doc_header_set_sha = function(line, sha) {
   paste0(lead, kv)
 }
 
-#' Choose the block id, fill it into the body, render, and pass the document_write event:
+#' Recorded lines with the block id filled in only where gptr wrote the token: the hidden value
+#' name, which loses its backquotes, and `gptr_resume(block = ` homes (a steer or model code may
+#' hold the token too). Without an id (no block written yet) that assignment reads as the
+#' gptr_return() call it records.
+#' @noRd
+doc_fill_id = function(lines, id = NULL) {
+  hidden = paste0("`", doc_value_name, "`")
+  if (is.null(id)) return(sub(paste0(hidden, " = "), "gptr_return", lines, fixed = TRUE))
+  home = "gptr_resume(block = \""
+  lines = gsub(hidden, paste0(".gptr_value_", id), lines, fixed = TRUE)
+  gsub(paste0(home, doc_block_token, "\""), paste0(home, id, "\""), lines, fixed = TRUE)
+}
+
+#' Choose the block id, fill it into the body and header, render, and pass the document_write event:
 #' list(id, rendered, action, sha, prompt) or list(skip = <reason>, id)
 #' @noRd
 doc_prepare = function(fmt, site, up, text, taken = character()) {
@@ -1492,8 +1587,10 @@ doc_prepare = function(fmt, site, up, text, taken = character()) {
     return(list(skip = "user-edited", id = id))
   }
   if (!replace) id = id_block(c(existing, taken))
-  body = gsub(doc_block_token, id, as.character(up$lines), fixed = TRUE)
-  header = up$header
+  body = doc_fill_id(as.character(up$lines), id)
+  header = lapply(up$header, function(v) {
+    if (is.character(v)) gsub(doc_block_token, id, v, fixed = TRUE) else v
+  })
   header$sha = doc_body_sha(body)
   rendered = fmt$render(list(id = id, header = header, body = body), site)
   kind = if (isTRUE(site$console)) "transcript" else "block"

@@ -808,15 +808,19 @@ gptr_resume = function(x = NULL, envir = parent.frame(), block = NULL, child = N
   store_rebuild(path, envir)
 }
 
-#' The file gptr_resume() rebuilds from
+#' The file gptr_resume() rebuilds from; a miss outside a `.gptr/` workspace says why the store is
+#' empty after a restart
 #' @noRd
 resume_path = function(x) {
+  hint = if (is.null(workspace_dir())) {
+    "Without a .gptr/ workspace, sessions last until R exits; gptr_init(\".\") keeps them."
+  }
   if (is.null(x)) {
     dir = sessions_dir()
     files = if (dir.exists(dir)) list.files(dir, pattern = "[.]jsonl$",
                                             full.names = TRUE) else character()
     if (!length(files)) {
-      gptr_abort("there is no stored session to resume", "invalid_argument", arg = "x",
+      gptr_abort(c("there is no stored session to resume", hint), "invalid_argument", arg = "x",
                  expected = "a stored session")
     }
     return(files[[which.max(file.mtime(files))]])
@@ -828,7 +832,7 @@ resume_path = function(x) {
   if (file.exists(x) && !dir.exists(x)) return(x)
   f = store_find(x)
   if (is.null(f)) {
-    gptr_abort(paste0("no stored session matches ", x), "invalid_argument", arg = "x",
+    gptr_abort(c(paste0("no stored session matches ", x), hint), "invalid_argument", arg = "x",
                expected = "a session id or a session file")
   }
   f

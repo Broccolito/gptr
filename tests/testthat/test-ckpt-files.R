@@ -485,7 +485,8 @@ test_that("the walk prunes .git and .gptr and lists links unfollowed; restores a
   w = ckpt_walk(proj)
   expect_setequal(w$path, c("R/a.R", "data/x.csv", "data_link"))
   expect_true(w$link[w$path == "data_link"])
-  expect_identical(is.na(ckpt_walked(list(root = proj), file.path(proj, "Node_Modules", "x.js"))),
+  tr = list(root = proj, prune = ckpt_prune(proj))
+  expect_identical(is.na(ckpt_walked(tr, file.path(proj, "Node_Modules", "x.js"))),
                    fs_case_insensitive(proj))
   g = ckpt_restore_guard(file.path(proj, "data_link", "x.csv"))
   expect_false(g$ok)
@@ -781,6 +782,57 @@ test_that("slow walks switch the session to one scan per turn plus predicted pat
   expect_identical(readLines(file.path(proj, "R", "a.R")), "a = 2")
 })
 
+# The notices of gptr.checkpoint_scan_budget that `expr` signals (shown nowhere)
+scan_notices = function(expr) {
+  seen = new.env(parent = emptyenv())
+  seen$text = character()
+  withCallingHandlers(expr, gptr_message_notice = function(m) {
+    seen$text = c(seen$text, conditionMessage(m))
+    invokeRestart("muffleMessage")
+  })
+  grep("gptr.checkpoint_scan_budget", seen$text, fixed = TRUE, value = TRUE)
+}
+
+test_that("only the walk counts against gptr.checkpoint_scan_budget, not root lookups", {
+  skip_on_cran()
+  local_project(gptr = FALSE)
+  local_gptr_options(checkpoint_scan_budget = 0.25, quiet = FALSE)
+  prune = ckpt_prune
+  local_mocked_bindings(ckpt_prune = function(root) {
+    Sys.sleep(0.3)
+    prune(root)
+  })
+  local_fake_provider(list(fake_tool("r", code = "writeLines('a', 'out.txt')"), "done"))
+  e = new.env()
+  notices = scan_notices({
+    e$s = peter("write out.txt", model = "fake/fake-1", mode = "auto", envir = e)
+  })
+  expect_identical(notices, character())
+  expect_identical(readLines("out.txt"), "a")
+  ck = ckpt_ck_of(ckpt_ext_state(e$s), e$s, create = FALSE)
+  expect_false(isTRUE(ck$files$per_turn))
+})
+
+test_that("a walk slower than gptr.checkpoint_scan_budget switches to per-turn scans once", {
+  local_gptr_options(checkpoint_scan_budget = 0.25, quiet = FALSE)
+  proj = local_project(files = list("a.R" = "a = 1"))
+  walk = ckpt_walk
+  local_mocked_bindings(ckpt_walk = function(...) {
+    Sys.sleep(0.3)
+    walk(...)
+  })
+  ck = ckpt_ck_new("s0000000096")
+  call = list(id = "c1", name = "r", input = list(code = "writeLines('a = 2', 'a.R')"))
+  notices = scan_notices(for (i in 1:2) {
+    tok = ckpt_files_before(ck, call, turn = 1L)
+    writeLines(paste("a =", i + 1L), file.path(proj, "a.R"))
+    ckpt_files_after(ck, call, tok)
+  })
+  expect_length(notices, 1L)
+  expect_match(notices, paste0("Checkpoint scans of ", proj), fixed = TRUE)
+  expect_true(ck$files$per_turn)
+})
+
 test_that("files that cannot be read are listed, never captured and stop nothing else", {
   skip_on_os("windows")
   proj = local_project(files = list("R/a.R" = "a = 1", "R/b.R" = "b = 1", "secret.txt" = "s"))
@@ -980,7 +1032,7 @@ test_that("checkpoint racy scans reject a tracked regular file replaced by a FIF
   withr::defer(close(fifo))
   expect_identical(ps::ps_fs_stat(pipe, follow = FALSE)$type, "FIFO")
   original = hash_file
-  local_mocked_bindings(ckpt_walk = function(root) observed, hash_file = function(path) {
+  local_mocked_bindings(ckpt_walk = function(root, prune) observed, hash_file = function(path) {
     if (any(path == pipe)) {
       stop(structure(list(message = "FIFO hash refused", call = NULL),
         class = c("ckpt_fifo_hash_refused", "error", "condition")))

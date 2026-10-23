@@ -3180,3 +3180,112 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-bridge-lang.R "peter$py() refuses RETICULATE_PYTHON=managed".
   Evidence: progress/fixes.md Task FIX-15 tools-1, tools-5, tools-6, tools-7, tools-8, tools-9,
   tools-10, tools-12.
+
+## D-249 - P15 Cheat-sheet review of history documents (2026-10-22)
+- Rule: a document's deferred or pending sidecar is kept in the `.gptr/` of its project, else in
+  `R_user_dir("gptr", "cache")/pending/` (was `tempdir()/gptr`, which no other process sees and R deletes at exit:
+  a closed kernel's and a killed Rscript run's blocks were lost without a word). Same name, mode and checks;
+  `gptr_cache()` prune and clear never touch it (IC-51). The document's lock is `locks/<sha1>` in that `.gptr/` or
+  `pending/` (was this process's workspace root, `tempdir()/gptr` outside a `.gptr/`, so two runs of one document
+  shared its sidecar but not its lock), and `gptr_cache("info")` lists `pending/` in a second `sidecar` row.
+- Rule: `gptr_doc(path, sync = TRUE)` informs a `notice`, "Wrote N block(s) into <doc>." or "No pending blocks for
+  <doc>.", and leaves a dead run's recovery to the sync, so the count includes it.
+- Rule: a `gptr_doc()` binding is consent for its own document only; a call located in another document (a sourced
+  or `Rscript` script) records there or nowhere. When that document's consent cannot be given, a call that could
+  record (record not FALSE, not replay mode) informs a `notice` once per document: "gptr did not record this call:
+  it is in <doc>, but gptr_doc() bound <bound>. ..." (was silent); without a binding it stays silent (IC-45).
+- Rule: a transcript's `# machine log:` names the session log only outside `tempdir()/gptr`, which R deletes at
+  exit; else, or without a log, it reads `none kept (gptr_init() keeps session logs in .gptr/)` (was the dead
+  absolute path, or `(none)`).
+- Rule: the `r` tool's `details$outputs` holds one `list(lines, n)` per recorded expression, its first lines (the
+  option, else the setting `doc$output_lines`) and their count (was one flat vector cut per expression without a
+  mark); the block cuts once and `#> ... (N more lines)` counts every line not shown, so a dropped expression's
+  output is dropped with it. A flat vector of an older session still renders.
+- Rule: a block header writes `cost=` whenever the turn's cost is known, `cost=0` for a free route (was only above
+  0), so `gptr_blocks()` lists `0` there and `NA` only when the cost is unknown or not recorded (IC-74).
+- Rule: a replay adds no turn to a session whose active path holds the block's `gptr.doc_block` entry, not undone
+  (the session that recorded it, replayed in the same process: was one more turn per block, so later turns, `turn=`
+  and `gptr_fork(at =)` were off); it still records `gptr.replay`, `seen` and the `value=` name, unless the session
+  holds a value of that turn: replayed into another environment of the recording process, it keeps the recorded
+  value (was a name bound only there: `$value` NULL, "`.gptr_value_<id>` ... is not bound") (IC-46).
+- Rule: a top-level `gptr_return(<expression>)` (one argument, unnamed or `x`, not a bare name; called or piped, on
+  any number of lines) is recorded as `.gptr_value_<block id> = (<expression>)` with `value=.gptr_value_<block id>`
+  when no other `gptr_return()` can run after it (one in a later expression or in a function can), so every replay
+  and a plain export recompute it (was `value=<its label>` and the line dropped: replay said "not bound" and
+  `$value` was NULL); `gptr_return(<name>)` is unchanged; `value=` holds one name, never an expression's label,
+  else is omitted (11.5). Such a call inside another expression is kept and records no value; replaying its block
+  into a session that holds no value of its turn (the recording one holds it) informs a `notice` once per block and
+  process, "No recorded value for block <id> of <doc>: ..." (IC-46, IC-48). R served over MCP to a CLI route
+  records the designated name in its `gptr.mcp_r` entry (`value`), as the `r` tool's `details$value`, so the same
+  holds there.
+- Rule: a team or fan-out block records the code of each child that designated a value with `gptr_return()` in its
+  child overlay, as for a child with exports (was only with exports), and `children=` entries are
+  `<name>:<session id>[:<value>]`, the third field the child's `value=` name (a bare name or
+  `.gptr_value_<block id>`); replay designates it and the fan-out route binds each replayed child's element as `.x`
+  in its home, so `f$value` and `tm$x$value` replay in any process (were NULL outside the recording one, without a
+  word). An entry of two fields, as written before, replays as before; a child name holding `:` or `,` still has no
+  replayable entry (IC-47).
+- Rule: a session rebuilt from its JSONL for a replay keeps no value record of a turn after the recorded one (a
+  replay in the recording process advanced a team child and stored a value record without its copy, which hid the
+  child's value in every later process; IC-46).
+- Rule: a replayed session's footer reads `replayed` in place of its status until a request adds usage, and
+  `unknown tokens . unknown cost` while it holds no stored request, as a reconstruction from the document (was the
+  recorded run's footer, byte-identical to a live one, or a known zero `0 tokens . $0.0000`; IC-74).
+- Rule: `gptr_export()` turns a top-level `gptr_doc()` whose string literal names the source into a comment (raw R) or
+  rebinds it to the destination (Peter format; alone on its lines, else refused); other `gptr_doc()` calls are kept
+  (was kept verbatim: the Peter script's calls recorded nowhere under `Rscript`, console turns went into the source).
+  A raw export refuses a session handle only when read after its `peter()` statement and before ordinary code assigns
+  the name (was any other statement naming it), and a function naming any handle of the document wherever it is
+  defined, as it reads the name when called.
+- Rule: outside a `.gptr/` workspace the session store and the S2 cache are in `tempdir()` and end with R, by design.
+  A `gptr_resume()` store miss there adds "Without a .gptr/ workspace, sessions last until R exits; gptr_init(\".\")
+  keeps them."; a replayed session or team child whose `$text` stays `NA` informs one `notice` per document and
+  process, "No recorded answer for <doc>: replayed answers ($text) are NA." (plus the `gptr_init()` hint outside a
+  workspace). Both were silent (IC-46).
+- Rule: `gptr_return()`'s once-per-session notice outside a run is silent in replay mode (`replay = "replay"`,
+  `GPTR_REPLAY=replay`), as P08 implements IC-48; a document sourced under `"auto"` gets it (the text said "silent
+  while a document is replayed").
+- Steering review: a `## Steer:` or `## Follow-up:` line is steering with or without the space after the colon, and a
+  blank text is written without it (was `## Steer: `, which an editor's trim made a user-edited block that
+  `gptr_export()` refused); the block id fills only gptr's own lines, the hidden value name and the overlay and team
+  homes (was every body line, so a steer or model code holding the placeholder was recorded with the id; IC-49).
+  The text of a steer, follow-up, decision or agent line stays one line (U+0085, U+2028 and U+2029 also become
+  spaces) and its control, bidi and zero-width characters are written `<U+XXXX>` (`ui_escape()`, rule C1; were
+  written raw, so `source(echo = TRUE)` drew escape sequences; 11.5 body). A console transcript records a run of any
+  settled status, one that did not end `idle` with a last `## Run: <status>` line and no cached answer (was only
+  `idle` runs, P15 decision 5, so an aborted or failed run vanished with its code and steers and the next turn began
+  a new session; IC-49). A replay reconstructs a block's steers and follow-ups in body order, between its runs of
+  code (a steer as the live relay); a reconstructed piped session gains each block's turn, and one rebuilt from its
+  JSONL moves to the end of each block's turn, at the block's `gptr.doc_block` entry, until a live run (was one
+  merged `r` call and no steer, and every piped turn after the first lost, a dead branch in the session file, also
+  in every process after a replay that stopped at an earlier block; IC-46). Each replay of a block, also a second
+  source in one process, sets its steer and follow-up texts on the session as its notes: `gptr_steer()` or a pipe
+  into the idle replayed session drops an equal text with one notice, and a matching item already queued is taken
+  back (was sent again: replay mode failed for want of a record, auto mode made an extra model call and recorded the
+  steer twice, and a second source in one process found no notes); a live run clears them. A turn `gptr_step()` or
+  `gptr_wait()` starts from queued input under a binding says once that it is not recorded (IC-55).
+- Contract-visible: 04 §4.4 `r` details `outputs` and `value`, §5.1 `print` and `.d` `replay_rows`, §6.4
+  `gptr_doc()` and `gptr_cache()`, §6.5 `gptr_resume()` and `gptr_steer()`, §6.6 `gptr_return()`, §7.6 replay
+  functions, §7.15 `doc_block_lines()`, §11.5 `cost`, `value`, `children`, body and transcript, §11.9, §15.3
+  IC-45, IC-46, IC-47, IC-48, IC-49, IC-51, IC-55; 03 §4.3, §5.1, §6.9.1, §6.9.3; `?gptr_doc`, `?gptr_cache`,
+  `?gptr_blocks`, `?gptr_return`, `?print.gptr_session`, `?gptr_export`, `?gptr_steer`; vignettes
+  script-as-history, teams-and-background.
+- Tests: test-doc-io: the user-cache sidecar, its lock and listing, the cross-process kernel and killed-run sync,
+  the live-run sync;
+  test-doc-replay: the other-binding notice and its four silent cases; test-doc-formats: the machine-log line with
+  and without `.gptr/`; test-doc-blocks: recorded `#>` cuts, the known-zero cost; test-tool-r: per-expression
+  outputs; test-doc-replay: the listed zero cost, the in-process replay, one into another environment;
+  test-session-object: a held or undone block; test-doc-blocks, test-doc-replay, test-doc-io, test-doc-export,
+  test-mcp-recording: a recorded `gptr_return(<expression>)`; test-doc-blocks, test-doc-replay, test-doc-io: each
+  `gptr_return()` shape replays its value or says once why not; test-doc-replay: fan-out and team children's values in
+  the recording process, an in-process replay and two simulated later processes, a three-field `children=` entry;
+  test-session-object: the replayed footer;
+  test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself, handle position,
+  a function naming a handle;
+  test-session-store: the resume hint; test-doc-replay: the no-answer notice in process, under `Rscript` and for
+  fan-out children; test-doc-blocks: a blank and a trimmed steer line, the block id only in gptr's lines, escaped
+  comment lines; test-doc-replay: an aborted or failed console run and its re-source, a steered chain's live context
+  rebuilt and reconstructed, steers and follow-ups between runs, recorded steers not sent again; test-session-object:
+  the seek along piped blocks; test-gptr-sdk: the unrecorded-turn notice. Evidence: progress/fixes.md Task FIX-16
+  doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-2c to -2h, replay-3, replay-4b,
+  replay-5, export-2, export-2b, store-1, doc-1b, steer-doc-1 to -5, steer-doc-4b, steer-doc-5b.

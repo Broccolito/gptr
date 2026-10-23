@@ -77,3 +77,24 @@ doc_stand_in = function(code = "n = 99", log = new.env()) {
   }
   e
 }
+
+# A temporary project where peter() records with the fake provider: replies are scripted, the
+# model is fake/fake-1, mode auto (no human is asked), recording consent by option, replay auto.
+# gptr.unsafe_no_permissions keeps the scripted r calls running when no mode policy is loaded
+# (P11 is an M2 plan, but not a dependency of P15; IC-53 documents the switch for sandboxed runs)
+local_doc_e2e = function(script, record = "auto", .env = parent.frame()) {
+  root = local_project(.env = .env)
+  local_gptr_options(record = record, replay = "auto", model = "fake/fake-1", mode = "auto",
+                     unsafe_no_permissions = TRUE, .env = .env)
+  fake = local_fake_provider(script, .env = .env)
+  old = the$doc_binding
+  withr::defer(assign("doc_binding", old, envir = the), envir = .env)
+  the$doc_binding = NULL
+  list(root = root, fake = fake)
+}
+
+# Source a document into a fresh environment (whose parent finds gptr) and return it
+doc_e2e_source = function(path, envir = new.env(parent = globalenv()), keep_source = TRUE) {
+  source(path, local = envir, keep.source = keep_source)
+  envir
+}

@@ -875,6 +875,19 @@ test_that("gptr_resume() validates x", {
   expect_error(gptr_resume(), class = "gptr_error_invalid_argument")
 })
 
+test_that("without a .gptr/ workspace, a failed resume says sessions end with R (FIX-16)", {
+  dir = local_project(gptr = FALSE)
+  local_mocked_bindings(sessions_dir = function() file.path(dir, "no-store"))
+  expect_error(gptr_resume("s0123456789"), class = "gptr_error_invalid_argument",
+               regexp = "sessions last until R exits; gptr_init(\".\") keeps them", fixed = TRUE)
+  expect_error(gptr_resume(), class = "gptr_error_invalid_argument", regexp = "gptr_init")
+  suppressMessages(gptr_init(dir))
+  for (x in list("s0123456789", NULL)) {
+    err = expect_error(gptr_resume(x), class = "gptr_error_invalid_argument")
+    expect_no_match(conditionMessage(err), "gptr_init")
+  }
+})
+
 test_that("gptr_resume(block =) returns the session replay bound to the block, never a fallback", {
   old = the$replay_blocks
   the$replay_blocks = new.env(parent = emptyenv())

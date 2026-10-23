@@ -423,7 +423,9 @@ session_history = function(s) {
 #' Print a session
 #'
 #' The footer is `status . model . turns . tokens . cost . id`. A token count or cost that a
-#' provider did not report is printed as unknown, never as zero.
+#' provider did not report is printed as unknown, never as zero. A session replayed from a
+#' document shows the status `replayed` until it makes a request; rebuilt from its saved
+#' transcript it shows the recorded usage, reconstructed from the document alone unknown usage.
 #'
 #' @param x A `gptr_session`.
 #' @param ... Unused.
@@ -438,15 +440,23 @@ print.gptr_session = function(x, ...) {
 }
 
 #' The footer line: status . model . turns . tokens . cost . id (unknown counts print as unknown,
-#' IC-74, D-021)
+#' IC-74, D-021); a replayed session reads `replayed` until a request adds usage, and one with no
+#' stored request (reconstructed from its document) has unknown usage
 #' @noRd
 session_footer = function(s) {
   d = session_data(s)
   u = session_usage_rows(s)
+  replayed = isTRUE(d$replayed) && isTRUE(nrow(u) == d$replay_rows)
   tokens = sum(u$input + u$output + u$cache_read + u$cache_write_5m + u$cache_write_1h)
+  cost = u$cost
+  if (replayed && !nrow(u)) {
+    tokens = NA_real_
+    cost = NA_real_
+  }
   dot = if (cli::is_utf8_output()) " \u00b7 " else " . "
-  paste(c(d$status, d$model, paste(d$turns, if (identical(d$turns, 1L)) "turn" else "turns"),
-          paste(format_count(tokens), "tokens"), format_cost(u$cost), d$id),
+  paste(c(if (replayed) "replayed" else d$status, d$model,
+          paste(d$turns, if (identical(d$turns, 1L)) "turn" else "turns"),
+          paste(format_count(tokens), "tokens"), format_cost(cost), d$id),
         collapse = dot)
 }
 
@@ -1182,15 +1192,29 @@ replay_key = function(block, child = NULL) if (is.null(child)) block else paste0
 # ---------------------------------------------------------------------------- replay (IC-46)
 
 #' Advance a piped session in place for a fresh recorded block (IC-46)
-#' Records the block (replay_mark()) and returns the same object, so a replayed pipe chain keeps
+#' A session rebuilt from its JSONL moves to the end of the block's turn (replay_seek()); one
+#' reconstructed from its document gains the block's turn from `doc` (replay_turn_append()). The
+#' block's steers become its notes each time it is replayed (replay_notes_add()). Records the
+#' block (replay_mark()) and returns the same object, so a replayed pipe chain keeps
 #' `identical(chain_result, first_result)`.
 #' @noRd
-session_replay_apply = function(s, block, header, text = NULL) {
+session_replay_apply = function(s, block, header, text = NULL, doc = NULL) {
   check_class(s, "gptr_session", "s")
   check_string(block, "block")
   replay_header_check(header)
   check_string(text, "text", null = TRUE)
-  replay_mark(s, block, header, text, advance = TRUE)
+  replay_doc_check(doc)
+  d = session_data(s)
+  added = FALSE
+  if (!block %in% d$seen) {
+    replay_seek(s, replay_turn(header$turn), block)
+    if (identical(d$history_source, "reconstructed") && !is.null(doc)) {
+      replay_turn_append(s, header, doc, d$turns + 1L)
+      added = TRUE
+    }
+  }
+  replay_notes_add(s, block, doc)
+  replay_mark(s, block, header, text, advance = !added)
   s
 }
 
@@ -1205,9 +1229,11 @@ session_replay_new = function(block, header, envir, doc = NULL) {
   replay_doc_check(doc)
   id = header$session
   live_s = if (is.null(id)) NULL else session_by_id(id)
-  if (!is.null(live_s)) return(session_replay_apply(live_s, block, header, doc$text))
+  if (!is.null(live_s)) return(session_replay_apply(live_s, block, header, doc$text, doc))
   path = if (is.null(id)) NULL else store_find(id)
-  if (!is.null(path)) return(replay_adopt(replay_rebuild(path, header, envir), block, header, doc))
+  if (!is.null(path)) {
+    return(replay_adopt(replay_rebuild(path, header, envir, block), block, header, doc))
+  }
   # all or nothing, as store_rebuild(): on.exit() undoes a failed or interrupted reconstruction
   prev_last = the$last
   s = replay_session_new(header, envir)
@@ -1231,8 +1257,52 @@ replay_adopt = function(s, block, header, doc) {
     d$doc = list(path = doc$path, format = doc$format %||% NA_character_, site = NULL,
                  blocks = block)
   }
+  replay_notes_add(s, block, doc)
   replay_mark(s, block, header, doc$text, advance = FALSE)
   s
+}
+
+#' The texts of a replayed block's `## Steer:` and `## Follow-up:` lines (`doc$steps`) become the
+#' session's notes of that block, set anew each time the block is replayed (a script sourced again
+#' sends them again): replay_note_take() keeps them from reaching the model twice. A matching item
+#' the script queued before the call that took it is taken back now.
+#' @noRd
+replay_notes_add = function(s, block, doc) {
+  notes = Filter(function(st) st$type %in% c("steer", "follow_up"), doc$steps %||% list())
+  if (!length(notes)) return(invisible(s))
+  d = session_data(s)
+  kept = d$replay_notes %||% list()
+  kept[[block]] = vapply(notes, function(st) st$text, "")
+  d$replay_notes = kept
+  q = d$queue
+  for (which in c("steer", "follow_up")) {
+    q[[which]] = Filter(function(it) {
+      !(it$source %in% c("api_user", "pipe") && replay_note_take(s, it$text))
+    }, q[[which]])
+  }
+  if (!identical(q, d$queue)) {
+    d$queue = q
+    session_emit(s, "queue_update", steer = length(q$steer), follow_up = length(q$follow_up))
+  }
+  invisible(s)
+}
+
+#' TRUE when `text`, a steer or follow-up a script sends to an idle replayed session, is one of its
+#' notes (as the document writer normalises it, either kind), which it then consumes
+#' @noRd
+replay_note_take = function(s, text) {
+  d = session_data(s)
+  if (!length(d$replay_notes) || !identical(d$status, "idle") || !rlang::is_string(text)) {
+    return(FALSE)
+  }
+  text = doc_one_line(redact(as_utf8(text), "context"))
+  b = Position(function(v) text %in% v, d$replay_notes)
+  if (is.na(b)) return(FALSE)
+  v = d$replay_notes[[b]]
+  d$replay_notes[[b]] = v[-match(text, v)]
+  gptr_inform(paste0("A steer this script sends is already recorded in the replayed block; it was ",
+                     "not sent again."), "notice", .once = "replay_steer_recorded")
+  TRUE
 }
 
 #' Check the header fields that name things before anything is looked up or recorded: `session`
@@ -1256,7 +1326,8 @@ replay_header_check = function(header) {
 replay_model_parts = function(model) c(sub("/.*$", "", model), sub("^[^/]*/", "", model))
 
 #' Check the document fields of a replay before a session is built from them: `path`, `format`,
-#' `template` and `text` are one string or NULL, `code` and `output` character vectors or NULL
+#' `template` and `text` are one string or NULL, `code` and `output` character vectors or NULL,
+#' `steps` a list or NULL
 #' @noRd
 replay_doc_check = function(doc) {
   check_list(doc, "doc", null = TRUE)
@@ -1264,6 +1335,7 @@ replay_doc_check = function(doc) {
     check_string(doc[[f]], paste0("doc$", f), null = TRUE, empty = TRUE)
   }
   for (f in c("code", "output")) check_strings(doc[[f]], paste0("doc$", f), null = TRUE)
+  check_list(doc[["steps"]], "doc$steps", null = TRUE)
   invisible(doc)
 }
 
@@ -1277,24 +1349,41 @@ replay_turn = function(x) {
 }
 
 #' Record a replayed block on a session: `gptr.replay`, `seen`, the turn (one more when
-#' `advance`), the value, `last_text`
+#' `advance`, unless the active path holds the block's turn already: the session that recorded
+#' it, in this process), the value, `last_text`
 #' @noRd
 replay_mark = function(s, block, header, text, advance) {
   d = session_data(s)
   if (block %in% d$seen) return(invisible(s))
-  turn = if (advance) d$turns + 1L else d$turns
+  turn = if (advance && !replay_holds_block(d, block)) d$turns + 1L else d$turns
   session_append(s, entry_custom("gptr.replay", compact(list(
     doc = header$doc %||% d$doc$path, block = block, mode = header$mode %||% "replay",
     turn = turn, value = header$value))))
   d$seen = c(d$seen, block)
   d$turns = turn
+  d$replay_rows = nrow(session_usage_rows(s))
   if (!is.null(header$value)) replay_value(s, header$value)
   if (!is.null(text)) d$last_text = text
   invisible(s)
 }
 
+#' Does the active path hold a record of `block` (replay_block_record())?
+#' @noRd
+replay_holds_block = function(d, block) {
+  any(vapply(entries_path(d), replay_block_record, NA, block = block))
+}
+
+#' Is entry `e` a `gptr.doc_block` record of `block` that a rewind has not undone?
+#' @noRd
+replay_block_record = function(e, block) {
+  identical(e$custom_type, "gptr.doc_block") && is.list(e$data) &&
+    identical(e$data$block, block) && !identical(e$data$action, "undone")
+}
+
 #' Designate the replayed block's `value=` name: through the value policy when the name is bound
-#' in the kept home, else held by name only (resolved when first read)
+#' in the kept home, else held by name only (resolved when first read), unless the session holds
+#' a value of this turn already: the recording session, replayed into another environment of this
+#' process, where the name is bound only after the replay and outside its home
 #' @noRd
 replay_value = function(s, name) {
   home = session_home(s)
@@ -1304,6 +1393,8 @@ replay_value = function(s, name) {
   }
   d = session_data(s)
   vals = d$values
+  held = vapply(vals, function(v) !is.null(v$value) && as.integer(v$turn) == d$turns, NA)
+  if (any(held)) return(invisible(NULL))
   vals[[length(vals) + 1L]] = list(turn = d$turns, mode = "name", name = name,
                                    address = NA_character_, class = NA_character_,
                                    bytes = NA_real_, value = NULL)
@@ -1312,22 +1403,43 @@ replay_value = function(s, name) {
   invisible(NULL)
 }
 
-#' Rebuild a replayed session from its JSONL, the leaf moved back to the end of the recorded turn
+#' Rebuild a replayed session from its JSONL, moved to the end of `block`'s turn; its path and
+#' values as read are kept for the later piped blocks of the chain (replay_seek())
 #' @noRd
-replay_rebuild = function(path, header, envir) {
+replay_rebuild = function(path, header, envir, block) {
   s = store_rebuild(path, envir)
   d = session_data(s)
-  turn = replay_turn(header$turn)
-  if (!is.na(turn) && turn < d$turns) {
-    cut = tryCatch(fork_cut(d, turn), error = function(e) NULL)
-    if (!is.null(cut) && !is.null(cut$entry)) {
-      d$leaf = cut$entry
-      path_fields(d, entries_path(d))
-      d$values = Filter(function(v) as.integer(v$turn) <= cut$turn, d$values)
-      d$status = "idle"
-    }
-  }
+  d$replay_tip = d$leaf
+  d$replay_values = d$values
+  replay_seek(s, replay_turn(header$turn), block)
   s
+}
+
+#' Move a session rebuilt for a replay to the end of `block`'s turn: its last `gptr.doc_block`
+#' record (replay_block_record()), which the writer appends after the turn, wherever the file's
+#' last entry is (an earlier replay that stopped sooner leaves it on a shorter branch); without one,
+#' to the end of recorded turn `turn` of the path it was rebuilt with. No value record of a later
+#' turn is kept: a replay that advanced the live session (a team child) recorded a value of the
+#' next turn, whose copy is not stored, which would hide the block's value. A live run ends the
+#' seeking (run_start()).
+#' @noRd
+replay_seek = function(s, turn, block) {
+  d = session_data(s)
+  if (is.null(d$replay_tip) || is.na(turn)) return(invisible(s))
+  rec = Find(function(e) replay_block_record(e, block), d$entries, right = TRUE)
+  d$leaf = rec$id %||% d$replay_tip
+  path = entries_path(d)
+  cut = if (is.null(rec) && turn < path_turn(path)) {
+    tryCatch(fork_cut(d, turn), error = function(e) NULL)
+  }
+  if (!is.null(cut$entry)) {
+    d$leaf = cut$entry
+    path = entries_path(d)
+  }
+  path_fields(d, path)
+  d$status = if (is.null(cut$entry)) rebuild_status(path) else "idle"
+  d$values = Filter(function(v) as.integer(v$turn) <= d$turns, d$replay_values)
+  invisible(s)
 }
 
 #' The `replayed` session a reconstruction fills: the recorded id and model, with a fresh overlay
@@ -1358,40 +1470,64 @@ session_undo = function(s, prev_last) {
   invisible(NULL)
 }
 
-#' Reconstruct a replayed session's transcript from its document block: the template, the code as
-#' an `r` call, the `#>` lines as its result, then the cached answer
+#' Reconstruct a replayed session's transcript from its document block (replay_turn_append())
 #' @noRd
 replay_reconstruct = function(s, header, doc) {
   d = session_data(s)
   d$history_source = "reconstructed"
   turn = replay_turn(header$turn)
-  d$turns = if (is.na(turn) || turn < 1L) 1L else turn
+  replay_turn_append(s, header, doc, if (is.na(turn) || turn < 1L) 1L else turn)
+}
+
+#' Append turn `turn` reconstructed from a document block: the template, then in body order each
+#' run of code as an `r` call with its `#>` lines as the result, each steer as the relay a live
+#' steer arrives as (which records back as the same `## Steer:` line), each follow-up as the user
+#' message it was, after the earlier answer it followed; then the cached answer. `doc$steps` is
+#' doc_replay_steps(); without it, `doc$code` and `doc$output` are one run.
+#' @noRd
+replay_turn_append = function(s, header, doc, turn) {
+  d = session_data(s)
+  d$turns = turn
   parts = replay_model_parts(header$model %||% "unknown/unknown")
-  provider = parts[[1L]]
-  model_id = parts[[2L]]
+  said = function(content, ...) {
+    session_append(s, entry_message(msg_assistant(content, api = "replay", provider = parts[[1L]],
+                                                  model = parts[[2L]], ...)))
+  }
   session_append(s, entry_message(msg_user(doc$template %||% "(the prompt was not recorded)",
                                            source = "replay")))
-  has_code = length(doc$code) > 0L
-  if (has_code) {
-    call_id = paste0("replay_", d$turns)
-    call = block_tool_call(call_id, "r", list(code = paste(doc$code, collapse = "\n")))
-    session_append(s, entry_message(msg_assistant(list(call), api = "replay", provider = provider,
-                                                  model = model_id, stop_reason = "tool_use")))
-    out = if (length(doc$output)) paste(doc$output, collapse = "\n") else "(no output recorded)"
-    session_append(s, entry_message(msg_tool_result(call_id, "r", out)))
+  steps = doc$steps %||% list(list(type = "r", code = doc$code, output = doc$output))
+  k = 0L
+  for (st in steps) {
+    if (identical(st$type, "steer")) {
+      session_append(s, entry_message(msg_operator(
+        "steer_relay", paste0("The user sent this message while you were working: ", st$text),
+        origin_text = st$text)))
+    } else if (identical(st$type, "follow_up")) {
+      said("(the answer to the earlier request was not recorded)")
+      session_append(s, entry_message(msg_user(st$text, source = "follow_up")))
+    } else if (length(st$code)) {
+      k = k + 1L
+      id = paste0("replay_", turn, if (k > 1L) paste0("_", k))
+      said(list(block_tool_call(id, "r", list(code = paste(st$code, collapse = "\n")))),
+           stop_reason = "tool_use")
+      out = if (length(st$output)) paste(st$output, collapse = "\n") else "(no output recorded)"
+      session_append(s, entry_message(msg_tool_result(id, "r", out)))
+    }
   }
   # a missing answer is said to be missing, and the code is pointed to only when it is there
-  answer = doc$text %||% paste0("(the answer of this turn was not recorded",
-                                if (has_code) "; its code is above", ")")
-  session_append(s, entry_message(msg_assistant(answer, api = "replay", provider = provider,
-                                                model = model_id)))
+  said(doc$text %||% paste0("(the answer of this turn was not recorded",
+                            if (k > 0L) "; its code is above", ")"))
   s
 }
 
-#' The one-time notice when a reconstructed session continues live (IC-46)
+#' A replayed session continues live (run_start()): the one-time notice of a reconstructed history
+#' (IC-46); a later replayed block no longer moves the session along its recorded path
+#' (replay_seek()), which the live turn has left, and a later steer equal to a note is sent
 #' @noRd
 replay_notice = function(s) {
   d = session_data(s)
+  d$replay_tip = NULL
+  d$replay_notes = NULL
   if (!identical(d$history_source, "reconstructed")) return(invisible(NULL))
   gptr_inform(paste0("session ", d$id, " continues from a history reconstructed from its ",
                      "document; earlier tool calls and answers are approximate"),

@@ -12,6 +12,7 @@ the = new.env(parent = emptyenv())
 the$on_load = list()
 the$on_unload = list()
 the$once = new.env(parent = emptyenv())
+the$rproj = new.env(parent = emptyenv())
 the$out = NULL
 the$services = list()
 the$redactor = NULL
