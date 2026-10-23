@@ -2040,6 +2040,10 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   price.input, expected ..."). `?gptr_provider` documents the price shape. NEWS entry; 04 §7.0, §10.2 amended.
 - Green: `^(ext-specs|aaa-state)$` PASS 354; ext-*, aaa-state, provider-*, catalog-*, session-budget,
   arch-layers, lint-rules, gptr-config, gptr-gateway and agent-run PASS 6972. Lint clean; Rd regenerated.
+- Review fix (docs): `?gptr_provider` gave `tier` as `"default"` or `">200k"`, while `price_threshold()`
+  takes any `">Nk"` (catalog-1 makes `>272k` and `>256k`); it now reads `">Nk"` for prompts above N thousand
+  tokens. `^(ext-specs|zzz|lint-rules)$` PASS 503. Lint clean; `man/gptr_provider.Rd` regenerated,
+  `tools::checkRd()` clean.
 - Deviations: D-250 (provider-2 rule). The plan's direct `prices_df()` call fails the layering test (ext-specs.R
   is L0, provider-usage.R L1), so P05 provides `prices_df()` as the `prices.table` service (IC-09), the pattern
   of `check.adapter`; without the service the table is checked when the model is resolved, as before. Open: a
