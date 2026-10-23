@@ -273,14 +273,15 @@ final_text = function(path) {
 #' `children`, `ext`, `plan`, `last_rewind`, `editor_text`, and the names of child sessions.
 #' Sessions are changed only through `peter()` and the `gptr_*()` verbs, so `$<-` and `[[<-`
 #' signal `gptr_error_readonly`. A team's `text` joins its members' reports under
-#' `### <name> (<model>)` headings, a fan-out's is the named chr of its children's texts, and
-#' `value` is the named list of their values, until the team or fan-out is continued with
-#' [peter()]: then `text` is its own answer and `value` its own value once a turn designates
-#' one, while each member's stay at `x$<name>$text` and `x$<name>$value`. Usage a provider did
-#' not report stays unknown: `cost` is `NA` when the cost of any request is unknown, as for a
-#' model without prices. `envir` is the session's kept workspace: `NULL` for a session started
-#' inside a function without `envir =` (a function frame is never kept), whose later turns
-#' evaluate in their caller's frame.
+#' `### <name> (<model>)` headings, where a member that did not finish says
+#' `(ended with status <status>)`; a fan-out's is the named chr of its children's texts, printed
+#' under the same headings; and `value` is the named list of their values, until the team or
+#' fan-out is continued with [peter()]: then `text` is its own answer and `value` its own value
+#' once a turn designates one, while each member's stay at `x$<name>$text` and
+#' `x$<name>$value`. Usage a provider did not report stays unknown: `cost` is `NA` when the cost
+#' of any request is unknown, as for a model without prices. `envir` is the session's kept
+#' workspace: `NULL` for a session started inside a function without `envir =` (a function
+#' frame is never kept), whose later turns evaluate in their caller's frame.
 #' `history` is the complete recorded-message table with a concise display, like
 #' `summary(x)`. Use `print(x$history, n = Inf)` to show all rows or `as.data.frame(x$history)`
 #' to obtain an ordinary data frame.
@@ -386,17 +387,35 @@ session_get = function(s, name) {
 session_text = function(s) {
   d = session_data(s)
   if (!is.na(d$last_text)) return(d$last_text)
-  if (identical(d$kind, "team") && length(d$children)) {
-    parts = vapply(names(d$children), function(nm) {
-      cd = session_data(d$children[[nm]])
-      paste0("### ", nm, " (", cd$model, ")\n", if (is.na(cd$last_text)) "" else cd$last_text)
-    }, "")
-    return(paste(parts, collapse = "\n\n"))
-  }
+  if (identical(d$kind, "team") && length(d$children)) return(session_child_reports(d))
   if (identical(d$kind, "fanout") && length(d$children)) {
     return(vapply(d$children, function(ch) session_data(ch)$last_text, ""))
   }
   d$last_text
+}
+
+#' Each child's report under `### <name> (<model>)`; a child that did not end idle says
+#' `(ended with status <status>)` first, as in the agent_reports block
+#' @noRd
+session_child_reports = function(d) {
+  parts = vapply(names(d$children), function(nm) {
+    cd = session_data(d$children[[nm]])
+    paste0("### ", nm, " (", cd$model, ")\n",
+           if (!identical(cd$status, "idle")) paste0("(ended with status ", cd$status, ")\n"),
+           if (is.na(cd$last_text)) "" else cd$last_text)
+  }, "")
+  paste(parts, collapse = "\n\n")
+}
+
+#' What print() and the notebook repr show: `$text`, but a fan-out without its own answer shows
+#' its children's reports under their names, as a team's `$text` does
+#' @noRd
+session_display_text = function(s) {
+  d = session_data(s)
+  if (identical(d$kind, "fanout") && is.na(d$last_text) && length(d$children)) {
+    return(session_child_reports(d))
+  }
+  session_text(s)
 }
 
 #' `$history`: one row per message on the active path; an assistant's `tokens` is its reported
@@ -432,14 +451,16 @@ session_history = function(s) {
 #' Print a session
 #'
 #' The footer is `status . model . turns . tokens . cost . id`. A token count or cost that a
-#' provider did not report is printed as unknown, never as zero.
+#' provider did not report is printed as unknown, never as zero. A team or fan-out without an
+#' answer of its own prints each child's answer under a `### <name> (<model>)` heading, with
+#' `(ended with status <status>)` for a child that did not finish.
 #'
 #' @param x A `gptr_session`.
 #' @param ... Unused.
 #' @return `x`, invisibly.
 #' @export
 print.gptr_session = function(x, ...) {
-  txt = session_text(x)
+  txt = session_display_text(x)
   txt = txt[!is.na(txt) & nzchar(txt)]
   if (length(txt)) msg_verbatim(console_escape(txt))
   msg_verbatim(cli::col_grey(console_escape(session_footer(x), newlines = FALSE)))
@@ -463,7 +484,7 @@ session_footer = function(s) {
 #' displayed independently by doc_pending_add(), so it is not appended a second time here.
 #' @noRd
 doc_session_repr_text = function(x, ...) {
-  txt = session_text(x)
+  txt = session_display_text(x)
   txt = txt[!is.na(txt) & nzchar(txt)]
   redact(paste(c(txt, session_footer(x)), collapse = "\n\n"), "persist")
 }

@@ -2105,3 +2105,27 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Open: `doc_block_lines()` still writes a continued team's turn as the team block (finding 170); a blocked or failed
   member's section of the joined `$text` has no status note (findings 77, 120); rewinding keeps `values` for every
   session. Finding 120 part 1 is the sheet's S05, S35 and S43 (sessions-21).
+
+### team-2 - Printed teams and fan-outs show each child under its name, and mark a child that did not finish
+- Red: FAIL 5 in `^subagent-team$` (PASS 374; finding 177): `print()` and the notebook repr of `peter("Sum.",
+  list(a = 1, b = 2), parallel = 2)` showed "A report." twice with no `### a (fake/fake-1)` heading (`knit_print`
+  too, an expectation later dropped); a `gptr_parallel()` team whose member `ko` failed with a 400 gave an empty
+  `### ko (fake/fake-1)` section in `$text` and in print.
+- Cause: `print.gptr_session()` and `doc_session_repr_text()` passed a fan-out's named chr through `msg_verbatim()`
+  and `paste()`, which drop the names (and left out a child without an answer); `session_text()`'s team branch
+  wrote no status.
+- Fix: `session_child_reports(d)`, the team branch with `(ended with status <status>)` for a child that did not end
+  idle (the marker of `subagent_reports_block()`), serves a team's `$text` and `session_display_text()`, which
+  `print()` and the repr use: a fan-out without its own answer (sessions-11's rule) shows the headings, else
+  `$text`. A fan-out's `$text`, `format()` and `as.character()` stay the named chr. `?print.gptr_session`,
+  `?session-accessors`, `?gptr_parallel`, the vignette's team and fan-out paragraphs; 04 §5.1 `text` row and
+  `print` method, §6.5 `gptr_map()`, 03 §4.1.6.
+- Green: `^subagent-team$` PASS 378; `^(subagent-|session-|doc-|ckpt-|console-render|gptr-gateway|copy-gateway|
+  arch-layers|lint-rules|vignette)` PASS 6301 SKIP 3. Full suite (NOT_CRAN=true) FAIL 0 PASS 35389 SKIP 64. Lint,
+  Rd and check-plans clean.
+- Deviations: D-251 (extended). From the plan: `knit_print` is unchanged, because doc-knitr.R (L5) may not call
+  session-object.R (L3) internals (`arch-layers` failed on the first attempt), so a knitted fan-out still joins its
+  answers without names. The failed member gets a 400 (not retried) in place of the plan's 529. The display helper
+  handles only the fan-out, since a team's `$text` already is its reports.
+- Open: `knit_print` of a fan-out (above; it needs a contract edge or an SDK verb); a fan-out's headings repeat the
+  one model its children share (kept for one form with the team).

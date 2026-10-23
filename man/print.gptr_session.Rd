@@ -16,5 +16,7 @@
 }
 \description{
 The footer is \verb{status . model . turns . tokens . cost . id}. A token count or cost that a
-provider did not report is printed as unknown, never as zero.
+provider did not report is printed as unknown, never as zero. A team or fan-out without an
+answer of its own prints each child's answer under a \verb{### <name> (<model>)} heading, with
+\verb{(ended with status <status>)} for a child that did not finish.
 }

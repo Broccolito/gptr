@@ -776,7 +776,7 @@ the valid names):
 
 | Name | Returns |
 |---|---|
-| `text` | chr(1): last final assistant text; `NA_character_` before the first turn; until a continuation gives a team or fan-out its own answer (D-251): team sessions the joined `### <name> (<model>)` reports, fan-out the named chr of child texts |
+| `text` | chr(1): last final assistant text; `NA_character_` before the first turn; until a continuation gives a team or fan-out its own answer (D-251): team sessions the joined `### <name> (<model>)` reports (a member that did not end `idle` says `(ended with status <status>)` under its heading), fan-out the named chr of child texts |
 | `value` | the latest designated value by turn (§5.1 of `03` value policy); `NULL` when none; name-held values are resolved with `get0(name, home, inherits = FALSE)` (a message `value_rebound` if the address changed); team/fan-out without a value of its own (D-251): named list of child values |
 | `values` | df `turn`, `mode`, `name`, `class`, `bytes` |
 | `usage` | a `gptr_usage` df (§5.12) of this session and its children |
@@ -798,7 +798,7 @@ the valid names):
 
 | Method | Behaviour |
 |---|---|
-| `print(x, ...)` | the last answer through `msg_verbatim()` (rendered markdown when the console renderer is available), then a dim footer `status . model . turns . tokens . cost . id`; returns `invisible(x)`; never touches user objects |
+| `print(x, ...)` | the last answer through `msg_verbatim()` (rendered markdown when the console renderer is available), then a dim footer `status . model . turns . tokens . cost . id`; a team or fan-out without its own answer shows each child's report under `### <name> (<model>)`, as a team's `$text` joins them (D-251; also the notebook repr); returns `invisible(x)`; never touches user objects |
 | `format(x, ...)`, `as.character(x, ...)` | `$text` |
 | `summary(object, ...)` | complete `gptr_session_summary` table with a detached character-only metadata snapshot; no model request |
 | `print.gptr_session_summary(x, n = 8L, ...)` | recent messages, omitted count and session metadata at current console width; safe display copy; `n = Inf` shows all rows |
@@ -1698,7 +1698,7 @@ children settled; `"return"` leaves failed children with status `error`.
 `backend`) child per element of `.x` (a list, atomic vector or data frame rows), each receiving the prompt and its
 element alone, for every backend: bound in the child's overlay as `.x`, a named list of one (`list(A = <element>)`),
 and attached as `.x[["A"]]` (D-212); it returns a **fan-out session** (`kind = "fanout"`;
-`$text` a named chr, `[[i]]`/`$name` child sessions). Users write `peter("Summarise this", cohorts, parallel = 4)`.
+`$text` a named chr, printed under `### <name> (<model>)` headings (D-251), `[[i]]`/`$name` child sessions). Users write `peter("Summarise this", cohorts, parallel = 4)`.
 Copy-safety: [R1][R3] (an inline or cli child does not copy the element; the bound list is removed and defused when
 the child settles, as checkpoint images are [R6]; `test-copy-subagent.R`; after a worker fan-out the caller's next edit
 still copies it once, D-212).

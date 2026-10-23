@@ -42,10 +42,11 @@ file costs; CLI backends need their external CLI and authentication. See
 [Execution model](execution-model.html) for copy-on-modify and backend boundaries.
 Role definitions do not waive the usual tool permission checks.
 
-`session$text` joins member reports under headings and `session$value` is their named list
-of values, until the team is continued; `session$statistics` is the member session. A report
-is model-generated output, not verification. Inspect each child's status and the actual
-results before relying on it.
+`session$text` joins member reports under headings, where a member that failed says
+`(ended with status error)`, and `session$value` is their named list of values, until the
+team is continued; `session$statistics` is the member session. A report is model-generated
+output, not verification. Inspect each child's status and the actual results before relying
+on it.
 
 Continuing a team without `agents =` asks the container's model to synthesize those reports.
 Afterwards `session$text` and printing show the synthesis, `session$value` is a value it
@@ -71,7 +72,8 @@ session$A$text
 queued. Exactly one attached context object must supply the batch, as a list, atomic vector
 or data-frame rows. Each child receives its own element. Unique nonempty element names become
 child names; otherwise positions are used. Inspect a child with `session$A` or
-`session[[1]]`.
+`session[[1]]`. `session$text` is the named vector of the children's answers, and printing the
+session shows each answer under its child's name.
 
 For object-producing work, keep each child's results separate and specify exports only when
 needed. Export-name collisions are reported and results are collected in task order; this

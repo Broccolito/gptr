@@ -667,7 +667,8 @@ accessor are rejected. `backend = "auto"` everywhere: inline, except `cli` for C
 `codex`) [15 verifier resolved]. `parallel = n` runs one inline child per element, `n` at a time (every element is
 queued; the 8-task cap applies only to fan-outs started by model code [IC-39]), each given its element alone as `.x`
 (`list(A = cohorts[["A"]])`, attached as `.x[["A"]]`, no copy; `.opts$context = "none"` is refused) [D-212]. Team and fan-out sessions are sessions (`kind = "team"`/`"fanout"`): `$text` joins the children's
-reports under `### <name> (<model>)` headings, `$value` is the named list of child values, `$<name>` and
+reports under `### <name> (<model>)` headings (a fan-out's is their named chr, printed so; a child that did not end
+`idle` says `(ended with status <status>)`) [D-251], `$value` is the named list of child values, `$<name>` and
 `[[` return child sessions, and piping the team continues it with the reports attached as a user-role
 `<agent_reports>` block (sub-agent output is data) [P-A §6.12, P-C §5.1]; from then on `$text` and
 `$value` are the team's own answer and value, once it has them [D-251].

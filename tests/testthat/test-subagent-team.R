@@ -506,6 +506,33 @@ test_that("a continued gptr_parallel() team or fan-out answers with its own text
   }
 })
 
+test_that("printing a team or fan-out shows each child under its name, and marks one that failed", {
+  skip_on_cran()
+  local_team_fake(function(request) {
+    if (identical(request$last_user, "bad")) return(fake_error("bad request", status = 400L))
+    if (grepl("Combine", request$last_user, fixed = TRUE)) "Combined." else "A report."
+  })
+  fan = peter("Sum.", list(a = 1, b = 2), parallel = 2, envir = new.env())
+  reports = "### a (fake/fake-1)\nA report.\n\n### b (fake/fake-1)\nA report."
+  expect_match(paste(capture.output(print(fan)), collapse = "\n"), reports, fixed = TRUE)
+  expect_match(doc_session_repr_text(fan), reports, fixed = TRUE)
+  expect_identical(fan$text, c(a = "A report.", b = "A report."))
+  expect_identical(format(fan), fan$text)
+  team = gptr_parallel(ok = peter("good", envir = new.env()), ko = peter("bad", envir = new.env()))
+  expect_identical(team$text, paste0("### ok (fake/fake-1)\nA report.\n\n",
+                                     "### ko (fake/fake-1)\n(ended with status error)\n"))
+  expect_match(paste(capture.output(print(team)), collapse = "\n"), "(ended with status error)",
+               fixed = TRUE)
+  # once continued, the container's own answer is shown, not the headings
+  for (s in list(fan, team)) {
+    s |> peter("Combine.")
+    for (out in c(paste(capture.output(print(s)), collapse = "\n"), doc_session_repr_text(s))) {
+      expect_match(out, "^Combined\\.")
+      expect_no_match(out, "###", fixed = TRUE)
+    }
+  }
+})
+
 test_that("a fan-out runs every element, parallel at a time (P19 acceptance 6)", {
   skip_on_cran()
   local_team_fake(list(fake_text("summary", delay = 0.3)))

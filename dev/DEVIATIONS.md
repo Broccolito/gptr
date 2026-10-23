@@ -3163,12 +3163,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   as.character, the notebook repr) is its `last_text` when set, else the joined reports or the named chr; `$value`
   is its own designated value when it has one, else the named list of the children's values. Was by kind alone, so
   `team |> peter("Reconcile ...")` kept showing the reports and child values. Rewinding resets `last_text` only.
+- Rule (team-2): a team's joined reports say `(ended with status <status>)` under the heading of a member that did
+  not end `idle`, as the `agent_reports` block does; until a team or fan-out has its own answer, `print()` and the
+  notebook repr show each child's report under `### <name> (<model>)`, so a fan-out's too. A fan-out's `$text`,
+  `format()` and `as.character()` stay the named chr, and `knit_print` still joins its answers without names. Was:
+  a failed member's section empty, and a fan-out printed its answers one after another without names, leaving out
+  a child without an answer.
 - Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
   `tools`, `.opts` and refusals. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter` `envir`,
   `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and row).
   04 §4.6 `gptr.budget`, §7.6 `budget_check()`, §10.4 `budget_exceeded`, IC-66. 04 §2.2 messages, §6.1 `budget`
   row, IC-66; `?peter` `budget`. 04 §5.1 `text` and `value` rows, §6.5 `gptr_parallel()`, 03 §4.1.6;
-  `?session-accessors`, `?gptr_parallel`, vignette teams-and-background.
+  `?session-accessors`, `?gptr_parallel`, vignette teams-and-background. 04 §5.1 `text` row and `print` method, §6.5
+  `gptr_map()`, 03 §4.1.6; `?print.gptr_session`, `?session-accessors`, `?gptr_parallel`, the same vignette.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...",
   "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
@@ -3177,4 +3184,5 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   provider's prompt count ...", "an extended token budget is checked again ..."; session-budget "a token budget the
   next request would exceed says so ...", "a call's own cost limit says once that an unknown cost counts nothing
   ...", "peter() with a cost limit on a model without prices ..."; subagent-team "NS-6: a team through peter() ...",
-  "a continued gptr_parallel() team or fan-out answers ...". Evidence: progress/fixes.md Task FIX-18.
+  "a continued gptr_parallel() team or fan-out answers ...", "printing a team or fan-out shows each child under its
+  name ...". Evidence: progress/fixes.md Task FIX-18.
