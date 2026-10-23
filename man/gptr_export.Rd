@@ -27,8 +27,14 @@ Only bare or symbol-assigned literal Peter calls and Peter-only native pipelines
 are admitted. Distinct statements sharing a line (including semicolon-separated statements),
 mixed pipelines, nested or computed calls, pending writes, missing or edited blocks, secret
 markers and interpolated-input hashes are refused.
-Raw exports also refuse ordinary code that uses a removed session handle. The Peter format
-retains such ordinary references, since its calls remain active.
+Raw exports also refuse ordinary code that reads a session handle after its Peter statement
+and before ordinary code assigns that name again. The Peter format retains such ordinary
+references, since its calls remain active.
+A top-level \code{gptr_doc()} whose string literal names the source (relative to the source's
+directory or the working directory) becomes a comment in raw R and binds the destination in
+the Peter format, so its calls record there: in the source's directory only the file name
+changes, elsewhere the literal becomes the destination's full path. It must be alone on its
+lines. Other \code{gptr_doc()} calls are kept.
 Feedback follows each pipeline operand when calls end on separate lines and only its
 pipe operator or a comment follows the closing call. Feedback follows the next operand's
 indentation (at most 74 characters); other layouts keep feedback after the complete

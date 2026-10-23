@@ -220,6 +220,52 @@ test_that("raw export refuses ambiguous calls and unresolved session semantics",
   expect_false(file.exists(target))
   expect_identical(gptr_export(f, target, "peter"), path_norm(target))
   expect_true("answer = s$value" %in% readLines(target))
+  unlink(target)
+  f = export_fixture(before = c("s = \"earlier\"", "print(s)"), after = c("s = 1", "print(s)"))
+  expect_identical(gptr_export(f, target), path_norm(target))
+})
+
+test_that("export rebinds or removes the source's own gptr_doc() line and keeps any other", {
+  local_project()
+  self = c("library(gptr)", "gptr_doc(\"history.R\")",
+           paste0("gptr::gptr_doc(path = ", doc_str_literal(file.path(getwd(), "history.R")),
+                  ", sync = FALSE)"))
+  f = export_fixture(before = self, after = "gptr_doc(\"other.R\")")
+  bytes = export_read(f)
+  peter = file.path(getwd(), "peter.R")
+  gptr_export(f, peter, format = "peter")
+  out = readLines(peter)
+  expect_identical(out[6:7], c("gptr_doc(\"peter.R\")",
+    paste0("gptr::gptr_doc(path = ", doc_str_literal(path_norm(peter)), ", sync = FALSE)")))
+  expect_true("gptr_doc(\"other.R\")" %in% out)
+  plain = file.path(getwd(), "plain.R")
+  gptr_export(f, plain)
+  out = readLines(plain)
+  expect_identical(out[6:7], paste0("# ", self[2:3]))
+  active = Filter(function(e) "gptr_doc" %in% all.names(e),
+                  as.list(parse(plain, keep.source = FALSE)))
+  expect_identical(active, list(quote(gptr_doc("other.R"))))
+  expect_identical(export_read(f), bytes)
+  f = export_fixture(before = "library(gptr); gptr_doc(\"history.R\")")
+  expect_error(gptr_export(f, file.path(getwd(), "shared.R")), class = "gptr_error_doc_export")
+})
+
+test_that("an exported Peter script records into itself and never into its source", {
+  skip_on_cran()
+  x = local_doc_e2e(rep(list(fake_tool("r", code = "x = 1"), fake_text("Done.")), 2L),
+                    record = "ask")
+  local_gptr_options(interactive = FALSE)
+  f = file.path(x$root, "history.R")
+  writeLines(c("library(gptr)", "gptr_doc(\"history.R\")", "s = peter(\"one\")"), f)
+  gptr_source(f, envir = new.env(parent = globalenv()))
+  expect_identical(gptr_blocks(f)$status, "fresh")
+  md5 = tools::md5sum(f)
+  target = file.path(x$root, "peter.R")
+  gptr_export(f, target, format = "peter")
+  gptr_source(target, envir = new.env(parent = globalenv()))
+  expect_identical(gptr_blocks(target)$status, "fresh")
+  expect_identical(tools::md5sum(f), md5)
+  expect_length(fake_requests(x$fake), 4L)
 })
 
 test_that("history export rejects missing stale edited undone and secret-marked records", {
@@ -302,8 +348,8 @@ test_that("export refuses source conflicts and respects the model control bounda
   f = export_fixture()
   target = file.path(getwd(), "conflict.R")
   transform = doc_export_lines
-  testthat::local_mocked_bindings(doc_export_lines = function(lines, format) {
-    result = transform(lines, format)
+  testthat::local_mocked_bindings(doc_export_lines = function(...) {
+    result = transform(...)
     writeLines(c(readLines(f), "# concurrent user edit"), f)
     result
   })

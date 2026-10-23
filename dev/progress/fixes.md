@@ -2349,3 +2349,28 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: none (the refusals are intended). Not planned: naming the line and argument in the
   refusal. Open: "later" code holds once export-2's position matching lands; until then the raw
   export also refuses code before the binding, and after an ordinary rebinding, that names a handle.
+
+### export-2 - gptr_export() rebinds its gptr_doc() line and refuses only live handles
+- Findings 27, 62 (the position bug).
+- Red: FAIL 6 in `^doc-export$` (PASS 218): `gptr_doc("history.R")` and an absolute
+  `gptr::gptr_doc(path = ...)` were copied verbatim in both formats, one sharing a line was
+  admitted, and `gptr_source()` of the exported Peter script (fake provider, record "ask", not
+  interactive) recorded no block; the raw export refused `s = "earlier"; print(s)` before `s =
+  peter("one")` and `s = 1; print(s)` after it.
+- Cause: `doc_export_lines()` kept every non-Peter statement, so the export bound the source, whose
+  binding is consent for the source only (doc-2): its calls recorded nowhere and console turns went
+  into the source. Handle names were refused in any other statement, whatever its position.
+- Fix: `doc_export_bind()` finds a top-level `gptr_doc()` whose `path` literal (`match.call()`,
+  nothing evaluated) names the source from its directory or the working directory; raw R comments it
+  out, the Peter format writes the destination into the literal (only the file name in the same
+  directory, else the full path); one sharing a line, or not read by `doc_unquote()`, is refused.
+  One ordered pass keeps a handle live from its `peter()` statement until ordinary code assigns the
+  name. `?gptr_export` @details.
+- Green: `^doc-export$` PASS 224; `^(doc-export|doc-replay|doc-blocks|zzz|arch-layers|lint-rules)$`
+  PASS 1493 (NOT_CRAN=true). Lint clean; Rd regenerated. Probe: a three-line
+  `gptr_doc('sub/history.R', format = "transcript")` exported from the project root became
+  `"sub/p1.R"` (same directory), the full path (another one), three comment lines (raw R).
+- Deviations: D-249 (extended). From the plan: the working directory also resolves the literal (the
+  verifier's fix), the literal keeps its directory part, and the commented line has no `# removed by
+  gptr_export()` suffix. Open: a `gptr_doc()` assigned or with a computed path is kept; the handle
+  refusal still names neither the handle nor its line.

@@ -3158,16 +3158,22 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: a replayed session's footer reads `replayed` in place of its status until a request adds usage, and
   `unknown tokens . unknown cost` while it holds no stored request, as a reconstruction from the document (was the
   recorded run's footer, byte-identical to a live one, or a known zero `0 tokens . $0.0000`; IC-74).
+- Rule: `gptr_export()` turns a top-level `gptr_doc()` whose string literal names the source into a comment (raw R) or
+  rebinds it to the destination (Peter format; alone on its lines, else refused); other `gptr_doc()` calls are kept
+  (was kept verbatim: the Peter script's calls recorded nowhere under `Rscript`, console turns went into the source).
+  A raw export refuses a session handle only when read after its `peter()` statement and before ordinary code assigns
+  the name (was any other statement naming it).
 - Contract-visible: 04 §4.4 `r` details `outputs` and `value`, §5.1 `print` and `.d` `replay_rows`, §6.4
   `gptr_doc()`, §7.15 `doc_block_lines()`, §11.5 `cost`, `value`, `children`, body and transcript, §11.9, §15.3
   IC-45, IC-46, IC-47, IC-48, IC-51; 03 §4.3, §5.1, §6.9.1, §6.9.3; `?gptr_doc`, `?gptr_blocks`, `?gptr_return`,
-  `?print.gptr_session`; vignettes script-as-history, teams-and-background.
+  `?print.gptr_session`, `?gptr_export`; vignettes script-as-history, teams-and-background.
 - Tests: test-doc-io: the user-cache sidecar, the cross-process kernel and killed-run sync, the live-run sync;
   test-doc-replay: the other-binding notice and its four silent cases; test-doc-formats: the machine-log line with
   and without `.gptr/`; test-doc-blocks: recorded `#>` cuts, the known-zero cost; test-tool-r: per-expression
   outputs; test-doc-replay: the listed zero cost, the in-process replay; test-session-object: a held or undone
   block; test-doc-blocks, test-doc-replay, test-doc-io, test-doc-export: a recorded `gptr_return(<expression>)`;
   test-doc-replay: fan-out and team children's values in the recording process, an in-process replay and two
-  simulated later processes, a three-field `children=` entry; test-session-object: the replayed footer.
+  simulated later processes, a three-field `children=` entry; test-session-object: the replayed footer;
+  test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself, handle position.
   Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-3,
-  replay-5.
+  replay-5, export-2.
