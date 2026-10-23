@@ -6572,8 +6572,8 @@ doc_route_run = function(call) {
   if (identical(decision, "replay")) return(doc_replay_call(call, site, mode))
   if (identical(decision, "skip")) {
     gptr_inform(paste0("Block ", site$block$id, " of ", doc_rel(site$path), " was undone by ",
-                       "/rewind; edit or delete the prompt, or run live to regenerate it."),
-                "notice")
+                       "/rewind; edit or delete the prompt, or run it with replay = \"record\" ",
+                       "to regenerate it."), "notice")
     doc_source_log(site$path, site$block$id, "skipped")
     assign("doc", NULL, envir = call)
     return(invisible(call$session))

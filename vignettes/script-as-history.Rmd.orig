@@ -153,7 +153,7 @@ R Markdown, Quarto and Jupyter formats; pending writes can be recovered before l
 |---|---|
 | `"auto"` | Replay fresh blocks; run missing or stale calls through the selected model. |
 | `"replay"` | Never call a model; a missing or stale record signals `gptr_error_not_recorded`. |
-| `"live"` | Ask the model again and rewrite recorded blocks when writing is allowed. |
+| `"live"` | Ask the model again and rewrite recorded blocks when writing is allowed; an undone block runs without being rewritten, and `"record"` regenerates it. |
 | `"record"` | Regenerate stale blocks; fresh blocks replay. |
 
 A call's `replay =` argument wins over process options, the `GPTR_REPLAY` environment variable

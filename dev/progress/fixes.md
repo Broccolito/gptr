@@ -2051,3 +2051,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the `.Rmd` is clean; the `.Rmd.orig` keeps its one lint from main (`mode = auto`, now line 350).
 - Deviations: none (the gate is intended). Open: an empty block when the model passes
   `record = false` is by design and rare, so neither the sheet nor the vignette mentions it.
+
+### doc-5 - The undone-block notice names replay = "record", the mode that regenerates it
+- Finding 13.
+- Red: FAIL 4 in `^doc-replay$` (PASS 625): under `auto` and `replay`, an undone team block's
+  notice said "or run live to regenerate it" and did not name `replay = "record"`.
+- Cause: G7 section 3.8's undone row gave the notice "run live to regenerate" while its `live`
+  column is "run, no write"; `doc_skip_undone()` copied the one, `doc_decide()` the other. So
+  `gptr_source(f, replay = "live")` called the model, left the block inert and wrote nothing.
+- Fix: the notice ends `or run it with replay = "record" to regenerate it.`; `?gptr_source`
+  and the `script-as-history` modes table say an undone block runs under `"live"` without being
+  rewritten and `"record"` regenerates it; G7 3.8 and the P15 plan's copy say the same.
+- Green: `^doc-replay$` PASS 629, with an end-to-end guard (fake provider, bound `.R`): an
+  undone block stays undone and byte-identical under `"live"`, then `"record"` gives
+  `regenerated` and `fresh`; `^(doc-.*|ckpt-rewind|arch-layers|lint-rules)$` PASS 2774 SKIP 2
+  (NOT_CRAN=true). Lint clean (the `.Rmd.orig` keeps its one lint from main, line 350). Rd
+  regenerated; plan checks pass. `precompute.R script-as-history`: 0 problems, output
+  byte-identical to the edited `.Rmd`.
+- Deviations: none (the G7 3.8 behaviour stands; only its notice text changed). Not in the plan:
+  the guard scripts six replies, as it makes three model runs.
+- Open: `gptr_source()` still lists the `"live"` run of an undone block as `NA`, which its
+  `@return` keeps for blocks no call touched; making `"live"` regenerate undone blocks is the
+  maintainer's call.

@@ -410,8 +410,8 @@ doc_route_match = function(call) {
 #' @noRd
 doc_skip_undone = function(site) {
   gptr_inform(paste0("Block ", site$block$id, " of ", doc_rel(site$path), " was undone by ",
-                     "/rewind; edit or delete the prompt, or run live to regenerate it."),
-              "notice")
+                     "/rewind; edit or delete the prompt, or run it with replay = \"record\" ",
+                     "to regenerate it."), "notice")
   doc_source_log(site$path, site$block$id, "skipped")
   invisible(NULL)
 }
@@ -1231,9 +1231,9 @@ doc_catalog_prune = function() {
 #' Evaluates `file` top-level expression by expression in `envir`, like [source()] with
 #' `keep.source = TRUE`. A `peter()` call whose block is fresh replays without calling a model
 #' and the block's code then runs as ordinary R. A call whose block is stale (its prompt or the
-#' values interpolated into it changed), or every call under `replay = "live"`, asks the model
-#' again and rewrites its block in place, and the old block is skipped, which base `source()`
-#' cannot do.
+#' values interpolated into it changed), or every call under `replay = "live"` (an undone block
+#' runs without being rewritten; `replay = "record"` regenerates it), asks the model again and
+#' rewrites its block in place, and the old block is skipped, which base `source()` cannot do.
 #'
 #' Replay executes the recorded R code, including its ordinary side effects. It does not
 #' freeze package versions, supply external inputs or validate the analysis. This function

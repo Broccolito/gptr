@@ -1066,8 +1066,11 @@ test_that("an undone team block gives the undone notice and is logged as skipped
   withr::defer(doc_source_pop(depth))
   for (mode in c("auto", "replay")) {
     local_gptr_options(replay = mode)
-    expect_message(source(f, local = e, keep.source = TRUE), "undone by /rewind",
-                   class = "gptr_message_notice")
+    cnd = expect_message(source(f, local = e, keep.source = TRUE), "undone by /rewind",
+                         class = "gptr_message_notice")
+    # it names the mode that regenerates the block: "live" runs it without a write
+    expect_match(conditionMessage(cnd), "replay = \"record\"", fixed = TRUE)
+    expect_no_match(conditionMessage(cnd), "run live", fixed = TRUE)
     # zero requests: the team is not run live, and nothing is recorded for it
     expect_s3_class(e$reviews, "gptr_session")
     expect_identical(doc_state()$sources[[depth]]$log[["abc123"]], "skipped")
@@ -2069,6 +2072,31 @@ test_that("a stale prompt regenerates through gptr_source(replay = \"record\") (
   expect_identical(out$id, id)
   expect_identical(out$action, "regenerated")
   expect_identical(doc_block_body(readLines(f), doc_find_blocks(readLines(f))), "new_ran = TRUE")
+})
+
+test_that("an undone block runs under replay = \"live\" and regenerates under \"record\"", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "x = 1"), fake_text("one"),
+                         fake_tool("r", code = "x = 2"), fake_text("two"),
+                         fake_tool("r", code = "x = 3"), fake_text("three")), record = NULL)
+  local_gptr_options(interactive = FALSE)
+  f = file.path(x$root, "analysis.R")
+  writeLines("res = peter(\"Set x\")", f)
+  local_doc_binding(f)
+  e = new.env(parent = globalenv())
+  expect_identical(gptr_source(f, envir = e)$action, "ran")
+  expect_true(doc_set_inert(f, doc_find_blocks(readLines(f))$id))
+  undone = readLines(f)
+  out = gptr_source(f, replay = "live", envir = e)
+  expect_identical(e$x, 2)
+  expect_identical(out$status, "undone")
+  expect_identical(readLines(f), undone)
+  out = gptr_source(f, replay = "record", envir = e)
+  expect_identical(e$x, 3)
+  expect_identical(out$action, "regenerated")
+  expect_identical(out$status, "fresh")
+  expect_identical(doc_block_body(readLines(f), doc_find_blocks(readLines(f))), "x = 3")
+  expect_length(fake_requests(x$fake), 6L)
 })
 
 test_that("GPTR_REPLAY=replay blocks a real model called in a loop (acceptance 3)", {
