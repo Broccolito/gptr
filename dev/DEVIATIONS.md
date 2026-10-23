@@ -3666,6 +3666,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   relay tests); test-mcp-server.R "a served call the person denies with text says it is theirs (cheat-sheet
   review)".
 - Review fixes of Tasks 22-27 (2026-10-23):
+  - A D console's drain at a question erases the row before what it writes when it read a partial line, as the D
+    live row does: the question's rows turned the echo back on, and the terminal had echoed the keys typed after
+    that at column 0, so the kept line read `reams↳ kept in history ↑ · s2 while the answer streams`.
+    Contract-visible: 04 §15.10 (the drain, Task 2). Tests: test-console-typing.R "a question drains fd 0 before
+    it reads: lines steer, a partial line is kept".
   - A secret read in Emacs' comint (M-x shell, ESS: `INSIDE_EMACS` names it) is no hidden read (`tty_secret()`
     gives NULL), so the dim row says once that this console shows the key as typed: comint's buffer shows the text
     and keeps it in its input ring whatever the tty's echo, while gptr set `-echo` there and said nothing.

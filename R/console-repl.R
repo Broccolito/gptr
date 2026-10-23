@@ -660,7 +660,7 @@ console_call_release = function(rs) {
 #' (console_keys()); a D console's lines are routed by console_typed_route(). Nothing is read
 #' outside a terminal REPL or while no session runs (the next prompt reads it). With `drain` (before
 #' a question) a D console reads fd 0 in tty_drain_mode(), so the partial line the question would
-#' take as its answer is read too; it goes to the console history.
+#' take as its answer is read too; it goes to the console history, its echoed row erased first.
 #' @noRd
 console_typed = function(drain = FALSE) {
   rs = console_repl_find()
@@ -680,6 +680,9 @@ console_typed = function(drain = FALSE) {
   if (length(modes) == 1L && isTRUE(attr(lines, "partial"))) {
     part = lines[[length(lines)]]
     lines = lines[-length(lines)]
+    # the terminal echoed it once the question turned the echo back on: its row is erased first, as
+    # the D live row is, so what is written next stands alone
+    console_cat(paste0("\r", strrep(" ", max(0L, cli::console_width() - 1L)), "\r"))
   }
   console_typed_route(rd, target$session, lines, part)
   0.05

@@ -1312,7 +1312,11 @@ test_that("a question drains fd 0 before it reads: lines steer, a partial line i
     # under the question and its keys, right above the chevron, never inside the call's block
     # (visual review)
     at = grep("? Allow r?", out, fixed = TRUE)
-    expect_identical(out[at + 2:3], c(queue_line("steer", "steer me"), notice[[k]]))
+    # the row is erased before them, as the D live row is, so the partial line the terminal echoed
+    # once the question turned the echo back on stays off it (review of Tasks 22-27)
+    row = term_rows(paste0("se R", out[at + 2L], "\n"))[[1L]]
+    expect_identical(c(trimws(row, "right"), out[at + 3L]),
+                     c(queue_line("steer", "steer me"), notice[[k]]))
     # the question reads in the saved modes from before its rows, the drain's restored before it
     # reads; the call's after it
     expect_identical(tty$log, c("-g", "-echo", "SAVED", "-g", drain, "SAVED", "-echo", "SAVED"))

@@ -5352,7 +5352,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     queue and kept lines sit under the question's rows, right above `› ` (visual review: drained before the rows,
     they split a call's code from the flagged rows of its ask):
     `tty_drain_mode()` (echo stays off), `console_typed_lines(rd, 0L)` until nothing is left, then
-    the saved modes (on exit). Complete lines are routed as before. A trailing partial line (attr
+    the saved modes (on exit). Complete lines are routed as before. Where a partial line was read, its row is
+    first erased as the D live row is (`\r`, spaces to width - 1, `\r`): the question's rows turn the echo back on
+    (`tty_question()`), and the terminal echoed the keys typed after that, so `reams↳ kept in history` was one
+    row (review of Tasks 22-27). A trailing partial line (attr
     `partial` of `console_typed_split()`) that is not blank goes to `console_history_add()` with
     `↳ kept in history ↑ · <line>` (`-> kept in history Up - <line>` where the output is not UTF-8), or, with
     `gptr.history` off, `↳ not kept (gptr.history is off) · <line>`: the echo is off while a run streams, so the
