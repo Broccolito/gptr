@@ -1950,3 +1950,22 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   provider-registry, provider-usage, s1-ollama, gptr-gateway, gptr-capture, gptr-config, subagent-backends,
   agent-run, arch-layers and lint-rules PASS 3779. Lint clean.
 - Deviations: D-250 (catalog-2 rule). Open: none.
+
+### prompt-1 - Cap the output reserve at half the window, and blame compact_at when it sets the threshold
+- Findings 51, 160 (sessions-25). Red: `^prompt-compact$` FAIL 4, PASS 344: `compact_threshold()` of (524288,
+  524288), (262144, 262144) and (131072, 131072) gave -8,000; `^prompt-sections$` FAIL 11, PASS 383: `peter()` on a
+  fake model with context = max_output = 131072 was refused at freeze ("too small", threshold -8,000), a
+  1,050,000-token model with `compact_at = 5000` was refused with `arg = "model"`, and both refusals hinted
+  `preset = "minimal" or context = "names"`.
+- Cause: `compact_threshold()` reserved `max(16384, max_output + 2 * r_cap)` with max_output unbounded, and
+  models.dev often gives the whole window as max_output (40 refreshed models refused); the request builders sent
+  that value as `max_tokens`. `prompt_floor_check()` used the compact_at wording only for an unknown window, and
+  `peter()` takes `preset =` and `context =` as context objects (`context = "names"` never lowers the floor).
+- Fix: `model_output_cap()` (`R/prompt-compact.R`), min(max_output, window / 2), in `compact_threshold()`,
+  `prompt_request_context()` and `request_fallback()`; the refusal names compact_at when the threshold equals the
+  cap alone, and hints `tools = "minimal"` (none for the minimal preset). The ten architecture-6.11 expectations
+  hold; no shipped model's max_output exceeds half its window. NEWS entry; 03 §6.11, 04 §7.7, §8.1, §15 amended.
+- Green: `^prompt-compact$` PASS 351, `^prompt-sections$` PASS 398; prompt-*, agent-*, arch-layers, lint-rules,
+  gptr-gateway, gptr-sdk and catalog-models PASS 3199. Lint clean; no Rd change.
+- Deviations: D-250 (prompt-1 rule; pointer lines under D-067 and D-069). Open: the refusal does not compute the
+  smallest passing compact_at (the floor rises with the 25% re-injection cut).

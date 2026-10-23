@@ -616,7 +616,7 @@ request_fallback = function(run, target) {
   msgs = images_elide(s, msgs, target)
   tools = lapply(fr$tool_names %||% character(), function(n) tool_lookup(n, d$id))
   tools = Filter(Negate(is.null), tools)
-  max_out = suppressWarnings(as.numeric(target$max_output %||% NA))
+  max_out = model_output_cap(target[["context"]], target[["max_output"]])
   context = list(system = list(t0 = fr$t0 %||% "", t1 = fr$t1 %||% ""),
                  tools_json = json_verbatim(fr$tools_json %||% "[]"), tools = tools,
                  messages = msgs,

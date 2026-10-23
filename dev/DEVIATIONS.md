@@ -734,6 +734,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: none (contract 7.7 `compact_threshold(window, max_output, r_cap = 4000)` and the formula unchanged).
 - Tests: test-prompt-compact.R: 3 blocks (8 expectations), incl. "compact_threshold keeps the contract 7.7 signature" and "compact_at
   comes from the settings service; a null setting disables the cap"; final PASS 18. Evidence: progress/P07.md Task 6.
+- Amended by D-250 (prompt-1): the formula's `max_output` is capped at half the window.
 
 ## D-068 - P15 recorded block content: character cuts, exact secret literals, emptied chunks, unknown usage (2026-10-04)
 - Rule: block content (`R/doc-blocks.R`); contract 7.15 `doc_block_lines(session, turn, site, call_ordinal)` and its attributes are unchanged; `doc_drop_ranges()` may return `NULL`:
@@ -757,6 +758,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-prompt-sections.R (12 expectations, final PASS 222): "the floor counts the project instructions the frozen audience will be sent (IC-52)", "cut
   re-injection budgets are recorded in gptr.frozen and survive a restore (IC-71)"; FIX-3: test-session-store.R 3 blocks, test-session-object.R
   "a replay cut takes the frozen audience and budget cut of its own path (FIX-3)". Evidence: progress/P07.md Task 7; progress/fixes.md Task FIX-3.
+- Amended by D-250 (prompt-1): the refusal names `compact_at` when it sets the threshold and hints `tools = "minimal"`.
 
 ## D-070 - P15 document formats: knitr chunks and labels, unterminated chunks, per-statement agent chunks, inert (2026-10-04)
 - Rule: `R/doc-formats.R`; the contract 10.2 row 18 `doc_format` functions and listed helpers keep names and arguments; `doc_rmd_chunks()` gains column `closed`:
@@ -3131,8 +3133,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   registered) instead of reaching the provider and fuzzy steps; `model_resolve()` raises `unknown_model` naming
   the alias, also with a thinking suffix. Formerly offline `"gemini"` (no Gemini Pro in the seed) ran
   google/gemini-3.8-flash by substring. The shipped orchestration skill uses `"flash"`.
+- Rule (prompt-1): `model_output_cap(window, max_output)` = `min(max_output, window / 2)` when both are known
+  (models.dev often gives the whole window as max_output); `compact_threshold()` reserves it, and
+  `prompt_request_context()` and `request_fallback()` send it as `max_tokens`. Formerly max_output = context gave
+  a threshold of -8,000 (40 refreshed models refused, e.g. MiniMax-M3, gpt-oss-120b) and `max_tokens` equal to
+  the window. `prompt_floor_check()` names `compact_at` (`arg = "compact_at"`) when the window is unknown or the
+  threshold equals the cap alone, and both refusals hint `tools = "minimal"`, not `preset =` or `context =
+  "names"`; formerly a 1,050,000-token model was "too small" for `compact_at = 5000`.
 - Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
-  model).
+  model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
-  match". Evidence: progress/fixes.md Task FIX-17.
+  match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
+  "the floor check blames compact_at when it sets the threshold (D-250)", "a model whose max_output is its whole
+  window runs and asks for half of it (D-250)". Evidence: progress/fixes.md Task FIX-17.

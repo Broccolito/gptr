@@ -137,6 +137,11 @@ works on the objects already in memory.
 * A model alias with no model in the catalog is an unknown model, not a guess: offline,
   `model = "gemini"` (Google's newest Gemini Pro) no longer runs Gemini Flash and asks for
   `gptr_models(refresh = TRUE)` or a `provider/id`.
+* Models whose catalog gives the whole context window as their output limit (common after
+  `gptr_models(refresh = TRUE)`, for example MiniMax-M3 and gpt-oss-120b) are no longer refused
+  as too small: gptr reserves and requests at most half the window for output. A `compact_at`
+  too small for the preset is named as the cause instead of the model, and the hint reads
+  `tools = "minimal"`.
 
 # gptr 0.7.0
 

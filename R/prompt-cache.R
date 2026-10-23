@@ -26,7 +26,7 @@ prompt_request_context = function(s, target, extra = NULL) {
   if (is.list(extra) && !is.null(extra$role)) extra = list(extra)
   msgs = c(msgs, extra)
   tools = lapply(frozen$tool_names, function(n) registry_get("tool", n, session = d$id))
-  mo = suppressWarnings(as.numeric(target[["max_output"]] %||% NA_real_))
+  mo = model_output_cap(target[["context"]], target[["max_output"]])
   # exact match: `$` would read `thinking_levels` for a record without a `thinking` field
   thinking = target[["thinking"]]
   if (is.null(thinking) && !is.null(d$thinking)) {
@@ -37,7 +37,7 @@ prompt_request_context = function(s, target, extra = NULL) {
        tools = Filter(Negate(is.null), tools),
        messages = msgs,
        cache_plan = NULL,
-       params = list(max_tokens = if (length(mo) == 1L && is.finite(mo)) as.integer(mo) else 8192L,
+       params = list(max_tokens = if (is.finite(mo)) as.integer(mo) else 8192L,
                      thinking = thinking, effort = NULL, tool_choice = "auto",
                      returns = session_live(s)$run$opts$returns, temperature = NULL),
        session_id = d$id, request_id = id_new("q", 12L))

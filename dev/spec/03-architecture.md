@@ -1715,8 +1715,9 @@ byte prefix emits `cache_break` naming the first differing element and the culpr
 on `session_tree` (rewind) [G4 §4.3.5, G7].
 
 **Compaction** (`compactor` spec, replaceable) [G4 §4.4, G2]:
-`threshold = min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, max_output +
-2 * r_cap), gptr.compact_at = 200000)`, plus the cold rule (idle beyond the tail TTL and context >= 100k:
+`threshold = min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, mo + 2 * r_cap),
+gptr.compact_at = 200000)` with `mo = min(max_output, window / 2)`, the output reserve also sent as `max_tokens`
+[D-250], plus the cold rule (idle beyond the tail TTL and context >= 100k:
 compact first). Checks run between tool rounds, before a new prompt and after an overflow error (one
 compact-and-retry, INFRA-26). The checkpoint request is sent in-conversation (a cache read; `max_tokens =
 2048`; a tool-calling reply is rejected) with G4's verbatim `<compaction_request>` prompt; the compaction
