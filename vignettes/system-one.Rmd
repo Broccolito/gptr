@@ -106,7 +106,10 @@ before sending sensitive data; see `?gptr_egress`, `?gptr_security` and
 
 `min_confidence` turns answers below the requested confidence into `NA` by default. Unknown
 confidence is also uncertain when the minimum is positive. For yes/no decisions,
-`min_confidence = 0.8` requires P(yes) at least 0.9 or at most 0.1.
+`min_confidence = 0.8` requires P(yes) at least 0.9 or at most 0.1. For choices and scores,
+confidence is each engine's own measure of concentration: the probabilities 0.90, 0.05 and
+0.05 give 0.85 on Jev and 0.64 on Clef (see `?gptr_prob`), so re-tune `min_confidence` when
+you switch engine.
 
 
 ``` r

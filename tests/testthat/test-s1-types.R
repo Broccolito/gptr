@@ -182,6 +182,16 @@ test_that("gptr_prob() reads prob, confidence and probabilities", {
   expect_error(gptr_prob(d, "odds"), class = "gptr_error_invalid_argument")
 })
 
+test_that("?gptr_prob's example of the engines' confidence scales matches the code (D-078)", {
+  p = c(0.9, 0.05, 0.05)
+  expect_equal(s1_confidence_choice(p), 0.85)
+  expect_equal(s1_ollama_confidence(p), 0.641, tolerance = 1e-3)
+  man = testthat::test_path("..", "..", "man")
+  skip_if_not(dir.exists(man), "man/ is not available (installed tests)")
+  rd = paste(readLines(file.path(man, "gptr_prob.Rd"), encoding = "UTF-8"), collapse = " ")
+  expect_match(rd, "0.90, 0.05 and 0.05 has confidence 0.85 on Jev and 0.64 on", fixed = TRUE)
+})
+
 test_that("vctrs methods keep the probabilities through slicing and combining", {
   skip_if_not_installed("vctrs")
   d = s1_dec()

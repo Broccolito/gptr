@@ -2270,3 +2270,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-250 (s1-4 rule). The plan kept the whole `meta`, which `print.factor()` prints with every
   answer (63 lines for two elements, measured, instead of 3); only `errors`, and only on failure, makes the
   warning true without that. Open: `gptr_prob()` on a factor still says only that `x` is not a `gptr_s1`.
+
+### s1-5 - Say what confidence means where min_confidence is offered
+- Findings 121 and 128. Red: `^s1-types$` FAIL 1, PASS 221: the guard's numbers already held
+  (`s1_confidence_choice(c(.9, .05, .05))` 0.85, `s1_ollama_confidence()` 0.641), but `man/gptr_prob.Rd` did
+  not give that example; `?peter` covered `min_confidence` and `uncertain` only as "System 1 answer shape and
+  abstention".
+- Cause: no user doc defined confidence. For yes/no it is `abs(2 * p - 1)`, so 0.8 abstains for 0.1 < p < 0.9,
+  not "80% sure"; for choices and scores each engine keeps its own measure (D-078 item 2, D-120), Jev's
+  peak or MAD formula against Clef's entropy, and `?gptr_prob` and the vignette said only "concentration".
+- Fix: docs only. `?peter` splits out `min_confidence` (the definition, the 0.8 band, the engine's own scale)
+  and `uncertain` (`NA`, `TRUE`/`FALSE` for yes/no only, `function(state, answer)`, `"stop"`; no effect
+  without `min_confidence`). `?gptr_prob` @details gives the three formulas and the 0.85 vs 0.64 example; the
+  system-one vignette (.Rmd and .Rmd.orig) adds the example and "re-tune `min_confidence` when you switch
+  engine".
+- Green: `^s1-types$` PASS 222; s1-types and gptr-gateway PASS 606; lint-rules, zzz, s1-client and s1-ollama
+  PASS 834. Lint clean; `man/peter.Rd` and `man/gptr_prob.Rd` regenerated, `tools::checkRd()` clean.
+- Deviations: none (04 §6.1 already defines the band). The guard also reads `man/gptr_prob.Rd` (skipped when
+  installed, as test-agent-background.R does), so the example cannot drift from the code. The verifier's "the
+  same value is stricter on Clef" is not used: 0.50/0.50/0 gives 0.25 on Jev and 0.37 on Clef (measured).
+- Open: the sheet's S14 caption is applied by the sheet commit. `peter("Is it?", "p=0.85", model = <System 1
+  model>)` still warns `two_prompts` "the second is context" (finding 121's side note; measured at HEAD, not
+  planned).

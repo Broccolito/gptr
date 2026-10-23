@@ -30,9 +30,16 @@ Probabilities are the model's own; they are empirically calibrated only when the
 footer says \code{calibrated}. Native decision models report calibration as unknown unless
 calibration evidence was recorded, and emulated answers are always \code{uncalibrated}. Answers
 combined from several calls (\code{c()}, \verb{[<-}, \code{vctrs::vec_c()}) say \code{calibrated} only when every
-part is calibrated and \code{uncalibrated} when any part is uncalibrated. For choices
-and scores the confidence describes how concentrated the distribution is, not the probability
-that the answer is correct.
+part is calibrated and \code{uncalibrated} when any part is uncalibrated.
+
+Confidence is not the probability that the answer is correct. For a decision it is
+\code{abs(2 * p - 1)} on every engine, so \code{min_confidence = 0.8} keeps only P(yes) at most 0.1 or
+at least 0.9. For choices and scores it is the engine's own measure of how concentrated the
+distribution is. TypeSafe Jev (and emulation) reports \code{(n * max(p) - 1) / (n - 1)} for a
+choice and \verb{1 - E|level - mode| / d} for a score, \code{d} being the levels' mean distance from
+their middle; Ollama's Clef and Clef Flash report \code{1 - H(p) / log(n)} for both. The
+distribution 0.90, 0.05 and 0.05 has confidence 0.85 on Jev and 0.64 on Clef, so re-tune
+\code{min_confidence} when switching engine.
 
 A score can be fractional: with levels low, medium and high (0, 1 and 2), probabilities
 0.85, 0.10 and 0.05 give the score 0.20. It is not rounded to the most likely level.

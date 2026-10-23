@@ -74,12 +74,20 @@
 #'   Each child gets its element alone as `.x`, a named list of one attached as `.x[["A"]]`;
 #'   `.opts = list(context = "none")`, which would drop it, is refused. A child that succeeds
 #'   keeps only the values it returned with [gptr_return()], so they must be self-contained.
-#' @param choices,levels,threshold,min_confidence,uncertain System 1 answer shape and abstention,
-#'   for a decision model (`jev`, `"ollama/clef-flash"`) or opt-in emulation
-#'   (`gptr_config(system1 = "emulate:<ref>")`). A conversational model refuses them (`threshold`
-#'   only when it is not 0.5) rather than ignore them. `choices` given as a factor, or
+#' @param choices,levels,threshold System 1 answer shape, for a decision model (`jev`,
+#'   `"ollama/clef-flash"`) or opt-in emulation (`gptr_config(system1 = "emulate:<ref>")`). A
+#'   conversational model refuses them, `min_confidence` and `uncertain` (`threshold` only when it
+#'   is not 0.5) rather than ignore them. `choices` given as a factor, or
 #'   `.opts = list(output = "factor")`, return a plain factor with those levels and no
 #'   probabilities or confidence.
+#' @param min_confidence A number from 0 to 1. An answer whose confidence is below it is
+#'   uncertain, as is an unknown confidence unless it is 0. A decision's confidence is
+#'   `abs(2 * p - 1)`, so 0.8 keeps only P(yes) at most 0.1 or at least 0.9. For choices and
+#'   scores it is the engine's own scale, so a value tuned on Jev abstains differently on Clef
+#'   (see [gptr_prob()]).
+#' @param uncertain What an uncertain answer becomes: `NA` (the default), `TRUE` or `FALSE` (yes/no
+#'   only), `function(state, answer)` returning one replacement of the answer's type, or `"stop"`
+#'   for a `gptr_error_s1_uncertain` error. It has no effect without `min_confidence`.
 #' @param prompt An explicit prompt; wins over positional selection.
 #' @param envir Where the agent evaluates R code and creates objects. A call made by the agent's
 #'   own R code without `envir` evaluates in a new environment whose parent is the caller's,
