@@ -1196,7 +1196,8 @@ list). Keys are the registered `setting` specs (core keys of §11.2 plus plugin 
 `gptr_error_invalid_argument`. `model`, `small_model`, `system1`, `mode`, `preset` take bare identifiers
 (§6.1.3); a `NULL` value removes the key from the scope. Scopes: `"session"` = this R process; `"project"` =
 `.gptr/settings.json` (needs a workspace, `gptr_error_workspace` otherwise; values that would loosen a `tighten`
-setting are stored but never applied, and other keys apply only in a trusted project, §11.2); `"user"` =
+setting are stored but never applied, a trusted project's `mode` excepted, and other keys apply only in a
+trusted project, §11.2; `mode = yolo` there is `gptr_error_invalid_argument`, D-250); `"user"` =
 `R_user_dir("gptr", "config")/settings.json`. `egress` is accepted only at user scope. Files are written
 atomically with top-level keys merged. Conditions: `invalid_argument`, `workspace`,
 `invalid_identifier`; after a write to an untrusted project, warning `untrusted_setting` (fields `keys`,
@@ -3465,7 +3466,7 @@ also has `kind`, `name` and `api_version` (the extension API version it was writ
 | 21 | `agent` | first | the `gptr_agent()` fields (§6.8) | data; invalid files skipped with a diagnostic | P02 |
 | 22 | `ui` | first (selected by `gptr.ui`/settings) | `has_ui` `function()` -> lgl(1); `select(title, choices, default = NULL, details = NULL, multiple = FALSE, allow_other = FALSE)` -> int (NA = cancelled; `attr(, "other")` = free text); `input(prompt, default = "", secret = FALSE)` -> chr(1)\|NA; `questions(qs)` -> `list(answers = named list, cancelled = lgl(1))`; `notify(text, level = "info")`; `permission(request)` -> `list(decision = "allow" \| "deny" \| "abort", remember = NULL \| "session" \| "project", feedback = chr(1) \| NULL)` | a failing dialog is not an approval; `permission` defaults to one built from `select` | P02 |
 | 23 | `frontend` [experimental] | first | `run` `function(session, ...)` -> session | owns the loop it runs | P02 |
-| 24 | `setting` | first (name = dotted key, e.g. `subagents.max_depth`) | `default`, `description`, `scope` (`both`, `user`), `validate` `function(value)` -> value (or `gptr_error_invalid_argument`), `tighten` (NULL or chr: the ordered values from strictest to loosest) | values through `gptr_config()`; a project layer may only move a `tighten` setting towards the strict end | P02 |
+| 24 | `setting` | first (name = dotted key, e.g. `subagents.max_depth`) | `default`, `description`, `scope` (`both`, `user`), `validate` `function(value)` -> value (or `gptr_error_invalid_argument`), `tighten` (NULL or chr: the ordered values from strictest to loosest) | values through `gptr_config()`; a project layer may only move a `tighten` setting towards the strict end (a trusted project's core `mode` excepted, D-250) | P02 |
 | 25 | `secret_source` | all | `resolve` `function(name, ctx)` -> chr(1)\|NULL (registered with `secret_register()` at once); `list` `function(ctx)` -> chr; `store`, `forget` (optional) | never logs values | P02 |
 | 26 | `redaction_rule` | all | `pattern` chr(1) (PCRE), `anchor` chr, `marker` chr(1) (the id inside `[secret:<id>]`), `profiles` chr | combined into one alternation; must not match its own marker | P02 |
 | 27 | `env_alias` | all (name = canonical) | `aliases` chr | used by `gptr_env()` and ambient discovery | P02 |
@@ -3719,10 +3720,10 @@ Layers, lowest to highest: package defaults < user `settings.json` < project `.g
 user-level project file `projects/<hash>.json` (IC-52) < `options(gptr.*)` < `gptr_config(.scope = "session")` <
 call arguments. An **untrusted** project contributes only changes that tighten `tighten`-type settings (a stricter
 `mode`, added `permissions.deny`/`permissions.ask` rules, a stricter `context`, `record = "off"`); a **trusted**
-project contributes every key, but `tighten`-type settings still only tighten and project `permissions.allow`
-rules never loosen `plan` or pre-approve level 4. A legacy `.gptr/settings.local.json` contributes only
-deny/ask additions and only in a trusted project. `egress` is read only from the user file. Safety options are
-snapshotted per run (IC-53).
+project contributes every key, but `tighten`-type settings other than `mode` still only tighten (its `mode`
+applies unless it is `yolo`, D-250) and project `permissions.allow` rules never loosen `plan` or pre-approve
+level 4. A legacy `.gptr/settings.local.json` contributes only deny/ask additions and only in a trusted project.
+`egress` is read only from the user file. Safety options are snapshotted per run (IC-53).
 
 | Key | Type | Default | Tighten order (strict -> loose) | Owner |
 |---|---|---|---|---|
@@ -3730,7 +3731,7 @@ snapshotted per run (IC-53).
 | `model` | chr\|null | `null` (first available route, §8.4 of `03`) | | P08 |
 | `small_model` | chr\|null | `null` (the catalog's small sibling of `model`) | | P08 |
 | `system1` | chr\|null | `null` (= `typesafe/jev-latest` when a key is found); `"emulate:<ref>"` opts into emulation | | P13 |
-| `mode` | chr | `"manual"` | `plan`, `manual`, `edits`, `auto`, `yolo` (project files only tighten) | P08/P11 |
+| `mode` | chr | `"manual"` | `plan`, `manual`, `edits`, `auto`, `yolo` (an untrusted project file only tightens; no project file sets `yolo`, D-250) | P08/P11 |
 | `preset` | chr | `"standard"` | | P07 |
 | `tools` | `{enable: [chr], disable: [chr], presets: {<model glob>: <preset>}}` | `{}` | | P07 |
 | `permissions` | `{allow: [rule], ask: [rule], deny: [rule]}` | `{}` | deny/ask additions tighten | P11 |
@@ -4028,7 +4029,7 @@ additive `risk_rule` records (§10.2 row 33; the highest level wins on duplicate
 `inst/templates/vignette.Rmd`: an R Markdown document with a YAML header (`title: "Project instructions"`,
 `output: html_document`), a first line `@AGENTS.md` comment hint (as an HTML comment), and sections "Data",
 "Conventions", "Do not" with placeholder bullets; it contains no executable chunks. `inst/templates/settings.json`:
-`{"version": 1, "mode": "manual", "record": "ask"}`.
+`{"version": 1}` (no `mode` or `record`, so the user's settings apply; D-250).
 
 
 ---
@@ -4574,9 +4575,9 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    human). `builtin:permissions`, `builtin:plan` and the `critical_guard` and `secret_guard` policies cannot be
    disabled by filters from any source; filters that would remove `policy` or `hook` records are refused inside a
    run. The only escape is `options(gptr.unsafe_no_permissions = TRUE)` set outside a run (documented for
-   sandboxed CI). The `yolo` mode (IC-78) is a partial opt-out that only the person selects: project settings,
-   nested calls and children only tighten, and from model code in another mode `gptr_config(mode =)` and
-   `options(gptr.mode)` are control actions.
+   sandboxed CI). The `yolo` mode (IC-78) is a partial opt-out that only the person selects: no project file sets
+   it (D-250), nested calls and children only tighten, and from model code in another mode
+   `gptr_config(mode =)` and `options(gptr.mode)` are control actions.
 2. `run_start()` snapshots `gptr.ui`, `gptr.interactive`, `gptr.critical_guard`, `gptr.secret_guard`,
    `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode` and `gptr.unsafe_no_permissions`; the run's gate
    reads only the snapshot.
@@ -5198,8 +5199,9 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
 
 - `session_modes` is `plan < manual < edits < auto < yolo`; every literal mode list uses it (the L1 CLI adapters
   name `"yolo"` explicitly). `peter(mode =)`, `/mode`, user and session settings, `options(gptr.mode)` and agent
-  specs accept it; project settings, nested calls and children only tighten (IC-52, IC-53 item 4). A project
-  value is compared with the default when the user's value is not a valid mode.
+  specs accept it; no project file sets it (an untrusted one only tightens the mode, D-250), nested calls and
+  children only tighten (IC-52, IC-53 item 4). A project value is compared with the default when the user's
+  value is not a valid mode.
 - Gate: the `mode` policy allows every call; `critical_guard` takes the level of the flagged rows that are not
   `control`, except `options(gptr.*)`, which could switch the guard off, and asks a person at level 4 while the
   guard is on; `secret_guard` asks only for secret-to-network flows; `protect_size` is skipped as in auto; deny

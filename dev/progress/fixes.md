@@ -2100,3 +2100,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-250 (config-3 rule). The warning quotes the `unknown_model` message instead of rebuilding its
   suggestions, so catalog-2's alias and catalog-3's refresh hints carry over. Open: the use-time error of a bad
   saved model still does not name its settings layer (the verifier's optional step 2, not planned).
+
+### config-4 - A gptr_init() project no longer pins mode and record, and a trusted project may set mode
+- Finding 16 (items 2 and 3). Red: `^gptr-config$` FAIL 9, PASS 553: after `gptr_config(mode = auto, record =
+  "auto", .scope = "user")` and `gptr_init()`, `gptr_config()` gave `manual` and `ask` from `[project]`; a trusted
+  project's `{"mode": "auto"}`, and `gptr_config(mode = auto)` at the default project scope, resolved `manual`;
+  `gptr_config(mode = yolo)` was saved to the project; the template read `version, mode, record`.
+- Cause: the template pinned the defaults `"mode": "manual"` and `"record": "ask"`, and `settings_project_value()`
+  applies a tighten-type key from any project, so the pinned `manual` beat a user-level `auto`; its tighten branch
+  also ran for a trusted project, which could never loosen the mode it saved.
+- Fix: the template is `{"version": 1}`; a trusted project's `mode` applies as written unless it is `yolo` (or no
+  mode); `settings_config_value()` refuses `mode = yolo` at project scope (`invalid_argument`, naming `.scope =
+  "user"` and `"session"`). config-2's warning now names `mode` when an untrusted project saves a looser one.
+  `?gptr_config`, the configuration vignette (.Rmd and .Rmd.orig), 04 and 03 amended; NEWS entry.
+- Green: `^gptr-config$` PASS 566 (the template pin is now `list(version = 1L)`); full suite (NOT_CRAN) FAIL 0,
+  WARN 0, SKIP 64, PASS 35399. Lint clean; `man/gptr_config.Rd` regenerated; plan checks pass.
+- Deviations: D-250 (config-4 rule). Narrower than planned: the plan freed every tighten-type key of a trusted
+  project; only `mode` is freed, since a project `record = "auto"` would be write consent, which IC-45 reserves to
+  the person (req-7, P15 acceptance 5), and `context` bounds what reaches providers. Beyond the plan: the
+  write-time refusal of a project `yolo`, because `settings_guard()`, which the plan said refuses it, covers only
+  `providers`; the value was dropped silently. Open: the blocked-run hint (item 4) is orchestration's gate-hint;
+  projects made earlier keep their pinned file (NEWS says to delete the two keys); a project `record = "auto"` or
+  a looser `context` is still saved without a word in a trusted project.

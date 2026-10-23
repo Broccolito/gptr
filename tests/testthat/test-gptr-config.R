@@ -504,7 +504,7 @@ test_that("an untrusted project only tightens (IC-52)", {
   expect_null(p$allow)
 })
 
-test_that("a trusted project applies every key, but tighten-type keys only tighten", {
+test_that("a trusted project applies every key, but never a project mode yolo", {
   skip_on_cran()
   proj = local_gw()
   writeLines('{"mode": "yolo", "preset": "extended", "permissions": {"allow": ["write(**)"]}}',
@@ -515,6 +515,43 @@ test_that("a trusted project applies every key, but tighten-type keys only tight
   settings_write("user", list(mode = "auto"))
   expect_identical(settings_get("mode"), "auto")
   expect_identical(settings_get("permissions")$allow, "write(**)")
+})
+
+test_that("a trusted project sets mode; context, record and untrusted modes only tighten (D-250)", {
+  skip_on_cran()
+  proj = local_gw()
+  p = file.path(proj, ".gptr", "settings.json")
+  settings_write("user", list(mode = "edits", context = "names"))
+  writeLines('{"mode": "auto", "context": "summary", "record": "auto"}', p)
+  expect_identical(settings_get("mode"), "edits")
+  gptr_trust(proj, TRUE)
+  expect_identical(settings_get("mode"), "auto")
+  expect_identical(unname(attr(gptr_config(), "sources")["mode"]), "project")
+  # write consent and context never loosen from a project file (IC-45)
+  expect_identical(settings_get("context"), "names")
+  expect_identical(settings_get("record"), "ask")
+  writeLines('{"mode": "plan"}', p)
+  expect_identical(settings_get("mode"), "plan")
+  writeLines('{"mode": "yolo"}', p)
+  expect_identical(settings_get("mode"), "edits")
+  gptr_trust(proj, TRUE)
+  expect_identical(settings_get("mode"), "edits")
+})
+
+test_that("gptr_config(mode = ) in a trusted project applies there; yolo is refused (D-250)", {
+  skip_on_cran()
+  proj = local_gw()
+  gptr_trust(proj, TRUE)
+  expect_no_warning(gptr_config(mode = auto))
+  expect_identical(gptr_config()$mode, "auto")
+  expect_true(trust_get(proj))
+  cnd = expect_error(gptr_config(mode = yolo), class = "gptr_error_invalid_argument")
+  expect_match(conditionMessage(cnd), "gptr_config(mode = yolo, .scope = \"user\")", fixed = TRUE)
+  expect_identical(settings_read("project")$mode, "auto")
+  gptr_trust(proj, FALSE)
+  cnd = expect_warning(gptr_config(mode = edits), class = "gptr_warning_untrusted_setting")
+  expect_match(conditionMessage(cnd), "`mode`", fixed = TRUE)
+  expect_identical(gptr_config()$mode, "manual")
 })
 
 test_that("an invalid user mode does not let a project loosen past the default", {
@@ -1314,11 +1351,22 @@ test_that("gptr_init(path) writes the templates once and never overwrites them",
                   c(".gitignore", "agents", "prompts", "settings.json", "skills", "vignette.Rmd"))
   settings = json_decode(paste(readLines(file.path(ws, "settings.json"), encoding = "UTF-8"),
                                collapse = "\n"))
-  expect_identical(settings, list(version = 1L, mode = "manual", record = "ask"))
+  expect_identical(settings, list(version = 1L))
   expect_true("sessions/" %in% readLines(file.path(ws, ".gitignore"), encoding = "UTF-8"))
   writeLines("{}", file.path(ws, "settings.json"))
   gptr_init(d)
   expect_identical(readLines(file.path(ws, "settings.json"), encoding = "UTF-8"), "{}")
+})
+
+test_that("a gptr_init() project leaves mode and record to the user's settings (D-250)", {
+  skip_on_cran()
+  proj = local_gw(workspace = FALSE)
+  gptr_config(mode = auto, record = "auto", .scope = "user")
+  gptr_init(proj)
+  cfg = gptr_config()
+  expect_identical(cfg$mode, "auto")
+  expect_identical(cfg$record, "auto")
+  expect_identical(unname(attr(cfg, "sources")[c("mode", "record")]), c("user", "user"))
 })
 
 test_that("gptr_init() in a package source offers the .Rbuildignore line, never writes it", {

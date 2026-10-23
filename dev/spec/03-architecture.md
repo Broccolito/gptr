@@ -1121,10 +1121,11 @@ in `res$envir`; an explicit `envir =` shares, and a function-frame caller is unc
 
 Layers, lowest to highest: package defaults < user `R_user_dir("gptr", "config")/settings.json` < project
 `.gptr/settings.json` (an untrusted project contributes only tightening of `mode`, `permissions`, `context` and
-`record`; a trusted one every key, with tighten-type keys still only tightening; `egress` is read from the user
-file only) < the user-level project file `R_user_dir("gptr", "config")/projects/<hash>.json` (remembered
-permission answers, transcript target, record consent; never in the project tree [IC-52]) < `options(gptr.*)` <
-`gptr_config(.scope = "session")` < call arguments. Safety options are snapshotted per run [IC-53]. Keys: `model`, `small_model`, `system1`, `mode`,
+`record`; a trusted one every key, with tighten-type keys other than `mode` still only tightening and never
+`mode = yolo` [D-250]; `egress` is read from the user file only) < the user-level project file
+`R_user_dir("gptr", "config")/projects/<hash>.json` (remembered permission answers, transcript target, record
+consent; never in the project tree [IC-52]) < `options(gptr.*)` < `gptr_config(.scope = "session")` < call
+arguments. Safety options are snapshotted per run [IC-53]. Keys: `model`, `small_model`, `system1`, `mode`,
 `preset`, `tools{enable, disable}`, `permissions{allow, ask, deny}`, `context`, `record`, `replay`,
 `transcript`, `plugins`, `filters`, `skills{paths}`, `mcp{exposure}`, `subagents{max_depth, max_active,
 max_workers, max_cli, max_tasks}`, `output_tokens`, `plot{width, height, res}`, `budget{tokens, cost}` (default 2e6
@@ -1439,8 +1440,8 @@ computes or a loop that assigns the name makes it computed [D-211]. The classifi
 not a security boundary; in-process R cannot be sandboxed [18 §2.5].
 
 `yolo` [IC-78] is the loosest mode (plan < manual < edits < auto < yolo): only the person selects it (`peter(mode =)`,
-`/mode`, user or session settings, `options(gptr.mode)` outside a run); project settings, nested calls and
-children only tighten. A delete keeps the category `file_delete` and a control target shows in its
+`/mode`, user or session settings, `options(gptr.mode)` outside a run); no project file sets it [D-250], nested
+calls and children only tighten. A delete keeps the category `file_delete` and a control target shows in its
 `path_class`, so the control check still sees it; the edit tool's `*** Delete File:` takes the level an
 `unlink()` of the same path has when that is 4, with the category `file_delete`, so in yolo a control path
 written by the same patch does not hide it. Entering yolo (a session, `/mode`, a console start) shows a
@@ -1464,11 +1465,11 @@ start, so model code cannot change them mid-run. A `modify` is re-classified and
 `rules` (grammar `tool(spec)`, e.g. `write(results/**)`, `r(fn:write.csv)`, `r(level<=1)`, `r(sh:git
 status*)`, `r(sql:select)`), `critical_guard`, `secret_guard`, `protect_size`. Allow rules never loosen plan
 and never pre-approve level 4; only `r(secret:NAME)` rules pre-approve the secret guard; project settings may
-only tighten; no filter from any source disables `builtin:permissions`, `builtin:plan` or the two guards, and
-inside a run filters that remove policies or hooks are refused [G1 §3.6; IC-53]. Every call made while a run is
-active inherits the running mode (only tightened) whatever its route, and the parent re-classifies every
-permission request forwarded by a worker (the worker backend is not an isolation boundary). `modify` changes the
-arguments the tool sees and is recorded.
+only tighten, a trusted project's `mode` excepted [D-250]; no filter from any source disables
+`builtin:permissions`, `builtin:plan` or the two guards, and inside a run filters that remove policies or hooks
+are refused [G1 §3.6; IC-53]. Every call made while a run is active inherits the running mode (only tightened)
+whatever its route, and the parent re-classifies every permission request forwarded by a worker (the worker
+backend is not an isolation boundary). `modify` changes the arguments the tool sees and is recorded.
 
 #### 6.8.3 The prompt
 

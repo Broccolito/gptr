@@ -167,6 +167,14 @@ works on the objects already in memory.
   gptr knows in this session, as the console's `/model` already checked, with the reason and how
   to undo it; the value is still saved, since a provider registered later or a catalog refresh
   can make it valid.
+* `gptr_init()` no longer writes `"mode": "manual"` and `"record": "ask"` into
+  `.gptr/settings.json`, which overrode a user-level `mode = auto` or `record = "auto"` in every
+  initialised project. In a project made by an earlier build, delete those two keys from the file
+  to let your user settings apply.
+* A trusted project's `mode` applies, so `gptr_config(mode = auto)` in a trusted project no longer
+  saves a value that is silently ignored; an untrusted project still only tightens the mode, and
+  `context` and `record` still only tighten in any project. A project cannot select `yolo`:
+  `gptr_config(mode = yolo)` at project scope is refused, naming `.scope = "user"` and `"session"`.
 
 # gptr 0.7.0
 

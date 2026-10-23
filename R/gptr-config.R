@@ -732,9 +732,10 @@ settings_perm_union = function(base, add, lists) {
   out
 }
 
-#' The value a project settings file contributes (IC-52): tighten-type keys only tighten;
-#' permissions add deny and ask rules (allow too when trusted); providers follow
-#' settings_project_providers(); other keys apply only in a trusted project
+#' The value a project settings file contributes (IC-52): tighten-type keys only tighten, except
+#' that a trusted project sets `mode` to anything but yolo (D-250); permissions add deny and ask
+#' rules (allow too when trusted); providers follow settings_project_providers(); other keys apply
+#' only in a trusted project
 #' @noRd
 settings_project_value = function(key, spec, current, new, trusted, root) {
   if (identical(key, "permissions")) {
@@ -745,6 +746,10 @@ settings_project_value = function(key, spec, current, new, trusted, root) {
     return(settings_project_providers(current, new, trusted, root))
   }
   tighten = spec$tighten
+  if (trusted && identical(key, "mode")) {
+    ok = is.character(new) && length(new) == 1L && new %in% setdiff(tighten, "yolo")
+    return(if (ok) new else current)
+  }
   if (!is.null(tighten)) {
     if (!is.character(new) || length(new) != 1L || !(new %in% tighten)) return(current)
     now = match(if (is.character(current)) current[1L] else NA, tighten)
@@ -1245,7 +1250,8 @@ settings_relaxed_ids = function(value) {
 }
 
 #' Checks a validated value before anything is written: `filters` in registry_filters_set()'s form
-#' (04 10.1), and no project `providers.<id>.local_only = FALSE` (IC-74, 07 section 5)
+#' (04 10.1), no project `mode = yolo` (IC-78, D-250) and no project
+#' `providers.<id>.local_only = FALSE` (IC-74, 07 section 5)
 #' @noRd
 settings_config_value = function(key, value, scope) {
   if (identical(key, "filters") && length(value) &&
@@ -1253,6 +1259,12 @@ settings_config_value = function(key, value, scope) {
     gptr_abort(paste0("Invalid filter; use -builtin:<name>, -plugin:<name> or -<kind>:<name>, ",
                       "and a leading + to undo one."), "invalid_argument", arg = "filters",
                expected = "filters of the form -builtin:<name>, -plugin:<name>, -<kind>:<name>")
+  }
+  if (identical(key, "mode") && identical(value, "yolo") && identical(scope, "project")) {
+    gptr_abort(c(paste0("A project cannot select mode yolo; only your user settings or this R ",
+                        "session can."),
+                 "Use gptr_config(mode = yolo, .scope = \"user\") or .scope = \"session\"."),
+               "invalid_argument", arg = ".scope", expected = "\"user\" or \"session\"")
   }
   ids = if (identical(key, "providers") && identical(scope, "project")) {
     settings_relaxed_ids(value)
@@ -1317,15 +1329,16 @@ settings_model_warn = function(patch, scope) {
 #'
 #' With no arguments, returns the effective settings with the layer each value came from:
 #' package defaults < user `settings.json` < project `.gptr/settings.json` (an untrusted project
-#' only tightens `mode`, `context`, `record`, permission rules and local-only inference) < the
-#' user-level project file < `options(gptr.*)` < this R session. With named arguments, sets
-#' those keys in one scope.
+#' only tightens `mode`, `context`, `record`, permission rules and local-only inference; a trusted
+#' one also sets `mode`, while `context` and `record` still only tighten) < the user-level project
+#' file < `options(gptr.*)` < this R session. With named arguments, sets those keys in one scope.
 #'
 #' `model`, `small_model`, `system1`, `mode` and `preset` take bare names (`mode = plan`); `NULL`
 #' removes a key from the scope. `egress` (the providers you allow automatic context to go to) is
-#' accepted only at user scope. Local-only Ollama inference (`providers = list(ollama =
-#' list(local_only = FALSE))`) can be turned off only at user or session scope; a project can only
-#' keep it on. Called from model code during a run, it is refused.
+#' accepted only at user scope. `mode = yolo` and turning off local-only Ollama inference
+#' (`providers = list(ollama = list(local_only = FALSE))`) are accepted only at user or session
+#' scope; a project can only keep local-only inference on. Called from model code during a run, it
+#' is refused.
 #'
 #' The `"session"` scope means this R process, not one conversation. User settings live at
 #' `tools::R_user_dir("gptr", "config")/settings.json`; project settings live in `.gptr/`.

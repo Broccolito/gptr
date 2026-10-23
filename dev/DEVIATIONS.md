@@ -3165,11 +3165,24 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   warns `unknown_model_setting` with that message and the undo call; the value is kept (a later
   `gptr_register()` or refresh can make it valid, §6.1.3). Formerly a typo such as `model = opuss` saved at user
   scope was silent and failed every later bare `peter()`, while the console's `/model` checks at once.
+- Rule (config-4): `inst/templates/settings.json`, which `gptr_init()` writes, is `{"version": 1}`. It held
+  `"mode": "manual"` and `"record": "ask"` (the defaults), which as a project layer beat a user-level
+  `mode = auto` or `record = "auto"` in every initialised project, since a tighten key applies from any
+  project. A trusted project's `mode` now applies as written unless it is `yolo` (`settings_project_value()`);
+  an untrusted project still only tightens it, and `gptr_config(mode = yolo)` at project scope is
+  `invalid_argument` naming `.scope = "user"` and `"session"`. Formerly a trusted project's `mode = auto`, which
+  `gptr_config(mode = auto)` writes at the default project scope, and a project `yolo` were saved and silently
+  ignored. The plan freed every tighten key of a trusted project; `context`, `record` and plugin tighten
+  settings still only tighten, because a project `record = "auto"` would be write consent, which IC-45 (req-7)
+  reserves to the person, and `context` bounds what reaches providers. Projects made earlier keep their file;
+  NEWS says to delete the two keys.
 - Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
   model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal); 07
   §2.1 and the 04 `model_prepare()` row (P06 prepares); the 04 `model_resolve()` row (the empty-route hint); 04
   §7.0 (`prices.table`) and §10.2 rows 1 and 3 (`prices`), `?gptr_provider`; 04 `gptr_config()` and §2.2
-  warnings (`untrusted_setting`, `unknown_model_setting`).
+  warnings (`untrusted_setting`, `unknown_model_setting`); 04 `gptr_config()` project scope, §10.2 row
+  24, §11.2 text and `mode` row, §11.16, §15 IC-53 item 1 and IC-78, 03 §5.9, §6.8.1 and §6.8.2,
+  `?gptr_config` and the configuration vignette (a trusted project's `mode`; the template).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
   match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
@@ -3179,4 +3192,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (D-250)"; test-ext-specs.R "model prices are a data frame or a list of price records, checked at
   registration"; test-aaa-state.R (40 services); test-gptr-config.R "gptr_config() warns when an untrusted
   project will not apply what it saved (D-250)", "gptr_config() warns when a saved model setting names no known
-  model (D-250)". Evidence: progress/fixes.md Task FIX-17.
+  model (D-250)", "a trusted project sets mode; context, record and untrusted modes only tighten (D-250)",
+  "gptr_config(mode = ) in a trusted project applies there; yolo is refused (D-250)", "a gptr_init() project
+  leaves mode and record to the user's settings (D-250)". Evidence: progress/fixes.md Task FIX-17.
