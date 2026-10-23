@@ -2204,3 +2204,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   1819. Lint clean; plan checks pass; Rd unchanged.
 - Deviations: D-252 (extended). The test spells the call `high - performance - r` (the same parse) or builds it
   with `str2lang()`, as lintr's infix rule refuses the bare spelling. Open: none.
+
+### mcp-print - print(h) says where the serve token is and what the served mode allows
+- Finding 102 (and finding 100's point, shown on the handle). Red: `^mcp-server$` (NOT_CRAN=true) FAIL 3 PASS
+  167: `print(h)` said "token: in the environment variable GPTR_MCP_TOKEN of the client, as $config shows" and no
+  mode line, while the claude_code, claude_desktop and cursor snippets embed `Bearer <token>`.
+- Cause: the hard-coded token line described the codex snippet only.
+- Fix: `token: inside the $config snippets, printed redacted (as.character() gives the text; $config$codex passes
+  it as GPTR_MCP_TOKEN)`, and while the handle is the running server's, `mode: manual; calls that need approval
+  are refused (set the mode, then restart the server to change it)` from its dedicated session.
+- Green: `^mcp-server$` PASS 170 (the three JSON snippets hold the token, the codex `$args` do not; the print holds
+  neither the token nor the old line); with mcp-*, arch-layers, lint-rules PASS 907 SKIP 1. Lint clean; Rd
+  unchanged.
+- Deviations: none (the contract and vignette do not quote the print). Open: none.
