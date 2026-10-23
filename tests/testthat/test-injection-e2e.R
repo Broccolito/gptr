@@ -363,11 +363,11 @@ test_that("a worker's forwarded permission request is re-classified by the paren
   wfake = local_fake_provider(list(fake_tool("r",
                                              code = "options(gptr.unsafe_no_permissions = TRUE)"),
                                    "done"), name = "wattack")
-  # A blocked member may make the team call itself signal gptr_error_permission (04 6.1.2); the
-  # team session then travels as cnd$session.
-  team = tryCatch(peter("Review.", agents = list(w = agent(model = wfake, backend = "worker")),
-                       mode = "auto", envir = new.env()),
-                  gptr_error_permission = function(e) e$session)
-  expect_identical(team$children$w$status, "blocked")
+  # A team whose only member is blocked signals gptr_error_permission with the team (04 6.1.2)
+  cnd = expect_error(peter("Review.", agents = list(w = agent(model = wfake, backend = "worker")),
+                           mode = "auto", envir = new.env()),
+                     class = "gptr_error_permission")
+  expect_identical(cnd$session$status, "blocked")
+  expect_identical(cnd$session$children$w$status, "blocked")
   expect_gate_intact(root)
 })

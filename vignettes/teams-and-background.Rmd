@@ -128,6 +128,9 @@ per-run `.opts` (including `max_turns`) are not applied. Members share the call'
 applicable defaults before launch or run under an enclosing budget; see
 [Token efficiency](token-efficiency.html). `on_error = "return"` keeps failed members for
 inspection; `"stop"` signals the first failed member's condition after all members settle.
+A team, fan-out or `gptr_parallel()` result whose members did not all finish takes the first
+such member's status, and `$reason` names each one; `agents =` and `parallel =` signal that
+member's condition, with the team as `$session`, when no member finished.
 
 ## Deferred sessions and SDK control
 
@@ -197,8 +200,9 @@ Other front ends have the support limits documented in `help("gptr-background", 
 do not infer support from the mere return of a session object.
 
 An approval or question at an idle tick parks the session as `waiting`, without performing
-the action. A later blocking call resumes it and the model repeats its request before the
-usual prompt. That extra request can use tokens. A waiting session has no active run for
+the action. A later blocking call resumes it with a message saying that you are at the
+console, and the model repeats its request before the usual prompt. That extra request can
+use tokens. A waiting session has no active run for
 `gptr_cancel()` to abort; inspect its status before choosing how to resume or stop jobs.
 
 ## Checkpoints, usage and durable history

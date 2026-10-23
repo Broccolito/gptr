@@ -137,9 +137,33 @@ test_that("gptr_mcp() lists servers without connecting; untrusted project server
   expect_identical(row("old")$status, "unsupported (sse)")
   expect_identical(row("old")$source, "gptr:user")
   expect_identical(row("github")$status, "configured")
+  expect_false(row("github")$trusted)
   expect_error(gptr_mcp("filesystem", tools = TRUE), class = "gptr_error_untrusted")
   expect_error(gptr_mcp("nope"), class = "gptr_error_unknown_member")
   expect_error(gptr_mcp(tools = NA), class = "gptr_error_invalid_argument")
+})
+
+test_that("gptr_mcp()'s trusted is the spec's: a user mcp.json entry marked trusted", {
+  fx = local_foreign_configs(files = list(".gptr/mcp.json" = json_encode(list(
+    mcpServers = list(proj = list(command = "srv"))))))
+  row = function(n) {
+    x = gptr_mcp()
+    x[x$name == n, ]
+  }
+  spec = gptr_mcp_add("docs", url = "http://127.0.0.1:8000/mcp")
+  expect_false(spec$trusted)
+  expect_identical(row("docs")$trusted, spec$trusted)
+  path = file.path(gptr_user_dir("config"), "mcp.json")
+  x = json_decode(read_utf8(path)$text)
+  x$mcpServers$docs$trusted = TRUE
+  write_json_file(path, x)
+  expect_true(mcp_config_all(fx$project)$docs$trusted)
+  expect_true(row("docs")$trusted)
+  expect_identical(row("proj")$status, "untrusted")
+  expect_false(row("proj")$trusted)
+  gptr_trust(fx$project, trust = TRUE)
+  expect_identical(row("proj")$status, "configured")
+  expect_false(row("proj")$trusted)
 })
 
 test_that("a .claude.json under the user's profile is listed (Windows home, IC-63)", {

@@ -33,9 +33,9 @@
 #'     approval or an answer at an idle tick, the action is not performed: the agent is told
 #'     that the user will be asked, its run stops, and the session moves to status
 #'     \code{"waiting"} with a notice. At your next \code{gptr_wait()}, \code{peter()} call or
-#'     console turn the session continues with one more model request, the agent repeats the
-#'     call, and you are asked as usual. A message piped into a waiting session is delivered
-#'     when it continues.
+#'     console turn the session continues with one more model request, which tells the agent
+#'     that you are at the console; the agent repeats the call, and you are asked as usual. A
+#'     message piped into a waiting session is delivered when it continues.
 #'   \item \code{gptr_cancel()} stops a running background session. A waiting session has no
 #'     run to cancel: \code{gptr_jobs(kill = TRUE)} stops it (together with every other job).
 #'   \item When an R tool changed objects in your workspace at an idle tick, one notice
@@ -176,6 +176,16 @@ bg_pending_text = function(what) {
          "again with the same input and the user will be asked")
 }
 
+#' The user message that opens a resumed run: the user is at the console now, so the model repeats
+#' the call that could not be approved, or asks again. Without it a model may read the stale
+#' denial as final and end without asking (finding 191)
+#' @noRd
+bg_resume_text = function(ask) {
+  if (!identical(ask$what, "permission")) return("I am at the console now; ask again.")
+  paste0("I am at the console now. Repeat the call that could not be approved (", ask$summary,
+         ") with the same input; I will be asked to approve it.")
+}
+
 #' Record that the background session `id` needs a human (the first ask wins). It runs inside the
 #' dispatcher, so it never stops the run: the sweep after the tick does
 #' @noRd
@@ -199,7 +209,8 @@ bg_ui_target = function(name) {
 
 #' A session-scoped wrapper of the `ui` record `name`: it delegates, but during an idle tick it
 #' records the ask and answers without prompting. `permission()` answers a denial with the pending
-#' text, never "abort" (P06 would tell the model that the user aborted the run)
+#' text and a `how` that replaces P06's "choose another approach", never "abort" (P06 would tell
+#' the model that the user aborted the run)
 #' @noRd
 bg_ui_spec = function(name, id) {
   force(id)
@@ -224,7 +235,8 @@ bg_ui_spec = function(name, id) {
     permission = function(request) {
       if (!bg_ticking()) return(bg_ui_target(name)$permission(request))
       bg_park(id, "permission", bg_request_summary(request))
-      list(decision = "deny", remember = NULL, feedback = bg_pending_text("approval"))
+      list(decision = "deny", remember = NULL, feedback = bg_pending_text("approval"),
+           how = "Nothing ran and nobody declined.")
     }
   )
 }
@@ -514,15 +526,23 @@ bg_park_session = function(s, run) {
   invisible(s)
 }
 
-#' Continue a waiting session inside a blocking gptr call: the run continues from the denied (or
-#' blocked) call, so the model repeats it and the gate asks the user. A session that cannot
-#' continue is set to `aborted` and released (one diagnostic), never left waiting
+#' Continue a waiting session inside a blocking gptr call: the run opens with a user message that
+#' says the user is at the console (a steer, so it comes before re-queued follow-ups), and the
+#' model repeats the denied (or blocked) call, which the gate asks the user about. A session that
+#' cannot continue keeps its queue as it was, is set to `aborted` and released (one diagnostic),
+#' never left waiting
 #' @noRd
 bg_resume = function(s) {
   d = session_data(s)
-  run = tryCatch(run_start(s, NULL, opts = session_live(s)$background$opts),
-                 error = function(e) e)
+  q = d$queue
+  live = session_live(s)
+  ask = live$background$ask
+  run = tryCatch({
+    if (!is.null(ask)) session_enqueue(s, bg_resume_text(ask), as = "steer", source = "api_user")
+    run_start(s, NULL, opts = live$background$opts)
+  }, error = function(e) e)
   if (!inherits(run, "error")) return(invisible(run))
+  d$queue = q
   registry_diagnostic("builtin:background", "resume", class(run)[1L], conditionMessage(run))
   if (identical(d$status, "waiting")) {
     d$status = "aborted"

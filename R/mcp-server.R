@@ -623,7 +623,7 @@ gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = paren
   st$handle
 }
 
-#' Print a server handle (never the token)
+#' Print a server handle (never the token), with the mode of its dedicated session while it runs
 #'
 #' @param x A `gptr_mcp_handle`.
 #' @param ... Ignored.
@@ -631,9 +631,15 @@ gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = paren
 #' @export
 #' @noRd
 print.gptr_mcp_handle = function(x, ...) {
+  s = if (identical(the$mcp_server$handle, x)) the$mcp_server$user$session
+  mode = if (!is.null(s)) {
+    paste0("mode: ", session_data(s)$mode, "; calls that need approval are refused (set the ",
+           "mode, then restart the server to change it)")
+  }
   msg_verbatim(c(paste0("<gptr MCP server> ", x$url),
-                 paste0("token: in the environment variable ", x$token_env,
-                        " of the client, as $config shows"),
+                 paste0("token: inside the $config snippets, printed redacted (as.character() ",
+                        "gives the text; $config$codex passes it as ", x$token_env, ")"),
+                 mode,
                  paste0("config: ", paste(names(x$config), collapse = ", ")),
                  "stop: $stop() or gptr_mcp_serve(stop = TRUE)"))
   invisible(x)

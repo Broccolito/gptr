@@ -124,15 +124,19 @@ A literal prompt gets \code{{name}} interpolation from \code{envir} (atomic vect
 \verb{\{\{} and \verb{\}\}} are literal braces); \code{.opts = list(interpolate = FALSE)} switches it off.
 
 Terminal statuses become conditions carrying the session as \verb{$session}: \code{error} signals
-\code{gptr_error_provider}, \code{blocked} \code{gptr_error_permission}, \code{budget} \verb{gptr_error_budget_<kind>}
-and \code{max_turns} \code{gptr_error_max_turns}. A call whose model cannot be reached (no egress
-acknowledgement, replay mode, a disabled provider, a missing key) is refused before its run:
-no turn, no model or mode switch, no new \code{\link[=gptr_last]{gptr_last()}} and no \verb{$session}. So is a call with
-an unknown plugin or \verb{skills =} name, \code{.opts$images} its model does not take, or a
-secret-looking prompt you decline to send. A piped call loads its \code{extensions}, \code{plugins} and
-specs first, since they can define that model, and unloads them again when it is refused;
-registry filters (\code{plugins = "-x"}) stay on the R session only once a call is accepted.
-\code{peter()} with no prompt opens the console when someone can answer, and signals
+\code{gptr_error_provider}, \code{blocked} \code{gptr_error_permission} (\code{gptr_error_noninteractive} when the
+\code{ask} tool has no one to answer), \code{budget} \verb{gptr_error_budget_<kind>} and \code{max_turns}
+\code{gptr_error_max_turns}. A team (\verb{agents =}) or fan-out (\verb{parallel =}) takes the
+status of its first member that did not end idle, with \verb{$reason} naming each such member; when
+no member ended idle it signals that member's condition with the team as \verb{$session}. A call
+whose model cannot be reached (no egress acknowledgement, replay mode, a disabled provider, a
+missing key) is refused before its run: no turn, no model or mode switch, no new
+\code{\link[=gptr_last]{gptr_last()}} and no \verb{$session}. So is a call with an unknown plugin or \verb{skills =} name,
+\code{.opts$images} its model does not take, or a secret-looking prompt you decline to send. A piped
+call loads its \code{extensions}, \code{plugins} and specs first, since they can define that model, and
+unloads them again when it is refused; registry filters (\code{plugins = "-x"}) stay on the R
+session only once a call is accepted. \code{peter()} with no prompt opens the console when someone
+can answer, and signals
 \code{gptr_error_noninteractive} otherwise.
 
 A new interactive console without an explicit or configured model first offers CLI selection

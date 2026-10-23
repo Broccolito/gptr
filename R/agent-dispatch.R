@@ -662,7 +662,11 @@ perm_ask = function(call, run, out, risk) {
       return(perm_result("deny", "the user aborted the run", call$input, risk, "user",
                          how = "The run stops here."))
     }
-    return(perm_result("deny", ans$feedback %||% "the user declined", call$input, risk, "user"))
+    # a UI may say what to do instead (P21's idle-tick answer: repeat the call later)
+    how = ans[["how"]]
+    if (!rlang::is_string(how) || !nzchar(how)) how = NULL
+    return(perm_result("deny", ans$feedback %||% "the user declined", call$input, risk, "user",
+                       how = how))
   }
   if (identical(snap$noninteractive_ask, "deny")) {
     return(perm_result("deny", "no one can approve this action in this run", call$input, risk,
@@ -671,7 +675,7 @@ perm_ask = function(call, run, out, risk) {
   how = if (identical(tier, "ask_human")) {
     "This action always needs a person to approve it: run it interactively."
   } else {
-    "Allow it with mode = \"auto\", a permission rule (gptr_permissions()), or run interactively."
+    perm_blocked_how(run)
   }
   run$blocked = list(tool = call$name, risk = risk, how_to_allow = how)
   # the stored, unsignalled condition of the `blocked` status (04 section 6.1.2; P08 signals it)
@@ -690,6 +694,21 @@ perm_ask = function(call, run, out, risk) {
   }
   perm_result("deny", "approval is needed and no one can answer in this run", call$input, risk,
               how = "The run stops here.")
+}
+
+#' How to allow a call nobody can answer: where the run's mode came from (the gateway's
+#' `opts$mode_from`, while the run keeps that mode); knitting cannot ask even in a console
+#' @noRd
+perm_blocked_how = function(run) {
+  o = run$opts$mode_from
+  from = if (is.list(o) && identical(o$mode, run$mode)) {
+    paste0("Mode \"", o$mode, "\" comes from ", o$from, ". ")
+  }
+  paste0(from, if (is_knitting()) {
+    "Allow it with mode = \"auto\" or a permission rule (gptr_permissions()); knitting cannot ask."
+  } else {
+    "Allow it with mode = \"auto\", a permission rule (gptr_permissions()), or run interactively."
+  })
 }
 
 #' The question texts of an `ask` call's input (`questions`: a list of `list(id, question, ...)`)

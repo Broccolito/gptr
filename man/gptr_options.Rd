@@ -114,7 +114,8 @@ plots sent to the model.
 \itemize{
 \item \code{gptr.noninteractive_ask} (character, \code{"stop"}): what a permission question does when
 nobody can answer: \code{"stop"} ends the run with status \code{blocked} and a
-\code{gptr_error_permission} condition; \code{"deny"} returns a denial to the model.
+\code{gptr_error_permission} condition (\code{gptr_error_noninteractive} when the \code{ask} tool has no one
+to answer); \code{"deny"} returns a denial to the model.
 \item \code{gptr.critical_guard} (logical, \code{TRUE}): level-4 actions ask even in \code{auto} mode.
 \item \code{gptr.secret_guard} (logical, \code{TRUE}): reads of registered secrets ask even in \code{auto}
 mode.

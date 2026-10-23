@@ -16,20 +16,21 @@ eval_guard_blocked = c(
 #' @noRd
 eval_guard_assign_ops = c("=", paste0("<", "-"), "<<-")
 
+#' The function argument of do.call() and of every base function that applies match.fun() to
+#' one, which looks a non-function value up by name: `q = 1; sapply("no", q)` calls base::q()
+#' @noRd
+eval_guard_fun_arg = c(
+  do.call = "what", match.fun = "FUN", lapply = "FUN", sapply = "FUN", vapply = "FUN",
+  mapply = "FUN", .mapply = "FUN", apply = "FUN", tapply = "FUN", eapply = "FUN", outer = "FUN",
+  sweep = "FUN", Map = "f", Reduce = "f", Filter = "f", Find = "f", Position = "f", Negate = "f",
+  .S3method = "method"
+)
+
 #' Calls whose string arguments name functions
 #' @noRd
 eval_guard_indirect = c(
   "do.call", "match.fun", "get", "get0", "getExportedValue", "lapply", "sapply", "vapply",
   "Map", "mapply", "Reduce", "Filter", "Find", "Position", "apply", "tapply", "outer", "Recall"
-)
-
-#' The function argument of the indirect calls that take one: match.fun() looks a non-function
-#' value up by name, so `q = 1; sapply("no", q)` still calls base::q()
-#' @noRd
-eval_guard_fun_arg = c(
-  do.call = "what", match.fun = "FUN", lapply = "FUN", sapply = "FUN", vapply = "FUN",
-  mapply = "FUN", apply = "FUN", tapply = "FUN", outer = "FUN", Map = "f", Reduce = "f",
-  Filter = "f", Find = "f", Position = "f"
 )
 
 #' Standard-input readers and the argument naming their connection. "stdin" opens standard
@@ -202,10 +203,13 @@ eval_guard_walk = function(e, acc, scope = character()) {
     return(invisible())
   }
   if (eval_guard_reads_stdin(fname, e)) acc$stdin = TRUE
-  if (fname %in% names(eval_guard_fun_arg)) {
-    # q or quit as the function argument: exempt only for a function the code defines
-    fa = eval_guard_arg(eval_guard_match(fname, e), eval_guard_fun_arg[[fname]])
-    nm = if (is.symbol(fa$value)) as.character(fa$value) else ""
+  fun_arg = c(eval_guard_fun_arg, Vectorize = "FUN")
+  if (fname %in% names(fun_arg)) {
+    # The function argument names a function as a string (Vectorize() looks one up in formals()),
+    # and as q or quit unless the code defines it (Vectorize() returns data unchanged)
+    v = eval_guard_arg(eval_guard_match(fname, e), fun_arg[[fname]])$value
+    if (is.character(v) && length(v) == 1L) acc$strings = c(acc$strings, v)
+    nm = if (is.symbol(v) && fname %in% names(eval_guard_fun_arg)) as.character(v) else ""
     if (nm %in% c("q", "quit") && !(nm %in% scope)) acc$strings = c(acc$strings, nm)
   }
   indirect = fname %in% eval_guard_indirect
@@ -221,11 +225,26 @@ eval_guard_walk = function(e, acc, scope = character()) {
   invisible()
 }
 
+#' Is `name`, looked up from `envir` as R looks up a value, bound to data? A promise or an active
+#' binding is not forced and counts as unknown (FALSE).
+#' @noRd
+eval_guard_is_data = function(name, envir) {
+  while (!identical(envir, emptyenv())) {
+    if (exists(name, envir = envir, inherits = FALSE)) {
+      return(!bindingIsActive(name, envir) && !rlang::env_binding_are_lazy(envir, name) &&
+               !exists(name, envir = envir, mode = "function", inherits = FALSE))
+    }
+    envir = parent.env(envir)
+  }
+  FALSE
+}
+
 #' Static guard over parsed code (04 section 7.9): list(blocked, reason = model text or NULL)
 #' A blocked name is refused when called or passed by name (unless the code defines that function),
-#' always through `pkg::`, and for q and quit as a value (unless the code assigns it).
+#' always through `pkg::`, and for q and quit as a value (unless the code assigns it or, seen from
+#' `envir`, it is bound to data).
 #' @noRd
-eval_guard = function(exprs) {
+eval_guard = function(exprs, envir = NULL) {
   acc = new.env(parent = emptyenv())
   acc$called = character()
   acc$ns = character()
@@ -235,9 +254,9 @@ eval_guard = function(exprs) {
   acc$stdin = FALSE
   for (i in seq_along(exprs)) eval_guard_walk(exprs[[i]], acc)
   funs = eval_guard_fun_defs(exprs)
-  vars = eval_assign_targets(exprs)
-  hits = c(setdiff(acc$called, funs), acc$ns, setdiff(acc$strings, funs),
-           setdiff(acc$values, vars))
+  vals = setdiff(acc$values, eval_assign_targets(exprs))
+  if (!is.null(envir)) vals = vals[!vapply(vals, eval_guard_is_data, TRUE, envir = envir)]
+  hits = c(setdiff(acc$called, funs), acc$ns, setdiff(acc$strings, funs), vals)
   fns = intersect(unique(hits), eval_guard_blocked)
   secrets = unique(acc$secrets)
   reasons = character()

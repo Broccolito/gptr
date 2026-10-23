@@ -572,6 +572,28 @@ test_that("a decimal-looking model name is taken literally and echoed once (cont
   expect_no_message(resolve_identifier(quote(v1.2), "skills", e))
 })
 
+test_that("a bare hyphenated name is refused with its quoted form (contract 6.1.3)", {
+  e = new.env()
+  hyphen = str2lang("high-performance-r")
+  how = "skills = \"high-performance-r\""
+  expect_error(resolve_identifier(hyphen, "skills", e), how,
+               class = "gptr_error_invalid_identifier", fixed = TRUE)
+  e$high = 1
+  e$performance = 2
+  e$r = 3
+  expect_error(resolve_identifier(hyphen, "skills", e), how, class = "gptr_error_invalid_argument",
+               fixed = TRUE)
+  expect_error(resolve_identifier(str2lang("claude-opus-4-6"), "model", e),
+               "model = \"claude-opus-4-6\"", class = "gptr_error_invalid_identifier", fixed = TRUE)
+  fake = local_fake_provider(list("ok"))
+  # R parses skills = high-performance-r as this subtraction
+  expect_error(peter("x", skills = high - performance - r, model = fake, envir = new.env()), how,
+               class = "gptr_error_invalid_argument", fixed = TRUE)
+  expect_length(fake_requests(fake), 0L)
+  expect_identical(resolve_identifier(quote(c(+grep, -write)), "tools", e), c("+grep", "-write"))
+  expect_identical(name_norm(resolve_identifier(quote(shiny_bslib), "skills", e)), "shiny-bslib")
+})
+
 test_that("bound values must be character or a spec of the right kind (contract 6.1.3)", {
   skip_on_cran()
   e = new.env()

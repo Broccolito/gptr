@@ -194,12 +194,13 @@ To version working files yourself, use:
 ```{r, eval = FALSE}
 peter$app(
   id, data = character(), title = NULL, kind = "shiny",
-  check = TRUE, launch = interactive()
+  check = TRUE, launch = NULL
 )
 ```
 
-Each call creates an immutable version. The built-in kinds are `"shiny"` and `"html"`;
-plugins can register other artifact types.
+Each call creates an immutable version. `launch = NULL` starts the app only when a person is
+at the console; pass `launch = TRUE` in a script to start and check it. The built-in kinds are
+`"shiny"` and `"html"`; plugins can register other artifact types.
 
 For Shiny, write `.gptr/artifacts/<id>/app.R` with a final `shinyApp(ui, server)` expression.
 Do not call `runApp()`, change the working directory or install packages inside the app. This

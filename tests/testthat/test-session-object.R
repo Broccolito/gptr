@@ -800,6 +800,45 @@ test_that("an overlay fork reads the source home and writes to its own overlay",
   expect_identical(gptr_fork(x$s, envir = "shared")$envir, x$home)
 })
 
+test_that("a fork's change report names the source objects its code changed in place (D-252)", {
+  skip_on_cran()
+  local_store()
+  has_dt = requireNamespace("data.table", quietly = TRUE)
+  home = new.env(parent = globalenv())
+  home$e = new.env()
+  home$e$flag = "orig"
+  home$v = 1
+  home$k = 1
+  if (has_dt) home$dt = data.table::data.table(a = 1:3)
+  code = paste(c(if (has_dt) "dt[, z := 1]", "e$flag = 'x'", "v <<- 2", "w = 3", "k = 5"),
+               collapse = "\n")
+  fake = local_fake_provider(list("A", fake_tool("r", code = code), fake_tool("r", code = "rm(k)"),
+                                  "done"))
+  s = peter("a", model = fake, mode = "auto", envir = home)
+  file = session_data(s)$file
+  md5 = tools::md5sum(file)
+  b = gptr_fork(s) |> peter("b")
+  expect_false(exists("w", envir = home, inherits = FALSE))
+  expect_true("w" %in% ls(b$envir))
+  expect_identical(list(s$turns, tools::md5sum(file)), list(1L, md5))
+  # the documented semantics: in-place edits reach the source's objects
+  expect_identical(list(home$e$flag, home$v, home$k), list("x", 2, 1))
+  if (has_dt) expect_true("z" %in% names(home$dt))
+  res = tool_results(b)[[1L]]
+  expect_identical(res$details$objects$modified, c(if (has_dt) "dt", "e", "k", "v"))
+  expect_identical(res$details$objects$added, "w")
+  text = msg_text(res)
+  expect_match(text, "~ v <numeric> modified (in the source workspace)", fixed = TRUE)
+  expect_match(text, "~ e <environment> modified (in the source workspace)", fixed = TRUE)
+  expect_match(text, "+ w <numeric length 1>", fixed = TRUE)
+  # a rebinding shadows the source's object without touching it, and removing it un-shadows it
+  expect_match(text, "~ k <numeric> modified\n", fixed = TRUE)
+  expect_identical(home$k, 1)
+  text = msg_text(tool_results(b)[[2L]])
+  expect_match(text, "~ k <numeric> modified", fixed = TRUE)
+  expect_false(grepl("in the source workspace", text, fixed = TRUE))
+})
+
 test_that("gptr_fork(at =) cuts at a turn, at 0 or at an entry id", {
   x = fork_source()
   f1 = gptr_fork(x$s, at = 1)

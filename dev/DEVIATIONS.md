@@ -3580,3 +3580,130 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   path or in a background job ...", "deny and ask rules see the command a nested sh or bg call computes ...";
   session-store "a rebuilt session keeps the mode it ran with".
   Evidence: progress/fixes.md Task FIX-18.
+
+## D-252 - FIX-19 Cheat-sheet review: orchestration (2026-10-22)
+- Rule (ws-1): the `<workspace>` block of an overlay home (a team member, fan-out child, nested `peter()` from
+  model code, `gptr_fork(envir = "overlay")`) lists what its code reads. `env_view_snapshot()` takes the overlay's
+  own rows, then each lower overlay's and the first other environment's (the walk of `binding_env()`), a nearer
+  binding shadowing a farther; `objects` counts them all, and the first line is `Reads fall through to globalenv;
+  assignments stay here.` (`<environment>` for another base), which also says why `ls()` is empty there.
+  `<workspace_changes>` and the `agent_end` and `session_tree` baselines use the same view, so inherited objects
+  are never reported as added or removed. Formerly every member was told `objects="0"` `(no objects)` while
+  `summary(fit)` worked in it.
+- Rule (sessions-20): an overlay isolates bindings only; data.table `:=`/`set*()`, environment and R6 field writes,
+  `<<-` and `assign(envir =)` change the source's objects (`gptr_fork()` doc, interactive-console vignette). The
+  evaluator diffs `env_view_snapshot(sizes = FALSE)` (new column `own`), so such a change is `modified`, an alias
+  (`e$f = 1` binds the source's `e` in the overlay) is not `added`, and a modified row whose old binding was not
+  `own` and whose new binding is not `own` or shares that object reads `(in the source workspace)`; a rebinding
+  (`k = 5`) and an `rm()` that un-shadows a source binding stay unmarked. Formerly `e` was added and nothing else.
+- Rule (guard-1): `eval_guard(exprs, envir = NULL)`; `eval_r()` passes its `envir`. `q` or `quit` used as a value
+  passes when, looked up from `envir` as R looks up a value (its parents in order), it is bound to data: not a
+  function, and not a promise or active binding (never forced). Calls (`q()`, `base::q`, `do.call("q")`) and `q`
+  passed directly as the function argument of `do.call()` and of every base function that applies `match.fun()`
+  to one (`sapply(x, q)`, `Negate(q)`, `sweep(m, 1, s, q)`, which resolve to `base::q`; a test scans base) stay
+  refused whatever is bound; so do that argument as a string, `Vectorize("q")` (its `formals()` looks the name up)
+  and any string argument of P09's 18 indirect calls (`get("q")`). `.S3method("edit", ...)`, `Vectorize(f, "de")`,
+  `Vectorize(q)` and `Recall(q)` pass, as none looks a blocked function up; a `q` that reaches such a function
+  through `...` (`sapply(x, lapply, q)`) is not checked. Formerly `summary(q)` on the user's quantile vector was
+  refused as quitting R (finding 25). The plan named `binding_env()`; it is an L3 function and not R's lookup.
+- Rule (team-1): a team, fan-out or `gptr_parallel()` team whose children did not all end idle takes the first such
+  child's status and stored condition, `$reason` `"k of n sub-agents did not finish: a (blocked), ..."`, and the
+  same status and reason in its `agent_end`; `agents =` and `parallel =` re-signal that condition with the container
+  as `$session` when no child ended idle (`subagent_settle_container()`, `subagent_signal()`). `on_error` is
+  unchanged. Formerly the container stayed `idle` and silent while its `agent_end` said `error`. The plan named
+  `gateway_signal()`, an L6 function L4 may not call; every signalled status stores its condition.
+- Rule (team-4): settling a container appends a `gptr.container_end` entry `{status}` after its last message. At
+  resume and in `gptr_sessions()` the last message or `gptr.container_end` decides: idle when it is a final answer or
+  an idle end, else `interrupted` (as a stored blocked chat); a later synthesis turn decides by itself. A listed row
+  with no answer naming the model takes it as `rebuild_model()` does (`model_change`, `gptr.frozen`). Formerly
+  every settled team or fan-out listed and resumed `interrupted` with model NA, while the live object was idle.
+- Rule (bg-1): a waiting background session's resumed run opens with a steer from the user (`api_user`, so before
+  re-queued follow-ups): "I am at the console now. Repeat the call that could not be approved (<summary>) with the
+  same input; I will be asked to approve it.", or "I am at the console now; ask again." for a question; a resume
+  that cannot start restores the queue. Only the sweep's `bg_resume()` starts it: `sdk_check()` starts nothing for a
+  `waiting` session, so a message piped in meanwhile waits for that run, and `gptr_step()` leaves the session
+  waiting (`gptr_wait()` continues it). A `ui` record's `permission()` denial may carry `how = chr(1)`, kept by
+  `ui_answer_norm()` for a denial only and used by `perm_ask()` as the denial text's last sentence; the idle-tick
+  wrapper's is "Nothing ran and nobody declined." (the pending text already says to repeat the call). Formerly the
+  run resumed on the stale "Permission denied ... Explain what you need or choose another approach." and GPT ended
+  without asking in 7 of 8 runs.
+- Rule (gate-hint): the `how_to_allow` (and message) of a call nobody can approve starts `Mode "<m>" comes from
+  <where>.` while the run keeps the mode the gateway recorded in a top-level call's `opts$mode_from`: "this call's
+  mode argument", "the session this call continues", or the `settings_layered("mode")` layer holding it ("the
+  package default", "your user settings", ".gptr/settings.json", "options(gptr.mode)", "this R session's
+  settings"); while knitting it ends "... or a permission rule (gptr_permissions()); knitting cannot ask." in place
+  of ", or run interactively.". The `ask_human` text and `gateway_signal()`'s fallback are unchanged. Formerly the
+  hint named no layer (a `gptr_init()` project's `manual` overrode a user `auto` unseen) and told a knitting user to
+  run interactively. The gateway records the origin because `perm_ask()` (L2) may not call `settings_layered()` (L6).
+- Rule (tpl-1): the service `templates.sync` (P17, owned by `builtin:prompts`) is the `session_start` hook's
+  `plugins_sync()` then `template_sync()`; the console calls it at `/help` and before it calls a command name
+  unknown, then looks again. Formerly no template command (project, user, `/review`, `/explain`) existed until a
+  session had started, so `/check` as the console's first input was "Unknown command", and a template saved later
+  waited for the next session start.
+- Rule (tpl-2): the trust question, or without a human the untrusted notice, covers every project location gptr
+  reads under trust. `trust_resources_present()` counts the trust-gated files, `AGENTS.md`, `AGENTS.override.md`,
+  `CLAUDE.md`, `CLAUDE.local.md`, `.gptr/vignette.Rmd`, the directories `.gptr/{skills,prompts,agents}`,
+  `.agents/skills`, `.claude/{skills,agents}`, `.codex/agents`, `.pi/agents`, and the relative `skills.paths`
+  entries of the settings skill discovery reads (no trust is resolved, so it cannot recurse). The question of
+  `trust_resolve()` and `gptr_init()` is `Trust this project (its settings, skills, prompt templates, agent files,
+  extensions and MCP servers)?`; `?gptr_trust` lists project skills and prompt templates. Formerly a project whose
+  only resource was `.gptr/prompts` (or `.claude/skills`, `.agents/skills`, a non-`.gptr` agent folder,
+  `AGENTS.override.md` or `CLAUDE.local.md`) got neither, and its templates or skills were dropped unannounced.
+  The plan's list lacked `.gptr/vignette.Rmd` (an instruction file whose authority follows trust) and read
+  `skills.paths` from the two files only.
+- Rule (sessions-23): reading `gptr_trust(path)` gives `NA` for a recorded `TRUE` whose fingerprint no longer
+  matches (`trust_holds()$record`), as the run treats it: undecided, asked again (IC-52). A recorded `FALSE` stays
+  `FALSE`; the write and its invisible previous value are unchanged. Formerly the read said `TRUE` while the run
+  printed the untrusted notice and dropped the changed `SYSTEM.md` (finding 52).
+- Rule (ident-1): an identifier argument written as a binary `-` whose leaves are names or numbers
+  (`skills = high-performance-r`, `model = claude-opus-4-6`) is refused before any evaluation with
+  `gptr_error_invalid_identifier` "`high-performance-r` reads as subtraction; quote the name: skills =
+  "high-performance-r"." (`ident_hyphen_name()`); unary `+name`/`-name` is unchanged. Formerly the alias mask
+  evaluated it and base R's "object 'high' not found" escaped, or with numbers bound to the pieces the error
+  suggested the quoted name "high - performance - r" (finding 112).
+- Rule (mcp-trusted): the `trusted` column of `gptr_mcp()` is the server spec's `trusted` (§11.7: a user `mcp.json`
+  entry marked `"trusted": true`, whose `readOnlyHint` lowers tool risk); project trust is status `untrusted`.
+  Formerly the column was `TRUE` for every startable server, opposite the spec's value (finding 105).
+- Rule (art-1): `peter$app(launch = NULL)`, both forms, launches when `gptr_has_human()`; when it does not, the
+  handle's `checks$messages` (and so the tool result) add `not launched: nobody is at an interactive console, so
+  vNNN was saved without starting it; pass launch = TRUE ...`. Formerly the default was base `interactive()`, deaf
+  to `gptr.interactive`, and the bare `(stopped)` led models in Rscript to build a second version (finding 56).
+- Rule (art-2): without `.gptr/` the `<environment>` line is `Artifacts: <path_norm(tempdir()/gptr/artifacts)>
+  (temporary: deleted when R exits; cite this full path; gptr_init() keeps artifacts)`, and `peter$app()` sends the
+  `notice` "Artifact <id> is in a temporary workspace (<path>) that is deleted when R exits; run gptr_init() to keep
+  artifacts." once per process. Formerly the bare temporary path led models to cite a relative `artifacts/<id>/app.R`
+  that does not exist, and nobody learnt the app would vanish at exit (finding 48).
+- Rule (reg-1): `gptr_register()` of a `first`-resolving kind adds the new record, then removes the earlier
+  process-level `user` records of that `(kind, name)` with a `replaced` diagnostic and the `notice` "Replaced your
+  earlier <kind> '<name>'."; a spec that fails validation leaves the old one, the old handle returns `FALSE`, and
+  `all` kinds (hooks, policies) keep both. Formerly the first registration stayed active and the new one silently
+  `overridden`, so a re-registered provider kept sending to its old `base_url` and a re-registered tool kept its
+  old `fun` (findings 38, 31).
+- Contract-visible: 03 §4.1.3 and 04 §6.1.3 (identifier table, ident-1), 03 §4.3 (fork), §5.1 (resume status),
+  §6.2 (background asks), §6.10 (trust gates, tpl-2), §6.12 (also the guard), §6.17 (templates), §6.18 and §7.5
+  `<workspace>`; 04 §4.6 (`gptr.container_end`), `gptr_fork(envir)`, `gptr_resume()`, `gptr_init()` and
+  `gptr_trust()` (tpl-2; its read, sessions-23), `gptr_register()` and §10.1 ties (reg-1; also 03 §4.3), §5.12
+  `gptr_mcp_servers` `trusted` (mcp-trusted), §9.4 `app` (art-1; also 03 §4.2), 03 §5.7 (temporary root, art-2),
+  §6.1.2 and `gptr_parallel()` (team-1), §7.0 and §7.17 `templates.sync` (tpl-1), §7.6 `opts$mode_from` and
+  `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and `eval_guard()`, §6.5 `gptr_step()` and §7.21 (bg-1),
+  §10.2 row 22 (`how`), §15.7, IC-52 (when the trust question is asked), IC-57; `?gptr-background`, `?gptr_trust`.
+- Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
+  and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame); session-object
+  "a fork's change report names the source objects its code changed in place"; eval-guard "q bound to data where the
+  code runs ...", "q bound to data is refused where a base function looks it up ...", "the function-argument table
+  names every base function ...", "model code reads a q bound to data ..."; subagent-team "a team or fan-out takes a failed member's
+  status ...", injection-e2e "a worker's forwarded permission request ..."; session-store "a settled team or fan-out
+  lists and resumes idle ..."; agent-background "a resumed session is told the user can now approve the call", "...
+  whose ask tool was blocked is told to ask again", "a message piped into a waiting session is delivered with the
+  console note"; console-ui "a denial keeps the UI's how ..."; agent-dispatch "a blocked call's hint names where its
+  mode came from"; console-commands "template commands exist before the first prompt ...", "a template command is
+  the console's first input (end to end)"; gptr-config "a project whose only resource is prompt templates gets the
+  trust notice", "a trusted prompts-only project registers its templates", "every project skill, agent and
+  instruction location counts ...", "a relative skills.paths directory counts, and the question names skills", "a
+  changed trust-gated file makes the project untrusted again"; gptr-capture "a bare hyphenated name is refused with
+  its quoted form"; mcp-config "gptr_mcp()'s trusted is the spec's ..."; artifact-app "peter$app() launches by
+  default only at the console ...", "an artifact in a temporary workspace is announced once"; prompt-context "the
+  Artifacts line says a workspace without .gptr/ is temporary"; ext-registry "gptr_register() of the same kind and
+  name again replaces your earlier record".
+  Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, guard-1b, team-1, team-4, bg-1, gate-hint, tpl-1, tpl-2,
+  sessions-23, ident-1, mcp-trusted, art-1, art-2, reg-1.

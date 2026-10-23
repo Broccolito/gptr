@@ -543,13 +543,23 @@ plugin_type_paths = function(p, type) {
   out[file.exists(out)]
 }
 
-#' Resource paths of one type from the plugins enabled for the whole process (not those of one
-#' session): `data.frame(name, dir, rank)`
+#' Resource paths of one type from the plugins enabled for the whole process: `data.frame(name,
+#' dir, rank)`
+#'
+#' With `listing = TRUE` (`gptr_skills()`, `gptr_agents()`) also those enabled for a live session
+#' (`plugins_session_end()` forgets them) and, at rank 3, the `plugins` setting's not enabled yet,
+#' read without running code and skipped where `plugin_enable()` would not trust them.
 #' @noRd
-res_plugin_dirs = function(type) {
+res_plugin_dirs = function(type, listing = FALSE) {
+  es = res_state()$plugins
+  ps = Filter(function(e) e$enabled && !e$failed && (listing || is.null(e$session)), es)
+  done = unlist(lapply(es, function(e) if (e$enabled || e$failed) e$path))
+  if (listing) for (n in plugins_setting()) {
+    p = tryCatch(plugin_resolve(n), error = function(e) NULL)
+    if (!is.null(p) && !p$path %in% done && plugin_trusted(p)) ps = c(ps, list(c(p, rank = 3L)))
+  }
   out = list()
-  for (e in res_state()$plugins) {
-    if (!isTRUE(e$enabled) || isTRUE(e$failed) || !is.null(e$session)) next
+  for (e in ps) {
     d = plugin_type_paths(e, type)
     if (!length(d)) next
     out[[length(out) + 1L]] = data.frame(name = e$name, dir = unname(d), rank = e$rank,
@@ -570,12 +580,12 @@ res_plugin_dirs = function(type) {
 #' without recursion. Returns `data.frame(dir, origin, rank, reg, label, trusted, recursive)`:
 #' `reg` is the registry source, `label` the listing source.
 #' @noRd
-res_roots = function(type, proj, user, flat = character()) {
+res_roots = function(type, proj, user, flat = character(), listing = FALSE) {
   trusted = trust_ok()
   user = user[dir.exists(user)]
   builtin = res_builtin_dir(type)
   pk = res_attached_dirs(type)
-  pl = res_plugin_dirs(type)
+  pl = res_plugin_dirs(type, listing)
   disc = res_state()$discovered[[paste0(sub("s$", "", type), "_paths")]]
   disc = disc[dir.exists(disc)]
   n = c(length(proj), length(user), length(builtin), nrow(pk), nrow(pl), length(disc))
@@ -1039,7 +1049,8 @@ extension_resolve = function(name) {
 extension_enable = function(ext, rank, session = NULL) {
   if (identical(ext$scope, "project") && !trust_ok()) {
     gptr_inform(paste0("Project extension ", ext$name,
-                       " was not loaded: the project is not trusted (see gptr_trust())."),
+                       " was not loaded: the project is not trusted; trust it with ",
+                       "gptr_trust(\".\", trust = TRUE)."),
                 "notice", .once = paste0("ext-untrusted:", ext$path))
     return(invisible(FALSE))
   }
@@ -1051,6 +1062,13 @@ extension_enable = function(ext, rank, session = NULL) {
                 dir = dirname(ext$path), session = session)
   st$loaded[[key]] = isTRUE(ok)
   invisible(isTRUE(ok))
+}
+
+#' May a resolved plugin contribute here? A package always; another only outside the project or
+#' when the project is trusted (IC-52)
+#' @noRd
+plugin_trusted = function(p) {
+  identical(p$kind, "package") || !path_inside(p$path, project_root()) || trust_ok()
 }
 
 #' Enable a plugin or a named extension (service `plugin.enable`; contract 7.17)
@@ -1071,7 +1089,7 @@ plugin_enable = function(name, rank, session = NULL) {
   p = plugin_resolve(name)
   key = paste(p$kind, p$path, rank, session %||% "", sep = "|")
   gen = registry_generation()
-  trusted = identical(p$kind, "package") || !path_inside(p$path, project_root()) || trust_ok()
+  trusted = plugin_trusted(p)
   old = res_state()$plugins[[key]]
   alive = is.null(old) || plugin_entry_alive(old)
   if (!is.null(old) && alive && identical(old$gen, gen) && (isTRUE(old$trusted) || !trusted)) {
@@ -1090,7 +1108,8 @@ plugin_enable = function(name, rank, session = NULL) {
                ids = character(), tokens = 0)
   if (!trusted) {
     gptr_inform(paste0("Plugin ", p$name, " lives in a project that is not trusted; ",
-                       "its resources and code were not loaded (see gptr_trust())."),
+                       "its resources and code were not loaded; trust it with ",
+                       "gptr_trust(\".\", trust = TRUE)."),
                 "notice", .once = paste0("plugin-untrusted:", p$path))
     plugin_entry_save(entry)
     return(invisible(FALSE))
@@ -1275,7 +1294,9 @@ plugin_candidates = function(installed = FALSE) {
 gptr_plugins = function(installed = FALSE) {
   check_flag(installed, "installed")
   es = res_state()$plugins
-  es = lapply(es[order(!vapply(es, function(e) is.null(e$session), NA))], function(e) {
+  # a path lists its first entry: a usable one, then the process's before a session's
+  usable = vapply(es, function(e) isTRUE(e$enabled) && !isTRUE(e$failed), NA)
+  es = lapply(es[order(!usable, !vapply(es, function(e) is.null(e$session), NA))], function(e) {
     e$state = if (e$failed || identical(e$code_state, "failed")) {
       "failed"
     } else if (!e$enabled) {

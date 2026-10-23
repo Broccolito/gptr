@@ -17,13 +17,15 @@ sdk_queued = function(s) {
 }
 
 #' Checks before starting a session's queued input: list(run) when running, NULL when nothing is
-#' queued, else list(cur, safety). A root run's safety record is taken once, here (07 section 5),
-#' and the guards run under it; a refusal leaves the pending call in place and starts nothing.
+#' queued or the session is waiting, else list(cur, safety). A root run's safety record is taken
+#' once, here (07 section 5), and the guards run under it; a refusal leaves the pending call in
+#' place and starts nothing.
 #' @noRd
 sdk_check = function(s) {
   run = sdk_run_of(s)
   if (!is.null(run)) return(list(run = run))
-  if (!sdk_queued(s)) return(NULL)
+  # a waiting session continues only through the background sweep, which adds the console note
+  if (identical(session_data(s)$status, "waiting") || !sdk_queued(s)) return(NULL)
   cur = run_current()
   safety = gateway_run_safety(cur)
   pending = get0(session_data(s)$id, envir = gateway_state()$pending, inherits = FALSE)
@@ -109,7 +111,8 @@ sdk_sessions = function(x, arg = "x") {
 #'
 #' Starts the queued input of an idle session (built with `.run = FALSE`, or given a follow-up
 #' with [gptr_steer()]) and pumps it until `turns` model turns have ended or the run settles. A
-#' running session is advanced the same way.
+#' running session is advanced the same way; a waiting background session is left as it is
+#' ([gptr_wait()] continues it, see [gptr-background]).
 #'
 #' `.run = FALSE` builds a session without making its model request; [gptr_step()] or
 #' [gptr_wait()] starts it. Supply an explicit workspace with `envir =` when results must

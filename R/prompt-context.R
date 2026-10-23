@@ -298,7 +298,7 @@ context_instruction_items = function(inp, notify = TRUE) {
     if (notify) {
       gptr_inform(paste0("Project instructions were not sent: the project is not trusted and ",
                          "no one can confirm in mode '", inp$mode, "'. Trust it with ",
-                         "gptr_trust()."),
+                         "gptr_trust(\".\", trust = TRUE)."),
                   "notice", .once = paste0("gptr_untrusted_instructions:", root))
     }
     files = Filter(function(f) isTRUE(f$user), files)
@@ -422,7 +422,11 @@ context_provide_environment = function(ctx, budget) {
   shiny = nzchar(system.file(package = "shiny"))
   if (shiny && "artifacts" %in% registry_names("prompt_section")) {
     art = ".gptr/artifacts"
-    if (is.null(workspace_dir())) art = file.path(tempdir(), "gptr", "artifacts")
+    if (is.null(workspace_dir())) {
+      # models shorten an opaque temporary path to a relative one that does not exist
+      art = paste0(path_norm(file.path(tempdir(), "gptr", "artifacts")), " (temporary: deleted ",
+                   "when R exits; cite this full path; gptr_init() keeps artifacts)")
+    }
   }
   lines = c(paste0("Date: ", with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d"))),
             paste0("Working directory: ", wd),

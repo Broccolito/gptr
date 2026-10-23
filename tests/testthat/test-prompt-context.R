@@ -183,6 +183,19 @@ test_that("the environment block states date, directory, front end and R", {
   expect_lte(prompt_est(env), 100)
 })
 
+test_that("the Artifacts line says a workspace without .gptr/ is temporary", {
+  skip_if_not_installed("shiny")
+  root = local_project(gptr = FALSE)
+  withr::local_envvar(GPTR_PROJECT_ROOT = root)
+  text = context_provide_environment(list(input = list()), 100L)
+  expect_match(text, "Artifacts: .* \\(temporary: deleted when R exits; cite this full path; ")
+  expect_match(text, path_norm(file.path(tempdir(), "gptr", "artifacts")), fixed = TRUE)
+  gptr_init(root)
+  text = context_provide_environment(list(input = list()), 100L)
+  expect_match(text, "Artifacts: .gptr/artifacts", fixed = TRUE)
+  expect_no_match(text, "temporary")
+})
+
 test_that("mode blocks carry the non-interactive suffixes of contract 9.3", {
   tx = prompt_texts()
   expect_identical(context_mode_body("manual", TRUE), tx$mode_manual)

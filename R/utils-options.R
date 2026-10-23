@@ -352,7 +352,8 @@ s3_register = function(generic, class, method = NULL) {
 #' @section Permissions:
 #' - `gptr.noninteractive_ask` (character, `"stop"`): what a permission question does when
 #'   nobody can answer: `"stop"` ends the run with status `blocked` and a
-#'   `gptr_error_permission` condition; `"deny"` returns a denial to the model.
+#'   `gptr_error_permission` condition (`gptr_error_noninteractive` when the `ask` tool has no one
+#'   to answer); `"deny"` returns a denial to the model.
 #' - `gptr.critical_guard` (logical, `TRUE`): level-4 actions ask even in `auto` mode.
 #' - `gptr.secret_guard` (logical, `TRUE`): reads of registered secrets ask even in `auto`
 #'   mode.

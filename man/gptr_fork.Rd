@@ -23,7 +23,10 @@ Creates a new idle session whose transcript is the source path up to a cut, with
 ids. Nothing live is shared (listeners, queue, run, lock, usage); the fork's file is written
 lazily at its first own message, with \code{parentSession} and \code{gptr.forkOf} in its header. The
 fork's workspace is an overlay of the source's kept home: it reads every object of the source
-at zero cost, and its writes stay in the overlay.
+at zero cost, and its ordinary assignments stay in the overlay, but code that modifies an
+object by reference (data.table \verb{:=} and \verb{set*()}, environments and R6 objects, \verb{<<-},
+\code{assign(envir =)}) changes the source's object too; copy such objects first, for example with
+\code{data.table::copy()}, when a branch must not touch them.
 }
 \examples{
 fake = gptr_fake_provider(list("A", "B"))

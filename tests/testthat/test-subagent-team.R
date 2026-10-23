@@ -122,6 +122,8 @@ test_that("gptr_parallel() keeps failed members, or signals the first with on_er
   team = gptr_parallel(ok = peter("good", envir = new.env()), ko = peter("bad", envir = new.env()))
   expect_identical(team$ko$status, "error")
   expect_identical(team$ok$status, "idle")
+  expect_identical(team$status, "error")
+  expect_identical(team$reason, "1 of 2 sub-agents did not finish: ko (error)")
   cnd = expect_error(gptr_parallel(ok = peter("good", envir = new.env()),
                                    ko = peter("bad", envir = new.env()), on_error = "stop"),
                      class = "gptr_error")
@@ -279,9 +281,48 @@ test_that("a settled team dispatches agent_end with its document site (IC-47)", 
   withr::defer(hook_remove(id))
   call = team_call("Review", agents = team_agents("a", "b"))
   call$doc = list(note = "the statement's site")
-  route_team_run(call)
+  team = route_team_run(call)
   expect_identical(seen$doc$note, "the statement's site")
   expect_identical(seen$status, "idle")
+  expect_identical(team$status, "idle")
+})
+
+test_that("a team or fan-out takes a failed member's status, and signals when none finished", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(mode = "manual", model = "fake/fake-1", interactive = FALSE)
+  local_fake_provider(function(request) {
+    if (any(grepl("Only read.", request$system, fixed = TRUE))) return("read")
+    fake_tool("r", code = 'writeLines("x", "f.txt")')
+  })
+  seen = new.env()
+  id = hook_add("agent_end", function(event, ctx) {
+    if (ctx$session$kind %in% c("team", "fanout")) seen$status = event$status
+    NULL
+  })
+  withr::defer(hook_remove(id))
+  cnd = expect_error(peter("Write f.", envir = new.env(),
+                           agents = list(a = agent(system = "Write."),
+                                         b = agent(system = "Write."))),
+                     class = "gptr_error_permission")
+  expect_identical(cnd$session$kind, "team")
+  expect_identical(cnd$session$status, "blocked")
+  expect_identical(unname(vapply(cnd$session$children, function(s) s$status, "")),
+                   rep("blocked", 2L))
+  expect_identical(seen$status, "blocked")
+  cnd = expect_error(peter("Write f.", list(a = 1, b = 2), parallel = 2, envir = new.env()),
+                     class = "gptr_error_permission")
+  expect_identical(cnd$session$kind, "fanout")
+  expect_identical(cnd$session$status, "blocked")
+  expect_identical(cnd$session$b$status, "blocked")
+  seen$status = NULL
+  mixed = peter("Write f.", envir = new.env(),
+                agents = list(a = agent(system = "Only read."), b = agent(system = "Write.")))
+  expect_identical(mixed$a$status, "idle")
+  expect_identical(mixed$status, "blocked")
+  expect_identical(mixed$reason, "1 of 2 sub-agents did not finish: b (blocked)")
+  expect_identical(seen$status, "blocked")
+  expect_false(file.exists("f.txt"))
 })
 
 # ---- Task 5: fan-outs ------------------------------------------------------------------------
@@ -558,6 +599,26 @@ test_that("each fan-out child gets its own element alone, as .x, for a symbol or
     expect_identical(attached_names(fan$B), ".x[[\"B\"]]")
     expect_identical(fan$value, list(A = list(A = 1:3), B = list(B = letters)))
   }
+})
+
+test_that("team members and fan-out children are shown the caller's objects (D-252)", {
+  skip_on_cran()
+  fake = local_team_fake(function(request) "ok")
+  e = new.env()
+  e$fit = lm(mpg ~ wt, mtcars)
+  peter("Review fit.", envir = e,
+        agents = list(stats = agent(system = "A."), code = agent(system = "B.")))
+  peter("Review fit.", envir = e, agents = list(stats = agent(system = "A.")))
+  peter("Summarise.", list(a = 1, b = 2), parallel = 2, envir = e)
+  ws = vapply(fake_requests(fake), function(r) {
+    texts = vapply(r$messages[[1L]]$content, function(b) b$text %||% "", "")
+    paste(grep("^<workspace ", texts, value = TRUE), collapse = "\n")
+  }, "")
+  expect_length(ws, 5L)
+  expect_match(ws, "^<workspace env=\"overlay of ")
+  expect_match(ws, "\nfit +lm ")
+  expect_false(any(grepl("(no objects)", ws, fixed = TRUE)))
+  expect_match(ws[4:5], "\n\\.x +list ")
 })
 
 test_that("a fan-out with context = \"none\" is refused before any child starts", {
@@ -1091,7 +1152,8 @@ test_that("active and failed child work is not inferred from a malicious final r
   expect_true(all(vapply(probe$active, function(x) {
     x$pending && x$results > 0L && !grepl("R tool results:", x$text, fixed = TRUE)
   }, FALSE)))
-  failed = peter("Provider failure", agents = list(first = agent(model = "fake/fake-1")))
+  failed = tryCatch(peter("Provider failure", agents = list(first = agent(model = "fake/fake-1"))),
+                    gptr_error = function(e) e$session)
   expect_identical(failed$first$status, "error")
   expect_false(grepl("R tool results:", subagent_reports_block(list(session = failed), 20000L),
                      fixed = TRUE))

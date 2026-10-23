@@ -3930,3 +3930,464 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `gptr_init(trust =)` argument.
 - Open: a recorded No is silent afterwards, unlike the undecided notice; `readline_answer()` drops a pasted line
   without saying so (finding 46, follow-ups); the sheet's card is S03.
+
+## Task FIX-19 - Cheat-sheet review: orchestration (2026-10-22, #PR)
+
+### ws-1 - A team, fan-out or nested child's <workspace> block lists the caller objects it can read
+- Findings 123, 126, 156, 184, 199, 201. Red: `^(env-snapshot|subagent-team)$` FAIL 13 PASS 537:
+  each team member's block was `<workspace env="overlay of stats" objects="0">` `(no objects)`, a
+  fan-out child's listed `.x` only; the same held for a nested overlay and a fork overlay.
+- Cause: `env_block_workspace()`, `env_block_changes()`, `env_on_agent_end()` and `env_on_tree()`
+  snapshot `env_home()`, an overlay `new.env(parent = caller)`, and `ls()` never looks at the
+  parent.
+- Fix: `env_view_snapshot()` (R/env-snapshot.R) at all four sites: the overlay's rows, then each
+  lower overlay's and the base's, own names first (`!duplicated()`); an overlay's block starts with
+  `Reads fall through to globalenv; assignments stay here.` (or `<environment>`). The first version
+  pinned a function-frame home: `[.data.frame` called in the frame that bound it kept that frame
+  referenced (copy-eval's new row: 1 copy; test-copy-tools' function-frame `peter()` row still
+  passed), so the helper drops `envir` before subsetting. The label is not `home_label()`, a
+  session-layer function (arch-layers).
+- Green: `^(env-snapshot|subagent-team)$` PASS 551; `^copy-` PASS 155; neighbours (env-, subagent-,
+  session-object, session-store, gptr-gateway, prompt-, northstar, ckpt-rewind, gptr-config,
+  agent-run, doc-blocks, arch-layers, lint-rules) PASS 5505 SKIP 1. Lint clean. Live (m$gpt, the
+  sheet's team example, mode "auto"): both blocks list `fit  lm` under `objects="8"` and both
+  members reviewed fit (48 s).
+- Deviations: D-252 (new). Open: finding 126's container status and `$text` synthesis are
+  sessions-11's; the extra line sits outside `workspace_lines()`'s budget (the block's truncation
+  still applies).
+
+### sessions-20 - A fork's change report names the source objects its code changed in place
+- Findings 99, 110. Red: `^session-object$` FAIL 4 PASS 534: after the fork ran
+  `dt[, z := 1]; e$flag = 'x'; v <<- 2; w = 3`, its r result had `added` = e, w and `modified`
+  empty, while home's dt, e and v had changed (the source's turns and file md5 did not).
+- Cause: `gptr_fork(envir = "overlay")` is `new.env(parent = home)`, which isolates bindings only,
+  and `eval_run()` diffed snapshots of the overlay alone, so in-place edits below it were invisible
+  and `e$flag = 'x'` (which binds the source's `e` in the overlay) looked new.
+- Fix: `eval_run()` diffs `env_view_snapshot(sizes = FALSE)` (new `sizes` argument and `own`
+  column); `eval_objects()` adds `(in the source workspace)` to a modified row not `own`, or whose
+  new own binding shares the old row's object (a rebinding `k = 5` stays unmarked). The
+  `gptr_fork()` doc and interactive-console vignette say in-place edits reach the source's objects.
+- Green: `^session-object$` PASS 538; session-object, env-snapshot, eval-core, eval-format,
+  eval-guard, copy-eval, copy-tools and tool-r PASS 1366; full suite (NOT_CRAN=true) FAIL 0 SKIP 64
+  PASS 35300. Lint clean; plan checks pass. Live (m$gpt, the finding's data.table fork): the model
+  ran `dt[, logmpg := log(mpg)]` and its result read `~ dt <data.table> modified (in the source
+  workspace)`.
+- Deviations: D-252 (extended). Open: no fork-scoped policy asks before `:=` or `<<-` (plan); an
+  object a fork creates in the source with `<<-` is still listed as `+ name` without the mark.
+
+### guard-1 - A q or quit bound to data in the workspace is not refused as quitting R
+- Finding 25 (in passing). Red: `^eval-guard$` FAIL 4 PASS 126: `eval_guard()` took no `envir`,
+  and a fake `r` call `summary(q)` in a session whose envir held `quantile(1:10)` came back
+  `blocked`, "Not run: the code calls or refers to q()".
+- Cause: a `q`/`quit` value passed only when the code itself assigned it; the guard never saw the
+  workspace, so the user's own `q` (a quantile vector, a query) read as `base::q`.
+- Fix: `eval_guard(exprs, envir = NULL)`; `eval_run()` passes `st$envir`. A value passes when the
+  first binding R's value lookup finds from `envir` is data (`eval_guard_is_data()`; a promise or
+  active binding is not forced and counts as unknown). Calls, `base::q`, `do.call("q")` and
+  `sapply(x, q)` stay refused.
+- Green: `^eval-guard$` PASS 136 (the end-to-end test needs no permission bypass in auto mode);
+  eval-*, copy-eval, copy-tools, tool-r, arch-layers, lint-rules, s1-* PASS 2229; agent-dispatch,
+  agent-loop, doc-blocks, gptr-gateway, injection-e2e, perm-gate, northstar, console-* PASS 3297
+  SKIP 1. Lint clean; plan checks pass.
+- Deviations: D-252 (extended): R's own lookup, not the plan's `binding_env()`, an L3 function the
+  eval layer may not call that skips the parents of a function-frame home (a nearer `base::q`).
+  Open: `rm(q); g = q; g()` passes, as `eval(parse(text = ...))` already does (advisory guard).
+
+### team-1 - A team or fan-out with failed members reports it, and signals when none finished
+- Findings 71, 72, 129, 185. Red: `^subagent-team$` FAIL 13 PASS 354: a manual-mode team and a
+  fan-out whose members were both `blocked` returned `idle` with no condition (a single call
+  signals `gptr_error_permission`), a mixed team was `idle` with `$reason` NULL while its
+  `agent_end` said `error`, and a `gptr_parallel()` team with a failed member stayed `idle`.
+- Cause: `subagent_run_children()` computed the outcome only for the `agent_end` event and never
+  wrote it to the container, which `session_new()` leaves `idle`; the routes return it without
+  the gateway's signal step.
+- Fix: `subagent_settle_container()` gives a team, fan-out or `gptr_parallel()` team the first
+  non-idle child's status and stored condition and the reason `k of n sub-agents did not finish:
+  b (blocked)`; `agent_end` carries both; `agents =` and `parallel =` re-signal the condition with
+  the container as `$session` (`subagent_signal()`, shared with `on_error = "stop"`) when no
+  child ended idle. ?peter, the teams vignette and 04 §6.1.2 say so.
+- Green: `^(subagent-team|injection-e2e)$` PASS 571; with gptr-gateway PASS 926; full
+  suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35329. Lint clean; plan checks pass. Live (m$gpt, the
+  sheet's team code under Rscript, manual mode): stats blocked, code idle; the team returned
+  `blocked`, reason `1 of 2 sub-agents did not finish: stats (blocked)` (30 s).
+- Deviations: D-252 (extended): the plan's `gateway_signal()` is L6, which an L4 file may not call
+  (arch-layers); every status it signals stores its condition, so re-signalling that is the same.
+  Open: none.
+
+### tools-4 - ?peter and ?gptr_options name gptr_error_noninteractive for a blocked ask
+- Findings 7, 73, 168, 180, 194 (docs). Red: none (wording; the behaviour is pinned by
+  agent-dispatch "a non-interactive ask call stops blocked with gptr_error_noninteractive").
+- Cause: ?peter mapped `blocked` only to `gptr_error_permission`, and ?gptr_options said
+  `gptr.noninteractive_ask = "stop"` raises it; an `ask` tool call nobody can answer raises
+  `gptr_error_noninteractive` (03 §6.8.5, IC-68). `preset_ask()` is right and unchanged.
+- Fix: both items add "(`gptr_error_noninteractive` when the `ask` tool has no one to answer)";
+  04 §6.1.2's terminal-status list, which ?peter mirrors, says the same. Rd regenerated.
+- Green: gptr-gateway, utils-options, tool-ask PASS 472. Lint clean; plan checks pass.
+- Deviations: none (the contract already said so). Open: none.
+
+### team-4 - gptr_sessions() lists a settled team or fan-out as idle, with its model
+- Finding 74. Red: `^session-store$` FAIL 5 PASS 276: a settled fan-out, team and `gptr_parallel()`
+  team listed `interrupted` with model NA and resumed (from the file, the live objects gone)
+  `interrupted`, while each live object was `idle`.
+- Cause: the stored status comes from the last message, and a container never writes an assistant
+  message (its tail is the `<agent_reports>` user message); the listing took the model only from
+  an assistant message, where `rebuild_model()` also reads `model_change` and `gptr.frozen`.
+- Fix: `subagent_settle_container()` appends `gptr.container_end` `{status}`; `rebuild_status()` and
+  `session_file_summary()` let the last message or end decide (an end is idle only with status
+  idle; a later synthesis turn decides by itself); a row with no answer naming the model takes
+  `rebuild_model()` of the head and tail lines. 04 §4.6 and `gptr_resume()`, 03 §5.1, ?gptr_resume.
+- Green: `^(session-store|subagent-team)$` PASS 650; with subagent-backends, session-object,
+  injection-e2e, gptr-gateway, arch-layers, lint-rules, ckpt-rewind PASS 2232; full suite
+  (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35337. Lint clean; plan checks pass.
+- Deviations: D-252 (extended). The plan's copy-under-another-id check cannot work (a durable usage
+  record is bound to its header id), so the test cuts a copy for the negative case and resumes the
+  real files after dropping the live sessions. Open: a `gptr_parallel()` row's title is still empty.
+
+### bg-1 - A resumed background session tells the model the user can now be asked
+- Findings 191, 204. Red: `^agent-background$` FAIL 6 PASS 194: with a fake model that does not
+  repeat the call, the resumed request ended on the stale tool result "Permission denied: the user
+  could not be asked ... Explain what you need or choose another approach." (for a blocked `ask`,
+  "Tool execution was blocked: ..."); no message said the user was there.
+- Cause: `bg_resume()` called `run_start(s, NULL)` with no input, so the run went on from the
+  denial, and the denial's `how` was lost (`ui_answer_norm()` rebuilt the answer without it,
+  `perm_ask()` passed none), so `perm_denial_text()` added "choose another approach". GPT read it
+  as final: 7 of 8 runs ended without asking.
+- Fix: `bg_resume()` queues a steer from the user (`api_user`) before `run_start()`,
+  `bg_resume_text()`: "I am at the console now. Repeat the call that could not be approved
+  (<summary>) with the same input; I will be asked to approve it." or "I am at the console now;
+  ask again."; a resume that cannot start restores the queue. The idle-tick `permission()` answer
+  carries `how = "Nothing ran and nobody declined; repeat the call when the session continues."`,
+  which `ui_answer_norm()` keeps for a denial and `perm_ask()` gives `perm_result()`.
+  ?gptr-background and the teams vignette say so; 03 §6.2, 04 §7.21, §10.2 row 22, IC-57.
+- Green: `^agent-background$` PASS 200; with agent-dispatch, console-ui, perm-*, tool-ask,
+  subagent-worker, injection-e2e, ext-specs, agent-run, agent-loop PASS 3293 SKIP 1; full suite
+  (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35354. Lint clean; plan checks pass. Live (m$gpt, manual
+  mode, `peter("Check fit.", fit, background = TRUE)` at an interactive pty console): parked
+  "waiting for approval", then `gptr_wait(b)` raised the allow? prompt in 3 of 3 runs (the
+  verifier's baseline: 1 of 6).
+- Deviations: D-252 (extended). `R/console-ui.R` (not in the plan's files) had to keep `how`. The
+  "cannot continue" test now fails `run_start()` with a mock: a queued note gives its finished
+  session something to run. Open: P28's sessions-16 also edits `perm_ask()` and `bg_ui_spec()`
+  (the second merge keeps both); no notice backs up a model that still does not repeat the call.
+
+### gate-hint - A blocked call's hint names where its mode came from, and knitting is not sent to the console
+- Finding 16, item 4 (doc-4 holds the id). Red: `^agent-dispatch$` FAIL 6 PASS 229: a manual-mode `r` call
+  under `gptr.interactive = FALSE` raised `gptr_error_permission` whose `how_to_allow` was always "Allow it with
+  mode = "auto", a permission rule (gptr_permissions()), or run interactively.", naming no layer, the same
+  with the mode set at session scope, by a project file over a user `auto`, by the call or by the session it
+  continued, and with `knitr.in.progress = TRUE`.
+- Cause: `perm_ask()` built a fixed sentence; it never looked at the run's mode or its origin, nor at
+  `is_knitting()`, under which `gptr_can_prompt()` is FALSE even at a console.
+- Fix: `gateway_run_opts()` records a top-level call's `mode_from = list(mode, from)`
+  (`gateway_mode_from()`: the call's `mode =`, the continued session, else the `settings_layered("mode")`
+  layer when it holds that mode); `perm_blocked_how()` starts the hint `Mode "manual" comes from
+  .gptr/settings.json.` while the run keeps that mode, and while knitting ends "... or a permission rule
+  (gptr_permissions()); knitting cannot ask." The `ask_human` text and `gateway_signal()` are unchanged.
+  04 §7.6 (run options) and the `perm_check()` row amended.
+- Green: `^agent-dispatch$` PASS 235; with gptr-gateway, gptr-config, gptr-sdk, perm-gate, doc-replay,
+  mcp-server, northstar, agent-run, agent-background, subagent-team, injection-e2e, arch-layers, lint-rules
+  PASS 3704; full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35374. Lint clean; plan checks pass; Rd unchanged.
+- Deviations: D-252 (extended). The plan's `settings_layered()` call in `perm_ask()` would cross layers
+  (L2 to L6), so the gateway records the origin; a nested call's origin is not named (its run may have
+  tightened the mode); a continued session names itself, not a settings layer it no longer follows.
+  Open: none.
+
+### tpl-1 - Prompt-template commands exist in the console before the first prompt
+- Findings 104, 109 (the trust half of 104 is tpl-2). Red: `^console-commands$` FAIL 7 PASS 94: with no
+  sync run, `/check mtcars` (a trusted `.gptr/prompts/check.md`) was "Unknown command", `/help` listed no
+  `/check`, `/review` or `/explain`, a `later.md` saved afterwards stayed unknown, and a `.stdin` console whose
+  first input was `/check mtcars` never reached the fake model.
+- Cause: templates reach the command registry only through `template_sync()`, called only by
+  `builtin:prompts`' `session_start` hook, and the console dispatches commands before its first session starts.
+- Fix: `prompts_sync()` (the hook's `plugins_sync()` then `template_sync()`) is the service `templates.sync`
+  (P17, owned by `builtin:prompts`, so filtering it keeps templates off); `console_command()` calls it when
+  neither lookup finds the name and looks again; `cmd_help()` calls it first. 03 §6.17, 04 §7.0, §7.17.
+- Green: `^console-commands$` PASS 102; aaa-state, console-*, skill-*, ext-*, arch-layers, lint-rules PASS 4209
+  SKIP 1; full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35382. Lint clean; plan checks pass; Rd unchanged.
+  Installed branch, piped console (fake model): `/help check`, `/check mtcars` and `/review x` work as the
+  first inputs.
+- Deviations: D-252 (extended). The service needs its `service_plans` entry (`R/aaa-state.R`, which the arch
+  helper reads; test-aaa-state's count 39 to 40), not in the plan's files; helper-arch.R needed no change. No
+  sync in `repl_main()`, as planned. Open: none.
+
+### tpl-2 - Projects whose only resources are prompts or agent-tool folders get the trust question
+- Findings 117, 147 (its code items; the caption is sheet entry S37, the messages trust-msg, skipped files
+  skills-2). Red: `^gptr-config$` FAIL 15 PASS 537: `trust_resources_present()` was FALSE for a project holding
+  only `.gptr/prompts/check.md`, `.claude/skills`, `.agents/skills`, `.claude/agents`, `.codex/agents`,
+  `.pi/agents`, `AGENTS.override.md`, `CLAUDE.local.md`, `.gptr/vignette.Rmd` or a relative `skills.paths`
+  directory, so `trust_resolve()` returned FALSE with no question, notice or `project_trust` event and
+  `template_roots()` dropped the root; the question named no skills.
+- Cause: the check listed `AGENTS.md`, `CLAUDE.md`, `.gptr/skills` and `.gptr/agents` only, not every location
+  skill, template, agent and instruction discovery reads under trust.
+- Fix: it counts those instruction files and directories plus the relative `skills.paths` entries of the
+  settings in force (`trust_skill_paths()`, through `settings_layered()`, which resolves no trust); the question
+  of `trust_resolve()` and `gptr_init()` names skills, prompt templates and agent files; `?gptr_trust` lists
+  project skills and prompt templates. 03 §6.10, 04 `gptr_init()`, `gptr_trust()`, IC-52.
+- Green: `^gptr-config$` PASS 552; full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35417. Lint clean; plan checks
+  pass; `gptr_trust.Rd` regenerated. Installed branch, fake model, a prompts-only project: a script's `peter()`
+  now gets the untrusted notice (none before); the console asks the trust question at the first prompt, and
+  after `y` `/check mtcars` runs the template and `gptr_trust(".")` reads TRUE.
+- Deviations: D-252 (extended). Also counts `.gptr/vignette.Rmd`, an instruction file whose authority follows
+  trust, which the plan's list lacked. `skills.paths` is read through `settings_layered()` (the layers skill
+  discovery reads; a project settings file is itself gated) rather than the two files as written. `gptr_init()`
+  asks the same question, so its text changed too (one test-gptr-config expectation). Open: none.
+
+### trust-msg - Untrusted-resource messages name the call that actually trusts
+- Motivated by findings 111, 147 (sheet units). Red: `^(skill-discover|ext-plugins)$` FAIL 3 PASS 562: the
+  untrusted skill notice, `skill_body()`'s `gptr_error_untrusted` and the untrusted-plugin notice said
+  `(gptr_trust())` or `trust it with gptr_trust()`, the read-only form, which returns `NA` and trusts nothing.
+- Cause: the advice named the function, not the call; with `trust = NULL`, `gptr_trust()` only reads.
+- Fix: all nine messages (skill notice and error, extension and plugin notices, `trust_resolve()`'s notice,
+  project MCP server, project instructions, agent notice and error) name `gptr_trust(".", trust = TRUE)`, the
+  form the sheet's Set up row uses. Text only.
+- Green: `^(skill-discover|ext-plugins)$` PASS 565; with mcp-config, gptr-config, prompt-context, subagent-defs,
+  lint-rules, arch-layers PASS 1538. Lint clean.
+- Deviations: none (the contract quotes none of these messages). Open: none.
+
+### sessions-23 - Report lapsed project trust as undecided
+- Finding 52. Red: `^gptr-config$` FAIL 1 PASS 555: after `.gptr/settings.json` changed in a trusted project,
+  `trust_get()` was FALSE but `gptr_trust(proj)` read TRUE.
+- Cause: the read returned the recorded flag without the fingerprint check `trust_get()` and `trust_resolve()`
+  apply, so it said TRUE while the run printed the untrusted notice and dropped the changed `SYSTEM.md`.
+- Fix: a recorded TRUE whose fingerprint no longer matches (`trust_holds(root)$record`) reads NA, as the run
+  treats it (asked again); a recorded FALSE stays FALSE; the write and its invisible previous value are unchanged.
+  `@return` and 04 `gptr_trust()` amended.
+- Green: `^gptr-config$` PASS 555 (after re-trusting, the read is TRUE and `SYSTEM.md` starts the next fake
+  request's system prompt; a refusal stays FALSE after `SYSTEM.md` changes); with injection-e2e, perm-plan,
+  prompt-sections, ext-plugins, lint-rules, arch-layers PASS 1718. Lint clean; plan checks pass; Rd regenerated.
+- Deviations: D-252 (extended). Open: a `project_trust` hook's unremembered yes still reads NA (record only).
+
+### plug-1 - gptr_plugins() lists the usable entry of a plugin first
+- Finding 108. Red: `^ext-plugins$` FAIL 1 PASS 382: after `plugin_enable(lab, 0L, session = d1)` in an untrusted
+  project, `gptr_trust(proj, TRUE)` and `plugin_enable(lab, 0L, session = d2)` (TRUE), `gptr_plugins()` listed
+  `stale-lab` enabled FALSE, state `disabled`.
+- Cause: entries were ordered process-before-session only and the first per path was kept, so the untrusted
+  session's disabled entry hid the trusted session's until GC drained the first session.
+- Fix: order entries usable first (enabled and not failed), then process before session.
+- Green: `^ext-plugins$` PASS 383 (the "a plugin enabled twice once" row still lists the process entry); full
+  suite (NOT_CRAN=true, with trust-msg and sessions-23) FAIL 0 SKIP 64 PASS 35426. Lint clean.
+- Deviations: none (04 `gptr_plugins()` does not say which entry is listed). Open: none.
+
+### skills-1 - gptr_skills() and gptr_agents() list the plugins of live sessions and of the settings
+- Findings 93, 107. Red: `^ext-plugins$` FAIL 4 PASS 388: with a live `peter(plugins = d)` session,
+  `gptr_skills()` had no `listed-skill` row and `gptr_agents()` no `listed-agent`; with
+  `options(gptr.plugins = d)` and no session started, `gptr_skills()` had no `unsynced-skill` row.
+- Cause: `res_plugin_dirs()` dropped every session entry, and `peter(plugins =)` plugins are always
+  session-scoped; settings plugins enter the plugin table only through `plugins_sync()` at a session start.
+  The session's catalog and `gptr_plugins()` showed both, so the listings disagreed with them.
+- Fix: `res_plugin_dirs(type, listing)` and `res_roots(..., listing)`; with `listing = TRUE`, used only by
+  `skill_discover()` and `agent_discover()` (through `skill_roots(listing)`, `agent_roots(listing)` and
+  `agent_collect(roots = )`), they add the entries of live sessions and, at rank 3, the `plugins` setting's
+  plugins with no enabled or failed entry, resolved by `plugin_resolve()` and read with `plugin_type_paths()`
+  only, skipped where `plugin_trusted()` (now shared with `plugin_enable()`) refuses. Syncs keep `FALSE`.
+- Green: `^ext-plugins$` PASS 392 (the IC-69 test unchanged; the eager `extensions/m.R` never ran; a settings
+  plugin inside an untrusted project is not listed, which fails with the trust check removed); with skill-*,
+  subagent-defs, arch-layers, lint-rules, console-commands PASS 1085; full suite (NOT_CRAN=true) FAIL 0 SKIP 64
+  PASS 35435. Lint clean; Rd unchanged.
+- Deviations: none (04 `gptr_skills()` does not say which plugins are listed; the fix meets `?gptr_skills`, "those
+  of enabled plugins"). A settings plugin whose entry failed is not listed (the plan said "no enabled entry"), and
+  no separate dedupe: discovery keeps one row per path and source. Open: none.
+
+### skills-2 - A skipped SKILL.md is named by gptr_skills() and by a preload of its name
+- Finding 103. Red: `^skill-discover$` FAIL 2 PASS 187: in a trusted project holding `.gptr/skills/nodesc`
+  (no description) and `.gptr/skills/Bad_Name`, `gptr_skills("project")` printed `# 0 rows` only, and
+  `peter(skills = "nodesc")` said "No skill with this name is available; gptr_skills() lists them."
+- Cause: `skill_parse()` wrote its reasons to the registry diagnostics only and `skill_collect()` dropped the
+  NULL spec, so neither the listing nor `skill_body()`'s not-found branch knew of the file.
+- Fix: `skill_collect()` also returns `skipped` (origin by path); `gptr_skills()` prints the footer `# 2 SKILL.md
+  files skipped: .gptr/skills/Bad_Name, .gptr/skills/nodesc; gptr_registry(diagnostics = TRUE) says why.`;
+  when a skipped file's directory name matches, `skill_body()` raises `gptr_error_invalid_argument` "The skill
+  file .gptr/skills/nodesc/SKILL.md was skipped: description is required." Discovery still never errors.
+- Green: `^skill-discover$` PASS 192 (no request reaches the fake model; an unknown name keeps its message); with
+  skill-*, ext-plugins, tool-read, gptr-gateway, subagent-defs, console-commands, arch-layers, lint-rules PASS
+  1660. Lint clean; Rd unchanged.
+- Deviations: none (the contract quotes neither text). The reasons come from parsing the file again with a
+  `diag` callback (new `skill_parse()` argument), not from the latest diagnostic as planned: a cached skip
+  whose diagnostic left the log (1,000 rows, a swapped registry) would have had none. Open: `read
+  skill:nodesc/SKILL.md` still says "Unknown skill" (`skill_file_path()` in R/tool-read.R drops the reason).
+
+### ident-1 - A bare hyphenated name gets a gptr error naming the quoted form
+- Finding 112. Red: `^gptr-capture$` FAIL 1 PASS 357: `resolve_identifier(high-performance-r, "skills")` raised
+  base R's simpleError "object 'high' not found" from `eval(expr, mask)`.
+- Cause: R parses the name as `(high - performance) - r`; `resolve_identifier()` treats only unary `+`/`-`
+  specially, so the binary call reached `ident_mask()`, which binds whole identifiers only (with numbers bound to
+  the pieces, the error suggested quoting "high - performance - r").
+- Fix: before the mask, a binary `-` whose leaves are names or numbers (`ident_hyphen_name()`) is refused with
+  `gptr_error_invalid_identifier` "`high-performance-r` reads as subtraction; quote the name: skills =
+  "high-performance-r"." Nothing is evaluated, so bound pieces change nothing. 03 §4.1.3, 04 §6.1.3.
+- Green: `^gptr-capture$` PASS 364 (`peter(skills = high-performance-r)` sends no request; `c(+grep, -write)` and
+  `shiny_bslib` unchanged); with gptr-*, copy-gateway, subagent-defs, skill-discover, arch-layers, lint-rules PASS
+  1819. Lint clean; plan checks pass; Rd unchanged.
+- Deviations: D-252 (extended). The test spells the call `high - performance - r` (the same parse) or builds it
+  with `str2lang()`, as lintr's infix rule refuses the bare spelling. Open: none.
+
+### mcp-print - print(h) says where the serve token is and what the served mode allows
+- Finding 102 (and finding 100's point, shown on the handle). Red: `^mcp-server$` (NOT_CRAN=true) FAIL 3 PASS
+  167: `print(h)` said "token: in the environment variable GPTR_MCP_TOKEN of the client, as $config shows" and no
+  mode line, while the claude_code, claude_desktop and cursor snippets embed `Bearer <token>`.
+- Cause: the hard-coded token line described the codex snippet only.
+- Fix: `token: inside the $config snippets, printed redacted (as.character() gives the text; $config$codex passes
+  it as GPTR_MCP_TOKEN)`, and while the handle is the running server's, `mode: manual; calls that need approval
+  are refused (set the mode, then restart the server to change it)` from its dedicated session.
+- Green: `^mcp-server$` PASS 170 (the three JSON snippets hold the token, the codex `$args` do not; the print holds
+  neither the token nor the old line); with mcp-*, arch-layers, lint-rules PASS 907 SKIP 1. Lint clean; Rd
+  unchanged.
+- Deviations: none (the contract and vignette do not quote the print). Open: none.
+
+### mcp-trusted - gptr_mcp()'s trusted column means what the server spec's trusted means
+- Finding 105. Red: `^mcp-config$` FAIL 2 PASS 103: after `gptr_mcp_add("docs", url = ...)` the spec said
+  `trusted` FALSE and the `gptr_mcp()` row TRUE; a project server in an untrusted project read TRUE once trusted.
+- Cause: `mcp_server_listing()` filled `trusted` with project trust (`!isFALSE(s$startable)`), which status
+  `"untrusted"` already reports, while the spec's `trusted` is annotation trust read by `mcp_tool_level()`.
+- Fix: the column is `isTRUE(s$trusted)`; `?gptr_mcp` defines it (a user `mcp.json` entry marked `"trusted": true`,
+  whose `readOnlyHint` then lowers tool risk) and the mcp vignette says how to mark a server. 04 §5.12.
+- Green: `^mcp-config$` PASS 106 (marking the entry makes both TRUE; a claude-code:user server reads FALSE; a
+  trusted project's server stays FALSE with status configured); with mcp-*, arch-layers, lint-rules PASS 916 SKIP 1;
+  zzz PASS 145. Lint clean; plan checks pass; `gptr_mcp.Rd` regenerated.
+- Deviations: D-252 (extended). Open: none.
+
+### art-1 - peter$app() launches by default only at the console, and says why it did not
+- Finding 56. Red: `^artifact-app$` FAIL 4 PASS 521: without `launch` in a non-interactive run the tool result
+  read only `(stopped)`; with `gptr.interactive = TRUE` nothing launched; the formals pinned `interactive()`.
+- Cause: both forms defaulted to base `interactive()`, which ignores `gptr.interactive`, and the skip gave no
+  reason, so a model in Rscript took it for a failure and built v002 with `launch = TRUE`.
+- Fix: `launch = NULL` in both forms, resolved in `artifact_app()` as `launch %||% gptr_has_human()`; a skip that
+  nobody asked for adds the message `not launched: nobody is at an interactive console, so v001 was saved without
+  starting it; pass launch = TRUE to start and check it now, or gptr_artifacts("x", open = TRUE) later`. The tool's
+  `launch` description, `?gptr_artifacts`, the tools-and-artifacts vignette, 03 §4.2 and 04 §9.4 say so.
+- Green: `^artifact-app$` PASS 525 (one version, no process record; `launch = FALSE` has no message; at the console
+  the start path runs); with artifact-*, copy-artifact, arch-layers, lint-rules, zzz (NOT_CRAN=true) PASS 3294 SKIP
+  10. Lint clean; plan checks pass; `gptr_artifacts.Rd` regenerated.
+- Deviations: D-252 (extended). The message is added once in `artifact_app()`, not in each caller; the test mocks
+  `artifact_start()` rather than the type's launch; D-252's contract line, left 156 wide by mcp-trusted, rewrapped.
+  Open: none.
+
+### art-2 - An artifact in a temporary workspace is announced to the user and the model
+- Finding 48. Red: `^artifact-app$|^prompt-context$` FAIL 4 PASS 617: without `.gptr/` the environment block read
+  `Artifacts: /var/folders/.../T//Rtmp.../gptr/artifacts` with no word that it is temporary, and `peter$app()`
+  signalled no notice.
+- Cause: the tempdir fallback is intended (`?gptr_artifacts`), but neither the model nor the user was told, so models
+  shortened the opaque path to a relative `artifacts/<id>/app.R` that does not exist (3/3 GPT runs).
+- Fix: the line is `Artifacts: <path_norm(tempdir()/gptr/artifacts)> (temporary: deleted when R exits; cite this full
+  path; gptr_init() keeps artifacts)`; after a version is built without `.gptr/`, `artifact_app()` sends
+  `gptr_inform(... "notice", .once = "artifact-temp-workspace")` naming `path_norm(artifact_dir(id))` and
+  `gptr_init()`. 03 §5.7.
+- Green: `^artifact-app$|^prompt-context$` PASS 621 (one notice, none on the second call or with `.gptr/`; after
+  `gptr_init()` the line is `.gptr/artifacts`); full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35482. Lint clean;
+  plan checks pass; Rd unchanged.
+- Deviations: D-252 (extended). The prompt's path is normalised (the plan's `tempdir()` path had a `//` and the
+  unresolved `/var` link), so it is the prefix of the path the notice names. Open: none.
+
+### reg-1 - Registering the same kind and name again replaces your earlier record
+- Findings 38, 31 (absorbs the models plan's provider-1). Red: `ext-registry` FAIL 8 PASS 211: a second
+  `gptr_register()` of provider `corp` left `base_url` at `a.invalid`, the new row `overridden`, no diagnostic and
+  no message, the first `off()` returned `TRUE`; a re-registered `shout` tool kept its old `fun`.
+- Cause: `gptr_register()` only appended a rank-3 `user` record; `registry_sort()` keeps the first at equal rank
+  and `registry_collision()` skips same-source ties, so the stale record won silently (and kept the old egress).
+- Fix: for `first`-resolving kinds, `gptr_register()` adds the new record, then removes the earlier process-level
+  `user` records of that `(kind, name)`, logs a `replaced` diagnostic and sends the `notice` "Replaced your earlier
+  <kind> '<name>'."; a spec that fails validation leaves the old one; hooks and policies keep both.
+  `?gptr_register`, 03 §4.3, 04 `gptr_register()` and §10.1.
+- Green: `ext-registry` PASS 219 (one active `corp` at `b.invalid`, the old `off()` `FALSE`, the new one removes it;
+  the tool's second `fun`; a corrupted spec leaves it; two `turn_end` hooks stay); full suite (NOT_CRAN=true) FAIL 0
+  SKIP 64 PASS 35496. Lint clean; plan checks pass; `gptr_register.Rd` regenerated.
+- Deviations: D-252 (extended). The rule removes every earlier `user` record of the key, including one from a
+  user directory, user `mcp.json` or user-scope extension, so the explicit registration wins in either order.
+  Open: none.
+
+### bg-1b - A message piped into a waiting session still opens the resumed run with the console note
+- Review of bg-1 (medium). Red: `^agent-background$` FAIL 2 PASS 203: after a manual-mode background session
+  parked, `s |> peter("also say hi")` then `gptr_step(s)` started the run itself, and the second request held the
+  stale denial and "also say hi" but no "I am at the console now" note.
+- Cause: a piped message (or a follow-up `bg_park_session()` re-queued) made `sdk_check()` see queued input, so
+  `gptr_wait()`/`gptr_step()` started the run through `gateway_run_start()` and the sweep only cleared the ask.
+- Fix: `sdk_check()` returns NULL for a `waiting` session; `gptr_wait()` keeps pumping while it waits and the
+  sweep's `bg_resume()` queues the note and starts the run. `gptr_step()` leaves a waiting session as it is (as
+  with nothing queued); `?gptr_step` and 04 §6.5 say so, 04 §7.21 names `bg_resume()`.
+- Green: `^(agent-background|gptr-sdk)$` PASS 300; with gptr-gateway, agent-run, injection-e2e, arch-layers,
+  lint-rules, zzz (NOT_CRAN=true) PASS 1753. Lint clean; plan checks pass; `gptr_step.Rd` regenerated.
+- Deviations: D-252 (extended). Open: none.
+
+### sessions-20b - Removing a fork's shadowing binding is not reported as a change to the source
+- Review of sessions-20 (low). Red: `^session-object$` FAIL 1 PASS 541: after the fork ran `k = 5`, a second `r`
+  call `rm(k)` read `~ k <numeric> modified (in the source workspace)` while `home$k` was still 1.
+- Cause: the mark took any modified row whose new binding is not `own`, so the source's binding reappearing under
+  a removed overlay binding read as a change to it.
+- Fix: `src = !old$own[k] & (!new$own[j] | env_same(...))`: only a row that was the source's before the code ran
+  and still is, or whose new binding shares its object (`e$flag = 'x'`). `v <<- 2` and `:=` keep the mark; a
+  rebinding and an un-shadowing `rm()` read `~ k <numeric> modified`. 03 §6.12 and 04 §7.9 amended.
+- Green: `^(session-object|eval-core|tool-r|env-snapshot|copy-eval)$` PASS 1196. Lint clean; plan checks pass.
+- Deviations: D-252 (extended). Open: none.
+
+### art-2b - The art-2 test removes its temporary-workspace artifact
+- Review of art-2 (low). Red: a check placed after the test, `dir.exists(file.path(tempdir(), "gptr", "artifacts",
+  "temp-workspace-notice"))`, was TRUE (`^artifact-app$` FAIL 1 PASS 530); the copy held app.R, v001 and v002.
+- Cause: `withr::defer(unlink(artifact_dir(id), ...))` evaluates `artifact_dir(id)` at exit, after the test made
+  `.gptr/`, so it removed the project copy and left the shared temporary workspace's one for later tests.
+- Fix: the path is taken before `.gptr/` exists (`tmp = artifact_dir(id)`), then deferred. Test only.
+- Green: the check FALSE (PASS 531; the check is not kept); `^(artifact-app|prompt-context)$` PASS 621. Lint clean.
+- Deviations: none. Open: none.
+
+### bg-1c - The idle-tick denial says once to repeat the call
+- Review of bg-1 (low). Red: `^agent-background$` FAIL 1 PASS 204: the denial read "... call the tool again with
+  the same input and the user will be asked. Nothing ran and nobody declined; repeat the call when the session
+  continues.", the same instruction twice (convention 11).
+- Cause: bg-1's `how` repeated what `bg_pending_text("approval")`, the denial's reason, already says.
+- Fix: `how = "Nothing ran and nobody declined."`, which still replaces "Explain what you need or choose another
+  approach."; the test matches the whole ending.
+- Green: `^(agent-background|console-ui|perm-ask|tool-ask|agent-dispatch)$` PASS 600; after bg-1b to bg-1c the full
+  suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35504. Lint clean; plan checks pass.
+- Deviations: D-252 (bg-1 quote amended). Open: none.
+
+### guard-1b - A q bound to data is refused as the function argument a base function looks up
+- Follow-up of guard-1. Red: `^eval-guard$` FAIL 9 PASS 139: with `q` bound to `quantile(1:10)` in `envir`,
+  `Negate(q)('no')`, `base::Negate(f = q)`, `sweep(m, 1, s, q)`, `eapply(env, q)`, `.mapply(q, ...)`,
+  `.S3method('print', 'foo', q)`, `Negate('q')('no')` and `Vectorize('q')('no')` passed, and a scan of base found
+  `.mapply`, `.S3method`, `eapply`, `Negate` and `sweep` missing from the function-argument table.
+- Cause: the table and the string list were hand lists of the apply family. With a data global `q`, each form above
+  reaches `base::q` through the callee's `match.fun()` (for a string, `Vectorize()`'s `formals()`), calling it
+  (`Negate(q)('no')`, `.mapply(q, list('no'), NULL)`) or returning or registering it for a later call (`Negate(f =
+  q)`, `.S3method('print', 'foo', q)`).
+- Fix: `eval_guard_fun_arg` holds `do.call()` and every base function that applies `match.fun()` to a formal;
+  `eval_guard_indirect` is its names plus `Vectorize`, `get`, `get0`, `getExportedValue` and `Recall`. `Vectorize(q)`
+  (returns the data) and `Recall(q)` (passes the value to the calling function, as `f(q)` does) still pass: a probe
+  shows neither reaches `base::q`, so neither is refused.
+- Green: `^eval-guard$` PASS 148; eval-*, copy-eval, copy-tools, tool-r, arch-layers, lint-rules, s1-* PASS 2454;
+  full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35516. Lint clean.
+- Deviations: D-252 (guard-1 rule extended). Open: stats functions that `match.fun()` an argument (`integrate`,
+  `aggregate`, `dendrapply`) and user functions that do still pass a data `q` (advisory guard), and so does a base
+  function given as another's function argument that receives a data `q` through `...` (`sapply(x, lapply, q)`).
+
+### guard-1c - Only a call's function argument is read as a string outside P09's indirect calls
+- Review of guard-1b (low). Red: `^eval-guard$` FAIL 2 PASS 149: `.S3method('edit', 'myclass', function(name, ...)
+  name)` and `Vectorize(function(x, de) x + de, 'de')` were refused as calling `edit()` and `de()` (so was
+  `.S3method('identify', ...)`); all three passed before guard-1b.
+- Cause: guard-1b gave every function-argument call and `Vectorize` the every-string rule, but a generic, a class
+  and `vectorize.args` are not function names.
+- Fix: `eval_guard_indirect` is P09's 18 names again; the walk adds the string function argument of every
+  `eval_guard_fun_arg` call and of `Vectorize(FUN)`, so `Negate('q')`, `Vectorize('q')` and `.S3method('print',
+  'foo', 'q')` stay refused. A `q` symbol is still checked in `eval_guard_fun_arg` calls only: `Vectorize(q)` of
+  data passes.
+- Green: `^eval-guard$` PASS 151; `^(eval-.*|copy-eval|copy-tools|tool-r|arch-layers|lint-rules|s1-.*)$` PASS 2244.
+  Lint clean.
+- Deviations: D-252 (guard-1 rule). Open: none.
+
+### guard-1d - The function-argument rule refuses the argument as passed
+- Review of guard-1b (medium). With a data `q`, `sapply(list('no'), lapply, q)` and `lapply(list('no'), sapply, q)`
+  quit R and pass the guard: the inner function gets `q` through `...`, and its `match.fun()` finds `base::q`.
+  `Map(lapply, list(list('no')), list(q))` only errors (`mapply()` passes `dots[[2L]][[1L]]`).
+- Records only, the review's simplest fix: D-252 and guard-1b's heading say `q` passed directly as the function
+  argument is refused, and guard-1b's Open names this form. A code fix would add one more special case (a `q` beside
+  a base function given as the function argument) to an advisory guard that `eval(parse(text = ...))` evades.
+- Deviations: D-252 (guard-1 rule wording). Open: as guard-1b.
+
+### guard-1e - guard-1b says how each form reaches base::q
+- Review of guard-1b (low) and a round-2 problem. `base::Negate(f = q)` and `.S3method('print', 'foo', q)` leave a
+  child R alive (they return or register `base::q` for a later call), and `sweep(m, 1, s, q)` of a numeric `m` stops
+  in `q()`'s `save` check, yet guard-1b's Cause and the test comment said each form quits R. Both now say each
+  reaches `base::q`, calling it or returning or registering it. Records and a test comment only.
+- The criterion that `Vectorize(q)(1)` and `Recall(q)` be refused is not adopted: neither reaches `base::q` (they
+  stop with "attempt to apply non-function" and "'Recall' called from outside a closure"), as guard-1b records, so
+  refusing them would be a deliberate over-refusal.
+- Green: `^eval-guard$` PASS 151. Lint clean.
+- Deviations: none. Open: none.

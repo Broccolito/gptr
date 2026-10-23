@@ -416,12 +416,27 @@ trust_gated_paths = function(root) {
 }
 
 #' TRUE when the project holds anything the trust question is about (IC-52): trust-gated files,
-#' AGENTS.md, CLAUDE.md, .gptr/skills/ or .gptr/agents/
+#' an instruction file (AGENTS.md, AGENTS.override.md, CLAUDE.md, CLAUDE.local.md,
+#' .gptr/vignette.Rmd), or a skill, prompt-template or agent directory gptr reads (.gptr/skills,
+#' .gptr/prompts, .gptr/agents, .agents/skills, .claude/skills, .claude/agents, .codex/agents,
+#' .pi/agents, a relative `skills.paths` entry)
 #' @noRd
 trust_resources_present = function(root) {
-  length(trust_gated_paths(root)) > 0L ||
-    any(file.exists(file.path(root, c("AGENTS.md", "CLAUDE.md")))) ||
-    any(dir.exists(file.path(root, ".gptr", c("skills", "agents"))))
+  files = c("AGENTS.md", "AGENTS.override.md", "CLAUDE.md", "CLAUDE.local.md", ".gptr/vignette.Rmd")
+  dirs = c(".gptr/skills", ".gptr/prompts", ".gptr/agents", ".agents/skills", ".claude/skills",
+           ".claude/agents", ".codex/agents", ".pi/agents")
+  length(trust_gated_paths(root)) > 0L || any(file.exists(file.path(root, files))) ||
+    any(dir.exists(c(file.path(root, dirs), trust_skill_paths(root))))
+}
+
+#' The relative `skills.paths` entries skill discovery reads (skill_setting_paths()), joined to
+#' `root`. Reading a setting resolves no trust, so trust_resources_present() cannot recurse; a
+#' project settings file is itself trust-gated.
+#' @noRd
+trust_skill_paths = function(root) {
+  p = as.character(unlist(settings_layered("skills", "paths")$value, use.names = FALSE))
+  p = p[!is.na(p) & !is_abs_path(p) & p != "~" & !grepl("^~[/\\\\]", p)]
+  file.path(rep(root, length(p)), p)
 }
 
 #' sha256 of one gated file's bytes; a file that cannot be read (gptr cannot load it either)
@@ -583,13 +598,15 @@ trust_resolve = function(root) {
     if (isTRUE(res[["remember"]])) trust_store(root, decision, fp)
   } else if (gptr_can_prompt()) {
     what = if (is.null(since)) "" else paste0(" Changed since you last trusted it: ", since, ".")
-    decision = isTRUE(gptr_confirm(paste0("Trust this project (its settings, extensions and MCP ",
-                                          "servers)?", what)))
+    decision = isTRUE(gptr_confirm(paste0("Trust this project (its settings, skills, prompt ",
+                                          "templates, agent files, extensions and MCP servers)?",
+                                          what)))
     trust_store(root, decision, fp)
   } else {
     why = if (is.null(since)) "" else paste0(" (changed since you trusted it: ", since, ")")
     gptr_inform(paste0("Project resources in ", root, " were not loaded because the project is ",
-                       "not trusted", why, ". Use gptr_trust() to trust it."), "notice",
+                       "not trusted", why, ". Use gptr_trust(\".\", trust = TRUE) to trust it."),
+                "notice",
                 .once = paste0("trust:", key, ":", fp$fp))
     decision = FALSE
   }
@@ -601,16 +618,19 @@ trust_resolve = function(root) {
 #'
 #' Trust decides whether gptr applies or runs what a project directory contains: project
 #' settings beyond tightening, `.gptr/extensions/` and project plugins, project MCP servers,
-#' `SYSTEM.md` and `APPEND_SYSTEM.md`, project `.env` discovery, provider base-URL overrides, the
-#' tool and model fields of project agent files, and the authority of project instructions. The
+#' `SYSTEM.md` and `APPEND_SYSTEM.md`, project `.env` discovery, provider base-URL overrides,
+#' project skills (`.gptr/skills/`, `.agents/skills/`, `.claude/skills/` and relative
+#' `skills.paths` entries), prompt templates (`.gptr/prompts/`), the tool and model fields of
+#' project agent files, and the authority of project instructions. The
 #' decision is kept in `tools::R_user_dir("gptr", "config")/trust.json` with a fingerprint of the
 #' trust-gated files; when they change, the project counts as untrusted again until you confirm.
 #' Called from model code during a run, recording a decision is refused.
 #'
 #' @param path A directory inside the project; its project root is used.
 #' @param trust `NULL` to read the decision, `TRUE` or `FALSE` to record one.
-#' @return With `trust = NULL`, the recorded decision: `TRUE`, `FALSE` or `NA` (undecided).
-#'   Otherwise the previous decision, invisibly.
+#' @return With `trust = NULL`, the recorded decision: `TRUE`, `FALSE` or `NA` (undecided, also
+#'   when a trust-gated file changed since the project was trusted). Otherwise the previous
+#'   recorded decision, invisibly.
 #' @examples
 #' d = tempfile("proj")
 #' dir.create(d)
@@ -623,7 +643,8 @@ gptr_trust = function(path = ".", trust = NULL) {
   root = project_root(path)
   rec = trust_record(root)
   prev = if (is.null(rec)) NA else isTRUE(rec[["trusted"]])
-  if (is.null(trust)) return(prev)
+  # trust that lapsed with a changed gated file is asked again, like an undecided project
+  if (is.null(trust)) return(if (isTRUE(prev) && !trust_holds(root)$record) NA else prev)
   session_control_check("gptr_trust")
   trust_store(root, trust)
   invisible(prev)
@@ -1573,8 +1594,8 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
   if (gitignore) template_copy("gitignore", file.path(ws, ".gitignore"))
   init_rbuildignore(proj)
   if (gptr_can_prompt()) {
-    answer = isTRUE(gptr_confirm(paste0("Trust this project (its settings, extensions and MCP ",
-                                        "servers)?")))
+    answer = isTRUE(gptr_confirm(paste0("Trust this project (its settings, skills, prompt ",
+                                        "templates, agent files, extensions and MCP servers)?")))
     # `proj` itself: project_root() may return an IC-63 override, not the directory initialised
     trust_store(proj, answer)
   }

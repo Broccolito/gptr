@@ -45,6 +45,46 @@ test_that("overrides are per record: a user read leaves the built-in edit and gr
   expect_equal(registry_get("tool", "read")$execute(list(), NULL), "read")
 })
 
+test_that("gptr_register() of the same kind and name again replaces your earlier record (D-252)", {
+  local_registry()
+  withr::local_options(gptr.quiet = FALSE)
+  corp = function(host) {
+    gptr_provider("corp", "openai-completions", base_url = paste0("https://", host, "/v1"),
+                  auth = "CORP_KEY", models = list(list(id = "my-id")))
+  }
+  off1 = gptr_register(corp("a.invalid"))
+  expect_message({
+    off2 = gptr_register(corp("b.invalid"))
+  }, "Replaced your earlier provider 'corp'.", fixed = TRUE, class = "gptr_message_notice")
+  expect_equal(registry_get("provider", "corp")$base_url, "https://b.invalid/v1")
+  r = gptr_registry("provider")
+  expect_equal(r$state[r$name == "corp"], "active")
+  d = gptr_registry(diagnostics = TRUE)
+  expect_true(any(d$class == "replaced" & grepl("corp", d$message, fixed = TRUE)))
+  expect_false(off1())
+  expect_equal(registry_get("provider", "corp")$base_url, "https://b.invalid/v1")
+  expect_true(off2())
+  expect_null(registry_get("provider", "corp"))
+
+  shout = function(suffix) {
+    force(suffix)
+    gptr_tool("shout", "Shout", execute = function(input, ctx) "x",
+              fun = function(x) paste0(toupper(x), suffix))
+  }
+  gptr_register(shout(""))
+  expect_message(gptr_register(shout("!")), class = "gptr_message_notice")
+  expect_equal(registry_get("tool", "shout")$fun("a"), "A!")
+  bad = unclass(shout("?"))
+  bad$fun = "not a function"
+  expect_error(gptr_register(structure(bad, class = c("gptr_tool", "gptr_spec"))),
+               class = "gptr_error_invalid_spec")
+  expect_equal(registry_get("tool", "shout")$fun("a"), "A!")
+
+  gptr_register(gptr_hook("turn_end", function(event, ctx) NULL))
+  expect_no_message(gptr_register(gptr_hook("turn_end", function(event, ctx) NULL)))
+  expect_length(registry_all("hook")[names(registry_all("hook")) == "turn_end"], 2L)
+})
+
 test_that("registry_all() orders all-kinds by their order field and returns winners otherwise", {
   skip_on_cran()
   local_registry()

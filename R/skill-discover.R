@@ -79,10 +79,11 @@ skill_line = function(name, desc) {
 #' missing, and any other failure is a diagnostic too: skill text is untrusted, and frontmatter
 #' problems are "diagnostics, never errors" (contract 11.13; D-074). `disable-model-invocation`
 #' is read only as a logical or text scalar and `allowed-tools` only as a flat value, so a nested
-#' (aliased) YAML structure is never expanded (D-074).
+#' (aliased) YAML structure is never expanded (D-074). `diag` receives each problem (default: a
+#' `builtin:skills` registry diagnostic).
 #' @noRd
-skill_parse = function(path) {
-  diag = function(msg) {
+skill_parse = function(path, diag = NULL) {
+  diag = diag %||% function(msg) {
     registry_diagnostic("builtin:skills", "skill", "warning", paste0(path, ": ", msg))
   }
   tryCatch({
@@ -157,9 +158,9 @@ skill_setting_paths = function() {
 #' Project `.gptr/skills`, `.agents/skills`, `.claude/skills` (nearest directory first) and the
 #' relative `skills.paths` entries, user directories under `gptr_user_dir("config")` and
 #' `user_home()` plus the absolute and `~` `skills.paths` entries, then the shared roots of
-#' `res_roots()`.
+#' `res_roots()` (`listing` as there).
 #' @noRd
-skill_roots = function() {
+skill_roots = function(listing = FALSE) {
   extra = skill_setting_paths()
   proj = c(res_project_dirs(c(".gptr/skills", ".agents/skills", ".claude/skills")),
            extra$project)
@@ -167,27 +168,32 @@ skill_roots = function() {
   user = c(file.path(gptr_user_dir("config"), "skills"), file.path(home, ".agents", "skills"),
            file.path(home, ".claude", "skills"), file.path(home, ".codex", "skills"),
            file.path(home, ".pi", "agent", "skills"), extra$user)
-  res_roots("skills", unique(proj[dir.exists(proj)]), unique(user))
+  res_roots("skills", unique(proj[dir.exists(proj)]), unique(user), listing = listing)
 }
 
-#' Discover every skill: `list(rows, specs)`, aligned by position
+#' Discover every skill: `list(rows, specs, skipped)`, `rows` and `specs` aligned by position
 #'
 #' `rows$visible` is TRUE for the skills that enter the catalog: trusted, not
 #' `disable-model-invocation`, and the winner of their name (lowest rank, then discovery order).
-#' Untrusted project skills are listed but never visible (IC-52). `roots` (default: every root)
-#' lets `skill_project_synced()` walk the project roots only.
+#' Untrusted project skills are listed but never visible (IC-52). `skipped` holds the origin of
+#' each `SKILL.md` `skill_parse()` skipped, named by its path. `roots` (default: every root) lets
+#' `skill_project_synced()` walk the project roots only.
 #' @noRd
 skill_collect = function(roots = skill_roots()) {
   rows = list()
   specs = list()
   seen = character()
+  skipped = character()
   for (i in seq_len(nrow(roots))) {
     for (f in skill_walk(roots$dir[i])) {
       id = paste(path_norm(f), roots$reg[i])
       if (id %in% seen) next
       seen = c(seen, id)
       spec = skill_parse_cached(f)
-      if (is.null(spec)) next
+      if (is.null(spec)) {
+        skipped[f] = roots$origin[i]
+        next
+      }
       spec[["source"]] = roots$label[i]
       specs[[length(specs) + 1L]] = spec
       rows[[length(rows) + 1L]] = data.frame(
@@ -209,19 +215,27 @@ skill_collect = function(roots = skill_roots()) {
   winners = cand[!duplicated(df$name[cand])]
   df$visible = seq_len(nrow(df)) %in% winners & !df$dmi
   rownames(df) = NULL
-  list(rows = df, specs = specs)
+  list(rows = df, specs = specs, skipped = skipped)
 }
 
-#' Discovered skills as a data frame (contract 7.17), filtered by scope
+#' Which origins fall in a `gptr_skills()` scope
+#' @noRd
+skill_in_scope = function(origin, scope) {
+  switch(scope,
+         all = rep(TRUE, length(origin)),
+         project = origin == "project",
+         user = origin == "user",
+         packages = origin %in% c("builtin", "package", "plugin", "discovered"))
+}
+
+#' Discovered skills as a data frame (contract 7.17), filtered by scope; with the plugins a
+#' listing shows (`res_plugin_dirs()`). Attribute `skipped`: the skipped `SKILL.md` paths in scope
 #' @noRd
 skill_discover = function(scope = "all") {
-  df = skill_collect()$rows
-  keep = switch(scope,
-                all = rep(TRUE, nrow(df)),
-                project = df$origin == "project",
-                user = df$origin == "user",
-                packages = df$origin %in% c("builtin", "package", "plugin", "discovered"))
-  df[keep, , drop = FALSE]
+  col = skill_collect(skill_roots(listing = TRUE))
+  df = col$rows[skill_in_scope(col$rows$origin, scope), , drop = FALSE]
+  attr(df, "skipped") = as.character(names(col$skipped))[skill_in_scope(col$skipped, scope)]
+  df
 }
 
 #' Discovered skills and agents
@@ -252,7 +266,13 @@ gptr_skills = function(scope = c("all", "project", "user", "packages")) {
   df = skill_discover(scope)
   out = df[, c("name", "description", "source", "path", "tokens", "visible"), drop = FALSE]
   rownames(out) = NULL
-  new_listing(out, "gptr_skills")
+  skipped = attr(df, "skipped")
+  footer = if (length(skipped)) {
+    paste0("# ", length(skipped), " SKILL.md file", if (length(skipped) > 1L) "s",
+           " skipped: ", paste(path_rel(dirname(skipped)), collapse = ", "),
+           "; gptr_registry(diagnostics = TRUE) says why.")
+  }
+  new_listing(out, "gptr_skills", footer)
 }
 
 # ---- registry sync, catalog, preloads, builtin:skills ----------------------------------------
@@ -276,7 +296,7 @@ skill_sync = function() {
   df = col$rows
   if (any(df$origin == "project" & !df$trusted)) {
     gptr_inform(paste0("Project skills are listed but not used until the project is trusted ",
-                       "(gptr_trust())."), "notice",
+                       "(gptr_trust(\".\", trust = TRUE))."), "notice",
                 .once = paste0("skills-untrusted:", path_key(project_root())))
   }
   groups = skill_groups(df)
@@ -411,7 +431,8 @@ skill_project_synced = function() {
 #' `skill_project_synced()` holds: a skill of another, an untrusted or a nested project is never
 #' served, and a current project skill displaces others of its name (rank 1; IC-52; D-129). An
 #' untrusted project's skill signals `gptr_error_untrusted`; an unknown name, or a skill whose
-#' `SKILL.md` is gone, `gptr_error_invalid_argument`.
+#' `SKILL.md` is gone, `gptr_error_invalid_argument`, which names the file and its problems when a
+#' skipped `SKILL.md` sits in a directory of that name.
 #' @noRd
 skill_body = function(name, session = NULL) {
   check_string(name, "name")
@@ -422,12 +443,24 @@ skill_body = function(name, session = NULL) {
     if (!is.null(spec) && !skill_file_ok(spec[["path"]])) spec = NULL
   }
   if (is.null(spec)) {
-    df = skill_discover("project")
-    hit = df[!df$trusted & res_norm(df$name) == res_norm(name), , drop = FALSE]
+    df = skill_discover()
+    hit = df[df$origin == "project" & !df$trusted & res_norm(df$name) == res_norm(name), ,
+             drop = FALSE]
     if (nrow(hit)) {
       gptr_abort(paste0("This skill belongs to a project that is not trusted; trust it with ",
-                        "gptr_trust() to use its skills."), "untrusted", what = "skill",
+                        "gptr_trust(\".\", trust = TRUE) to use its skills."), "untrusted",
+                 what = "skill",
                  path = hit$path[1L], origin = "project")
+    }
+    f = attr(df, "skipped")
+    f = f[res_norm(basename(dirname(f))) == res_norm(name)][1L]
+    if (!is.na(f)) {
+      why = character()
+      skill_parse(f, function(msg) why <<- c(why, msg))
+      why = if (length(why)) paste0(": ", paste(why, collapse = "; "), ".")
+      gptr_abort(paste0("The skill file ", path_rel(f), " was skipped",
+                        why %||% "; gptr_registry(diagnostics = TRUE) says why."),
+                 "invalid_argument", arg = "skills", path = f)
     }
     gptr_abort("No skill with this name is available; gptr_skills() lists them.",
                "invalid_argument", arg = "skills",

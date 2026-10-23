@@ -222,7 +222,16 @@ test_that("a changed trust-gated file makes the project untrusted again", {
   expect_true(trust_get(proj))
   writeLines('{"preset": "extended", "mode": "auto"}', file.path(proj, ".gptr", "settings.json"))
   expect_false(trust_get(proj))
+  expect_identical(gptr_trust(proj), NA)
+  writeLines("Answer in French.", file.path(proj, ".gptr", "SYSTEM.md"))
+  gptr_trust(proj, TRUE)
   expect_true(gptr_trust(proj))
+  fake = local_fake_provider(list("ok"))
+  peter("Hi.", model = fake, envir = new.env())
+  expect_true(startsWith(fake_requests(fake)[[1L]]$system$t0, "Answer in French."))
+  gptr_trust(proj, FALSE)
+  writeLines("Answer in German.", file.path(proj, ".gptr", "SYSTEM.md"))
+  expect_false(gptr_trust(proj))
 })
 
 test_that("gptr's own writes to a trusted project re-fingerprint it", {
@@ -281,6 +290,64 @@ test_that("with a human the question lists the files changed since trust was giv
   expect_true(trust_resolve(proj))
   expect_match(box$question, ".gptr/settings.json", fixed = TRUE)
   expect_true(trust_get(proj))
+})
+
+test_that("a project whose only resource is prompt templates gets the trust notice (IC-52)", {
+  skip_on_cran()
+  proj = local_gw()
+  expect_false(trust_resources_present(proj))
+  dir.create(file.path(proj, ".gptr", "prompts"))
+  writeLines("Check $ARGUMENTS.", file.path(proj, ".gptr", "prompts", "check.md"))
+  expect_true(trust_resources_present(proj))
+  local_gptr_options(quiet = FALSE, interactive = FALSE)
+  expect_message(expect_false(trust_resolve(proj)), "not trusted", class = "gptr_message_notice")
+})
+
+test_that("a trusted prompts-only project registers its templates (IC-52)", {
+  skip_on_cran()
+  proj = local_gw()
+  dir.create(file.path(proj, ".gptr", "prompts"))
+  writeLines("Check $ARGUMENTS.", file.path(proj, ".gptr", "prompts", "check.md"))
+  expect_false(file.path(proj, ".gptr", "prompts") %in% template_roots()$dir)
+  off = gptr_register(gptr_hook("project_trust", function(event, ctx) list(decision = "yes")))
+  withr::defer(off())
+  expect_true(trust_resolve(proj))
+  roots = template_roots()
+  expect_identical(roots$origin[roots$dir == file.path(proj, ".gptr", "prompts")], "project")
+})
+
+test_that("every project skill, agent and instruction location counts as a resource (IC-52)", {
+  skip_on_cran()
+  local_gw(workspace = FALSE)
+  for (rel in c(".claude/skills/x/SKILL.md", ".agents/skills/x/SKILL.md", ".gptr/skills/x/SKILL.md",
+                ".gptr/agents/a.md", ".claude/agents/a.md", ".codex/agents/a.md", ".pi/agents/a.md",
+                "AGENTS.md", "AGENTS.override.md", "CLAUDE.md", "CLAUDE.local.md",
+                ".gptr/vignette.Rmd")) {
+    root = withr::local_tempdir("gptr-res-")
+    expect_false(trust_resources_present(root))
+    dir.create(dirname(file.path(root, rel)), recursive = TRUE, showWarnings = FALSE)
+    writeLines("x", file.path(root, rel))
+    expect_true(trust_resources_present(root), label = rel)
+  }
+})
+
+test_that("a relative skills.paths directory counts, and the question names skills (IC-52)", {
+  skip_on_cran()
+  proj = local_gw(workspace = FALSE)
+  settings_write("user", list(skills = list(paths = c("lab-skills", withr::local_tempdir(), "~"))))
+  expect_false(trust_resources_present(proj))
+  dir.create(file.path(proj, "lab-skills", "x"), recursive = TRUE)
+  writeLines(c("---", "description: A lab skill.", "---", "Body."),
+             file.path(proj, "lab-skills", "x", "SKILL.md"))
+  expect_true(trust_resources_present(proj))
+  local_gptr_options(interactive = TRUE)
+  box = new.env()
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    box$question = question
+    TRUE
+  })
+  expect_true(trust_resolve(proj))
+  expect_match(box$question, "its settings, skills, prompt templates, agent files,", fixed = TRUE)
 })
 
 test_that("gptr_trust() is refused from model code during a run (IC-53)", {
@@ -1547,8 +1614,9 @@ test_that("with a human, gptr_init() adds the .Rbuildignore line on a yes and ke
   expect_identical(readLines(file.path(d, ".Rbuildignore"), encoding = "UTF-8"),
                    c("^.*\\.Rproj$", "^data-raw$", "^\\.gptr$"))
   expect_identical(seen$questions, c("Add ^\\.gptr$ to .Rbuildignore?",
-                                     paste0("Trust this project (its settings, extensions and ",
-                                            "MCP servers)?")))
+                                     paste0("Trust this project (its settings, skills, prompt ",
+                                            "templates, agent files, extensions and MCP ",
+                                            "servers)?")))
   # a "no" to trust is recorded (for `d` itself, not the project root override), and the line
   # already present is not offered again
   expect_identical(trust_record(d)$trusted, FALSE)

@@ -617,7 +617,10 @@ registry_unregister_fn = function(id) {
 #' Registers a spec made by [gptr_spec()] or one of the spec constructors at top level: rank 3,
 #' source `"user"`, for the lifetime of the R process. Sessions frozen before the call are not
 #' changed; the next session sees the record. A user record overrides a built-in record of the same
-#' kind and name only (the built-in's other records keep working).
+#' kind and name only (the built-in's other records keep working). Registering the same kind and
+#' name again replaces your earlier record, with a notice, and the function the earlier call
+#' returned then removes nothing (it returns `FALSE`); kinds that keep every record, such as hooks
+#' and policies, keep both.
 #'
 #' Called from model code while a run executes a tool, `gptr_register()` and the function it
 #' returns signal `gptr_error_permission` unless the user approved that call.
@@ -632,6 +635,21 @@ gptr_register = function(spec) {
   check_class(spec, "gptr_spec", "spec")
   ext_control_guard("gptr_register")
   id = registry_add(spec, source = "user", rank = 3L)
+  reg = registry_env()
+  rec = get(id, envir = reg$recs)
+  if (identical(kind_get(rec$kind)$resolve, "first")) {
+    # added first, so a spec that fails validation leaves the earlier record in place
+    ids = get0(paste(rec$kind, rec$name, sep = "\r"), envir = reg$by_key, inherits = FALSE)
+    old = Filter(function(r) identical(r$source, "user") && is.null(r$session),
+                 registry_recs(reg, setdiff(ids, id)))
+    for (r in old) registry_remove(r$id)
+    if (length(old)) {
+      registry_diagnostic("user", "register", "replaced",
+                          paste0(rec$kind, " '", rec$name, "': a new registration replaced ",
+                                 "the earlier one"))
+      gptr_inform(paste0("Replaced your earlier ", rec$kind, " '", rec$name, "'."), "notice")
+    }
+  }
   invisible(registry_unregister_fn(id))
 }
 
