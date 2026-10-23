@@ -177,7 +177,8 @@ parallel_start = function(m, nm, backend, team, cur, caller) {
 #' a time. The result is a team session: `team$text` joins the members' answers under
 #' `### <name> (<model>)` headings, `team$value` is the named list of their values, and
 #' `team$<name>` (or `team[[i]]`) is a member's session. Piping the team into [peter()] continues
-#' it.
+#' it: then `team$text` (and printing) is the team's own answer, `team$value` its own value once
+#' a turn designates one, and each member's answer stays at `team$<name>$text`.
 #'
 #' Members evaluate R code in their own environment (`envir =`) with their own random-number
 #' stream, and share one budget, as one `peter()` call does. A member's `tools =`, `budget =` and

@@ -776,8 +776,8 @@ the valid names):
 
 | Name | Returns |
 |---|---|
-| `text` | chr(1): last final assistant text; `NA_character_` before the first turn; team sessions: the joined `### <name> (<model>)` reports; fan-out: the named chr of child texts |
-| `value` | the latest designated value by turn (§5.1 of `03` value policy); `NULL` when none; name-held values are resolved with `get0(name, home, inherits = FALSE)` (a message `value_rebound` if the address changed); team/fan-out: named list of child values |
+| `text` | chr(1): last final assistant text; `NA_character_` before the first turn; until a continuation gives a team or fan-out its own answer (D-251): team sessions the joined `### <name> (<model>)` reports, fan-out the named chr of child texts |
+| `value` | the latest designated value by turn (§5.1 of `03` value policy); `NULL` when none; name-held values are resolved with `get0(name, home, inherits = FALSE)` (a message `value_rebound` if the address changed); team/fan-out without a value of its own (D-251): named list of child values |
 | `values` | df `turn`, `mode`, `name`, `class`, `bytes` |
 | `usage` | a `gptr_usage` df (§5.12) of this session and its children |
 | `cost` | num(1) USD |
@@ -1691,7 +1691,7 @@ gptr_parallel(..., .list = NULL, max_active = NULL, on_error = c("return", "stop
 an unstarted session, or a session created with `.run = FALSE`; `.list` is a named list of such sessions. All run
 concurrently on one reactor (at most `max_active`, default `gptr.subagents.max_active`, IC-71). Returns a **team session**
 (`kind = "team"`, children named by the argument names; `$text` joins the reports under `### <name> (<model>)`,
-`$value` is the named list of child values). `on_error = "stop"` signals the first child's condition after all
+`$value` is the named list of child values, until a continuation gives the team its own, §5.1). `on_error = "stop"` signals the first child's condition after all
 children settled; `"return"` leaves failed children with status `error`.
 
 `gptr_map()` is **internal** (IC-36; S-1 keeps one gateway): the function behind `parallel =`, one inline (or

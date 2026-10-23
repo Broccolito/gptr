@@ -669,7 +669,8 @@ queued; the 8-task cap applies only to fan-outs started by model code [IC-39]), 
 (`list(A = cohorts[["A"]])`, attached as `.x[["A"]]`, no copy; `.opts$context = "none"` is refused) [D-212]. Team and fan-out sessions are sessions (`kind = "team"`/`"fanout"`): `$text` joins the children's
 reports under `### <name> (<model>)` headings, `$value` is the named list of child values, `$<name>` and
 `[[` return child sessions, and piping the team continues it with the reports attached as a user-role
-`<agent_reports>` block (sub-agent output is data) [P-A §6.12, P-C §5.1].
+`<agent_reports>` block (sub-agent output is data) [P-A §6.12, P-C §5.1]; from then on `$text` and
+`$value` are the team's own answer and value, once it has them [D-251].
 
 ### 4.2 The gateway namespace `peter$...`
 

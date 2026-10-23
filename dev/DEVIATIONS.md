@@ -3159,11 +3159,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   team or fan-out pool): "The cost budget of this call ($0.0100) is not enforced: <provider/model> has no prices, so
   its cost is unknown; tokens and turns limits still apply." D-025 item 2 stands (unknown counts nothing; no fail
   closed). Was silent, the footer's "unknown cost" aside (Versa and Codex models, `gptr_provider()` without prices).
+- Rule (sessions-11): a team or fan-out answers for itself once it has its own answer: `$text` (print, format,
+  as.character, the notebook repr) is its `last_text` when set, else the joined reports or the named chr; `$value`
+  is its own designated value when it has one, else the named list of the children's values. Was by kind alone, so
+  `team |> peter("Reconcile ...")` kept showing the reports and child values. Rewinding resets `last_text` only.
 - Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
   `tools`, `.opts` and refusals. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter` `envir`,
   `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and row).
   04 §4.6 `gptr.budget`, §7.6 `budget_check()`, §10.4 `budget_exceeded`, IC-66. 04 §2.2 messages, §6.1 `budget`
-  row, IC-66; `?peter` `budget`.
+  row, IC-66; `?peter` `budget`. 04 §5.1 `text` and `value` rows, §6.5 `gptr_parallel()`, 03 §4.1.6;
+  `?session-accessors`, `?gptr_parallel`, vignette teams-and-background.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...",
   "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
@@ -3171,4 +3176,5 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   received costs nothing ...", "a reported usage keeps its unknown counts ...", "an overflow condition carries the
   provider's prompt count ...", "an extended token budget is checked again ..."; session-budget "a token budget the
   next request would exceed says so ...", "a call's own cost limit says once that an unknown cost counts nothing
-  ...", "peter() with a cost limit on a model without prices ...". Evidence: progress/fixes.md Task FIX-18.
+  ...", "peter() with a cost limit on a model without prices ..."; subagent-team "NS-6: a team through peter() ...",
+  "a continued gptr_parallel() team or fan-out answers ...". Evidence: progress/fixes.md Task FIX-18.

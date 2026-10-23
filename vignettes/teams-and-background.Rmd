@@ -54,11 +54,14 @@ file costs; CLI backends need their external CLI and authentication. See
 [Execution model](execution-model.html) for copy-on-modify and backend boundaries.
 Role definitions do not waive the usual tool permission checks.
 
-`session$text` joins member reports under headings; `session$value` is their named list of
-values, and `session$statistics` is the member session. A report is model-generated output,
-not verification. Inspect each child's status and the actual results before relying on it.
+`session$text` joins member reports under headings and `session$value` is their named list
+of values, until the team is continued; `session$statistics` is the member session. A report
+is model-generated output, not verification. Inspect each child's status and the actual
+results before relying on it.
 
-Continuing a team without `agents =` asks the container's model to synthesize those reports:
+Continuing a team without `agents =` asks the container's model to synthesize those reports.
+Afterwards `session$text` and printing show the synthesis, `session$value` is a value it
+returns, and `session$statistics$text` is still that member's report:
 
 
 ``` r

@@ -472,12 +472,38 @@ test_that("NS-6: a team through peter(), its members, its text, and its continua
   out = reviews |> peter("Reconcile these into one list of fixes")
   expect_identical(out, reviews)
   expect_identical(reviews$turns, 1L)
-  expect_identical(session_data(reviews)$last_text, "One list of fixes.")
+  expect_identical(reviews$text, "One list of fixes.")
+  expect_identical(format(reviews), "One list of fixes.")
+  expect_output(print(reviews), "One list of fixes.", fixed = TRUE)
+  expect_identical(reviews$stats$text, "Review: Review analysis.R for statistical errors.")
   messages = tail(fake_requests(fake), 1L)[[1L]]$messages
   blocks = unlist(lapply(messages, function(m) m$content), recursive = FALSE)
   reports = Filter(function(b) identical(b$kind, "agent_reports"), blocks)
   expect_length(reports, 1L)
   expect_match(reports[[1L]]$text, "<agent_report from=\"stats\"", fixed = TRUE)
+})
+
+test_that("a continued gptr_parallel() team or fan-out answers with its own text and value", {
+  skip_on_cran()
+  local_team_fake(function(request) {
+    if (!grepl("Combine", request$last_user, fixed = TRUE)) return("A report.")
+    if (length(request$last_results)) return("Combined.")
+    fake_tool("r", code = "gptr::gptr_return(42)")
+  })
+  team = gptr_parallel(a = peter("Plan.", envir = new.env()),
+                       b = peter("Review.", envir = new.env()))
+  fan = peter("p", list(A = 1, B = 2), parallel = 2)
+  expect_identical(team$value, list(a = NULL, b = NULL))
+  expect_identical(fan$text, c(A = "A report.", B = "A report."))
+  for (s in list(team, fan)) {
+    s |> peter("Combine.")
+    expect_identical(s$text, "Combined.")
+    expect_identical(format(s), "Combined.")
+    expect_output(print(s), "Combined.", fixed = TRUE)
+    expect_identical(s$value, 42)
+    expect_identical(s[[1L]]$text, "A report.")
+    expect_null(s[[1L]]$value)
+  }
 })
 
 test_that("a fan-out runs every element, parallel at a time (P19 acceptance 6)", {

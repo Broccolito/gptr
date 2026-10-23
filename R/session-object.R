@@ -272,10 +272,15 @@ final_text = function(path) {
 #' `messages`, `model`, `mode`, `status`, `reason`, `id`, `kind`, `file`, `turns`, `envir`,
 #' `children`, `ext`, `plan`, `last_rewind`, `editor_text`, and the names of child sessions.
 #' Sessions are changed only through `peter()` and the `gptr_*()` verbs, so `$<-` and `[[<-`
-#' signal `gptr_error_readonly`. Usage a provider did not report stays unknown: `cost` is `NA`
-#' when the cost of any request is unknown, as for a model without prices. `envir` is the
-#' session's kept workspace: `NULL` for a session started inside a function without `envir =`
-#' (a function frame is never kept), whose later turns evaluate in their caller's frame.
+#' signal `gptr_error_readonly`. A team's `text` joins its members' reports under
+#' `### <name> (<model>)` headings, a fan-out's is the named chr of its children's texts, and
+#' `value` is the named list of their values, until the team or fan-out is continued with
+#' [peter()]: then `text` is its own answer and `value` its own value once a turn designates
+#' one, while each member's stay at `x$<name>$text` and `x$<name>$value`. Usage a provider did
+#' not report stays unknown: `cost` is `NA` when the cost of any request is unknown, as for a
+#' model without prices. `envir` is the session's kept workspace: `NULL` for a session started
+#' inside a function without `envir =` (a function frame is never kept), whose later turns
+#' evaluate in their caller's frame.
 #' `history` is the complete recorded-message table with a concise display, like
 #' `summary(x)`. Use `print(x$history, n = Inf)` to show all rows or `as.data.frame(x$history)`
 #' to obtain an ordinary data frame.
@@ -375,10 +380,12 @@ session_get = function(s, name) {
     })
 }
 
-#' `$text`: the last final answer; team sessions join their reports; fan-outs give a named chr
+#' `$text`: the last final answer; until a team or fan-out has its own (a continuation), a team
+#' joins its reports and a fan-out gives a named chr
 #' @noRd
 session_text = function(s) {
   d = session_data(s)
+  if (!is.na(d$last_text)) return(d$last_text)
   if (identical(d$kind, "team") && length(d$children)) {
     parts = vapply(names(d$children), function(nm) {
       cd = session_data(d$children[[nm]])
@@ -701,11 +708,12 @@ values_trim = function(d) {
   invisible(d)
 }
 
-#' The designated value: the latest by turn, or the one of `turn`; NULL when none
+#' The designated value: the latest by turn, or the one of `turn`; NULL when none; a team or
+#' fan-out without a value of its own gives the named list of its children's values
 #' @noRd
 session_value_get = function(s, turn = NULL) {
   d = session_data(s)
-  if (d$kind %in% c("team", "fanout") && length(d$children)) {
+  if (d$kind %in% c("team", "fanout") && length(d$children) && !length(d$values)) {
     return(lapply(d$children, function(ch) session_value_get(ch)))
   }
   if (!length(d$values)) return(NULL)

@@ -31,7 +31,8 @@ without running it, and all members then run together on one reactor, at most \c
 a time. The result is a team session: \code{team$text} joins the members' answers under
 \verb{### <name> (<model>)} headings, \code{team$value} is the named list of their values, and
 \verb{team$<name>} (or \code{team[[i]]}) is a member's session. Piping the team into \code{\link[=peter]{peter()}} continues
-it.
+it: then \code{team$text} (and printing) is the team's own answer, \code{team$value} its own value once
+a turn designates one, and each member's answer stays at \verb{team$<name>$text}.
 }
 \details{
 Members evaluate R code in their own environment (\verb{envir =}) with their own random-number

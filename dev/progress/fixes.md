@@ -2084,3 +2084,24 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Open: the notice prints a limit under $0.00005 as "$0.0000" (`format_cost()`, cosmetic); `gptr_provider()` still
   does not document `prices` (the verifier's docs suggestion, not planned); no `budget_unenforced` event (not
   planned); the sheet's budget line is S08.
+
+### sessions-11 - A continued team or fan-out shows its own synthesis in $text and $value
+- Red: FAIL 11 in `^subagent-team$` (PASS 353; findings 77, 116, 120, 170, 172): after NS-6's `reviews |>
+  peter("Reconcile ...")`, `reviews$text`, `format()` and `print()` still gave the joined `### stats ...` reports;
+  a `gptr_parallel()` team and a `parallel = 2` fan-out continued with "Combine." kept the reports (the fan-out its
+  named chr), and `$value` stayed the members' list although the synthesis turn ran `gptr_return(42)`.
+- Cause: `session_text()` and `session_value_get()` chose by kind alone; the continuation's answer and value sit in
+  the container's `last_text` and `values`, which only NS-6's internal `session_data()` read checked.
+- Fix: `session_text()` returns `last_text` once set, else joins or lists; `session_value_get()` delegates to the
+  children only while the container has no values. `?session-accessors`, `?gptr_parallel` (first paragraph), the
+  vignette's two paragraphs; 04 §5.1 `text` and `value` rows, §6.5 `gptr_parallel()`, 03 §4.1.6.
+- Green: `^subagent-team$` PASS 364; `^(subagent-|session-|doc-|ckpt-|console-render|gptr-gateway|copy-gateway|
+  arch-layers|lint-rules|vignette)` PASS 6287 SKIP 3. Full suite (NOT_CRAN=true) FAIL 0 PASS 35375 SKIP 64.
+  Lint, Rd and check-plans clean.
+- Deviations: D-251 (extended). From the plan: rewinding the synthesis turn resets `last_text` (the reports come
+  back to `$text`) but not `values`, so `$value` keeps that turn's value, as `gptr_rewind()` does for every session
+  (measured: a plain session rewound to turn 0 keeps `$value` 42). One test holds both twins and the value case. A
+  replay into a live team (`replay_mark()`) sets `last_text` to the recorded joined reports, so `$text` reads alike.
+- Open: `doc_block_lines()` still writes a continued team's turn as the team block (finding 170); a blocked or failed
+  member's section of the joined `$text` has no status note (findings 77, 120); rewinding keeps `values` for every
+  session. Finding 120 part 1 is the sheet's S05, S35 and S43 (sessions-21).
