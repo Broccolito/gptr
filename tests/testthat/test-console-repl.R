@@ -303,6 +303,8 @@ test_that("the banner names the console's key; no pause is promised where none i
   expect_identical(keys("terminal"),
                    "/help lists commands; Ctrl-C pauses an answer, twice at the prompt leaves.")
   expect_identical(keys("rstudio"),
+                   "/help lists commands; Esc pauses an answer, twice at the prompt leaves.")
+  expect_identical(keys("rgui"),
                    "/help lists commands; Esc stops an answer, twice at the prompt leaves.")
 })
 

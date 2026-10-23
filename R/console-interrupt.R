@@ -76,11 +76,14 @@ policy_targets = function(runs) {
 #' Whether the pause menu can be offered here (else the policy is abort-only)
 #'
 #' Needs someone to answer (IC-43) and a console where resuming an interrupt is verified:
-#' terminal R, also inside VS Code, and Positron's console (03 section 6.2, report 18 section
-#' 2.1.6; the visual review resumed it there).
+#' terminal R, also inside VS Code, the consoles of Positron and RStudio, and R.app, but not
+#' Windows' Rgui (03 section 6.2, report 18 section 2.1.6; the visual review and the steering
+#' review resumed it there).
 #' @noRd
 console_menu_available = function() {
-  isTRUE(gptr_can_prompt()) && front_end() %in% c("terminal", "vscode", "positron", "unknown")
+  isTRUE(gptr_can_prompt()) &&
+    (front_end() %in% c("terminal", "vscode", "positron", "rstudio", "unknown") ||
+       identical(platform_gui(), "AQUA"))
 }
 
 #' The innermost console REPL state on the call stack (a frame binding `.gptr_repl`), or NULL

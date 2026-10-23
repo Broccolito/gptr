@@ -2828,7 +2828,7 @@ res = s1_request(model_resolve("jev"), states, q, list())
 |---|---|---|---|
 | `builtin_console(gptr)` | `console-repl.R` | registers the `frontend` `console`, the route `console` (order 30), the renderer hooks (process-wide notify hooks on `message_update`, `message_end`, `tool_execution_start`, `tool_execution_end`, `agent_end` that render only for the foreground session when `verbosity() >= 2`, a hook on `artifact_start` printing `artifact  <id>  ->  <url>   (running in background)` (NS-8), a hook on `turn_end`, emitted just before the loop polls steers, that runs `console_typed()` (a terminal REPL reads what was typed and queues it), so a line sent before a step boundary reaches it (D-242), a hook on `queue_update` that prints a user's message the run takes as the person's line `› <text>` at that boundary (D-242), tool `render` functions and `renderer` records, IC-69, IC-71), the service `console.interrupt_policy`, and the command specs of §6.17 of `03` | P02 load |
 | `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s`; first-use setup per §6.1.1 before its banner/input; returns the session invisibly on `/exit`, or `NULL` when setup returns before starting it | P08 (route) |
-| `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu, a console question (`? Paused` and the keys `s steer`, `f follow-up`, `c continue`, `a abort`, `b background` for foreground calls when P21 is loaded, read at `› `; IC-76 in §15.10), writes to stdout through the console writer and resumes through the `resume` restart; a second Ctrl-C aborts; `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Rgui, IDE consoles) | P06, P08 |
+| `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu, a console question (`? Paused` and the keys `s steer`, `f follow-up`, `c continue`, `a abort`, `b background` for foreground calls when P21 is loaded, read at `› `; IC-76 in §15.10), writes to stdout through the console writer and resumes through the `resume` restart; a second Ctrl-C aborts; `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Windows' Rgui, Jupyter; `console_menu_available()` offers the menu in terminal R, the consoles of Positron and RStudio and R.app, D-243) | P06, P08 |
 | `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)` and `finish(cut = FALSE)`; chunk-invariant; writes whole rows only, each at its line end or its wrap (prose wraps at 100 columns at most [D-245]; `finish()` ends the held partial row, `finish(cut = TRUE)` (an aborted, failed or truncated answer, the pause menu's [b], an unusual end) writes all it received and ends the held row with a dim `…` [D-245]; other output goes between whole rows and the held row continues after it; a fenced line is written once, at its line end) [D-245]; untrusted text never used as a format string | P14 |
 | `console_live()`, `console_live_row(state, width)` | `console-input.R` | the live row (IC-82 in §15.10), on the input band where `console_style()` gives one (a T console's; Task 25): an environment with `draw(state)` and `clear()`, held in `the$live_row` while a foreground run works, so `gptr_message_write()` clears it before every console write and redraws it after; `console_live_row()` is its text, fitted to width - 1 | P28 |
 | `builtin_jsonl(gptr)`, `jsonl_sink(session, con)` | `console-jsonl.R` | the `frontend` `jsonl`: subscribes to the session's events and writes one redacted JSON object per line in the §4.5 JSON form (event names verbatim) | P19 (worker children), P24 |
@@ -5711,10 +5711,13 @@ its part in its own commit, and Task 27 finalises them.
       or with an empty draft `   ↳ <kind> · <newest text> · ↑ edit` (a queue) or
       `   enter steer · tab follow-up · ctrl-c pause` (swapped under `type_ahead = "follow_up"`); without a
       composer ` · <key> pause` where the pause menu is offered (`console_menu_available()`: terminals,
-      Positron) or ` · <key> stop` (RStudio, Rgui; the key from `console_interrupt_key()`, lower case): the
+      Positron, RStudio; R.app draws no row) or ` · <key> stop` (Windows' Rgui; the key from
+      `console_interrupt_key()`, lower case): the
       key and its verb, as the composer's keys read (review of Tasks 16-21: `pauses`, `stops`); in Positron
       ` · ctrl-c steer`, as its console holds what is typed while R is busy and clears it at Ctrl-C, so the
-      pause menu is the way to steer there.
+      pause menu is the way to steer there; in RStudio ` · esc pause · typed lines run next` (steering review:
+      its console keeps a line entered during the run for the next prompt, unless a question reads it, and
+      hides the entered line at its next output, so the row says where it goes).
       `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`
       while a sub-agent it shows runs; while the `r` tool evaluates in this process (`rec$frozen`, set by
       `console_on_tool_start()` and cleared at its end or the next request) the row has no clock, which cannot
@@ -5727,7 +5730,8 @@ its part in its own commit, and Task 27 finalises them.
       `#6c6c6c`, 256 colours `38;5;242`, on the light band; `#a8a8a8`, `38;5;247`, on the dark one), as the one
       grey was about 2.8:1 and 3.2:1 there (review of Tasks 16-21). ASCII: `# thinking 6s - ctrl-c pause`.
     - One collapse rule: the `/` and `!` hint goes first; then whole terms go from the right, the hint's
-      (`ctrl-c pause`, `tab follow-up`, `enter steer`; the queue view's `↑ edit`), then `question waiting`, then
+      (`typed lines run next`, `ctrl-c pause`, `tab follow-up`, `enter steer`; the queue view's `↑ edit`), then
+      `question waiting`, then
       `<n> queued`; then the queued message
       is cut with `…`, keeping its head; at least `▌ <elapsed>`; the draft keeps its tail (review of Tasks 16-21:
       a character cut ended a whole message in `…` and cut `ctrl-c…`). With a draft the status is padded to the

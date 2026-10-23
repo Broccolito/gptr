@@ -268,22 +268,23 @@ console_newest = function(s, rd, take = FALSE) {
 #' question waits), `newest` (list(kind, text): the newest of them), `candidates` (completions,
 #' shown in place of the status words), `draft` (the composer's text; NULL where no composer reads
 #' keys), `enter` (the kind Enter queues, the `type_ahead` setting), `key` (the console's interrupt
-#' key), `pause` (TRUE where the key pauses, else it stops) and `steer` (TRUE where only the pause
-#' menu steers: Positron's console holds what is typed), `frozen` (TRUE while R code runs in this
+#' key), `pause` (TRUE where the key pauses, else it stops), `steer` (TRUE where only the pause
+#' menu steers: Positron's console holds what is typed) and `typed` (TRUE where a line typed during
+#' the run is the next prompt: RStudio's console), `frozen` (TRUE while R code runs in this
 #' process: no clock, and with an empty draft `<sep>keys show when r returns`), `band` (TRUE on the
 #' input band, its words
 #' in the band's grey) and `status_w` (the widest status a row with a draft had this run: the
 #' status is padded to it, so the draft never moves left; attr "status_w" of the result is this
 #' row's, 0 for a row of completions, which shows until the next key). In the style table's glyphs:
 #' without a composer the status ends with the key and its verb, as the composer's keys read,
-#' `<sep>esc stop`; with an empty draft the newest message follows, `<queued> steer<sep><text><sep>
-#' <up> edit`, or the keys, `enter steer<sep>tab follow-up<sep>ctrl-c pause`; else `<person>
-#' <draft>`, after the hint `runs after this answer` where the draft starts with / or ! (a
-#' follow-up, whatever the key) and the hint fits beside the status at its widest, and a leading !
-#' takes the person's glyph's place, bold red (Codex's shell mode, D-244). The block is the agent's
-#' blue and the words dim; the draft is ink. One collapse rule: whole terms go from the right, the
-#' hint's, then the queue and a waiting question, then the queued message is cut keeping its head,
-#' down to the block and the elapsed time; the draft keeps
+#' `<sep>esc stop`, and with `typed` `<sep>typed lines run next`; with an empty draft the newest
+#' message follows, `<queued> steer<sep><text><sep><up> edit`, or the keys, `enter steer<sep>tab
+#' follow-up<sep>ctrl-c pause`; else `<person> <draft>`, after the hint `runs after this answer`
+#' where the draft starts with / or ! (a follow-up, whatever the key) and the hint fits beside the
+#' status at its widest, and a leading ! takes the person's glyph's place, bold red (Codex's shell
+#' mode, D-244). The block is the agent's blue and the words dim; the draft is ink. One collapse
+#' rule: whole terms go from the right, the hint's, then the queue and a waiting question, then the
+#' queued message is cut keeping its head, down to the block and the elapsed time; the draft keeps
 #' its tail, so an ellipsis always marks cut text. Widths are counted as the console draws them
 #' (live_fit()), so the row never wraps; where not even the block and the time fit, it is empty.
 #' @noRd
@@ -305,7 +306,8 @@ console_live_row = function(state, width) {
   # the hint's terms; a queued message (`said`) is the one text cut, the others are dropped whole
   said = NULL
   terms = if (is.null(draft)) {
-    paste(key, if (isTRUE(state$steer)) "steer" else if (isTRUE(state$pause)) "pause" else "stop")
+    verb = if (isTRUE(state$steer)) "steer" else if (isTRUE(state$pause)) "pause" else "stop"
+    c(paste(key, verb), if (isTRUE(state$typed)) "typed lines run next")
   } else if (!nzchar(draft) && frozen) {
     paste("keys show when", what, "returns")
   } else if (!nzchar(draft) && is.null(state$newest)) {
@@ -316,8 +318,9 @@ console_live_row = function(state, width) {
     c(said, paste(sym$up, "edit"))
   }
   hint = function(terms) {
-    if (!length(terms)) "" else if (is.null(draft) || frozen) paste0(sym$sep, terms) else
-      paste0("   ", paste(terms, collapse = sym$sep))
+    if (!length(terms)) return("")
+    if (is.null(draft) || frozen) return(paste0(sym$sep, terms, collapse = ""))
+    paste0("   ", paste(terms, collapse = sym$sep))
   }
   lead = paste0(sym$agent, " ")
   # a leading ! takes the chevron's place, as Codex's shell mode
@@ -464,7 +467,8 @@ console_live = function() {
 #' The live row's state for the record `rec` of a foreground run (console_live_row()): the state
 #' word (`rec$what`; `sub-agent <label>` while a sub-agent it shows runs), the run's seconds, the
 #' person's messages waiting for its session, whether a question waits (`rec$question`,
-#' console_ask_wait()), and the console's interrupt key and what it does; where a T console's
+#' console_ask_wait()), and the console's interrupt key and what it does (in RStudio, also that a
+#' typed line is the next prompt); where a T console's
 #' composer reads keys (tty_call()), its draft, the newest message waiting (console_newest()), the
 #' completion candidates its last key listed and the kind Enter sends
 #' @noRd
@@ -478,6 +482,7 @@ console_live_state = function(rec) {
        question = isTRUE(rec$question), frozen = isTRUE(rec$frozen),
        key = console_interrupt_key(), pause = console_menu_available(),
        steer = console_menu_available() && front_end() == "positron",
+       typed = front_end() == "rstudio",
        draft = if (!is.null(rd)) rd$compose$draft %||% "", candidates = rd$compose$candidates,
        newest = if (!is.null(rd)) console_newest(s, rd), enter = setting_get("type_ahead", s))
 }

@@ -70,6 +70,10 @@ per-message choice:
 - `type_ahead` decides.
 - In L class, R reads nothing while busy. A line typed during a run steers only if a question
   reads it (Task 3). Otherwise it is the next prompt.
+- (Amended in the steering review: in RStudio and R.app, where resuming an interrupt works, Esc opens
+  the pause menu, whose s and f steer and queue; a typed line still runs next unless a question reads
+  it, and RStudio's live row says so (R.app draws none). In RStudio an Esc first closes RStudio's own
+  completion list, if open, then clears a line being typed, so the menu reads at an empty input line.)
 
 This replaces IC-76's "follow-up ... is sent when the agent would stop" and any text that treats
 steering as end-of-run delivery.
@@ -876,7 +880,9 @@ Decisions:
   what is typed while R is busy and clears it at Ctrl-C, so the menu's s and f are the way to steer.) (Amended in the visual review: the padding left about 57 trailing
   spaces on each RStudio row that replaced the waiting row.) D (TERM=dumb) is padded too, and so is
   Positron, whose console erases by writing spaces (amended in Task 17: given `\033[K`, its transcript had
-  32 rows ending in spaces). Until Task 18's composer reads keys, T is status only as well, ending
+  32 rows ending in spaces). (Amended in the steering review: RStudio offers the pause menu, so its row ends
+  `· esc pause · typed lines run next`, whose last term the collapse drops first; Windows' Rgui keeps
+  `· esc stop`.) Until Task 18's composer reads keys, T is status only as well, ending
   `· ctrl-c pauses` (amended in Task 17).
 - P: nothing.
 - `console_class()` takes no argument (amended in Task 17): P outside an interactive R; a piped REPL
@@ -1402,7 +1408,11 @@ Decisions:
     terminal does not echo while an answer runs: a line shows once you press Enter ..." becomes the live
     row's draft, Enter steers, Tab sends a follow-up, Up takes one back, and the draft kept through
     questions, Ctrl-C and to the next prompt; the menu's `[s]teer`, `[f]ollow-up`, `[c]ontinue`,
-    `[a]bort`, `[b]ackground` becomes `s steer · f follow-up · c continue · a abort · b background`.
+    `[a]bort`, `[b]ackground` becomes `s steer · f follow-up · c continue · a abort · b background`;
+  - (amended in the steering review) Esc pauses in RStudio and R.app: `?peter`'s "Ctrl-C while an
+    answer runs opens a pause menu in supported terminal front ends and Positron" and the vignette's
+    pause-menu paragraph name their Esc, and say that a line typed there during a run is the next
+    prompt, as RStudio's live row does.
 - Update `/help`, the interactive-console vignette and the README console section. (Amended in Task 23:)
   the vignette's completion paragraph, stale since Tasks 22 and 23 (it names `!` only and says RStudio's
   console completes R code at `peter>`), takes `?peter`'s. (Amended in Task 24:) its mention paragraph
@@ -1470,7 +1480,10 @@ Commit: `docs(progress): P28 live dogfood on claude-cli, codex and ollama`.
 
 - Mid-turn steering on the CLI routes (Claude Code stream-json input, Codex app-server steer).
 - Skipping the remaining calls of a response when a steer arrives (D-242 gives the reason).
-- Type-ahead in RStudio, Positron and Windows consoles: R cannot read them while busy.
+- Type-ahead in RStudio, Positron and Windows consoles: R cannot read them while busy. (Amended in
+  the steering review: RStudio itself hides an entered line at its next output, so gptr cannot keep it
+  on screen; nor can it join the lines after a run, as R cannot ask RStudio whether another typed line
+  waits without blocking. RStudio's pause menu is the way to steer there.)
 - Cursor movement inside the composer.
 - Shift-Tab mode cycling.
 - Terminal titles (OSC 0).

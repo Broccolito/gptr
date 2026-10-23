@@ -172,16 +172,22 @@ test_that("live row redraws cannot enter a nested R tool's captured output", {
   expect_identical(utils::capture.output(invisible(task$fn())), character())
 })
 
-test_that("an abort-only IDE console advertises its stop key without promising a pause", {
+test_that("an IDE console's row says what its key does and where typed lines go", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, interactive = TRUE)
   withr::local_options(cli.dynamic = TRUE)
   testthat::local_mocked_bindings(front_end = function() "rstudio")
   w = wait_record()
   local_live_console("L")
-  # RStudio honours \033[K, so no padding stays in its transcript (visual review)
+  # RStudio honours \033[K, so no padding stays in its transcript (visual review); Esc pauses
+  # there, and a line typed during the run is the next prompt (steering review)
   expect_identical(utils::capture.output(invisible(wait_request(w))),
-                   "\r# thinking 0s - esc stop\033[K")
+                   "\r# thinking 0s - esc pause - typed lines run next\033[K")
+  # Rgui is abort-only: no pause is promised
+  testthat::local_mocked_bindings(front_end = function() "rgui")
+  utils::capture.output(console_live_stop())
+  expect_identical(sub(" +$", "", utils::capture.output(invisible(wait_request(w)))),
+                   "\r# thinking 0s - esc stop")
   # Positron's console erases by writing spaces, so its row is padded; it holds what is typed
   # there, so Ctrl-C and the pause menu are how to steer (review)
   testthat::local_mocked_bindings(front_end = function() "positron")

@@ -83,6 +83,42 @@ test_that("Positron's console is no terminal REPL and offers the pause menu (vis
   expect_true(repl_terminal(repl_state(NULL, new.env())))
 })
 
+test_that("RStudio's console offers the pause menu; its s steers the run (steering review)", {
+  local_project()
+  local_gptr_options(unsafe_no_permissions = TRUE, verbose = 2L)
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L)
+  off = gptr_register(gptr_tool("slow", "Test tool slow", execute = function(input, ctx) {
+    fake_interrupt()
+    "slow done"
+  }))
+  withr::defer(off())
+  fake = local_fake_provider(list(fake_tool("slow"), "ack", "done"))
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  log = local_menu_answers(c("s", "use mpg"))
+  local_mocked_bindings(front_end = function() "rstudio")
+  expect_true(console_menu_available())
+  enqueue = session_enqueue
+  sources = character()
+  local_mocked_bindings(session_enqueue = function(s, text, ..., source = "api_user") {
+    sources <<- c(sources, source)
+    enqueue(s, text, ..., source = source)
+  })
+  run = local_tracked(run_start(s, msg_user("go")), s)
+  out = notices(with_interrupt_policy(function() run_wait(run), list(run), mode = "repl"))
+  # one steer, from the menu; the tool resumed and the run went on to its end
+  expect_identical(sources, "pause_menu")
+  expect_identical(log$prompts, rep("\u203a ", 2L))
+  expect_identical(run$status, "idle")
+  msgs = fake_requests(fake)[[2L]]$messages
+  expect_identical(msg_text(msgs[[length(msgs)]]),
+                   "The user sent this message while you were working: use mpg")
+  # delivered as the person's line at the boundary, right before the next request's output
+  shown = which(out == "\u203a use mpg")
+  expect_length(shown, 1L)
+  expect_identical(out[shown + 1L], "ack")
+})
+
 test_that("continue resumes the interrupted computation", {
   log = local_menu_answers("c")
   res = NULL
@@ -304,12 +340,12 @@ test_that("a line typed before the pause menu appeared never answers it (IC-75)"
   expect_identical(rl$i, 2L)
 })
 
-test_that("the policy is abort-only where resuming is unverified (RStudio, Rgui, Jupyter)", {
+test_that("the policy is abort-only where resuming is unverified (Rgui, Jupyter), not in R.app", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   aborted = local_abort_log()
   log = local_menu_answers("c")
-  for (fe in c("rstudio", "rgui", "jupyter")) {
+  for (fe in c("rgui", "jupyter")) {
     local_mocked_bindings(front_end = function() fe)
     run$status = "streaming"
     res = "not set"
@@ -319,7 +355,10 @@ test_that("the policy is abort-only where resuming is unverified (RStudio, Rgui,
     expect_null(res)
   }
   expect_identical(log$prompts, character())
-  expect_identical(aborted$aborted, rep("u0000run1", 3L))
+  expect_identical(aborted$aborted, rep("u0000run1", 2L))
+  # R.app is front end rgui too; resuming there is verified (steering review)
+  local_mocked_bindings(front_end = function() "rgui", platform_gui = function() "AQUA")
+  expect_true(console_menu_available())
 })
 
 test_that("nested policies show one menu and the inner runs join the outer one", {

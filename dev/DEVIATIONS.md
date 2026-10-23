@@ -3424,8 +3424,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     (steers, drafts and follow-ups stayed as pending input through the approval, the question and peter's own
     prompts, never delivered) and clears it at Ctrl-C, so the menu's s and f are the only way to steer there;
     ?peter no longer says Positron keeps typed lines for the next input. Contract-visible: 04 §15.10 IC-82,
-    `?peter`. Tests: test-console-wait.R "an abort-only IDE console advertises its stop key without promising a
-    pause".
+    `?peter`. Tests: test-console-wait.R "an IDE console's row says what its key does and where typed lines go".
   - The idle editor's row escapes the draft as the live row does (`live_text()`, rule C1): a pasted bidi override
     or zero-width character was written raw at the prompt while the live row showed `<U+202E>`. Tests:
     test-console-input.R "a draft a run left is edited at the prompt; Enter returns it as readline would".
@@ -3459,6 +3458,21 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Tests: test-console-input.R "Up on an empty draft takes back; as a batch of its own or its end (review)", "Tab
     completes a trigger word and never queues it; other drafts go as the other kind", "a draft a run left is
     edited at the prompt; Enter returns it as readline would".
+- Steering review fixes (2026-10-22):
+  - RStudio and R.app offer the pause menu (`console_menu_available()`: `rstudio`, and `.Platform$GUI` AQUA):
+    abort-only there, a steer typed during a run could only be the next prompt, and RStudio hides an entered line
+    at its next output. Resuming works in both (plain-R probes; the whole menu flow in a new RStudio 2026.09 and a
+    new R.app instance). A line entered during a run is still the next prompt unless a question reads it, one line
+    one prompt; RStudio's live row says so, `▌ thinking 12s · esc pause · typed lines run next` (`typed` in
+    `console_live_state()`, the first term the collapse drops), and the banner says `Esc pauses an answer`. In
+    RStudio an Esc first closes RStudio's own completion list, if open, then clears a line being typed, and only
+    then pauses, so the menu reads at an empty input line. Windows' Rgui stays abort-only. Contract-visible: 03
+    §6.2, 04 §7.14 (`with_interrupt_policy()`) and §15.10 IC-82. Tests: test-console-interrupt.R "RStudio's
+    console offers the pause menu; its s steers the run (steering review)", "the policy is abort-only where
+    resuming is unverified (Rgui, Jupyter), not in R.app"; test-console-input.R "the live row says what the run
+    does, its queue and the person's draft (D-243)"; test-console-repl.R "the banner names the console's key; no
+    pause is promised where none is (review)"; test-console-wait.R "an IDE console's row says what its key does
+    and where typed lines go".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

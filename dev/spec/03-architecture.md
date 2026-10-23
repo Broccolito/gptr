@@ -1246,9 +1246,12 @@ else gets a dim hint naming the keys; [s] and [f] read their text at the same ch
 message is queued [D-242]. Continuing writes no notice, and a terminal console's draft survives the menu; a
 second Ctrl-C aborts. Menu output goes to stdout through the console writer, which keeps
 it out of a tool's captured output (the handler may run inside it), and tools record interruption with `on.exit()`,
-never with an exiting `tryCatch(interrupt =)` that would pre-empt the menu (G3 menu fixes). Where the resume
-restart is unavailable or unverified (Rgui,
-IDE consoles), the policy falls back to abort-only. R in an IDE's terminal tab reads a tty and is terminal R
+never with an exiting `tryCatch(interrupt =)` that would pre-empt the menu (G3 menu fixes). The menu is offered
+in terminal R, in the consoles of Positron and RStudio and in R.app, where resuming is verified
+(`console_menu_available()`); in RStudio and R.app Esc opens it, RStudio clears a line being typed at that Esc, so
+the menu reads at an empty input line, and a line entered during the run still is the next prompt unless a
+question reads it [D-243]. Where the resume restart is unavailable or unverified (Windows' Rgui, Jupyter), the
+policy falls back to abort-only. R in an IDE's terminal tab reads a tty and is terminal R
 (`front_end()` counts the inherited `RSTUDIO=1`/`POSITRON=1` only without one), so it has the pause menu and
 Ctrl-C [D-183]. Abort: `curl::multi_cancel()`, interrupt then `kill_all()`
 child trees after a grace period, record the partial with `stop_reason = "aborted"`; the REPL returns to its

@@ -181,7 +181,7 @@ live_rows = function(states, width) {
 }
 
 live_states = list(
-  rstudio = list(what = "thinking", secs = 6, queued = 1, key = "Esc", pause = FALSE),
+  rstudio = list(what = "thinking", secs = 6, queued = 1, key = "Esc", pause = TRUE, typed = TRUE),
   menu = list(what = "r", secs = 65, key = "Ctrl-C", pause = TRUE),
   hint = list(what = "thinking", secs = 6, draft = ""),
   follow = list(what = "thinking", secs = 6, draft = "", enter = "follow_up"),
@@ -198,7 +198,7 @@ test_that("the live row says what the run does, its queue and the person's draft
   local_utf8_glyphs()
   withr::local_options(cli.num_colors = 1L)
   expect_identical(live_rows(live_states, 80L), list(
-    rstudio = "▌ thinking 6s · 1 queued · esc stop",
+    rstudio = "▌ thinking 6s · 1 queued · esc pause · typed lines run next",
     menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer · tab follow-up · ctrl-c pause",
     follow = "▌ thinking 6s   enter follow-up · tab steer · ctrl-c pause",
@@ -211,7 +211,7 @@ test_that("the live row says what the run does, its queue and the person's draft
   # one collapse rule: whole terms go from the right (the hint's, then the queue and a waiting
   # question), then the queued message is cut, keeping its head; the draft keeps its tail
   expect_identical(live_rows(live_states, 40L), list(
-    rstudio = "▌ thinking 6s · 1 queued · esc stop",
+    rstudio = "▌ thinking 6s · 1 queued · esc pause",
     menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer",
     follow = "▌ thinking 6s   enter follow-up",
