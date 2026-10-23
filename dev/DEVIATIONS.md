@@ -3164,6 +3164,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   console limits, `insert_matching`, `stty sane`), `/help`'s keys, the interactive-console vignette, the README,
   the NEWS console bullets and the configuration vignette's `type_ahead` row say D-242..D-245 as built; these
   four entries are final. Tests: test-console-commands.R "/help lists the commands and the input syntax".
+- Review fixes of Tasks 22-27 (2026-10-23): `/help`'s keys follow the console as the banner's do: Enter, Tab's
+  follow-up and Up only where a composer reads keys (class T), Tab's completion only where the REPL completes
+  (`! or /` in RStudio), and its last line says what a line typed while peter works does there (the next prompt;
+  queued as `type_ahead` says under TERM=dumb; Positron the banner's line); the commands, input and keys lists
+  share one description column. RStudio's `/help` promised Up and `@` completion, Positron's that a typed line is
+  the next prompt. Contract-visible: 03 §6.17. Tests: test-console-commands.R "/help lists the commands and the
+  input syntax", "/help's keys follow the console, as the banner does (review of Tasks 22-27)", "in the console
+  margin command output wraps inside it; listings fit its width".
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Rule (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

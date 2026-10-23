@@ -1589,7 +1589,11 @@ Decisions:
     write the menu's keys as `s` steer, `f` follow-up, `c` continue, `a` abort and `b` background.
   - `/help`'s keys are a `Keys:` list like its `Input:` one: Enter, Tab (also completion after the trigger
     characters), Up and the console's own interrupt key, whose row says `stop the answer` where no menu is
-    offered; one line says a line typed in other consoles is the next prompt.
+    offered; one line says a line typed in other consoles is the next prompt. (Amended in the review of Tasks
+    22-27: the keys follow the console as the banner's do, Enter, Tab's follow-up and Up only where a composer
+    reads keys, Tab's completion only where the REPL completes, `! or /` in RStudio, and the last line says what a
+    typed line does in this console, the banner's line in Positron; the three lists share one description
+    column. RStudio's `/help` promised Up and `@` completion, which it lacks.)
   - `?peter`'s console table is a `\tabular` (console, what typing does, the pause key), the vignette's a
     Markdown table; `?peter`'s and the vignette's paste paragraphs drop the pause menu from the questions a line
     typed before them never answers (steer-8: a key typed right after the pause key answers the menu).

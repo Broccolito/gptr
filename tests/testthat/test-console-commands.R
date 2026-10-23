@@ -128,9 +128,18 @@ test_that("commands pass the input event (source repl): recorded, handled or tra
   expect_identical(got$recorded, c("/mode auto", "/mode plan", "/model opus"))
 })
 
+# /help's text in console class `cls` of front end `fe`, its reader completing or not
+help_text = function(cls = "T", fe = "terminal", complete = TRUE) {
+  local_mocked_bindings(console_class = function() cls, front_end = function() fe)
+  rs = repl_state(NULL, new.env())
+  rs$reader = list(complete = complete)
+  run_command(rs, "/help")$out
+}
+
 test_that("/help lists the commands and the input syntax", {
   local_console_commands()
-  out = run_command(repl_state(NULL, new.env()), "/help")$out
+  local_gptr_options(interactive = TRUE)
+  out = help_text()
   expect_true(any(grepl("^  /mode", out)))
   expect_true(any(grepl("!!code", out, fixed = TRUE)))
   # the keys of the composer, the two kinds of queued message and the trigger characters (D-242,
@@ -139,8 +148,34 @@ test_that("/help lists the commands and the input syntax", {
   for (word in c("Enter", "Tab", "Up", "steer", "follow-up", "@, !, !!, / or peter$")) {
     expect_true(grepl(word, text, fixed = TRUE), info = word)
   }
+  # the descriptions of commands, input and keys start in one column (review of Tasks 22-27)
+  rows = out[grepl("^  \\S", out)]
+  expect_true(all(grepl("^  .{17}\\S", rows) & !grepl("^  .{16}\\S\\S", rows)))
   expect_identical(run_command(repl_state(NULL, new.env()), "/help mode")$out,
                    "/mode  Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]")
+})
+
+test_that("/help's keys follow the console, as the banner does (review of Tasks 22-27)", {
+  local_console_commands()
+  local_gptr_options(interactive = TRUE)
+  words = function(...) gsub("\\s+", " ", paste(help_text(...), collapse = " "))
+  # RStudio: no composer (Enter, Up), its triggers ! and /, a typed line the next prompt
+  rstudio = words("L", "rstudio")
+  for (w in c("Enter", "Up", "@, !, !!", "In other consoles")) {
+    expect_false(grepl(w, rstudio, fixed = TRUE), info = w)
+  }
+  for (w in c("Tab after ! or /, complete the word", "Esc pause the answer",
+              "A line typed while peter works is the next prompt.")) {
+    expect_true(grepl(w, rstudio, fixed = TRUE), info = w)
+  }
+  # Positron: no completion, and typed text waits as R code, as its banner says
+  positron = words("L", "positron", complete = FALSE)
+  expect_false(grepl("Tab", positron, fixed = TRUE))
+  expect_true(grepl("Text typed while peter works waits as R code; ctrl-c, then s, to steer.",
+                    positron, fixed = TRUE))
+  # TERM=dumb: each line is queued as type_ahead says
+  expect_true(grepl("A line typed while peter works is queued as type_ahead says",
+                    words("D", complete = FALSE), fixed = TRUE))
 })
 
 test_that("in the console margin command output wraps inside it; listings fit its width", {
@@ -158,7 +193,7 @@ test_that("in the console margin command output wraps inside it; listings fit it
   expect_identical(words(out), words(cmd_help("", list())))
   # a description wraps under its own column, so no row looks like another command
   cmds = out[seq(2L, match("  Input:", out) - 1L)]
-  expect_true(all(grepl("^.{16} {3}\\S", cmds)))
+  expect_true(all(grepl("^.{18} {3}\\S", cmds)))
   expect_identical(run_command(rs, "/mode")$out, "  Mode: manual")
   expect_match(run_command(rs, "/env")$out, "^  alpha: <integer>")
   # a listing is printed at the content width (60 - 4), not wrapped again

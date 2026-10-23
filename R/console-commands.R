@@ -105,6 +105,10 @@ cmd_doc_site = function(s) {
   tryCatch(ext_service_get("doc.site")(s), error = function(e) NULL)
 }
 
+#' /help [command]: the commands, the input syntax and the keys, which follow the console as the
+#' banner's do (repl_banner()): Enter, Tab's follow-up and Up where a composer reads keys (class T),
+#' Tab's completion where the REPL completes (after `! /` in RStudio), and what a line typed while
+#' peter works does there; the descriptions in one column
 #' @noRd
 cmd_help = function(args, ctx) {
   s = ctx$session
@@ -117,31 +121,49 @@ cmd_help = function(args, ctx) {
   nms = sort(registry_names("command", session = s), method = "radix")
   desc = vapply(nms, function(nm) registry_get("command", nm, session = s)$description %||% "",
                 "", USE.NAMES = FALSE)
-  # the descriptions wrap under their column at the content width (D-225)
+  # the descriptions wrap under one column at the content width (D-225)
   width = cli::console_width() - 2L * nchar(console_pad())
-  c("Commands:", formatDL(paste0("  /", nms), desc, width = width, indent = 17L),
+  dl = function(x, y) formatDL(paste0("  ", x), y, width = width, indent = 19L)
+  keys = console_class() == "T"
+  done = if (isTRUE(console_repl_find()$reader$complete)) {
+    paste0("after ", if (front_end() == "rstudio") "! or /" else "@, !, !!, / or peter$",
+           ", complete the word")
+  }
+  pause = paste0(if (console_menu_available()) {
+    "pause the answer: s steer, f follow-up, c continue, a abort, b background"
+  } else {
+    "stop the answer"
+  }, "; twice at the prompt leaves")
+  typed = if (keys) {
+    "In other consoles a line typed while peter works is the next prompt."
+  } else if (console_menu_available() && front_end() == "positron") {
+    "Text typed while peter works waits as R code; ctrl-c, then s, to steer."
+  } else if (console_class() == "D") {
+    "A line typed while peter works is queued as type_ahead says: a steer, unless follow_up."
+  } else {
+    "A line typed while peter works is the next prompt."
+  }
+  c("Commands:", dl(paste0("/", nms), desc),
     "Input:",
-    formatDL(c("  text", "  !code", "  !!code", "  ```r ... ```", "  \"\"\" ... \"\"\""),
-             c("a prompt; @file adds a file, @object attaches an object",
-               "run R code here; the code and its output go with the next prompt",
-               "run R code here; omit the code/output note for the next prompt",
-               "a block of R code (like !)",
-               "a multi-line prompt; a trailing \\ also continues a line"),
-             width = width, indent = 19L),
+    dl(c("text", "!code", "!!code", "```r ... ```", "\"\"\" ... \"\"\""),
+       c("a prompt; @file adds a file, @object attaches an object",
+         "run R code here; the code and its output go with the next prompt",
+         "run R code here; omit the code/output note for the next prompt",
+         "a block of R code (like !)",
+         "a multi-line prompt; a trailing \\ also continues a line")),
     "Keys:",
-    formatDL(paste0("  ", c("Enter", "Tab", "Up", console_interrupt_key())),
-             c(paste("in a terminal, send what you typed while peter works as a steer: the agent",
-                     "reads it at its next step"),
-               paste("send it as a follow-up instead: the next prompt, once the answer ends",
-                     "(type_ahead swaps the two); after @, !, !!, / or peter$, complete the word"),
-               "on an empty draft, take back the newest message not yet delivered",
-               paste0(if (console_menu_available()) {
-                 "pause the answer: s steer, f follow-up, c continue, a abort, b background"
-               } else {
-                 "stop the answer"
-               }, "; twice at the prompt leaves")),
-             width = width, indent = 19L),
-    "In other consoles a line typed while peter works is the next prompt.")
+    dl(c(if (keys) "Enter", if (keys || !is.null(done)) "Tab", if (keys) "Up",
+         console_interrupt_key()),
+       c(if (keys) {
+         paste("send what you typed while peter works as a steer: the agent reads it at its next",
+               "step")
+       }, if (keys) {
+         paste(c(paste("send it as a follow-up instead: the next prompt, once the answer ends",
+                       "(type_ahead swaps the two)"), done), collapse = "; ")
+       } else {
+         done
+       }, if (keys) "on an empty draft, take back the newest message not yet delivered", pause)),
+    typed)
 }
 
 #' /exit, /quit, /q
