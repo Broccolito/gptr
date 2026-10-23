@@ -68,7 +68,9 @@ session's later turns; \code{max_turns} caps this call's model requests.}
 
 \item{.run}{\code{FALSE} builds the session with the prompt queued and returns it (see
 \code{\link[=gptr_step]{gptr_step()}}). Building checks egress and replay only; \code{\link[=gptr_step]{gptr_step()}} and \code{\link[=gptr_wait]{gptr_wait()}} check
-the model's provider and key before they start the run.}
+the model's provider and key before they start the run. A piped \code{.run = FALSE} call applies
+its model, mode and tools at once; a \code{\link[=gptr_step]{gptr_step()}} or \code{\link[=gptr_wait]{gptr_wait()}} that then refuses leaves
+them, with no turn.}
 
 \item{.stdin}{Drive the console from piped standard input.}
 }

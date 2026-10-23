@@ -1120,7 +1120,9 @@ context and signals the warning `partial_name` naming each such formal (D-251).
   (`model =`, `tools =`) register first, since the checks read them, and are removed again when it is refused; a
   call's registry filters (`plugins = "-x"`) apply to the R session only once it is accepted. Building a session
   (`.run = FALSE`, a `gptr_parallel()` member) checks egress and replay only: `gptr_step()` and `gptr_wait()`
-  check the rest before they start its run, and a member that cannot reach its model ends `error` (`on_error`).
+  check the rest before they start its run, and a member that cannot reach its model ends `error` (`on_error`). A
+  piped `.run = FALSE` call applies its model, mode and tools at once; a `gptr_step()` or `gptr_wait()` that then
+  refuses leaves them, with no turn.
 
 #### 6.1.3 Identifier resolution (D-07, `resolve_identifier()`, P08)
 

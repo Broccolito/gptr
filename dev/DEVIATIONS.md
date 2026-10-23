@@ -3143,10 +3143,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   and replay only (`ready = FALSE`), and its request refuses the rest, as before (a keyless choice:
   `gptr_error_no_key`, no request). So does building a session (`.run = FALSE`, a `gptr_parallel()` member):
   `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a member that cannot reach its model
-  ends `error` (kept by `on_error = "return"`). A failure after a request (HTTP 4xx/5xx) keeps INFRA-04. A switch
-  resolves the target as its session sees it (`model_canonical(strict = TRUE, session =)` through
-  `run_model_resolve()`), so a piped `model =` provider spec and a later `.opts$thinking` on it switch (were
-  `gptr_error_unknown_model`).
+  ends `error` (kept by `on_error = "return"`). A piped `.run = FALSE` call applies its model, mode and tools at once;
+  a `gptr_step()` or `gptr_wait()` that then refuses leaves them, with no turn. A failure after a request (HTTP
+  4xx/5xx) keeps INFRA-04. A switch resolves the target as its session sees it (`model_canonical(strict = TRUE,
+  session =)` through `run_model_resolve()`), so a piped `model =` provider spec and a later `.opts$thinking` on it
+  switch (were `gptr_error_unknown_model`).
 - Rule (sessions-4): a continuation without `envir =` of a session with no kept home whose `home_label` is a
   function frame (R2) informs once per session (`gptr_message_home_not_kept`) when `home_label(call$envir)`
   differs, naming both and `envir = new.env()`. Was silent. R2 and the IC-40 precedence are unchanged.

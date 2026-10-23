@@ -108,7 +108,9 @@
 #'   session's later turns; `max_turns` caps this call's model requests.
 #' @param .run `FALSE` builds the session with the prompt queued and returns it (see
 #'   [gptr_step()]). Building checks egress and replay only; [gptr_step()] and [gptr_wait()] check
-#'   the model's provider and key before they start the run.
+#'   the model's provider and key before they start the run. A piped `.run = FALSE` call applies
+#'   its model, mode and tools at once; a [gptr_step()] or [gptr_wait()] that then refuses leaves
+#'   them, with no turn.
 #' @param .stdin Drive the console from piped standard input.
 #' @return A `gptr_session` for agent work (invisibly when its answer was streamed to the
 #'   console), or a typed System 1 vector for classifier models.

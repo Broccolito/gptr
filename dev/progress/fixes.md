@@ -2009,6 +2009,11 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `^gptr-gateway$` PASS 425; `^(gptr-|ext-|skill-|mcp-|subagent-|session-|prompt-|copy-gateway|console-commands|
   arch-layers|lint-rules|zzz)` PASS 8205 SKIP 2. `?peter`, 04 §6.1.2 (`agents =` dropped: a piped team is refused
   before any registration). Lint and Rd clean.
+- Review: r3 documented (low). Since r2 a piped `.run = FALSE` call skips readiness, so its model, mode and tools
+  apply before any key check: `s |> peter("next", model = opus, mode = "plan", .run = FALSE)` without a key
+  returns, `gptr_step(s)` refuses with `gptr_error_no_key`, and the session stays on Opus in plan mode with no new
+  turn (as on main). `?peter` `.run`, 04 §6.1.2 and D-251 say so. Red: none, a docs unit. Green
+  `^(gptr-gateway|zzz|lint-rules|doc-)` PASS 3014 SKIP 2. Lint and Rd clean.
 - Deviations: D-251 (extended). From the plan: the continuation guards its target whether or not it changes and
   `gateway_run()` guards only a new session (one check per switch); `session_new()` sets `gptr_last()`, so a
   refused new call restores it.
