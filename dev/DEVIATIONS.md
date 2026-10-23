@@ -3118,7 +3118,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: env-snapshot, env-describe, ckpt-objects, ckpt-rewind, perm-classify, gptr-capture, session-object (a
   ggplot2 guard), utils-options, subagent-team, copy-eval, arch-layers. Evidence: progress/fixes.md Task FIX-13.
 
-## D-248 - FIX-15 A tool the session did not offer is not dispatched (2026-10-22)
+## D-248 - FIX-15 Cheat-sheet review: tools (2026-10-22)
 - Rule: a direct tool call resolves only when its name is among the tools the session offered the
   model: the frozen array plus the `tool_add` declarations of every `tool_change` operator message
   on the active path and in the queue (`prompt_tools_known()`), taken once per batch by
@@ -3127,7 +3127,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `available()`) gets `Tool <name> not found` before hooks and the permission check, so an
   undeclared `ask` no longer stops a non-interactive auto run. `dispatch_nested()` still resolves
   `peter$` members in the registry under every preset; the MCP door already served declared tools.
-- Contract-visible: 04 §4.4 call record (`tool` NULL when not offered), §7.6 `dispatch_tools()`.
+- Rule: with `gptr.noninteractive_ask = "deny"` a non-interactive mode block ends with the deny
+  suffix in every mode, manual included (`context_mode_body()` tests deny first): a manual run's
+  `ask` call is denied and the run goes on, so "questions asked with the ask tool, stop the run"
+  was false.
+- Contract-visible: 04 §4.4 call record (`tool` NULL when not offered), §7.6 `dispatch_tools()`,
+  §9.3 suffix order.
 - Tests: test-agent-dispatch.R "the offered tools (D-248)" (3 blocks) and the frozen-schema block;
-  test-bridge-lang.R, test-bridge-sh.R through-run refusals. Evidence: progress/fixes.md Task
-  FIX-15 tools-1.
+  test-bridge-lang.R, test-bridge-sh.R through-run refusals; test-prompt-context.R mode suffixes.
+  Evidence: progress/fixes.md Task FIX-15 tools-1, tools-5.

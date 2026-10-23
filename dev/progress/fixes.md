@@ -1940,3 +1940,14 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   continued session adds by value (`tools = "+sh"`, measured) and keeps its unit test.
 - Open: the fixed preamble still says "with the r tool" when r is removed (by decision);
   `tool_change` declarations count after a switch to a provider that cannot take additions.
+
+### tools-5 - Non-interactive manual mode with noninteractive_ask = deny says questions are refused
+- Red: FAIL 1 in `prompt-context` (PASS 87): with deny, `context_mode_body("manual", FALSE)` still
+  ended "questions asked with the ask tool, stop the run" (verdict of finding 168, item a).
+- Cause: `context_mode_body()` chose the manual suffix before it looked at `deny`, while under deny
+  a manual run's `ask` call is denied and the run goes on to idle.
+- Fix: test deny first. The deny suffix ("are refused. State your assumptions instead of asking.")
+  holds for a denied ask too; no new text, `preset_ask()` unchanged.
+- Green: `prompt-context` PASS 88; `^(prompt-context|prompt-text|prompt-compact|tool-ask)$` PASS
+  572. Lint clean; plan checks pass.
+- Deviations: D-248 (04 §9.3 suffix order). Open: none.

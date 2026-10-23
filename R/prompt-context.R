@@ -441,10 +441,10 @@ context_provide_environment = function(ctx, budget) {
 context_mode_body = function(mode, human, deny = FALSE) {
   body = prompt_text(paste0("mode_", if (identical(mode, "yolo")) "auto" else mode))
   if (isTRUE(human)) return(body)
-  suffix = if (identical(mode, "manual")) {
-    prompt_text("noninteractive_manual")
-  } else if (isTRUE(deny)) {
+  suffix = if (isTRUE(deny)) {
     prompt_text("noninteractive_deny")
+  } else if (identical(mode, "manual")) {
+    prompt_text("noninteractive_manual")
   } else {
     prompt_text("noninteractive_stop")
   }

@@ -3358,10 +3358,11 @@ peter$<ns>$<name>(<arg>: <type>, <arg>?: <type>)  # <first sentence of the descr
 
 Mode blocks and the first-message formats are verbatim in §7.4 of `03`; the non-interactive suffix appended inside
 the mode block is exactly `No one can answer questions or approvals in this run, so actions that need approval
-stop the run. State your assumptions instead of asking.` (with `gptr.noninteractive_ask = "deny"` the second
-clause reads `so actions that need approval are refused.`); in `manual` mode, where `ask` stays declared (IC-68),
-it is `No one can answer questions or approvals in this run: actions that need approval, and questions asked with
-the ask tool, stop the run. Ask only when no reasonable assumption lets you continue.`
+stop the run. State your assumptions instead of asking.` (with `gptr.noninteractive_ask = "deny"`, in every mode,
+the second clause reads `so actions that need approval are refused.`, D-248); otherwise in `manual` mode, where
+`ask` stays declared (IC-68), it is `No one can answer questions or approvals in this run: actions that need
+approval, and questions asked with the ask tool, stop the run. Ask only when no reasonable assumption lets you
+continue.`
 
 ### 9.4 The `peter$` namespace members [stable]
 
