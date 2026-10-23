@@ -3744,7 +3744,8 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   arch-layers|lint-rules)` PASS 5961 SKIP 2; `^(tool-r|session-object)$` PASS 653. Full suite (NOT_CRAN=true)
   FAIL 0 PASS 35395 SKIP 64. Lint, Rd and check-plans clean.
 - Deviations: D-251 (extended). As planned; the scripted `write` still runs and creates `ro.txt` (measured), which
-  the tools group's tools-1 refuses ("Tool write not found"), a post-merge check.
+  the tools group's tools-1 refuses ("Tool write not found"), a post-merge check. Merged with tools-1, the test
+  asserts that refusal and no `ro.txt`: `^perm-plan$` PASS 125.
 - Open: plan mode freezes the configured preset, not `readonly` as 03 §6.8 and §10.8 say (finding 9, in passing);
   `r` under `readonly` can still change files outside plan mode (by design; the sheet's S29).
 

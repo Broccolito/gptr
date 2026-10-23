@@ -432,6 +432,9 @@ test_that("a readonly session keeps read and r outside plan mode (D-251)", {
   s = peter("x", model = f, mode = auto, tools = readonly, envir = new.env())
   s |> peter("again")
   expect_identical(f$log$n, 3L)
+  res = Filter(function(m) identical(m$role, "tool_result"), s$messages)
+  expect_identical(msg_text(res[[1L]]), "Tool write not found")
+  expect_false(file.exists("ro.txt"))
   for (q in f$log$requests) {
     expect_identical(q$tools, c("read", "r"))
     said = vapply(q$messages, function(m) paste(msg_text(m), collapse = "\n"), "")
