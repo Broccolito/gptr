@@ -200,9 +200,10 @@ tty_drain_mode = function() {
 
 #' Mockable: the terminal's answer to `query` (IC-82): with fd 0 in `stty -icanon -echo min 0 time
 #' 0`, `query` is written to stdout, then fd 0 is read until a DA1 reply (`ESC [ ? ... c`) arrives,
-#' at most `ms` milliseconds, and the modes are restored. What was read, "" when stty fails
+#' at most `ms` milliseconds (a terminal answers in milliseconds; over ssh or on a loaded machine
+#' later than 250), and the modes are restored. What was read, "" when stty fails
 #' @noRd
-tty_query = function(query, ms = 250) {
+tty_query = function(query, ms = 1500) {
   modes = tty_modes()
   if (length(modes) != 1L) return("")
   on.exit(tty_modes(modes), add = TRUE)
@@ -222,6 +223,13 @@ tty_query = function(query, ms = 250) {
     }
   }, error = function(e) NULL)
   got
+}
+
+#' Text without the terminal's answers to tty_query(), an OSC reply (`ESC ] ... BEL` or `ST`) and
+#' DA1's `ESC [ ? ... c`, so a reply that comes late is never typed text (IC-82)
+#' @noRd
+tty_unreply = function(x) {
+  gsub("\033\\][^\a\033]*(\a|\033\\\\)?|\033\\[\\?[0-9;]*c", "", x, perl = TRUE)
 }
 
 #' Mockable wrapper of readline(); the answer is normalised to UTF-8 (IC-62). The REPL passes its

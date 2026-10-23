@@ -7,26 +7,27 @@
 #'
 #' Text is added at the draft's end; DEL and BS delete its last character, Ctrl-U clears it and
 #' Ctrl-W deletes its last word. Other control bytes and escape sequences (up to their final byte)
-#' are dropped, so nothing moves a cursor. A sequence the batch ends in is held in `esc` until
-#' `now` passes its start `t` by 50 ms, then dropped (a lone Esc). `\r` and `\r\n` read as `\n`; a
-#' batch holding newlines sends the draft and its text up to the last newline as one message,
-#' newlines kept (IC-76's paste rule), and keeps the rest as the draft; a newline ends what the
-#' edit keys reach. With `paste` (a batch read on the polling beat, too quick for a person to type
-#' a newline and more) a batch with text after its last newline is a paste: its newlines stay in
-#' the draft, leading blank lines dropped. A message goes as `enter_kind` (`"steer"` or
-#' `"follow_up"`), always as a follow-up when it starts with / or !, and not at all when blank.
-#' Two keys act only as a batch of their own or as the end of a batch without a newline (elsewhere
-#' Tab is text and Up is dropped): Up (`ESC [ A`, `ESC O A`) on an empty draft takes back the
-#' newest queued message; Tab on a trigger word (console_trigger()) completes it and never sends:
-#' `complete(line, end)` returns full words, whose longest common prefix replaces the word when
-#' longer, else two or more are listed. On any other draft Tab sends the other kind.
+#' are dropped, so nothing moves a cursor, and so is a terminal's late answer to the background
+#' probe (tty_unreply()). A sequence the batch ends in is held in `esc` until `now` passes its start
+#' `t` by 50 ms, then dropped (a lone Esc). `\r` and `\r\n` read as `\n`; a batch holding newlines
+#' sends the draft and its text up to the last newline as one message, newlines kept (IC-76's paste
+#' rule), and keeps the rest as the draft; a newline ends what the edit keys reach. With `paste` (a
+#' batch read on the polling beat, too quick for a person to type a newline and more) a batch with
+#' text after its last newline is a paste: its newlines stay in the draft, leading blank lines
+#' dropped. A message goes as `enter_kind` (`"steer"` or `"follow_up"`), always as a follow-up when
+#' it starts with / or !, and not at all when blank. Two keys act only as a batch of their own or as
+#' the end of a batch without a newline (elsewhere Tab is text and Up is dropped): Up (`ESC [ A`,
+#' `ESC O A`) on an empty draft takes back the newest queued message; Tab on a trigger word
+#' (console_trigger()) completes it and never sends: `complete(line, end)` returns full words, whose
+#' longest common prefix replaces the word when longer, else two or more are listed. On any other
+#' draft Tab sends the other kind.
 #' @return list(state, action), the action NULL, list(type = "send", kind, text),
 #'   list(type = "take_back") or list(type = "complete", candidates)
 #' @noRd
 console_compose = function(state, chars, now, enter_kind, complete, paste = FALSE) {
   draft = state$draft %||% ""
   held = if (now - (state$t %||% now) <= 0.05) state$esc %||% "" else ""
-  x = paste0(held, gsub("\r\n?", "\n", chars))
+  x = tty_unreply(paste0(held, gsub("\r\n?", "\n", chars)))
   out = function(action = NULL, esc = "", t = now) {
     list(state = list(draft = draft, esc = esc, t = t), action = action)
   }

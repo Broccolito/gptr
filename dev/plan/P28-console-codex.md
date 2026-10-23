@@ -1424,7 +1424,9 @@ Decisions:
 - Probe, once per REPL in T:
   1. Set `stty -icanon -echo min 0 time 0`.
   2. Write `ESC ] 11 ; ? ESC \` and DA1 `ESC [ c`.
-  3. Read fd 0 until the DA1 reply `ESC [ ? ... c` arrives, at most 250 ms.
+  3. Read fd 0 until the DA1 reply `ESC [ ? ... c` arrives, at most 250 ms. (Amended in the review of Tasks
+     22-27: 1,500 ms, as an answer after 250 ms, over ssh or on a loaded machine, was typed at the first prompt;
+     DA1 still ends the wait at once. A later answer is taken out of what the composer reads, `tty_unreply()`.)
   4. Parse `rgb:RRRR/GGGG/BBBB` (BEL or ST, 2- or 4-digit hex). Luminance below 0.5 means dark.
   5. Restore the modes.
 - The probe is skipped for TERM=linux or dumb, `NO_COLOR`, fewer than 256 colours and non-tty

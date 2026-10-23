@@ -4072,6 +4072,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     the last old `[gptr]` notice on the abort path. Contract-visible: none. Tests: test-console-abort-stream.R
     "abort labels a redactor tail received after a pause without printing it twice", "continuing a pause never
     adds an abort-tail label".
+  - The background probe waits up to 1,500 ms for DA1 (`tty_query()`), which still ends it at once: an answer
+    after 250 ms, over ssh or on a loaded machine, was typed at the first prompt (`peter> 11;rgb:ffff/ffff/ffff62;22chi`
+    reached the model) and made the pty test of the band timing-dependent. The composer and the idle editor take a
+    later answer out of what they read (`tty_unreply()`, which `repl_background()` shares). Contract-visible: 04
+    §7.1 (`tty_query()`) and §15.10 IC-82. Tests: test-console-repl.R "a terminal answering the probe late still has
+    the answer read by it (review)"; test-console-input.R "cursor keys and other sequences are dropped up to their
+    final byte".
   - The status line, the banner's rows, the mention line and a question's key rows wrap between whole terms
     (`console_terms()`, which the mention line's loop became): a row ends at a term and the next starts with the
     next one, never after a separator; a term wider than a row is cut. Word wrapping split `98% context left`

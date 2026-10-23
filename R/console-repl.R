@@ -213,7 +213,7 @@ repl_background = function(rd) {
   got = tty_query("\033]11;?\033\\\033[c")
   bg = background_reply(got)
   if (!is.na(bg)) the$background = bg
-  keys = gsub("\033\\][^\a\033]*(\a|\033\\\\)?|\033\\[\\?[0-9;]*c", "", got, perl = TRUE)
+  keys = tty_unreply(got)
   if (nzchar(keys)) {
     res = console_compose(list(), keys, reactor_now(), "steer", console_complete)
     if (identical(res$action$type, "send")) rd$typed = c(rd$typed, res$action$text)

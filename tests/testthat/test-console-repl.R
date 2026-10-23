@@ -1196,3 +1196,24 @@ test_that("a terminal answering the probe has its prompt on the band, reset afte
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
 })
+
+test_that("a terminal answering the probe late still has the answer read by it (review)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.num_colors = 256L)",
+    "fake = gptr_fake_provider(function(req) paste0('GOT [', req$last_user, '] END'))",
+    "invisible(peter(model = fake, envir = new.env()))"
+  ))
+  expect_true(pty$wait("\033]11;?\033\\\033[c", timeout = 120))
+  # over ssh or on a loaded machine: after the probe's first cap, 250 ms
+  Sys.sleep(0.4)
+  pty$send("\033]11;rgb:ffff/ffff/ffff\033\\\033[?62;22c")
+  expect_true(pty$wait("\033[48;5;254mpeter> \033[K"))
+  pty$send("hi\r")
+  expect_true(pty$wait("GOT [hi] END"))
+  expect_identical(pty$seen("rgb:"), 0L)
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+})

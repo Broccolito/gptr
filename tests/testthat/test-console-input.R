@@ -61,7 +61,10 @@ test_that("cursor keys and other sequences are dropped up to their final byte", 
     list("\033b", "abc", "abc", NULL),
     list("\001\005\004", "abc", "abc", NULL),
     list("ab\033[Dc", "", "abc", NULL),
-    list(paste0("\033", "é"), "", "é", NULL)
+    list(paste0("\033", "é"), "", "é", NULL),
+    # a terminal's late answers to the background probe are never typed text (review of Tasks 22-27)
+    list("h\033]11;rgb:ffff/ffff/ffff\033\\i\033[?62;22c", "", "hi", NULL),
+    list("\033]11;rgb:1c1c/1c1c/1c1c\a", "hi", "hi", NULL)
   ))
 })
 
