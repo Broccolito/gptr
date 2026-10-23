@@ -4511,10 +4511,11 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   calls to `gptr_return()`/`gptr::gptr_return()` of a name (or with another named argument or none) and to members
   whose spec has `record = FALSE`; a chunk that becomes empty is omitted; the value stays in `value=`. A call with
   one expression, unnamed or `x` (called or piped, on any number of lines), becomes `.gptr_value_<block id> =
-  (<expression>)`, and `value=.gptr_value_<block id>` when no other `gptr_return()` is left in the code, so replay
-  recomputes it. Such a call inside another expression is kept as written and records no value (IC-46 says so on
-  replay). `record = FALSE` is set for `out`, `plot`, `help`,
-  `search`, `describe`; the `<r_session>` text tells the model to use them only with `record = false`.
+  (<expression>)`, and `value=.gptr_value_<block id>` when no other `gptr_return()` left in the code can run after
+  it (one in a later top-level expression or inside a function can), so replay recomputes it. Such a call inside
+  another expression is kept as written and records no value (IC-46 says so on replay). `record = FALSE` is set
+  for `out`, `plot`, `help`, `search`, `describe`; the `<r_session>` text tells the model to use them only with
+  `record = false`.
 - Plan-mode runs never record code (`record` forced `FALSE`); their block holds one `## Plan: <plans path>`
   comment.
 - S-9 best effort: `doc_block_lines()` rewrites `<-` to `=` for `LEFT_ASSIGN` tokens whose assignment is a

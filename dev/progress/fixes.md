@@ -2727,3 +2727,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   lint-rules)$` PASS 5004 SKIP 2 (repr; NOT_CRAN=true). Lint clean.
 - Deviations: D-249 (extended). Open: a block without a record (a team child, a nested call)
   still seeks along the rebuilt path.
+
+### replay-2g - A nested gptr_return() before the last top-level one keeps value=
+- Second validation of replay-2f (low; a regression from 2df56eaa).
+- Red: FAIL 3 in `^(doc-blocks|doc-replay)$` (PASS 1227): `if (FALSE) gptr_return(1)` then
+  `gptr_return(coef(fit))` was recorded without `value=`; replayed in a later process `$value` was
+  NULL with the false "only as a top-level call" notice.
+- Cause: doc_rewrite_return() denied `returned` for any gptr_return() left in the code, also one
+  that cannot run after the last rewritten call.
+- Fix: only a leftover in a later top-level expression, or inside a function literal (which may
+  be called later), denies it. `?gptr_return`, IC-48 and D-249 amended.
+- Green: `^(doc-blocks|doc-replay|doc-io|doc-export|mcp-recording)$` PASS 2217; `^(gptr-sdk|
+  arch-layers|lint-rules)$` PASS 194 (NOT_CRAN=true). Lint clean; Rd regenerated.
+- Deviations: D-249 (extended). Open: none.

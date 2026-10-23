@@ -499,7 +499,9 @@ test_that("gptr_return(<expression>) is recorded as the block's hidden value; va
                 list(c("x = 1; gptr_return(", "  coef(fit)", "); y = 2"),
                      paste0("x = 1; ", hidden, "(coef(fit)); y = 2")),
                 list("gptr_return(x = coef(fit))", paste0(hidden, "(coef(fit))")),
-                list("coef(fit) |> gptr_return(x = _)", paste0(hidden, "(coef(fit))")))
+                list("coef(fit) |> gptr_return(x = _)", paste0(hidden, "(coef(fit))")),
+                list(c("if (ok) gptr_return(1)", "gptr_return(coef(fit))"),
+                     c("if (ok) gptr_return(1)", paste0(hidden, "(coef(fit))"))))
   for (sh in shapes) {
     out = doc_code_clean(sh[[1L]])
     expect_identical(as.character(out), sh[[2L]], info = sh[[2L]][1L])
@@ -515,7 +517,10 @@ test_that("gptr_return(<expression>) is recorded as the block's hidden value; va
   nested = list(list("if (ok) gptr_return(coef(fit))"), list("y = gptr_return(coef(fit))"),
                 list(c("{", "  gptr_return(coef(fit))", "}")),
                 list(c("gptr_return(coef(fit))", "if (ok) gptr_return(summary(fit))"),
-                     c(paste0(hidden, "(coef(fit))"), "if (ok) gptr_return(summary(fit))")))
+                     c(paste0(hidden, "(coef(fit))"), "if (ok) gptr_return(summary(fit))")),
+                # a function may be called after the last call
+                list(c("f = function() gptr_return(1)", "gptr_return(coef(fit))"),
+                     c("f = function() gptr_return(1)", paste0(hidden, "(coef(fit))"))))
   for (sh in nested) {
     out = doc_code_clean(sh[[1L]])
     expect_identical(as.character(out), sh[[length(sh)]], info = sh[[1L]][1L])

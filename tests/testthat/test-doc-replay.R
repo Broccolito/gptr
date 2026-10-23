@@ -2331,7 +2331,8 @@ test_that("each gptr_return() shape replays its value in a later process, or say
               paste0(fit, "gptr_return(\n  coef(fit)\n)"),
               paste0(fit, "gptr_return(x = coef(fit))"),
               paste0(fit, "`my fit` = coef(fit)\ngptr_return(`my fit`)"),
-              paste0(fit, "b = coef(fit)\nif (TRUE) gptr_return(b)"))
+              paste0(fit, "b = coef(fit)\nif (TRUE) gptr_return(b)"),
+              paste0(fit, "if (FALSE) gptr_return(1)\ngptr_return(coef(fit))"))
   # the last one designated 1 after the coefficients: replay must not give them
   lost = c(paste0(fit, "if (TRUE) gptr_return(coef(fit))"),
            paste0(fit, "y = gptr_return(coef(fit))"), paste0(fit, "{\n  gptr_return(coef(fit))\n}"),

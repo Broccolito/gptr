@@ -905,8 +905,9 @@ doc_rewrite_assign = function(lines) {
 #' `.gptr_value_<block id> = (coef(fit))`. The call's text around its argument (comments
 #' included) goes. The name stays backquoted until doc_prepare() fills in the block id, so the text
 #' parses meanwhile. Lines whose rewrite does not parse to the rewritten expressions are kept as
-#' written. Attribute `returned`: a call was rewritten and no other gptr_return() is left, so the
-#' hidden name holds the code's latest designated value.
+#' written. Attribute `returned`: a call was rewritten and no gptr_return() left in the code can
+#' run after the last one (in a later expression, or in a function, which may be called later), so
+#' the hidden name holds the code's latest designated value.
 #' @noRd
 doc_rewrite_return = function(lines) {
   none = structure(lines, returned = FALSE)
@@ -946,7 +947,9 @@ doc_rewrite_return = function(lines) {
     want[[i]] = call("=", as.name(doc_value_name), call("(", exprs[[i]][[2L]]))
   }
   if (!doc_same_exprs(lines, want)) return(none)
-  structure(lines, returned = !"gptr_return" %in% unlist(lapply(want, all.names)))
+  left = vapply(want, function(e) "gptr_return" %in% all.names(e), NA)
+  fn = vapply(want, function(e) "function" %in% all.names(e), NA)
+  structure(lines, returned = !any(left & (seq_along(want) > max(hit) | fn)))
 }
 
 #' Recorded code of one r call: drop gptr_return() of a name and record = FALSE members, rewrite
