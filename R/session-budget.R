@@ -400,7 +400,7 @@ run_used = function(run) {
 
 #' Check the budgets that apply to a session's current run against run_used() (IC-74, D-025)
 #' @param estimate Estimated input tokens of the next request.
-#' @return `NULL` or `list(kind, budget, used)`.
+#' @return `NULL` or `list(kind, budget, used, estimate)`.
 #' @noRd
 budget_check = function(s, estimate = 0) {
   check_number(estimate, "estimate", min = 0)
@@ -411,15 +411,12 @@ budget_check = function(s, estimate = 0) {
     lim = r$budget
     if (!length(lim)) next
     used = run_used(r)
-    if (!is.null(lim$tokens) && used$tokens + estimate > lim$tokens) {
-      return(list(kind = "tokens", budget = lim$tokens, used = used$tokens))
+    hit = function(kind) {
+      list(kind = kind, budget = lim[[kind]], used = used[[kind]], estimate = estimate)
     }
-    if (!is.null(lim$cost) && used$cost >= lim$cost) {
-      return(list(kind = "cost", budget = lim$cost, used = used$cost))
-    }
-    if (!is.null(lim$turns) && used$turns >= lim$turns) {
-      return(list(kind = "turns", budget = lim$turns, used = used$turns))
-    }
+    if (!is.null(lim$tokens) && used$tokens + estimate > lim$tokens) return(hit("tokens"))
+    if (!is.null(lim$cost) && used$cost >= lim$cost) return(hit("cost"))
+    if (!is.null(lim$turns) && used$turns >= lim$turns) return(hit("turns"))
   }
   NULL
 }

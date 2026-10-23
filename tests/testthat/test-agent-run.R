@@ -157,11 +157,12 @@ test_that("the budget question of a sub-agent says who asks (D-188)", {
   s = test_session()
   for (agent in c("alpha", "main")) {
     expect_false(run_budget_extend(test_run(s, list(agent = agent)),
-                                   list(kind = "cost", budget = 1)))
+                                   list(kind = "cost", budget = 1, used = 1.5)))
   }
   expect_identical(st$log$prompt,
-                   c("sub-agent alpha: The cost budget of this call ($1.0000) is reached.",
-                     "The cost budget of this call ($1.0000) is reached."))
+                   c(paste("sub-agent alpha: The cost budget of this call ($1.0000) is reached",
+                           "(used $1.5000)."),
+                     "The cost budget of this call ($1.0000) is reached (used $1.5000)."))
 })
 
 test_that("a reached token budget reads as a token count, never 2e+06", {
@@ -169,8 +170,23 @@ test_that("a reached token budget reads as a token count, never 2e+06", {
   st = local_scripted_ui(list(2L))
   s = test_session()
   expect_false(run_budget_extend(test_run(s, list(agent = "main")),
-                                 list(kind = "tokens", budget = 2e6)))
-  expect_identical(st$log$prompt, "The tokens budget of this call (2.0M) is reached.")
+                                 list(kind = "tokens", budget = 2e6, used = 2e6, estimate = 10)))
+  expect_identical(st$log$prompt, "The tokens budget of this call (2.0M) is reached (used 2.0M).")
+})
+
+test_that("an extended token budget is checked again before the request is sent", {
+  skip_on_cran()
+  st = local_scripted_ui(list(1L, 2L))
+  local_without_builtin(c("tools", "r"))
+  fake = local_fake_provider(list("never"), name = "fb")
+  s = test_session(model = "fb/fb-1")
+  run_text(s, "go", list(budget = list(tokens = 10)))
+  expect_identical(s$status, "budget")
+  expect_length(fake_requests(fake), 0L)
+  lead = "^The next request \\(~[0-9.]+k? tokens\\) would exceed the tokens budget of this call "
+  expect_length(st$log$prompt, 2L)
+  expect_match(st$log$prompt[1L], paste0(lead, "\\(10; used 0\\)\\.$"))
+  expect_match(st$log$prompt[2L], paste0(lead, "\\(20; used 0\\)\\.$"))
 })
 
 # ---------------------------------------------------------------- report 02 section 5.3 (26 checks)

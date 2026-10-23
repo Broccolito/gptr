@@ -3147,12 +3147,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `turns`. Was the whole prompt's estimate at the catalog price (a refused connection to Opus: $0.0479 over 3
   requests; a 401: $0.0080), which ended a run as `gptr_error_budget_*` instead of retrying. A partial reply, idle
   and first-byte timeouts and a success without usage keep the estimate; an overflow's `tokens` stays NA.
+- Rule (sessions-8): a `budget_check()` hit carries `estimate` (the next request's estimated input tokens), and so
+  do the `gptr.budget` entry, the `budget_exceeded` event and the condition. A token hit with used < budget reads
+  "the next request (~3.9k tokens) would exceed the tokens budget of this call (9.0k; used 5.8k)", others "is
+  reached (used X)", in the stop and the extend question alike. Was "(9.0k) is reached (used 5.8k)", even "(500) is
+  reached (used 0)"; the question named no usage. After "Extend" the budgets are checked again (was: sent unchecked).
 - Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
   `tools`, `.opts` and refusals. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter` `envir`,
   `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and row).
+  04 §4.6 `gptr.budget`, §7.6 `budget_check()`, §10.4 `budget_exceeded`, IC-66.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...",
   "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
   prompt-sections "the tool array skips unavailable and missing tools ..."; agent-run "a request rejected or never
   received costs nothing ...", "a reported usage keeps its unknown counts ...", "an overflow condition carries the
-  provider's prompt count ...". Evidence: progress/fixes.md Task FIX-18.
+  provider's prompt count ...", "an extended token budget is checked again ..."; session-budget "a token budget the
+  next request would exceed says so ...". Evidence: progress/fixes.md Task FIX-18.

@@ -1095,7 +1095,10 @@ run_request = function(run, check_compact = TRUE) {
   if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
   req = run_build(run, target)
   hit = budget_check(s, req$tokens_est)
-  if (!is.null(hit) && !run_budget_extend(run, hit)) return(run_stop_budget(run, hit))
+  while (!is.null(hit)) {
+    if (!run_budget_extend(run, hit)) return(run_stop_budget(run, hit))
+    hit = budget_check(s, req$tokens_est)
+  }
   if (ext_service_has("prefix.guard")) {
     # gptr.check_prefix = "error" (04 section 3.1) ends the run; other failures are diagnostics
     tryCatch(ext_service_get("prefix.guard")(s, target, req$view), error = function(e) {
@@ -1417,6 +1420,19 @@ run_budget_amount = function(kind, x) {
   switch(kind, tokens = format_count(x), cost = format_cost(x), format(x))
 }
 
+#' Why a budget stops the run: the next request's estimate when it, not the usage, crosses a token
+#' budget; else the budget reached
+#' @noRd
+run_budget_reason = function(hit) {
+  amt = function(x) run_budget_amount(hit$kind, x)
+  if (identical(hit$kind, "tokens") && hit$used < hit$budget) {
+    return(paste0("the next request (~", amt(hit$estimate), " tokens) would exceed the tokens ",
+                  "budget of this call (", amt(hit$budget), "; used ", amt(hit$used), ")"))
+  }
+  paste0("the ", hit$kind, " budget of this call (", amt(hit$budget), ") is reached (used ",
+         amt(hit$used), ")")
+}
+
 #' Ask to extend a reached budget by the same amount (ask_human: the run's UI only)
 #' @noRd
 run_budget_extend = function(run, hit) {
@@ -1424,9 +1440,9 @@ run_budget_extend = function(run, hit) {
   ui = run_ui(run)
   if (is.null(ui) || !isTRUE(tryCatch(ui$has_ui(), error = function(e) FALSE))) return(FALSE)
   who = agent_label(run)
-  title = paste0(if (!identical(who, "main")) paste0("sub-agent ", who, ": "), "The ", hit$kind,
-                 " budget of this call (", run_budget_amount(hit$kind, hit$budget),
-                 ") is reached.")
+  reason = run_budget_reason(hit)
+  title = paste0(if (!identical(who, "main")) paste0("sub-agent ", who, ": "),
+                 toupper(substr(reason, 1L, 1L)), substring(reason, 2L), ".")
   ans = tryCatch(ui$select(title, c("Extend it by the same amount", "Stop the run"), default = 2L),
                  error = function(e) NA_integer_)
   if (!identical(suppressWarnings(as.integer(ans)), 1L)) return(FALSE)
@@ -1446,14 +1462,11 @@ run_budget_extend = function(run, hit) {
 run_stop_budget = function(run, hit) {
   s = run$shell
   d = session_data(s)
-  session_append(s, entry_custom("gptr.budget", list(kind = hit$kind, budget = hit$budget,
-                                                     used = hit$used)))
-  run_emit(run, "budget_exceeded", kind = hit$kind, budget = hit$budget, used = hit$used)
-  run$condition = gptr_condition(
-    paste0("the ", hit$kind, " budget of this call (", run_budget_amount(hit$kind, hit$budget),
-           ") is reached (used ", run_budget_amount(hit$kind, hit$used), ")"),
-    c(paste0("budget_", hit$kind), "budget"), "error",
-    list(kind = hit$kind, budget = hit$budget, used = hit$used, session = d$id))
+  session_append(s, entry_custom("gptr.budget", hit))
+  run_emit(run, "budget_exceeded", kind = hit$kind, budget = hit$budget, used = hit$used,
+           estimate = hit$estimate)
+  run$condition = gptr_condition(run_budget_reason(hit), c(paste0("budget_", hit$kind), "budget"),
+                                 "error", c(hit, list(session = d$id)))
   run_settle(run, "budget")
 }
 

@@ -2028,3 +2028,23 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   and then lost (curl or adapter `network` class) before any content block also counts zero. A zero row of a model
   without prices is still "unknown cost" (`usage_row()` prices nothing without a tier). `turns` still counts each
   retry, as documented.
+
+### sessions-8 - A token-budget stop names the next request, and an extension is checked again
+- Red: FAIL 8 in `^(session-budget|agent-run)$` (PASS 887; findings 75, 81, 137, 188): `budget = list(tokens =
+  10)` stopped with "the tokens budget of this call (10) is reached" and no `estimate` in the condition, entry or
+  event; with "Extend" answered, the request went out (1 request, status idle) and no second question came; the
+  extend question named no usage.
+- Cause: `budget_check()` stops when `used + estimate > limit` but returned only `used`; `run_stop_budget()` and
+  `run_budget_extend()` always said "is reached"; `run_request()` sent after an extension without checking again.
+- Fix: every hit carries `estimate`; `run_budget_reason()` words the stop and the question (a token hit with used <
+  budget: "the next request (~N tokens) would exceed the tokens budget of this call (B; used U)", else "is reached
+  (used U)"). The hit is the `gptr.budget` entry and the condition's data; `budget_exceeded` adds `estimate`.
+  `run_request()` asks again until the request fits or the run stops. 04 §4.6, §7.6, §10.4, IC-66.
+- Green: `^(session-budget|agent-run|ext-events)$` PASS 1095; `^(session-|agent-|ext-|gptr-|prompt-compact|
+  subagent-|console-render|arch-layers|lint-rules)` PASS 7522 SKIP 1. Full suite (NOT_CRAN=true) FAIL 0 PASS
+  35342 SKIP 64. Lint and check-plans clean.
+- Deviations: D-251 (extended). From the plan: every hit kind carries `estimate` (one shape for the entry, event and
+  condition), and the two extend-question tests now pass `used`.
+- Open: the estimate is uncalibrated (finding 75 in passing: 3.9k against 5.9k sent on Bedrock Claude), so the
+  reservation can still run low; `gateway_signal()`'s fallback for a session without a stored condition carries no
+  `estimate`.

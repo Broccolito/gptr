@@ -643,7 +643,7 @@ has `type`, `id` (8 hex), `parentId` (id or `null` for the first entry), `timest
 | `gptr.image_elision` | P06 | `{images: [ids]}`: older images projected as omitted (IC-67) |
 | `gptr.scrub` | P03 | `{date, secrets, count}`: `gptr_scrub()` rewrote this file (IC-70) |
 | `gptr.ext` | P02 | `{plugin, state}`: a plugin's JSON-able per-session state (`ctx$state()` persistence) |
-| `gptr.budget` | P06 | `{kind, budget, used}` when a budget stops a run |
+| `gptr.budget` | P06 | `{kind, budget, used, estimate}` when a budget stops a run (`estimate`: the next request's estimated input tokens) |
 
 ### 4.7 Session header line
 
@@ -2562,7 +2562,7 @@ adopting the recorded id, from the JSONL or reconstructed from the document with
 `session_replay_bind(block, s, child = NULL)` and `replay_lookup(block, child = NULL)` (the `the$replay_blocks`
 table behind `gptr_resume(block =)`). Consumers: P15, P19.
 
-**`session-budget.R`**: `budget_check(s, estimate = 0)` -> `NULL` or `list(kind, budget, used)`;
+**`session-budget.R`**: `budget_check(s, estimate = 0)` -> `NULL` or `list(kind, budget, used, estimate)`;
 `ledger_add(s, request_id, components)`; `gptr_usage()` (§6.5).
 
 **`agent-run.R`**
@@ -3546,7 +3546,7 @@ name and semantics follow Pi `1b347794`; `gptr` means gptr-specific. Handlers mu
 | `route`, `model_select` | gptr, pi | notify | `route`, `router`, `model`, `reason`; `from`, `to`, `reason` | - | P08, P06 (router switches, IC-69) |
 | `subagent_start`, `subagent_end` | gptr | notify | `child`, `agent`, `backend`, `model`; end: `status`, `usage` | - | P19 |
 | `artifact_start`, `artifact_stop` | gptr | notify | `id`, `url`, `version`; stop: `reason` | - | P23 |
-| `usage`, `budget_near`, `budget_exceeded` | gptr | notify | `row`; `kind`, `budget`, `used` | - | P06 |
+| `usage`, `budget_near`, `budget_exceeded` | gptr | notify | `row`; `kind`, `budget`, `used`; exceeded: `estimate` | - | P06 |
 | `cache_break` | gptr | notify | `provider`, `model`, `first_diff`, `entry`, `culprit` | - | P07 |
 | `bridge_call` | gptr | notify | `bridge`, `id`, `cmd` (redacted), `level`, `status`, `seconds`, `bytes_out`, `bytes_err`, `spill`, `digest` | - | P22 |
 | `checkpoint` | gptr | notify | `tool_call_id`, `objects`, `files`, `restorable` (counts) | - | P16 |
@@ -4852,6 +4852,9 @@ document are exact.
 **IC-66 Budgets.** (safe-11) Settings default `budget = {cost: 5, tokens: 2000000, turns: null}` per top-level
 call (per prompt at the console); `budget_near` at 80%; reaching it asks to extend by the same amount
 (`ask_human`) interactively and stops with status `budget` otherwise; `null` set explicitly disables a limit.
+The token limit counts the next request's estimated input: when that, not the usage, crosses it, the question and
+the stop say so ("the next request (~3.9k tokens) would exceed the tokens budget of this call (9.0k; used 5.8k)";
+D-251), and an extended budget is checked again before the request is sent.
 Budgets are hierarchical: every request's check walks to the root session and charges the root, and children
 start with `min(<their share>, <root remaining>)`. Caps: `gptr.max_nested_calls` (20 `peter()` calls per `r`
 evaluation; a team or fan-out counts as one) and `gptr.s1_max_elements` (10,000 elements per System 1 call; error

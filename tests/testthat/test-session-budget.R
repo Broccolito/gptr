@@ -356,6 +356,26 @@ test_that("a token budget stops the run before the next request with status budg
   expect_identical(last$custom_type, "gptr.budget")
 })
 
+test_that("a token budget the next request would exceed says so, not that it is reached", {
+  local_without_builtin(c("tools", "r"))
+  ev = local_events("budget_exceeded")
+  fake = local_fake_provider(list("never"), name = "fb")
+  s = test_session(model = "fb/fb-1")
+  run_text(s, "go", list(budget = list(tokens = 10)))
+  expect_identical(s$status, "budget")
+  expect_length(fake_requests(fake), 0L)
+  cnd = session_data(s)$condition
+  expect_s3_class(cnd, "gptr_error_budget_tokens")
+  expect_identical(cnd$used, 0)
+  expect_gt(cnd$estimate, 10)
+  expect_match(conditionMessage(cnd),
+               paste0("^the next request \\(~[0-9.]+k? tokens\\) would exceed the tokens budget ",
+                      "of this call \\(10; used 0\\)$"))
+  d = session_data(s)
+  expect_identical(d$entries[[length(d$entries)]]$data$estimate, cnd$estimate)
+  expect_identical(ev(s)[[1L]]$estimate, cnd$estimate)
+})
+
 test_that("a budget of 5 USD on a root stops its children (root charging, IC-66)", {
   local_permissive()
   box = new.env()
