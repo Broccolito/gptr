@@ -202,17 +202,22 @@ edit_splice_exact = function(text, body, has_cr, k, eol, starts, lens, repl) {
   splice_bytes(text, o_start, o_end - o_start, repl_eol)
 }
 
-#' Original byte offsets of 0-based byte offsets into the fuzzy view of one line: NA when the line
-#' does not normalise character by character (a combining sequence) or an offset falls inside one
-#' character's normalised form (a ligature)
+#' Original byte offsets of 0-based byte offsets into the fuzzy view of one line. The per-character
+#' normalisation is aligned with the line's own from both ends; NA for an offset between the two
+#' common parts (by a combining sequence) or inside one character's normalised form (a ligature)
 #' @noRd
 fuzzy_offsets = function(line, off) {
   ch = strsplit(line, "", fixed = TRUE)[[1L]]
   nc = fuzzy_normalize_lines(ch, strip = FALSE)
-  if (!identical(paste(nc, collapse = ""), fuzzy_normalize_lines(line, strip = FALSE))) {
-    return(rep(NA_real_, length(off)))
-  }
-  c(0, cumsum(nchar(ch, type = "bytes")))[match(off, c(0, cumsum(nchar(nc, type = "bytes"))))]
+  pc = charToRaw(paste(nc, collapse = ""))
+  w = charToRaw(fuzzy_normalize_lines(line, strip = FALSE))
+  n = min(length(pc), length(w))
+  a = match(FALSE, pc[seq_len(n)] == w[seq_len(n)], nomatch = n + 1L) - 1L
+  z = match(FALSE, rev(pc)[seq_len(n - a)] == rev(w)[seq_len(n - a)], nomatch = n - a + 1L) - 1L
+  cb = function(x) c(0, cumsum(nchar(x, type = "bytes")))
+  left = cb(ch)[match(off, cb(nc))]
+  right = sum(nchar(ch, type = "bytes")) - cb(rev(ch))[match(length(w) - off, cb(rev(nc)))]
+  ifelse(off <= a, left, ifelse(off >= length(w) - z, right, NA_real_))
 }
 
 #' Fuzzy path: the matched spans are mapped back to the original bytes and newText (with the file's

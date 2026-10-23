@@ -119,8 +119,13 @@ test_that("a fuzzy match changes only its span; the rest of its lines keeps its 
   f = put_file(td, "tail.R", "x = \u201chello\u201d   \r\ny = 1\r\n")
   edit_file(f, e1("x = \"hello\"", "x = \"bye\"\n# was hello"))
   expect_identical(rd(f), "x = \"bye\"\r\n# was hello   \r\ny = 1\r\n")
-  # A boundary inside a ligature cannot be mapped back: the touched lines are rewritten, and said so
   skip_if_not_installed("stringi")
+  # A combining sequence away from the boundaries keeps its bytes, as does the other quote
+  f = put_file(td, "nfd.R", "café ‘x’ ‘y’\n")
+  ed = edit_file(f, e1("'x'", "'z'"))
+  expect_identical(rd(f), "café 'z' ‘y’\n")
+  expect_identical(ed$details$reasons, "matched after whitespace, quote or dash normalisation")
+  # A boundary inside a ligature cannot be mapped back: the touched lines are rewritten, and said so
   f = put_file(td, "lig.R", "# \ufb01rst \u2018a\u2019\nkeep \u2018b\u2019\n")
   ed = edit_file(f, e1("irst 'a'", "irst 'c'"))
   expect_identical(rd(f), "# first 'c'\nkeep \u2018b\u2019\n")

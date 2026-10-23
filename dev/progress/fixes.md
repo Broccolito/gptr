@@ -1991,18 +1991,24 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the model saw.
 - Fix: the splice landed (sheet entry S31 takes the "changes only the matched text" wording).
   `fuzzy_offsets()` maps a fuzzy-view offset back to the original line by per-character
-  normalisation (`fuzzy_normalize_lines(strip = FALSE)`), and newText (file line ending) is spliced
-  into the original bytes. When a boundary cannot be mapped (a combining sequence on its line, a
-  boundary inside a ligature) the old line rewrite runs and the reasons add "the touched lines
-  were rewritten in normalised form". `gptr_patch` gains `reasons` (all three call sites) and
-  prints them bracketed between the message and the diff when fuzzy. Vignette sentence corrected
-  in .Rmd and .Rmd.orig; Pi's not-found wording stays.
+  normalisation (`fuzzy_normalize_lines(strip = FALSE)`) aligned with the line's own from both
+  ends, and newText (file line ending) is spliced into the original bytes. When a boundary cannot
+  be mapped (between two combining accents on its line, inside a ligature) the old line rewrite
+  runs and the reasons add "the touched lines were rewritten in normalised form". `gptr_patch`
+  gains `reasons` (all three call sites) and prints them bracketed between the message and the
+  diff when fuzzy. Vignette sentence corrected in .Rmd and .Rmd.orig; Pi's not-found wording stays.
 - Green: `tool-edit` PASS 194; `^(tool-edit|tool-namespace|tool-r|doc-replay|doc-formats|
   doc-blocks|utils-paths|json-schema)$` PASS 2129 SKIP 1; every existing fuzzy expectation (tws.txt
   included: covered trailing spaces go) unchanged. 20,000 fuzzy matches with replace_all: 1.8 s
   (was 2.7 s). Lint clean; Rd unchanged.
-- Deviations: D-248 (04 §5.10, §7.10). Open: the combining/ligature fallback still rewrites lines
-  (said in the reasons); a non-fuzzy deviation (CRLF, re-encoding) still prints only the message.
+- Reviews: r1 (2) the first version sent a whole edit to the line rewrite when one combining
+  sequence sat anywhere on a touched line: `cafe\u0301 \u2018x\u2019 \u2018y\u2019` edited
+  `'x'` -> `'z'` composed the accent and straightened the other quote (red FAIL 2 in `tool-edit`,
+  PASS 194). Aligning from both ends: `tool-edit` PASS 196; the neighbours above PASS 2137 SKIP 1;
+  20,000 matches 1.7 s (1.4 s before, same run). Lint clean.
+- Deviations: D-248 (04 §5.10, §7.10). Open: the fallback still rewrites the lines when a boundary
+  lies between two combining accents on its line or inside a ligature (said in the reasons); a
+  non-fuzzy deviation (CRLF, re-encoding) still prints only the message.
 
 ### tools-9 - The r_session prompt mentions record = false only when the r tool has it
 - Red: FAIL 1 in `tool-namespace` (PASS 415): a session with no document froze "Use peter$out(),

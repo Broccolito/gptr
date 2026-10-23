@@ -3141,13 +3141,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: `peter$help()` lists a member's schema arguments when they are among its formals (was:
   equal to them), with an array's item fields, so `edit` and `find` now show theirs.
 - Rule: a fuzzy edit changes only its matched span. `edit_splice_fuzzy()` maps each span boundary
-  back to the original bytes (`fuzzy_offsets()`: per-character normalisation) and splices newText
-  there, so the rest of a touched line keeps its bytes (curly quotes, ligatures, U+00B5, special
-  spaces, trailing spaces after the match). Pi rewrites the touched lines from the fuzzy view; that
-  stays as the fallback when a boundary cannot be mapped (a combining sequence on its line, or a
-  boundary inside a ligature), and then the reasons add "the touched lines were rewritten in
-  normalised form". A `gptr_patch` keeps the reasons (`reasons`, chr) and prints them bracketed
-  between the message and the diff when fuzzy, as the model reads them.
+  back to the original bytes (`fuzzy_offsets()`: the per-character normalisation aligned with the
+  line's own from both ends) and splices newText there, so the rest of a touched line keeps its
+  bytes (curly quotes, ligatures, U+00B5, special spaces, trailing spaces after the match, a
+  combining accent). Pi rewrites the touched lines from the fuzzy view; that stays as the fallback
+  when a boundary cannot be mapped (it lies between two combining accents on its line, or inside a
+  ligature), and then the reasons add "the touched lines were rewritten in normalised form". A
+  `gptr_patch` keeps the reasons (`reasons`, chr) and prints them bracketed between the message and
+  the diff when fuzzy, as the model reads them.
 - Rule: the `<r_session>` `out` fragment says "Use peter$out(), peter$help(), peter$search() and
   peter$plot() only with record = false." only when a document is bound (`ctx$input$document`),
   the freeze input that gives `r` its `record` argument; without one, `record` read as an argument
