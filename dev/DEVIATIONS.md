@@ -3094,6 +3094,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     last). Before, the kept list sat between the status line and the notice, directly over the prompt.
     Contract-visible: 04 §15.10 IC-76. Tests: test-console-typing.R "an abort's status line says aborted once; the
     kept list follows it, then a blank row".
+- Steering review fixes (2026-10-22):
+  - A steer sent before a deferred prompt runs joins it. `peter(.run = FALSE)` queues its prompt as a follow-up, and
+    `run_initial_input()` took the steers first, so `gptr_steer(s, "...")` then `gptr_wait(s)` opened the run with
+    the bare steer (in the audit's live run the model asked what it should round) and the prompt came second, as its
+    own request; the record skipped the turn's first user message, the steer, and wrote the prompt as
+    `## Follow-up:`. A deferred prompt has no step boundary before it, so the steer belongs after it. The older
+    queue head now opens a run started without input, by the items' `t`; the steers go first when one is older (a
+    leftover steer) or the follow-up has no `t`. The steer joins the first request at the loop's start poll, and the
+    record writes it as `## Steer:`; `doc_turn_body()` is unchanged. Contract-visible: 04 §15.10 IC-55. Tests:
+    test-gptr-sdk.R "a steer sent before a deferred prompt runs joins it, recorded (steering review)", "a deferred
+    prompt run alone records no follow-up line (steering review)"; test-agent-run.R "a steer older than every
+    follow-up still opens a run without input (steering review)".
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

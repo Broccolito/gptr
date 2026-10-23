@@ -5311,7 +5311,10 @@ its part in its own commit, and Task 27 finalises them.
 - IC-55 amended (D-242; P28 Task 4): each poll of the steer FIFO (run start, after `turn_end`) takes every queued
   steer, in order, and `queue_item_message()` makes each its own message, so a step boundary delivers them all to
   the next request: consecutive operator relays after the complete tool results, which every adapter serialises
-  as it does any run of operator messages. Follow-ups are still taken one at a time.
+  as it does any run of operator messages. Follow-ups are still taken one at a time. A run started without
+  input opens with the older queue head by the items' `t` (steering review): the first follow-up, such as the
+  prompt `peter(.run = FALSE)` queued, unless a steer is older or the follow-up has no `t`; steers sent after it
+  join that first request at the start poll, user-role messages with source `steer`.
 - IC-75 amended (D-243; P28 Task 3): a stale line is kept, never discarded, and no answer is ever turned into a
   steer.
   - `readline_answer(prompt, keep)` hands each line it reads past (not blank) to `keep`. The console questions

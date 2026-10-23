@@ -919,12 +919,19 @@ run_input = function(input) {
              expected = "a message from msg_user() or a list of messages")
 }
 
-#' Without input: the queued steers, else the first follow-up, open the turn; with an empty queue
+#' Without input the older queue head opens the turn (D-242): the first follow-up (a deferred
+#' prompt) when no steer is older, and the steers sent after it join at the loop's start poll;
+#' else the queued steers (a leftover steer, or a follow-up without a time). With an empty queue
 #' the run continues from the leaf when the path awaits a response, else there is nothing to run
 #' @noRd
 run_initial_input = function(run, input) {
   if (!is.null(input)) return(input)
   d = session_data(run$shell)
+  fu = d$queue$follow_up
+  st = d$queue$steer
+  if (length(fu) && (!length(st) || isTRUE(fu[[1L]]$t <= (st[[1L]]$t %||% Inf)))) {
+    return(run_take(run, "follow_up"))
+  }
   for (which in c("steer", "follow_up")) {
     if (length(d$queue[[which]])) return(run_take(run, which))
   }

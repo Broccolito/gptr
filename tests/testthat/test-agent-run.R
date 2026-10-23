@@ -1086,6 +1086,25 @@ test_that("queued items start an idle session's run (input = NULL)", {
   expect_identical(s$turns, 1L)
 })
 
+test_that("a steer older than every follow-up still opens a run without input (steering review)", {
+  skip_on_cran()
+  local_permissive()
+  fake = local_fake_provider(list("first", "second"))
+  s = test_session()
+  session_enqueue(s, "old steer", as = "steer")
+  session_enqueue(s, "new follow-up", as = "follow_up")
+  # a leftover steer was queued before the follow-up, as by an earlier run
+  d = session_data(s)
+  q = d$queue
+  q$steer[[1L]]$t = q$follow_up[[1L]]$t - 1
+  d$queue = q
+  session_run(s, NULL)
+  users = Filter(function(m) identical(m$role, "user"), s$messages)
+  expect_identical(vapply(users, msg_text, ""), c("old steer", "new follow-up"))
+  expect_identical(vapply(users, function(m) m$source, ""), c("steer", "follow_up"))
+  expect_identical(vapply(fake_requests(fake)[[1L]]$messages, msg_text, ""), "old steer")
+})
+
 test_that("run_start(s, NULL) continues from the leaf after an abort", {
   skip_on_cran()
   local_permissive()

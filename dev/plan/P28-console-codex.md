@@ -54,6 +54,11 @@ response, and both Codex 0.157.1 and Pi's current loop finish them. Skipping the
 agent failures it did not cause. In manual mode each remaining call is still asked, and
 `n <text>` denies it with that text. Ctrl-C [a] stops everything.
 
+(Amended in the steering review: a run started without input opens with the older of the two
+queue heads. `peter(.run = FALSE)` queues its prompt as a follow-up, so a steer sent before the
+run starts joins the first request after that prompt, and the record writes it as `## Steer:`;
+a leftover steer older than any follow-up still opens the run.)
+
 Typing during an in-process `r` tool:
 - Keys wait in the terminal buffer and are read when the tool returns. (Amended in the review of Tasks
   16-21: the live row says so, `▌ r · keys show when r returns`, without a clock, which cannot tick then.)
@@ -290,6 +295,10 @@ Decisions:
 - The provider adapters already hold operator messages until pending tool results are complete
   (`provider-transform.R`).
 - The boundary is pinned as D-242 states: no call is skipped.
+- (Amended in the steering review: `run_initial_input()` took the steers before the follow-up, so a
+  steer sent after `peter(.run = FALSE)` opened the run alone and the model answered it without its
+  task. The older queue head opens the run now, by the items' `t`; the steers go first when one is
+  older or the follow-up has no `t`.)
 
 Tests (`test-agent-run.R`, `test-provider-transform.R`), RED first:
 - Two steers enqueued during one tool call both appear in REQ2. Today the second waits for REQ3.

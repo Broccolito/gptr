@@ -83,6 +83,31 @@ test_that("gptr_steer() queues a follow-up delivered when the agent would stop",
   expect_identical(s$text, "second")
 })
 
+test_that("a steer sent before a deferred prompt runs joins it, recorded (steering review)", {
+  local_gw()
+  fake = local_fake_provider(list("ok"))
+  s = peter("Summarise mtcars", model = fake, .run = FALSE, envir = new.env())
+  gptr_steer(s, "Use only the mpg column")
+  gptr_wait(s)
+  reqs = fake_requests(fake)
+  expect_length(reqs, 1L)
+  users = Filter(function(m) identical(m$role, "user"), reqs[[1L]]$messages)
+  expect_identical(vapply(users, msg_text, ""), c("Summarise mtcars", "Use only the mpg column"))
+  expect_identical(vapply(users, function(m) m$source, ""), c("follow_up", "steer"))
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "Summarise mtcars"), 1L)
+  expect_true("## Steer: Use only the mpg column" %in% lines)
+  expect_false(any(startsWith(lines, "## Follow-up")))
+})
+
+test_that("a deferred prompt run alone records no follow-up line (steering review)", {
+  local_gw()
+  fake = local_fake_provider(list("ok"))
+  s = peter("Summarise mtcars", model = fake, .run = FALSE, envir = new.env())
+  gptr_wait(s)
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "Summarise mtcars"), 1L)
+  expect_false(any(startsWith(lines, "## Follow-up")))
+})
+
 test_that("gptr_steer() redacts with the context profile and queues an api_user item", {
   local_gw()
   fake = local_fake_provider(list("ok"))
