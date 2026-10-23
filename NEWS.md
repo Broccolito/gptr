@@ -178,11 +178,10 @@ works on the objects already in memory.
   `context` and `record` still only tighten in any project. A project cannot select `yolo`:
   `gptr_config(mode = yolo)` at project scope is refused, naming `.scope = "user"` and `"session"`.
 * Providers declared with `api = "bedrock-converse"` send thinking levels
-  (`.opts = list(thinking =)` or a `:high` suffix) to Claude models, as `api = "anthropic-messages"`
-  does; formerly every level was dropped without a word. Declare
-  `capabilities = list(adaptive_thinking = TRUE, effort = TRUE)` on Claude 4.6 and later models
-  (see `?gptr_provider`); without it a token budget is sent, which Claude Opus 4.8 refuses. Other
-  Converse models say once that the level is not sent.
+  (`.opts = list(thinking =)` or a `:high` suffix) to a Claude model whose record declares
+  `capabilities = list(adaptive_thinking = TRUE, effort = TRUE)` (Claude 4.6 and later; see
+  `?gptr_provider`); formerly every level was dropped without a word. Any other model, an
+  undeclared Claude record included, still runs without thinking and now says so once.
 * A string that is not one of an argument's choices, such as `.opts = list(thinking = "ultra")`,
   is reported as such ("the string given is not one of them", with "Did you mean" when it differs
   from a choice only in case) instead of "not a character of length 1".

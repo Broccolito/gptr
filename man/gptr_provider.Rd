@@ -73,9 +73,9 @@ gptr_provider("corp", api = "openai-completions", base_url = "https://llm.corp.e
               auth = "CORP_LLM_KEY", models = list(list(id = "corp-large", context = 128000)))
 # Amazon Bedrock's Converse API through a SigV4 gateway (region and endpoint are record data):
 # the IAM key pair is read from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (and
-# AWS_SESSION_TOKEN when set); gptr_env(aliases = ...) maps other names onto them. A Claude
-# model gets thinking levels as on api = "anthropic-messages"; `capabilities` says it thinks
-# adaptively with an effort (Claude 4.6 and later) rather than with a token budget. The
+# AWS_SESSION_TOKEN when set); gptr_env(aliases = ...) maps other names onto them. Thinking
+# levels are sent only to a Claude model whose `capabilities` declare adaptive thinking with
+# an effort (Claude 4.6 and later); other models get no thinking, with a message. The
 # bedrock-converse adapter does not request prompt caching, so each request sends the full
 # prompt at the uncached rate.
 gptr_provider("gateway", api = "bedrock-converse", base_url = "https://ai.corp.example/awsai",

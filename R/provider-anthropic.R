@@ -1193,10 +1193,10 @@ anthropic_elements = function(model, msgs, opts, anchors = "project", tail = FAL
   list(elements = out, betas = unique(betas), prev = prev, mid = mid)
 }
 
-#' Thinking, effort, budget and max_tokens of a request (anthropic-messages, and Claude on
-#' bedrock-converse): adaptive models get adaptive thinking and an effort, budget models `enabled`
-#' with a budget and the interleaved beta (07 section 2.6), raising max_tokens up to max_output
-#' so that 1024 <= budget_tokens < max_tokens; with no room for that, no thinking
+#' Thinking, effort, budget and max_tokens of a request (anthropic-messages, and adaptive Claude
+#' on bedrock-converse): adaptive models get adaptive thinking and an effort, budget models
+#' `enabled` with a budget and the interleaved beta (07 section 2.6), raising max_tokens up to
+#' max_output so that 1024 <= budget_tokens < max_tokens; with no room for that, no thinking
 #' @noRd
 anthropic_thinking = function(model, params) {
   max_tokens = params$max_tokens %||% model$max_output %||% 64000L

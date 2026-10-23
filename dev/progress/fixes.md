@@ -2163,7 +2163,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-250 (thinking-1 rule), pointer under D-193. Beyond the plan: test-live-bedrock.R registers its
   endpoint through one local helper for both live tests. Open: an Opus 4.8 record declared without
   `capabilities` and given a level now gets the provider's HTTP 400 ("Use thinking.type.adaptive ...") instead
-  of a silent no-op (the plan rules out id inference; no gptr hint added); `:max` still clamps to `high` on a
+  of a silent no-op (fixed by thinking-1b); `:max` still clamps to `high` on a
   record without `thinking_levels` (thinking-4); `usage$reasoning` stays 0 on Converse.
 
 ### thinking-3 - A string that is not one of the choices is reported as such
@@ -2319,3 +2319,23 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Open: the sheet's S14 caption is applied by the sheet commit. `peter("Is it?", "p=0.85", model = <System 1
   model>)` still warns `two_prompts` "the second is context" (finding 121's side note; measured at HEAD, not
   planned).
+
+### thinking-1b - An undeclared Claude record on bedrock-converse gets no thinking, never an HTTP 400
+- Review of thinking-1 (high). Red: `^provider-bedrock$` FAIL 3, PASS 160: a record shaped like the live `m$claude`
+  (`us.anthropic.claude-opus-4-8`, `reasoning = TRUE`, no `capabilities`) got `thinking` `enabled` with a
+  budget at `high` and `max`, and no notice.
+- Cause: `model_capabilities()` fills undeclared flags with `FALSE`, so thinking-1 sent every Claude record
+  without `adaptive_thinking` a budget; Opus 4.8 refuses it ("thinking.type.enabled is not supported for this
+  model", HTTP 400, `gptr_error_provider`), where main sent nothing and answered.
+- Fix: `bedrock_thinking()` sends thinking only to a Claude record declaring `adaptive_thinking` (adaptive
+  fields); any other model gets none and a notice once per model naming `capabilities = list(adaptive_thinking =
+  TRUE, effort = TRUE)`. The budget path and `anthropic_beta` leave `bedrock_build()`. IC-80, `?gptr_provider`'s
+  example comment, NEWS and the D-250 rule (why: no budget declaration, no id inference) amended.
+- Green: `^provider-bedrock$` PASS 163; provider-bedrock, provider-anthropic, ext-specs, live-bedrock,
+  lint-rules, zzz and arch-layers PASS 1285 (SKIP 3, live); full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 66,
+  PASS 35503. Lint clean; `man/gptr_provider.Rd` regenerated. Live (Versa gateway, installed branch): `m$claude`
+  at `high`, `max` and `:high` answers "ready" (one notice; `max` also the thinking-4 clamp message); Opus 4.8
+  declared adaptive at `high` returns a thinking block; `^live-bedrock$` PASS 7 (+1: an undeclared record
+  answers at `high`).
+- Deviations: D-250 (thinking-1 rule rewritten in place; D-193 pointer). Open: Claude 4.5 and earlier on
+  Converse get no thinking (no budget declaration exists); `usage$reasoning` stays 0 on Converse.

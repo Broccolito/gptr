@@ -5287,14 +5287,14 @@ Written by `dev/plan/P26-console-agent-fixes.md`; these items win over earlier s
   instruction (IC-71) joins the last user message. With no tools to send, past tool calls and results are text
   (Converse refuses `toolUse` and `toolResult` blocks without `toolConfig`). No tool choice and no cache points
   are sent (capabilities `forced_tool_choice = FALSE`, `cache = "none"`).
-- Thinking (D-250): a model whose id contains `anthropic.claude` gets the anthropic-messages fields of
-  `anthropic_thinking()` (report 07 section 2.6) in `additionalModelRequestFields`: `thinking` and
-  `output_config.effort` when its record declares `capabilities$adaptive_thinking` (and `effort`), else, for a
-  level other than `off`, `thinking` `enabled` with a budget and `anthropic_beta`
-  `["interleaved-thinking-2025-05-14"]`, with `maxTokens` raised up to `max_output` so that 1024 <=
-  `budget_tokens` < `maxTokens` (no room: no thinking). Adaptive or budget follows the record, never the id.
-  Another model's level other than `off` is not sent, and a `notice` says so once per model. Converse reports no
-  reasoning tokens, so `usage$reasoning` keeps the legacy zero of an absent field (IC-74).
+- Thinking (D-250): a model whose id contains `anthropic.claude` and whose record declares
+  `capabilities$adaptive_thinking` gets the adaptive fields of `anthropic_thinking()` (report 07 section 2.6) in
+  `additionalModelRequestFields`: `thinking` `adaptive` (none for `off`) and, with `effort`,
+  `output_config.effort`. Any other model, an undeclared Claude record included, is sent no thinking field and
+  `maxTokens` as asked; a level other than `off` gives a `notice` once per model naming
+  `capabilities = list(adaptive_thinking = TRUE, effort = TRUE)`. No budget is sent: a record cannot say it
+  thinks on a budget (undeclared capabilities are `FALSE`), and Opus 4.8 refuses `enabled` with HTTP 400. Converse
+  reports no reasoning tokens, so `usage$reasoning` keeps the legacy zero of an absent field (IC-74).
 - Signing: with a credential, `build()` returns `sign` (04 section 8.1): AWS Signature Version 4 for service
   `bedrock` and the provider record's `compat$region` (required), signed headers `host`, `x-amz-content-sha256`
   (the body's SHA-256), `x-amz-date` and, with a session token, `x-amz-security-token`; the canonical URI is the

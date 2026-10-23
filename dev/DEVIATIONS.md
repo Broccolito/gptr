@@ -2413,7 +2413,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: provider-bedrock (new), live-bedrock (opt-in), arch-layers (122 files), auth-secrets (the key id is a
   secret name); `setup.R` clears the key-pair variables; the scripted wire of `replay_helpers.R` takes raw
   bodies; `fixtures/sse/bedrock-converse/` (tool_use, throttled). Evidence: progress/P26.md Task 11.
-- Amended by D-250 (thinking-1): Claude models get thinking fields in `additionalModelRequestFields`.
+- Amended by D-250 (thinking-1): Claude models declared adaptive get thinking in `additionalModelRequestFields`.
 
 ## D-200 - P26 CLI usage is the increase of the CLIs' running totals (2026-10-18)
 - Rule: claude-cli's `total_cost_usd` is the CLI session's running total, also after `--resume` (seurat-claude: each
@@ -3181,15 +3181,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   settings still only tighten, because a project `record = "auto"` would be write consent, which IC-45 (req-7)
   reserves to the person, and `context` bounds what reaches providers. Projects made earlier keep their file;
   NEWS says to delete the two keys.
-- Rule (thinking-1): `bedrock_build()` sends a Claude model (id containing `anthropic.claude`) the fields of
-  `anthropic_thinking()` in `additionalModelRequestFields` (`thinking`, `output_config.effort`, `anthropic_beta`);
-  adaptive or budget follows the record's declared capabilities, as on anthropic-messages, never the id.
-  `anthropic_thinking()` now holds the budget clamp both adapters use (1024 <= budget_tokens < max_tokens <=
-  max_output, else no thinking) and returns `max_tokens`. Another Converse model's level other than `off` gives a
-  `notice` once per model. Formerly every level, `:max` and `off` sent the same body (D-193 cut thinking out).
-  Measured on the Versa gateway: Opus 4.8 declared adaptive and Sonnet 4.6 on a budget return signed thinking;
-  Opus 4.8 declared without the capability and given a level gets the provider's HTTP 400 for `enabled` (no id
-  inference, by plan); with no level its body is unchanged.
+- Rule (thinking-1): `bedrock_build()` sends a Claude model (id containing `anthropic.claude`) whose record
+  declares `capabilities$adaptive_thinking` the adaptive fields of `anthropic_thinking()` in
+  `additionalModelRequestFields` (`thinking`, `output_config.effort`); every other model, an undeclared Claude
+  record included, gets no thinking field and, for a level other than `off`, a `notice` once per model naming
+  `capabilities = list(adaptive_thinking = TRUE, effort = TRUE)`. Why no budget and no id inference: a record
+  cannot say it thinks on a budget (`model_capabilities()` fills undeclared flags with `FALSE`), Opus 4.8 refuses
+  `enabled` with HTTP 400 and Claude 4.5 and earlier have no adaptive mode, so any guess fails a call for asking
+  more reasoning, while sending nothing answers as before; an id rule would also go stale with each release.
+  Formerly every level, `:max` and `off` sent the same body (D-193 cut thinking out); the first round sent an
+  undeclared record a budget, which broke `versa-bedrock/us.anthropic.claude-opus-4-8` at `high`.
+  `anthropic_thinking()` now holds anthropic-messages' budget clamp (1024 <= budget_tokens < max_tokens <=
+  max_output, else no thinking) and returns `max_tokens`. Measured on the Versa gateway: Opus 4.8 declared
+  adaptive returns signed thinking; undeclared at `high` answers without thinking.
 - Rule (thinking-3): `check_choice()` and `gateway_choice()` report a string that is not a choice through
   `choice_abort()`: "`<arg>` must be one of ...; the string given is not one of them.", plus "Did you mean
   "<choice>"?" for a choice equal to it but for case. The value is never quoted; a non-string keeps
@@ -3251,13 +3255,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   project will not apply what it saved (D-250)", "gptr_config() warns when a saved model setting names no known
   model (D-250)", "a trusted project sets mode; context, record and untrusted modes only tighten (D-250)",
   "gptr_config(mode = ) in a trusted project applies there; yolo is refused (D-250)", "a gptr_init() project
-  leaves mode and record to the user's settings (D-250)"; test-provider-bedrock.R "a Claude model gets the
-  thinking level in additionalModelRequestFields (D-250)"; test-live-bedrock.R (opt-in) "thinking = 'high' on
-  an adaptive Claude model is signed"; test-utils-conditions.R "a string that is not one of the choices is
-  reported as such, never quoted (D-250)"; test-agent-run.R "a thinking level the model lacks is announced once
-  per model and level (D-250)"; test-catalog-models.R "a thinking suffix the model lacks is announced with the
-  level used (D-250)"; test-gptr-capture.R "an alias shadowed by a spec the argument accepts gets the message
-  (D-250)"; test-gptr-gateway.R "System 1 arguments are refused on a conversational route (D-250)";
+  leaves mode and record to the user's settings (D-250)"; test-provider-bedrock.R "a Claude model
+  declared adaptive gets the thinking level; others get none (D-250)"; test-live-bedrock.R (opt-in) "thinking =
+  'high' on an adaptive Claude model is signed", "a Claude record not declared adaptive answers at 'high'";
+  test-utils-conditions.R "a string that is not one of the choices is reported as such, never quoted (D-250)";
+  test-agent-run.R "a thinking level the model lacks is announced once per model and level (D-250)";
+  test-catalog-models.R "a thinking suffix the model lacks is announced with the level used (D-250)";
+  test-gptr-capture.R "an alias shadowed by a spec the argument accepts gets the message (D-250)";
+  test-gptr-gateway.R "System 1 arguments are refused on a conversational route (D-250)";
   test-s1-route.R "uncertain = \"stop\" names the uncertain inputs and carries every answer (D-250)", "a
   factor answer keeps the call's meta, which its failure warning points to (D-250)". Evidence:
   progress/fixes.md Task FIX-17.

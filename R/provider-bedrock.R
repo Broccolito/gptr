@@ -389,16 +389,23 @@ bedrock_tools = function(tools) {
   })
 }
 
-#' Anthropic's thinking fields for a Claude model, sent in `additionalModelRequestFields` (the
-#' anthropic-messages rules, D-250); another model's level is not sent, said once per model
+#' Anthropic's adaptive thinking fields for a Claude model whose record declares
+#' `adaptive_thinking`, sent in `additionalModelRequestFields` (D-250); any other model's level
+#' is not sent, said once per model: an undeclared record may be adaptive-only (Opus 4.8 refuses
+#' a budget) or budget-only (Claude 4.5 and earlier), and a wrong guess is an HTTP 400
 #' @noRd
 bedrock_thinking = function(model, params) {
-  if (grepl("anthropic\\.claude", model$id)) return(anthropic_thinking(model, params))
+  if (grepl("anthropic\\.claude", model$id) &&
+      isTRUE(adp_model_cap(model, "adaptive_thinking", FALSE))) {
+    return(anthropic_thinking(model, params))
+  }
   level = params$thinking
   if (!is.null(level) && !identical(level, "off")) {
     ref = paste0(model$provider, "/", model$id)
     gptr_inform(paste0("Thinking level \"", level, "\" is not sent to ", ref, ": api = ",
-                       "\"bedrock-converse\" sends thinking levels to Claude models only."),
+                       "\"bedrock-converse\" sends thinking only to a Claude model whose record ",
+                       "declares capabilities = list(adaptive_thinking = TRUE, effort = TRUE) ",
+                       "(Claude 4.6 and later)."),
                 "notice", .once = paste0("bedrock_thinking:", ref))
   }
   list()
@@ -417,15 +424,13 @@ bedrock_build = function(model, context, opts) {
   }
   th = bedrock_thinking(model, params)
   inference = list()
-  max_tokens = if (is.null(th$budget)) params$max_tokens else th$max_tokens
-  if (!is.null(max_tokens)) inference$maxTokens = as.integer(max_tokens)
+  if (!is.null(params$max_tokens)) inference$maxTokens = as.integer(params$max_tokens)
   if (!is.null(params$temperature) && !isTRUE(model$reasoning)) {
     inference$temperature = params$temperature
   }
   head = if (length(inference)) list(inferenceConfig = inference) else list()
   fields = list(thinking = th$thinking,
-                output_config = if (!is.null(th$effort)) list(effort = th$effort),
-                anthropic_beta = if (length(th$betas)) as.list(th$betas))
+                output_config = if (!is.null(th$effort)) list(effort = th$effort))
   fields = Filter(Negate(is.null), fields)
   if (length(fields)) head$additionalModelRequestFields = fields
 

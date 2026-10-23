@@ -41,3 +41,12 @@ test_that("bedrock-converse: thinking = 'high' on an adaptive Claude model is si
   }, NA)
   expect_true(any(signed), info = msg$error_message %||% "")
 })
+
+test_that("bedrock-converse: a Claude record not declared adaptive answers at 'high' (live)", {
+  ref = local_bedrock_live(reasoning = TRUE)
+  testthat::skip_if_not(grepl("anthropic\\.claude", ref), "GPTR_BEDROCK_MODEL is not Claude")
+  msg = live_stream(model_resolve(ref),
+                    live_context(list(msg_user("Reply with the single word: ready.")),
+                                 list(thinking = "high")))
+  expect_identical(msg$stop_reason, "stop", info = msg$error_message %||% "")
+})
