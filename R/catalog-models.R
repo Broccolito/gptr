@@ -795,20 +795,19 @@ model_suggestions = function(text, ctg, candidates = NULL) {
   known[order(d, known, method = "radix")][seq_len(min(3L, length(known)))]
 }
 
-#' Clamp a requested thinking level to the supported ones: upwards first, then downwards
+#' Clamp a requested thinking level to the supported ones: upwards first, then downwards; with
+#' the model's `ref`, a changed level is announced once per model and level
 #' @noRd
-model_clamp_thinking = function(levels, level) {
-  first = if (length(levels)) levels[[1]] else "off"
-  if (level %in% levels) return(level)
-  i = match(level, catalog_thinking_levels)
-  if (is.na(i)) return(first)
-  up = catalog_thinking_levels[i:length(catalog_thinking_levels)]
-  hit = up[up %in% levels]
-  if (length(hit)) return(hit[[1]])
-  down = rev(catalog_thinking_levels[seq_len(i - 1L)])
-  hit = down[down %in% levels]
-  if (length(hit)) return(hit[[1]])
-  first
+model_clamp_thinking = function(levels, level, ref = NULL) {
+  known = catalog_thinking_levels
+  i = match(level, known, nomatch = 0L)
+  near = if (i) c(known[i:length(known)], rev(known[seq_len(i - 1L)])) else character()
+  got = c(intersect(c(level, near), levels), levels, "off")[[1L]]
+  if (!is.null(ref) && !identical(got, level)) {
+    gptr_inform(paste0(ref, " has no thinking level \"", level, "\"; using \"", got, "\"."),
+                "thinking_clamped", .once = paste0("thinking_clamped:", ref, ":", level))
+  }
+  got
 }
 
 #' A length-1 number or NA
@@ -913,7 +912,9 @@ model_resolve = function(ref, strict = TRUE) {
                "unknown_model", ref = ref, suggestions = sugg)
   }
   rec = model_record(hit$entry, ctg)
-  if (!is.null(hit$thinking)) rec$thinking = model_clamp_thinking(rec$thinking_levels, hit$thinking)
+  if (!is.null(hit$thinking)) {
+    rec$thinking = model_clamp_thinking(rec$thinking_levels, hit$thinking, rec$ref)
+  }
   rec
 }
 

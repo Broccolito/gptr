@@ -821,6 +821,20 @@ test_that("router and ctx$set_model() thinking levels are clamped to the model's
   expect_identical(run_target(run)$thinking, "high")
 })
 
+test_that("a thinking level the model lacks is announced once per model and level (D-250)", {
+  skip_on_cran()
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  withr::local_options(gptr.quiet = FALSE)
+  fake = local_fake_provider(list("a", "b", "c"))
+  ask = function(level) peter("x", model = "fake/fake-1", .opts = list(thinking = level))
+  expect_message(ask("max"), "fake/fake-1 has no thinking level \"max\"; using \"high\".",
+                 fixed = TRUE, class = "gptr_message_thinking_clamped")
+  expect_identical(fake_requests(fake)[[1L]]$params$thinking, "high")
+  expect_no_message(ask("max"), class = "gptr_message_thinking_clamped")
+  expect_no_message(ask("high"), class = "gptr_message_thinking_clamped")
+  expect_identical(fake_requests(fake)[[3L]]$params$thinking, "high")
+})
+
 test_that("the fallback freeze evaluates function parameters and available() (04 section 9.1)", {
   skip_on_cran()
   local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",

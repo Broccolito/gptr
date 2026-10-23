@@ -3190,6 +3190,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `choice_abort()`: "`<arg>` must be one of ...; the string given is not one of them.", plus "Did you mean
   "<choice>"?" for a choice equal to it but for case. The value is never quoted; a non-string keeps
   `arg_abort()`'s class and length. Formerly `thinking = "ultra"` read "not a character of length 1".
+- Rule (thinking-4): `model_clamp_thinking(levels, level, ref = NULL)` still gives the nearest level the model
+  has (upwards first, IC-74); given `ref` and a changed level it informs `thinking_clamped` once per model and
+  level. `run_target()`, `run_model_resolve()`, `route_answer()` and `model_resolve()` pass the model's ref;
+  `prompt_request_context()`'s estimate does not. Formerly `opus:off` ran at `low` and `thinking = "max"` on a
+  reasoning record without `thinking_levels` (off..high, now documented in `?gptr_provider`) ran at `high`
+  without a word.
 - Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
   model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal); 07
   §2.1 and the 04 `model_prepare()` row (P06 prepares); the 04 `model_resolve()` row (the empty-route hint); 04
@@ -3198,7 +3204,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   24, §11.2 text and `mode` row, §11.16, §15 IC-53 item 1 and IC-78, 03 §5.9, §6.8.1 and §6.8.2,
   `?gptr_config` and the configuration vignette (a trusted project's `mode`; the template); 04 §15 IC-80
   (thinking) and `?gptr_provider`'s bedrock-converse example (`reasoning`, `capabilities`); 04 §1.1 (a
-  string that is not a choice).
+  string that is not a choice); 04 §2.2 messages (`thinking_clamped`), §4.9 `thinking` row, 03 §8.4 model
+  references and `?gptr_provider` (`thinking_levels`).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
   match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
@@ -3213,4 +3220,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   leaves mode and record to the user's settings (D-250)"; test-provider-bedrock.R "a Claude model gets the
   thinking level in additionalModelRequestFields (D-250)"; test-live-bedrock.R (opt-in) "thinking = 'high' on
   an adaptive Claude model is signed"; test-utils-conditions.R "a string that is not one of the choices is
-  reported as such, never quoted (D-250)". Evidence: progress/fixes.md Task FIX-17.
+  reported as such, never quoted (D-250)"; test-agent-run.R "a thinking level the model lacks is announced once
+  per model and level (D-250)"; test-catalog-models.R "a thinking suffix the model lacks is announced with the
+  level used (D-250)". Evidence: progress/fixes.md Task FIX-17.

@@ -458,7 +458,7 @@ run_target = function(run) {
     run$model_key = d$model
   }
   if (!is.null(d$thinking)) {
-    run$model$thinking = model_clamp_thinking(run$model$thinking_levels, d$thinking)
+    run$model$thinking = model_clamp_thinking(run$model$thinking_levels, d$thinking, run$model$ref)
   }
   run$model
 }
@@ -498,7 +498,7 @@ run_model_resolve = function(ref, sid) {
       if (level %in% catalog_thinking_levels) {
         rec = session_model_resolve(pr, substr(mid, 1L, pos - 1L))
         if (!is.null(rec)) {
-          rec$thinking = model_clamp_thinking(rec$thinking_levels, level)
+          rec$thinking = model_clamp_thinking(rec$thinking_levels, level, rec$ref)
           return(rec)
         }
       }
@@ -578,7 +578,7 @@ route_answer = function(res, run) {
   }
   th = if (is.list(res)) res[["thinking"]] else NULL
   if (rlang::is_string(th)) {
-    rec$thinking = model_clamp_thinking(rec$thinking_levels, th)
+    rec$thinking = model_clamp_thinking(rec$thinking_levels, th, rec$ref)
   }
   list(rec = rec)
 }

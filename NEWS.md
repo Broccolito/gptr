@@ -183,6 +183,10 @@ works on the objects already in memory.
 * A string that is not one of an argument's choices, such as `.opts = list(thinking = "ultra")`,
   is reported as such ("the string given is not one of them", with "Did you mean" when it differs
   from a choice only in case) instead of "not a character of length 1".
+* A thinking level the model does not offer still becomes the nearest one it has, and gptr now
+  says so once per model and level: for example `"opus:off"` runs at `low`, and `thinking = "max"`
+  on a model whose levels end at `high` runs at `high`. `?gptr_provider` documents
+  `thinking_levels`; a reasoning model declared without it gets `off` to `high`.
 
 # gptr 0.7.0
 

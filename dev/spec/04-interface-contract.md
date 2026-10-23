@@ -291,7 +291,9 @@ Messages (`gptr_message_<name>`): `alias_shadowed` (P08), `plan_handoff` (P11), 
 session when a data frame is split into several states, naming `I(x)`),
 `billing_env` (P03/P20; names of removed billing variables), `notice`
 (one-time notices: experimental routes, Codex overhead, uncalibrated emulation), `value_rebound` (P06),
-`progress` (P14, verbosity 1), `interpolated` (P08, echo of the interpolated prompt at verbosity >= 2).
+`progress` (P14, verbosity 1), `interpolated` (P08, echo of the interpolated prompt at verbosity >= 2),
+`thinking_clamped` (P05/P06; a requested thinking level the model lacks was replaced by the nearest it has;
+once per model and level; D-250).
 
 Transport, adapter and System 1 failures are condition **objects** created (not signalled) by P04, P12 and P13
 with the classes above; they travel in `error` events and in the run. The gateway (P08) signals the stored object
@@ -695,7 +697,7 @@ UTF-8 first (§6.6 of `03`).
 | `context`, `max_output` | num(1)\|NA | tokens |
 | `reasoning` | lgl(1) | supports thinking |
 | `thinking_levels` | chr | levels the model accepts (subset of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) |
-| `thinking` | chr(1)\|NULL | the clamped level requested with `:level` or `.opts$thinking` |
+| `thinking` | chr(1)\|NULL | the clamped level requested with `:level` or `.opts$thinking`: a level the model lacks becomes the nearest it has (upwards first), with a `thinking_clamped` message once per model and level (D-250) |
 | `input` | chr | `text`, `image`, `pdf` |
 | `tool_call`, `structured_output` | lgl(1) | |
 | `prices` | df(`from` Date, `tier` chr, `input`, `output`, `cache_read`, `cache_write_5m`, `cache_write_1h` USD per million) | dated price tiers |

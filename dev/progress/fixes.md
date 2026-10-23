@@ -2157,3 +2157,22 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   "ultra"))` gives the new text); gptr-capture, gptr-config, gptr-gateway, doc-replay, arch-layers and
   lint-rules PASS 2039. Lint clean; no Rd change.
 - Deviations: D-250 (thinking-3 rule). Open: NA still reads "not a character of length 1" (not a string).
+
+### thinking-4 - A clamped thinking level is announced once
+- Finding 167. Red: `^(agent-run|catalog-models)$` FAIL 2, PASS 1120: `peter("x", model = "fake/fake-1", .opts =
+  list(thinking = "max"))` (levels off..high) sent `high` and `model_resolve("opus:off")` gave `low`, both with
+  no message.
+- Cause: `model_clamp_thinking()` moves a level the model lacks to the nearest it has (IC-74, by design), and
+  its callers (`run_target()`, `run_model_resolve()`, `route_answer()`, `model_resolve()`) did it silently; a
+  reasoning record without `thinking_levels` gets off..high, which `?gptr_provider` never said.
+- Fix: `model_clamp_thinking(levels, level, ref)` informs `thinking_clamped` ("<ref> has no thinking level
+  "<asked>"; using "<got>".") once per model and level when the level changes; the four callers pass the
+  model's ref, `prompt_request_context()` stays silent. Same clamp in four lines (1179 level/subset cases equal
+  the old body). `?gptr_provider` documents `thinking_levels`. 04 §2.2 and §4.9 `thinking` row, 03 §8.4 amended;
+  NEWS entry.
+- Green: `^(agent-run|catalog-models)$` PASS 1122 (a second identical call and `high` stay silent); full
+  suite (NOT_CRAN) FAIL 2, WARN 0, SKIP 65, PASS 35417, both in `proc-rscript-native` artifact-cancel (a `ps`
+  memory sample of the cancelled child got `access_denied`, with three other worktrees' suites running), which
+  alone passes (PASS 132). Lint clean; `man/gptr_provider.Rd` regenerated.
+- Deviations: D-250 (thinking-4 rule). Open: the sheet line is entry S15; the session still records the
+  requested level (`session_data()$thinking`).

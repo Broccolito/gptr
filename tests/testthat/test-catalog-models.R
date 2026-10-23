@@ -279,6 +279,17 @@ test_that("a model record has every contract field (04 section 4.9)", {
   expect_equal(model_resolve("opus:off")$thinking, "low")
 })
 
+test_that("a thinking suffix the model lacks is announced with the level used (D-250)", {
+  local_catalog()
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  withr::local_options(gptr.quiet = FALSE)
+  expect_message(model_resolve("opus:off"),
+                 "anthropic/claude-opus-5-5 has no thinking level \"off\"; using \"low\".",
+                 fixed = TRUE, class = "gptr_message_thinking_clamped")
+  expect_no_message(expect_equal(model_resolve("opus:off")$thinking, "low"))
+  expect_no_message(model_resolve("opus:xhigh"))
+})
+
 test_that("unknown references fail with suggestions, or NULL when not strict", {
   local_catalog()
   err = expect_error(model_resolve("claude-sonet-5-5"), class = "gptr_error_unknown_model")
