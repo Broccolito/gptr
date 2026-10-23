@@ -1105,8 +1105,11 @@ exact name.
 - Terminal statuses of a programmatic run: `idle` returns normally; `error` signals `gptr_error_provider`;
   `blocked` signals `gptr_error_permission`; `budget` signals `gptr_error_budget_<kind>`; `max_turns` signals
   `gptr_error_max_turns`. Each condition carries the session as `cnd$session`, and the session is also
-  `gptr_last()`. An interrupt (Ctrl-C abort) persists the partial turn and re-signals R's `interrupt` condition so
-  loops stop [15 §4.7].
+  `gptr_last()`. A team or fan-out (`agents =`, `parallel =`) and a `gptr_parallel()` team take the status and
+  stored condition of their first child that did not end `idle`, with `$reason`
+  `"<k> of <n> sub-agents did not finish: <name> (<status>), ..."`; `agents =` and `parallel =` signal that
+  condition, with the container as `cnd$session`, only when no child ended `idle` (D-252). An interrupt (Ctrl-C
+  abort) persists the partial turn and re-signals R's `interrupt` condition so loops stop [15 §4.7].
 
 #### 6.1.3 Identifier resolution (D-07, `resolve_identifier()`, P08)
 
@@ -1682,7 +1685,8 @@ an unstarted session, or a session created with `.run = FALSE`; `.list` is a nam
 concurrently on one reactor (at most `max_active`, default `gptr.subagents.max_active`, IC-71). Returns a **team session**
 (`kind = "team"`, children named by the argument names; `$text` joins the reports under `### <name> (<model>)`,
 `$value` is the named list of child values). `on_error = "stop"` signals the first child's condition after all
-children settled; `"return"` leaves failed children with status `error`.
+children settled; `"return"` leaves failed children with their status, and the team takes the first one's
+(§6.1.2).
 
 `gptr_map()` is **internal** (IC-36; S-1 keeps one gateway): the function behind `parallel =`, one inline (or
 `backend`) child per element of `.x` (a list, atomic vector or data frame rows), each receiving the prompt and its

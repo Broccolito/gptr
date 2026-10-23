@@ -108,6 +108,9 @@ per-run `.opts` (including `max_turns`) are not applied. Members share the call'
 applicable defaults before launch or run under an enclosing budget; see
 [Token efficiency](token-efficiency.html). `on_error = "return"` keeps failed members for
 inspection; `"stop"` signals the first failed member's condition after all members settle.
+A team, fan-out or `gptr_parallel()` result whose members did not all finish takes the first
+such member's status, and `$reason` names each one; `agents =` and `parallel =` signal that
+member's condition, with the team as `$session`, when no member finished.
 
 ## Deferred sessions and SDK control
 

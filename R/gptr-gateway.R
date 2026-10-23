@@ -31,8 +31,11 @@
 #'
 #' Terminal statuses become conditions carrying the session as `$session`: `error` signals
 #' `gptr_error_provider`, `blocked` `gptr_error_permission`, `budget` `gptr_error_budget_<kind>`
-#' and `max_turns` `gptr_error_max_turns`. `peter()` with no prompt opens the console when someone
-#' can answer, and signals `gptr_error_noninteractive` otherwise.
+#' and `max_turns` `gptr_error_max_turns`. A team (`agents =`) or fan-out (`parallel =`) takes the
+#' status of its first member that did not end idle, with `$reason` naming each such member; when
+#' no member ended idle it signals that member's condition with the team as `$session`. `peter()`
+#' with no prompt opens the console when someone can answer, and signals
+#' `gptr_error_noninteractive` otherwise.
 #'
 #' A new interactive console without an explicit or configured model first offers CLI selection
 #' or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;

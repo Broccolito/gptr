@@ -219,16 +219,38 @@ gptr_parallel = function(..., .list = NULL, max_active = NULL, on_error = c("ret
   })
   subagent_schedule(items, max_active, function(i, h) subagent_record_end(team, h))
   subagent_record_reports(team)
+  subagent_settle_container(team)
   if (identical(on_error, "stop")) {
-    for (ch in session_data(team)$children) {
-      cnd = session_data(ch)$condition
-      if (inherits(cnd, "condition")) {
-        cnd$session = ch
-        stop(cnd)
-      }
-    }
+    for (ch in session_data(team)$children) subagent_signal(ch, session_data(ch)$condition)
   }
   team
+}
+
+#' Settle a team or fan-out on its children (04 section 6.1.2): it stays idle when every child is;
+#' else it takes the first other child's status and stored condition, and its reason names each
+#' such child
+#' @noRd
+subagent_settle_container = function(s) {
+  d = session_data(s)
+  st = vapply(d$children, function(ch) session_data(ch)$status, "")
+  bad = which(st != "idle")
+  if (length(bad)) {
+    d$status = st[[bad[[1L]]]]
+    d$reason = paste0(length(bad), " of ", length(st), " sub-agents did not finish: ",
+                      paste0(names(st)[bad], " (", st[bad], ")", collapse = ", "))
+    d$condition = session_data(d$children[[bad[[1L]]]])$condition
+  }
+  invisible(s)
+}
+
+#' Signal `cnd`, the stored condition of a terminal status, with `s` as its session (04 6.1.2)
+#' @noRd
+subagent_signal = function(s, cnd) {
+  if (inherits(cnd, "condition")) {
+    cnd$session = s
+    stop(cnd)
+  }
+  invisible(s)
 }
 
 # ---- teams and fan-outs: common parts (contract 6.1.1, IC-39, IC-47, IC-55) ---------------------
@@ -289,8 +311,9 @@ subagent_choose_backend = function(agent, opts, info) {
 }
 
 #' Run the children of a container: record each settled child, move the exports into
-#' `call$envir` in task order, then dispatch the container's `agent_end` with the statement's
-#' document site (P15 records the block of an idle end, which needs every child idle; IC-47)
+#' `call$envir` in task order, settle the container, then dispatch its `agent_end` with the
+#' statement's document site (P15 records the block of an idle end, which needs every child idle;
+#' IC-47); when no child ended idle, signal the container's condition (04 section 6.1.2)
 #' @noRd
 subagent_run_children = function(container, items, max_total, call) {
   handles = subagent_schedule(items, max_total, function(i, h) {
@@ -302,10 +325,12 @@ subagent_run_children = function(container, items, max_total, call) {
   fan = identical(session_data(container)$kind, "fanout")
   for (h in handles) taken = subagent_export(h, call$envir, taken, clear = fan)
   subagent_record_reports(container)
-  idle = vapply(handles, function(h) identical(session_data(h$session)$status, "idle"), NA)
+  subagent_settle_container(container)
   d = session_data(container)
-  subagent_emit(container, "agent_end", status = if (all(idle)) "idle" else "error",
-                reason = NULL, usage = d$usage, doc = call$doc, turns = d$turns)
+  subagent_emit(container, "agent_end", status = d$status, reason = d$reason, usage = d$usage,
+                doc = call$doc, turns = d$turns)
+  idle = vapply(handles, function(h) identical(session_data(h$session)$status, "idle"), NA)
+  if (!any(idle)) subagent_signal(container, d$condition)
   container
 }
 

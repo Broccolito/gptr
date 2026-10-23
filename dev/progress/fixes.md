@@ -1976,3 +1976,24 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-252 (extended): R's own lookup, not the plan's `binding_env()`, an L3 function the
   eval layer may not call that skips the parents of a function-frame home (a nearer `base::q`).
   Open: `rm(q); g = q; g()` passes, as `eval(parse(text = ...))` already does (advisory guard).
+
+### team-1 - A team or fan-out with failed members reports it, and signals when none finished
+- Findings 71, 72, 129, 185. Red: `^subagent-team$` FAIL 13 PASS 354: a manual-mode team and a
+  fan-out whose members were both `blocked` returned `idle` with no condition (a single call
+  signals `gptr_error_permission`), a mixed team was `idle` with `$reason` NULL while its
+  `agent_end` said `error`, and a `gptr_parallel()` team with a failed member stayed `idle`.
+- Cause: `subagent_run_children()` computed the outcome only for the `agent_end` event and never
+  wrote it to the container, which `session_new()` leaves `idle`; the routes return it without
+  the gateway's signal step.
+- Fix: `subagent_settle_container()` gives a team, fan-out or `gptr_parallel()` team the first
+  non-idle child's status and stored condition and the reason `k of n sub-agents did not finish:
+  b (blocked)`; `agent_end` carries both; `agents =` and `parallel =` re-signal the condition with
+  the container as `$session` (`subagent_signal()`, shared with `on_error = "stop"`) when no
+  child ended idle. ?peter, the teams vignette and 04 §6.1.2 say so.
+- Green: `^(subagent-team|injection-e2e)$` PASS 571; with gptr-gateway PASS 926; full
+  suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35329. Lint clean; plan checks pass. Live (m$gpt, the
+  sheet's team code under Rscript, manual mode): stats blocked, code idle; the team returned
+  `blocked`, reason `1 of 2 sub-agents did not finish: stats (blocked)` (30 s).
+- Deviations: D-252 (extended): the plan's `gateway_signal()` is L6, which an L4 file may not call
+  (arch-layers); every status it signals stores its condition, so re-signalling that is the same.
+  Open: none.

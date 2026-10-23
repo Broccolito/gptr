@@ -89,8 +89,11 @@ A literal prompt gets \code{{name}} interpolation from \code{envir} (atomic vect
 
 Terminal statuses become conditions carrying the session as \verb{$session}: \code{error} signals
 \code{gptr_error_provider}, \code{blocked} \code{gptr_error_permission}, \code{budget} \verb{gptr_error_budget_<kind>}
-and \code{max_turns} \code{gptr_error_max_turns}. \code{peter()} with no prompt opens the console when someone
-can answer, and signals \code{gptr_error_noninteractive} otherwise.
+and \code{max_turns} \code{gptr_error_max_turns}. A team (\verb{agents =}) or fan-out (\verb{parallel =}) takes the
+status of its first member that did not end idle, with \verb{$reason} naming each such member; when
+no member ended idle it signals that member's condition with the team as \verb{$session}. \code{peter()}
+with no prompt opens the console when someone can answer, and signals
+\code{gptr_error_noninteractive} otherwise.
 
 A new interactive console without an explicit or configured model first offers CLI selection
 or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;

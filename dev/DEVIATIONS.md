@@ -3138,10 +3138,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   function argument (`sapply(x, q)`, which `match.fun()` resolves to `base::q`) stay refused whatever is bound.
   Formerly `summary(q)` on the user's quantile vector was refused as quitting R (finding 25). The plan named
   `binding_env()`; it is an L3 function and not R's lookup.
+- Rule (team-1): a team, fan-out or `gptr_parallel()` team whose children did not all end idle takes the first such
+  child's status and stored condition, `$reason` `"k of n sub-agents did not finish: a (blocked), ..."`, and the
+  same status and reason in its `agent_end`; `agents =` and `parallel =` re-signal that condition with the container
+  as `$session` when no child ended idle (`subagent_settle_container()`, `subagent_signal()`). `on_error` is
+  unchanged. Formerly the container stayed `idle` and silent while its `agent_end` said `error`. The plan named
+  `gateway_signal()`, an L6 function L4 may not call; every signalled status stores its condition.
 - Contract-visible: 03 §4.3 (fork), §6.12 (also the guard), §6.18 and §7.5 `<workspace>`; 04 `gptr_fork(envir)`,
-  §7.9 `env_view_snapshot()` and `eval_guard()`, §15.7.
+  §6.1.2 and `gptr_parallel()` (team-1), §7.9 `env_view_snapshot()` and `eval_guard()`, §15.7.
 - Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
   and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame);
   session-object "a fork's change report names the source objects its code changed in place"; eval-guard "q bound
-  to data where the code runs ...", "model code reads a q bound to data ...". Evidence: progress/fixes.md Task
-  FIX-19 ws-1, sessions-20, guard-1.
+  to data where the code runs ...", "model code reads a q bound to data ..."; subagent-team "a team or fan-out
+  takes a failed member's status ...", injection-e2e "a worker's forwarded permission request ...". Evidence:
+  progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, team-1.
