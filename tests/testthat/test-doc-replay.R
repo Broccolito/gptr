@@ -2367,6 +2367,20 @@ test_that("each gptr_return() shape replays its value in a later process, or say
   }
 })
 
+test_that("a nested gptr_return() re-sourced in the recording process keeps its value, silently", {
+  x = local_doc_e2e(list(fake_tool("r", code = "if (TRUE) gptr_return(2)"), fake_text("done")))
+  f = file.path(x$root, "analysis.R")
+  writeLines("s = peter(\"Designate 2\")", f)
+  gptr_source(f, envir = new.env(parent = globalenv()))
+  e = new.env(parent = globalenv())
+  said = withr::with_options(list(gptr.quiet = FALSE), testthat::capture_messages({
+    gptr_source(f, replay = "replay", envir = e)
+    value = e$s$value
+  }))
+  expect_identical(value, 2)
+  expect_identical(said, character())
+})
+
 # Record the team or fan-out statement `stmt` into analysis.R through gptr_source(), with fake
 # sub-agents that each run `code` and then answer "Done."; then replay it in this process (its
 # live sessions), as a later process that keeps the session store, and as one that has neither

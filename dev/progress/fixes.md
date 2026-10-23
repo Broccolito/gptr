@@ -2740,3 +2740,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^(doc-blocks|doc-replay|doc-io|doc-export|mcp-recording)$` PASS 2217; `^(gptr-sdk|
   arch-layers|lint-rules)$` PASS 194 (NOT_CRAN=true). Lint clean; Rd regenerated.
 - Deviations: D-249 (extended). Open: none.
+
+### replay-2h - No false no-value notice when the recording session replays its own value
+- Second validation of replay-2f (low).
+- Red: FAIL 1 in `^doc-replay$` (PASS 847): `if (TRUE) gptr_return(2)` recorded through
+  gptr_source() and re-sourced with `replay = "replay"` in the same process gave `$value` 2 and
+  yet "No recorded value for block <id> of analysis.R: ... so $value is not replayed."
+- Cause: doc_replay_no_value() read only the header and the code, not the replayed session.
+- Fix: it takes the session and is silent when it holds a value of its turn (replay_value()'s
+  test). `?gptr_return` (the notice is a later R session's), IC-46 and D-249 amended.
+- Green: `^(doc-replay|doc-blocks|doc-io|gptr-sdk|subagent-team|session-object|arch-layers|
+  lint-rules)$` PASS 3027 (NOT_CRAN=true); the later-process shapes keep their notice. Lint
+  clean; Rd regenerated.
+- Deviations: D-249 (extended). Open: none.

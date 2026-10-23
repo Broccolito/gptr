@@ -4467,9 +4467,10 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   informs one `notice` per document and process: "No recorded answer for <doc>: replayed answers ($text) are NA.", plus,
   without a workspace, " gptr_init(\".\") keeps answers in .gptr/ for later R sessions."
 - **No value**: a replayed block whose header has no `value=` while its recorded code still calls `gptr_return()`
-  (of an expression inside another expression, which IC-48 does not record) informs one `notice` per block and
-  process: "No recorded value for block <id> of <doc>: a document records gptr_return() only as a top-level call,
-  so $value is not replayed."
+  (of an expression inside another expression, which IC-48 does not record), replayed into a session that holds no
+  value of its turn (the live session that recorded it holds one), informs one `notice` per block and process:
+  "No recorded value for block <id> of <doc>: a document records gptr_return() only as a top-level call, so
+  $value is not replayed."
 - **Fork blocks** (`fork=` header): the replay result is bound to the block id with `session_replay_bind(block,
   s)` in a process table `the$replay_blocks` (gptr-created sessions only, never user frames; replaced on
   re-source). Recorded fork turns are wrapped `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`;

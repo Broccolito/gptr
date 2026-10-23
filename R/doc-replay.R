@@ -246,11 +246,16 @@ doc_replay_no_answer = function(site, s) {
 }
 
 #' Say once per block and process that a replayed block's code designated a value no replay
-#' restores: its header names none, and its code still calls gptr_return(), which the recorder
-#' leaves only inside another expression (IC-48)
+#' restores: its header names none, its code still calls gptr_return(), which the recorder leaves
+#' only inside another expression (IC-48), and the replayed session `s` holds no value of its
+#' turn (the live session that recorded it does, as replay_value() reads it)
 #' @noRd
-doc_replay_no_value = function(site, block, code) {
+doc_replay_no_value = function(site, block, code, s) {
   if (!is.null(block$header$value)) return(invisible(NULL))
+  d = session_data(s)
+  if (any(vapply(d$values, function(v) !is.null(v$value) && as.integer(v$turn) == d$turns, NA))) {
+    return(invisible(NULL))
+  }
   ex = tryCatch(doc_parse_text(code, keep_source = FALSE), error = function(e) NULL)
   if (!"gptr_return" %in% all.names(ex)) return(invisible(NULL))
   gptr_inform(paste0("No recorded value for block ", block$id, " of ", doc_rel(site$path), ": a ",
@@ -325,7 +330,7 @@ doc_replay_call = function(call, site, mode = "replay") {
   }
   if (!is.null(h$fork)) session_replay_bind(b$id, s)
   doc_replay_no_answer(site, s)
-  doc_replay_no_value(site, b, doc$code)
+  doc_replay_no_value(site, b, doc$code, s)
   doc_source_log(site$path, b$id, "replayed")
   assign("doc", NULL, envir = call)
   s

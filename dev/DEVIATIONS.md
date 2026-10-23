@@ -3151,9 +3151,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   and a plain export recompute it (was `value=<its label>` and the line dropped: replay said "not bound" and
   `$value` was NULL); `gptr_return(<name>)` is unchanged; `value=` holds one name, never an expression's label,
   else is omitted (11.5). Such a call inside another expression is kept and records no value; replaying its block
-  informs a `notice` once per block and process, "No recorded value for block <id> of <doc>: ..." (IC-46, IC-48).
-  R served over MCP to a CLI route records the designated name in its `gptr.mcp_r` entry (`value`), as the `r`
-  tool's `details$value`, so the same holds there.
+  into a session that holds no value of its turn (the recording one holds it) informs a `notice` once per block and
+  process, "No recorded value for block <id> of <doc>: ..." (IC-46, IC-48). R served over MCP to a CLI route
+  records the designated name in its `gptr.mcp_r` entry (`value`), as the `r` tool's `details$value`, so the same
+  holds there.
 - Rule: a team or fan-out block records the code of each child that designated a value with `gptr_return()` in its
   child overlay, as for a child with exports (was only with exports), and `children=` entries are
   `<name>:<session id>[:<value>]`, the third field the child's `value=` name (a bare name or
@@ -3223,5 +3224,5 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   comment lines; test-doc-replay: an aborted or failed console run and its re-source, a steered chain's live context
   rebuilt and reconstructed, steers and follow-ups between runs, recorded steers not sent again; test-session-object:
   the seek along piped blocks; test-gptr-sdk: the unrecorded-turn notice. Evidence: progress/fixes.md Task FIX-16
-  doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-2c to -2g, replay-3, replay-4b,
+  doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-2c to -2h, replay-3, replay-4b,
   replay-5, export-2, export-2b, store-1, doc-1b, steer-doc-1 to -5, steer-doc-4b, steer-doc-5b.

@@ -11,7 +11,7 @@ gptr_return(x)
 top-level call (also piped or over several lines) as an assignment to a hidden name in the
 block, which replay reads. Inside another expression (a branch, braces, an assignment or a
 function) such a value is not recorded, nor an earlier one it may replace, and replaying its
-block says so once.}
+block in a later R session says so once.}
 }
 \value{
 \code{NULL} invisibly during a run; \code{x} invisibly outside a run.
