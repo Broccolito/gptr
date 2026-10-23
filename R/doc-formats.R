@@ -459,7 +459,7 @@ doc_transcript_header = function(text, site) {
                     "none kept (gptr_init() keeps session logs in .gptr/)"))
   if (!length(text)) {
     head = c(head, "# source() this file to replay the recorded code without calling a model;",
-             paste0("# gptr_source(", doc_str_literal(basename(site[["path"]])),
+             paste0("# gptr_source(", doc_str_literal(doc_rel(site[["path"]])),
                     ", replay = \"live\") re-asks the model."), "library(gptr)")
   }
   c(if (length(text)) "", head)

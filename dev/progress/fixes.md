@@ -2491,3 +2491,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-249 (extended). Not as suggested: the sidecar keeps doc-1's path (no shared
   `cache/tmp` under `pending/`). Open: a document in a `.gptr/` project now locks in that `.gptr/`
   also when this process works in another project (was this process's root).
+
+### doc-7b - The transcript header names the transcript from the project root
+- Review of doc-7 (`R/doc-formats.R`, low).
+- Red: FAIL 2 in `^doc-formats$` (PASS 258): a transcript at `.gptr/transcripts/gptr-session-
+  20260929-183000.R` read `# gptr_source("gptr-session-20260929-183000.R", replay = "live")`, a
+  file `gptr_source()` refuses from the project root; one outside the project gave its file name.
+- Cause: doc-7 built the literal from `basename(site$path)`, while console transcripts made by the
+  default choice (`doc_new_transcript()`) live in `.gptr/transcripts/`.
+- Fix: the literal is `doc_rel(site$path)`: relative to the project root, absolute outside it.
+- Green: `^doc-formats$` PASS 260; `^(doc-formats|doc-replay|console-.*|arch-layers|lint-rules)$`
+  PASS 2914 SKIP 1 (INFRA-03; NOT_CRAN=true). Lint clean. A root-level `log.R` still reads
+  `"log.R"`.
+- Deviations: none. Open: doc-7's, a moved transcript keeps the path it had when recorded.
