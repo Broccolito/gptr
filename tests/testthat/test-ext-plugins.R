@@ -631,6 +631,23 @@ test_that("project plugin code and resources are ignored until gptr_trust()", {
   expect_false(is.null(registry_get("skill", "local-skill", session = sid)))
 })
 
+test_that("gptr_plugins lists a plugin's usable entry before an earlier untrusted one", {
+  skip_on_cran()
+  files = list()
+  files[["lab/plugin.json"]] = '{"name": "stale-lab"}'
+  files[["lab/skills/stale-units/SKILL.md"]] =
+    "---\nname: stale-units\ndescription: Report units.\n---\nBody"
+  proj = local_project(trust = FALSE, files = files)
+  lab = file.path(proj, "lab")
+  withr::defer(plugin_forget(lab))
+  expect_false(plugin_enable(lab, 0L, session = "s00000000d1"))
+  gptr_trust(proj, TRUE)
+  expect_true(plugin_enable(lab, 0L, session = "s00000000d2"))
+  pl = gptr_plugins()
+  pl = pl[pl$name == "stale-lab", , drop = FALSE]
+  expect_identical(list(pl$enabled, pl$state), list(TRUE, "active"))
+})
+
 test_that("the untrusted-plugin notice names the call that trusts the project", {
   local_gptr_options(quiet = FALSE)
   files = list()

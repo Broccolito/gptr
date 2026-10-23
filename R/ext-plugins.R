@@ -1277,7 +1277,9 @@ plugin_candidates = function(installed = FALSE) {
 gptr_plugins = function(installed = FALSE) {
   check_flag(installed, "installed")
   es = res_state()$plugins
-  es = lapply(es[order(!vapply(es, function(e) is.null(e$session), NA))], function(e) {
+  # a path lists its first entry: a usable one, then the process's before a session's
+  usable = vapply(es, function(e) isTRUE(e$enabled) && !isTRUE(e$failed), NA)
+  es = lapply(es[order(!usable, !vapply(es, function(e) is.null(e$session), NA))], function(e) {
     e$state = if (e$failed || identical(e$code_state, "failed")) {
       "failed"
     } else if (!e$enabled) {

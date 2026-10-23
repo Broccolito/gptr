@@ -2140,3 +2140,14 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   request's system prompt; a refusal stays FALSE after `SYSTEM.md` changes); with injection-e2e, perm-plan,
   prompt-sections, ext-plugins, lint-rules, arch-layers PASS 1718. Lint clean; plan checks pass; Rd regenerated.
 - Deviations: D-252 (extended). Open: a `project_trust` hook's unremembered yes still reads NA (record only).
+
+### plug-1 - gptr_plugins() lists the usable entry of a plugin first
+- Finding 108. Red: `^ext-plugins$` FAIL 1 PASS 382: after `plugin_enable(lab, 0L, session = d1)` in an untrusted
+  project, `gptr_trust(proj, TRUE)` and `plugin_enable(lab, 0L, session = d2)` (TRUE), `gptr_plugins()` listed
+  `stale-lab` enabled FALSE, state `disabled`.
+- Cause: entries were ordered process-before-session only and the first per path was kept, so the untrusted
+  session's disabled entry hid the trusted session's until GC drained the first session.
+- Fix: order entries usable first (enabled and not failed), then process before session.
+- Green: `^ext-plugins$` PASS 383 (the "a plugin enabled twice once" row still lists the process entry); full
+  suite (NOT_CRAN=true, with trust-msg and sessions-23) FAIL 0 SKIP 64 PASS 35426. Lint clean.
+- Deviations: none (04 `gptr_plugins()` does not say which entry is listed). Open: none.
