@@ -2852,6 +2852,9 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   functions' `doc` (an L4 file calls only the kernel SDK); a live run clears them in `run_start()`
   (`replay_notice()`), not `gateway_run_start()`; the drain takes back only `api_user` and `pipe`
   items, never a typed steer. Open: at the P28 merge the drain emits `queue_emit(s, "withdraw", ...)`.
+- Open: a new `s |> peter("<text>")` turn whose text equals a steer or follow-up recorded in an earlier
+  replayed block, which the script does not send itself, is skipped on replay with the notice "A steer this
+  script sends is already recorded..." (IC-55 says either kind; low; found by the round-2 validation).
 
 ### replay-2f - Every gptr_return() shape replays its value or says once why not
 - Second validation of replay-2 (medium; a regression: main said "not bound" for every expression).
