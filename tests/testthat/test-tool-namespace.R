@@ -631,6 +631,13 @@ test_that("peter$help() shows a member's schema, else the R help page, within th
                "No help found for 'no_such_topic_xyz'", fixed = TRUE)
 })
 
+test_that("peter$help(\"edit\") lists the schema arguments and an array's item fields (D-248)", {
+  skip_on_cran()
+  h = paste(member_help("edit"), collapse = "\n")
+  expect_match(h, "\nArguments:\n  path (string, required): ", fixed = TRUE)
+  expect_match(h, "merge them into one edit instead. [items: oldText, newText]", fixed = TRUE)
+})
+
 test_that("peter$search() offers only what resolves; documents sharing an id keep their own kind", {
   skip_on_cran()
   withr::defer(if (exists("taken9$", envir = ns_refused, inherits = FALSE)) {

@@ -421,6 +421,20 @@ test_that("an oldText or newText that is not one string is refused with a classe
   expect_identical(rd(f), "abc\n")
 })
 
+test_that("an edit without oldText or newText names the fields it expects (D-248)", {
+  skip_on_cran()
+  td = withr::local_tempdir()
+  f = put_file(td, "t.txt", "abc\n")
+  cls = "gptr_error_invalid_argument"
+  both = "edits[1] has no oldText or newText (it has: old, new)"
+  expect_error(edit_file(f, list(list(old = "abc", new = "x"))), both, fixed = TRUE, class = cls)
+  expect_error(edit_file(f, list(old = "abc", new = "x")), both, fixed = TRUE, class = cls)
+  expect_error(edit_file(f, list(list(oldText = "abc"))),
+               "edits[1] has no newText (it has: oldText)", fixed = TRUE, class = cls)
+  expect_error(edit_file(f, e1("", "x")), "oldText must not be empty", fixed = TRUE, class = cls)
+  expect_identical(rd(f), "abc\n")
+})
+
 test_that("edit errors number edits from 1, as R and the schema gate do (D-248)", {
   skip_on_cran()
   td = withr::local_tempdir()

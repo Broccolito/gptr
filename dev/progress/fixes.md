@@ -1962,3 +1962,21 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `tool-edit` PASS 179 (6 pins moved to 1-based); `^(tool-edit|tool-namespace|doc-replay|
   utils-paths|json-schema|doc-edit)$` PASS 1407 SKIP 1. Lint clean.
 - Deviations: D-248 (no contract text names the index). Open: none.
+
+### tools-7 - peter$edit names the fields it expects, and peter$help("edit") lists its arguments
+- Red: FAIL 3 in `^(tool-edit|tool-namespace)$` (PASS 588): `peter$edit(f, list(list(old =,
+  new =)))` said "oldText must not be empty", and `peter$help("edit")` had no Arguments block
+  (finding 20).
+- Cause: `edit_normalize_args()` never checked that the fields exist and `apply_edits()` read a
+  missing one as "" (so an edit without newText deleted its text, measured); a named list counted
+  as one edit only when it had oldText. `ns_tool_help()` listed arguments only when the schema's
+  properties equalled the formals, and `edit` has `replace_all` beyond its schema.
+- Fix: a named list of non-lists is one edit; an edit missing a field is refused with "edits[i]
+  has no oldText or newText (it has: old, new). Use list(list(oldText = ..., newText = ...))."
+  Help lists the schema arguments when they are among the formals, plus "[items: oldText,
+  newText]" for an array; `find` now lists its arguments too. Inside `r` the schema gate already
+  answered, so only the console changes.
+- Green: PASS 595; `^(tool-edit|tool-namespace|doc-replay|doc-edit|utils-paths|json-schema|mcp-.*|
+  skill-.*|bridge-lang|bridge-sh)$` PASS 2968 SKIP 8; `^(console-commands|northstar)$` PASS 175.
+  Lint clean; Rd unchanged.
+- Deviations: D-248. Open: none.

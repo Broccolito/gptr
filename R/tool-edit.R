@@ -229,8 +229,9 @@ edit_splice_fuzzy = function(body, fz_lines, has_cr, k, eol, starts, lens, repl)
 }
 
 #' Pi prepareEditArguments(): edits as a JSON string, a single object, a data frame or a list
-#' json_decode(), never jsonlite::fromJSON(), which reads a non-JSON string as a file or URL; every
-#' present `oldText`/`newText` (or `old_text`/`new_text`) must be one string.
+#' json_decode(), never jsonlite::fromJSON(), which reads a non-JSON string as a file or URL; a
+#' named list of non-lists is one edit; every edit has `oldText` and `newText` (or `old_text` and
+#' `new_text`), each one string: the console path has no schema gate to say so (D-248).
 #' @noRd
 edit_normalize_args = function(edits) {
   if (is.character(edits) && length(edits) == 1L && !patch_is_envelope(edits)) {
@@ -242,15 +243,27 @@ edit_normalize_args = function(edits) {
     row_edit = function(i) lapply(as.list(edits[i, , drop = FALSE]), unfactor)
     edits = lapply(seq_len(nrow(edits)), row_edit)
   }
-  single = is.list(edits) && !is.null(names(edits))
-  if (single && !is.null(edits[["oldText"]] %||% edits[["old_text"]])) edits = list(edits)
+  if (is.list(edits) && !is.null(names(edits)) && !all(vapply(edits, is.list, NA))) {
+    edits = list(edits)
+  }
   if (!is.list(edits) || !length(edits) || !all(vapply(edits, is.list, NA))) {
     gptr_abort("Edit tool input is invalid. edits must contain at least one replacement.",
                "invalid_argument", arg = "edits", expected = "a list of list(oldText =, newText =)")
   }
   for (i in seq_along(edits)) {
+    e = edits[[i]]
+    miss = c("oldText", "newText")[c(is.null(e[["oldText"]] %||% e[["old_text"]]),
+                                     is.null(e[["newText"]] %||% e[["new_text"]]))]
+    if (length(miss)) {
+      has = names(e)[nzchar(names(e))]
+      msg = paste0("Edit tool input is invalid. edits[", i, "] has no ",
+                   paste(miss, collapse = " or "), " (it has: ",
+                   if (length(has)) paste(has, collapse = ", ") else "no names",
+                   "). Use list(list(oldText = \"...\", newText = \"...\")).")
+      gptr_abort(msg, "invalid_argument", arg = "edits", expected = "oldText and newText")
+    }
     for (f in c("oldText", "old_text", "newText", "new_text")) {
-      v = edits[[i]][[f]]
+      v = e[[f]]
       if (!is.null(v) && !rlang::is_string(v)) {
         msg = paste0("Edit tool input is invalid. edits[", i, "].", f, " must be a string.")
         gptr_abort(msg, "invalid_argument", arg = "edits", expected = "string oldText and newText")

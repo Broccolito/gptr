@@ -929,14 +929,14 @@ member_search = function(words, limit = 8L) {
 }
 
 #' Help lines of a tool spec: signature, description and its schema arguments
-#' Arguments are listed when the schema's properties are `fun`'s formals (read through args()).
+#' Arguments are listed when the schema's properties are among `fun`'s formals (read through
+#' args()); an array lists its items' fields.
 #' @noRd
 ns_tool_help = function(spec) {
   params = if (is.list(spec$parameters)) spec$parameters else ns_formals_schema(spec$fun)
   props = params$properties %||% list()
   req = as.character(unlist(params$required %||% list()))
-  same = !is.function(spec$fun) ||
-    setequal(names(props), setdiff(names(ns_fun_formals(spec$fun)), "..."))
+  same = !is.function(spec$fun) || all(names(props) %in% names(ns_fun_formals(spec$fun)))
   args = if (same && length(props)) {
     vapply(names(props), function(p) {
       pr = props[[p]]
@@ -944,7 +944,10 @@ ns_tool_help = function(spec) {
       paste0("  ", p, " (", paste(unlist(type), collapse = "|"),
              if (p %in% req) ", required" else "", ")",
              if (is.character(pr$description)) paste0(": ", pr$description) else "",
-             if (!is.null(pr$enum)) paste0(" [", paste(unlist(pr$enum), collapse = ", "), "]"))
+             if (!is.null(pr$enum)) paste0(" [", paste(unlist(pr$enum), collapse = ", "), "]"),
+             if (is.list(pr$items) && length(names(pr$items$properties))) {
+               paste0(" [items: ", paste(names(pr$items$properties), collapse = ", "), "]")
+             })
     }, "", USE.NAMES = FALSE)
   }
   c(member_signature(spec), "", spec$description %||% "",

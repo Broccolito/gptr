@@ -3134,9 +3134,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: edit errors number edits from 1 (`edits[1]` is the first), as R and the schema gate do,
   at the console, inside `r` and from the direct tool; Pi's wording counts from 0. Applies to the
   not-found, empty-oldText, occurrences, overlap and must-be-a-string messages.
+- Rule: `edit_normalize_args()` reads a named list of non-lists as one edit and refuses an edit
+  without `oldText`/`old_text` or `newText`/`new_text`, naming both sets of fields ("edits[1] has
+  no oldText or newText (it has: old, new)"). P10 read a missing field as "", so at the console
+  `list(old =, new =)` said "oldText must not be empty" and an edit without newText deleted text.
+- Rule: `peter$help()` lists a member's schema arguments when they are among its formals (was:
+  equal to them), with an array's item fields, so `edit` and `find` now show theirs.
 - Contract-visible: 04 §4.4 call record (`tool` NULL when not offered), §7.6 `dispatch_tools()`,
   §9.3 suffix order.
 - Tests: test-agent-dispatch.R "the offered tools (D-248)" (3 blocks) and the frozen-schema block;
   test-bridge-lang.R, test-bridge-sh.R through-run refusals; test-prompt-context.R mode suffixes;
-  test-tool-edit.R "edit errors number edits from 1". Evidence: progress/fixes.md Task FIX-15
-  tools-1, tools-5, tools-6.
+  test-tool-edit.R "edit errors number edits from 1", "an edit without oldText or newText";
+  test-tool-namespace.R `peter$help("edit")`. Evidence: progress/fixes.md Task FIX-15 tools-1,
+  tools-5, tools-6, tools-7.
