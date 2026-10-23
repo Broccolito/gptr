@@ -2319,5 +2319,6 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Cause: bg-1's `how` repeated what `bg_pending_text("approval")`, the denial's reason, already says.
 - Fix: `how = "Nothing ran and nobody declined."`, which still replaces "Explain what you need or choose another
   approach."; the test matches the whole ending.
-- Green: `^(agent-background|console-ui|perm-ask|tool-ask|agent-dispatch)$` PASS 600. Lint clean; plan checks pass.
+- Green: `^(agent-background|console-ui|perm-ask|tool-ask|agent-dispatch)$` PASS 600; after bg-1b to bg-1c the full
+  suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35504. Lint clean; plan checks pass.
 - Deviations: D-252 (bg-1 quote amended). Open: none.
