@@ -3526,6 +3526,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     came for a second (D-243)"; test-console-ui.R "a question drawn over the composer's draft says where it went
     (steering review)"; test-console-typing.R "a terminal: a question waits a second after the last key; `yes`
     is no answer (D-243)", "a terminal: a question never takes the line typed ahead of it (P28 B, C, H)".
+  - A batch read on the polling beat that holds newlines and ends in text is a paste and stays one draft
+    (`console_compose(..., paste)`; leading blank lines dropped), which Enter sends as one message, as at the
+    idle prompt: during a run a paste without a final newline was split, its head delivered alone as a steer
+    (two model requests for one message) and its last line kept as the draft. No person types a newline and
+    more inside one 50 ms read, so `console_keys()` passes TRUE when the reader read at most 0.2 s before
+    (`rd$polled`, empty reads included); the idle editor always; the background probe never. A run's first
+    read and keys piled up during an in-process tool keep the old rule, so `do X`, Enter, `then Y` typed during
+    a tool still sends `do X`. Bracketed paste was rejected: new terminal state for every mode switch and
+    question. Contract-visible: 04 §15.10 IC-76. Tests: test-console-input.R "a batch read on the polling beat
+    that ends in text is a paste: one draft (review)"; test-console-typing.R "keys read on the polling beat are
+    a paste; after a stall they are typed (review)", "a terminal: a paste during a run is one draft; Enter sends
+    it as one steer (review)"; test-console-repl.R "a macOS terminal: a paste is one turn, a fence echoes once,
+    Ctrl-D never hangs".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

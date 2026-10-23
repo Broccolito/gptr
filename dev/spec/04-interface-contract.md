@@ -5403,16 +5403,23 @@ its part in its own commit, and Task 27 finalises them.
     prompt to the REPL's session while it runs or waits in the background steers it (`route_continue()`), and
     once sent its queue line says so, `↳ steer · <text>` (`repl_turn()`).
   - The composer's key machine (Task 16; pure, in `console-input.R`; Tasks 18-21 feed it the keys typed while
-    the agent works). `console_compose(state, chars, now, enter_kind, complete)` applies one read batch (the text
-    `conn_read_chars()` decodes) at time `now` to `state` (`list(draft, esc, t)`) and returns the new state and
-    at most one action: NULL, `list(type = "send", kind, text)`, `list(type = "take_back")` or
+    the agent works). `console_compose(state, chars, now, enter_kind, complete, paste = FALSE)` applies one read
+    batch (the text `conn_read_chars()` decodes) at time `now` to `state` (`list(draft, esc, t)`) and returns the
+    new state and at most one action: NULL, `list(type = "send", kind, text)`, `list(type = "take_back")` or
     `list(type = "complete", candidates)`. Text is added at the draft's end; DEL and BS delete its last
     character, Ctrl-U clears it and Ctrl-W deletes its last word; other control bytes and escape sequences (up
     to their final byte, 0x40-0x7e) are dropped, so nothing moves a cursor. A sequence the batch ends in is held
     until `now` passes its start by 50 ms, then dropped (a lone Esc). `\r` and `\r\n` read as `\n`: a batch
     holding newlines sends the draft and its text up to the last newline as one message of the Enter kind
     (`enter_kind`, the `type_ahead` setting), newlines kept, and the rest is the draft; a newline ends what the
-    edit keys reach. A message starting with `/` or `!` is always a follow-up, and a blank one is not sent. Two
+    edit keys reach. With `paste` (steering review) a batch with text after its last newline, not only edit
+    keys, is a paste: its newlines stay in the draft, leading blank lines dropped, and Enter later sends it as
+    one message, as at the idle prompt. `console_keys()` passes TRUE for a batch read on the polling beat, at
+    most 0.2 s after the reader's last read (`rd$polled`, empty reads included), as no person types a newline
+    and more inside one 50 ms read; the idle editor always; the background probe never. A run's first read and
+    the keys piled up during an in-process tool keep the rule above (during a run a paste without a final
+    newline was split: its head went at once as a steer, its last line stayed the draft). A message starting
+    with `/` or `!` is always a follow-up, and a blank one is not sent. Two
     keys act only as a batch of their own, or at the end of a batch without a newline, after its text (review of
     Tasks 16-21: keys typed during an in-process tool arrive as one batch; elsewhere Tab is text and Up is
     dropped): Up (`ESC [ A`, `ESC O A`) on

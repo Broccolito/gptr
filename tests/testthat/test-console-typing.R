@@ -832,6 +832,39 @@ test_that("Up takes back the newest message the person queued, of either kind (D
   })
 })
 
+test_that("keys read on the polling beat are a paste; after a stall they are typed (review)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$reader = console_reader()
+  rs$sending = quote(peter())
+  clock = 0
+  local_mocked_bindings(reactor_now = function() clock)
+  read = function(t, chars) {
+    clock <<- t
+    .gptr_repl = rs
+    console_keys(rs$reader, s, chars)
+  }
+  steers = function() vapply(session_data(s)$queue$steer, function(it) it$text, "")
+  utils::capture.output({
+    # a run's first read is typed: `a` goes, `b` is the draft
+    read(0, "a\rb")
+    expect_identical(steers(), "a")
+    expect_identical(rs$reader$compose$draft, "b")
+    # 0.05 s after the last read, an empty one too, a newline and more text are a paste
+    read(0.05, "")
+    read(0.1, "\rc\rd")
+    expect_identical(steers(), "a")
+    expect_identical(rs$reader$compose$draft, "b\nc\nd")
+    read(0.15, "\r")
+    expect_identical(steers(), c("a", "b\nc\nd"))
+    # the same batch after a 2 s stall (keys piled up during an in-process tool) is typed
+    read(2.15, "a\rb")
+    expect_identical(steers(), c("a", "b\nc\nd", "a"))
+    expect_identical(rs$reader$compose$draft, "b")
+  })
+})
+
 test_that("a draft a run left waits for the follow-ups, then continues at the prompt (D-243)", {
   skip_on_cran()
   local_console_test()
@@ -997,6 +1030,38 @@ test_that("a terminal: the draft shows on the live row as text streams; Enter st
   answers = gsub(" ", "", regmatches(text, gregexpr("BEGIN.*?END", text, perl = TRUE))[[1L]])
   expect_length(answers, 2L)
   expect_identical(answers[[1L]], answers[[2L]])
+})
+
+test_that("a terminal: a paste during a run is one draft; Enter sends it as one steer (review)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
+    "fake = gptr_fake_provider(function(req) {",
+    "  if (req$n == 1L) return(list(text = 'first', delay = 4))",
+    "  ops = Filter(function(m) identical(m$role, 'operator'), req$messages)",
+    "  text = sub('^.*working: ', '', gptr:::msg_text(ops[[1L]]))",
+    "  paste0('REQ ', length(ops), ' [', gsub('\\n', '/', text), ']')",
+    "})",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
+  ), term = "xterm")
+  person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("thinking"))
+  # on the polling beat, as the run goes
+  Sys.sleep(0.5)
+  pty$send("a\rb\rc")
+  expect_true(pty$wait(paste0(person, " a b c")))
+  expect_identical(pty$seen("queued"), 0L)
+  pty$send("\r")
+  expect_true(pty$wait("1 queued"))
+  expect_true(pty$wait("REQ 1 [a/b/c]"))
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(pty$seen("REQ "), 1L)
 })
 
 test_that("a terminal: Tab queues a follow-up, a second run; Up takes back, Ctrl-U discards", {

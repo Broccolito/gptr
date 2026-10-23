@@ -3,20 +3,21 @@
 
 # console_compose() on `chars` from the draft `draft` at time `now`; the completer knows a few
 # full words and offers those starting with the trigger word
-compose = function(chars, draft = "", now = 0, enter_kind = "steer", state = list(draft = draft)) {
+compose = function(chars, draft = "", now = 0, enter_kind = "steer", state = list(draft = draft),
+                   paste = FALSE) {
   words = c("@mtcars", "@mtcars_copy", "/mode", "/model", "mtcars_copy", "peter$send")
   complete = function(line, end) {
     word = console_trigger(substr(line, 1L, end))
     words[startsWith(words, word)]
   }
-  console_compose(state, chars, now, enter_kind, complete)
+  console_compose(state, chars, now, enter_kind, complete, paste)
 }
 
 # Each case: the keys, the draft before, the draft after and the action; a difference names its
 # case as 'draft + keys'
-expect_keys = function(cases, enter_kind = "steer") {
+expect_keys = function(cases, enter_kind = "steer", paste = FALSE) {
   got = lapply(cases, function(x) {
-    r = compose(x[[1L]], x[[2L]], enter_kind = enter_kind)
+    r = compose(x[[1L]], x[[2L]], enter_kind = enter_kind, paste = paste)
     list(r$state$draft, r$action)
   })
   names(got) = vapply(cases, function(x) encodeString(paste0(x[[2L]], " + ", x[[1L]])), "")
@@ -124,6 +125,19 @@ test_that("Enter sends the draft; a batch holding newlines is one message (the p
     list("\r", "use base R", "", sent("follow_up", "use base R")),
     list("a\nb", "", "b", sent("follow_up", "a"))
   ), enter_kind = "follow_up")
+})
+
+test_that("a batch read on the polling beat that ends in text is a paste: one draft (review)", {
+  expect_keys(list(
+    list("a\rb\rc", "", "a\nb\nc", NULL),
+    list("a\rb\rc\r", "", "", sent("steer", "a\nb\nc")),
+    list("tail of\rtwo lines", "abc ", "abc tail of\ntwo lines", NULL),
+    list("abc\n\177", "", "", sent("steer", "abc")),
+    list("\nabc\ndef", "", "abc\ndef", NULL),
+    list("!x = 1\ny = 2", "", "!x = 1\ny = 2", NULL),
+    list("\r", "!x = 1\ny = 2", "", sent("follow_up", "!x = 1\ny = 2")),
+    list("\r", "one\ntwo", "", sent("steer", "one\ntwo"))
+  ), paste = TRUE)
 })
 
 test_that("/ and ! drafts are follow-ups, whatever the key", {

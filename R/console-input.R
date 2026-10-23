@@ -11,17 +11,19 @@
 #' `now` passes its start `t` by 50 ms, then dropped (a lone Esc). `\r` and `\r\n` read as `\n`; a
 #' batch holding newlines sends the draft and its text up to the last newline as one message,
 #' newlines kept (IC-76's paste rule), and keeps the rest as the draft; a newline ends what the
-#' edit keys reach. A message goes as `enter_kind` (`"steer"` or `"follow_up"`), always as a
-#' follow-up when it starts with / or !, and not at all when blank. Two keys act only as a batch
-#' of their own or as the end of a batch without a newline (elsewhere Tab is text and Up is
-#' dropped): Up (`ESC [ A`, `ESC O A`) on an empty draft takes back the newest queued message;
-#' Tab on a trigger word (console_trigger()) completes it and never sends: `complete(line, end)`
-#' returns full words, whose longest common prefix replaces the word when longer, else two or more
-#' are listed. On any other draft Tab sends the other kind.
+#' edit keys reach. With `paste` (a batch read on the polling beat, too quick for a person to type
+#' a newline and more) a batch with text after its last newline is a paste: its newlines stay in
+#' the draft, leading blank lines dropped. A message goes as `enter_kind` (`"steer"` or
+#' `"follow_up"`), always as a follow-up when it starts with / or !, and not at all when blank.
+#' Two keys act only as a batch of their own or as the end of a batch without a newline (elsewhere
+#' Tab is text and Up is dropped): Up (`ESC [ A`, `ESC O A`) on an empty draft takes back the
+#' newest queued message; Tab on a trigger word (console_trigger()) completes it and never sends:
+#' `complete(line, end)` returns full words, whose longest common prefix replaces the word when
+#' longer, else two or more are listed. On any other draft Tab sends the other kind.
 #' @return list(state, action), the action NULL, list(type = "send", kind, text),
 #'   list(type = "take_back") or list(type = "complete", candidates)
 #' @noRd
-console_compose = function(state, chars, now, enter_kind, complete) {
+console_compose = function(state, chars, now, enter_kind, complete, paste = FALSE) {
   draft = state$draft %||% ""
   held = if (now - (state$t %||% now) <= 0.05) state$esc %||% "" else ""
   x = paste0(held, gsub("\r\n?", "\n", chars))
@@ -61,11 +63,17 @@ console_compose = function(state, chars, now, enter_kind, complete) {
   keys = regmatches(x, gregexpr(paste0("\\x1b(\\[[\\x20-\\x3f]*[\\x40-\\x7e]?|O[\\x40-\\x7e]?|",
                                        "[\\x20-\\x7e])?|[\\x01-\\x1f\\x7f]|[^\\x01-\\x1f\\x7f]+"),
                                 x, perl = TRUE))[[1L]]
+  # a paste has text after its last newline, not only edit keys
+  last = max(0L, which(keys == "\n"))
+  joined = paste && last > 0L &&
+    any(!grepl("^[\\x01-\\x1f\\x7f]", keys[-seq_len(last)], perl = TRUE))
   lines = ""
   esc = ""
   for (i in seq_along(keys)) {
     k = keys[[i]]
-    if (k == "\n") {
+    if (k == "\n" && joined) {
+      draft = if (nzchar(trimws(draft))) paste0(draft, "\n") else ""
+    } else if (k == "\n") {
       lines = paste0(lines, draft, "\n")
       draft = ""
     } else if (k %in% c("\177", "\b")) {
@@ -101,16 +109,21 @@ console_trigger = function(line) {
 #' (policy_enqueue(): a steer for the next step boundary, a follow-up in `rd$typed` for the next
 #' prompt) and Up takes back the newest one (console_newest()); Tab on a trigger word completes it
 #' (console_complete()), and several candidates are kept as `rd$compose$candidates`, which the live
-#' row shows until the next key; the live row is drawn again where it shows. Ctrl-C, a key in
-#' character mode (tty_call()), interrupts as SIGINT would, after the keys before it; the keys
-#' after it in the batch are dropped
+#' row shows until the next key; the live row is drawn again where it shows. A batch read at most
+#' 0.2 s after the reader's last read (`rd$polled`, an empty read too) is on the polling beat, so
+#' console_compose() takes it as a paste. Ctrl-C, a key in character mode (tty_call()), interrupts
+#' as SIGINT would, after the keys before it; the keys after it in the batch are dropped
 #' @noRd
 console_keys = function(rd, s, chars) {
+  # the first read of a run, or one after an in-process tool held the reactor, is off the beat
+  now = reactor_now()
+  paste = !is.null(rd$polled) && now - rd$polled <= 0.2
+  rd$polled = now
   ctrl_c = regexpr("\003", chars, fixed = TRUE)
   if (ctrl_c > 0L) chars = substr(chars, 1L, ctrl_c - 1L)
   if (nzchar(chars)) {
-    res = console_compose(rd$compose, chars, reactor_now(), setting_get("type_ahead", s),
-                          console_complete)
+    res = console_compose(rd$compose, chars, now, setting_get("type_ahead", s), console_complete,
+                          paste)
     rd$compose = res$state
     act = res$action
     if (identical(act$type, "send")) {
@@ -167,7 +180,8 @@ console_idle = function(rd, prompt) {
         keys = sub("\t$", "", keys)
       }
       if (nzchar(keys)) {
-        res = console_compose(rd$compose, keys, reactor_now(), "steer", console_complete)
+        # a read here starts at its first key, so a newline with text after it came as a paste
+        res = console_compose(rd$compose, keys, reactor_now(), "steer", console_complete, TRUE)
         rd$compose = res$state
         if (identical(res$action$type, "send")) {
           line = res$action$text

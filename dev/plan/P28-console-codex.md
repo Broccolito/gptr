@@ -136,7 +136,9 @@ working directory restored. Plan-specific rules:
   no-margin plain layout.
 - Tests:
   - Pure functions with an injected clock hold the timing rules: 0.05 s poll, 0.1 s stale line,
-    1 s typing idle (3 s with a draft), 50 ms escape hold, the batch rule.
+    1 s typing idle (3 s with a draft), 50 ms escape hold, the batch rule. (Amended in the steering
+    review: a batch read on the polling beat, within 0.2 s of the last read, that holds newlines and
+    ends in text is a paste and stays one draft.)
   - pty children: `processx` pty, `skip_on_cran()`, `skip_on_os("windows")`, TERM=xterm-256color,
     80x24, temporary R_USER_* and GPTR_PROJECT_ROOT. One case per guarantee, run on the macOS and
     Linux NOT_CRAN lanes.
@@ -809,7 +811,8 @@ Commit: `fix(console): queued messages are never dropped`.
 Decisions:
 - `console_compose(state, chars, now, enter_kind, complete)` returns the new state
   (`list(draft, esc, t)`) and at most one action, as a batch sends at most one message: NULL,
-  `send(kind, text)`, `take_back` or `complete(candidates)`.
+  `send(kind, text)`, `take_back` or `complete(candidates)`. (Amended in the steering review: a
+  sixth argument, `paste`; see the batch rule.)
 - Keys:
   - printable characters append to the draft;
   - DEL and BS delete the last character;
@@ -834,7 +837,15 @@ Decisions:
   only as a batch of their own: in any other batch Tab is text and Up is dropped. (Amended in the review of
   Tasks 16-21: also at the end of a batch without a newline, as the key after the batch's text; keys typed
   during an in-process tool arrive as one batch, so `then plot` and Tab gave a literal tab, never a
-  follow-up. A Tab inside text stays text.)
+  follow-up. A Tab inside text stays text.) (Amended in the steering review: a batch read on the
+  polling beat that holds newlines and ends in text is a paste: its newlines stay in the draft,
+  leading blank lines dropped, and Enter later sends it as one message, as at the idle prompt.
+  During a run a paste without a final newline was split, its head sent at once as a steer and its
+  last line kept as the draft. A person cannot type a newline and more text inside one 50 ms read.
+  `console_compose(..., paste = FALSE)`: `console_keys()` passes TRUE when the reader read at most
+  0.2 s before (`rd$polled`, empty reads included), the idle editor always; a batch that ends in a
+  newline or in edit keys only, and any batch read after a stall (a run's first read, keys piled up
+  during an in-process tool), sends up to its last newline as before.)
 - `/` and `!` drafts send as follow-ups.
 - No cursor movement: the draft is edited at its end, and Left, Right, Ctrl-A and Ctrl-E are
   dropped. Full editing is readline's, at the prompt.
