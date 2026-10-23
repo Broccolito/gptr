@@ -67,7 +67,8 @@ once that its cost limit is not enforced; the \code{tokens} and \code{turns} lim
 session's later turns; \code{max_turns} caps this call's model requests.}
 
 \item{.run}{\code{FALSE} builds the session with the prompt queued and returns it (see
-\code{\link[=gptr_step]{gptr_step()}}).}
+\code{\link[=gptr_step]{gptr_step()}}). Building checks egress and replay only; \code{\link[=gptr_step]{gptr_step()}} and \code{\link[=gptr_wait]{gptr_wait()}} check
+the model's provider and key before they start the run.}
 
 \item{.stdin}{Drive the console from piped standard input.}
 }

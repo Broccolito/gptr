@@ -1977,6 +1977,13 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   keeps egress and replay only (`gateway_guards(ready = FALSE)`): the choice stops with `gptr_error_no_key` after
   0 requests, as on main. Red FAIL 2 (the router test, rewritten). Green `^gptr-gateway$` PASS 406;
   `^(gptr-|agent-run$|prompt-compact$|subagent-|provider-registry$|arch-layers$|lint-rules$)` PASS 4183 SKIP 1.
+- Review: r2 (medium) applied. The readiness checks also ran when a session was only built, so a keyless Opus
+  stopped `peter(.run = FALSE)` and the whole `gptr_parallel()` with `gptr_error_no_key`, where main returned an
+  idle session and a team whose member ended `error` (vignette teams-and-background, `?peter` `.run`). Building
+  passes `ready = isTRUE(call$args$run)`; `sdk_check()` (`gptr_step()`, `gptr_wait()`) checks readiness before a
+  run starts, and a member's request does. `?peter` `.run`, `?gptr_wait`; 04 §6.1.2. Red FAIL 1 on 99e12070 (the
+  build and, alone, the team). Green `^gptr-gateway$` PASS 414; `^(gptr-|agent-run$|subagent-|provider-registry$|
+  doc-|console-render$|copy-gateway$|arch-layers$|lint-rules$)` PASS 6542 SKIP 3. Lint and Rd clean.
 - Deviations: D-251 (extended). From the plan: the continuation guards its target whether or not it changes and
   `gateway_run()` guards only a new session (one check per switch); `session_new()` sets `gptr_last()`, so a
   refused new call restores it.

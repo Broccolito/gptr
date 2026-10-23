@@ -1424,6 +1424,23 @@ test_that("a router's choice without a key stops the run, not the default model 
   expect_length(fake_requests(fake), 0L)
 })
 
+test_that("a built session needs no key until a run starts it (D-251)", {
+  local_gw()
+  local_gptr_options(replay = "auto")
+  withr::local_envvar(ANTHROPIC_API_KEY = NA)
+  settings_write("user", list(egress = list(anthropic = "ack")))
+  fake = local_fake_provider(list("fine"))
+  opus = "anthropic/claude-opus-5-5"
+  s = peter("x", model = opus, envir = new.env(), .run = FALSE)
+  expect_identical(c(s$status, s$model), c("idle", opus))
+  expect_error(gptr_step(s), class = "gptr_error_no_key")
+  expect_identical(list(s$status, s$turns), list("idle", 0L))
+  team = gptr_parallel(a = peter("x", model = opus, envir = new.env()),
+                       b = peter("y", model = fake, envir = new.env()))
+  expect_identical(c(team$a$status, team$b$status, team$b$text), c("error", "idle", "fine"))
+  expect_s3_class(session_data(team$a)$condition, "gptr_error_no_key")
+})
+
 test_that("a named dot that abbreviates an argument warns and stays context (D-251)", {
   local_gw()
   fake = local_fake_provider(as.list(paste("reply", 1:5)))

@@ -105,7 +105,8 @@
 #'   `preset`, and entries named by a plugin namespace. `thinking` applies to this call and to the
 #'   session's later turns; `max_turns` caps this call's model requests.
 #' @param .run `FALSE` builds the session with the prompt queued and returns it (see
-#'   [gptr_step()]).
+#'   [gptr_step()]). Building checks egress and replay only; [gptr_step()] and [gptr_wait()] check
+#'   the model's provider and key before they start the run.
 #' @param .stdin Drive the console from piped standard input.
 #' @return A `gptr_session` for agent work (invisibly when its answer was streamed to the
 #'   console), or a typed System 1 vector for classifier models.
@@ -667,7 +668,8 @@ gateway_continue_session = function(call, s, cur, safety) {
   gateway_preset(call) # for its refusal only
   th = call$args$opts$thinking
   ref = if (is.null(call$ids$model)) d$model else gateway_model_ref(call$ids$model, th, d$id)
-  gateway_guards(call, s, safety, list(provider = gateway_provider_id(ref), ref = ref))
+  gateway_guards(call, s, safety, list(provider = gateway_provider_id(ref), ref = ref),
+                 ready = isTRUE(call$args$run))
   if (!is.null(call$ids$model)) {
     if (!identical(ref, d$model)) session_set_model(s, ref, reason = "user")
   } else if (!is.null(th)) {
@@ -721,12 +723,14 @@ gateway_check_visible = function(call) {
 }
 
 #' Egress acknowledgment (unless the context of `call` is "none") under `safety` and the replay
-#' guard under `call`'s `replay =` (contract 3.1, IC-45), then, when `ready`, the model's readiness
-#' (decision-only model, disabled provider, preflight with an Ollama model prepared, key), so a
-#' refused call changes nothing (D-251); on the session's own record of the provider: of the
-#' session's model, or of `m` (`provider`, `ref`): a continuation's new model or a router's choice
-#' (a router session's own model is checked per request by router_call(), without readiness: the
-#' request checks it; IC-29, IC-74; D-099, D-114); the question names the model when model code asks
+#' guard under `call`'s `replay =` (contract 3.1, IC-45), then, when `ready` (a run starts now: a
+#' built session is checked by sdk_check(), a gptr_parallel() member by its request), the model's
+#' readiness (decision-only model, disabled provider, preflight with an Ollama model prepared,
+#' key), so a refused run records nothing (D-251); on the session's own record of the provider: of
+#' the session's model, or of `m` (`provider`, `ref`): a continuation's new model or a router's
+#' choice (a router session's own model is checked per request by router_call(), without
+#' readiness: the request checks it; IC-29, IC-74; D-099, D-114); the question names the model when
+#' model code asks
 #' @noRd
 gateway_guards = function(call, s, safety, m = NULL, ready = TRUE) {
   d = session_data(s)
@@ -986,7 +990,7 @@ gateway_run = function(call, s = NULL) {
     last = gptr_last()
     tryCatch({
       s = gateway_new_session(call, cur)
-      gateway_guards(call, s, safety %||% egress_safety())
+      gateway_guards(call, s, safety %||% egress_safety(), ready = isTRUE(call$args$run))
     }, error = function(e) {
       last_set(last)
       stop(e)

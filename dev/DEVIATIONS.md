@@ -3138,7 +3138,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the previous `gptr_last()`. Was: those changed first, and key and provider refusals came at the first request,
   after the turn and its prompt were recorded (resent with the next prompt). A router's choice keeps egress and
   replay only (`ready = FALSE`), and its request refuses the rest, as before (a keyless choice: `gptr_error_no_key`,
-  no request). A failure after a request (HTTP 4xx/5xx) keeps INFRA-04.
+  no request). So does building a session (`.run = FALSE`, a `gptr_parallel()` member): `gptr_step()` and
+  `gptr_wait()` check the rest before they start its run, and a member that cannot reach its model ends `error`
+  (kept by `on_error = "return"`). A failure after a request (HTTP 4xx/5xx) keeps INFRA-04.
 - Rule (sessions-4): a continuation without `envir =` of a session with no kept home whose `home_label` is a
   function frame (R2) informs once per session (`gptr_message_home_not_kept`) when `home_label(call$envir)`
   differs, naming both and `envir = new.env()`. Was silent. R2 and the IC-40 precedence are unchanged.
@@ -3204,18 +3206,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   came back `manual` (a script stopped at its first write) and one started in `plan` came back under a looser
   setting (`auto`: a write ran). A file that records no mode (written before) behaves as before.
 - Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
-  `tools`, `.opts` and refusals. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter` `envir`,
-  `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and row).
-  04 §4.6 `gptr.budget`, §7.6 `budget_check()`, §10.4 `budget_exceeded`, IC-66. 04 §2.2 messages, §6.1 `budget`
-  row, IC-66; `?peter` `budget`. 04 §5.1 `text` and `value` rows, §6.5 `gptr_parallel()`, 03 §4.1.6;
+  `tools`, `.opts`, `.run` and refusals, `?gptr_wait`. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter`
+  `envir`, `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and
+  row). 04 §4.6 `gptr.budget`, §7.6 `budget_check()`, §10.4 `budget_exceeded`, IC-66. 04 §2.2 messages, §6.1
+  `budget` row, IC-66; `?peter` `budget`. 04 §5.1 `text` and `value` rows, §6.5 `gptr_parallel()`, 03 §4.1.6;
   `?session-accessors`, `?gptr_parallel`, vignette teams-and-background. 04 §5.1 `text` row and `print` method, §6.5
-  `gptr_map()`, 03 §4.1.6; `?print.gptr_session`, `?session-accessors`, `?gptr_parallel`, the same vignette.
-  03 §6.8 (the execute menu). 04 IC-54 (the plan allowlist). `gptr_risk()`'s rows and categories of a program
-  given by its path (no spec text describes them). 04 §9.4 `bg` risk cell. 03 §6.8.4, 04 §7.6 `dispatch_nested()`.
-  04 §4.6 `gptr.frozen`, §6.5 `gptr_resume()`; `?gptr_sessions`.
+  `gptr_map()`, 03 §4.1.6; `?print.gptr_session`, `?session-accessors`, `?gptr_parallel`, the same vignette. 03 §6.8
+  (the execute menu). 04 IC-54 (the plan allowlist). `gptr_risk()`'s rows and categories of a program given by its
+  path (no spec text describes them). 04 §9.4 `bg` risk cell. 03 §6.8.4, 04 §7.6 `dispatch_nested()`. 04 §4.6
+  `gptr.frozen`, §6.5 `gptr_resume()`; `?gptr_sessions`.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice without a key stops the run ...",
-  "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
+  "a built session needs no key until a run starts it ...", "a continuation of a session that kept no workspace
+  ...", "a named dot that abbreviates an argument ...";
   prompt-sections "the tool array skips unavailable and missing tools ..."; agent-run "a request rejected or never
   received costs nothing ...", "a reported usage keeps its unknown counts ...", "an overflow condition carries the
   provider's prompt count ...", "an extended token budget is checked again ..."; session-budget "a token budget the
