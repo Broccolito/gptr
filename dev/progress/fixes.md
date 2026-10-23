@@ -2049,3 +2049,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   copy-bridge|lint-rules|arch-layers)$` PASS 648 SKIP 6. Lint clean; Rd unchanged.
 - Deviations: none (the contract does not define `seconds`). Open: a job nobody looks at until
   long after it ended (including after `kill()`) stops at that first look, an upper bound.
+
+### tools-12 - peter$py() refuses RETICULATE_PYTHON=managed and gives advice an R user can follow
+- Red: FAIL 1 in `bridge-lang` (PASS 106): with `RETICULATE_PYTHON=managed`, `py_available()`
+  mocked FALSE and `import_main()` mocked to stop, `bridge_py_main()` reached `import_main()`
+  (finding 2: reticulate then downloads a uv-managed Python, which the refusal says gptr never
+  lets happen); the unconfigured refusal said "activate a virtual environment", which in R reads
+  as `reticulate::use_virtualenv()`, refused by the same guard.
+- Cause: the guard asked only `nzchar()` of `RETICULATE_PYTHON`, `RETICULATE_PYTHON_ENV` and
+  `VIRTUAL_ENV`; "managed" is non-empty.
+- Fix: `identical(Sys.getenv("RETICULATE_PYTHON"), "managed")` (reticulate's own `==` test) is
+  refused like an unconfigured Python, first line "RETICULATE_PYTHON=managed asks reticulate to
+  download a Python for peter$py()."; both refusals advise a Python executable in
+  `RETICULATE_PYTHON` (or R started from an activated virtual environment), or
+  `reticulate::use_python("<path>")` then `reticulate::py_config()` before the first call.
+  P22 Task 7's guard rule amended.
+- Green: `bridge-lang` PASS 115; `^(bridge-.*|copy-bridge|perm-classify|lint-rules|arch-layers)$`
+  PASS 1546 SKIP 12. Unmocked (no Python configured, reticulate 1.47.0) `peter$py("1 + 1")` with
+  `RETICULATE_PYTHON=managed` refuses and Python stays uninitialised. Lint clean; Rd unchanged
+  (`@noRd`).
+- Deviations: D-248 (P22 Task 7). Open: `use_python()`/`use_virtualenv()` without `py_config()`
+  are still refused (accepting them needs reticulate internals or `RETICULATE_USE_MANAGED_VENV`
+  handling, a later change); the cheat sheet takes sheet entry S32.

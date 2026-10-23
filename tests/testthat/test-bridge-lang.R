@@ -98,6 +98,28 @@ test_that("peter$py() refuses a Python that reticulate would have to provision",
   expect_identical(err$member, "py")
 })
 
+test_that("peter$py() refuses RETICULATE_PYTHON=managed and advises use_python() (D-248)", {
+  withr::with_options(list(ambiguousMethodSelection = getOption("ambiguousMethodSelection")),
+    skip_if_not_installed("reticulate"))
+  testthat::local_mocked_bindings(
+    py_available = function(initialize = FALSE) FALSE,
+    import_main = function(...) stop("reticulate::import_main() was reached"),
+    .package = "reticulate")
+  withr::local_envvar(RETICULATE_PYTHON = "managed", RETICULATE_PYTHON_ENV = NA, VIRTUAL_ENV = NA)
+  before = Sys.getenv()
+  err = expect_error(bridge_py_main(), class = "gptr_error_not_available")
+  expect_identical(err$member, "py")
+  expect_match(conditionMessage(err), "RETICULATE_PYTHON=managed", fixed = TRUE)
+  expect_identical(Sys.getenv(), before)
+  withr::local_envvar(RETICULATE_PYTHON = NA)
+  before = Sys.getenv()
+  err = expect_error(bridge_py_main(), class = "gptr_error_not_available")
+  expect_no_match(conditionMessage(err), "activate a virtual environment", fixed = TRUE)
+  expect_match(conditionMessage(err), "reticulate::use_python(\"<path>\")", fixed = TRUE)
+  expect_match(conditionMessage(err), "reticulate::py_config()", fixed = TRUE)
+  expect_identical(Sys.getenv(), before)
+})
+
 test_that("peter$py() keeps objects in __main__, shows the last value and one-line errors", {
   skip_if_no_python()
   seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
