@@ -3176,7 +3176,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   IC-48 (`record = false` sentence), §7.10 `read_file()` (line count); 03 §7.3 (`out` without a
   document); P22 Task 5 S-4 refusal (an undeclared bridge is not found first), P22 Task 7
   provisioning guard (`managed`).
-- Tests: test-agent-dispatch.R "the offered tools (D-248)" (3 blocks) and the frozen-schema block;
+- Tests: test-agent-dispatch.R "a direct call to a tool the session did not offer ...", "an ask the
+  non-interactive auto preset did not offer ...", "a tool added to a continued session ..." and the
+  frozen-schema block;
   test-bridge-lang.R, test-bridge-sh.R through-run refusals; test-prompt-context.R mode suffixes;
   test-tool-edit.R "edit errors number edits from 1", "an edit without oldText or newText";
   test-tool-namespace.R `peter$help("edit")`; test-tool-edit.R "a fuzzy match changes only its

@@ -58,6 +58,53 @@ test_that("an unknown tool is an error result", {
   expect_true(x$msgs[[1L]]$is_error)
 })
 
+test_that("a direct call to a tool the session did not offer is not found and does not run", {
+  local_project(files = list("R/fit.R" = "n = 10"))
+  e = new.env()
+  last = function(tools, reply) {
+    s = peter("Do it.", model = gptr_fake_provider(list(reply, "done")), envir = e, mode = "auto",
+              tools = tools)
+    utils::tail(tool_results(s), 1L)[[1L]]
+  }
+  res = last("-write", fake_tool("write", path = "w.txt", content = "x"))
+  expect_true(res$is_error)
+  expect_identical(msg_text(res), "Tool write not found")
+  expect_false(file.exists("w.txt"))
+  expect_identical(msg_text(last("-r", fake_tool("r", code = "made_here = 1"))), "Tool r not found")
+  expect_false(exists("made_here", envir = e, inherits = FALSE))
+  grep = fake_tool("grep", pattern = "n", path = "R")
+  expect_identical(msg_text(last(NULL, grep)), "Tool grep not found")
+  res = last("extended", grep)
+  expect_false(res$is_error)
+  expect_match(msg_text(res), "fit.R", fixed = TRUE)
+})
+
+test_that("an ask the non-interactive auto preset did not offer is not found; the run ends idle", {
+  local_project()
+  local_gptr_options(interactive = FALSE)
+  qs = list(list(id = "q1", question = "Which file?"))
+  fake = gptr_fake_provider(list(fake_tool("ask", questions = qs), "done"))
+  s = peter("Do it.", model = fake, envir = new.env(), mode = "auto")
+  expect_identical(msg_text(tool_results(s)[[1L]]), "Tool ask not found")
+  expect_identical(s$status, "idle")
+})
+
+test_that("a tool added to a continued session and an r member under minimal can be called", {
+  local_project(files = list("R/fit.R" = "n = 10"))
+  fake = gptr_fake_provider(list("ok", fake_tool("grep", pattern = "n", path = "R"), "done"))
+  s = peter("Hi.", model = fake, envir = new.env(), mode = "auto")
+  s = peter(s, "Search.", tools = "+grep")
+  res = tool_results(s)[[1L]]
+  expect_false(res$is_error)
+  expect_match(msg_text(res), "fit.R", fixed = TRUE)
+  code = "peter$grep(\"n\", path = \".\")"
+  fake = gptr_fake_provider(list(fake_tool("r", code = code), "done"))
+  s = peter("Search.", model = fake, envir = new.env(), mode = "auto", tools = "minimal")
+  res = tool_results(s)[[1L]]
+  expect_false(res$is_error)
+  expect_match(msg_text(res), "fit.R", fixed = TRUE)
+})
+
 test_that("throw, warn-as-error, time limit and interrupt give paired events (INFRA-10)", {
   skip_on_cran()
   local_permissive()
@@ -878,53 +925,4 @@ test_that("a blocked call's hint names where its mode came from (finding 16)", {
   how = hint()$how_to_allow
   expect_false(grepl("run interactively", how, fixed = TRUE))
   expect_match(how, "knitting cannot ask", fixed = TRUE)
-})
-
-# ---------------------------------------------------------------- the offered tools (D-248)
-
-test_that("a direct call to a tool the session did not offer is not found and does not run", {
-  local_project(files = list("R/fit.R" = "n = 10"))
-  e = new.env()
-  last = function(tools, reply) {
-    s = peter("Do it.", model = gptr_fake_provider(list(reply, "done")), envir = e, mode = "auto",
-              tools = tools)
-    utils::tail(tool_results(s), 1L)[[1L]]
-  }
-  res = last("-write", fake_tool("write", path = "w.txt", content = "x"))
-  expect_true(res$is_error)
-  expect_identical(msg_text(res), "Tool write not found")
-  expect_false(file.exists("w.txt"))
-  expect_identical(msg_text(last("-r", fake_tool("r", code = "made_here = 1"))), "Tool r not found")
-  expect_false(exists("made_here", envir = e, inherits = FALSE))
-  grep = fake_tool("grep", pattern = "n", path = "R")
-  expect_identical(msg_text(last(NULL, grep)), "Tool grep not found")
-  res = last("extended", grep)
-  expect_false(res$is_error)
-  expect_match(msg_text(res), "fit.R", fixed = TRUE)
-})
-
-test_that("an ask the non-interactive auto preset did not offer is not found; the run ends idle", {
-  local_project()
-  local_gptr_options(interactive = FALSE)
-  qs = list(list(id = "q1", question = "Which file?"))
-  fake = gptr_fake_provider(list(fake_tool("ask", questions = qs), "done"))
-  s = peter("Do it.", model = fake, envir = new.env(), mode = "auto")
-  expect_identical(msg_text(tool_results(s)[[1L]]), "Tool ask not found")
-  expect_identical(s$status, "idle")
-})
-
-test_that("a tool added to a continued session and an r member under minimal can be called", {
-  local_project(files = list("R/fit.R" = "n = 10"))
-  fake = gptr_fake_provider(list("ok", fake_tool("grep", pattern = "n", path = "R"), "done"))
-  s = peter("Hi.", model = fake, envir = new.env(), mode = "auto")
-  s = peter(s, "Search.", tools = "+grep")
-  res = tool_results(s)[[1L]]
-  expect_false(res$is_error)
-  expect_match(msg_text(res), "fit.R", fixed = TRUE)
-  code = "peter$grep(\"n\", path = \".\")"
-  fake = gptr_fake_provider(list(fake_tool("r", code = code), "done"))
-  s = peter("Search.", model = fake, envir = new.env(), mode = "auto", tools = "minimal")
-  res = tool_results(s)[[1L]]
-  expect_false(res$is_error)
-  expect_match(msg_text(res), "fit.R", fixed = TRUE)
 })
