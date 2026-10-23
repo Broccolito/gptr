@@ -758,6 +758,21 @@ test_that("a run that reaches max_turns signals gptr_error_max_turns", {
   expect_identical(cnd$session$status, "max_turns")
 })
 
+test_that("budget turns and max_turns count model requests; session$turns counts prompts", {
+  local_gw()
+  script = list(fake_tool("r", code = "t1 = 1"), fake_tool("r", code = "t2 = 2"),
+                fake_tool("r", code = "t3 = 3"), "Done.")
+  e = new.env()
+  fake = local_fake_provider(script)
+  cnd = expect_error(peter("x", model = fake, mode = "auto", envir = e,
+                           budget = list(turns = 2)), class = "gptr_error_budget_turns")
+  expect_identical(c(cnd$session$turns, nrow(cnd$session$usage)), c(1L, 2L))
+  fake2 = local_fake_provider(script, name = "fake2")
+  cnd = expect_error(peter("x", model = fake2, mode = "auto", envir = e,
+                           .opts = list(max_turns = 2L)), class = "gptr_error_max_turns")
+  expect_identical(c(cnd$session$turns, nrow(cnd$session$usage)), c(1L, 2L))
+})
+
 test_that("blocked and budget statuses map to their conditions (contract 6.1.2)", {
   local_gw()
   s = session_new("fake/fake-1", "manual", home = new.env())

@@ -2048,3 +2048,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Open: the estimate is uncalibrated (finding 75 in passing: 3.9k against 5.9k sent on Bedrock Claude), so the
   reservation can still run low; `gateway_signal()`'s fallback for a session without a stored condition carries no
   `estimate`.
+
+### sessions-9 - Say that budget turns count model requests
+- Red: none, a docs unit (findings 78, 145, 162, 163, 182, 197). The new pin "budget turns and max_turns count
+  model requests; session$turns counts prompts" passes on the base (`^gptr-gateway$` PASS 405): three scripted `r`
+  calls under `budget = list(turns = 2)` or `.opts = list(max_turns = 2L)` stop after 2 requests with `s$turns` 1.
+- Cause: `run_used()` counts usage rows and `loop_at_limit()` loop requests, while `s$turns` counts prompts
+  (`run_append_messages()`); `?peter` said only "limits for this call" and 04 §6.1 named no unit.
+- Fix: `?peter` `budget`: `turns` counts model requests, retries and sub-agents' included, `session$turns` prompts;
+  `.opts`: `max_turns` caps this call's model requests. 04 §6.1's `budget` and `.opts` rows name the unit.
+- Green: `^gptr-gateway$` PASS 405; `^(gptr-|doc-|copy-gateway|session-budget|arch-layers|lint-rules)` PASS 4102
+  SKIP 2. Lint, Rd and check-plans clean.
+- Deviations: none (no contract change). From the plan: the spec rows also name the unit; the pin's second
+  provider is `fake2`, because a bare `model = fake` names the registered provider `fake`, not the variable.
+- Open: `gptr_step()`'s "model turns" and the `s$turns` accessor keep their wording (the doc group's sessions-26);
+  the sheet's lines are S06 and S08.

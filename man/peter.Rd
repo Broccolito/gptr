@@ -49,13 +49,14 @@ session keeps no workspace for later turns; pass \code{envir = new.env()} to kee
 
 \item{background}{Experimental: return the running session at once (needs later).}
 
-\item{budget}{\code{list(tokens =, cost =, turns =)} limits for this call.}
+\item{budget}{\code{list(tokens =, cost =, turns =)} limits for this call. \code{turns} counts model
+requests, retries and sub-agents' requests included; \code{session$turns} counts prompts instead.}
 
 \item{replay}{Document replay mode: \code{"auto"}, \code{"replay"}, \code{"live"} or \code{"record"}.}
 
 \item{.opts}{Rare switches such as \code{thinking}, \code{max_turns}, \code{context}, \code{returns}, \code{images},
 \code{preset}, and entries named by a plugin namespace. \code{thinking} applies to this call and to the
-session's later turns.}
+session's later turns; \code{max_turns} caps this call's model requests.}
 
 \item{.run}{\code{FALSE} builds the session with the prompt queued and returns it (see
 \code{\link[=gptr_step]{gptr_step()}}).}

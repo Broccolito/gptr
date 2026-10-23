@@ -90,11 +90,12 @@
 #'   frame (the default inside a function, or `environment()`) serves only that call, so the
 #'   session keeps no workspace for later turns; pass `envir = new.env()` to keep one.
 #' @param background Experimental: return the running session at once (needs later).
-#' @param budget `list(tokens =, cost =, turns =)` limits for this call.
+#' @param budget `list(tokens =, cost =, turns =)` limits for this call. `turns` counts model
+#'   requests, retries and sub-agents' requests included; `session$turns` counts prompts instead.
 #' @param replay Document replay mode: `"auto"`, `"replay"`, `"live"` or `"record"`.
 #' @param .opts Rare switches such as `thinking`, `max_turns`, `context`, `returns`, `images`,
 #'   `preset`, and entries named by a plugin namespace. `thinking` applies to this call and to the
-#'   session's later turns.
+#'   session's later turns; `max_turns` caps this call's model requests.
 #' @param .run `FALSE` builds the session with the prompt queued and returns it (see
 #'   [gptr_step()]).
 #' @param .stdin Drive the console from piped standard input.
