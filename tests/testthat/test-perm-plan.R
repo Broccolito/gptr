@@ -292,8 +292,6 @@ test_that("the execute menu follows the plan run: mode, tools, a queued go-ahead
   expect_false(exists(home_address(home), envir = plan_store(), inherits = FALSE))
   added = vapply(ctx$added$specs, function(sp) sp$name, "")
   expect_true(all(c("edit", "write") %in% added))
-  plan_on_agent_start(list(), ctx)
-  expect_identical(vapply(ctx$added$specs, function(sp) sp$name, ""), added)
   plan_on_agent_end(list(status = "idle"), ctx)
   expect_identical(nrow(st$log), 1L)
 })
@@ -374,4 +372,18 @@ test_that("a plan is pending for the environment its run evaluated in (IC-40, IC
   s = peter("start", model = fake, envir = e1)
   s |> peter("plan it", envir = e2, mode = "plan")
   expect_identical(plan_addresses(), home_address(e2))
+})
+
+test_that("a readonly session keeps read and r outside plan mode (D-251)", {
+  local_gw()
+  f = gptr_fake_provider(list(fake_tool("write", path = "ro.txt", content = "x"), "done",
+                              "again"))
+  s = peter("x", model = f, mode = auto, tools = readonly, envir = new.env())
+  s |> peter("again")
+  expect_identical(f$log$n, 3L)
+  for (q in f$log$requests) {
+    expect_identical(q$tools, c("read", "r"))
+    said = vapply(q$messages, function(m) paste(msg_text(m), collapse = "\n"), "")
+    expect_false(any(grepl("New tools are available", said, fixed = TRUE)))
+  }
 })

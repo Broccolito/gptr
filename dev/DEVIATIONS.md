@@ -3169,6 +3169,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `format()` and `as.character()` stay the named chr, and `knit_print` still joins its answers without names. Was:
   a failed member's section empty, and a fan-out printed its answers one after another without names, leaving out
   a child without an answer.
+- Rule (tools-2): a session frozen with the `readonly` preset keeps `read` and `r` outside plan mode; only Execute
+  in the plan menu declares `edit` and `write` (`plan_execute()`). Was: P11's `agent_start` hook
+  (`plan_on_agent_start()`, removed) declared them at every run outside plan mode, so `tools = readonly` was told
+  "New tools are available from now on: edit, write." from its first request. `r` can still change files there.
 - Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
   `tools`, `.opts` and refusals. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter` `envir`,
   `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and row).
@@ -3176,6 +3180,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   row, IC-66; `?peter` `budget`. 04 §5.1 `text` and `value` rows, §6.5 `gptr_parallel()`, 03 §4.1.6;
   `?session-accessors`, `?gptr_parallel`, vignette teams-and-background. 04 §5.1 `text` row and `print` method, §6.5
   `gptr_map()`, 03 §4.1.6; `?print.gptr_session`, `?session-accessors`, `?gptr_parallel`, the same vignette.
+  03 §6.8 (the execute menu).
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...",
   "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
@@ -3185,4 +3190,5 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   next request would exceed says so ...", "a call's own cost limit says once that an unknown cost counts nothing
   ...", "peter() with a cost limit on a model without prices ..."; subagent-team "NS-6: a team through peter() ...",
   "a continued gptr_parallel() team or fan-out answers ...", "printing a team or fan-out shows each child under its
-  name ...". Evidence: progress/fixes.md Task FIX-18.
+  name ..."; perm-plan "a readonly session keeps read and r outside plan mode ...". Evidence: progress/fixes.md
+  Task FIX-18.

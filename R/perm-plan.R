@@ -187,7 +187,8 @@ plan_on_input = function(event, ctx) {
 plan_on_decision = function(event, ctx) plan_count_call()
 
 #' Declare, once, the tools of the session's preset (`readonly` read as `standard`) that its
-#' frozen array lacks (ctx$add_tools(), IC-69)
+#' frozen array lacks (ctx$add_tools(), IC-69). Only the execute menu calls it: a readonly
+#' session that never chose Execute keeps `read` and `r` (D-251)
 #' @noRd
 plan_add_tools = function(s, ctx, mode) {
   d = session_data(s)
@@ -272,17 +273,6 @@ plan_on_agent_end = function(event, ctx) {
   NULL
 }
 
-#' Hook `agent_start`: a session frozen with the readonly preset, now outside plan mode, gets
-#' the tools of its preset
-#' @noRd
-plan_on_agent_start = function(event, ctx) {
-  s = ctx$session
-  if (!inherits(s, "gptr_session") || identical(ctx$mode(), "plan")) return(NULL)
-  d = session_data(s)
-  if (identical(d$frozen$preset %||% d$preset, "readonly")) plan_add_tools(s, ctx, ctx$mode())
-  NULL
-}
-
 #' Policy `plan`: write/edit denied; `r` only when every call is known read-only (IC-54), no
 #' existing object changes and it evaluates in a scratch overlay (IC-15). Control calls are left
 #' to the guards, which ask a person (05 P11 acceptance 6); every other call of the same code
@@ -330,7 +320,6 @@ builtin_plan = function(gptr) {
                             "plan mode: only known read-only calls run"))
   gptr$on("turn_end", plan_on_turn_end)
   gptr$on("agent_end", plan_on_agent_end)
-  gptr$on("agent_start", plan_on_agent_start)
   gptr$on("input", plan_on_input)
   gptr$on("decision", plan_on_decision)
   invisible(NULL)

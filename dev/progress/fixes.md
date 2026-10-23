@@ -2129,3 +2129,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   handles only the fan-out, since a team's `$text` already is its reports.
 - Open: `knit_print` of a fan-out (above; it needs a contract edge or an SDK verb); a fan-out's headings repeat the
   one model its children share (kept for one form with the team).
+
+### tools-2 - A readonly session stays readonly outside plan mode
+- Red: FAIL 3 in `^perm-plan$` (PASS 110; finding 9): `peter("x", model = fake, mode = auto, tools = readonly)`
+  then `s |> peter("again")`: each of the 3 requests offered `read`, `r` and carried "New tools are available from
+  now on: edit, write." (measured on HEAD).
+- Cause: `plan_on_agent_start()` (P11's `agent_start` hook) called `plan_add_tools()` at every run outside plan
+  mode of a session frozen with `readonly`; that reads the configured preset (`readonly` as `standard`) and declared
+  `edit` and `write`. Plan mode here freezes the configured preset, so the hook only widened a readonly choice.
+- Fix: the hook and its registration are gone; `plan_execute()` (Execute in the plan menu) still calls
+  `plan_add_tools()`. The menu test drops its two `plan_on_agent_start()` lines. 03 §6.8 says so.
+- Green: `^perm-plan$` PASS 112; `^(perm-|prompt-|gptr-gateway|mcp-server|ext-|bridge-sh|gptr-capture|gptr-config|
+  arch-layers|lint-rules)` PASS 5961 SKIP 2; `^(tool-r|session-object)$` PASS 653. Full suite (NOT_CRAN=true)
+  FAIL 0 PASS 35395 SKIP 64. Lint, Rd and check-plans clean.
+- Deviations: D-251 (extended). As planned; the scripted `write` still runs and creates `ro.txt` (measured), which
+  the tools group's tools-1 refuses ("Tool write not found"), a post-merge check.
+- Open: plan mode freezes the configured preset, not `readonly` as 03 §6.8 and §10.8 say (finding 9, in passing);
+  `r` under `readonly` can still change files outside plan mode (by design; the sheet's S29).
