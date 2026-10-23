@@ -1969,9 +1969,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   check-plans clean.
 - Deviations: D-251 (extended). From the plan: the continuation guards its target whether or not it changes and
   `gateway_run()` guards only a new session (one check per switch); `session_new()` sets `gptr_last()`, so a
-  refused new call restores it; a router's choice gets the same checks and an unreachable one falls back.
+  refused new call restores it.
+- Review: r1 (high) applied. `router_guards()` ran the new readiness checks too, so a keyless router choice raised
+  in `router_call()` and `run_route()` sent the turn to the default model, unchecked for egress (1 request). It
+  keeps egress and replay only (`gateway_guards(ready = FALSE)`): the choice stops with `gptr_error_no_key` after
+  0 requests, as on main. Red FAIL 2 (the router test, rewritten). Green `^gptr-gateway$` PASS 406;
+  `^(gptr-|agent-run$|prompt-compact$|subagent-|provider-registry$|arch-layers$|lint-rules$)` PASS 4183 SKIP 1.
 - Open: the `.opts$images` and `prompt_secrets` "ask" refusals still follow the switch (`gateway_input()`); a
-  continuation to a provider spec not registered globally still fails in `session_set_model()` (finding 80 aside).
+  continuation to a provider spec not registered globally still fails in `session_set_model()` (finding 80 aside);
+  a router choice refused for egress or replay still falls back through `route_default()`, which checks no egress
+  on the default model (r1, on main too: L3's `run_route()` cannot call the L6 guards, so closing it changes
+  IC-69's fallback; the models group edits `run_route()` in parallel).
 
 ### sessions-4 - Say when a continued session has no kept workspace
 - Red: FAIL 2 in `^gptr-gateway$` (PASS 387; findings 97, 134, 143): `s = f(); s |> peter("Report z.")` for a

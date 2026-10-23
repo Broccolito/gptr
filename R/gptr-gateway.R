@@ -720,14 +720,14 @@ gateway_check_visible = function(call) {
 }
 
 #' Egress acknowledgment (unless the context of `call` is "none") under `safety` and the replay
-#' guard under `call`'s `replay =` (contract 3.1, IC-45), then the model's readiness (decision-only
-#' model, disabled provider, preflight with an Ollama model prepared, key), so a refused call
-#' changes nothing (D-251); on the session's own record of the provider: of the session's model,
-#' or of `m` (`provider`, `ref`): a continuation's new model or a router's choice (a router
-#' session's own model is checked per request by router_call(); IC-29, IC-74; D-099, D-114); the
-#' question names the model when model code asks
+#' guard under `call`'s `replay =` (contract 3.1, IC-45), then, when `ready`, the model's readiness
+#' (decision-only model, disabled provider, preflight with an Ollama model prepared, key), so a
+#' refused call changes nothing (D-251); on the session's own record of the provider: of the
+#' session's model, or of `m` (`provider`, `ref`): a continuation's new model or a router's choice
+#' (a router session's own model is checked per request by router_call(), without readiness: the
+#' request checks it; IC-29, IC-74; D-099, D-114); the question names the model when model code asks
 #' @noRd
-gateway_guards = function(call, s, safety, m = NULL) {
+gateway_guards = function(call, s, safety, m = NULL, ready = TRUE) {
   d = session_data(s)
   ref = m$ref %||% d$model
   if (startsWith(ref, "router:")) return(invisible(TRUE))
@@ -737,6 +737,7 @@ gateway_guards = function(call, s, safety, m = NULL) {
     egress_check(pid, pr, safety, asker = ref)
   }
   replay_guard(pr %||% m %||% ref, mode = replay_mode(call$args$replay))
+  if (!ready) return(invisible(TRUE))
   rec = run_model_resolve(ref, d$id)
   stream_chat_model(rec)
   provider_ready(rec, pr, safety, prepare = TRUE)
@@ -1290,14 +1291,14 @@ router_invoke = function(spec, request, ctx) {
   NULL
 }
 
-#' gateway_guards() for router choice `m` under the call and safety record of the run driving
-#' session `s`, which run_current() does not find between turns (an empty record, failing
-#' closed, for a run without one; outside a run, egress_safety())
+#' gateway_guards() egress and replay for router choice `m` under the call and safety record of
+#' the run driving session `s`, which run_current() does not find between turns (an empty record,
+#' failing closed, for a run without one; outside a run, egress_safety())
 #' @noRd
 router_guards = function(m, s) {
   run = session_live(s)$run
   safety = if (is.null(run)) egress_safety() else run$opts$safety %||% list()
-  gateway_guards(run$opts$call, s, safety, m)
+  gateway_guards(run$opts$call, s, safety, m, ready = FALSE)
 }
 
 #' Falls back to the default model after a router failure, with a diagnostic; the router's last

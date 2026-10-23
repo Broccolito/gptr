@@ -3135,8 +3135,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   backstop; an Ollama model is prepared through `model_prepare()`), a missing key (`provider_credential(register =
   FALSE)`). A continuation guards its target before its model, level, mode or tools change; a refused new call keeps
   the previous `gptr_last()`. Was: those changed first, and key and provider refusals came at the first request,
-  after the turn and its prompt were recorded (resent with the next prompt). A router's choice is guarded alike (an
-  unreachable one falls back to the default model). A failure after a request (HTTP 4xx/5xx) keeps INFRA-04.
+  after the turn and its prompt were recorded (resent with the next prompt). A router's choice keeps egress and
+  replay only (`ready = FALSE`), and its request refuses the rest, as before (a keyless choice: `gptr_error_no_key`,
+  no request). A failure after a request (HTTP 4xx/5xx) keeps INFRA-04.
 - Rule (sessions-4): a continuation without `envir =` of a session with no kept home whose `home_label` is a
   function frame (R2) informs once per session (`gptr_message_home_not_kept`) when `home_label(call$envir)`
   differs, naming both and `envir = new.env()`. Was silent. R2 and the IC-40 precedence are unchanged.
@@ -3210,7 +3211,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   given by its path (no spec text describes them). 04 §9.4 `bg` risk cell. 03 §6.8.4, 04 §7.6 `dispatch_nested()`.
   04 §4.6 `gptr.frozen`, §6.5 `gptr_resume()`; `?gptr_sessions`.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
-  "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...",
+  "a call refused before its run changes neither ...", "a router's choice without a key stops the run ...",
   "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
   prompt-sections "the tool array skips unavailable and missing tools ..."; agent-run "a request rejected or never
   received costs nothing ...", "a reported usage keeps its unknown counts ...", "an overflow condition carries the

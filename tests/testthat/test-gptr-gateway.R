@@ -1397,18 +1397,19 @@ test_that("a call refused before its run changes neither the session nor gptr_la
   expect_false(any(grepl("UNSENT", vapply(sent, msg_text, ""), fixed = TRUE)))
 })
 
-test_that("a router's choice that cannot be reached falls back to the default model (D-251)", {
+test_that("a router's choice without a key stops the run, not the default model (D-251)", {
   local_gw()
   local_gptr_options(replay = "auto", model = "fake/fake-1")
   withr::local_envvar(GPTR_TEST_ABSENT_KEY = NA)
-  local_fake_provider(list("fallback answer"))
+  fake = local_fake_provider(list("fallback answer"))
   keyless = gptr_provider("keyless", "openai-completions", base_url = "https://keyless.invalid/v1",
                           auth = "GPTR_TEST_ABSENT_KEY", models = list(list(id = "m")))
   off = list(gptr_register(keyless),
              gptr_register(gptr_router("to_keyless", route = function(request, ctx) "keyless/m")))
   withr::defer(for (o in off) o())
-  s = peter("x", model = "router:to_keyless", envir = new.env(), .opts = list(context = "none"))
-  expect_identical(s$text, "fallback answer")
+  expect_error(peter("x", model = "router:to_keyless", envir = new.env(),
+                     .opts = list(context = "none")), class = "gptr_error_no_key")
+  expect_length(fake_requests(fake), 0L)
 })
 
 test_that("a named dot that abbreviates an argument warns and stays context (D-251)", {
