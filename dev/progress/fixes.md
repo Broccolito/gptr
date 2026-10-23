@@ -2146,3 +2146,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the tools group's tools-1 refuses ("Tool write not found"), a post-merge check.
 - Open: plan mode freezes the configured preset, not `readonly` as 03 §6.8 and §10.8 say (finding 9, in passing);
   `r` under `readonly` can still change files outside plan mode (by design; the sheet's S29).
+
+### sessions-12 - The plan go-ahead notice names a call that runs the whole plan
+- Red: FAIL 3 in `^perm-plan$` (PASS 113; findings 86, 96, 166): with Execute answered "edits", `peter("Create
+  f.txt", model = fake, mode = "plan")` printed "... gptr_step(gptr_last()) runs the plan."; evaluating that call
+  left the session `running` after 2 of 4 fake requests (write done, read and the answer not).
+- Cause: `plan_execute()` named `gptr_step()`, whose default `turns = 1L` returns after one model turn; a plan that
+  calls a tool needs at least two, and the leftover run then advanced inside the next unrelated `peter()`.
+- Fix: the notice reads "Queued the go-ahead in session <id> (mode <m>): gptr_wait(gptr_last()) runs the plan."
+  The new test evaluates the call the notice prints and expects `idle`, 4 requests and `f.txt`.
+- Green: `^perm-plan$` PASS 116; `^(perm-|gptr-sdk|gptr-gateway|console-|arch-layers|lint-rules)` PASS 3705
+  SKIP 1. Full suite (NOT_CRAN=true) FAIL 0 PASS 35399 SKIP 64. Lint and check-plans clean.
+- Deviations: none (the notice text is in no contract; P11's plan prose keeps the old call as history).
+- Open: the reactor still pumps any unsettled run inside a later call, and the spinner `gptr_step()` leaves on an
+  unsettled run is not cleared (follow-ups); the go-ahead's missing `<mode>` note is sessions-13, the hand-off
+  sessions-14.

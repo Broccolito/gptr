@@ -223,7 +223,7 @@ plan_execute = function(s, mode, ctx) {
                          data = list(text_hash = hash_sha256(d$plan), status = "used")))
   session_enqueue(s, "Go ahead with the plan above.", as = "follow_up", source = "pause_menu")
   gptr_inform(paste0("Queued the go-ahead in session ", d$id, " (mode ", mode, "): ",
-                     "gptr_step(gptr_last()) runs the plan."), "plan_handoff")
+                     "gptr_wait(gptr_last()) runs the plan."), "plan_handoff")
   plan_add_tools(s, ctx, mode)
 }
 

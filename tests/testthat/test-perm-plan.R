@@ -286,7 +286,7 @@ test_that("the execute menu follows the plan run: mode, tools, a queued go-ahead
   expect_identical(session_data(s)$mode, "auto")
   expect_identical(session_data(s)$queue[[1L]], list(text = "Go ahead with the plan above.",
                                           as = "follow_up", source = "pause_menu"))
-  expect_match(paste(msgs, collapse = ""), "gptr_step(gptr_last())", fixed = TRUE)
+  expect_match(paste(msgs, collapse = ""), "gptr_wait(gptr_last())", fixed = TRUE)
   expect_identical(vapply(session_data(s)$entries, function(e) e$data$status, ""),
                    c("pending", "used"))
   expect_false(exists(home_address(home), envir = plan_store(), inherits = FALSE))
@@ -294,6 +294,26 @@ test_that("the execute menu follows the plan run: mode, tools, a queued go-ahead
   expect_true(all(c("edit", "write") %in% added))
   plan_on_agent_end(list(status = "idle"), ctx)
   expect_identical(nrow(st$log), 1L)
+})
+
+test_that("the call the go-ahead notice names runs the whole plan", {
+  skip_on_cran()
+  root = local_project()
+  local_plan_store()
+  local_gptr_options(quiet = FALSE)
+  local_scripted_ui(list(2L))
+  fake = local_fake_provider(list("<proposed_plan>1. write f.txt 2. read it</proposed_plan>",
+                                  fake_tool("write", path = "f.txt", content = "hi"),
+                                  fake_tool("read", path = "f.txt"), "Done."))
+  msgs = testthat::capture_messages(peter("Create f.txt", model = fake, mode = "plan"))
+  s = gptr_last()
+  hint = grep("runs the plan", msgs, value = TRUE, fixed = TRUE)
+  cmd = regmatches(hint, regexpr("[a-z_]+\\(gptr_last\\(\\)\\)", hint))
+  expect_length(cmd, 1L)
+  testthat::capture_messages(eval(parse(text = cmd)))
+  expect_identical(s$status, "idle")
+  expect_length(fake_requests(fake), 4L)
+  expect_true(file.exists(file.path(root, "f.txt")))
 })
 
 test_that("keep planning, a non-interactive run or a nested session show no menu", {
