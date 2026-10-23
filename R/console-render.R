@@ -804,7 +804,8 @@ console_diff_rows = function(rows, n, width = NULL, more = "") {
 #' `width`; an error's message in red,
 #' wrapped to at most 6 rows, then the object changes of `r` (also after an error); nothing else
 #' for a read; the diff of `edit` without its file headers, which the call line names, at most 12
-#' rows (console_diff_rows()), the project-relative path of `write`, else `done`; each with
+#' rows (console_diff_rows()), or where its approval showed the change (`call$asked`) one row,
+#' `edited <path><sep>+a -r`; the project-relative path of `write`, else `done`; each with
 #' `<sep><elapsed>` when it took a second or more
 #' @noRd
 console_result_lines = function(call, result, width, kind = "act") {
@@ -838,7 +839,13 @@ console_result_lines = function(call, result, width, kind = "act") {
   if (!is.null(changes)) return(sym$dim(paste0(changes, secs)))
   if (identical(call$name, "edit") && is.character(d$diff) && length(d$diff)) {
     diff = d$diff[!grepl("^(--- a/|[+]{3} b/)", d$diff)]
-    return(console_diff_rows(console_escape(diff, FALSE), 12L, width))
+    if (!isTRUE(call$asked)) return(console_diff_rows(console_escape(diff, FALSE), 12L, width))
+    n = c(sum(startsWith(diff, "+")), sum(startsWith(diff, "-")))
+    counts = paste(c(if (n[[1L]]) paste0("+", n[[1L]]), if (n[[2L]]) paste0("-", n[[2L]])),
+                   collapse = " ")
+    path = if (rlang::is_string(d$path)) path_rel(d$path) else call$input$path %||% ""
+    return(sym$dim(paste0(pad, "edited ", console_escape(path, FALSE),
+                          if (nzchar(counts)) paste0(sym$sep, counts), secs)))
   }
   if (identical(call$name, "write") && rlang::is_string(d$path)) {
     bytes = if (is.numeric(d$bytes)) paste0(" (", format(d$bytes, big.mark = ","), " bytes)")

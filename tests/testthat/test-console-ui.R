@@ -254,6 +254,53 @@ test_that("an edit's ask shows its change; a denied edit leaves the file (cheat-
   expect_identical(list(readBin(f, "raw", 100L), file.mtime(f)), before)
 })
 
+test_that("the console's ? view shows only the change rows its ask cut (review of Tasks 22-27)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  req = function(tool, ...) list(tool = tool, input = list(...), risk = list(level = 2L))
+  ask = function(r) console_try(function() ui_console_permission(r), c("?", "y"))$shown
+  # the ask showed the whole change: the ? view shows none of it again
+  ed = req("edit", path = "R/io.R", edits = list(list(oldText = "n = 10", newText = "n = 20")))
+  out = ask(ed)
+  expect_identical(sum(out == "    -n = 10"), 1L)
+  expect_false("    (continued)" %in% out)
+  # a long change: the rows after the ask's 12, under (continued)
+  w = req("write", path = "a.md", content = paste0("line ", 1:60, collapse = "\n"))
+  out = ask(w)
+  at = match("    (continued)", out)
+  expect_identical(out[at + 0:29], c("    (continued)", paste0("    +line ", 13:40),
+                                     "    (+20 more lines)"))
+  expect_identical(sum(out == "    +line 12"), 1L)
+  # a row the ask cut at the width is shown whole, so the whole change is
+  long = paste0("x = '", strrep("d", 90L), "'")
+  out = ask(req("write", path = "a.R", content = paste0("a\n", long)))
+  expect_identical(sum(out == "    +a"), 2L)
+  expect_true(paste0("    +", long) %in% out)
+  # alone (the RStudio dialog) the ? view shows the whole change
+  expect_identical(ui_permission_detail(ed)[2:3], c("    -n = 10", "    +n = 20"))
+})
+
+test_that("an allowed edit whose change the ask showed sums it up once (review of Tasks 22-27)", {
+  skip_on_cran()
+  root = local_project(list("fit.R" = "n = 10\nplot(n)"))
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  fake = local_fake_provider(function(request) {
+    if (length(request$last_results)) return("done")
+    fake_tool("edit", path = "fit.R",
+              edits = list(list(oldText = "plot(n)", newText = "plot(n)\ntitle('n')")))
+  })
+  local_gptr_options(mode = "manual", interactive = TRUE, verbose = 2L, quiet = FALSE,
+                     ui = ui_console_spec(function(prompt, ...) "y"))
+  out = utils::capture.output(peter("add a title", model = fake))
+  expect_identical(sum(out == "    -plot(n)"), 1L)
+  expect_identical(out[match("  ? Allow edit?", out) + 2L], "    edited fit.R - +1")
+  expect_identical(readLines(file.path(root, "fit.R")), c("n = 10", "plot(n)", "title('n')"))
+  # a call that was not asked keeps its result's diff
+  call = list(id = "c1", name = "edit", input = list(path = "fit.R"))
+  res = msg_tool_result("c1", "edit", "ok", details = list(diff = c("@@ -1 +1 @@", "-a", "+b")))
+  expect_identical(console_tool_line(call, res), c("    @@ -1 +1 @@", "    -a", "    +b"))
+  expect_identical(console_tool_line(c(call, asked = TRUE), res), "    edited fit.R - +1 -1")
+})
+
 test_that("a and p are offered only with a suggested rule; a and p say why not (#33)", {
   skip_on_cran()
   root = local_project()

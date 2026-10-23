@@ -242,16 +242,22 @@ ui_permission_lines = function(request) {
     ui_keys(keys, what, width))
 }
 
-#' The detail view shown for `?`: unless `code` is FALSE (it also feeds the RStudio dialog), at
-#' most 40 code rows at column 4 as the call block shows them (console_code_rows(), D-207), or of a
-#' path tool's change, its path then named in the first row; the keys as the question shows them,
-#' bold, and what they do, dim (D-243)
+#' The detail view shown for `?`: at most 40 code rows at column 4 as the call block shows them
+#' (console_code_rows(), D-207), or of a path tool's change, its path then named in the first row;
+#' the keys as the question shows them, bold, and what they do, dim (D-243). Under the console's
+#' ask (`asked`) it leaves out what shows whole above it: the code when the call block showed it
+#' (at most 20 rows that fit), the change rows the ask showed (its first 12 when none was cut), the
+#' rest under a dim `(continued)`; alone, as the RStudio dialog, it shows them all
 #' @noRd
-ui_permission_detail = function(request, code = TRUE) {
+ui_permission_detail = function(request, asked = FALSE) {
   risk = request$risk
   sym = console_style()
   lines = ui_request_lines(request)
   change = ui_request_change(request)
+  fits = function(x, n) length(x) <= n && all(nchar(x, type = "width") + 4L <= ui_width())
+  code = !(asked && ui_call_shown(request) && is.character(request$input$code) && fits(lines, 20L))
+  shown = if (asked && fits(utils::head(change, 12L), 12L)) min(12L, length(change)) else 0L
+  rest = change[seq_along(change) > shown]
   who = ui_who(request)
   out = c(paste0("  ", if (nzchar(who)) who else "gptr", " wants to use ",
                  console_tool_name(request$tool %||% "a tool"),
@@ -265,9 +271,9 @@ ui_permission_detail = function(request, code = TRUE) {
           if (rlang::is_string(request$reason) && nzchar(request$reason)) {
             paste0("  reason: ", ui_escape(request$reason))
           },
-          if (length(change)) {
-            console_diff_rows(change, 40L)
-          } else if (code) {
+          if (length(rest)) {
+            c(if (shown) sym$dim("    (continued)"), console_diff_rows(rest, 40L - shown))
+          } else if (!length(change) && code) {
             console_code_rows(lines, console_lang(request$tool), 40L)
           })
   fl = ui_flagged(risk)
@@ -450,7 +456,8 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 #' that names the question, which may have scrolled away, and its keys; an empty one gets the hint
 #' alone, both dim at column 4 (ui_hint()), and in an IDE console an answer of several words a row
 #' noting that a draft typed during the run joins an answer; five (`?` is none) end in a refusal
-#' whose reason says so (D-188, D-243)
+#' whose reason says so (D-188, D-243); an ask that shows the call's change marks its record
+#' (ui_change_asked())
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())
@@ -459,6 +466,7 @@ ui_console_permission = function(request, read = ui_console_read) {
   why = ui_no_rule(request)
   can = is.null(why)
   console_write(ui_permission_lines(request))
+  if (length(ui_request_change(request))) ui_change_asked(request)
   sym = console_style()
   bad = 0L
   while (bad < 5L) {
@@ -478,11 +486,7 @@ ui_console_permission = function(request, read = ui_console_read) {
       return(ui_answer("deny", feedback = if (nzchar(fb)) fb))
     }
     if (low == "?") {
-      # the call line above showed the code whole (D-243)
-      lines = ui_request_lines(request)
-      whole = ui_call_shown(request) && is.character(request$input$code) &&
-        length(lines) <= 20L && all(nchar(lines, type = "width") + 4L <= ui_width())
-      console_write(ui_permission_detail(request, code = !whole))
+      console_write(ui_permission_detail(request, asked = TRUE))
       next
     }
     bad = bad + 1L
@@ -505,6 +509,20 @@ ui_console_permission = function(request, read = ui_console_read) {
   }
   console_write(ui_hint("No valid answer after 5 tries; refused."))
   ui_answer("deny", reason = "no valid answer was given at the approval prompt")
+}
+
+#' The console's record of the call an approval asks about (its session and call ids) says the ask
+#' showed the call's change (`asked`), so its result sums the change up (console_result_lines())
+#' @noRd
+ui_change_asked = function(request) {
+  key = paste0("t", request$tool_call_id)
+  for (rec in as.list(console_state()$active)) {
+    call = if (is.environment(rec$tools)) get0(key, envir = rec$tools, inherits = FALSE)
+    if (is.null(call) || !identical(session_data(rec$session)$id, request$session)) next
+    call$asked = TRUE
+    assign(key, call, envir = rec$tools)
+  }
+  invisible(NULL)
 }
 
 #' questions() through select() and input() (report 18 ui_questions_via()); every choice

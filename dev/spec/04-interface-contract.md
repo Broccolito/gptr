@@ -5602,8 +5602,12 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     dim). Its code is at most 40 rows at column 4, as the call block shows them (`console_code_rows()`, no fence
     lines; visual review), or a path tool's change, at most 40 rows, with the path in the first row,
     `gptr wants to use edit on R/io.R (level 2)` (cheat-sheet review: the RStudio dialog has no call line above it).
-    The console leaves out code rows (`code = FALSE`) when the call line just above is this request's and showed
-    its code whole (at most 20 lines); the RStudio dialog keeps them and gets the text without SGR.
+    Under the console's ask (`asked`) it leaves out what shows whole just above: the code rows when the call line
+    is this request's and showed its code whole (at most 20 lines), and the change rows the ask showed (its first
+    12, none cut at the width), the rest from row 13 under a dim `    (continued)` (review of Tasks 22-27: the same
+    rows showed twice, nine rows apart); the RStudio dialog keeps them all and gets the text without SGR. An ask
+    that shows a call's change marks the console's record of the call (`asked`), and an allowed edit's result is
+    then one dim row, `    edited analysis.R · +2 -1` (its diff's counts), in place of the same rows again.
   - An approval's `n <text>` (`no, <text>`, `No. <text>`) reaches the model as the person's instruction (cheat-sheet
     review): an answer's `feedback` is only what the person typed, and the denials the UI writes itself (a failing
     dialog, five invalid answers, a scripted UI out of answers, an ask an idle tick parks) are its `reason` (§10.2

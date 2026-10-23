@@ -2316,6 +2316,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     (`ui_request_change()` reads the input itself when it has no `edits`); it showed the call line alone.
     Contract-visible: 04 §15.10 IC-77. Tests: test-console-ui.R "an edit or write approval shows the change before
     the answer (cheat-sheet review)".
+  - The change shows once. The console's `?` view (`ui_permission_detail(asked = TRUE)`) leaves out the change rows
+    its ask showed whole (the first 12) and shows the rest under a dim `(continued)`; an allowed edit whose ask
+    showed its change (`ui_change_asked()` marks its record) sums its result up in one row, `edited fit.R · +1`,
+    where the result printed the diff the ask had shown eight rows above. The RStudio dialog keeps the whole
+    change. Contract-visible: 04 §15.10 IC-77. Tests: test-console-ui.R "the console's ? view shows only the change
+    rows its ask cut (review of Tasks 22-27)", "an allowed edit whose change the ask showed sums it up once (review
+    of Tasks 22-27)".
 
 ## D-188 - P26 Prompts reach the person and name the asker; fan-out status; nested overlays (2026-10-16)
 - Rule (IC-77; 03 sections 5.8, 6.8.3, 6.13, 6.17, 7.3; 04 sections 2 conditions, 6.1 `envir`, 7.9, 7.11): an evaluation's `.gptr_message_write(text, stream, margin, k)` lifts only its own top capture sink and hands the text on (`gptr_message_write(from = k - 1L)`); `console_cat()` (every `console_write()`, the Markdown emit, the spinner, the rgui LF, block gaps) and the console UI (`permission`, `select`; `notify` through `console_notice()`) write through it, so prompts reach the console whatever `tee` is and never a tool result; for prompts and sub-agent lines `console_before_message(tools = TRUE)` also ends partial lines while a tool executes (conditions raised inside a tool still leave the waiting row alone).

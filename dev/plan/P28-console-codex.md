@@ -626,6 +626,9 @@ Decisions:
   path (`gptr wants to use edit on R/io.R (level 2)`: the RStudio dialog, which shows only this view, would
   otherwise not say which file). The rows are styled and cut as the result's diff, one helper,
   `console_diff_rows()`. Main showed the path alone: an edit's change only after `y`, a write's content never.
+  (Amended in the review of Tasks 22-27: under the console's ask the `?` view leaves out the rows the ask showed
+  whole, the rest under a dim `(continued)`, and an allowed edit whose ask showed its change sums its result up in
+  one row, `edited analysis.R · +2 -1`: the same rows showed twice, in the `?` view and after `y`.)
 - The question is at column 2, `? Allow <tool>?`, and the keys are a row of their own under its text, at
   column 4: `y yes · a always (session) · p always (project) · n no · ? more` (amended in the review of
   Tasks 8-15: on the question's row they wrapped at 80 columns for any tool name of 4 characters or more,
