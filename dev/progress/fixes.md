@@ -1914,3 +1914,24 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the probe nor accepts `initialize`), and a dual-era server that starts slowly is still taken as
   legacy (cached for 7 days), which works. A hung server forced modern now fails after the request
   timeout instead of 5 s.
+
+## Task FIX-16 - Cheat-sheet review: doc (2026-10-22, #PR)
+
+### paths-1 - Memoise the *.Rproj probe of project_root() by directory mtime
+- Findings 3, 36, 69, 83, 118, 159, 178; 60 and 157 (sessions-1, merged here).
+- Red: FAIL 2 in `^utils-paths$` (PASS 154), with the listing moved into `dir_list_rproj()` and
+  no memo: 11 walks from `a/b` listed `a` and `b` 22 times (expected 2), and an unpinned fake
+  `peter()` call from a marker-less temp dir listed an ancestor again at an unchanged mtime.
+- Cause: `project_root()` walks every ancestor up to `/` on each of the 80 to 160 calls of one
+  `peter()` call, and `is_project_dir()` listed each unmarked one for `*.Rproj`, uncached. Under
+  macOS `$TMPDIR` (79k to 107k entries) one listing takes 0.2 to 0.8 s: 9 to 66 s per offline call,
+  and a false "Checkpoint scans ... take longer than gptr.checkpoint_scan_budget" notice, as
+  `ckpt_prune()` walks inside the timed scan. The suite pins the root, so no test walked.
+- Fix: the four stat probes stay live; the listing's answer is kept per directory in `the$rproj`
+  and redone when `file.mtime(dir)` changes, as adding, removing or renaming an entry does.
+- Green: `^utils-paths$` PASS 156; `^(utils-paths|aaa-state|arch-layers|lint-rules|gptr-config|
+  ckpt-files)$` PASS 1052 (NOT_CRAN=true). Lint clean. Fake one-request call from a project under
+  `$TMPDIR` (79,229 entries): main 6.37 and 6.05 s, fix 1.08 and 1.01 s (86 and 83 walks; 11, then
+  0 listings).
+- Deviations: none. Open: an `*.Rproj` created within the mtime granularity of a cached listing
+  (2 s on FAT) is seen only at the directory's next change.

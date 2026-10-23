@@ -87,6 +87,45 @@ test_that("project_root() finds the nearest marked ancestor, else the start dire
   expect_identical(project_root(deep), path_norm(file.path(dir, "proj", "R")))
 })
 
+test_that("project_root() lists a directory for *.Rproj again only when its mtime changes", {
+  withr::local_options(gptr.project_root = NULL)
+  withr::local_envvar(GPTR_PROJECT_ROOT = NA)
+  dir = withr::local_tempdir()
+  dir.create(file.path(dir, "a", "b"), recursive = TRUE)
+  a = path_norm(file.path(dir, "a"))
+  b = file.path(a, "b")
+  n = 0L
+  local_mocked_bindings(dir_list_rproj = function(dir) {
+    if (dir %in% c(a, b)) n <<- n + 1L
+    length(list.files(dir, pattern = "\\.Rproj$")) > 0L
+  })
+  expect_identical(project_root(b), b)
+  for (i in seq_len(10L)) project_root(b)
+  expect_identical(n, 2L)
+  file.create(file.path(a, "x.Rproj"))
+  Sys.setFileTime(a, Sys.time() + 5)
+  expect_identical(project_root(b), a)
+  unlink(file.path(a, "x.Rproj"))
+  Sys.setFileTime(a, Sys.time() + 10)
+  expect_identical(project_root(b), b)
+})
+
+test_that("an unpinned peter() call lists each ancestor for *.Rproj once per mtime", {
+  withr::local_options(gptr.project_root = NULL)
+  withr::local_envvar(GPTR_PROJECT_ROOT = NA)
+  withr::local_dir(withr::local_tempdir())
+  seen = character()
+  local_mocked_bindings(dir_list_rproj = function(dir) {
+    seen <<- c(seen, paste(dir, format(unclass(file.mtime(dir)), digits = 22L)))
+    length(list.files(dir, pattern = "\\.Rproj$")) > 0L
+  })
+  s = peter("How many rows?", mtcars, model = local_fake_provider(list("32 rows.")),
+            envir = new.env())
+  expect_identical(s$text, "32 rows.")
+  expect_gt(length(seen), 0L)
+  expect_identical(anyDuplicated(seen), 0L)
+})
+
 test_that("user_home() uses USERPROFILE on Windows and HOME elsewhere (IC-63)", {
   withr::local_envvar(USERPROFILE = "C:\\Users\\me", HOME = "/home/me")
   local_mocked_bindings(is_windows = function() TRUE)
