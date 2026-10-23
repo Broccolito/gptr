@@ -185,6 +185,10 @@ test_that("an edit or write approval shows the change before the answer (cheat-s
   ed = req("edit", path = "R/io.R", edits = list(list(oldText = "n = 10", newText = "n = 20")))
   expect_identical(ui_permission_lines(ed), c("  | edit  R/io.R", "    -n = 10", "    +n = 20",
                                               "  ? Allow edit?", keys))
+  # Pi's top-level oldText and newText, which the edit tool also takes (review of Tasks 22-27)
+  top = req("edit", path = "a.R", oldText = "x = 1", newText = "x = 2")
+  expect_identical(ui_permission_lines(top), c("  | edit  a.R", "    -x = 1", "    +x = 2",
+                                               "  ? Allow edit?", keys))
   # the ? view (also the RStudio dialog) names the path in its first row, then the change
   detail = ui_permission_detail(ed)
   expect_identical(detail[1:3], c("  gptr wants to use edit on R/io.R (level 2)", "    -n = 10",

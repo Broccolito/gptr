@@ -5543,7 +5543,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     A request whose input has a `path` and no `code` shows the change it asks for under the call line
     (`ui_request_change()`, from the input alone; the file is never read, so the ask cannot fail or stall on it): at
     most 12 rows at column 4 in the result diff's style (`console_diff_rows()`: `+` blue, `-` red, others dim, each cut
-    to the width), `-` rows of each edit's `oldText` and `+` rows of its `newText`, `@@` between edits, a patch
+    to the width), `-` rows of each edit's `oldText` and `+` rows of its `newText` (also Pi's top-level `oldText` and
+    `newText`, which the edit tool takes: review of Tasks 22-27), `@@` between edits, a patch
     envelope (`patch`, or carried in `edits`) as its own lines, `+` rows of a write's `content`, another tool's other
     fields as JSON, then `    (+N more lines; ? shows more)`; any other input shape shows the call line alone. Before,
     an edit's change showed only after `y` and a write's content never (cheat-sheet review). The flagged

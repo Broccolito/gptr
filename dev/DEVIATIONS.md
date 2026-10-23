@@ -2311,6 +2311,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   Contract-visible: 04 §15.10 IC-77 and the `builtin_ui` row, 03 §6.8.3. Tests: test-console-ui.R "an edit or
   write approval shows the change before the answer (cheat-sheet review)", "an edit's ask shows its change; a
   denied edit leaves the file (cheat-sheet review)".
+- Review fixes of Tasks 22-27 (2026-10-23):
+  - An edit given as Pi's top-level `oldText` and `newText`, which the edit tool takes, shows its change too
+    (`ui_request_change()` reads the input itself when it has no `edits`); it showed the call line alone.
+    Contract-visible: 04 §15.10 IC-77. Tests: test-console-ui.R "an edit or write approval shows the change before
+    the answer (cheat-sheet review)".
 
 ## D-188 - P26 Prompts reach the person and name the asker; fan-out status; nested overlays (2026-10-16)
 - Rule (IC-77; 03 sections 5.8, 6.8.3, 6.13, 6.17, 7.3; 04 sections 2 conditions, 6.1 `envir`, 7.9, 7.11): an evaluation's `.gptr_message_write(text, stream, margin, k)` lifts only its own top capture sink and hands the text on (`gptr_message_write(from = k - 1L)`); `console_cat()` (every `console_write()`, the Markdown emit, the spinner, the rgui LF, block gaps) and the console UI (`permission`, `select`; `notify` through `console_notice()`) write through it, so prompts reach the console whatever `tee` is and never a tool result; for prompts and sub-agent lines `console_before_message(tools = TRUE)` also ends partial lines while a tool executes (conditions raised inside a tool still leave the waiting row alone).

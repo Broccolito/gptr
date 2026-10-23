@@ -93,9 +93,10 @@ ui_request_lines = function(request) {
 }
 
 #' The change a request with a path and no code makes, as escaped diff rows from its input alone
-#' (the file is never read): each edit's oldText as `-` rows and newText as `+` rows, `@@` between
-#' edits; a patch envelope (`patch`, or carried in `edits`) as its own lines; a write's content as
-#' `+` rows; another tool's other fields as JSON; character() for any other shape
+#' (the file is never read): each edit's oldText as `-` rows and newText as `+` rows (also given at
+#' the input's top level), `@@` between edits; a patch envelope (`patch`, or carried in `edits`) as
+#' its own lines; a write's content as `+` rows; another tool's other fields as JSON; character()
+#' for any other shape
 #' @noRd
 ui_request_change = function(request) {
   input = request$input
@@ -117,7 +118,9 @@ ui_request_change = function(request) {
   }
   switch(request$tool %||% "",
          edit = {
-           edits = if (patch(input[["patch"]])) list(input[["patch"]]) else input[["edits"]]
+           # Pi's top-level oldText and newText too, as the edit tool takes them
+           edits = if (patch(input[["patch"]])) list(input[["patch"]]) else
+             input[["edits"]] %||% list(input)
            one = Filter(length, lapply(if (is.list(edits)) edits else list(edits), edit_rows))
            as.character(unlist(lapply(seq_along(one), function(i) c(if (i > 1L) "@@", one[[i]]))))
          },
