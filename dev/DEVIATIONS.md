@@ -3164,8 +3164,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule (config-3): after any write, `gptr_config()` checks `model`, `small_model` and `system1` (less
   `emulate:`; a router name or `router:` passes) with `model_canonical(strict = TRUE)` and on `unknown_model`
   warns `unknown_model_setting` with that message and the undo call; the value is kept (a later
-  `gptr_register()` or refresh can make it valid, §6.1.3). Formerly a typo such as `model = opuss` saved at user
-  scope was silent and failed every later bare `peter()`, while the console's `/model` checks at once.
+  `gptr_register()` or refresh can make it valid, §6.1.3). Another `gptr_error` (an invalid declared price
+  table) is left to the call that uses the model: the check never fails a saved write. Formerly a typo such as
+  `model = opuss` saved at user scope was silent and failed every later bare `peter()`, while the console's
+  `/model` checks at once.
 - Rule (config-4): `inst/templates/settings.json`, which `gptr_init()` writes, is `{"version": 1}`. It held
   `"mode": "manual"` and `"record": "ask"` (the defaults), which as a project layer beat a user-level
   `mode = auto` or `record = "auto"` in every initialised project, since a tighten key applies from any

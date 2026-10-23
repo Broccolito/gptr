@@ -1229,6 +1229,13 @@ test_that("gptr_config() warns when a saved model setting names no known model (
   expect_no_warning(gptr_config(model = "ollama/any-tag:1b", .scope = "session"))
   expect_no_warning(gptr_config(model = cheapest, .scope = "session"))
   expect_no_warning(gptr_config(model = "router:cheapest", .scope = "session"))
+  # the check is advisory: a model that fails to resolve for another reason never fails the write
+  twice = list(list(input = 1, output = 2), list(input = 3, output = 4))
+  gptr_config(providers = list(bedrock = list(models = list(list(id = "m1", tool_call = TRUE,
+                                                                 prices = twice)))),
+              .scope = "session")
+  expect_silent(gptr_config(model = "bedrock/m1", .scope = "session"))
+  expect_identical(settings_read("session")$model, "bedrock/m1")
 })
 
 test_that("gptr_config(.scope = NULL) writes the project file when a workspace exists (IC-71)", {

@@ -2097,6 +2097,11 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^gptr-config$` PASS 546 (opus, haiku, `emulate:sonnet`, `ollama/any-tag:1b`, a router by name and as
   `router:` stay silent); 20 neighbour files PASS 5657; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 64, PASS 35379.
   Lint clean; no Rd change.
+- Review fix: only `unknown_model` was caught, so another resolution error escaped after the save (a declared
+  `bedrock/m1` with two default price rows: `invalid_argument` "Invalid prices", yet the session held the
+  value; main was silent). Any other `gptr_error` is now ignored and left to the call that uses the model. Red
+  `^gptr-config$` FAIL 1, PASS 566; green PASS 568; with catalog-models, provider-usage, arch-layers and
+  lint-rules PASS 1334. Lint clean; 04 `gptr_config()` and the D-250 rule amended.
 - Deviations: D-250 (config-3 rule). The warning quotes the `unknown_model` message instead of rebuilding its
   suggestions, so catalog-2's alias and catalog-3's refresh hints carry over. Open: the use-time error of a bad
   saved model still does not name its settings layer (the verifier's optional step 2, not planned).

@@ -1308,7 +1308,7 @@ settings_untrusted_warn = function(patch) {
 
 #' Warns when a saved model setting names no model this session resolves; it is kept, since a
 #' provider registered later or a catalog refresh can make it valid (04 6.1.3). Routers and the
-#' `emulate:` prefix of `system1` are not models.
+#' `emulate:` prefix of `system1` are not models. Advisory: another error never fails the write.
 #' @noRd
 settings_model_warn = function(patch, scope) {
   for (k in intersect(names(patch), c("model", "small_model", "system1"))) {
@@ -1321,7 +1321,7 @@ settings_model_warn = function(patch, scope) {
                        " settings, but gptr does not know that model in this session: ",
                        conditionMessage(e), " Undo with gptr_config(", k, " = NULL, .scope = \"",
                        scope, "\")."), "unknown_model_setting", key = k, ref = v)
-    })
+    }, gptr_error = function(e) NULL)
   }
 }
 
