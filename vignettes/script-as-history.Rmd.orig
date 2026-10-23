@@ -114,6 +114,17 @@ Without a binding, source discovery can find a call in a document. At an interac
 agreeing to transcript recording creates a script under `.gptr/transcripts/`; an explicit
 `gptr_doc(path, format = "transcript")` selects an R transcript target.
 
+Recording also needs the agent's code to run. In the default `manual` mode, code that changes
+objects, such as storing `top` above, waits for approval. Nobody can approve under `Rscript`,
+or in `rmarkdown::render()` even from the console, so the run stops with
+`gptr_error_permission` and no block is written. For such a run, set auto mode for this R
+session first, pass `mode = auto` to the call, or add `gptr_permissions()` rules. Replaying a
+fresh block needs no approval.
+
+```{r, eval = FALSE}
+gptr_config(mode = auto, .scope = "session")
+```
+
 Main-session recorded code runs as ordinary document code on replay. Keep its input objects
 in the document's evaluation environment, using `peter()`'s default caller environment. An
 arbitrary custom `envir` is not restored or applied to the following recorded chunk. For a
@@ -194,8 +205,9 @@ gptr_doc("analysis.qmd")
 ```
 
 `gptr_source()` is not a renderer for either format. Arrange the document's setup to load
-gptr, prepare its input data and select a model or replay mode. Plain R chunks still execute
-when the report is rendered.
+gptr, prepare its input data and select a model or replay mode. Knitting cannot ask for
+approval, so allow the agent's code as described for `Rscript` above. Plain R chunks still
+execute when the report is rendered.
 
 For Jupyter, bind the saved `.ipynb` path in the R kernel. Blocks become agent cells. Writes
 are queued while the notebook is open to avoid competing with the notebook editor. The queue

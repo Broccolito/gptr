@@ -2027,3 +2027,27 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   user scope outside a `gptr_init()` project: the default scope is this session there, and inside
   a project the template's `record: "ask"` holds against a user "auto", and an untrusted
   project's own "auto" cannot loosen it. Open: none.
+
+### doc-4 - Sheet: recording under Rscript or render() needs auto mode or allow rules
+- Finding 16, its wording half (config-4 in the models group and gate-hint in the orchestration
+  group carry its code items).
+- Red: none (wording). Installed build, fake provider whose `r` call runs `fit = lm(mpg ~ wt,
+  data = mtcars)`, `Rscript` on a script that binds itself with `gptr_doc()`: with default
+  settings, rc 1, "The run stopped: `r` needs approval and no one can answer in this run", no
+  block; the same in a `gptr_init()` project whose user level is auto.
+- Cause: in the default manual mode a change waits for approval, and `gptr_can_prompt()` is FALSE
+  under `Rscript` and while knitting (`is_knitting()`), even from an interactive console, so the
+  gate stops the run before any block is written. The vignette's driver and its
+  `rmarkdown::render()` example never said a mode was needed.
+- Fix: `script-as-history` says recording needs the agent's code to run, that nobody can approve
+  under `Rscript` or in `rmarkdown::render()`, and to run `gptr_config(mode = auto, .scope =
+  "session")`, pass `mode = auto` or add `gptr_permissions()` rules; replays need no approval.
+  The R Markdown section points back to it. Session scope, because it holds inside a
+  `gptr_init()` project with or without config-4. The `.Rmd` is the knitted `.Rmd.orig`.
+- Green: session scope and the call's `mode = auto` each wrote the block (rc 0), also in that
+  `gptr_init()` project (effective mode manual there); `GPTR_REPLAY=replay` of the recorded
+  script in manual mode rebuilt `fit` without asking. `precompute.R script-as-history`: 0
+  problems, output byte-identical to the edited `.Rmd`. `^zzz$` PASS 145 (NOT_CRAN=true). Lint:
+  the `.Rmd` is clean; the `.Rmd.orig` keeps its one lint from main (`mode = auto`, now line 350).
+- Deviations: none (the gate is intended). Open: an empty block when the model passes
+  `record = false` is by design and rare, so neither the sheet nor the vignette mentions it.
