@@ -3448,8 +3448,9 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Fix: `prompt_tools_check()` refuses a call's name (`+`/`-` stripped) that names no tool of the
   session, hinting the closest preset or tool (`utils::adist()`, case-insensitive, at most 2). It runs
   in `prompt_compose_preset()` for run options that carry the call (after `session_start`; the run's
-  startup failure re-signals it before any request) and in `gateway_continue_session()` after the
-  call's specs register. `gateway_preset()` refuses two presets. `?peter` `tools`: a bare name adds.
+  startup failure re-signals it before any request) and, for a continuation, in `gateway_checks()` after
+  the call's specs register (in `gateway_continue_session()` until gateway-1's r5). `gateway_preset()`
+  refuses two presets. `?peter` `tools`: a bare name adds.
 - Green: `^gptr-gateway$` PASS 368, `^prompt-sections$` PASS 387;
   `^(prompt-|gptr-|subagent-|arch-layers$|lint-rules$)` PASS 3383 SKIP 1. Lint clean.
 - Review: r1 (low) applied. A continuation's `tools = c(readonly, extended)` passed `prompt_tools_check()` (presets
