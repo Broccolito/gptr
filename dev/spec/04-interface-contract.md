@@ -3832,7 +3832,9 @@ are not recorded (a plan-mode turn gives one `## Plan: <plans path>` line). Over
 `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)` (IC-46). Team and fan-out blocks hold one
 `## Agent <name> (<model>): <first line>` line per child and, for children with exports or a designated value, the
 child's code wrapped `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` plus one
-`<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per export (IC-47). Indentation copies the owning
+`<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per export (IC-47). The text of a
+`## Steer:`, `## Follow-up:`, `## Decision:` or `## Agent` line is one line: line breaks (also U+0085, U+2028, U+2029)
+become spaces and control, bidi and zero-width characters are written `<U+XXXX>`, as the console shows them. Indentation copies the owning
 statement's first line. Ownership: the run of blocks starting at the first non-blank line after the statement
 (blank lines between blocks allowed); the k-th call owns the block whose `prompt=` matches, else the one with
 `call=k` (then stale). Only top-level calls own blocks (not inside `function`, `\(x)`, `for`, `while`, `repeat`,

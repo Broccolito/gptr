@@ -650,6 +650,25 @@ test_that("steers and follow-ups delivered during the turn are recorded as comme
   expect_identical(attr(lines, "header")$turn, 1L)
 })
 
+test_that("recorded steer, follow-up and decision lines escape control characters", {
+  bad = paste("ctrl \u001b[31mred\u001b[0m bell\u0007 ff\u000c vt\u000b nel\u0085 ls\u2028",
+              "ps\u2029 caf\u00e9")
+  esc = "ctrl <U+001B>[31mred<U+001B>[0m bell<U+0007> ff<U+000C> vt<U+000B> nel  ls  ps  caf\u00e9"
+  expect_identical(doc_one_line(bad), esc)
+  expect_identical(withr::with_locale(c(LC_CTYPE = "C"), doc_one_line(bad)), esc)
+  expect_identical(doc_one_line("a\nb\r\nc\td e"), "a b c d e")
+  expect_identical(doc_one_line("use TPM"), "use TPM")
+  turn = doc_test_turn("x = 1", note = bad)
+  relay = list(type = "custom_message", message = msg_operator(
+    "steer_relay", paste("The user sent this message while you were working:", bad),
+    origin_text = bad))
+  follow = list(type = "message", message = msg_user(bad, source = "follow_up"))
+  s = doc_test_session(list(c(turn[1:3], list(relay), turn[4], list(follow))))
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
+  expect_identical(as.character(lines), c("x = 1", paste0("## Decision: ", esc),
+                                          paste0("## Steer: ", esc), paste0("## Follow-up: ", esc)))
+})
+
 test_that("a blank steer has no trailing space, and a steer line trimmed by hand stays fresh", {
   local_project()
   turn = doc_test_turn("x = 1")

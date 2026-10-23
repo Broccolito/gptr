@@ -2563,3 +2563,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^doc-blocks$` PASS 358; `^(doc-blocks|doc-replay|doc-export|doc-knitr)$` PASS 1371
   (NOT_CRAN=true). Lint clean; plan checks pass (index findings unchanged).
 - Deviations: D-249 (extended). Open: none.
+
+### steer-doc-2 - Recorded steer, follow-up, decision and agent lines escape control characters
+- Steering review finding 2 (partly confirmed: one line is the IC-49 design and a cut is
+  `source()`'s, not ours; raw control characters are real).
+- Red: FAIL 3 in `^doc-blocks$` (PASS 360): a turn whose `note`, steer relay and follow-up held ESC,
+  BEL, FF, VT, U+0085, U+2028 and U+2029 wrote them raw into its `## Decision:`, `## Steer:` and
+  `## Follow-up:` lines, also with `LC_CTYPE` C; `source(echo = TRUE)` then drew them.
+- Cause: `doc_one_line()` collapsed only `[\r\n\t]`.
+- Fix: it also turns U+0085, U+2028 and U+2029 into spaces and passes `ui_escape()` (rule C1),
+  which writes control, bidi and zero-width characters as `<U+XXXX>`; the `## Agent` line, an S1
+  block's `#>` line and a console command's `#` comment share it. Written blocks keep their bytes.
+  04 §11.5 amended.
+- Green: `^doc-blocks$` PASS 363; `^(doc-blocks|doc-replay|doc-export|doc-knitr|doc-io|arch-layers|
+  lint-rules)$` PASS 2171 (NOT_CRAN=true, the IC-49 menu-steer replay included). Lint clean.
+- Deviations: D-249 (extended). Open: none.

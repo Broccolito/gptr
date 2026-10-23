@@ -17,11 +17,12 @@ doc_header_keys = c("model", "date", "prompt", "sha", "call", "tokens", "cost", 
                     "value", "fork", "plan", "status", "args", "kind", "children")
 doc_quoted_keys = "children"
 
-#' Collapse text to one comment-safe line
+#' Collapse text to one comment-safe line: line breaks become spaces, and the control, bidi and
+#' zero-width characters that `source(echo = TRUE)` would draw are escaped as the console does
 #' @noRd
 doc_one_line = function(x) {
   x = as_utf8(paste(as.character(x), collapse = " "))
-  trimws(gsub("[\r\n\t]+", " ", x))
+  ui_escape(trimws(gsub("[\r\n\t\u0085\u2028\u2029]+", " ", x)))
 }
 
 #' A `## Steer:` or `## Follow-up:` line; a blank text leaves no trailing space for an editor to
