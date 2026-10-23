@@ -2038,3 +2038,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   is L0, provider-usage.R L1), so P05 provides `prices_df()` as the `prices.table` service (IC-09), the pattern
   of `check.adapter`; without the service the table is checked when the model is resolved, as before. Open: a
   second user registration of the same provider id is ignored silently (verifier's side finding; not this unit).
+
+### provider-3 - A provider without a valid base URL names the variable that sets it
+- Finding 37. Red: `^provider-registry$` FAIL 5, PASS 735: with `AZURE_OPENAI_ENDPOINT` unset or `"not a url"`,
+  `provider_credential(provider_get("azure"))` said "needs a valid configured origin before credentials can be
+  bound" with `variables = character()`; a provider without env said the same.
+- Cause: the no-origin branch of `provider_credential()` ignored the record's `compat$base_url_env`.
+- Fix: "Provider <id> has no valid base URL: set <env> (for example with gptr_env()) or providers$<id>$base_url
+  with gptr_config()." (`env` joined with " or "; without one only the `gptr_config()` clause), `variables =
+  env`, class `no_key` kept. With the endpoint set and no key, "Set AZURE_OPENAI_API_KEY" is unchanged. NEWS entry.
+- Green: `^provider-registry$` PASS 740; provider-*, catalog-models, gptr-config, gptr-gateway, s1-*, auth-*,
+  arch-layers and lint-rules PASS 6985 (SKIP 3, platform). Lint clean; no Rd change.
+- Deviations: none (message text; 04 §2.2 `no_key` already carries `variables`). Open: the key variable is still
+  reported only after the endpoint is fixed (the verifier's optional one-error variant was not planned).

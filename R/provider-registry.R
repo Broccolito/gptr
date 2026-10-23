@@ -328,8 +328,12 @@ provider_credential = function(provider, register = TRUE) {
   if (is.null(auth) || isTRUE(provider[["offline"]])) return(NULL)
   origin = provider_origin(provider_base_url(provider))
   if (is.null(origin)) {
-    gptr_abort(paste0("Provider ", id, " needs a valid configured origin before credentials ",
-                      "can be bound."), "no_key", provider = id, variables = character())
+    env = as.character((provider[["compat"]] %||% list())[["base_url_env"]])
+    gptr_abort(paste0("Provider ", id, " has no valid base URL: set ",
+                      if (length(env)) paste0(paste(env, collapse = " or "),
+                                              " (for example with gptr_env()) or "),
+                      "providers$", id, "$base_url with gptr_config()."),
+               "no_key", provider = id, variables = env)
   }
   if (is.function(auth)) {
     optional = attr(auth, "gptr_optional_auth", exact = TRUE)

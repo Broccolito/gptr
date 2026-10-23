@@ -264,6 +264,27 @@ test_that("missing or malformed configured origins fail before credential lookup
   expect_identical(calls, 0L)
 })
 
+test_that("a provider without a valid base URL names the variable that sets it", {
+  local_mocked_bindings(auth_store_get = function(key) NULL)
+  withr::local_envvar(AZURE_OPENAI_ENDPOINT = "", AZURE_OPENAI_API_KEY = "")
+  for (endpoint in c("", "not a url")) {
+    withr::local_envvar(AZURE_OPENAI_ENDPOINT = endpoint)
+    err = expect_error(provider_credential(provider_get("azure")), class = "gptr_error_no_key")
+    expect_identical(conditionMessage(err), paste0(
+      "Provider azure has no valid base URL: set AZURE_OPENAI_ENDPOINT (for example with ",
+      "gptr_env()) or providers$azure$base_url with gptr_config()."))
+    expect_identical(err$variables, "AZURE_OPENAI_ENDPOINT")
+  }
+  withr::local_envvar(AZURE_OPENAI_ENDPOINT = "https://res.openai.azure.com")
+  expect_error(provider_credential(provider_get("azure")), "Set AZURE_OPENAI_API_KEY",
+               class = "gptr_error_no_key")
+  err = expect_error(provider_credential(gptr_provider("bare", "openai-completions", auth = "K")),
+                     class = "gptr_error_no_key")
+  expect_identical(conditionMessage(err), paste0(
+    "Provider bare has no valid base URL: set providers$bare$base_url with gptr_config()."))
+  expect_identical(err$variables, character())
+})
+
 test_that("provider credentials honor both the actual vault and handle origin restrictions", {
   local_vault()
   handle = secret_register("synthetic-provider-bound-key-123456", "BOUND_TEST_KEY",

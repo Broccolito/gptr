@@ -155,6 +155,8 @@ works on the objects already in memory.
 * `gptr_provider()` and `gptr_spec("model")` accept a model's `prices` as a list of price records
   as well as a data frame, as `gptr_config(providers =)` does, and check the table when the spec
   is built, naming the field, instead of failing at the first call.
+* A provider without a valid base URL, such as `azure/` before `AZURE_OPENAI_ENDPOINT` is set, names
+  the variable that sets it (or `providers$<id>$base_url` in `gptr_config()`).
 
 # gptr 0.7.0
 
