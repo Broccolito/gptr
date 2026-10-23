@@ -42,10 +42,10 @@
 #' [gptr_last()] and no `$session`. So is a call with an unknown plugin or `skills =` name,
 #' `.opts$images` its model does not take, or a secret-looking prompt you decline to send. A piped
 #' call loads its `extensions`, `plugins` and specs first, since they can define that model, and
-#' unloads them again when it is refused; registry filters (`plugins = "-x"`) stay on the R
-#' session only once a call is accepted. `peter()` with no prompt opens the console when someone
-#' can answer, and signals
-#' `gptr_error_noninteractive` otherwise.
+#' unloads them again when it is refused or interrupted before its turn starts; registry filters
+#' (`plugins = "-x"`) stay on the R session only once a call is accepted. `peter()` with no
+#' prompt opens the console when someone can answer, and signals `gptr_error_noninteractive`
+#' otherwise.
 #'
 #' A new interactive console without an explicit or configured model first offers CLI selection
 #' or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;
@@ -1084,18 +1084,19 @@ gateway_run = function(call, s = NULL) {
   if (is.null(cur)) gateway_filters_sync()
   # egress is judged under the record the run freezes (a nested run inherits that of `cur`)
   safety = gateway_run_safety(cur)
-  # a call registers, is checked, then changes its session: a refusal undoes what it registered
-  # or filtered, and a root session keeps the previous gptr_last() (session_new() set it; D-251)
+  # a call registers, is checked, then changes its session: a refusal or an interrupt undoes what
+  # it registered or filtered, and a root session keeps the previous gptr_last() (session_new()
+  # set it; D-251)
   last = gptr_last()
   undo = gateway_undo(s)
   tools = if (!first) registry_names("tool", session = session_data(s)$id)
-  checked = tryCatch({
+  checked = NULL
+  tryCatch({
     if (first) s = gateway_new_session(call, cur) else gateway_register(call, s)
-    gateway_checks(call, s, first, safety %||% egress_safety())
-  }, error = function(e) {
+    checked = gateway_checks(call, s, first, safety %||% egress_safety())
+  }, finally = if (is.null(checked)) {
     undo()
     last_set(last)
-    stop(e)
   })
   if (!first) gateway_continue_session(call, s, cur, checked$ref, tools)
   if (is.null(cur)) last_set(s)

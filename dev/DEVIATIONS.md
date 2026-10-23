@@ -3464,12 +3464,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   registers). `gateway_checks()` holds every other refusal before a turn starts too: a continuation's unknown tool
   name, two presets, `.opts$images` its model does not take, `background = TRUE` without later, an unknown
   `skills =` preload and, last, a secret-looking prompt the person declines to send (`"ask"`). A refusal there, or
-  while the call registers (an unknown plugin name), undoes the registrations (`gateway_undo()`,
-  `registry_session_undo()`) and the call's registry filters, which apply before the preload check, so a refused
-  call keeps none; a refused new call keeps the previous `gptr_last()`. Was: those changed first, and key and
-  provider refusals came at the first request, after the turn and its prompt were recorded (resent with the next
-  prompt), and a refused call kept its registrations and filters; then (r3 to r4) a refusal while registering kept
-  them, and the images, preload and prompt refusals came after the switch and `gptr_last()`. A router's choice
+  while the call registers (an unknown plugin name), or an interrupt before the turn starts undoes the registrations
+  (`gateway_undo()`, `registry_session_undo()`) and the call's registry filters, which apply before the preload
+  check, so a refused call keeps none; a refused new call keeps the previous `gptr_last()`. Was: those changed
+  first, and key and provider refusals came at the first request, after the turn and its prompt were recorded
+  (resent with the next prompt), and a refused call kept its registrations and filters; then (r3 to r4) a refusal
+  while registering kept them, and the images, preload and prompt refusals came after the switch and `gptr_last()`.
+  A router's choice
   keeps egress and replay only (`ready = FALSE`), and its request refuses the rest, as before (a keyless choice:
   `gptr_error_no_key`, no request). So does building a session (`.run = FALSE`, a `gptr_parallel()` member):
   `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a member that cannot reach its model
@@ -3563,7 +3564,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `?gptr_security` (a computed `system()` command). 04 §4.6 `gptr.frozen`, §6.5 `gptr_resume()`; `?gptr_sessions`.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "every refusal before a turn starts undoes ...",
-  "a call's filters notice comes with its first accepted call ...",
+  "a call's filters notice comes with its first accepted call ...", "an interrupt before a turn starts ...",
   "a router's choice without a key stops the run ...", "a built session needs no key until a run starts it ...",
   "a call, gptr_step() and a parallel member each discover an Ollama model once ...",
   "a continuation switches to a provider spec that only its session knows ...",

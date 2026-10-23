@@ -3946,6 +3946,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^(gptr-gateway|gptr-config|ext-registry|ext-plugins|arch-layers|lint-rules)$` PASS 1792. Lint clean.
 - Deviations: none. Open: none.
 
+### gateway-1c - An interrupt before the turn starts undoes the call too (2026-10-23)
+- Last validation of gateway-1 (low). Red: FAIL 4 in `^gptr-gateway$` (PASS 485): Ctrl-C at the secret question
+  (`gptr_confirm()` mocked to signal an interrupt) left a continuation's `-builtin:memory` filter, its `probe` tool
+  and its extension's hook, which fired on the next turn, and a new call stayed `gptr_last()`.
+- Cause: `gateway_run()` undid the registrations and restored `gptr_last()` only in an `error` handler.
+- Fix: the registration and checks run in `tryCatch(finally =)`, which undoes both on any exit before
+  `gateway_checks()` returns. `?peter`, 04 §6.1.2 and D-251 say "or interrupted".
+- Green: `^gptr-gateway$` PASS 489; `^(gptr-.*|console-.*|copy-gateway|subagent-team|session-object|doc-replay|
+  arch-layers|lint-rules)$` PASS 5369 SKIP 1. Lint clean; Rd regenerated.
+- Deviations: D-251 (extended). Open: none.
+
 ## Task FIX-19 - Cheat-sheet review: orchestration (2026-10-22, #PR)
 
 ### ws-1 - A team, fan-out or nested child's <workspace> block lists the caller objects it can read

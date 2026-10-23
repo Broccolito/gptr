@@ -1139,8 +1139,8 @@ context and signals the warning `partial_name` naming each such formal (D-251).
   tool name, an unknown plugin or `skills =` name, two presets, `.opts$images` its model does not take,
   `background = TRUE` without later, or a secret-looking prompt the person declines to send. A piped call's
   `extensions`, `plugins` and rank-0 specs (`model =`, `tools =`) register first, since the checks read them, and
-  are removed again when it is refused, also while it registers; a call's registry filters (`plugins = "-x"`) stay
-  on the R session only once it is accepted. Building a session (`.run = FALSE`, a `gptr_parallel()` member) checks
+  are removed again when it is refused, also while it registers, or interrupted before its turn starts; a call's
+  registry filters (`plugins = "-x"`) stay on the R session only once it is accepted. Building a session (`.run = FALSE`, a `gptr_parallel()` member) checks
   egress and replay only: `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a member
   that cannot reach its model ends `error` (`on_error`). A run's first request to its session's model prepares it
   as the checks do (`model_prepare()` discovers an Ollama model only without current evidence), so a plain call,

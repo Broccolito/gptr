@@ -1550,6 +1550,43 @@ test_that("a call's filters notice comes with its first accepted call, not a ref
   expect_message(s |> peter("second", plugins = "-builtin:memory"), notice, fixed = TRUE)
 })
 
+test_that("an interrupt before a turn starts undoes what the call registered (D-251)", {
+  local_gw()
+  fake = local_fake_provider(list("one", "two"))
+  s = peter("hello", model = fake, envir = new.env())
+  seen = new.env()
+  seen$n = 0L
+  good = function(gptr) {
+    gptr$register(gptr_hook("agent_start", function(event, ctx) {
+      seen$n = seen$n + 1L
+      NULL
+    }))
+  }
+  probe = test_tool("probe", function(ctx) "probed")
+  u = paste("U1 uses", paste0("sk-", "ant-api03-", strrep("FAKEant0", 11), "xxxxxAA"))
+  local({
+    # Ctrl-C at the secret question; the project trust question is declined
+    local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+      if (grepl("secret-looking", question, fixed = TRUE)) {
+        signalCondition(structure(class = c("interrupt", "condition"),
+                                  list(message = "", call = NULL)))
+      }
+      FALSE
+    })
+    local_gptr_options(prompt_secrets = "ask", interactive = TRUE)
+    stopped = function(...) tryCatch(peter(...), interrupt = function(cnd) "interrupted")
+    expect_identical(stopped(s, u, extensions = good, tools = list(probe),
+                             plugins = "-builtin:memory"), "interrupted")
+    expect_identical(stopped(u, model = fake, plugins = "-builtin:memory", envir = new.env()),
+                     "interrupted")
+  })
+  expect_null(settings_read("session")$filters)
+  expect_false("probe" %in% registry_names("tool", session = session_data(s)$id))
+  expect_identical(gptr_last(), s)
+  expect_identical((s |> peter("second"))$text, "two")
+  expect_identical(seen$n, 0L)
+})
+
 test_that("a router's choice without a key stops the run, not the default model (D-251)", {
   local_gw()
   local_gptr_options(replay = "auto", model = "fake/fake-1")

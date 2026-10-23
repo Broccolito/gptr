@@ -134,10 +134,10 @@ missing key) is refused before its run: no turn, no model or mode switch, no new
 \code{\link[=gptr_last]{gptr_last()}} and no \verb{$session}. So is a call with an unknown plugin or \verb{skills =} name,
 \code{.opts$images} its model does not take, or a secret-looking prompt you decline to send. A piped
 call loads its \code{extensions}, \code{plugins} and specs first, since they can define that model, and
-unloads them again when it is refused; registry filters (\code{plugins = "-x"}) stay on the R
-session only once a call is accepted. \code{peter()} with no prompt opens the console when someone
-can answer, and signals
-\code{gptr_error_noninteractive} otherwise.
+unloads them again when it is refused or interrupted before its turn starts; registry filters
+(\code{plugins = "-x"}) stay on the R session only once a call is accepted. \code{peter()} with no
+prompt opens the console when someone can answer, and signals \code{gptr_error_noninteractive}
+otherwise.
 
 A new interactive console without an explicit or configured model first offers CLI selection
 or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;
