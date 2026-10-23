@@ -3165,10 +3165,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   of ", or run interactively.". The `ask_human` text and `gateway_signal()`'s fallback are unchanged. Formerly the
   hint named no layer (a `gptr_init()` project's `manual` overrode a user `auto` unseen) and told a knitting user to
   run interactively. The gateway records the origin because `perm_ask()` (L2) may not call `settings_layered()` (L6).
-- Contract-visible: 03 §4.3 (fork), §5.1 (resume status), §6.2 (background asks), §6.12 (also the guard), §6.18 and
-  §7.5 `<workspace>`; 04 §4.6 (`gptr.container_end`), `gptr_fork(envir)`, `gptr_resume()`, §6.1.2 and
-  `gptr_parallel()` (team-1), §7.6 `opts$mode_from` and `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and
-  `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7, IC-57; `?gptr-background`.
+- Rule (tpl-1): the service `templates.sync` (P17, owned by `builtin:prompts`) is the `session_start` hook's
+  `plugins_sync()` then `template_sync()`; the console calls it at `/help` and before it calls a command name
+  unknown, then looks again. Formerly no template command (project, user, `/review`, `/explain`) existed until a
+  session had started, so `/check` as the console's first input was "Unknown command", and a template saved later
+  waited for the next session start.
+- Contract-visible: 03 §4.3 (fork), §5.1 (resume status), §6.2 (background asks), §6.12 (also the guard), §6.17
+  (templates), §6.18 and §7.5 `<workspace>`; 04 §4.6 (`gptr.container_end`), `gptr_fork(envir)`, `gptr_resume()`,
+  §6.1.2 and `gptr_parallel()` (team-1), §7.0 and §7.17 `templates.sync` (tpl-1), §7.6 `opts$mode_from` and
+  `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7,
+  IC-57; `?gptr-background`.
 - Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
   and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame);
   session-object "a fork's change report names the source objects its code changed in place"; eval-guard "q bound
@@ -3176,5 +3182,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   takes a failed member's status ...", injection-e2e "a worker's forwarded permission request ..."; session-store
   "a settled team or fan-out lists and resumes idle ..."; agent-background "a resumed session is told the user can
   now approve the call", "... whose ask tool was blocked is told to ask again"; console-ui "a denial keeps the
-  UI's how ..."; agent-dispatch "a blocked call's hint names where its mode came from". Evidence: progress/fixes.md
-  Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1, gate-hint.
+  UI's how ..."; agent-dispatch "a blocked call's hint names where its mode came from"; console-commands "template
+  commands exist before the first prompt ...", "a template command is the console's first input (end to end)".
+  Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1, gate-hint, tpl-1.

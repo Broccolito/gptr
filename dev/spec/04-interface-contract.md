@@ -2201,6 +2201,7 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `agent_def.get` | P17 | `gptr_agent()` (P02) | `function(name, file = NULL) <spec:agent>` |
 | `skill.catalog`, `skill.body` | P17 | `skills =` preloads (P08/P07), `peter$search()` (P10) | `function(session, budget) chr(1)`; `function(name) list(text, dir)` |
 | `plugin.enable` | P17 | `peter(plugins =, extensions =)` (P08) | `function(name, rank, session = NULL) invisible(lgl(1))` |
+| `templates.sync` | P17 | the console's `/help` and a command name not registered (P14), so templates work before a session starts and one saved since is found (D-252) | `function() invisible(NULL)`: what `builtin:prompts`' `session_start` hook does (settings plugins enabled, templates and their commands synced) |
 | `mcp.catalog` | P18 | `peter$search()` (P10) | `function(session, budget) chr(1) or NULL` |
 | `mcp.dispatch_local` | P18 | `cli-claude`, `cli-codex` (P20) | `function(message, session) list` (JSON-RPC response) |
 | `bg.register` | P21 | `peter(background = TRUE)` (P08), the pause menu (P14) | `function(session) invisible(session)` |
@@ -2884,7 +2885,7 @@ ckpt_predict("pbmc = FindClusters(pbmc, resolution = 0.8); unlink('tmp.csv')")
 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
-| `builtin_skills(gptr)`, `builtin_prompts(gptr)`, `builtin_agents(gptr)` | `skill-discover.R`, `skill-templates.R`, `subagent-defs.R` | register discovered `skill`, `prompt_template`, `agent` specs (declarative, rank by location), one `command` spec per template, the `skills` section (T1, order 820) and the services `skill.catalog`, `skill.body`, `agent_def.get`, `plugin.enable` | P02 load |
+| `builtin_skills(gptr)`, `builtin_prompts(gptr)`, `builtin_agents(gptr)` | `skill-discover.R`, `skill-templates.R`, `subagent-defs.R` | register discovered `skill`, `prompt_template`, `agent` specs (declarative, rank by location), one `command` spec per template, the `skills` section (T1, order 820) and the services `skill.catalog`, `skill.body`, `agent_def.get`, `plugin.enable`, `templates.sync` | P02 load |
 | `skill_discover(scope = "all")` | `skill-discover.R` | df of skills from the roots of 16 §4.8 (`.gptr/skills`, `.agents/skills`, `.claude/skills` of trusted projects; user directories under `user_home()`; attached packages' `inst/gptr/skills` and `inst/skills`; plugin `skills/`), bounded walk; untrusted project skills are listed but never catalogued (IC-52); names compared with `name_norm()` (IC-42) | P17 |
 | `skill_parse(path)` | `skill-discover.R` | `<spec:skill>` from `SKILL.md` frontmatter (lenient yaml: `name`, `description` <= 1,024 characters, `disable-model-invocation`, `allowed-tools`; string keys keep their source text against YAML 1.1 coercion, IC-71) or `NULL` + diagnostic; the catalog shows `[skill:<name>/SKILL.md]` pseudo-paths that `read` resolves (IC-68) | P17 |
 | `template_expand(text, args)` | `skill-templates.R` | Pi's template grammar (`$ARGUMENTS`, `$ARGUMENTS[N]`, `$N`, `${@:N}`) [05 §3.7] | P17 (the `command` specs `builtin:prompts` registers for templates, so the console only dispatches commands) |

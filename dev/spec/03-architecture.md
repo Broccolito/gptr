@@ -1972,8 +1972,10 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   `/compact [focus]`, `/cost` (by agent, one total), `/context` (token ledger; on a CLI route also the
   CLI's reported turn input, D-206), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
-  templates as `/<name> args`. Commands are recorded as comments in transcripts. Their output, like a
-  prompt over 200 bytes or wider than a content row, is word-wrapped in the console margin; the listings
+  templates as `/<name> args`, registered when a session starts and by the console (the `templates.sync`
+  service) before `/help` and before it calls a name unknown, so a template works as the first input and a
+  template saved since is found (D-252). Commands are recorded as comments in transcripts. Their output,
+  like a prompt over 200 bytes or wider than a content row, is word-wrapped in the console margin; the listings
   they print are formatted at width - 4 (`print_lines()`), so they are not wrapped again, and `/help` wraps
   each description under its column (`formatDL()`). The Ctrl-C notices at the prompt and of the pause menu
   start with a line end (D-225).

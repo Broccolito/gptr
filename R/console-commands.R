@@ -72,6 +72,10 @@ console_command = function(text, session = NULL, send = NULL) {
     return(invisible("prompt"))
   }
   ev_dispatch("console:command", list(data = list(text = text)), session = session)
+  if (is.null(registry_get("command", cmd$full, session = session)) &&
+      is.null(registry_get("command", cmd$name, session = session))) {
+    console_templates_sync()
+  }
   spec = registry_get("command", cmd$full, session = session)
   args = cmd$rest
   if (is.null(spec)) {
@@ -98,6 +102,14 @@ console_command = function(text, session = NULL, send = NULL) {
   invisible("done")
 }
 
+#' Register the prompt templates now (the `templates.sync` service, P17): a session registers
+#' them when it starts, which in the console is after the first prompt (D-252)
+#' @noRd
+console_templates_sync = function() {
+  if (ext_service_has("templates.sync")) ext_service_get("templates.sync")()
+  invisible(NULL)
+}
+
 #' The bound history document of `s` (the `doc.site` service, P15), or NULL
 #' @noRd
 cmd_doc_site = function(s) {
@@ -108,6 +120,7 @@ cmd_doc_site = function(s) {
 #' @noRd
 cmd_help = function(args, ctx) {
   s = ctx$session
+  console_templates_sync()
   if (nzchar(args)) {
     nm = sub("^/", "", args)
     spec = registry_get("command", nm, session = s)

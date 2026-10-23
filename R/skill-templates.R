@@ -387,13 +387,19 @@ template_sync = function() {
   invisible(NULL)
 }
 
-#' `session_start` hook of `builtin:prompts`: enable settings plugins, then sync the templates
-#' of a top-level session
+#' Enable settings plugins, then sync the templates: the `templates.sync` service, which the
+#' console calls before its first session starts (D-252)
+#' @noRd
+prompts_sync = function() {
+  plugins_sync()
+  template_sync()
+}
+
+#' `session_start` hook of `builtin:prompts`: `prompts_sync()` for a top-level session
 #' @noRd
 prompts_on_session_start = function(event, ctx) {
   if (skill_child_session(ctx)) return(NULL)
-  plugins_sync()
-  template_sync()
+  prompts_sync()
   NULL
 }
 
@@ -407,3 +413,4 @@ builtin_prompts = function(gptr) {
 on_load(ext_declare_builtin("prompts", builtin_prompts))
 on_load(res_handler_set("prompts", template_dir_specs))
 on_load(res_handler_set("commands", template_command_specs))
+on_load(ext_service_set("templates.sync", prompts_sync, provided_by = "P17", builtin = "prompts"))

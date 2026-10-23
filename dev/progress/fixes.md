@@ -2075,3 +2075,21 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   (L2 to L6), so the gateway records the origin; a nested call's origin is not named (its run may have
   tightened the mode); a continued session names itself, not a settings layer it no longer follows.
   Open: none.
+
+### tpl-1 - Prompt-template commands exist in the console before the first prompt
+- Findings 104, 109 (the trust half of 104 is tpl-2). Red: `^console-commands$` FAIL 7 PASS 94: with no
+  sync run, `/check mtcars` (a trusted `.gptr/prompts/check.md`) was "Unknown command", `/help` listed no
+  `/check`, `/review` or `/explain`, a `later.md` saved afterwards stayed unknown, and a `.stdin` console whose
+  first input was `/check mtcars` never reached the fake model.
+- Cause: templates reach the command registry only through `template_sync()`, called only by
+  `builtin:prompts`' `session_start` hook, and the console dispatches commands before its first session starts.
+- Fix: `prompts_sync()` (the hook's `plugins_sync()` then `template_sync()`) is the service `templates.sync`
+  (P17, owned by `builtin:prompts`, so filtering it keeps templates off); `console_command()` calls it when
+  neither lookup finds the name and looks again; `cmd_help()` calls it first. 03 §6.17, 04 §7.0, §7.17.
+- Green: `^console-commands$` PASS 102; aaa-state, console-*, skill-*, ext-*, arch-layers, lint-rules PASS 4209
+  SKIP 1; full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35382. Lint clean; plan checks pass; Rd unchanged.
+  Installed branch, piped console (fake model): `/help check`, `/check mtcars` and `/review x` work as the
+  first inputs.
+- Deviations: D-252 (extended). The service needs its `service_plans` entry (`R/aaa-state.R`, which the arch
+  helper reads; test-aaa-state's count 39 to 40), not in the plan's files; helper-arch.R needed no change. No
+  sync in `repl_main()`, as planned. Open: none.

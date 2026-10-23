@@ -139,6 +139,44 @@ test_that("/help lists the commands and the input syntax", {
                    "/mode  Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]")
 })
 
+test_that("template commands exist before the first prompt, and a template saved later too", {
+  local_console_commands()
+  withr::defer(res_prune("prompts:", character()))
+  p = local_project(list(".gptr/prompts/check.md" = "Check $1."), trust = TRUE)
+  res_prune("prompts:", character())
+  rs = repl_state(NULL, new.env())
+  sent = new.env(parent = emptyenv())
+  send = function(text) sent$text = text
+  expect_identical(run_command(rs, "/check mtcars", send)$res, "prompt")
+  expect_identical(sent$text, "Check mtcars.")
+  res_prune("prompts:", character())
+  listed = sub("^  /([^ ]+) .*", "\\1", cmd_help("", ctx_new(NULL)))
+  expect_true(all(c("check", "review", "explain") %in% listed))
+  writeLines("Later $1.", file.path(p, ".gptr", "prompts", "later.md"))
+  expect_identical(run_command(rs, "/later z", send)$res, "prompt")
+  expect_identical(sent$text, "Later z.")
+})
+
+test_that("a template command is the console's first input (end to end)", {
+  skip_on_cran()
+  local_console_test()
+  withr::defer(res_prune("prompts:", character()))
+  root = getOption("gptr.project_root")
+  dir.create(file.path(root, ".gptr", "prompts"))
+  writeLines("Check $1.", file.path(root, ".gptr", "prompts", "check.md"))
+  gptr_trust(root, trust = TRUE)
+  res_prune("prompts:", character())
+  fake = gptr_fake_provider(list("checked"))
+  local_console_stdin(c("/check mtcars", "/exit"))
+  res = NULL
+  err = utils::capture.output(invisible(utils::capture.output({
+    res = peter(.stdin = TRUE, model = fake, envir = new.env())
+  })), type = "message")
+  expect_false(any(grepl("Unknown command", err, fixed = TRUE)))
+  expect_true(grepl("Check mtcars.", fake$log$requests[[1L]]$last_user, fixed = TRUE))
+  expect_identical(res$text, "checked")
+})
+
 test_that("in the console margin command output wraps inside it; listings fit its width", {
   local_console_commands()
   local_project()
