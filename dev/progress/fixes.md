@@ -2302,3 +2302,12 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   rebinding and an un-shadowing `rm()` read `~ k <numeric> modified`. 03 §6.12 and 04 §7.9 amended.
 - Green: `^(session-object|eval-core|tool-r|env-snapshot|copy-eval)$` PASS 1196. Lint clean; plan checks pass.
 - Deviations: D-252 (extended). Open: none.
+
+### art-2b - The art-2 test removes its temporary-workspace artifact
+- Review of art-2 (low). Red: a check placed after the test, `dir.exists(file.path(tempdir(), "gptr", "artifacts",
+  "temp-workspace-notice"))`, was TRUE (`^artifact-app$` FAIL 1 PASS 530); the copy held app.R, v001 and v002.
+- Cause: `withr::defer(unlink(artifact_dir(id), ...))` evaluates `artifact_dir(id)` at exit, after the test made
+  `.gptr/`, so it removed the project copy and left the shared temporary workspace's one for later tests.
+- Fix: the path is taken before `.gptr/` exists (`tmp = artifact_dir(id)`), then deferred. Test only.
+- Green: the check FALSE (PASS 531; the check is not kept); `^(artifact-app|prompt-context)$` PASS 621. Lint clean.
+- Deviations: none. Open: none.

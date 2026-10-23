@@ -1113,7 +1113,9 @@ test_that("an artifact in a temporary workspace is announced once", {
     seen
   }
   id = "temp-workspace-notice"
-  withr::defer(unlink(artifact_dir(id), recursive = TRUE))
+  # taken before .gptr/ exists, when it is the temporary workspace's copy
+  tmp = artifact_dir(id)
+  withr::defer(unlink(tmp, recursive = TRUE))
   write_working(id, ok_app)
   first = notices(peter$app(id, check = FALSE, launch = FALSE))
   expect_length(first, 1L)
