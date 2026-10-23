@@ -284,8 +284,9 @@ sdk_off = function(id) {
 #' Called by R code the agent runs (or by you inside a tool) to designate the run's result, which
 #' the session then returns as `$value`. Objects bound in the session's workspace are kept by name
 #' when large (no copy), copied when small; other values are boxed. Outside a run it returns its
-#' argument invisibly and does nothing else, so recorded code that still contains the call runs
-#' cleanly.
+#' argument invisibly and designates nothing; the first such call in an R session prints a one-line
+#' notice (silent while a document is replayed, with `options(gptr.quiet = TRUE)` or
+#' `suppressMessages()`).
 #'
 #' @param x The value. A history document records a bare name by name; any other single
 #'   argument is recorded as an assignment to a hidden name in the block, which replay reads.

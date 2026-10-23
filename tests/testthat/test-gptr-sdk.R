@@ -159,6 +159,19 @@ test_that("gptr_return() outside a run returns its argument invisibly (IC-48)", 
   expect_silent(gptr_return("quiet while replaying"))
 })
 
+test_that("gptr_return() outside a run gives its notice once per R session (IC-48)", {
+  slot = "message:gptr_return_outside_run"
+  had = isTRUE(the$once[[slot]])
+  withr::defer(if (had) assign(slot, TRUE, envir = the$once) else
+    if (exists(slot, envir = the$once, inherits = FALSE)) rm(list = slot, envir = the$once))
+  if (had) rm(list = slot, envir = the$once)
+  local_gptr_options(replay = "auto", quiet = TRUE)
+  expect_silent(gptr_return(1))
+  local_gptr_options(quiet = FALSE)
+  expect_message(gptr_return(1), "only designates a value", class = "gptr_message_notice")
+  expect_no_message(gptr_return(1))
+})
+
 test_that("gptr_return() designates the run's value from R code during a run", {
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)

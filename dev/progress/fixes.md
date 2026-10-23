@@ -2275,3 +2275,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   replayed fan-out child keeps `.x` in its home (a live one's is removed when it settles); a child
   name holding `:` or `,` has no replayable entry; a child value whose code was not recorded replays
   "not bound", as a block's does.
+
+### replay-4 - gptr_return() outside a run prints a one-time notice
+- Findings 138, 190.
+- Red: none (docs). The new test passes on main: with replay off, the first top-level
+  `gptr_return(1)` signals the `gptr_message_notice` "only designates a value", the second is
+  silent, and so is a call under `gptr.quiet`; the help page's own example prints it.
+- Cause: the code follows IC-48 (a once-per-session notice, silent while replaying); `?gptr_return`
+  and 03 §4.3 copied "returns its argument invisibly and does nothing else".
+- Fix: both say it designates nothing and the first such call in an R session prints a one-line
+  notice, silent while a document is replayed, with `options(gptr.quiet = TRUE)` or
+  `suppressMessages()`.
+- Green: `^(gptr-sdk|arch-layers|lint-rules)$` PASS 188 (NOT_CRAN=true). Lint clean; Rd
+  regenerated; plan checks pass.
+- Deviations: none. Open: the notice goes to stdout, like every `gptr_inform()` display.
