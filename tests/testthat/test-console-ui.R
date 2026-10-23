@@ -416,6 +416,37 @@ test_that("a terminal's question read that Ctrl-C or an end of input ends ends i
   expect_identical(written(function() ui_console_read("> ")), "")
 })
 
+test_that("a question drawn over the composer's draft says where it went (steering review)", {
+  local_console_test()
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L, width = 80L)
+  withr::defer(assign("tty", NULL, envir = the))
+  local_readline(rep("y", 4L))
+  rd = new.env(parent = emptyenv())
+  rd$waiting = function() character()
+  shown = character()
+  local_mocked_bindings(console_repl_find = function() list(reader = rd),
+                        console_typed = function(drain = FALSE) FALSE,
+                        console_write = function(lines) shown <<- c(shown, lines))
+  read = function(draft) {
+    rd$compose = list(draft = draft, t = 1)
+    shown <<- character()
+    expect_identical(ui_console_read("> "), "y")
+    shown
+  }
+  the$tty = list2env(list(keys = TRUE))
+  expect_identical(read("half"), "    \u21b3 draft kept \u00b7 half \u00b7 back after your answer")
+  # a long draft shows its tail, on one row inside the width
+  row = read(paste(rep("word", 30L), collapse = " "))
+  expect_identical(row, paste0("    \u21b3 draft kept \u00b7 \u2026word", strrep(" word", 6L),
+                               " \u00b7 back after your answer"))
+  expect_identical(nchar(row), 79L)
+  expect_identical(read(""), character())
+  # D consoles hold no draft
+  the$tty = list2env(list(keys = FALSE))
+  expect_identical(read("half"), character())
+})
+
 test_that("during a run a line typed before the approval prompt is queued, then it asks again", {
   skip_on_cran()
   local_console_test()

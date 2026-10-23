@@ -1148,13 +1148,17 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
     "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
   ))
   person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
+  sep = if (l10n_info()[["UTF-8"]]) " \u00b7 " else " - "
+  kept = paste0("draft kept", sep, "use base R", sep, "back after your answer")
   expect_true(pty$wait("peter> ", timeout = 120))
   # B: typed without Enter while the answer streams, it is the composer's draft: the approval
-  # row ends with its prompt and the draft is on the live row again while the call it gated runs
+  # says it is kept, its row ends with its prompt and the draft is on the live row again while the
+  # call it gated runs
   pty$send("B\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("use base R")
   expect_true(pty$wait("Allow r?"))
+  expect_true(pty$wait(kept))
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("y\r")
   expect_match(pty$pending(), paste0(person, " use base R"), fixed = TRUE)
@@ -1175,6 +1179,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   expect_true(pty$wait("BEGIN"))
   pty$send("use base R")
   expect_true(pty$wait("Choose a number, or type your own answer"))
+  expect_true(pty$wait(kept))
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("1\r")
   expect_true(pty$wait("REQ tool_result: The user answered: - q1: ggplot2 END"))
@@ -1253,7 +1258,7 @@ test_that("a terminal: a question waits a second after the last key; `yes` is no
   expect_true(pty$wait("BEGIN"))
   # typed key by key while the answer streams and the ask comes due, however slow the child:
   # the live row says a question waits, Enter still queues, and the ask is drawn a second after
-  # the last key, its answer empty
+  # the Enter, its answer empty
   typed = ""
   for (k in rep(c("y", "e", "s"), 10L)) {
     pty$send(k)
@@ -1261,6 +1266,8 @@ test_that("a terminal: a question waits a second after the last key; `yes` is no
     if (pty$wait("question waiting", timeout = 0.3)) break
   }
   expect_lt(nchar(typed), 30L)
+  # while the draft has text it waits three seconds: a pause in a sentence is not its end
+  expect_false(pty$wait("Allow r?", timeout = 1.5))
   pty$send("\r")
   sent = Sys.time()
   expect_true(pty$wait("Allow r?"))
@@ -1273,7 +1280,9 @@ test_that("a terminal: a question waits a second after the last key; `yes` is no
   expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(c(pty$seen("Not an answer"), pty$seen("Permission denied")), c(0L, 0L))
+  # a sent draft leaves nothing to keep
+  expect_identical(c(pty$seen("Not an answer"), pty$seen("Permission denied"),
+                     pty$seen("draft kept")), c(0L, 0L, 0L))
 })
 
 test_that("a terminal: a line arriving just as a question is drawn steers the run (P28 D)", {

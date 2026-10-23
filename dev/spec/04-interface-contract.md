@@ -5441,19 +5441,24 @@ its part in its own commit, and Task 27 finalises them.
     in the composer for the next prompt (Task 21); after any other end it joins the kept list above.
   - A question waits for typing to pause (Task 19; T class). Before a console question draws its rows
     (`console_before_message(kind = "prompt")`), `console_ask_wait()` gives what waits on fd 0 to the composer
-    (`console_typed()`) and, while the composer's last key (`rd$compose$t`) is under a second old
-    (`ask_ready(last_key, now)`: TRUE when `last_key` is NULL or `now - last_key >= 1`), reads the keys every
-    0.05 s, the live row saying `question waiting` (the record's `question`), so Enter and Tab still queue and Up
-    still takes back; then the row is cleared and the question drawn. The ask therefore comes a second after the
-    last key, or at once when none came in the last second, and keys typed as it comes due never reach its
-    answer. It reads with the saved modes (`gptr_readline()`), and when it returns (`console_asked()`, on exit of
-    `ui_console_permission()`, `ui_console_select()` and `ui_console_input()`) the row is drawn again with the
-    draft unchanged, so it shows while the call the question gated runs. A sub-agent's question waits the same
-    way, one at a time; what is typed goes to the session of the console call (the parent). D keeps the drain
-    after the rows (Task 2); `gptr_confirm()` and the pause menu do not wait. A question's read that Ctrl-C or
-    an end of input ends (`ui_console_read()`, `console_ask()`) first ends the person's row in a terminal (T,
-    D), which readline leaves open, so the row stays as typed and what follows starts below it (review of
-    Tasks 16-21: the redrawn live row wrote over `› and colour`, and TERM=dumb glued the refusal to it).
+    (`console_typed()`) and, while the composer's last key (`rd$compose$t`) is under a second old, three while
+    it holds a draft (`ask_ready(last_key, now, draft)`: TRUE when `last_key` is NULL or `now - last_key` is at
+    least 1, or 3 for a non-empty `draft`), reads the keys every 0.05 s, the live row saying `question waiting`
+    (the record's `question`), so Enter and Tab still queue and Up still takes back; then the row is cleared and
+    the question drawn. The ask therefore comes a second after the last key, three seconds while a draft has
+    text (steering review: a pause in a half-typed sentence drew the question over the draft, and the rest of
+    the sentence became its answer), or at once when none came in that time, and keys typed as it comes due
+    never reach its answer. Where a question still draws over a draft, `ui_console_read()` writes one dim row
+    at column 4 above the chevron, `↳ draft kept · <the draft's tail> · back after your answer` (ASCII `->`
+    and ` - `), cut to the width. It reads with the saved modes (`gptr_readline()`), and when it returns
+    (`console_asked()`, on exit of `ui_console_permission()`, `ui_console_select()` and `ui_console_input()`)
+    the row is drawn again with the draft unchanged, so it shows while the call the question gated runs. A
+    sub-agent's question waits the same way, one at a time; what is typed goes to the session of the console
+    call (the parent). D keeps the drain after the rows (Task 2); `gptr_confirm()` and the pause menu do not
+    wait. A question's read that Ctrl-C or an end of input ends (`ui_console_read()`, `console_ask()`) first
+    ends the person's row in a terminal (T, D), which readline leaves open, so the row stays as typed and what
+    follows starts below it (review of Tasks 16-21: the redrawn live row wrote over `› and colour`, and
+    TERM=dumb glued the refusal to it).
   - A draft survives Ctrl-C and the pause menu (Task 20). SIGINT flushes what the terminal holds unread, never
     the composer's draft. The pause menu (`policy_menu()`, wherever `console_menu_available()`) is a console
     question in every class: after a blank row, `  ? Paused` (`? Paused <session id>` only when the call's runs
@@ -5542,7 +5547,8 @@ its part in its own commit, and Task 27 finalises them.
     the 5 tries.
   - A question and the tool block it is asked in are one block (`console_gap()`): no blank line between a call
     line, its ask and its result lines.
-  - In a T console a question is drawn once typing has paused for a second, the live row saying
+  - In a T console a question is drawn once typing has paused for a second (three while the composer holds
+    a draft, which a dim `↳ draft kept` row above the chevron then names), the live row saying
     `question waiting` meanwhile, and the live row with the person's draft comes back when the question has its
     answer (Task 19; IC-76).
   - The `?` detail view (`ui_permission_detail()`) lists the keys as the question shows them,

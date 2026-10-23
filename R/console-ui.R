@@ -255,12 +255,23 @@ ui_undo_note = function(request) {
 #' waiting after the answer (a paste; a last line without a newline is not waiting), the answer and
 #' the lines go to the console history as one entry (a `secret` is dropped) and the question is
 #' asked again (IC-75); Ctrl-C or EOF gives NA (a terminal echoes even a `secret` itself), and in a
-#' terminal ends the person's row, which readline() leaves open then
+#' terminal ends the person's row, which readline() leaves open then. A T console's draft stays in
+#' its composer, for the live row after the answer; a dim row above the chevron says so, its tail
+#' cut to the width (D-243)
 #' @noRd
 ui_console_read = function(prompt, secret = FALSE) {
   rd = console_repl_find()$reader
   repeat {
     console_typed(drain = TRUE)
+    draft = if (isTRUE(the$tty$keys)) rd$compose$draft
+    if (nzchar(draft %||% "")) {
+      sym = console_style()
+      lead = paste0(sym$queued, " draft kept", sym$sep)
+      end = paste0(sym$sep, "back after your answer")
+      room = max(8L, ui_width() - 5L - live_fit(paste0(lead, end)))
+      text = live_fit(live_text(draft), room, sym$ellipsis, tail = TRUE)
+      console_write(ui_hint(paste0(lead, text, end)))
+    }
     ans = tryCatch(readline_answer(prompt, if (!secret) console_typed_ahead),
                    interrupt = function(e) NA_character_)
     if (!rlang::is_string(ans)) {

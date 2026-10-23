@@ -3516,6 +3516,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     queue and the person's draft (D-243)", "Positron's row says Ctrl-C, then s, steers there (steering review)";
     test-console-repl.R "in Positron the banner says typed text waits as R code (steering review)";
     test-console-wait.R "an IDE console's row says what its key does and where typed lines go".
+  - A question waits three seconds after the last key while the composer holds a draft, a second otherwise
+    (`ask_ready(last_key, now, draft)`), and one drawn over a draft writes a dim row above its chevron,
+    `↳ draft kept · <the draft's tail> · back after your answer`. With a half-typed draft and a pause of a
+    second the question cleared the live row, the only place the draft showed, and the rest of the sentence
+    became its answer (an ask got `loess fit`; an approval read ` no more than 5 bins` as a denial). Enter or
+    Ctrl-U empties the draft, so a sent or cleared draft asks after a second. D and L consoles are unchanged.
+    Contract-visible: 04 §15.10 IC-76 and IC-77. Tests: test-console-input.R "a question is asked once no key
+    came for a second (D-243)"; test-console-ui.R "a question drawn over the composer's draft says where it went
+    (steering review)"; test-console-typing.R "a terminal: a question waits a second after the last key; `yes`
+    is no answer (D-243)", "a terminal: a question never takes the line typed ahead of it (P28 B, C, H)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

@@ -507,6 +507,11 @@ test_that("a question is asked once no key came for a second (D-243)", {
   expect_false(ask_ready(9.01, 10))
   expect_true(ask_ready(9, 10))
   expect_true(ask_ready(2, 10))
+  # three while the composer holds a draft, so a pause in a sentence is not its end
+  expect_true(ask_ready(NULL, 10, "x"))
+  expect_false(ask_ready(9, 10, "x"))
+  expect_false(ask_ready(8, 10, "x"))
+  expect_true(ask_ready(7, 10, "x"))
 })
 
 # ---- Task 21: a draft left at a run's end stays in the composer --------------------------------

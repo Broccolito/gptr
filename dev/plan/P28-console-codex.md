@@ -136,7 +136,7 @@ working directory restored. Plan-specific rules:
   no-margin plain layout.
 - Tests:
   - Pure functions with an injected clock hold the timing rules: 0.05 s poll, 0.1 s stale line,
-    1 s typing idle, 50 ms escape hold, the batch rule.
+    1 s typing idle (3 s with a draft), 50 ms escape hold, the batch rule.
   - pty children: `processx` pty, `skip_on_cran()`, `skip_on_os("windows")`, TERM=xterm-256color,
     80x24, temporary R_USER_* and GPTR_PROJECT_ROOT. One case per guarantee, run on the macOS and
     Linux NOT_CRAN lanes.
@@ -1016,8 +1016,8 @@ Decisions:
 - In T, before the question's rows are drawn (`console_before_message(kind = "prompt")`; D keeps
   Task 2's drain in `ui_console_read()`, after the rows, as amended in the visual review):
   1. Drains fd 0 into the composer.
-  2. Keeps reading every 0.05 s while the last key is under 1 s old. The live row shows
-     `question waiting`, and Enter and Tab still queue.
+  2. Keeps reading every 0.05 s while the last key is under 1 s old (3 s with a draft). The live
+     row shows `question waiting`, and Enter and Tab still queue.
   3. Clears the row and prints the question.
   4. Reads the answer with the saved modes. (Amended in the review of Tasks 16-21: a read that Ctrl-C or
      an end of input ends first ends the person's row in a terminal, `ui_console_read()` and `console_ask()`.)
@@ -1028,8 +1028,13 @@ Decisions:
   `ui_console_permission()`, `ui_console_select()` and `ui_console_input()`, redraws the row: after
   each read, a question that asks again (an invalid answer, a paste) would draw and clear it
   between its rows and its chevron.
-- The ask appears 1 s after the last key, or at once when no key came in the last second. The
-  rule is the pure `ask_ready(last_key, now)`.
+- The ask appears 1 s after the last key, 3 s while the composer holds a draft, or at once when
+  no key came in that time. The rule is the pure `ask_ready(last_key, now, draft)`. (Amended in the
+  steering review: after a pause of a second in a half-typed sentence the question cleared the live
+  row, the only place the draft showed, and the rest of the sentence became its answer. Enter or
+  Ctrl-U empties the draft, so a sent or cleared draft asks after 1 s.) Where a question still draws
+  over a draft, `ui_console_read()` writes one dim row at column 4 above the chevron, `↳ draft
+  kept · <its tail> · back after your answer`; D and L consoles are unchanged.
 - This replaces Task 2's history route in T.
 - Sub-agent questions work the same way, one at a time. Typed messages always go to the parent
   session.
@@ -1483,8 +1488,8 @@ Decisions:
     relay is in the request. Time from Enter to delivery. CLI routes deliver after the CLI's
     answer.
   - S2, Tab follow-up: it is the next prompt and a second run.
-  - S3, typing as an approval arrives: the ask comes after 1 s idle; `y` answers; the draft is
-    intact. Then `n use tempdir()`.
+  - S3, typing as an approval arrives: the ask comes after 1 s idle (3 s with a draft, which it
+    says is kept); `y` answers; the draft is intact. Then `n use tempdir()`.
   - S4, take-back: two steers, Up, edit, Enter.
   - S5, completion: natural text plus Tab gives nothing; `@obj`, `@dir/`, `peter$`, `@df$`,
     `/mo`, `/skill:` and `!summ` complete.

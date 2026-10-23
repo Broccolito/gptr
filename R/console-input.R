@@ -195,14 +195,17 @@ console_idle = function(rd, prompt) {
 }
 
 #' May a question be asked at time `now` (seconds)? Only once the last key the composer read
-#' (`last_key`, NULL when none) is a second old, so typing never runs into an answer (D-243)
+#' (`last_key`, NULL when none) is a second old, three while it holds a `draft`, so typing never
+#' runs into an answer, nor does the rest of a sentence after a pause (D-243)
 #' @noRd
-ask_ready = function(last_key, now) is.null(last_key) || now - last_key >= 1
+ask_ready = function(last_key, now, draft = "") {
+  is.null(last_key) || now - last_key >= if (nzchar(draft)) 3 else 1
+}
 
 #' Before a console question in a T console (D-243): what waits on fd 0 goes to the composer
-#' (console_typed()), and while its last key is under a second old (ask_ready()) the keys are read
-#' every 0.05 s, the live row saying `question waiting` (`rec$question` of its record), so Enter
-#' and Tab still queue
+#' (console_typed()), and until the question may be asked (ask_ready()) the keys are read every
+#' 0.05 s, the live row saying `question waiting` (`rec$question` of its record), so Enter and Tab
+#' still queue
 #' @noRd
 console_ask_wait = function() {
   rd = console_repl_find()$reader
@@ -211,7 +214,7 @@ console_ask_wait = function() {
   on.exit(if (!is.null(row)) row$rec$question = NULL, add = TRUE)
   repeat {
     console_typed()
-    if (ask_ready(rd$compose$t, reactor_now())) break
+    if (ask_ready(rd$compose$t, reactor_now(), rd$compose$draft %||% "")) break
     if (!is.null(row) && !isTRUE(row$rec$question)) {
       row$rec$question = TRUE
       if (row$shown) row$draw()
