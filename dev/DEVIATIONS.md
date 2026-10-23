@@ -3137,10 +3137,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   passes when, looked up from `envir` as R looks up a value (its parents in order), it is bound to data: not a
   function, and not a promise or active binding (never forced). Calls (`q()`, `base::q`, `do.call("q")`) and the
   function argument of `do.call()` and of every base function that applies `match.fun()` to one (`sapply(x, q)`,
-  `Negate(q)`, `sweep(m, 1, s, q)`, which resolve to `base::q`; a test scans base) stay refused whatever is bound,
-  as do their string arguments and `Vectorize("q")`'s (its `formals()` looks the name up); `Vectorize(q)` and
-  `Recall(q)` pass, as neither looks a value up. Formerly `summary(q)` on the user's quantile vector was refused as quitting R (finding 25). The plan named
-  `binding_env()`; it is an L3 function and not R's lookup.
+  `Negate(q)`, `sweep(m, 1, s, q)`, which resolve to `base::q`; a test scans base) stay refused whatever is bound;
+  so do that argument as a string, `Vectorize("q")` (its `formals()` looks the name up) and any string argument of
+  P09's 18 indirect calls (`get("q")`), while `.S3method("edit", ...)`, `Vectorize(f, "de")`, `Vectorize(q)` and
+  `Recall(q)` pass, as none looks a blocked function up. Formerly `summary(q)` on the user's quantile vector was
+  refused as quitting R (finding 25). The plan named `binding_env()`; it is an L3 function and not R's lookup.
 - Rule (team-1): a team, fan-out or `gptr_parallel()` team whose children did not all end idle takes the first such
   child's status and stored condition, `$reason` `"k of n sub-agents did not finish: a (blocked), ..."`, and the
   same status and reason in its `agent_end`; `agents =` and `parallel =` re-signal that condition with the container

@@ -2338,3 +2338,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35516. Lint clean.
 - Deviations: D-252 (guard-1 rule extended). Open: stats functions that `match.fun()` an argument (`integrate`,
   `aggregate`, `dendrapply`) and user functions that do still pass a data `q` (advisory guard).
+
+### guard-1c - Only a call's function argument is read as a string outside P09's indirect calls
+- Review of guard-1b (low). Red: `^eval-guard$` FAIL 2 PASS 149: `.S3method('edit', 'myclass', function(name, ...)
+  name)` and `Vectorize(function(x, de) x + de, 'de')` were refused as calling `edit()` and `de()` (so was
+  `.S3method('identify', ...)`); all three passed before guard-1b.
+- Cause: guard-1b gave every function-argument call and `Vectorize` the every-string rule, but a generic, a class
+  and `vectorize.args` are not function names.
+- Fix: `eval_guard_indirect` is P09's 18 names again; the walk adds the string function argument of every
+  `eval_guard_fun_arg` call and of `Vectorize(FUN)`, so `Negate('q')`, `Vectorize('q')` and `.S3method('print',
+  'foo', 'q')` stay refused. A `q` symbol is still checked in `eval_guard_fun_arg` calls only (`Vectorize(q)` of data passes).
+- Green: `^eval-guard$` PASS 151; `^(eval-.*|copy-eval|copy-tools|tool-r|arch-layers|lint-rules|s1-.*)$` PASS 2244.
+  Lint clean.
+- Deviations: D-252 (guard-1 rule). Open: none.

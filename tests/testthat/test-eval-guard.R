@@ -148,11 +148,14 @@ test_that("q bound to data is refused where a base function looks it up as a fun
   # Each quits R: the callee's match.fun() (Vectorize's formals()) finds base::q by name
   forms = c("Negate(q)('no')", "base::Negate(f = q)", "sweep(m, 1, s, q)", "eapply(env, q)",
             ".mapply(q, list('no'), NULL)", ".S3method('print', 'foo', q)", "Negate('q')('no')",
-            "Vectorize('q')('no')")
+            "Vectorize('q')('no')", ".S3method('print', 'foo', 'q')")
   for (code in forms) expect_equal(eval_guard(ex(code), e)$blocked, "q", label = code)
   # Neither looks q up: Vectorize() of data returns it, Recall() passes the value on
   expect_null(eval_guard(ex("Vectorize(q); f = function(x) Recall(q)"), e)$reason)
   expect_null(eval_guard(ex("sweep(q, 1, 2); Negate(is.na)(q)"), e)$reason)
+  # Only the function argument's string names a function, not a generic, class or vectorize.args
+  expect_null(guard(".S3method('edit', 'myclass', function(name, ...) name)")$reason)
+  expect_null(guard("Vectorize(function(x, de) x + de, 'de')")$reason)
 })
 
 test_that("the function-argument table names every base function that match.fun()s one", {

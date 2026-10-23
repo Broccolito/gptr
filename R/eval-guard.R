@@ -26,10 +26,11 @@ eval_guard_fun_arg = c(
   .S3method = "method"
 )
 
-#' Calls whose string arguments name functions (Vectorize() looks its string up in formals())
+#' Calls whose string arguments name functions
 #' @noRd
 eval_guard_indirect = c(
-  names(eval_guard_fun_arg), "Vectorize", "get", "get0", "getExportedValue", "Recall"
+  "do.call", "match.fun", "get", "get0", "getExportedValue", "lapply", "sapply", "vapply",
+  "Map", "mapply", "Reduce", "Filter", "Find", "Position", "apply", "tapply", "outer", "Recall"
 )
 
 #' Standard-input readers and the argument naming their connection. "stdin" opens standard
@@ -202,10 +203,13 @@ eval_guard_walk = function(e, acc, scope = character()) {
     return(invisible())
   }
   if (eval_guard_reads_stdin(fname, e)) acc$stdin = TRUE
-  if (fname %in% names(eval_guard_fun_arg)) {
-    # q or quit as the function argument: exempt only for a function the code defines
-    fa = eval_guard_arg(eval_guard_match(fname, e), eval_guard_fun_arg[[fname]])
-    nm = if (is.symbol(fa$value)) as.character(fa$value) else ""
+  fun_arg = c(eval_guard_fun_arg, Vectorize = "FUN")
+  if (fname %in% names(fun_arg)) {
+    # The function argument names a function as a string (Vectorize() looks one up in formals()),
+    # and as q or quit unless the code defines it (Vectorize() returns data unchanged)
+    v = eval_guard_arg(eval_guard_match(fname, e), fun_arg[[fname]])$value
+    if (is.character(v) && length(v) == 1L) acc$strings = c(acc$strings, v)
+    nm = if (is.symbol(v) && fname %in% names(eval_guard_fun_arg)) as.character(v) else ""
     if (nm %in% c("q", "quit") && !(nm %in% scope)) acc$strings = c(acc$strings, nm)
   }
   indirect = fname %in% eval_guard_indirect
