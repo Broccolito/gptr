@@ -729,14 +729,14 @@ model_match = function(pat, ctg) {
   if (!is.null(r)) return(r)
   e = model_alias_entry(alias, ctg)
   if (!is.null(e)) return(list(entry = e, how = "alias"))
-  # an alias with no model is not guessed ("gemini" with no Gemini Pro is no Gemini Flash)
-  if (catalog_norm_id(pat) %in% catalog_norm_id(names(targets))) {
-    return(list(entry = NULL, how = "alias without a model", alias = pat))
-  }
   pv = model_provider_id(pat, ctg)
   models = if (!is.na(pv)) provider_get(pv)$models
   e = if (length(models)) model_alias_entry(paste0(pv, "/", models[[1L]]$id), ctg)
   if (!is.null(e)) return(list(entry = e, how = "provider"))
+  # an alias with no model is not guessed ("gemini" with no Gemini Pro is no Gemini Flash)
+  if (catalog_norm_id(pat) %in% catalog_norm_id(names(targets))) {
+    return(list(entry = NULL, how = "alias without a model", alias = pat))
+  }
   r = model_match_fuzzy(pat, ctg, every)
   if (!is.null(r)) return(r)
   list(entry = NULL, how = "no match")

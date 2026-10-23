@@ -1949,6 +1949,12 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^catalog-models$` PASS 425 (a models.dev-shaped gemini-3.1-pro-preview resolves as `gemini`); with
   provider-registry, provider-usage, s1-ollama, gptr-gateway, gptr-capture, gptr-config, subagent-backends,
   agent-run, arch-layers and lint-rules PASS 3779. Lint clean.
+- Review fix: the alias stop came before IC-19's provider step, so a registered provider named like an alias
+  without a model (`gptr_provider("gemini", models = corp-gemini)`) raised the alias error instead of running
+  gemini/corp-gemini, as main did. It now follows the provider step and still precedes the fuzzy step. Red
+  `^catalog-models$` ERROR 1, PASS 455; green PASS 457; catalog-*, provider-registry, gptr-gateway,
+  gptr-config, subagent-backends, agent-run, arch-layers and lint-rules PASS 3062. Lint clean; 04 §11.10 and
+  the D-250 rule amended.
 - Deviations: D-250 (catalog-2 rule). Open: none.
 
 ### prompt-1 - Cap the output reserve at half the window, and blame compact_at when it sets the threshold

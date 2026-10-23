@@ -3963,7 +3963,8 @@ context tier `size` becomes a `>Nk` row, the legacy `context_over_200k` (a copy 
 when no context tier is given, and a repeated tier label is dropped. A refreshed cache of another `converter` is
 ignored (the snapshot is used) and the next refresh downloads it in full (D-250). A family alias resolves to the
 newest `active` model of the family by `release_date`; an alias with no such model, or whose provider is not
-registered, is `gptr_error_unknown_model` and never reaches the provider or fuzzy step (D-250);
+registered, is `gptr_error_unknown_model` unless a registered provider of that name runs its first declared
+model (IC-19), and never reaches the fuzzy step (D-250);
 `claude-cli/default` and `codex/default` resolve through the CLI provider's `status()` to a full id before any
 invocation (CLI invocations always receive full ids). Merge order: snapshot < cache < overrides < user config
 `providers.*.models` < live discovery of local servers.

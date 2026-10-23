@@ -310,6 +310,12 @@ test_that("an alias with no model in the catalog is unknown, not a fuzzy match",
   }
   expect_null(model_resolve("gemini", strict = FALSE))
   expect_identical(model_resolve("flash")$ref, "google/gemini-3.8-flash")
+  # a registered provider named alone still runs its first declared model (IC-19)
+  off = gptr_register(gptr_provider("gemini", api = "openai-completions",
+                                    base_url = "https://corp.example/v1",
+                                    models = list(list(id = "corp-gemini", tool_call = TRUE))))
+  withr::defer(off())
+  expect_identical(model_resolve("gemini")$ref, "gemini/corp-gemini")
   premium = list(input = 4, output = 18, cache_read = 0.4)
   pro = list(id = "gemini-3.1-pro-preview", name = "Gemini 3.1 Pro Preview", family = "gemini-pro",
              tool_call = TRUE, reasoning = TRUE, release_date = "2026-02-19",

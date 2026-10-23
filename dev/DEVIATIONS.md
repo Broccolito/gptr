@@ -3131,9 +3131,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   is refreshed without `If-None-Match`, because models.dev answers 304 and kept the old rows. The shipped
   snapshot is not checked; `schema_version` stays 1.
 - Rule (catalog-2): `model_match()` ends at an alias name that has no model (target NA, or a provider that is not
-  registered) instead of reaching the provider and fuzzy steps; `model_resolve()` raises `unknown_model` naming
-  the alias, also with a thinking suffix. Formerly offline `"gemini"` (no Gemini Pro in the seed) ran
-  google/gemini-3.8-flash by substring. The shipped orchestration skill uses `"flash"`.
+  registered) after IC-19's provider step (a registered provider of that name runs its first declared model)
+  and before the fuzzy step; `model_resolve()` raises `unknown_model` naming the alias, also with a thinking
+  suffix. Formerly offline `"gemini"` (no Gemini Pro in the seed) ran google/gemini-3.8-flash by substring.
+  The shipped orchestration skill uses `"flash"`.
 - Rule (prompt-1): `model_output_cap(window, max_output)` = `min(max_output, window / 2)` when both are known
   (models.dev often gives the whole window as max_output); `compact_threshold()` reserves it, and
   `prompt_request_context()` and `request_fallback()` send it as `max_tokens`. Formerly max_output = context gave
