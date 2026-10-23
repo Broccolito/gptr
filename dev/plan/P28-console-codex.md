@@ -1510,6 +1510,10 @@ Decisions:
     banner offered tab there (visual check); `console_completes()` now excludes Positron, as IC-81 says.
 - (Amended in the cheat-sheet review, sessions-7:) the reason's line breaks, with the blanks around them, are one
   space, so curl's two-line error stays on the line (it showed `<U+000A>`); other control characters stay escaped.
+- (Amended in the cheat-sheet review, console-4:) after `/compact` the last request is the compaction request:
+  `/context` says so in its header, adds `  next request: about <n> tokens` (the compaction entry's
+  `tokens_after`) and measures the context left from that; `/compact` reports `Conversation compacted: <before> ->
+  <after> tokens.`.
 
 Tests (`test-console-render.R`, `test-console-repl.R`, `test-console-commands.R`), RED first:
 - The status text.

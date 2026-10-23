@@ -244,26 +244,29 @@ cmd_env = function(args, ctx) {
   if (length(lines)) lines else "(no objects)"
 }
 
-#' `/compact [focus]`, under the interrupt policy (mode "repl": an abort returns NULL)
+#' `/compact [focus]`, under the interrupt policy (mode "repl": an abort returns NULL); it reports
+#' the token counts of the new compaction entry, as the automatic notice does (console_on_compact())
 #' @noRd
 cmd_compact = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("There is no conversation to compact yet.")
   if (isTRUE(session_live(s)$compacting)) return("Compaction is already in progress.")
   compact = ext_service_get("compact.run")
-  count = function() {
-    sum(vapply(session_data(s)$entries, function(e) identical(e$type, "compaction"), NA))
+  compactions = function() {
+    Filter(function(e) identical(e$type, "compaction"), session_data(s)$entries)
   }
-  before = count()
+  before = length(compactions())
   done = with_interrupt_policy(function() {
     compact(s, "manual", if (nzchar(args)) args)
-    count() > before
+    length(compactions()) > before
   }, list(), mode = "repl")
-  if (isTRUE(done)) "Conversation compacted." else if (identical(done, FALSE)) {
-    "Compaction was cancelled."
-  } else {
-    "Compaction was interrupted."
-  }
+  if (identical(done, FALSE)) return("Compaction was cancelled.")
+  if (!isTRUE(done)) return("Compaction was interrupted.")
+  e = utils::tail(compactions(), 1L)[[1L]]
+  n = c(e$tokens_before %||% NA_real_, e$details$tokens_after %||% NA_real_)
+  if (anyNA(n)) return("Conversation compacted.")
+  paste0("Conversation compacted: ", format_count(n[[1L]]), " -> ", format_count(n[[2L]]),
+         " tokens.")
 }
 
 #' /cost: the requests, input tokens and cost of the session and its children by agent, then
@@ -282,21 +285,34 @@ cmd_cost = function(args, ctx) {
 
 #' /context: the token ledger of the last request and the context it left, as the run's status line
 #' says it (console_context_left()); on a CLI route (`plan-cli`) instead what the CLI reported for
-#' its turn, since it keeps its own transcript
+#' its turn, since it keeps its own transcript. After /compact the last request is the compaction
+#' request (its `gptr.compaction_usage` record), which says so and adds the estimate of the next
+#' request, the compaction entry's `tokens_after`, from which the context left is then measured
 #' @noRd
 cmd_context = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("No session yet.")
   led = gptr::gptr_usage(s, detail = TRUE)
   if (!nrow(led)) return("No request yet.")
-  last = led[led$request_id == led$request_id[[nrow(led)]], , drop = FALSE]
+  id = led$request_id[[nrow(led)]]
+  last = led[led$request_id == id, , drop = FALSE]
   u = session_data(s)$usage
-  u = u[match(last$request_id[[1L]], u$request_id), , drop = FALSE]
-  left = console_context_left(u)
-  c(paste0("Last request ", last$request_id[[1L]], ":"),
-    sprintf("  %-14s %9s%s", last$component, format(round(last$tokens), big.mark = ","),
+  u = u[match(id, u$request_id), , drop = FALSE]
+  entries = session_data(s)$entries
+  at = Position(function(e) {
+    identical(e$custom_type, "gptr.compaction_usage") && identical(e$data$row$request_id, id)
+  }, entries)
+  after = if (!is.na(at)) {
+    Find(function(e) identical(e$type, "compaction"), entries[-seq_len(at)])$details$tokens_after
+  }
+  if (anyNA(after)) after = NULL
+  left = console_context_left(u, after)
+  fmt = function(n) format(round(n), big.mark = ",")
+  c(paste0("Last request ", id, if (!is.na(at)) " (the compaction request)", ":"),
+    sprintf("  %-14s %9s%s", last$component, fmt(last$tokens),
             ifelse(is.na(last$cached), "  (cache unknown)", ifelse(last$cached, "  (cached)", ""))),
-    sprintf("  %-14s %9s", "total", format(round(sum(last$tokens)), big.mark = ",")),
+    sprintf("  %-14s %9s", "total", fmt(sum(last$tokens))),
+    if (!is.null(after)) paste0("  next request: about ", fmt(after), " tokens"),
     if (!is.na(left)) sprintf("  %-14s %9s", "context left", paste0(left, "%")),
     if (identical(u$route, "plan-cli")) {
       paste0("  The CLI keeps its own transcript; its last turn reported ",

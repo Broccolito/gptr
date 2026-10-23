@@ -890,17 +890,18 @@ console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL)
 #' The context the last of usage rows `u` left (IC-77, D-245), a whole percent: 1 minus its prompt
 #' tokens (input, cache reads and writes) over compact_threshold() of its model, where compaction
 #' starts; NA where that is not finite (an unknown window with compact_at off), a count is unknown,
-#' and on a CLI route, whose CLI keeps its own transcript (D-202). The status line and /context
+#' and on a CLI route, whose CLI keeps its own transcript (D-202). The status line and /context;
+#' `used` stands for those prompt tokens (/context after a compaction request: the next request's)
 #' @noRd
-console_context_left = function(u) {
+console_context_left = function(u, used = NULL) {
   n = NROW(u)
   if (!n || identical(u$route[[n]], "plan-cli")) return(NA_real_)
   u = u[n, , drop = FALSE]
   m = prompt_model(paste0(u$provider, "/", u$model))
   limit = compact_threshold(as.numeric(m$context %||% NA_real_),
                             as.numeric(m$max_output %||% NA_real_), gptr_opt("r_output_tokens"))
-  used = sum(unlist(u[intersect(c("input", "cache_read", "cache_write_5m", "cache_write_1h"),
-                                names(u))]))
+  used = used %||% sum(unlist(u[intersect(c("input", "cache_read", "cache_write_5m",
+                                            "cache_write_1h"), names(u))]))
   if (!is.finite(limit) || is.na(used)) return(NA_real_)
   round(100 * max(0, limit - used) / limit)
 }

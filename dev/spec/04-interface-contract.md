@@ -5623,7 +5623,13 @@ its part in its own commit, and Task 27 finalises them.
     cache_write_1h)` over `compact_threshold(window, max_output, gptr.r_output_tokens)` of `prompt_model()`'s
     record for its `provider/model`, where compaction starts (an unknown window gives `compact_at` alone), as a
     whole percent from 0; NA where that threshold is infinite, a count is unknown or the route is `plan-cli`
-    (D-202). `/context` adds it under the ledger's total (`  context left         82%`).
+    (D-202). `/context` adds it under the ledger's total (`  context left         82%`). After `/compact` the
+    last request is the compaction request (its `gptr.compaction_usage` record): `/context` heads it `Last request
+    <id> (the compaction request):`, adds `  next request: about <n> tokens` (the compaction entry's
+    `tokens_after`) and measures the context left from that; `/compact` says `Conversation compacted: <before> ->
+    <after> tokens.`, the counts of the automatic notice, `Conversation compacted.` where one is unknown
+    (cheat-sheet review, console-4: it said only that, and `/context` showed the compaction request unlabelled,
+    larger than the request before it).
     `console_context_left()` -> `compact_threshold()` and `prompt_model()` are contract edges of the layering
     test (12.2).
 - **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23).

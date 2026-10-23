@@ -339,6 +339,30 @@ test_that("/context on a CLI route says the CLI keeps its own transcript (#38)",
                                               "model calls."))
 })
 
+test_that("/compact reports its saving and /context names the compaction request (console-4)", {
+  local_console_commands()
+  local_project()
+  long = strrep("mpg falls with wt. ", 300)
+  s = peter("q1", model = gptr_fake_provider(list(long, long, "## Goal\nx\n## Progress\ny", "ok")),
+            envir = new.env())
+  s = peter(s, "q2")
+  rs = repl_state(s, new.env())
+  out = run_command(rs, "/compact")$out
+  expect_match(out[[length(out)]], "^Conversation compacted: \\S+ -> \\S+ tokens\\.$")
+  figure = function(out, pattern) {
+    as.numeric(gsub("[^0-9]", "", grep(pattern, out, value = TRUE)))
+  }
+  ctx_out = run_command(rs, "/context")$out
+  expect_match(ctx_out[[1L]], "^Last request q[0-9a-f]+ \\(the compaction request\\):$")
+  compaction_total = figure(ctx_out, "^  total ")
+  expect_lt(figure(ctx_out, "^  next request: about [0-9,]+ tokens$"), compaction_total)
+  s = peter(s, "q3")
+  ctx_out = run_command(rs, "/context")$out
+  expect_match(ctx_out[[1L]], "^Last request q[0-9a-f]+:$")
+  expect_false(any(grepl("next request", ctx_out, fixed = TRUE)))
+  expect_lt(figure(ctx_out, "^  total "), compaction_total)
+})
+
 test_that("commands of later plans answer when their plan is absent", {
   local_console_commands()
   s = idle_session()

@@ -3970,3 +3970,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (console-3)"; test-agent-dispatch.R "the end of a refused call says why it did not run; an error's does not
   (console-3)"; test-mcp-server.R "the end of a served call that was refused says why it did not run
   (console-3)".
+- Cheat-sheet review (2026-10-23, console-4): `/compact` reports its saving, `Conversation compacted: 5.7k -> 3.2k
+  tokens.` (the automatic notice's counts; `Conversation compacted.` where one is unknown), where it said only
+  that. Right after it `/context` shows the compaction request, the whole conversation plus the instruction, so it
+  now says `Last request <id> (the compaction request):` and adds `  next request: about 3,180 tokens` (the entry's
+  `tokens_after`), from which the context left is measured; it showed that request unlabelled, larger than the one
+  before it. Contract-visible: 04 §15.10 IC-77; 03 §6.11 and §6.17. Tests: test-console-commands.R "/compact
+  reports its saving and /context names the compaction request (console-4)".

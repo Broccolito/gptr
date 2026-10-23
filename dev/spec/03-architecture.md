@@ -1774,7 +1774,8 @@ preset; after a threshold compaction the next one waits until the context grew b
 On a CLI route (a model of `type = "cli"`) neither rule triggers, nor the halved tool-output budget: the CLI
 compacts its own conversation; `/compact` still runs, and the next turn starts a fresh CLI conversation from its
 checkpoint [D-203]. A compaction during a foreground run prints one dim line
-with its before and after token counts [D-202].
+with its before and after token counts [D-202]; `/compact` reports the same counts
+(`Conversation compacted: 5.7k -> 3.2k tokens.`) [D-245].
 
 ### 6.12 Evaluator [12 §3-4]
 
@@ -2078,7 +2079,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   above 0, is left out [IC-77, D-245].
 - **Slash commands** (`command` specs): `/help`, `/exit`, `/model`, `/mode`, `/plan`, `/tools`, `/env`,
   `/compact [focus]`, `/cost` (by agent, one total), `/context` (token ledger and the context left, as the
-  status line says it [D-245]; on a CLI route instead the CLI's reported turn input, D-206), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
+  status line says it [D-245]; on a CLI route instead the CLI's reported turn input, D-206; after `/compact` it names
+  the compaction request and the next request's estimate, from which it measures the context left [D-245]),
+  `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
   templates as `/<name> args`. Commands are recorded as comments in transcripts. Their output, like a
   prompt over 200 bytes or wider than a content row, is word-wrapped in the console margin; the listings

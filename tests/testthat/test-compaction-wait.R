@@ -788,6 +788,7 @@ test_that("manual compaction on an active session completes without an orphan co
   # Keep the abort active through admission and manual work, before expectation formatting.
   text = cmd_compact("", session_live(x$s)$ctx)
   manual_completed = reactor_now()
+  compacted = "^Conversation compacted: \\S+ -> \\S+ tokens\\.$"
   entries = cp_wait_entries(x$s)
   guard_released = FALSE
   if (admission_ready && admission_guard_released &&
@@ -795,7 +796,7 @@ test_that("manual compaction on an active session completes without an orphan co
       all(admitted$elapsed < 0.2) && all(admitted$values) && admitted$retained &&
       identical(ordinary$status, "running") && isTRUE(ordinary$busy) &&
       identical(ordinary$request_closed, FALSE) && ordinary$requests == 1L &&
-      ordinary$usage == 0L && identical(text, "Conversation compacted.") &&
+      ordinary$usage == 0L && isTRUE(grepl(compacted, text)) &&
       manual_completed < x$guard_at && length(entries) == 1L &&
       identical(entries[[1L]]$details$reason, "manual") &&
       identical(entries[[1L]]$summary, "Manual summary.") &&
@@ -826,7 +827,7 @@ test_that("manual compaction on an active session completes without an orphan co
   expect_false(ordinary$request_closed)
   expect_identical(ordinary$requests, 1L)
   expect_identical(ordinary$usage, 0L)
-  expect_identical(text, "Conversation compacted.", info = diagnostic)
+  expect_match(text, compacted, info = diagnostic)
   expect_true(guard_released, info = diagnostic)
   expect_length(cp_wait_entries(x$s), 1L)
   expect_identical(cp_wait_entries(x$s)[[1L]]$details$reason, "manual")
