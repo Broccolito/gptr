@@ -2158,6 +2158,8 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   (SKIP 2, live); full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 65, PASS 35413. Live on the Versa gateway:
   `^live-bedrock$` PASS 6 (Opus 4.8 declared adaptive returns signed thinking at `high`); Sonnet 4.6 on a budget
   with `anthropic_beta` returns signed thinking. Lint clean; `man/gptr_provider.Rd` regenerated.
+- Review fix (docs): the NEWS bullet's first line was 101 columns, over the 100-column rule; rewrapped (no NEWS
+  line now exceeds 100).
 - Deviations: D-250 (thinking-1 rule), pointer under D-193. Beyond the plan: test-live-bedrock.R registers its
   endpoint through one local helper for both live tests. Open: an Opus 4.8 record declared without
   `capabilities` and given a level now gets the provider's HTTP 400 ("Use thinking.type.adaptive ...") instead
