@@ -3160,8 +3160,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule (config-2): `gptr_config()` keeps a project write and then, when the project is not trusted (a recorded
   "no" included), warns `untrusted_setting` (once per root and keys) naming each key whose untrusted contribution
   (`settings_project_value()`) is not what trust would apply, with `gptr_trust("<root>", trust = TRUE)` and
-  `.scope = "session"` as the ways out. Tightening (`mode = plan`, deny and ask rules) stays silent. Formerly the
-  value was saved without a word and, for a recorded "no", nothing ever mentioned trust.
+  `.scope = "session"` as the ways out. Tightening (`mode = plan`, deny and ask rules) stays silent; a
+  `permissions` write with allow rules is named `permissions.allow`, the one list an untrusted project drops.
+  Formerly the value was saved without a word and, for a recorded "no", nothing ever mentioned trust.
 - Rule (config-3): after any write, `gptr_config()` checks `model`, `small_model` and `system1` (less
   `emulate:`; a router name or `router:` passes) with `model_canonical(strict = TRUE)` and on `unknown_model`
   warns `unknown_model_setting` with that message and the undo call; the value is kept (a later

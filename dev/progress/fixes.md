@@ -2086,6 +2086,11 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   warnings amended; NEWS entry.
 - Green: `^gptr-config$` PASS 535; with the 13 other test files that call `gptr_config()`, arch-layers and
   lint-rules PASS 4280. Lint clean; no Rd change.
+- Review fix: `permissions` was reported whole, though an untrusted project applies its deny and ask rules
+  (`settings_project_value()`, `perm_rules_table()`) and drops only allow. A write with allow rules now names
+  `permissions.allow`; deny or ask alone stays silent. Red `^gptr-config$` FAIL 2, PASS 569; green PASS 571;
+  with perm-*, arch-layers and lint-rules PASS 1915. Lint clean; NEWS, 04 `gptr_config()` and the D-250 rule
+  amended.
 - Deviations: D-250 (config-2 rule). Open: a project value that loosens a tighten key (`mode = yolo`) is dropped
   silently, trusted or not (§11.2, not a trust matter).
 

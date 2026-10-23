@@ -1211,7 +1211,8 @@ trusted project, §11.2; `mode = yolo` there is `gptr_error_invalid_argument`, D
 atomically with top-level keys merged. Conditions: `invalid_argument`, `workspace`,
 `invalid_identifier`; after a write to an untrusted project, warning `untrusted_setting` (fields `keys`,
 `path`; once per root and keys) naming the keys its file holds but untrusted cannot apply (those whose
-§11.2 project contribution differs from a trusted one; D-250); and warning `unknown_model_setting` (fields `key`,
+§11.2 project contribution differs from a trusted one, and `permissions.allow` for permission rules, whose deny
+and ask rules apply untrusted; D-250); and warning `unknown_model_setting` (fields `key`,
 `ref`; D-250) for a saved `model`, `small_model` or `system1` (less `emulate:`) that is not a router and that
 `model_resolve()` reports as `unknown_model` in this session, quoting that message and the undo call; the value
 is kept, since a later registration or catalog refresh can make it valid (§6.1.3), and another resolution error is

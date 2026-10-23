@@ -1260,6 +1260,11 @@ test_that("gptr_config() warns when an untrusted project will not apply what it 
   # tightening applies untrusted, so it is silent
   expect_no_warning(gptr_config(mode = plan, permissions = list(deny = "r(fn:unlink)")))
   expect_identical(settings_get("mode"), "plan")
+  # deny and ask rules apply untrusted too; only the allow rules are named
+  rules = list(allow = "r(level<=1)", deny = "r(fn:system)")
+  cnd = expect_warning(gptr_config(permissions = rules), class = "gptr_warning_untrusted_setting")
+  expect_identical(cnd$keys, "permissions.allow")
+  expect_match(conditionMessage(cnd), "`permissions.allow`", fixed = TRUE)
   # a recorded "no" shows no trust notice at all, so the warning is the only signal
   gptr_trust(proj, FALSE)
   cnd = expect_warning(gptr_config(model = opus), class = "gptr_warning_untrusted_setting")

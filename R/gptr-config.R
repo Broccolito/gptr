@@ -1284,7 +1284,8 @@ settings_config_value = function(key, value, scope) {
 
 #' Warns when keys just written to an untrusted project's file cannot apply there (IC-52): those
 #' whose untrusted contribution (settings_project_value()) is not what trust would apply. Trusted,
-#' `providers` applies as written, a `base_url` once confirmed (not asked here).
+#' `providers` applies as written, a `base_url` once confirmed (not asked here); of `permissions`
+#' only the allow rules are dropped.
 #' @noRd
 settings_untrusted_warn = function(patch) {
   root = project_root()
@@ -1293,6 +1294,10 @@ settings_untrusted_warn = function(patch) {
   for (k in names(patch)) {
     v = patch[[k]]
     if (is.null(v)) next
+    if (identical(k, "permissions")) {
+      if (length(unlist(v[["allow"]]))) lost = c(lost, "permissions.allow")
+      next
+    }
     sp = settings_spec(k)
     full = if (identical(k, "providers")) v else settings_project_value(k, sp, NULL, v, TRUE, root)
     if (!identical(settings_project_value(k, sp, NULL, v, FALSE, root), full)) lost = c(lost, k)
