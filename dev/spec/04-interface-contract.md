@@ -5817,8 +5817,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       while a sub-agent it shows runs, a `peter()` call in the parent's `r` code whose run reads the keys, so the
       clock ticks and the queue view shows (steering review: the row said `keys show when sub-agent '…' #1
       returns`, without a clock, and hid the queued message); while the `r` tool evaluates in this process
-      (`rec$frozen`, set by `console_on_tool_start()` and cleared at its end or the next request; during a
-      sub-agent, the sub-agent's own `r` call) the row has no clock, which cannot
+      (`rec$frozen`, the call's id, set by `console_on_tool_start()` and cleared at that call's end, not a
+      nested call's, or the next request; during a sub-agent, the sub-agent's own `r` call; not while a
+      question waits, which reads keys: review of Tasks 22-27) the row has no clock, which cannot
       tick, and with an empty draft says `<sep>keys show when r returns` (review of Tasks 16-21: it read `r 0s`
       for the whole call and showed none of what was typed), with a draft `keys wait` as a status word
       after `r` and before the queue, `▌ r · keys wait · 1 queued   › <draft>` (steering review: the row with a

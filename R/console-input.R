@@ -305,7 +305,8 @@ console_newest = function(s, rd, take = FALSE) {
 #' menu steers: Positron's console holds what is typed as R code) and `typed` (TRUE where a line
 #' typed during the run is the next prompt: RStudio's console), `frozen` (TRUE while R code runs
 #' in this process: no clock, and the keys wait, `<sep>keys show when r returns` with an empty
-#' draft, else `keys wait` among the status words before the queue), `band`
+#' draft, else `keys wait` among the status words before the queue; not while a question waits,
+#' which reads keys), `band`
 #' (TRUE on the input band, its words in the band's grey) and `status_w` (the widest status a row
 #' with a draft had this run: the status is padded to it, so the draft never moves left; attr
 #' "status_w" of the result is this row's, 0 for a row of completions, which shows until the next
@@ -328,8 +329,9 @@ console_live_row = function(state, width) {
   secs = as.integer(max(0, state$secs %||% 0))
   clock = if (secs < 60L) paste0(secs, "s") else sprintf("%dm %02ds", secs %/% 60L, secs %% 60L)
   what = state$what %||% "thinking"
-  # R code runs in this process: no clock ticks and no key is read until it returns
-  frozen = isTRUE(state$frozen)
+  # R code runs in this process: no clock ticks and no key is read until it returns, unless a
+  # question waits, which reads them
+  frozen = isTRUE(state$frozen) && !isTRUE(state$question)
   if (frozen) clock = what
   words = c(if (frozen) what else paste(what, clock),
             if (frozen && nzchar(state$draft %||% "")) "keys wait",
@@ -503,16 +505,20 @@ console_live = function() {
 #' The live row's state for the record `rec` of a foreground run (console_live_row()): the state
 #' word (`rec$what`; `sub-agent <label>` while a sub-agent it shows runs), the run's seconds, the
 #' person's messages waiting for its session, whether a question waits (`rec$question`,
-#' console_ask_wait()), whether an r call evaluates in this process (`rec$frozen`; during a
-#' sub-agent, which runs in the parent's r call and reads keys, one of the sub-agents'), and the
-#' console's interrupt key and what it does (in RStudio, also that a typed line is the next
-#' prompt); where a T console's
-#' composer reads keys (tty_call()), its draft, the newest message waiting (console_newest()), the
-#' completion candidates its last key listed and the kind Enter sends
+#' console_ask_wait()), whether an r call evaluates in this process (`rec$frozen`, its call id;
+#' during a sub-agent, which runs in the parent's r call and reads keys, one of the sub-agents'),
+#' and the console's interrupt key and what it does (in RStudio, also that a typed line is the next
+#' prompt); where a T console's composer reads keys (tty_call()), its draft, the newest message
+#' waiting (console_newest()), the completion candidates its last key listed and the kind Enter
+#' sends
 #' @noRd
 console_live_state = function(rec) {
   kids = console_kids()
-  frozen = if (length(kids)) any(vapply(kids, function(r) isTRUE(r$frozen), NA)) else rec$frozen
+  frozen = if (length(kids)) {
+    any(vapply(kids, function(r) !is.null(r$frozen), NA))
+  } else {
+    !is.null(rec$frozen)
+  }
   s = rec$session
   rd = if (isTRUE(the$tty$keys)) console_repl_prompt()$reader
   list(what = if (length(kids)) paste("sub-agent", kids[[1L]]$child$label) else rec$what,

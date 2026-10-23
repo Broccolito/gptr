@@ -1051,15 +1051,15 @@ console_on_message_end = function(event, ctx) {
 #' tool_execution_start: the call's lines (verbosity 2), whose ids its approval reads (D-243), with
 #' the tool's name as the live row's state word, or a progress message of its first line and
 #' `(+N more lines)` (verbosity 1); an r call, which evaluates in this process, freezes its
-#' record, and a shown sub-agent's draws the row once
+#' record with its id, and a shown sub-agent's draws the row once
 #' @noRd
 console_on_tool_start = function(event, ctx) {
   rec = console_record(event)
   if (is.null(rec)) return(NULL)
   # the r tool evaluates in this process: the live row cannot tick or read keys until it returns
-  if (identical(event$tool_name, "r")) rec$frozen = TRUE
+  if (identical(event$tool_name, "r") && is.null(rec$frozen)) rec$frozen = event$tool_call_id
   if (!console_foreground(rec)) {
-    if (isTRUE(rec$frozen) && !is.null(rec$child) && isTRUE(the$live_row$on)) the$live_row$draw()
+    if (!is.null(rec$frozen) && !is.null(rec$child) && isTRUE(the$live_row$on)) the$live_row$draw()
     return(NULL)
   }
   call = list(id = event$tool_call_id, name = event$tool_name, input = event$input %||% list())
@@ -1084,7 +1084,8 @@ console_on_tool_start = function(event, ctx) {
 }
 
 #' tool_execution_end: queue the pause-menu items and print the artifact lines held while tools
-#' ran, keep the elapsed time for the result line, report a failure at verbosity 1, a refused
+#' ran, unfreeze the record at the end of the r call that froze it (not a nested call's), keep the
+#' elapsed time for the result line, report a failure at verbosity 1, a refused
 #' call as not run; the end of a call served in a live run carries its `content` and prints its
 #' result line (D-192); a CLI route's informational tool event leaves its request pending, so the
 #' live row says thinking
@@ -1094,7 +1095,7 @@ console_on_tool_end = function(event, ctx) {
   console_artifact_flush()
   rec = console_record(event)
   if (is.null(rec)) return(NULL)
-  rec$frozen = NULL
+  if (identical(rec$frozen, event$tool_call_id)) rec$frozen = NULL
   key = paste0("t", event$tool_call_id)
   call = get0(key, envir = rec$tools, inherits = FALSE)
   if (!is.null(call)) {

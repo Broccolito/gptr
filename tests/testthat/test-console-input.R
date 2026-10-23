@@ -291,12 +291,15 @@ test_that("while R code runs in this process the row has no clock and says keys 
   states = list(keys = c(r, draft = ""), draft = c(r, draft = "and plot"), ide = r,
                 queued = c(r, queued = 1, draft = "p1 third line"),
                 all = c(r, queued = 2, question = TRUE, draft = "and plot"),
+                asks = c(r, question = TRUE, draft = ""),
                 widest = c(r, draft = "and plot", status_w = 26L))
-  # with a draft the status words say keys wait too, before the queue (steering review)
+  # with a draft the status words say keys wait too, before the queue (steering review); a question
+  # waiting reads keys, so its row has the clock and the keys (review of Tasks 22-27)
   expect_identical(live_rows(states, 80L), list(
     keys = "▌ r · keys show when r returns", draft = "▌ r · keys wait   › and plot",
     ide = "▌ r · ctrl-c pause", queued = "▌ r · keys wait · 1 queued   › p1 third line",
-    all = "▌ r · keys wait · 2 queued · question waiting   › and plot",
+    all = "▌ r 5s · 2 queued · question waiting   › and plot",
+    asks = "▌ r 5s · question waiting   enter steer · tab follow-up · ctrl-c pause",
     widest = paste0("▌ r · keys wait", strrep(" ", 13L), "   › and plot")
   ))
   # a long draft keeps its tail; the cue and the queue go whole
@@ -304,6 +307,24 @@ test_that("while R code runs in this process the row has no clock and says keys 
   states = list(long = c(r, queued = 1, draft = long))
   expect_identical(live_rows(states, 80L)$long, paste0("▌ r   › …", substring(long, 51L)))
   expect_identical(live_rows(states, 40L)$long, paste0("▌ r   › …", substring(long, 91L)))
+})
+
+test_that("the r call's own end unfreezes the row, not a nested call's (review)", {
+  rec = new.env()
+  rec$tools = new.env()
+  active = console_state()$active
+  assign("u_run", rec, envir = active)
+  withr::defer(suppressWarnings(rm(list = "u_run", envir = active)))
+  local_mocked_bindings(console_foreground = function(rec, tools = FALSE) FALSE,
+                        console_live_state = function(rec) list(frozen = !is.null(rec$frozen)))
+  ev = function(id, name = "r") list(run = "u_run", tool_call_id = id, tool_name = name)
+  console_on_tool_start(ev("c1"), NULL)
+  # peter$describe() inside the r code: a nested call `<id>/<k>` starts and ends
+  console_on_tool_start(ev("c1/1", "describe"), NULL)
+  console_on_tool_end(ev("c1/1", "describe"), NULL)
+  expect_true(console_live_state(rec)$frozen)
+  console_on_tool_end(ev("c1"), NULL)
+  expect_false(console_live_state(rec)$frozen)
 })
 
 test_that("during a sub-agent the row ticks and shows the queue; keys wait in its r call", {

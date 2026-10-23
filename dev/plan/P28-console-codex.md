@@ -65,6 +65,9 @@ Typing during an in-process `r` tool:
   16-21: the live row says so, `▌ r · keys show when r returns`, without a clock, which cannot tick then.)
   (Amended in the steering review: with a draft too, `▌ r · keys wait   › <draft>`, the cue among the
   status words before the queue; the row with a draft said nothing while further keys did not show.)
+  (Amended in the review of Tasks 22-27: the record freezes with the `r` call's id, which only that call's end
+  clears, and a question waiting, which reads keys, shows the clock and the keys: the call's approval comes
+  after its start event, and a nested `peter$describe()` ended the freeze while the code still ran.)
 - The console reads typed input at `turn_end`, before the loop polls steers (Task 7). So a
   message sent before a boundary reaches that boundary.
 - (Amended in the steering review: a pause-menu answer that resumes, s, f, c or b, leaves the call's

@@ -3641,6 +3641,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   model reads n <text> as the person's; the next call is asked (cheat-sheet review)"; test-subagent-worker.R (both
   relay tests); test-mcp-server.R "a served call the person denies with text says it is theirs (cheat-sheet
   review)".
+- Review fixes of Tasks 22-27 (2026-10-23):
+  - The live row's freeze is the `r` call's (`rec$frozen` holds its id): a nested call's end no longer clears
+    it while the code runs, and a question waiting shows the clock and the keys, since it reads them; the
+    approval of the `r` call comes after its start event, so the row said `keys wait` while Enter, Tab and Up
+    worked. Contract-visible: 04 §15.10 IC-82. Tests: test-console-input.R "while R code runs in this process the
+    row has no clock and says keys wait (review)", "the r call's own end unfreezes the row, not a nested call's
+    (review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
