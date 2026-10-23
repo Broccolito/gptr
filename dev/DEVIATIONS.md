@@ -3201,6 +3201,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   applied there, and `gptr.unsafe_no_permissions` skips it. Was: re-checked only above the outer call's approved
   level and then as tool `sh`, which no `r(sh:)` rule matches, so `cmd = "rm -rf build"; peter$sh(cmd)` ran in auto
   and yolo under `r(sh:rm *)`.
+- Open (nested-1): a computed command run through base `system()` or `system2()` (`cmd = paste("rm", "-rf",
+  "build"); system(cmd)`) is one `dynamic` level-3 row that no `sh:` rule matches, so it still runs in auto and yolo
+  under a deny `r(sh:rm *)`; only nested `peter$sh` and `peter$bg` calls are re-checked. The gate is advisory;
+  `?gptr_security` names the limit. No code change.
 - Rule (sessions-22): the `gptr.frozen` entry records `mode`, the session's mode at the freeze (P07's and the
   fallback's), and a rebuild (`gptr_resume()`, console `/resume`, a replay cut) takes the last mode its active path
   records, a `gptr.frozen` `mode` or a `gptr.mode_change` `to` that is one of the five modes, else the `mode`
@@ -3215,8 +3219,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `?session-accessors`, `?gptr_parallel`, vignette teams-and-background. 04 §5.1 `text` row and `print` method, §6.5
   `gptr_map()`, 03 §4.1.6; `?print.gptr_session`, `?session-accessors`, `?gptr_parallel`, the same vignette. 03 §6.8
   (the execute menu). 04 IC-54 (the plan allowlist). `gptr_risk()`'s rows and categories of a program given by its
-  path (no spec text describes them). 04 §9.4 `bg` risk cell. 03 §6.8.4, 04 §7.6 `dispatch_nested()`. 04 §4.6
-  `gptr.frozen`, §6.5 `gptr_resume()`; `?gptr_sessions`.
+  path (no spec text describes them). 04 §9.4 `bg` risk cell. 03 §6.8.4, 04 §7.6 `dispatch_nested()`;
+  `?gptr_security` (a computed `system()` command). 04 §4.6 `gptr.frozen`, §6.5 `gptr_resume()`; `?gptr_sessions`.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice without a key stops the run ...",
   "a built session needs no key until a run starts it ...", "a continuation of a session that kept no workspace

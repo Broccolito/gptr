@@ -2312,7 +2312,12 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the registry's `rules` record is asked through `ext_policy_decide()` and the command is read through the literal
   call (the reading of sessions-17 and sessions-18, `bg`'s `process` row included). No live check (the fake run is
   the gate end to end).
-- Open: none.
+- Open: a command computed at run time and run through base `system()` (`cmd = paste("rm", "-rf", "build");
+  system(cmd)`) still escapes a deny `r(sh:rm *)` in auto and yolo (fake run: `build/` deleted in both): its static
+  row is `dynamic` (level 3, as is `system2("rm", a)`), which no `sh:` glob matches, and nested-1 re-checks only
+  nested `peter$sh` and `peter$bg` calls. No code change (the gate is advisory); `?gptr_security` ("What the gate
+  cannot do") names the limit. Docs: `^(zzz|lint-rules|doc-|gptr-config$)` PASS 3106 SKIP 2; check-docs 0
+  problems; release doc tests PASS 49. Lint and check-plans clean.
 
 ### sessions-22 - Keep a resumed session's mode
 - Red: FAIL 5 in `^session-store$` (PASS 274; findings 148, 153): `peter(mode = "plan")`'s `gptr.frozen` held no

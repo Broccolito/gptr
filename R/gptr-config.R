@@ -1559,9 +1559,12 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' The risk levels come from a static classifier ([gptr_risk()]). It is advisory and it is not a
 #' security boundary: R code can compute function names, call compiled code or load packages
 #' whose effects the classifier cannot see, and R has no sandbox for code that runs inside your
-#' session. In `auto` and `yolo` mode a model can delete or overwrite files and objects. Use them
-#' only in projects you can restore (version control, backups, [gptr_rewind()] for recent turns),
-#' and run untrusted prompts or untrusted projects in a disposable container or virtual machine.
+#' session. Deny and ask `sh:` rules see a command computed at run time only in a `peter$sh()` or
+#' `peter$bg()` call, so `cmd = paste("rm", "-rf", "build"); system(cmd)` runs in `auto` and
+#' `yolo` mode despite a deny rule `r(sh:rm *)`. In `auto` and `yolo` mode a model can delete or
+#' overwrite files and objects. Use them only in projects you can restore (version control,
+#' backups, [gptr_rewind()] for recent turns), and run untrusted prompts or untrusted projects in
+#' a disposable container or virtual machine.
 #'
 #' @section Sub-agents, workers and child processes:
 #' Inline sub-agents run in your session and see its objects. The worker backend runs a
