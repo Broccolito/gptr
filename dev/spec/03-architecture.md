@@ -1749,7 +1749,8 @@ format_eval_result(res, budget_tokens)
 Hand-rolled, not `evaluate` (sink breakage, sticky references, options leak [12 §2.A2]): parse with
 `srcfilecopy()`; static guard (`q()`, `quit()`, `readline()`, `menu()`, `browser()` and friends return an error
 result without evaluation; `q` and `quit` are flagged in any position, as a value, a `FUN` argument or inside
-`match.fun`, `get`, `do.call` [12 fact-check; IC-67]); `sink()` capture cleaned up in `suspendInterrupts()`; per-expression
+`match.fun`, `get`, `do.call` [12 fact-check; IC-67], a value unless the code assigns it or `envir` binds it to
+data [D-252]); `sink()` capture cleaned up in `suspendInterrupts()`; per-expression
 `setTimeLimit(elapsed, transient = TRUE)` reset to `Inf` (no timeout when a human is present, the pause menu
 instead; `gptr.r_timeout = 3600` otherwise) [J-cran graft]; messages and warnings through calling handlers
 created in a frame that does not hold the home (§6.4 R2-R3); errors with a trimmed, redacted traceback;

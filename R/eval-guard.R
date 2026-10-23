@@ -221,11 +221,26 @@ eval_guard_walk = function(e, acc, scope = character()) {
   invisible()
 }
 
+#' Is `name`, looked up from `envir` as R looks up a value, bound to data? A promise or an active
+#' binding is not forced and counts as unknown (FALSE).
+#' @noRd
+eval_guard_is_data = function(name, envir) {
+  while (!identical(envir, emptyenv())) {
+    if (exists(name, envir = envir, inherits = FALSE)) {
+      return(!bindingIsActive(name, envir) && !rlang::env_binding_are_lazy(envir, name) &&
+               !exists(name, envir = envir, mode = "function", inherits = FALSE))
+    }
+    envir = parent.env(envir)
+  }
+  FALSE
+}
+
 #' Static guard over parsed code (04 section 7.9): list(blocked, reason = model text or NULL)
 #' A blocked name is refused when called or passed by name (unless the code defines that function),
-#' always through `pkg::`, and for q and quit as a value (unless the code assigns it).
+#' always through `pkg::`, and for q and quit as a value (unless the code assigns it or, seen from
+#' `envir`, it is bound to data).
 #' @noRd
-eval_guard = function(exprs) {
+eval_guard = function(exprs, envir = NULL) {
   acc = new.env(parent = emptyenv())
   acc$called = character()
   acc$ns = character()
@@ -235,9 +250,9 @@ eval_guard = function(exprs) {
   acc$stdin = FALSE
   for (i in seq_along(exprs)) eval_guard_walk(exprs[[i]], acc)
   funs = eval_guard_fun_defs(exprs)
-  vars = eval_assign_targets(exprs)
-  hits = c(setdiff(acc$called, funs), acc$ns, setdiff(acc$strings, funs),
-           setdiff(acc$values, vars))
+  vals = setdiff(acc$values, eval_assign_targets(exprs))
+  if (!is.null(envir)) vals = vals[!vapply(vals, eval_guard_is_data, TRUE, envir = envir)]
+  hits = c(setdiff(acc$called, funs), acc$ns, setdiff(acc$strings, funs), vals)
   fns = intersect(unique(hits), eval_guard_blocked)
   secrets = unique(acc$secrets)
   reasons = character()

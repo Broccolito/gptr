@@ -3132,9 +3132,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   evaluator diffs `env_view_snapshot(sizes = FALSE)` (new column `own`), so such a change is `modified`, an alias
   (`e$f = 1` binds the source's `e` in the overlay) is not `added`, and a modified row not `own`, or whose new own
   binding shares the old row's object, reads `(in the source workspace)`. Formerly `e` was added and nothing else.
-- Contract-visible: 03 §4.3 (fork), §6.12, §6.18 and §7.5 `<workspace>`; 04 `gptr_fork(envir)`, §7.9
-  `env_view_snapshot()`.
+- Rule (guard-1): `eval_guard(exprs, envir = NULL)`; `eval_r()` passes its `envir`. `q` or `quit` used as a value
+  passes when, looked up from `envir` as R looks up a value (its parents in order), it is bound to data: not a
+  function, and not a promise or active binding (never forced). Calls (`q()`, `base::q`, `do.call("q")`) and the
+  function argument (`sapply(x, q)`, which `match.fun()` resolves to `base::q`) stay refused whatever is bound.
+  Formerly `summary(q)` on the user's quantile vector was refused as quitting R (finding 25). The plan named
+  `binding_env()`; it is an L3 function and not R's lookup.
+- Contract-visible: 03 §4.3 (fork), §6.12 (also the guard), §6.18 and §7.5 `<workspace>`; 04 `gptr_fork(envir)`,
+  §7.9 `env_view_snapshot()` and `eval_guard()`, §15.7.
 - Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
   and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame);
-  session-object "a fork's change report names the source objects its code changed in place". Evidence:
-  progress/fixes.md Task FIX-19 ws-1, sessions-20.
+  session-object "a fork's change report names the source objects its code changed in place"; eval-guard "q bound
+  to data where the code runs ...", "model code reads a q bound to data ...". Evidence: progress/fixes.md Task
+  FIX-19 ws-1, sessions-20, guard-1.

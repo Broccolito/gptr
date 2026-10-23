@@ -123,6 +123,35 @@ test_that("q or quit as the function argument is flagged unless the code defines
   expect_equal(guard("f = function(q) sapply(1:3, q)")$blocked, character())
 })
 
+test_that("q bound to data where the code runs is not refused as a value; calls still are", {
+  skip_on_cran()
+  ex = function(code) parse(text = code, keep.source = FALSE)
+  e = new.env()
+  e$q = stats::quantile(1:10)
+  expect_null(eval_guard(ex("summary(q); q[2]"), e)$reason)
+  expect_equal(eval_guard(ex("summary(q); q[2]"), new.env())$blocked, "q")
+  expect_equal(eval_guard(ex("q('no')"), e)$blocked, "q")
+  expect_equal(eval_guard(ex("sapply(1, q)"), e)$blocked, "q")
+  # a nearer binding wins, as in R's lookup; a promise is not forced and counts as unknown
+  expect_null(eval_guard(ex("q[2]"), new.env(parent = e))$reason)
+  delayedAssign("q", stop("forced"), assign.env = e)
+  expect_equal(eval_guard(ex("summary(q)"), e)$blocked, "q")
+  e$q = function(...) 1
+  expect_equal(eval_guard(ex("summary(q)"), e)$blocked, "q")
+})
+
+test_that("model code reads a q bound to data in the session's workspace", {
+  skip_on_cran()
+  e = new.env()
+  e$q = stats::quantile(1:10)
+  fake = local_fake_provider(list(fake_tool("r", code = "summary(q)"), "Done."))
+  s = peter("Summarise q", model = fake, envir = e, mode = "auto")
+  res = Filter(function(m) identical(m$role, "tool_result"), s$messages)[[1L]]
+  expect_identical(res$details$status, "ok")
+  expect_no_match(msg_text(res), "Not run", fixed = TRUE)
+  expect_match(msg_text(res), "Median", fixed = TRUE)
+})
+
 test_that("empty arguments and odd calls never make the guard or the targets throw", {
   skip_on_cran()
   expect_equal(guard("x = scan(, what = 'a')")$blocked, "stdin")

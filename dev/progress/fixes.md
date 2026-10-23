@@ -1958,3 +1958,21 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   workspace)`.
 - Deviations: D-252 (extended). Open: no fork-scoped policy asks before `:=` or `<<-` (plan); an
   object a fork creates in the source with `<<-` is still listed as `+ name` without the mark.
+
+### guard-1 - A q or quit bound to data in the workspace is not refused as quitting R
+- Finding 25 (in passing). Red: `^eval-guard$` FAIL 4 PASS 126: `eval_guard()` took no `envir`,
+  and a fake `r` call `summary(q)` in a session whose envir held `quantile(1:10)` came back
+  `blocked`, "Not run: the code calls or refers to q()".
+- Cause: a `q`/`quit` value passed only when the code itself assigned it; the guard never saw the
+  workspace, so the user's own `q` (a quantile vector, a query) read as `base::q`.
+- Fix: `eval_guard(exprs, envir = NULL)`; `eval_run()` passes `st$envir`. A value passes when the
+  first binding R's value lookup finds from `envir` is data (`eval_guard_is_data()`; a promise or
+  active binding is not forced and counts as unknown). Calls, `base::q`, `do.call("q")` and
+  `sapply(x, q)` stay refused.
+- Green: `^eval-guard$` PASS 136 (the end-to-end test needs no permission bypass in auto mode);
+  eval-*, copy-eval, copy-tools, tool-r, arch-layers, lint-rules, s1-* PASS 2229; agent-dispatch,
+  agent-loop, doc-blocks, gptr-gateway, injection-e2e, perm-gate, northstar, console-* PASS 3297
+  SKIP 1. Lint clean; plan checks pass.
+- Deviations: D-252 (extended): R's own lookup, not the plan's `binding_env()`, an L3 function the
+  eval layer may not call that skips the parents of a function-frame home (a nearer `base::q`).
+  Open: `rm(q); g = q; g()` passes, as `eval(parse(text = ...))` already does (advisory guard).

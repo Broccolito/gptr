@@ -175,7 +175,7 @@ eval_run = function(st) {
   st$outputs = rep(list(character()), st$n_total)
   if (!st$n_total) return(invisible(st))
   if (st$guard) {
-    g = eval_guard(parsed)
+    g = eval_guard(parsed, st$envir)
     if (!is.null(g$reason)) {
       eval_error(st, g$reason, "gptr_blocked")
       st$status = "blocked"
