@@ -3136,11 +3136,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   backstop; an Ollama model is prepared through `model_prepare()`), a missing key (`provider_credential(register =
   FALSE)`). A continuation guards its target before its model, level, mode or tools change, after the call's
   extensions, plugins and rank-0 specs register (the checks read them: a `model =` spec, a provider an extension
-  registers); a refusal there undoes them (`registry_session_undo()`), and a call's registry filters apply only once
-  it passed the checks, so a refused call keeps none; a refused new call keeps the previous `gptr_last()`. Was: those
-  changed first, and key and provider refusals came at the first request, after the turn and its prompt were recorded
-  (resent with the next prompt), and a refused call kept its registrations and filters. A router's choice keeps egress
-  and replay only (`ready = FALSE`), and its request refuses the rest, as before (a keyless choice:
+  registers). `gateway_checks()` holds every other refusal before a turn starts too: a continuation's unknown tool
+  name, two presets, `.opts$images` its model does not take, `background = TRUE` without later, an unknown
+  `skills =` preload and, last, a secret-looking prompt the person declines to send (`"ask"`). A refusal there, or
+  while the call registers (an unknown plugin name), undoes the registrations (`gateway_undo()`,
+  `registry_session_undo()`) and the call's registry filters, which apply before the preload check, so a refused
+  call keeps none; a refused new call keeps the previous `gptr_last()`. Was: those changed first, and key and
+  provider refusals came at the first request, after the turn and its prompt were recorded (resent with the next
+  prompt), and a refused call kept its registrations and filters; then (r3 to r4) a refusal while registering kept
+  them, and the images, preload and prompt refusals came after the switch and `gptr_last()`. A router's choice
+  keeps egress and replay only (`ready = FALSE`), and its request refuses the rest, as before (a keyless choice:
   `gptr_error_no_key`, no request). So does building a session (`.run = FALSE`, a `gptr_parallel()` member):
   `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a member that cannot reach its model
   ends `error` (kept by `on_error = "return"`). A run's first request to its session's model prepares it as the
@@ -3232,9 +3237,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   path (no spec text describes them). 04 §9.4 `bg` risk cell. 03 §6.8.4, 04 §7.6 `dispatch_nested()`;
   `?gptr_security` (a computed `system()` command). 04 §4.6 `gptr.frozen`, §6.5 `gptr_resume()`; `?gptr_sessions`.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
-  "a call refused before its run changes neither ...", "a router's choice without a key stops the run ...",
-  "a built session needs no key until a run starts it ...", "a call, gptr_step() and a parallel member each discover
-  an Ollama model once ...", "a continuation switches to a provider spec that only its session knows ...",
+  "a call refused before its run changes neither ...", "every refusal before a turn starts undoes ...",
+  "a router's choice without a key stops the run ...", "a built session needs no key until a run starts it ...",
+  "a call, gptr_step() and a parallel member each discover an Ollama model once ...",
+  "a continuation switches to a provider spec that only its session knows ...",
   "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
   prompt-sections "the tool array skips unavailable and missing tools ..."; agent-run "a request rejected or never
   received costs nothing ...", "a reported usage keeps its unknown counts ...", "an overflow condition carries the

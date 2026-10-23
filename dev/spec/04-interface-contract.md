@@ -1116,15 +1116,18 @@ context and signals the warning `partial_name` naming each such formal (D-251).
 - A call refused before its run starts, because its model cannot be reached (egress §3.1, the replay guard, a
   decision-only model, a disabled provider, the preflight with an Ollama model prepared first, a missing key),
   records nothing: no turn, no model, level, mode or tool change on a piped session, and `gptr_last()` stays as it
-  was; its condition carries no session (D-251). A piped call's `extensions`, `plugins` and rank-0 specs
-  (`model =`, `tools =`) register first, since the checks read them, and are removed again when it is refused; a
-  call's registry filters (`plugins = "-x"`) apply to the R session only once it is accepted. Building a session
-  (`.run = FALSE`, a `gptr_parallel()` member) checks egress and replay only: `gptr_step()` and `gptr_wait()`
-  check the rest before they start its run, and a member that cannot reach its model ends `error` (`on_error`). A
-  run's first request to its session's model prepares it as the checks do (`model_prepare()` discovers an Ollama
-  model only without current evidence), so a plain call, `gptr_step()`, `gptr_wait()` and a member each discover an
-  Ollama model once, a member at its first request. A piped `.run = FALSE` call applies its model, mode and tools at
-  once; a `gptr_step()` or `gptr_wait()` that then refuses leaves them, with no turn.
+  was; its condition carries no session (D-251). So does a call refused for its arguments: a continuation's unknown
+  tool name, an unknown plugin or `skills =` name, two presets, `.opts$images` its model does not take,
+  `background = TRUE` without later, or a secret-looking prompt the person declines to send. A piped call's
+  `extensions`, `plugins` and rank-0 specs (`model =`, `tools =`) register first, since the checks read them, and
+  are removed again when it is refused, also while it registers; a call's registry filters (`plugins = "-x"`) stay
+  on the R session only once it is accepted. Building a session (`.run = FALSE`, a `gptr_parallel()` member) checks
+  egress and replay only: `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a member
+  that cannot reach its model ends `error` (`on_error`). A run's first request to its session's model prepares it
+  as the checks do (`model_prepare()` discovers an Ollama model only without current evidence), so a plain call,
+  `gptr_step()`, `gptr_wait()` and a member each discover an Ollama model once, a member at its first request. A
+  piped `.run = FALSE` call applies its model, mode and tools at once; a `gptr_step()` or `gptr_wait()` that then
+  refuses leaves them, with no turn.
 
 #### 6.1.3 Identifier resolution (D-07, `resolve_identifier()`, P08)
 

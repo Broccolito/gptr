@@ -1432,6 +1432,62 @@ test_that("a call refused before its run changes neither the session nor gptr_la
   expect_identical((t |> peter("again"))$text, "corp answer")
 })
 
+test_that("every refusal before a turn starts undoes what the call registered (D-251)", {
+  local_gw()
+  local_gptr_options(replay = "auto")
+  settings_write("user", list(egress = list(corp = "ack")))
+  fake = local_fake_provider(list("one", "two"))
+  script = gptr_fake_provider(list("corp answer"), name = "corp")
+  corp = gptr_provider("corp", api = "fake", models = list(list(id = "corp-big")))
+  s = peter("hello", model = fake, envir = new.env())
+  sid = session_data(s)$id
+  state = function() {
+    d = session_data(s)
+    list(d$model, d$mode, d$turns, length(d$entries), identical(gptr_last(), s))
+  }
+  before = state()
+  seen = new.env()
+  seen$n = 0L
+  good = function(gptr) {
+    gptr$register(gptr_hook("agent_start", function(event, ctx) {
+      seen$n = seen$n + 1L
+      NULL
+    }))
+  }
+  probe = test_tool("probe", function(ctx) "probed")
+  refused = function(why, ...) {
+    expect_error(peter(...), why, class = "gptr_error_invalid_argument")
+  }
+  # refused while it registers: an unknown plugin name after an extension it loaded
+  refused("No plugin", s, "U1", mode = "plan", extensions = list(good, "no-such-plugin-zz"),
+          tools = list(probe), plugins = "-builtin:memory")
+  refused("No plugin", s, "U1", extensions = good, tools = list(probe),
+          plugins = c("-builtin:memory", "no-such-plugin-zz"))
+  # refused after its model passed the checks: an unknown skills = preload, an image refusal and
+  # a secret-looking prompt the person declines to send
+  refused("No skill", s, "U2", model = corp, mode = "plan", extensions = good,
+          tools = list(probe), plugins = "-builtin:memory", skills = "no-such-skill-zz")
+  refused("image", s, "U3", model = corp, mode = "plan", extensions = good, tools = list(probe),
+          .opts = list(images = "plot.txt"))
+  local({
+    local_mocked_bindings(gptr_confirm = function(question, default = FALSE) FALSE)
+    local_gptr_options(prompt_secrets = "ask", interactive = TRUE)
+    u5 = paste("U5 uses", paste0("sk-", "ant-api03-", strrep("FAKEant0", 11), "xxxxxAA"))
+    refused("secret-looking", s, u5, model = corp, mode = "plan", extensions = good,
+            tools = list(probe), plugins = "-builtin:memory")
+  })
+  expect_identical(state(), before)
+  expect_null(settings_read("session")$filters)
+  expect_false("probe" %in% registry_names("tool", session = sid))
+  expect_identical((s |> peter("second"))$text, "two")
+  expect_identical(c(seen$n, script$log$n), c(0L, 0L))
+  # a refused new call keeps the previous gptr_last() and none of its registry filters
+  refused("No skill", "U4", model = fake, plugins = "-builtin:memory",
+          skills = "no-such-skill-zz", envir = new.env())
+  expect_identical(gptr_last(), s)
+  expect_null(settings_read("session")$filters)
+})
+
 test_that("a router's choice without a key stops the run, not the default model (D-251)", {
   local_gw()
   local_gptr_options(replay = "auto", model = "fake/fake-1")

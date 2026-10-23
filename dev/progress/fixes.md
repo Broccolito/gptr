@@ -2030,13 +2030,31 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   server is down ended `gptr_error_not_available`, not the server's `gptr_error_network`). Green `^gptr-gateway$`
   PASS 433; `^(catalog-models|provider-registry|agent-|subagent-|s1-|gptr-|arch-layers|lint-rules|
   copy-gateway|prompt-compact)` PASS 6591 SKIP 1. 04 §6.1.2; D-251. Lint clean.
+- Review: r5 applied. r3's undo did not cover every refusal, so r3's bullet above, `?peter` and 04 §6.1.2 said
+  more than the code did. A refusal while the call registered (an unknown plugin name, after an extension it loaded
+  or beside a `plugins = "-x"` filter) came before the undo existed: its extension fired on the next turn and its
+  tools stayed. The `skills =` preload, `.opts$images` and prompt_secrets "ask" refusals came in `gateway_input()`,
+  after a continuation switched model and mode with its filters applied, and after a new call became
+  `gptr_last()`: the next turn ran on the refused call's model with its hook. `gateway_undo()` marks the session's
+  registrations and the R session's filters before the call registers; `gateway_run()` registers inside the
+  `tryCatch` of `gateway_checks()`, which now holds every refusal before anything switches: a continuation's
+  tools, presets and model, the guards, images on the model the call runs, `background = TRUE` without later, the
+  filters, the preloads and, last, the prompt's secrets. Red FAIL 7 on 8185ebdc (the new test: model, mode and
+  entries switched, the filter and 'probe' kept, the next turn on corp with the hook, a new call's
+  `gptr_last()` and filter). Green `^gptr-gateway$` PASS 446; `^(gptr-|agent-|artifact-app|catalog-models|
+  console-abort-stream|console-repl|console-commands|eval-format|ext-|doc-replay|env-snapshot|mcp-|s1-|s11-|
+  prompt-|provider-message|provider-registry|session-|subagent-|skill-|tool-namespace|tool-r$|copy-gateway|
+  arch-layers|lint-rules|zzz)` PASS 14237 SKIP 2; `^(gptr-gateway|doc-|copy-gateway|lint-rules|zzz)` PASS 3056
+  SKIP 2. `?peter`, 04 §6.1.2, D-251. Lint and Rd clean. The work in progress found uncommitted on the branch was
+  this fix; r5 finishes it (the prompt check moved last, the test names each refusal) and pushes r3 and r4 with it.
 - Deviations: D-251 (extended). From the plan: the continuation guards its target whether or not it changes and
   `gateway_run()` guards only a new session (one check per switch); `session_new()` sets `gptr_last()`, so a
   refused new call restores it.
-- Open: the `.opts$images` and `prompt_secrets` "ask" refusals still follow the switch (`gateway_input()`); a
-  router choice refused for egress or replay still falls back through `route_default()`, which checks no egress
-  on the default model (r1, on main too: L3's `run_route()` cannot call the L6 guards, so closing it changes
-  IC-69's fallback; the models group edits `run_route()` in parallel).
+- Open: a new call's unknown tool name is refused when its prompt freezes, at the run's start (extension and MCP
+  tools register at `session_start`), so the refused session still becomes `gptr_last()` (status `error`, no turn;
+  04 §6.1.2 claims only a continuation's); a router choice refused for egress or replay still falls back through
+  `route_default()`, which checks no egress on the default model (r1, on main too: L3's `run_route()` cannot call
+  the L6 guards, so closing it changes IC-69's fallback; the models group edits `run_route()` in parallel).
 
 ### sessions-4 - Say when a continued session has no kept workspace
 - Red: FAIL 2 in `^gptr-gateway$` (PASS 387; findings 97, 134, 143): `s = f(); s |> peter("Report z.")` for a
