@@ -35,9 +35,9 @@ Each child gets its element alone as \code{.x}, a named list of one attached as 
 keeps only the values it returned with \code{\link[=gptr_return]{gptr_return()}}, so they must be self-contained.}
 
 \item{choices, levels, threshold}{System 1 answer shape, for a decision model (\code{jev},
-\code{"ollama/clef-flash"}) or opt-in emulation (\code{gptr_config(system1 = "emulate:<ref>")}). A
-conversational model refuses them, \code{min_confidence} and \code{uncertain} (\code{threshold} only when it
-is not 0.5) rather than ignore them. \code{choices} given as a factor, or
+\code{"ollama/clef-flash"}; after \code{gptr_config(system1 = "emulate:<ref>")}, \code{model = jev} runs it
+through a chat model). A conversational model refuses them, \code{min_confidence} and \code{uncertain}
+(\code{threshold} only when it is not 0.5) rather than ignore them. \code{choices} given as a factor, or
 \code{.opts = list(output = "factor")}, return a plain factor with those levels and no
 probabilities or confidence.}
 

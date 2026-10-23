@@ -75,9 +75,9 @@
 #'   `.opts = list(context = "none")`, which would drop it, is refused. A child that succeeds
 #'   keeps only the values it returned with [gptr_return()], so they must be self-contained.
 #' @param choices,levels,threshold System 1 answer shape, for a decision model (`jev`,
-#'   `"ollama/clef-flash"`) or opt-in emulation (`gptr_config(system1 = "emulate:<ref>")`). A
-#'   conversational model refuses them, `min_confidence` and `uncertain` (`threshold` only when it
-#'   is not 0.5) rather than ignore them. `choices` given as a factor, or
+#'   `"ollama/clef-flash"`; after `gptr_config(system1 = "emulate:<ref>")`, `model = jev` runs it
+#'   through a chat model). A conversational model refuses them, `min_confidence` and `uncertain`
+#'   (`threshold` only when it is not 0.5) rather than ignore them. `choices` given as a factor, or
 #'   `.opts = list(output = "factor")`, return a plain factor with those levels and no
 #'   probabilities or confidence.
 #' @param min_confidence A number from 0 to 1. An answer whose confidence is below it is
@@ -1145,12 +1145,10 @@ route_refuse_s1_args = function(call) {
   who = if (is.na(label)) "the model of this call" else paste("model", label)
   gptr_abort(c(paste0("`", arg, "` shapes a System 1 decision; ", who, " is conversational, so ",
                       "peter() would start a conversation and ignore it."),
-               paste0("Use a decision model (model = jev or \"ollama/clef-flash\"), opt into ",
-                      "emulation with gptr_config(system1 = \"emulate:<ref>\"), or drop the ",
-                      "argument.")),
-             "invalid_argument", arg = arg,
-             expected = paste("a decision (classifier) model, or emulation enabled with",
-                              "gptr_config(system1 =)"))
+               paste0("Use a decision model (model = jev or \"ollama/clef-flash\"; after ",
+                      "gptr_config(system1 = \"emulate:<ref>\"), model = jev runs it through a ",
+                      "chat model), or drop the argument.")),
+             "invalid_argument", arg = arg, expected = "a decision (classifier) model")
 }
 
 #' TRUE unless the call's model is a classifier, left to P13's `classifier` route (IC-74)

@@ -194,8 +194,8 @@ works on the objects already in memory.
   `opus = gptr_fake_provider(...)`, `model = opus` uses the alias and suggests `!!opus`.
 * `choices`, `levels`, `threshold`, `min_confidence` and `uncertain` given to a conversational model
   are refused, naming the argument; they were ignored, and the call returned a session on which
-  `sum()`, `[` and `gptr_prob()` then failed. Use a decision model such as `jev`, or opt into
-  emulation with `gptr_config(system1 = "emulate:<ref>")`.
+  `sum()`, `[` and `gptr_prob()` then failed. Use a decision model such as `jev`; after
+  `gptr_config(system1 = "emulate:<ref>")`, `model = jev` runs it through a chat model.
 * The `uncertain = "stop"` error names the uncertain inputs (the first ten) and carries their
   positions (`$index`), `$names` and `$confidence`, the confidence the band tests, and every answer
   (`$value`), which it used to discard; `$prob` is unchanged.

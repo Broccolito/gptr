@@ -2215,11 +2215,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   nested, continue and new routes refused only `.opts$system1_images` (`route_refuse_s1_images()`, IC-74 §4).
 - Fix: `route_refuse_s1_args()` replaces it at its three call sites. After the images check it refuses the
   first of `choices`, `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain` as
-  `invalid_argument` naming it, pointing to `jev`, `"ollama/clef-flash"` or `gptr_config(system1 =
-  "emulate:<ref>")`. The continue route and a configured default chat model refuse too; an explicit
-  `threshold = 0.5` runs. `?peter`, 03 §4.1 and 04 §6.1.1 step 5 amended; NEWS entry.
+  `invalid_argument` naming it, pointing to `jev` or `"ollama/clef-flash"` (after `gptr_config(system1 =
+  "emulate:<ref>")`, `model = jev` runs a chat model). The continue route and a configured default chat model
+  refuse too; an explicit `threshold = 0.5` runs. `?peter`, 03 §4.1 and 04 §6.1.1 step 5 amended; NEWS entry.
 - Green: `^gptr-gateway$` PASS 384; with s1-route and arch-layers PASS 720; full suite (NOT_CRAN) FAIL
   0, WARN 0, SKIP 65, PASS 35466. Lint clean; `man/peter.Rd` regenerated, `tools::checkRd()` clean.
+- Review fix: the remedy said to opt into emulation with `gptr_config(system1 = "emulate:<ref>")`, but
+  emulation answers only `model = jev` or `"emulate:<ref>"` (`s1_target()`), so the setting alone left the
+  call refused with the same advice. It now names `model = jev` (also `expected`, `?peter`, NEWS, 04, D-250;
+  03 §4.1 never named the setting). Red `^gptr-gateway$` FAIL 5, PASS 381; green PASS 386; with s1-route,
+  arch-layers, zzz and lint-rules PASS 937. Lint clean; `man/peter.Rd` regenerated, `tools::checkRd()` clean.
 - Deviations: D-250 (s1-1 rule). Open: the `team` and `fanout` routes (`agents =`, `parallel =`) still drop
   these arguments and `.opts$system1_images` (measured: `parallel = 2, choices =` ran two sub-agents).
   Calling this helper from `subagent_route_checks()` fails test-arch-layers.R (P19 is L4, P08 L6), so it

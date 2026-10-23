@@ -1084,7 +1084,7 @@ test_that("System 1 arguments are refused on a conversational route (D-250)", {
     expect_identical(cnd$arg, arg)
     expect_match(conditionMessage(cnd), paste0("`", arg, "` shapes a System 1 decision"),
                  fixed = TRUE)
-    expect_match(conditionMessage(cnd), "emulate:<ref>", fixed = TRUE)
+    expect_match(conditionMessage(cnd), "model = jev runs it through a chat model", fixed = TRUE)
   }
   expect_length(fake_requests(fake), 0L)
   # the default threshold, and an explicit 0.5, are no System 1 request
@@ -1102,6 +1102,10 @@ test_that("System 1 arguments are refused on a conversational route (D-250)", {
   cnd = expect_error(peter("Which?", envir = new.env(), choices = c("a", "b")),
                      class = "gptr_error_invalid_argument")
   expect_identical(cnd$arg, "choices")
+  expect_length(fake_requests(fake), 2L)
+  # the system1 setting alone leaves a chat model's call conversational: emulation needs model = jev
+  local_gptr_options(system1 = "emulate:fake/fake-1")
+  expect_error(ask$choices(new.env()), class = "gptr_error_invalid_argument")
   expect_length(fake_requests(fake), 2L)
 })
 

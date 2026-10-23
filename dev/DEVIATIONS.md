@@ -3205,7 +3205,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule (s1-1): `route_refuse_s1_args()` (was `route_refuse_s1_images()`, whose refusal still comes first) runs
   in the `nested`, `continue` and `new` routes; it refuses the first of `choices`, `levels`, a `threshold`
   other than 0.5, `min_confidence` and `uncertain` as `invalid_argument` naming it, before any request, and
-  points to a decision model or `gptr_config(system1 = "emulate:<ref>")`. An explicit `threshold = 0.5`
+  points to a decision model (`model = jev`, which runs through a chat model after `gptr_config(system1 =
+  "emulate:<ref>")`; the setting alone moves no call to emulation). An explicit `threshold = 0.5`
   passes (no `missing()` tracking). Formerly they were validated and dropped: a chat model returned a
   session, on which `sum()`, `[` and `gptr_prob()` failed. The `team` and `fanout` routes (P19, L4) still
   drop them, and `.opts$system1_images` (measured); L4 may not call this P08 helper (test-arch-layers.R).

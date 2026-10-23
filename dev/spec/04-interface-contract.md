@@ -1089,8 +1089,9 @@ exact name.
    `GPTR_REPLAY=replay` still proves that a script makes no model calls. The `nested`, `continue` and `new`
    routes refuse the System 1 arguments before anything starts: `.opts$system1_images`, then the first of
    `choices`, `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain`, as
-   `gptr_error_invalid_argument` naming it, since a conversation would ignore them; a decision model or
-   `gptr_config(system1 = "emulate:<ref>")` serves them (IC-74, D-250).
+   `gptr_error_invalid_argument` naming it, since a conversation would ignore them; a decision model serves
+   them, and `model = jev` runs through a chat model after `gptr_config(system1 = "emulate:<ref>")`, which
+   alone moves no call to emulation (IC-74, D-250).
 
    The console's first-use setup runs before its banner or chat input only for a new interactive
    console without an explicit or effective configured model. It offers the expected Codex and
