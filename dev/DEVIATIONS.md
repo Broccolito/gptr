@@ -3738,6 +3738,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     plot_png()`). Contract-visible: 04 §15.10 IC-81. Tests: test-console-completion.R "RStudio's console has the
     triggers for the REPL's whole life, a run's too (IC-81)", "the reader completes around its prompt reads, not
     at + and not unflagged (IC-81)".
+  - The mention line writes every term as `@ <name> ...`: `@ fit2 not found, sent as text` and `@ data is a
+    folder, sent as text`, beside `@ fuel (data.frame, 32 x 4)`; a missing name was echoed as typed, `@fit2`.
+    Contract-visible: 03 §6.17. Tests: test-console-repl.R "@mentions: files become <file> blocks, bound names
+    become objects", "a binary @file is announced, not inlined".
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Rule (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three

@@ -418,7 +418,7 @@ console_objects = function(env, all = TRUE) {
 #' or absolute/home paths) become <file> blocks; syntactic names bound in `env` become context
 #' objects passed by name. `said` names what each mention resolved to, in order (D-244): `@ notes.md
 #' (2 lines)`, `@ fit (lm)` or `@ tbl (data.frame, 32 x 11)` (its class and dimensions), or
-#' `@fit2 not found, sent as text` (`is a folder` for a directory)
+#' `@ fit2 not found, sent as text` (`is a folder` for a directory), each `@ ` and the name
 #' @noRd
 repl_mentions = function(text, env) {
   pattern = "(?<![^\\s\"'\\\\`><=%;,|&{()}!])@(\"[^\"]+\"|[A-Za-z0-9_./~-]*[A-Za-z0-9_/~-])"
@@ -440,7 +440,7 @@ repl_mentions = function(text, env) {
       objects = c(objects, nm)
       said = c(said, paste0("@ ", nm, " (", mention_kind(nm, env), ")"))
     } else {
-      said = c(said, paste0(t, if (any(dir %in% TRUE)) " is a folder" else " not found",
+      said = c(said, paste0("@ ", nm, if (any(dir %in% TRUE)) " is a folder" else " not found",
                             ", sent as text"))
     }
   }

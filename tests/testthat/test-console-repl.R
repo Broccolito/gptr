@@ -442,10 +442,11 @@ test_that("@mentions: files become <file> blocks, bound names become objects", {
   e$fit = structure(list(), class = c("lm", "x"))
   men = repl_mentions("see @fit, @data, @data/, @fit2, x@tbl, (@tbl) and @\"no such.R\"", e)
   expect_identical(men$objects, c("fit", "tbl"))
-  expect_identical(men$said, c("@ fit (lm)", "@data is a folder, sent as text",
-                               "@data/ is a folder, sent as text", "@fit2 not found, sent as text",
-                               "@ tbl (data.frame, 3 x 1)",
-                               "@\"no such.R\" not found, sent as text"))
+  # every term in one shape, `@ <name> ...` (review of Tasks 22-27)
+  expect_identical(men$said, c("@ fit (lm)", "@ data is a folder, sent as text",
+                               "@ data/ is a folder, sent as text",
+                               "@ fit2 not found, sent as text", "@ tbl (data.frame, 3 x 1)",
+                               "@ no such.R not found, sent as text"))
   expect_identical(repl_mentions("hello there", e)$said, character())
 })
 
@@ -584,7 +585,7 @@ test_that("one dim line under a sent prompt names what its @mentions resolved to
   )
   expect_identical(out[match("peter> use @my_cars and @fit2", out) + 0:1],
                    c("peter> use @my_cars and @fit2",
-                     "@ my_cars (data.frame, 32 x 11) · @fit2 not found, sent as text"))
+                     "@ my_cars (data.frame, 32 x 11) · @ fit2 not found, sent as text"))
   # no line for a prompt without @
   expect_identical(out[match("peter> hello there", out) + 0:1], c("peter> hello there", "one"))
   # at column 2 where the console margin applies, dim, wrapped between its terms, a term wider
@@ -596,8 +597,8 @@ test_that("one dim line under a sent prompt names what its @mentions resolved to
   said = written(function() repl_turn(rs, "use @my_cars, @fit2 and @fit2_with_a_long_name"))
   expect_identical(said,
                    paste0("  \033[38;5;244m@ my_cars (data.frame, 32 x 11)\033[39m\n",
-                          "  \033[38;5;244m@fit2 not found, sent as text\033[39m\n",
-                          "  \033[38;5;244m@fit2_with_a_long_name not found, s…\033[39m\n"))
+                          "  \033[38;5;244m@ fit2 not found, sent as text\033[39m\n",
+                          "  \033[38;5;244m@ fit2_with_a_long_name not found, …\033[39m\n"))
   expect_identical(written(function() repl_turn(rs, "hello there")), "")
 })
 

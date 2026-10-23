@@ -1935,7 +1935,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   next prompt's context within 300 tokens [IC-73]) and `!!expr` (not added), fenced ```` ```r ```` blocks, `"""` multi-line prompts,
   trailing backslash, `@file` and `@object` mentions (a word starting with `@`, so an e-mail address stays text;
   after a sent prompt one dim line names what they resolved to, `@ mtcars_copy (data.frame, 32 x 11) · @ notes.md
-  (first 40 lines) · @fit2 not found, sent as text`, wrapped between its terms, and none without a mention
+  (first 40 lines) · @ fit2 not found, sent as text`, wrapped between its terms, and none without a mention
   [D-244]); a warning
   near the readline line limit (4,095 bytes on
   R < 4.5, 8,190 on R >= 4.5 [18 fact-check]); optional history through `utils::timestamp()`

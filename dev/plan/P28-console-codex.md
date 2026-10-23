@@ -1384,7 +1384,9 @@ Decisions:
     bold red, and there is no hint. Enter writes the line plain, as readline leaves it.
   - `repl_mentions()` returns `said`: a file `@ notes.md (6 lines)`, `(first 40 lines)` or `(binary, 3
     bytes)`; an object its class and dimensions, read in a leaf (`mention_kind()`, 03 §6.4 R4); a directory
-    `is a folder, sent as text`. `repl_turn()` writes the line and passes the mentions to `console_send()`
+    `is a folder, sent as text` (amended in the review of Tasks 22-27: every term `@ <name> ...`, so `@ fit2 not
+    found, sent as text`; the echo as typed, `@fit2`, read as misaligned beside `@ fuel`). `repl_turn()` writes the
+    line and passes the mentions to `console_send()`
     (`console_call()` takes them), so they are resolved once.
   - The line wraps between its terms at the console's content width; a term wider than that is cut. "One
     line" does not fit: the example above is 99 columns, and a cut at 80 columns hid `not found`.
