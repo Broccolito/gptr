@@ -3186,6 +3186,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   Measured on the Versa gateway: Opus 4.8 declared adaptive and Sonnet 4.6 on a budget return signed thinking;
   Opus 4.8 declared without the capability and given a level gets the provider's HTTP 400 for `enabled` (no id
   inference, by plan); with no level its body is unchanged.
+- Rule (thinking-3): `check_choice()` and `gateway_choice()` report a string that is not a choice through
+  `choice_abort()`: "`<arg>` must be one of ...; the string given is not one of them.", plus "Did you mean
+  "<choice>"?" for a choice equal to it but for case. The value is never quoted; a non-string keeps
+  `arg_abort()`'s class and length. Formerly `thinking = "ultra"` read "not a character of length 1".
 - Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
   model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal); 07
   §2.1 and the 04 `model_prepare()` row (P06 prepares); the 04 `model_resolve()` row (the empty-route hint); 04
@@ -3193,7 +3197,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   warnings (`untrusted_setting`, `unknown_model_setting`); 04 `gptr_config()` project scope, §10.2 row
   24, §11.2 text and `mode` row, §11.16, §15 IC-53 item 1 and IC-78, 03 §5.9, §6.8.1 and §6.8.2,
   `?gptr_config` and the configuration vignette (a trusted project's `mode`; the template); 04 §15 IC-80
-  (thinking) and `?gptr_provider`'s bedrock-converse example (`reasoning`, `capabilities`).
+  (thinking) and `?gptr_provider`'s bedrock-converse example (`reasoning`, `capabilities`); 04 §1.1 (a
+  string that is not a choice).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
   match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
@@ -3207,4 +3212,5 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   "gptr_config(mode = ) in a trusted project applies there; yolo is refused (D-250)", "a gptr_init() project
   leaves mode and record to the user's settings (D-250)"; test-provider-bedrock.R "a Claude model gets the
   thinking level in additionalModelRequestFields (D-250)"; test-live-bedrock.R (opt-in) "thinking = 'high' on
-  an adaptive Claude model is signed". Evidence: progress/fixes.md Task FIX-17.
+  an adaptive Claude model is signed"; test-utils-conditions.R "a string that is not one of the choices is
+  reported as such, never quoted (D-250)". Evidence: progress/fixes.md Task FIX-17.

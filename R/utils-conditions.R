@@ -243,9 +243,28 @@ check_number = function(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE
 #' @noRd
 check_choice = function(x, choices, arg) {
   if (identical(x, choices)) return(invisible(choices[[1L]]))
-  ok = rlang::is_string(x) && x %in% choices
-  if (!ok) arg_abort(x, arg, paste0("one of ", paste0("\"", choices, "\"", collapse = ", ")))
+  if (!rlang::is_string(x) || !x %in% choices) choice_abort(x, choices, arg)
   invisible(x)
+}
+
+#' A bad choice: a string is said not to be one (with a choice that matches it but for case),
+#' anything else is described by class and length; the value itself is never quoted
+#' @noRd
+choice_abort = function(x, choices, arg) {
+  expected = if (length(choices)) {
+    paste0("one of ", paste0("\"", choices, "\"", collapse = ", "))
+  } else {
+    "a registered name (none is registered)"
+  }
+  if (!rlang::is_string(x)) arg_abort(x, arg, expected)
+  hint = choices[tolower(choices) == tolower(x)]
+  gptr_abort(
+    paste0("`", arg, "` must be ", expected, "; the string given is not one of them.",
+           if (length(hint)) paste0(" Did you mean \"", hint[[1L]], "\"?")),
+    "invalid_argument",
+    arg = arg,
+    expected = expected
+  )
 }
 
 #' @noRd

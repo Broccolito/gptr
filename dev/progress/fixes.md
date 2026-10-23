@@ -2143,3 +2143,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `capabilities` and given a level now gets the provider's HTTP 400 ("Use thinking.type.adaptive ...") instead
   of a silent no-op (the plan rules out id inference; no gptr hint added); `:max` still clamps to `high` on a
   record without `thinking_levels` (thinking-4); `usage$reasoning` stays 0 on Converse.
+
+### thinking-3 - A string that is not one of the choices is reported as such
+- Finding 161. Red: `^utils-conditions$` FAIL 3, PASS 64: `check_choice("ultra", c("off", "high"),
+  "thinking")` said "must be one of "off", "high", not a character of length 1." and `"HIGH"` got no hint.
+- Cause: `check_choice()` and `gateway_choice()` fell through to `arg_abort()`, which describes class and length
+  only, so a right-typed value that is not a choice read as a type error (`.opts$thinking`, `.opts$context`,
+  `replay`, `.scope`).
+- Fix: `choice_abort()` (`R/utils-conditions.R`), called by both: a string gets "...; the string given is not
+  one of them." plus "Did you mean "<choice>"?" when it equals a choice but for case (the hint names the choice,
+  never the value); anything else keeps `arg_abort()`. 04 §1.1 amended; NEWS entry.
+- Green: `^utils-conditions$` PASS 70 (a fake key is still never quoted; `peter(.opts = list(thinking =
+  "ultra"))` gives the new text); gptr-capture, gptr-config, gptr-gateway, doc-replay, arch-layers and
+  lint-rules PASS 2039. Lint clean; no Rd change.
+- Deviations: D-250 (thinking-3 rule). Open: NA still reads "not a character of length 1" (not a string).

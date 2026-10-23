@@ -106,7 +106,9 @@ Every exported function validates its arguments on entry with the internal check
 (P01) and signals `gptr_error_invalid_argument` with fields `arg` (the argument name) and `expected` (a short
 phrase), never including the argument's value (it may be large or secret; only `class(x)[1]` and `length(x)` may
 appear). Checkers never use `match.arg()` (copy-safety rule R3); `check_choice()` does exact matching and accepts
-the first element of the default vector when the argument is missing.
+the first element of the default vector when the argument is missing. A string that is not one of the choices is
+reported as such ("the string given is not one of them"), with "Did you mean" and the choice it equals but for
+case (D-250).
 
 ```r
 check_string(x, arg, null = FALSE, empty = FALSE)          # chr(1), not NA

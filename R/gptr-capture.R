@@ -262,14 +262,7 @@ gateway_opts_names = function() {
 #' first element (match.arg())
 #' @noRd
 gateway_choice = function(x, choices, arg) {
-  if (!is.character(x) || length(x) != 1L || is.na(x) || !x %in% choices) {
-    expected = if (length(choices)) {
-      paste0("one of ", paste0("\"", choices, "\"", collapse = ", "))
-    } else {
-      "a registered name (none is registered)"
-    }
-    arg_abort(x, arg, expected)
-  }
+  if (!rlang::is_string(x) || !x %in% choices) choice_abort(x, choices, arg)
   x
 }
 

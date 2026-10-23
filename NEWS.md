@@ -180,6 +180,9 @@ works on the objects already in memory.
   was dropped without a word. Declare `capabilities = list(adaptive_thinking = TRUE, effort = TRUE)`
   on Claude 4.6 and later models (see `?gptr_provider`); without it a token budget is sent, which
   Claude Opus 4.8 refuses. Other Converse models say once that the level is not sent.
+* A string that is not one of an argument's choices, such as `.opts = list(thinking = "ultra")`,
+  is reported as such ("the string given is not one of them", with "Did you mean" when it differs
+  from a choice only in case) instead of "not a character of length 1".
 
 # gptr 0.7.0
 
