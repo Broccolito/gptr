@@ -1947,7 +1947,7 @@ test_that("per-call record TRUE does not grant recording consent under persisten
 })
 
 test_that("a script call gptr_doc() cannot record, as it bound another document, says so once", {
-  x = local_doc_e2e(rep(list(fake_tool("r", code = "x = 1"), fake_text("x is one.")), 3L),
+  x = local_doc_e2e(rep(list(fake_tool("r", code = "x = 1"), fake_text("x is one.")), 4L),
                      record = NULL)
   local_gptr_options(interactive = FALSE, quiet = FALSE)
   out = file.path(x$root, "out.R")
@@ -1964,12 +1964,20 @@ test_that("a script call gptr_doc() cannot record, as it bound another document,
   expect_identical(e$x, 1)
   expect_length(grep(said(fk), msgs), 1L)
   expect_length(grep(said(fk), testthat::capture_messages(doc_e2e_source(fk))), 0L)
+  # run from a subdirectory, the suggested gptr_doc() path is the one it resolves there (FIX-16)
+  sub = file.path(x$root, "analysis")
+  dir.create(sub)
+  drv = file.path(sub, "driver.R")
+  writeLines('s = peter("Compute x.")', drv)
+  msgs = withr::with_dir(sub, testthat::capture_messages(doc_e2e_source(drv)))
+  expect_length(grep("it is in analysis/driver.R, but", msgs, fixed = TRUE), 1L)
+  expect_length(grep("run gptr_doc(\"driver.R\") to record", msgs, fixed = TRUE), 1L)
   # under Rscript the call is sited in the script the process runs
   testthat::local_mocked_bindings(doc_command_args = function() c("R", paste0("--file=", job)))
   msgs = testthat::capture_messages(eval(doc_e2e_call(prompt = "Compute y."),
                                          new.env(parent = globalenv())))
   expect_length(grep(said(job), msgs), 1L)
-  expect_length(fake_requests(x$fake), 6L)
+  expect_length(fake_requests(x$fake), 8L)
   expect_false(file.exists(out))
   expect_identical(readLines(fk), 's = peter("Compute x.")')
   expect_identical(readLines(job), 's = peter("Compute y.")')

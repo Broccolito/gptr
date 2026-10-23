@@ -436,18 +436,19 @@ doc_skip_undone = function(site) {
 
 #' Keep `site` in `call$doc` for recording when the call may record: not in replay mode and write
 #' consent can still be given (IC-45); else NULL. A call that cannot record because gptr_doc()
-#' bound another document says so once per document (without a binding it stays silent).
+#' bound another document says so once per document (without a binding it stays silent); the
+#' gptr_doc() it suggests names the document as gptr_doc() resolves it, from the working directory.
 #' @noRd
 doc_keep = function(call, site, mode) {
   may = !is.null(site) && !isFALSE(call$args$opts$record) && !identical(mode, "replay")
   ok = may && doc_consent_possible(site$path)
   b = the$doc_binding$path
   if (may && !ok && rlang::is_string(b)) {
-    rel = doc_rel(site$path)
-    gptr_inform(paste0("gptr did not record this call: it is in ", rel, ", but gptr_doc() bound ",
-                       doc_rel(b), ". Calls are recorded into the document that holds them; run ",
-                       "gptr_doc(\"", rel, "\") to record them there."), "notice",
-                .once = paste0("doc_other_binding:", path_key(site$path)))
+    gptr_inform(paste0("gptr did not record this call: it is in ", doc_rel(site$path), ", but ",
+                       "gptr_doc() bound ", doc_rel(b), ". Calls are recorded into the document ",
+                       "that holds them; run gptr_doc(",
+                       doc_str_literal(path_rel(site$path, getwd())), ") to record them there."),
+                "notice", .once = paste0("doc_other_binding:", path_key(site$path)))
   }
   assign("doc", if (ok) site else NULL, envir = call)
 }

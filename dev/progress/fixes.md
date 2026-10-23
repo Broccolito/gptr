@@ -2504,3 +2504,15 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   PASS 2914 SKIP 1 (INFRA-03; NOT_CRAN=true). Lint clean. A root-level `log.R` still reads
   `"log.R"`.
 - Deviations: none. Open: doc-7's, a moved transcript keeps the path it had when recorded.
+
+### doc-2b - The other-binding notice suggests gptr_doc() with the path it resolves
+- Review of doc-2 (`R/doc-replay.R`, low).
+- Red: FAIL 1 in `^doc-replay$` (PASS 707): run from `analysis/` of a project bound to `out.R`, a
+  fake `peter()` call in `analysis/driver.R` suggested `run gptr_doc("analysis/driver.R")`.
+- Cause: the literal came from `doc_rel()`, relative to the project root, while `gptr_doc()`
+  resolves its argument against the working directory (`analysis/analysis/driver.R`, refused as
+  not in an existing directory); it was also pasted without escaping.
+- Fix: the suggestion is `doc_str_literal(path_rel(site$path, getwd()))`: relative inside the
+  working directory, absolute outside it; the sentence keeps `doc_rel()` for both documents.
+- Green: `^(doc-.*|arch-layers|lint-rules)$` PASS 2672 SKIP 2 (repr; NOT_CRAN=true). Lint clean.
+- Deviations: none (the notice's form in D-249 stands). Open: none.
