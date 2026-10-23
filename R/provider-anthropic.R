@@ -1193,19 +1193,11 @@ anthropic_elements = function(model, msgs, opts, anchors = "project", tail = FAL
   list(elements = out, betas = unique(betas), prev = prev, mid = mid)
 }
 
-#' Thinking, effort, budget and max_tokens of a request (anthropic-messages, and adaptive Claude
-#' on bedrock-converse): adaptive models get adaptive thinking and an effort, budget models
-#' `enabled` with a budget and the interleaved beta (07 section 2.6), raising max_tokens up to
-#' max_output so that 1024 <= budget_tokens < max_tokens; with no room for that, no thinking
+#' Thinking, effort and budget of a request: adaptive models get adaptive thinking and an
+#' effort, budget models `enabled` with a budget and the interleaved beta (07 section 2.6)
 #' @noRd
 anthropic_thinking = function(model, params) {
-  max_tokens = params$max_tokens %||% model$max_output %||% 64000L
-  if (is.null(max_tokens) || is.na(max_tokens)) max_tokens = 64000L
-  cap = model$max_output
-  if (is.null(cap) || is.na(cap)) cap = Inf
-  asked = min(max_tokens, cap)
-  out = list(thinking = NULL, effort = NULL, budget = NULL, betas = character(),
-             max_tokens = asked)
+  out = list(thinking = NULL, effort = NULL, budget = NULL, betas = character())
   if (!isTRUE(model$reasoning)) return(out)
   level = params$thinking
   if (isTRUE(adp_model_cap(model, "adaptive_thinking", FALSE))) {
@@ -1217,15 +1209,9 @@ anthropic_thinking = function(model, params) {
       out$effort = params$effort %||% adp_level_effort(level)
     }
   } else if (!is.null(level) && !identical(level, "off")) {
-    want = adp_budget(level)
-    max_tokens = min(max(asked, want + 1024L), cap)
-    budget = min(want, max(1024L, max_tokens - 1024L))
-    if (budget < max_tokens) {
-      out$budget = as.integer(budget)
-      out$thinking = list(type = "enabled", budget_tokens = out$budget)
-      out$betas = "interleaved-thinking-2025-05-14"
-      out$max_tokens = max_tokens
-    }
+    out$budget = adp_budget(level)
+    out$thinking = list(type = "enabled", budget_tokens = out$budget)
+    out$betas = "interleaved-thinking-2025-05-14"
   }
   out
 }
@@ -1253,9 +1239,27 @@ anthropic_build = function(model, context, opts) {
   tail = !is.null(params$returns) && !native_returns
   rendered = anthropic_elements(model, msgs, opts, anchors, tail)
   th = anthropic_thinking(model, params)
+
+  max_tokens = params$max_tokens %||% model$max_output %||% 64000L
+  if (is.null(max_tokens) || is.na(max_tokens)) max_tokens = 64000L
+  cap = model$max_output
+  if (is.null(cap) || is.na(cap)) cap = Inf
+  asked = min(max_tokens, cap)
+  max_tokens = asked
+  if (!is.null(th$budget)) {
+    max_tokens = min(max(asked, th$budget + 1024L), cap)
+    budget = min(th$budget, max(1024L, max_tokens - 1024L))
+    if (budget < max_tokens) {
+      th$thinking = list(type = "enabled", budget_tokens = as.integer(budget))
+    } else {
+      # the API needs 1024 <= budget_tokens < max_tokens: no room to think, so no thinking
+      th = list(thinking = NULL, effort = th$effort, budget = NULL, betas = character())
+      max_tokens = asked
+    }
+  }
   betas = c(rendered$betas, th$betas)
 
-  head = list(model = model$id, max_tokens = as.integer(th$max_tokens), stream = TRUE)
+  head = list(model = model$id, max_tokens = as.integer(max_tokens), stream = TRUE)
   head$cache_control = if (identical(plan$tail_ttl, "1h")) cc1h else list(type = "ephemeral")
   if (!is.null(th$thinking)) head$thinking = th$thinking
   oc = list()

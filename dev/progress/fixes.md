@@ -2336,6 +2336,11 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   at `high`, `max` and `:high` answers "ready" (one notice; `max` also the thinking-4 clamp message); Opus 4.8
   declared adaptive at `high` returns a thinking block; `^live-bedrock$` PASS 7 (+1: an undeclared record
   answers at `high`).
+- Review fix (simplicity): with the budget path gone, thinking-1's refactor of the anthropic-messages adapter
+  (the budget clamp moved from `anthropic_build()` into `anthropic_thinking()`, which returned `max_tokens`) had
+  no second caller, so it is reverted: `R/provider-anthropic.R` is main's again, and `bedrock_thinking()` reads
+  only the `thinking` and `effort` that main's `anthropic_thinking()` returns. provider-anthropic,
+  provider-bedrock and arch-layers PASS 782; the D-250 sentence about the clamp is deleted.
 - Deviations: D-250 (thinking-1 rule rewritten in place; D-193 pointer). Open: Claude 4.5 and earlier on
   Converse get no thinking (no budget declaration exists); `usage$reasoning` stays 0 on Converse.
 

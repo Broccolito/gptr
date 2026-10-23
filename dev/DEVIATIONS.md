@@ -3190,10 +3190,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `enabled` with HTTP 400 and Claude 4.5 and earlier have no adaptive mode, so any guess fails a call for asking
   more reasoning, while sending nothing answers as before; an id rule would also go stale with each release.
   Formerly every level, `:max` and `off` sent the same body (D-193 cut thinking out); the first round sent an
-  undeclared record a budget, which broke `versa-bedrock/us.anthropic.claude-opus-4-8` at `high`.
-  `anthropic_thinking()` now holds anthropic-messages' budget clamp (1024 <= budget_tokens < max_tokens <=
-  max_output, else no thinking) and returns `max_tokens`. Measured on the Versa gateway: Opus 4.8 declared
-  adaptive returns signed thinking; undeclared at `high` answers without thinking.
+  undeclared record a budget, which broke `versa-bedrock/us.anthropic.claude-opus-4-8` at `high`. Measured on
+  the Versa gateway: Opus 4.8 declared adaptive returns signed thinking; undeclared at `high` answers without
+  thinking.
 - Rule (thinking-3): `check_choice()` and `gateway_choice()` report a string that is not a choice through
   `choice_abort()`: "`<arg>` must be one of ...; the string given is not one of them.", plus "Did you mean
   "<choice>"?" for a choice equal to it but for case. The value is never quoted; a non-string keeps
