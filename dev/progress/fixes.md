@@ -1935,3 +1935,27 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   0 listings).
 - Deviations: none. Open: an `*.Rproj` created within the mtime granularity of a cached listing
   (2 s on FAT) is seen only at the directory's next change.
+
+### ckpt-1 - Time only the walk against gptr.checkpoint_scan_budget
+- Findings 150, 196.
+- Red: FAIL 2 in `^ckpt-files$` (PASS 251): with `ckpt_prune()` slowed by 0.3 s and the budget at
+  0.25 s, a fake `peter()` call in mode auto whose `r` call writes `out.txt` in an empty
+  marker-less project printed the "Checkpoint scans of ... take longer than
+  gptr.checkpoint_scan_budget" notice and set the tracker's `per_turn`.
+- Cause: `ckpt_files_after()` timed all of `ckpt_files_step()`, which includes
+  `ckpt_prune()` -> `workspace_root()` -> `project_root()` on every walk and every predicted path,
+  and the blob-store root while storing; a slow root lookup alone switched the session to per-turn
+  scans and the notice blamed the scan.
+- Fix: the tracker computes its prune pattern once (`ckpt_files_tr()`: `prune`); `ckpt_walk(root,
+  prune = ckpt_prune(root))` and `ckpt_walked()` use it; `ckpt_files_scan()` notes the walk's own
+  time in `tr$walk_secs`, which `ckpt_files_after()` compares with the budget.
+- Green: `^ckpt-files$` PASS 253, with a new guard that a walk slowed past the budget still
+  switches once with one notice; `^(ckpt-.*|utils-paths|windows-security|windows-link-policy|
+  arch-layers|lint-rules)$` PASS 974 SKIP 12 (Windows only; NOT_CRAN=true). Lint clean. One
+  `after()` in an empty project with `ckpt_prune()` slowed by 0.3 s (3 runs, load 11): before
+  0.31 to 0.37 s and per-turn mode, after 0.001 to 0.06 s (walk 0.001 to 0.046 s), no switch.
+- Deviations: none; the documented contract already says walk time (`gptr.checkpoint_scan_budget`
+  in `?gptr_options`, P16). Two tests follow the new signature (a hand-made tracker carries
+  `prune`; the FIFO test's `ckpt_walk` mock takes it). Open: the prune pattern is fixed when the
+  tracker is made, as its root is. `.gptr/` is pruned at any depth, so only `tempdir()/gptr` can
+  escape it: when the root contains `tempdir()` and a `setwd()` mid-session leaves `.gptr/`.
