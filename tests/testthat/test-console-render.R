@@ -1189,6 +1189,18 @@ test_that("the status line names the model and the context left; unknown terms g
                    "done - fake-1 - 1 request - 1.1k tokens - $0.0100")
 })
 
+test_that("a reason's line breaks fold into one space; other controls stay escaped (sessions-7)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  # curl's two-line error, as a network failure gives it
+  x = console_status_line("error", "network error: a [h]:\nb")
+  expect_length(x, 1L)
+  expect_false(grepl("U+000A", x, fixed = TRUE))
+  expect_false(grepl("\n", x, fixed = TRUE))
+  expect_match(x, "a [h]: b", fixed = TRUE)
+  expect_identical(console_status_line("error", "a  \r\n  b\rc\n\nd \033[31m"),
+                   "error: a b c d <U+001B>[31m - 0 requests - 0 tokens")
+})
+
 test_that("console_context_left() measures the last request against compact_threshold() (IC-77)", {
   fake = gptr_fake_provider(list("ok"))
   u = fake_usage(input = 12000, cache_read = 6000)

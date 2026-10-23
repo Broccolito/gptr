@@ -5590,7 +5590,8 @@ its part in its own commit, and Task 27 finalises them.
     SGR.
   - Run totals (Task 26; amends item 6 and D-206): the status line is dim and written as a notice, at column 2
     and wrapped where the margin applies, `done · <model> · <n> requests · <tokens> tokens · <cost> · <k>%
-    context left`, with `aborted: <reason>` or `error: <reason>` for `done` as before: the model of the run's
+    context left`, with `aborted: <reason>` or `error: <reason>` for `done` as before (the reason's line breaks one
+    space, cheat-sheet review: curl's two-line error showed `<U+000A>`): the model of the run's
     last request (its usage row's `model`), and `sub-agents <cost>` after the own cost. A term whose value is
     unknown (IC-74) is left out, as is a cost not above 0 (a free or local model): `aborted · 1 request` after
     an abort that reported nothing. `format_cost()` keeps IC-74's form wherever a cost is shown.

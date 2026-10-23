@@ -1480,6 +1480,8 @@ Decisions:
     candidates in backticks (Task 23). A blank line ends the banner, after the yolo notice.
   - Positron's console answered `console_completes()` as R's readline on a tty (its ark has a tty stdin), so the
     banner offered tab there (visual check); `console_completes()` now excludes Positron, as IC-81 says.
+- (Amended in the cheat-sheet review, sessions-7:) the reason's line breaks, with the blanks around them, are one
+  space, so curl's two-line error stays on the line (it showed `<U+000A>`); other control characters stay escaped.
 
 Tests (`test-console-render.R`, `test-console-repl.R`, `test-console-commands.R`), RED first:
 - The status text.

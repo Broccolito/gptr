@@ -848,12 +848,13 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
 #' $0.0042 · 82% context left` from the run's own requests (its usage rows): the last request's
 #' model, then `sub-agents $0.8500` when `kids` holds the costs of its sub-agents' requests, then
 #' the context the last request left (console_context_left()); the status and reason when it did
-#' not end idle. A term whose value is unknown (IC-74) is left out, as is a cost that is not above
-#' 0 (a free or local model)
+#' not end idle, the reason's line breaks one space (curl's errors take two lines). A term whose
+#' value is unknown (IC-74) is left out, as is a cost that is not above 0 (a free or local model)
 #' @noRd
 console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL) {
   word = if (identical(status, "idle")) "done" else console_escape(status %||% "?", FALSE)
   if (!identical(status, "idle") && rlang::is_string(reason) && nzchar(reason)) {
+    reason = gsub("\\s*(\r\n|\r|\n)\\s*", " ", reason, perl = TRUE)
     word = paste0(word, ": ", console_escape(reason, FALSE))
   }
   cols = c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h")

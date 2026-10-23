@@ -3923,3 +3923,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-console-repl.R "the banner: dim lines at column 2 with the keys bold, then a blank line (NS-1)", "the banner
   names the console's key and promises nothing it lacks (review, Task 26)"; test-console-commands.R "/cost,
   /context, /fork and /resume work on a session that ran".
+- Cheat-sheet review (2026-10-23, sessions-7): a status line's reason has its line breaks, with the blanks around them,
+  as one space, so curl's two-line error (`network error: Could not resolve host [h]:` / `Failed to connect ...`)
+  stays on the line, where it showed `<U+000A>`; other control characters stay escaped. Contract-visible: 04 §15.10
+  IC-77. Tests: test-console-render.R "a reason's line breaks fold into one space; other controls stay escaped
+  (sessions-7)".
