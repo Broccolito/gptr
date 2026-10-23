@@ -1450,7 +1450,9 @@ run_stop_budget = function(run, hit) {
 #' settlement cancel a job that has not started
 #' @noRd
 run_tools = function(run, act) {
-  calls = lapply(act$calls, function(b) call_record(run, b))
+  # what the model was offered: the frozen array and every tool_change addition (D-248)
+  offered = names(prompt_tools_known(run$shell, run_data(run)$frozen)$decls)
+  calls = lapply(act$calls, function(b) call_record(run, b, offered))
   run$status = "tools"
   run$busy = TRUE
   job = function() {

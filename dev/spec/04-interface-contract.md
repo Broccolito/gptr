@@ -541,7 +541,7 @@ list(id = chr(1),            # the tool_call block id
      name = chr(1),          # tool name as the model wrote it
      input = named list,     # parsed arguments (after validation and coercion: the validated input)
      raw = chr(1) | NULL,    # raw argument JSON
-     tool = <spec:tool> | NULL,   # NULL when unknown
+     tool = <spec:tool> | NULL,   # NULL when unknown or not offered to the model (D-248)
      nested = lgl(1),        # a peter$ call made inside an r evaluation
      parent_id = chr(1) | NULL,   # the outer r call's id for nested calls
      outer_level = int(1) | NULL, # risk level approved for the outer call
@@ -944,7 +944,7 @@ contain no value.
 | Class | Owner | Shape | `print` |
 |---|---|---|---|
 | `gptr_lines` | P10 | chr (file lines) + attributes `path`, `offset`, `limit`, `total`, `truncated`, `encoding` | Pi's read format, within `gptr.helper_output_tokens` |
-| `gptr_patch` | P10 | list(path, message, diff (chr), n_edits, fuzzy (lgl)) | the message; the diff only when `fuzzy` |
+| `gptr_patch` | P10 | list(path, message, diff (chr), n_edits, fuzzy (lgl), reasons (chr, D-248)) | the message; only when `fuzzy`, the bracketed reasons and the diff (D-248) |
 | `gptr_matches` | P10 | `c("gptr_matches", "data.frame")`: `file`, `line` (int), `text`; attr `truncated`, `limit` | `file:line: text` lines within 1,500 tokens, then a notice |
 | `gptr_files` | P10 | `c("gptr_files", "data.frame")`: `path`, `size` (num), `mtime` (POSIXct), `type` (`file`, `dir`, `link`) | paths within 1,500 tokens |
 | `gptr_cmd` | P22 | list(cmd (chr), status (int), ok (lgl), stdout (chr(1)), stderr (chr(1)), elapsed, timed_out (lgl), id (out id)) | head 40% / tail 60% within `max_tokens`, stderr at most 25% with 200/100-token floors [G5 fact-check]; `format`/`as.character` give stdout |
@@ -2582,7 +2582,7 @@ snapshot of IC-53), `root` (the root session id for budgets, IC-66).
 
 | Function | Contract | Consumers |
 |---|---|---|
-| `dispatch_tools(run, calls)` | executes a turn's tool calls in source order; for each: lookup (unknown -> error result `Tool <name> not found`), `tool_validate()`, `tool_call` hooks, `perm_check()`, checkpointers' `before`, execute (sequential tools through `reactor_enqueue_tool()`; concurrent ones as reactor work), checkpointers' `after`, `tool_result` hooks; never throws; a `length`/`refusal` stop fails every call unrun; returns `list(results = list(<gptr_tool_result>), terminate = lgl(1))` | P06 |
+| `dispatch_tools(run, calls)` | executes a turn's tool calls in source order; for each: lookup (unknown, or not in the tools the session offered the model, the frozen array and every `tool_change` addition -> error result `Tool <name> not found`; D-248), `tool_validate()`, `tool_call` hooks, `perm_check()`, checkpointers' `before`, execute (sequential tools through `reactor_enqueue_tool()`; concurrent ones as reactor work), checkpointers' `after`, `tool_result` hooks; never throws; a `length`/`refusal` stop fails every call unrun; returns `list(results = list(<gptr_tool_result>), terminate = lgl(1))` | P06 |
 | `dispatch_nested(name, input, ctx)` | the nested entry for `peter$...` calls made while an `r` evaluation runs: if the outer code's static analysis listed this function at a level no higher than the level approved for the outer call and `call_risk()` of the actual input is no higher either (IC-78), runs without a second prompt; otherwise `perm_check()`; records into the outer result's `details$nested` (at most 20); returns the tool result's `value` (or signals the tool's error as an R error of class `gptr_error_tool` inside the model's code) | P10, P18, P22, P23 |
 | `tool_validate(tool, input)` | `schema_validate()` of the tool's `parameters`; `{"INVALID_JSON": raw}` when the final strict parse failed | P06, P18 |
 | `perm_check(call, run)` (IC-04, IC-53) | `list(decision = "allow" \| "deny" \| "ask" \| "ask_human" \| "modify", reason = chr(1), input = named list, risk = <gptr_risk> \| NULL, rule = chr(1) \| NULL)`: every `policy` spec's `check(call, ctx)` (deny > ask_human > ask > modify > allow; a throwing policy denies; **no active `mode` policy = ask**, fail closed, unless the run's snapshot has `gptr.unsafe_no_permissions`); a `modify` is re-classified and re-checked once (a second modify denies); an `ask` goes to `permission_request` hooks (first decision; error = deny), then to `ui$permission()` when `gptr_can_prompt()` holds in the run's snapshot; an `ask_human` skips the hooks; without anyone to prompt: `gptr.noninteractive_ask = "stop"` stops the run with status `blocked` (the gateway raises `gptr_error_permission` with `action` and `how_to_allow`), `"deny"` returns a denial the model sees | P06, P20 (through the injected `opts$gate`, IC-33), P18 (server calls) |
@@ -2719,9 +2719,9 @@ describe_binding("fit", e, budget = 80L)
 | `member_closure(spec)` | `tool-namespace.R` | a `gptr_member` function: formals from the schema (required properties first, optional ones default `NULL`), body that validates, calls `dispatch_nested()` when a run is executing on the stack and the spec's `fun`/`execute` directly otherwise (user calls are the user's actions) | P10, P18 |
 | `ns_catalog(session, kinds = c("plugin"), budget = 1500L)` | `tool-namespace.R` | chr(1) body of the `plugins` section: one `peter$<ns>$<name>(<sig>)  # <first sentence>` line per plugin member, least-recently-used descriptions trimmed first | P10 (its `plugins` section) |
 | `bm25_index(docs)`, `bm25_search(index, words, limit = 8L)` | `tool-namespace.R` | the search behind `peter$search()`; `docs` = df(`id`, `text`) | P10, P18 |
-| `read_file(path, offset = NULL, limit = NULL, budget_tokens = gptr.read_max_tokens)` | `tool-read.R` | `list(text = chr(1), image = <block> \| NULL, details = list)` (Pi read semantics [01 §3.2], line numbers off, images by magic bytes, encodings, 16 MiB raw index / streaming index / cached sparse index above 20 MB) | P10 |
+| `read_file(path, offset = NULL, limit = NULL, budget_tokens = gptr.read_max_tokens)` | `tool-read.R` | `list(text = chr(1), image = <block> \| NULL, details = list)` (Pi read semantics [01 §3.2], except that a final newline ends the last line, as `readLines()` counts (D-248), line numbers off, images by magic bytes, encodings, 16 MiB raw index / streaming index / cached sparse index above 20 MB) | P10 |
 | `write_file(path, content)` | `tool-write.R` | atomic; keeps the existing EOL, BOM and encoding of an existing file; creates parent directories; `list(bytes, created, details)` | P10, P23 |
-| `edit_file(path, edits, replace_all = FALSE)` | `tool-edit.R` | Pi's multi-edit semantics (each `oldText` matched against the original, unique, non-overlapping), fuzzy fallback (whitespace, quotes, NFKC with stringi), a pasted `*** Begin Patch` envelope applied through `patch_apply()`; `list(message, diff = chr, fuzzy = lgl(1), details)`; the result text carries the diff (at most 400 tokens) only when something deviated from the literal request | P10, P15 (document edits routed back after block bookkeeping) |
+| `edit_file(path, edits, replace_all = FALSE)` | `tool-edit.R` | Pi's multi-edit semantics (each `oldText` matched against the original, unique, non-overlapping), fuzzy fallback (whitespace, quotes, NFKC with stringi) that splices newText into the original bytes of the matched span and rewrites the touched lines from the fuzzy view only when a span boundary cannot be mapped back (D-248), a pasted `*** Begin Patch` envelope applied through `patch_apply()`; `list(message, diff = chr, fuzzy = lgl(1), details)`; the result text carries the diff (at most 400 tokens) only when something deviated from the literal request | P10, P15 (document edits routed back after block bookkeeping) |
 | `patch_apply(envelope, root = project_root())` | `tool-edit.R` | applies a Codex-style patch (`*** Add File`, `*** Update File`, `*** Delete File`, `@@` hunks); `list(files, message, details)` | P10 |
 | `diff_lines(old, new, context = 3L, max_tokens = 400L)` | `tool-diff.R` | chr unified diff (prefix/suffix trim, patience anchors, Myers capped at D = 256) | P10, P15, P16 |
 | `walk_files(root = ".", type = c("file", "dir", "any"), gitignore = TRUE, hidden = FALSE, max = Inf, prune = NULL)` | `tool-walk.R` | df `path` (relative to `root`), `size`, `mtime`, `type`; pruned walker (skips `.git`, `node_modules`, `renv`, `.venv`, `__pycache__`), gitignore engine | P10, P16 |
@@ -3358,10 +3358,11 @@ peter$<ns>$<name>(<arg>: <type>, <arg>?: <type>)  # <first sentence of the descr
 
 Mode blocks and the first-message formats are verbatim in §7.4 of `03`; the non-interactive suffix appended inside
 the mode block is exactly `No one can answer questions or approvals in this run, so actions that need approval
-stop the run. State your assumptions instead of asking.` (with `gptr.noninteractive_ask = "deny"` the second
-clause reads `so actions that need approval are refused.`); in `manual` mode, where `ask` stays declared (IC-68),
-it is `No one can answer questions or approvals in this run: actions that need approval, and questions asked with
-the ask tool, stop the run. Ask only when no reasonable assumption lets you continue.`
+stop the run. State your assumptions instead of asking.` (with `gptr.noninteractive_ask = "deny"`, in every mode,
+the second clause reads `so actions that need approval are refused.`, D-248); otherwise in `manual` mode, where
+`ask` stays declared (IC-68), it is `No one can answer questions or approvals in this run: actions that need
+approval, and questions asked with the ask tool, stop the run. Ask only when no reasonable assumption lets you
+continue.`
 
 ### 9.4 The `peter$` namespace members [stable]
 
@@ -4474,7 +4475,8 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 - `doc_block_lines()` drops, at top-level-expression granularity (`getParseData()` of each recorded code chunk),
   calls to `gptr_return()`/`gptr::gptr_return()` and to members whose spec has `record = FALSE`; a chunk that
   becomes empty is omitted; the value stays in `value=`. `record = FALSE` is set for `out`, `plot`, `help`,
-  `search`, `describe`; the `<r_session>` text tells the model to use them only with `record = false`.
+  `search`, `describe`; with a document bound (when `r` has `record`), the `<r_session>` text tells the model to
+  use them only with `record = false` (D-248).
 - Plan-mode runs never record code (`record` forced `FALSE`); their block holds one `## Plan: <plans path>`
   comment.
 - S-9 best effort: `doc_block_lines()` rewrites `<-` to `=` for `LEFT_ASSIGN` tokens whose assignment is a

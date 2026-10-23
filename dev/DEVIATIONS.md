@@ -3117,3 +3117,66 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `env_snapshot()` and `workspace_lines()`; `?gptr_options`, `?gptr_risk`, `?gptr_artifacts`, `?gptr_rewind`.
 - Tests: env-snapshot, env-describe, ckpt-objects, ckpt-rewind, perm-classify, gptr-capture, session-object (a
   ggplot2 guard), utils-options, subagent-team, copy-eval, arch-layers. Evidence: progress/fixes.md Task FIX-13.
+
+## D-248 - FIX-15 Cheat-sheet review: tools (2026-10-22)
+- Rule: a direct tool call resolves only when its name is among the tools the session offered the
+  model: the frozen array plus the `tool_add` declarations of every `tool_change` operator message
+  on the active path and in the queue (`prompt_tools_known()`), taken once per batch by
+  `run_tools()` and passed to `call_record(run, block, offered)`. Any other name (a registered tool
+  removed with `-name`, left out by a preset, disabled through `tools.disable`, deferred or not
+  `available()`) gets `Tool <name> not found` before hooks and the permission check, so an
+  undeclared `ask` no longer stops a non-interactive auto run. `dispatch_nested()` still resolves
+  `peter$` members in the registry under every preset; the MCP door already served declared tools.
+  A direct call of an undeclared bridge (`sh`, `script`, `bg`, `jobs`, `py`, `sql`, `knit`) now
+  reads `Tool <name> not found` before any hook; the S-4 hook text is reached only when a session
+  declares the bridge by value (`tools = "+sh"`).
+- Rule: with `gptr.noninteractive_ask = "deny"` a non-interactive mode block ends with the deny
+  suffix in every mode, manual included (`context_mode_body()` tests deny first): a manual run's
+  `ask` call is denied and the run goes on, so "questions asked with the ask tool, stop the run"
+  was false.
+- Rule: edit errors number edits from 1 (`edits[1]` is the first), as R and the schema gate do,
+  at the console, inside `r` and from the direct tool; Pi's wording counts from 0. Applies to the
+  not-found, empty-oldText, occurrences, overlap and must-be-a-string messages.
+- Rule: `edit_normalize_args()` reads a named list of non-lists as one edit and refuses an edit
+  without `oldText`/`old_text` or `newText`/`new_text`, naming both sets of fields ("edits[1] has
+  no oldText or newText (it has: old, new)"). P10 read a missing field as "", so at the console
+  `list(old =, new =)` said "oldText must not be empty" and an edit without newText deleted text.
+- Rule: `peter$help()` lists a member's schema arguments when they are among its formals (was:
+  equal to them), with an array's item fields, so `edit` and `find` now show theirs.
+- Rule: a fuzzy edit changes only its matched span. `edit_splice_fuzzy()` maps each span boundary
+  back to the original bytes (`fuzzy_offsets()`: the per-character normalisation aligned with the
+  line's own from both ends) and splices newText there, so the rest of a touched line keeps its
+  bytes (curly quotes, ligatures, U+00B5, special spaces, trailing spaces after the match, a
+  combining accent). Pi rewrites the touched lines from the fuzzy view; that stays as the fallback
+  when a boundary cannot be mapped (it lies between two combining accents on its line, or inside a
+  ligature), and then the reasons add "the touched lines were rewritten in normalised form". A
+  `gptr_patch` keeps the reasons (`reasons`, chr) and prints them bracketed between the message and
+  the diff when fuzzy, as the model reads them.
+- Rule: the `<r_session>` `out` fragment says "Use peter$out(), peter$help(), peter$search() and
+  peter$plot() only with record = false." only when a document is bound (`ctx$input$document`),
+  the freeze input that gives `r` its `record` argument; without one, `record` read as an argument
+  of those helpers (`peter$help("edit", record = FALSE)`: unused argument).
+- Rule: `read` and `peter$read()` count lines as `readLines()` does: a final newline ends the last
+  line (in-memory, UTF-16/32 and sparse-index paths), so a 3-line file written by `writeLines()`
+  has total 3, not Pi's 4 (`split("\n")`), and the notices, `lines_total`, the `total` attribute
+  and the window lose the phantom empty line; an empty file stays empty and "\n" alone is one
+  empty line. The read text of such a file no longer ends in "\n".
+- Rule: `peter$py()` refuses `RETICULATE_PYTHON=managed` (reticulate's request for a uv-managed
+  download) as it refuses an unconfigured Python, before `reticulate::import_main()`; P22's guard
+  let any non-empty value through. Both refusals now advise `reticulate::use_python("<path>")`
+  then `reticulate::py_config()`, not "activate a virtual environment", which in R reads as
+  `reticulate::use_virtualenv()`, a choice the guard does not see.
+- Contract-visible: 04 §4.4 call record (`tool` NULL when not offered), §7.6 `dispatch_tools()`,
+  §9.3 suffix order, §5.10 `gptr_patch` (`reasons`, print), §7.10 `edit_file()` (fuzzy splice),
+  IC-48 (`record = false` sentence), §7.10 `read_file()` (line count); 03 §7.3 (`out` without a
+  document); P22 Task 5 S-4 refusal (an undeclared bridge is not found first), P22 Task 7
+  provisioning guard (`managed`).
+- Tests: test-agent-dispatch.R "the offered tools (D-248)" (3 blocks) and the frozen-schema block;
+  test-bridge-lang.R, test-bridge-sh.R through-run refusals; test-prompt-context.R mode suffixes;
+  test-tool-edit.R "edit errors number edits from 1", "an edit without oldText or newText";
+  test-tool-namespace.R `peter$help("edit")`; test-tool-edit.R "a fuzzy match changes only its
+  span" and "gptr_patch prints the message"; test-tool-namespace.R "the out fragment names record =
+  false only when the r tool takes it"; test-tool-read.R "a final newline ends the last line";
+  test-bridge-lang.R "peter$py() refuses RETICULATE_PYTHON=managed".
+  Evidence: progress/fixes.md Task FIX-15 tools-1, tools-5, tools-6, tools-7, tools-8, tools-9,
+  tools-10, tools-12.

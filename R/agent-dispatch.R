@@ -258,11 +258,13 @@ tool_result_hooks = function(run, call, res) {
   res
 }
 
-#' The call record of a tool_call block (04 section 4.4)
+#' The call record of a tool_call block (04 section 4.4); a name not in `offered`, the tools the
+#' session declared to the model, resolves to no tool, so the call is "Tool <name> not found"
 #' @noRd
-call_record = function(run, block) {
+call_record = function(run, block, offered) {
+  tool = if (block$name %in% offered) tool_lookup(block$name, run$session)
   list(id = block$id, name = block$name, input = block$arguments %||% json_obj(),
-       raw = block$raw_arguments, tool = tool_lookup(block$name, run$session), nested = FALSE,
+       raw = block$raw_arguments, tool = tool, nested = FALSE,
        parent_id = NULL, outer_level = NULL, risk = NULL)
 }
 

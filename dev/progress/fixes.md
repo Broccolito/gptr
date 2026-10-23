@@ -1914,3 +1914,200 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the probe nor accepts `initialize`), and a dual-era server that starts slowly is still taken as
   legacy (cached for 7 days), which works. A hung server forced modern now fails after the request
   timeout instead of 5 s.
+
+## Task FIX-15 - Cheat-sheet review: tools (2026-10-22, #PR)
+
+### tools-1 - Dispatch refuses a direct call to a tool the session did not offer
+- Red: FAIL 7 in `agent-dispatch` (PASS 221), mode auto with the fake provider: `write` under
+  `tools = "-write"` wrote w.txt, `r` under `"-r"` bound `made_here`, `grep` under standard ran,
+  and a non-interactive `ask` stopped the run with `gptr_error_noninteractive` (findings 12, 17).
+- Cause: `call_record()` resolved a call with `tool_lookup()`, the registry alone (registered,
+  `execute`, not hidden), never what the session declared; presets, `-name`, `tools.disable`,
+  deferred and unavailable tools only shaped the array, and only the mode stood in the way.
+- Fix: `run_tools()` takes the offered names once per batch (the frozen array plus every
+  `tool_change` addition on the path and in the queue, `prompt_tools_known()`) and
+  `call_record(run, block, offered)` resolves only those; any other name is "Tool <name> not
+  found" before hooks and the permission check. `dispatch_nested()` is unchanged. The report02
+  harness's `dispatch()` freezes the blocks' declarations (`freeze_tool_decl()`) when unfrozen.
+- Green: `agent-dispatch` PASS 228; `^(agent-dispatch|agent-run|dispatch-elapsed|bridge-lang|
+  bridge-sh|arch-layers|lint-rules)$` PASS 1383 SKIP 6; full suite (NOT_CRAN=true) FAIL 4 SKIP 64
+  PASS 35277, all four the bridge tests below, then fixed. Lint clean. Live (Claude Opus 4.8,
+  `tools = "-r"`, auto, 3 runs): 2 called `r`, got "Tool r not found" and wrote the code to a
+  file instead; `sds` never created; all idle.
+- Deviations: D-248. The frozen-schema test starts from the harness's freeze. The bridge
+  through-run tests (py, sql, knit, sh) now read "Tool <name> not found", still refused before the
+  permission check; the S-4 text "is an R function, not a tool" is now reached only by a bridge a
+  continued session adds by value (`tools = "+sh"`, measured) and keeps its unit test.
+- Reviews: r1 1 finding (low), applied: D-248 recorded the new refusal of an undeclared bridge
+  only here; its first Rule now states it (`Tool <name> not found` before any hook; the S-4 hook
+  text only for a bridge declared by value), Contract-visible lists P22 Task 5, and P22's S-4
+  paragraph and self-review item 10 point to it. Plan checks pass.
+- Open: the fixed preamble still says "with the r tool" when r is removed (by decision);
+  `tool_change` declarations count after a switch to a provider that cannot take additions.
+
+### tools-5 - Non-interactive manual mode with noninteractive_ask = deny says questions are refused
+- Red: FAIL 1 in `prompt-context` (PASS 87): with deny, `context_mode_body("manual", FALSE)` still
+  ended "questions asked with the ask tool, stop the run" (verdict of finding 168, item a).
+- Cause: `context_mode_body()` chose the manual suffix before it looked at `deny`, while under deny
+  a manual run's `ask` call is denied and the run goes on to idle.
+- Fix: test deny first. The deny suffix ("are refused. State your assumptions instead of asking.")
+  holds for a denied ask too; no new text, `preset_ask()` unchanged.
+- Green: `prompt-context` PASS 88; `^(prompt-context|prompt-text|prompt-compact|tool-ask)$` PASS
+  572. Lint clean; plan checks pass.
+- Deviations: D-248 (04 §9.3 suffix order). Open: none.
+
+### tools-6 - Edit errors number edits from 1
+- Red: FAIL 1 in `tool-edit` (PASS 170): `peter$edit()` with the first of two edits missing said
+  "Could not find edits[0]", which an R reader takes for no edit (finding 4).
+- Cause: `apply_edits()` and `edit_normalize_args()` printed `i - 1L`, Pi's JSON wording, on every
+  path (console, inside `r`, direct tool), while the schema gate on the same tool counts from 1.
+- Fix: the five messages (not found, empty oldText, occurrences, overlap, must be a string) print
+  `i`; one rule for every caller, no base argument.
+- Green: `tool-edit` PASS 179 (6 pins moved to 1-based); `^(tool-edit|tool-namespace|doc-replay|
+  utils-paths|json-schema|doc-edit)$` PASS 1407 SKIP 1. Lint clean.
+- Deviations: D-248 (no contract text names the index). Open: none.
+
+### tools-7 - peter$edit names the fields it expects, and peter$help("edit") lists its arguments
+- Red: FAIL 3 in `^(tool-edit|tool-namespace)$` (PASS 588): `peter$edit(f, list(list(old =,
+  new =)))` said "oldText must not be empty", and `peter$help("edit")` had no Arguments block
+  (finding 20).
+- Cause: `edit_normalize_args()` never checked that the fields exist and `apply_edits()` read a
+  missing one as "" (so an edit without newText deleted its text, measured); a named list counted
+  as one edit only when it had oldText. `ns_tool_help()` listed arguments only when the schema's
+  properties equalled the formals, and `edit` has `replace_all` beyond its schema.
+- Fix: a named list of non-lists is one edit; an edit missing a field is refused with "edits[i]
+  has no oldText or newText (it has: old, new). Use list(list(oldText = ..., newText = ...))."
+  Help lists the schema arguments when they are among the formals, plus "[items: oldText,
+  newText]" for an array; `find` now lists its arguments too. Inside `r` the schema gate already
+  answered, so only the console changes.
+- Green: PASS 595; `^(tool-edit|tool-namespace|doc-replay|doc-edit|utils-paths|json-schema|mcp-.*|
+  skill-.*|bridge-lang|bridge-sh)$` PASS 2968 SKIP 8; `^(console-commands|northstar)$` PASS 175.
+  Lint clean; Rd unchanged.
+- Deviations: D-248. Open: none.
+
+### tools-8 - A fuzzy peter$edit changes only what it matched, and says why it was not exact
+- Red: FAIL 6 in `tool-edit` (PASS 188): `1 - 2` -> `1 to 2` against an en dash also straightened
+  a curly apostrophe later on the line, unfolded the fi ligature, turned U+00B5 into U+03BC and NBSP
+  into a space and dropped the trailing spaces; a printed fuzzy `gptr_patch` showed no reasons
+  line (finding 1).
+- Cause: `edit_splice_fuzzy()` (Pi's applyReplacementsPreservingUnchangedLines()) rebuilt each
+  touched line group from the fuzzy view; `new_gptr_patch()` dropped `edit_reasons()`, which only
+  the model saw.
+- Fix: the splice landed (sheet entry S31 takes the vignette's wording: "changes only the matched
+  text, unless the match starts or ends inside a ligature or between two letters with combining
+  accents on one line; those lines are rewritten in normalised form").
+  `fuzzy_offsets()` maps a fuzzy-view offset back to the original line by per-character
+  normalisation (`fuzzy_normalize_lines(strip = FALSE)`) aligned with the line's own from both
+  ends, and newText (file line ending) is spliced into the original bytes. When a boundary cannot
+  be mapped (between two combining accents on its line, inside a ligature) the old line rewrite
+  runs and the reasons add "the touched lines were rewritten in normalised form". `gptr_patch`
+  gains `reasons` (all three call sites) and prints them bracketed between the message and the
+  diff when fuzzy. Vignette sentence corrected in .Rmd and .Rmd.orig; Pi's not-found wording stays.
+- Green: `tool-edit` PASS 194; `^(tool-edit|tool-namespace|tool-r|doc-replay|doc-formats|
+  doc-blocks|utils-paths|json-schema)$` PASS 2129 SKIP 1; every existing fuzzy expectation (tws.txt
+  included: covered trailing spaces go) unchanged. 20,000 fuzzy matches with replace_all: 1.8 s
+  (was 2.7 s). Lint clean; Rd unchanged.
+- Reviews: r1 2 findings (low), both applied. (1) The vignette sentence said "still changes only
+  the matched text" with no exception for the fallback, and left out NFKC compatibility forms
+  (ligatures, full-width letters, U+00B5, with stringi): both vignette files now name them and the
+  exception, and say the printed result names the normalisation. (2) The first version sent a
+  whole edit to the line rewrite when one combining sequence sat anywhere on a touched line:
+  `cafe\u0301 \u2018x\u2019 \u2018y\u2019` edited `'x'` -> `'z'` composed the accent and
+  straightened the other quote (red FAIL 2 in `tool-edit`, PASS 194). Aligned from both ends:
+  `tool-edit` PASS 196; the neighbours above PASS 2137 SKIP 1; 20,000 matches 1.7 s (1.4 s before,
+  same run). Lint clean.
+- Deviations: D-248 (04 §5.10, §7.10). Open: the fallback still rewrites the lines when a boundary
+  lies between two combining accents on its line or inside a ligature (said in the reasons); a
+  non-fuzzy deviation (CRLF, re-encoding) still prints only the message.
+
+### tools-9 - The r_session prompt mentions record = false only when the r tool has it
+- Red: FAIL 1 in `tool-namespace` (PASS 415): a session with no document froze "Use peter$out(),
+  peter$help(), peter$search() and peter$plot() only with record = false." while its `r` schema
+  had only `code` (from the verdict of finding 20: `peter$help("edit", record = FALSE)` failed).
+- Cause: `r_session_out_text` was a fixed string, while `record` is an `r` argument only with a
+  document bound at freeze (`r_schema(document = TRUE)`).
+- Fix: the fragment is a `function(ctx)` that adds the sentence only when `ctx$input$document` is
+  set, the test `<documents>` uses; frozen once per session, so the cache prefix is unchanged.
+- Green: `tool-namespace` PASS 417 (the stand-in and registration pins render the document
+  text); `^(tool-namespace|tool-r|prompt-.*|northstar|bench-context|doc-formats|lint-rules|
+  arch-layers)$` PASS 2031. Lint clean; Rd unchanged.
+- Deviations: D-248 (03 §7.3, IC-48). Open: none.
+
+### tools-10 - read and peter$read count lines as readLines() does
+- Red: FAIL 14 in `tool-read` (PASS 221): a 3-line `writeLines()` file read total 4 with a final
+  "", "[2 more lines ...]" at limit 2, offset 4 accepted; 3000 lines at offset 2990, limit 5 said
+  7 more; 2500 lines "of 2501"; `writeLines("done")` at limit 1 said 1 more (finding 5).
+- Cause: Pi's `split("\n")` count, kept on all three paths: `length(nl) + 1L` in
+  `read_window_small()`, `split_lines_js()` on UTF-16/32, the newline count plus one in
+  `read_line_index_build()`. Every fixture was built with `paste(collapse = "\n")`.
+- Fix: a final newline ends the last line on each path (subtract it; drop a final "" of more than
+  one element); "" stays empty and "\n" alone is one empty line. Vignette: `read()` returns the
+  file's lines, without line numbers (.Rmd and .Rmd.orig).
+- Green: `tool-read` PASS 235 (Pi's count moved in seven tests: UTF-16, BOM CRLF, streaming
+  index, BM text, cap, giant line, non-ASCII index); `tool-namespace` PASS 417 ("direct tools return Pi's texts" now
+  "x = 1\ny = 2", total 2); `^(tool-.*|console-render|context-prefix|ext-api|ext-events|mcp-
+  namespace|mcp-server|prompt-.*|session-object|skill-.*|doc-.*|lint-rules|arch-layers)$` PASS
+  7261 SKIP 2 before that pin; full suite (NOT_CRAN=true) FAIL 2 SKIP 64 PASS 35324, both
+  `proc-windows-backpressure` (a ps `access_denied` memory sample under load; the file alone PASS
+  254). Lint clean; Rd unchanged.
+- Deviations: D-248 (04 §7.10 `read_file()`). Open: none.
+
+### tools-11 - A finished background job's run time stops growing
+- Red: FAIL 1 in `bridge-sh` (PASS 286): with `reactor_now()` mocked 100 s later, a waited-on
+  done job and a killed one read `peter$jobs()` seconds and `read()` footers 101, 101, 100, 100
+  instead of 1, 1, 0, 0 (finding 6; live GPT called a 2 s job 48 s).
+- Cause: a `gptr_job` kept only `.started`; the footer and the `seconds` column measured to now
+  whatever the status.
+- Fix: `bridge_job_status()` sets `.ended` the first time it sees the process dead;
+  `bridge_job_seconds()` (end, else now, minus start) serves both reports; `wait()`'s `settled()`
+  asks the status, so a waited-on job stops within one 200 ms pump.
+- Green: `bridge-sh` PASS 287 SKIP 2; `^(bridge-sh|bridge-lang|proc-supervise|gptr-jobs|
+  copy-bridge|lint-rules|arch-layers)$` PASS 648 SKIP 6. Lint clean; Rd unchanged.
+- Deviations: none (the contract does not define `seconds`). Open: a job nobody looks at until
+  long after it ended (including after `kill()`) stops at that first look, an upper bound.
+
+### tools-12 - peter$py() refuses RETICULATE_PYTHON=managed and gives advice an R user can follow
+- Red: FAIL 1 in `bridge-lang` (PASS 106): with `RETICULATE_PYTHON=managed`, `py_available()`
+  mocked FALSE and `import_main()` mocked to stop, `bridge_py_main()` reached `import_main()`
+  (finding 2: reticulate then downloads a uv-managed Python, which the refusal says gptr never
+  lets happen); the unconfigured refusal said "activate a virtual environment", which in R reads
+  as `reticulate::use_virtualenv()`, refused by the same guard.
+- Cause: the guard asked only `nzchar()` of `RETICULATE_PYTHON`, `RETICULATE_PYTHON_ENV` and
+  `VIRTUAL_ENV`; "managed" is non-empty.
+- Fix: `identical(Sys.getenv("RETICULATE_PYTHON"), "managed")` (reticulate's own `==` test) is
+  refused like an unconfigured Python, first line "RETICULATE_PYTHON=managed asks reticulate to
+  download a Python for peter$py()."; both refusals advise a Python executable in
+  `RETICULATE_PYTHON` (or R started from an activated virtual environment), or
+  `reticulate::use_python("<path>")` then `reticulate::py_config()` before the first call.
+  P22 Task 7's guard rule amended.
+- Green: `bridge-lang` PASS 115; `^(bridge-.*|copy-bridge|perm-classify|lint-rules|arch-layers)$`
+  PASS 1546 SKIP 12. Unmocked (no Python configured, reticulate 1.47.0) `peter$py("1 + 1")` with
+  `RETICULATE_PYTHON=managed` refuses and Python stays uninitialised. Lint clean; Rd unchanged
+  (`@noRd`).
+- Deviations: D-248 (P22 Task 7). Open: `use_python()`/`use_virtualenv()` without `py_config()`
+  are still refused (accepting them needs reticulate internals or `RETICULATE_USE_MANAGED_VENV`
+  handling, a later change); the cheat sheet takes sheet entry S32.
+
+### tools-13 - A broken fake-provider script fails at once instead of being retried as overloaded
+- Red: FAIL 7 in `provider-fake` (PASS 199): with `agent_retry_delay()` mocked to 0, a number
+  as reply 2 of a list script made 4 requests and signalled `gptr_error_overloaded` (finding 10:
+  "retrying in 2.0 s (overloaded)", then 4.0 s); a script function that stops ("boom 500
+  timeout") and an empty script made 3 each; the no-script error event had class "provider"; a
+  failing classifier script and a classifier with no script gave `gptr_error_s1_overloaded`.
+- Cause: `fake_script_reply()` and `fake_pick()` reported gptr's own script failures as status
+  500, which `fake_status_class()` names "overloaded", so `run_retryable()` retried them twice
+  against its own rule (never a local failure); `fake_missing_events()` sent class "provider"
+  with 500, which `err_class()` drops and reads back as overloaded; the classifier fake passed
+  500 to `fake_s1_error()`.
+- Fix: `fake_script_error()` gives a broken script's reply `status = NA` and class
+  "invalid_spec" (never retried, signalled as `gptr_error_provider`); `fake_plan()` takes
+  `reply$class` before the status; the no-script event is "invalid_spec" with no status. A
+  scripted `list(error =, status = 529L)` still retries. Beyond the plan, the classifier fake's
+  failures (a failing or empty script, no script found) follow through the same helper and an NA
+  status: `gptr_error_s1_response`, never retried. No construction-time check of list elements:
+  the request already names the misuse.
+- Green: `provider-fake` PASS 206; `^(provider-.*|agent-run|agent-loop.*|s1-.*|gptr-gateway|
+  lint-rules|arch-layers)$` PASS 5442; full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35358.
+  Lint clean; Rd unchanged (`@noRd`).
+- Deviations: none (04 §12.1 does not define a broken script; the fix restores
+  `run_retryable()`'s rule). Open: none.
