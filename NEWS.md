@@ -49,7 +49,8 @@ works on the objects already in memory.
   without a person present stops the run with a classed condition.
 * Scripts and notebooks are the history: code the agent ran is recorded below each `peter()`
   call in `.R`, `.Rmd`, `.qmd` and `.ipynb` documents and replays without model calls
-  (`gptr_doc()`, `gptr_source()`, `gptr_blocks()`, `gptr_cache()`).
+  (`gptr_doc()`, `gptr_source()`, `gptr_blocks()`, `gptr_cache()`). A console transcript also
+  records a run that was aborted or stopped by an error, marked `## Run: <status>`.
 * `gptr_init()` creates a `.gptr/` project workspace with the project instructions file
   `.gptr/vignette.Rmd`; `gptr_config()` and `gptr_trust()` manage settings and trust.
 * Checkpoints: `gptr_rewind()`, `gptr_checkpoints()` and `/undo` restore objects, files and the

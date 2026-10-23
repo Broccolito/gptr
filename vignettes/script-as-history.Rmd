@@ -131,7 +131,9 @@ file with `gptr_doc()` makes that file the transcript (`format = "transcript"` o
 binding). A transcript holds what passes through gptr: each `peter()` call typed at the console
 and each prompt of the `peter()` console as `s_<id> = peter("prompt", <context names>)` with its
 block, the console's `!`, `!!` and fenced R lines under `# direct R (no model)`, and slash
-commands as comments. Other code typed at R's own `>` prompt is not recorded, so a transcript
+commands as comments. A run that was aborted or stopped early (an error, `max_turns`, a blocked
+call or the budget) is recorded too, with a last `## Run: <status>` line, and the next prompt
+continues its session. Other code typed at R's own `>` prompt is not recorded, so a transcript
 whose turns use objects made there fails on replay; create such inputs with `!code` in the
 `peter()` console.
 

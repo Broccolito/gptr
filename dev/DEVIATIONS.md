@@ -3184,7 +3184,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   homes (was every body line, so a steer or model code holding the placeholder was recorded with the id; IC-49).
   The text of a steer, follow-up, decision or agent line stays one line (U+0085, U+2028 and U+2029 also become
   spaces) and its control, bidi and zero-width characters are written `<U+XXXX>` (`ui_escape()`, rule C1; were
-  written raw, so `source(echo = TRUE)` drew escape sequences; 11.5 body).
+  written raw, so `source(echo = TRUE)` drew escape sequences; 11.5 body). A console transcript records a run of any
+  settled status, one that did not end `idle` with a last `## Run: <status>` line and no cached answer (was only
+  `idle` runs, P15 decision 5, so an aborted or failed run vanished with its code and steers and the next turn began
+  a new session; IC-49).
 - Contract-visible: 04 §4.4 `r` details `outputs` and `value`, §5.1 `print` and `.d` `replay_rows`, §6.4
   `gptr_doc()` and `gptr_cache()`, §6.5 `gptr_resume()`, §6.6 `gptr_return()`, §7.15 `doc_block_lines()`, §11.5
   `cost`, `value`, `children`, body and transcript, §11.9, §15.3 IC-45, IC-46, IC-47, IC-48, IC-49, IC-51; 03 §4.3,
@@ -3203,6 +3206,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   a function naming a handle;
   test-session-store: the resume hint; test-doc-replay: the no-answer notice in process, under `Rscript` and for
   fan-out children; test-doc-blocks: a blank and a trimmed steer line, the block id only in gptr's lines, escaped
-  comment lines. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2,
-  replay-2c, replay-2d, replay-2e, replay-3, replay-4b, replay-5, export-2, export-2b, store-1, doc-1b, steer-doc-1,
-  steer-doc-2.
+  comment lines; test-doc-replay: an aborted or failed console run and its re-source. Evidence: progress/fixes.md
+  Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-2c, replay-2d, replay-2e, replay-3,
+  replay-4b, replay-5, export-2, export-2b, store-1, doc-1b, steer-doc-1, steer-doc-2, steer-doc-3.

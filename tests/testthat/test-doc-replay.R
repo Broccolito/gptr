@@ -699,6 +699,41 @@ test_that("console turns become one steered session in the transcript (IC-49)", 
   expect_identical(sum(grepl("^# >>> gptr:", tr)), 2L)
 })
 
+test_that("a console transcript records a run that ended aborted, at max_turns or with an error", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  relay = list(type = "custom_message", message = msg_operator(
+    "steer_relay", "The user sent this message while you were working: use base graphics",
+    origin_text = "use base graphics"))
+  for (status in c("aborted", "error", "max_turns", "blocked", "budget")) {
+    rel = paste0(".gptr/transcripts/", status, ".R")
+    doc_project_transcript(rel)
+    t1 = doc_test_turn("fit = lm(mpg ~ wt, data = mtcars)", prompt = "fit", answer = "Partly")
+    t1[[4L]]$message$stop_reason = "aborted"
+    s = doc_test_session(list(c(t1[1:3], list(relay), t1[4]),
+                              doc_test_turn("p = predict(fit)", prompt = "predict")))
+    for (k in 1:2) {
+      site = doc_console_site(session_id = session_data(s)$id, template = c("fit", "predict")[k])
+      doc_on_agent_end(list(status = c(status, "idle")[k], doc = site, turns = k),
+                       list(session = s))
+    }
+    tr = readLines(file.path(proj, rel))
+    hex = substr(sub("^s", "", session_data(s)$id), 1, 6)
+    for (line in c(paste0("s_", hex, " = peter(\"fit\")"), "fit = lm(mpg ~ wt, data = mtcars)",
+                   "## Steer: use base graphics", paste0("## Run: ", status),
+                   paste0("s_", hex, " |> peter(\"predict\")"), "p = predict(fit)")) {
+      expect_true(line %in% tr, label = paste(status, line))
+    }
+    expect_identical(gptr_blocks(file.path(proj, rel))$status, c("fresh", "fresh"))
+    # the partial answer of a run that did not end idle is not cached as the block's answer
+    b = doc_find_blocks(tr)
+    cached = vapply(seq_len(nrow(b)), function(k) {
+      !is.null(s2_get(s2_key(rel, b$id[k], "", b$header[[k]]$prompt, "")))
+    }, NA)
+    expect_identical(cached, c(FALSE, TRUE))
+  }
+})
+
 test_that("doc.site answers the session's run site, else the gptr_doc() binding", {
   local_project()
   expect_null(doc_site_service(NULL))
@@ -2553,6 +2588,28 @@ test_that("a two-turn console session with a menu steer re-sources as one sessio
   s2 = get(paste0("s_", hex), envir = e2)
   expect_identical(length(session_data(s2)$seen), 2L)
   expect_true(is.numeric(e2$p))
+  expect_length(fake_requests(x$fake), 4L)
+})
+
+test_that("a console transcript recorded after an errored run re-sources (IC-49)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "x_err = 21"), fake_error("bad request", 400L),
+                         fake_tool("r", code = "y = x_err * 2"), fake_text("Doubled.")))
+  testthat::local_mocked_bindings(doc_command_args = function() "R")
+  t = file.path(x$root, ".gptr", "transcripts", "console.R")
+  dir.create(dirname(t), recursive = TRUE)
+  gptr_doc(t, format = "transcript")
+  e = new.env(parent = globalenv())
+  expect_error(eval(doc_e2e_call(prompt = paste("set", "x_err")), e), class = "gptr_error")
+  e$s = gptr_last()
+  eval(doc_e2e_call(as.name("s"), prompt = paste("double", "it")), e)
+  expect_true("## Run: error" %in% readLines(t))
+  e2 = new.env(parent = globalenv())
+  e2$library = function(...) invisible(NULL)
+  local_gptr_options(replay = "replay")
+  gptr_doc(FALSE)
+  suppressMessages(doc_e2e_source(t, e2))
+  expect_identical(c(e2$x_err, e2$y), c(21, 42))
   expect_length(fake_requests(x$fake), 4L)
 })
 

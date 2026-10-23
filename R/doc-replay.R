@@ -712,13 +712,16 @@ doc_replay_service = function(call) {
 # ---- hooks --------------------------------------------------------------------------------------
 
 #' agent_end: write the block of a settled top-level run whose run options carry a document site
-#' (contract 7.15); only runs that ended `idle` are recorded
+#' (contract 7.15). A script document records only runs that ended `idle`; a console transcript,
+#' the history of what happened, records every settled run, one that did not end `idle` with a
+#' last `## Run: <status>` line and no cached answer (IC-49)
 #' @noRd
 doc_on_agent_end = function(event, ctx) {
   site = event$doc
   s = ctx$session
   if (is.null(site) || is.null(site$path) || is.null(s)) return(NULL)
-  if (!identical(event$status %||% "idle", "idle")) return(NULL)
+  status = event$status %||% "idle"
+  if (!identical(status, "idle") && !isTRUE(site$console)) return(NULL)
   d = session_data(s)
   if (isTRUE(site$console)) {
     site$session_id = d$id
@@ -728,6 +731,10 @@ doc_on_agent_end = function(event, ctx) {
   }
   turn = if (d$kind %in% c("team", "fanout")) 1L else as.integer(event$turns %||% d$turns)
   lines = doc_block_lines(s, turn, site, site$ordinal %||% 1L)
+  if (!identical(status, "idle")) {
+    lines[length(lines) + 1L] = paste0("## Run: ", status)
+    attr(lines, "answer") = NA_character_
+  }
   doc_upsert(site, lines, block_id = site$block_id)
   NULL
 }

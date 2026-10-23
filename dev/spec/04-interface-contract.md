@@ -4512,7 +4512,9 @@ follow-ups delivered during a block's turn (pause menu, `gptr_steer()`, pipe int
 in a terminal console [IC-76]) are recorded
 inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`; a
 blank text is written `## Steer:` without the trailing space, and a line is steering with or without it.
-P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one
+A console transcript records every settled run; a run that ended `aborted`, `error`, `max_turns`, `blocked` or
+`budget` gets a last `## Run: <status>` line and caches no S2 answer (a script document records only `idle`
+runs). P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one
 session.
 
 **IC-50 Jupyter documents.** (req-11) With `front_end() == "jupyter"` gptr never writes the open notebook: the

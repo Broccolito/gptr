@@ -2585,3 +2585,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   kept; no raw control byte in the file or in `source(echo = TRUE)` of its export; `gptr_blocks()`
   fresh with and without the trailing space.
 - Deviations: D-249 (extended). Open: none.
+
+### steer-doc-3 - A console transcript records a run that ended aborted, at max_turns or with an error
+- Steering review finding 10.
+- Red: FAIL 37 in `^doc-replay$` (PASS 714): for each of `aborted`, `error`, `max_turns`, `blocked`
+  and `budget`, a console turn's prompt, code and `## Steer:` were missing, the next turn was written
+  `s_<hex> = peter("predict")` and its partial answer cached; a transcript whose errored first run
+  set `x_err` failed to re-source with "object 'x_err' not found".
+- Cause: `doc_on_agent_end()` wrote only `idle` runs (P15 decision 5), a rule made for script blocks,
+  whose block caches the answer, and never weighed for a transcript, the history of what happened.
+- Fix: a console site records every settled run; one that did not end `idle` gets a last
+  `## Run: <status>` line (in the body and its sha) and no cached answer. Script documents keep
+  decision 5. IC-49, P15 decision 5, the hook's roxygen, the script-as-history vignette and NEWS.
+- Green: `^doc-replay$` PASS 752; `^(doc-replay|doc-blocks|doc-formats|doc-export|arch-layers|
+  lint-rules)$` PASS 1693 (NOT_CRAN=true). Lint clean; plan checks unchanged; `precompute.R
+  script-as-history` byte-identical to the edited `.Rmd`.
+- Deviations: D-249 (extended). Not as planned: no list of ended statuses, since `run_settle()` gives
+  `agent_end` no other non-idle status. Open: the background `[b]` path is not tested.

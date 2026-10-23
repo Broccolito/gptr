@@ -6107,7 +6107,7 @@ human can answer, recovers a dead process's deferred writes for that document (I
 re-asked one for regeneration (the old block is skipped by `gptr_source()` or knitr), and otherwise passes with
 `call$doc` set only when the call may be recorded (consent exists or can be asked, and the mode is not `replay`).
 P08's `gateway_run()` hands `call$doc` to the run as `opts$doc`, P06 returns it in the `agent_end` payload, and the
-hook writes the block of a run that ended `idle`. `doc.edit` routes an `edit` of the bound document through the
+hook writes the block of a settled run (decision 5). `doc.edit` routes an `edit` of the bound document through the
 registered edit tool (answering `NULL` while that tool runs, so it is not re-entered), refuses to change a block the
 user edited, and refreshes the date and sha of the blocks the agent changed (04 §7.10: P15 consumes the edit; the
 documents section asks the model to edit earlier blocks). `doc.site` answers the session's replayed document, the
@@ -8919,7 +8919,9 @@ knitr 1.51, jsonlite 2.0.0, cli 3.6.6):
    overwritten in `live`/`record` and otherwise replays (user code wins). Under base `source()`/Rscript a stale or
    re-asked block downgrades to replay with the warning `replay_downgraded` in every mode, as 03 §6.9.3 says;
    report 14's "In `record` mode this is an error" is not followed (`replay` mode still errors `stale_block`, IC-45).
-5. Only runs that end `idle` write a block; aborted, errored, blocked or budget-stopped runs write nothing.
+5. Only runs that end `idle` write a block in a script document; aborted, errored, blocked or budget-stopped runs
+   write nothing there. A console transcript, the history of what happened, records a run of any settled status;
+   one that did not end `idle` gets a last `## Run: <status>` line and caches no answer (IC-49).
 6. 04 §7.10 lists P15 as a consumer of P10's `edit_file()`, but the layering test forbids an L4 call into another
    L4 area; `doc.edit` reaches the edit tool through `registry_get("tool", "edit")$execute()` and answers `NULL` while
    that tool runs (no re-entry).
