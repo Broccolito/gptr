@@ -3122,7 +3122,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: a document's deferred or pending sidecar is kept in the `.gptr/` of its project, else in
   `R_user_dir("gptr", "cache")/pending/` (was `tempdir()/gptr`, which no other process sees and R deletes at exit:
   a closed kernel's and a killed Rscript run's blocks were lost without a word). Same name, mode and checks;
-  `gptr_cache()` prune and clear never touch it (IC-51).
+  `gptr_cache()` prune and clear never touch it (IC-51). The document's lock is `locks/<sha1>` in that `.gptr/` or
+  `pending/` (was this process's workspace root, `tempdir()/gptr` outside a `.gptr/`, so two runs of one document
+  shared its sidecar but not its lock), and `gptr_cache("info")` lists `pending/` in a second `sidecar` row.
 - Rule: `gptr_doc(path, sync = TRUE)` informs a `notice`, "Wrote N block(s) into <doc>." or "No pending blocks for
   <doc>.", and leaves a dead run's recovery to the sync, so the count includes it.
 - Rule: a `gptr_doc()` binding is consent for its own document only; a call located in another document (a sourced
@@ -3173,11 +3175,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   process, "No recorded answer for <doc>: replayed answers ($text) are NA." (plus the `gptr_init()` hint outside a
   workspace). Both were silent (IC-46).
 - Contract-visible: 04 §4.4 `r` details `outputs` and `value`, §5.1 `print` and `.d` `replay_rows`, §6.4
-  `gptr_doc()`, §6.5 `gptr_resume()`, §7.15 `doc_block_lines()`, §11.5 `cost`, `value`, `children`, body and
-  transcript, §11.9, §15.3 IC-45, IC-46, IC-47, IC-48, IC-51; 03 §4.3, §5.1, §6.9.1, §6.9.3; `?gptr_doc`,
-  `?gptr_blocks`, `?gptr_return`, `?print.gptr_session`, `?gptr_export`; vignettes script-as-history,
-  teams-and-background.
-- Tests: test-doc-io: the user-cache sidecar, the cross-process kernel and killed-run sync, the live-run sync;
+  `gptr_doc()` and `gptr_cache()`, §6.5 `gptr_resume()`, §7.15 `doc_block_lines()`, §11.5 `cost`, `value`,
+  `children`, body and transcript, §11.9, §15.3 IC-45, IC-46, IC-47, IC-48, IC-51; 03 §4.3, §5.1, §6.9.1, §6.9.3;
+  `?gptr_doc`, `?gptr_cache`, `?gptr_blocks`, `?gptr_return`, `?print.gptr_session`, `?gptr_export`; vignettes
+  script-as-history, teams-and-background.
+- Tests: test-doc-io: the user-cache sidecar, its lock and listing, the cross-process kernel and killed-run sync,
+  the live-run sync;
   test-doc-replay: the other-binding notice and its four silent cases; test-doc-formats: the machine-log line with
   and without `.gptr/`; test-doc-blocks: recorded `#>` cuts, the known-zero cost; test-tool-r: per-expression
   outputs; test-doc-replay: the listed zero cost, the in-process replay, one into another environment;
@@ -3188,4 +3191,4 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself, handle position;
   test-session-store: the resume hint; test-doc-replay: the no-answer notice in process, under `Rscript` and for
   fan-out children. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1,
-  replay-2, replay-2c, replay-2d, replay-2e, replay-3, replay-5, export-2, store-1.
+  replay-2, replay-2c, replay-2d, replay-2e, replay-3, replay-5, export-2, store-1, doc-1b.

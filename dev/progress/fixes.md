@@ -2470,3 +2470,24 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   SKIP 3 (repr; Windows worker; NOT_CRAN=true). Lint clean; plan checks pass.
 - Deviations: D-249 (extended). Open: a bare `gptr_return(fit)` replayed into another environment
   still gives the recording home's `fit`, as replay-2 left it.
+
+### doc-1b - A document outside .gptr/ takes its lock beside its sidecar, and gptr_cache() lists both
+- Review of doc-1 (`R/doc-io.R`, medium; the lock and listing half of finding 15).
+- Red: FAIL 3 in `^doc-io$` (PASS 702): for a notebook in a project without `.gptr/`,
+  `doc_lock_dir()` was under `tempdir()/gptr`, not beside its sidecar in the user cache's
+  `pending/`, and `gptr_cache()` listed no row with the sidecar written there.
+- Cause: `doc_lock_dir()` used this process's `workspace_root()`, so two runs of one document
+  outside `.gptr/` shared doc-1's sidecar without sharing the lock that guards it (IC-51): either
+  run's write could replace the other's record, and the first run's exit unlink the second's.
+  `doc_cache_files("sidecar")` read only the workspace root's `cache/tmp`, which the conflict
+  warning ("see gptr_cache(\"info\")") and IC-51 point to.
+- Fix: `doc_pending_dir()`; `doc_lock_dir()` uses the document's `.gptr/` else that directory, as
+  `doc_sidecar_path()` does; the sidecar listing adds its `pending-*` files, and `gptr_cache()`
+  gives them a second `sidecar` row with that path. `?gptr_cache`, 04 §6.4, IC-51.
+- Green: `^(doc-io|doc-replay|storage-boundaries|windows-security)$` PASS 1548 SKIP 11;
+  `^(doc-.*|storage-boundaries|windows-.*|console-.*|zzz|arch-layers|lint-rules)$` PASS 4830
+  SKIP 14 (Windows filesystem; repr; INFRA-03; NOT_CRAN=true). Lint clean; Rd regenerated; plan
+  checks pass. Seven `gptr_cache()` expectations in test-doc-replay gain the fifth row.
+- Deviations: D-249 (extended). Not as suggested: the sidecar keeps doc-1's path (no shared
+  `cache/tmp` under `pending/`). Open: a document in a `.gptr/` project now locks in that `.gptr/`
+  also when this process works in another project (was this process's root).

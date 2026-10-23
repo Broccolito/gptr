@@ -1089,8 +1089,9 @@ doc_blocks_ipynb = function(text) {
 #' Inspect, prune or clear gptr's caches
 #'
 #' `info` lists the System 1 answer cache, the System 2 answer cache used for replay, temporary
-#' spill files and unapplied document sidecars (deferred or pending blocks; they are never
-#' removed here: apply them with `gptr_doc(path, sync = TRUE)`). `prune` removes System 2 answers
+#' spill files and unapplied document sidecars (deferred or pending blocks; a second row lists
+#' those of documents outside any `.gptr/`, kept in the user cache; they are never removed here:
+#' apply them with `gptr_doc(path, sync = TRUE)`). `prune` removes System 2 answers
 #' whose block is neither in its document nor queued for it in a sidecar, System 1 answers unused
 #' for 90 days, temporary files older than `getOption("gptr.spill_days", 7)` days and older
 #' refreshed model catalogs; `clear` removes a kind entirely.
@@ -1125,37 +1126,50 @@ gptr_cache = function(action = c("info", "prune", "clear"), kind = c("all", "s1"
 }
 
 #' Files of one cache kind under the workspace root (`sidecar`: the unapplied document sidecars,
-#' which are never removed, IC-51; the S1 cache's `salt` file is not an entry)
+#' which are never removed, IC-51, with those of documents outside any `.gptr/` in
+#' doc_pending_dir(); the S1 cache's `salt` file is not an entry)
 #' @noRd
 doc_cache_files = function(kind) {
   if (!kind %in% c("s1", "s2", "tmp", "sidecar")) return(character())
+  side = "^pending-.*[.](json|rds)$"
+  pending = character()
+  if (identical(kind, "sidecar")) {
+    p = doc_pending_dir()
+    pending = list.files(p, pattern = side, full.names = TRUE)
+    pending = pending[path_inside(pending, p) & path_info(pending)$isdir %in% FALSE]
+  }
   root = doc_root()
   cache = file.path(root, "cache")
   dir = file.path(cache, if (identical(kind, "sidecar")) "tmp" else kind)
-  if (!all(path_inside(c(cache, dir), root))) return(character())
+  if (!all(path_inside(c(cache, dir), root))) return(pending)
   answers = kind %in% c("s1", "s2")
   f = list.files(dir, pattern = if (answers) "[.]json$" else NULL, recursive = answers,
                  full.names = TRUE)
   f = f[path_inside(f, dir)]
-  sidecars = grepl("^pending-.*[.](json|rds)$", basename(f))
+  sidecars = grepl(side, basename(f))
   if (identical(kind, "tmp")) f = f[!sidecars]
   if (identical(kind, "sidecar")) f = f[sidecars]
-  f[path_info(f)$isdir %in% FALSE]
+  c(f[path_info(f)$isdir %in% FALSE], pending)
 }
 
-#' The gptr_cache_info listing (one row per kind plus the sidecars)
+#' The gptr_cache_info listing: one row per kind, then the sidecars under the workspace root and
+#' those in doc_pending_dir()
 #' @noRd
 doc_cache_info = function(kinds) {
   cache = file.path(doc_root(), "cache")
-  rows = lapply(c(kinds, "sidecar"), function(k) {
-    f = doc_cache_files(k)
+  pend = doc_pending_dir()
+  side = doc_cache_files("sidecar")
+  away = path_inside(side, pend)
+  row = function(k, f, path) {
     info = file.info(f, extra_cols = FALSE)
     mtime = info$mtime[!is.na(info$mtime)]
     data.frame(kind = k, entries = length(f), bytes = sum(info$size, na.rm = TRUE),
                oldest = if (length(mtime)) min(mtime) else with_calendar_preserved(as.POSIXct(NA)),
-               path = file.path(cache, if (identical(k, "sidecar")) "tmp" else k),
-               stringsAsFactors = FALSE)
-  })
+               path = path, stringsAsFactors = FALSE)
+  }
+  rows = c(lapply(kinds, function(k) row(k, doc_cache_files(k), file.path(cache, k))),
+           list(row("sidecar", side[!away], file.path(cache, "tmp")),
+                row("sidecar", side[away], pend)))
   new_listing(do.call(rbind, rows), "gptr_cache_info")
 }
 

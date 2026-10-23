@@ -1517,14 +1517,26 @@ test_that("an Rscript replay restores a gptr_return(<expression>) value, with or
   }
 })
 
-test_that("a document outside a .gptr/ project keeps its sidecar in the user cache (IC-51)", {
+test_that("a document outside a .gptr/ project keeps its sidecar and lock in the user cache", {
+  local_user_dirs()
   root = local_project(gptr = FALSE)
-  side = doc_sidecar_path(file.path(root, "analysis.ipynb"))
+  nb = file.path(root, "analysis.ipynb")
+  side = doc_sidecar_path(nb)
   expect_true(path_inside(side, gptr_user_dir("cache")))
   expect_false(path_inside(side, file.path(tempdir(), "gptr")))
+  # every process recording the document takes the lock beside its sidecar (IC-51)
+  expect_identical(dirname(dirname(doc_lock_dir(nb))), dirname(side))
+  rec = doc_pending_new(path_norm(nb), "pending", NULL)
+  rec$upserts = list(list(block_id = "bbbbbb", lines = "x", site = list(format = "ipynb")))
+  doc_sidecar_write(rec)
+  info = gptr_cache()
+  expect_identical(info$kind, c("s1", "s2", "tmp", "sidecar", "sidecar"))
+  expect_identical(info$entries[info$path == dirname(side)], 1L)
   ws = local_project()
-  expect_identical(path_key(dirname(doc_sidecar_path(file.path(ws, "analysis.ipynb")))),
+  wnb = file.path(ws, "analysis.ipynb")
+  expect_identical(path_key(dirname(doc_sidecar_path(wnb))),
                    path_key(file.path(ws, ".gptr", "cache", "tmp")))
+  expect_identical(path_key(dirname(dirname(doc_lock_dir(wnb)))), path_key(file.path(ws, ".gptr")))
 })
 
 test_that("another R process syncs a closed kernel's and a killed run's blocks without .gptr/", {

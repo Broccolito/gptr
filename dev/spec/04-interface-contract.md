@@ -1517,7 +1517,8 @@ gptr_cache(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tm
 ```
 
 `info` returns a `gptr_cache_info` data frame (including unapplied document sidecars, which are never pruned
-automatically, IC-51); `prune` removes S2 entries of deleted blocks, S1 entries unused for
+automatically, IC-51: one row for the workspace root's, one for those of documents outside any `.gptr/` in
+`R_user_dir("gptr", "cache")/pending/`); `prune` removes S2 entries of deleted blocks, S1 entries unused for
 90 days (mtime touched on hit), `cache/tmp` files older than `gptr.spill_days`, the refreshed catalog cache beyond
 the newest, checkpoint blobs per G7 retention; `clear` removes the kind entirely. `prune`/`clear` return the number
 of files removed invisibly. Works on the workspace root (or `tempdir()/gptr`) and `R_user_dir("gptr", "cache")`.
@@ -4528,7 +4529,8 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
 - New sidecars use a versioned, closed plain-data JSON record at
   `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json`, `<root>` being the `.gptr/` of the document's
   project; a document outside one keeps it in `R_user_dir("gptr", "cache")/pending/`, never in a `tempdir()`, so
-  another process finds it after the writer exits or is killed (D-249). Required scalar/array/null fields,
+  another process finds it after the writer exits or is killed (D-249). The document's lock is `locks/<sha1>` in
+  the same `.gptr/` or `pending/`, so every process recording the document takes the same one. Required scalar/array/null fields,
   nested anchors and notebook block metadata are validated before recovery. Modern records have
   a fixed 16 MiB byte limit: readers reject oversize/missing/directory inputs and read at most
   that limit plus one byte even if the file grows; writers reject oversize encoded records

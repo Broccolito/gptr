@@ -206,10 +206,13 @@ doc_lock_acquire = function(dir, tries = 10L) {
   NULL
 }
 
-#' The lock directory of a document: `<root>/locks/<sha1 of path_key>` (contract 11.1)
+#' The lock directory of a document: `<root>/locks/<sha1 of path_key>` (contract 11.1), `<root>`
+#' the `.gptr/` of the document's own project, else doc_pending_dir(): the place of its sidecar,
+#' so every process that records the document takes the same lock
 #' @noRd
 doc_lock_dir = function(path) {
-  file.path(workspace_root(), "locks", cli::hash_sha1(path_key(path)))
+  root = workspace_dir(dirname(path_norm(path))) %||% doc_pending_dir()
+  file.path(root, "locks", cli::hash_sha1(path_key(path)))
 }
 
 #' Lock a document for one write: list(dir, own) or NULL; a lock this process holds for its
@@ -354,10 +357,13 @@ doc_ide_backend = function() {
 #' @noRd
 doc_sidecar_path = function(path) {
   ws = workspace_dir(dirname(path_norm(path)))
-  dir = if (is.null(ws)) file.path(gptr_user_dir("cache"), "pending") else
-    file.path(ws, "cache", "tmp")
+  dir = if (is.null(ws)) doc_pending_dir() else file.path(ws, "cache", "tmp")
   file.path(dir, paste0("pending-", cli::hash_sha1(path_key(path)), ".json"))
 }
+
+#' Where the sidecars and locks of documents outside any `.gptr/` live: the user cache directory
+#' @noRd
+doc_pending_dir = function() file.path(gptr_user_dir("cache"), "pending")
 
 #' The retained legacy RDS sidecar at the same document-owned location
 #' @noRd
