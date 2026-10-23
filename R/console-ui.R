@@ -254,13 +254,16 @@ ui_undo_note = function(request) {
 #' rows, right above the chevron; then readline_answer(). When the REPL's reader finds lines
 #' waiting after the answer (a paste; a last line without a newline is not waiting), the answer and
 #' the lines go to the console history as one entry (a `secret` is dropped) and the question is
-#' asked again (IC-75); Ctrl-C or EOF gives NA (a terminal echoes even a `secret` itself), and in a
-#' terminal ends the person's row, which readline() leaves open then. A T console's draft stays in
-#' its composer, for the live row after the answer; a dim row above the chevron says so, its tail
-#' cut to the width (D-243)
+#' asked again (IC-75); Ctrl-C or EOF gives NA, and in a terminal ends the person's row, which
+#' readline() leaves open then. A `secret` is read with the echo off where R reads its own terminal
+#' (tty_secret()); elsewhere the console shows it, which a dim row above the chevron says once in
+#' the session (IC-77). A T console's draft stays in its composer, for the live row after the
+#' answer; a dim row above the chevron says so, its tail cut to the width (D-243)
 #' @noRd
 ui_console_read = function(prompt, secret = FALSE) {
   rd = console_repl_find()$reader
+  hide = if (secret) tty_secret()
+  read = if (is.null(hide)) gptr_readline else function(p) gptr_readline(p, hide = hide)
   repeat {
     console_typed(drain = TRUE)
     draft = if (isTRUE(the$tty$keys)) rd$compose$draft
@@ -272,7 +275,11 @@ ui_console_read = function(prompt, secret = FALSE) {
       text = live_fit(live_text(draft), room, sym$ellipsis, tail = TRUE)
       console_write(ui_hint(paste0(lead, text, end)))
     }
-    ans = tryCatch(readline_answer(prompt, if (!secret) console_typed_ahead),
+    if (secret && is.null(hide) && once_first("visible", "secret")) {
+      console_write(ui_hint(paste("This console shows the key as you type; gptr_env() loads keys",
+                                  "from a file instead.")))
+    }
+    ans = tryCatch(readline_answer(prompt, if (!secret) console_typed_ahead, read = read),
                    interrupt = function(e) NA_character_)
     if (!rlang::is_string(ans)) {
       if (console_class() %in% c("T", "D")) console_cat("\n")
@@ -355,8 +362,9 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
 }
 
 #' Console input() (D-243): `? <prompt>`, a dim `Enter = <default>` under its text and the
-#' person's chevron; NA = cancelled; a secret is asked through RStudio's masked dialog there; a
-#' console command typed there waits for the next prompt (ui_console_command())
+#' person's chevron; NA = cancelled; a secret is asked through RStudio's masked dialog there, else
+#' read without echo where the console allows (ui_console_read()); a console command typed there
+#' waits for the next prompt (ui_console_command())
 #' @noRd
 ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())

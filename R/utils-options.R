@@ -171,6 +171,18 @@ tty_question = function(on) {
   invisible(NULL)
 }
 
+#' The modes a secret's read restores after reading with the echo off (gptr_readline()), where R
+#' reads a terminal of its own (T, D): a console call's saved ones (tty_call()), in which its
+#' questions read, else the terminal's (`stty -g`); NULL where stty fails or R reads no terminal
+#' (R.app, Windows, IRkernel, radian; RStudio and Positron, which ask in their own dialog where
+#' rstudioapi is installed, ui_console_input()), whose console shows what is typed
+#' @noRd
+tty_secret = function() {
+  if (!console_class() %in% c("T", "D")) return(NULL)
+  modes = the$tty$saved %||% tty_modes()
+  if (length(modes) == 1L) modes
+}
+
 #' Mockable: let fd 0 be read as typed (`stty -icanon min 0 time 0`, the echo unchanged), so the
 #' partial line the terminal holds can be read; returns the modes to restore (`tty_modes()`), NULL
 #' when stty fails (IC-76)
@@ -211,9 +223,12 @@ tty_query = function(query, ms = 250) {
 #' own copy of readline() as `read` (console_reader()). The seconds it waited go to
 #' `the$readline_secs` (readline_answer()); readline() keeps only 255 bytes of a prompt, so one
 #' over 200 bytes, or in the console margin (D-186) one wider than its content row, is printed
-#' whole (word-wrapped in the margin) and read after "> " (in the margin too) (IC-75)
+#' whole (word-wrapped in the margin) and read after "> " (in the margin too) (IC-75). With `hide`
+#' (a secret's tty_secret()) it reads with the echo off, the last mode set before the read, and
+#' restores `hide` first on exit, also after an interrupt; GNU readline and libedit then draw
+#' nothing typed, nor the Enter, whose newline follows the answer (IC-77)
 #' @noRd
-gptr_readline = function(prompt = "", read = readline) {
+gptr_readline = function(prompt = "", read = readline, hide = NULL) {
   pad = console_pad()
   text = trimws(prompt, "left")
   if (nchar(prompt, type = "bytes") > 200L || (nzchar(pad) &&
@@ -228,9 +243,14 @@ gptr_readline = function(prompt = "", read = readline) {
     tty_modes(tty$saved)
     on.exit(tty_modes(tty$set), add = TRUE)
   }
+  if (!is.null(hide)) {
+    on.exit(tty_modes(hide), add = TRUE, after = FALSE)
+    tty_modes("-echo")
+  }
   start = proc.time()[["elapsed"]]
   x = as_utf8(read(prompt))
   the$readline_secs = proc.time()[["elapsed"]] - start
+  if (!is.null(hide)) gptr_message_write("\n", gptr_message_stream("stdout"))
   x
 }
 
@@ -240,12 +260,14 @@ gptr_readline = function(prompt = "", read = readline) {
 #' not blank goes to `keep(line)`: the console history, a console question's
 #' console_typed_ahead(), or nowhere for NULL (a secret) (IC-75, D-243). A line that is one of
 #' `accept` (trimmed, lower case; TRUE: any) answers even when read too soon, as a key typed just
-#' after the pause menu's Ctrl-C is meant for the menu
+#' after the pause menu's Ctrl-C is meant for the menu. `read` reads a line: gptr_readline(), or a
+#' secret's read without echo (ui_console_read())
 #' @noRd
-readline_answer = function(prompt, keep = console_history_add, accept = NULL) {
+readline_answer = function(prompt, keep = console_history_add, accept = NULL,
+                           read = gptr_readline) {
   for (i in seq_len(100L)) {
     the$readline_secs = NULL
-    x = gptr_readline(prompt)
+    x = read(prompt)
     if (i == 100L || !gptr_is_interactive() || !answer_stale(the$readline_secs)) break
     if (rlang::is_string(x) && (isTRUE(accept) || tolower(trimws(x)) %in% accept)) break
     if (is.function(keep) && rlang::is_string(x) && nzchar(trimws(x))) keep(x)

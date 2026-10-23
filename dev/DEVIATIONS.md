@@ -3591,6 +3591,21 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Contract-visible: 04 §15.10 IC-76. Tests: test-console-input.R "a hand-over keeps the editor's modes until
     readline is called, which erases the row"; test-console-typing.R "a terminal: keys typed as the idle editor
     hands over show after the prompt only".
+  - A secret question reads without echo where R reads its own terminal (cheat-sheet review findings 50 and 59,
+    unit auth-2): `ui_console_read()` took `secret` and ignored it, so outside RStudio `gptr_login()`'s key
+    entry, the MCP bearer-token prompt and the client-id prompt showed the key as typed, left in the
+    scrollback, though `?gptr_login` and the sheet promise masked entry. In a T or D console
+    `tty_secret()` gives the modes to come back to (a console call's saved ones, else `stty -g`) and
+    `gptr_readline(hide = )` sets `-echo` as the last mode before readline, after its own restore, and
+    restores the modes first on exit, an interrupt too; GNU readline and libedit read the ECHO flag when
+    they start and then draw nothing typed, so the newline of Enter is written after the answer. Where R
+    reads no terminal or stty fails (R.app, Windows, IRkernel, radian; RStudio, and Positron with rstudioapi
+    installed, ask in their own dialog, `rstudioapi::askForPassword()`, as before), one dim row above the
+    chevron says once in the session `This console shows the key as you type; gptr_env() loads keys from a
+    file instead.` R's history never held a `readline()` answer. Contract-visible:
+    04 §15.10 IC-77. Tests: test-console-ui.R "a terminal reads a secret with its echo off, then restores it
+    (cheat-sheet review)", "a console that shows a secret as typed says so once (cheat-sheet review)", "a
+    terminal: gptr_login() reads a key without showing it (cheat-sheet review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

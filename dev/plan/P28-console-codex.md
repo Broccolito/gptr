@@ -624,6 +624,14 @@ Decisions:
   - Who asks: `? sub-agent a: allow r?`.
   - The invalid-answer hint (Task 3) names the same letters, `p` among them.
 - The answer prompt is `› ` at column 0, read with R's readline, echo on, Enter required.
+  (Amended in the cheat-sheet review: auth-2.) A secret input (`gptr_login()`'s key, an MCP bearer token, a
+  client id) that no rstudioapi dialog asks (RStudio's, or Positron's with rstudioapi installed) reads with
+  the echo off where R reads its own terminal (T, D): `-echo` is the last mode set before readline, inside
+  `gptr_readline()` after its own restore, and the modes come back first on exit, also after an interrupt,
+  so both readline libraries draw nothing typed and the newline of Enter is written after the answer. Where
+  R reads no terminal or stty fails (R.app, Windows, IRkernel, radian), a dim row above the chevron says
+  once: `This console shows the key as you type; gptr_env() loads keys from a file instead.` (main echoed
+  the key in every terminal).
 - Answers are unchanged:
   - `y`, `a`, `p`, `n`;
   - `n <text>` denies with feedback (amended in the steering review: also `no, <text>` and `No. <text>`;
@@ -667,14 +675,20 @@ Tests (`test-console-ui.R`), RED first:
 - (Amended in the cheat-sheet review: auth-1.) `test-auth-oauth.R` pins the OAuth inputs' prompts as the
   UI receives them, `API key for <provider>`, `Bearer token for MCP server <name>` and the paste prompt,
   none ending in `: `, which `ui_console_input()` adds (main asked `API key for openai: : `).
+- (Amended in the cheat-sheet review: auth-2.) `test-console-ui.R`: with the stty calls recorded, a secret
+  read on a terminal sets `-echo` after any restore and before the read and restores the saved modes after it,
+  also when the read signals an interrupt; a non-secret read never sets it; where stty fails or the console is
+  L the notice shows once; a pty case types a key at `gptr_login(..., method = "key")` and never sees it.
 
 Spec: IC-77, 03 §6.8.3, §6.17 and NS-1 (§10.1).
 
 Files: `R/console-ui.R` (`ui_question()`, `ui_permission_lines()`, `ui_console_permission()`,
 `ui_console_select()`, `ui_console_input()`), `R/console-render.R` (`console_state()`,
 `console_on_tool_start()`: the last printed call ids; `console_gap()`), `R/auth-oauth.R` (the input
-prompts), the tests above, and the approval sentences of `vignettes/interactive-console.Rmd` and
-`vignettes/teams-and-background.Rmd` (and their `.orig`). Amended in Task 12.
+prompts), `R/utils-options.R` (`gptr_readline()`, `readline_answer()`; amended in the
+cheat-sheet review: auth-2), the tests above, and the approval sentences of
+`vignettes/interactive-console.Rmd` and `vignettes/teams-and-background.Rmd` (and their `.orig`). Amended in
+Task 12.
 
 Commit: `feat(console): approvals ask under the call they gate`.
 

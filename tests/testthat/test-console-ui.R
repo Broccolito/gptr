@@ -400,7 +400,7 @@ test_that("lines typed or pasted before the approval prompt never answer it (IC-
   expect_identical(rl$kept, c("h$config$codex", "y"))
   # a secret is never kept
   rl = local_readline(c("sk-typed-ahead", "sk-answer"), secs = c(0.001, 1.5))
-  expect_identical(ui_console_read("Key: ", secret = TRUE), "sk-answer")
+  utils::capture.output(expect_identical(ui_console_read("Key: ", secret = TRUE), "sk-answer"))
   expect_identical(rl$kept, character())
 })
 
@@ -443,6 +443,111 @@ test_that("a terminal's question read that Ctrl-C or an end of input ends ends i
   # an IDE console ends the input line itself
   local_live_console("L")
   expect_identical(written(function() ui_console_read("> ")), "")
+})
+
+test_that("a terminal reads a secret with its echo off, then restores it (cheat-sheet review)", {
+  local_console_test()
+  local_live_console("T")
+  withr::defer(assign("tty", NULL, envir = the))
+  log = character()
+  local_mocked_bindings(tty_modes = function(modes = "-g") {
+    log <<- c(log, paste(modes, collapse = " "))
+    if (identical(modes, "-g")) "SAVED"
+  })
+  # gptr_readline() itself, reading from `typed()` and logging the read among the modes
+  real = gptr_readline
+  typed = function() "sk-typed"
+  local_mocked_bindings(gptr_readline = function(prompt = "", read = readline, hide = NULL) {
+    real(prompt, function(p) {
+      log <<- c(log, "read")
+      typed()
+    }, hide)
+  })
+  ask = function(secret = TRUE) {
+    log <<- character()
+    written(function() ui_console_read("Key: ", secret = secret))
+  }
+  # outside a console call: the terminal's modes saved, the echo off last, restored after the
+  # read, and the row the hidden Enter left open ended
+  expect_identical(ask(), "\n")
+  expect_identical(log, c("-g", "-echo", "read", "SAVED"))
+  # a console call's question reads in its saved modes: the echo off is undone first
+  the$tty = list2env(list(saved = "SAVED", set = "CALL"))
+  expect_identical(ask(), "\n")
+  expect_identical(log, c("SAVED", "-echo", "read", "SAVED", "CALL"))
+  the$tty$asking = TRUE
+  ask()
+  expect_identical(log, c("-echo", "read", "SAVED"))
+  # an interrupt restores the modes too, and the row is ended once
+  typed = function() {
+    signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
+  }
+  the$tty = NULL
+  expect_identical(ask(), "\n")
+  expect_identical(log, c("-g", "-echo", "read", "SAVED"))
+  # an answer that is no secret never turns the echo off
+  typed = function() "y"
+  expect_identical(ask(FALSE), "")
+  expect_identical(log, "read")
+  the$tty = list2env(list(saved = "SAVED", set = "CALL"))
+  ask(FALSE)
+  expect_identical(log, c("SAVED", "read", "CALL"))
+})
+
+test_that("a console that shows a secret as typed says so once (cheat-sheet review)", {
+  local_console_test()
+  withr::local_options(width = 80L)
+  old = the$once
+  the$once = new.env(parent = emptyenv())
+  withr::defer(assign("once", old, envir = the))
+  local_readline(rep("sk-typed", 6L))
+  note = c("    This console shows the key as you type; gptr_env() loads keys from a file",
+           "    instead.")
+  shown = function(cls, secret = TRUE) {
+    local_live_console(cls)
+    out = NULL
+    rows = utils::capture.output({
+      out = ui_console_read("Key: ", secret = secret)
+    })
+    expect_identical(out, "sk-typed")
+    cli::ansi_strip(rows)
+  }
+  # an IDE console, R.app, Windows or IRkernel (no terminal of its own), once in the session
+  expect_identical(shown("L"), note)
+  expect_identical(shown("L"), character())
+  # a terminal where stty fails, also once
+  the$once = new.env(parent = emptyenv())
+  expect_identical(shown("T"), note)
+  expect_identical(shown("D"), character())
+  the$once = new.env(parent = emptyenv())
+  expect_identical(shown("L", secret = FALSE), character())
+  # a terminal that reads it without echo says nothing
+  local_mocked_bindings(tty_modes = function(modes = "-g") if (identical(modes, "-g")) "SAVED")
+  expect_identical(shown("T"), character())
+})
+
+test_that("a terminal: gptr_login() reads a key without showing it (cheat-sheet review)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "for (v in c('R_USER_CONFIG_DIR', 'R_USER_DATA_DIR', 'R_USER_CACHE_DIR')) {",
+    "  do.call(Sys.setenv, stats::setNames(list(file.path(tempdir(), v)), v))",
+    "}",
+    "options(gptr.interactive = TRUE, gptr.history = FALSE, cli.num_colors = 1L)",
+    "gptr_login('openai', method = 'key')",
+    "auth = readLines(file.path(tools::R_user_dir('gptr', 'config'), 'auth.json'))",
+    "cat('STORED', any(grepl(paste0('sk-', 'pty', 'hidden'), auth, fixed = TRUE)), '\\n')"
+  ), term = "xterm")
+  expect_true(pty$wait("API key for openai", timeout = 120))
+  expect_true(endsWith(pty$pending(), pty_asked()))
+  pty$send("sk-ptyhidden\r")
+  expect_true(pty$wait("STORED TRUE"))
+  # the echo is back: R's readline shows what is typed at the next prompt
+  expect_true(pty$wait("> "))
+  pty$send("cat('ECHO', 'BACK\\n')\r")
+  expect_true(pty$wait("ECHO BACK"))
+  expect_identical(pty$seen("cat('ECHO'"), 1L)
+  expect_identical(pty$seen("sk-ptyhidden"), 0L)
 })
 
 test_that("a question drawn over the composer's draft says where it went (steering review)", {
