@@ -3672,6 +3672,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Contract-visible: 04 §15.10 IC-82. Tests: test-console-input.R "the draft keeps its column as the status
     changes; the status only widens (review)", "a leading ! takes the chevron's place; / and ! drafts say when
     they run (D-244)".
+  - The row above a question's chevron that names a T console's draft puts the person's text last, its head kept as
+    a queue line keeps it, `↳ draft kept, back after your answer · and label the ax…` (`ui_draft_kept()`); it was
+    `↳ draft kept · …bel the axes · back after your answer`. The pause menu writes it too, above its chevron and
+    above its `? Steer` or `? Follow-up` text's: the menu hid the draft without a word, and a person who retyped it
+    had it queued twice. Contract-visible: 04 §15.10 IC-76. Tests: test-console-ui.R "a question drawn over the
+    composer's draft says where it went (steering review)"; test-console-interrupt.R "the pause menu and its text
+    question say a T console's draft is kept (review)"; test-console-typing.R (the pty case's rows).
   - On a narrow live row a sub-agent's label gives way to its number first, `sub-agent #1 4s` (`short` in
     `console_live_state()`), before the person's queued text is cut or the hint dropped, and a bare clock is not
     padded to the run's widest status: at 60 columns the row read `▌ 4s` padded beside a draft, cut `↳ steer ·

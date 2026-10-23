@@ -5465,8 +5465,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     text (steering review: a pause in a half-typed sentence drew the question over the draft, and the rest of
     the sentence became its answer), or at once when none came in that time, and keys typed as it comes due
     never reach its answer. Where a question still draws over a draft, `ui_console_read()` writes one dim row
-    at column 4 above the chevron, `↳ draft kept · <the draft's tail> · back after your answer` (ASCII `->`
-    and ` - `), cut to the width. It reads with the saved modes (`gptr_readline()`), and when it returns
+    at column 4 above the chevron, `↳ draft kept, back after your answer · <the draft's head>` (ASCII `->`
+    and ` - `), cut to the width (`ui_draft_kept()`; the pause menu writes it too, above its chevron and its
+    `? Steer` or `? Follow-up` text's: review of Tasks 22-27, the draft's tail sat between two fixed phrases,
+    cut mid-word at its head, and the menu hid the draft without a word). It reads with the saved modes (`gptr_readline()`), and when it returns
     (`console_asked()`, on exit of `ui_console_permission()`, `ui_console_select()` and `ui_console_input()`)
     the row is drawn again with the draft unchanged, so it shows while the call the question gated runs. A
     sub-agent's question waits the same way, one at a time; what is typed goes to the session of the console

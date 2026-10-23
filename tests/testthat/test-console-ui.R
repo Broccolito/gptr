@@ -697,12 +697,13 @@ test_that("a question drawn over the composer's draft says where it went (steeri
     shown
   }
   the$tty = list2env(list(keys = TRUE))
-  expect_identical(read("half"), "    \u21b3 draft kept \u00b7 half \u00b7 back after your answer")
-  # a long draft shows its tail, on one row inside the width
+  expect_identical(read("half"), "    \u21b3 draft kept, back after your answer \u00b7 half")
+  # a long draft shows its head, as a queue line does, on one row inside the width (review of
+  # Tasks 22-27: its tail between two fixed phrases read `\u2026bel the axes`)
   row = read(paste(rep("word", 30L), collapse = " "))
-  expect_identical(row, paste0("    \u21b3 draft kept \u00b7 \u2026word", strrep(" word", 6L),
-                               " \u00b7 back after your answer"))
-  expect_identical(nchar(row), 79L)
+  expect_identical(row, paste0("    \u21b3 draft kept, back after your answer \u00b7 word",
+                               strrep(" word", 6L), "\u2026"))
+  expect_identical(nchar(row), 78L)
   expect_identical(read(""), character())
   # D consoles hold no draft
   the$tty = list2env(list(keys = FALSE))

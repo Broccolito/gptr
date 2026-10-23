@@ -313,7 +313,7 @@ ui_undo_note = function(request) {
 #' readline() leaves open then. A `secret` is read with the echo off where R reads its own terminal
 #' (tty_secret()); elsewhere the console shows it, which a dim row above the chevron says once in
 #' the session (IC-77). A T console's draft stays in its composer, for the live row after the
-#' answer; a dim row above the chevron says so, its tail cut to the width (D-243)
+#' answer; a dim row above the chevron says so (ui_draft_kept(), D-243)
 #' @noRd
 ui_console_read = function(prompt, secret = FALSE) {
   rd = console_repl_find()$reader
@@ -321,15 +321,7 @@ ui_console_read = function(prompt, secret = FALSE) {
   read = if (is.null(hide)) gptr_readline else function(p) gptr_readline(p, hide = hide)
   repeat {
     console_typed(drain = TRUE)
-    draft = if (isTRUE(the$tty$keys)) rd$compose$draft
-    if (nzchar(draft %||% "")) {
-      sym = console_style()
-      lead = paste0(sym$queued, " draft kept", sym$sep)
-      end = paste0(sym$sep, "back after your answer")
-      room = max(8L, ui_width() - 5L - live_fit(paste0(lead, end)))
-      text = live_fit(live_text(draft), room, sym$ellipsis, tail = TRUE)
-      console_write(ui_hint(paste0(lead, text, end)))
-    }
+    ui_draft_kept()
     if (secret && is.null(hide) && once_first("visible", "secret")) {
       console_write(ui_hint(paste("This console shows the key as you type; gptr_env() loads keys",
                                   "from a file instead.")))
@@ -346,6 +338,20 @@ ui_console_read = function(prompt, secret = FALSE) {
     console_write(ui_hint(paste0("A pasted block is not an answer", if (kept) " (kept in history)",
                                  ".")))
   }
+}
+
+#' The dim row above a question's chevron where a T console's composer holds a draft (D-243), which
+#' stays for the live row after the answer: `<queued> draft kept, back after your
+#' answer<sep><draft>`, the draft's head kept, as a queue line keeps it, cut to the width; nothing
+#' without a draft
+#' @noRd
+ui_draft_kept = function() {
+  draft = if (isTRUE(the$tty$keys)) console_repl_find()$reader$compose$draft
+  if (!nzchar(draft %||% "")) return(invisible(NULL))
+  sym = console_style()
+  lead = paste0(sym$queued, " draft kept, back after your answer", sym$sep)
+  room = max(8L, ui_width() - 5L - live_fit(lead))
+  console_write(ui_hint(paste0(lead, live_fit(live_text(draft), room, sym$ellipsis))))
 }
 
 #' Is a question's free-text answer a console command (`/exit`, `/help x`)? It waits for the next

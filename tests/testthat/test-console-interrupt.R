@@ -258,6 +258,23 @@ test_that("in the console margin the menu's rows are an approval's, its prompt a
   expect_identical(log$prompts, c(">> ", ">> "))
 })
 
+test_that("the pause menu and its text question say a T console's draft is kept (review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  log = local_menu_answers(c("s", "use only mpg"))
+  rd = new.env(parent = emptyenv())
+  rd$compose = list(draft = "and colour by gear")
+  local_mocked_bindings(console_repl_find = function() list(reader = rd))
+  tty = the$tty
+  the$tty = list(keys = TRUE)
+  withr::defer(assign("tty", tty, envir = the))
+  err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  kept = "    -> draft kept, back after your answer - and colour by gear"
+  expect_identical(err[2:6], c("  ? Paused",
+                               "    s steer - f follow-up - c continue - a abort - b background",
+                               kept, "  ? Steer", kept))
+})
+
 test_that("pause-menu text passes the input event with source steer", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)

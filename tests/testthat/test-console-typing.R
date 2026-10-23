@@ -1340,7 +1340,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   ))
   person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
   sep = if (l10n_info()[["UTF-8"]]) " \u00b7 " else " - "
-  kept = paste0("draft kept", sep, "use base R", sep, "back after your answer")
+  kept = paste0("draft kept, back after your answer", sep, "use base R")
   expect_true(pty$wait("peter> ", timeout = 120))
   # B: typed without Enter while the answer streams, it is the composer's draft: the approval
   # says it is kept, its row ends with its prompt and the draft is on the live row again while the

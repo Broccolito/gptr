@@ -160,7 +160,8 @@ console_ahead = function(rd, accept) {
 #' (D-243): after a blank row, `? Paused` (the session's id added when more than one is paused)
 #' and under its text the keys as an approval's (ui_keys()): `s steer`, `f follow-up`, `c continue`,
 #' `a abort` and, for a foreground call, `b background`, read at the person's chevron
-#' (console_ask()), in the saved modes from before its rows (tty_question()). A key or its word
+#' (console_ask()), in the saved modes from before its rows (tty_question()), a T console's draft
+#' said to be kept above the chevron as at any question (ui_draft_kept()). A key or its word
 #' answers, also one typed before the chevron showed or with the Ctrl-C (console_ahead()), an empty
 #' answer continues, anything else is kept in the history, never sent, under a dim hint that names
 #' it and the keys. [s] and [f] read their text at the chevron of their own question, `?
@@ -196,6 +197,7 @@ policy_menu = function(cnd, pol) {
   tty_question(TRUE)
   console_write(c("", paste0("  ", ui_question(title, ui_width() - 2L)),
                   ui_keys(k, keys, ui_width())))
+  ui_draft_kept()
   go = function() {
     for (rec in recs) rec$last = "notice"
     console_render_resume(pol$runs)
@@ -212,6 +214,7 @@ policy_menu = function(cnd, pol) {
       # the text's own question, so its chevron hangs under a title as every other does
       console_write(paste0("  ", ui_question(c(s = "Steer", f = "Follow-up")[[key]],
                                              ui_width() - 2L)))
+      ui_draft_kept()
       text = console_ask(TRUE)
       if (is.na(text)) return(invisible(NULL))
       enqueue = function() {

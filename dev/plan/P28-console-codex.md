@@ -1113,7 +1113,10 @@ Decisions:
   row, the only place the draft showed, and the rest of the sentence became its answer. Enter or
   Ctrl-U empties the draft, so a sent or cleared draft asks after 1 s.) Where a question still draws
   over a draft, `ui_console_read()` writes one dim row at column 4 above the chevron, `↳ draft
-  kept · <its tail> · back after your answer`; D and L consoles are unchanged.
+  kept · <its tail> · back after your answer`; D and L consoles are unchanged. (Amended in the review of
+  Tasks 22-27: `↳ draft kept, back after your answer · <its head>`, the person's text last with its head kept, as a
+  queue line; the pause menu writes the row too, above its chevron and its text question's, as it hid the
+  draft.)
 - This replaces Task 2's history route in T.
 - Sub-agent questions work the same way, one at a time. Typed messages always go to the parent
   session.
