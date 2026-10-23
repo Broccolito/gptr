@@ -126,8 +126,14 @@ To opt out for one call, including a call in a bound document, pass
 `.opts = list(record = FALSE)`. Pass it to each call in a pipe chain that should not record.
 `record = TRUE` in `.opts` keeps the usual consent checks; it does not supply consent.
 Without a binding, source discovery can find a call in a document. At an interactive console,
-agreeing to transcript recording creates a script under `.gptr/transcripts/`; an explicit
-`gptr_doc(path, format = "transcript")` selects an R transcript target.
+agreeing to transcript recording creates a script under `.gptr/transcripts/`; binding an `.R`
+file with `gptr_doc()` makes that file the transcript (`format = "transcript"` only labels the
+binding). A transcript holds what passes through gptr: each `peter()` call typed at the console
+and each prompt of the `peter()` console as `s_<id> = peter("prompt", <context names>)` with its
+block, the console's `!`, `!!` and fenced R lines under `# direct R (no model)`, and slash
+commands as comments. Other code typed at R's own `>` prompt is not recorded, so a transcript
+whose turns use objects made there fails on replay; create such inputs with `!code` in the
+`peter()` console.
 
 Recording also needs the agent's code to run. In the default `manual` mode, code that changes
 objects, such as storing `top` above, waits for approval. Nobody can approve under `Rscript`,

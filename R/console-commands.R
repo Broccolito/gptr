@@ -98,10 +98,11 @@ console_command = function(text, session = NULL, send = NULL) {
   invisible("done")
 }
 
-#' The bound history document of `s` (the `doc.site` service, P15), or NULL
+#' The bound history document of `s`, or the gptr_doc() binding before the console's first
+#' prompt when `s` is NULL (the `doc.site` service, P15), or NULL
 #' @noRd
 cmd_doc_site = function(s) {
-  if (is.null(s) || !ext_service_has("doc.site")) return(NULL)
+  if (!ext_service_has("doc.site")) return(NULL)
   tryCatch(ext_service_get("doc.site")(s), error = function(e) NULL)
 }
 
@@ -310,7 +311,8 @@ cmd_status = function(args, ctx) {
     return(c("session   (none yet: the first prompt starts one)",
              paste0("model     ",
                     cmd_model_label(if (!is.null(rs)) repl_model(rs) else "the default model")),
-             paste0("mode      ", if (!is.null(rs)) repl_mode(rs) else "manual")))
+             paste0("mode      ", if (!is.null(rs)) repl_mode(rs) else "manual"),
+             paste0("document  ", cmd_doc_site(NULL)$path %||% "(none)")))
   }
   d = session_data(s)
   c(paste0("session   ", d$id, "  (", d$status, ", ", d$turns,

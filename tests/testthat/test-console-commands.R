@@ -270,6 +270,25 @@ test_that("/status, /tools and /env describe the console", {
                    paste0("session   ", s$id, "  (idle, 1 turn)"))
 })
 
+test_that("/doc and /status name a gptr_doc() binding before the first prompt", {
+  local_console_commands()
+  root = local_project()
+  old = the$doc_binding
+  withr::defer(assign("doc_binding", old, envir = the))
+  the$doc_binding = NULL
+  expect_null(cmd_doc_site(NULL))
+  rs = repl_state(NULL, new.env())
+  expect_identical(run_command(rs, "/doc")$out, "No document is bound.")
+  expect_true("document  (none)" %in% run_command(rs, "/status")$out)
+  log = file.path(root, "log.R")
+  gptr_doc(log)
+  expect_identical(cmd_doc_site(NULL), list(path = log, format = "r"))
+  expect_identical(run_command(rs, "/doc")$out, paste0("Document: ", log, " (r)"))
+  status = run_command(rs, "/status")$out
+  expect_match(status[[1L]], "session   (none yet", fixed = TRUE)
+  expect_true(paste0("document  ", log) %in% status)
+})
+
 test_that("/clear starts a new conversation and keeps model and mode", {
   local_console_commands()
   s = idle_session()

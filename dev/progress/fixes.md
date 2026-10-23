@@ -2132,3 +2132,30 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-249 (extended). Open: replayed text comes from the S2 cache, also in
   `tempdir()/gptr` without `.gptr/`, so a later process's replay has `text` NA; `doc_conflict`'s
   "the session log has it" is equally untrue there after exit.
+
+### doc-9 - /doc and /status see a gptr_doc() binding before the first prompt
+- Finding 25.
+- Red: FAIL 4 in `^console-commands$` (PASS 97): with `gptr_doc("log.R")` bound and no session,
+  `cmd_doc_site(NULL)` was NULL, `/doc` said "No document is bound." and `/status` had no
+  `document` line.
+- Cause: `cmd_doc_site()` returned NULL for a NULL session without asking the doc.site service,
+  whose answer without a session is the `gptr_doc()` binding (`doc_site_service()`, which
+  `prompt_doc()` asks the same way); `cmd_status()` printed no document line before a session.
+- Fix: `cmd_doc_site()` asks the service with the session as given; `/status` before the first
+  prompt adds `document  <path>` or `(none)`. The `script-as-history` transcript paragraph says
+  an `.R` binding is the transcript (`format = "transcript"` only labels it); that it holds each
+  console `peter()` call and prompt as `s_<id> = peter("prompt", <context names>)` with its
+  block, the console's `!`, `!!` and fenced R lines under `# direct R (no model)` and slash
+  commands as comments; and that other code typed at R's `>` prompt is not recorded, so a
+  transcript using objects made there fails on replay: make them with `!code`. The `.Rmd` is the
+  knitted `.Rmd.orig`.
+- Green: `^console-commands$` PASS 101; `^(console-.*|perm-plan|doc-replay|arch-layers|
+  lint-rules)$` PASS 2690 SKIP 1 (INFRA-03, interactive R on CI; NOT_CRAN=true). Lint clean (the
+  `.Rmd.orig` keeps its one lint from main, now line 356). `precompute.R script-as-history`: 0
+  problems, output byte-identical to the edited `.Rmd`. Rd unchanged.
+- Deviations: none (03 §6.17 lists `/status` and `/doc` without their lines; the doc.site service
+  already answered the binding without a session). Not in the plan: `/status` before a session
+  gains the `document` line, as it had none to correct.
+- Open: the transcript still does not see R's own `>` prompt (no task callback; P15/IC-49). The
+  verdict's other passing bug, `eval_guard()` refusing a `q` bound to a non-function, is the
+  orchestration group's guard-1.
