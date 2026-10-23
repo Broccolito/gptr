@@ -574,7 +574,7 @@ and produce `gptr_tool_result` objects (§5.7) that `tool_result_message(result,
 | `bridge` | chr | `#>` digests of bridge calls (`#> sh git status --porcelain: exit 0, 6 lines`) |
 | `artifacts` | chr | paths of artifacts written (`.gptr/artifacts/<id>/app.R`) |
 | `checkpoint` | chr(1)\|NULL | id of the `gptr.checkpoint` entry |
-| `value` | chr(1)\|NULL | name designated through `gptr_return()` during this call (the value itself is held by the session per §5.1) |
+| `value` | chr(1)\|NULL | name designated through `gptr_return()` during this call, for an expression its one-line label (the value itself is held by the session per §5.1) |
 
 `details` of `read`: `path`, `offset`, `limit`, `lines_total`, `truncated`, `image` (lgl), `encoding`, `eol`.
 Of `edit`: `path`, `n_edits`, `fuzzy` (lgl), `diff` (chr, the full unified diff), `document` (lgl: the path is a
@@ -2846,7 +2846,7 @@ policy(function() session_run(s, msg_user("go"), list()), list(), mode = "call")
 | `builtin_documents(gptr)` | `doc-formats.R` | registers `doc_format` specs `r`, `rmd`, `qmd`, `ipynb`, `transcript`; the route `document` (order 50); the `documents` prompt section (IC-68); an `agent_end` hook that renders and writes the block when `run$opts$doc` is set; a `session_tree` hook that makes undone blocks inert; the services `doc.site`, `doc.edit`, `doc.s1_block` and `doc.replay` (owned by `builtin:documents`, so filtering it removes them, IC-34, IC-47) | P02 load |
 | `doc_locate(call)` | `doc-locate.R` | a site `list(kind = "srcref" \| "source_frame" \| "knitr" \| "quarto" \| "jupyter" \| "rscript" \| "ide" \| "console", path, format, stmt = int(2) \| NULL, expr = call \| NULL, occurrence = int(1), ordinal = int(1), backend = chr(1), top_level = lgl(1), in_block = chr(1) \| NULL (the agent block whose body holds the statement, IC-47), ide_id = chr(1) \| NULL, defer = lgl(1))` using the precedence of §6.9.3 of `03`; `source()` frames are read inside `tryCatch` only when `gptr.doc_source_frames` is `TRUE`; paths compared with `path_key()` | P15 |
 | `doc_decide(site, prompt_hash, args_hash, mode)` | `doc-replay.R` | `"replay"`, `"run"`, `"regenerate"`, `"skip"` (undone), or signals `not_recorded`/`stale_block` per the table of 14 §4.4.2 plus the undone row of G7 §3.8; a block is fresh only when both hashes match (IC-45); block-nested calls replay from S2 (IC-47) | P15 |
-| `doc_block_lines(session, turn, site, call_ordinal)` | `doc-blocks.R` | chr lines of a block in the §11.5 grammar for the site's format (code of successful `record = TRUE` `r` calls from `details$code` minus top-level `gptr_return()` calls and calls of `record = FALSE` members, with top-level `<-` rewritten to `=` where safe; `#>` outputs from `details$outputs`; `## Decision:`, `## Steer:` and `## Follow-up:` lines; bridge digests; artifact paths; redacted with `code_for_history()` and `persist`; IC-48, IC-49); team and fan-out blocks per IC-47; plan-mode turns give one `## Plan:` line | P15 |
+| `doc_block_lines(session, turn, site, call_ordinal)` | `doc-blocks.R` | chr lines of a block in the §11.5 grammar for the site's format (code of successful `record = TRUE` `r` calls from `details$code` minus top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members, with top-level `gptr_return(<expression>)` rewritten to `.gptr_value_<block id> = (<expression>)` and top-level `<-` to `=` where safe; `#>` outputs from `details$outputs`; `## Decision:`, `## Steer:` and `## Follow-up:` lines; bridge digests; artifact paths; redacted with `code_for_history()` and `persist`; IC-48, IC-49); team and fan-out blocks per IC-47; plan-mode turns give one `## Plan:` line | P15 |
 | `doc_upsert(site, block_lines, block_id = NULL)` | `doc-blocks.R` | checks write consent (IC-45; otherwise nothing is written), then idempotent insert/replace of the owned block through the site's backend, passing the `document_write` event (fail closed, patchable) first; md5 conflict check with re-locate and retry (3 times, then warning `doc_conflict`); deferred under Rscript through the sidecar of IC-51; never writes an open notebook (IC-50); returns `list(action, block_id, lines, backend)` and appends `gptr.doc_block`; caches child texts in S2 (IC-47) | P15, P16 |
 | `prompt_hash(template)`, `args_hash(interp)` | `doc-blocks.R` | 12 hex of sha256 of the normalised template (trimws, CRLF -> LF, whitespace around newlines removed); 8 hex of sha256 of the sorted interpolated `name=value` pairs, `NULL` without interpolation (IC-45) | P15 |
 | `s2_get(key)`, `s2_put(key, record)` | `doc-replay.R` | the S2 answer cache (§11.9) | P15 |
@@ -3807,7 +3807,7 @@ Values containing spaces are double-quoted with R escapes. Header keys, in this 
 | `cost` | optional | USD, plain number; written whenever the turn's cost is known (`0` for a free route), omitted when unknown (IC-74) |
 | `session` | recommended | session id |
 | `turn` | recommended | turn number in the session |
-| `value` | optional | the name designated with `gptr_return()` (replay binds `$value` to it) |
+| `value` | optional | the name designated with `gptr_return()` (replay binds `$value` to it): a bare name as written, `.gptr_value_<block id>` for an expression the body assigns, else omitted (one name, never an expression) |
 | `fork` | forks | `<parent session id>:<turn>` |
 | `plan` | when used | id of the session whose pending plan was consumed |
 | `status` | undone blocks | `undone` |
@@ -3816,8 +3816,9 @@ Values containing spaces are double-quoted with R escapes. Header keys, in this 
 | `children` | team and fan-out blocks | `"<name>:<session id>,..."` (quoted) |
 
 **Body**, in emission order: the code of each successful `r` call with `record = TRUE`, verbatim except that
-top-level `gptr_return()` calls and calls of `record = FALSE` members are dropped and top-level `<-` is rewritten to
-`=` where safe (IC-48); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
+top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members are dropped, a top-level
+`gptr_return(<expression>)` with one unnamed argument becomes `.gptr_value_<block id> = (<expression>)` and top-level
+`<-` is rewritten to `=` where safe (IC-48); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
 (excluded from `prompt` and `sha`, IC-49); after each such call that printed something, its output as `#> ` lines (at most `gptr.doc_output_lines` lines, else the setting `doc$output_lines`, of 76
 characters, then `#> ... (N more lines)` counting every line not shown), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
 (`#> sh git status --porcelain: exit 0, 6 lines`); artifact references (`#> [app] .gptr/artifacts/<id>/app.R`,
@@ -4478,8 +4479,10 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 - `gptr_return(x)` outside a run returns `invisible(x)` with a once-per-session `notice`, suppressed while a
   document is being replayed; `gptr_error_not_in_run` is removed.
 - `doc_block_lines()` drops, at top-level-expression granularity (`getParseData()` of each recorded code chunk),
-  calls to `gptr_return()`/`gptr::gptr_return()` and to members whose spec has `record = FALSE`; a chunk that
-  becomes empty is omitted; the value stays in `value=`. `record = FALSE` is set for `out`, `plot`, `help`,
+  calls to `gptr_return()`/`gptr::gptr_return()` of a name (or with a named or no argument) and to members whose
+  spec has `record = FALSE`; a chunk that becomes empty is omitted; the value stays in `value=`. A call with one
+  unnamed expression becomes `.gptr_value_<block id> = (<expression>)` and `value=.gptr_value_<block id>`, so replay
+  recomputes it. `record = FALSE` is set for `out`, `plot`, `help`,
   `search`, `describe`; the `<r_session>` text tells the model to use them only with `record = false`.
 - Plan-mode runs never record code (`record` forced `FALSE`); their block holds one `## Plan: <plans path>`
   comment.

@@ -476,6 +476,31 @@ test_that("doc_drop_expr() drops the gptr::-qualified forms like the bare ones (
   expect_identical(as.character(doc_code_clean("gptr::peter$out(\"o1a2b3\"); y = 1")), "y = 1")
 })
 
+test_that("gptr_return(<expression>) is recorded as the block's hidden value; value= is a name", {
+  arrow = paste0("<", "-")
+  hidden = "`.gptr_value_@@GPTR_BLOCK@@` = "
+  out = doc_code_clean(c(paste("fit", arrow, "lm(mpg ~ wt, mtcars)"), "gptr_return(coef(fit))",
+                         "x = \"é\"; gptr::gptr_return(nchar(x)) # done"))
+  expect_identical(as.character(out), c("fit = lm(mpg ~ wt, mtcars)",
+                                        paste0(hidden, "(coef(fit))"),
+                                        paste0("x = \"é\"; ", hidden, "(nchar(x)) # done")))
+  expect_identical(attr(out, "kept"), c(TRUE, TRUE, TRUE, TRUE))
+  expect_true(attr(out, "returned"))
+  # a bare name stays value=<name>; a named argument would bind it, so it is dropped as before
+  for (code in c("gptr_return(fit)", "gptr_return(x = coef(fit))")) {
+    out = doc_code_clean(code)
+    expect_identical(as.character(out), character(), info = code)
+    expect_false(attr(out, "returned"), info = code)
+  }
+  base = list(body = character(), code = character(), secrets = FALSE)
+  det = list(value = "coef(fit)", code = "gptr_return(coef(fit))")
+  expect_identical(doc_turn_r(base, det, list(), TRUE, FALSE)$value,
+                   ".gptr_value_@@GPTR_BLOCK@@")
+  expect_null(doc_turn_r(base, c(det, record = FALSE), list(), TRUE, FALSE)$value)
+  expect_identical(doc_turn_r(base, list(value = "b", code = "gptr_return(b)"), list(), TRUE,
+                              FALSE)$value, "b")
+})
+
 test_that("printed output becomes at most gptr.doc_output_lines #> lines of 76 characters", {
   out = doc_output_lines(as.character(1:20), max_lines = 12L)
   expect_length(out, 13L)

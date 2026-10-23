@@ -2141,6 +2141,30 @@ test_that("value= replays by name and no document gets a $value line (acceptance
   expect_length(fake_requests(x$fake), 2L)
 })
 
+test_that("gptr_return(<expression>) is recorded so a replay restores $value (acceptance 4)", {
+  code = "fit = lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))"
+  x = local_doc_e2e(list(fake_tool("r", code = code), fake_text("done")))
+  f = file.path(x$root, "analysis.R")
+  writeLines("s = peter(\"Fit mpg on wt\")", f)
+  e = new.env(parent = globalenv())
+  gptr_source(f, envir = e)
+  txt = readLines(f)
+  b = doc_find_blocks(txt)
+  hidden = paste0(".gptr_value_", b$id)
+  expect_identical(b$header[[1L]]$value, hidden)
+  body = doc_block_body(txt, b)
+  expect_identical(body[!startsWith(body, "#>")],
+                   c("fit = lm(mpg ~ wt, mtcars)", paste(hidden, "= (coef(fit))")))
+  want = coef(lm(mpg ~ wt, mtcars))
+  expect_equal(e$s$value, want)
+  out = gptr_source(f, replay = "replay", envir = e)
+  expect_identical(out$action, "replayed")
+  withr::with_options(list(gptr.quiet = FALSE),
+                      expect_no_message(e$s$value, message = "not bound"))
+  expect_equal(e$s$value, want)
+  expect_length(fake_requests(x$fake), 2L)
+})
+
 test_that("documents are written only with consent; a project cannot grant it (acceptance 5)", {
   skip_on_cran()
   x = local_doc_e2e(function(request) {

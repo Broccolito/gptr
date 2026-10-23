@@ -77,9 +77,11 @@ specification:
   `fanout`), `children` (`"<name>:<session id>,..."`, quoted); block ids from P01's `id_block()` (6 hex with a letter,
   grown on collision, RNG-free).
 - Block body (04 §11.5, IC-48, IC-49): "the code of each successful `r` call with `record = TRUE`, verbatim except
-  that top-level `gptr_return()` calls and calls of `record = FALSE` members are dropped and top-level `<-` is
-  rewritten to `=` where safe"; "`## Steer: <text>` and `## Follow-up: <text>` lines ... (excluded from `prompt` and
-  `sha`)"; outputs "as `#> ` lines (at most `gptr.doc_output_lines` lines of 76 characters, then `#> ... (N more
+  that top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members are dropped, a top-level
+  `gptr_return(<expression>)` with one unnamed argument becomes `.gptr_value_<block id> = (<expression>)` and
+  top-level `<-` is rewritten to `=` where safe"; "`## Steer: <text>` and `## Follow-up: <text>` lines ...
+  (excluded from `prompt` and `sha`)"; outputs "as `#> ` lines (at most `gptr.doc_output_lines` lines of 76
+  characters, then `#> ... (N more
   lines)`), not in Rmd/qmd"; "`## Decision: <note>` lines"; bridge digests; artifact references (`#> [app] ...`,
   `#> [plot] <path>`); "a block whose code needed a secret gets `# gptr: block needs secrets that are not
   recorded`"; "Code passes `code_for_history()`"; "a plan-mode turn gives one `## Plan: <plans path>` line";
@@ -1111,9 +1113,9 @@ git commit -m "feat(doc): find peter() calls by content and resolve the blocks t
   `doc_secret_flag`.
 
 The body follows 04 §11.5 and IC-47..IC-49. `doc_code_clean()` drops, at top-level-expression granularity
-(`getParseData()`/srcrefs of each recorded chunk), `gptr_return()`/`gptr::gptr_return()` and calls of `record =
-FALSE` members (the tool spec's `record`, else `out`, `plot`, `help`, `search`, `describe`), cutting only the
-dropped bytes when a line holds several expressions, and rewrites a `LEFT_ASSIGN` that is a top-level expression or
+(`getParseData()`/srcrefs of each recorded chunk), `gptr_return()`/`gptr::gptr_return()` of a name and calls of
+`record = FALSE` members (the tool spec's `record`, else `out`, `plot`, `help`, `search`, `describe`), cutting only
+the dropped bytes when a line holds several expressions, and rewrites a `LEFT_ASSIGN` that is a top-level expression or
 a direct child of a `{` list to `=` (never inside call arguments; the superassignment, the right arrow and pipes stay;
 IC-48). The output of a dropped expression is dropped with it when the outputs are per expression. Entries are
 redacted at ingress (P06), so recorded code holds secret markers: a literal that is exactly `"[secret:NAME]"`

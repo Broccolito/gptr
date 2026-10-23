@@ -1496,6 +1496,27 @@ test_that("gptr_return() and peter$out() calls re-source cleanly under Rscript a
   expect_match(src$stdout, "REQUESTS 0", fixed = TRUE)
 })
 
+test_that("an Rscript replay restores a gptr_return(<expression>) value, with or without .gptr/", {
+  skip_on_cran()
+  fake = r"---(fake = gptr_fake_provider(list(list(tool = "r", input = list(
+  code = "fit = lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))")), "Fitted."))
+)---"
+  for (workspace in c(TRUE, FALSE)) {
+    root = local_project(gptr = workspace)
+    f = file.path(root, "fit.R")
+    doc_child_script(f, fake, c("s = peter('Fit mpg on wt')",
+                                "stopifnot(isTRUE(all.equal(s$value, coef(lm(mpg ~ wt, mtcars)))))",
+                                "cat('REQUESTS', length(fake$log$requests), '\\n')"))
+    rec = doc_child_run(root, f)
+    expect_identical(rec$status, 0L, info = rec$stderr)
+    expect_match(rec$stdout, "REQUESTS 2", fixed = TRUE)
+    expect_length(doc_find_blocks(readLines(f))$id, 1L)
+    rs = doc_child_run(root, f, replay = "replay")
+    expect_identical(rs$status, 0L, info = rs$stderr)
+    expect_match(rs$stdout, "REQUESTS 0", fixed = TRUE)
+  }
+})
+
 test_that("a document outside a .gptr/ project keeps its sidecar in the user cache (IC-51)", {
   root = local_project(gptr = FALSE)
   side = doc_sidecar_path(file.path(root, "analysis.ipynb"))

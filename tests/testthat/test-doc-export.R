@@ -80,6 +80,21 @@ test_that("raw history export preserves interleaved R across a pipeline and a se
   expect_identical(export_read(png)[1:8], as.raw(c(137, 80, 78, 71, 13, 10, 26, 10)))
 })
 
+test_that("raw export keeps the assignment a recorded gptr_return(<expression>) became", {
+  code = "fit = lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))"
+  x = local_doc_e2e(list(fake_tool("r", code = code), fake_text("Fitted.")))
+  f = file.path(x$root, "fit.R")
+  writeLines("s = peter(\"Fit mpg on wt\")", f)
+  gptr_source(f, envir = new.env(parent = globalenv()))
+  hidden = paste0(".gptr_value_", doc_find_blocks(readLines(f))$id)
+  target = file.path(x$root, "plain.R")
+  gptr_export(f, target)
+  expect_true(paste(hidden, "= (coef(fit))") %in% readLines(target))
+  plain = new.env(parent = globalenv())
+  source(target, local = plain)
+  expect_equal(get(hidden, envir = plain), coef(lm(mpg ~ wt, mtcars)))
+})
+
 test_that("Peter export keeps calls active and recorded code inert exactly once", {
   local_project()
   body = c("hits = hits + 1L", "value = c(", "  2, 4", ")", "## Decision: Keep the data.",

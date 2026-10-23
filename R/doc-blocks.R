@@ -11,6 +11,8 @@ doc_re_close = "^([ \t]*)# <<< gptr:([0-9a-z]{6,16})[ \t]*$"
 doc_re_kv = "([A-Za-z_][A-Za-z0-9_.]*)=(\"([^\"\\\\]|\\\\.)*\"|[^ \t]+)"
 doc_re_steer = "^[ \t]*## (Steer|Follow-up): "
 doc_block_token = "@@GPTR_BLOCK@@"
+# what a recorded gptr_return(<expression>) assigns, and value= names (doc_rewrite_return())
+doc_value_name = paste0(".gptr_value_", doc_block_token)
 doc_header_keys = c("model", "date", "prompt", "sha", "call", "tokens", "cost", "session", "turn",
                     "value", "fork", "plan", "status", "args", "kind", "children")
 doc_quoted_keys = "children"
@@ -736,15 +738,28 @@ doc_member_recorded = function(name) {
   !name %in% doc_unrecorded_members
 }
 
-#' Should a top-level expression of recorded code be dropped: gptr_return() or a call of a
-#' `record = FALSE` peter$ member (IC-48), bare or `gptr::`-qualified
+#' Is `e` a gptr_return() call, bare or `gptr::`-qualified?
+#' @noRd
+doc_is_return = function(e) {
+  is.call(e) && (identical(e[[1L]], quote(gptr_return)) ||
+                   identical(e[[1L]], quote(gptr::gptr_return)))
+}
+
+#' Does a gptr_return() call designate an expression (one unnamed argument, not a bare name)?
+#' Recorded code keeps it as an assignment to the block's hidden name (doc_rewrite_return()).
+#' @noRd
+doc_return_value = function(e) {
+  doc_is_return(e) && length(e) == 2L && is.null(names(e)) && !is.symbol(e[[2L]])
+}
+
+#' Should a top-level expression of recorded code be dropped: gptr_return() of a name (another
+#' argument is kept, doc_return_value()) or a call of a `record = FALSE` peter$ member (IC-48),
+#' bare or `gptr::`-qualified
 #' @noRd
 doc_drop_expr = function(e) {
   if (!is.call(e)) return(FALSE)
   head = e[[1L]]
-  if (identical(head, quote(gptr_return)) || identical(head, quote(gptr::gptr_return))) {
-    return(TRUE)
-  }
+  if (doc_is_return(e)) return(!doc_return_value(e))
   if (is.call(head) && length(head) == 3L &&
       (identical(head[[1L]], as.name("$")) || identical(head[[1L]], as.name("[["))) &&
       (identical(head[[2L]], quote(peter)) || identical(head[[2L]], quote(gptr::peter)))) {
@@ -885,17 +900,55 @@ doc_rewrite_assign = function(lines) {
   lines
 }
 
-#' Recorded code of one r call: drop gptr_return() and record = FALSE members, rewrite the left
-#' arrow, trim blank edges (IC-48). The text is parsed as doc_parse_text() parses it (IC-62; parse
-#' data kept under sys.source()); a cut whose result does not parse to the kept expressions
-#' leaves the code as written. Attribute `kept`: one logical per top-level expression (NULL when
-#' the code does not parse; such code is kept as written).
+#' Rewrite each top-level gptr_return(<expression>) (doc_return_value()) as an assignment to the
+#' block's hidden name, so replay recomputes what value= names: `gptr_return(coef(fit))` becomes
+#' `.gptr_value_<block id> = (coef(fit))`. The name stays backquoted until doc_prepare() fills in
+#' the block id, so the text parses meanwhile. A call whose name is split over lines is kept as
+#' written. Attribute `returned`: TRUE when one was rewritten.
+#' @noRd
+doc_rewrite_return = function(lines) {
+  none = structure(lines, returned = FALSE)
+  if (!any(grepl("gptr_return", lines, fixed = TRUE))) return(none)
+  exprs = tryCatch(doc_parse_text(lines), error = function(e) NULL)
+  hit = which(vapply(seq_along(exprs), function(i) doc_return_value(exprs[[i]]), NA))
+  pd = if (length(hit)) utils::getParseData(exprs)
+  if (is.null(pd)) return(none)
+  done = FALSE
+  for (i in rev(hit)) {
+    sr = attr(exprs, "srcref")[[i]]
+    l = sr[1L]
+    fn = pd[pd$token == "SYMBOL_FUNCTION_CALL" & pd$line1 == l & pd$col1 >= sr[5L], ,
+            drop = FALSE]
+    if (!nrow(fn)) next
+    cols = doc_byte_cols(lines[l])
+    from = match(sr[5L], cols)
+    to = findInterval(fn$col2[which.min(fn$col1)], cols)
+    b = charToRaw(lines[l])
+    if (is.na(from) || to < from ||
+        !gsub("[ \t]", "", rawToChar(b[from:to])) %in% c("gptr_return", "gptr::gptr_return")) {
+      next
+    }
+    lines[l] = as_utf8(rawToChar(c(b[seq_len(from - 1L)],
+                                   charToRaw(paste0("`", doc_value_name, "` = ")),
+                                   b[seq_along(b) > to])))
+    done = TRUE
+  }
+  structure(lines, returned = done)
+}
+
+#' Recorded code of one r call: drop gptr_return() of a name and record = FALSE members, rewrite
+#' the left arrow and gptr_return(<expression>), trim blank edges (IC-48). The text is parsed as
+#' doc_parse_text() parses it (IC-62; parse data kept under sys.source()); a cut whose result does
+#' not parse to the kept expressions leaves the code as written. Attributes `kept`: one logical
+#' per top-level expression (NULL when the code does not parse; such code is kept as written);
+#' `returned`: a gptr_return(<expression>) was rewritten (doc_rewrite_return()).
 #' @noRd
 doc_code_clean = function(code) {
   lines = strsplit(as_utf8(paste(code, collapse = "\n")), "\n", fixed = TRUE)[[1L]]
   if (!length(lines)) return(character())
   exprs = tryCatch(doc_parse_text(lines), error = function(e) NULL)
   kept = NULL
+  returned = FALSE
   if (!is.null(exprs) && length(exprs)) {
     drop = vapply(seq_along(exprs), function(i) doc_drop_expr(exprs[[i]]), NA)
     if (any(drop)) {
@@ -903,12 +956,14 @@ doc_code_clean = function(code) {
       cut = doc_drop_ranges(lines, srcs[drop], srcs[!drop])
       if (!is.null(cut) && doc_same_exprs(cut, exprs[!drop])) lines = cut else drop[] = FALSE
     }
-    lines = doc_rewrite_assign(lines)
+    lines = doc_rewrite_return(doc_rewrite_assign(lines))
+    returned = attr(lines, "returned")
     kept = !drop
   }
+  lines = as.character(lines)
   while (length(lines) && !nzchar(trimws(lines[1L]))) lines = lines[-1L]
   while (length(lines) && !nzchar(trimws(lines[length(lines)]))) lines = lines[-length(lines)]
-  structure(lines, kept = kept)
+  structure(lines, kept = kept, returned = returned)
 }
 
 #' The flag line of a block whose code holds a secret that cannot be replayed (contract 11.5)
@@ -1228,9 +1283,14 @@ doc_turn_assistant = function(out, m, results, with_out, plan_mode) {
 #' @noRd
 doc_turn_r = function(out, det, args, with_out, plan_mode) {
   if (!identical(det$status %||% "ok", "ok")) return(out)
-  if (!is.null(det$value)) out$value = det$value
+  # value= is one name (11.5): an expression's label is not; its recorded assignment names one
+  named = rlang::is_string(det$value) && identical(make.names(det$value), det$value)
+  if (!is.null(det$value)) out$value = if (named) det$value
   if (plan_mode || isFALSE(det$record) || isFALSE(args$record)) return(out)
   chunk = doc_code_clean(det$code %||% args$code %||% "")
+  if (!is.null(det$value) && !named && isTRUE(attr(chunk, "returned"))) {
+    out$value = doc_value_name
+  }
   kept = attr(chunk, "kept")
   chunk = as.character(chunk)
   safe = doc_history_code(chunk)
@@ -1471,7 +1531,7 @@ doc_header_set_sha = function(line, sha) {
   paste0(lead, kv)
 }
 
-#' Choose the block id, fill it into the body, render, and pass the document_write event:
+#' Choose the block id, fill it into the body and header, render, and pass the document_write event:
 #' list(id, rendered, action, sha, prompt) or list(skip = <reason>, id)
 #' @noRd
 doc_prepare = function(fmt, site, up, text, taken = character()) {
@@ -1491,8 +1551,12 @@ doc_prepare = function(fmt, site, up, text, taken = character()) {
     return(list(skip = "user-edited", id = id))
   }
   if (!replace) id = id_block(c(existing, taken))
-  body = gsub(doc_block_token, id, as.character(up$lines), fixed = TRUE)
-  header = up$header
+  body = gsub(paste0("`", doc_value_name, "`"), doc_value_name, as.character(up$lines),
+              fixed = TRUE)
+  body = gsub(doc_block_token, id, body, fixed = TRUE)
+  header = lapply(up$header, function(v) {
+    if (is.character(v)) gsub(doc_block_token, id, v, fixed = TRUE) else v
+  })
   header$sha = doc_body_sha(body)
   rendered = fmt$render(list(id = id, header = header, body = body), site)
   kind = if (isTRUE(site$console)) "transcript" else "block"

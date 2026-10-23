@@ -7,7 +7,8 @@
 gptr_return(x)
 }
 \arguments{
-\item{x}{The value; a bare name is recorded by name.}
+\item{x}{The value. A history document records a bare name by name; any other single
+argument is recorded as an assignment to a hidden name in the block, which replay reads.}
 }
 \value{
 \code{NULL} invisibly during a run; \code{x} invisibly outside a run.

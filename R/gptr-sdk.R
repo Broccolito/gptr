@@ -287,7 +287,8 @@ sdk_off = function(id) {
 #' argument invisibly and does nothing else, so recorded code that still contains the call runs
 #' cleanly.
 #'
-#' @param x The value; a bare name is recorded by name.
+#' @param x The value. A history document records a bare name by name; any other single
+#'   argument is recorded as an assignment to a hidden name in the block, which replay reads.
 #' @return `NULL` invisibly during a run; `x` invisibly outside a run.
 #' @examples
 #' y = gptr_return(1:3)

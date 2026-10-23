@@ -2208,3 +2208,31 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   arch-layers|lint-rules)$` PASS 4577 SKIP 2 (repr; NOT_CRAN=true). Lint clean; plan checks pass.
 - Deviations: D-249 (extended). Open: replaying block 1 into the live session after turn 2 records
   its `gptr.replay` and `value=` at turn 2, the session's current turn.
+
+### replay-2 - Record gptr_return(<expression>) so replay restores the value
+- Findings 155, 151, 114 (their expression half; replay-3 has fan-out values, store-1 `$text`).
+- Red: FAIL 17 in `^(doc-blocks|doc-replay|doc-export|doc-io)$` (PASS 1894): fake `r` code `fit =
+  lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))` recorded `value=coef(fit)` and dropped the line; a
+  same-process `gptr_source(replay = "replay")` gave `$value` NULL with "value `coef(fit)` (turn 1)
+  is not bound in this R process"; a `GPTR_REPLAY=replay Rscript` replay failed its value check
+  with and without `.gptr/`; a plain export held no line computing it.
+- Cause: `gptr_return()` boxes an expression under its deparsed label, `r_new_value_name()` hands
+  the label on, `doc_turn_r()` wrote it as `value=` and `doc_drop_expr()` cut the call, so replay
+  looked the label up as a binding name and nothing in the document recomputed it.
+- Fix: `doc_rewrite_return()` turns a top-level `gptr_return(<one unnamed argument, not a name>)`
+  into `.gptr_value_<block id> = (<argument>)` (backquoted until `doc_prepare()` fills the id into
+  the body and header); `doc_turn_r()` writes that name, keeps a syntactic name and omits a label.
+  Replay uses the name path unchanged. `?gptr_return`, 04 §4.4, §7.15, §11.5, IC-48, 03 §6.9.3.
+- Green: PASS 1911; `^(doc-.*|gptr-sdk|subagent-team|session-object|session-store|mcp-recording|
+  tool-r|northstar|ckpt-rewind|console-commands|copy-tools|arch-layers|lint-rules)$` PASS 4442 SKIP
+  2 (repr; NOT_CRAN=true). Lint clean; Rd regenerated; plan checks pass. Installed build, fake
+  provider, a self-bound `analysis.R`: the block reads `.gptr_value_c5b47c = (coef(fit))`; the
+  same-process and `GPTR_REPLAY=replay Rscript` replays print the coefficients, 0 requests, file
+  unchanged.
+- Deviations: D-249 (extended). Not in the plan: the Rscript case is in test-doc-io.R, beside its
+  child-script helpers; the bare-name case is the existing acceptance-4 test; no test-doc-io case
+  assumed a dropped expression line.
+- Open: a same-process replay into an environment other than the recording one (and not the
+  global one) still resolves `value=` in the recording home ("not bound"; a bare name gets the
+  object of recording time); a `gptr_return(<expression>)` inside braces or a branch, or with its
+  name split over lines, is not rewritten and its value is not recorded.
