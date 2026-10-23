@@ -308,6 +308,23 @@ test_that("the banner names the console's key; no pause is promised where none i
                    "/help lists commands; Esc stops an answer, twice at the prompt leaves.")
 })
 
+test_that("in Positron the banner says typed text waits as R code (steering review)", {
+  local_gptr_options(interactive = TRUE)
+  banner = function(fe) {
+    local_mocked_bindings(front_end = function() fe)
+    utils::capture.output(repl_banner(repl_state(NULL, new.env())))
+  }
+  expect_identical(utils::tail(banner("positron"), 2L), c(
+    "/help lists commands; Ctrl-C pauses an answer, twice at the prompt leaves.",
+    "Text typed while peter works waits as R code; Ctrl-C, then s, steers."))
+  for (fe in c("terminal", "rstudio")) {
+    expect_false(any(grepl("waits as R code", banner(fe))), info = fe)
+  }
+  # no menu, no line: nobody can answer it
+  local_gptr_options(interactive = FALSE)
+  expect_false(any(grepl("waits as R code", banner("positron"))))
+})
+
 test_that("gptr.history decides whether console_history_add() adds; it never fails (D-243)", {
   added = character()
   local_mocked_bindings(timestamp = function(stamp, ...) added <<- c(added, stamp),

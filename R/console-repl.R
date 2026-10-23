@@ -785,7 +785,8 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
 
 #' The banner (architecture 6.17, NS-1): `gptr <version> | model ... | mode ... | .gptr/ found`,
 #' up to six objects of the evaluation environment, then the keys: the console's interrupt key
-#' pauses an answer where the pause menu is offered, else it stops it
+#' pauses an answer where the pause menu is offered, else it stops it. In Positron, whose console
+#' holds what is typed while peter works as R code, a line says so and that the key, then s, steers.
 #' @noRd
 repl_banner = function(rs) {
   ws = if (is.null(workspace_dir())) "no .gptr/" else ".gptr/ found"
@@ -797,7 +798,11 @@ repl_banner = function(rs) {
                    FALSE),
     paste0("/help lists commands; ", console_interrupt_key(),
            if (console_menu_available()) " pauses" else " stops",
-           " an answer, twice at the prompt leaves.")))
+           " an answer, twice at the prompt leaves."),
+    if (console_menu_available() && front_end() == "positron") {
+      paste0("Text typed while peter works waits as R code; ", console_interrupt_key(),
+             ", then s, steers.")
+    }))
   mode_notice(repl_mode(rs))
 }
 

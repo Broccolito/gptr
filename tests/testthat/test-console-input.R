@@ -182,6 +182,8 @@ live_rows = function(states, width) {
 
 live_states = list(
   rstudio = list(what = "thinking", secs = 6, queued = 1, key = "Esc", pause = TRUE, typed = TRUE),
+  positron = list(what = "thinking", secs = 6, queued = 1, key = "Ctrl-C", pause = TRUE,
+                  steer = TRUE),
   menu = list(what = "r", secs = 65, key = "Ctrl-C", pause = TRUE),
   hint = list(what = "thinking", secs = 6, draft = ""),
   follow = list(what = "thinking", secs = 6, draft = "", enter = "follow_up"),
@@ -199,6 +201,7 @@ test_that("the live row says what the run does, its queue and the person's draft
   withr::local_options(cli.num_colors = 1L)
   expect_identical(live_rows(live_states, 80L), list(
     rstudio = "▌ thinking 6s · 1 queued · esc pause · typed lines run next",
+    positron = "▌ thinking 6s · 1 queued · ctrl-c, then s, to steer",
     menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer · tab follow-up · ctrl-c pause",
     follow = "▌ thinking 6s   enter follow-up · tab steer · ctrl-c pause",
@@ -212,6 +215,7 @@ test_that("the live row says what the run does, its queue and the person's draft
   # question), then the queued message is cut, keeping its head; the draft keeps its tail
   expect_identical(live_rows(live_states, 40L), list(
     rstudio = "▌ thinking 6s · 1 queued · esc pause",
+    positron = "▌ thinking 6s · 1 queued",
     menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer",
     follow = "▌ thinking 6s   enter follow-up",
@@ -222,6 +226,7 @@ test_that("the live row says what the run does, its queue and the person's draft
   ))
   expect_identical(live_rows(live_states, 30L), list(
     rstudio = "▌ thinking 6s · 1 queued",
+    positron = "▌ thinking 6s · 1 queued",
     menu = "▌ r 1m 05s · ctrl-c pause",
     hint = "▌ thinking 6s   enter steer",
     follow = "▌ thinking 6s",
@@ -251,6 +256,18 @@ test_that("the live row says what the run does, its queue and the person's draft
     queue = "# thinking 6s - 2 queued   -> steer - use log(mpg) instead - Up edit",
     draft = "# thinking 6s   >> and plot the residuals against the fitted values please"
   ))
+})
+
+test_that("Positron's row says Ctrl-C, then s, steers there (steering review)", {
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L)
+  state = list(what = "thinking", secs = 6, steer = TRUE, pause = TRUE, key = "Ctrl-C")
+  expect_identical(console_live_row(state, 80L), "▌ thinking 6s · ctrl-c, then s, to steer")
+  # the term goes whole, as every term does
+  expect_identical(console_live_row(state, 40L), "▌ thinking 6s")
+  expect_identical(console_live_row(state, 30L), "▌ thinking 6s")
+  withr::local_options(cli.unicode = FALSE)
+  expect_identical(console_live_row(state, 80L), "# thinking 6s - ctrl-c, then s, to steer")
 })
 
 test_that("while R code runs in this process the row has no clock and says keys wait (review)", {

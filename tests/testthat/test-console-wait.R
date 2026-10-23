@@ -189,11 +189,11 @@ test_that("an IDE console's row says what its key does and where typed lines go"
   expect_identical(sub(" +$", "", utils::capture.output(invisible(wait_request(w)))),
                    "\r# thinking 0s - esc stop")
   # Positron's console erases by writing spaces, so its row is padded; it holds what is typed
-  # there, so Ctrl-C and the pause menu are how to steer (review)
+  # there as R code, so Ctrl-C, then the pause menu's s, is how to steer (review; steering review)
   testthat::local_mocked_bindings(front_end = function() "positron")
   utils::capture.output(console_live_stop())
   expect_identical(sub(" +$", "", utils::capture.output(invisible(wait_request(w)))),
-                   "\r# thinking 0s - ctrl-c steer")
+                   "\r# thinking 0s - ctrl-c, then s, to steer")
 })
 
 test_that("continue and queued pause messages restore a pending request's live row", {

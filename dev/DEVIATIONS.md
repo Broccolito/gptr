@@ -3473,6 +3473,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     does, its queue and the person's draft (D-243)"; test-console-repl.R "the banner names the console's key; no
     pause is promised where none is (review)"; test-console-wait.R "an IDE console's row says what its key does
     and where typed lines go".
+  - Positron's live row reads `▌ thinking 2s · ctrl-c, then s, to steer` (was `· ctrl-c steer`), and where the
+    menu is offered the console's banner adds `Text typed while peter works waits as R code; Ctrl-C, then s,
+    steers.`: Positron's console holds what is typed while peter works as R code, cleared at Ctrl-C or run after
+    `peter()` returns (a parse error), so it never reaches the agent, and the old term let the person take their
+    text for sent. gptr reads nothing of Positron's input (no parser, no poller); a one-shot `peter("...")` has no
+    banner, so the row is the cue there. The term goes whole below about 40 columns, as every term does.
+    Contract-visible: 04 §15.10 IC-82. Tests: test-console-input.R "the live row says what the run does, its
+    queue and the person's draft (D-243)", "Positron's row says Ctrl-C, then s, steers there (steering review)";
+    test-console-repl.R "in Positron the banner says typed text waits as R code (steering review)";
+    test-console-wait.R "an IDE console's row says what its key does and where typed lines go".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

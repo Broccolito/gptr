@@ -5714,8 +5714,10 @@ its part in its own commit, and Task 27 finalises them.
       Positron, RStudio; R.app draws no row) or ` · <key> stop` (Windows' Rgui; the key from
       `console_interrupt_key()`, lower case): the
       key and its verb, as the composer's keys read (review of Tasks 16-21: `pauses`, `stops`); in Positron
-      ` · ctrl-c steer`, as its console holds what is typed while R is busy and clears it at Ctrl-C, so the
-      pause menu is the way to steer there; in RStudio ` · esc pause · typed lines run next` (steering review:
+      ` · ctrl-c, then s, to steer`, as its console holds what is typed while R is busy as R code, cleared at
+      Ctrl-C or run after `peter()` returns, so the pause menu is the way to steer there (steering review: it
+      read ` · ctrl-c steer`, and the person took their typed text for sent; the console's banner adds
+      `Text typed while peter works waits as R code; Ctrl-C, then s, steers.`); in RStudio ` · esc pause · typed lines run next` (steering review:
       its console keeps a line entered during the run for the next prompt, unless a question reads it, and
       hides the entered line at its next output, so the row says where it goes).
       `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`

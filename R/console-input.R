@@ -269,16 +269,16 @@ console_newest = function(s, rd, take = FALSE) {
 #' shown in place of the status words), `draft` (the composer's text; NULL where no composer reads
 #' keys), `enter` (the kind Enter queues, the `type_ahead` setting), `key` (the console's interrupt
 #' key), `pause` (TRUE where the key pauses, else it stops), `steer` (TRUE where only the pause
-#' menu steers: Positron's console holds what is typed) and `typed` (TRUE where a line typed during
-#' the run is the next prompt: RStudio's console), `frozen` (TRUE while R code runs in this
-#' process: no clock, and with an empty draft `<sep>keys show when r returns`), `band` (TRUE on the
-#' input band, its words
-#' in the band's grey) and `status_w` (the widest status a row with a draft had this run: the
-#' status is padded to it, so the draft never moves left; attr "status_w" of the result is this
-#' row's, 0 for a row of completions, which shows until the next key). In the style table's glyphs:
-#' without a composer the status ends with the key and its verb, as the composer's keys read,
-#' `<sep>esc stop`, and with `typed` `<sep>typed lines run next`; with an empty draft the newest
-#' message follows, `<queued> steer<sep><text><sep><up> edit`, or the keys, `enter steer<sep>tab
+#' menu steers: Positron's console holds what is typed as R code) and `typed` (TRUE where a line
+#' typed during the run is the next prompt: RStudio's console), `frozen` (TRUE while R code runs
+#' in this process: no clock, and with an empty draft `<sep>keys show when r returns`), `band`
+#' (TRUE on the input band, its words in the band's grey) and `status_w` (the widest status a row
+#' with a draft had this run: the status is padded to it, so the draft never moves left; attr
+#' "status_w" of the result is this row's, 0 for a row of completions, which shows until the next
+#' key). In the style table's glyphs: without a composer the status ends with the key and its
+#' verb, as the composer's keys read, `<sep>esc stop`, with `steer` `<sep>ctrl-c, then s, to
+#' steer`, and with `typed` `<sep>typed lines run next`; with an empty draft the newest message
+#' follows, `<queued> steer<sep><text><sep><up> edit`, or the keys, `enter steer<sep>tab
 #' follow-up<sep>ctrl-c pause`; else `<person> <draft>`, after the hint `runs after this answer`
 #' where the draft starts with / or ! (a follow-up, whatever the key) and the hint fits beside the
 #' status at its widest, and a leading ! takes the person's glyph's place, bold red (Codex's shell
@@ -306,8 +306,9 @@ console_live_row = function(state, width) {
   # the hint's terms; a queued message (`said`) is the one text cut, the others are dropped whole
   said = NULL
   terms = if (is.null(draft)) {
-    verb = if (isTRUE(state$steer)) "steer" else if (isTRUE(state$pause)) "pause" else "stop"
-    c(paste(key, verb), if (isTRUE(state$typed)) "typed lines run next")
+    verb = if (isTRUE(state$steer)) ", then s, to steer" else
+      if (isTRUE(state$pause)) " pause" else " stop"
+    c(paste0(key, verb), if (isTRUE(state$typed)) "typed lines run next")
   } else if (!nzchar(draft) && frozen) {
     paste("keys show when", what, "returns")
   } else if (!nzchar(draft) && is.null(state$newest)) {

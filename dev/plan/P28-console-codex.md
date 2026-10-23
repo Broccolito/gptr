@@ -74,6 +74,9 @@ per-message choice:
   the pause menu, whose s and f steer and queue; a typed line still runs next unless a question reads
   it, and RStudio's live row says so (R.app draws none). In RStudio an Esc first closes RStudio's own
   completion list, if open, then clears a line being typed, so the menu reads at an empty input line.)
+- (Amended in the steering review: Positron's console holds a line typed during a run as R code, cleared
+  at Ctrl-C or run after `peter()` returns, so it never steers; its live row reads
+  `· ctrl-c, then s, to steer` and the console's banner says that typed text waits as R code.)
 
 This replaces IC-76's "follow-up ... is sent when the agent would stop" and any text that treats
 steering as end-of-run delivery.
@@ -882,8 +885,9 @@ Decisions:
   Positron, whose console erases by writing spaces (amended in Task 17: given `\033[K`, its transcript had
   32 rows ending in spaces). (Amended in the steering review: RStudio offers the pause menu, so its row ends
   `· esc pause · typed lines run next`, whose last term the collapse drops first; Windows' Rgui keeps
-  `· esc stop`.) Until Task 18's composer reads keys, T is status only as well, ending
-  `· ctrl-c pauses` (amended in Task 17).
+  `· esc stop`. Positron's reads `· ctrl-c, then s, to steer`, as `· ctrl-c steer` did not say that text
+  typed there waits as R code and never reaches the agent.) Until Task 18's composer reads keys, T is
+  status only as well, ending `· ctrl-c pauses` (amended in Task 17).
 - P: nothing.
 - `console_class()` takes no argument (amended in Task 17): P outside an interactive R; a piped REPL
   (`.stdin`) stays out of `repl_terminal()`, which is now a T or D console's REPL not piped, so radian (L in
@@ -1375,7 +1379,10 @@ Decisions:
   visual review: the banner said `Esc pauses an answer` where Esc stops the run). (Amended in the review of
   Tasks 16-21: until this task the old banner already says `<key> stops an answer` where no menu is offered,
   as the live row contradicted it in RStudio and R.app. In Positron the banner says Ctrl-C steers, as its
-  live row does: its console holds what is typed while peter works.)
+  live row does: its console holds what is typed while peter works.) (Amended in the steering review: in
+  Positron, where the menu is offered, the old banner has one more line, `Text typed while peter works
+  waits as R code; Ctrl-C, then s, steers.`; this rewrite keeps it as a fourth dim line at column 2,
+  `text typed while peter works waits as R code · ctrl-c, then s, steers`.)
 - The mode stays in the prompt (`peter[auto]>`). Shift-Tab is not added; readline cannot bind it
   portably.
 
