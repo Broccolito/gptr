@@ -169,7 +169,8 @@ console_ahead = function(rd, accept) {
 #' without the text it shows under, right under it, as under any question. [b] says
 #' in dim rows that the run went to the background (with the service's notices), then lists what
 #' the REPL held for after the run as kept (console_background_settle()), or in red why not.
-#' It resumes the interrupted computation, the next block a blank row below the menu and the live
+#' It resumes the interrupted computation, the next block a blank row below the menu (an interrupted
+#' tool block continues as one: its code's further output and its result line) and the live
 #' row with a T console's draft drawn again (console_asked()), or returns to let the policy's
 #' exiting handler abort. It clears the live row only: an answer's held row stays in its stream and
 #' continues after the menu, which goes between whole rows (D-245)
@@ -180,6 +181,8 @@ policy_menu = function(cnd, pol) {
   if (is.null(findRestart("resume", cnd)) || !console_menu_available()) return(invisible(NULL))
   if (!is.null(the$live_row)) the$live_row$clear()
   recs = as.list(console_state()$active)
+  # a tool block the menu interrupted: the rest of its code's output and its result
+  tool = vapply(recs, function(rec) identical(rec$last, "tool"), NA)
   for (rec in recs) {
     rec$paused = TRUE
     rec$last = "prompt"
@@ -199,7 +202,10 @@ policy_menu = function(cnd, pol) {
                   ui_keys(k, keys, ui_width())))
   ui_draft_kept()
   go = function() {
-    for (rec in recs) rec$last = "notice"
+    # resumed code's output (the evaluator's tee writes no block gap) and its result line are its
+    # call's block again, one blank row below the menu; any other block opens after a notice
+    for (i in seq_along(recs)) recs[[i]]$last = if (tool[[i]]) "tool" else "notice"
+    if (any(tool) && nzchar(console_pad())) console_cat("\n")
     console_render_resume(pol$runs)
     console_asked()
     invokeRestart("resume")

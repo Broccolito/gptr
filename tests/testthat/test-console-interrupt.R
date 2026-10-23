@@ -275,6 +275,26 @@ test_that("the pause menu and its text question say a T console's draft is kept 
                                kept, "  ? Steer", kept))
 })
 
+test_that("the output of resumed code and its result stay one block below the menu (review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  rec = console_record(list(run = run$id))
+  rec$last = "tool"
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  local_menu_answers("c")
+  out = notices({
+    with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call")
+    # the evaluator's tee writes the rest of the code's output with no block gap, then the result
+    cat("    Min. 1st Qu.\n")
+    console_gap(rec, "tool")
+    cat("    done\n")
+  })
+  expect_identical(utils::tail(out, 4L), c(
+    "    s steer - f follow-up - c continue - a abort - b background", "", "    Min. 1st Qu.",
+    "    done"))
+})
+
 test_that("pause-menu text passes the input event with source steer", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)

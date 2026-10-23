@@ -3672,6 +3672,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Contract-visible: 04 §15.10 IC-82. Tests: test-console-input.R "the draft keeps its column as the status
     changes; the status only widens (review)", "a leading ! takes the chevron's place; / and ! drafts say when
     they run (D-244)".
+  - Code the pause menu resumed during an `r` call keeps its block: its further output (the evaluator's tee, which
+    writes no block gap) sits one blank row below the menu and its `done · 4.8 s` joins it, where the output ran on
+    from the menu's last row (`↳ steer`, then `Min. 1st Qu. ...`) and a blank row cut `done` off from it.
+    Contract-visible: none. Tests: test-console-interrupt.R "the output of resumed code and its result stay one
+    block below the menu (review)".
   - The row above a question's chevron that names a T console's draft puts the person's text last, its head kept as
     a queue line keeps it, `↳ draft kept, back after your answer · and label the ax…` (`ui_draft_kept()`); it was
     `↳ draft kept · …bel the axes · back after your answer`. The pause menu writes it too, above its chevron and
