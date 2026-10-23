@@ -2323,7 +2323,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35504. Lint clean; plan checks pass.
 - Deviations: D-252 (bg-1 quote amended). Open: none.
 
-### guard-1b - A q bound to data is refused wherever a base function looks it up as a function
+### guard-1b - A q bound to data is refused as the function argument a base function looks up
 - Follow-up of guard-1. Red: `^eval-guard$` FAIL 9 PASS 139: with `q` bound to `quantile(1:10)` in `envir`,
   `Negate(q)('no')`, `base::Negate(f = q)`, `sweep(m, 1, s, q)`, `eapply(env, q)`, `.mapply(q, ...)`,
   `.S3method('print', 'foo', q)`, `Negate('q')('no')` and `Vectorize('q')('no')` passed, and a scan of base found
@@ -2337,7 +2337,8 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^eval-guard$` PASS 148; eval-*, copy-eval, copy-tools, tool-r, arch-layers, lint-rules, s1-* PASS 2454;
   full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35516. Lint clean.
 - Deviations: D-252 (guard-1 rule extended). Open: stats functions that `match.fun()` an argument (`integrate`,
-  `aggregate`, `dendrapply`) and user functions that do still pass a data `q` (advisory guard).
+  `aggregate`, `dendrapply`) and user functions that do still pass a data `q` (advisory guard), and so does a base
+  function given as another's function argument that receives a data `q` through `...` (`sapply(x, lapply, q)`).
 
 ### guard-1c - Only a call's function argument is read as a string outside P09's indirect calls
 - Review of guard-1b (low). Red: `^eval-guard$` FAIL 2 PASS 149: `.S3method('edit', 'myclass', function(name, ...)
@@ -2347,7 +2348,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   and `vectorize.args` are not function names.
 - Fix: `eval_guard_indirect` is P09's 18 names again; the walk adds the string function argument of every
   `eval_guard_fun_arg` call and of `Vectorize(FUN)`, so `Negate('q')`, `Vectorize('q')` and `.S3method('print',
-  'foo', 'q')` stay refused. A `q` symbol is still checked in `eval_guard_fun_arg` calls only (`Vectorize(q)` of data passes).
+  'foo', 'q')` stay refused. A `q` symbol is still checked in `eval_guard_fun_arg` calls only: `Vectorize(q)` of
+  data passes.
 - Green: `^eval-guard$` PASS 151; `^(eval-.*|copy-eval|copy-tools|tool-r|arch-layers|lint-rules|s1-.*)$` PASS 2244.
   Lint clean.
 - Deviations: D-252 (guard-1 rule). Open: none.
+
+### guard-1d - The function-argument rule refuses the argument as passed
+- Review of guard-1b (medium). With a data `q`, `sapply(list('no'), lapply, q)` and `lapply(list('no'), sapply, q)`
+  quit R and pass the guard: the inner function gets `q` through `...`, and its `match.fun()` finds `base::q`.
+  `Map(lapply, list(list('no')), list(q))` only errors (`mapply()` passes `dots[[2L]][[1L]]`).
+- Records only, the review's simplest fix: D-252 and guard-1b's heading say `q` passed directly as the function
+  argument is refused, and guard-1b's Open names this form. A code fix would add one more special case (a `q` beside
+  a base function given as the function argument) to an advisory guard that `eval(parse(text = ...))` evades.
+- Deviations: D-252 (guard-1 rule wording). Open: as guard-1b.

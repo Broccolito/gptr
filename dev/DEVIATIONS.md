@@ -3135,12 +3135,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (`k = 5`) and an `rm()` that un-shadows a source binding stay unmarked. Formerly `e` was added and nothing else.
 - Rule (guard-1): `eval_guard(exprs, envir = NULL)`; `eval_r()` passes its `envir`. `q` or `quit` used as a value
   passes when, looked up from `envir` as R looks up a value (its parents in order), it is bound to data: not a
-  function, and not a promise or active binding (never forced). Calls (`q()`, `base::q`, `do.call("q")`) and the
-  function argument of `do.call()` and of every base function that applies `match.fun()` to one (`sapply(x, q)`,
-  `Negate(q)`, `sweep(m, 1, s, q)`, which resolve to `base::q`; a test scans base) stay refused whatever is bound;
-  so do that argument as a string, `Vectorize("q")` (its `formals()` looks the name up) and any string argument of
-  P09's 18 indirect calls (`get("q")`), while `.S3method("edit", ...)`, `Vectorize(f, "de")`, `Vectorize(q)` and
-  `Recall(q)` pass, as none looks a blocked function up. Formerly `summary(q)` on the user's quantile vector was
+  function, and not a promise or active binding (never forced). Calls (`q()`, `base::q`, `do.call("q")`) and `q`
+  passed directly as the function argument of `do.call()` and of every base function that applies `match.fun()`
+  to one (`sapply(x, q)`, `Negate(q)`, `sweep(m, 1, s, q)`, which resolve to `base::q`; a test scans base) stay
+  refused whatever is bound; so do that argument as a string, `Vectorize("q")` (its `formals()` looks the name up)
+  and any string argument of P09's 18 indirect calls (`get("q")`). `.S3method("edit", ...)`, `Vectorize(f, "de")`,
+  `Vectorize(q)` and `Recall(q)` pass, as none looks a blocked function up; a `q` that reaches such a function
+  through `...` (`sapply(x, lapply, q)`) is not checked. Formerly `summary(q)` on the user's quantile vector was
   refused as quitting R (finding 25). The plan named `binding_env()`; it is an L3 function and not R's lookup.
 - Rule (team-1): a team, fan-out or `gptr_parallel()` team whose children did not all end idle takes the first such
   child's status and stored condition, `$reason` `"k of n sub-agents did not finish: a (blocked), ..."`, and the
