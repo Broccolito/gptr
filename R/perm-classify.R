@@ -2750,15 +2750,18 @@ risk_member_flags = function(member, e, root, known = NULL) {
   }
   if (member %in% c("help", "search", "describe", "plot", "out")) return(row(0L, "read"))
   if (member == "jobs") return(row(if (isFALSE(risk_arg(a, "kill", 1L) %||% FALSE)) 0L else 3L))
-  if (startsWith(member, "mcp$") || member %in% c("bg", "script", "app")) return(row(3L))
-  code = switch(member, sh = risk_fold(risk_arg(a, "cmd", 1L)),
+  if (startsWith(member, "mcp$") || member %in% c("script", "app")) return(row(3L))
+  code = switch(member, sh = , bg = risk_fold(risk_arg(a, "cmd", 1L)),
                 py = risk_fold(risk_arg(a, "code", 1L)), sql = risk_fold(risk_arg(a, "query", 1L)),
                 knit = risk_fold(risk_arg(a, "code", 2L)))
-  if (member %in% c("sh", "py", "sql", "knit") && is.null(code)) {
+  if (member %in% c("sh", "bg", "py", "sql", "knit") && is.null(code)) {
     return(row(3L, "dynamic", paste0(txt, "(<code the code computes>)")))
   }
   eng = risk_fold(risk_arg(a, "engine", 1L))
   f = switch(member, sh = risk_command(code, root),
+             # a background job is level 3 whatever it runs; its row carries the command for rules
+             bg = risk_flags_bind(risk_command(code, root),
+                                  row(3L, call = paste(code, collapse = " "))),
              py = risk_python(paste(code, collapse = "\n"), root),
              sql = risk_sql(paste(code, collapse = "\n"), root),
              knit = if (isTRUE(eng %in% c("bash", "sh", "zsh", "powershell", "cmd"))) {

@@ -2238,3 +2238,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the decision names. No live check (the fake run is the gate end to end).
 - Open: such a call whose reading is flagged gets no `[a]lways` rule (no one `sh:` glob covers the path and the
   name); `peter$bg` is sessions-18; a computed command (`cmd = "rm -rf build"; peter$sh(cmd)`) is nested-1.
+
+### sessions-18 - Classify peter$bg() commands like peter$sh()
+- Red: FAIL 9 in `^perm-(rules|gate|classify)$` (PASS 1198; finding 45): `r(sh:rm *)` deny and ask matched neither
+  `peter$bg('rm -rf build')` nor its argv form, `r(sh:python3 -m*)` did not allow `peter$bg('python3 -m
+  http.server 8000')`, `[a]lways` offered `r(sh:peter$bg*)`, `gptr_risk("peter$bg('rm -rf ~')")` was 3, and the
+  fake's `peter$bg('rm -rf build')` ran in auto and yolo and deleted `build/` (4).
+- Cause: `risk_member_flags()` returned one `peter$bg` row at level 3 and never read the command.
+- Fix: `bg` folds its `cmd` as `sh` does: a literal command gets `risk_command()`'s rows plus a level-3 `process`
+  row carrying the command text; a computed one the `dynamic` level-3 row.
+- Green: `^perm-(rules|gate|classify)$` PASS 1207; `^(perm-|bridge-|agent-dispatch|tool-r|ckpt-|arch-layers|
+  lint-rules|zzz)` PASS 3359 SKIP 12. Full suite (NOT_CRAN=true) FAIL 0 PASS 35465 SKIP 64. Lint and
+  check-plans clean.
+- Deviations: D-251 (extended); 04 §9.4 `bg` risk cell amended. From the plan: the level-4 case is an expectation
+  after the G5 table, which keeps its 46 cases. No live check (the fake run is the gate end to end).
+- Open: `peter$script()` still offers `r(sh:peter$script*)`, which would allow every script (finding 45, no
+  unit); a computed command is nested-1.

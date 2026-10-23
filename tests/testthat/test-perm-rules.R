@@ -144,6 +144,20 @@ test_that("sh: and category: rules see a program given by its path", {
   }
 })
 
+test_that("sh: rules read the command of a background job", {
+  root = local_project()
+  for (code in c("peter$bg('rm -rf build')", "peter$bg(c('rm', '-rf', 'build'))")) {
+    m = rule_match(list(deny = "r(sh:rm *)", ask = "r(sh:rm *)"), r_call(code))
+    expect_identical(c(m$deny, m$ask), rep("r(sh:rm *)", 2L), label = code)
+  }
+  m = rule_match(list(allow = "r(sh:python3 -m*)"),
+                 r_call("peter$bg('python3 -m http.server 8000')"))
+  expect_identical(m$allow, "r(sh:python3 -m*)")
+  expect_identical(rule_suggest(r_call("peter$bg('rm -rf build')")), "r(sh:rm -rf*)")
+  m = rule_match(list(allow = "r(sh:rm -rf*)"), r_call("peter$bg('curl https://x.org')"))
+  expect_identical(m$allow, character())
+})
+
 test_that("gptr_permissions() adds, lists and removes session rules (6.2)", {
   root = local_project()
   local_permission_rules()

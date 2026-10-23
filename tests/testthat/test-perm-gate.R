@@ -300,18 +300,21 @@ test_that("a nested member is gated at its own risk of its actual input (IC-78, 
   expect_true(file.exists(file.path(root, ".env")))
 })
 
-test_that("a deny rule stops a program given by its path, in auto and yolo (6.8.2)", {
+test_that("a deny rule stops a program given by its path or in a background job (6.8.2)", {
   skip_on_cran()
   root = local_project(files = list("build/a.o" = "x"))
   local_permission_rules()
   gptr_permissions(deny = "r(sh:rm *)")
-  for (mode in c("auto", "yolo")) {
-    fake = local_fake_provider(list(fake_tool("r", code = "peter$sh('/bin/rm -rf build')"),
-                                    "Done."), name = paste0("rm-", mode))
-    peter("Clean up.", model = fake, mode = mode, envir = new.env())
-    res = fake_requests(fake)[[2]]$last_results[[1]]
-    expect_match(msg_text(res), "denied by the rule r(sh:rm *)", fixed = TRUE, label = mode)
-    expect_true(file.exists(file.path(root, "build", "a.o")), label = mode)
+  for (code in c("peter$sh('/bin/rm -rf build')", "peter$bg('rm -rf build')")) {
+    for (mode in c("auto", "yolo")) {
+      fake = local_fake_provider(list(fake_tool("r", code = code), "Done."),
+                                 name = paste0(substr(code, 7L, 8L), "-", mode))
+      peter("Clean up.", model = fake, mode = mode, envir = new.env())
+      res = fake_requests(fake)[[2]]$last_results[[1]]
+      expect_match(msg_text(res), "denied by the rule r(sh:rm *)", fixed = TRUE,
+                   label = paste(code, mode))
+      expect_true(file.exists(file.path(root, "build", "a.o")), label = paste(code, mode))
+    }
   }
 })
 

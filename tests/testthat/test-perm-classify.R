@@ -633,6 +633,8 @@ test_that("G5's 46 polyglot calls are classified through their arguments (G5 p08
   )
   expect_length(cases, 46L)
   for (cs in cases) expect_identical(bridge(cs[[2]]), cs[[1]], label = cs[[2]])
+  # a background job is classified by its command, as peter$sh() is (D-251)
+  expect_identical(gptr_risk("peter$bg('rm -rf ~')", root = root)$level, 4L)
 })
 
 test_that("file connections opened for writing are file writes (plan mode stays read-only)", {

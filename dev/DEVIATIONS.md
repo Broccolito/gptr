@@ -3184,6 +3184,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   network); levels are unchanged. Was: only its level-4 rows, so `r(sh:rm *)` and `r(category:file_delete)` missed
   `/bin/rm -rf build` in auto and yolo. An allow rule must cover the path row as well, so `r(sh:/bin/rm -rf*)`, the
   former `[a]lways` rule, no longer approves it, and such a call is offered no `[a]lways` rule.
+- Rule (sessions-18): `peter$bg()` is classified as `peter$sh()` is: a literal command's rows plus a level-3
+  `process` row carrying the command text, so `sh:` rules match it and `[a]lways` offers `r(sh:rm -rf*)`; a
+  computed command is the `dynamic` level-3 row. Was one `peter$bg` row at level 3, which `r(sh:rm *)` never matched
+  (the job ran in auto and yolo) and for which `[a]lways` offered `r(sh:peter$bg*)`; `peter$bg('rm -rf ~')` is 4.
 - Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
   `tools`, `.opts` and refusals. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter` `envir`,
   `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and row).
@@ -3192,7 +3196,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `?session-accessors`, `?gptr_parallel`, vignette teams-and-background. 04 §5.1 `text` row and `print` method, §6.5
   `gptr_map()`, 03 §4.1.6; `?print.gptr_session`, `?session-accessors`, `?gptr_parallel`, the same vignette.
   03 §6.8 (the execute menu). 04 IC-54 (the plan allowlist). `gptr_risk()`'s rows and categories of a program
-  given by its path (no spec text describes them).
+  given by its path (no spec text describes them). 04 §9.4 `bg` risk cell.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...",
   "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
@@ -3204,5 +3208,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   "a continued gptr_parallel() team or fan-out answers ...", "printing a team or fan-out shows each child under its
   name ..."; perm-plan "a readonly session keeps read and r outside plan mode ...", "plan mode runs console
   output such as cat() ..."; perm-classify "the plan-mode allowlist admits only known read-only calls (IC-54)";
-  perm-rules "sh: and category: rules see a program given by its path"; perm-gate "a deny rule stops a program
-  given by its path ...". Evidence: progress/fixes.md Task FIX-18.
+  perm-rules "sh: and category: rules see a program given by its path", "sh: rules read the command of a
+  background job"; perm-classify "G5's 46 polyglot calls ..."; perm-gate "a deny rule stops a program given by its
+  path or in a background job ...". Evidence: progress/fixes.md Task FIX-18.

@@ -3397,7 +3397,7 @@ the remaining `r` budget when called inside `r`.
 | `out` | P10 (only owner, IC-36) | `peter$out(id, stream = c("stdout", "stderr"), lines = NULL)` | chr (the stored full text from the session store, the process store or the spill file, or `lines` of it); `record = FALSE` | 0 |
 | `sh` | P22 | `peter$sh(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE, check = FALSE, max_tokens = NULL)` (`cmd` chr: length > 1 = argv without a shell; length 1 = a command line through `shell_resolve()` when it has shell syntax) | `gptr_cmd` | command classifier (G5 levels); computed commands 3 |
 | `script` | P22 | `peter$script(path, args = character(), interpreter = NULL, ...)` | `gptr_cmd` | 3 |
-| `bg` | P22 | `peter$bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)` | `gptr_job` (added to the job table) | 3 |
+| `bg` | P22 | `peter$bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)` | `gptr_job` (added to the job table) | 3, or the command classifier's level when higher (D-251); computed commands 3 |
 | `jobs` | P22 | `peter$jobs(kill = FALSE)` | df of `bg` jobs | 0 (kill: 3) |
 | `py` | P22 | `peter$py(code, name = NULL, max_rows = 10L)` | `gptr_py`; reticulate (Suggests) | Python classifier |
 | `sql` | P22 | `peter$sql(query, name = NULL, con = NULL, n = 10L)` | data frame (all rows; prints dims + `n` rows); `name` = a data frame registered in an in-memory duckdb under its expression label (`name = mtcars` -> table `mtcars`) or a named list of data frames (one copy on the next edit of each, R9); without `name`, `con` or the DBI connection found by name in the evaluation environment | SQL classifier (select 0, drop 3) |
