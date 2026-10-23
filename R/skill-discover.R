@@ -157,9 +157,9 @@ skill_setting_paths = function() {
 #' Project `.gptr/skills`, `.agents/skills`, `.claude/skills` (nearest directory first) and the
 #' relative `skills.paths` entries, user directories under `gptr_user_dir("config")` and
 #' `user_home()` plus the absolute and `~` `skills.paths` entries, then the shared roots of
-#' `res_roots()`.
+#' `res_roots()` (`listing` as there).
 #' @noRd
-skill_roots = function() {
+skill_roots = function(listing = FALSE) {
   extra = skill_setting_paths()
   proj = c(res_project_dirs(c(".gptr/skills", ".agents/skills", ".claude/skills")),
            extra$project)
@@ -167,7 +167,7 @@ skill_roots = function() {
   user = c(file.path(gptr_user_dir("config"), "skills"), file.path(home, ".agents", "skills"),
            file.path(home, ".claude", "skills"), file.path(home, ".codex", "skills"),
            file.path(home, ".pi", "agent", "skills"), extra$user)
-  res_roots("skills", unique(proj[dir.exists(proj)]), unique(user))
+  res_roots("skills", unique(proj[dir.exists(proj)]), unique(user), listing = listing)
 }
 
 #' Discover every skill: `list(rows, specs)`, aligned by position
@@ -212,10 +212,11 @@ skill_collect = function(roots = skill_roots()) {
   list(rows = df, specs = specs)
 }
 
-#' Discovered skills as a data frame (contract 7.17), filtered by scope
+#' Discovered skills as a data frame (contract 7.17), filtered by scope; with the plugins a
+#' listing shows (`res_plugin_dirs()`)
 #' @noRd
 skill_discover = function(scope = "all") {
-  df = skill_collect()$rows
+  df = skill_collect(skill_roots(listing = TRUE))$rows
   keep = switch(scope,
                 all = rep(TRUE, nrow(df)),
                 project = df$origin == "project",

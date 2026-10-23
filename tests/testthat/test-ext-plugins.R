@@ -743,6 +743,47 @@ test_that("a plugin passed with plugins = is invisible to the next peter() call 
   expect_null(registry_get("skill", "scoped-skill", session = s2$id))
 })
 
+test_that("gptr_skills() and gptr_agents() list a live session's peter(plugins =) plugin", {
+  skip_on_cran()
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "listed-plug"}')
+  write_file(file.path(d, "skills", "listed-skill", "SKILL.md"),
+             c("---", "name: listed-skill", "description: Listed.", "---", "x"))
+  write_file(file.path(d, "agents", "listed-agent.md"),
+             c("---", "name: listed-agent", "description: Listed.", "---", "x"))
+  withr::defer(plugin_forget(d))
+  expect_false("listed-skill" %in% gptr_skills()$name)
+  s = peter("hello", plugins = d, model = local_fake_provider(list("ok")), envir = new.env())
+  sk = gptr_skills()
+  expect_identical(sk$source[sk$name == "listed-skill"], "plugin:listed-plug")
+  expect_true("listed-agent" %in% gptr_agents()$name)
+  plugins_session_end(s)
+  expect_false("listed-skill" %in% gptr_skills()$name)
+  expect_false("listed-agent" %in% gptr_agents()$name)
+})
+
+test_that("gptr_skills() lists settings plugins before any session, running none of their code", {
+  skip_on_cran()
+  d = withr::local_tempdir()
+  mark = file.path(d, "ran")
+  write_file(file.path(d, "plugin.json"), '{"name": "unsynced-plug"}')
+  write_file(file.path(d, "extensions", "m.R"),
+             c(paste0("cat(\"x\", file = ", deparse(mark), ")"), "function(gptr) NULL"))
+  write_file(file.path(d, "skills", "unsynced-skill", "SKILL.md"),
+             c("---", "name: unsynced-skill", "description: From the settings.", "---", "x"))
+  files = list()
+  files[["lab/plugin.json"]] = '{"name": "lab-plug"}'
+  files[["lab/skills/lab-skill/SKILL.md"]] = "---\nname: lab-skill\ndescription: Lab.\n---\nx"
+  p = local_project(files = files)
+  local_gptr_options(plugins = c(d, file.path(p, "lab")))
+  sk = gptr_skills()
+  expect_identical(sk$source[sk$name == "unsynced-skill"], "plugin:unsynced-plug")
+  expect_true(sk$visible[sk$name == "unsynced-skill"])
+  # a plugin inside an untrusted project is not enabled, so it is not listed either
+  expect_false("lab-skill" %in% sk$name)
+  expect_false(file.exists(mark))
+})
+
 test_that("after gptr_reload() declarative records are rebuilt once and code is not rerun", {
   skip_on_cran()
   d = withr::local_tempdir()

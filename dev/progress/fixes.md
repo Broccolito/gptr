@@ -2151,3 +2151,23 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^ext-plugins$` PASS 383 (the "a plugin enabled twice once" row still lists the process entry); full
   suite (NOT_CRAN=true, with trust-msg and sessions-23) FAIL 0 SKIP 64 PASS 35426. Lint clean.
 - Deviations: none (04 `gptr_plugins()` does not say which entry is listed). Open: none.
+
+### skills-1 - gptr_skills() and gptr_agents() list the plugins of live sessions and of the settings
+- Findings 93, 107. Red: `^ext-plugins$` FAIL 4 PASS 388: with a live `peter(plugins = d)` session,
+  `gptr_skills()` had no `listed-skill` row and `gptr_agents()` no `listed-agent`; with
+  `options(gptr.plugins = d)` and no session started, `gptr_skills()` had no `unsynced-skill` row.
+- Cause: `res_plugin_dirs()` dropped every session entry, and `peter(plugins =)` plugins are always
+  session-scoped; settings plugins enter the plugin table only through `plugins_sync()` at a session start.
+  The session's catalog and `gptr_plugins()` showed both, so the listings disagreed with them.
+- Fix: `res_plugin_dirs(type, listing)` and `res_roots(..., listing)`; with `listing = TRUE`, used only by
+  `skill_discover()` and `agent_discover()` (through `skill_roots(listing)`, `agent_roots(listing)` and
+  `agent_collect(roots = )`), they add the entries of live sessions and, at rank 3, the `plugins` setting's
+  plugins with no enabled or failed entry, resolved by `plugin_resolve()` and read with `plugin_type_paths()`
+  only, skipped where `plugin_trusted()` (now shared with `plugin_enable()`) refuses. Syncs keep `FALSE`.
+- Green: `^ext-plugins$` PASS 392 (the IC-69 test unchanged; the eager `extensions/m.R` never ran; a settings
+  plugin inside an untrusted project is not listed, which fails with the trust check removed); with skill-*,
+  subagent-defs, arch-layers, lint-rules, console-commands PASS 1085; full suite (NOT_CRAN=true) FAIL 0 SKIP 64
+  PASS 35435. Lint clean; Rd unchanged.
+- Deviations: none (04 `gptr_skills()` does not say which plugins are listed; the fix meets `?gptr_skills`, "those
+  of enabled plugins"). A settings plugin whose entry failed is not listed (the plan said "no enabled entry"), and
+  no separate dedupe: discovery keeps one row per path and source. Open: none.

@@ -138,17 +138,17 @@ agent_untrust = function(spec) {
 #'
 #' Project `.gptr/agents`, `.claude/agents`, `.codex/agents`, `.pi/agents` (nearest directory
 #' first) and the user's equivalents under `gptr_user_dir("config")` and `user_home()`, then the
-#' shared roots of `res_roots()`. Only Pi's own `.pi/agents` and `.pi/agent/agents` are flat,
-#' judged by their own path (D-134).
+#' shared roots of `res_roots()` (`listing` as there). Only Pi's own `.pi/agents` and
+#' `.pi/agent/agents` are flat, judged by their own path (D-134).
 #' @noRd
-agent_roots = function() {
+agent_roots = function(listing = FALSE) {
   proj = res_project_dirs(c(".gptr/agents", ".claude/agents", ".codex/agents", ".pi/agents"))
   home = user_home()
   pi_user = file.path(home, ".pi", "agent", "agents")
   user = c(file.path(gptr_user_dir("config"), "agents"), file.path(home, ".claude", "agents"),
            file.path(home, ".codex", "agents"), pi_user)
   flat = c(proj[basename(proj) == "agents" & basename(dirname(proj)) == ".pi"], pi_user)
-  res_roots("agents", proj, user, flat)
+  res_roots("agents", proj, user, flat, listing)
 }
 
 #' Discover every agent file: `list(rows, specs)`, aligned by position
@@ -160,8 +160,7 @@ agent_roots = function() {
 #' `auto`, `edits` or `yolo` (IC-52). `rows$usable` marks the agents a sync registers. `mode` is the
 #' session's mode (default: the setting).
 #' @noRd
-agent_collect = function(mode = NULL) {
-  roots = agent_roots()
+agent_collect = function(mode = NULL, roots = agent_roots()) {
   rows = list()
   specs = list()
   seen = character()
@@ -200,10 +199,10 @@ agent_collect = function(mode = NULL) {
   list(rows = df, specs = specs)
 }
 
-#' Discovered agents as a data frame, filtered by scope
+#' Discovered agents as a data frame, filtered by scope; with the plugins a listing shows
 #' @noRd
 agent_discover = function(scope = "all") {
-  df = agent_collect()$rows
+  df = agent_collect(roots = agent_roots(listing = TRUE))$rows
   keep = switch(scope,
                 all = rep(TRUE, nrow(df)),
                 project = df$origin == "project",
