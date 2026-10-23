@@ -188,7 +188,8 @@ apply them with `gptr_doc(path, sync = TRUE)`.
 ## R Markdown, Quarto and Jupyter
 
 In `.Rmd` and `.qmd`, a recorded block becomes a chunk labeled `gptr-<id>` after its calling
-chunk. Bind the report, run it with its normal renderer, then inspect the recorded blocks:
+chunk. A binding belongs to the R process that made it. `rmarkdown::render()` knits in the
+calling R session, so a binding made there covers the report:
 
 
 ``` r
@@ -198,9 +199,21 @@ gptr_blocks("analysis.Rmd")
 gptr_doc(FALSE)
 ```
 
-Use `quarto render analysis.qmd` for `.qmd`; `gptr_source()` is not a renderer for either
-format. Arrange the document's setup to load gptr, prepare its input data and select a model
-or replay mode. Plain R chunks still execute when the report is rendered.
+`quarto render`, `quarto::quarto_render()` and RStudio's Knit and Render buttons run the
+document in another R process, which a binding made at the console does not reach: nothing is
+recorded and nothing is said. Bind such a document in its own setup chunk, then render it as
+usual:
+
+
+``` r
+# The setup chunk of analysis.qmd:
+library(gptr)
+gptr_doc("analysis.qmd")
+```
+
+`gptr_source()` is not a renderer for either format. Arrange the document's setup to load
+gptr, prepare its input data and select a model or replay mode. Plain R chunks still execute
+when the report is rendered.
 
 For Jupyter, bind the saved `.ipynb` path in the R kernel. Blocks become agent cells. Writes
 are queued while the notebook is open to avoid competing with the notebook editor. The queue

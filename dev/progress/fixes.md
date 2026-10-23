@@ -2004,3 +2004,26 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   two calls, no out.R, driver.R unchanged; a self-bound script records both blocks, no notice.
 - Deviations: D-249 (extended). Open: an interactive run whose answer for a document is a remembered
   "off" also gets the notice once while another document is bound.
+
+### doc-3 - Sheet: gptr_doc() binds this R session; bind quarto and Knit documents in their setup chunk
+- Finding 19, its rendering half (doc-1 fixed the notebook and crash-recovery half).
+- Red: none (wording). Installed build, fake provider, quarto 1.10.18: a `.qmd` bound at the
+  console, then `quarto render`, got no block and no message; `rmarkdown::render()` of an `.Rmd`
+  in the binding session recorded one.
+- Cause: a binding is this R process's consent (`the$doc_binding`; 04 §6.4 already says "this R
+  process"). `quarto render`, `quarto::quarto_render()` and RStudio's Knit and Render buttons knit
+  in another process, which cannot ask, so `doc_keep()` drops the call and, unbound, says nothing
+  (IC-45). The vignette's "Bind the report, run it with its normal renderer" and "Use `quarto
+  render analysis.qmd`" was a recipe that records nothing.
+- Fix: `script-as-history` says a binding belongs to the process that made it, keeps the in-process
+  `rmarkdown::render()` example, and says to bind a document rendered elsewhere in its own setup
+  chunk, shown as `library(gptr); gptr_doc("analysis.qmd")`. The `.Rmd` is the knitted `.Rmd.orig`.
+- Green: a setup-chunk binding plus `quarto render` wrote `#| label: gptr-<id>`, outside and inside
+  a `gptr_init()` project. `precompute.R script-as-history`: 0 problems, output byte-identical to
+  the edited `.Rmd`. `^zzz$` PASS 145 (NOT_CRAN=true). Lint: the `.Rmd` is clean; the `.Rmd.orig`
+  keeps its one lint from main (`mode = auto` in an `eval = FALSE` chunk, line 338).
+- Deviations: none (the contract already binds this process). Not in the plan: no
+  `gptr_config(record = "auto")` alternative. Measured with `quarto render`, it records only at
+  user scope outside a `gptr_init()` project: the default scope is this session there, and inside
+  a project the template's `record: "ask"` holds against a user "auto", and an untrusted
+  project's own "auto" cannot loosen it. Open: none.
