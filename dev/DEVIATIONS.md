@@ -3141,10 +3141,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: a replay adds no turn to a session whose active path holds the block's `gptr.doc_block` entry, not undone
   (the session that recorded it, replayed in the same process: was one more turn per block, so later turns, `turn=`
   and `gptr_fork(at =)` were off); it still records `gptr.replay`, `seen` and the `value=` name (IC-46).
-- Rule: a top-level `gptr_return(<expression>)` (one unnamed argument, not a bare name) is recorded as
-  `.gptr_value_<block id> = (<expression>)` with `value=.gptr_value_<block id>`, so every replay and a plain export
-  recompute it (was `value=<its label>` and the line dropped: replay said "not bound" and `$value` was NULL);
-  `gptr_return(<name>)` is unchanged; `value=` holds one name, never an expression's label, else is omitted (11.5).
+- Rule: a top-level `gptr_return(<expression>)` (one unnamed argument, not a bare name; also `<expression> |>
+  gptr_return()` on one line) is recorded as `.gptr_value_<block id> = (<expression>)` with
+  `value=.gptr_value_<block id>`, so every replay and a plain export recompute it (was `value=<its label>` and the
+  line dropped: replay said "not bound" and `$value` was NULL); `gptr_return(<name>)` is unchanged; `value=` holds
+  one name, never an expression's label, else is omitted (11.5).
 - Rule: a team or fan-out block records the code of each child that designated a value with `gptr_return()` in its
   child overlay, as for a child with exports (was only with exports), and `children=` entries are
   `<name>:<session id>[:<value>]`, the third field the child's `value=` name (a bare name or
@@ -3183,4 +3184,4 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself, handle position;
   test-session-store: the resume hint; test-doc-replay: the no-answer notice in process, under `Rscript` and for
   fan-out children. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1,
-  replay-2, replay-3, replay-5, export-2, store-1.
+  replay-2, replay-2c, replay-3, replay-5, export-2, store-1.

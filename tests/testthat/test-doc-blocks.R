@@ -486,8 +486,18 @@ test_that("gptr_return(<expression>) is recorded as the block's hidden value; va
                                         paste0("x = \"é\"; ", hidden, "(nchar(x)) # done")))
   expect_identical(attr(out, "kept"), c(TRUE, TRUE, TRUE, TRUE))
   expect_true(attr(out, "returned"))
+  # the native pipe form, also after a chain and before a comment (FIX-16)
+  out = doc_code_clean(c("coef(fit) |> gptr_return()",
+                         "x = \"é\"; mtcars |> nrow() |>  gptr::gptr_return( ) # done"))
+  expect_identical(as.character(out), c(paste0(hidden, "(coef(fit))"),
+                                        paste0("x = \"é\"; ", hidden, "(mtcars |> nrow()) # done")))
+  expect_true(attr(out, "returned"))
+  # a pipe split from its call over lines is kept as written, as a split call name is
+  out = doc_code_clean(c("coef(fit) |>", "  gptr_return()"))
+  expect_identical(as.character(out), c("coef(fit) |>", "  gptr_return()"))
+  expect_false(attr(out, "returned"))
   # a bare name stays value=<name>; a named argument would bind it, so it is dropped as before
-  for (code in c("gptr_return(fit)", "gptr_return(x = coef(fit))")) {
+  for (code in c("gptr_return(fit)", "fit |> gptr_return()", "gptr_return(x = coef(fit))")) {
     out = doc_code_clean(code)
     expect_identical(as.character(out), character(), info = code)
     expect_false(attr(out, "returned"), info = code)

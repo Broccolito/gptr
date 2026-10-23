@@ -2417,3 +2417,21 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   NOT_CRAN=true). Lint clean. The knit writes the block before the chunk prints, so the first
   render shows `.gptr_value_<id> = (n * 2)`.
 - Deviations: none (the shown code is the block's). Open: none.
+
+### replay-2c - Record the native-pipe form `<expression> |> gptr_return()` too
+- Review of replay-2 (`R/doc-blocks.R`, medium).
+- Red: FAIL 2 in `^doc-blocks$` (PASS 349): `doc_code_clean()` kept `coef(fit) |> gptr_return()`
+  and `mtcars |> nrow() |> gptr::gptr_return( ) # done` as written, `returned` FALSE.
+- Cause: the pipe form parses to `gptr_return(<expression>)`, so `doc_drop_expr()` kept it, but
+  `doc_rewrite_return()` looked for the function name at the expression's start, found the
+  argument's, and skipped it: `value=` was omitted and every replay gave `$value` NULL without a
+  word, while the kept line printed the outside-a-run notice under `replay = "auto"`.
+- Fix: when the top-level expression's own `PIPE` token ends on its last line, the hidden name
+  and `(` go before the expression and the pipe with the call become `)`; a pipe split from its
+  call over lines is kept as written, as a split call name is. IC-48 says so.
+- Green: `^doc-blocks$` PASS 351 (a bare `fit |> gptr_return()` is still dropped);
+  `^(doc-.*|tool-r|mcp-recording|gptr-sdk|arch-layers|lint-rules)$` PASS 2933 SKIP 2 (repr;
+  NOT_CRAN=true). Lint clean; plan checks pass. Fake provider, `coef(fit) |> gptr_return()`
+  recorded through `gptr_source()`: `.gptr_value_<id> = (coef(fit))`, and a simulated later
+  process's replay returns the coefficients without a message.
+- Deviations: D-249 (extended). Open: none.

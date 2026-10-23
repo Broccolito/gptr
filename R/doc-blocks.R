@@ -901,10 +901,11 @@ doc_rewrite_assign = function(lines) {
 }
 
 #' Rewrite each top-level gptr_return(<expression>) (doc_return_value()) as an assignment to the
-#' block's hidden name, so replay recomputes what value= names: `gptr_return(coef(fit))` becomes
-#' `.gptr_value_<block id> = (coef(fit))`. The name stays backquoted until doc_prepare() fills in
-#' the block id, so the text parses meanwhile. A call whose name is split over lines is kept as
-#' written. Attribute `returned`: TRUE when one was rewritten.
+#' block's hidden name, so replay recomputes what value= names: `gptr_return(coef(fit))` and
+#' `coef(fit) |> gptr_return()` become `.gptr_value_<block id> = (coef(fit))`. The name stays
+#' backquoted until doc_prepare() fills in the block id, so the text parses meanwhile. A call
+#' whose name, or whose pipe and call, are split over lines is kept as written. Attribute
+#' `returned`: TRUE when one was rewritten.
 #' @noRd
 doc_rewrite_return = function(lines) {
   none = structure(lines, returned = FALSE)
@@ -913,24 +914,41 @@ doc_rewrite_return = function(lines) {
   hit = which(vapply(seq_along(exprs), function(i) doc_return_value(exprs[[i]]), NA))
   pd = if (length(hit)) utils::getParseData(exprs)
   if (is.null(pd)) return(none)
+  name = charToRaw(paste0("`", doc_value_name, "` = "))
+  calls = c("gptr_return", "gptr::gptr_return")
   done = FALSE
   for (i in rev(hit)) {
     sr = attr(exprs, "srcref")[[i]]
     l = sr[1L]
-    fn = pd[pd$token == "SYMBOL_FUNCTION_CALL" & pd$line1 == l & pd$col1 >= sr[5L], ,
-            drop = FALSE]
-    if (!nrow(fn)) next
     cols = doc_byte_cols(lines[l])
     from = match(sr[5L], cols)
-    to = findInterval(fn$col2[which.min(fn$col1)], cols)
-    b = charToRaw(lines[l])
-    if (is.na(from) || to < from ||
-        !gsub("[ \t]", "", rawToChar(b[from:to])) %in% c("gptr_return", "gptr::gptr_return")) {
-      next
+    top = pd$id[pd$parent == 0L & pd$line1 == l & pd$col1 == sr[5L] & pd$token == "expr"]
+    pipe = pd[pd$token == "PIPE" & pd$parent %in% top, , drop = FALSE]
+    if (nrow(pipe)) {
+      # `<argument> |> gptr_return()`: the pipe and the call become the closing parenthesis
+      if (pipe$line1 != sr[3L]) next
+      end = doc_byte_cols(lines[sr[3L]])
+      p = match(pipe$col1, end)
+      to = findInterval(sr[6L], end)
+      b = charToRaw(lines[sr[3L]])
+      if (is.na(from) || is.na(p) || to < p ||
+          !gsub("[ \t]", "", rawToChar(b[p:to])) %in% paste0("|>", calls, "()")) {
+        next
+      }
+      left = sub("[ \t]+$", "", as_utf8(rawToChar(b[seq_len(p - 1L)])))
+      lines[sr[3L]] = paste0(left, ")", as_utf8(rawToChar(b[seq_along(b) > to])))
+      b = charToRaw(lines[l])
+      lines[l] = as_utf8(rawToChar(c(b[seq_len(from - 1L)], name, charToRaw("("),
+                                     b[seq_along(b) >= from])))
+    } else {
+      fn = pd[pd$token == "SYMBOL_FUNCTION_CALL" & pd$line1 == l & pd$col1 >= sr[5L], ,
+              drop = FALSE]
+      if (!nrow(fn)) next
+      to = findInterval(fn$col2[which.min(fn$col1)], cols)
+      b = charToRaw(lines[l])
+      if (is.na(from) || to < from || !gsub("[ \t]", "", rawToChar(b[from:to])) %in% calls) next
+      lines[l] = as_utf8(rawToChar(c(b[seq_len(from - 1L)], name, b[seq_along(b) > to])))
     }
-    lines[l] = as_utf8(rawToChar(c(b[seq_len(from - 1L)],
-                                   charToRaw(paste0("`", doc_value_name, "` = ")),
-                                   b[seq_along(b) > to])))
     done = TRUE
   }
   structure(lines, returned = done)

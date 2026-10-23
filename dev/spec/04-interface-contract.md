@@ -4491,8 +4491,8 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 - `doc_block_lines()` drops, at top-level-expression granularity (`getParseData()` of each recorded code chunk),
   calls to `gptr_return()`/`gptr::gptr_return()` of a name (or with a named or no argument) and to members whose
   spec has `record = FALSE`; a chunk that becomes empty is omitted; the value stays in `value=`. A call with one
-  unnamed expression becomes `.gptr_value_<block id> = (<expression>)` and `value=.gptr_value_<block id>`, so replay
-  recomputes it. `record = FALSE` is set for `out`, `plot`, `help`,
+  unnamed expression (also `<expression> |> gptr_return()` with the pipe and the call on one line) becomes
+  `.gptr_value_<block id> = (<expression>)` and `value=.gptr_value_<block id>`, so replay recomputes it. `record = FALSE` is set for `out`, `plot`, `help`,
   `search`, `describe`; the `<r_session>` text tells the model to use them only with `record = false`.
 - Plan-mode runs never record code (`record` forced `FALSE`); their block holds one `## Plan: <plans path>`
   comment.
