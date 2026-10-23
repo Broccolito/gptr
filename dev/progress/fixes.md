@@ -2561,8 +2561,10 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   space; `doc_fill_id()` fills the id only into the hidden value name and `gptr_resume(block = `
   homes (the header keeps its substitution). IC-49 and P15 amended.
 - Green: `^doc-blocks$` PASS 358; `^(doc-blocks|doc-replay|doc-export|doc-knitr)$` PASS 1371
-  (NOT_CRAN=true). Lint clean; plan checks pass (index findings unchanged).
-- Deviations: D-249 (extended). Open: none.
+  (NOT_CRAN=true). Lint clean; plan checks pass (index findings unchanged). Live: see steer-doc-2.
+- Deviations: D-249 (extended). Open: with `.run = FALSE`, steers queued before the run go ahead of
+  the deferred prompt, so the first is the turn's first message and is not recorded, and the prompt
+  is recorded as `## Follow-up:` (seen live; steering audit finding 1, P28's).
 
 ### steer-doc-2 - Recorded steer, follow-up, decision and agent lines escape control characters
 - Steering review finding 2 (partly confirmed: one line is the IC-49 design and a cut is
@@ -2577,4 +2579,9 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   04 §11.5 amended.
 - Green: `^doc-blocks$` PASS 363; `^(doc-blocks|doc-replay|doc-export|doc-knitr|doc-io|arch-layers|
   lint-rules)$` PASS 2171 (NOT_CRAN=true, the IC-49 menu-steer replay included). Lint clean.
+  Live, installed build, with steer-doc-1 (GPT-5.6 Sol, Claude Opus 4.8, Ollama qwen3.8:27b): a
+  `background = TRUE` script given `gptr_steer(s, "   ")` and a steer holding ESC, BEL and
+  `@@GPTR_BLOCK@@`, run by `gptr_source()`, recorded `## Steer:` and the escaped text with the token
+  kept; no raw control byte in the file or in `source(echo = TRUE)` of its export; `gptr_blocks()`
+  fresh with and without the trailing space.
 - Deviations: D-249 (extended). Open: none.
