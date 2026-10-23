@@ -664,6 +664,9 @@ Tests (`test-console-ui.R`), RED first:
   `test-console-ui.R`, `test-console-{typing,render,wait,repl,setup}.R`, `test-cli-claude.R` and
   `test-subagent-team.R`; the pty cases wait for `Allow r?` and end with `pty_asked()`
   (`helper-console-input.R`), the chevron the child's locale shows.
+- (Amended in the cheat-sheet review: auth-1.) `test-auth-oauth.R` pins the OAuth inputs' prompts as the
+  UI receives them, `API key for <provider>`, `Bearer token for MCP server <name>` and the paste prompt,
+  none ending in `: `, which `ui_console_input()` adds (main asked `API key for openai: : `).
 
 Spec: IC-77, 03 §6.8.3, §6.17 and NS-1 (§10.1).
 
