@@ -1316,7 +1316,7 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
   if (tb$tokens_known && any(tb$tokens > 0)) {
     header$tokens = sprintf("%.0f/%.0f", tb$tokens[1L], tb$tokens[2L])
   }
-  if (tb$cost_known && tb$cost > 0) header$cost = format(round(tb$cost, 4L), scientific = FALSE)
+  if (tb$cost_known) header$cost = format(round(tb$cost, 4L), scientific = FALSE)
   header$session = d$id
   header$turn = as.integer(turn)
   header$value = tb$value

@@ -11,7 +11,8 @@ gptr_blocks(file)
 }
 \value{
 A \code{gptr_blocks} data frame with columns \code{id}, \code{lines}, \code{prompt}, \code{status}, \code{model},
-\code{date}, \code{tokens}, \code{cost}, \code{session}.
+\code{date}, \code{tokens}, \code{cost}, \code{session}. \code{cost} is in USD: \code{0} for a known free route (a local
+model), \code{NA} when unknown or not recorded.
 }
 \description{
 Reads an \code{.R}, \code{.Rmd}, \code{.qmd} or \code{.ipynb} document and lists its gptr blocks with their

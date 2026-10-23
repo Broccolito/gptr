@@ -947,7 +947,8 @@ doc_bind_format = function(full, format) {
 #'
 #' @param file Path of the document.
 #' @return A `gptr_blocks` data frame with columns `id`, `lines`, `prompt`, `status`, `model`,
-#'   `date`, `tokens`, `cost`, `session`.
+#'   `date`, `tokens`, `cost`, `session`. `cost` is in USD: `0` for a known free route (a local
+#'   model), `NA` when unknown or not recorded.
 #' @export
 #' @examples
 #' f = tempfile(fileext = ".R")

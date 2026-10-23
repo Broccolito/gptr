@@ -2176,3 +2176,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   lint-rules)$` PASS 2879 SKIP 2 (repr), `^(mcp-recording|eval-core)$` PASS 346 (NOT_CRAN=true). Lint
   clean; plan checks pass. `local_doc_e2e()` and `doc_e2e_source()` moved to `helper-doc.R`.
 - Deviations: D-249 (extended; 04 §4.4 `outputs`, §11.5). Open: none.
+
+### doc-11 - Write a known zero cost as cost=0 in block headers
+- Finding 122.
+- Red: FAIL 2 in `^(doc-blocks|doc-replay)$` (PASS 972): a turn whose answers cost a known `0`
+  had no `cost` header key; a fake `peter()` call recorded into `analysis.R` listed
+  `gptr_blocks(f)$cost` NA while `s$cost` was 0.
+- Cause: `doc_block_lines()` wrote `cost=` only when known and above 0, and `doc_block_row()` reads
+  a missing key as NA, the value IC-74 keeps for unknown.
+- Fix: the guard is `tb$cost_known`; an unknown cost stays omitted. `?gptr_blocks` says `cost` is
+  `0` for a known free route and `NA` when unknown or not recorded; 04 §11.5's `cost` row says when
+  it is written.
+- Green: `^(doc-.*|subagent-team|ckpt-rewind|session-object|mcp-recording|console-commands|
+  arch-layers|lint-rules)$` PASS 3820 SKIP 2 (repr; NOT_CRAN=true). Lint clean; Rd regenerated;
+  plan checks pass. The IC-74 test's local-model case now expects `"0"` (its cost was a known 0).
+- Deviations: D-249 (extended). Open: none.

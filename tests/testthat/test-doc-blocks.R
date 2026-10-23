@@ -753,7 +753,7 @@ test_that("a local model keeps its tag and unknown usage is never summed (IC-74)
   h = attr(doc_block_lines(doc_test_session(list(turn)), 1L, site, 1L), "header")
   expect_identical(h$model, "ollama/qwen3:8b")
   expect_null(h$tokens)
-  expect_null(h$cost)
+  expect_identical(h$cost, "0")
   priced = doc_test_turn("x = 1")
   priced[[2L]]$message$usage$cost$total = 0.01
   priced[[4L]]$message$usage$cost$total = 0.0023

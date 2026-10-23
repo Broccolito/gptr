@@ -2001,6 +2001,15 @@ test_that("per-call record FALSE suppresses a System 1 document summary", {
   expect_identical(nrow(gptr_blocks(f)), 1L)
 })
 
+test_that("a block lists a known zero cost as 0, as the session reports it (IC-74)", {
+  x = local_doc_e2e(list(fake_tool("r", code = "n = 1"), fake_text("done")))
+  f = file.path(x$root, "analysis.R")
+  writeLines("s = peter(\"Set n\")", f)
+  e = doc_e2e_source(f)
+  expect_identical(e$s$cost, 0)
+  expect_identical(gptr_blocks(f)$cost, e$s$cost)
+})
+
 test_that("a recorded block replays under source() with zero model calls (acceptance 2)", {
   x = local_doc_e2e(list(fake_tool("r", code = "n_rows = nrow(d)\nn_rows", note = "count"),
                          fake_text("There are 4 rows.")))

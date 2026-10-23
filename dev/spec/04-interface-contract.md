@@ -3804,7 +3804,7 @@ Values containing spaces are double-quoted with R escapes. Header keys, in this 
 | `sha` | recommended | first 8 hex of sha256 of the body lines as last written (user-edit detection) |
 | `call` | when > 1 | ordinal of the `peter()` call within the statement (pipelines) |
 | `tokens` | optional | `<input>/<output>` of the turn |
-| `cost` | optional | USD, plain number |
+| `cost` | optional | USD, plain number; written whenever the turn's cost is known (`0` for a free route), omitted when unknown (IC-74) |
 | `session` | recommended | session id |
 | `turn` | recommended | turn number in the session |
 | `value` | optional | the name designated with `gptr_return()` (replay binds `$value` to it) |
