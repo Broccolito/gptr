@@ -2328,8 +2328,10 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `Negate(q)('no')`, `base::Negate(f = q)`, `sweep(m, 1, s, q)`, `eapply(env, q)`, `.mapply(q, ...)`,
   `.S3method('print', 'foo', q)`, `Negate('q')('no')` and `Vectorize('q')('no')` passed, and a scan of base found
   `.mapply`, `.S3method`, `eapply`, `Negate` and `sweep` missing from the function-argument table.
-- Cause: the table and the string list were hand lists of the apply family. Each form above quits a child R whose
-  global `q` is data, because the callee's `match.fun()` (for a string, `Vectorize()`'s `formals()`) finds `base::q`.
+- Cause: the table and the string list were hand lists of the apply family. With a data global `q`, each form above
+  reaches `base::q` through the callee's `match.fun()` (for a string, `Vectorize()`'s `formals()`), calling it
+  (`Negate(q)('no')`, `.mapply(q, list('no'), NULL)`) or returning or registering it for a later call (`Negate(f =
+  q)`, `.S3method('print', 'foo', q)`).
 - Fix: `eval_guard_fun_arg` holds `do.call()` and every base function that applies `match.fun()` to a formal;
   `eval_guard_indirect` is its names plus `Vectorize`, `get`, `get0`, `getExportedValue` and `Recall`. `Vectorize(q)`
   (returns the data) and `Recall(q)` (passes the value to the calling function, as `f(q)` does) still pass: a probe
@@ -2362,3 +2364,14 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   argument is refused, and guard-1b's Open names this form. A code fix would add one more special case (a `q` beside
   a base function given as the function argument) to an advisory guard that `eval(parse(text = ...))` evades.
 - Deviations: D-252 (guard-1 rule wording). Open: as guard-1b.
+
+### guard-1e - guard-1b says how each form reaches base::q
+- Review of guard-1b (low) and a round-2 problem. `base::Negate(f = q)` and `.S3method('print', 'foo', q)` leave a
+  child R alive (they return or register `base::q` for a later call), and `sweep(m, 1, s, q)` of a numeric `m` stops
+  in `q()`'s `save` check, yet guard-1b's Cause and the test comment said each form quits R. Both now say each
+  reaches `base::q`, calling it or returning or registering it. Records and a test comment only.
+- The criterion that `Vectorize(q)(1)` and `Recall(q)` be refused is not adopted: neither reaches `base::q` (they
+  stop with "attempt to apply non-function" and "'Recall' called from outside a closure"), as guard-1b records, so
+  refusing them would be a deliberate over-refusal.
+- Green: `^eval-guard$` PASS 151. Lint clean.
+- Deviations: none. Open: none.

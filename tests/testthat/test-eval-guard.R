@@ -145,7 +145,8 @@ test_that("q bound to data is refused where a base function looks it up as a fun
   ex = function(code) parse(text = code, keep.source = FALSE)
   e = new.env()
   e$q = stats::quantile(1:10)
-  # Each quits R: the callee's match.fun() (Vectorize's formals()) finds base::q by name
+  # Each reaches base::q by name through the callee's match.fun() (Vectorize's formals()), to
+  # call it or to return or register it for a later call (Negate(f = q), .S3method())
   forms = c("Negate(q)('no')", "base::Negate(f = q)", "sweep(m, 1, s, q)", "eapply(env, q)",
             ".mapply(q, list('no'), NULL)", ".S3method('print', 'foo', q)", "Negate('q')('no')",
             "Vectorize('q')('no')", ".S3method('print', 'foo', 'q')")
