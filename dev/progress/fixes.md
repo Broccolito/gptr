@@ -2374,3 +2374,30 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   verifier's fix), the literal keeps its directory part, and the commented line has no `# removed by
   gptr_export()` suffix. Open: a `gptr_doc()` assigned or with a computed path is kept; the handle
   refusal still names neither the handle nor its line.
+
+### store-1 - Say that sessions and answers outlive R only in a .gptr/ workspace
+- Findings 124, 139, 152 (the `$text` halves of 114 and 119; the sheet's S03, S12, S23 lines follow in the
+  sheet commit).
+- Red: FAIL 5. `^session-store$`: `gptr_resume("s0123456789")` outside a workspace said only "no stored session
+  matches". `^doc-replay$`: a replay that restored no answer was silent in process, under `GPTR_REPLAY=replay
+  Rscript` (exit 0, `TEXT NA`) and for fan-out children whose answers were removed.
+- Cause: without `.gptr/`, `workspace_root()` is `tempdir()/gptr`, so the session store and the S2 answer cache end
+  with R (intended: gptr writes only where named). Nothing said so where the loss is felt.
+- Fix: both `resume_path()` store misses add "Without a .gptr/ workspace, sessions last until R exits;
+  gptr_init(\".\") keeps them." when `workspace_dir()` is NULL. `doc_replay_no_answer()`, called for a replayed call
+  and each team child, informs one `notice` per document and process when `$text` stays NA: "No recorded answer
+  for <doc>: replayed answers ($text) are NA.", plus " gptr_init(\".\") keeps answers in .gptr/ for later R
+  sessions." outside a workspace. NEWS: sessions are saved in `.gptr/` (without one, until R exits). 04 §6.5, IC-46.
+- Green: `^(doc-replay|session-store)$` PASS 982 (703 + 279); `^(doc-.*|session-.*|subagent-.*|ckpt-rewind|
+  console-commands|console-repl|mcp-recording|gptr-sdk|gptr-source|knitr.*|arch-layers|lint-rules|zzz)$` PASS 5884
+  SKIP 3 (NOT_CRAN=true). Lint clean; no Rd change. Installed build, fake provider, two `Rscript` runs: outside a
+  workspace the replay prints the notice with the hint, `TEXT NA`, exit 0, and `gptr_resume(id)` and
+  `gptr_resume()` carry the hint; after `gptr_init(".")` neither error has it, a replay restores the text, still
+  after `gptr_cache("clear", "s2")` (from the session file), and with `.gptr/sessions` removed too the notice comes
+  without the hint.
+- Deviations: D-249 (extended). From the plan: the notice keys on the outcome (`$text` NA after replay), not on a
+  missing S2 record, which in a workspace or a live session is no loss (the session file or the live session holds
+  the answer); the workspace text omits "the answer cache was cleared", as a copied document, a block recorded
+  before `gptr_init()` or one recorded without an answer gives the same miss. Open: a piped replay keeps the
+  previous turn's `$text` when its block's answer is missing (no notice there); a bare `/resume` still lists
+  "# 0 rows" without the hint.

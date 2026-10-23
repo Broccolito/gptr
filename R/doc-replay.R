@@ -231,6 +231,20 @@ doc_s2_answer = function(rec) {
   if (rlang::is_string(a) && nzchar(a)) a else NULL
 }
 
+#' Say once per document and process that a replayed session has no answer (`$text` NA): no S2
+#' record, live session or session file held it; outside a `.gptr/` workspace the S2 cache and the
+#' session files are in this process's `tempdir()` (IC-46)
+#' @noRd
+doc_replay_no_answer = function(site, s) {
+  if (!is.na(session_data(s)$last_text)) return(invisible(NULL))
+  hint = if (is.null(workspace_dir())) {
+    " gptr_init(\".\") keeps answers in .gptr/ for later R sessions."
+  }
+  gptr_inform(paste0("No recorded answer for ", doc_rel(site$path), ": replayed answers ($text) ",
+                     "are NA.", hint), "notice",
+              .once = paste0("doc_no_answer:", path_key(site$path)))
+}
+
 #' What a replayed session reconstructs its history from (IC-46; P06's `doc` argument):
 #' list(path, format, template, code, output, text)
 #' @noRd
@@ -268,6 +282,7 @@ doc_replay_call = function(call, site, mode = "replay") {
                        doc = doc_replay_doc(site, call, b$id, answer))
   }
   if (!is.null(h$fork)) session_replay_bind(b$id, s)
+  doc_replay_no_answer(site, s)
   doc_source_log(site$path, b$id, "replayed")
   assign("doc", NULL, envir = call)
   s
@@ -336,6 +351,7 @@ doc_replay_team = function(call, site, mode) {
                                           template = site$template, code = character(),
                                           output = character(), text = answer))
     session_replay_bind(b$id, child, child = kv[1L])
+    doc_replay_no_answer(site, child)
     texts = c(texts, paste0("### ", kv[1L], " (", rec$model %||% h$model, ")\n", answer %||% ""))
   }
   text = if (length(texts)) paste(texts, collapse = "\n\n") else NULL

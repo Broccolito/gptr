@@ -1724,8 +1724,10 @@ else `interrupted`) with home `envir`; a rebuilt **fork** always gets a fresh `n
 (IC-46). A file from another machine or tracked by git is rebuilt with a freshly frozen prompt and its user turns
 marked `imported` (IC-52). A detached copy follows the split-brain rules of §5.1 of `03` (`gptr_error_split_brain`).
 `block = "<id>"` (and `child = "<name>"` for team blocks) returns the session that replay bound to that document
-block in this process, or signals `gptr_error_replay_unbound`; it never falls back to `envir` (IC-46). Conditions:
-`invalid_argument`, `split_brain`, `busy`, `replay_unbound`.
+block in this process, or signals `gptr_error_replay_unbound`; it never falls back to `envir` (IC-46). Without a
+workspace the store lasts until R exits: a store miss (`x = NULL` with no stored session, or an id no stored file
+matches) then adds the line "Without a .gptr/ workspace, sessions last until R exits; gptr_init(\".\") keeps them."
+to its `invalid_argument` error. Conditions: `invalid_argument`, `split_brain`, `busy`, `replay_unbound`.
 
 `gptr_last()`: the most recently active session of this process, held **strongly** (IC-71), including one whose
 call was interrupted before assignment, or `NULL`.
@@ -4445,6 +4447,10 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   as the user message, the recorded code as the assistant's `r` call, the `#>` lines as its result, the S2 answer
   text if cached) with `.d$history_source = "reconstructed"`. A later live continuation of a reconstructed session
   prints a one-time notice that the history is reconstructed.
+- **No answer**: a replayed session, or a replayed team or fan-out child, whose `$text` stays `NA` (no S2 answer,
+  live session or session file holds it; outside a workspace the S2 cache and session files are in `tempdir()`)
+  informs one `notice` per document and process: "No recorded answer for <doc>: replayed answers ($text) are NA.", plus,
+  without a workspace, " gptr_init(\".\") keeps answers in .gptr/ for later R sessions."
 - **Fork blocks** (`fork=` header): the replay result is bound to the block id with `session_replay_bind(block,
   s)` in a process table `the$replay_blocks` (gptr-created sessions only, never user frames; replaced on
   re-source). Recorded fork turns are wrapped `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`;

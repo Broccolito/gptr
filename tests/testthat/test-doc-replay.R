@@ -2076,6 +2076,77 @@ test_that("a recorded block replays under source() with zero model calls (accept
   expect_identical(length(fake_requests(x$fake)), 2L)
 })
 
+test_that("a replay that restores no answer says so once per document (FIX-16)", {
+  x = local_doc_e2e(list(fake_tool("r", code = "n = 1"), fake_text("n is one.")))
+  unlink(file.path(x$root, ".gptr"), recursive = TRUE)
+  old = mget(c("live", "replay_blocks"), envir = the)
+  withr::defer(list2env(old, envir = the))
+  local_gptr_options(quiet = FALSE)
+  f = file.path(x$root, "analysis.R")
+  writeLines("s = peter(\"Set n\")", f)
+  rec = doc_e2e_source(f)
+  b = doc_find_blocks(readLines(f))
+  s2 = s2_path(s2_key("analysis.R", b$id, "", b$header[[1L]]$prompt, ""))
+  expect_true(file.exists(s2))
+  # a later R process: no live session and, without .gptr/, no session file (tempdir() is gone)
+  later = function(file = FALSE) {
+    the$live = new.env(parent = emptyenv())
+    the$replay_blocks = new.env(parent = emptyenv())
+    if (!file) unlink(store_find(rec$s$id))
+  }
+  notes = character()
+  replay = function() {
+    e = new.env(parent = globalenv())
+    withCallingHandlers(gptr_source(f, replay = "replay", envir = e),
+                        gptr_message_notice = function(m) {
+                          notes <<- c(notes, conditionMessage(m))
+                          invokeRestart("muffleMessage")
+                        })
+    e$s$text
+  }
+  later()
+  expect_identical(replay(), "n is one.")
+  # without the S2 answer, the session file that replay wrote still holds it
+  unlink(s2)
+  later(file = TRUE)
+  expect_identical(replay(), "n is one.")
+  later()
+  expect_identical(c(replay(), replay()), c(NA_character_, NA_character_))
+  notes = grep("No recorded answer", notes, value = TRUE, fixed = TRUE)
+  expect_length(notes, 1L)
+  expect_match(notes, paste0("No recorded answer for analysis.R: replayed answers ($text) are ",
+                             "NA. gptr_init(\".\") keeps answers in .gptr/ for later R sessions."),
+               fixed = TRUE)
+  expect_length(fake_requests(x$fake), 2L)
+})
+
+test_that("an Rscript replay without .gptr/ says why $text is NA and exits 0 (FIX-16)", {
+  skip_on_cran()
+  root = local_project(gptr = FALSE)
+  f = file.path(root, "job.R")
+  writeLines(c(tracemem_loader(),
+               paste("options(gptr.model = \"fake/fake-1\", gptr.mode = \"auto\",",
+                     "gptr.record = \"auto\", gptr.unsafe_no_permissions = TRUE)"),
+               paste0("fake = gptr_fake_provider(list(list(tool = 'r', ",
+                      "input = list(code = 'n = 1')), 'n is one.'))"),
+               "invisible(gptr_register(fake))", "s = peter('Set n')",
+               "cat('TEXT', s$text, '\\n')"), f)
+  run = function(replay) {
+    processx::run(rscript_path(), c("--vanilla", f), wd = root, error_on_status = FALSE,
+                  env = c("current", GPTR_PROJECT_ROOT = root, GPTR_REPLAY = replay,
+                          R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep)),
+                  timeout = 300)
+  }
+  first = run("auto")
+  expect_identical(first$status, 0L)
+  expect_match(first$stdout, "TEXT n is one.", fixed = TRUE)
+  expect_length(doc_find_blocks(readLines(f))$id, 1L)
+  again = run("replay")
+  expect_identical(again$status, 0L)
+  expect_match(again$stdout, "TEXT NA", fixed = TRUE)
+  expect_match(paste(again$stdout, again$stderr), "No recorded answer for job.R", fixed = TRUE)
+})
+
 test_that("a stale prompt regenerates through gptr_source(replay = \"record\") (acceptance 2)", {
   skip_on_cran()
   x = local_doc_e2e(list(fake_tool("r", code = "old_ran = TRUE"), fake_text("old"),
@@ -2185,7 +2256,8 @@ test_that("gptr_return(<expression>) is recorded so a replay restores $value (ac
 # the store nor the S2 answers. `read(env)` is read right after each run, while its sessions are
 # live: its value and the messages reading it gave. Returns the recorded lines and block, the
 # number of requests after recording and after the replays, the document after them, and per run
-# (`record`, `same`, `store`, `bare`) the value, the messages and the environment.
+# (`record`, `same`, `store`, `bare`) the value, the messages, the run's own messages and the
+# environment.
 doc_kids_e2e = function(stmt, code, read, .env = parent.frame()) {
   x = local_doc_e2e(function(request) {
     if (length(request$last_results)) "Done." else fake_tool("r", code = code)
@@ -2194,7 +2266,7 @@ doc_kids_e2e = function(stmt, code, read, .env = parent.frame()) {
   withr::defer(list2env(old, envir = the), envir = .env)
   f = file.path(x$root, "analysis.R")
   writeLines(stmt, f)
-  out = list(values = list(), notes = list(), envs = list())
+  out = list(values = list(), notes = list(), said = list(), envs = list())
   for (run in c("record", "same", "store", "bare")) {
     if (run %in% c("store", "bare")) {
       the$live = new.env(parent = emptyenv())
@@ -2204,7 +2276,8 @@ doc_kids_e2e = function(stmt, code, read, .env = parent.frame()) {
       unlink(file.path(x$root, ".gptr", c("sessions", file.path("cache", "s2"))), recursive = TRUE)
     }
     e = new.env(parent = globalenv())
-    gptr_source(f, replay = if (identical(run, "record")) "auto" else "replay", envir = e)
+    out$said[[run]] = withr::with_options(list(gptr.quiet = FALSE), testthat::capture_messages(
+      gptr_source(f, replay = if (identical(run, "record")) "auto" else "replay", envir = e)))
     if (identical(run, "record")) {
       out$txt = readLines(f)
       out$recorded = length(fake_requests(x$fake))
@@ -2236,6 +2309,10 @@ test_that("a fan-out block records each child's code and value, so replay restor
     expect_identical(r$values[[run]], list(a = 2, b = 15), info = run)
     expect_identical(r$notes[[run]], character(), info = run)
   }
+  # only the bare run lost the children's answers; one notice for the document (FIX-16)
+  expect_identical(grep("No recorded answer", unlist(r$said), value = TRUE),
+                   c(bare = paste("No recorded answer for analysis.R: replayed answers ($text)",
+                                  "are NA.\n")))
   expect_identical(r$requests, r$recorded)
   expect_identical(r$file, r$txt)
 })

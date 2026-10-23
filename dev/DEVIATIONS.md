@@ -3163,10 +3163,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (was kept verbatim: the Peter script's calls recorded nowhere under `Rscript`, console turns went into the source).
   A raw export refuses a session handle only when read after its `peter()` statement and before ordinary code assigns
   the name (was any other statement naming it).
+- Rule: outside a `.gptr/` workspace the session store and the S2 cache are in `tempdir()` and end with R, by design.
+  A `gptr_resume()` store miss there adds "Without a .gptr/ workspace, sessions last until R exits; gptr_init(\".\")
+  keeps them."; a replayed session or team child whose `$text` stays `NA` informs one `notice` per document and
+  process, "No recorded answer for <doc>: replayed answers ($text) are NA." (plus the `gptr_init()` hint outside a
+  workspace). Both were silent (IC-46).
 - Contract-visible: 04 §4.4 `r` details `outputs` and `value`, §5.1 `print` and `.d` `replay_rows`, §6.4
-  `gptr_doc()`, §7.15 `doc_block_lines()`, §11.5 `cost`, `value`, `children`, body and transcript, §11.9, §15.3
-  IC-45, IC-46, IC-47, IC-48, IC-51; 03 §4.3, §5.1, §6.9.1, §6.9.3; `?gptr_doc`, `?gptr_blocks`, `?gptr_return`,
-  `?print.gptr_session`, `?gptr_export`; vignettes script-as-history, teams-and-background.
+  `gptr_doc()`, §6.5 `gptr_resume()`, §7.15 `doc_block_lines()`, §11.5 `cost`, `value`, `children`, body and
+  transcript, §11.9, §15.3 IC-45, IC-46, IC-47, IC-48, IC-51; 03 §4.3, §5.1, §6.9.1, §6.9.3; `?gptr_doc`,
+  `?gptr_blocks`, `?gptr_return`, `?print.gptr_session`, `?gptr_export`; vignettes script-as-history,
+  teams-and-background.
 - Tests: test-doc-io: the user-cache sidecar, the cross-process kernel and killed-run sync, the live-run sync;
   test-doc-replay: the other-binding notice and its four silent cases; test-doc-formats: the machine-log line with
   and without `.gptr/`; test-doc-blocks: recorded `#>` cuts, the known-zero cost; test-tool-r: per-expression
@@ -3174,6 +3180,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   block; test-doc-blocks, test-doc-replay, test-doc-io, test-doc-export: a recorded `gptr_return(<expression>)`;
   test-doc-replay: fan-out and team children's values in the recording process, an in-process replay and two
   simulated later processes, a three-field `children=` entry; test-session-object: the replayed footer;
-  test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself, handle position.
-  Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-3,
-  replay-5, export-2.
+  test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself, handle position;
+  test-session-store: the resume hint; test-doc-replay: the no-answer notice in process, under `Rscript` and for
+  fan-out children. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1,
+  replay-2, replay-3, replay-5, export-2, store-1.

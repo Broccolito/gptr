@@ -27,8 +27,8 @@ works on the objects already in memory.
 * `peter()` is the single entry point. Without a prompt it opens a chat in the console; with a
   prompt it runs the agent loop and returns the session. The pipe steers one session:
   `peter("...") |> peter("...")` adds turns to the same object. `gptr_fork()` is the only way to
-  branch. Sessions are saved in the project and resumed with `gptr_sessions()`,
-  `gptr_resume()` and `gptr_last()`.
+  branch. Sessions are saved in the project's `.gptr/` workspace (without one, until R exits)
+  and resumed with `gptr_sessions()`, `gptr_resume()` and `gptr_last()`.
 * With no default model, the interactive console offers Claude Code CLI or Codex CLI setup, or
   API instructions; `gptr_providers(check_login = TRUE)` shows CLI sign-in status.
 * The agent evaluates R code in the environment you pass (by default the caller's frame), so
