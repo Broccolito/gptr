@@ -1175,9 +1175,9 @@ Returns `invisible(<absolute path of .gptr>)`. Creates `.gptr/`, `settings.json`
 `inst/templates/settings.json`), `skills/`, `agents/`, `prompts/` (never overwrites existing files; idempotent).
 In a package source (a `DESCRIPTION` with `Package:`) whose `.Rbuildignore` lacks `^\.gptr$` it **offers** the line
 (interactive `gptr_confirm()`; otherwise one `notice` message naming the line); it never writes it silently
-[13 §2.3]. With a human present it then asks a separate question `Trust this project (its settings, extensions and
-MCP servers)? [y/N]` and records the answer with `gptr_trust()`; without a human nothing is trusted. Conditions:
-`noninteractive`, `workspace`, `invalid_argument`. Emits nothing.
+[13 §2.3]. With a human present it then asks a separate question `Trust this project (its settings, skills, prompt
+templates, agent files, extensions and MCP servers)? [y/N]` and records the answer with `gptr_trust()`; without a
+human nothing is trusted. Conditions: `noninteractive`, `workspace`, `invalid_argument`. Emits nothing.
 
 ```r
 d = tempfile("proj"); dir.create(d)
@@ -1249,7 +1249,8 @@ gptr_trust(path = ".", trust = NULL)
 (undecided). `TRUE`/`FALSE` records it in `R_user_dir("gptr", "config")/trust.json` keyed by the normalised
 project path and returns the previous decision invisibly. Trust gates (§6.10 of `03`): project settings beyond
 tightening, `.gptr/extensions/` and project plugin code, project MCP servers, `SYSTEM.md`/`APPEND_SYSTEM.md`,
-project `.env` auto-discovery, provider base-URL overrides, tool and model fields of project agent files.
+project `.env` auto-discovery, provider base-URL overrides, project skills and prompt templates (D-252), tool and
+model fields of project agent files.
 The record includes the trust fingerprint of the trust-gated files (IC-52). Conditions: `invalid_argument`. Side
 effects: writes `trust.json` (atomic, under a short file lock). Emits nothing (`project_trust` is the first-decision
 event raised when untrusted resources are first used, IC-71). Called from model code during a run it is a
@@ -4550,10 +4551,14 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
   `.R`, `.Rmd`, `.qmd` or `.ipynb`, and not be a `control` or protected path.
 - Instruction authority follows trust. In an untrusted project, project instructions render as
   `<project_instructions trusted="false">` and the frozen `<context>` section says such blocks are information,
-  not commands; the first interactive session in an untrusted project that has `AGENTS.md`, `CLAUDE.md` or
-  `.gptr` skills/agents asks the trust question once. Non-interactive + untrusted + mode `auto` or `edits`:
-  project instructions, project skills and project agents are omitted with a notice. Only skills from user
-  directories, installed packages and trusted projects enter the T1 catalog. Project-file updates are no longer
+  not commands; the first interactive session in an untrusted project that has trust-gated files, an instruction
+  file (`AGENTS.md`, `AGENTS.override.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.gptr/vignette.Rmd`) or a skill,
+  prompt-template or agent directory gptr reads (`.gptr/{skills,prompts,agents}`, `.agents/skills`,
+  `.claude/{skills,agents}`, `.codex/agents`, `.pi/agents`, a relative `skills.paths` entry) asks the trust
+  question once; without a human such a project gets the untrusted notice (D-252). Non-interactive + untrusted +
+  mode `auto` or `edits`: project instructions, project skills and project agents are omitted with a notice.
+  Only skills from user directories, installed packages and trusted projects enter the T1 catalog.
+  Project-file updates are no longer
   operator messages but user-role `project_instructions_update` context blocks; `context_block` `authority = "operator"` is allowed only for records of rank >= 3.
 - `trust.json` records a `fingerprint` (sha256 over the sorted paths and contents of the trust-gated files:
   `.gptr/settings.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `APPEND_SYSTEM.md`, `agents/`, an

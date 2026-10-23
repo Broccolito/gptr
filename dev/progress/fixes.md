@@ -2093,3 +2093,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-252 (extended). The service needs its `service_plans` entry (`R/aaa-state.R`, which the arch
   helper reads; test-aaa-state's count 39 to 40), not in the plan's files; helper-arch.R needed no change. No
   sync in `repl_main()`, as planned. Open: none.
+
+### tpl-2 - Projects whose only resources are prompts or agent-tool folders get the trust question
+- Findings 117, 147 (its code items; the caption is sheet entry S37, the messages trust-msg, skipped files
+  skills-2). Red: `^gptr-config$` FAIL 15 PASS 537: `trust_resources_present()` was FALSE for a project holding
+  only `.gptr/prompts/check.md`, `.claude/skills`, `.agents/skills`, `.claude/agents`, `.codex/agents`,
+  `.pi/agents`, `AGENTS.override.md`, `CLAUDE.local.md`, `.gptr/vignette.Rmd` or a relative `skills.paths`
+  directory, so `trust_resolve()` returned FALSE with no question, notice or `project_trust` event and
+  `template_roots()` dropped the root; the question named no skills.
+- Cause: the check listed `AGENTS.md`, `CLAUDE.md`, `.gptr/skills` and `.gptr/agents` only, not every location
+  skill, template, agent and instruction discovery reads under trust.
+- Fix: it counts those instruction files and directories plus the relative `skills.paths` entries of the
+  settings in force (`trust_skill_paths()`, through `settings_layered()`, which resolves no trust); the question
+  of `trust_resolve()` and `gptr_init()` names skills, prompt templates and agent files; `?gptr_trust` lists
+  project skills and prompt templates. 03 §6.10, 04 `gptr_init()`, `gptr_trust()`, IC-52.
+- Green: `^gptr-config$` PASS 552; full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35417. Lint clean; plan checks
+  pass; `gptr_trust.Rd` regenerated. Installed branch, fake model, a prompts-only project: a script's `peter()`
+  now gets the untrusted notice (none before); the console asks the trust question at the first prompt, and
+  after `y` `/check mtcars` runs the template and `gptr_trust(".")` reads TRUE.
+- Deviations: D-252 (extended). Also counts `.gptr/vignette.Rmd`, an instruction file whose authority follows
+  trust, which the plan's list lacked. `skills.paths` is read through `settings_layered()` (the layers skill
+  discovery reads; a project settings file is itself gated) rather than the two files as written. `gptr_init()`
+  asks the same question, so its text changed too (one test-gptr-config expectation). Open: none.

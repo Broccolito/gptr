@@ -18,8 +18,10 @@ Otherwise the previous decision, invisibly.
 \description{
 Trust decides whether gptr applies or runs what a project directory contains: project
 settings beyond tightening, \verb{.gptr/extensions/} and project plugins, project MCP servers,
-\code{SYSTEM.md} and \code{APPEND_SYSTEM.md}, project \code{.env} discovery, provider base-URL overrides, the
-tool and model fields of project agent files, and the authority of project instructions. The
+\code{SYSTEM.md} and \code{APPEND_SYSTEM.md}, project \code{.env} discovery, provider base-URL overrides,
+project skills (\verb{.gptr/skills/}, \verb{.agents/skills/}, \verb{.claude/skills/} and relative
+\code{skills.paths} entries), prompt templates (\verb{.gptr/prompts/}), the tool and model fields of
+project agent files, and the authority of project instructions. The
 decision is kept in \code{tools::R_user_dir("gptr", "config")/trust.json} with a fingerprint of the
 trust-gated files; when they change, the project counts as untrusted again until you confirm.
 Called from model code during a run, recording a decision is refused.

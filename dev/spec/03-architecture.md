@@ -1660,8 +1660,9 @@ model or remote override from egress acknowledgement.
   untrusted again until the user confirms the listed changes [IC-52]. A `.gptr/` that arrives by clone or copy is
   untrusted until the user confirms. Trust gates: project settings beyond tightening, project extensions and
   plugin code, project MCP servers (they run commands), `SYSTEM.md` and `APPEND_SYSTEM.md`, project `.env`
-  auto-discovery, provider base-URL overrides, the tool and model fields of project agent files, and the
-  **authority of project instructions** [IC-52]. Context files (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`)
+  auto-discovery, provider base-URL overrides, project skills and prompt templates, the tool and model fields of
+  project agent files, and the **authority of project instructions** [IC-52].
+  Context files (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`)
   are read as user-role data [16 §7.1(3), 14 §4.8]; in an untrusted project they render as
   `<project_instructions trusted="false">`, which the frozen `<context>` section tells the model to treat as
   information, not commands; non-interactive runs in `auto` or `edits` mode in an untrusted project omit project

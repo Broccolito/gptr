@@ -3170,11 +3170,23 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   unknown, then looks again. Formerly no template command (project, user, `/review`, `/explain`) existed until a
   session had started, so `/check` as the console's first input was "Unknown command", and a template saved later
   waited for the next session start.
-- Contract-visible: 03 §4.3 (fork), §5.1 (resume status), §6.2 (background asks), §6.12 (also the guard), §6.17
-  (templates), §6.18 and §7.5 `<workspace>`; 04 §4.6 (`gptr.container_end`), `gptr_fork(envir)`, `gptr_resume()`,
-  §6.1.2 and `gptr_parallel()` (team-1), §7.0 and §7.17 `templates.sync` (tpl-1), §7.6 `opts$mode_from` and
-  `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7,
-  IC-57; `?gptr-background`.
+- Rule (tpl-2): the trust question, or without a human the untrusted notice, covers every project location gptr
+  reads under trust. `trust_resources_present()` counts the trust-gated files, `AGENTS.md`, `AGENTS.override.md`,
+  `CLAUDE.md`, `CLAUDE.local.md`, `.gptr/vignette.Rmd`, the directories `.gptr/{skills,prompts,agents}`,
+  `.agents/skills`, `.claude/{skills,agents}`, `.codex/agents`, `.pi/agents`, and the relative `skills.paths`
+  entries of the settings skill discovery reads (no trust is resolved, so it cannot recurse). The question of
+  `trust_resolve()` and `gptr_init()` is `Trust this project (its settings, skills, prompt templates, agent files,
+  extensions and MCP servers)?`; `?gptr_trust` lists project skills and prompt templates. Formerly a project whose
+  only resource was `.gptr/prompts` (or `.claude/skills`, `.agents/skills`, a non-`.gptr` agent folder,
+  `AGENTS.override.md` or `CLAUDE.local.md`) got neither, and its templates or skills were dropped unannounced.
+  The plan's list lacked `.gptr/vignette.Rmd` (an instruction file whose authority follows trust) and read
+  `skills.paths` from the two files only.
+- Contract-visible: 03 §4.3 (fork), §5.1 (resume status), §6.2 (background asks), §6.10 (trust gates, tpl-2),
+  §6.12 (also the guard), §6.17 (templates), §6.18 and §7.5 `<workspace>`; 04 §4.6 (`gptr.container_end`),
+  `gptr_fork(envir)`, `gptr_resume()`, `gptr_init()` and `gptr_trust()` (tpl-2), §6.1.2 and `gptr_parallel()`
+  (team-1), §7.0 and §7.17 `templates.sync` (tpl-1), §7.6 `opts$mode_from` and `perm_check()` (gate-hint), §7.9
+  `env_view_snapshot()` and `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7, IC-52 (when the trust question is
+  asked), IC-57; `?gptr-background`, `?gptr_trust`.
 - Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
   and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame);
   session-object "a fork's change report names the source objects its code changed in place"; eval-guard "q bound
@@ -3183,5 +3195,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   "a settled team or fan-out lists and resumes idle ..."; agent-background "a resumed session is told the user can
   now approve the call", "... whose ask tool was blocked is told to ask again"; console-ui "a denial keeps the
   UI's how ..."; agent-dispatch "a blocked call's hint names where its mode came from"; console-commands "template
-  commands exist before the first prompt ...", "a template command is the console's first input (end to end)".
-  Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1, gate-hint, tpl-1.
+  commands exist before the first prompt ...", "a template command is the console's first input (end to end)";
+  gptr-config "a project whose only resource is prompt templates gets the trust notice", "a trusted prompts-only
+  project registers its templates", "every project skill, agent and instruction location counts ...", "a relative
+  skills.paths directory counts, and the question names skills".
+  Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1, gate-hint, tpl-1,
+  tpl-2.
