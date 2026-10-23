@@ -2301,6 +2301,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Approval: the plan's "first line names the tool only" is not applied: IC-53 item 8 (04 ranks above the plan) keeps the first line and `+N more lines`, and MCP-served and nested calls print no tool line above the prompt (verbosity 1 only a one-line one). The first line is cut to the console width (minus the margin) before `+N more lines` instead of at 72 characters, so it no longer wraps. `?` shows the request lines as a plain fence (no SGR, also the RStudio dialog), at most 40 lines, the cap line outside.
 - Contract-visible: console display only. Integration (2026-10-17): IC-53 item 8, the 04 `builtin_ui` row and 03 section 6.8.3 now describe this prompt (who asks, the tool and the first line cut to the console width before `(+N more lines)`, flagged calls); the plan's tool-only first line stays unapplied. Since D-192 a call served to a CLI route in a live run also prints its tool line above its prompt, so there too the prompt repeats the call's first line, as on the API routes.
 - Tests: test-console-fences.R (frame oracles of 12 blocks to Markdown; UTF-8 copy and parse, list-indented fences per split, tool fences and info string, error line), -render (4-mode invariance incl. a list-indented fence, streaming redraw, TAB line, broken line; 7 oracles incl. margin screen model), -ui (prompt fit, `?` fence). Evidence: progress/P26.md Task 5.
+- Cheat-sheet review (2026-10-23, P28 console-2; amends the approval's one line): a request whose input has a
+  `path` and no `code` shows the change it asks for under the call line, from its input alone (the file is never
+  read): at most 12 rows at column 4 in the result diff's style (`console_diff_rows()`, which the result's diff now
+  uses too), `-` rows of each edit's old text, `+` rows of its new text and of a write's content, `@@` between edits,
+  a patch envelope as its own lines, another tool's other fields as JSON, then `(+N more lines; ? shows more)`. `?`
+  shows at most 40 such rows and names the path in its first row (`gptr wants to use edit on R/io.R (level 2)`),
+  which the RStudio dialog needs. Before, an edit's change showed only after `y` and a write's content never.
+  Contract-visible: 04 §15.10 IC-77 and the `builtin_ui` row, 03 §6.8.3. Tests: test-console-ui.R "an edit or
+  write approval shows the change before the answer (cheat-sheet review)", "an edit's ask shows its change; a
+  denied edit leaves the file (cheat-sheet review)".
 
 ## D-188 - P26 Prompts reach the person and name the asker; fan-out status; nested overlays (2026-10-16)
 - Rule (IC-77; 03 sections 5.8, 6.8.3, 6.13, 6.17, 7.3; 04 sections 2 conditions, 6.1 `envir`, 7.9, 7.11): an evaluation's `.gptr_message_write(text, stream, margin, k)` lifts only its own top capture sink and hands the text on (`gptr_message_write(from = k - 1L)`); `console_cat()` (every `console_write()`, the Markdown emit, the spinner, the rgui LF, block gaps) and the console UI (`permission`, `select`; `notify` through `console_notice()`) write through it, so prompts reach the console whatever `tee` is and never a tool result; for prompts and sub-agent lines `console_before_message(tools = TRUE)` also ends partial lines while a tool executes (conditions raised inside a tool still leave the waiting row alone).

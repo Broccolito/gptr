@@ -178,6 +178,78 @@ test_that("a path tool's prompt shows the path relative to the project; no empty
   expect_match(ui_permission_detail(ui_request("x = 1"))[1L], "(level 1: local)", fixed = TRUE)
 })
 
+test_that("an edit or write approval shows the change before the answer (cheat-sheet review)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  keys = "    y yes - n no - ? more"
+  req = function(tool, ...) list(tool = tool, input = list(...), risk = list(level = 2L))
+  ed = req("edit", path = "R/io.R", edits = list(list(oldText = "n = 10", newText = "n = 20")))
+  expect_identical(ui_permission_lines(ed), c("  | edit  R/io.R", "    -n = 10", "    +n = 20",
+                                              "  ? Allow edit?", keys))
+  # the ? view (also the RStudio dialog) names the path in its first row, then the change
+  detail = ui_permission_detail(ed)
+  expect_identical(detail[1:3], c("  gptr wants to use edit on R/io.R (level 2)", "    -n = 10",
+                                  "    +n = 20"))
+  expect_false("    R/io.R" %in% detail)
+  # a write's content as + rows: 12 in the ask, then how many more, 40 in the ? view
+  expect_identical(ui_permission_lines(req("write", path = "a.md", content = "a\nb\n"))[2:4],
+                   c("    +a", "    +b", "  ? Allow write?"))
+  w = req("write", path = "a.md", content = paste0("line ", 1:60, collapse = "\n"))
+  expect_identical(ui_permission_lines(w)[2:15], c(paste0("    +line ", 1:12),
+                                                   "    (+48 more lines; ? shows more)",
+                                                   "  ? Allow write?"))
+  detail = ui_permission_detail(w)
+  expect_identical(detail[2:42], c(paste0("    +line ", 1:40), "    (+20 more lines)"))
+  # edits apart by @@, a deletion only - rows; an envelope, in patch or in an edit, as its lines
+  two = req("edit", path = "x.R", edits = list(list(oldText = "a", newText = "b"),
+                                               list(old_text = "c\nd", new_text = "")))
+  expect_identical(ui_permission_lines(two)[2:6],
+                   c("    -a", "    +b", "    @@", "    -c", "    -d"))
+  env = "*** Begin Patch\n*** Update File: x.R\n@@\n-a\n+b\n*** End Patch"
+  rows = c("    *** Begin Patch", "    *** Update File: x.R", "    @@", "    -a", "    +b",
+           "    *** End Patch")
+  for (p in list(req("edit", path = "x.R", edits = list(), patch = env),
+                 req("edit", path = "x.R", edits = env),
+                 req("edit", path = "x.R", edits = list(list(oldText = "", newText = env))))) {
+    expect_identical(ui_permission_lines(p)[2:7], rows)
+  }
+  # controls, bidi and zero-width characters are escaped
+  bad = req("write", path = "a.md", content = "\u001b[2J\u202e\u200b")
+  expect_identical(ui_permission_lines(bad)[2L], "    +<U+001B>[2J<U+202E><U+200B>")
+  # malformed edits show what the call line shows, never an error
+  for (e in list(data.frame(oldText = "a", newText = "b"), 3, "fix it", list(list(oldText = 1)))) {
+    expect_identical(ui_permission_lines(req("edit", path = "R/io.R", edits = e)),
+                     c("  | edit  R/io.R", "  ? Allow edit?", keys))
+  }
+  # another tool with a path: its other fields as JSON
+  run = req("mcp__fs__run", path = "x.sh", args = list("--force"))
+  json = "    {\"args\":[\"--force\"]}"
+  expect_identical(ui_permission_lines(run)[1:2], c("  | fs/run  x.sh", json))
+  expect_true(json %in% ui_permission_detail(run))
+  # at 256 colours the rows are styled as the result's diff
+  withr::local_options(cli.num_colors = 256L)
+  shown = console_tool_line(list(name = "edit"), msg_tool_result("c1", "edit", "ok", details = list(
+    diff = c("-n = 10", "+n = 20"))))
+  expect_identical(ui_permission_lines(ed)[2:3], shown)
+})
+
+test_that("an edit's ask shows its change; a denied edit leaves the file (cheat-sheet review)", {
+  skip_on_cran()
+  root = local_project(list("fit.R" = "n = 10"))
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  f = file.path(root, "fit.R")
+  before = list(readBin(f, "raw", 100L), file.mtime(f))
+  fake = local_fake_provider(function(request) {
+    if (length(request$last_results)) return("done")
+    fake_tool("edit", path = "fit.R", edits = list(list(oldText = "n = 10", newText = "n = 20")))
+  })
+  local_gptr_options(mode = "manual", interactive = TRUE, verbose = 2L, quiet = FALSE,
+                     ui = ui_console_spec(function(prompt, ...) "n"))
+  out = utils::capture.output(peter("set n to 20", model = fake))
+  at = match("  ? Allow edit?", out)
+  expect_identical(out[at - 3:1], c("  | edit  fit.R", "    -n = 10", "    +n = 20"))
+  expect_identical(list(readBin(f, "raw", 100L), file.mtime(f)), before)
+})
+
 test_that("a and p are offered only with a suggested rule; a and p say why not (#33)", {
   skip_on_cran()
   root = local_project()

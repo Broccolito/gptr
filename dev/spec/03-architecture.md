@@ -1501,7 +1501,11 @@ An approval asks under the call it gates (NS-1) [D-243]. The call line (`  ▎ r
 name bold, cut to the console width less the margin before `(+N more lines)`) is printed only when the console's
 last printed call line is not the request's (its session and `tool_call_id`, §7.11): a background ask, a nested
 member call inside `r` code, a sub-agent's call; a question and the tool block it is asked in are one block (no
-blank line between the call, its ask and its result lines). Then come, dim at column 4, the flagged calls one per
+blank line between the call, its ask and its result lines). A tool whose input has a `path` and no `code` shows the
+change it asks for under the call line, from its input alone (the file is never read): at most 12 rows at column 4,
+styled and cut as a result's diff, `-` rows of each edit's old text, `+` rows of its new text and of a write's
+content, `@@` between edits, a patch envelope as its own lines, another tool's other fields as JSON (dim), then
+`(+N more lines; ? shows more)` [cheat-sheet review]. Then come, dim at column 4, the flagged calls one per
 line (highest level first, each cut to the width, at most 5, then `(+N more; ? shows all)`) and an `ask_human`
 request's `asks in every mode: <reason>`, then the question `  ? Allow r?` (`?` blue, the question bold), and under its text the
 keys, `    y yes · a always (session) · p always (project) · n no · ? more` (the keys bold, what they do dim; 68
@@ -1510,11 +1514,12 @@ bidi and zero-width characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. The 
 the person's chevron `› ` (ASCII `>> `) at column 0, with R's readline, echo on and Enter required; no single key
 answers. `a` adds a session rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`) and `p`
 the same rule for the project, both offered only when the request suggests one; a remembered answer adds one dim
-line, `    allowed r(fn:FindNeighbors,FindClusters) for this session` (or `project`). `?` opens the detail view (code,
-flagged calls with levels, paths, "cannot be undone" when no checkpoint is possible, and "always in this project",
-written to the user-level project file `R_user_dir("gptr", "config")/projects/<hash>.json`, never into the project
-tree [IC-52]); `n` optionally takes feedback text that becomes the tool result (`n use base R`; also `no, use
-base R` or `No. Use base R`: punctuation right after `n` or `no` is part of the key); Ctrl-C aborts the run. Never
+line, `    allowed r(fn:FindNeighbors,FindClusters) for this session` (or `project`). `?` opens the detail view
+(code, or a path tool's change, at most 40 rows, its path then in the first row; flagged calls with levels, paths,
+"cannot be undone" when no checkpoint is possible, and "always in this project", written to the user-level project
+file `R_user_dir("gptr", "config")/projects/<hash>.json`, never into the project tree [IC-52]); `n` optionally takes
+feedback text that becomes the tool result (`n use base R`; also `no, use base R` or `No. Use base R`: punctuation
+right after `n` or `no` is part of the key); Ctrl-C aborts the run. Never
 `askYesNo()`, `menu()` or `select.list()` for gptr's own prompts [18 §2.1]. A sub-agent's question names it
 (`  ? sub-agent alpha: allow r?`; a nested `peter()` by its quoted prompt and number). Choices and inputs (the `ask`
 tool's questions among them) use the same frame: `? <title>` in bold, details dim under it, numbered choices

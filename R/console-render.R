@@ -777,12 +777,27 @@ console_call_line = function(call, width, kind = "act") {
   c(paste0("  ", tone(head)), console_code_rows(lines, lang, 20L, width))
 }
 
+#' Diff rows at column 4 (D-245): at most `n` of the escaped `rows`, `+` rows blue, `-` rows red,
+#' others dim, with a `width` a row wider than it cut, never wrapped, so its code keeps its spaces;
+#' then a dim `(+N more lines<more>)`
+#' @noRd
+console_diff_rows = function(rows, n, width = NULL, more = "") {
+  if (!length(rows)) return(character())
+  sym = console_style()
+  shown = utils::head(rows, n)
+  lines = paste0("    ", shown)
+  if (!is.null(width)) lines = console_cut(lines, width, sym$ellipsis)
+  sign = substr(shown, 1L, 1L)
+  lines = ifelse(sign == "+", sym$blue(lines), ifelse(sign == "-", sym$red(lines), sym$dim(lines)))
+  left = length(rows) - length(shown)
+  c(lines, if (left > 0L) sym$dim(paste0("    (+", left, " more lines", more, ")")))
+}
+
 #' The default result lines of a tool call, indented 4 and dim (D-245): an error's message in red,
 #' wrapped to at most 6 rows, then the object changes of `r` (also after an error); nothing else
-#' for a read; the diff of `edit` without its file headers, which the call line names (`+` lines
-#' blue, `-` lines red, hunk headers dim; a row wider than `width` cut, never wrapped, so its code
-#' keeps its spaces), the project-relative path of `write`, else `done`; each with `<sep><elapsed>`
-#' when it took a second or more
+#' for a read; the diff of `edit` without its file headers, which the call line names, at most 12
+#' rows (console_diff_rows()), the project-relative path of `write`, else `done`; each with
+#' `<sep><elapsed>` when it took a second or more
 #' @noRd
 console_result_lines = function(call, result, width, kind = "act") {
   sym = console_style()
@@ -810,13 +825,7 @@ console_result_lines = function(call, result, width, kind = "act") {
   if (!is.null(changes)) return(sym$dim(paste0(changes, secs)))
   if (identical(call$name, "edit") && is.character(d$diff) && length(d$diff)) {
     diff = d$diff[!grepl("^(--- a/|[+]{3} b/)", d$diff)]
-    shown = utils::head(diff, 12L)
-    lines = console_cut(paste0(pad, console_escape(shown, FALSE)), width, sym$ellipsis)
-    sign = substr(shown, 1L, 1L)
-    lines = ifelse(sign == "+", sym$blue(lines),
-                   ifelse(sign == "-", sym$red(lines), sym$dim(lines)))
-    more = length(diff) - 12L
-    return(c(lines, if (more > 0L) sym$dim(paste0(pad, "(+", more, " more lines)"))))
+    return(console_diff_rows(console_escape(diff, FALSE), 12L, width))
   }
   if (identical(call$name, "write") && rlang::is_string(d$path)) {
     bytes = if (is.numeric(d$bytes)) paste0(" (", format(d$bytes, big.mark = ","), " bytes)")

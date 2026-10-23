@@ -2756,7 +2756,7 @@ diff_lines(c("a", "b"), c("a", "c"))
 | `rule_suggest(call)` | `perm-rules.R` | chr(1) rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`), or `NULL` (never for level 4) | P11, P14 |
 | `builtin_permissions(gptr)` | `perm-gate.R` | registers the policies `mode` (the mode x level table of §6.8.1 of `03`), `rules`, `critical_guard`, `secret_guard`, `protect_size` (IC-04) | P02 load |
 | `builtin_plan(gptr)` | `perm-plan.R` | registers the `plan` policy (writes denied, level-1 R allowed only because the run evaluates in the scratch overlay), the plan-mode `agent_end` hook (captures the last `<proposed_plan>...</proposed_plan>`, saves `<root>/plans/<YYYY-MM-DD>-<slug>.md`, sets `.d$plan`, stores the pending plan under `home_address(home)` with the time, appends `gptr.plan`, offers the execute menu interactively), the plan-mode allowlist check (only calls known to be read-only run, IC-54), and the `plan.pending` service (returns the plan once, only to the next top-level `peter()` call of the same process and environment within one hour; any other call in between discards it; IC-56) | P02 load |
-| `builtin_ui(gptr)` | `console-ui.R` | registers `ui` specs `console`, `none`, `scripted`, `rstudio` and the `ui.get` service (resolution from the run's snapshot of `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`, IC-43, IC-53); every display escapes control, bidi and zero-width characters and the one-line prompt shows the call's first line cut to the console width, `(+N more lines)` and at most 5 flagged calls, one per line (IC-53, D-187, D-222) | P02 load |
+| `builtin_ui(gptr)` | `console-ui.R` | registers `ui` specs `console`, `none`, `scripted`, `rstudio` and the `ui.get` service (resolution from the run's snapshot of `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`, IC-43, IC-53); every display escapes control, bidi and zero-width characters and the one-line prompt shows the call's first line cut to the console width, `(+N more lines)`, a path tool's change from its input (IC-77 in §15.10) and at most 5 flagged calls, one per line (IC-53, D-187, D-222) | P02 load |
 | `builtin_ask(gptr)` | `tool-ask.R` | registers the `ask` direct tool (schema §9.2) with `available = function(ctx) ctx$has_ui()`; result text as 18 §3.6 (`The user answered:` lines; cancellation and non-interactive texts) | P02 load |
 
 Console `select()` deliberately preserves title line feeds for setup and `ask` questions.
@@ -5534,7 +5534,14 @@ its part in its own commit, and Task 27 finalises them.
     `console_on_tool_start()`); `ui_permission_lines(request)` prints the call line (`  ▎ r  <first line>`, strip
     red, name bold, cut before `(+N more lines)`; the name as `console_tool_name()` gives it, an MCP tool as
     `server/tool` with its arguments dim, in the question and the detail view too) only when they are not the
-    request's (`session`, `tool_call_id`, §7.11): a background ask, a nested member call in `r` code, a sub-agent's call. The flagged
+    request's (`session`, `tool_call_id`, §7.11): a background ask, a nested member call in `r` code, a sub-agent's call.
+    A request whose input has a `path` and no `code` shows the change it asks for under the call line
+    (`ui_request_change()`, from the input alone; the file is never read, so the ask cannot fail or stall on it): at
+    most 12 rows at column 4 in the result diff's style (`console_diff_rows()`: `+` blue, `-` red, others dim, each cut
+    to the width), `-` rows of each edit's `oldText` and `+` rows of its `newText`, `@@` between edits, a patch
+    envelope (`patch`, or carried in `edits`) as its own lines, `+` rows of a write's `content`, another tool's other
+    fields as JSON, then `    (+N more lines; ? shows more)`; any other input shape shows the call line alone. Before,
+    an edit's change showed only after `y` and a write's content never (cheat-sheet review). The flagged
     rows and `asks in every mode: <reason>` follow, dim at column 4 (later flagged rows under the first's text),
     then the question `  ? Allow r?` (`?` blue, the question bold)
     and, under its text, the keys row `    y yes · a always (session) · p always (project) · n no · ? more` (the
@@ -5587,9 +5594,10 @@ its part in its own commit, and Task 27 finalises them.
   - The `?` detail view (`ui_permission_detail()`) lists the keys as the question shows them,
     `    y  yes`, `    a  always in this session: <rule>`, ..., `    Ctrl-C  abort the run` (the key bold, its words
     dim). Its code is at most 40 rows at column 4, as the call block shows them (`console_code_rows()`, no fence
-    lines; visual review). The console leaves them out (`code = FALSE`) when the call line just above is this
-    request's and showed its code whole (at most 20 lines); the RStudio dialog keeps them and gets the text without
-    SGR.
+    lines; visual review), or a path tool's change, at most 40 rows, with the path in the first row,
+    `gptr wants to use edit on R/io.R (level 2)` (cheat-sheet review: the RStudio dialog has no call line above it).
+    The console leaves out code rows (`code = FALSE`) when the call line just above is this request's and showed
+    its code whole (at most 20 lines); the RStudio dialog keeps them and gets the text without SGR.
   - Run totals (Task 26; amends item 6 and D-206): the status line is dim and written as a notice, at column 2
     and wrapped where the margin applies, `done · <model> · <n> requests · <tokens> tokens · <cost> · <k>%
     context left`, with `aborted: <reason>` or `error: <reason>` for `done` as before (the reason's line breaks one

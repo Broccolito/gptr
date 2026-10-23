@@ -612,6 +612,16 @@ Decisions:
   detail view lists the keys as the question does (`    y  yes`, the key bold, its words dim) and
   leaves out its code rows when the call line just above showed the code whole (amended in the review of
   Tasks 8-15; the RStudio dialog keeps them, without SGR).
+- (Amended in the cheat-sheet review: console-2.) A request whose input has a `path` and no `code` shows the
+  change it asks for under the call line, before the flagged rows, from its input alone (the file is never
+  read, so the ask cannot fail or stall on it and L5 needs no service of `tool-edit.R`): `ui_request_change()`
+  gives `-` rows of each edit's old text and `+` rows of its new text, `@@` between edits, a patch envelope
+  (`patch`, or carried in `edits`) as its own lines, `+` rows of a write's content, another tool's other fields
+  as JSON, and nothing for any other shape. At most 12 rows in the ask, then `(+N more lines; ? shows more)`
+  (`? shows all` would be false past 52 lines), and 40 in the `?` view, whose first row then names the
+  path (`gptr wants to use edit on R/io.R (level 2)`: the RStudio dialog, which shows only this view, would
+  otherwise not say which file). The rows are styled and cut as the result's diff, one helper,
+  `console_diff_rows()`. Main showed the path alone: an edit's change only after `y`, a write's content never.
 - The question is at column 2, `? Allow <tool>?`, and the keys are a row of their own under its text, at
   column 4: `y yes · a always (session) · p always (project) · n no · ? more` (amended in the review of
   Tasks 8-15: on the question's row they wrapped at 80 columns for any tool name of 4 characters or more,
@@ -688,12 +698,19 @@ Tests (`test-console-ui.R`), RED first:
   give NA under `No valid answer after 5 tries; cancelled.`. `test-console-setup.R`: Enter at the setup
   menu cancels after one read, its Cancel row and hint shown; a scripted 4 cancels; a call with a prompt
   resolves its model and shows no menu.
+- (Amended in the cheat-sheet review: console-2.) `test-console-ui.R`: an edit's ask shows `-` and `+` rows
+  between the call line and the question, and its `?` view the rows with the path in its first row; a write's
+  content as `+` rows, 12 then the more row in the ask and 40 in the `?` view; edits apart by `@@`; a patch
+  envelope in `patch` or in an edit as its lines; controls escaped; malformed edits show the call line alone; an
+  MCP tool's other fields as JSON; at 256 colours the rows' bytes are the result diff's; end to end, a denied
+  edit shows its change before `Allow edit?` and leaves the file's bytes and mtime.
 
 Spec: IC-77, 03 §6.8.3, §6.17 and NS-1 (§10.1).
 
 Files: `R/console-ui.R` (`ui_question()`, `ui_permission_lines()`, `ui_console_permission()`,
-`ui_console_select()`, `ui_console_input()`), `R/console-render.R` (`console_state()`,
-`console_on_tool_start()`: the last printed call ids; `console_gap()`), `R/auth-oauth.R` (the input
+`ui_console_select()`, `ui_console_input()`; `ui_request_change()`, console-2), `R/console-render.R`
+(`console_state()`, `console_on_tool_start()`: the last printed call ids; `console_gap()`; `console_diff_rows()`,
+console-2), `R/auth-oauth.R` (the input
 prompts), `R/utils-options.R` (`gptr_readline()`, `readline_answer()`; amended in the
 cheat-sheet review: auth-2), `R/console-repl.R` (the first-use setup) and `?peter` (`R/gptr-gateway.R`; amended
 in the cheat-sheet review: console-1), the tests above, and the approval sentences of

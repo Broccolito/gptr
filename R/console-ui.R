@@ -91,6 +91,43 @@ ui_request_lines = function(request) {
   ui_escape(text_lines(input[["code"]] %||% path %||% request$summary))
 }
 
+#' The change a request with a path and no code makes, as escaped diff rows from its input alone
+#' (the file is never read): each edit's oldText as `-` rows and newText as `+` rows, `@@` between
+#' edits; a patch envelope (`patch`, or carried in `edits`) as its own lines; a write's content as
+#' `+` rows; another tool's other fields as JSON; character() for any other shape
+#' @noRd
+ui_request_change = function(request) {
+  input = request$input
+  if (!is.list(input) || !rlang::is_string(input[["path"]]) || !is.null(input[["code"]])) {
+    return(character())
+  }
+  signed = function(s, x) {
+    x = if (rlang::is_string(x)) console_lines(x)
+    if (length(x)) paste0(s, x)
+  }
+  patch = function(x) rlang::is_string(x) && grepl("^\\s*\\*\\*\\* Begin Patch", x, perl = TRUE)
+  edit_rows = function(e) {
+    if (patch(e)) return(console_lines(e))
+    if (!is.list(e)) return(NULL)
+    old = e[["oldText"]] %||% e[["old_text"]]
+    new = e[["newText"]] %||% e[["new_text"]]
+    if (patch(new) || patch(old)) return(console_lines(if (patch(new)) new else old))
+    c(signed("-", old), signed("+", new))
+  }
+  switch(request$tool %||% "",
+         edit = {
+           edits = if (patch(input[["patch"]])) list(input[["patch"]]) else input[["edits"]]
+           one = Filter(length, lapply(if (is.list(edits)) edits else list(edits), edit_rows))
+           as.character(unlist(lapply(seq_along(one), function(i) c(if (i > 1L) "@@", one[[i]]))))
+         },
+         write = as.character(signed("+", input[["content"]])),
+         {
+           rest = input[setdiff(names(input), "path")]
+           if (!length(rest)) return(character())
+           console_lines(tryCatch(json_encode(rest), error = function(e) ""))
+         })
+}
+
 #' The flagged calls (level >= 1) of a risk record, highest level first, or NULL
 #' @noRd
 ui_flagged = function(risk) {
@@ -156,8 +193,8 @@ ui_call_shown = function(request) {
 
 #' The lines of an approval (D-243): the call line (`  | r  x = 1`, the tool named, R code
 #' highlighted and an MCP call's arguments dim as the console's call line has them, fitted to the
-#' console before (+N more lines), D-187) unless the console printed it (ui_call_shown()), then dim
-#' at column 4
+#' console before (+N more lines), D-187) unless the console printed it (ui_call_shown()), at most
+#' 12 rows of the change a path tool makes (ui_request_change()) as a diff, then dim at column 4
 #' the flagged calls one per line, fitted, at most 5 (D-222), and why an `ask_human` request asks
 #' in every mode, then the question, and under its text the keys (a and p only with a rule,
 #' ui_keys())
@@ -166,6 +203,7 @@ ui_permission_lines = function(request) {
   sym = console_style()
   lines = ui_request_lines(request)
   lines = lines[nzchar(trimws(lines))]
+  change = ui_request_change(request)
   more = if (length(lines) > 1L) paste0("  (+", length(lines) - 1L, " more lines)") else ""
   tool = console_tool_name(request$tool %||% "tool")
   arg = c(lines, "")[1L]
@@ -184,6 +222,7 @@ ui_permission_lines = function(request) {
   keys = c("y", if (can) c("a", "p"), "n", "?")
   what = c("yes", if (can) c("always (session)", "always (project)"), "no", "more")
   c(call,
+    console_diff_rows(change, 12L, width, "; ? shows more"),
     if (n) {
       k = seq_len(min(n, 5L))
       rows = paste0(c("    flagged: ", rep(strrep(" ", 13L), 4L))[k], "[", fl$level[k], " ",
@@ -200,16 +239,19 @@ ui_permission_lines = function(request) {
 }
 
 #' The detail view shown for `?`: unless `code` is FALSE (it also feeds the RStudio dialog), at
-#' most 40 code rows at column 4 as the call block shows them (console_code_rows(), D-207); the
-#' keys as the question shows them, bold, and what they do, dim (D-243)
+#' most 40 code rows at column 4 as the call block shows them (console_code_rows(), D-207), or of a
+#' path tool's change, its path then named in the first row; the keys as the question shows them,
+#' bold, and what they do, dim (D-243)
 #' @noRd
 ui_permission_detail = function(request, code = TRUE) {
   risk = request$risk
   sym = console_style()
   lines = ui_request_lines(request)
+  change = ui_request_change(request)
   who = ui_who(request)
   out = c(paste0("  ", if (nzchar(who)) who else "gptr", " wants to use ",
                  console_tool_name(request$tool %||% "a tool"),
+                 if (length(change)) paste0(" on ", c(lines, "")[[1L]]),
                  if (!is.null(risk$level)) {
                    paste0(" (level ", risk$level,
                           if (rlang::is_string(risk$label)) paste0(": ", ui_escape(risk$label)),
@@ -219,7 +261,11 @@ ui_permission_detail = function(request, code = TRUE) {
           if (rlang::is_string(request$reason) && nzchar(request$reason)) {
             paste0("  reason: ", ui_escape(request$reason))
           },
-          if (code) console_code_rows(lines, console_lang(request$tool), 40L))
+          if (length(change)) {
+            console_diff_rows(change, 40L)
+          } else if (code) {
+            console_code_rows(lines, console_lang(request$tool), 40L)
+          })
   fl = ui_flagged(risk)
   if (NROW(fl)) {
     where = ifelse(is.na(fl$path), "",
