@@ -16,5 +16,7 @@
 }
 \description{
 The footer is \verb{status . model . turns . tokens . cost . id}. A token count or cost that a
-provider did not report is printed as unknown, never as zero.
+provider did not report is printed as unknown, never as zero. A session replayed from a
+document shows the status \code{replayed} until it makes a request; rebuilt from its saved
+transcript it shows the recorded usage, reconstructed from the document alone unknown usage.
 }

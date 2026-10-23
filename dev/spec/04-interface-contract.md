@@ -754,6 +754,7 @@ returns the identical object (`identical(s |> peter("x"), s)`).
 | `home_label` | chr(1) | `"globalenv"`, `"overlay of s…"`, `"<environment>"`, `"frame of f()"` |
 | `plan` | chr(1)\|NULL | pending plan text (plan mode) |
 | `replayed` | lgl(1) | a replayed session |
+| `replay_rows` | int(1)\|NULL | its usage rows when a block was last replayed into it (the footer's `replayed`) |
 | `block` | chr(1)\|NULL | replayed block id |
 | `snapshot` | df\|NULL | last workspace snapshot (names, addresses, fingerprints; no values) |
 | `ext` | named list | per-plugin JSON-able state |
@@ -795,7 +796,7 @@ the valid names):
 
 | Method | Behaviour |
 |---|---|
-| `print(x, ...)` | the last answer through `msg_verbatim()` (rendered markdown when the console renderer is available), then a dim footer `status . model . turns . tokens . cost . id`; returns `invisible(x)`; never touches user objects |
+| `print(x, ...)` | the last answer through `msg_verbatim()` (rendered markdown when the console renderer is available), then a dim footer `status . model . turns . tokens . cost . id` (a replayed session's status reads `replayed` until a request adds usage, and its tokens and cost read unknown while it holds no stored request; IC-46, IC-74); returns `invisible(x)`; never touches user objects |
 | `format(x, ...)`, `as.character(x, ...)` | `$text` |
 | `summary(object, ...)` | complete `gptr_session_summary` table with a detached character-only metadata snapshot; no model request |
 | `print.gptr_session_summary(x, n = 8L, ...)` | recent messages, omitted count and session metadata at current console width; safe display copy; `n = Inf` shows all rows |

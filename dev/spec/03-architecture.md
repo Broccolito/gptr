@@ -943,7 +943,8 @@ reactor holds a running session strongly until it settles.
 **Accessors** (`$.gptr_session`, `[[`, `.DollarNames`): `text`, `value`, `values`, `usage`, `cost`,
 `history` (data frame: turn, role, preview, tools, tokens), `messages`, `model`, `mode`, `status`, `id`,
 `turns`, `kind`, `envir` (the kept home or `NULL`), `ext`, and child names for teams (`reviews$stats`).
-`print()` shows the last answer and a dim footer `status . model . turns . tokens . cost . id`;
+`print()` shows the last answer and a dim footer `status . model . turns . tokens . cost . id` (status `replayed`
+until a replayed session makes a request; unknown usage while it holds no stored one);
 `format()`/`as.character()` return the text; `summary()` and `str()` never touch user objects; `knit_print`
 is registered lazily. `$<-` and `[[<-` are refused with `gptr_error_readonly`: state changes go through verbs
 (G3 t1).

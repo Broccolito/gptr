@@ -423,7 +423,9 @@ session_history = function(s) {
 #' Print a session
 #'
 #' The footer is `status . model . turns . tokens . cost . id`. A token count or cost that a
-#' provider did not report is printed as unknown, never as zero.
+#' provider did not report is printed as unknown, never as zero. A session replayed from a
+#' document shows the status `replayed` until it makes a request; rebuilt from its saved
+#' transcript it shows the recorded usage, reconstructed from the document alone unknown usage.
 #'
 #' @param x A `gptr_session`.
 #' @param ... Unused.
@@ -438,15 +440,23 @@ print.gptr_session = function(x, ...) {
 }
 
 #' The footer line: status . model . turns . tokens . cost . id (unknown counts print as unknown,
-#' IC-74, D-021)
+#' IC-74, D-021); a replayed session reads `replayed` until a request adds usage, and one with no
+#' stored request (reconstructed from its document) has unknown usage
 #' @noRd
 session_footer = function(s) {
   d = session_data(s)
   u = session_usage_rows(s)
+  replayed = isTRUE(d$replayed) && isTRUE(nrow(u) == d$replay_rows)
   tokens = sum(u$input + u$output + u$cache_read + u$cache_write_5m + u$cache_write_1h)
+  cost = u$cost
+  if (replayed && !nrow(u)) {
+    tokens = NA_real_
+    cost = NA_real_
+  }
   dot = if (cli::is_utf8_output()) " \u00b7 " else " . "
-  paste(c(d$status, d$model, paste(d$turns, if (identical(d$turns, 1L)) "turn" else "turns"),
-          paste(format_count(tokens), "tokens"), format_cost(u$cost), d$id),
+  paste(c(if (replayed) "replayed" else d$status, d$model,
+          paste(d$turns, if (identical(d$turns, 1L)) "turn" else "turns"),
+          paste(format_count(tokens), "tokens"), format_cost(cost), d$id),
         collapse = dot)
 }
 
@@ -1289,6 +1299,7 @@ replay_mark = function(s, block, header, text, advance) {
     turn = turn, value = header$value))))
   d$seen = c(d$seen, block)
   d$turns = turn
+  d$replay_rows = nrow(session_usage_rows(s))
   if (!is.null(header$value)) replay_value(s, header$value)
   if (!is.null(text)) d$last_text = text
   invisible(s)

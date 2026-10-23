@@ -1236,6 +1236,33 @@ test_that("a later live run of a reconstructed session gives a one-time notice",
   expect_no_message(run_text(r, "more"), message = "reconstructed")
 })
 
+test_that("the footer marks a replayed session until it runs, and never as a known zero", {
+  skip_on_cran()
+  local_store()
+  local_permissive()
+  local_fake_provider(list("first answer", "second answer", "continued"))
+  s = test_session(home = globalenv())
+  run_text(s, "one")
+  id = s$id
+  ids = s$usage$request_id
+  other = test_session()
+  rm(s)
+  invisible(gc())
+  r = session_replay_new("a1b2c3", list(session = id, turn = "1", model = "fake/fake-1"),
+                         envir = new.env())
+  expect_match(session_footer(r), "^replayed . fake/fake-1 . 1 turn . [0-9.]+k? tokens . \\$0")
+  expect_identical(r$usage$request_id, ids)
+  run_text(r, "two")
+  expect_match(session_footer(r), "^idle .")
+  expect_length(r$usage$request_id, 2L)
+  # reconstructed from the document: no request is known, so its usage is unknown, never zero
+  b = session_replay_new("d4e5f6", list(session = "s0123456788", turn = "1", model = "fake/fake-1"),
+                         envir = new.env(), doc = list(template = "Summarise d", text = "Done."))
+  expect_match(session_footer(b), "^replayed . .* . unknown tokens . unknown cost . s0123456788$")
+  run_text(b, "and then?")
+  expect_no_match(session_footer(b), "replayed|unknown")
+})
+
 # Added to the plan's replay tests: the header fields that name things are checked, `doc` is
 # optional (IC-46 calls session_replay_new(block, header, envir)), a header turn that is not one
 # whole number never fails, and a session rebuilt for a replay takes every path-derived field

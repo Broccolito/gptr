@@ -2304,3 +2304,24 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^(session-object|gptr-sdk|gptr-gateway|arch-layers|lint-rules)$` PASS 1078
   (NOT_CRAN=true). Lint clean; Rd regenerated.
 - Deviations: none. Open: the sheet's S06 and S09 lines follow in the sheet commit.
+
+### replay-5 - Footer marks a replayed session and never prints a known zero
+- Finding 21.
+- Red: FAIL 2 in `^session-object$` (PASS 539): a one-turn fake session forgotten and rebuilt from
+  its JSONL by `session_replay_new()` printed `idle . fake/fake-1 . 1 turn . 1.7k tokens . $0.0000`,
+  as the live run did; one reconstructed from a document alone printed `0 tokens . $0.0000`.
+- Cause: `session_footer()` never showed that a session was replayed, and a reconstruction holds no
+  usage row, which `format_count()` and `format_cost()` print as a known zero.
+- Fix: `replay_mark()` keeps the usage row count in `d$replay_rows`; while a replayed session
+  still has that many rows its footer status reads `replayed`, and with none its tokens and cost
+  read unknown. A live request adds a row and the footer is the usual one. `?print.gptr_session`,
+  04 §5.1 (`print`, `.d` `replay_rows`), 03 §5.1.
+- Green: `^session-object$` PASS 541; `^(doc-.*|session-.*|subagent-team|ckpt-rewind|
+  console-commands|mcp-recording|gptr-sdk|arch-layers|lint-rules)$` PASS 4900 SKIP 2 (repr;
+  NOT_CRAN=true). Lint clean; Rd regenerated; plan checks pass. Installed build, fake provider,
+  a self-bound `analysis.R` run by `Rscript`, then `GPTR_REPLAY=replay Rscript`: in a
+  `gptr_init()` project `replayed . fake/fake-1 . 1 turn . 3.7k tokens . $0.0000`, outside one
+  `replayed . ... . unknown tokens . unknown cost`; file unchanged both times.
+- Deviations: D-249 (extended). Open: the same-process replay into the recording session keeps
+  its live footer (not a replayed session); outside a project the shell replay still prints no
+  answer, as S2 lives in this process's `tempdir()`.
