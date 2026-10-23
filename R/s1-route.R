@@ -654,10 +654,18 @@ s1_abstain = function(out, q, a, states) {
   if (!any(unsure)) return(out)
   u = a$uncertain
   if (identical(u, "stop")) {
-    gptr_abort(paste0(sum(unsure), " System 1 answer(s) fall inside the uncertain band ",
-                      "(confidence below ", mc, if (any(unknown)) " or unknown", ")."),
-               c("s1_uncertain", "s1"), prob = unname(gptr_prob(out)[unsure]),
-               min_confidence = mc)
+    idx = unname(which(unsure))
+    nm = names(out)[idx]
+    who = if (is.null(nm)) as.character(idx) else ifelse(nzchar(nm), nm, idx)
+    shown = paste(who[seq_len(min(10L, length(who)))], collapse = ", ")
+    if (length(who) > 10L) shown = paste(shown, "and", length(who) - 10L, "more")
+    gptr_abort(c(paste0(length(idx), " System 1 answer(s) fall inside the uncertain band ",
+                        "(confidence below ", mc, if (any(unknown)) " or unknown", "): ", shown,
+                        "."),
+                 "The error's $value holds every answer; uncertain = NA keeps the others."),
+               c("s1_uncertain", "s1"), index = idx, names = nm,
+               confidence = unname(conf[idx]), prob = unname(gptr_prob(out)[unsure]),
+               min_confidence = mc, value = out)
   }
   value = s1_bare(out)
   if (is.function(u)) {

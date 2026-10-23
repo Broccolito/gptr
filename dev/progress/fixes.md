@@ -2225,3 +2225,21 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   Calling this helper from `subagent_route_checks()` fails test-arch-layers.R (P19 is L4, P08 L6), so it
   needs a contract edge or a P19 check of its own. The sheet's System 1 card can say these arguments need
   a decision model (the sheet is edited later).
+
+### s1-2 - The uncertain = "stop" error names the uncertain inputs and carries the answers
+- Finding 127. Red: `^s1-route$` FAIL 10, PASS 299: for `c(trial, weeks, chose, pilot)` with P(yes) 0.98,
+  0.12, 0.05, 0.32 and `min_confidence = 0.8`, the error had no `index`, `names`, `confidence` or `value`,
+  and its message ended "(confidence below 0.8)." without naming an input.
+- Cause: `s1_abstain()` built the condition from `prob = unname(gptr_prob(out)[unsure])` only: P(yes) or the
+  chosen option's probability, not the confidence the band tests, and the abort before `s1_record()`
+  discarded every other answer.
+- Fix: the condition adds `index`, `names` (`NULL` for unnamed input), `confidence` and `value` (the whole
+  answer); `prob` stays (the IC-74 test pins it). The message lists the first ten names, a position where a
+  name is empty, "and N more" beyond, and a second line: "The error's $value holds every answer;
+  uncertain = NA keeps the others." 04 §2.2 row amended; NEWS entry.
+- Green: `^s1-route$` PASS 309 (unnamed input lists "2, 4"; a choice reports its stored confidence 0.91,
+  not the chosen 0.94); all System 1 files (`s1-*`, `copy-s1`, `s11-conformance`) PASS 1435. Lint clean;
+  no Rd change.
+- Deviations: D-250 (s1-2 rule). The plan's second line, "e$value holds every answer", names a variable the
+  user may not have; it reads "The error's $value". Open: the system-one vignette does not describe the
+  fields (the message does).

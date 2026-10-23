@@ -261,7 +261,7 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `doc_write` | - | `path`, `reason` | P15 | a document write failed or was blocked and the caller asked for strictness |
 | `s1` | - | `status`, `error_type`, `request_id`, `model` | P13 | System 1 failure, parent of the next rows |
 | `s1_auth`, `s1_validation`, `s1_rate_limit`, `s1_overloaded`, `s1_connection`, `s1_response` | `s1` | as `s1` | P13 | classified as in 04 §4.12 (scalar calls; vectorised calls give `NA` + one warning) |
-| `s1_uncertain` | `s1` | `prob`, `min_confidence` | P13 | `uncertain = "stop"` inside the uncertain band |
+| `s1_uncertain` | `s1` | `index`, `names` (`NULL` for unnamed input), `confidence`, `prob`, `min_confidence`, `value` (every answer) | P13 | `uncertain = "stop"` inside the uncertain band; the message names the first ten inputs |
 | `s1_labels` | `s1` | `labels` | P13 | a choice label `if()` would read as logical |
 | `mcp` | - | `server` | P18 | parent of MCP errors |
 | `mcp_auth_required` | `mcp` | `server`, `login` | P18 | OAuth needed; names `gptr_login("mcp:<name>")` |
