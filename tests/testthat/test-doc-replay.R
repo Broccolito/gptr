@@ -2001,6 +2001,27 @@ test_that("per-call record FALSE suppresses a System 1 document summary", {
   expect_identical(nrow(gptr_blocks(f)), 1L)
 })
 
+test_that("replaying a document into the session that recorded it adds no turn", {
+  x = local_doc_e2e(list(fake_tool("r", code = "x = 1"), fake_text("Made x."),
+                         fake_tool("r", code = "x = x + 1"), fake_text("Added one."),
+                         fake_tool("r", code = "x = x * 10"), fake_text("Times ten.")))
+  f = file.path(x$root, "analysis.R")
+  writeLines(c("s = peter(\"make x\")", "p = s |> peter(\"add one\")"), f)
+  rec = new.env(parent = globalenv())
+  gptr_source(f, replay = "record", envir = rec)
+  expect_identical(rec$s$turns, 2L)
+  rep = new.env(parent = globalenv())
+  out = gptr_source(f, replay = "replay", envir = rep)
+  expect_identical(out$action, c("replayed", "replayed"))
+  expect_identical(rep$s, rec$s)
+  expect_identical(rep$s$turns, 2L)
+  expect_length(fake_requests(x$fake), 4L)
+  rec$s |> peter("times ten", .opts = list(record = FALSE))
+  expect_identical(rec$s$turns, 3L)
+  sm = summary(rec$s)
+  expect_identical(as.integer(sm$turn[sm$role == "user"]), 1:3)
+})
+
 test_that("a block lists a known zero cost as 0, as the session reports it (IC-74)", {
   x = local_doc_e2e(list(fake_tool("r", code = "n = 1"), fake_text("done")))
   f = file.path(x$root, "analysis.R")

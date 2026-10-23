@@ -1277,12 +1277,13 @@ replay_turn = function(x) {
 }
 
 #' Record a replayed block on a session: `gptr.replay`, `seen`, the turn (one more when
-#' `advance`), the value, `last_text`
+#' `advance`, unless the active path holds the block's turn already: the session that recorded
+#' it, in this process), the value, `last_text`
 #' @noRd
 replay_mark = function(s, block, header, text, advance) {
   d = session_data(s)
   if (block %in% d$seen) return(invisible(s))
-  turn = if (advance) d$turns + 1L else d$turns
+  turn = if (advance && !replay_holds_block(d, block)) d$turns + 1L else d$turns
   session_append(s, entry_custom("gptr.replay", compact(list(
     doc = header$doc %||% d$doc$path, block = block, mode = header$mode %||% "replay",
     turn = turn, value = header$value))))
@@ -1291,6 +1292,15 @@ replay_mark = function(s, block, header, text, advance) {
   if (!is.null(header$value)) replay_value(s, header$value)
   if (!is.null(text)) d$last_text = text
   invisible(s)
+}
+
+#' Does the active path hold a `gptr.doc_block` entry for `block` that a rewind has not undone?
+#' @noRd
+replay_holds_block = function(d, block) {
+  any(vapply(entries_path(d), function(e) {
+    identical(e$custom_type, "gptr.doc_block") && is.list(e$data) &&
+      identical(e$data$block, block) && !identical(e$data$action, "undone")
+  }, NA))
 }
 
 #' Designate the replayed block's `value=` name: through the value policy when the name is bound

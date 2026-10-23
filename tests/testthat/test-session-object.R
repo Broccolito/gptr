@@ -1141,6 +1141,18 @@ test_that("session_replay_new() returns the live session holding the header's id
   expect_identical(r, s)
   expect_identical(s$turns, 1L)
   expect_identical(s$text, "cached")
+  # the session that recorded a block holds its turn already; an undone block's turn is gone
+  held = test_session()
+  block = function(id, action) {
+    session_append(held, list(type = "custom", custom_type = "gptr.doc_block",
+                              data = list(doc = "analysis.R", block = id, action = action)))
+  }
+  block("a1b2c3", "insert")
+  block("d4e5f6", "undone")
+  expect_identical(session_replay_new("a1b2c3", list(session = held$id), globalenv()), held)
+  expect_identical(held$turns, 0L)
+  session_replay_new("d4e5f6", list(session = held$id), globalenv())
+  expect_identical(held$turns, 1L)
 })
 
 test_that("session_replay_new() rebuilds from the JSONL, cut at the recorded turn", {

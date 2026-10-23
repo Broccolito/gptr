@@ -2191,3 +2191,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   arch-layers|lint-rules)$` PASS 3820 SKIP 2 (repr; NOT_CRAN=true). Lint clean; Rd regenerated;
   plan checks pass. The IC-74 test's local-model case now expects `"0"` (its cost was a known 0).
 - Deviations: D-249 (extended). Open: none.
+
+### replay-1 - Replaying into the session that recorded the block adds no turn
+- Finding 84.
+- Red: FAIL 5 in `^(doc-replay|session-object)$` (PASS 1171): a two-block pipe chain recorded with
+  `gptr_source(replay = "record")` read 4 turns after `gptr_source(replay = "replay")` in the same
+  process, the next live turn was 5 and the user turns 1, 2, 5; `session_replay_new()` advanced a
+  live session whose path held the block's `gptr.doc_block` entry.
+- Cause: `replay_mark(advance = TRUE)` (both `session_replay_apply()` and `session_replay_new()`'s
+  live-session branch) skipped only blocks in `seen`, which recording never fills, so the session
+  that already held the turn gained one per block.
+- Fix: `replay_mark()` advances only when `replay_holds_block()` finds no `gptr.doc_block` entry
+  for the block, not undone, on the active path; it still records `gptr.replay`, `seen` and
+  `value=` (a session rebuilt from JSONL holds the block and needs its value). IC-46 says so.
+- Green: `^(doc-replay|session-object)$` PASS 1176; `^(doc-.*|session-.*|subagent-team|ckpt-rewind|
+  arch-layers|lint-rules)$` PASS 4577 SKIP 2 (repr; NOT_CRAN=true). Lint clean; plan checks pass.
+- Deviations: D-249 (extended). Open: replaying block 1 into the live session after turn 2 records
+  its `gptr.replay` and `value=` at turn 2, the session's current turn.

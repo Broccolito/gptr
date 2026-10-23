@@ -3138,10 +3138,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   output is dropped with it. A flat vector of an older session still renders.
 - Rule: a block header writes `cost=` whenever the turn's cost is known, `cost=0` for a free route (was only above
   0), so `gptr_blocks()` lists `0` there and `NA` only when the cost is unknown or not recorded (IC-74).
+- Rule: a replay adds no turn to a session whose active path holds the block's `gptr.doc_block` entry, not undone
+  (the session that recorded it, replayed in the same process: was one more turn per block, so later turns, `turn=`
+  and `gptr_fork(at =)` were off); it still records `gptr.replay`, `seen` and the `value=` name (IC-46).
 - Contract-visible: 04 §4.4 `r` details `outputs`, §6.4 `gptr_doc()`, §11.5 `cost`, body and transcript, §11.9,
-  §15.3 IC-45, IC-51; 03 §4.3, §6.9.1; `?gptr_doc`, `?gptr_blocks`; vignette script-as-history.
+  §15.3 IC-45, IC-46, IC-51; 03 §4.3, §6.9.1; `?gptr_doc`, `?gptr_blocks`; vignette script-as-history.
 - Tests: test-doc-io: the user-cache sidecar, the cross-process kernel and killed-run sync, the live-run sync;
   test-doc-replay: the other-binding notice and its four silent cases; test-doc-formats: the machine-log line with
   and without `.gptr/`; test-doc-blocks: recorded `#>` cuts, the known-zero cost; test-tool-r: per-expression
-  outputs; test-doc-replay: the listed zero cost. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8,
-  doc-10, doc-11.
+  outputs; test-doc-replay: the listed zero cost, the in-process replay; test-session-object: a held or undone
+  block. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1.
