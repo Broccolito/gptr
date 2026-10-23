@@ -2063,3 +2063,24 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   provider is `fake2`, because a bare `model = fake` names the registered provider `fake`, not the variable.
 - Open: `gptr_step()`'s "model turns" and the `s$turns` accessor keep their wording (the doc group's sessions-26);
   the sheet's lines are S06 and S08.
+
+### sessions-10 - Tell the caller when a cost limit meets an unpriced model
+- Red: FAIL 3 in `^session-budget$` (PASS 223; findings 133, 158): `budget_near()` under `budget = list(cost = 1)`
+  with a request of cost NA signalled nothing, and `peter(..., budget = list(cost = 0.01))` on a registered fake
+  without `prices` ran 2 requests to `idle`, `s$cost` NA, with no notice (the verifiers' live repro: Versa
+  `gpt-5.6-sol` under `cost = 1e-6` the same; registered with prices, it stopped after 1 request).
+- Cause: `run_used()` sums the cost with `na.rm = TRUE`, so an unpriced request counts nothing (D-025 item 2: failing
+  closed would stop every unpriced model under the default 5 USD); nothing told a caller whose own limit could not
+  be enforced, only the footer's "unknown cost".
+- Fix: `budget_unpriced()`, called at the end of `budget_near()`: when the run's own `opts$budget$cost` is set and a
+  usage row since `run$usage_start` has NA cost, `gptr_inform()` once (`gptr_message_budget_unpriced`, fields
+  `budget`, `model`; "cost_unknown" recorded in `near` of the run, or of the team or fan-out pool so members say it
+  once). The settings default says nothing. `?peter` `budget`; 04 §2.2 messages, §6.1 `budget` row, IC-66.
+- Green: `^session-budget$` PASS 231; `^(session-budget|gptr-gateway|agent-run|ext-events|arch-layers|lint-rules)$`
+  PASS 1602. Full suite (NOT_CRAN=true) FAIL 0 PASS 35358 SKIP 64. Lint, Rd and check-plans clean. Live (Versa
+  `gpt-5.6-sol`, `budget = list(cost = 1e-6)`): 2 requests, status idle, cost NA, exactly one notice.
+- Deviations: D-251 (extended), pointer under D-025. From the plan: the team or fan-out pool holds the record, so a
+  call's members say it once, not once each; the condition carries `budget` and `model`.
+- Open: the notice prints a limit under $0.00005 as "$0.0000" (`format_cost()`, cosmetic); `gptr_provider()` still
+  does not document `prices` (the verifier's docs suggestion, not planned); no `budget_unenforced` event (not
+  planned); the sheet's budget line is S08.

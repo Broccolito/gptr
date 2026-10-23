@@ -299,6 +299,73 @@ test_that("an unknown cost neither reaches nor counts toward a cost budget (IC-7
   expect_equal(c(hit$budget, hit$used), c(1, 1.1))
 })
 
+# The gptr_message_budget_unpriced notices signalled while `expr` is evaluated, muffled
+unpriced_notices = function(expr) {
+  seen = list()
+  withCallingHandlers(expr, gptr_message_budget_unpriced = function(m) {
+    seen[[length(seen) + 1L]] <<- m
+    invokeRestart("muffleMessage")
+  })
+  seen
+}
+
+test_that("a call's own cost limit says once that an unknown cost counts nothing (D-251)", {
+  local_gptr_options(quiet = FALSE)
+  s = test_session()
+  sid = session_data(s)$id
+  run = test_run(s, list(budget = list(cost = 1)))
+  # known costs, a known zero included, are counted: nothing to say
+  usage_add(s, usage_fixture(sid, "q-zero", cost = 0))
+  usage_add(s, usage_fixture(sid, "q-priced", cost = 0.2))
+  expect_length(unpriced_notices(budget_near(run)), 0L)
+  usage_add(s, usage_fixture(sid, "q-unpriced", cost = NA_real_))
+  seen = unpriced_notices(budget_near(run))
+  expect_length(seen, 1L)
+  expect_identical(conditionMessage(seen[[1L]]), paste0(
+    "The cost budget of this call ($1.0000) is not enforced: fake/fake-1 has no prices, so its ",
+    "cost is unknown; tokens and turns limits still apply.\n"))
+  expect_identical(seen[[1L]]$budget, 1)
+  usage_add(s, usage_fixture(sid, "q-unpriced-2", cost = NA_real_))
+  expect_length(unpriced_notices(budget_near(run)), 0L)
+  # the settings default (5 USD) is not the call's own limit
+  s2 = test_session()
+  run2 = test_run(s2, list())
+  usage_add(s2, usage_fixture(session_data(s2)$id, "q-default", cost = NA_real_))
+  expect_identical(run2$budget$cost, 5)
+  expect_length(unpriced_notices(budget_near(run2)), 0L)
+  # the members of a team or fan-out share the call's one pool, so the call says it once
+  team = test_session(kind = "team")
+  tid = session_data(team)$id
+  a = test_session(kind = "child", parent = team)
+  b = test_session(kind = "child", parent = team)
+  ra = test_run(a, list(root = tid, budget = list(cost = 1)))
+  rb = test_run(b, list(root = tid, budget = list(cost = 1)))
+  usage_add(a, usage_fixture(session_data(a)$id, "q-a", cost = NA_real_))
+  usage_add(b, usage_fixture(session_data(b)$id, "q-b", cost = NA_real_))
+  expect_length(unpriced_notices(list(budget_near(ra), budget_near(rb))), 1L)
+})
+
+test_that("peter() with a cost limit on a model without prices completes and says so once", {
+  local_gw()
+  local_gptr_options(quiet = FALSE, verbose = 0L)
+  spec = gptr_fake_provider(list(fake_tool("r", code = "x = 1"), "Done."), name = "unpriced")
+  spec$models[[1L]]$prices = NULL
+  off = gptr_register(spec)
+  withr::defer(off())
+  n = 0L
+  s = withCallingHandlers(
+    peter("x", model = "unpriced/unpriced-1", mode = "auto", envir = new.env(),
+          budget = list(cost = 0.01)),
+    gptr_message_budget_unpriced = function(m) {
+      n <<- n + 1L
+      invokeRestart("muffleMessage")
+    })
+  expect_identical(s$status, "idle")
+  expect_identical(nrow(s$usage), 2L)
+  expect_identical(s$cost, NA_real_)
+  expect_identical(n, 1L)
+})
+
 test_that("a token budget counts the known tokens of a row with an unknown column (IC-74)", {
   s = test_session()
   sid = session_data(s)$id

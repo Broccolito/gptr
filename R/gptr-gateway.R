@@ -92,6 +92,9 @@
 #' @param background Experimental: return the running session at once (needs later).
 #' @param budget `list(tokens =, cost =, turns =)` limits for this call. `turns` counts model
 #'   requests, retries and sub-agents' requests included; `session$turns` counts prompts instead.
+#'   `cost` counts priced requests only: a model without prices (such as Codex, or a
+#'   [gptr_provider()] without `prices`) has an unknown cost that counts nothing, so the call says
+#'   once that its cost limit is not enforced; the `tokens` and `turns` limits still apply.
 #' @param replay Document replay mode: `"auto"`, `"replay"`, `"live"` or `"record"`.
 #' @param .opts Rare switches such as `thinking`, `max_turns`, `context`, `returns`, `images`,
 #'   `preset`, and entries named by a plugin namespace. `thinking` applies to this call and to the

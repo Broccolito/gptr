@@ -50,7 +50,10 @@ session keeps no workspace for later turns; pass \code{envir = new.env()} to kee
 \item{background}{Experimental: return the running session at once (needs later).}
 
 \item{budget}{\code{list(tokens =, cost =, turns =)} limits for this call. \code{turns} counts model
-requests, retries and sub-agents' requests included; \code{session$turns} counts prompts instead.}
+requests, retries and sub-agents' requests included; \code{session$turns} counts prompts instead.
+\code{cost} counts priced requests only: a model without prices (such as Codex, or a
+\code{\link[=gptr_provider]{gptr_provider()}} without \code{prices}) has an unknown cost that counts nothing, so the call says
+once that its cost limit is not enforced; the \code{tokens} and \code{turns} limits still apply.}
 
 \item{replay}{Document replay mode: \code{"auto"}, \code{"replay"}, \code{"live"} or \code{"record"}.}
 

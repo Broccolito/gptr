@@ -288,7 +288,8 @@ Messages (`gptr_message_<name>`): `alias_shadowed` (P08), `plan_handoff` (P11), 
 session when a data frame is split into several states, naming `I(x)`),
 `billing_env` (P03/P20; names of removed billing variables), `notice`
 (one-time notices: experimental routes, Codex overhead, uncalibrated emulation), `value_rebound` (P06),
-`home_not_kept` (P08; once per session, IC-40),
+`home_not_kept` (P08; once per session, IC-40), `budget_unpriced` (P06; once per call whose own cost
+limit meets a request of unknown cost, IC-66, D-251),
 `progress` (P14, verbosity 1), `interpolated` (P08, echo of the interpolated prompt at verbosity >= 2).
 
 Transport, adapter and System 1 failures are condition **objects** created (not signalled) by P04, P12 and P13
@@ -1046,7 +1047,7 @@ context and signals the warning `partial_name` naming each such formal (D-251).
 | `prompt` | `chr(1)` or `NULL` | explicit prompt; wins over positional selection |
 | `envir` | `env` | where `r` evaluates and objects persist (D-04); a magrittr mask is replaced by its parent [12 §2.B4]; for a continuation an explicit `envir` (tested with `missing(envir)`) beats the session's kept home, which beats the caller frame (IC-40); a new call made inside a run without `envir` evaluates in `overlay_new(<caller>, <running session id>)`, so it reads the caller's objects and keeps its own in `res$envir`, unless the caller is a function frame [R2] (IC-77) |
 | `background` | `lgl(1)` | [experimental] return the running session at once (needs later; P21) |
-| `budget` | `list(tokens =, cost =, turns =)` or `NULL` | per-call limits; each element `num(1)` or `NULL`; `turns` counts model requests (retries and children's included, as `run_used()` does), not the prompt turns of `s$turns` |
+| `budget` | `list(tokens =, cost =, turns =)` or `NULL` | per-call limits; each element `num(1)` or `NULL`; `turns` counts model requests (retries and children's included, as `run_used()` does), not the prompt turns of `s$turns`; `cost` counts priced requests only, and a request of unknown cost (a model without prices) makes the call inform once that its cost limit is not enforced (`budget_unpriced`, IC-66, D-251) |
 | `replay` | `chr(1)` or `NULL` | `"auto"`, `"replay"`, `"live"`, `"record"` (document replay mode, P15) |
 | `.opts` | named list | rare switches: `thinking` (chr(1); on a continuation without `model =` it switches the session's level for this and later turns, as `model = "<ref>:<level>"` does, D-251), `max_turns` (int(1): this call's model requests), `context` (`"summary"`, `"names"`, `"none"`), `record` (lgl(1)), `interpolate` (lgl(1)), `timeout` (num(1), seconds for `r`), `output` (`"factor"`), `system` (chr(1) replacing `preamble`/`tools`/`rules`, or a named list overriding sections, `NULL` elements remove), `preset` (a registered `preset` name), `returns` (a JSON Schema list: structured final answer, INFRA-25), `max_active` (int(1)), `backend` (a registered `backend` name or `"auto"`), `frontend` (a registered `frontend` name), `images` (list of image paths, `ggplot` or `recordedplot` objects, IC-44), `seed` (int(1): reproducible sub-agent RNG streams, IC-61), and entries named by a plugin namespace (validated by that plugin's `setting` specs, IC-44); other unknown names signal `gptr_error_invalid_argument` |
 | `.run` | `lgl(1)` | `FALSE`: build the session with the prompt queued and return it (SDK) |
@@ -4855,6 +4856,9 @@ call (per prompt at the console); `budget_near` at 80%; reaching it asks to exte
 The token limit counts the next request's estimated input: when that, not the usage, crosses it, the question and
 the stop say so ("the next request (~3.9k tokens) would exceed the tokens budget of this call (9.0k; used 5.8k)";
 D-251), and an extended budget is checked again before the request is sent.
+A request of unknown cost (a model without prices) counts nothing toward a cost limit (D-025), so a cost
+limit the call sets itself informs once that it is not enforced (`gptr_message_budget_unpriced`, fields
+`budget`, `model`; a team or fan-out says it once; the settings default says nothing; D-251).
 Budgets are hierarchical: every request's check walks to the root session and charges the root, and children
 start with `min(<their share>, <root remaining>)`. Caps: `gptr.max_nested_calls` (20 `peter()` calls per `r`
 evaluation; a team or fan-out counts as one) and `gptr.s1_max_elements` (10,000 elements per System 1 call; error

@@ -176,6 +176,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   3. `budget_check(s, estimate)` refuses an estimate that is not one nonnegative number (`gptr_error_invalid_argument`, `arg = "estimate"`); Task 10 passes `req$tokens_est %||% 0`.
 - Contract-visible: `used` in the `budget_near`/`budget_exceeded` events (contract 10.4) and the `gptr.budget` session entry (contract 4.6) is a lower bound when usage is unknown; no section amended.
 - Tests: test-session-budget.R: "an unknown cost neither reaches nor counts toward a cost budget (IC-74, D-025)", "a token budget counts the known tokens of a row with an unknown column (IC-74)", "budget_check() refuses an estimate that is not a nonnegative number". Evidence: progress/P06.md Task 5.
+- Amended by D-251 (sessions-10): a cost limit the call sets itself informs once that it is not enforced when a
+  request of unknown cost meets it (`gptr_message_budget_unpriced`); item 2 is unchanged.
 
 ## D-026 - P12 check_adapter(): no normaliser condition escapes, http_json goldens skipped, classifier replay (2026-10-04)
 - Rule: `check_adapter()` (`R/provider-anthropic.R`, the `check.adapter` service behind `gptr_check()`, contract 6.7/7.12), stream adapters (P12 Task 3):
@@ -3152,14 +3154,21 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   "the next request (~3.9k tokens) would exceed the tokens budget of this call (9.0k; used 5.8k)", others "is
   reached (used X)", in the stop and the extend question alike. Was "(9.0k) is reached (used 5.8k)", even "(500) is
   reached (used 0)"; the question named no usage. After "Extend" the budgets are checked again (was: sent unchecked).
+- Rule (sessions-10): a call's own cost limit (`opts$budget$cost`, not the settings default) that meets a request of
+  unknown cost since its run started informs once (`gptr_message_budget_unpriced`, fields `budget`, `model`; once per
+  team or fan-out pool): "The cost budget of this call ($0.0100) is not enforced: <provider/model> has no prices, so
+  its cost is unknown; tokens and turns limits still apply." D-025 item 2 stands (unknown counts nothing; no fail
+  closed). Was silent, the footer's "unknown cost" aside (Versa and Codex models, `gptr_provider()` without prices).
 - Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
   `tools`, `.opts` and refusals. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter` `envir`,
   `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and row).
-  04 §4.6 `gptr.budget`, §7.6 `budget_check()`, §10.4 `budget_exceeded`, IC-66.
+  04 §4.6 `gptr.budget`, §7.6 `budget_check()`, §10.4 `budget_exceeded`, IC-66. 04 §2.2 messages, §6.1 `budget`
+  row, IC-66; `?peter` `budget`.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...",
   "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
   prompt-sections "the tool array skips unavailable and missing tools ..."; agent-run "a request rejected or never
   received costs nothing ...", "a reported usage keeps its unknown counts ...", "an overflow condition carries the
   provider's prompt count ...", "an extended token budget is checked again ..."; session-budget "a token budget the
-  next request would exceed says so ...". Evidence: progress/fixes.md Task FIX-18.
+  next request would exceed says so ...", "a call's own cost limit says once that an unknown cost counts nothing
+  ...", "peter() with a cost limit on a model without prices ...". Evidence: progress/fixes.md Task FIX-18.

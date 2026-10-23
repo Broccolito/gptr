@@ -437,7 +437,26 @@ budget_near = function(run) {
       }
     }
   }
+  budget_unpriced(run)
   invisible(NULL)
+}
+
+#' Say once per call that its own cost limit is not enforced when a request since the run started
+#' has an unknown cost, which counts nothing (D-025, D-251); the settings default says nothing, and
+#' the runs sharing a team or fan-out pool say it once
+#' @noRd
+budget_unpriced = function(run) {
+  lim = run$opts$budget$cost
+  holder = run$budget_root %||% run
+  if (is.null(lim) || "cost_unknown" %in% holder$near) return(invisible(NULL))
+  u = session_data(run$shell)$usage
+  u = u[seq_len(nrow(u)) > run$usage_start & is.na(u$cost), , drop = FALSE]
+  if (!nrow(u)) return(invisible(NULL))
+  holder$near = c(holder$near, "cost_unknown")
+  model = paste0(u$provider[[1L]], "/", u$model[[1L]])
+  gptr_inform(paste0("The cost budget of this call (", format_cost(lim), ") is not enforced: ",
+                     model, " has no prices, so its cost is unknown; tokens and turns limits ",
+                     "still apply."), "budget_unpriced", budget = lim, model = model)
 }
 
 # ---------------------------------------------------------------------------- usage (gptr_usage)
