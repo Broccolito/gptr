@@ -3168,7 +3168,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   rebinds it to the destination (Peter format; alone on its lines, else refused); other `gptr_doc()` calls are kept
   (was kept verbatim: the Peter script's calls recorded nowhere under `Rscript`, console turns went into the source).
   A raw export refuses a session handle only when read after its `peter()` statement and before ordinary code assigns
-  the name (was any other statement naming it).
+  the name (was any other statement naming it), and a function naming any handle of the document wherever it is
+  defined, as it reads the name when called.
 - Rule: outside a `.gptr/` workspace the session store and the S2 cache are in `tempdir()` and end with R, by design.
   A `gptr_resume()` store miss there adds "Without a .gptr/ workspace, sessions last until R exits; gptr_init(\".\")
   keeps them."; a replayed session or team child whose `$text` stays `NA` informs one `notice` per document and
@@ -3188,7 +3189,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-mcp-recording: a recorded `gptr_return(<expression>)`; test-doc-replay: fan-out and team children's values in
   the recording process, an in-process replay and two simulated later processes, a three-field `children=` entry;
   test-session-object: the replayed footer;
-  test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself, handle position;
+  test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself, handle position,
+  a function naming a handle;
   test-session-store: the resume hint; test-doc-replay: the no-answer notice in process, under `Rscript` and for
   fan-out children. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1,
-  replay-2, replay-2c, replay-2d, replay-2e, replay-3, replay-5, export-2, store-1, doc-1b.
+  replay-2, replay-2c, replay-2d, replay-2e, replay-3, replay-5, export-2, export-2b, store-1, doc-1b.

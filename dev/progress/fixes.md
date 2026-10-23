@@ -2516,3 +2516,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   working directory, absolute outside it; the sentence keeps `doc_rel()` for both documents.
 - Green: `^(doc-.*|arch-layers|lint-rules)$` PASS 2672 SKIP 2 (repr; NOT_CRAN=true). Lint clean.
 - Deviations: none (the notice's form in D-249 stands). Open: none.
+
+### export-2b - A raw export refuses a function that names a session handle
+- Validation and review of export-2 (`R/doc-export.R`, low; one finding reported twice).
+- Red: FAIL 3 in `^doc-export$` (PASS 224): `report = function() cat(s$text)` before `s =
+  peter("one")` and `report()` after it exported, and so did `s = 1; report = \() s$text;
+  report()` before the call: the plain scripts fail with "object 's' not found" or report `1`.
+- Cause: export-2's ordered pass counts a read only after the handle's `peter()` statement; a
+  function reads its names when called, which `report()` does not show.
+- Fix: a statement whose `all.names()` hold `function` (also `\()`) is refused when it names any
+  handle a `peter()` statement of the document binds; direct reads keep the position rule.
+  `?gptr_export` and the `script-as-history` export paragraph say so.
+- Green: `^doc-export$` PASS 228; `^(doc-export|doc-replay|doc-blocks|zzz|arch-layers|lint-rules)$`
+  PASS 1522 (NOT_CRAN=true). Lint clean (the `.Rmd.orig` keeps its one lint from main, line 365);
+  Rd regenerated; plan checks pass. `precompute.R script-as-history`: 0 problems, output
+  byte-identical to the edited `.Rmd`.
+- Deviations: D-249 (extended). Open: a function whose own argument or local shares a handle's
+  name is refused too (conservative).

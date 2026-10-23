@@ -223,6 +223,15 @@ test_that("raw export refuses ambiguous calls and unresolved session semantics",
   unlink(target)
   f = export_fixture(before = c("s = \"earlier\"", "print(s)"), after = c("s = 1", "print(s)"))
   expect_identical(gptr_export(f, target), path_norm(target))
+  unlink(target)
+  # a function reads the handle when it is called, wherever it is defined (FIX-16)
+  for (before in list("report = function() cat(s$text)",
+                      c("s = 1", "report = \\() s$text", "report()"))) {
+    f = export_fixture(before = before, after = "report()")
+    expect_error(gptr_export(f, target), "removed session handle",
+                 class = "gptr_error_doc_export")
+    expect_false(file.exists(target))
+  }
 })
 
 test_that("export rebinds or removes the source's own gptr_doc() line and keeps any other", {

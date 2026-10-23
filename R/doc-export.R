@@ -210,7 +210,8 @@ doc_export_lines = function(lines, format, path, target) {
     }
   }
   if (length(claimed) != nrow(blocks)) doc_export_refuse("unowned recorded blocks")
-  # A session handle is live from its peter() statement until ordinary code assigns the name.
+  # A session handle is live from its peter() statement until ordinary code assigns the name; a
+  # function reads names when it is called, so one naming any handle of the document is refused.
   live = character()
   for (j in seq_along(parsed)) {
     expr = parsed[[j]]
@@ -246,7 +247,9 @@ doc_export_lines = function(lines, format, path, target) {
       set = as.character(expr[[2L]])
       expr = expr[[3L]]
     }
-    if (identical(format, "r") && any(all.names(expr) %in% live)) {
+    used = all.names(expr)
+    if (identical(format, "r") &&
+        any(used %in% if ("function" %in% used) unlist(bound) else live)) {
       doc_export_refuse("ordinary code depends on a removed session handle")
     }
     live = setdiff(live, set)
@@ -276,8 +279,9 @@ doc_export_lines = function(lines, format, path, target) {
 #' mixed pipelines, nested or computed calls, pending writes, missing or edited blocks, secret
 #' markers and interpolated-input hashes are refused.
 #' Raw exports also refuse ordinary code that reads a session handle after its Peter statement
-#' and before ordinary code assigns that name again. The Peter format retains such ordinary
-#' references, since its calls remain active.
+#' and before ordinary code assigns that name again, and a function that names any session handle
+#' of the document, wherever it is defined, as it reads the name when called. The Peter format
+#' retains such ordinary references, since its calls remain active.
 #' A top-level `gptr_doc()` whose string literal names the source (relative to the source's
 #' directory or the working directory) becomes a comment in raw R and binds the destination in
 #' the Peter format, so its calls record there: in the source's directory only the file name
