@@ -188,6 +188,10 @@ works on the objects already in memory.
   says so once per model and level: for example `"opus:off"` runs at `low`, and `thinking = "max"`
   on a model whose levels end at `high` runs at `high`. `?gptr_provider` documents
   `thinking_levels`; a reasoning model declared without it gets `off` to `high`.
+* A known name, such as a model alias or a built-in tool, still wins over a variable of the same
+  name, and gptr now says so when the variable holds a spec the argument takes (a provider or
+  router for `model`, a tool for `tools`), as it did for a character value: after
+  `opus = gptr_fake_provider(...)`, `model = opus` uses the alias and suggests `!!opus`.
 
 # gptr 0.7.0
 

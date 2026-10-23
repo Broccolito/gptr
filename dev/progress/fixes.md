@@ -2192,3 +2192,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   regenerated.
 - Deviations: none (the specs already state it). Open: Converse `cachePoint`s (plan anchors, the four-point
   limit, `cacheDetails[].ttl` attribution in the normaliser), a feature.
+
+### capture-1 - A spec bound to an alias name gets the alias-shadowed notice
+- Finding 92. Red: `^gptr-capture$` FAIL 2, PASS 361: `opus = gptr_fake_provider(...)` and `grep =
+  gptr_tool("mygrep", ...)` resolved to the alias "opus" and the built-in "grep" with no `alias_shadowed`.
+- Cause: `ident_shadow_notice()` spoke only for a character variable. The known identifier wins by design
+  (packages export `claude`, `plan`, `write`), but a spec, which only a gptr user makes, was dropped silently.
+- Fix: a spec the argument accepts (`ident_spec_ok()`) counts as its `name`, then the character rule applies;
+  a function or another object stays silent. 03 §4.1.3 and 04 §6.1.3 amended; NEWS entry.
+- Green: `^gptr-capture$` PASS 363; with gptr-gateway and gptr-config PASS 1284; full suite (NOT_CRAN) FAIL 0,
+  WARN 0, SKIP 65, PASS 35437. Lint clean; no Rd change.
+- Deviations: D-250 (capture-1 rule). The plan's trigger (every accepted spec) also fired for
+  `local = gptr_provider("local", ...)` registered and passed as `model = local` (measured), which names the
+  same provider; comparing `name` keeps it silent. Open: a call such as `model = if (x) haiku else opus` is
+  evaluated in the alias mask and stays silent (by design, 03 §4.1.3).

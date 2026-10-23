@@ -3196,6 +3196,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `prompt_request_context()`'s estimate does not. Formerly `opus:off` ran at `low` and `thinking = "max"` on a
   reasoning record without `thinking_levels` (off..high, now documented in `?gptr_provider`) ran at `high`
   without a word.
+- Rule (capture-1): `ident_shadow_notice()` also informs `alias_shadowed` when the shadowed variable holds a
+  spec the argument accepts (`ident_spec_ok()`) whose `name` is not the identifier; the identifier still wins
+  and a function stays silent (packages export `claude`, `plan`, `write`). Formerly `opus =
+  gptr_fake_provider(...)` then `model = opus` ran the alias's model without a word. The plan named every
+  accepted spec; comparing `name` keeps a provider registered under its variable's name silent, as an equal
+  character value is.
 - Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
   model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal); 07
   §2.1 and the 04 `model_prepare()` row (P06 prepares); the 04 `model_resolve()` row (the empty-route hint); 04
@@ -3205,7 +3211,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `?gptr_config` and the configuration vignette (a trusted project's `mode`; the template); 04 §15 IC-80
   (thinking) and `?gptr_provider`'s bedrock-converse example (`reasoning`, `capabilities`); 04 §1.1 (a
   string that is not a choice); 04 §2.2 messages (`thinking_clamped`), §4.9 `thinking` row, 03 §8.4 model
-  references and `?gptr_provider` (`thinking_levels`).
+  references and `?gptr_provider` (`thinking_levels`); 03 §4.1.3 and 04 §6.1.3 (`alias_shadowed` for a
+  spec).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
   match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
@@ -3222,4 +3229,5 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   an adaptive Claude model is signed"; test-utils-conditions.R "a string that is not one of the choices is
   reported as such, never quoted (D-250)"; test-agent-run.R "a thinking level the model lacks is announced once
   per model and level (D-250)"; test-catalog-models.R "a thinking suffix the model lacks is announced with the
-  level used (D-250)". Evidence: progress/fixes.md Task FIX-17.
+  level used (D-250)"; test-gptr-capture.R "an alias shadowed by a spec the argument accepts gets the message
+  (D-250)". Evidence: progress/fixes.md Task FIX-17.
