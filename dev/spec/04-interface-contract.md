@@ -5752,8 +5752,11 @@ its part in its own commit, and Task 27 finalises them.
       its console keeps a line entered during the run for the next prompt, unless a question reads it, and
       hides the entered line at its next output, so the row says where it goes).
       `<state>` is `thinking` (a request), the running tool's name (`console_tool_name()`) or `sub-agent <label>`
-      while a sub-agent it shows runs; while the `r` tool evaluates in this process (`rec$frozen`, set by
-      `console_on_tool_start()` and cleared at its end or the next request) the row has no clock, which cannot
+      while a sub-agent it shows runs, a `peter()` call in the parent's `r` code whose run reads the keys, so the
+      clock ticks and the queue view shows (steering review: the row said `keys show when sub-agent '…' #1
+      returns`, without a clock, and hid the queued message); while the `r` tool evaluates in this process
+      (`rec$frozen`, set by `console_on_tool_start()` and cleared at its end or the next request; during a
+      sub-agent, the sub-agent's own `r` call) the row has no clock, which cannot
       tick, and with an empty draft says `<sep>keys show when r returns` (review of Tasks 16-21: it read `r 0s`
       for the whole call and showed none of what was typed), with a draft `keys wait` as a status word
       after `r` and before the queue, `▌ r · keys wait · 1 queued   › <draft>` (steering review: the row with a

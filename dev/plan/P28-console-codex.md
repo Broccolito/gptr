@@ -994,6 +994,11 @@ Decisions:
   goes to the console history. It is listed after the status line (`console_queue_left()`) until
   Task 21 continues it at the prompt. After an abort it joins the kept list, which was Task 20's.
 - `gptr_readline()` reads with the saved modes and re-applies character mode afterwards.
+- (Amended in the steering review:) A message typed during a sub-agent goes to the parent session, the
+  REPL's, and reaches its boundary after the `r` call that runs the sub-agent. The sub-agent's run reads
+  the keys inside that call, so the live row keeps its clock, its hint and the queue view, and says keys
+  wait only while an `r` call evaluates in this process, the sub-agent's own: `keys show when r returns`.
+  It said `keys show when sub-agent '…' #1 returns`, without a clock, and hid the queued message.
 - The `type_ahead` description in `R/gptr-config.R` and 04 §11.2 becomes: "What Enter does with
   a message typed in a terminal console while the agent works (Tab does the other); in other
   consoles, what a typed line does." The `type_ahead` row of the configuration vignette says the

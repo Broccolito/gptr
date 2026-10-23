@@ -306,6 +306,57 @@ test_that("while R code runs in this process the row has no clock and says keys 
   expect_identical(live_rows(states, 40L)$long, paste0("▌ r   › …", substring(long, 91L)))
 })
 
+test_that("during a sub-agent the row ticks and shows the queue; keys wait in its r call", {
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE)
+  local_live_console()
+  newest = NULL
+  local_mocked_bindings(console_queued = function(s) as.integer(!is.null(newest)),
+                        console_newest = function(s, rd) newest,
+                        console_repl_prompt = function() list(reader = list(compose = list())),
+                        console_render_on = function(rec) FALSE, front_end = function() "terminal")
+  tty = the$tty
+  the$tty = list(keys = TRUE)
+  withr::defer(assign("tty", tty, envir = the))
+  # the parent's r call runs the sub-agent, a peter() call whose own reactor reads the keys
+  parent = new.env()
+  parent$what = "r"
+  parent$frozen = TRUE
+  parent$t0 = as.numeric(Sys.time())
+  kid = new.env()
+  kid$child = list(label = "'a' #1", run = list())
+  active = console_state()$active
+  assign("u_parent", parent, envir = active)
+  assign("u_kid", kid, envir = active)
+  withr::defer(suppressWarnings(rm(list = c("u_parent", "u_kid"), envir = active)))
+  row = function(width) {
+    state = console_live_state(parent)
+    state$secs = 7
+    c(console_live_row(state, width))
+  }
+  state = console_live_state(parent)
+  expect_false(state$frozen)
+  expect_identical(state$what, "sub-agent 'a' #1")
+  hint = "▌ sub-agent 'a' #1 7s   enter steer · tab follow-up · ctrl-c pause"
+  expect_identical(c(row(80L), row(120L)), c(hint, hint))
+  newest = list(kind = "steer", text = "s11 during the sub-agent")
+  expect_identical(row(80L),
+                   "▌ sub-agent 'a' #1 7s · 1 queued   ↳ steer · s11 during the sub-agent · ↑ edit")
+  # the sub-agent's own r call evaluates in this process; the hint names the tool, not the label
+  kid$frozen = TRUE
+  expect_identical(row(80L), "▌ sub-agent 'a' #1 · 1 queued · keys show when r returns")
+  # once it returns, the parent's r call is the one that runs
+  rm(list = "u_kid", envir = active)
+  expect_identical(row(80L), "▌ r · 1 queued · keys show when r returns")
+  # the row's task draws while a sub-agent shows, though a tool is on the stack
+  written(function() console_live_start(parent))
+  pass = function() written(reactor_get()$tasks[[the$live_row$task]]$fn)
+  expect_identical(pass(), "")
+  kid$frozen = NULL
+  assign("u_kid", kid, envir = active)
+  expect_match(pass(), "sub-agent 'a' #1 [0-9]+s · 1 queued")
+})
+
 test_that("the draft keeps its column as the status changes; the status only widens (review)", {
   local_utf8_glyphs()
   withr::local_options(cli.num_colors = 1L)

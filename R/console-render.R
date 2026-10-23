@@ -1005,12 +1005,18 @@ console_on_message_end = function(event, ctx) {
 }
 
 #' tool_execution_start: the call's lines (verbosity 2), whose ids its approval reads (D-243), with
-#' the tool's name as the live row's state word (`frozen` for the r tool, which evaluates in this
-#' process), or a progress message (verbosity 1)
+#' the tool's name as the live row's state word, or a progress message (verbosity 1); an r call,
+#' which evaluates in this process, freezes its record, and a shown sub-agent's draws the row once
 #' @noRd
 console_on_tool_start = function(event, ctx) {
   rec = console_record(event)
-  if (is.null(rec) || !console_foreground(rec)) return(NULL)
+  if (is.null(rec)) return(NULL)
+  # the r tool evaluates in this process: the live row cannot tick or read keys until it returns
+  if (identical(event$tool_name, "r")) rec$frozen = TRUE
+  if (!console_foreground(rec)) {
+    if (isTRUE(rec$frozen) && !is.null(rec$child) && isTRUE(the$live_row$on)) the$live_row$draw()
+    return(NULL)
+  }
   call = list(id = event$tool_call_id, name = event$tool_name, input = event$input %||% list())
   v = verbosity()
   if (v == 1L) {
@@ -1019,8 +1025,6 @@ console_on_tool_start = function(event, ctx) {
   } else if (v >= 2L) {
     assign(paste0("t", call$id), call, envir = rec$tools)
     rec$what = console_tool_name(call$name)
-    # the r tool evaluates in this process: the live row cannot tick or read keys until it returns
-    rec$frozen = identical(call$name, "r")
     console_pause_one(rec)
     console_gap(rec, "tool")
     lines = console_tool_line(call, NULL, rec$session)

@@ -3561,6 +3561,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     before the draft's tail is cut, and the frozen row is still drawn once. Contract-visible: 04 §15.10 IC-82.
     Tests: test-console-input.R "while R code runs in this process the row has no clock and says keys wait
     (review)", "a leading ! takes the chevron's place; / and ! drafts say when they run (D-244)".
+  - During a sub-agent the live row ticks and shows the queue view: the sub-agent is a `peter()` call in the
+    parent's `r` code, whose run reads and draws the keys, yet the row took the parent's frozen `r` call and
+    said `keys show when sub-agent '…' #1 returns` (the label twice), without a clock, the queued message
+    hidden. `console_live_state()` reads frozen from the sub-agents while one shows (`console_kids()`), the
+    row's task draws while one shows, a sub-agent's `r` call freezes its own record and draws the row once,
+    and the cue names the tool, `keys show when r returns`. A tool start only freezes (an `r` call), so a
+    call nested in `r` code, now seen at its start, does not unfreeze its record. Contract-visible: 04
+    §15.10 IC-82.
+    Tests: test-console-input.R "during a sub-agent the row ticks and shows the queue; keys wait in its r
+    call"; test-console-typing.R "a terminal: during a sub-agent the row ticks and steers; its r call waits
+    (review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

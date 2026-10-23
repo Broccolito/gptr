@@ -342,7 +342,7 @@ console_live_row = function(state, width) {
       if (isTRUE(state$pause)) " pause" else " stop"
     c(paste0(key, verb), if (isTRUE(state$typed)) "typed lines run next")
   } else if (!nzchar(draft) && frozen) {
-    paste("keys show when", what, "returns")
+    "keys show when r returns"
   } else if (!nzchar(draft) && is.null(state$newest)) {
     c(paste("enter", kind(enter)), paste("tab", kind(setdiff(c("steer", "follow_up"), enter))),
       paste(key, "pause"))
@@ -500,24 +500,33 @@ console_live = function() {
 #' The live row's state for the record `rec` of a foreground run (console_live_row()): the state
 #' word (`rec$what`; `sub-agent <label>` while a sub-agent it shows runs), the run's seconds, the
 #' person's messages waiting for its session, whether a question waits (`rec$question`,
-#' console_ask_wait()), and the console's interrupt key and what it does (in RStudio, also that a
-#' typed line is the next prompt); where a T console's
+#' console_ask_wait()), whether an r call evaluates in this process (`rec$frozen`; during a
+#' sub-agent, which runs in the parent's r call and reads keys, one of the sub-agents'), and the
+#' console's interrupt key and what it does (in RStudio, also that a typed line is the next
+#' prompt); where a T console's
 #' composer reads keys (tty_call()), its draft, the newest message waiting (console_newest()), the
 #' completion candidates its last key listed and the kind Enter sends
 #' @noRd
 console_live_state = function(rec) {
-  kids = Filter(function(r) !is.null(r$child), as.list(console_state()$active))
-  labels = sort(vapply(kids, function(r) r$child$label, ""))
+  kids = console_kids()
+  frozen = if (length(kids)) any(vapply(kids, function(r) isTRUE(r$frozen), NA)) else rec$frozen
   s = rec$session
   rd = if (isTRUE(the$tty$keys)) console_repl_prompt()$reader
-  list(what = if (length(labels)) paste("sub-agent", labels[[1L]]) else rec$what,
+  list(what = if (length(kids)) paste("sub-agent", kids[[1L]]$child$label) else rec$what,
        secs = as.numeric(Sys.time()) - rec$t0, queued = console_queued(s),
-       question = isTRUE(rec$question), frozen = isTRUE(rec$frozen),
+       question = isTRUE(rec$question), frozen = isTRUE(frozen),
        key = console_interrupt_key(), pause = console_menu_available(),
        steer = console_menu_available() && front_end() == "positron",
        typed = front_end() == "rstudio",
        draft = if (!is.null(rd)) rd$compose$draft %||% "", candidates = rd$compose$candidates,
        newest = if (!is.null(rd)) console_newest(s, rd), enter = setting_get("type_ahead", s))
+}
+
+#' The records of the sub-agents the console shows (console_child_shown()), by label
+#' @noRd
+console_kids = function() {
+  kids = Filter(function(r) !is.null(r$child), as.list(console_state()$active))
+  kids[order(vapply(kids, function(r) r$child$label, ""))]
 }
 
 #' The person's messages waiting for session `s`: its queued items from user sources, the items
@@ -532,7 +541,8 @@ console_queued = function(s) {
 
 #' Show the live row for the record `rec` of a foreground run while it waits for its model
 #' (`what` thinking): drawn now and once a second by a reactor task while the record renders
-#' (console_render_on()), on a dynamic console of an interactive R (not class P), but not in
+#' (console_render_on()) or a sub-agent it shows runs, whose run pumps the reactor inside the
+#' parent's r call, on a dynamic console of an interactive R (not class P), but not in
 #' R.app, whose console gives everything after a carriage return the input's colour
 #' @noRd
 console_live_start = function(rec) {
@@ -549,7 +559,7 @@ console_live_start = function(rec) {
     the$live_row = row
     row$task = reactor_task(function() {
       if (!identical(the$live_row, row)) return(FALSE)
-      if (row$on && console_render_on(rec)) row$draw()
+      if (row$on && (console_render_on(rec) || length(console_kids()))) row$draw()
       1
     })
   }

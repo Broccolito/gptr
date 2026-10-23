@@ -1113,6 +1113,48 @@ test_that("a terminal: a paste during a run is one draft; Enter sends it as one 
   expect_identical(pty$seen("REQ "), 1L)
 })
 
+test_that("a terminal: during a sub-agent the row ticks and steers; its r call waits (review)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.num_colors = 1L)",
+    "busy = 'local({ t0 = proc.time()[[3]]; while (proc.time()[[3]] - t0 < 3) NULL }); 32L'",
+    "kid = gptr_fake_provider(list(list(text = 'counting', tool = 'r', input = list(code = busy)),",
+    "                              list(text = 'There are 32 cars.', delay = 4)), name = 'kid')",
+    "fake = gptr_fake_provider(function(req) {",
+    "  if (req$n == 1L) return(list(text = 'Starting.', tool = 'r',",
+    "                               input = list(code = 'k = peter(\"count\", model = kid); 1L')))",
+    "  roles = vapply(req$messages, function(m) m$role, '')",
+    "  paste0('REQ ', paste(roles, collapse = ','), ' END')",
+    "})",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
+  ), term = "xterm")
+  utf8 = l10n_info()[["UTF-8"]]
+  sep = if (utf8) " \u00b7 " else " - "
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("(kid/kid-1) started"))
+  # the sub-agent's r call evaluates in this process: keys wait
+  expect_true(pty$wait(paste0("sub-agent 'count' #1", sep, "keys show when r returns")))
+  # it waits for its model: the row ticks and reads keys, which steer the parent
+  expect_true(pty$wait("enter steer"))
+  pty$send("s11")
+  expect_true(pty$wait(paste0(if (utf8) "\u203a" else ">>", " s11")))
+  pty$send("\r")
+  expect_true(pty$wait(queue_line("steer", "s11", utf8)))
+  expect_true(pty$wait("#1 done"))
+  expect_true(pty$wait("REQ user,assistant,tool_result,operator END"))
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  shown = gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$all)
+  kid = regmatches(shown, regexpr("\\(kid/kid-1\\) started.*#1 done", shown))
+  expect_false(grepl("keys show when sub-agent", kid, fixed = TRUE))
+  clocks = regmatches(kid, gregexpr("sub-agent 'count' #1 [0-9]+s", kid))[[1L]]
+  expect_gt(length(unique(clocks)), 1L)
+})
+
 test_that("a terminal: Tab queues a follow-up, a second run; Up takes back, Ctrl-U discards", {
   skip_on_cran()
   skip_on_os("windows")
