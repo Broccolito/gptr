@@ -78,7 +78,8 @@ specification:
   with a letter, grown on collision, RNG-free).
 - Block body (04 §11.5, IC-48, IC-49): "the code of each successful `r` call with `record = TRUE`, verbatim except
   that top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members are dropped, a top-level
-  `gptr_return(<expression>)` with one unnamed argument becomes `.gptr_value_<block id> = (<expression>)` and
+  `gptr_return(<expression>)` (argument unnamed or `x`, called or piped, on any number of lines) becomes
+  `.gptr_value_<block id> = (<expression>)` and
   top-level `<-` is rewritten to `=` where safe"; "`## Steer: <text>` and `## Follow-up: <text>` lines ...
   (excluded from `prompt` and `sha`)"; outputs "as `#> ` lines (at most `gptr.doc_output_lines` lines of 76
   characters, then `#> ... (N more

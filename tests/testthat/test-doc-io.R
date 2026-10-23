@@ -1496,24 +1496,29 @@ test_that("gptr_return() and peter$out() calls re-source cleanly under Rscript a
   expect_match(src$stdout, "REQUESTS 0", fixed = TRUE)
 })
 
-test_that("an Rscript replay restores a gptr_return(<expression>) value, with or without .gptr/", {
+test_that("an Rscript replay gives a gptr_return() value or says why not, with or without .gptr/", {
   skip_on_cran()
   fake = r"---(fake = gptr_fake_provider(list(list(tool = "r", input = list(
-  code = "fit = lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))")), "Fitted."))
+  code = "fit = lm(mpg ~ wt, mtcars)\ncoef(fit) |>\n  gptr_return()")), "Fitted.",
+  list(tool = "r", input = list(code = "if (TRUE) gptr_return(2)")), "Two."))
 )---"
   for (workspace in c(TRUE, FALSE)) {
     root = local_project(gptr = workspace)
     f = file.path(root, "fit.R")
     doc_child_script(f, fake, c("s = peter('Fit mpg on wt')",
                                 "stopifnot(isTRUE(all.equal(s$value, coef(lm(mpg ~ wt, mtcars)))))",
-                                "cat('REQUESTS', length(fake$log$requests), '\\n')"))
+                                "options(gptr.quiet = FALSE)", "t = peter('Return two')",
+                                "cat('VALUE', deparse(t$value), length(fake$log$requests), '\\n')"))
     rec = doc_child_run(root, f)
     expect_identical(rec$status, 0L, info = rec$stderr)
-    expect_match(rec$stdout, "REQUESTS 2", fixed = TRUE)
-    expect_length(doc_find_blocks(readLines(f))$id, 1L)
+    expect_match(rec$stdout, "VALUE 2 4", fixed = TRUE)
+    id = doc_find_blocks(readLines(f))$id
+    expect_length(id, 2L)
     rs = doc_child_run(root, f, replay = "replay")
     expect_identical(rs$status, 0L, info = rs$stderr)
-    expect_match(rs$stdout, "REQUESTS 0", fixed = TRUE)
+    expect_match(rs$stdout, "VALUE NULL 0", fixed = TRUE)
+    said = regmatches(rs$stdout, gregexpr("No recorded value for block [0-9a-z]+", rs$stdout))[[1L]]
+    expect_identical(said, paste("No recorded value for block", id[2L]))
   }
 })
 

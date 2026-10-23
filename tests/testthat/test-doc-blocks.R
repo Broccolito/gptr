@@ -492,21 +492,42 @@ test_that("gptr_return(<expression>) is recorded as the block's hidden value; va
   expect_identical(as.character(out), c(paste0(hidden, "(coef(fit))"),
                                         paste0("x = \"é\"; ", hidden, "(mtcars |> nrow()) # done")))
   expect_true(attr(out, "returned"))
-  # a pipe split from its call over lines is kept as written, as a split call name is
-  out = doc_code_clean(c("coef(fit) |>", "  gptr_return()"))
-  expect_identical(as.character(out), c("coef(fit) |>", "  gptr_return()"))
-  expect_false(attr(out, "returned"))
-  # a bare name stays value=<name>; a named argument would bind it, so it is dropped as before
-  for (code in c("gptr_return(fit)", "fit |> gptr_return()", "gptr_return(x = coef(fit))")) {
+  # every layout of a top-level call, and its argument named x, keeps only the argument (FIX-16)
+  shapes = list(list(c("coef(fit) |>", "  gptr_return()"), paste0(hidden, "(coef(fit))")),
+                list(c("mtcars |> # data", "  nrow() |>", "  gptr::gptr_return() # n"),
+                     c(paste0(hidden, "(mtcars |> # data"), "  nrow()) # n")),
+                list(c("x = 1; gptr_return(", "  coef(fit)", "); y = 2"),
+                     paste0("x = 1; ", hidden, "(coef(fit)); y = 2")),
+                list("gptr_return(x = coef(fit))", paste0(hidden, "(coef(fit))")),
+                list("coef(fit) |> gptr_return(x = _)", paste0(hidden, "(coef(fit))")))
+  for (sh in shapes) {
+    out = doc_code_clean(sh[[1L]])
+    expect_identical(as.character(out), sh[[2L]], info = sh[[2L]][1L])
+    expect_true(attr(out, "returned"), info = sh[[2L]][1L])
+  }
+  # a bare name stays value=<name>
+  for (code in c("gptr_return(fit)", "fit |> gptr_return()", "gptr_return(x = fit)")) {
     out = doc_code_clean(code)
     expect_identical(as.character(out), character(), info = code)
     expect_false(attr(out, "returned"), info = code)
+  }
+  # inside another expression it is kept, and a chunk that keeps one names no hidden value
+  nested = list(list("if (ok) gptr_return(coef(fit))"), list("y = gptr_return(coef(fit))"),
+                list(c("{", "  gptr_return(coef(fit))", "}")),
+                list(c("gptr_return(coef(fit))", "if (ok) gptr_return(summary(fit))"),
+                     c(paste0(hidden, "(coef(fit))"), "if (ok) gptr_return(summary(fit))")))
+  for (sh in nested) {
+    out = doc_code_clean(sh[[1L]])
+    expect_identical(as.character(out), sh[[length(sh)]], info = sh[[1L]][1L])
+    expect_false(attr(out, "returned"), info = sh[[1L]][1L])
   }
   base = list(body = character(), code = character(), secrets = FALSE)
   det = list(value = "coef(fit)", code = "gptr_return(coef(fit))")
   expect_identical(doc_turn_r(base, det, list(), TRUE, FALSE)$value,
                    ".gptr_value_@@GPTR_BLOCK@@")
   expect_null(doc_turn_r(base, c(det, record = FALSE), list(), TRUE, FALSE)$value)
+  expect_null(doc_turn_r(base, list(value = "coef(fit)", code = "if (ok) gptr_return(coef(fit))"),
+                         list(), TRUE, FALSE)$value)
   expect_identical(doc_turn_r(base, list(value = "b", code = "gptr_return(b)"), list(), TRUE,
                               FALSE)$value, "b")
 })

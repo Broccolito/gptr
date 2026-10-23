@@ -3145,12 +3145,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   and `gptr_fork(at =)` were off); it still records `gptr.replay`, `seen` and the `value=` name, unless the session
   holds a value of that turn: replayed into another environment of the recording process, it keeps the recorded
   value (was a name bound only there: `$value` NULL, "`.gptr_value_<id>` ... is not bound") (IC-46).
-- Rule: a top-level `gptr_return(<expression>)` (one unnamed argument, not a bare name; also `<expression> |>
-  gptr_return()` on one line) is recorded as `.gptr_value_<block id> = (<expression>)` with
-  `value=.gptr_value_<block id>`, so every replay and a plain export recompute it (was `value=<its label>` and the
-  line dropped: replay said "not bound" and `$value` was NULL); `gptr_return(<name>)` is unchanged; `value=` holds
-  one name, never an expression's label, else is omitted (11.5). R served over MCP to a CLI route records the
-  designated name in its `gptr.mcp_r` entry (`value`), as the `r` tool's `details$value`, so the same holds there.
+- Rule: a top-level `gptr_return(<expression>)` (one argument, unnamed or `x`, not a bare name; called or piped, on
+  any number of lines) is recorded as `.gptr_value_<block id> = (<expression>)` with `value=.gptr_value_<block id>`
+  when no other `gptr_return()` is left in the code, so every replay and a plain export recompute it (was
+  `value=<its label>` and the line dropped: replay said "not bound" and `$value` was NULL); `gptr_return(<name>)` is
+  unchanged; `value=` holds one name, never an expression's label, else is omitted (11.5). Such a call inside
+  another expression is kept and records no value; replaying its block informs a `notice` once per block and
+  process, "No recorded value for block <id> of <doc>: ..." (IC-46, IC-48). R served over MCP to a CLI route
+  records the designated name in its `gptr.mcp_r` entry (`value`), as the `r` tool's `details$value`, so the same
+  holds there.
 - Rule: a team or fan-out block records the code of each child that designated a value with `gptr_return()` in its
   child overlay, as for a child with exports (was only with exports), and `children=` entries are
   `<name>:<session id>[:<value>]`, the third field the child's `value=` name (a bare name or
@@ -3207,7 +3210,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   and without `.gptr/`; test-doc-blocks: recorded `#>` cuts, the known-zero cost; test-tool-r: per-expression
   outputs; test-doc-replay: the listed zero cost, the in-process replay, one into another environment;
   test-session-object: a held or undone block; test-doc-blocks, test-doc-replay, test-doc-io, test-doc-export,
-  test-mcp-recording: a recorded `gptr_return(<expression>)`; test-doc-replay: fan-out and team children's values in
+  test-mcp-recording: a recorded `gptr_return(<expression>)`; test-doc-blocks, test-doc-replay, test-doc-io: each
+  `gptr_return()` shape replays its value or says once why not; test-doc-replay: fan-out and team children's values in
   the recording process, an in-process replay and two simulated later processes, a three-field `children=` entry;
   test-session-object: the replayed footer;
   test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself, handle position,
@@ -3217,5 +3221,5 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   comment lines; test-doc-replay: an aborted or failed console run and its re-source, a steered chain's live context
   rebuilt and reconstructed, steers and follow-ups between runs, recorded steers not sent again; test-session-object:
   the seek along piped blocks; test-gptr-sdk: the unrecorded-turn notice. Evidence: progress/fixes.md Task FIX-16
-  doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-2c, replay-2d, replay-2e, replay-3, replay-4b,
+  doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-2c to -2f, replay-3, replay-4b,
   replay-5, export-2, export-2b, store-1, doc-1b, steer-doc-1 to -5.

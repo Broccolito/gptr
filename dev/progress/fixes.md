@@ -2655,3 +2655,31 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   functions' `doc` (an L4 file calls only the kernel SDK); a live run clears them in `run_start()`
   (`replay_notice()`), not `gateway_run_start()`; the drain takes back only `api_user` and `pipe`
   items, never a typed steer. Open: at the P28 merge the drain emits `queue_emit(s, "withdraw", ...)`.
+
+### replay-2f - Every gptr_return() shape replays its value or says once why not
+- Second validation of replay-2 (medium; a regression: main said "not bound" for every expression).
+- Red: FAIL 24 in `^(doc-blocks|doc-replay|doc-io)$` (PASS 1885): recorded through `gptr_source()`
+  and replayed as a later process, `coef(fit) |>\n  gptr_return()`, a four-line chain with a
+  comment and `gptr_return(x = coef(fit))` gave `$value` NULL with no message, and so did
+  `if (TRUE) gptr_return(...)`, `y = gptr_return(...)` and braces; `gptr_return(coef(fit))` then
+  `if (TRUE) gptr_return(1)` replayed the coefficients, not 1; the same under `GPTR_REPLAY=replay
+  Rscript`, with and without `.gptr/`.
+- Cause: `doc_rewrite_return()` rewrote a call only when its name, or its pipe and call, sat on one
+  line, `doc_drop_expr()` dropped an `x =` call, and `returned` held once any call was rewritten;
+  `doc_turn_r()` then wrote no `value=` (or the wrong one), and nothing told the replay.
+- Fix: one rule: any top-level call, piped or over lines, its argument unnamed or `x`, becomes
+  `.gptr_value_<id> = (<argument>)` (checked by re-parsing), and `returned` holds only when no
+  `gptr_return()` is left in the code. A replayed block with no `value=` whose code still calls
+  `gptr_return()` informs once per block and process, "No recorded value for block <id> of <doc>: a
+  document records gptr_return() only as a top-level call, so $value is not replayed."
+  `?gptr_return`, 04 §11.5, IC-46, IC-48, 03 §6.9.3, P15.
+- Green: `^(doc-blocks|doc-replay|doc-io)$` PASS 1909; `^(doc-.*|gptr-sdk|subagent-team|
+  session-object|session-store|mcp-recording|tool-r|northstar|ckpt-rewind|console-commands|
+  copy-tools|arch-layers|lint-rules)$` PASS 4707 SKIP 2 (repr; NOT_CRAN=true). Lint clean; Rd
+  regenerated; plan checks unchanged from HEAD. Installed build, fake `r` call, a self-bound
+  `analysis.R` per shape recorded by `Rscript` and replayed by `GPTR_REPLAY=replay Rscript`, with and
+  without `gptr_init()`: the seven top-level shapes print the coefficients, the three nested ones the
+  notice and NULL, files unchanged; under auto a nested one adds the outside-a-run notice.
+- Deviations: D-249 (extended). Open: a team or fan-out child that designates an expression inside
+  another expression still replays NULL without a word (its code is recorded only with a value or
+  exports); a nested bare name keeps `value=<name>`, as before.

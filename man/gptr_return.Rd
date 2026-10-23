@@ -7,8 +7,10 @@
 gptr_return(x)
 }
 \arguments{
-\item{x}{The value. A history document records a bare name by name; any other single
-argument is recorded as an assignment to a hidden name in the block, which replay reads.}
+\item{x}{The value. A history document records a bare name by name, and any other argument of a
+top-level call (also piped or over several lines) as an assignment to a hidden name in the
+block, which replay reads. Inside another expression (a branch, braces, an assignment or a
+function) such an argument is not recorded, and replaying its block says so once.}
 }
 \value{
 \code{NULL} invisibly during a run; \code{x} invisibly outside a run.

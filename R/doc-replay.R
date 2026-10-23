@@ -245,6 +245,20 @@ doc_replay_no_answer = function(site, s) {
               .once = paste0("doc_no_answer:", path_key(site$path)))
 }
 
+#' Say once per block and process that a replayed block's code designated a value no replay
+#' restores: its header names none, and its code still calls gptr_return(), which the recorder
+#' leaves only inside another expression (IC-48)
+#' @noRd
+doc_replay_no_value = function(site, block, code) {
+  if (!is.null(block$header$value)) return(invisible(NULL))
+  ex = tryCatch(doc_parse_text(code, keep_source = FALSE), error = function(e) NULL)
+  if (!"gptr_return" %in% all.names(ex)) return(invisible(NULL))
+  gptr_inform(paste0("No recorded value for block ", block$id, " of ", doc_rel(site$path), ": a ",
+                     "document records gptr_return() only as a top-level call, so $value is not ",
+                     "replayed."), "notice",
+              .once = paste0("doc_no_value:", path_key(site$path), ":", block$id))
+}
+
 #' What a replayed session reconstructs its history from (IC-46; P06's `doc` argument):
 #' list(path, format, template, code, output, text, steps); `code` and `output` are those of all
 #' the block's runs
@@ -303,15 +317,15 @@ doc_replay_call = function(call, site, mode = "replay") {
   rel = doc_rel(site$path)
   answer = doc_s2_answer(s2_get(s2_key(rel, b$id, "", h$prompt %||% "", h$args %||% "")))
   header = doc_replay_header(h, site, mode)
+  doc = doc_replay_doc(site, call, b$id, answer)
   s = if (!is.null(call$session)) {
-    session_replay_apply(call$session, b$id, header, text = answer,
-                         doc = doc_replay_doc(site, call, b$id, answer))
+    session_replay_apply(call$session, b$id, header, text = answer, doc = doc)
   } else {
-    session_replay_new(b$id, header, call$envir,
-                       doc = doc_replay_doc(site, call, b$id, answer))
+    session_replay_new(b$id, header, call$envir, doc = doc)
   }
   if (!is.null(h$fork)) session_replay_bind(b$id, s)
   doc_replay_no_answer(site, s)
+  doc_replay_no_value(site, b, doc$code)
   doc_source_log(site$path, b$id, "replayed")
   assign("doc", NULL, envir = call)
   s

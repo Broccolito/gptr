@@ -2322,6 +2322,49 @@ test_that("gptr_return(<expression>) is recorded so a replay restores $value (ac
   expect_length(fake_requests(x$fake), 2L)
 })
 
+test_that("each gptr_return() shape replays its value in a later process, or says once why not", {
+  want = coef(lm(mpg ~ wt, mtcars))
+  fit = "fit = lm(mpg ~ wt, mtcars)\n"
+  replays = c(paste0(fit, "gptr_return(coef(fit))"), paste0(fit, "b = coef(fit)\ngptr_return(b)"),
+              paste0(fit, "coef(fit) |>\n  gptr_return()"),
+              "mtcars |>\n  lm(mpg ~ wt, data = _) |> # fit\n  coef() |>\n  gptr_return()",
+              paste0(fit, "gptr_return(\n  coef(fit)\n)"),
+              paste0(fit, "gptr_return(x = coef(fit))"),
+              paste0(fit, "`my fit` = coef(fit)\ngptr_return(`my fit`)"))
+  # the last one designated 1 after the coefficients: replay must not give them
+  lost = c(paste0(fit, "if (TRUE) gptr_return(coef(fit))"),
+           paste0(fit, "y = gptr_return(coef(fit))"), paste0(fit, "{\n  gptr_return(coef(fit))\n}"),
+           paste0(fit, "gptr_return(coef(fit))\nif (TRUE) gptr_return(1)"))
+  for (code in c(replays, lost)) {
+    local({
+      x = local_doc_e2e(list(fake_tool("r", code = code), fake_text("done")))
+      old = mget(c("live", "replay_blocks"), envir = the)
+      withr::defer(list2env(old, envir = the))
+      f = file.path(x$root, "analysis.R")
+      writeLines("s = peter(\"Fit mpg on wt\")", f)
+      gptr_source(f, envir = new.env(parent = globalenv()))
+      id = doc_find_blocks(readLines(f))$id
+      the$live = new.env(parent = emptyenv())
+      the$replay_blocks = new.env(parent = emptyenv())
+      e = new.env(parent = globalenv())
+      said = withr::with_options(list(gptr.quiet = FALSE), testthat::capture_messages({
+        for (i in 1:2) gptr_source(f, replay = "replay", envir = e)
+        value = e$s$value
+      }))
+      if (code %in% replays) {
+        expect_equal(value, want, info = code)
+        expect_identical(said, character(), info = code)
+      } else {
+        expect_null(value)
+        expect_identical(said, paste0("No recorded value for block ", id, " of analysis.R: a ",
+                                      "document records gptr_return() only as a top-level call, ",
+                                      "so $value is not replayed.\n"), info = code)
+      }
+      expect_length(fake_requests(x$fake), 2L)
+    })
+  }
+})
+
 # Record the team or fan-out statement `stmt` into analysis.R through gptr_source(), with fake
 # sub-agents that each run `code` and then answer "Done."; then replay it in this process (its
 # live sessions), as a later process that keeps the session store, and as one that has neither

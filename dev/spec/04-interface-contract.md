@@ -3824,7 +3824,8 @@ Values containing spaces are double-quoted with R escapes. Header keys, in this 
 
 **Body**, in emission order: the code of each successful `r` call with `record = TRUE`, verbatim except that
 top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members are dropped, a top-level
-`gptr_return(<expression>)` with one unnamed argument becomes `.gptr_value_<block id> = (<expression>)` and top-level
+`gptr_return(<expression>)` (argument unnamed or `x`, called or piped, on any number of lines) becomes
+`.gptr_value_<block id> = (<expression>)` and top-level
 `<-` is rewritten to `=` where safe (IC-48); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
 (excluded from `prompt` and `sha`, IC-49); after each such call that printed something, its output as `#> ` lines (at most `gptr.doc_output_lines` lines, else the setting `doc$output_lines`, of 76
 characters, then `#> ... (N more lines)` counting every line not shown), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
@@ -4463,6 +4464,10 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   live session or session file holds it; outside a workspace the S2 cache and session files are in `tempdir()`)
   informs one `notice` per document and process: "No recorded answer for <doc>: replayed answers ($text) are NA.", plus,
   without a workspace, " gptr_init(\".\") keeps answers in .gptr/ for later R sessions."
+- **No value**: a replayed block whose header has no `value=` while its recorded code still calls `gptr_return()`
+  (of an expression inside another expression, which IC-48 does not record) informs one `notice` per block and
+  process: "No recorded value for block <id> of <doc>: a document records gptr_return() only as a top-level call,
+  so $value is not replayed."
 - **Fork blocks** (`fork=` header): the replay result is bound to the block id with `session_replay_bind(block,
   s)` in a process table `the$replay_blocks` (gptr-created sessions only, never user frames; replaced on
   re-source). Recorded fork turns are wrapped `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`;
@@ -4501,10 +4506,12 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 - `gptr_return(x)` outside a run returns `invisible(x)` with a once-per-session `notice`, suppressed in replay
   mode (`replay = "replay"`, `GPTR_REPLAY=replay`); `gptr_error_not_in_run` is removed.
 - `doc_block_lines()` drops, at top-level-expression granularity (`getParseData()` of each recorded code chunk),
-  calls to `gptr_return()`/`gptr::gptr_return()` of a name (or with a named or no argument) and to members whose
-  spec has `record = FALSE`; a chunk that becomes empty is omitted; the value stays in `value=`. A call with one
-  unnamed expression (also `<expression> |> gptr_return()` with the pipe and the call on one line) becomes
-  `.gptr_value_<block id> = (<expression>)` and `value=.gptr_value_<block id>`, so replay recomputes it. `record = FALSE` is set for `out`, `plot`, `help`,
+  calls to `gptr_return()`/`gptr::gptr_return()` of a name (or with another named argument or none) and to members
+  whose spec has `record = FALSE`; a chunk that becomes empty is omitted; the value stays in `value=`. A call with
+  one expression, unnamed or `x` (called or piped, on any number of lines), becomes `.gptr_value_<block id> =
+  (<expression>)`, and `value=.gptr_value_<block id>` when no other `gptr_return()` is left in the code, so replay
+  recomputes it. Such a call inside another expression is kept as written and records no value (IC-46 says so on
+  replay). `record = FALSE` is set for `out`, `plot`, `help`,
   `search`, `describe`; the `<r_session>` text tells the model to use them only with `record = false`.
 - Plan-mode runs never record code (`record` forced `FALSE`); their block holds one `## Plan: <plans path>`
   comment.

@@ -743,11 +743,12 @@ doc_is_return = function(e) {
                    identical(e[[1L]], quote(gptr::gptr_return)))
 }
 
-#' Does a gptr_return() call designate an expression (one unnamed argument, not a bare name)?
-#' Recorded code keeps it as an assignment to the block's hidden name (doc_rewrite_return()).
+#' Does a gptr_return() call designate an expression (one argument, unnamed or `x`, not a bare
+#' name)? Recorded code keeps it as an assignment to the block's hidden name (doc_rewrite_return()).
 #' @noRd
 doc_return_value = function(e) {
-  doc_is_return(e) && length(e) == 2L && is.null(names(e)) && !is.symbol(e[[2L]])
+  doc_is_return(e) && length(e) == 2L && (is.null(names(e)) || names(e)[2L] %in% c("", "x")) &&
+    !is.symbol(e[[2L]])
 }
 
 #' Should a top-level expression of recorded code be dropped: gptr_return() of a name (another
@@ -898,12 +899,14 @@ doc_rewrite_assign = function(lines) {
   lines
 }
 
-#' Rewrite each top-level gptr_return(<expression>) (doc_return_value()) as an assignment to the
-#' block's hidden name, so replay recomputes what value= names: `gptr_return(coef(fit))` and
-#' `coef(fit) |> gptr_return()` become `.gptr_value_<block id> = (coef(fit))`. The name stays
-#' backquoted until doc_prepare() fills in the block id, so the text parses meanwhile. A call
-#' whose name, or whose pipe and call, are split over lines is kept as written. Attribute
-#' `returned`: TRUE when one was rewritten.
+#' Rewrite each top-level gptr_return(<expression>) (doc_return_value()), called or piped and on
+#' any number of lines, as an assignment of its argument to the block's hidden name, so replay
+#' recomputes what value= names: `gptr_return(coef(fit))` and `coef(fit) |> gptr_return()` become
+#' `.gptr_value_<block id> = (coef(fit))`. The call's text around its argument (comments
+#' included) goes. The name stays backquoted until doc_prepare() fills in the block id, so the text
+#' parses meanwhile. Lines whose rewrite does not parse to the rewritten expressions are kept as
+#' written. Attribute `returned`: a call was rewritten and no other gptr_return() is left, so the
+#' hidden name holds the code's latest designated value.
 #' @noRd
 doc_rewrite_return = function(lines) {
   none = structure(lines, returned = FALSE)
@@ -912,44 +915,38 @@ doc_rewrite_return = function(lines) {
   hit = which(vapply(seq_along(exprs), function(i) doc_return_value(exprs[[i]]), NA))
   pd = if (length(hit)) utils::getParseData(exprs)
   if (is.null(pd)) return(none)
-  name = charToRaw(paste0("`", doc_value_name, "` = "))
-  calls = c("gptr_return", "gptr::gptr_return")
-  done = FALSE
+  pd = pd[order(pd$line1, pd$col1, method = "radix"), , drop = FALSE]
+  byte = function(l, col, last) {
+    cols = doc_byte_cols(lines[l])
+    if (last) findInterval(col, cols) else match(col, cols)
+  }
+  cut = function(l, from, to = Inf) {
+    b = charToRaw(lines[l])
+    as_utf8(rawToChar(b[seq_along(b) >= from & seq_along(b) <= to]))
+  }
+  want = as.list(exprs)
   for (i in rev(hit)) {
     sr = attr(exprs, "srcref")[[i]]
-    l = sr[1L]
-    cols = doc_byte_cols(lines[l])
-    from = match(sr[5L], cols)
-    top = pd$id[pd$parent == 0L & pd$line1 == l & pd$col1 == sr[5L] & pd$token == "expr"]
-    pipe = pd[pd$token == "PIPE" & pd$parent %in% top, , drop = FALSE]
-    if (nrow(pipe)) {
-      # `<argument> |> gptr_return()`: the pipe and the call become the closing parenthesis
-      if (pipe$line1 != sr[3L]) next
-      end = doc_byte_cols(lines[sr[3L]])
-      p = match(pipe$col1, end)
-      to = findInterval(sr[6L], end)
-      b = charToRaw(lines[sr[3L]])
-      if (is.na(from) || is.na(p) || to < p ||
-          !gsub("[ \t]", "", rawToChar(b[p:to])) %in% paste0("|>", calls, "()")) {
-        next
-      }
-      left = sub("[ \t]+$", "", as_utf8(rawToChar(b[seq_len(p - 1L)])))
-      lines[sr[3L]] = paste0(left, ")", as_utf8(rawToChar(b[seq_along(b) > to])))
-      b = charToRaw(lines[l])
-      lines[l] = as_utf8(rawToChar(c(b[seq_len(from - 1L)], name, charToRaw("("),
-                                     b[seq_along(b) >= from])))
-    } else {
-      fn = pd[pd$token == "SYMBOL_FUNCTION_CALL" & pd$line1 == l & pd$col1 >= sr[5L], ,
-              drop = FALSE]
-      if (!nrow(fn)) next
-      to = findInterval(fn$col2[which.min(fn$col1)], cols)
-      b = charToRaw(lines[l])
-      if (is.na(from) || to < from || !gsub("[ \t]", "", rawToChar(b[from:to])) %in% calls) next
-      lines[l] = as_utf8(rawToChar(c(b[seq_len(from - 1L)], name, b[seq_along(b) > to])))
-    }
-    done = TRUE
+    top = pd$id[pd$parent == 0L & pd$line1 == sr[1L] & pd$col1 == sr[5L] & pd$token == "expr"]
+    if (length(top) != 1L) return(none)
+    kids = pd[pd$parent == top, , drop = FALSE]
+    # the argument: the left side of a pipe, else the call's last expression
+    arg = kids[kids$token == "expr", , drop = FALSE]
+    arg = arg[if (any(kids$token == "PIPE")) 1L else nrow(arg), ]
+    at = c(byte(sr[1L], sr[5L], FALSE), byte(sr[3L], sr[6L], TRUE),
+           byte(arg$line1, arg$col1, FALSE), byte(arg$line2, arg$col2, TRUE))
+    if (anyNA(at)) return(none)
+    n = arg$line2 - arg$line1 + 1L
+    body = lines[arg$line1:arg$line2]
+    body[n] = cut(arg$line2, 1L, at[4L])
+    body[1L] = cut(arg$line1, at[3L], if (n == 1L) at[4L] else Inf)
+    body[1L] = paste0(cut(sr[1L], 1L, at[1L] - 1L), "`", doc_value_name, "` = (", body[1L])
+    body[n] = paste0(body[n], ")", cut(sr[3L], at[2L] + 1L))
+    lines = c(lines[seq_len(sr[1L] - 1L)], body, lines[seq_along(lines) > sr[3L]])
+    want[[i]] = call("=", as.name(doc_value_name), call("(", exprs[[i]][[2L]]))
   }
-  structure(lines, returned = done)
+  if (!doc_same_exprs(lines, want)) return(none)
+  structure(lines, returned = !"gptr_return" %in% unlist(lapply(want, all.names)))
 }
 
 #' Recorded code of one r call: drop gptr_return() of a name and record = FALSE members, rewrite
@@ -957,7 +954,7 @@ doc_rewrite_return = function(lines) {
 #' doc_parse_text() parses it (IC-62; parse data kept under sys.source()); a cut whose result does
 #' not parse to the kept expressions leaves the code as written. Attributes `kept`: one logical
 #' per top-level expression (NULL when the code does not parse; such code is kept as written);
-#' `returned`: a gptr_return(<expression>) was rewritten (doc_rewrite_return()).
+#' `returned`: the hidden name holds the code's designated value (doc_rewrite_return()).
 #' @noRd
 doc_code_clean = function(code) {
   lines = strsplit(as_utf8(paste(code, collapse = "\n")), "\n", fixed = TRUE)[[1L]]

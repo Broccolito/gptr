@@ -1590,8 +1590,8 @@ interpolated values, so a parameterised report never replays another parameter's
 (body hash for user-edit detection), `call` (k-th call of a pipeline), `tokens`, `cost`, `session`, `turn`,
 `value` (the designated name), `fork=<parent>:<turn>`, `plan=<id>`, `kind`/`children` (team and fan-out blocks
 [IC-47]), `status=undone`. The body holds successful `record = TRUE` code (top-level `gptr_return(<name>)` calls
-and calls of `record = FALSE` members such as `peter$out()` dropped, `gptr_return(<expression>)` rewritten to
-`.gptr_value_<block id> = (<expression>)`, which `value` names, top-level `<-` rewritten to `=` where safe
+and calls of `record = FALSE` members such as `peter$out()` dropped, a top-level `gptr_return(<expression>)`
+rewritten to `.gptr_value_<block id> = (<expression>)`, which `value` names, top-level `<-` rewritten to `=` where safe
 [IC-48]), `#>` outputs (12 lines max), `## Decision:` notes, `## Steer:`/`## Follow-up:` lines for steering during
 the turn [IC-49], bridge digests (`#> sh git status --porcelain: exit 0, 6 lines`) and artifact paths. Overlay-fork
 turns replay inside `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`, which finds the fork that
