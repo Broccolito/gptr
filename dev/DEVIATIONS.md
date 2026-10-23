@@ -3192,8 +3192,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `idle` runs, P15 decision 5, so an aborted or failed run vanished with its code and steers and the next turn began
   a new session; IC-49). A replay reconstructs a block's steers and follow-ups in body order, between its runs of
   code (a steer as the live relay); a reconstructed piped session gains each block's turn, and one rebuilt from its
-  JSONL moves to the end of each block's turn until a live run (was one merged `r` call and no steer, and every
-  piped turn after the first lost, a dead branch in the session file; IC-46). Each replay of a block, also a second
+  JSONL moves to the end of each block's turn, at the block's `gptr.doc_block` entry, until a live run (was one
+  merged `r` call and no steer, and every piped turn after the first lost, a dead branch in the session file, also
+  in every process after a replay that stopped at an earlier block; IC-46). Each replay of a block, also a second
   source in one process, sets its steer and follow-up texts on the session as its notes: `gptr_steer()` or a pipe
   into the idle replayed session drops an equal text with one notice, and a matching item already queued is taken
   back (was sent again: replay mode failed for want of a record, auto mode made an extra model call and recorded the
@@ -3223,4 +3224,4 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   rebuilt and reconstructed, steers and follow-ups between runs, recorded steers not sent again; test-session-object:
   the seek along piped blocks; test-gptr-sdk: the unrecorded-turn notice. Evidence: progress/fixes.md Task FIX-16
   doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-2c to -2f, replay-3, replay-4b,
-  replay-5, export-2, export-2b, store-1, doc-1b, steer-doc-1 to -5, steer-doc-5b.
+  replay-5, export-2, export-2b, store-1, doc-1b, steer-doc-1 to -5, steer-doc-4b, steer-doc-5b.

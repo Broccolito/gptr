@@ -1213,6 +1213,13 @@ test_that("each piped block moves a rebuilt session to its turn until a live run
   invisible(gc())
   expect_null(session_by_id(id))
   h = function(k) list(session = id, turn = as.character(k), model = "fake/fake-1")
+  # a replay that stopped after b1 (one line run, an interrupt) leaves the file's last entry on
+  # turn 1's branch; a later process still finds turn 2 at b2's own record
+  first = session_replay_new("b1b2c3", h(1), envir = new.env(), doc = NULL)
+  lock_release(lock_path(session_data(first)$file))
+  live_forget(first)
+  rm(first)
+  invisible(gc())
   r = session_replay_new("b1b2c3", h(1), envir = new.env(), doc = NULL)
   expect_identical(list(r$turns, r$text), list(1L, "first answer"))
   session_replay_apply(r, "b2b2c3", h(2))

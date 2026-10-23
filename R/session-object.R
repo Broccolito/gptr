@@ -1207,7 +1207,7 @@ session_replay_apply = function(s, block, header, text = NULL, doc = NULL) {
   d = session_data(s)
   added = FALSE
   if (!block %in% d$seen) {
-    replay_seek(s, replay_turn(header$turn))
+    replay_seek(s, replay_turn(header$turn), block)
     if (identical(d$history_source, "reconstructed") && !is.null(doc)) {
       replay_turn_append(s, header, doc, d$turns + 1L)
       added = TRUE
@@ -1231,7 +1231,9 @@ session_replay_new = function(block, header, envir, doc = NULL) {
   live_s = if (is.null(id)) NULL else session_by_id(id)
   if (!is.null(live_s)) return(session_replay_apply(live_s, block, header, doc$text, doc))
   path = if (is.null(id)) NULL else store_find(id)
-  if (!is.null(path)) return(replay_adopt(replay_rebuild(path, header, envir), block, header, doc))
+  if (!is.null(path)) {
+    return(replay_adopt(replay_rebuild(path, header, envir, block), block, header, doc))
+  }
   # all or nothing, as store_rebuild(): on.exit() undoes a failed or interrupted reconstruction
   prev_last = the$last
   s = replay_session_new(header, envir)
@@ -1365,13 +1367,17 @@ replay_mark = function(s, block, header, text, advance) {
   invisible(s)
 }
 
-#' Does the active path hold a `gptr.doc_block` entry for `block` that a rewind has not undone?
+#' Does the active path hold a record of `block` (replay_block_record())?
 #' @noRd
 replay_holds_block = function(d, block) {
-  any(vapply(entries_path(d), function(e) {
-    identical(e$custom_type, "gptr.doc_block") && is.list(e$data) &&
-      identical(e$data$block, block) && !identical(e$data$action, "undone")
-  }, NA))
+  any(vapply(entries_path(d), replay_block_record, NA, block = block))
+}
+
+#' Is entry `e` a `gptr.doc_block` record of `block` that a rewind has not undone?
+#' @noRd
+replay_block_record = function(e, block) {
+  identical(e$custom_type, "gptr.doc_block") && is.list(e$data) &&
+    identical(e$data$block, block) && !identical(e$data$action, "undone")
 }
 
 #' Designate the replayed block's `value=` name: through the value policy when the name is bound
@@ -1397,30 +1403,35 @@ replay_value = function(s, name) {
   invisible(NULL)
 }
 
-#' Rebuild a replayed session from its JSONL, moved to the end of the recorded turn; its path and
+#' Rebuild a replayed session from its JSONL, moved to the end of `block`'s turn; its path and
 #' values as read are kept for the later piped blocks of the chain (replay_seek())
 #' @noRd
-replay_rebuild = function(path, header, envir) {
+replay_rebuild = function(path, header, envir, block) {
   s = store_rebuild(path, envir)
   d = session_data(s)
   d$replay_tip = d$leaf
   d$replay_values = d$values
-  replay_seek(s, replay_turn(header$turn))
+  replay_seek(s, replay_turn(header$turn), block)
   s
 }
 
-#' Move a session rebuilt for a replay to the end of recorded turn `turn` of the path it was
-#' rebuilt with (from its tip, so a later block moves forward again), with no value record of a
-#' later turn: a replay that advanced the live session (a team child) recorded a value of the next
-#' turn, whose copy is not stored, which would hide the block's value. A live run ends the seeking
-#' (run_start()).
+#' Move a session rebuilt for a replay to the end of `block`'s turn: its last `gptr.doc_block`
+#' record (replay_block_record()), which the writer appends after the turn, wherever the file's
+#' last entry is (an earlier replay that stopped sooner leaves it on a shorter branch); without one,
+#' to the end of recorded turn `turn` of the path it was rebuilt with. No value record of a later
+#' turn is kept: a replay that advanced the live session (a team child) recorded a value of the
+#' next turn, whose copy is not stored, which would hide the block's value. A live run ends the
+#' seeking (run_start()).
 #' @noRd
-replay_seek = function(s, turn) {
+replay_seek = function(s, turn, block) {
   d = session_data(s)
   if (is.null(d$replay_tip) || is.na(turn)) return(invisible(s))
-  d$leaf = d$replay_tip
+  rec = Find(function(e) replay_block_record(e, block), d$entries, right = TRUE)
+  d$leaf = rec$id %||% d$replay_tip
   path = entries_path(d)
-  cut = if (turn < path_turn(path)) tryCatch(fork_cut(d, turn), error = function(e) NULL)
+  cut = if (is.null(rec) && turn < path_turn(path)) {
+    tryCatch(fork_cut(d, turn), error = function(e) NULL)
+  }
   if (!is.null(cut$entry)) {
     d$leaf = cut$entry
     path = entries_path(d)

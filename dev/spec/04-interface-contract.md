@@ -4447,9 +4447,11 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   session that recorded it, also as `session_replay_new()` finds it live), sets the value by name from `value=` under
   the value policy unless the session holds a value of that turn (the recording session replayed into another
   environment of the process keeps its own), sets `last_text` from the S2 cache when present, and returns `s`. So `identical(chain_result, first_result)` holds for a replayed
-  pipe chain. A session rebuilt from its JSONL first moves to the end of the block's recorded turn along the path it
-  was rebuilt with, so each piped block brings its turn back and a live call continues from the last one; a live
-  run ends this. A reconstructed session first gains the block's turn from `doc`, reconstructed as below.
+  pipe chain. A session rebuilt from its JSONL first moves to the end of the block's turn, at the block's last
+  `gptr.doc_block` entry not undone (else at its recorded turn along the path it was rebuilt with), so each piped
+  block brings its turn back, also after an earlier replay that stopped sooner, and a live call continues from the
+  last one; a live run ends this. A reconstructed session first gains the block's turn from `doc`, reconstructed as
+  below.
 - **No piped session**: `session_replay_new(block, header, envir)` returns a live session holding the header's
   `session=` id if one exists in this process; otherwise a `replayed` session that adopts the recorded id when
   no live session holds it. Its transcript comes from the session JSONL truncated at the recorded turn (no value

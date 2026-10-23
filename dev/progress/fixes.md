@@ -2712,3 +2712,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^(doc-replay|gptr-sdk)$` PASS 947; `^(session-object|gptr-gateway|agent-background|
   doc-blocks|utils-text|arch-layers|lint-rules)$` PASS 1598 (NOT_CRAN=true). Lint clean.
 - Deviations: D-249 (extended). Open: none.
+
+### steer-doc-4b - A rebuilt session seeks each block's own record, not the file's last entry
+- Second validation of steer-doc-4 (medium).
+- Red: FAIL 3 in `^session-object$` (PASS 543): after a replay of b1 alone (forgotten, as at a
+  process exit), a rebuilt b1 piped into b2 had `turns` 2 but one user/assistant pair and `$text`
+  "first answer", and the next live call lacked turn 2.
+- Cause: replay_seek() could only cut back from the rebuilt leaf, the file's last entry, which a
+  replay that stopped sooner (one line run, an interrupt, the pre-fix code) left on turn 1's branch.
+- Fix: replay_seek(s, turn, block) moves to the block's last `gptr.doc_block` record not undone
+  (replay_block_record(), shared with replay_holds_block()), else cuts from the tip as before;
+  session_replay_apply() and replay_rebuild() pass the block. IC-46 and D-249 amended.
+- Green: `^session-object$` PASS 547; `^(doc-.*|session-.*|agent-run|mcp-recording|arch-layers|
+  lint-rules)$` PASS 5004 SKIP 2 (repr; NOT_CRAN=true). Lint clean.
+- Deviations: D-249 (extended). Open: a block without a record (a team child, a nested call)
+  still seeks along the rebuilt path.
