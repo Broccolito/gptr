@@ -3215,9 +3215,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain` as `invalid_argument` naming it,
   before any request, and points to a decision model (`model = jev`, which runs through a chat model after
   `gptr_config(system1 = "emulate:<ref>")`; the setting alone moves no call to emulation). An explicit
-  `threshold = 0.5` passes (no `missing()` tracking). Formerly they were validated and dropped: a chat model
-  returned a session, on which `sum()`, `[` and `gptr_prob()` failed, and `parallel = 2, choices =` ran
-  two sub-agents.
+  `threshold = 0.5` passes (no `missing()` tracking); a call that names no model is "this call". The
+  `classifier` route (order 10, before `team` and `fanout`) refuses `agents =`, then `parallel =`, as
+  `invalid_argument` naming it, since a decision model answers in one call. Formerly they were validated and
+  dropped: a chat model returned a session, on which `sum()`, `[` and `gptr_prob()` failed, `parallel = 2,
+  choices =` ran two sub-agents, and a decision model ignored `agents =` and `parallel =`.
 - Rule (s1-2): `s1_abstain()`'s `uncertain = "stop"` condition adds `index`, `names` (`NULL` for unnamed
   input), `confidence` (what the band tests: `abs(2 * p - 1)` for decisions, the stored confidence otherwise)
   and `value` (every answer, since the abort runs before `s1_record()`); `prob` and `min_confidence` stay.
@@ -3241,9 +3243,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (thinking) and `?gptr_provider`'s bedrock-converse example (`reasoning`, `capabilities`); 04 §1.1 (a
   string that is not a choice); 04 §2.2 messages (`thinking_clamped`), §4.9 `thinking` row, 03 §8.4 model
   references and `?gptr_provider` (`thinking_levels`); 03 §4.1.3 and 04 §6.1.3 (`alias_shadowed` for a
-  spec); 03 §4.1, 04 §6.1.1 step 5 and `?peter` (System 1 arguments on a conversational route); 04 §2.2
-  `s1_uncertain` row (its fields); 03 §4.1.5, `?peter`, `?gptr_prob` and the system-one vignette (the factor
-  result).
+  spec); 03 §4.1, 04 §6.1.1 step 5 and `?peter` (System 1 arguments on a conversational route; `agents` and
+  `parallel` on a decision model); 04 §2.2 `s1_uncertain` row (its fields); 03 §4.1.5, `?peter`, `?gptr_prob`
+  and the system-one vignette (the factor result).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
   match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
@@ -3265,5 +3267,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-gptr-gateway.R "System 1 arguments are refused on a conversational route (D-250)";
   test-subagent-team.R "teams and fan-outs refuse System 1 arguments before any child starts (D-250)";
   test-s1-route.R "uncertain = \"stop\" names the uncertain inputs and carries every answer (D-250)", "a
-  factor answer keeps the call's meta, which its failure warning points to (D-250)". Evidence:
+  factor answer keeps the call's meta, which its failure warning points to (D-250)", "a decision model refuses
+  agents = and parallel = before any request (D-250)". Evidence:
   progress/fixes.md Task FIX-17.

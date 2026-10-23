@@ -526,8 +526,8 @@ test_that("teams and fan-outs refuse System 1 arguments before any child starts 
   expect_identical(cnd$arg, "choices")
   cnd = expect_error(peter("Which?", agents = list(a = agent(model = "fake/fake-1")),
                            levels = c("lo", "hi")),
-                     "`levels` shapes a System 1 decision", fixed = TRUE,
-                     class = "gptr_error_invalid_argument")
+                     "`levels` shapes a System 1 decision; this call is conversational",
+                     fixed = TRUE, class = "gptr_error_invalid_argument")
   expect_identical(cnd$arg, "levels")
   img = list(list(data = as.raw(c(0x89, 0x50, 0x4e, 0x47)), mime = "image/png"))
   cnd = expect_error(peter("Is it ok?", b, parallel = 2, .opts = list(system1_images = img)),

@@ -70,6 +70,7 @@
 #'   file paths.
 #' @param tools Tool names, `"+name"`/`"-name"` modifiers, a preset name, or [gptr_tool()] specs.
 #' @param agents A named list of agent definitions for a team (`agent()` means [gptr_agent()]).
+#'   A decision model refuses it and `parallel`: it answers in one call.
 #' @param parallel Fan one list-like context object out over this many concurrent sub-agents.
 #'   Each child gets its element alone as `.x`, a named list of one attached as `.x[["A"]]`;
 #'   `.opts = list(context = "none")`, which would drop it, is refused. A child that succeeds
@@ -1142,7 +1143,7 @@ route_refuse_s1_args = function(call) {
   if (!any(given)) return(invisible(TRUE))
   arg = names(given)[given][1L]
   label = gateway_model_label(call$ids$model)
-  who = if (is.na(label)) "the model of this call" else paste("model", label)
+  who = if (is.na(label)) "this call" else paste("model", label)
   gptr_abort(c(paste0("`", arg, "` shapes a System 1 decision; ", who, " is conversational, so ",
                       "peter() would start a conversation and ignore it."),
                paste0("Use a decision model (model = jev or \"ollama/clef-flash\"; after ",

@@ -2360,6 +2360,28 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   Lint clean; `devtools::document()` changes nothing. Live (installed branch): `m$gpt`, `m$claude` and
   `m$ollama` with `choices =, parallel = 2` and with `levels =, agents =` (two members) each raise
   `invalid_argument` naming the argument in 0.2 to 0.3 s; `gptr_usage()` has no row.
-- Deviations: D-250 (s1-1 rule edited in place). Open: the classifier route (order 10) still ignores `agents =`
+- Deviations: D-250 (s1-1 rule edited in place). Open: the classifier route (order 10) ignored `agents =`
   and `parallel =` given with a decision model (measured offline: a classifier fake with `parallel = 2` or
-  `agents =` returned a `gptr_decision`), not this unit.
+  `agents =` returned a `gptr_decision`), where this refusal's advice led; fixed by s1-1c.
+
+### s1-1c - A decision model refuses agents = and parallel =, and a call without a model is "this call"
+- Review of s1-1b (low). Red: `^s1-route$` FAIL 5, PASS 316: with a classifier fake, `peter("Is it fine?", x,
+  model = judge, agents = list(a = agent(...)))` and the same with `parallel = 2` returned a `gptr_decision`
+  (one fake request, the argument ignored); `^subagent-team$` FAIL 1: a team naming no model was told "the
+  model of this call is conversational".
+- Cause: the classifier route (order 10) matches before `team` (15) and `fanout` (16) and never read
+  `agents` or `parallel`, so s1-1b's advice "Use a decision model" led to a silent drop (IC-74 section 4);
+  `route_refuse_s1_args()` named the call's model when the call had none.
+- Fix: `s1_call()` refuses `agents =` (`length(call$ids$agents)`), then `parallel =`, as `invalid_argument`
+  naming it ("... a decision model answers in one call (an answer per input element); drop `agents =`."),
+  before `s1_ready()`; with no model the refusal says "this call is conversational". `?peter` (`agents`), 03
+  §4.1, 04 §6.1.1 step 5 and the NEWS bullet amended.
+- Green: `^s1-route$` PASS 321; s1-route, subagent-team, gptr-gateway, arch-layers, lint-rules, zzz, copy-s1
+  and s1-types PASS 1522; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 66, PASS 35515. Lint clean;
+  `man/peter.Rd` regenerated, `tools::checkRd()` clean. Live (installed branch): a team naming no model with
+  `levels =` on `m$gpt`, `m$claude` and `m$ollama` reads "this call is conversational"; `"ollama/clef-flash"`
+  and `jev` emulated on `m$gpt` and `m$claude` refuse `agents =` and `parallel = 2` naming the argument in 0.1
+  to 0.3 s with no usage row; dropping them, `jev` on `m$gpt` answers a `gptr_decision` (the local clef-flash
+  copy answered HTTP 400 "format that is no longer supported", a stale Ollama download).
+- Deviations: D-250 (s1-1 rule edited in place). The reviewer's smaller alternative (a team wording in
+  `subagent_route_checks()`) is not used: it would leave the drop. Open: none.

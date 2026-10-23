@@ -933,10 +933,19 @@ s1_run = function(prompt, parts, target, args, session = NULL, call = NULL) {
 
 # ---- entry points -------------------------------------------------------------------------------
 
-#' The classifier route's run() (contract 7.13). No closure and no tryCatch() in this frame: it
-#' is the caller of s1_inputs(), which reads the user's values (copy safety).
+#' The classifier route's run() (contract 7.13); it matches before the team and fan-out routes,
+#' so it refuses their arguments rather than drop them (IC-74 section 4, D-250). No closure and no
+#' tryCatch() in this frame: it is the caller of s1_inputs(), which reads the user's values (copy
+#' safety).
 #' @noRd
 s1_call = function(call) {
+  given = c(agents = length(call$ids$agents) > 0L, parallel = !is.null(call$args$parallel))
+  if (any(given)) {
+    arg = names(given)[given][1L]
+    gptr_abort(paste0("`", arg, " =` starts sub-agents, but a decision model answers in one call ",
+                      "(an answer per input element); drop `", arg, " =`."),
+               "invalid_argument", arg = arg, expected = "no agents = or parallel =")
+  }
   target = s1_ready(s1_target(call$ids$model), replay = call$args$replay)
   parts = s1_inputs(call)
   s1_run(call$prompt, parts, target, call$args, session = call$session, call = call)

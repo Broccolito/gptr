@@ -197,7 +197,8 @@ works on the objects already in memory.
   model, also with `agents =` or `parallel =`, are refused, naming the argument; they were ignored,
   and the call returned a session on which `sum()`, `[` and `gptr_prob()` then failed. Use a
   decision model such as `jev`; after `gptr_config(system1 = "emulate:<ref>")`, `model = jev` runs
-  it through a chat model.
+  it through a chat model. A decision model, which ignored `agents =` and `parallel =`, refuses
+  them: it answers every input in one call.
 * The `uncertain = "stop"` error names the uncertain inputs (the first ten) and carries their
   positions (`$index`), `$names` and `$confidence`, the confidence the band tests, and every answer
   (`$value`), which it used to discard; `$prob` is unchanged.

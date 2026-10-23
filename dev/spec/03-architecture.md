@@ -539,8 +539,9 @@ labelled by their expression, named ones by name). `model`, `mode`, `skills`, `p
 of agent definitions (`agent()` is bound to `gptr_agent()` inside it). `parallel = n`: fan a list/vector/data
 frame context out over `n` concurrent sub-agents. `choices`, `levels`, `threshold`, `min_confidence`,
 `uncertain`: System 1 answer shape and abstention (§4.1.5); a conversational model refuses them (a `threshold`
-other than 0.5 included) rather than ignore them (D-250). `envir`: where code runs and objects persist
-(D-04). `background = TRUE`: experimental, returns the running session at once (needs `later`). `budget =
+other than 0.5 included) rather than ignore them; a decision model refuses `agents` and `parallel` (D-250).
+`envir`: where code runs and objects persist (D-04).
+`background = TRUE`: experimental, returns the running session at once (needs `later`). `budget =
 list(tokens =, cost =, turns =)`. `replay`: document replay mode (`"auto"`, `"replay"`, `"live"`, `"record"`).
 `.opts`: rare switches: `thinking`, `max_turns`, `context` (`"summary"`, `"names"`, `"none"`), `record`,
 `interpolate`, `timeout`, `output = "factor"`, `system` (string replaces preamble/tools/rules; named list

@@ -935,6 +935,22 @@ test_that("a factor answer keeps the call's meta, which its failure warning poin
   expect_identical(names(attributes(ok)), c("names", "levels", "class"))
 })
 
+test_that("a decision model refuses agents = and parallel = before any request (D-250)", {
+  skip_on_cran()
+  s1_fresh()
+  judge = local_fake_provider(list(0.9), name = "judge", type = "classifier")
+  x = list(a = "fine", b = "broken")
+  cnd = expect_error(peter("Is it fine?", x, model = judge,
+                           agents = list(a = agent(model = "fake/fake-1"))),
+                     "a decision model answers in one call", fixed = TRUE,
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "agents")
+  cnd = expect_error(peter("Is it fine?", x, model = judge, parallel = 2),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "parallel")
+  expect_length(fake_requests(judge), 0L)
+})
+
 # ---- Task 11: the jev-router example (IC-69) ----------------------------------------------------
 
 # The installed (or load_all()-shimmed) example; a missing file is an error, never source("")

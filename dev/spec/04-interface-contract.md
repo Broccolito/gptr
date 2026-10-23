@@ -1092,7 +1092,8 @@ exact name.
    `gptr_error_invalid_argument` naming it, since a conversation would ignore them; a decision model serves
    them, and `model = jev` runs through a chat model after `gptr_config(system1 = "emulate:<ref>")`, which
    alone moves no call to emulation (IC-74, D-250). P19's call of P08's `route_refuse_s1_args()` is a
-   contract edge of the layering test (12.2).
+   contract edge of the layering test (12.2). The `classifier` route, which matches first, refuses `agents`,
+   then `parallel`, as `gptr_error_invalid_argument` naming it: a decision model answers in one call.
 
    The console's first-use setup runs before its banner or chat input only for a new interactive
    console without an explicit or effective configured model. It offers the expected Codex and

@@ -27,7 +27,8 @@ file paths.}
 
 \item{tools}{Tool names, \code{"+name"}/\code{"-name"} modifiers, a preset name, or \code{\link[=gptr_tool]{gptr_tool()}} specs.}
 
-\item{agents}{A named list of agent definitions for a team (\code{agent()} means \code{\link[=gptr_agent]{gptr_agent()}}).}
+\item{agents}{A named list of agent definitions for a team (\code{agent()} means \code{\link[=gptr_agent]{gptr_agent()}}).
+A decision model refuses it and \code{parallel}: it answers in one call.}
 
 \item{parallel}{Fan one list-like context object out over this many concurrent sub-agents.
 Each child gets its element alone as \code{.x}, a named list of one attached as \code{.x[["A"]]};
