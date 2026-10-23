@@ -844,12 +844,13 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
   console_cut(console_wrap(out, width), width)
 }
 
-#' The status line of a run's end (IC-77, D-245): `done · fake-1 · 2 requests · 1.2k tokens ·
-#' $0.0042 · 82% context left` from the run's own requests (its usage rows): the last request's
-#' model, then `sub-agents $0.8500` when `kids` holds the costs of its sub-agents' requests, then
-#' the context the last request left (console_context_left()); the status and reason when it did
-#' not end idle, the reason's line breaks one space (curl's errors take two lines). A term whose
-#' value is unknown (IC-74) is left out, as is a cost that is not above 0 (a free or local model)
+#' The status line of a run's end (IC-77, D-245), its terms joined by the separator, in ASCII
+#' `done - fake-1 - 2 requests - 1.2k tokens - $0.0042 - 82% context left`, from the run's own
+#' requests (its usage rows): the last request's model, then `sub-agents $0.8500` when `kids` holds
+#' the costs of its sub-agents' requests, then the context the last request left
+#' (console_context_left()); the status and reason when it did not end idle, the reason's line
+#' breaks one space (curl's errors take two lines). A term whose value is unknown (IC-74) is left
+#' out, as is a cost that is not above 0 (a free or local model)
 #' @noRd
 console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL) {
   word = if (identical(status, "idle")) "done" else console_escape(status %||% "?", FALSE)

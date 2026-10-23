@@ -801,13 +801,14 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
 # errors are printed escaped on stderr and the REPL goes on.
 # ---------------------------------------------------------------------------------------------
 
-#' The banner (architecture 6.17, NS-1; D-245): dim lines at column 2 as a notice, `gptr <version> ·
-#' <model> · <mode> · .gptr/ found`, `objects: ` and up to six names of the evaluation
-#' environment, then the keys in bold, `/help lists commands · tab completes after @ ! / · ctrl-c
-#' twice leaves`: the tab only where the REPL completes (after ! and / in RStudio's console, which
-#' puts other words in backticks), the console's own interrupt key, which does not pause at the
-#' prompt. In Positron, whose console holds what is typed while peter works as R code, a line says
-#' so and that the key, then s, steers. A blank line ends it, after the yolo notice
+#' The banner (architecture 6.17, NS-1; D-245): dim lines at column 2 as a notice, their terms
+#' joined by the separator, in ASCII `gptr <version> - <model> - <mode> - .gptr/ found`, `objects: `
+#' and up to six names of the evaluation environment, then the keys in bold, `/help lists commands -
+#' tab completes after @ ! / - ctrl-c twice leaves`: the tab only where the REPL completes (after !
+#' and / in RStudio's console, which puts other words in backticks), the console's own interrupt
+#' key, which does not pause at the prompt. In Positron, whose console holds what is typed while
+#' peter works as R code, a line says so and that the key, then s, steers. A blank line ends it,
+#' after the yolo notice
 #' @noRd
 repl_banner = function(rs) {
   sym = console_style()

@@ -1490,8 +1490,8 @@ Tests (`test-console-render.R`, `test-console-repl.R`, `test-console-commands.R`
 - The banner bytes.
 - `/context` agrees.
 - (Amended in Task 26:) the status lines and banners expected in
-  `test-console-{fences,jupyter-progress,setup,typing}.R`; a Positron with a tty stdin in
-  `test-console-completion.R`.
+  `test-console-{fences,jupyter-progress,setup,typing}.R` and `test-northstar.R` (NS-1's mode); a Positron with a
+  tty stdin in `test-console-completion.R`.
 
 Spec: IC-77 run totals (amends D-206), NS-1 banner. (Amended in Task 26:) Also 04's `compact_threshold()` row,
 03 §6.17 (banner, status line, `/context`) and §10.1, D-245's Task 26 note.
@@ -1500,7 +1500,7 @@ Files: `R/console-render.R` (`console_status_line()`, `console_context_left()`),
 (`repl_banner()`), `R/console-commands.R` (`/context`), `tests/testthat/test-console-render.R`,
 `tests/testthat/test-console-repl.R`, `tests/testthat/test-console-commands.R`. (Amended in Task 26:) Also
 `tests/testthat/helper-arch.R` (two contract edges), `test-console-{fences,jupyter-progress,setup,typing}.R`,
-`R/console-complete.R` and `test-console-completion.R`.
+`test-northstar.R`, `R/console-complete.R` and `test-console-completion.R`.
 
 Commit: `feat(console): run status names the model and the context left`.
 
