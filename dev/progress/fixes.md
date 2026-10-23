@@ -2281,9 +2281,13 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the registry's `rules` record is asked through `ext_policy_decide()` and the command is read through the literal
   call (the reading of sessions-17 and sessions-18, `bg`'s `process` row included). No live check (the fake run is
   the gate end to end).
-- Open: an `[a]lways` answer to such a question stores `sh` (`perm_on_remember()` recomputes from tool `sh`), an
-  allow rule for every nested `sh` call the level gate asks about, not the shown `r(sh:rm -rf*)` (as for any
-  nested question before; P11's code).
+- Review: r1 (medium) applied. The question offered `[a]lways r(sh:rm -rf*)`, but `perm_on_remember()` recomputes
+  from tool `sh` and stored the allow rule `sh` (every nested shell call the level gate asks about; in project
+  settings for `[p]`), and allow rules are not applied here anyway. `nested_rules()` clears `suggested_rule` before
+  `perm_ask()`, so an ask rule asks every time and offers no `[a]lways`. Red FAIL 1 (an `a` answer: allow `sh`).
+  Green `^perm-gate$` PASS 156; `^(perm-|agent-dispatch$|bridge-|tool-r$|console-ui$|arch-layers$|lint-rules$)`
+  PASS 2428 SKIP 12. Lint and check-plans clean. 03 §6.8.4 and 04 §7.6 say so.
+- Open: none.
 
 ### sessions-22 - Keep a resumed session's mode
 - Red: FAIL 5 in `^session-store$` (PASS 274; findings 148, 153): `peter(mode = "plan")`'s `gptr.frozen` held no

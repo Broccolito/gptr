@@ -3191,9 +3191,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (the job ran in auto and yolo) and for which `[a]lways` offered `r(sh:peter$bg*)`; `peter$bg('rm -rf ~')` is 4.
 - Rule (nested-1): a nested `peter$sh()` or `peter$bg()` call meets the `rules` policy with its actual command, read
   as the literal call (`peter$sh("rm -rf build")`), whatever its level: a deny rule refuses it, an ask rule asks
-  through `perm_ask()`; allow rules are not applied there, and `gptr.unsafe_no_permissions` skips it. Was: re-checked
-  only above the outer call's approved level and then as tool `sh`, which no `r(sh:)` rule matches, so `cmd = "rm
-  -rf build"; peter$sh(cmd)` ran in auto and yolo under `r(sh:rm *)`.
+  through `perm_ask()` and offers no `[a]lways` rule (an answer would have stored an allow `sh`); allow rules are not
+  applied there, and `gptr.unsafe_no_permissions` skips it. Was: re-checked only above the outer call's approved
+  level and then as tool `sh`, which no `r(sh:)` rule matches, so `cmd = "rm -rf build"; peter$sh(cmd)` ran in auto
+  and yolo under `r(sh:rm *)`.
 - Rule (sessions-22): the `gptr.frozen` entry records `mode`, the session's mode at the freeze (P07's and the
   fallback's), and a rebuild (`gptr_resume()`, console `/resume`, a replay cut) takes the last mode its active path
   records, a `gptr.frozen` `mode` or a `gptr.mode_change` `to` that is one of the five modes, else the `mode`

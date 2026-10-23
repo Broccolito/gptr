@@ -1496,8 +1496,8 @@ outer code listed the same function at a level no higher than the level the user
 and the member's own classification of its actual input (`call_risk()`: a patch's Delete File, a command computed
 at run time) is no higher either, it runs without a second prompt; otherwise it passes the gate [IC-78].
 The command of a `peter$sh()` or `peter$bg()` call meets the deny and ask rules first, whatever its level,
-as the literal call would; allow rules are not applied there [D-251]. Nested calls are recorded in the outer
-result's `details$nested` (at most 20) [06 §4, G5 §5].
+as the literal call would; allow rules are not applied there, and an ask offers no `[a]lways` rule [D-251].
+Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
 
 #### 6.8.5 Non-interactive runs and plan mode (NS-12)
 

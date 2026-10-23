@@ -338,7 +338,7 @@ test_that("deny and ask rules see the command a nested sh or bg call computes (6
   }
   gptr_permissions(remove = "r(sh:rm *)")
   gptr_permissions(ask = "r(sh:rm *)")
-  ui = local_scripted_ui(list("n"))
+  ui = local_scripted_ui(list("n", "a"))
   fake = local_fake_provider(list(
     fake_tool("r", code = "cmd = paste('rm', '-rf', 'build'); peter$sh(cmd)"),
     fake_tool("r", code = "out = peter$sh(paste('echo', 'hi'))$stdout"), "Done."), name = "ask")
@@ -347,6 +347,13 @@ test_that("deny and ask rules see the command a nested sh or bg call computes (6
   expect_true(file.exists(build))
   expect_identical(sum(ui$log$method == "permission"), 1L)
   expect_identical(trimws(e$out), "hi")
+  # the ask rule asks every time: an [a]lways answer stores no rule, `sh` above all
+  fake = local_fake_provider(list(
+    fake_tool("r", code = "cmd = paste('rm', '-f', 'gone.txt'); peter$sh(cmd)"), "Done."),
+    name = "always")
+  peter("Clean up.", model = fake, mode = "auto", envir = new.env())
+  expect_identical(sum(ui$log$method == "permission"), 2L)
+  expect_identical(perm_store()$allow, character())
 })
 
 test_that("the protect_size policy reads the run's snapshot, not the live option (IC-53)", {

@@ -468,6 +468,8 @@ nested_rules = function(call, run) {
   dec = if (identical(out$decision, "deny")) {
     perm_result("deny", out$reason, call$input, lit$risk, out$rule)
   } else {
+    # an ask rule asks every time, so the question offers no [a]lways rule
+    out$suggested_rule = NULL
     perm_ask(call, run, out, lit$risk)
   }
   if (!identical(dec$decision, "allow")) dec
