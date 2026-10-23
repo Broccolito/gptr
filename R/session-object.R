@@ -870,6 +870,8 @@ session_enqueue = function(s, text, as = c("steer", "follow_up"), source = "api_
                            blocks = list()) {
   check_class(s, "gptr_session", "s")
   check_string(text, "text")
+  # the model would read a blank steer as an empty message; attachments carry a follow-up alone
+  if (!length(blocks) && !nzchar(trimws(text))) arg_abort(text, "text", "a non-blank string")
   as = check_choice(as, c("steer", "follow_up"), "as")
   source = check_choice(source, queue_sources, "source")
   queue_blocks_check(blocks, as, source)

@@ -5314,7 +5314,10 @@ its part in its own commit, and Task 27 finalises them.
   as it does any run of operator messages. Follow-ups are still taken one at a time. A run started without
   input opens with the older queue head by the items' `t` (steering review): the first follow-up, such as the
   prompt `peter(.run = FALSE)` queued, unless a steer is older or the follow-up has no `t`; steers sent after it
-  join that first request at the start poll, user-role messages with source `steer`.
+  join that first request at the start poll, user-role messages with source `steer`. At ingress
+  `session_enqueue()` refuses blank text (whitespace only, `gptr_error_invalid_argument`, `a non-blank string`)
+  unless the item carries attachments, so `gptr_steer()`, a pipe into a running session and `ctx$send()` refuse it
+  as the console does (steering review).
 - IC-75 amended (D-243; P28 Task 3): a stale line is kept, never discarded, and no answer is ever turned into a
   steer.
   - `readline_answer(prompt, keep)` hands each line it reads past (not blank) to `keep`. The console questions

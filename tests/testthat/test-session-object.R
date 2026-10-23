@@ -495,6 +495,20 @@ test_that("session_enqueue() appends FIFO items by kind and emits queue_update",
   expect_error(session_enqueue(s, 1), class = "gptr_error_invalid_argument")
 })
 
+test_that("session_enqueue() refuses blank text unless it has attachments (steering review)", {
+  ev = local_events("queue_update")
+  s = test_session()
+  for (text in c("   ", "\t\n")) {
+    cnd = expect_error(session_enqueue(s, text), class = "gptr_error_invalid_argument")
+    expect_identical(cnd$expected, "a non-blank string")
+  }
+  expect_identical(session_data(s)$queue, list(steer = list(), follow_up = list()))
+  img = block_image(as.raw(1:4), source = "user")
+  session_enqueue(s, " ", as = "follow_up", source = "pipe", blocks = list(img))
+  expect_identical(session_data(s)$queue$follow_up[[1L]]$blocks, list(img))
+  expect_length(ev(s), 1L)
+})
+
 # the queue_update fields that name the item, then the counts left in the queue
 queue_fields = c("op", "which", "text", "source", "steer", "follow_up")
 

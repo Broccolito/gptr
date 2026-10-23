@@ -3127,6 +3127,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     back. Contract-visible: 04 §15.10 IC-76. Tests: test-console-interrupt.R "[b] keeps the REPL's held lines
     and draft in the history, not sent (steering review)"; test-console-repl.R "a prompt to a session that
     runs, in the background, says it steers (steering review)".
+  - The queue refuses a blank steer. `gptr_steer(s, "   ")`, a pipe of whitespace into a running session and
+    `ctx$send()` queued it (`check_string()` takes whitespace), so the model read `The user sent this message
+    while you were working: ` and the record wrote `## Steer: `; the console already refused it. Now
+    `session_enqueue()` refuses blank text unless the item carries attachments (the gateway's deferred prompt
+    and `bg_park_session()`'s re-queue keep them). Contract-visible: 04 §15.10 IC-55. Tests:
+    test-session-object.R "session_enqueue() refuses blank text unless it has attachments (steering review)";
+    test-gptr-sdk.R "a blank steer is refused by gptr_steer() and by a pipe into a running session".
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue
