@@ -2533,3 +2533,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   byte-identical to the edited `.Rmd`.
 - Deviations: D-249 (extended). Open: a function whose own argument or local shares a handle's
   name is refused too (conservative).
+
+### replay-4b - The gptr_return() notice is said to be silent in replay mode, as it is
+- Review of replay-4 (`R/gptr-sdk.R`, low).
+- Red: none (docs). The extended test passes before the change: with `gptr.replay = "replay"` the
+  first call is silent, and a file holding `gptr_return(1)` sourced under `"auto"` gives the notice.
+- Cause: replay-4 copied IC-48's "silent while a document is replayed" into `?gptr_return` and 03
+  §4.3; the code is silent only when `replay_mode()` is `"replay"` (P08 adaptation 13), so a
+  recorded `gptr_return()` that stays in the code (nested, or a pipe split over lines) prints it
+  when the document is sourced under the default `"auto"`.
+- Fix: `?gptr_return`, 03 §4.3, 04 §6.6 and IC-48 say "silent in replay mode (`replay = "replay"`
+  or `GPTR_REPLAY=replay`)".
+- Green: `^(gptr-sdk|arch-layers|lint-rules)$` PASS 189 (NOT_CRAN=true). Lint clean; Rd
+  regenerated; plan checks pass.
+- Deviations: D-249 (extended: the contract text now names the implemented rule). Open: none.

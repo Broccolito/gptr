@@ -168,7 +168,12 @@ test_that("gptr_return() outside a run gives its notice once per R session (IC-4
   local_gptr_options(replay = "auto", quiet = TRUE)
   expect_silent(gptr_return(1))
   local_gptr_options(quiet = FALSE)
-  expect_message(gptr_return(1), "only designates a value", class = "gptr_message_notice")
+  # silent in replay mode only: a document sourced under "auto" gets the notice (FIX-16)
+  withr::with_options(list(gptr.replay = "replay"), expect_no_message(gptr_return(1)))
+  f = withr::local_tempfile(fileext = ".R")
+  writeLines("gptr_return(1)", f)
+  expect_message(source(f, local = new.env()), "only designates a value",
+                 class = "gptr_message_notice")
   expect_no_message(gptr_return(1))
 })
 

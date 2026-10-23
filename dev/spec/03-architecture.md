@@ -821,7 +821,8 @@ gptr_preimage(x, name, ctx, ...)
 
 `gptr_return()` designates the run's result under the value policy of §5.1; outside a run it returns
 `invisible(x)` and designates nothing; the first such call in an R session prints a one-line notice
-(silent while a document is replayed, with `options(gptr.quiet = TRUE)` or `suppressMessages()`) [IC-48].
+(silent in replay mode, `replay = "replay"` or `GPTR_REPLAY=replay`, with `options(gptr.quiet = TRUE)` or
+`suppressMessages()`) [IC-48].
 `gptr_describe()` is the S3 generic for compact descriptions (methods from any package through delayed
 `S3method(gptr::gptr_describe, cls)`). `gptr_risk()` is the advisory static classifier; it never evaluates and
 is documented as not a security boundary. `gptr_prompt()` shows a session's frozen system blocks, tool array

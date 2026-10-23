@@ -19,8 +19,9 @@ the session then returns as \verb{$value}: the newest value designated in any tu
 designates nothing keeps it (\verb{$values} lists them by turn; \code{gptr_return(NULL)} clears it).
 Objects bound in the session's workspace are kept by name when large (no copy), copied when
 small; other values are boxed. Outside a run it returns its argument invisibly and designates
-nothing; the first such call in an R session prints a one-line notice (silent while a document
-is replayed, with \code{options(gptr.quiet = TRUE)} or \code{suppressMessages()}).
+nothing; the first such call in an R session prints a one-line notice (silent in replay mode,
+\code{replay = "replay"} or \code{GPTR_REPLAY=replay}, with \code{options(gptr.quiet = TRUE)} or
+\code{suppressMessages()}).
 }
 \examples{
 y = gptr_return(1:3)

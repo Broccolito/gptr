@@ -1813,7 +1813,7 @@ and forces `x` in a leaf; the session stores it under the §5.1 value policy of 
 below `gptr.value_copy_max` by `env_snap_size()`: deep copy, unless `duplicate()` returns the value itself or the
 copy holds as much of its own; otherwise name + address; anonymous or bound in a function-frame home: boxed;
 D-247), capped by `gptr.values_max_bytes`, and appends a `gptr.value` entry. Returns `invisible(NULL)`. Outside a run
-it returns `invisible(x)` and does nothing else (a once-per-session `notice`, silent while a document is replayed), so
+it returns `invisible(x)` and does nothing else (a once-per-session `notice`, silent in replay mode), so
 recorded code that still contains the call re-sources cleanly (IC-48). Copy-safety: [R1][leaf] (`test-copy-tools.R`
 rows for the three cases).
 
@@ -4488,8 +4488,8 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 
 **IC-48 What recorded code contains.** (req-1, req-26, req-28)
 
-- `gptr_return(x)` outside a run returns `invisible(x)` with a once-per-session `notice`, suppressed while a
-  document is being replayed; `gptr_error_not_in_run` is removed.
+- `gptr_return(x)` outside a run returns `invisible(x)` with a once-per-session `notice`, suppressed in replay
+  mode (`replay = "replay"`, `GPTR_REPLAY=replay`); `gptr_error_not_in_run` is removed.
 - `doc_block_lines()` drops, at top-level-expression granularity (`getParseData()` of each recorded code chunk),
   calls to `gptr_return()`/`gptr::gptr_return()` of a name (or with a named or no argument) and to members whose
   spec has `record = FALSE`; a chunk that becomes empty is omitted; the value stays in `value=`. A call with one
