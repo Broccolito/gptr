@@ -105,11 +105,14 @@ console_repl_find = function() {
 #' from a `.stdin` REPL's connection, else readline_answer(); a Ctrl-C while waiting (no resume
 #' restart there) gives NA, and in a terminal ends the person's row, as ui_console_read() does.
 #' With `accept` (readline_answer()) a line typed before the chevron showed answers when it is one
-#' of them, and another such line is kept in the history (console_keep()), never sent to the agent
+#' of them, and another such line is kept in the history (console_keep()), never sent to the agent;
+#' the keys a T console read with its Ctrl-C are such lines, read first (console_ahead())
 #' @noRd
 console_ask = function(accept = NULL) {
   prompt = paste0(console_style()$person, " ")
   rs = console_repl_find()
+  x = console_ahead(rs$reader, accept)
+  if (!is.null(x)) return(x)
   x = tryCatch({
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
       rs$reader$read(prompt, stream = "stdout")
@@ -122,13 +125,45 @@ console_ask = function(accept = NULL) {
   x
 }
 
+#' The answer among the keys a T console's composer read with its Ctrl-C (`rd$after_interrupt`,
+#' console_keys()), or NULL: the first whole line, its edit keys applied (console_compose()), that
+#' is one of `accept` (trimmed, lower case; TRUE: any), echoed after the person's chevron as
+#' readline() leaves a line. The lines before it, or with no answer all the text, go to the console
+#' history (console_keep()), never to the agent; the text after it waits for the next question
+#' @noRd
+console_ahead = function(rd, accept) {
+  x = rd$after_interrupt %||% ""
+  if (!nzchar(x)) return(NULL)
+  edit = function(keys) {
+    res = console_compose(list(), keys, 0, "steer", console_complete)
+    res$action$text %||% res$state$draft
+  }
+  keep = function(texts) console_keep(texts[nzchar(trimws(texts))])
+  lines = console_typed_split(x)
+  part = if (isTRUE(attr(lines, "partial"))) lines[[length(lines)]]
+  whole = lines[seq_len(length(lines) - !is.null(part))]
+  typed = vapply(whole, function(line) edit(paste0(line, "\n")), "", USE.NAMES = FALSE)
+  hit = if (isTRUE(accept)) seq_along(typed) else which(tolower(trimws(typed)) %in% accept)
+  if (!length(hit)) {
+    rd$after_interrupt = ""
+    keep(c(typed, if (!is.null(part)) edit(part)))
+    return(NULL)
+  }
+  n = hit[[1L]]
+  rd$after_interrupt = paste0(paste(c(whole[-seq_len(n)], ""), collapse = "\n"), part)
+  keep(typed[seq_len(n - 1L)])
+  console_write(paste0(console_style()$person, " ", console_escape(typed[[n]], FALSE)))
+  typed[[n]]
+}
+
 #' The pause menu (calling handler for `interrupt`), a console question wherever it is offered
 #' (D-243): after a blank row, `? Paused` (the session's id added when more than one is paused)
 #' and under its text the keys as an approval's (ui_keys()): `s steer`, `f follow-up`, `c continue`,
 #' `a abort` and, for a foreground call, `b background`, read at the person's chevron
 #' (console_ask()), in the saved modes from before its rows (tty_question()). A key or its word
-#' answers, also one typed before the chevron showed, an empty answer continues, anything else gets
-#' a dim hint naming the keys. [s] and [f] read their text at the chevron of their own question, `?
+#' answers, also one typed before the chevron showed or with the Ctrl-C (console_ahead()), an empty
+#' answer continues, anything else is kept in the history, never sent, under a dim hint that names
+#' it and the keys. [s] and [f] read their text at the chevron of their own question, `?
 #' Steer` or `? Follow-up`, and queue it as Enter and Tab do (policy_enqueue()), their queue line,
 #' without the text it shows under, right under it, as under any question. [b] says
 #' in dim rows that the run went to the background (with the service's notices), then lists what
@@ -168,7 +203,8 @@ policy_menu = function(cnd, pol) {
     invokeRestart("resume")
   }
   repeat {
-    ans = tolower(trimws(console_ask(c("", k, keys))))
+    typed = console_ask(c("", k, keys))
+    ans = tolower(trimws(typed))
     key = if (is.na(ans)) "a" else c("c", k, k)[match(ans, c("", k, keys))]
     if (identical(key, "c")) go()
     if (identical(key, "a")) return(invisible(NULL))
@@ -211,8 +247,13 @@ policy_menu = function(cnd, pol) {
       })
       next
     }
-    console_write(ui_hint(paste0("Paused. Type ", paste(k[-length(k)], collapse = ", "), " or ",
-                                 k[[length(k)]], ".")))
+    # text that is no key is kept, never sent, as an approval keeps it
+    kept = gptr_is_interactive() && console_history_add(typed)
+    console_write(ui_hint(c(
+      paste0("Not a key: '", ui_escape(substr(trimws(typed), 1L, 40L)), "'",
+             if (kept) " (kept in history)", "."),
+      paste0("Paused. Type ", paste(k[-length(k)], collapse = ", "), " or ", k[[length(k)]], ".")
+    )))
   }
 }
 

@@ -167,12 +167,23 @@ test_that("the pause menu is a console question: its keys under it, read at the 
     paste0("    ", paste0(cli::style_bold(c("s", "f", "c", "a", "b")), sym$dim(what),
                           collapse = " "))
   ))
-  # an answer other than a key or its word gets a dim hint naming the keys, and the menu reads
-  # again: text meant as a steer never aborts
+  # an answer other than a key or its word is kept in the history, never sent, and a dim hint
+  # names it and the keys; the menu reads again: text meant as a steer never aborts
   local_abort_log()
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  kept = character()
+  local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
+                        .package = "utils")
   m = menu(c("add a legend", "continue"), mode = "repl")
-  expect_identical(m$out[-(1:3)], as.character(sym$dim("    Paused. Type s, f, c or a.")))
+  expect_identical(m$out[-(1:3)], as.character(sym$dim(c(
+    "    Not a key: 'add a legend' (kept in history).", "    Paused. Type s, f, c or a."
+  ))))
   expect_length(m$prompts, 2L)
+  expect_identical(kept, "add a legend")
+  local_gptr_options(history = FALSE)
+  m = menu(c("add a legend", "continue"), mode = "repl")
+  expect_identical(m$out[[4L]], as.character(sym$dim("    Not a key: 'add a legend'.")))
+  expect_identical(kept, "add a legend")
   withr::local_options(cli.num_colors = 1L)
   # the session's id only when more than one session is paused
   s2 = policy_session()
@@ -331,6 +342,37 @@ test_that("a key typed before the menu's chevron showed answers it; other text i
   expect_true(kept_line("use the median") %in% err)
   q = session_data(s)$queue$steer
   expect_identical(vapply(q, function(i) i$text, ""), "and log it")
+})
+
+test_that("keys read with Ctrl-C answer the pause menu and its text question (steering review)", {
+  rl = local_readline(character())
+  acc = c("", "s", "f", "c", "a", "steer", "follow-up", "continue", "abort")
+  # the keys a T console's composer read after Ctrl-C (console_keys())
+  ahead = function(tail, accept = acc) {
+    rd = new.env(parent = emptyenv())
+    rd$after_interrupt = tail
+    x = NULL
+    out = utils::capture.output({
+      x = console_ahead(rd, accept)
+    })
+    list(x = x, out = out, rest = rd$after_interrupt)
+  }
+  sym = console_style()
+  # an answer is echoed at the person's chevron, as readline leaves it
+  expect_identical(ahead("s\r"), list(x = "s", out = paste0(sym$person, " s"), rest = ""))
+  # a line that is no key is kept in the history, never sent; the key after it answers
+  expect_identical(ahead("foo\rs\r"),
+                   list(x = "s", out = c(kept_line("foo"), paste0(sym$person, " s")), rest = ""))
+  # the lines after the answer wait for the next question; [s]'s text question takes any line
+  a = ahead("s\ruse the median\r")
+  expect_identical(a[c("x", "rest")], list(x = "s", rest = "use the median\n"))
+  expect_identical(ahead(a$rest, TRUE)$x, "use the median")
+  # the edit keys act; an unterminated key is kept, no answer; Enter alone continues
+  expect_identical(ahead("x\177s\r")$x, "s")
+  expect_identical(ahead("s"), list(x = NULL, out = kept_line("s"), rest = ""))
+  expect_identical(ahead("\r")$x, "")
+  expect_identical(ahead(""), list(x = NULL, out = character(), rest = ""))
+  expect_identical(rl$kept, c("foo", "s"))
 })
 
 test_that("a line typed before the pause menu appeared never answers it (IC-75)", {

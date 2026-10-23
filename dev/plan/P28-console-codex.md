@@ -1090,7 +1090,13 @@ Decisions:
   [f] any text, typed before the chevron showed answers, `console_ask(accept)`, as under load stty made readline
   start after the person had typed `s`, which was sent to the agent as a steer; other text read too soon is
   kept in the history, never sent; every console question switches to the saved modes before its rows,
-  `tty_question()`.)
+  `tty_question()`.) (Amended in the steering review: the keys a T console's composer read in the same
+  read as its Ctrl-C answer the menu and then its text question, `console_ahead()`, the answer echoed at
+  the chevron; they were dropped, so under load Ctrl-C, `s` and Enter in one read lost the `s`, and the
+  steer then typed at the menu was lost too. The lines before an answer, and text without one, are kept in the history; what the
+  menu leaves the composer reads once it resumes, and after [a] it is the draft at the next prompt. Text
+  typed at the menu that is no key is kept in the history too, under `Not a key: '<text>' (kept in
+  history).` above the keys hint, and never sent.)
 - [s] and [f] read their text at the same `› ` and queue it exactly as Enter and Tab do. (Amended in
   Task 20:) `policy_enqueue()` keeps the reader's `sent`, the kind queued last, which `console_keys()`
   kept, so Up takes back a menu message as a composer one; blank text queues nothing, without the

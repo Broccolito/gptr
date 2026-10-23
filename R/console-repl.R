@@ -741,7 +741,8 @@ typed_code_open = function(held) {
 #' else a new gptr_last()); a stray run left by an early interrupt is aborted. On a terminal the
 #' call's console_typed() task reads what is typed, in the call's modes until it ends (tty_call():
 #' a T console's keys, a D console's lines without echo; IC-76, D-243); the end of its run settles
-#' what it held (console_queue_left()). `men`: the prompt's @mentions.
+#' what it held (console_queue_left()), and keys read with a Ctrl-C that no question took
+#' (console_ahead()) are the composer's draft at the next prompt. `men`: the prompt's @mentions.
 #' @return list(status = "ok" | "error" | "interrupt", value, error); `rs$session` is updated.
 #' @noRd
 console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) {
@@ -763,6 +764,14 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
   res = tryCatch(list(status = "ok", value = eval(cl, envir = rs$mask)),
                  error = function(e) list(status = "error", error = e),
                  interrupt = function(e) list(status = "interrupt"))
+  # keys read with a Ctrl-C that no question took (after [a]) are typed at the next prompt
+  rd = rs$reader
+  if (nzchar(rd$after_interrupt %||% "")) {
+    left = sub("[\r\n]+$", "", rd$after_interrupt)
+    rd$after_interrupt = ""
+    rd$compose = console_compose(rd$compose, left, reactor_now(), "steer", console_complete,
+                                 TRUE)$state
+  }
   s = NULL
   if (inherits(res$value, "gptr_session")) {
     s = res$value

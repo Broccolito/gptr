@@ -3539,6 +3539,21 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     a paste; after a stall they are typed (review)", "a terminal: a paste during a run is one draft; Enter sends
     it as one steer (review)"; test-console-repl.R "a macOS terminal: a paste is one turn, a fence echoes once,
     Ctrl-D never hangs".
+  - The keys a T console's composer reads in the same read as its Ctrl-C answer the pause menu and then its
+    text question (`rd$after_interrupt`, `console_ahead()`, read first by `console_ask()`; the answer echoed at
+    the chevron): they were dropped, so under load Ctrl-C, `s` and Enter in one read lost the `s`, and the steer
+    then typed at the menu was lost as well. Lines before an answer, and text without one, are kept in the
+    history; what the menu leaves the composer reads once it resumes (so it is typed after the menu, never
+    behind keys typed later), and after [a] it is the draft at the next prompt (`console_send()`), so a stale
+    tail never answers a later menu. Text typed at the menu that is no key is kept in the history in an
+    interactive R, as an approval keeps a non-answer, under `Not a key: '<text>' (kept in history).` above the
+    keys hint, and is never sent: free text at the menu stays no steer (Task 20's rule; reversing it is the
+    maintainer's call). An unterminated key read with the Ctrl-C is kept, no answer: readline cannot be
+    pre-filled. Contract-visible: 04 §15.10 IC-76. Tests: test-console-typing.R "Ctrl-C is a key the composer
+    reads: it pauses after the keys before it (review)", "keys read with Ctrl-C that no question took wait at
+    the prompt (steering review)", "a terminal: keys read with Ctrl-C answer the pause menu (steering review)";
+    test-console-interrupt.R "keys read with Ctrl-C answer the pause menu and its text question (steering
+    review)", "the pause menu is a console question: its keys under it, read at the chevron (D-243)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

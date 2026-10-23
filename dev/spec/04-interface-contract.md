@@ -5475,9 +5475,18 @@ its part in its own commit, and Task 27 finalises them.
     with a session, [b] for a foreground call when P21 is loaded). It reads at the person's chevron at column 0
     (`console_ask()`: `› `, ASCII `>> `), with the saved modes in T from before its rows (`tty_question()`); a
     key, or for [s] and [f] any text, read too soon (typed just after Ctrl-C, before readline started) answers
-    all the same, and other text read too soon is kept in the history, never sent (review of Tasks 16-21). A key or its word
+    all the same, and other text read too soon is kept in the history, never sent (review of Tasks 16-21). So
+    are the keys a T console's composer read in the same read as its Ctrl-C (`console_keys()` holds them in the
+    reader's `after_interrupt`; steering review: they were dropped): `console_ask()` first takes from them
+    (`console_ahead(rd, accept)`) the first whole line, its edit keys applied, that answers, echoed after the
+    chevron as readline leaves a line; the lines before it, or all the text when none answers, are kept in the
+    history (`console_keep()`), and the rest waits for [s]'s or [f]'s text question. What the menu leaves the
+    composer reads once the menu resumes; after [a] it is the composer's draft at the next prompt
+    (`console_send()`). A key or its word
     answers, as an approval reads `y` or `yes`, and an empty answer continues; anything else (a steer typed at
-    the chevron, `add a legend`, which the first-letter rule read as `a`) gets the dim hint
+    the chevron, `add a legend`, which the first-letter rule read as `a`) is kept in the history in an
+    interactive R (`console_history_add()`, as an approval keeps a non-answer), never sent, and gets the dim
+    hints `    Not a key: '<its first 40 characters>' (kept in history).` (the parenthesis only when kept) and
     `    Paused. Type s, f, c, a or b.` (at column 4, `ui_hint()`) and the menu reads again. [s] and [f] read
     their text at the chevron of their own question, `  ? Steer` or `  ? Follow-up` (review of Tasks 16-21: a
     bare chevron read as the menu asking again), and queue it with `policy_enqueue()` as Enter and Tab do (source `pause_menu`), which keeps the reader's

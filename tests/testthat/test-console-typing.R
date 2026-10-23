@@ -775,22 +775,45 @@ test_that("Ctrl-C is a key the composer reads: it pauses after the keys before i
   rs$reader = console_reader()
   rs$sending = quote(peter())
   .gptr_repl = rs
-  # a calling handler resumes, as the pause menu's [c] does; the keys after Ctrl-C are dropped
-  paused = function(chars) {
+  # a calling handler resumes, as the pause menu's [c] does, after it read the keys after Ctrl-C
+  # (`read`) or none of them (steering review)
+  paused = function(chars, read = FALSE) {
     seen = NULL
     resume = function(e) {
-      seen <<- rs$reader$compose$draft
+      seen <<- list(draft = rs$reader$compose$draft, after = rs$reader$after_interrupt)
+      if (read) rs$reader$after_interrupt = ""
       invokeRestart("resume")
     }
     utils::capture.output(withCallingHandlers(console_keys(rs$reader, s, chars),
                                               interrupt = resume))
     seen
   }
-  expect_identical(paused("use base\003x"), "use base")
+  # the keys after Ctrl-C are the pause menu's (console_ahead())
+  expect_identical(paused("use base\003s\r", read = TRUE), list(draft = "use base", after = "s\r"))
   expect_identical(rs$reader$compose$draft, "use base")
-  # a message sent before Ctrl-C in the same batch is queued first
-  expect_identical(paused(" R\r\003"), "")
+  # a message sent before Ctrl-C in the same batch is queued first; a second Ctrl-C is dropped,
+  # and the keys the menu did not read are typed after it
+  expect_identical(paused(" R\r\003and\003 plot"), list(draft = "", after = "and plot"))
   expect_identical(session_data(s)$queue$steer[[1L]]$text, "use base R")
+  expect_identical(rs$reader$compose$draft, "and plot")
+  expect_identical(rs$reader$after_interrupt, "")
+})
+
+test_that("keys read with Ctrl-C that no question took wait at the prompt (steering review)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(history = TRUE, interactive = TRUE)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE, front_end = function() "terminal")
+  fake = gptr_fake_provider(list(list(text = "first", delay = 5)))
+  # [a] read with Ctrl-C aborts; the text after it is the prompt's draft, never a later answer
+  local_keys(keys_once("\003a\rnext please", function() length(fake_requests(fake)) == 1L))
+  res = typing_console(fake, c("go", "/exit"))
+  expect_length(fake_requests(fake), 1L)
+  expect_true(paste0(console_style()$person, " a") %in% res$out)
+  # the prompt's editor showed it, then handed it to readline, kept in the history
+  expect_true(any(endsWith(res$out, paste0("peter[auto]> next please\033[K\r\033[K",
+                                           kept_line("next please")))))
+  expect_identical(res$kept, c("go", "next please", "/exit"))
 })
 
 test_that("in-process R code runs with isig on, so Ctrl-C interrupts it (review)", {
@@ -1144,6 +1167,41 @@ test_that("a terminal: a draft survives Ctrl-C and the pause menu (P28 G, D-243)
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(pty$seen("continuing"), 0L)
+})
+
+test_that("a terminal: keys read with Ctrl-C answer the pause menu (steering review)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
+    "long = paste(c('BEGIN', sprintf('w%02dabc', 1:80), 'END'), collapse = ' ')",
+    "fake = gptr_fake_provider(function(req) {",
+    "  m = req$messages[[length(req$messages)]]",
+    "  if (identical(m$role, 'user')) return(list(text = long, chunk = 8L, gap = 0.05))",
+    "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
+    "})",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
+  ), term = "xterm")
+  utf8 = l10n_info()[["UTF-8"]]
+  person = if (utf8) "›" else ">>"
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("BEGIN"))
+  # Ctrl-C, s and Enter in one read, as under load: the s answers the menu, echoed at its chevron
+  pty$send("\003s\r")
+  expect_true(pty$wait("? Paused"))
+  expect_true(pty$wait(paste0(person, " s\r\n")))
+  expect_true(pty$wait("? Steer"))
+  expect_true(endsWith(pty$pending(), pty_asked()))
+  pty$send("use the median\r")
+  expect_true(pty$wait(paste0(if (utf8) "↳" else "->", " steer\r\n")))
+  expect_true(pty$wait("END"))
+  expect_true(pty$wait("use the median END"))
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(pty$seen("Paused. Type"), 0L)
 })
 
 test_that("console_typed_split() marks a last line without a line end as partial", {

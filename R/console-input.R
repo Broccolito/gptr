@@ -112,7 +112,9 @@ console_trigger = function(line) {
 #' row shows until the next key; the live row is drawn again where it shows. A batch read at most
 #' 0.2 s after the reader's last read (`rd$polled`, an empty read too) is on the polling beat, so
 #' console_compose() takes it as a paste. Ctrl-C, a key in character mode (tty_call()), interrupts
-#' as SIGINT would, after the keys before it; the keys after it in the batch are dropped
+#' as SIGINT would, after the keys before it; the keys after it in the batch (a further Ctrl-C
+#' dropped) are the pause menu's answers (`rd$after_interrupt`, console_ahead()), and those it
+#' leaves are read here once it resumes, as if typed after it
 #' @noRd
 console_keys = function(rd, s, chars) {
   # the first read of a run, or one after an in-process tool held the reactor, is off the beat
@@ -120,8 +122,13 @@ console_keys = function(rd, s, chars) {
   paste = !is.null(rd$polled) && now - rd$polled <= 0.2
   rd$polled = now
   ctrl_c = regexpr("\003", chars, fixed = TRUE)
-  if (ctrl_c > 0L) chars = substr(chars, 1L, ctrl_c - 1L)
-  if (nzchar(chars)) {
+  if (ctrl_c > 0L) {
+    after = gsub("\003", "", substring(chars, ctrl_c + 1L), fixed = TRUE)
+    rd$after_interrupt = paste0(rd$after_interrupt, after)
+    chars = substr(chars, 1L, ctrl_c - 1L)
+  }
+  compose = function(chars) {
+    if (!nzchar(chars)) return()
     res = console_compose(rd$compose, chars, now, setting_get("type_ahead", s), console_complete,
                           paste)
     rd$compose = res$state
@@ -135,7 +142,13 @@ console_keys = function(rd, s, chars) {
     }
     if (isTRUE(the$live_row$shown)) the$live_row$draw()
   }
-  if (ctrl_c > 0L) rlang::interrupt()
+  compose(chars)
+  if (ctrl_c > 0L) {
+    rlang::interrupt()
+    left = rd$after_interrupt
+    rd$after_interrupt = ""
+    compose(left)
+  }
   invisible(NULL)
 }
 
