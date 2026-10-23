@@ -2161,3 +2161,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Open: the reactor still pumps any unsettled run inside a later call, and the spinner `gptr_step()` leaves on an
   unsettled run is not cleared (follow-ups); the go-ahead's missing `<mode>` note is sessions-13, the hand-off
   sessions-14.
+
+### sessions-13 - The plan go-ahead tells the model the chosen mode
+- Red: FAIL 1 in `^perm-plan$` (PASS 119; finding 198): with Execute answered "edits", the go-ahead request
+  (`fake_requests(fake)[[2]]`) ended with the user message "Go ahead with the plan above." carrying no `<mode>`
+  block, so the only one the model saw was the plan run's `<mode name="plan">`.
+- Cause: the queued go-ahead starts through `sdk_launch()` -> `gateway_run_start(s, NULL, ...)`, which renders no
+  turn context, and `session_set_mode()` on an idle session leaves the `<mode>` block to the next user message
+  (04 §7.6); that message was the go-ahead, enqueued without blocks.
+- Fix: `plan_execute()` enqueues the go-ahead with P07's `context.turn` blocks (rendered after the mode switch and
+  the plan's removal from the store), so it carries `<mode name="edits">` with the edits body, as a continuation
+  turn would. The new test checks the last message of request 2: role `user`, the go-ahead text, one `mode` block
+  named `edits`.
+- Green: `^perm-plan$` PASS 120; `^(perm-|arch-layers|lint-rules|gptr-sdk|gptr-gateway|console-|prompt-context|
+  agent-run|session-object)` PASS 5003 SKIP 1. Full suite (NOT_CRAN=true) FAIL 0 PASS 35403 SKIP 64. Lint and
+  check-plans clean. Live m$gpt, Execute "edits" then `gptr_wait(gptr_last())`: HEAD refused in 1 of 2 runs
+  ("the session remains in read-only plan mode"); the fix wrote and read back the file in 2 of 2.
+- Deviations: none (04 §7.6 already says the next user message carries the new `<mode>` block). Plan deviation:
+  the planned `prompt_pending_add(s, msg_operator("mode", mode_block_text(s, mode)))` in `perm-plan.R` (L4) fails
+  `test-arch-layers.R` (L4 reaches L3 only through the kernel SDK and services; both helpers are L3), so the
+  go-ahead carries the turn blocks through the declared `context.turn` service instead.
+- Open: any other follow-up queued on an idle session after a mode change still starts without turn context (the
+  general `sdk_launch()` gap); the plan hand-off is sessions-14.

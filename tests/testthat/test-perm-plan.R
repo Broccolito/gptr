@@ -316,6 +316,24 @@ test_that("the call the go-ahead notice names runs the whole plan", {
   expect_true(file.exists(file.path(root, "f.txt")))
 })
 
+test_that("the go-ahead request tells the model the mode the menu chose", {
+  skip_on_cran()
+  local_project()
+  local_plan_store()
+  local_scripted_ui(list(2L))
+  fake = local_fake_provider(list("<proposed_plan>1. write f.txt</proposed_plan>",
+                                  fake_tool("write", path = "f.txt", content = "hi"), "Done."))
+  s = peter("Create f.txt", model = fake, mode = "plan")
+  gptr_wait(s)
+  expect_identical(s$status, "idle")
+  msgs = fake_requests(fake)[[2L]]$messages
+  last = msgs[[length(msgs)]]
+  expect_identical(last$role, "user")
+  expect_identical(msg_text(last), "Go ahead with the plan above.")
+  modes = Filter(function(b) identical(b$kind, "mode"), last$content)
+  expect_identical(vapply(modes, function(b) b$attrs$name, ""), "edits")
+})
+
 test_that("keep planning, a non-interactive run or a nested session show no menu", {
   root = local_project()
   local_plan_kernel()
