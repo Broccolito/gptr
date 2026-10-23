@@ -1967,8 +1967,12 @@ gptr_register(spec)
 
 Registers a spec at top level (rank 3, source `user`, process lifetime) after validation by its kind. Returns an
 unregister function invisibly. Inside a factory the verb is `gptr$register(spec)` (§10.5); per session it is
-`peter(..., tools = list(spec))` (rank 0). Conditions: `invalid_spec`, `unknown_kind`. Emits nothing (records are
-visible to the next session freeze; already frozen sessions are unchanged).
+`peter(..., tools = list(spec))` (rank 0). Conditions: `invalid_spec`, `unknown_kind`. Records are visible to the
+next session freeze; already frozen sessions are unchanged. Registering a `first`-resolving kind and name again
+replaces the earlier process-level `user` record: the new record is added first (a spec that fails validation
+leaves the old one), then the old one is removed with a `replaced` diagnostic and one `gptr_message_notice`
+"Replaced your earlier <kind> '<name>'.", and the earlier unregister function returns `FALSE`; `all` kinds keep
+both. Emits nothing else.
 
 ```r
 off = gptr_register(gptr_command("hello", function(args, ctx) "hi"))
@@ -3424,7 +3428,8 @@ the remaining `r` budget when called inside `r`.
 | plugins (packages, directories, `.claude-plugin` bundles) | 5 | `plugin:<name>` | the process; removed when the package unloads |
 | built-ins (`builtin_<name>()` factories) | 6 | `builtin:<name>` | the process |
 
-Same `(kind, name)`: the lowest rank wins; ties: the first registered, with a `collision` diagnostic.
+Same `(kind, name)`: the lowest rank wins; ties: the first registered, with a `collision` diagnostic when the
+sources differ. `gptr_register()` never leaves a `user` tie: it replaces the earlier `user` record (§9).
 `all`-resolving kinds keep every record, ordered by the kind's order field when it has one, else by rank then
 registration. A lower-rank record shadows **only** the record with the same `(kind, name)`; a whole built-in is
 disabled only by an explicit `-builtin:<name>` filter (Pi merges per tool, `agent-session.ts:3478-3481`; IC-69).

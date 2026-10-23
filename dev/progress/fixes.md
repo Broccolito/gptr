@@ -2261,3 +2261,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   plan checks pass; Rd unchanged.
 - Deviations: D-252 (extended). The prompt's path is normalised (the plan's `tempdir()` path had a `//` and the
   unresolved `/var` link), so it is the prefix of the path the notice names. Open: none.
+
+### reg-1 - Registering the same kind and name again replaces your earlier record
+- Findings 38, 31 (absorbs the models plan's provider-1). Red: `ext-registry` FAIL 8 PASS 211: a second
+  `gptr_register()` of provider `corp` left `base_url` at `a.invalid`, the new row `overridden`, no diagnostic and
+  no message, the first `off()` returned `TRUE`; a re-registered `shout` tool kept its old `fun`.
+- Cause: `gptr_register()` only appended a rank-3 `user` record; `registry_sort()` keeps the first at equal rank
+  and `registry_collision()` skips same-source ties, so the stale record won silently (and kept the old egress).
+- Fix: for `first`-resolving kinds, `gptr_register()` adds the new record, then removes the earlier process-level
+  `user` records of that `(kind, name)`, logs a `replaced` diagnostic and sends the `notice` "Replaced your earlier
+  <kind> '<name>'."; a spec that fails validation leaves the old one; hooks and policies keep both.
+  `?gptr_register`, 03 §4.3, 04 `gptr_register()` and §10.1.
+- Green: `ext-registry` PASS 219 (one active `corp` at `b.invalid`, the old `off()` `FALSE`, the new one removes it;
+  the tool's second `fun`; a corrupted spec leaves it; two `turn_end` hooks stay); full suite (NOT_CRAN=true) FAIL 0
+  SKIP 64 PASS 35496. Lint clean; plan checks pass; `gptr_register.Rd` regenerated.
+- Deviations: D-252 (extended). The rule removes every earlier `user` record of the key, including one from a
+  user directory, user `mcp.json` or user-scope extension, so the explicit registration wins in either order.
+  Open: none.

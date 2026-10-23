@@ -3203,14 +3203,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `notice` "Artifact <id> is in a temporary workspace (<path>) that is deleted when R exits; run gptr_init() to keep
   artifacts." once per process. Formerly the bare temporary path led models to cite a relative `artifacts/<id>/app.R`
   that does not exist, and nobody learnt the app would vanish at exit (finding 48).
-- Contract-visible: 03 §4.1.3 and 04 §6.1.3 (identifier table, ident-1), 03 §4.3 (fork), §5.1 (resume status), §6.2
-  (background asks), §6.10 (trust gates, tpl-2), §6.12 (also the guard), §6.17 (templates), §6.18 and §7.5
+- Rule (reg-1): `gptr_register()` of a `first`-resolving kind adds the new record, then removes the earlier
+  process-level `user` records of that `(kind, name)` with a `replaced` diagnostic and the `notice` "Replaced your
+  earlier <kind> '<name>'."; a spec that fails validation leaves the old one, the old handle returns `FALSE`, and
+  `all` kinds (hooks, policies) keep both. Formerly the first registration stayed active and the new one silently
+  `overridden`, so a re-registered provider kept sending to its old `base_url` and a re-registered tool kept its
+  old `fun` (findings 38, 31).
+- Contract-visible: 03 §4.1.3 and 04 §6.1.3 (identifier table, ident-1), 03 §4.3 (fork), §5.1 (resume status),
+  §6.2 (background asks), §6.10 (trust gates, tpl-2), §6.12 (also the guard), §6.17 (templates), §6.18 and §7.5
   `<workspace>`; 04 §4.6 (`gptr.container_end`), `gptr_fork(envir)`, `gptr_resume()`, `gptr_init()` and
-  `gptr_trust()` (tpl-2; its read, sessions-23), §5.12 `gptr_mcp_servers` `trusted` (mcp-trusted), §9.4 `app` (art-1;
-  also 03 §4.2), 03 §5.7 (temporary root, art-2), §6.1.2 and `gptr_parallel()` (team-1), §7.0 and §7.17
-  `templates.sync` (tpl-1), §7.6 `opts$mode_from` and `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and
-  `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7, IC-52 (when the trust question is asked), IC-57;
-  `?gptr-background`, `?gptr_trust`.
+  `gptr_trust()` (tpl-2; its read, sessions-23), `gptr_register()` and §10.1 ties (reg-1; also 03 §4.3), §5.12
+  `gptr_mcp_servers` `trusted` (mcp-trusted), §9.4 `app` (art-1; also 03 §4.2), 03 §5.7 (temporary root, art-2),
+  §6.1.2 and `gptr_parallel()` (team-1), §7.0 and §7.17 `templates.sync` (tpl-1), §7.6 `opts$mode_from` and
+  `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7,
+  IC-52 (when the trust question is asked), IC-57; `?gptr-background`, `?gptr_trust`.
 - Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
   and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame);
   session-object "a fork's change report names the source objects its code changed in place"; eval-guard "q bound
@@ -3226,6 +3232,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   untrusted again"; gptr-capture "a bare hyphenated name is refused with its quoted form"; mcp-config "gptr_mcp()'s
   trusted is the spec's ..."; artifact-app "peter$app() launches by default only at the console ...", "an artifact in
   a temporary workspace is announced once"; prompt-context "the Artifacts line says a workspace without .gptr/ is
-  temporary".
+  temporary"; ext-registry "gptr_register() of the same kind and name again replaces your earlier record".
   Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1, gate-hint, tpl-1, tpl-2,
-  sessions-23, ident-1, mcp-trusted, art-1, art-2.
+  sessions-23, ident-1, mcp-trusted, art-1, art-2, reg-1.

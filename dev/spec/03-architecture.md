@@ -842,11 +842,12 @@ gptr_spec(kind, name, ...)
 ```
 
 `gptr_api()` returns `list(version = package_version("1.0"), features = <character>)`. `gptr_register()`
-registers at process lifetime (rank "user") and returns an unregister function invisibly; session scope is
-`peter(..., tools = list(spec))` (rank 0); inside a factory the verb is `gptr$register(spec)`. `gptr_registry()`
-lists records with kind, name, source, rank, state (lazy, active, overridden, disabled) and an estimated
-`tokens` column. `gptr_fake_provider()` returns a provider spec usable directly as `model = <spec>` or through
-`gptr_register()`; every manual example uses it.
+registers at process lifetime (rank "user") and returns an unregister function invisibly; registering the same
+kind and name again replaces the earlier `user` record with a notice (all-resolving kinds keep both). Session
+scope is `peter(..., tools = list(spec))` (rank 0); inside a factory the verb is `gptr$register(spec)`.
+`gptr_registry()` lists records with kind, name, source, rank, state (lazy, active, overridden, disabled) and an
+estimated `tokens` column. `gptr_fake_provider()` returns a provider spec usable directly as `model = <spec>` or
+through `gptr_register()`; every manual example uses it.
 
 **Spec constructors** (11; the other kinds use `gptr_spec(kind, name, ...)`; contracts in §11.1)
 
