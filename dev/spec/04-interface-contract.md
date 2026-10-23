@@ -1107,6 +1107,10 @@ exact name.
   `gptr_error_max_turns`. Each condition carries the session as `cnd$session`, and the session is also
   `gptr_last()`. An interrupt (Ctrl-C abort) persists the partial turn and re-signals R's `interrupt` condition so
   loops stop [15 §4.7].
+- A call refused before its run starts, because its model cannot be reached (egress §3.1, the replay guard, a
+  decision-only model, a disabled provider, the preflight with an Ollama model prepared first, a missing key),
+  changes nothing: no turn, no model, level, mode or tool change on a piped session, and `gptr_last()` stays as it
+  was; its condition carries no session (D-251).
 
 #### 6.1.3 Identifier resolution (D-07, `resolve_identifier()`, P08)
 
@@ -2488,7 +2492,8 @@ reactor_pump(until = function() done, slice_ms = 100L)
 | `handoff_transform(messages, target)` | `provider-transform.R` | same model: keeps signatures and opaque blocks; otherwise thinking becomes text (or is dropped when `target` lacks reasoning replay), opaque blocks dropped, tool ids normalised to the target api's rules (Mistral 9 chars, etc.) | P06, P20 |
 | `provider_get(id)` | `provider-registry.R` | `<spec:provider>` or `NULL` | P05, P08, P13, P20 |
 | `adapter_get(api)` | `provider-registry.R` | `<spec:adapter>` or `gptr_error_not_available` | P06, P13, P20 |
-| `provider_credential(provider)` | `provider-registry.R` | a handle bound to the provider's configured origin, resolved in the order explicit > vault > credential store > keyring > environment table (§8 of `03`); `NULL` for providers without auth; `gptr_error_no_key` otherwise | P05, P13 |
+| `provider_credential(provider)` | `provider-registry.R` | a handle bound to the provider's configured origin, resolved in the order explicit > vault > credential store > keyring > environment table (§8 of `03`); `NULL` for providers without auth; `gptr_error_no_key` otherwise | P05, P08, P13 |
+| `provider_ready(model, provider, safety = NULL, prepare = FALSE)` | `provider-registry.R` | a disabled provider is `gptr_error_not_available`, then `provider_preflight()`; `prepare = TRUE` goes through `model_prepare()` for an Ollama route; the gateway's check before a call changes anything (D-251) | P05, P08 |
 | `provider_stream(model, context, opts, emit, done, run = NULL)` | `provider-registry.R` | starts one model request on the reactor through the model's adapter (§8.1); returns the transfer/task id; calls `emit(ev)` for every INFRA-02 event and `done(msg)` exactly once with the final assistant message; never throws after it returns (INFRA-02) | P06, P07 (compaction), P13 (emulation) |
 | `builtin_providers(gptr)` | `provider-registry.R` | registers the provider records of §8.1-8.2 of `03` as data; P05 also declares `builtin:fake` (IC-08) | P02 load |
 | `usage_new(...)`, `usage_cost(usage, model, when = Sys.Date())`, `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)` | `provider-usage.R` | §4.3 records; cost from the dated price tier in force on `when`; TTL-split cache writes (1 h at 2x input, 5 min at 1.25x) | P06, P12, P13, P20 |

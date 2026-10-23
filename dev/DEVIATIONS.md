@@ -3128,6 +3128,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule (sessions-3): a continuation's `.opts$thinking` without `model =` switches the session's level through
   `kernel_model_switch()` (clamped; a `model_change` only when it changes; a router session keeps its model and
   takes the level), for this and later turns. Was validated and dropped.
-- Contract-visible: 04 §6.1 `tools` and `.opts` rows; `?peter` `tools` and `.opts`.
-- Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...";
+- Rule (gateway-1): before a call changes anything, `gateway_guards()` refuses a model it cannot reach: egress,
+  replay, a decision-only model, a disabled provider and the preflight (`provider_ready()`, also `provider_stream()`'s
+  backstop; an Ollama model is prepared through `model_prepare()`), a missing key (`provider_credential(register =
+  FALSE)`). A continuation guards its target before its model, level, mode or tools change; a refused new call keeps
+  the previous `gptr_last()`. Was: those changed first, and key and provider refusals came at the first request,
+  after the turn and its prompt were recorded (resent with the next prompt). A router's choice is guarded alike (an
+  unreachable one falls back to the default model). A failure after a request (HTTP 4xx/5xx) keeps INFRA-04.
+- Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
+  `tools`, `.opts` and refusals.
+- Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
+  "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...";
   prompt-sections "the tool array skips unavailable and missing tools ...". Evidence: progress/fixes.md Task FIX-18.

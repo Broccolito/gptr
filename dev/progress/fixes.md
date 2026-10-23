@@ -1949,3 +1949,26 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   PASS 2620. Lint clean.
 - Deviations: D-251 (extended). Open: none (the Bedrock and announced-clamp parts of finding 200
   belong to the models group).
+
+### gateway-1 - A call that cannot reach its model changes nothing
+- Red: FAIL 1 in `^gptr-gateway$` (PASS 372; findings 101, 67, 80, 106, 130, 140, 142): the refused switch to `corp`
+  reached `session_set_model()` before egress. With every case evaluated, FAIL 8: a refused new session became
+  `gptr_last()`; a switch to a disabled `openai` stayed, with 2 turns, status error and 2 entries, and the next
+  plain pipe was refused for openai. The router test failed with `gptr_error_no_key`.
+- Cause: `gateway_run()` applied the continuation (model, mode, tools) and `last_set()` (`session_new()` too, for a
+  root session) before `gateway_guards()`; key, disabled-provider and preflight refusals came in `provider_stream()`
+  after `run_start()` recorded the turn and prompt, which `project_structure()` keeps for the next request.
+- Fix: `provider_ready()` (disabled provider, preflight; `prepare = TRUE` via `model_prepare()`) serves
+  `provider_stream()` and `gateway_guards()`, which after egress and replay adds `stream_chat_model()` and
+  `provider_credential(register = FALSE)`. A continuation guards its target before any change; a refused new call
+  restores the previous `gptr_last()`. `?peter`; 04 §6.1.2, §7.5.
+- Green: `^gptr-gateway$` PASS 386; `^(gptr-|provider-registry|provider-transform|console-render|catalog-models|
+  agent-run|session-object|subagent-team|copy-gateway|arch-layers|lint-rules)` PASS 4546 (INFRA-04 included). Full
+  suite FAIL 4 PASS 35297 SKIP 64: three load-timing failures in `proc-windows-backpressure` (alone PASS 254) and
+  `console-render` "a failed sub-agent line ...", whose session is now made before it mocks the key away. Lint and
+  check-plans clean.
+- Deviations: D-251 (extended). From the plan: the continuation guards its target whether or not it changes and
+  `gateway_run()` guards only a new session (one check per switch); `session_new()` sets `gptr_last()`, so a
+  refused new call restores it; a router's choice gets the same checks and an unreachable one falls back.
+- Open: the `.opts$images` and `prompt_secrets` "ask" refusals still follow the switch (`gateway_input()`); a
+  continuation to a provider spec not registered globally still fails in `session_set_model()` (finding 80 aside).

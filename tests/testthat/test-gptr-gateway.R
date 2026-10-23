@@ -1328,6 +1328,54 @@ test_that("a continuation's .opts$thinking applies without model = and stays (D-
   expect_identical(th, c("high", "low", "low", NA, "high", NA, "low"))
 })
 
+test_that("a call refused before its run changes neither the session nor gptr_last() (D-251)", {
+  local_gw()
+  local_gptr_options(replay = "auto")
+  withr::local_envvar(GPTR_TEST_ABSENT_KEY = NA)
+  fake = local_fake_provider(list("one", "two"))
+  s = peter("hello", model = fake, envir = new.env())
+  state = function() {
+    d = session_data(s)
+    list(d$model, d$mode, d$turns, d$status, length(d$entries), identical(gptr_last(), s))
+  }
+  before = state()
+  refused = function(class, ...) {
+    expect_error(peter(...), class = class)
+    expect_identical(state(), before)
+  }
+  corp = gptr_provider("corp", api = "fake",
+                       models = list(list(id = "corp-1", ref = "corp/corp-1")))
+  refused("gptr_error_egress", s, "UNSENT", model = corp, mode = "plan")
+  refused("gptr_error_egress", "UNSENT", model = corp, envir = new.env())
+  settings_write("user", list(egress = list(corp = "ack")))
+  refused("gptr_error_not_recorded", s, "UNSENT", model = corp, mode = "plan", replay = "replay")
+  keyless = gptr_provider("keyless", "openai-completions", base_url = "https://keyless.invalid/v1",
+                          auth = "GPTR_TEST_ABSENT_KEY",
+                          models = list(list(id = "m", tool_call = TRUE)))
+  none = list(context = "none")
+  refused("gptr_error_no_key", s, "UNSENT", model = keyless, .opts = none)
+  gptr_config(providers = list(openai = list(enabled = FALSE)), .scope = "session")
+  refused("gptr_error_not_available", s, "UNSENT", model = "openai/gpt-6-sol", .opts = none)
+  expect_identical((s |> peter("second"))$text, "two")
+  sent = fake_requests(fake)[[2L]]$messages
+  expect_identical(vapply(sent, function(m) m$role, ""), c("user", "assistant", "user"))
+  expect_false(any(grepl("UNSENT", vapply(sent, msg_text, ""), fixed = TRUE)))
+})
+
+test_that("a router's choice that cannot be reached falls back to the default model (D-251)", {
+  local_gw()
+  local_gptr_options(replay = "auto", model = "fake/fake-1")
+  withr::local_envvar(GPTR_TEST_ABSENT_KEY = NA)
+  local_fake_provider(list("fallback answer"))
+  keyless = gptr_provider("keyless", "openai-completions", base_url = "https://keyless.invalid/v1",
+                          auth = "GPTR_TEST_ABSENT_KEY", models = list(list(id = "m")))
+  off = list(gptr_register(keyless),
+             gptr_register(gptr_router("to_keyless", route = function(request, ctx) "keyless/m")))
+  withr::defer(for (o in off) o())
+  s = peter("x", model = "router:to_keyless", envir = new.env(), .opts = list(context = "none"))
+  expect_identical(s$text, "fallback answer")
+})
+
 # Task 12: append
 
 test_that("NAMESPACE exports P08's ten names and registers its S3 methods", {

@@ -31,8 +31,11 @@
 #'
 #' Terminal statuses become conditions carrying the session as `$session`: `error` signals
 #' `gptr_error_provider`, `blocked` `gptr_error_permission`, `budget` `gptr_error_budget_<kind>`
-#' and `max_turns` `gptr_error_max_turns`. `peter()` with no prompt opens the console when someone
-#' can answer, and signals `gptr_error_noninteractive` otherwise.
+#' and `max_turns` `gptr_error_max_turns`. A call whose model cannot be reached (no egress
+#' acknowledgement, replay mode, a disabled provider, a missing key) is refused before anything
+#' changes: no turn, no model or mode switch, no new [gptr_last()] and no `$session`. `peter()`
+#' with no prompt opens the console when someone can answer, and signals
+#' `gptr_error_noninteractive` otherwise.
 #'
 #' A new interactive console without an explicit or configured model first offers CLI selection
 #' or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;
@@ -625,18 +628,20 @@ gateway_continue_envir = function(call, s) {
   invisible(call)
 }
 
-#' Applies a continuation's changes after refusing an unknown tool name: model, or `.opts$thinking`
-#' alone, an explicit `mode =` (tightened inside a run) and tools through session.add_tools (IC-69).
+#' Applies a continuation's changes after refusing an unknown tool name and, under `safety`, a
+#' model the call cannot reach (gateway_guards(), D-251): model, or `.opts$thinking` alone, an
+#' explicit `mode =` (tightened inside a run) and tools through session.add_tools (IC-69).
 #' An inherited mode is never written to the session (IC-53 item 4).
 #' @noRd
-gateway_continue_session = function(call, s, cur) {
+gateway_continue_session = function(call, s, cur, safety) {
   d = session_data(s)
   before = registry_names("tool", session = d$id)
   gateway_register(call, s)
   prompt_tools_check(gateway_tool_mods(call$ids$tools), d$id)
   th = call$args$opts$thinking
+  ref = if (is.null(call$ids$model)) d$model else gateway_model_ref(call$ids$model, th, d$id)
+  gateway_guards(call, s, safety, list(provider = gateway_provider_id(ref), ref = ref))
   if (!is.null(call$ids$model)) {
-    ref = gateway_model_ref(call$ids$model, th, session = d$id)
     if (!identical(ref, d$model)) session_set_model(s, ref, reason = "user")
   } else if (!is.null(th)) {
     kernel_model_switch(s, d$model, th, reason = "user")
@@ -689,20 +694,28 @@ gateway_check_visible = function(call) {
 }
 
 #' Egress acknowledgment (unless the context of `call` is "none") under `safety` and the replay
-#' guard under `call`'s `replay =` (contract 3.1, IC-45), on the session's own record of the
-#' provider: of the session's model, or of `m`, a router's choice (a router session's own model is
-#' checked per request by router_call(); IC-29, IC-74; D-099, D-114); the question names the model
-#' when model code asks
+#' guard under `call`'s `replay =` (contract 3.1, IC-45), then the model's readiness (decision-only
+#' model, disabled provider, preflight with an Ollama model prepared, key), so a refused call
+#' changes nothing (D-251); on the session's own record of the provider: of the session's model,
+#' or of `m` (`provider`, `ref`): a continuation's new model or a router's choice (a router
+#' session's own model is checked per request by router_call(); IC-29, IC-74; D-099, D-114); the
+#' question names the model when model code asks
 #' @noRd
 gateway_guards = function(call, s, safety, m = NULL) {
   d = session_data(s)
-  if (is.null(m) && startsWith(d$model, "router:")) return(invisible(TRUE))
-  pid = m$provider %||% gateway_provider_id(d$model)
-  pr = gateway_provider(s, pid)
+  ref = m$ref %||% d$model
+  if (startsWith(ref, "router:")) return(invisible(TRUE))
+  pid = m$provider %||% gateway_provider_id(ref)
+  pr = provider_effective(gateway_provider(s, pid))
   if (!identical(context_mode(call$args$opts), "none")) {
-    egress_check(pid, pr, safety, asker = m$ref %||% d$model)
+    egress_check(pid, pr, safety, asker = ref)
   }
-  replay_guard(pr %||% m %||% d$model, mode = replay_mode(call$args$replay))
+  replay_guard(pr %||% m %||% ref, mode = replay_mode(call$args$replay))
+  rec = run_model_resolve(ref, d$id)
+  stream_chat_model(rec)
+  provider_ready(rec, pr, safety, prepare = TRUE)
+  provider_credential(pr, register = FALSE)
+  invisible(TRUE)
 }
 
 #' Base64 without line breaks
@@ -938,15 +951,22 @@ gateway_run = function(call, s = NULL) {
   }
   # settings-file `filters` reach the registry before the session is built (04 10.1)
   if (is.null(cur)) gateway_filters_sync()
-  if (first) {
-    s = gateway_new_session(call, cur)
-  } else {
-    gateway_continue_session(call, s, cur)
-  }
-  if (is.null(cur)) last_set(s)
   # egress is judged under the record the run freezes (a nested run inherits that of `cur`)
   safety = gateway_run_safety(cur)
-  gateway_guards(call, s, safety %||% egress_safety())
+  if (first) {
+    # session_new() makes a root session gptr_last(); a call refused here keeps the previous one
+    last = gptr_last()
+    tryCatch({
+      s = gateway_new_session(call, cur)
+      gateway_guards(call, s, safety %||% egress_safety())
+    }, error = function(e) {
+      last_set(last)
+      stop(e)
+    })
+  } else {
+    gateway_continue_session(call, s, cur, safety %||% egress_safety())
+  }
+  if (is.null(cur)) last_set(s)
   input = gateway_input(call, s, first, nested)
   if (is.null(input)) return(invisible(s))
   ropts = gateway_run_opts(call, s, cur)
