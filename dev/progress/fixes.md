@@ -2176,3 +2176,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   alone passes (PASS 132). Lint clean; `man/gptr_provider.Rd` regenerated.
 - Deviations: D-250 (thinking-4 rule). Open: the sheet line is entry S15; the session still records the
   requested level (`session_data()$thinking`).
+
+### bedrock-docs - Say that bedrock-converse requests no prompt caching
+- Finding 89 (docs only). The verifier measured 0 cache reads over 7 requests on Opus 4.8 through the Versa
+  gateway; with three injected `cachePoint`s the same run read 36,145 cached tokens (about 70% less input
+  cost), so the gateway accepts them.
+- Cause: `bedrock_caps()` declares `cache = "none"` and `bedrock_build()` writes no `cachePoint` (IC-80, D-193,
+  P26 open item), while NEWS promised prompt caching "where the model supports them", which Claude on Bedrock
+  does.
+- Fix: the NEWS providers bullet says "not yet through `api = "bedrock-converse"`"; `?gptr_provider`'s
+  bedrock-converse example and the language-models vignette (.Rmd and .Rmd.orig, which now also points to
+  `api = "bedrock-converse"` for SigV4) say the adapter requests no caching, so each request sends the full
+  prompt at the uncached rate.
+- Green: `^(ext-specs|zzz)$` PASS 457; `tools::checkRd()` clean. Lint clean; `man/gptr_provider.Rd`
+  regenerated.
+- Deviations: none (the specs already state it). Open: Converse `cachePoint`s (plan anchors, the four-point
+  limit, `cacheDetails[].ttl` attribution in the normaliser), a feature.

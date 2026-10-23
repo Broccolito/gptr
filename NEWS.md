@@ -37,9 +37,10 @@ works on the objects already in memory.
   are reached through `peter$sh()`, `peter$py()`, `peter$sql()` and `peter$knit()`.
 * Providers are implemented in R: Anthropic, OpenAI, Google Gemini, OpenAI-compatible
   endpoints and local Ollama servers, with streaming, tool calls, images, reasoning controls,
-  prompt caching and cost accounting where the model supports them. The Claude plan (through
-  the `claude` command-line tool, experimental) and the ChatGPT plan (through `codex`) are
-  supported without keys. See `gptr_providers()` and `gptr_models()`.
+  prompt caching (not yet through `api = "bedrock-converse"`) and cost accounting where the
+  model supports them. The Claude plan (through the `claude` command-line tool, experimental)
+  and the ChatGPT plan (through `codex`) are supported without keys. See `gptr_providers()`
+  and `gptr_models()`.
 * System 1 decisions: with a typed decision model, TypeSafe AI's Jev or Clef and Clef Flash on a
   local Ollama server (0.35.1 or later), `peter()` returns logical, choice or score vectors with
   their probabilities (`gptr_prob()`) that work inside `if`, `for` and `while`, one element per

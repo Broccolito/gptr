@@ -1040,7 +1040,9 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #' # the IAM key pair is read from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (and
 #' # AWS_SESSION_TOKEN when set); gptr_env(aliases = ...) maps other names onto them. A Claude
 #' # model gets thinking levels as on api = "anthropic-messages"; `capabilities` says it thinks
-#' # adaptively with an effort (Claude 4.6 and later) rather than with a token budget.
+#' # adaptively with an effort (Claude 4.6 and later) rather than with a token budget. The
+#' # bedrock-converse adapter does not request prompt caching, so each request sends the full
+#' # prompt at the uncached rate.
 #' gptr_provider("gateway", api = "bedrock-converse", base_url = "https://ai.corp.example/awsai",
 #'               auth = "AWS_SECRET_ACCESS_KEY", compat = list(region = "us-west-2"),
 #'               models = list(list(id = "us.anthropic.claude-opus-4-8", tool_call = TRUE,
