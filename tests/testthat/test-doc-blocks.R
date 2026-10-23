@@ -650,6 +650,25 @@ test_that("steers and follow-ups delivered during the turn are recorded as comme
   expect_identical(attr(lines, "header")$turn, 1L)
 })
 
+test_that("a blank steer has no trailing space, and a steer line trimmed by hand stays fresh", {
+  local_project()
+  turn = doc_test_turn("x = 1")
+  relay = list(type = "custom_message", message = msg_operator(
+    "steer_relay", "The user sent this message while you were working: ", origin_text = "   "))
+  follow = list(type = "message", message = msg_user("", source = "follow_up"))
+  s = doc_test_session(list(c(turn[1:3], list(relay), turn[4], list(follow))))
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
+  expect_identical(as.character(lines), c("x = 1", "## Steer:", "## Follow-up:"))
+  expect_identical(doc_body_sha(c("x = 1", "## Steer:")), doc_body_sha("x = 1"))
+  # a document recorded with `## Steer: ` whose editor trimmed the space
+  f = file.path(getwd(), "history.R")
+  h = list(model = "fake/fake-1", prompt = prompt_hash("one"),
+           sha = doc_body_sha(c("x = 1", "## Steer: ")), session = "s0123456789ab", turn = 1L)
+  writeLines(c("s = peter(\"one\")", doc_render_block("abc123", h, c("x = 1", "## Steer:"))), f)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+  expect_no_error(gptr_export(f, file.path(getwd(), "plain.R")))
+})
+
 test_that("secret markers become Sys.getenv() and an unreplayable one flags the block", {
   # entries are redacted at ingress (P06), so recorded code holds markers, never values
   s = doc_test_session(list(doc_test_turn("k = \"[secret:DOC_TEST_KEY]\"\nn = nchar(k)")))
@@ -913,6 +932,34 @@ test_that("doc_upsert() writes nothing without consent and inserts, replaces and
   expect_identical(rep$action, "replace")
   expect_identical(readLines(f)[4], "n = 32")
   expect_identical(nrow(doc_find_blocks(readLines(f))), 1L)
+})
+
+test_that("only gptr's own lines take the block id; steer text and model code keep the token", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines("peter(\"count rows\")", f)
+  code = "tok = \"@@GPTR_BLOCK@@\"; nchar(tok)\ngptr_return(nchar(tok) + 1)"
+  turn = doc_test_turn(code, value = "nchar(tok) + 1")
+  steer = "`r 1+1` and @@GPTR_BLOCK@@ token"
+  relay = list(type = "custom_message", message = msg_operator(
+    "steer_relay", paste("The user sent this message while you were working:", steer),
+    origin_text = steer))
+  s = doc_test_session(list(c(turn[1:3], list(relay), turn[4])))
+  site = doc_file_site(f)
+  res = doc_upsert(site, doc_block_lines(s, 1L, site, 1L))
+  id = res$block_id
+  b = doc_find_blocks(readLines(f))
+  expect_identical(doc_block_body(readLines(f), b), c(
+    "tok = \"@@GPTR_BLOCK@@\"; nchar(tok)", paste0(".gptr_value_", id, " = (nchar(tok) + 1)"),
+    paste("## Steer:", steer)))
+  expect_identical(b$header[[1L]]$value, paste0(".gptr_value_", id))
+  wrapped = doc_fill_id(c(doc_wrap_local("tok = \"@@GPTR_BLOCK@@\"", child = "code"),
+                          paste0("tok = gptr_resume(block = \"", doc_block_token,
+                                 "\", child = \"code\")$envir$tok")), "abc123")
+  expect_identical(wrapped, c("local({", "  tok = \"@@GPTR_BLOCK@@\"",
+                              "}, envir = gptr_resume(block = \"abc123\", child = \"code\")$envir)",
+                              "tok = gptr_resume(block = \"abc123\", child = \"code\")$envir$tok"))
 })
 
 test_that("a hand-edited block is kept unless regenerating, and hooks can block or patch", {

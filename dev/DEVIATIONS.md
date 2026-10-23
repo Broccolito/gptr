@@ -3178,10 +3178,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: `gptr_return()`'s once-per-session notice outside a run is silent in replay mode (`replay = "replay"`,
   `GPTR_REPLAY=replay`), as P08 implements IC-48; a document sourced under `"auto"` gets it (the text said "silent
   while a document is replayed").
+- Steering review: a `## Steer:` or `## Follow-up:` line is steering with or without the space after the colon, and a
+  blank text is written without it (was `## Steer: `, which an editor's trim made a user-edited block that
+  `gptr_export()` refused); the block id fills only gptr's own lines, the hidden value name and the overlay and team
+  homes (was every body line, so a steer or model code holding the placeholder was recorded with the id; IC-49).
 - Contract-visible: 04 §4.4 `r` details `outputs` and `value`, §5.1 `print` and `.d` `replay_rows`, §6.4
   `gptr_doc()` and `gptr_cache()`, §6.5 `gptr_resume()`, §6.6 `gptr_return()`, §7.15 `doc_block_lines()`, §11.5
-  `cost`, `value`, `children`, body and transcript, §11.9, §15.3 IC-45, IC-46, IC-47, IC-48, IC-51; 03 §4.3, §5.1,
-  §6.9.1, §6.9.3; `?gptr_doc`, `?gptr_cache`, `?gptr_blocks`, `?gptr_return`, `?print.gptr_session`,
+  `cost`, `value`, `children`, body and transcript, §11.9, §15.3 IC-45, IC-46, IC-47, IC-48, IC-49, IC-51; 03 §4.3,
+  §5.1, §6.9.1, §6.9.3; `?gptr_doc`, `?gptr_cache`, `?gptr_blocks`, `?gptr_return`, `?print.gptr_session`,
   `?gptr_export`; vignettes script-as-history, teams-and-background.
 - Tests: test-doc-io: the user-cache sidecar, its lock and listing, the cross-process kernel and killed-run sync,
   the live-run sync;
@@ -3195,5 +3199,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself, handle position,
   a function naming a handle;
   test-session-store: the resume hint; test-doc-replay: the no-answer notice in process, under `Rscript` and for
-  fan-out children. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1,
-  replay-2, replay-2c, replay-2d, replay-2e, replay-3, replay-4b, replay-5, export-2, export-2b, store-1, doc-1b.
+  fan-out children; test-doc-blocks: a blank and a trimmed steer line, the block id only in gptr's lines. Evidence:
+  progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-2c, replay-2d,
+  replay-2e, replay-3, replay-4b, replay-5, export-2, export-2b, store-1, doc-1b, steer-doc-1.

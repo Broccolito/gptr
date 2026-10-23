@@ -9,7 +9,7 @@
 doc_re_open = "^([ \t]*)# >>> gptr:([0-9a-z]{6,16})(?:[ \t]+(.*))?$"
 doc_re_close = "^([ \t]*)# <<< gptr:([0-9a-z]{6,16})[ \t]*$"
 doc_re_kv = "([A-Za-z_][A-Za-z0-9_.]*)=(\"([^\"\\\\]|\\\\.)*\"|[^ \t]+)"
-doc_re_steer = "^[ \t]*## (Steer|Follow-up): "
+doc_re_steer = "^[ \t]*## (Steer|Follow-up):( |$)"
 doc_block_token = "@@GPTR_BLOCK@@"
 # what a recorded gptr_return(<expression>) assigns, and value= names (doc_rewrite_return())
 doc_value_name = paste0(".gptr_value_", doc_block_token)
@@ -23,6 +23,11 @@ doc_one_line = function(x) {
   x = as_utf8(paste(as.character(x), collapse = " "))
   trimws(gsub("[\r\n\t]+", " ", x))
 }
+
+#' A `## Steer:` or `## Follow-up:` line; a blank text leaves no trailing space for an editor to
+#' trim
+#' @noRd
+doc_steer_line = function(kind, text) sub(" $", "", paste0("## ", kind, ": ", doc_one_line(text)))
 
 #' A string literal that both R and JSON read back as `x` (Python's json.dumps(ensure_ascii =
 #' False)); non-ASCII characters are kept, which encodeString() escapes in a C locale
@@ -1223,7 +1228,7 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
     e = ents[[i]]
     m = e$message
     if (identical(e$type, "custom_message") && identical(m$kind, "steer_relay")) {
-      out$body = c(out$body, paste0("## Steer: ", doc_one_line(m$origin_text %||% "")))
+      out$body = c(out$body, doc_steer_line("Steer", m$origin_text %||% ""))
     } else if (identical(e$type, "message") && identical(m$role, "user")) {
       for (blk in m$content) {
         if (identical(blk$type, "context") && identical(blk$kind, "plan")) {
@@ -1233,9 +1238,9 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
       if (i == 1L) next
       src = m$source %||% "prompt"
       if (identical(src, "follow_up")) {
-        out$body = c(out$body, paste0("## Follow-up: ", doc_one_line(msg_text(m))))
+        out$body = c(out$body, doc_steer_line("Follow-up", msg_text(m)))
       } else if (identical(src, "steer")) {
-        out$body = c(out$body, paste0("## Steer: ", doc_one_line(msg_text(m))))
+        out$body = c(out$body, doc_steer_line("Steer", msg_text(m)))
       }
     } else if (identical(e$type, "message") && identical(m$role, "assistant")) {
       out = doc_turn_assistant(out, m, results, with_out, plan_mode)
@@ -1556,14 +1561,17 @@ doc_header_set_sha = function(line, sha) {
   paste0(lead, kv)
 }
 
-#' Recorded lines with the block id filled in: the hidden value name loses its backquotes and the
-#' token becomes `id`; without an id (no block written yet) that assignment reads as the
-#' gptr_return() call it records
+#' Recorded lines with the block id filled in only where gptr wrote the token: the hidden value
+#' name, which loses its backquotes, and `gptr_resume(block = ` homes (a steer or model code may
+#' hold the token too). Without an id (no block written yet) that assignment reads as the
+#' gptr_return() call it records.
 #' @noRd
 doc_fill_id = function(lines, id = NULL) {
   hidden = paste0("`", doc_value_name, "`")
   if (is.null(id)) return(sub(paste0(hidden, " = "), "gptr_return", lines, fixed = TRUE))
-  gsub(doc_block_token, id, gsub(hidden, doc_value_name, lines, fixed = TRUE), fixed = TRUE)
+  home = "gptr_resume(block = \""
+  lines = gsub(hidden, paste0(".gptr_value_", id), lines, fixed = TRUE)
+  gsub(paste0(home, doc_block_token, "\""), paste0(home, id, "\""), lines, fixed = TRUE)
 }
 
 #' Choose the block id, fill it into the body and header, render, and pass the document_write event:

@@ -239,7 +239,9 @@ specification:
 - Produces (04 §7.15, §11.5): `prompt_hash(template)` -> chr(1) 12 hex; `args_hash(interp)` -> chr(1) 8 hex or
   `NULL` (`interp` is P08's character vector of `name=value` pairs, or a named list of values); and the helpers every
   later task uses: the marker regexes `doc_re_open`, `doc_re_close`, `doc_re_kv`, `doc_re_steer`, the body
-  placeholder `doc_block_token` (`"@@GPTR_BLOCK@@"`, replaced by the block id when the block is written),
+  placeholder `doc_block_token` (`"@@GPTR_BLOCK@@"`, replaced by the block id when the block is written, only in
+  gptr's own lines, the hidden value name and the block homes of overlays and teams: steer text and model code
+  keep it),
   `doc_header_keys`, `doc_one_line(x)`, `doc_str_literal(x)`, `doc_parse_kv(s)` -> named list of strings,
   `doc_format_kv(x)` -> chr(1), `doc_find_blocks(lines)` -> df(`id`, `start`, `end`, `indent`, `header` (list
   column)) with attribute `malformed`, `doc_block_body(lines, block)`, `doc_body_sha(body)` -> 8 hex (steer and
@@ -249,7 +251,8 @@ specification:
 
 The grammar is report 14 §3.1 and 04 §11.5 (prototype `proto/gptrdoc.R` of report 14 §5.0: `parse_kv`,
 `format_kv`, `doc_find_blocks`, `doc_render_block`, `prompt_hash`), with two additions from the contract: the `args`
-key joins `prompt` in freshness (IC-45), and the body sha ignores `## Steer:`/`## Follow-up:` lines (IC-49). The
+key joins `prompt` in freshness (IC-45), and the body sha ignores `## Steer:`/`## Follow-up:` lines, with or without
+the space after the colon (IC-49). The
 report's verification log confirms the `prompt_hash()` values used in the test (item 32) and asks for radix
 sorting wherever keys are ordered (item 33), which `args_hash()` follows.
 

@@ -4508,7 +4508,8 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 as `s_<6 hex of the session id> = peter("...")`, later REPL turns as `s_<hex> |> peter("...")`. Steers and
 follow-ups delivered during a block's turn (pause menu, `gptr_steer()`, pipe into a running session, a line typed
 in a terminal console [IC-76]) are recorded
-inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`.
+inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`; a
+blank text is written `## Steer:` without the trailing space, and a line is steering with or without it.
 P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one
 session.
 

@@ -2547,3 +2547,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^(gptr-sdk|arch-layers|lint-rules)$` PASS 189 (NOT_CRAN=true). Lint clean; Rd
   regenerated; plan checks pass.
 - Deviations: D-249 (extended: the contract text now names the implemented rule). Open: none.
+
+### steer-doc-1 - A steer line reads the same with or without its trailing space; only gptr's lines get the block id
+- Steering review finding 5, the record half (its ingress half, refusing a blank steer, is P28's
+  steer-14).
+- Red: FAIL 6 in `^doc-blocks$` (PASS 352): a blank steer relay and an attachment-only follow-up
+  were written `## Steer: ` and `## Follow-up: `; a recorded block whose `## Steer: ` an editor
+  trimmed read `user-edited` in `gptr_blocks()` and `gptr_export()` refused it; a steer and r code
+  holding `@@GPTR_BLOCK@@` were written with the block id, also inside a child overlay.
+- Cause: `doc_re_steer` needed the space after the colon, the three writers kept it after an empty
+  text, and `doc_fill_id()` replaced the placeholder in every body line.
+- Fix: `doc_re_steer` ends `:( |$)`; the writers use `doc_steer_line()`, which drops a trailing
+  space; `doc_fill_id()` fills the id only into the hidden value name and `gptr_resume(block = `
+  homes (the header keeps its substitution). IC-49 and P15 amended.
+- Green: `^doc-blocks$` PASS 358; `^(doc-blocks|doc-replay|doc-export|doc-knitr)$` PASS 1371
+  (NOT_CRAN=true). Lint clean; plan checks pass (index findings unchanged).
+- Deviations: D-249 (extended). Open: none.
