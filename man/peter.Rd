@@ -110,9 +110,10 @@ Terminal statuses become conditions carrying the session as \verb{$session}: \co
 and \code{max_turns} \code{gptr_error_max_turns}. A call whose model cannot be reached (no egress
 acknowledgement, replay mode, a disabled provider, a missing key) is refused before its run:
 no turn, no model or mode switch, no new \code{\link[=gptr_last]{gptr_last()}} and no \verb{$session}. A piped call loads
-its \code{extensions}, \code{plugins} (filters included) and specs first, since they can define that
-model, and a refused one leaves them loaded for later turns. \code{peter()} with no prompt opens
-the console when someone can answer, and signals \code{gptr_error_noninteractive} otherwise.
+its \code{extensions}, \code{plugins} and specs first, since they can define that model, and unloads
+them again when it is refused; registry filters (\code{plugins = "-x"}) apply to the R session only
+once a call is accepted. \code{peter()} with no prompt opens the console when someone can answer,
+and signals \code{gptr_error_noninteractive} otherwise.
 
 A new interactive console without an explicit or configured model first offers CLI selection
 or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;

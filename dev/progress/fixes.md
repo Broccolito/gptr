@@ -1998,6 +1998,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   through `run_model_resolve()` (the session's rank-0 provider next); both pass the session. Red FAIL 1 (the new
   spec-switch test). Green `^gptr-gateway$` PASS 419; `^(gptr-|session-|agent-|console-commands|ext-|catalog-models|
   arch-layers|lint-rules)` PASS 6505. Lint and Rd clean.
+- Review: r3 applied. A refused call still changed something: `gateway_register()` ran before the checks with no
+  rollback, so a refused continuation's extension fired on the next turn, its `tools =` spec stayed registered and
+  an earlier spec of the same name it replaced was lost, and any refused call, new ones too, left its `plugins =
+  "-x"` filters in force for the R session. r2's test pinned the leak and passed on its parent 095268e3 (PASS 415).
+  `gateway_register()` returns an undo (`registry_session_mark()`/`registry_session_undo()`: records added removed,
+  records removed put back, extensions forgotten, P17's plugin and extension-file table entries restored), which
+  `gateway_continue_session()` runs when its tools, preset, guards or filters refuse; `gateway_filters_apply(call)`
+  runs after the guards, for new calls too. The refused-call test expects none of it. Red FAIL 4 on d3db8eff. Green
+  `^gptr-gateway$` PASS 425; `^(gptr-|ext-|skill-|mcp-|subagent-|session-|prompt-|copy-gateway|console-commands|
+  arch-layers|lint-rules|zzz)` PASS 8205 SKIP 2. `?peter`, 04 §6.1.2 (`agents =` dropped: a piped team is refused
+  before any registration). Lint and Rd clean.
 - Deviations: D-251 (extended). From the plan: the continuation guards its target whether or not it changes and
   `gateway_run()` guards only a new session (one check per switch); `session_new()` sets `gptr_last()`, so a
   refused new call restores it.

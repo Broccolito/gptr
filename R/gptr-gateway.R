@@ -36,9 +36,10 @@
 #' and `max_turns` `gptr_error_max_turns`. A call whose model cannot be reached (no egress
 #' acknowledgement, replay mode, a disabled provider, a missing key) is refused before its run:
 #' no turn, no model or mode switch, no new [gptr_last()] and no `$session`. A piped call loads
-#' its `extensions`, `plugins` (filters included) and specs first, since they can define that
-#' model, and a refused one leaves them loaded for later turns. `peter()` with no prompt opens
-#' the console when someone can answer, and signals `gptr_error_noninteractive` otherwise.
+#' its `extensions`, `plugins` and specs first, since they can define that model, and unloads
+#' them again when it is refused; registry filters (`plugins = "-x"`) apply to the R session only
+#' once a call is accepted. `peter()` with no prompt opens the console when someone can answer,
+#' and signals `gptr_error_noninteractive` otherwise.
 #'
 #' A new interactive console without an explicit or configured model first offers CLI selection
 #' or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;
@@ -549,11 +550,19 @@ gateway_register_spec = function(spec, sid) {
   invisible(ids[[key]])
 }
 
-#' Applies a call's registry filters (`plugins = "-builtin:x"`, `"+builtin:x"` to undo), merged
-#' into the session settings key `filters` (P02 has no per-session filter scope); refused from
-#' model code unless approved (IC-53 items 3-4)
+#' The names a call gives `plugins =`; those starting with "+" or "-" are registry filters
 #' @noRd
-gateway_filters_apply = function(filters) {
+gateway_plugin_names = function(call) {
+  as.character(unlist(Filter(is.character, gateway_list(call$ids$plugins))))
+}
+
+#' Applies a call's registry filters (`plugins = "-builtin:x"`, `"+builtin:x"` to undo), merged
+#' into the session settings key `filters` (P02 has no per-session filter scope), once the call
+#' passed its checks (D-251); refused from model code unless approved (IC-53 items 3-4)
+#' @noRd
+gateway_filters_apply = function(call) {
+  filters = grep("^[+-]", gateway_plugin_names(call), value = TRUE)
+  if (!length(filters)) return(invisible(NULL))
   session_control_check("gptr_config")
   cur = as.character(unlist(settings_read("session")$filters))
   for (f in filters) {
@@ -569,11 +578,14 @@ gateway_filters_apply = function(filters) {
   invisible(cur)
 }
 
-#' Registers the call's specs at rank 0 for the session, loads its extensions, applies its
-#' registry filters and enables named plugins (IC-69; contract 10.1)
+#' Registers the call's specs at rank 0 for the session, loads its extensions and enables named
+#' plugins (IC-69; contract 10.1); returns a function that undoes it all (a refused call, D-251)
 #' @noRd
 gateway_register = function(call, s) {
   id = session_data(s)$id
+  st = gateway_state()
+  ids = get0(id, envir = st$specs, inherits = FALSE) %||% character()
+  before = registry_session_mark(id)
   specs = list()
   if (inherits(call$ids$model, "gptr_spec")) specs = c(specs, list(call$ids$model))
   for (t in gateway_list(call$ids$tools)) if (inherits(t, "gptr_spec")) specs = c(specs, list(t))
@@ -592,15 +604,16 @@ gateway_register = function(call, s) {
       }
     }
   }
-  pl = as.character(unlist(Filter(is.character, gateway_list(call$ids$plugins))))
-  filters = pl[grepl("^[+-]", pl)]
-  if (length(filters)) gateway_filters_apply(filters)
-  enable = setdiff(pl, filters)
+  enable = grep("^[+-]", gateway_plugin_names(call), value = TRUE, invert = TRUE)
   if (length(enable)) {
     f = ext_service_get("plugin.enable")
     for (p in enable) f(p, rank = 0L, session = id)
   }
-  invisible(specs)
+  after = registry_session_mark(id)
+  invisible(function() {
+    registry_session_undo(before, after)
+    assign(id, ids, envir = st$specs)
+  })
 }
 
 #' Creates the session of a new call: resolved model and mode, the evaluation environment as home;
@@ -656,22 +669,30 @@ gateway_continue_envir = function(call, s) {
   invisible(call)
 }
 
-#' Registers the call's specs, extensions and plugins (the checks read them, so a refused call
-#' keeps them), then applies a continuation's changes after refusing an unknown tool name or two
-#' presets and, under `safety`, a model the call cannot reach (gateway_guards(), D-251): model, or
-#' `.opts$thinking` alone, an explicit `mode =` (tightened inside a run) and tools through
-#' session.add_tools (IC-69). An inherited mode is never written to the session (IC-53 item 4).
+#' Registers the call's specs, extensions and plugins (the checks read them), refuses an unknown
+#' tool name or two presets and, under `safety`, a model the call cannot reach (gateway_guards(),
+#' D-251), applies its registry filters, and undoes the registration when any of that refuses the
+#' call; then applies a continuation's changes: model, or `.opts$thinking` alone, an explicit
+#' `mode =` (tightened inside a run) and tools through session.add_tools (IC-69). An inherited mode
+#' is never written to the session (IC-53 item 4).
 #' @noRd
 gateway_continue_session = function(call, s, cur, safety) {
   d = session_data(s)
   before = registry_names("tool", session = d$id)
-  gateway_register(call, s)
-  prompt_tools_check(gateway_tool_mods(call$ids$tools), d$id)
-  gateway_preset(call) # for its refusal only
+  undo = gateway_register(call, s)
   th = call$args$opts$thinking
-  ref = if (is.null(call$ids$model)) d$model else gateway_model_ref(call$ids$model, th, d$id)
-  gateway_guards(call, s, safety, list(provider = gateway_provider_id(ref), ref = ref),
-                 ready = isTRUE(call$args$run))
+  ref = d$model
+  tryCatch({
+    prompt_tools_check(gateway_tool_mods(call$ids$tools), d$id)
+    gateway_preset(call) # for its refusal only
+    if (!is.null(call$ids$model)) ref = gateway_model_ref(call$ids$model, th, d$id)
+    gateway_guards(call, s, safety, list(provider = gateway_provider_id(ref), ref = ref),
+                   ready = isTRUE(call$args$run))
+    gateway_filters_apply(call)
+  }, error = function(e) {
+    undo()
+    stop(e)
+  })
   if (!is.null(call$ids$model)) {
     if (!identical(ref, d$model)) session_set_model(s, ref, reason = "user")
   } else if (!is.null(th)) {
@@ -993,6 +1014,7 @@ gateway_run = function(call, s = NULL) {
     tryCatch({
       s = gateway_new_session(call, cur)
       gateway_guards(call, s, safety %||% egress_safety(), ready = isTRUE(call$args$run))
+      gateway_filters_apply(call)
     }, error = function(e) {
       last_set(last)
       stop(e)

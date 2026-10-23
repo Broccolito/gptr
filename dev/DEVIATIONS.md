@@ -3131,14 +3131,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule (sessions-3): a continuation's `.opts$thinking` without `model =` switches the session's level through
   `kernel_model_switch()` (clamped; a `model_change` only when it changes; a router session keeps its model and
   takes the level), for this and later turns. Was validated and dropped.
-- Rule (gateway-1): before a call's run records anything, `gateway_guards()` refuses a model it cannot reach:
-  egress, replay, a decision-only model, a disabled provider and the preflight (`provider_ready()`, also
-  `provider_stream()`'s backstop; an Ollama model is prepared through `model_prepare()`), a missing key
-  (`provider_credential(register = FALSE)`). A continuation guards its target before its model, level, mode or tools
-  change, but after the call's extensions, plugins, registry filters and rank-0 specs register (the checks read
-  them: a `model =` spec, a provider an extension registers), which a refused call leaves registered; a refused new
-  call keeps the previous `gptr_last()`. Was: those changed first, and key and provider refusals came at the first
-  request, after the turn and its prompt were recorded (resent with the next prompt). A router's choice keeps egress
+- Rule (gateway-1): before a call's run records anything, `gateway_guards()` refuses a model it cannot reach: egress,
+  replay, a decision-only model, a disabled provider and the preflight (`provider_ready()`, also `provider_stream()`'s
+  backstop; an Ollama model is prepared through `model_prepare()`), a missing key (`provider_credential(register =
+  FALSE)`). A continuation guards its target before its model, level, mode or tools change, after the call's
+  extensions, plugins and rank-0 specs register (the checks read them: a `model =` spec, a provider an extension
+  registers); a refusal there undoes them (`registry_session_undo()`), and a call's registry filters apply only once
+  it passed the checks, so a refused call keeps none; a refused new call keeps the previous `gptr_last()`. Was: those
+  changed first, and key and provider refusals came at the first request, after the turn and its prompt were recorded
+  (resent with the next prompt), and a refused call kept its registrations and filters. A router's choice keeps egress
   and replay only (`ready = FALSE`), and its request refuses the rest, as before (a keyless choice:
   `gptr_error_no_key`, no request). So does building a session (`.run = FALSE`, a `gptr_parallel()` member):
   `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a member that cannot reach its model

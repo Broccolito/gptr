@@ -1116,11 +1116,11 @@ context and signals the warning `partial_name` naming each such formal (D-251).
 - A call refused before its run starts, because its model cannot be reached (egress §3.1, the replay guard, a
   decision-only model, a disabled provider, the preflight with an Ollama model prepared first, a missing key),
   records nothing: no turn, no model, level, mode or tool change on a piped session, and `gptr_last()` stays as it
-  was; its condition carries no session (D-251). A piped call's `extensions`, `plugins` (registry filters
-  included) and rank-0 specs (`model =`, `tools =`, `agents =`) register first, since the checks read them, and
-  stay registered when it is refused. Building a session (`.run = FALSE`, a `gptr_parallel()` member)
-  checks egress and replay only: `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a
-  member that cannot reach its model ends `error` (`on_error`).
+  was; its condition carries no session (D-251). A piped call's `extensions`, `plugins` and rank-0 specs
+  (`model =`, `tools =`) register first, since the checks read them, and are removed again when it is refused; a
+  call's registry filters (`plugins = "-x"`) apply to the R session only once it is accepted. Building a session
+  (`.run = FALSE`, a `gptr_parallel()` member) checks egress and replay only: `gptr_step()` and `gptr_wait()`
+  check the rest before they start its run, and a member that cannot reach its model ends `error` (`on_error`).
 
 #### 6.1.3 Identifier resolution (D-07, `resolve_identifier()`, P08)
 

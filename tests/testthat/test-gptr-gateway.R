@@ -1407,14 +1407,29 @@ test_that("a call refused before its run changes neither the session nor gptr_la
     NULL
   })
   ext = function(gptr) gptr$register(hook)
-  refused("gptr_error_no_key", s, "UNSENT", model = keyless, extensions = ext, .opts = none)
+  # a refused call keeps none of its extensions, tools, specs or registry filters
+  probe = test_tool("probe", function(ctx) "probed")
+  refused("gptr_error_no_key", s, "UNSENT", model = keyless, extensions = ext, tools = list(probe),
+          plugins = "-builtin:memory", .opts = none)
+  refused("gptr_error_no_key", "UNSENT", model = keyless, plugins = "-builtin:memory",
+          envir = new.env(), .opts = none)
+  expect_null(settings_read("session")$filters)
+  expect_false("probe" %in% registry_names("tool", session = session_data(s)$id))
   gptr_config(providers = list(openai = list(enabled = FALSE)), .scope = "session")
   refused("gptr_error_not_available", s, "UNSENT", model = "openai/gpt-6-sol", .opts = none)
   expect_identical((s |> peter("second"))$text, "two")
-  expect_identical(seen$n, 1L) # the refused call's extension stays loaded (?peter)
+  expect_identical(seen$n, 0L)
   sent = fake_requests(fake)[[2L]]$messages
   expect_identical(vapply(sent, function(m) m$role, ""), c("user", "assistant", "user"))
   expect_false(any(grepl("UNSENT", vapply(sent, msg_text, ""), fixed = TRUE)))
+  # a spec the refused call replaced comes back
+  script = gptr_fake_provider(list("hi", "corp answer"), name = "corp")
+  big = gptr_provider("corp", api = "fake", models = list(list(id = "big")))
+  t = peter("hi", model = big, envir = new.env())
+  keyless_big = gptr_provider("corp", "openai-completions", base_url = "https://keyless.invalid/v1",
+                              auth = "GPTR_TEST_ABSENT_KEY", models = list(list(id = "big")))
+  expect_error(t |> peter("UNSENT", model = keyless_big, .opts = none), class = "gptr_error_no_key")
+  expect_identical((t |> peter("again"))$text, "corp answer")
 })
 
 test_that("a router's choice without a key stops the run, not the default model (D-251)", {

@@ -521,6 +521,50 @@ registry_session_drop = function(sid) {
   invisible(NULL)
 }
 
+#' What session `sid` holds now, for registry_session_undo(): its records, the extension ids and
+#' P17's tables of enabled plugins and loaded extension files
+#' @noRd
+registry_session_mark = function(sid) {
+  reg = registry_env()
+  recs = as.list(reg$recs, all.names = TRUE)
+  res = res_state()
+  list(sid = sid, recs = recs[vapply(recs, function(r) identical(r$session, sid), NA)],
+       exts = ls(reg$exts), tables = list(plugins = res$plugins, loaded = res$loaded))
+}
+
+#' Undoes what changed for session `sid` from mark `a` to mark `b` (a refused call, D-251): the
+#' records added are removed and those removed put back, the extensions loaded are forgotten and
+#' the table entries written return to `a`
+#' @noRd
+registry_session_undo = function(a, b) {
+  reg = registry_env()
+  for (id in setdiff(names(b$recs), names(a$recs))) registry_remove(id)
+  for (rec in a$recs[setdiff(names(a$recs), names(b$recs))]) {
+    assign(rec$id, rec, envir = reg$recs)
+    registry_index_push(reg$by_kind, rec$kind, rec$id)
+    registry_index_push(reg$by_key, paste(rec$kind, rec$name, sep = "\r"), rec$id)
+    if (identical(rec$kind, "hook")) {
+      registry_index_push(reg$hooks, rec$hook_event %||% rec$spec[["event"]] %||% rec$name, rec$id)
+    }
+  }
+  for (eid in setdiff(b$exts, a$exts)) {
+    info = get0(eid, envir = reg$exts, inherits = FALSE)
+    if (identical(info$session, a$sid)) {
+      info$status = "unloaded"
+      ext_forget(info, reg)
+    }
+  }
+  res = res_state()
+  for (tab in names(b$tables)) {
+    was = a$tables[[tab]]
+    for (k in names(b$tables[[tab]])) {
+      if (!identical(was[[k]], b$tables[[tab]][[k]])) res[[tab]][[k]] = was[[k]]
+    }
+  }
+  registry_touch(reg)
+  invisible(NULL)
+}
+
 # ---- control exports (IC-53 point 3) ------------------------------------------------------------
 
 #' Refuse a gptr configuration export called from model code while a tool executes (IC-53),
