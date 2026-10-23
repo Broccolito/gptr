@@ -5520,7 +5520,11 @@ its part in its own commit, and Task 27 finalises them.
     readline once the draft is sent. Once the draft is empty (DEL, Ctrl-U, Ctrl-W), at Ctrl-C, or when nothing
     is read (an end of input), a draft left goes to the console history and is listed
     (`console_keep()`: `↳ kept in history ↑ · <draft>`) with a blank row after it, as every prompt after a run
-    has above it (review of Tasks 16-21), and readline reads at the same prompt; Ctrl-C there
+    has above it (review of Tasks 16-21), and readline reads at the same prompt. Where R's readline reads the
+    tty (`console_readline_tty()`) the editor's modes then stay until the reader calls readline (`rd$handed`),
+    after the completer and the band, and that prompt starts with `\001\r\033[K\002`, so a key typed in between
+    shows after the prompt only; the echo is never off at readline's start, which would draw nothing typed
+    (steering review). Ctrl-C there
     is not the first of the two that leave the console. The follow-ups waiting are sent first, the draft on the
     live row through their runs.
 - IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26); Task 26 pending.

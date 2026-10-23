@@ -3582,6 +3582,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Tests: test-console-input.R "during a sub-agent the row ticks and shows the queue; keys wait in its r
     call"; test-console-typing.R "a terminal: during a sub-agent the row ticks and steers; its r call waits
     (review)".
+  - Keys typed as the idle editor hands over to readline are not echoed before its prompt (the open finding of
+    the review of Tasks 16-21: `/expeter[edits]> /exit`). The editor restored the saved modes, echo on, before
+    readline took the terminal. Where R's readline reads the tty, `console_idle()` now leaves the call's modes
+    (`rd$handed`) and the reader restores them as its last step before `gptr_readline()`, the prompt starting
+    with `\001\r\033[K\002`, which erases a key echoed in the moment left. Echo is not left off for readline:
+    both readline libraries read the ECHO flag when they start and would then draw nothing typed.
+    Contract-visible: 04 §15.10 IC-76. Tests: test-console-input.R "a hand-over keeps the editor's modes until
+    readline is called, which erases the row"; test-console-typing.R "a terminal: keys typed as the idle editor
+    hands over show after the prompt only".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

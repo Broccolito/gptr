@@ -162,12 +162,14 @@ console_keys = function(rd, s, chars) {
 #' prompt's row, as readline lists them. Once the
 #' draft is empty, at Ctrl-C, at a cursor key (Left, Right, Home, End, Ctrl-A, Ctrl-E: readline's
 #' editing, where Up recalls the draft) or when nothing is read, a draft left goes to the console
-#' history (console_keep()) and NULL is returned, so readline() reads at the same prompt
+#' history (console_keep()) and NULL is returned, so readline() reads at the same prompt; where R's
+#' readline reads the tty the call's modes stay (`rd$handed`) until the reader calls it, so a key
+#' typed in between is not echoed before its prompt
 #' @noRd
 console_idle = function(rd, prompt) {
   sym = console_style()
   line = NULL
-  on.exit(tty_restore(), add = TRUE)
+  on.exit(if (is.null(rd$handed)) tty_restore(), add = TRUE)
   tryCatch({
     tty_call(TRUE)
     repeat {
@@ -218,6 +220,7 @@ console_idle = function(rd, prompt) {
     # the prompt keeps the blank row above it, as after every run
     console_write("")
   }
+  if (console_readline_tty()) rd$handed = the$tty
   NULL
 }
 

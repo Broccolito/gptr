@@ -151,6 +151,11 @@ console_reader = function(stdin = FALSE, echo = stdin) {
         console_write(console_band(strsplit(paste0(prompt, console_escape(x)), "\n")[[1L]]))
         return(x)
       }
+      # the idle editor's modes, echo off, are restored as the last step before readline(), whose
+      # prompt erases its row for a key the terminal echoed in that moment
+      tty = rd$handed
+      rd$handed = NULL
+      on.exit(tty_restore(tty), add = TRUE)
       if (isTRUE(rd$complete) && !identical(prompt, "+ ")) {
         prev = utils::rc.getOption("custom.completer")
         utils::rc.options(custom.completer = console_completer(prev))
@@ -162,6 +167,10 @@ console_reader = function(stdin = FALSE, echo = stdin) {
       if (nzchar(band)) {
         prompt = paste0("\001", band, "\002", prompt, "\001\033[K\002")
         on.exit(console_cat("\033[0m\033[K"), add = TRUE)
+      }
+      if (!is.null(tty)) {
+        prompt = paste0("\001\r\033[K\002", prompt)
+        tty_restore(tty)
       }
       x = gptr_readline(prompt, rl)
       if (length(x) != 1L || is.na(x)) return(NA_character_)

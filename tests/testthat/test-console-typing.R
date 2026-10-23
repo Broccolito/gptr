@@ -1417,14 +1417,49 @@ test_that("a terminal: a draft a run left continues at the prompt until sent (P2
   expect_true(pty$wait("peter[auto]> and plot"))
   pty$send("\003")
   expect_true(pty$wait(kept_line("and plot", utf8 = utf8)))
-  # a blank row between the kept line and the prompt, as after every run
-  expect_true(pty$wait("\r\n\r\npeter[auto]> "))
+  # a blank row between the kept line and the prompt, as after every run; readline's prompt
+  # erases its row first (steering review)
+  expect_true(pty$wait("\r\n\r\n\r\033[Kpeter[auto]> "))
   pty$send("\033[A\r")
   expect_true(pty$wait("REQ and plot END"))
   expect_true(pty$wait("peter[auto]> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(c(pty$seen("REQ "), pty$seen("again to leave")), c(2L, 0L))
+})
+
+test_that("a terminal: keys typed as the idle editor hands over show after the prompt only", {
+  skip_on_cran()
+  skip_on_os("windows")
+  # the moment between the restore of the terminal's modes and readline's start, marked and widened
+  restored = withr::local_tempfile()
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = TRUE, cli.num_colors = 1L, cli.width = 60L)",
+    sprintf("trace('tty_restore', exit = quote({file.create(%s); Sys.sleep(0.5)}),",
+            deparse(restored)),
+    "      where = asNamespace('gptr'), print = FALSE)",
+    "long = paste(c('BEGIN', sprintf('w%02dabc', 1:40), 'END'), collapse = ' ')",
+    "fake = gptr_fake_provider(list(list(text = long, chunk = 8L, gap = 0.05)))",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))",
+    "cat('ECHO', any(grepl('(^| )echo( |$)', system('stty -a', intern = TRUE))), '\\n')"
+  ), term = "xterm")
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("BEGIN"))
+  pty$send("and colour")
+  expect_true(pty$wait("peter[auto]> and colour"))
+  # Ctrl-U empties the draft; `/ex` comes once the modes are restored, before readline starts
+  unlink(restored)
+  pty$send("\025")
+  deadline = Sys.time() + 30
+  while (!file.exists(restored) && Sys.time() < deadline) Sys.sleep(0.01)
+  pty$send("/ex")
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("it\r")
+  expect_true(pty$wait("ECHO TRUE"))
+  rows = term_rows(gsub("\033\\[\\?[0-9;]*[A-Za-z]", "", pty$all))
+  expect_identical(grep("> /exit", rows, fixed = TRUE, value = TRUE), "peter[auto]> /exit")
 })
 
 test_that("a terminal: a question waits a second after the last key; `yes` is no answer (D-243)", {

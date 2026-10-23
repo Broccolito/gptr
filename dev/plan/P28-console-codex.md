@@ -1161,6 +1161,11 @@ Decisions:
   16-21), and that Ctrl-C is not the first of the two that leave. After an idle or max_turns
   end, `console_queue_left()` leaves the draft in the composer, so it waits through the follow-ups' runs.
   Until Task 25 bands readline's prompt, only the editor's row has the band.
+- (Amended in the steering review: input 1.) At a hand-over to readline, where R's readline reads the tty,
+  the call's modes (character mode, echo off) stay until the reader calls readline, after the completer
+  and the band, and that prompt starts by erasing its row (`\001\r\033[K\002`), so a key typed in between
+  shows after the prompt only (`/expeter[edits]> /exit` before). The echo is never off at readline's start:
+  readline would then draw nothing typed. A line sent at the editor restores the modes at once.
 
 Tests (`test-console-input.R`, `test-console-typing.R`), RED first:
 - Pure reader cases for Enter, emptying the draft and Ctrl-C.

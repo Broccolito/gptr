@@ -717,3 +717,61 @@ test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C ke
     expect_identical(r$x, "next", info = k)
   }
 })
+
+test_that("a hand-over keeps the editor's modes until readline is called, which erases the row", {
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L, cli.width = 80L)
+  stty = character()
+  keys = character()
+  at_read = NULL
+  local_mocked_bindings(
+    tty_modes = function(modes = "-g") {
+      stty <<- c(stty, paste(modes, collapse = " "))
+      if (identical(modes, "-g")) "SAVED" else character()
+    },
+    console_typed_chars = function(rd, wait) {
+      k = keys[1L]
+      keys <<- keys[-1L]
+      if (is.na(k)) "" else k
+    },
+    gptr_readline = function(prompt = "", ...) {
+      at_read <<- list(stty = stty, prompt = prompt, tty = the$tty)
+      "X"
+    },
+    console_readline_tty = function() TRUE)
+  withr::defer(tty_restore())
+  rd = console_reader()
+  idle = function(k) {
+    stty <<- character()
+    keys <<- k
+    rd$compose = list(draft = "and colour")
+    x = NULL
+    written(function() x <<- console_idle(rd, "peter> "))
+    x
+  }
+  # Ctrl-U: the echo stays off until the reader calls readline, after the completer and the band
+  expect_null(idle("\025"))
+  expect_identical(stty, c("-g", keys_mode))
+  expect_false(is.null(the$tty))
+  expect_identical(rd$handed, the$tty)
+  written(function() expect_identical(rd$read("peter> "), "X"))
+  expect_identical(at_read$stty, c("-g", keys_mode, "SAVED"))
+  expect_null(at_read$tty)
+  expect_identical(at_read$prompt, "\001\r\033[K\002peter> ")
+  expect_null(the$tty)
+  expect_null(rd$handed)
+  # where R's readline does not read the tty the editor restores at once, and the prompt is plain
+  local_mocked_bindings(console_readline_tty = function() FALSE)
+  expect_null(idle("\025"))
+  expect_identical(stty, c("-g", keys_mode, "SAVED"))
+  expect_null(rd$handed)
+  written(function() rd$read("peter> "))
+  expect_identical(at_read$prompt, "peter> ")
+  # a line sent at the editor restores at once and calls no readline
+  local_mocked_bindings(console_readline_tty = function() TRUE)
+  at_read = NULL
+  expect_identical(idle("x\r"), "and colourx")
+  expect_identical(stty, c("-g", keys_mode, "SAVED"))
+  expect_null(rd$handed)
+  expect_null(at_read)
+})
