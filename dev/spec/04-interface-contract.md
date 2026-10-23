@@ -1103,7 +1103,8 @@ exact name.
   and `background = TRUE` return it invisibly.
 - System 1 returns a typed vector (§5.2), visibly.
 - Terminal statuses of a programmatic run: `idle` returns normally; `error` signals `gptr_error_provider`;
-  `blocked` signals `gptr_error_permission`; `budget` signals `gptr_error_budget_<kind>`; `max_turns` signals
+  `blocked` signals `gptr_error_permission` (`gptr_error_noninteractive` when the `ask` tool has no one
+  to answer, `03` §6.8.5); `budget` signals `gptr_error_budget_<kind>`; `max_turns` signals
   `gptr_error_max_turns`. Each condition carries the session as `cnd$session`, and the session is also
   `gptr_last()`. A team or fan-out (`agents =`, `parallel =`) and a `gptr_parallel()` team take the status and
   stored condition of their first child that did not end `idle`, with `$reason`

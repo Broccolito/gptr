@@ -1997,3 +1997,14 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-252 (extended): the plan's `gateway_signal()` is L6, which an L4 file may not call
   (arch-layers); every status it signals stores its condition, so re-signalling that is the same.
   Open: none.
+
+### tools-4 - ?peter and ?gptr_options name gptr_error_noninteractive for a blocked ask
+- Findings 7, 73, 168, 180, 194 (docs). Red: none (wording; the behaviour is pinned by
+  agent-dispatch "a non-interactive ask call stops blocked with gptr_error_noninteractive").
+- Cause: ?peter mapped `blocked` only to `gptr_error_permission`, and ?gptr_options said
+  `gptr.noninteractive_ask = "stop"` raises it; an `ask` tool call nobody can answer raises
+  `gptr_error_noninteractive` (03 §6.8.5, IC-68). `preset_ask()` is right and unchanged.
+- Fix: both items add "(`gptr_error_noninteractive` when the `ask` tool has no one to answer)";
+  04 §6.1.2's terminal-status list, which ?peter mirrors, says the same. Rd regenerated.
+- Green: gptr-gateway, utils-options, tool-ask PASS 472. Lint clean; plan checks pass.
+- Deviations: none (the contract already said so). Open: none.

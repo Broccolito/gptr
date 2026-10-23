@@ -30,8 +30,9 @@
 #' `{{` and `}}` are literal braces); `.opts = list(interpolate = FALSE)` switches it off.
 #'
 #' Terminal statuses become conditions carrying the session as `$session`: `error` signals
-#' `gptr_error_provider`, `blocked` `gptr_error_permission`, `budget` `gptr_error_budget_<kind>`
-#' and `max_turns` `gptr_error_max_turns`. A team (`agents =`) or fan-out (`parallel =`) takes the
+#' `gptr_error_provider`, `blocked` `gptr_error_permission` (`gptr_error_noninteractive` when the
+#' `ask` tool has no one to answer), `budget` `gptr_error_budget_<kind>` and `max_turns`
+#' `gptr_error_max_turns`. A team (`agents =`) or fan-out (`parallel =`) takes the
 #' status of its first member that did not end idle, with `$reason` naming each such member; when
 #' no member ended idle it signals that member's condition with the team as `$session`. `peter()`
 #' with no prompt opens the console when someone can answer, and signals
