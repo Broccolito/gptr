@@ -2095,3 +2095,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: none (the downgrade is intended). Open: the `replay_downgraded` warning itself says
   "or run the call interactively to regenerate it", which holds in an IDE but not at a plain
   console.
+
+### doc-7 - Transcript header names gptr_source(replay = "live")
+- Finding 44.
+- Red: FAIL 2 in `^doc-formats$` (PASS 252): a new transcript's fourth line was `# options(gptr.replay
+  = "live") re-asks the model.`. FAIL 1 in `^doc-replay$` (PASS 635) on the same line of a console
+  transcript recorded with the fake provider; its behaviour already held (below).
+- Cause: `doc_transcript_header()` pointed to the option, which only `gptr_source()`, knitr, an IDE
+  or Jupyter can honour; under `source()` or Rscript `doc_decide()` downgrades a regeneration to
+  replay with `replay_downgraded` (architecture 6.9.3), so following the hint never re-asked.
+- Fix: the line is `# gptr_source("<file name>", replay = "live") re-asks the model.`; the
+  `source()` line above it stays.
+- Green: `^(doc-formats|doc-replay)$` PASS 890, with a guard (fake provider): `source()` of the
+  recorded transcript under `gptr.replay = "live"` warns `replay_downgraded` and sends nothing,
+  `gptr_source(t, replay = "live")` sends two requests and gives `regenerated`;
+  `^(doc-.*|arch-layers|lint-rules)$` PASS 2541 SKIP 2 (NOT_CRAN=true). Lint clean.
+- Deviations: none (04 §11.5 names only the `source()` line). Open: the name is the file's at
+  recording; a renamed or moved transcript keeps the old one.

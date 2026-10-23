@@ -458,7 +458,8 @@ doc_transcript_header = function(text, site) {
            paste0("# machine log: ", site[["session_file"]] %||% "(none)"))
   if (!length(text)) {
     head = c(head, "# source() this file to replay the recorded code without calling a model;",
-             "# options(gptr.replay = \"live\") re-asks the model.", "library(gptr)")
+             paste0("# gptr_source(", doc_str_literal(basename(site[["path"]])),
+                    ", replay = \"live\") re-asks the model."), "library(gptr)")
   }
   c(if (length(text)) "", head)
 }

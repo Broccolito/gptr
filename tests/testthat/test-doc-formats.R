@@ -115,13 +115,18 @@ test_that("undone blocks become inert in R, Rmd and qmd and can be revived", {
 
 test_that("console transcripts record the first prompt as an assignment and later ones as pipes", {
   site = list(console = TRUE, session_id = "sab12cd3456", template = "fit mpg on weight",
-              session_file = ".gptr/sessions/20260929T183000_sab12cd3456.jsonl")
+              session_file = ".gptr/sessions/20260929T183000_sab12cd3456.jsonl",
+              path = file.path("notes", "log.R"))
   block = doc_render_block("a1b2c3", list(model = "m", prompt = prompt_hash("fit mpg on weight")),
                            "fit = lm(mpg ~ wt, data = mtcars)")
   t1 = doc_transcript_upsert(character(), site, block, "a1b2c3")
   expect_match(t1[1], "^# gptr session sab12cd3456 -- started ")
   expect_identical(t1[2], "# machine log: .gptr/sessions/20260929T183000_sab12cd3456.jsonl")
-  expect_identical(t1[5], "library(gptr)")
+  # only gptr_source() regenerates: under source() the option replays with a warning
+  expect_identical(t1[3:5], c(
+    "# source() this file to replay the recorded code without calling a model;",
+    "# gptr_source(\"log.R\", replay = \"live\") re-asks the model.", "library(gptr)"))
+  expect_false(any(grepl("options(gptr.replay", t1, fixed = TRUE)))
   expect_identical(t1[6:7], c("", "s_ab12cd = peter(\"fit mpg on weight\")"))
   site2 = utils::modifyList(site, list(template = "add \"predictions\"\nnow",
                                        context_labels = "mtcars"))

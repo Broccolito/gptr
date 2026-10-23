@@ -2324,6 +2324,28 @@ test_that("a two-turn console session with a menu steer re-sources as one sessio
   expect_length(fake_requests(x$fake), 4L)
 })
 
+test_that("a transcript's header names the driver that re-asks the model", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "x = 1"), fake_text("one"),
+                         fake_tool("r", code = "x = 2"), fake_text("two")))
+  testthat::local_mocked_bindings(doc_command_args = function() "R")
+  t = file.path(x$root, "log.R")
+  gptr_doc(t, format = "transcript")
+  eval(doc_e2e_call(prompt = paste("set", "x")), new.env(parent = globalenv()))
+  expect_true("# gptr_source(\"log.R\", replay = \"live\") re-asks the model." %in% readLines(t))
+  e = new.env(parent = globalenv())
+  e$library = function(...) invisible(NULL)
+  withr::with_options(list(gptr.replay = "live"), {
+    expect_warning(doc_e2e_source(t, e), class = "gptr_warning_replay_downgraded")
+  })
+  expect_identical(e$x, 1)
+  expect_length(fake_requests(x$fake), 2L)
+  out = gptr_source(t, replay = "live", envir = e)
+  expect_identical(out$action, "regenerated")
+  expect_identical(e$x, 2)
+  expect_length(fake_requests(x$fake), 4L)
+})
+
 test_that("a plan-mode run records only its plan line (IC-48)", {
   x = local_doc_e2e(list(fake_tool("r", code = "x = 1"),
                          fake_text("Plan:\n1. Load the data\n2. Fit the model")))
