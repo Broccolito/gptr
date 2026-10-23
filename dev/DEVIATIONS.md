@@ -3666,6 +3666,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   relay tests); test-mcp-server.R "a served call the person denies with text says it is theirs (cheat-sheet
   review)".
 - Review fixes of Tasks 22-27 (2026-10-23):
+  - The width the live row pads its status to (`status_w`) counts the lasting words only, not `keys wait` or
+    `question waiting`, which go when `r` returns or the question is asked: one row with both kept every later
+    draft of the run 20 columns from its status (`▌ thinking 27s                       › then save ...`).
+    Contract-visible: 04 §15.10 IC-82. Tests: test-console-input.R "the draft keeps its column as the status
+    changes; the status only widens (review)", "a leading ! takes the chevron's place; / and ! drafts say when
+    they run (D-244)".
   - The live row's freeze is the `r` call's (`rec$frozen` holds its id): a nested call's end no longer clears
     it while the code runs, and a question waiting shows the clock and the keys, since it reads them; the
     approval of the `r` call comes after its start event, so the row said `keys wait` while Enter, Tab and Up

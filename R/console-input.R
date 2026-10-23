@@ -296,32 +296,32 @@ console_newest = function(s, rd, take = FALSE) {
 #' The live row's text (IC-82, D-243): what the run does and how long it has run, its queue and a
 #' waiting question, then the person's draft or the keys, fitted to `width - 1` columns
 #'
-#' `state`: `what` (thinking, the running tool's name or `sub-agent a`), `secs` (the run's
-#' seconds, shown as 0s, 59s, 1m 05s), `queued` (the person's messages waiting), `question` (a
-#' question waits), `newest` (list(kind, text): the newest of them), `candidates` (completions,
-#' shown in place of the status words), `draft` (the composer's text; NULL where no composer reads
-#' keys), `enter` (the kind Enter queues, the `type_ahead` setting), `key` (the console's interrupt
-#' key), `pause` (TRUE where the key pauses, else it stops), `steer` (TRUE where only the pause
-#' menu steers: Positron's console holds what is typed as R code) and `typed` (TRUE where a line
-#' typed during the run is the next prompt: RStudio's console), `frozen` (TRUE while R code runs
-#' in this process: no clock, and the keys wait, `<sep>keys show when r returns` with an empty
-#' draft, else `keys wait` among the status words before the queue; not while a question waits,
-#' which reads keys), `band`
-#' (TRUE on the input band, its words in the band's grey) and `status_w` (the widest status a row
-#' with a draft had this run: the status is padded to it, so the draft never moves left; attr
-#' "status_w" of the result is this row's, 0 for a row of completions, which shows until the next
-#' key). In the style table's glyphs: without a composer the status ends with the key and its
-#' verb, as the composer's keys read, `<sep>esc stop`, with `steer` `<sep>ctrl-c, then s, to
-#' steer`, and with `typed` `<sep>typed lines run next`; with an empty draft the newest message
-#' follows, `<queued> steer<sep><text><sep><up> edit`, or the keys, `enter steer<sep>tab
-#' follow-up<sep>ctrl-c pause`; else `<person> <draft>`, after the hint `runs after this answer`
-#' where the draft starts with / or ! (a follow-up, whatever the key) and the hint fits beside the
-#' status at its widest, and a leading ! takes the person's glyph's place, bold red (Codex's shell
-#' mode, D-244). The block is the agent's blue and the words dim; the draft is ink. One collapse
-#' rule: whole terms go from the right, the hint's, then the queue and a waiting question, then the
-#' queued message is cut keeping its head, down to the block and the elapsed time; the draft keeps
-#' its tail, so an ellipsis always marks cut text. Widths are counted as the console draws them
-#' (live_fit()), so the row never wraps; where not even the block and the time fit, it is empty.
+#' `state`: `what` (thinking, the running tool's name or `sub-agent a`), `secs` (the run's seconds,
+#' shown as 0s, 59s, 1m 05s), `queued` (the person's messages waiting), `question` (a question
+#' waits), `newest` (list(kind, text): the newest of them), `candidates` (completions, shown in
+#' place of the status words), `draft` (the composer's text; NULL where no composer reads keys),
+#' `enter` (the kind Enter queues, the `type_ahead` setting), `key` (the console's interrupt key),
+#' `pause` (TRUE where the key pauses, else it stops), `steer` (TRUE where only the pause menu
+#' steers: Positron's console holds what is typed as R code) and `typed` (TRUE where a line typed
+#' during the run is the next prompt: RStudio's console), `frozen` (TRUE while R code runs in this
+#' process: no clock, and the keys wait, `<sep>keys show when r returns` with an empty draft, else
+#' `keys wait` among the status words before the queue; not while a question waits, which reads
+#' keys), `band` (TRUE on the input band, its words in the band's grey) and `status_w` (the widest
+#' status a row with a draft had this run: the status is padded to it, so the draft never moves
+#' left; attr "status_w" of the result is this row's lasting width, without `keys wait` and
+#' `question waiting`, 0 for a row of completions, which shows until the next key). In the style
+#' table's glyphs: without a composer the status ends with the key and its verb, as the composer's
+#' keys read, `<sep>esc stop`, with `steer` `<sep>ctrl-c, then s, to steer`, and with `typed`
+#' `<sep>typed lines run next`; with an empty draft the newest message follows, `<queued>
+#' steer<sep><text><sep><up> edit`, or the keys, `enter steer<sep>tab follow-up<sep>ctrl-c pause`;
+#' else `<person> <draft>`, after the hint `runs after this answer` where the draft starts with / or
+#' ! (a follow-up, whatever the key) and the hint fits beside the status at its widest, and a
+#' leading ! takes the person's glyph's place, bold red (Codex's shell mode, D-244). The block is
+#' the agent's blue and the words dim; the draft is ink. One collapse rule: whole terms go from the
+#' right, the hint's, then the queue and a waiting question, then the queued message is cut keeping
+#' its head, down to the block and the elapsed time; the draft keeps its tail, so an ellipsis always
+#' marks cut text. Widths are counted as the console draws them (live_fit()), so the row never
+#' wraps; where not even the block and the time fit, it is empty.
 #' @noRd
 console_live_row = function(state, width) {
   sym = console_style()
@@ -412,8 +412,10 @@ console_live_row = function(state, width) {
     glyph = if (bang) cli::style_bold(sym$red("!")) else sym$person
     row = paste0(row, "   ", glyph, " ", live_fit(input, left, sym$ellipsis, tail = TRUE))
   }
-  # completions show until the next key: they move the draft only while they show
-  structure(row, status_w = if (length(state$candidates)) 0L else shown)
+  # completions show until the next key, and `keys wait` and `question waiting` until r returns or
+  # the question is asked: they move the draft only while they show
+  lasting = live_fit(paste(setdiff(words, c("keys wait", "question waiting")), collapse = sym$sep))
+  structure(row, status_w = if (length(state$candidates)) 0L else min(shown, lasting))
 }
 
 #' Completion candidates on one row of `n` columns (IC-81): each escaped (live_text()), two blanks

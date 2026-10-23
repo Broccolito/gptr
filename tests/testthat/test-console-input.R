@@ -404,6 +404,11 @@ test_that("the draft keeps its column as the status changes; the status only wid
            list(what = "thinking", secs = 5, draft = "/mode"),
            list(what = "thinking", secs = 6))
   expect_identical(c(regexpr("›", r, fixed = TRUE)), c(17L, 42L, 17L))
+  # and the words that go when r returns or the question is asked (review of Tasks 22-27): a draft
+  # typed later starts beside its status
+  r = rows(list(what = "thinking", secs = 5), list(what = "r", frozen = TRUE),
+           list(what = "thinking", secs = 9, question = TRUE), list(what = "thinking", secs = 27))
+  expect_identical(c(regexpr("›", r, fixed = TRUE)), c(17L, 19L, 36L, 18L))
 })
 
 test_that("a leading ! takes the chevron's place; / and ! drafts say when they run (D-244)", {
@@ -439,7 +444,7 @@ test_that("a leading ! takes the chevron's place; / and ! drafts say when they r
   }
   expect_identical(rows(60L), c("▌ thinking 4s   ! summary(fuel$mpg)",
                                 "▌ r · keys wait   ! summary(fuel$mpg)",
-                                "▌ thinking 5s     ! summary(fuel$mpg)"))
+                                "▌ thinking 5s   ! summary(fuel$mpg)"))
   expect_identical(rows(80L)[[2L]],
                    "▌ r · keys wait   runs after this answer   ! summary(fuel$mpg)")
   # the ! bold and red, as Codex's shell mode; plain text is never restyled

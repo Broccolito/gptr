@@ -1376,7 +1376,9 @@ Decisions:
 - (Amended in Task 24:)
   - The hint applies where the composer always sends a follow-up: a draft starting with optional spaces,
     then `/` or `!`. It goes with the draft, before its glyph, and shows where it fits beside the status at
-    its widest this run (`status_w`), so it never widens the padded status (a later draft keeps its column)
+    its widest this run (`status_w`), so it never widens the padded status (a later draft keeps its column;
+    amended in the review of Tasks 22-27: `status_w` counts the lasting words only, not `keys wait` or `question
+    waiting`, which pushed every later draft of the run 20 columns from its status)
     and does not come and go as the status words change: in the visual check at 60 columns, the draft jumped
     25 columns at each change between `thinking` and `r`. Where it does not fit it goes first. The `!` in
     the glyph's place is followed by the rest of the draft, `! summary(x)`, as Codex shows `! ls`.

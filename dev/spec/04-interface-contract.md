@@ -5850,8 +5850,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       is cut with `…`, keeping its head; at least `▌ <elapsed>`; the draft keeps its tail (review of Tasks 16-21:
       a character cut ended a whole message in `…` and cut `ctrl-c…`). With a draft the status is padded to the
       widest it was this run (`console_live()` keeps `status_w`), so the draft never moves left: it jumped 7
-      columns when `thinking 17s` became `r 15s`. Completion candidates and the `/` and `!` hint do not count
-      towards that width, so they move the draft only while they show. The row is fitted to width - 1 as the console draws it (`live_fit()`: R's widths; in a CJK
+      columns when `thinking 17s` became `r 15s`. Completion candidates, the `/` and `!` hint, and the words that
+      go when `r` returns or the question is asked (`keys wait`, `question waiting`) do not count towards that
+      width, so they move the draft only while they show (review of Tasks 22-27: one `keys wait · question
+      waiting` row kept every later draft of the run 20 columns from its status). The row is fitted to width - 1 as the console draws it (`live_fit()`: R's widths; in a CJK
       locale, whose terminals draw East Asian ambiguous widths wide, every character outside ASCII that R
       counts as one column counted as two), so it never wraps; it is empty where not even the block and the
       time fit.
