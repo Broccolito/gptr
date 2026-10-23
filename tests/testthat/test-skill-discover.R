@@ -397,6 +397,30 @@ test_that("untrusted-skill messages name the call that trusts the project", {
   expect_error(skill_body("x"), how, class = "gptr_error_untrusted", fixed = TRUE)
 })
 
+test_that("a skipped SKILL.md is named by gptr_skills() and by a preload of its name", {
+  withr::defer(res_prune("skills:", character()))
+  p = local_project(trust = TRUE)
+  root = file.path(p, ".gptr", "skills")
+  write_skill(root, "nodesc", c("---", "name: nodesc", "---", "x"))
+  write_skill(root, "Bad_Name", c("---", "description: Named after its folder.", "---", "x"))
+  expect_no_warning(gptr_skills("project"))
+  sk = gptr_skills("project")
+  expect_identical(nrow(sk), 0L)
+  shown = paste(utils::capture.output(print(sk)), collapse = "\n")
+  expect_match(shown, paste0("# 2 SKILL.md files skipped: .gptr/skills/Bad_Name, ",
+                             ".gptr/skills/nodesc; gptr_registry(diagnostics = TRUE) says why."),
+               fixed = TRUE)
+  fake = local_fake_provider(list("done"))
+  expect_error(peter("hi", skills = "nodesc", model = fake, envir = new.env()),
+               ".gptr/skills/nodesc/SKILL.md was skipped: description is required",
+               class = "gptr_error_invalid_argument", fixed = TRUE)
+  expect_error(peter("hi", skills = "bad-name", model = fake, envir = new.env()),
+               "name contains invalid characters", class = "gptr_error_invalid_argument")
+  expect_length(fake_requests(fake), 0L)
+  expect_error(skill_body("no-such-skill"), "No skill with this name is available",
+               class = "gptr_error_invalid_argument")
+})
+
 test_that("over budget, least recently used descriptions go first, then entries", {
   withr::defer(res_prune("skills:", character()))
   p = local_project(trust = TRUE)

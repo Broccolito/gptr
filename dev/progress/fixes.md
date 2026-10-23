@@ -2171,3 +2171,21 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: none (04 `gptr_skills()` does not say which plugins are listed; the fix meets `?gptr_skills`, "those
   of enabled plugins"). A settings plugin whose entry failed is not listed (the plan said "no enabled entry"), and
   no separate dedupe: discovery keeps one row per path and source. Open: none.
+
+### skills-2 - A skipped SKILL.md is named by gptr_skills() and by a preload of its name
+- Finding 103. Red: `^skill-discover$` FAIL 2 PASS 187: in a trusted project holding `.gptr/skills/nodesc`
+  (no description) and `.gptr/skills/Bad_Name`, `gptr_skills("project")` printed `# 0 rows` only, and
+  `peter(skills = "nodesc")` said "No skill with this name is available; gptr_skills() lists them."
+- Cause: `skill_parse()` wrote its reasons to the registry diagnostics only and `skill_collect()` dropped the
+  NULL spec, so neither the listing nor `skill_body()`'s not-found branch knew of the file.
+- Fix: `skill_collect()` also returns `skipped` (origin by path); `gptr_skills()` prints the footer `# 2 SKILL.md
+  files skipped: .gptr/skills/Bad_Name, .gptr/skills/nodesc; gptr_registry(diagnostics = TRUE) says why.`;
+  when a skipped file's directory name matches, `skill_body()` raises `gptr_error_invalid_argument` "The skill
+  file .gptr/skills/nodesc/SKILL.md was skipped: description is required." Discovery still never errors.
+- Green: `^skill-discover$` PASS 192 (no request reaches the fake model; an unknown name keeps its message); with
+  skill-*, ext-plugins, tool-read, gptr-gateway, subagent-defs, console-commands, arch-layers, lint-rules PASS
+  1660. Lint clean; Rd unchanged.
+- Deviations: none (the contract quotes neither text). The reasons come from parsing the file again with a
+  `diag` callback (new `skill_parse()` argument), not from the latest diagnostic as planned: a cached skip
+  whose diagnostic left the log (1,000 rows, a swapped registry) would have had none. Open: `read
+  skill:nodesc/SKILL.md` still says "Unknown skill" (`skill_file_path()` in R/tool-read.R drops the reason).
