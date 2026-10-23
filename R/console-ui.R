@@ -244,10 +244,11 @@ ui_permission_lines = function(request) {
 
 #' The detail view shown for `?`: at most 40 code rows at column 4 as the call block shows them
 #' (console_code_rows(), D-207), or of a path tool's change, its path then named in the first row;
-#' the keys as the question shows them, bold, and what they do, dim (D-243). Under the console's
-#' ask (`asked`) it leaves out what shows whole above it: the code when the call block showed it
-#' (at most 20 rows that fit), the change rows the ask showed (its first 12 when none was cut), the
-#' rest under a dim `(continued)`; alone, as the RStudio dialog, it shows them all
+#' the keys as the question shows them, bold, padded to one width, and what they do, dim (D-243),
+#' the interrupt key as the banner names it (`ctrl-c`, `esc`). Under the console's ask (`asked`) it
+#' leaves out what shows whole above it: the code when the call block showed it (at most 20 rows
+#' that fit), the change rows the ask showed (its first 12 when none was cut), the rest under a dim
+#' `(continued)`; alone, as the RStudio dialog, it shows them all
 #' @noRd
 ui_permission_detail = function(request, asked = FALSE) {
   risk = request$risk
@@ -286,12 +287,13 @@ ui_permission_detail = function(request, asked = FALSE) {
   note = request$undo_note %||% ui_undo_note(request)
   if (rlang::is_string(note) && nzchar(note)) out = c(out, paste0("  ", ui_escape(note)))
   can = is.null(ui_no_rule(request))
-  keys = c("y", if (can) c("a", "p"), "n", "Ctrl-C")
+  # the console's interrupt key as the banner and live row name it; the words in one column
+  keys = c("y", if (can) c("a", "p"), "n", tolower(console_interrupt_key()))
   what = c("yes", if (can) {
     paste0(c("always in this session: ", "always in this project: "),
            ui_escape(request$suggested_rule))
   }, "no (type n <what to do instead> to tell gptr)", "abort the run")
-  c(out, paste0("    ", cli::style_bold(keys), "  ", sym$dim(what)))
+  c(out, paste0("    ", cli::style_bold(format(keys)), "  ", sym$dim(what)))
 }
 
 #' The "cannot be undone" note of the checkpoint.note service (P16) for a request without one

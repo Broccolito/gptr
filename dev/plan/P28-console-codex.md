@@ -613,7 +613,8 @@ Decisions:
     between a call line, its ask and its result lines (amended in Task 12).
 - Flagged rows (at most 5, then `(+N more; ? shows all)`) and the `asks in every mode:` reason
   stay, dim at column 4 like the result rows, later flagged rows under the first's text. The `?`
-  detail view lists the keys as the question does (`    y  yes`, the key bold, its words dim) and
+  detail view lists the keys as the question does (`    y       yes`, the key bold, its words dim; amended in the
+  review of Tasks 22-27: the keys padded to one width and the interrupt key lower case, as the banner names it) and
   leaves out its code rows when the call line just above showed the code whole (amended in the review of
   Tasks 8-15; the RStudio dialog keeps them, without SGR).
 - (Amended in the cheat-sheet review: console-2.) A request whose input has a `path` and no `code` shows the

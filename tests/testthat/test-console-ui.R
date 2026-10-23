@@ -333,9 +333,10 @@ test_that("the detail view's keys read as the question's; it skips a fence shown
   skip_on_cran()
   root = local_project()
   req = ui_request("write.csv(df, 'out.csv')", rule = "r(fn:write.csv)")
-  keys = c("    y  yes", "    a  always in this session: r(fn:write.csv)",
-           "    p  always in this project: r(fn:write.csv)",
-           "    n  no (type n <what to do instead> to tell gptr)", "    Ctrl-C  abort the run")
+  # the console's interrupt key as its banner and live row name it, the words in one column
+  keys = c("    y       yes", "    a       always in this session: r(fn:write.csv)",
+           "    p       always in this project: r(fn:write.csv)",
+           "    n       no (type n <what to do instead> to tell gptr)", "    ctrl-c  abort the run")
   expect_identical(utils::tail(ui_permission_detail(req), 5L), keys)
   # the console printed this call's line with its code: ? leaves the fence out
   req$tool_call_id = "t1"
@@ -353,7 +354,11 @@ test_that("the detail view's keys read as the question's; it skips a fence shown
   # the key bold and its words dim; the RStudio dialog gets the code and no SGR
   withr::local_options(cli.num_colors = 256L)
   expect_identical(utils::tail(ui_permission_detail(req), 1L),
-                   "    \033[1mCtrl-C\033[22m  \033[38;5;244mabort the run\033[39m")
+                   "    \033[1mctrl-c\033[22m  \033[38;5;244mabort the run\033[39m")
+  local_mocked_bindings(front_end = function() "rstudio")
+  expect_identical(utils::tail(cli::ansi_strip(ui_permission_detail(req)), 2L),
+                   c("    n    no (type n <what to do instead> to tell gptr)",
+                     "    esc  abort the run"))
   skip_if_not_installed("rstudioapi")
   shown = NULL
   local_mocked_bindings(ui_rstudio = function() TRUE)
@@ -383,7 +388,7 @@ test_that("the console prompt maps y, a, p, n, n <feedback>, ? and Ctrl-C (6.8.3
   expect_identical(fb$feedback, "use write_csv instead")
   out = console_try(function() ui_console_permission(req), c("?", "y"))
   expect_identical(out$result$decision, "allow")
-  expect_true("    a  always in this session: r(fn:write.csv)" %in% out$shown)
+  expect_true("    a       always in this session: r(fn:write.csv)" %in% out$shown)
   expect_identical(console_try(function() ui_console_permission(req), character())$result$decision,
                    "abort")
   crit = ui_request("q('no')", tier = "ask_human")
