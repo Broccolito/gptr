@@ -873,7 +873,7 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
   console_cut(console_wrap(out, width), width)
 }
 
-#' The status line of a run's end (IC-77, D-245), its terms joined by the separator, in ASCII
+#' The terms of a run's end status line (IC-77, D-245), joined by the separator, in ASCII
 #' `done - fake-1 - 2 requests - 1.2k tokens - $0.0042 - 82% context left`, from the run's own
 #' requests (its usage rows): the last request's model, then `sub-agents $0.8500` when `kids` holds
 #' the costs of its sub-agents' requests, then the context the last request left
@@ -898,7 +898,6 @@ console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL)
             if (tokens != "unknown") paste(tokens, "tokens"), cost(usage$cost),
             if (!is.null(cost(kids))) paste("sub-agents", cost(kids)),
             if (!is.na(left)) paste0(left, "% context left"))
-  paste(parts, collapse = console_style()$sep)
 }
 
 #' The context the last of usage rows `u` left (IC-77, D-245), a whole percent: 1 minus its prompt
@@ -1201,10 +1200,11 @@ console_on_agent_end = function(event, ctx) {
   d = session_data(rec$session)
   u = d$usage
   kids = u$cost[seq_len(nrow(u)) > rec$u0 & !(u$session %in% d$id) & !duplicated(u$request_id)]
-  line = console_status_line(event$status, event$reason, event$usage, kids)
+  terms = console_status_line(event$status, event$reason, event$usage, kids)
+  sym = console_style()
   v = verbosity()
   if (v == 1L) {
-    text = paste0("gptr: ", line)
+    text = paste0("gptr: ", paste(terms, collapse = sym$sep))
     if (identical(event$status, "idle")) {
       console_progress(text)
     } else {
@@ -1216,7 +1216,9 @@ console_on_agent_end = function(event, ctx) {
   if (!is.null(rec$md)) rec$md$finish(cut = !identical(event$status, "idle"))
   console_gap(rec, "status")
   console_render_custom(rec$session, rec$n0)
-  console_notice(console_style()$dim(line))
+  # in rows ending at whole terms (console_terms()), at the content width
+  rows = console_terms(terms, max(20L, cli::console_width() - 2L * nchar(console_pad())))
+  console_notice(paste(sym$dim(rows), collapse = "\n"))
   on.exit(console_gap(rec, "prompt"), add = TRUE)
   NULL
 }

@@ -161,16 +161,13 @@ ui_question = function(title, width) {
   paste0(lead[seq_along(rows)], cli::style_bold(rows))
 }
 
-#' A question's keys (D-243): a row at column 4, under the question's text, of each key in bold
-#' and what it does dim, the separator after it; `width` wraps the row between the options only
+#' A question's keys (D-243): rows at column 4, under the question's text, of each key in bold and
+#' what it does dim, joined by the separator; a row of `width` ends at a whole key (console_terms())
 #' @noRd
 ui_keys = function(keys, what, width) {
   sym = console_style()
-  sep = c(rep(trimws(sym$sep, "right"), length(keys) - 1L), "")
-  # no-break spaces keep a key with its words and the separator when the row wraps
-  opts = paste0(cli::style_bold(keys), sym$dim(gsub(" ", "\u00a0", paste0(" ", what, sep))),
-                collapse = " ")
-  gsub("\u00a0", " ", console_wrap(paste0("    ", opts), width), fixed = TRUE)
+  terms = paste0(cli::style_bold(keys), sym$dim(paste0(" ", what)))
+  paste0("    ", console_terms(terms, width - 4L, sym$dim(sym$sep)))
 }
 
 #' A question's hint when it reads again (D-243): dim rows at column 4, under the question's text as

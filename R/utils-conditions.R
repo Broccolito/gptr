@@ -228,6 +228,21 @@ console_cut = function(rows, width, ellipsis = console_style()$ellipsis) {
          USE.NAMES = FALSE)
 }
 
+#' Terms laid out in rows of at most `width` columns, joined by `sep` (D-245): a row ends at a whole
+#' term and the next row starts with the next term, so no row ends in the separator; a term wider
+#' than a row is cut with an ellipsis
+#' @noRd
+console_terms = function(terms, width, sep = console_style()$sep) {
+  rows = character()
+  for (x in terms) {
+    n = length(rows)
+    joined = if (n) paste0(rows[[n]], sep, x)
+    fits = n && cli::ansi_nchar(joined, type = "width") <= width
+    if (fits) rows[[n]] = joined else rows = c(rows, x)
+  }
+  console_cut(rows, width)
+}
+
 #' Lines wrapped at `width`, continuation rows indented like their line (a wider word stays whole)
 #' @noRd
 console_wrap = function(lines, width) {

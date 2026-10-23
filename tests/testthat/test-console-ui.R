@@ -444,7 +444,7 @@ test_that("the keys are a row under the question, a and p only with a rule (D-24
   testthat::local_reproducible_output(width = 50, crayon = FALSE, unicode = TRUE)
   local_mocked_bindings(console_pad = function() "  ")
   expect_identical(utils::tail(ui_permission_lines(req), 3L),
-                   c("  ? Allow r?", "    y yes \u00b7 a always (session) \u00b7",
+                   c("  ? Allow r?", "    y yes \u00b7 a always (session)",
                      "    p always (project) \u00b7 n no \u00b7 ? more"))
   # an MCP tool reads as the console's call line names it: server/tool, its arguments dim
   mcp = list(tool = "mcp__github__create_issue", input = list(title = "bug"),
@@ -461,8 +461,8 @@ test_that("the keys are a row under the question, a and p only with a rule (D-24
                    c(paste0("  \u001b[38;5;167m\u258e\u001b[39m \u001b[1mr\u001b[22m  x = ",
                             "\u001b[38;5;67m1\u001b[39m"),
                      "  \033[38;5;67m?\033[39m \033[1mAllow r?\033[22m",
-                     paste0("    \u001b[1my\u001b[22m\u001b[38;5;244m yes \u00b7\u001b[39m ",
-                            "\u001b[1mn\u001b[22m\u001b[38;5;244m no \u00b7\u001b[39m ",
+                     paste0("    \u001b[1my\u001b[22m\u001b[38;5;244m yes \u00b7 \u001b[39m",
+                            "\u001b[1mn\u001b[22m\u001b[38;5;244m no \u00b7 \u001b[39m",
                             "\u001b[1m?\u001b[22m\u001b[38;5;244m more\u001b[39m")))
 })
 

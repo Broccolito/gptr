@@ -1209,43 +1209,77 @@ fake_usage = function(model = "fake-1", input = 200, output = 10, cache_read = 9
                            cost = cost, stringsAsFactors = FALSE))
 }
 
+# The status line's terms on one line (console_status_line())
+status_line = function(...) paste(console_status_line(...), collapse = console_style()$sep)
+
 test_that("the status line names the model and the context left; unknown terms go (IC-77)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   fake = gptr_fake_provider(list("ok"))
   usage = fake_usage(c("fake-0", "fake-1"), c(1000, 200), c(50, 10), c(0, 900), c(0.001, 0.0005))
   # the last request's model, and its 1,100 prompt tokens against the 170,000 where compaction
   # starts
-  expect_identical(console_status_line("idle", NULL, usage),
+  expect_identical(status_line("idle", NULL, usage),
                    "done - fake-1 - 2 requests - 2.2k tokens - $0.0015 - 99% context left")
-  expect_identical(console_status_line("aborted", "aborted (user)", NULL),
+  expect_identical(status_line("aborted", "aborted (user)", NULL),
                    "aborted: aborted (user) - 0 requests - 0 tokens")
   # a cost of 0, a free or local model's, is left out; past the threshold no context is left
-  expect_identical(console_status_line("error", "network error", fake_usage(input = 999950)),
+  expect_identical(status_line("error", "network error", fake_usage(input = 999950)),
                    "error: network error - fake-1 - 1 request - 1.0M tokens - 0% context left")
   usage$cost[[2L]] = NA
   usage$output[[1L]] = NA
-  expect_identical(console_status_line("idle", NULL, usage, c(0.5, NA)), paste(
+  expect_identical(status_line("idle", NULL, usage, c(0.5, NA)), paste(
     "done - fake-1 - 2 requests - $0.0010 + 1 request of unknown cost - sub-agents $0.5000 + 1",
     "request of unknown cost - 99% context left"))
   usage$cost[[1L]] = NA
   usage$model[[2L]] = NA
   usage$cache_read[[2L]] = NA
-  expect_identical(console_status_line("aborted", NULL, usage, NA_real_), "aborted - 2 requests")
+  expect_identical(status_line("aborted", NULL, usage, NA_real_), "aborted - 2 requests")
   # a CLI keeps its own transcript: no context term
-  expect_identical(console_status_line("idle", NULL, fake_usage(route = "plan-cli", cost = 0.01)),
+  expect_identical(status_line("idle", NULL, fake_usage(route = "plan-cli", cost = 0.01)),
                    "done - fake-1 - 1 request - 1.1k tokens - $0.0100")
 })
 
 test_that("a reason's line breaks fold into one space; other controls stay escaped (sessions-7)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   # curl's two-line error, as a network failure gives it
-  x = console_status_line("error", "network error: a [h]:\nb")
+  x = status_line("error", "network error: a [h]:\nb")
   expect_length(x, 1L)
   expect_false(grepl("U+000A", x, fixed = TRUE))
   expect_false(grepl("\n", x, fixed = TRUE))
   expect_match(x, "a [h]: b", fixed = TRUE)
-  expect_identical(console_status_line("error", "a  \r\n  b\rc\n\nd \033[31m"),
+  expect_identical(status_line("error", "a  \r\n  b\rc\n\nd \033[31m"),
                    "error: a b c d <U+001B>[31m - 0 requests - 0 tokens")
+})
+
+test_that("the status line wraps between whole terms, never after a separator (review)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
+  local_utf8_glyphs()
+  # a dated API model id at 80 columns, its content 76 wide, and at 60
+  terms = c("done", "claude-sonnet-4-5-20250929-1", "7 requests", "19.8k tokens",
+            "98% context left")
+  expect_identical(console_terms(terms, 76L), c(
+    "done \u00b7 claude-sonnet-4-5-20250929-1 \u00b7 7 requests \u00b7 19.8k tokens",
+    "98% context left"))
+  expect_identical(console_terms(terms, 56L), c(
+    "done \u00b7 claude-sonnet-4-5-20250929-1 \u00b7 7 requests",
+    "19.8k tokens \u00b7 98% context left"))
+  # a term wider than a row is cut
+  expect_identical(console_terms(c("ok", strrep("x", 30L)), 20L), c("ok", paste0(strrep("x", 19L),
+                                                                               "\u2026")))
+  # the run's end writes the rows in the margin, dim
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = TRUE)
+  local_gptr_options(verbose = 2L)
+  local_mocked_bindings(console_pad = function() "  ")
+  s = render_session()
+  ctx = session_live(s)$ctx
+  usage = fake_usage(c("fake-0", "fake-1"), c(1000, 200), c(50, 10), c(0, 900), c(0.001, 0.0005))
+  out = utils::capture.output({
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    invisible(console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = usage,
+                                              turns = 2L), ctx))
+  })
+  expect_identical(out[nzchar(out)], c("  done \u00b7 fake-1 \u00b7 2 requests",
+                                       "  2.2k tokens \u00b7 $0.0015", "  99% context left"))
 })
 
 test_that("console_context_left() measures the last request against compact_threshold() (IC-77)", {

@@ -822,20 +822,22 @@ repl_banner = function(rs) {
   nms = sort(ls(repl_eval_env(rs)), method = "radix")
   more = if (length(nms) > 6L) paste0(" (+ ", length(nms) - 6L, " more)")
   after = if (front_end() == "rstudio") "! /" else "@ ! /"
+  # rows of whole terms (console_terms()), at the content width
+  width = max(20L, cli::console_width() - 2L * nchar(console_pad()))
+  terms = function(x) console_terms(x, width, sym$dim(sep))
   console_notice(paste(c(
-    sym$dim(paste0("gptr ", utils::packageVersion("gptr"), sep,
-                   console_escape(repl_model(rs), FALSE), sep,
-                   console_escape(repl_mode(rs), FALSE), sep, ws)),
+    sym$dim(console_terms(c(paste("gptr", utils::packageVersion("gptr")),
+                            console_escape(c(repl_model(rs), repl_mode(rs)), FALSE), ws), width)),
     if (length(nms)) {
       sym$dim(paste0("objects: ", console_escape(paste(utils::head(nms, 6L), collapse = ", "),
                                                  FALSE), more))
     },
-    paste0(key("/help", paste0(" lists commands", sep)),
-           if (isTRUE(rs$reader$complete)) key("tab", paste0(" completes after ", after, sep)),
-           key(esc, " twice leaves")),
+    terms(c(key("/help", " lists commands"),
+            if (isTRUE(rs$reader$complete)) key("tab", paste0(" completes after ", after)),
+            key(esc, " twice leaves"))),
     if (console_menu_available() && front_end() == "positron") {
-      paste0(sym$dim(paste0("text typed while peter works waits as R code", sep)),
-             key(esc, ", then "), key("s", ", steers"))
+      terms(c(sym$dim("text typed while peter works waits as R code"),
+              paste0(key(esc, ", then "), key("s", ", steers"))))
     }), collapse = "\n"))
   mode_notice(repl_mode(rs))
   console_write("")
@@ -865,15 +867,8 @@ repl_error = function(e) {
 #' console's content width (a term wider than it cut)
 #' @noRd
 mention_line = function(said) {
-  sym = console_style()
-  width = max(20L, cli::console_width() - 4L)
-  said = console_escape(said, FALSE)
-  rows = said[[1L]]
-  for (x in said[-1L]) {
-    joined = paste0(rows[[length(rows)]], sym$sep, x)
-    if (nchar(joined, type = "width") <= width) rows[[length(rows)]] = joined else rows = c(rows, x)
-  }
-  paste(sym$dim(console_cut(rows, width)), collapse = "\n")
+  rows = console_terms(console_escape(said, FALSE), max(20L, cli::console_width() - 4L))
+  paste(console_style()$dim(rows), collapse = "\n")
 }
 
 #' One prompt through console_send(), after the line naming what its @mentions resolved to

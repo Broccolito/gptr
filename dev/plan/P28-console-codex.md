@@ -636,7 +636,8 @@ Decisions:
   and the wrapped `? more` read as a second question).
   - `?` is blue, the question bold, key letters bold and descriptions dim.
   - The keys row is 68 columns whatever the tool or who asks. In a narrower console it wraps between the
-    options at column 4: no-break spaces keep a key with its words, and are written as spaces.
+    options at column 4: no-break spaces keep a key with its words, and are written as spaces. (Amended in the
+    review of Tasks 22-27: a row ends at a whole option, `console_terms()`, so none ends in the separator.)
   - a and p are omitted when no rule is offered; typed anyway, they get
     `a and p are not offered: <why>; answer y, n or ?.`.
   - Who asks: `? sub-agent a: allow r?`.
@@ -1479,7 +1480,9 @@ Decisions:
   `done · <model> · <n> requests · <tokens> tokens · <cost> · <k>% context left`.
   - Instead of `done`: `aborted: <reason>` or `error: <reason>`.
   - The model is the run's last request's model.
-  - The line wraps like any notice.
+  - The line wraps like any notice. (Amended in the review of Tasks 22-27: between whole terms, as the mention
+    line does, `console_terms()`; word wrapping split `98% context left` and ended rows in ` ·`. The banner's
+    rows and the approval's and pause menu's key rows too.)
   - A term whose value is unknown (`unknown tokens`, `unknown cost`), or a cost of 0 (a free or local
     model), is left out: `aborted · 1 request` (amended in the visual review: `$0.0000`, and two unknown
     terms after an abort, were noise). `format_cost()` stays as IC-74 has it for `/cost`.

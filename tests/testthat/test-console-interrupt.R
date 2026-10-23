@@ -152,20 +152,20 @@ test_that("the pause menu is a console question: its keys under it, read at the 
   m = menu()
   expect_identical(m$out[[3L]], gsub(" - ", " \u00b7 ", keys, fixed = TRUE))
   expect_identical(m$prompts, "\u203a ")
-  # at 60 columns the keys wrap between the options
+  # at 60 columns the keys wrap between the options, a row never ending in the separator
   testthat::local_reproducible_output(width = 60, unicode = FALSE)
   expect_identical(menu()$out[-1L], c("  ? Paused",
-                                      "    s steer - f follow-up - c continue - a abort -",
+                                      "    s steer - f follow-up - c continue - a abort",
                                       "    b background"))
   # at 256 colours ? is blue, the title and the keys bold, what they do dim
   testthat::local_reproducible_output(width = 80, unicode = TRUE)
   withr::local_options(cli.num_colors = 256L)
   sym = console_style()
-  what = c(" steer \u00b7", " follow-up \u00b7", " continue \u00b7", " abort \u00b7", " background")
+  what = c(paste0(" ", c("steer", "follow-up", "continue", "abort"), " \u00b7 "), " background")
   expect_identical(menu()$out[2:3], c(
     paste0("  ", sym$blue("?"), " ", cli::style_bold("Paused")),
     paste0("    ", paste0(cli::style_bold(c("s", "f", "c", "a", "b")), sym$dim(what),
-                          collapse = " "))
+                          collapse = ""))
   ))
   # an answer other than a key or its word is kept in the history, never sent, and a dim hint
   # names it and the keys; the menu reads again: text meant as a steer never aborts

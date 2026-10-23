@@ -5552,8 +5552,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     then the question `  ? Allow r?` (`?` blue, the question bold)
     and, under its text, the keys row `    y yes · a always (session) · p always (project) · n no · ? more` (the
     keys bold, what they do dim; `a` and `p` only with a `suggested_rule`). The keys row is 68 columns whatever the
-    tool or who asks; in a narrower console it word-wraps at column 4, each key kept with its words (no-break
-    spaces, written as spaces). Who asks: `  ? sub-agent <agent>: allow r?`.
+    tool or who asks; in a narrower console its rows at column 4 end at a whole key with its words, the next row
+    starting with the next key (`console_terms()`; review of Tasks 22-27: a row ended in a dangling ` ·`). Who
+    asks: `  ? sub-agent <agent>: allow r?`.
   - Every console question (`ui_console_permission()`, `ui_console_select()`, `ui_console_input()`) reads its
     answer after the person's chevron, `console_style()$person` and a space (`› `, ASCII `>> `), at column 0, with
     R's readline (echo on, Enter required; a secret input that no rstudioapi dialog asks reads with the echo
@@ -5620,7 +5621,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     text was `Permission denied: <text>. Explain what you need or choose another approach.`, which GPT, Claude and
     qwen read as the harness's refusal and did not carry out.
   - Run totals (Task 26; amends item 6 and D-206): the status line is dim and written as a notice, at column 2
-    and wrapped where the margin applies, `done · <model> · <n> requests · <tokens> tokens · <cost> · <k>%
+    in rows of whole terms at the content width (`console_terms()`: a row ends at a term and never at the
+    separator, a term wider than a row is cut; review of Tasks 22-27: word wrapping broke `98% context` from
+    `left` and left a row ending ` ·`; the banner's rows and the mention line too), `done · <model> · <n> requests · <tokens> tokens · <cost> · <k>%
     context left`, with `aborted: <reason>` or `error: <reason>` for `done` as before (the reason's line breaks one
     space, cheat-sheet review: curl's two-line error showed `<U+000A>`): the model of the run's
     last request (its usage row's `model`), and `sub-agents <cost>` after the own cost. A term whose value is

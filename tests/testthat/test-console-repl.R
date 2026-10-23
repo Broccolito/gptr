@@ -333,6 +333,12 @@ test_that("the banner names the console's key and promises nothing it lacks (rev
   expect_identical(keys("rgui", complete = FALSE), "/help lists commands - esc twice leaves")
   env = list2env(stats::setNames(as.list(1:8), letters[8:1]))
   expect_identical(banner_rows(env = env)[[2L]], "objects: a, b, c, d, e, f (+ 2 more)")
+  # a narrow console: its rows end at whole terms, never at a separator (review of Tasks 22-27)
+  testthat::local_reproducible_output(width = 60, crayon = FALSE, unicode = FALSE)
+  withr::local_options(cli.dynamic = TRUE)
+  local_gptr_options(verbose = 2L)
+  expect_identical(banner_rows()[2:3], c("  /help lists commands - tab completes after @ ! /",
+                                         "  ctrl-c twice leaves"))
 })
 
 test_that("in Positron the banner says typed text waits as R code (steering review)", {

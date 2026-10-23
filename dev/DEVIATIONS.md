@@ -4021,3 +4021,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Tests: test-console-render.R "a refused
     call's result is one dim row that says it was not run (review)"; test-agent-dispatch.R "the model reads n
     <text> as the person's; the next call is asked (cheat-sheet review)".
+  - The status line, the banner's rows, the mention line and a question's key rows wrap between whole terms
+    (`console_terms()`, which the mention line's loop became): a row ends at a term and the next starts with the
+    next one, never after a separator; a term wider than a row is cut. Word wrapping split `98% context left`
+    from `left` whenever a dated API model id made the line wider than 80 columns, and left rows ending ` ·` at
+    60. `console_status_line()` returns the terms. Contract-visible: 04 §15.10 IC-77 (run totals and the keys
+    row). Tests: test-console-render.R "the status line wraps between whole terms, never after a separator
+    (review)"; test-console-repl.R "the banner names the console's key and promises nothing it lacks (review,
+    Task 26)"; test-console-ui.R "the keys are a row under the question, a and p only with a rule (D-243)";
+    test-console-interrupt.R (the pause menu's keys).
