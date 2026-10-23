@@ -3215,6 +3215,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   The message lists the first ten names, or positions where a name is empty, and says that `$value` holds
   every answer and `uncertain = NA` keeps the others. Formerly it carried only `prob` (P(yes) or the chosen
   option's probability) and no way to tell which inputs were uncertain.
+- Rule (s1-4): the factor that `s1_run()` returns for factor `choices` or `.opts$output = "factor"` (P13,
+  INFRA-18) carries `attr(, "meta") = list(errors = <df>)` when elements failed; otherwise it has only
+  names and levels. Formerly every attribute was dropped after `s1_failures()` had warned "see attr(x,
+  "meta")$errors". The plan kept the whole `meta`, but `print.factor()` prints every attribute other than
+  levels and class (R 4.6): a two-element factor with `s1_meta()`'s fields printed 63 lines instead of 3
+  (measured), on every call. Probabilities stay off, as planned: `[<-.factor` keeps attributes, so they
+  would go stale.
 - Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
   model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal); 07
   §2.1 and the 04 `model_prepare()` row (P06 prepares); the 04 `model_resolve()` row (the empty-route hint); 04
@@ -3226,7 +3233,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   string that is not a choice); 04 §2.2 messages (`thinking_clamped`), §4.9 `thinking` row, 03 §8.4 model
   references and `?gptr_provider` (`thinking_levels`); 03 §4.1.3 and 04 §6.1.3 (`alias_shadowed` for a
   spec); 03 §4.1, 04 §6.1.1 step 5 and `?peter` (System 1 arguments on a conversational route); 04 §2.2
-  `s1_uncertain` row (its fields).
+  `s1_uncertain` row (its fields); 03 §4.1.5, `?peter`, `?gptr_prob` and the system-one vignette (the factor
+  result).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
   match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
@@ -3245,5 +3253,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   per model and level (D-250)"; test-catalog-models.R "a thinking suffix the model lacks is announced with the
   level used (D-250)"; test-gptr-capture.R "an alias shadowed by a spec the argument accepts gets the message
   (D-250)"; test-gptr-gateway.R "System 1 arguments are refused on a conversational route (D-250)";
-  test-s1-route.R "uncertain = \"stop\" names the uncertain inputs and carries every answer (D-250)". Evidence:
+  test-s1-route.R "uncertain = \"stop\" names the uncertain inputs and carries every answer (D-250)", "a
+  factor answer keeps the call's meta, which its failure warning points to (D-250)". Evidence:
   progress/fixes.md Task FIX-17.

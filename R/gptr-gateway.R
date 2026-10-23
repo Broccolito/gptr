@@ -77,7 +77,9 @@
 #' @param choices,levels,threshold,min_confidence,uncertain System 1 answer shape and abstention,
 #'   for a decision model (`jev`, `"ollama/clef-flash"`) or opt-in emulation
 #'   (`gptr_config(system1 = "emulate:<ref>")`). A conversational model refuses them (`threshold`
-#'   only when it is not 0.5) rather than ignore them.
+#'   only when it is not 0.5) rather than ignore them. `choices` given as a factor, or
+#'   `.opts = list(output = "factor")`, return a plain factor with those levels and no
+#'   probabilities or confidence.
 #' @param prompt An explicit prompt; wins over positional selection.
 #' @param envir Where the agent evaluates R code and creates objects. A call made by the agent's
 #'   own R code without `envir` evaluates in a new environment whose parent is the caller's,

@@ -201,6 +201,9 @@ works on the objects already in memory.
   (`$value`), which it used to discard; `$prob` is unchanged.
 * `as.data.frame()` of a System 1 score names its probability columns by level (`p_<level>`), as
   `gptr_prob(x, "probabilities")` and choices do; they were `p_0`, `p_1`, ...
+* `choices` given as a factor, or `.opts = list(output = "factor")`, return a plain factor without
+  probabilities, as `?peter`, `?gptr_prob` and the System 1 vignette now say. When elements fail,
+  the factor keeps `attr(x, "meta")$errors`, which the failure warning points to.
 
 # gptr 0.7.0
 

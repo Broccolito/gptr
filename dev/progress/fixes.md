@@ -2253,3 +2253,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^s1-types$` PASS 219 (the new test ties both accessors for a choice and a score); the `s1-*`,
   `copy-s1` and `s11-conformance` files PASS 1504. Lint clean; no Rd change.
 - Deviations: none (the contract already says `p_<level>`). Open: none.
+
+### s1-4 - A factor-returning choice keeps its errors, and the factor result is documented
+- Finding 131. Red: `^s1-route$` FAIL 1, PASS 314: with the mocked /systemone answering one of two states
+  without probabilities, `choices = factor(c("liver", "lung", "other"))` warned "see attr(x,
+  "meta")$errors" and returned a factor whose `meta` was NULL.
+- Cause: `s1_run()` returns `factor(s1_bare(out), levels = q$options)` (by design, P13, INFRA-18), and
+  `s1_bare()` strips every attribute after `s1_failures()` has warned; no user doc said a factor comes back.
+- Fix: the factor keeps `meta = list(errors = <df>)` when elements failed and nothing else. `?peter` (System
+  1 arguments paragraph), `?gptr_prob` and the system-one vignette (.Rmd and .Rmd.orig) say that factor
+  `choices` or `.opts = list(output = "factor")` return a plain factor without probabilities. 03 §4.1.5
+  amended; NEWS entry.
+- Green: `^s1-route$` PASS 316 (an answer without failures has only names, levels and class);
+  s1-route, s1-types and gptr-gateway PASS 919; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 65, PASS
+  35492. Lint clean; `man/peter.Rd` and `man/gptr_prob.Rd` regenerated, `tools::checkRd()` clean.
+- Deviations: D-250 (s1-4 rule). The plan kept the whole `meta`, which `print.factor()` prints with every
+  answer (63 lines for two elements, measured, instead of 3); only `errors`, and only on failure, makes the
+  warning true without that. Open: `gptr_prob()` on a factor still says only that `x` is not a `gptr_s1`.

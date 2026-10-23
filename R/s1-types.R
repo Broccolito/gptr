@@ -438,6 +438,8 @@ Summary.gptr_s1 = function(...) {
 #' (logical), a `gptr_choice` (character) or a `gptr_score` (double, the expected 0-based level).
 #' They work in `if()`, `while()`, `ifelse()`, `table()`, `sum()` and comparisons like the bare
 #' vectors, and carry the model's probabilities as attributes. `gptr_prob()` reads them.
+#' Choices given as a factor, or `.opts = list(output = "factor")`, return a plain factor
+#' instead, which carries no probabilities.
 #'
 #' Probabilities are the model's own; they are empirically calibrated only when the printed
 #' footer says `calibrated`. Native decision models report calibration as unknown unless

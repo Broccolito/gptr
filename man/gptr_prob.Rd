@@ -22,6 +22,8 @@ System 1 calls (\code{peter(question, x, model = jev)}) return typed vectors: a 
 (logical), a \code{gptr_choice} (character) or a \code{gptr_score} (double, the expected 0-based level).
 They work in \verb{if()}, \verb{while()}, \code{ifelse()}, \code{table()}, \code{sum()} and comparisons like the bare
 vectors, and carry the model's probabilities as attributes. \code{gptr_prob()} reads them.
+Choices given as a factor, or \code{.opts = list(output = "factor")}, return a plain factor
+instead, which carries no probabilities.
 }
 \details{
 Probabilities are the model's own; they are empirically calibrated only when the printed

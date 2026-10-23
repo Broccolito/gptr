@@ -922,7 +922,11 @@ s1_run = function(prompt, parts, target, args, session = NULL, call = NULL) {
   s1_record(out, prompt, q, meta, session, call)
   if (identical(q$type, "choice") &&
         (isTRUE(q$factor) || identical(args[["opts"]][["output"]], "factor"))) {
-    return(factor(s1_bare(out), levels = q$options))
+    # only the errors that s1_failures() points to: a factor prints every attribute, and
+    # per-element probabilities would go stale under [<-.factor
+    f = factor(s1_bare(out), levels = q$options)
+    if (!is.null(meta$errors)) attr(f, "meta") = list(errors = meta$errors)
+    return(f)
   }
   out
 }

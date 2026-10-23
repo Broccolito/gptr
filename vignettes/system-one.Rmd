@@ -200,7 +200,9 @@ gptr_prob(severity, "probabilities")
 severe = 2. The example scores are 0.20 and 1.88, not rounded labels. For scores,
 `gptr_prob(x)` gives confidence; use `"probabilities"` to inspect the distribution over
 levels. Choice and score confidence are provider-defined measures of concentration, not
-established probabilities that the answer is correct.
+established probabilities that the answer is correct. Giving `choices` as a factor, or
+`.opts = list(output = "factor")`, returns a plain factor with those levels instead, without
+probabilities or confidence.
 
 ## Provenance and caching
 

@@ -903,6 +903,38 @@ test_that("INFRA-18: choices give a classed character with a plain ==; a factor 
   expect_identical(nrow(srv$log()), n)
 })
 
+test_that("a factor answer keeps the call's meta, which its failure warning points to (D-250)", {
+  # the second state gets an answer without probabilities, so it fails and is NA; the server
+  # starts before s1_fresh() moves the working directory into a temporary project
+  srv = local_mock_server("systemone", answers = function(body) {
+    if (!grepl("liver", unlist(body$state), fixed = TRUE)) {
+      return(list(answer = list(type = "choice", choice = "kidney")))
+    }
+    list(answer = list(type = "choice", choice = "liver",
+                       probabilities = list(liver = 0.8, lung = 0.1, other = 0.1)))
+  })
+  s1_fresh()
+  x = c(s1 = "hepatocytes from the liver", s2 = "a blood sample")
+  seen = new.env()
+  f = withCallingHandlers(
+    peter("Which tissue?", x, model = srv$provider, choices = factor(c("liver", "lung", "other"))),
+    gptr_warning_s1_errors = function(w) {
+      seen$w = w
+      invokeRestart("muffleWarning")
+    }
+  )
+  expect_match(conditionMessage(seen$w), "see attr(x, \"meta\")$errors", fixed = TRUE)
+  expect_identical(class(f), "factor")
+  expect_identical(levels(f), c("liver", "lung", "other"))
+  expect_identical(unname(as.character(f)), c("liver", NA))
+  expect_identical(attr(f, "meta")$errors$index, 2L)
+  expect_null(attr(f, "probabilities"))
+  # an answer without failures is a plain factor, which prints no attribute
+  ok = peter("Which tissue?", x[1L], model = srv$provider, .opts = list(output = "factor"),
+             choices = c("liver", "lung", "other"))
+  expect_identical(names(attributes(ok)), c("names", "levels", "class"))
+})
+
 # ---- Task 11: the jev-router example (IC-69) ----------------------------------------------------
 
 # The installed (or load_all()-shimmed) example; a missing file is an error, never source("")

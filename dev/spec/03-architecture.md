@@ -652,7 +652,8 @@ message naming `I(x)` when it splits a data frame into several states [IC-71]). 
 `as_state(s)`: its last answer (at most 2,000 characters) plus value facts; no turn is added and a
 `gptr.decision` custom entry is appended [G3 (12)]. Question type: `choices` -> choice, `levels` -> score,
 else a boolean (wire name `noul`, never the public `bool` [04a]). Results: `gptr_decision` (logical),
-`gptr_choice` (classed character; a factor only when `choices` is a factor or `.opts$output = "factor"`),
+`gptr_choice` (classed character; a factor only when `choices` is a factor or `.opts$output = "factor"`, a
+plain factor without probabilities whose `meta` attribute holds only `errors`, when elements failed [D-250]),
 `gptr_score` (double), probabilities as attributes (§5.6). Choice labels that `if()` would read as logical
 (`"TRUE"`, `"T"`, `"false"`) are rejected at request time [04 verification]. `threshold` (0.5) turns P(yes)
 into TRUE/FALSE; abstention is **off by default**. `min_confidence` defines an uncertain band; `uncertain`
