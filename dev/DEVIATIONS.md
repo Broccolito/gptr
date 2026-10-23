@@ -3131,8 +3131,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   suffix in every mode, manual included (`context_mode_body()` tests deny first): a manual run's
   `ask` call is denied and the run goes on, so "questions asked with the ask tool, stop the run"
   was false.
+- Rule: edit errors number edits from 1 (`edits[1]` is the first), as R and the schema gate do,
+  at the console, inside `r` and from the direct tool; Pi's wording counts from 0. Applies to the
+  not-found, empty-oldText, occurrences, overlap and must-be-a-string messages.
 - Contract-visible: 04 §4.4 call record (`tool` NULL when not offered), §7.6 `dispatch_tools()`,
   §9.3 suffix order.
 - Tests: test-agent-dispatch.R "the offered tools (D-248)" (3 blocks) and the frozen-schema block;
-  test-bridge-lang.R, test-bridge-sh.R through-run refusals; test-prompt-context.R mode suffixes.
-  Evidence: progress/fixes.md Task FIX-15 tools-1, tools-5.
+  test-bridge-lang.R, test-bridge-sh.R through-run refusals; test-prompt-context.R mode suffixes;
+  test-tool-edit.R "edit errors number edits from 1". Evidence: progress/fixes.md Task FIX-15
+  tools-1, tools-5, tools-6.

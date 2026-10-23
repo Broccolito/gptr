@@ -58,10 +58,11 @@ splice_bytes = function(x, start, len, new) {
   rawToChar(unlist(pieces))
 }
 
-#' Signal an edit error with Pi's single-edit or multi-edit wording (`i` is 1-based, shown 0-based)
+#' Signal an edit error with Pi's single-edit or multi-edit wording; edits count from 1, as in R
+#' and the schema gate (D-248)
 #' @noRd
 edit_error = function(single, multi, path, i, n) {
-  msg = if (n == 1L) sprintf(single, path) else sprintf(multi, i - 1L, path)
+  msg = if (n == 1L) sprintf(single, path) else sprintf(multi, i, path)
   gptr_abort(msg, "invalid_argument", arg = "edits", expected = "edits that match the file")
 }
 
@@ -136,7 +137,7 @@ apply_edits = function(text, edits, path = "file", replace_all = FALSE) {
           paste0("Found ", occ, " occurrences of the text in ", path,
                  ". The text must be unique. Please provide more context to make it unique.")
         } else {
-          paste0("Found ", occ, " occurrences of edits[", i - 1L, "] in ", path,
+          paste0("Found ", occ, " occurrences of edits[", i, "] in ", path,
                  ". Each oldText must be unique. Please provide more context to make it unique.")
         }
         gptr_abort(msg, "invalid_argument", arg = "edits", expected = "a unique oldText")
@@ -156,7 +157,7 @@ apply_edits = function(text, edits, path = "file", replace_all = FALSE) {
   owner = owner[o]
   ov = which(starts[-1L] < (starts + lens)[-length(starts)])
   if (length(ov)) {
-    gptr_abort(paste0("edits[", owner[ov[1L]] - 1L, "] and edits[", owner[ov[1L] + 1L] - 1L,
+    gptr_abort(paste0("edits[", owner[ov[1L]], "] and edits[", owner[ov[1L] + 1L],
                       "] overlap in ", path,
                       ". Merge them into one edit or target disjoint regions."),
                "invalid_argument", arg = "edits", expected = "non-overlapping edits")
@@ -251,7 +252,7 @@ edit_normalize_args = function(edits) {
     for (f in c("oldText", "old_text", "newText", "new_text")) {
       v = edits[[i]][[f]]
       if (!is.null(v) && !rlang::is_string(v)) {
-        msg = paste0("Edit tool input is invalid. edits[", i - 1L, "].", f, " must be a string.")
+        msg = paste0("Edit tool input is invalid. edits[", i, "].", f, " must be a string.")
         gptr_abort(msg, "invalid_argument", arg = "edits", expected = "string oldText and newText")
       }
     }

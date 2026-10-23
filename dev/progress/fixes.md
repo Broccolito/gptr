@@ -1951,3 +1951,14 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `prompt-context` PASS 88; `^(prompt-context|prompt-text|prompt-compact|tool-ask)$` PASS
   572. Lint clean; plan checks pass.
 - Deviations: D-248 (04 §9.3 suffix order). Open: none.
+
+### tools-6 - Edit errors number edits from 1
+- Red: FAIL 1 in `tool-edit` (PASS 170): `peter$edit()` with the first of two edits missing said
+  "Could not find edits[0]", which an R reader takes for no edit (finding 4).
+- Cause: `apply_edits()` and `edit_normalize_args()` printed `i - 1L`, Pi's JSON wording, on every
+  path (console, inside `r`, direct tool), while the schema gate on the same tool counts from 1.
+- Fix: the five messages (not found, empty oldText, occurrences, overlap, must be a string) print
+  `i`; one rule for every caller, no base argument.
+- Green: `tool-edit` PASS 179 (6 pins moved to 1-based); `^(tool-edit|tool-namespace|doc-replay|
+  utils-paths|json-schema|doc-edit)$` PASS 1407 SKIP 1. Lint clean.
+- Deviations: D-248 (no contract text names the index). Open: none.

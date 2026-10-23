@@ -43,11 +43,11 @@ test_that("edit errors use Pi's texts and never write partially", {
   f = put_file(td, "overlap.txt", "one\ntwo\nthree\n")
   expect_match(err(edit_file(f, list(list(oldText = "one\ntwo\n", newText = "A"),
                                      list(oldText = "two\nthree\n", newText = "B")))),
-               "^edits\\[0\\] and edits\\[1\\] overlap in ")
+               "^edits\\[1\\] and edits\\[2\\] overlap in ")
   f = put_file(td, "nopartial.txt", "alpha\nbeta\ngamma\n")
   expect_match(err(edit_file(f, list(list(oldText = "alpha\n", newText = "ALPHA\n"),
                                      list(oldText = "missing\n", newText = "M\n")))),
-               "^Could not find edits\\[1\\] in ")
+               "^Could not find edits\\[2\\] in ")
   expect_identical(rd(f), "alpha\nbeta\ngamma\n")
   f = put_file(td, "same.txt", "abc\n")
   expect_match(err(edit_file(f, e1("abc", "abc"))), "^No changes made to ")
@@ -410,15 +410,40 @@ test_that("an oldText or newText that is not one string is refused with a classe
   f = put_file(td, "t.txt", "abc\n")
   cls = "gptr_error_invalid_argument"
   expect_error(edit_file(f, list(list(oldText = 1, newText = "x"))),
-               "edits[0].oldText must be a string", fixed = TRUE, class = cls)
+               "edits[1].oldText must be a string", fixed = TRUE, class = cls)
   expect_error(edit_file(f, list(list(oldText = NA_character_, newText = "x"))),
-               "edits[0].oldText must be a string", fixed = TRUE, class = cls)
+               "edits[1].oldText must be a string", fixed = TRUE, class = cls)
   expect_error(edit_file(f, list(list(oldText = "a", newText = "b"),
                                  list(oldText = "abc", newText = c("x", "y")))),
-               "edits[1].newText must be a string", fixed = TRUE, class = cls)
+               "edits[2].newText must be a string", fixed = TRUE, class = cls)
   expect_error(edit_file(f, list(list(old_text = "abc", new_text = 2))),
-               "edits[0].new_text must be a string", fixed = TRUE, class = cls)
+               "edits[1].new_text must be a string", fixed = TRUE, class = cls)
   expect_identical(rd(f), "abc\n")
+})
+
+test_that("edit errors number edits from 1, as R and the schema gate do (D-248)", {
+  skip_on_cran()
+  td = withr::local_tempdir()
+  f = put_file(td, "idx.R", "p = 1\nq = 2\n")
+  cls = "gptr_error_invalid_argument"
+  miss = list(oldText = "NOPE", newText = "x")
+  ok = list(oldText = "p = 1", newText = "p = 3")
+  ed = function(edits) member_edit(f, edits)
+  expect_error(ed(list(miss, ok)), "Could not find edits[1] in", fixed = TRUE, class = cls)
+  expect_error(ed(list(ok, miss)), "Could not find edits[2] in", fixed = TRUE, class = cls)
+  expect_error(ed(list(ok, list(oldText = "", newText = "x"))),
+               "edits[2].oldText must not be empty", fixed = TRUE, class = cls)
+  expect_error(ed(list(ok, list(oldText = " = ", newText = "x"))),
+               "Found 2 occurrences of edits[2] in", fixed = TRUE, class = cls)
+  overlap = list(list(oldText = "p = 1\nq", newText = "A"), list(oldText = "q = 2", newText = "B"))
+  expect_error(ed(overlap), "edits[1] and edits[2] overlap", fixed = TRUE, class = cls)
+  expect_error(ed(list(ok, list(oldText = "q = 2", newText = 1))),
+               "edits[2].newText must be a string", fixed = TRUE, class = cls)
+  expect_error(ed(data.frame(oldText = c("NOPE", "p = 1"), newText = c("x", "p = 3"))),
+               "Could not find edits[1] in", fixed = TRUE, class = cls)
+  expect_error(tool_edit_execute(list(path = f, edits = list(miss, ok)), NULL),
+               "Could not find edits[1] in", fixed = TRUE, class = cls)
+  expect_identical(rd(f), "p = 1\nq = 2\n")
 })
 
 test_that("an envelope inside JSON-string, single-object or data-frame edits is a patch", {
@@ -541,7 +566,7 @@ test_that("an oldText of only whitespace never matches between every two charact
   expect_match(err(edit_file(f, e1("  ", "X"))), "^Could not find the exact text in ")
   expect_match(err(edit_file(f, list(list(oldText = "ab", newText = "AB"),
                                      list(oldText = " \t", newText = "X")))),
-               "^Could not find edits\\[1\\] in ")
+               "^Could not find edits\\[2\\] in ")
   expect_identical(rd(f), "ab\ncd\n")
   g = put_file(td, "t.txt", "a\tb\n")
   edit_file(g, e1("\t", " "))
