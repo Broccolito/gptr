@@ -893,11 +893,11 @@ console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL)
   tokens = format_count(unlist(usage[intersect(cols, names(usage))]))
   cost = function(x) if (sum(x, na.rm = TRUE) > 0) format_cost(x)
   left = console_context_left(usage)
-  parts = c(word, if (rlang::is_string(model)) console_escape(model, FALSE),
-            paste0(n, if (n == 1L) " request" else " requests"),
-            if (tokens != "unknown") paste(tokens, "tokens"), cost(usage$cost),
-            if (!is.null(cost(kids))) paste("sub-agents", cost(kids)),
-            if (!is.na(left)) paste0(left, "% context left"))
+  c(word, if (rlang::is_string(model)) console_escape(model, FALSE),
+    paste0(n, if (n == 1L) " request" else " requests"),
+    if (tokens != "unknown") paste(tokens, "tokens"), cost(usage$cost),
+    if (!is.null(cost(kids))) paste("sub-agents", cost(kids)),
+    if (!is.na(left)) paste0(left, "% context left"))
 }
 
 #' The context the last of usage rows `u` left (IC-77, D-245), a whole percent: 1 minus its prompt
@@ -970,7 +970,8 @@ console_on_before_request = function(event, ctx) {
   NULL
 }
 
-#' message_update: stream text deltas through the markdown renderer; thinking at verbosity 3; on a
+#' message_update: stream text deltas through the markdown renderer (after an abort, the text held
+#' when it came under a dim `received before the abort:`); thinking at verbosity 3; on a
 #' CLI route, whose one request runs a whole agent turn, the first line of each thinking block at
 #' verbosity 2, with the live row below it
 #' @noRd
@@ -985,7 +986,11 @@ console_on_message_update = function(event, ctx) {
   if (visible && isTRUE(rec$paused) && any(nzchar(delta))) {
     rec$paused = FALSE
     live = session_live(rec$session)
-    if (isTRUE(live$run$signal$aborted)) console_write("[gptr] final received text:")
+    if (isTRUE(live$run$signal$aborted)) {
+      # what arrived before the abort continues under a dim label, one block with it
+      console_gap(rec, "text")
+      console_notice(console_style()$dim("received before the abort:"))
+    }
   }
   if (identical(kind, "text")) {
     if (!is.null(rec$think)) rec$think$finish()

@@ -4057,6 +4057,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Tests: test-console-render.R "a refused
     call's result is one dim row that says it was not run (review)"; test-agent-dispatch.R "the model reads n
     <text> as the person's; the next call is asked (cheat-sheet review)".
+  - After an abort, the text that arrived before it continues under a dim `received before the abort:` at the
+    margin, one block with it, in the console's words; it was `[gptr] final received text:` at column 0 in ink,
+    the last old `[gptr]` notice on the abort path. Contract-visible: none. Tests: test-console-abort-stream.R
+    "abort labels a redactor tail received after a pause without printing it twice", "continuing a pause never
+    adds an abort-tail label".
   - The status line, the banner's rows, the mention line and a question's key rows wrap between whole terms
     (`console_terms()`, which the mention line's loop became): a row ends at a term and the next starts with the
     next one, never after a separator; a term wider than a row is cut. Word wrapping split `98% context left`

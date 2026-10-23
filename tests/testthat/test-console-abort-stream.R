@@ -31,10 +31,10 @@ test_that("abort labels a redactor tail received after a pause without printing 
     run_abort(run, "user")
     run_abort(run, "user")
   })
-  # the pause marks the cut; the redactor's tail follows under its label, the aborted answer's end
-  # marked too
-  expect_identical(utils::head(out, 3L), c("Hello...", "[gptr] final received text:", "world..."))
-  expect_identical(sum(out == "[gptr] final received text:"), 1L)
+  # the pause marks the cut; the redactor's tail follows under its label, dim in the console's words
+  # (review of Tasks 22-27), the aborted answer's end marked too
+  expect_identical(utils::head(out, 3L), c("Hello...", "received before the abort:", "world..."))
+  expect_identical(sum(out == "received before the abort:"), 1L)
   expect_identical(sum(out == "world..."), 1L)
   expect_identical(msg_text(utils::tail(run$shell$messages, 1L)[[1L]]), "Hello world")
   expect_null(console_record(list(run = run$id)))
@@ -51,7 +51,7 @@ test_that("continuing a pause never adds an abort-tail label", {
     abort_stream_delta(run, " again.")
     run_abort(run, "user")
   })
-  expect_false(any(grepl("final received text", out, fixed = TRUE)))
+  expect_false(any(grepl("received before the abort", out, fixed = TRUE)))
   expect_identical(msg_text(utils::tail(run$shell$messages, 1L)[[1L]]), "Hello world again.")
 })
 
