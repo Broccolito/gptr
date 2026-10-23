@@ -1760,6 +1760,11 @@ artifact_app = function(id, data, title, kind, check, launch, envir, ctx = NULL)
   )))
   meta$current = n
   artifact_meta_write(id, meta)
+  if (is.null(workspace_dir())) {
+    gptr_inform(paste0("Artifact ", id, " is in a temporary workspace (", path_norm(dir), ") that ",
+                       "is deleted when R exits; run gptr_init() to keep artifacts."),
+                "notice", .once = "artifact-temp-workspace")
+  }
   if (launch %||% gptr_has_human()) {
     return(artifact_start(id, n, type, ctx = ctx, session_check = check))
   }

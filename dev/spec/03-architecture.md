@@ -1103,9 +1103,11 @@ bare vector for foreign values), `c`, `rep`, `format` (`TRUE (p=0.93)`), `print`
 ```
 
 `<root>` is `.gptr` in a consented workspace (so NS-8's `.gptr/artifacts/marker-explorer/app.R` is literal),
-else `tempdir()/gptr`. Handle `gptr_artifact`: `list(id, title, version, url, path, status, checks, screenshot,
-session)`. Data snapshots use a leaf `saveRDS(compress = FALSE)` wrapper, capped by `gptr.artifact_max_bytes`
-(500 MB) (§6.4 R7).
+else `tempdir()/gptr`, which R deletes at exit: then the `<environment>` line is `Artifacts: <that path,
+normalised> (temporary: deleted when R exits; cite this full path; gptr_init() keeps artifacts)`, and the first
+`peter$app()` of the process sends a `notice` naming the artifact's path and `gptr_init()`. Handle
+`gptr_artifact`: `list(id, title, version, url, path, status, checks, screenshot, session)`. Data snapshots use a
+leaf `saveRDS(compress = FALSE)` wrapper, capped by `gptr.artifact_max_bytes` (500 MB) (§6.4 R7).
 
 ### 5.8 Sub-agent handles
 

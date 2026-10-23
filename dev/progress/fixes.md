@@ -2245,3 +2245,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-252 (extended). The message is added once in `artifact_app()`, not in each caller; the test mocks
   `artifact_start()` rather than the type's launch; D-252's contract line, left 156 wide by mcp-trusted, rewrapped.
   Open: none.
+
+### art-2 - An artifact in a temporary workspace is announced to the user and the model
+- Finding 48. Red: `^artifact-app$|^prompt-context$` FAIL 4 PASS 617: without `.gptr/` the environment block read
+  `Artifacts: /var/folders/.../T//Rtmp.../gptr/artifacts` with no word that it is temporary, and `peter$app()`
+  signalled no notice.
+- Cause: the tempdir fallback is intended (`?gptr_artifacts`), but neither the model nor the user was told, so models
+  shortened the opaque path to a relative `artifacts/<id>/app.R` that does not exist (3/3 GPT runs).
+- Fix: the line is `Artifacts: <path_norm(tempdir()/gptr/artifacts)> (temporary: deleted when R exits; cite this full
+  path; gptr_init() keeps artifacts)`; after a version is built without `.gptr/`, `artifact_app()` sends
+  `gptr_inform(... "notice", .once = "artifact-temp-workspace")` naming `path_norm(artifact_dir(id))` and
+  `gptr_init()`. 03 §5.7.
+- Green: `^artifact-app$|^prompt-context$` PASS 621 (one notice, none on the second call or with `.gptr/`; after
+  `gptr_init()` the line is `.gptr/artifacts`); full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35482. Lint clean;
+  plan checks pass; Rd unchanged.
+- Deviations: D-252 (extended). The prompt's path is normalised (the plan's `tempdir()` path had a `//` and the
+  unresolved `/var` link), so it is the prefix of the path the notice names. Open: none.

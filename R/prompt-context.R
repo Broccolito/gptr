@@ -422,7 +422,11 @@ context_provide_environment = function(ctx, budget) {
   shiny = nzchar(system.file(package = "shiny"))
   if (shiny && "artifacts" %in% registry_names("prompt_section")) {
     art = ".gptr/artifacts"
-    if (is.null(workspace_dir())) art = file.path(tempdir(), "gptr", "artifacts")
+    if (is.null(workspace_dir())) {
+      # models shorten an opaque temporary path to a relative one that does not exist
+      art = paste0(path_norm(file.path(tempdir(), "gptr", "artifacts")), " (temporary: deleted ",
+                   "when R exits; cite this full path; gptr_init() keeps artifacts)")
+    }
   }
   lines = c(paste0("Date: ", with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d"))),
             paste0("Working directory: ", wd),

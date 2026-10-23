@@ -1100,6 +1100,32 @@ test_that("peter$app() launches by default only at the console, and says why it 
   expect_identical(seen$version, 4L)
 })
 
+test_that("an artifact in a temporary workspace is announced once", {
+  root = local_project(gptr = FALSE)
+  withr::local_options(gptr.quiet = FALSE)
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  notices = function(expr) {
+    seen = character()
+    withCallingHandlers(expr, gptr_message_notice = function(m) {
+      seen <<- c(seen, conditionMessage(m))
+      invokeRestart("muffleMessage")
+    })
+    seen
+  }
+  id = "temp-workspace-notice"
+  withr::defer(unlink(artifact_dir(id), recursive = TRUE))
+  write_working(id, ok_app)
+  first = notices(peter$app(id, check = FALSE, launch = FALSE))
+  expect_length(first, 1L)
+  expect_match(first, paste0("(", path_norm(artifact_dir(id)), ")"), fixed = TRUE)
+  expect_match(first, "deleted when R exits; run gptr_init() to keep artifacts.", fixed = TRUE)
+  expect_length(notices(peter$app(id, check = FALSE, launch = FALSE)), 0L)
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  dir.create(file.path(root, ".gptr"))
+  write_working(id, ok_app)
+  expect_length(notices(peter$app(id, check = FALSE, launch = FALSE)), 0L)
+})
+
 test_that("peter$app() launches through the ladder and keeps .Random.seed (IC-61)", {
   skip_if_cannot_launch()
   local_project()
