@@ -4475,7 +4475,8 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 - `doc_block_lines()` drops, at top-level-expression granularity (`getParseData()` of each recorded code chunk),
   calls to `gptr_return()`/`gptr::gptr_return()` and to members whose spec has `record = FALSE`; a chunk that
   becomes empty is omitted; the value stays in `value=`. `record = FALSE` is set for `out`, `plot`, `help`,
-  `search`, `describe`; the `<r_session>` text tells the model to use them only with `record = false`.
+  `search`, `describe`; with a document bound (when `r` has `record`), the `<r_session>` text tells the model to
+  use them only with `record = false` (D-248).
 - Plan-mode runs never record code (`record` forced `FALSE`); their block holds one `## Plan: <plans path>`
   comment.
 - S-9 best effort: `doc_block_lines()` rewrites `<-` to `=` for `LEFT_ASSIGN` tokens whose assignment is a

@@ -1526,10 +1526,13 @@ r_session_helpers_text = paste(
   "peter$find(pattern, path, sort), peter$ls(path), peter$describe(x). peter$search(\"words\") and",
   "peter$help(name) find more."
 )
-r_session_out_text = paste(
-  "- Long output is cut to its head and tail; the notice names peter$out(id) for the rest. Use",
-  "peter$out(), peter$help(), peter$search() and peter$plot() only with record = false."
-)
+# The record = false sentence only with a document bound, when `r` has `record` (r_schema())
+r_session_out_text = function(ctx) {
+  out = "- Long output is cut to its head and tail; the notice names peter$out(id) for the rest."
+  if (is.null(ctx$input$document)) return(out)
+  paste(out, "Use peter$out(), peter$help(), peter$search() and peter$plot() only with",
+        "record = false.")
+}
 
 # Member-only capabilities: descriptions and schemas
 tool_help_description = paste(

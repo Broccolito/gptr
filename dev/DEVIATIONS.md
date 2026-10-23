@@ -3148,11 +3148,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   boundary inside a ligature), and then the reasons add "the touched lines were rewritten in
   normalised form". A `gptr_patch` keeps the reasons (`reasons`, chr) and prints them bracketed
   between the message and the diff when fuzzy, as the model reads them.
+- Rule: the `<r_session>` `out` fragment says "Use peter$out(), peter$help(), peter$search() and
+  peter$plot() only with record = false." only when a document is bound (`ctx$input$document`),
+  the freeze input that gives `r` its `record` argument; without one, `record` read as an argument
+  of those helpers (`peter$help("edit", record = FALSE)`: unused argument).
 - Contract-visible: 04 §4.4 call record (`tool` NULL when not offered), §7.6 `dispatch_tools()`,
-  §9.3 suffix order, §5.10 `gptr_patch` (`reasons`, print), §7.10 `edit_file()` (fuzzy splice).
+  §9.3 suffix order, §5.10 `gptr_patch` (`reasons`, print), §7.10 `edit_file()` (fuzzy splice),
+  IC-48 (`record = false` sentence); 03 §7.3 (`out` without a document).
 - Tests: test-agent-dispatch.R "the offered tools (D-248)" (3 blocks) and the frozen-schema block;
   test-bridge-lang.R, test-bridge-sh.R through-run refusals; test-prompt-context.R mode suffixes;
   test-tool-edit.R "edit errors number edits from 1", "an edit without oldText or newText";
   test-tool-namespace.R `peter$help("edit")`; test-tool-edit.R "a fuzzy match changes only its
-  span" and "gptr_patch prints the message". Evidence: progress/fixes.md Task FIX-15 tools-1,
-  tools-5, tools-6, tools-7, tools-8.
+  span" and "gptr_patch prints the message"; test-tool-namespace.R "the out fragment names record =
+  false only when the r tool takes it". Evidence: progress/fixes.md Task FIX-15 tools-1, tools-5,
+  tools-6, tools-7, tools-8, tools-9.

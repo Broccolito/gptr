@@ -2003,3 +2003,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   (was 2.7 s). Lint clean; Rd unchanged.
 - Deviations: D-248 (04 §5.10, §7.10). Open: the combining/ligature fallback still rewrites lines
   (said in the reasons); a non-fuzzy deviation (CRLF, re-encoding) still prints only the message.
+
+### tools-9 - The r_session prompt mentions record = false only when the r tool has it
+- Red: FAIL 1 in `tool-namespace` (PASS 415): a session with no document froze "Use peter$out(),
+  peter$help(), peter$search() and peter$plot() only with record = false." while its `r` schema
+  had only `code` (from the verdict of finding 20: `peter$help("edit", record = FALSE)` failed).
+- Cause: `r_session_out_text` was a fixed string, while `record` is an `r` argument only with a
+  document bound at freeze (`r_schema(document = TRUE)`).
+- Fix: the fragment is a `function(ctx)` that adds the sentence only when `ctx$input$document` is
+  set, the test `<documents>` uses; frozen once per session, so the cache prefix is unchanged.
+- Green: `tool-namespace` PASS 417 (the stand-in and registration pins render the document
+  text); `^(tool-namespace|tool-r|prompt-.*|northstar|bench-context|doc-formats|lint-rules|
+  arch-layers)$` PASS 2031. Lint clean; Rd unchanged.
+- Deviations: D-248 (03 §7.3, IC-48). Open: none.

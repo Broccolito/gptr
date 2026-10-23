@@ -2077,7 +2077,8 @@ array order (read: line 1; r: five lines 2-6; edit: lines 7-10; write: line 11) 
 so the `readonly` preset has no edit or write lines; `<r_session>` is P07's core with fragments (`parent =
 "r_session"`) from `builtin:tools` (helpers, `out`), `builtin:bridges` (shell), `builtin:lang` (languages) and
 `builtin:subagents`; `<documents>`, `<artifacts>` and `<system1>` are registered by P15, P23 and P13. Disabling a
-built-in removes its lines. The text below is the composition with every built-in loaded.
+built-in removes its lines. The text below is the composition with every built-in loaded and a document bound;
+without a document, `out` ends after "for the rest." (`r` then has no `record` argument; D-248).
 
 ```text
 You are Peter, an expert R programmer and data analyst working inside the user's live R session. The objects in memory are your workspace: inspect them, compute on them and create new ones with the r tool; everything you create stays in the session for the user. You also read, edit and write files, and your code is recorded in the user's script or notebook.

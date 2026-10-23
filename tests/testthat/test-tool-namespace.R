@@ -976,10 +976,14 @@ test_that("the specs preserve P07's stand-ins apart from read's path and line gu
                      label = t$name)
   }
   secs = registry_all("prompt_section")
+  doc = list(input = list(document = list(path = "a.R")))
   for (f in sb$fragments[1:2]) {
     mine = Filter(function(s) identical(s$name, f$name) && identical(s$parent, f$parent), secs)
     expect_identical(length(mine), 1L, label = f$name)
-    expect_identical(mine[[1L]]$text, f$text, label = f$name)
+    txt = mine[[1L]]$text
+    # the stand-ins are the texts with a document bound
+    if (is.function(txt)) txt = txt(doc)
+    expect_identical(txt, f$text, label = f$name)
     expect_identical(as.integer(mine[[1L]]$order), as.integer(f$order), label = f$name)
   }
 })
@@ -999,7 +1003,8 @@ test_that("builtin:tools registers fragments, the plugins section, a search sour
     "- Long output is cut to its head and tail; the notice names peter$out(id) for the rest.",
     "Use peter$out(), peter$help(), peter$search() and peter$plot() only with record = false."
   )
-  expect_identical(unname(vapply(frag, function(s) s$text, "")), c(helpers, out))
+  expect_identical(frag[[1L]]$text, helpers)
+  expect_identical(frag[[2L]]$text(list(input = list(document = list(path = "a.R")))), out)
   plugins = Filter(function(s) identical(s$name, "plugins"), secs)[[1L]]
   expect_identical(plugins$tier, "T1")
   expect_identical(plugins$order, 860L)
@@ -1009,6 +1014,23 @@ test_that("builtin:tools registers fragments, the plugins section, a search sour
   expect_identical(ext_service_get("ns.resolve"), ns_resolve)
   expect_identical(ext_service_get("ns.names"), ns_names)
   expect_identical(ext_service_get("search.sources"), search_sources)
+})
+
+test_that("the out fragment names record = false only when the r tool takes it (D-248)", {
+  rule = "peter$plot() only with record = false."
+  r_props = function(frozen) {
+    decls = jsonlite::fromJSON(frozen$tools_json, simplifyVector = FALSE)
+    r = Filter(function(d) identical(d$name, "r"), decls)[[1L]]
+    names(r$input_schema$properties)
+  }
+  session = p07_session()
+  plain = prompt_compose(session, list(interactive = TRUE))
+  expect_match(plain$t0, "the notice names peter$out(id) for the rest.", fixed = TRUE)
+  expect_false(grepl(rule, plain$t0, fixed = TRUE))
+  expect_false("record" %in% r_props(plain))
+  doc = prompt_compose(session, list(interactive = TRUE, doc = list(path = "a.R", format = "r")))
+  expect_match(doc$t0, rule, fixed = TRUE)
+  expect_true("record" %in% r_props(doc))
 })
 
 # Number of calls of base file-system functions made while expr_fun() runs (traced, then untraced)
