@@ -2183,3 +2183,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   go-ahead carries the turn blocks through the declared `context.turn` service instead.
 - Open: any other follow-up queued on an idle session after a mode change still starts without turn context (the
   general `sdk_launch()` gap); the plan hand-off is sessions-14.
+
+### sessions-14 - Document the plan hand-off to the next call
+- Red: none, a docs unit (findings 90, 171). The hand-off is the designed IC-56 one, kept by safe-19 for the
+  two-statement script idiom and pinned by `test-perm-plan.R`'s hand-off and discard tests; only `?gptr_options`
+  named it ("hand a plan from `plan` mode to the next call").
+- Cause: `?peter` `mode`, the execution-model vignette and the sheet's plan row describe plan mode only as
+  read-only.
+- Fix: `?peter` `mode`, the vignette's permissions paragraph (`.Rmd` and `.Rmd.orig`) and `?gptr_options`
+  `gptr.plan_handoff`: the plan goes once, as a `<plan>` block, to the next top-level `peter()` call from the same
+  environment, within an hour and in another mode, whatever that call asks; another call first, or a next call
+  inside a loop or a run, discards it; the option turns it off.
+- Green: `^(perm-plan|gptr-gateway|utils-options)$` PASS 601; `^(zzz|lint-rules|arch-layers)$` PASS 235. Lint and
+  Rd clean.
+- Deviations: none (no contract change; 03 §6.8.5 already says it).
+- Open: with `gptr.plan_handoff = FALSE` `plan_capture()` still stores a record and the next call prints its discard
+  notice, and under `gptr.quiet` the hand-off prints no notice (finding 90, follow-ups); the sheet's row is S34.

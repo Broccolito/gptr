@@ -19,7 +19,12 @@ peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 such as \code{\link[=gptr_fake_provider]{gptr_fake_provider()}}, or \code{NULL} for the configured default. A call made by the
 agent's own R code, and a team or fan-out it starts, uses the running session's model instead.}
 
-\item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default.}
+\item{mode}{One of \code{plan}, \code{manual}, \code{edits}, \code{auto}, \code{yolo}; \code{NULL} for the configured default.
+The plan a \code{plan} run proposes goes once, as a \verb{<plan>} block, to the next top-level
+\code{peter()} call from the same environment, within an hour and in another mode, whatever that
+call asks: a script runs the plan with \code{peter("Go ahead.", mode = auto)}. Another \code{peter()}
+call first, or a next call inside a loop or a run, discards it;
+\code{options(gptr.plan_handoff = FALSE)} turns the hand-off off.}
 
 \item{skills, plugins, extensions}{Names (bare or quoted) of skills to preload, plugins and
 extensions to enable for this session; \code{extensions} also takes \verb{function(gptr)} factories and

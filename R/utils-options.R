@@ -357,7 +357,9 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.secret_guard` (logical, `TRUE`): reads of registered secrets ask even in `auto`
 #'   mode.
 #' - `gptr.protect_size` (bytes, `1e8`): overwriting a larger object is a level-3 action.
-#' - `gptr.plan_handoff` (logical, `TRUE`): hand a plan from `plan` mode to the next call.
+#' - `gptr.plan_handoff` (logical, `TRUE`): hand the plan a `plan` run proposes, once, to the next
+#'   top-level `peter()` call from the same environment, within an hour and in another mode;
+#'   another `peter()` call first, or a next call inside a loop or a run, discards it.
 #' - `gptr.unsafe_no_permissions` (logical, `FALSE`): turns the permission gate off entirely;
 #'   honored only when set outside a run, for sandboxed continuous integration.
 #'

@@ -119,7 +119,9 @@ nobody can answer: \code{"stop"} ends the run with status \code{blocked} and a
 \item \code{gptr.secret_guard} (logical, \code{TRUE}): reads of registered secrets ask even in \code{auto}
 mode.
 \item \code{gptr.protect_size} (bytes, \code{1e8}): overwriting a larger object is a level-3 action.
-\item \code{gptr.plan_handoff} (logical, \code{TRUE}): hand a plan from \code{plan} mode to the next call.
+\item \code{gptr.plan_handoff} (logical, \code{TRUE}): hand the plan a \code{plan} run proposes, once, to the next
+top-level \code{peter()} call from the same environment, within an hour and in another mode;
+another \code{peter()} call first, or a next call inside a loop or a run, discards it.
 \item \code{gptr.unsafe_no_permissions} (logical, \code{FALSE}): turns the permission gate off entirely;
 honored only when set outside a run, for sandboxed continuous integration.
 }
