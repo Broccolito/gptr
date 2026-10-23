@@ -1246,9 +1246,10 @@ gptr_trust(path = ".", trust = NULL)
 ```
 
 `trust = NULL` returns the recorded decision for `project_root(path)` visibly: `TRUE`, `FALSE` or `NA`
-(undecided). `TRUE`/`FALSE` records it in `R_user_dir("gptr", "config")/trust.json` keyed by the normalised
-project path and returns the previous decision invisibly. Trust gates (§6.10 of `03`): project settings beyond
-tightening, `.gptr/extensions/` and project plugin code, project MCP servers, `SYSTEM.md`/`APPEND_SYSTEM.md`,
+(undecided; also a recorded `TRUE` whose fingerprint no longer matches, which is asked again, IC-52, D-252).
+`TRUE`/`FALSE` records it in `R_user_dir("gptr", "config")/trust.json` keyed by the normalised project path and
+returns the previous decision invisibly. Trust gates (§6.10 of `03`): project settings beyond tightening,
+`.gptr/extensions/` and project plugin code, project MCP servers, `SYSTEM.md`/`APPEND_SYSTEM.md`,
 project `.env` auto-discovery, provider base-URL overrides, project skills and prompt templates (D-252), tool and
 model fields of project agent files.
 The record includes the trust fingerprint of the trust-gated files (IC-52). Conditions: `invalid_argument`. Side

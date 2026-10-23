@@ -12,8 +12,9 @@ gptr_trust(path = ".", trust = NULL)
 \item{trust}{\code{NULL} to read the decision, \code{TRUE} or \code{FALSE} to record one.}
 }
 \value{
-With \code{trust = NULL}, the recorded decision: \code{TRUE}, \code{FALSE} or \code{NA} (undecided).
-Otherwise the previous decision, invisibly.
+With \code{trust = NULL}, the recorded decision: \code{TRUE}, \code{FALSE} or \code{NA} (undecided, also
+when a trust-gated file changed since the project was trusted). Otherwise the previous
+recorded decision, invisibly.
 }
 \description{
 Trust decides whether gptr applies or runs what a project directory contains: project

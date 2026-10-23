@@ -628,8 +628,9 @@ trust_resolve = function(root) {
 #'
 #' @param path A directory inside the project; its project root is used.
 #' @param trust `NULL` to read the decision, `TRUE` or `FALSE` to record one.
-#' @return With `trust = NULL`, the recorded decision: `TRUE`, `FALSE` or `NA` (undecided).
-#'   Otherwise the previous decision, invisibly.
+#' @return With `trust = NULL`, the recorded decision: `TRUE`, `FALSE` or `NA` (undecided, also
+#'   when a trust-gated file changed since the project was trusted). Otherwise the previous
+#'   recorded decision, invisibly.
 #' @examples
 #' d = tempfile("proj")
 #' dir.create(d)
@@ -642,7 +643,8 @@ gptr_trust = function(path = ".", trust = NULL) {
   root = project_root(path)
   rec = trust_record(root)
   prev = if (is.null(rec)) NA else isTRUE(rec[["trusted"]])
-  if (is.null(trust)) return(prev)
+  # trust that lapsed with a changed gated file is asked again, like an undecided project
+  if (is.null(trust)) return(if (isTRUE(prev) && !trust_holds(root)$record) NA else prev)
   session_control_check("gptr_trust")
   trust_store(root, trust)
   invisible(prev)

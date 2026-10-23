@@ -2127,3 +2127,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^(skill-discover|ext-plugins)$` PASS 565; with mcp-config, gptr-config, prompt-context, subagent-defs,
   lint-rules, arch-layers PASS 1538. Lint clean.
 - Deviations: none (the contract quotes none of these messages). Open: none.
+
+### sessions-23 - Report lapsed project trust as undecided
+- Finding 52. Red: `^gptr-config$` FAIL 1 PASS 555: after `.gptr/settings.json` changed in a trusted project,
+  `trust_get()` was FALSE but `gptr_trust(proj)` read TRUE.
+- Cause: the read returned the recorded flag without the fingerprint check `trust_get()` and `trust_resolve()`
+  apply, so it said TRUE while the run printed the untrusted notice and dropped the changed `SYSTEM.md`.
+- Fix: a recorded TRUE whose fingerprint no longer matches (`trust_holds(root)$record`) reads NA, as the run
+  treats it (asked again); a recorded FALSE stays FALSE; the write and its invisible previous value are unchanged.
+  `@return` and 04 `gptr_trust()` amended.
+- Green: `^gptr-config$` PASS 555 (after re-trusting, the read is TRUE and `SYSTEM.md` starts the next fake
+  request's system prompt; a refusal stays FALSE after `SYSTEM.md` changes); with injection-e2e, perm-plan,
+  prompt-sections, ext-plugins, lint-rules, arch-layers PASS 1718. Lint clean; plan checks pass; Rd regenerated.
+- Deviations: D-252 (extended). Open: a `project_trust` hook's unremembered yes still reads NA (record only).

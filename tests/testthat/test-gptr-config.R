@@ -222,7 +222,16 @@ test_that("a changed trust-gated file makes the project untrusted again", {
   expect_true(trust_get(proj))
   writeLines('{"preset": "extended", "mode": "auto"}', file.path(proj, ".gptr", "settings.json"))
   expect_false(trust_get(proj))
+  expect_identical(gptr_trust(proj), NA)
+  writeLines("Answer in French.", file.path(proj, ".gptr", "SYSTEM.md"))
+  gptr_trust(proj, TRUE)
   expect_true(gptr_trust(proj))
+  fake = local_fake_provider(list("ok"))
+  peter("Hi.", model = fake, envir = new.env())
+  expect_true(startsWith(fake_requests(fake)[[1L]]$system$t0, "Answer in French."))
+  gptr_trust(proj, FALSE)
+  writeLines("Answer in German.", file.path(proj, ".gptr", "SYSTEM.md"))
+  expect_false(gptr_trust(proj))
 })
 
 test_that("gptr's own writes to a trusted project re-fingerprint it", {
