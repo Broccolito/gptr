@@ -1929,17 +1929,20 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 - **REPL completion** [D-183, D-244]: completion comes only after gptr's trigger characters, never on natural
   language [IC-81]: R's own completion of the code on a `!`/`!!` line; objects, then files and directories
   after `@`; the object's members after `@obj$`; peter's members after `peter$`; commands and `/skill:<name>`
-  for a first word starting with `/` (`console_complete()`). Wherever R's own Unix readline reads a tty
-  (terminal R, an IDE's terminal tab; not with `R_COMPLETION=FALSE`) the REPL's reader installs
+  for a first word starting with `/` (`console_complete()`). Where R's completion calls the custom completer
+  (`console_completes()`: R's own Unix readline on a tty, i.e. terminal R and an IDE's terminal tab, RStudio's
+  console, Windows' Rgui and Rterm; not with `R_COMPLETION=FALSE`) the REPL's reader installs
   `console_completer()` as `custom.completer` around its prompt reads (`peter>`, `... `; not `+ `, which
   continues `!` code), so questions, the pause menu and tool `readline()` calls keep R's; a caller's
-  completer is kept and completes the `!` lines. The REPL adds `!` to `rl_word_breaks` for its duration
-  (restored on exit; not for a caller-owned completer, whose words stay its own). The terminal composer's Tab
-  calls the same completer [IC-76]. The REPL reads its lines with a copy of
-  `base::readline` carrying one attribute: RStudio's console completes nothing inside a frame `identical()` to
-  `base::readline`, so it completes R code at `peter>`, while approval and menu prompts keep `readline()` and
-  RStudio's choice completion (until P28 Task 23). radian and Positron's console offer no completion at the
-  prompt.
+  completer is kept and completes the `!` lines. On R's own readline the REPL adds `!` to `rl_word_breaks`
+  for its duration (restored on exit; not for a caller-owned completer, whose words stay its own). The
+  terminal composer's Tab calls the same completer [IC-76]. RStudio's console gets only the candidates that
+  are syntactic names (it inserts any other in backticks), so it completes the commands after `/` and R code
+  after `!`; its editor, which shares the request while `peter>` waits (`isConsole` FALSE), gets R's own
+  completion. The REPL reads its lines with a copy of `base::readline` carrying one attribute: RStudio's
+  console completes nothing inside a frame `identical()` to `base::readline`, while approval and menu prompts
+  keep `readline()` and RStudio's choice completion. R.app, radian and Positron's console keep their own
+  completion at the prompt.
 - **Pasted and typed-ahead input** [IC-75, D-184]: on a macOS terminal (R's own readline on a tty, where the
   BSD tty driver hands waiting input over as complete lines), the lines already waiting on fd 0 after a prompt,
   slash or `!code` line is read (a paste) join it, a dim `(pasted: Enter sends it as one message)` hint follows

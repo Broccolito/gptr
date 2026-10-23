@@ -98,7 +98,7 @@ readline_limit = function() {
 #' D-242); `compose`, the state of a T console's composer (console_compose(): its draft), whose
 #' draft a run left it then edits at the prompt (console_idle()), the line sent echoed alike,
 #' `sent`, the kind of message queued last (policy_enqueue()), and `complete`, TRUE where the REPL
-#' completes after its trigger characters (repl_main(), IC-81): the terminal reader's readline()
+#' completes after its trigger characters (repl_main(), IC-81): the console reader's readline()
 #' then has console_completer() as R's custom completer, the caller's kept for ! lines, but at
 #' `+ `, where the line continues !code and R's own completion applies. With `echo` the stdin
 #' reader writes the prompt and the escaped line (never a `secret` one) on `stream`, so a piped
@@ -817,11 +817,12 @@ repl_main = function(rs) {
   piped = rs$session
   on.exit(repl_close(rs), add = TRUE)
   rs$reader = console_reader(rs$stdin)
-  # R's own Unix readline on a tty (an IDE's terminal tab too) completes only after the trigger
-  # characters (IC-81), and ! breaks its words, so the R code after !/!! is completed; a
-  # caller-owned completer keeps its words and completes the ! lines
-  if (!rs$stdin && console_readline_tty() && !identical(Sys.getenv("R_COMPLETION"), "FALSE")) {
-    rs$reader$complete = TRUE
+  # completion only after the trigger characters (IC-81) where R's completion calls the custom
+  # completer (console_completes()); on R's own Unix readline on a tty (an IDE's terminal tab too)
+  # ! breaks its words, so the R code after !/!! is completed; a caller-owned completer keeps its
+  # words and completes the ! lines
+  if (console_completes(rs$stdin)) rs$reader$complete = TRUE
+  if (isTRUE(rs$reader$complete) && console_readline_tty()) {
     breaks = getOption("rl_word_breaks", " \t\n\"\\'`><=%;,|&{()}")
     if (!is.function(utils::rc.getOption("custom.completer")) &&
         !grepl("!", breaks, fixed = TRUE)) {
@@ -1054,9 +1055,14 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' lines for the next input. Positron's console holds what is typed while peter works and clears it
 #' at Ctrl-C, so steer there with Ctrl-C, then `s` or `f`.
 #'
-#' Tab completes R names and file paths after `!` in terminal R, R in an IDE's Terminal tab
-#' included; RStudio's console completes R code at the prompt too; radian and Positron's console
-#' offer no completion there.
+#' Tab completes only after `@` (objects, then files), `@obj$` (its members), `peter$`, a leading
+#' `/` (commands) and on a `!` or `!!` line (R code), never in plain text: in terminal R, R in an
+#' IDE's Terminal tab, Windows' Rgui and Rterm, and RStudio's console, which completes only what its
+#' popup inserts as offered (the commands after `/` and R code after `!`, not words holding `@` or
+#' `$`, which it would wrap in backticks). R.app, radian and Positron's console keep their own
+#' completion. gptr never changes RStudio's preferences: as you type in its console, RStudio adds
+#' closing brackets and quotes unless `insert_matching` is off, and opens completions unless
+#' `console_code_completion` is off (Tools > Global Options > Code).
 #'
 #' Ctrl-C while an answer runs opens a pause menu in supported terminal front ends and Positron:
 #' `[s]teer` (delivered after the current tool results), `[f]ollow-up` (in the chat, the next

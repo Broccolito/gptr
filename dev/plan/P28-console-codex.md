@@ -137,7 +137,7 @@ working directory restored. Plan-specific rules:
 | `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 15, 17, 18, 21, 26 |
 | `R/auth-oauth.R` (input prompts) | 12 |
 | `R/console-ui.R` | 2, 3, 8, 12, 19, 20 |
-| `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 17, 18, 20, 21, 22, 24, 25, 26 |
+| `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 17, 18, 20, 21, 22, 23, 24, 25, 26 |
 | `R/console-interrupt.R` | 3, 13, 14, 15, 17, 18, 20 |
 | `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21, 22 |
 | `R/console-complete.R` (new) | 22, 23 |
@@ -1199,6 +1199,19 @@ Decisions:
   `console_code_completion`.
 - `@path` replacement in RStudio's popup is not promised.
 - Positron, radian and R.app are out of reach and documented.
+- (Amended in Task 23, measured in a fresh RStudio 2026.09 instance:)
+  - An empty result is not "no popup" there: `.rs.getCustomRCompletions()` fails on it (`subscript out of
+    bounds`) and RStudio shows its own completions. A single result equal to the token shows none, on Tab or
+    the automatic one, so in RStudio's console (`isConsole` TRUE) the adapter gives the token itself for none.
+  - RStudio inserts a candidate that is not a syntactic name in backticks (`use @fu` + Tab gave
+    ``use `@fuel` ``), whatever the custom completer gives. So its console gets only the syntactic candidates:
+    the commands after `/` and R code after `!` complete there, and @ words, `@obj$` and `peter$` members,
+    `/skill:` names and `x$y` complete nothing.
+  - `console_completes()` in `console-complete.R` names where R's completion calls the custom completer (R's
+    own readline on a tty, RStudio's console, Windows' Rgui and Rterm), and `repl_main()` sets `rd$complete`
+    there; the `!` word break stays R's own readline's.
+  - R.app's GUI-tools.R `rcompgen.completion()` does call `.completeToken()`, but how R.app replaces the word is
+    unverified and the capture toolkit cannot send it Tab, so R.app stays out.
 
 Tests (`test-console-completion.R`), RED first:
 - `.win32consoleCompletion()` (via `getFromNamespace`) on the trigger table.
@@ -1206,10 +1219,15 @@ Tests (`test-console-completion.R`), RED first:
   completion).
 - 'unsupported input modes and IDE consoles keep completion options unchanged' is rewritten: IDE
   consoles get the scoped completer.
+- (Amended in Task 23:) the replay's console gives only syntactic names and the token for none; the rewrite
+  also covers Positron, radian, R.app and `R_COMPLETION=FALSE` in RStudio (no completer) and a Windows
+  console with a caller-owned completer.
 
-Spec: IC-81.
+Spec: IC-81. (Amended in Task 23:) Also 03 §6.17's completion bullet, D-244's Task 23 note and `?peter`'s
+completion paragraph, which names `insert_matching` and `console_code_completion`.
 
-Files: `R/console-complete.R`, `tests/testthat/test-console-completion.R`.
+Files: `R/console-complete.R`, `tests/testthat/test-console-completion.R`. (Amended in Task 23:) Also
+`R/console-repl.R` (`repl_main()`, `?peter`) and `man/peter.Rd`.
 
 Commit: `feat(console): trigger-only completion in RStudio and Windows consoles`.
 
@@ -1337,7 +1355,9 @@ Decisions:
     row's draft, Enter steers, Tab sends a follow-up, Up takes one back, and the draft kept through
     questions, Ctrl-C and to the next prompt; the menu's `[s]teer`, `[f]ollow-up`, `[c]ontinue`,
     `[a]bort`, `[b]ackground` becomes `s steer · f follow-up · c continue · a abort · b background`.
-- Update `/help`, the interactive-console vignette and the README console section.
+- Update `/help`, the interactive-console vignette and the README console section. (Amended in Task 23:)
+  the vignette's completion paragraph, stale since Tasks 22 and 23 (it names `!` only and says RStudio's
+  console completes R code at `peter>`), takes `?peter`'s.
 - Finalise D-242..D-245, §15.10 and the amended IC-75..IC-77.
 - Re-run the cross-plan checks.
 - Update report 18's Verification log rows for type-ahead, completion and the band.

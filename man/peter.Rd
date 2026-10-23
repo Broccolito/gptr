@@ -152,9 +152,14 @@ RStudio and R.app consoles, and type-ahead at R's own prompt during \code{peter(
 lines for the next input. Positron's console holds what is typed while peter works and clears it
 at Ctrl-C, so steer there with Ctrl-C, then \code{s} or \code{f}.
 
-Tab completes R names and file paths after \code{!} in terminal R, R in an IDE's Terminal tab
-included; RStudio's console completes R code at the prompt too; radian and Positron's console
-offer no completion there.
+Tab completes only after \code{@} (objects, then files), \verb{@obj$} (its members), \verb{peter$}, a leading
+\code{/} (commands) and on a \code{!} or \verb{!!} line (R code), never in plain text: in terminal R, R in an
+IDE's Terminal tab, Windows' Rgui and Rterm, and RStudio's console, which completes only what its
+popup inserts as offered (the commands after \code{/} and R code after \code{!}, not words holding \code{@} or
+\code{$}, which it would wrap in backticks). R.app, radian and Positron's console keep their own
+completion. gptr never changes RStudio's preferences: as you type in its console, RStudio adds
+closing brackets and quotes unless \code{insert_matching} is off, and opens completions unless
+\code{console_code_completion} is off (Tools > Global Options > Code).
 
 Ctrl-C while an answer runs opens a pause menu in supported terminal front ends and Positron:
 \verb{[s]teer} (delivered after the current tool results), \verb{[f]ollow-up} (in the chat, the next

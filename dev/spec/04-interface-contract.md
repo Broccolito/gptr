@@ -5541,7 +5541,7 @@ its part in its own commit, and Task 27 finalises them.
     lines; visual review). The console leaves them out (`code = FALSE`) when the call line just above is this
     request's and showed its code whole (at most 20 lines); the RStudio dialog keeps them and gets the text without
     SGR.
-- **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23); Task 23 pending.
+- **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23).
   - The completer (Task 22): `console_complete(line, end)` takes the word before the cursor (`end`) from
     `console_trigger()` (IC-76) and returns full words, in a REPL whose reader completes (`rd$complete`) and
     only on a trigger word:
@@ -5563,12 +5563,22 @@ its part in its own commit, and Task 27 finalises them.
     completions of the line before the cursor as completions of R's token (`completion_shift()`: readline's
     word, or utils' guess in RStudio and Windows; the longer one's extra head is cut or added), with `prev`,
     the caller's completer (NULL when none), as the custom one meanwhile, so a `!` line calls it.
-  - Scope: wherever R's own Unix readline reads a tty (`console_readline_tty()`), not under `.stdin` and not
-    with `R_COMPLETION=FALSE`, `repl_main()` sets the reader's `complete`. The terminal reader then installs
-    the adapter around its `readline()` (`peter>` and `... ` reads; not `+ `, which continues `!` code and
-    keeps R's own completion), restoring the completer it found on exit. Questions, the pause menu and tool
-    `readline()` calls keep the caller's completion. The `!` word break of D-183 stays, and a caller-owned
-    completer still keeps its words (no `!` break).
+  - RStudio (Task 23) asks through its `get_completions` request, whose frame binds `isConsole`
+    (`dynGet()`). From its editor (FALSE), which shares the request while `peter>` waits, the adapter gives R's
+    own completion (or the caller's). From its console (TRUE) it gives only the candidates that are syntactic
+    names, since RStudio inserts any other in backticks (`@mtcars_copy`, `peter$read`, `skill:tidy-data`,
+    `mtcars$mpg`), and for none the token itself: RStudio 2026.09 shows its own completions for an empty
+    result (`.rs.getCustomRCompletions()` fails on it) and no popup for the token alone, on Tab or the
+    automatic one. So its console completes the commands after `/` and R code after `!`.
+  - Scope: where R's completion calls the custom completer (`console_completes()`): R's own Unix readline on a
+    tty (`console_readline_tty()`), RStudio's console and Windows' Rgui and Rterm (utils'
+    `.win32consoleCompletion()`, Task 23); not under `.stdin`, not with `R_COMPLETION=FALSE`, and not in
+    Positron's console, radian or R.app, which keep their own. There `repl_main()` sets the reader's `complete`,
+    and the reader installs the adapter around its `readline()` (`peter>` and `... ` reads; not `+ `, which
+    continues `!` code and keeps R's own completion), restoring the completer it found on exit. Questions, the
+    pause menu and tool `readline()` calls keep the caller's completion. On R's own readline the `!` word break
+    of D-183 stays, and a caller-owned completer still keeps its words (no `!` break). gptr never writes
+    RStudio's preferences; `?peter` names `insert_matching` and `console_code_completion`.
   - The composer (T): Tab on a trigger word calls the same completer (IC-76): the longest common prefix replaces
     the word when it is longer; else two or more candidates replace the live row's status words until the next
     key (IC-82; they do not widen the padded status, so the draft moves only while they show), or, at the idle

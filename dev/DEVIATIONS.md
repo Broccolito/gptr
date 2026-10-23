@@ -3486,6 +3486,22 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   show on the live row until a key (IC-81)"; test-console-input.R "a draft at the prompt completes a trigger
   word; several are listed above (IC-81)", "the draft keeps its column as the status changes; the status only
   widens (review)".
+- Task 23: RStudio's console and Windows' Rgui and Rterm complete only after the trigger characters too.
+  `console_completes()` decides where: R's own Unix readline on a tty, RStudio's console, Windows' Rgui and Rterm
+  (utils' `.win32consoleCompletion()` calls the custom completer); not Positron's console, radian or R.app.
+  RStudio sends its editor's requests through the same handler while `peter>` waits; its frame binds
+  `isConsole`, and from the editor (FALSE) the adapter gives R's own completion. From the console it gives only
+  the candidates that are syntactic names, and the token itself for none. The plan said an empty result shows
+  no popup, but RStudio 2026.09 then shows its own completions (`.rs.getCustomRCompletions()` fails on an empty
+  result: `subscript out of bounds`), and it inserts a candidate that is not a syntactic name in backticks
+  (`use @fu` + Tab gave ``use `@fuel` ``), so @ words, `peter$` members, `/skill:` names and `x$y` complete
+  nothing there. Visible now: in RStudio's console `summarise the da` + Tab and the automatic popup show
+  nothing (were `data`, `date`, ...), `/mo` lists `mode model`, `!summ` completes `!summary`, `@fu` shows
+  nothing (was RStudio's `(No matches)`). gptr writes no RStudio preference; `?peter` names `insert_matching` and
+  `console_code_completion`. Contract-visible: 04 §15.10 IC-81, 03 §6.17, `?peter`. Tests:
+  test-console-completion.R "Windows' console completion completes only the triggers (IC-81)", "RStudio's
+  console completes only the triggers; its editor gets R's (IC-81)", "unsupported input modes and IDE consoles
+  keep completion options unchanged" (rewritten: IDE consoles get the scoped completer).
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Pending (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three

@@ -1,20 +1,23 @@
 # tests/testthat/test-console-completion.R -- native Unix readline prefix scope and restoration;
-# completion only after @, !, !!, / and peter$ (P28 Task 22, IC-81, D-244).
+# completion only after @, !, !!, / and peter$ (P28 Task 22, IC-81, D-244), in RStudio and Windows
+# consoles too (Task 23).
 
 local_completion_console = function(human = TRUE, cledit = TRUE, tty = TRUE, unix = TRUE,
-                                    .env = parent.frame()) {
+                                    gui = "X11", .env = parent.frame()) {
   force(human)
   force(cledit)
   force(tty)
   platform = .Platform
   platform$OS.type = if (unix) "unix" else "windows"
+  platform$GUI = gui
   testthat::local_mocked_bindings(
     .Platform = platform, capabilities = function(...) c(cledit = cledit), .package = "base",
     .env = .env
   )
   testthat::local_mocked_bindings(gptr_is_interactive = function() human,
                                   stdin_tty = function() tty, .env = .env)
-  withr::local_envvar(R_COMPLETION = NA, .local_envir = .env)
+  withr::local_envvar(R_COMPLETION = NA, RSTUDIO = NA, POSITRON = NA, RADIAN_VERSION = NA,
+                      .local_envir = .env)
 }
 
 completion_repl_state = function(stdin = FALSE) {
@@ -187,21 +190,37 @@ test_that("native prefix integration preserves argument and quote completers", {
 })
 
 test_that("unsupported input modes and IDE consoles keep completion options unchanged", {
-  # an IDE console (RStudio, Positron, R.app, Jupyter) reads no tty
-  cases = list(list(human = FALSE), list(cledit = FALSE), list(tty = FALSE),
-               list(unix = FALSE), list(stdin = TRUE), list(disabled = TRUE))
-  for (case in cases) (function(case) {
+  # IDE consoles get the scoped completer and keep their word breaks (IC-81): RStudio's, a
+  # Windows console (Rgui, Rterm), with or without a caller-owned completer
+  ide = list(list(tty = FALSE, gui = "RStudio"), list(unix = FALSE, tty = FALSE, gui = "Rgui"),
+             list(unix = FALSE, gui = "RTerm"), list(unix = FALSE, gui = "RTerm", owned = TRUE))
+  # out of reach (no completer): Positron, radian, R.app; and the unsupported input modes: not
+  # interactive, R without readline in a terminal, another unix front end with no tty, piped,
+  # R_COMPLETION=FALSE (also in RStudio)
+  none = list(list(tty = FALSE, env = c(POSITRON = "1")),
+              list(unix = FALSE, gui = "RTerm", env = c(RADIAN_VERSION = "0.6.13")),
+              list(tty = FALSE, gui = "AQUA"), list(human = FALSE), list(cledit = FALSE),
+              list(tty = FALSE), list(stdin = TRUE), list(disabled = TRUE),
+              list(tty = FALSE, gui = "RStudio", disabled = TRUE))
+  for (case in c(ide, none)) (function(case) {
     original = getOption("rl_word_breaks")
+    completes = any(vapply(ide, identical, NA, case))
     input = isTRUE(case$stdin)
     disabled = isTRUE(case$disabled)
-    case$stdin = NULL
-    case$disabled = NULL
+    owned = isTRUE(case$owned)
+    env = case$env
+    case$stdin = case$disabled = case$owned = case$env = NULL
     do.call(local_completion_console, c(case, list(.env = environment())))
     if (disabled) withr::local_envvar(R_COMPLETION = "FALSE")
+    if (length(env)) withr::local_envvar(env)
+    if (owned) {
+      handler = function(env) env$comps = "caller completion"
+      old = utils::rc.options(custom.completer = handler)
+      withr::defer(utils::rc.options(old))
+    }
     local_completion_repl(function(rs) {
       expect_identical(getOption("rl_word_breaks"), original)
-      # no trigger-only completion either (IC-81; IDE consoles: Task 23)
-      expect_null(rs$reader$complete)
+      if (completes) expect_true(rs$reader$complete) else expect_null(rs$reader$complete)
       FALSE
     })
     expect_null(repl_main(completion_repl_state(input)))
@@ -303,6 +322,72 @@ test_that("R's completion through the adapter gives the table's words as its tok
   expect_identical(host_complete("@data/a", "@data/a"), "@data/a.csv")
   expect_identical(host_complete("summarise the da", "da"), character())
   expect_true("summary" %in% host_complete("!summ", "summ"))
+})
+
+test_that("Windows' console completion completes only the triggers (IC-81)", {
+  .gptr_repl = local_completing_repl()
+  old = utils::rc.options(custom.completer = console_completer(NULL))
+  withr::defer(utils::rc.options(old))
+  # what Rgui and Rterm call on Tab: the text the cursor ends inserted, several listed
+  win = function(line) {
+    utils::getFromNamespace(".win32consoleCompletion", "utils")(line, nchar(line),
+                                                               check.repeat = FALSE)
+  }
+  expect_identical(win("summarise the da")[c("addition", "comps")],
+                   list(addition = "", comps = ""))
+  expect_identical(win("please /mo")$comps, "")
+  expect_identical(win("cost is $5")$comps, "")
+  expect_identical(win("use @mtc")$addition, "ars_copy")
+  expect_identical(win("/mo")[c("addition", "comps")], list(addition = "de", comps = "mode model"))
+  expect_identical(win("@data/a")$addition, ".csv")
+  expect_identical(win("ask peter$rea")$addition, "d")
+  expect_match(win("!summ")$comps, "(^| )summary( |$)")
+  expect_identical(win("plot @mtcars_copy$m")$addition, "pg")
+})
+
+# RStudio's completion request as its get_completions handler makes it with a custom completer:
+# `isConsole` bound in the handler's frame (FALSE when the editor asks), then
+# .rs.getCustomRCompletions(): utils' token guess, .completeToken(), .retrieveCompletions()
+rstudio_complete = function(line, isConsole) { # nolint: object_name_linter.
+  force(isConsole)
+  u = function(f) utils::getFromNamespace(f, "utils")
+  u(".assignLinebuffer")(line)
+  u(".assignEnd")(nchar(line))
+  u(".guessTokenFromLine")()
+  u(".completeToken")()
+  u(".retrieveCompletions")()
+}
+
+test_that("RStudio's console completes only the triggers; its editor gets R's (IC-81)", {
+  .gptr_repl = local_completing_repl()
+  old = utils::rc.options(custom.completer = console_completer(NULL))
+  withr::defer(utils::rc.options(old))
+  # the console: only syntactic names, as RStudio inserts any other in backticks; none is the
+  # token itself, as RStudio shows its own completions for an empty result
+  # (.rs.getCustomRCompletions() fails on it) and none for the token alone
+  expect_identical(rstudio_complete("summarise the da", TRUE), "da")
+  expect_identical(rstudio_complete("hello /mo", TRUE), "mo")
+  expect_identical(rstudio_complete("/mo", TRUE), c("mode", "model"))
+  expect_identical(rstudio_complete("@data/a", TRUE), "a.csv")
+  summ = rstudio_complete("!summ", TRUE)
+  expect_true("summary" %in% summ)
+  expect_true(all(make.names(summ) == summ))
+  # `@mtcars_copy`, `peter$read`, `skill:tidy-data` and `mtcars$mpg` would be inserted in backticks
+  expect_identical(rstudio_complete("use @mtc", TRUE), "@mtc")
+  expect_identical(rstudio_complete("ask peter$rea", TRUE), "peter$rea")
+  expect_identical(rstudio_complete("/skill:t", TRUE), "skill:t")
+  expect_identical(rstudio_complete("!mtcars$m", TRUE), "mtcars$m")
+  # the editor, which RStudio asks through the same request while peter> waits: R's completion
+  expect_true("summary" %in% rstudio_complete("x = summ", FALSE))
+  expect_true("data.frame" %in% rstudio_complete("summarise the da", FALSE))
+  # with the caller's completer, the caller's
+  caller = function(env) env$comps = paste0(env$token, "_caller")
+  utils::rc.options(custom.completer = console_completer(caller))
+  expect_identical(rstudio_complete("x = summ", FALSE), "summ_caller")
+  expect_identical(rstudio_complete("summarise the da", TRUE), "da")
+  # a terminal or Windows request (no isConsole on the stack) still gets nothing for none
+  expect_identical(host_complete("summarise the da", completer = console_completer(caller)),
+                   character())
 })
 
 test_that("the adapter sets fileName first, so a failure completes nothing (IC-81)", {

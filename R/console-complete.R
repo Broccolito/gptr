@@ -1,7 +1,20 @@
 # console-complete.R -- trigger-only completion at the gptr console (P28, layer L5, area console;
 # IC-81, D-244): after @, !, !!, / and peter$ only, never on natural language. R's completion
-# reaches it through the custom completer that the REPL's reader installs around its prompt reads;
-# the composer's Tab calls it directly.
+# reaches it through the custom completer that the REPL's reader installs around its prompt reads,
+# in terminal R, RStudio's console and Windows' consoles; the composer's Tab calls it directly.
+
+#' Does R's completion in this console call R's custom completer, so the REPL completes after its
+#' trigger characters (IC-81)? R's own Unix readline on a tty (console_readline_tty()), RStudio's
+#' console (which consults it before its own engine) and Windows' Rgui and Rterm (utils'
+#' .win32consoleCompletion()); not a piped REPL, not with R_COMPLETION=FALSE, and not Positron,
+#' radian or R.app, whose completion gptr does not reach
+#' @noRd
+console_completes = function(stdin = FALSE) {
+  if (isTRUE(stdin) || identical(Sys.getenv("R_COMPLETION"), "FALSE")) return(FALSE)
+  console_readline_tty() || (gptr_is_interactive() && !nzchar(Sys.getenv("RADIAN_VERSION")) &&
+                               (front_end() == "rstudio" ||
+                                  (is_windows() && platform_gui() %in% c("Rgui", "RTerm"))))
+}
 
 #' The completions of the word before the cursor (`end`) in `line` (IC-81, D-244), as full words,
 #' in a REPL whose reader completes (`rd$complete`) and only on a trigger word (console_trigger()):
@@ -61,7 +74,11 @@ console_complete = function(line, end = nchar(line)) {
 #' FALSE first, as a completion environment without it aborts the readline() call, then gives
 #' console_complete() of the line before the cursor as completions of R's token (readline's word,
 #' or utils' guess in RStudio and Windows), with the caller's completer `prev` (NULL when none) as
-#' the custom one meanwhile, so R's completion of a ! line calls it
+#' the custom one meanwhile, so R's completion of a ! line calls it. RStudio asks with `isConsole`
+#' in its request's frame: its editor (FALSE), which shares the request while the prompt waits,
+#' gets R's own completion (or the caller's); its console only the candidates that are syntactic
+#' names, as RStudio inserts any other in backticks, and for none the token itself, as RStudio
+#' shows its own completions for an empty result and none for the token alone
 #' @noRd
 console_completer = function(prev) {
   function(env) {
@@ -71,7 +88,14 @@ console_completer = function(prev) {
     line = substr(env$linebuffer, 1L, env$end)
     old = utils::rc.options(custom.completer = prev)
     on.exit(utils::rc.options(old), add = TRUE)
-    env$comps = completion_shift(console_complete(line), console_trigger(line) %||% "", token)
+    console = dynGet("isConsole", ifnotfound = NA)
+    if (isFALSE(console)) return(utils::getFromNamespace(".completeToken", "utils")())
+    comps = completion_shift(console_complete(line), console_trigger(line) %||% "", token)
+    if (isTRUE(console)) {
+      comps = comps[make.names(comps) == comps]
+      if (!length(comps)) comps = token
+    }
+    env$comps = comps
     invisible(NULL)
   }
 }
