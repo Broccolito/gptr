@@ -2073,3 +2073,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Open: `gptr_source()` still lists the `"live"` run of an undone block as `NA`, which its
   `@return` keeps for blocks no call touched; making `"live"` regenerate undone blocks is the
   maintainer's call.
+
+### doc-6 - Sheet: say where replay = "live" re-asks the model
+- Finding 14, its driver half (doc-5 fixed the undone half; the sheet line is S26).
+- Red: none (wording). Installed build, fake provider, a self-bound `live.R` with
+  `peter(..., mode = "auto", replay = "live")`: the first `Rscript` made 2 requests and wrote
+  the block; the second made 0, warned "Block 2d55a7 of live.R was not regenerated: under
+  source() or Rscript the recorded code runs anyway, so it was replayed.", and left the file
+  byte-identical; `gptr_source("live.R")` then listed it `regenerated` with a new sha.
+- Cause: `doc_decide()` regenerates only under a driver that can skip the old block
+  (`gptr_source()`, knitr or Quarto, an IDE, Jupyter); under base `source()` or Rscript every
+  regeneration downgrades to replay with `replay_downgraded` (architecture 6.9.3). The modes
+  table said `"live"` rewrites recorded blocks without naming a driver.
+- Fix: the `script-as-history` live row names the four drivers and says a recorded block
+  replays with a warning under base `source()` or Rscript. It does not say "at the console": a
+  call typed there is a transcript turn and never re-asks a recorded block. The `.Rmd` is the
+  knitted `.Rmd.orig`.
+- Green: `precompute.R script-as-history`: 0 problems, output byte-identical to the edited
+  `.Rmd`. `^zzz$` PASS 145 (NOT_CRAN=true). Lint: the `.Rmd` is clean; the `.Rmd.orig` keeps its
+  one lint from main (`mode = auto`, line 350).
+- Deviations: none (the downgrade is intended). Open: the `replay_downgraded` warning itself says
+  "or run the call interactively to regenerate it", which holds in an IDE but not at a plain
+  console.
