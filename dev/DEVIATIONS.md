@@ -3668,6 +3668,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   when the first cut line is blank", "one dim line under a sent prompt names what its @mentions resolved to
   (D-244)"; test-console-typing.R "Tab completes a trigger word; several show on the live row until a key
   (IC-81)".
+- Task 26 (its visual check): Positron's console gets no completer. Its ark has a tty stdin, so `console_completes()`
+  took it for R's own readline on a tty, and the new banner offered `tab completes after @ ! /` there, where
+  Positron's own completion never calls gptr's; `console_completes()` now asks `front_end()` first. Contract-visible:
+  none (04 §15.10 IC-81 already excludes Positron). Tests: test-console-completion.R "unsupported input modes and IDE
+  consoles keep completion options unchanged" (a Positron with a tty stdin).
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Pending (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three
@@ -3901,3 +3906,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     tool block starts before the boundary. Below verbosity 2 no delivery is drawn, and the line stays.
     Contract-visible: 04 §15.10 IC-82. Tests: test-console-typing.R "a line queued while an answer streams waits for its block to end (visual review)", "a
     held follow-up line stays; a held steer's shows before a tool (steering review)".
+- Task 26: the run's status line names the model and the context left, and the banner is three dim lines. The line
+  reads `done · fake-1 · 7 requests · 19.8k tokens · 98% context left`: the model of the run's last request (its
+  usage row's `model`), then `console_context_left()`, the last request's prompt tokens against `compact_threshold()`
+  of its model, where compaction starts (none on a CLI route, D-202), which `/context` adds under its total. A term
+  whose value is unknown, and a cost not above 0, is left out (`$0.0000`, `unknown tokens` and `unknown cost` were
+  noise); `format_cost()` is unchanged. Written as a notice, it wraps in the margin and sits at column 0 where there
+  is none (it had two fixed spaces). The banner: `gptr 1.0.0 · <model> · <mode> · .gptr/ found`, `objects: ` and up
+  to six names (`/env` describes them), `/help lists commands · tab completes after @ ! / · ctrl-c twice leaves`
+  with the keys bold, Positron's line in the same form, then a blank line; the tab only where the REPL completes,
+  after `! /` in RStudio's console. The plan's fallback to the model's window is never reached, as
+  `compact_threshold()` is finite wherever the window is known. The console calls `compact_threshold()` and
+  `prompt_model()` as two contract edges. Contract-visible: 04 §15.10 IC-77 and the `compact_threshold()` row; 03
+  §6.17 and §10.1. Tests: test-console-render.R "the status line names the model and the context left; unknown
+  terms go (IC-77)", "console_context_left() measures the last request against compact_threshold() (IC-77)";
+  test-console-repl.R "the banner: dim lines at column 2 with the keys bold, then a blank line (NS-1)", "the banner
+  names the console's key and promises nothing it lacks (review, Task 26)"; test-console-commands.R "/cost,
+  /context, /fork and /resume work on a session that ran".

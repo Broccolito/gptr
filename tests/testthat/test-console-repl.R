@@ -289,40 +289,63 @@ test_that("a console opened in yolo shows the yolo notice with its banner (IC-78
   expect_message({
     out = utils::capture.output(repl_banner(rs))
   }, "not a sandbox", class = "gptr_message_notice")
-  # the banner lists the objects indented under its first line; an empty workspace adds no line
-  expect_match(out[[2L]], "^  alpha: <integer>")
-  expect_length(utils::capture.output(repl_banner(repl_state(NULL, new.env()))), 2L)
+  # the objects under the first line; an empty workspace adds no line
+  expect_identical(out[[2L]], "objects: alpha")
+  expect_length(utils::capture.output(repl_banner(repl_state(NULL, new.env()))), 3L)
 })
 
-test_that("the banner names the console's key; no pause is promised where none is (review)", {
+# The banner's rows in front end `fe`, its reader completing or not
+banner_rows = function(fe = "terminal", complete = TRUE, env = new.env()) {
+  local_mocked_bindings(front_end = function() fe)
+  rs = repl_state(NULL, env)
+  rs$model = "fake/fake-1"
+  rs$reader = list(complete = complete)
+  utils::capture.output(repl_banner(rs))
+}
+
+test_that("the banner: dim lines at column 2 with the keys bold, then a blank line (NS-1)", {
+  local_gptr_options(interactive = TRUE, verbose = 2L)
+  testthat::local_reproducible_output(width = 80, crayon = TRUE, unicode = TRUE)
+  withr::local_options(cli.dynamic = TRUE, cli.num_colors = 256L)
+  rows = banner_rows(env = list2env(list(fuel = 1, alpha = 2)))
+  d = function(x) as.character(console_style()$dim(x))
+  b = function(x) as.character(cli::style_bold(x))
+  ws = if (is.null(workspace_dir())) "no .gptr/" else ".gptr/ found"
+  expect_identical(rows, c(
+    paste0("  ", d(paste0("gptr ", utils::packageVersion("gptr"), " · fake/fake-1 · ",
+                          "manual · ", ws))),
+    paste0("  ", d("objects: alpha, fuel")),
+    paste0("  ", b("/help"), d(" lists commands · "), b("tab"),
+           d(" completes after @ ! / · "), b("ctrl-c"), d(" twice leaves")),
+    ""))
+  expect_match(rows[[1L]], "\033[38;5;", fixed = TRUE)
+})
+
+test_that("the banner names the console's key and promises nothing it lacks (review, Task 26)", {
   local_gptr_options(interactive = TRUE)
-  keys = function(fe) {
-    local_mocked_bindings(front_end = function() fe)
-    utils::tail(utils::capture.output(repl_banner(repl_state(NULL, new.env()))), 1L)
-  }
+  keys = function(...) banner_rows(...)[[2L]]
   expect_identical(keys("terminal"),
-                   "/help lists commands; Ctrl-C pauses an answer, twice at the prompt leaves.")
+                   "/help lists commands - tab completes after @ ! / - ctrl-c twice leaves")
+  # RStudio's console completes only syntactic names: commands after / and R code after !
   expect_identical(keys("rstudio"),
-                   "/help lists commands; Esc pauses an answer, twice at the prompt leaves.")
-  expect_identical(keys("rgui"),
-                   "/help lists commands; Esc stops an answer, twice at the prompt leaves.")
+                   "/help lists commands - tab completes after ! / - esc twice leaves")
+  # Ctrl-C does not pause at the prompt; where gptr does not complete, no tab
+  expect_identical(keys("rgui", complete = FALSE), "/help lists commands - esc twice leaves")
+  env = list2env(stats::setNames(as.list(1:8), letters[8:1]))
+  expect_identical(banner_rows(env = env)[[2L]], "objects: a, b, c, d, e, f (+ 2 more)")
 })
 
 test_that("in Positron the banner says typed text waits as R code (steering review)", {
   local_gptr_options(interactive = TRUE)
-  banner = function(fe) {
-    local_mocked_bindings(front_end = function() fe)
-    utils::capture.output(repl_banner(repl_state(NULL, new.env())))
-  }
-  expect_identical(utils::tail(banner("positron"), 2L), c(
-    "/help lists commands; Ctrl-C pauses an answer, twice at the prompt leaves.",
-    "Text typed while peter works waits as R code; Ctrl-C, then s, steers."))
+  expect_identical(utils::tail(banner_rows("positron", complete = FALSE), 3L), c(
+    "/help lists commands - ctrl-c twice leaves",
+    "text typed while peter works waits as R code - ctrl-c, then s, steers", ""))
   for (fe in c("terminal", "rstudio")) {
-    expect_false(any(grepl("waits as R code", banner(fe))), info = fe)
+    expect_false(any(grepl("waits as R code", banner_rows(fe))), info = fe)
   }
   # no menu, no line: nobody can answer it
   local_gptr_options(interactive = FALSE)
-  expect_false(any(grepl("waits as R code", banner("positron"))))
+  expect_false(any(grepl("waits as R code", banner_rows("positron"))))
 })
 
 test_that("gptr.history decides whether console_history_add() adds; it never fails (D-243)", {
@@ -799,7 +822,7 @@ test_that("in IRkernel peter() without a prompt starts the console on gptr_readl
   })
   expect_false(res$visible)
   expect_null(res$value)
-  expect_match(out[[1L]], "^gptr .* \\| model .* \\| mode .* \\| ")
+  expect_match(out[[1L]], "^gptr .* - fake/fake-1 - [a-z]+ - ")
   expect_true(any(grepl("session   (none yet", out, fixed = TRUE)))
   expect_length(box$answers, 0L)
 })
@@ -820,9 +843,9 @@ test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
   expect_null(res)
   i = grep("again to leave gptr", out, fixed = TRUE)
   expect_length(i, 1L)
-  # the notice ends the prompt line first; the banner's keys sentence ends with a period
-  expect_identical(out[[i - 1L]], "")
-  expect_match(out[[i - 2L]], "twice at the prompt leaves.", fixed = TRUE)
+  # the notice ends the prompt line first, under the banner's blank line and its keys row
+  expect_identical(out[c(i - 2L, i - 1L)], c("", ""))
+  expect_match(out[[i - 3L]], "twice leaves$")
 })
 
 test_that("a line at the readline limit is reported at once and not sent", {

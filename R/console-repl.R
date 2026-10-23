@@ -801,27 +801,40 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
 # errors are printed escaped on stderr and the REPL goes on.
 # ---------------------------------------------------------------------------------------------
 
-#' The banner (architecture 6.17, NS-1): `gptr <version> | model ... | mode ... | .gptr/ found`,
-#' up to six objects of the evaluation environment, then the keys: the console's interrupt key
-#' pauses an answer where the pause menu is offered, else it stops it. In Positron, whose console
-#' holds what is typed while peter works as R code, a line says so and that the key, then s, steers.
+#' The banner (architecture 6.17, NS-1; D-245): dim lines at column 2 as a notice, `gptr <version> ·
+#' <model> · <mode> · .gptr/ found`, `objects: ` and up to six names of the evaluation
+#' environment, then the keys in bold, `/help lists commands · tab completes after @ ! / · ctrl-c
+#' twice leaves`: the tab only where the REPL completes (after ! and / in RStudio's console, which
+#' puts other words in backticks), the console's own interrupt key, which does not pause at the
+#' prompt. In Positron, whose console holds what is typed while peter works as R code, a line says
+#' so and that the key, then s, steers. A blank line ends it, after the yolo notice
 #' @noRd
 repl_banner = function(rs) {
+  sym = console_style()
+  sep = sym$sep
+  key = function(k, words) paste0(cli::style_bold(k), sym$dim(words))
+  esc = tolower(console_interrupt_key())
   ws = if (is.null(workspace_dir())) "no .gptr/" else ".gptr/ found"
-  console_write(c(
-    paste0("gptr ", utils::packageVersion("gptr"), " | model ",
-           console_escape(repl_model(rs), FALSE), " | mode ",
-           console_escape(repl_mode(rs), FALSE), " | ", ws),
-    console_escape(paste0("  ", console_env_lines(repl_eval_env(rs), n = 6L), recycle0 = TRUE),
-                   FALSE),
-    paste0("/help lists commands; ", console_interrupt_key(),
-           if (console_menu_available()) " pauses" else " stops",
-           " an answer, twice at the prompt leaves."),
+  nms = sort(ls(repl_eval_env(rs)), method = "radix")
+  more = if (length(nms) > 6L) paste0(" (+ ", length(nms) - 6L, " more)")
+  after = if (front_end() == "rstudio") "! /" else "@ ! /"
+  console_notice(paste(c(
+    sym$dim(paste0("gptr ", utils::packageVersion("gptr"), sep,
+                   console_escape(repl_model(rs), FALSE), sep,
+                   console_escape(repl_mode(rs), FALSE), sep, ws)),
+    if (length(nms)) {
+      sym$dim(paste0("objects: ", console_escape(paste(utils::head(nms, 6L), collapse = ", "),
+                                                 FALSE), more))
+    },
+    paste0(key("/help", paste0(" lists commands", sep)),
+           if (isTRUE(rs$reader$complete)) key("tab", paste0(" completes after ", after, sep)),
+           key(esc, " twice leaves")),
     if (console_menu_available() && front_end() == "positron") {
-      paste0("Text typed while peter works waits as R code; ", console_interrupt_key(),
-             ", then s, steers.")
-    }))
+      paste0(sym$dim(paste0("text typed while peter works waits as R code", sep)),
+             key(esc, ", then "), key("s", ", steers"))
+    }), collapse = "\n"))
   mode_notice(repl_mode(rs))
+  console_write("")
 }
 
 #' A notice when background sessions wait for approval; P21 asks at the next blocking call

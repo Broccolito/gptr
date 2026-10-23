@@ -844,10 +844,12 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
   console_cut(console_wrap(out, width), width)
 }
 
-#' The status line of a run's end: `  done | 2 requests | 1.2k tokens | $0.0042`, the run's own
-#' requests (its usage rows), then `sub-agents $0.8500` when `kids` holds the costs of its
-#' sub-agents' requests; the status and reason when it did not end idle; an unknown (NA) usage
-#' value is unknown (IC-74)
+#' The status line of a run's end (IC-77, D-245): `done · fake-1 · 2 requests · 1.2k tokens ·
+#' $0.0042 · 82% context left` from the run's own requests (its usage rows): the last request's
+#' model, then `sub-agents $0.8500` when `kids` holds the costs of its sub-agents' requests, then
+#' the context the last request left (console_context_left()); the status and reason when it did
+#' not end idle. A term whose value is unknown (IC-74) is left out, as is a cost that is not above
+#' 0 (a free or local model)
 #' @noRd
 console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL) {
   word = if (identical(status, "idle")) "done" else console_escape(status %||% "?", FALSE)
@@ -856,10 +858,34 @@ console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL)
   }
   cols = c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h")
   n = NROW(usage)
-  parts = c(word, paste0(n, if (n == 1L) " request" else " requests"),
-            paste(format_count(unlist(usage[intersect(cols, names(usage))])), "tokens"),
-            format_cost(usage$cost), if (length(kids)) paste("sub-agents", format_cost(kids)))
-  paste0("  ", paste(parts, collapse = console_style()$sep))
+  model = if (n) usage$model[[n]]
+  tokens = format_count(unlist(usage[intersect(cols, names(usage))]))
+  cost = function(x) if (sum(x, na.rm = TRUE) > 0) format_cost(x)
+  left = console_context_left(usage)
+  parts = c(word, if (rlang::is_string(model)) console_escape(model, FALSE),
+            paste0(n, if (n == 1L) " request" else " requests"),
+            if (tokens != "unknown") paste(tokens, "tokens"), cost(usage$cost),
+            if (!is.null(cost(kids))) paste("sub-agents", cost(kids)),
+            if (!is.na(left)) paste0(left, "% context left"))
+  paste(parts, collapse = console_style()$sep)
+}
+
+#' The context the last of usage rows `u` left (IC-77, D-245), a whole percent: 1 minus its prompt
+#' tokens (input, cache reads and writes) over compact_threshold() of its model, where compaction
+#' starts; NA where that is not finite (an unknown window with compact_at off), a count is unknown,
+#' and on a CLI route, whose CLI keeps its own transcript (D-202). The status line and /context
+#' @noRd
+console_context_left = function(u) {
+  n = NROW(u)
+  if (!n || identical(u$route[[n]], "plan-cli")) return(NA_real_)
+  u = u[n, , drop = FALSE]
+  m = prompt_model(paste0(u$provider, "/", u$model))
+  limit = compact_threshold(as.numeric(m$context %||% NA_real_),
+                            as.numeric(m$max_output %||% NA_real_), gptr_opt("r_output_tokens"))
+  used = sum(unlist(u[intersect(c("input", "cache_read", "cache_write_5m", "cache_write_1h"),
+                                names(u))]))
+  if (!is.finite(limit) || is.na(used)) return(NA_real_)
+  round(100 * max(0, limit - used) / limit)
 }
 
 #' Show the custom entries appended during a run through `renderer` records (IC-69)
@@ -1133,7 +1159,7 @@ console_on_agent_end = function(event, ctx) {
   line = console_status_line(event$status, event$reason, event$usage, kids)
   v = verbosity()
   if (v == 1L) {
-    text = paste0("gptr:", sub("^ +", " ", line))
+    text = paste0("gptr: ", line)
     if (identical(event$status, "idle")) {
       console_progress(text)
     } else {
@@ -1145,7 +1171,7 @@ console_on_agent_end = function(event, ctx) {
   if (!is.null(rec$md)) rec$md$finish(cut = !identical(event$status, "idle"))
   console_gap(rec, "status")
   console_render_custom(rec$session, rec$n0)
-  console_write(console_style()$dim(line))
+  console_notice(console_style()$dim(line))
   on.exit(console_gap(rec, "prompt"), add = TRUE)
   NULL
 }

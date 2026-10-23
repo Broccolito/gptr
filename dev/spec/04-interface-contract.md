@@ -2615,7 +2615,7 @@ session_enqueue(s, "use TPM", as = "steer", source = "pipe")
 | `context_turn_blocks(s, input)` | `prompt-context.R` | the leading blocks of a later user message (`placement = "turn"` or `"both"` specs: `workspace_changes`, `attached`, mode changes, skill activations); only non-empty blocks; a block whose text hash equals the last one emitted under the same name in this session is skipped (IC-38) | P06 (through the §7.0 services) |
 | `request_build(s, target, extra = NULL)` | `prompt-cache.R` | `list(context, view, tokens_est, components)`: `context` is the adapter context of §8.1 for `target` (a model record): `system`, `tools_json`, `tools`, `messages` (`project_messages()` + the `extra` tail, e.g. the compaction request), `cache_plan` (the `cache_policy` spec's plan for the api), `params`, ids; `view` is the element summary for the prefix guard; `tokens_est` and `components` feed the budget check and the ledger | P06 (through the §7.0 services) |
 | `prefix_guard(s, target, view)` | `prompt-cache.R` | compares with the previous request to the same (provider, model); on a break emits `cache_break`, appends `gptr.cache_break` and acts per `gptr.check_prefix`; resets on `session_tree` | P06 (through the §7.0 services) |
-| `compact_threshold(window, max_output, r_cap = 4000)` | `prompt-compact.R` | `min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, max_output + 2 * r_cap), gptr.compact_at)` | P07 (behind `compact.should`) |
+| `compact_threshold(window, max_output, r_cap = 4000)` | `prompt-compact.R` | `min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, max_output + 2 * r_cap), gptr.compact_at)` | P07 (behind `compact.should`), P28 (`console_context_left()`, IC-77) |
 | `compact_should(s, tokens, idle_s)` | `prompt-compact.R` | `lgl(1)`: threshold or cold rule (the `compact.should` service); the checkpoint compactor's rules never trigger for a CLI model (`type = "cli"`), which compacts its own conversation [D-202] | P06 (through the service) |
 | `extract_state(entries)` | `prompt-compact.R` | harness state for the checkpoint (user messages incl. steering, objects with creating code, decisions, files, skills, plan) | P07, P16 |
 | `builtin_prompt(gptr)`, `builtin_context(gptr)`, `builtin_compaction(gptr)` | | register P07's sections (`preamble`, `tools`, the closing lines of `rules`, the core of `r_session`, `r_performance`, `modes`, `context`, `addendum`; IC-68), the four `preset` records, the gap `cache_policy`, the default `estimator`, the context blocks `project_instructions` (rendered `trusted="false"` in an untrusted project, IC-52), `environment`, `mode`, `plan`, and the checkpoint `compactor` (with the post-compaction floor check, IC-71) | P02 load |
@@ -5527,7 +5527,7 @@ its part in its own commit, and Task 27 finalises them.
     (steering review). Ctrl-C there
     is not the first of the two that leave the console. The follow-ups waiting are sent first, the draft on the
     live row through their runs.
-- IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26); Task 26 pending.
+- IC-77 amended (D-243, D-245; P28 Tasks 12, 19, 26).
   - Approvals ask under the call they gate (Task 12; amends IC-53 item 8 and IC-77 items 2-3). The console renderer
     keeps the session and call ids of the last call line it printed (`console_state()$last_call`, set by
     `console_on_tool_start()`); `ui_permission_lines(request)` prints the call line (`  ▎ r  <first line>`, strip
@@ -5588,6 +5588,19 @@ its part in its own commit, and Task 27 finalises them.
     lines; visual review). The console leaves them out (`code = FALSE`) when the call line just above is this
     request's and showed its code whole (at most 20 lines); the RStudio dialog keeps them and gets the text without
     SGR.
+  - Run totals (Task 26; amends item 6 and D-206): the status line is dim and written as a notice, at column 2
+    and wrapped where the margin applies, `done · <model> · <n> requests · <tokens> tokens · <cost> · <k>%
+    context left`, with `aborted: <reason>` or `error: <reason>` for `done` as before: the model of the run's
+    last request (its usage row's `model`), and `sub-agents <cost>` after the own cost. A term whose value is
+    unknown (IC-74) is left out, as is a cost not above 0 (a free or local model): `aborted · 1 request` after
+    an abort that reported nothing. `format_cost()` keeps IC-74's form wherever a cost is shown.
+    `console_context_left(u)` is the last request's `1 - (input + cache_read + cache_write_5m +
+    cache_write_1h)` over `compact_threshold(window, max_output, gptr.r_output_tokens)` of `prompt_model()`'s
+    record for its `provider/model`, where compaction starts (an unknown window gives `compact_at` alone), as a
+    whole percent from 0; NA where that threshold is infinite, a count is unknown or the route is `plan-cli`
+    (D-202). `/context` adds it under the ledger's total (`  context left         82%`).
+    `console_context_left()` -> `compact_threshold()` and `prompt_model()` are contract edges of the layering
+    test (12.2).
 - **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23).
   - The completer (Task 22): `console_complete(line, end)` takes the word before the cursor (`end`) from
     `console_trigger()` (IC-76) and returns full words, in a REPL whose reader completes (`rd$complete`) and
@@ -5620,7 +5633,7 @@ its part in its own commit, and Task 27 finalises them.
   - Scope: where R's completion calls the custom completer (`console_completes()`): R's own Unix readline on a
     tty (`console_readline_tty()`), RStudio's console and Windows' Rgui and Rterm (utils'
     `.win32consoleCompletion()`, Task 23); not under `.stdin`, not with `R_COMPLETION=FALSE`, and not in
-    Positron's console, radian or R.app, which keep their own. There `repl_main()` sets the reader's `complete`,
+    Positron's console (although its ark has a tty stdin; Task 26), radian or R.app, which keep their own. There `repl_main()` sets the reader's `complete`,
     and the reader installs the adapter around its `readline()` (`peter>` and `... ` reads; not `+ `, which
     continues `!` code and keeps R's own completion), restoring the completer it found on exit. Questions, the
     pause menu and tool `readline()` calls keep the caller's completion. On R's own readline the `!` word break

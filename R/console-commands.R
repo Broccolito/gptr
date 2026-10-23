@@ -223,7 +223,7 @@ cmd_tools = function(args, ctx) {
 }
 
 #' The first `n` objects of `env` whose names contain `pattern`, described without forcing
-#' promises (/env and the console banner)
+#' promises (/env)
 #' @noRd
 console_env_lines = function(env, pattern = "", n = 30L) {
   nms = sort(ls(env), method = "radix")
@@ -280,8 +280,9 @@ cmd_cost = function(args, ctx) {
   }, ""), paste0("Total: ", format_usage(u)))
 }
 
-#' /context: the token ledger of the last request; on a CLI route (`plan-cli`) also what the CLI
-#' reported for its turn, since it keeps its own transcript
+#' /context: the token ledger of the last request and the context it left, as the run's status line
+#' says it (console_context_left()); on a CLI route (`plan-cli`) instead what the CLI reported for
+#' its turn, since it keeps its own transcript
 #' @noRd
 cmd_context = function(args, ctx) {
   s = ctx$session
@@ -291,10 +292,12 @@ cmd_context = function(args, ctx) {
   last = led[led$request_id == led$request_id[[nrow(led)]], , drop = FALSE]
   u = session_data(s)$usage
   u = u[match(last$request_id[[1L]], u$request_id), , drop = FALSE]
+  left = console_context_left(u)
   c(paste0("Last request ", last$request_id[[1L]], ":"),
     sprintf("  %-14s %9s%s", last$component, format(round(last$tokens), big.mark = ","),
             ifelse(is.na(last$cached), "  (cache unknown)", ifelse(last$cached, "  (cached)", ""))),
     sprintf("  %-14s %9s", "total", format(round(sum(last$tokens)), big.mark = ",")),
+    if (!is.na(left)) sprintf("  %-14s %9s", "context left", paste0(left, "%")),
     if (identical(u$route, "plan-cli")) {
       paste0("  The CLI keeps its own transcript; its last turn reported ",
              format_count(c(u$input, u$cache_read, u$cache_write_5m, u$cache_write_1h)),

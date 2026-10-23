@@ -290,7 +290,12 @@ test_that("/cost, /context, /fork and /resume work on a session that ran", {
   expect_match(cost[[length(cost)]], "^Total: 1 request, ")
   ctx_out = run_command(rs, "/context")$out
   expect_match(ctx_out[[1L]], "^Last request q[0-9a-f]+:$")
-  expect_match(ctx_out[[length(ctx_out)]], "^  total ")
+  expect_match(ctx_out[[length(ctx_out) - 1L]], "^  total ")
+  # the context left, as the run's status line says it (IC-77)
+  left = console_context_left(session_data(s)$usage)
+  expect_true(left > 90)
+  expect_identical(ctx_out[[length(ctx_out)]],
+                   sprintf("  %-14s %9s", "context left", paste0(left, "%")))
   # an unknown cache read is shown as unknown (IC-74)
   d = session_data(s)
   d$ledger$cached = NA

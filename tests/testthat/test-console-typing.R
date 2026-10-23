@@ -268,7 +268,7 @@ test_that("type_ahead = 'follow_up' sends the line as the next prompt, its own r
   expect_length(session_data(res$s)$queue$follow_up, 0L)
   # queued during run 1, echoed at the prompt after its status line, then run 2's status line
   sym = console_style()
-  status = which(startsWith(res$out, paste0("  done", sym$sep)))
+  status = which(startsWith(res$out, paste0("done", sym$sep)))
   expect_length(status, 2L)
   at = match(c(queue_line("follow-up", "then plot it"), "peter[auto]> then plot it"), res$out)
   expect_identical(sort(c(at, status)), c(at[[1L]], status[[1L]], at[[2L]], status[[2L]]))

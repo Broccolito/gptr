@@ -172,7 +172,7 @@ working directory restored. Plan-specific rules:
 | `tests/testthat/test-subagent-team.R`, `test-gptr-gateway.R` (expected sub-agent lines) | 11, 12 |
 | `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19, 22, 24, 25 |
 | `tests/testthat/test-agent-{run,loop,dispatch}.R`, `fixtures/oracles/report02/loop.json`, `test-session-object.R`, `test-provider-transform.R` | 4, 5, 6 |
-| `tests/testthat/helper-arch.R` (the console's contract edges; new files' layer rows), `test-arch-layers.R` | 15, 16, 22 |
+| `tests/testthat/helper-arch.R` (the console's contract edges; new files' layer rows), `test-arch-layers.R` | 15, 16, 22, 26 |
 | `tests/testthat.R` (CRAN list, D-240) | 16 |
 | `dev/spec/03-architecture.md`, `dev/spec/04-interface-contract.md`, `dev/spec/05-plan-decomposition.md`, `dev/DEVIATIONS.md`, `?peter`, vignettes, README | 1, then each task's own sections, 27 |
 | `dev/dogfood/p28-console.R` (new), `dev/progress/P28.md` | 1, 28, every task |
@@ -1464,6 +1464,22 @@ Decisions:
   `text typed while peter works waits as R code · ctrl-c, then s, steers`.)
 - The mode stays in the prompt (`peter[auto]>`). Shift-Tab is not added; readline cannot bind it
   portably.
+- (Amended in Task 26:)
+  - The model is the last usage row's `model` (the id, without its provider). A cost is left out when its known
+    sum is not above 0, also with requests of unknown cost beside it; so are `sub-agents` terms.
+  - The line is written as a notice (`console_notice()`): at column 2 and wrapped where the margin applies, at
+    column 0 in the plain layout, where it had two fixed spaces.
+  - The limit is `compact_threshold(window, max_output, gptr.r_output_tokens)` of `prompt_model()`'s record for
+    the row's `provider/model`, as compaction resolves it. It is finite wherever the window is known, so the
+    fallback to the window is never reached: the term is omitted where the threshold is infinite (an unknown
+    window with `compact_at` off), a count is unknown, and on CLI routes. The percent is rounded, from 0. The
+    console reaches the two L3 functions as contract edges of the layering test (`helper-arch.R`).
+  - `/context` adds `  context left    <k>%` under the ledger's total.
+  - The banner's objects are names, `(+ n more)` past six. The tab term is there only where the REPL completes
+    (`rs$reader$complete`), and in RStudio's console it says `! /`, since that console inserts the other
+    candidates in backticks (Task 23). A blank line ends the banner, after the yolo notice.
+  - Positron's console answered `console_completes()` as R's readline on a tty (its ark has a tty stdin), so the
+    banner offered tab there (visual check); `console_completes()` now excludes Positron, as IC-81 says.
 
 Tests (`test-console-render.R`, `test-console-repl.R`, `test-console-commands.R`), RED first:
 - The status text.
@@ -1471,12 +1487,18 @@ Tests (`test-console-render.R`, `test-console-repl.R`, `test-console-commands.R`
 - The CLI omission.
 - The banner bytes.
 - `/context` agrees.
+- (Amended in Task 26:) the status lines and banners expected in
+  `test-console-{fences,jupyter-progress,setup,typing}.R`; a Positron with a tty stdin in
+  `test-console-completion.R`.
 
-Spec: IC-77 run totals (amends D-206), NS-1 banner.
+Spec: IC-77 run totals (amends D-206), NS-1 banner. (Amended in Task 26:) Also 04's `compact_threshold()` row,
+03 §6.17 (banner, status line, `/context`) and §10.1, D-245's Task 26 note.
 
 Files: `R/console-render.R` (`console_status_line()`, `console_context_left()`), `R/console-repl.R`
 (`repl_banner()`), `R/console-commands.R` (`/context`), `tests/testthat/test-console-render.R`,
-`tests/testthat/test-console-repl.R`, `tests/testthat/test-console-commands.R`.
+`tests/testthat/test-console-repl.R`, `tests/testthat/test-console-commands.R`. (Amended in Task 26:) Also
+`tests/testthat/helper-arch.R` (two contract edges), `test-console-{fences,jupyter-progress,setup,typing}.R`,
+`R/console-complete.R` and `test-console-completion.R`.
 
 Commit: `feat(console): run status names the model and the context left`.
 

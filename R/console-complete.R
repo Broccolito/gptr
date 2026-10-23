@@ -6,11 +6,14 @@
 #' Does R's completion in this console call R's custom completer, so the REPL completes after its
 #' trigger characters (IC-81)? R's own Unix readline on a tty (console_readline_tty()), RStudio's
 #' console (which consults it before its own engine) and Windows' Rgui and Rterm (utils'
-#' .win32consoleCompletion()); not a piped REPL, not with R_COMPLETION=FALSE, and not Positron,
-#' radian or R.app, whose completion gptr does not reach
+#' .win32consoleCompletion()); not a piped REPL, not with R_COMPLETION=FALSE, and not Positron
+#' (whose ark has a tty stdin), radian or R.app, whose completion gptr does not reach
 #' @noRd
 console_completes = function(stdin = FALSE) {
-  if (isTRUE(stdin) || identical(Sys.getenv("R_COMPLETION"), "FALSE")) return(FALSE)
+  if (isTRUE(stdin) || identical(Sys.getenv("R_COMPLETION"), "FALSE") ||
+        front_end() == "positron") {
+    return(FALSE)
+  }
   console_readline_tty() || (gptr_is_interactive() && !nzchar(Sys.getenv("RADIAN_VERSION")) &&
                                (front_end() == "rstudio" ||
                                   (is_windows() && platform_gui() %in% c("Rgui", "RTerm"))))

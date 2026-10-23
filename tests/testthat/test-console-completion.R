@@ -194,10 +194,10 @@ test_that("unsupported input modes and IDE consoles keep completion options unch
   # Windows console (Rgui, Rterm), with or without a caller-owned completer
   ide = list(list(tty = FALSE, gui = "RStudio"), list(unix = FALSE, tty = FALSE, gui = "Rgui"),
              list(unix = FALSE, gui = "RTerm"), list(unix = FALSE, gui = "RTerm", owned = TRUE))
-  # out of reach (no completer): Positron, radian, R.app; and the unsupported input modes: not
-  # interactive, R without readline in a terminal, another unix front end with no tty, piped,
-  # R_COMPLETION=FALSE (also in RStudio)
-  none = list(list(tty = FALSE, env = c(POSITRON = "1")),
+  # out of reach (no completer): Positron (its ark has a tty stdin; Task 26's visual check), radian,
+  # R.app; and the unsupported input modes: not interactive, R without readline in a terminal,
+  # another unix front end with no tty, piped, R_COMPLETION=FALSE (also in RStudio)
+  none = list(list(tty = FALSE, env = c(POSITRON = "1")), list(gui = "Positron"),
               list(unix = FALSE, gui = "RTerm", env = c(RADIAN_VERSION = "0.6.13")),
               list(tty = FALSE, gui = "AQUA"), list(human = FALSE), list(cledit = FALSE),
               list(tty = FALSE), list(stdin = TRUE), list(disabled = TRUE),

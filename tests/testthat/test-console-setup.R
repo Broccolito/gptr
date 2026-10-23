@@ -114,7 +114,7 @@ test_that("peter opens with the chosen default and skips setup on its next openi
   local_mocked_bindings(gptr_readline = function(prompt = "", ...) "/exit")
   local_no_fd0()
   out = utils::capture.output(peter())
-  expect_match(paste(out, collapse = "\n"), "model codex/default", fixed = TRUE)
+  expect_match(paste(out, collapse = "\n"), "gptr [0-9.]+ - codex/default - ")
   expect_identical(settings_read("user")$model, "codex/default")
   utils::capture.output(peter())
   expect_identical(ui$log$method, "select")
@@ -165,7 +165,7 @@ test_that("the console menu consumes a CLI choice before normal chat input", {
   first = which(grepl("^[[:space:]]+1  ", out))
   expect_identical(out[first - 1L],
                    "  Manual setup shows API and Ollama commands, then returns to R.")
-  expect_match(text, "model claude-cli/default", fixed = TRUE)
+  expect_match(text, "gptr [0-9.]+ - claude-cli/default - ")
   expect_identical(settings_read("user")$model, "claude-cli/default")
   expect_length(box$answers, 0L)
 })

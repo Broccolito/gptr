@@ -162,15 +162,16 @@ arch_kernel_sdk = function() {
 # checkpointers as the loop does (tool_run(), tool_execute_frame(), checkpoint_before(),
 # checkpoint_after()), the console's /model checks a reference with P06's model_canonical()
 # (IC-79), /model and /status name the full id behind a CLI's `default` with P20's
-# pcli_default_model() (section 11.10, D-226), and the console takes back the person's queued
-# steers with session_unqueue() (section 7.6, D-242)
+# pcli_default_model() (section 11.10, D-226), the console takes back the person's queued
+# steers with session_unqueue() (section 7.6, D-242), and its run status and /context measure the
+# context left against P07's compact_threshold() of prompt_model()'s record (IC-77, D-245)
 arch_contract_edges = function() {
   data.frame(
     caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "console",
-                    "console", "console"),
+                    "console", "console", "console", "console"),
     callee = c("code_targets", "session_new", "session_new", "tool_call_hook", "tool_run",
                "tool_execute_frame", "checkpoint_before", "checkpoint_after", "model_canonical",
-               "pcli_default_model", "session_unqueue")
+               "pcli_default_model", "session_unqueue", "compact_threshold", "prompt_model")
   )
 }
 

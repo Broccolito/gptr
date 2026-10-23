@@ -1933,7 +1933,11 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   [D-244]); a warning
   near the readline line limit (4,095 bytes on
   R < 4.5, 8,190 on R >= 4.5 [18 fact-check]); optional history through `utils::timestamp()`
-  (`gptr.history`). Banner: `gptr 1.0.0 | model ... | mode ... | .gptr/ found` plus the workspace summary.
+  (`gptr.history`). Banner [D-245]: dim lines at column 2, `gptr 1.0.0 · <model> · <mode> · .gptr/ found`,
+  `objects: ` and up to six names, then the keys in bold, `/help lists commands · tab completes after @ ! / ·
+  ctrl-c twice leaves` (the tab only where the REPL completes, after `! /` in RStudio's console; the console's
+  own key, `esc` in RStudio, R.app and Rgui, which does not pause at the prompt), in Positron a line `text typed
+  while peter works waits as R code · ctrl-c, then s, steers`, then a blank line.
 - **REPL completion** [D-183, D-244]: completion comes only after gptr's trigger characters, never on natural
   language [IC-81]: R's own completion of the code on a `!`/`!!` line; objects, then files and directories
   after `@`; the object's members after `@obj$`; peter's members after `peter$`; commands and `/skill:<name>`
@@ -2062,11 +2066,14 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   `failed (1/2): <first line of the reason>`, after the agent's blue block [D-245], cut to the console width; `(k/N)` for a team, fan-out or
   `gptr_parallel()` group; a nested `peter()` by its quoted prompt and its number among the parent run's
   children, `'Summarise ...' #2`, D-224). Model code that wraps such calls in `capture.output()` or `sink()`
-  still captures prompts and lines (D-188). A run's status line counts its own requests and adds what its
-  sub-agents cost (`done · 2 requests · 156.7k tokens · $0.2125 · sub-agents $0.8500`, D-206).
+  still captures prompts and lines (D-188). A run's status line, dim and wrapped as a notice, names the model of
+  its last request, counts its own requests, adds what its sub-agents cost (D-206) and ends with the context the
+  last request left before compaction starts (`done · claude-sonnet-5-5 · 2 requests · 156.7k tokens · $0.2125
+  · sub-agents $0.8500 · 82% context left`, none on a CLI route); a term whose value is unknown, and a cost not
+  above 0, is left out [IC-77, D-245].
 - **Slash commands** (`command` specs): `/help`, `/exit`, `/model`, `/mode`, `/plan`, `/tools`, `/env`,
-  `/compact [focus]`, `/cost` (by agent, one total), `/context` (token ledger; on a CLI route also the
-  CLI's reported turn input, D-206), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
+  `/compact [focus]`, `/cost` (by agent, one total), `/context` (token ledger and the context left, as the
+  status line says it [D-245]; on a CLI route instead the CLI's reported turn input, D-206), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
   templates as `/<name> args`. Commands are recorded as comments in transcripts. Their output, like a
   prompt over 200 bytes or wider than a content row, is word-wrapped in the console margin; the listings
@@ -2601,9 +2608,9 @@ Prices: Sonnet 5.5 at $2 input / $10 output per million tokens, 1-hour cache wri
    discovery, registry resolution, `session_start` hooks, the system prompt frozen (standard preset with
    `ask`, `<documents>` because the user bound `analysis.R` once, `<artifacts>`, `<r_env>`), `store_open()`
    appends the JSONL header in `.gptr/sessions/`, the task callback for user expressions is registered.
-   Banner: `gptr 1.0.0 | model anthropic/claude-sonnet-5-5 | mode manual | .gptr/ found` and
-   `pbmc <Seurat, 3,012,448 cells x 33,538 features, 5.1 GB>` from the shipped `gptr_describe.Seurat` method
-   (S4 accessors, address-keyed size cache, no copy). First provider use: the egress acknowledgement was
+   Banner: `gptr 1.0.0 · anthropic/claude-sonnet-5-5 · manual · .gptr/ found`, `objects: pbmc` and the keys
+   (§6.17); `/env` shows `pbmc <Seurat, 3,012,448 cells x 33,538 features, 5.1 GB>` from the shipped
+   `gptr_describe.Seurat` method (S4 accessors, address-keyed size cache, no copy). First provider use: the egress acknowledgement was
    recorded earlier at user scope.
 3. The prompt passes the `input` hook chain and becomes the first user message: `<project_instructions>`
    (vignette.Rmd, about 200), `<environment>` (76), `<mode name="manual">` (50), `<workspace>` (about 40 for

@@ -719,7 +719,7 @@ test_that("a foreground run streams its answer and ends with a status line (verb
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Hello")),
     hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
                turns = 1L)))
-  expect_identical(out, c("Hello **world** {x}", "  done - 0 requests - 0 tokens - $0.0000"))
+  expect_identical(out, c("Hello **world** {x}", "done - 0 requests - 0 tokens"))
   expect_null(console_record(list(run = "u0000test")))
 })
 
@@ -1152,24 +1152,66 @@ test_that("a cut answer keeps what it received, the cut marked (visual review)",
                      length = "Heavy cars, so par...", stop = "Heavy cars, so par"))
 })
 
-test_that("the status line names an unusual end and sums the usage rows", {
+# Usage rows of the fake provider's model (window 200,000, maximum output 8,192), as usage_row()
+# gives them
+fake_usage = function(model = "fake-1", input = 200, output = 10, cache_read = 900, cost = 0,
+                      route = "api") {
+  usage_conform(data.frame(request_id = paste0("q", seq_along(input)), provider = "fake",
+                           model = model, route = route, input = input, output = output,
+                           cache_read = cache_read, cache_write_5m = 0, cache_write_1h = 0,
+                           cost = cost, stringsAsFactors = FALSE))
+}
+
+test_that("the status line names the model and the context left; unknown terms go (IC-77)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
-  usage = data.frame(input = c(1000, 200), output = c(50, 10), cache_read = c(0, 900),
-                     cost = c(0.001, 0.0005))
+  fake = gptr_fake_provider(list("ok"))
+  usage = fake_usage(c("fake-0", "fake-1"), c(1000, 200), c(50, 10), c(0, 900), c(0.001, 0.0005))
+  # the last request's model, and its 1,100 prompt tokens against the 170,000 where compaction
+  # starts
   expect_identical(console_status_line("idle", NULL, usage),
-                   "  done - 2 requests - 2.2k tokens - $0.0015")
+                   "done - fake-1 - 2 requests - 2.2k tokens - $0.0015 - 99% context left")
   expect_identical(console_status_line("aborted", "aborted (user)", NULL),
-                   "  aborted: aborted (user) - 0 requests - 0 tokens - $0.0000")
-  expect_identical(console_status_line("idle", NULL, data.frame(input = 999950)),
-                   "  done - 1 request - 1.0M tokens - $0.0000")
+                   "aborted: aborted (user) - 0 requests - 0 tokens")
+  # a cost of 0, a free or local model's, is left out; past the threshold no context is left
+  expect_identical(console_status_line("error", "network error", fake_usage(input = 999950)),
+                   "error: network error - fake-1 - 1 request - 1.0M tokens - 0% context left")
   usage$cost[[2L]] = NA
   usage$output[[1L]] = NA
   expect_identical(console_status_line("idle", NULL, usage, c(0.5, NA)), paste(
-    "  done - 2 requests - unknown tokens - $0.0010 + 1 request of unknown cost - sub-agents",
-    "$0.5000 + 1 request of unknown cost"))
+    "done - fake-1 - 2 requests - $0.0010 + 1 request of unknown cost - sub-agents $0.5000 + 1",
+    "request of unknown cost - 99% context left"))
   usage$cost[[1L]] = NA
-  expect_identical(console_status_line("idle", NULL, usage, NA_real_),
-                   "  done - 2 requests - unknown tokens - unknown cost - sub-agents unknown cost")
+  usage$model[[2L]] = NA
+  usage$cache_read[[2L]] = NA
+  expect_identical(console_status_line("aborted", NULL, usage, NA_real_), "aborted - 2 requests")
+  # a CLI keeps its own transcript: no context term
+  expect_identical(console_status_line("idle", NULL, fake_usage(route = "plan-cli", cost = 0.01)),
+                   "done - fake-1 - 1 request - 1.1k tokens - $0.0100")
+})
+
+test_that("console_context_left() measures the last request against compact_threshold() (IC-77)", {
+  fake = gptr_fake_provider(list("ok"))
+  u = fake_usage(input = 12000, cache_read = 6000)
+  u$cache_write_5m = 1500
+  u$cache_write_1h = 500
+  # 20,000 prompt tokens; compaction of the fake's window starts at 170,000
+  expect_identical(compact_threshold(200000, 8192, gptr_opt("r_output_tokens")), 170000)
+  expect_identical(console_context_left(u), round(100 * (1 - 20000 / 170000)))
+  local_gptr_options(compact_at = 40000)
+  expect_identical(console_context_left(u), 50)
+  # a model whose window is unknown: compact_at alone; with compact_at off nothing is known
+  unknown = u
+  unknown$model = "fake-9"
+  expect_identical(console_context_left(unknown), 50)
+  local_gptr_options(compact_at = Inf)
+  expect_identical(console_context_left(unknown), NA_real_)
+  u$input = 180000
+  expect_identical(console_context_left(u), 0)
+  # an unknown count, a CLI route and no request give no term
+  u$cache_read = NA
+  expect_identical(console_context_left(u), NA_real_)
+  expect_identical(console_context_left(fake_usage(route = "plan-cli")), NA_real_)
+  expect_identical(console_context_left(NULL), NA_real_)
 })
 
 test_that("the status line counts the run's requests and adds its sub-agents' cost (#38)", {
@@ -1197,10 +1239,12 @@ test_that("the status line counts the run's requests and adds its sub-agents' co
   usage_add(kid, row("q-kid", session_data(kid)$id, 0.5))
   own = rbind(row("q1", d$id, 0.001), row("q2", d$id, 0.002))
   for (i in 1:2) usage_add(s, own[i, ])
-  expect_message(end(own), "gptr: done - 2 requests - 220 tokens - $0.0030 - sub-agents $0.5000",
-                 fixed = TRUE)
+  # rows that name no model: no model term, the context left measured against compact_at
+  expect_message(end(own), paste("gptr: done - 2 requests - 220 tokens - $0.0030 - sub-agents",
+                                 "$0.5000 - 100% context left"), fixed = TRUE)
   console_on_agent_start(hook_event("agent_start", s), ctx)
-  expect_message(end(own[1L, ]), "^gptr: done - 1 request - 110 tokens - \\$0\\.0010\\s*$")
+  expect_message(end(own[1L, ]),
+                 "^gptr: done - 1 request - 110 tokens - \\$0\\.0010 - 100% context left\\s*$")
 })
 
 test_that("custom entries of a run are shown through renderer records (IC-69)", {
@@ -1480,11 +1524,11 @@ test_that("a foreground run separates text, tool and status blocks once (D-186, 
                  hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL,
                             doc = NULL, turns = 1L)))
   rows = list(c("", "  First tail", "", "  | r  1 + 1", "    + value", "", "  Second ending", "",
-                "  done - 0 requests - 0 tokens - $0.0000", ""),
+                "  done - 0 requests - 0 tokens", ""),
               c("", "  [gptr] a notice", "", "  Answer", "",
-                "  done - 0 requests - 0 tokens - $0.0000", ""),
+                "  done - 0 requests - 0 tokens", ""),
               c("", "  | r  1 + 1", "    + value", "  | r  2 + 2", "    + value", "", "  Done", "",
-                "  done - 0 requests - 0 tokens - $0.0000", ""))
+                "  done - 0 requests - 0 tokens", ""))
   # an R GUI spaces the blocks exactly as a terminal does
   for (fe in c("terminal", "rgui")) {
     for (i in 1:3) {
@@ -1526,7 +1570,7 @@ test_that("a streamed reply is printed verbatim and never evaluated (acceptance 
   expect_true("Use {Sys.setenv(GPTR_PWNED = \"1\")} with care." %in% out)
   expect_identical(Sys.getenv("GPTR_PWNED"), "")
   expect_false(res$visible)
-  expect_match(out[[length(out)]], "^  done - 1 request - ")
+  expect_match(out[[length(out)]], "^done - fake-1 - 1 request - ")
 })
 
 test_that("nothing is rendered at verbosity 0 (knitr, testthat)", {
