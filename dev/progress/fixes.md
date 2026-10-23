@@ -1935,3 +1935,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   call) stays unchecked, so a file agent's `mcp__` tool that is not loaded still degrades quietly.
   Open: a preset named in a continuation's `tools =` is still ignored; `gptr_config(preset =)` still
   accepts an unknown preset (finding 8, in passing).
+
+### sessions-3 - A continuation's .opts$thinking applies without model =
+- Red: FAIL 3 in `^gptr-gateway$` (PASS 369; findings 29 and 200): `s |> peter("y", .opts =
+  list(thinking = "low"))` sent `high` and kept it, a session started without a level stayed
+  without one, and a router session's level stayed NULL.
+- Cause: `gateway_continue_session()` read `.opts$thinking` only inside `if (!is.null(call$ids$model))`;
+  the level lives only on the session (`d$thinking`).
+- Fix: without `model =`, a level goes through `kernel_model_switch(s, d$model, th, reason = "user")`
+  (clamped; `model_change` only when it changes; a router keeps its model and takes `d$thinking`).
+  `?peter` `.opts`: `thinking` applies to this call and the session's later turns.
+- Green: `^gptr-gateway$` PASS 372; `^(gptr-|arch-layers$|lint-rules$|session-object$|agent-run$)`
+  PASS 2620. Lint clean.
+- Deviations: D-251 (extended). Open: none (the Bedrock and announced-clamp parts of finding 200
+  belong to the models group).

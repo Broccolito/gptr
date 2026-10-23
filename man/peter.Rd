@@ -52,7 +52,8 @@ own R code without \code{envir} evaluates in a new environment whose parent is t
 \item{replay}{Document replay mode: \code{"auto"}, \code{"replay"}, \code{"live"} or \code{"record"}.}
 
 \item{.opts}{Rare switches such as \code{thinking}, \code{max_turns}, \code{context}, \code{returns}, \code{images},
-\code{preset}, and entries named by a plugin namespace.}
+\code{preset}, and entries named by a plugin namespace. \code{thinking} applies to this call and to the
+session's later turns.}
 
 \item{.run}{\code{FALSE} builds the session with the prompt queued and returns it (see
 \code{\link[=gptr_step]{gptr_step()}}).}

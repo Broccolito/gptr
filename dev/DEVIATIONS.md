@@ -3125,6 +3125,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   tools; no request is sent) and at a continuation (after the call's specs register). Was a `missing_tool`
   diagnostic, the name ignored. Names in settings `tools.enable`/`tools.disable` and in an agent definition's
   allowlist keep that diagnostic. Two presets in `tools =` are refused (the first won). A bare name adds, as `+name`.
-- Contract-visible: 04 §6.1 `tools` row; `?peter` `tools`.
-- Tests: gptr-gateway "an unknown name in tools = is refused ..."; prompt-sections "the tool array skips unavailable
-  and missing tools ...". Evidence: progress/fixes.md Task FIX-18.
+- Rule (sessions-3): a continuation's `.opts$thinking` without `model =` switches the session's level through
+  `kernel_model_switch()` (clamped; a `model_change` only when it changes; a router session keeps its model and
+  takes the level), for this and later turns. Was validated and dropped.
+- Contract-visible: 04 §6.1 `tools` and `.opts` rows; `?peter` `tools` and `.opts`.
+- Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...";
+  prompt-sections "the tool array skips unavailable and missing tools ...". Evidence: progress/fixes.md Task FIX-18.

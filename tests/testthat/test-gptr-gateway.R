@@ -1305,6 +1305,29 @@ test_that("an unknown name in tools = is refused with the closest preset or tool
   expect_identical(f$log$n, 1L)
 })
 
+test_that("a continuation's .opts$thinking applies without model = and stays (D-251)", {
+  local_gw()
+  fake = local_fake_provider(as.list(paste("reply", 1:7)))
+  s = peter("x", model = fake, .opts = list(thinking = "high"), envir = new.env())
+  s |> peter("y", .opts = list(thinking = "low"))
+  s |> peter("z")
+  expect_identical(session_data(s)$thinking, "low")
+  t = peter("x", model = fake, envir = new.env())
+  t |> peter("y", .opts = list(thinking = "high"))
+  # a router session keeps its model and records no model_change; its choice gets the level
+  pick = gptr_router("pick_th", route = function(request, ctx) "fake/fake-1")
+  r = peter("x", model = pick, envir = new.env())
+  changes = function(x) {
+    sum(vapply(session_data(x)$entries, function(e) e$type, "") == "model_change")
+  }
+  n = changes(r)
+  r |> peter("y", .opts = list(thinking = "low"))
+  expect_identical(c(r$model, session_data(r)$thinking), c("router:pick_th", "low"))
+  expect_identical(changes(r), n)
+  th = vapply(fake_requests(fake), function(q) q$params$thinking %||% NA_character_, "")
+  expect_identical(th, c("high", "low", "low", NA, "high", NA, "low"))
+})
+
 # Task 12: append
 
 test_that("NAMESPACE exports P08's ten names and registers its S3 methods", {

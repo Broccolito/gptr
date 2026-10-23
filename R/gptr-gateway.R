@@ -86,7 +86,8 @@
 #' @param budget `list(tokens =, cost =, turns =)` limits for this call.
 #' @param replay Document replay mode: `"auto"`, `"replay"`, `"live"` or `"record"`.
 #' @param .opts Rare switches such as `thinking`, `max_turns`, `context`, `returns`, `images`,
-#'   `preset`, and entries named by a plugin namespace.
+#'   `preset`, and entries named by a plugin namespace. `thinking` applies to this call and to the
+#'   session's later turns.
 #' @param .run `FALSE` builds the session with the prompt queued and returns it (see
 #'   [gptr_step()]).
 #' @param .stdin Drive the console from piped standard input.
@@ -624,18 +625,21 @@ gateway_continue_envir = function(call, s) {
   invisible(call)
 }
 
-#' Applies a continuation's changes after refusing an unknown tool name: model, an explicit
-#' `mode =` (tightened inside a run) and tools through session.add_tools (IC-69). An inherited
-#' mode is never written to the session (IC-53 item 4).
+#' Applies a continuation's changes after refusing an unknown tool name: model, or `.opts$thinking`
+#' alone, an explicit `mode =` (tightened inside a run) and tools through session.add_tools (IC-69).
+#' An inherited mode is never written to the session (IC-53 item 4).
 #' @noRd
 gateway_continue_session = function(call, s, cur) {
   d = session_data(s)
   before = registry_names("tool", session = d$id)
   gateway_register(call, s)
   prompt_tools_check(gateway_tool_mods(call$ids$tools), d$id)
+  th = call$args$opts$thinking
   if (!is.null(call$ids$model)) {
-    ref = gateway_model_ref(call$ids$model, call$args$opts$thinking, session = d$id)
+    ref = gateway_model_ref(call$ids$model, th, session = d$id)
     if (!identical(ref, d$model)) session_set_model(s, ref, reason = "user")
+  } else if (!is.null(th)) {
+    kernel_model_switch(s, d$model, th, reason = "user")
   }
   mode = if (isTRUE(call$args$mode_given)) call$ids$mode else NULL
   if (!is.null(mode) && !is.null(cur)) mode = run_mode_tighter(mode, cur$mode)
