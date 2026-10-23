@@ -1799,7 +1799,7 @@ ctx_kernel = function() {
       if (is.null(run) || isTRUE(run$settled)) {
         kernel_model_switch(s, ref, thinking, reason)
       } else {
-        kernel_model_ref(ref, thinking)
+        kernel_model_ref(ref, thinking, session_data(s)$id)
         run$pending_model = list(ref = ref, thinking = thinking, reason = reason)
       }
       invisible(NULL)
@@ -1920,8 +1920,8 @@ ctx_state_restorable = function(prior) {
 #' Pure resolution (IC-74) that refuses what session_set_model() refuses (D-017); the level
 #' travels as a `:<level>` suffix, except for a router, which chooses its own.
 #' @noRd
-kernel_model_ref = function(ref, thinking = NULL) {
-  m = model_canonical(ref, strict = TRUE)
+kernel_model_ref = function(ref, thinking = NULL, session = NULL) {
+  m = model_canonical(ref, strict = TRUE, session = session)
   stream_chat_model(m)
   if (is.null(thinking) || startsWith(m$ref, "router:")) return(ref)
   paste0(m$ref, ":", thinking)
@@ -1930,7 +1930,7 @@ kernel_model_ref = function(ref, thinking = NULL) {
 #' Switch a session's model (and thinking level) now: one `model_change` entry and `model_select`
 #' @noRd
 kernel_model_switch = function(s, ref, thinking = NULL, reason = "plugin") {
-  target = kernel_model_ref(ref, thinking)
+  target = kernel_model_ref(ref, thinking, session_data(s)$id)
   session_set_model(s, target, reason)
   if (!is.null(thinking) && startsWith(target, "router:")) {
     d = session_data(s)

@@ -117,11 +117,12 @@ session_id_ok = function(x) {
 
 #' Canonical model reference; lenient (an unknown model fails at the first request, not here)
 #' Pure resolution (IC-74); `type` is NULL when not known here (a router, an unresolved reference).
+#' `strict` also finds a provider spec registered for `session` only (run_model_resolve(), D-251).
 #' @noRd
-model_canonical = function(model, strict = FALSE) {
+model_canonical = function(model, strict = FALSE, session = NULL) {
   if (startsWith(model, "router:")) return(list(ref = model, thinking = NULL, type = NULL))
   rec = if (strict) {
-    model_resolve(model, strict = TRUE)
+    run_model_resolve(model, session)
   } else {
     tryCatch(model_resolve(model, strict = FALSE), error = function(e) NULL)
   }
@@ -825,7 +826,7 @@ session_set_model = function(s, ref, reason = "user") {
   check_string(ref, "ref")
   check_string(reason, "reason")
   d = session_data(s)
-  m = model_canonical(ref, strict = TRUE)
+  m = model_canonical(ref, strict = TRUE, session = d$id)
   stream_chat_model(m)
   from = d$model
   if (identical(from, m$ref) && identical(d$thinking, m$thinking)) return(invisible(s))

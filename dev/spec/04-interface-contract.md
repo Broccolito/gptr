@@ -2540,7 +2540,7 @@ row = usage_row(msg, session = s$id, agent = "main", parent_id = NA_character_, 
 | `session_home(s)` | the kept home or `NULL` | P09, P16, P19 |
 | `session_append(s, entry)` | appends an entry (R shape) to `.d$entries` and the store (`persist` redaction at ingress, inside `suspendInterrupts()`), moves the leaf, returns the entry id invisibly | all plans that write entries |
 | `session_record_initial_model(s)` | on an empty session, resolves its already-selected model (including session-only specs; routers remain deferred), refuses decision-only models, and records one typed initial `model_change`; no request, prompt freeze or `model_select` event | P19 |
-| `session_set_model(s, ref, reason = "user")` | resolves `ref`, appends `model_change`, emits `model_select` | P08, P14 |
+| `session_set_model(s, ref, reason = "user")` | resolves `ref` (session-only specs included), appends `model_change`, emits `model_select` | P08, P14 |
 | `session_set_mode(s, mode, source = "user")` | appends `gptr.mode_change`; the next user message (idle) or an operator message after the current tool results (running) carries the new `<mode>` block | P08, P11, P14 |
 | `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())` | the queue behind `gptr_steer()`; `source` in `pipe`, `pause_menu`, `repl`, `api_user`, `extension`, `agent`; only user sources become operator relays; a call from model code of the same session tree is refused (IC-55) | P08, P14, P19 |
 | `session_value_set(s, label, value, name = NULL, forced_home = NULL)` | the §5.1 value policy of `03`; appends `gptr.value` | P08 (`gptr_return()`), P15 (replay `value=`), P19 (child values) |

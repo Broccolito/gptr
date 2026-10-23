@@ -1991,12 +1991,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   its extensions, plugins (filters) and specs loaded; 04 §6.1.2 and D-251 likewise. The refused-call test pins it.
   Green `^gptr-gateway$` PASS 415; `^(gptr-|lint-rules$|arch-layers$|zzz)` PASS 1619. Full suite (NOT_CRAN=true,
   in five filters) FAIL 0 PASS 35496 SKIP 64. Lint and Rd clean.
+- Review: r3 (medium) applied. A piped `model =` provider spec never switched (on main too): the session's spec
+  passed the guards, but `session_set_model()` and `kernel_model_ref()` resolved through `model_canonical(strict =
+  TRUE)`, the global catalog only, so `s |> peter("next", model = corp)` was `gptr_error_unknown_model`, and so was a
+  later `.opts$thinking` on a session started on such a spec. `model_canonical(strict = TRUE, session =)` resolves
+  through `run_model_resolve()` (the session's rank-0 provider next); both pass the session. Red FAIL 1 (the new
+  spec-switch test). Green `^gptr-gateway$` PASS 419; `^(gptr-|session-|agent-|console-commands|ext-|catalog-models|
+  arch-layers|lint-rules)` PASS 6505. Lint and Rd clean.
 - Deviations: D-251 (extended). From the plan: the continuation guards its target whether or not it changes and
   `gateway_run()` guards only a new session (one check per switch); `session_new()` sets `gptr_last()`, so a
   refused new call restores it.
 - Open: the `.opts$images` and `prompt_secrets` "ask" refusals still follow the switch (`gateway_input()`); a
-  continuation to a provider spec not registered globally still fails in `session_set_model()` (finding 80 aside);
-  a router choice refused for egress or replay still falls back through `route_default()`, which checks no egress
+  router choice refused for egress or replay still falls back through `route_default()`, which checks no egress
   on the default model (r1, on main too: L3's `run_route()` cannot call the L6 guards, so closing it changes
   IC-69's fallback; the models group edits `run_route()` in parallel).
 

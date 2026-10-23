@@ -3142,7 +3142,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   and replay only (`ready = FALSE`), and its request refuses the rest, as before (a keyless choice:
   `gptr_error_no_key`, no request). So does building a session (`.run = FALSE`, a `gptr_parallel()` member):
   `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a member that cannot reach its model
-  ends `error` (kept by `on_error = "return"`). A failure after a request (HTTP 4xx/5xx) keeps INFRA-04.
+  ends `error` (kept by `on_error = "return"`). A failure after a request (HTTP 4xx/5xx) keeps INFRA-04. A switch
+  resolves the target as its session sees it (`model_canonical(strict = TRUE, session =)` through
+  `run_model_resolve()`), so a piped `model =` provider spec and a later `.opts$thinking` on it switch (were
+  `gptr_error_unknown_model`).
 - Rule (sessions-4): a continuation without `envir =` of a session with no kept home whose `home_label` is a
   function frame (R2) informs once per session (`gptr_message_home_not_kept`) when `home_label(call$envir)`
   differs, naming both and `envir = new.env()`. Was silent. R2 and the IC-40 precedence are unchanged.
@@ -3211,7 +3214,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   setting. Was: the last `gptr.mode_change`, else the resuming process's setting, so a session started in `auto`
   came back `manual` (a script stopped at its first write) and one started in `plan` came back under a looser
   setting (`auto`: a write ran). A file that records no mode (written before) behaves as before.
-- Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
+- Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`, §7.6
+  `session_set_model()`; `?peter`
   `tools`, `.opts`, `.run` and refusals, `?gptr_wait`. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter`
   `envir`, `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and
   row). 04 §4.6 `gptr.budget`, §7.6 `budget_check()`, §10.4 `budget_exceeded`, IC-66. 04 §2.2 messages, §6.1
@@ -3223,7 +3227,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `?gptr_security` (a computed `system()` command). 04 §4.6 `gptr.frozen`, §6.5 `gptr_resume()`; `?gptr_sessions`.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice without a key stops the run ...",
-  "a built session needs no key until a run starts it ...", "a continuation of a session that kept no workspace
+  "a built session needs no key until a run starts it ...", "a continuation switches to a provider spec that only
+  its session knows ...", "a continuation of a session that kept no workspace
   ...", "a named dot that abbreviates an argument ...";
   prompt-sections "the tool array skips unavailable and missing tools ..."; agent-run "a request rejected or never
   received costs nothing ...", "a reported usage keeps its unknown counts ...", "an overflow condition carries the

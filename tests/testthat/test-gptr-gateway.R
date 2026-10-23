@@ -1449,6 +1449,25 @@ test_that("a built session needs no key until a run starts it (D-251)", {
   expect_s3_class(session_data(team$a)$condition, "gptr_error_no_key")
 })
 
+test_that("a continuation switches to a provider spec that only its session knows (D-251)", {
+  local_gw()
+  local_gptr_options(replay = "auto")
+  settings_write("user", list(egress = list(corp = "ack")))
+  fake = local_fake_provider(list("one"))
+  # the fake api finds its script through the live fake of the same name
+  script = gptr_fake_provider(list("corp answer", "low answer"), name = "corp")
+  corp = gptr_provider("corp", api = "fake",
+                       models = list(list(id = "corp-big", thinking_levels = c("low", "high"))))
+  s = peter("hello", model = fake, envir = new.env())
+  s |> peter("next", model = corp)
+  changes = Filter(function(e) identical(e$type, "model_change"), session_data(s)$entries)
+  expect_identical(c(s$model, s$text), c("corp/corp-big", "corp answer"))
+  expect_identical(vapply(changes, function(e) e$gptr$ref, ""), "corp/corp-big")
+  s |> peter("more", .opts = list(thinking = "low"))
+  expect_identical(c(s$text, session_data(s)$thinking), c("low answer", "low"))
+  expect_identical(script$log$n, 2L)
+})
+
 test_that("a named dot that abbreviates an argument warns and stays context (D-251)", {
   local_gw()
   fake = local_fake_provider(as.list(paste("reply", 1:5)))
