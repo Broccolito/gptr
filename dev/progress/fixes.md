@@ -2004,3 +2004,21 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `router.call` fails, as under replay) has no earlier guard, and the test fixture drops `num_ctx` (8K is below
   the standard preset's compaction floor). Open: that fallback still sends a non-Ollama default's request
   under replay (by reading; pre-existing). The lmstudio/llamacpp/vllm tools note is sheet entry S17.
+
+### catalog-3 - An unknown model on a route with no catalog models says a refresh fills it
+- Findings 30, 41. Red: `^catalog-models$` FAIL 1, PASS 443: with the seed catalog `model_resolve("groq/llama-x")`
+  said only "Unknown model reference 'groq/llama-x'." (no suggestions, no remedy).
+- Cause: the shipped snapshot is seed-only (anthropic 4, google 1, ollama 2, openai 2, typesafe 1), so every
+  openrouter, groq, deepseek, mistral, together, xai, cerebras, fireworks, azure or bedrock id is unknown until
+  `gptr_models(refresh = TRUE)`, and `model_resolve()` gave no hint; the provider-scoped suggestions are empty.
+- Fix: `model_resolve()` adds "The catalog lists no <pid> models yet; gptr_models(refresh = TRUE) downloads them
+  from models.dev." when the reference names a models.dev route (`catalog_modelsdev_ids()`) with no catalog row,
+  also with a thinking suffix. 04 `model_resolve()` row amended; NEWS entry.
+- Green: `^catalog-models$` PASS 452 (anthropic/claude-nope keeps its suggestions and no hint; a user-registered
+  provider gets no hint); catalog-*, provider-registry, gptr-gateway, agent-run, s1-client, session-object,
+  console-commands, arch-layers and lint-rules PASS 3283. Lint clean; no Rd change. On the shipped snapshot:
+  groq/llama-3.3-70b-versatile, azure/gpt-x, openrouter/openai/gpt-5-mini and xai/grok-4.7:high carry the hint.
+- Deviations: D-250 (catalog-3 rule). The plan's condition ("a known provider with no catalog rows") is
+  narrowed to models.dev routes, since a refresh brings nothing for a provider the user registered. Open: the
+  maintainer's online `dev/catalog/build_models.R` run so the shipped snapshot carries these routes (release
+  step, after catalog-1 and prompt-1); the refresh-scope wording is sheet entries S16 and S18.

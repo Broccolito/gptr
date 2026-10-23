@@ -902,6 +902,12 @@ model_resolve = function(ref, strict = TRUE) {
     } else {
       paste0("Unknown model reference '", ref, "'.")
     }
+    # a models.dev route with no rows yet (the shipped snapshot is seed-only for most routes)
+    pid = hit$provider %||% ""
+    if (pid %in% names(catalog_modelsdev_ids()) && !(pid %in% ctg$index$provider)) {
+      lead = paste0(lead, " The catalog lists no ", pid, " models yet; ",
+                    "gptr_models(refresh = TRUE) downloads them from models.dev.")
+    }
     gptr_abort(paste0(lead, if (length(sugg)) paste0(" Did you mean: ",
                                                      paste(sugg, collapse = ", "), "?") else ""),
                "unknown_model", ref = ref, suggestions = sugg)

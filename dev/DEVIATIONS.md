@@ -3145,12 +3145,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   for the session only names it, after `replay_guard()` (a router's fallback default had no earlier guard).
   Formerly System 2 never prepared, so evidence, held in memory only, needed `gptr_models(refresh = TRUE)` in
   every R session, and a saved default Ollama model failed in each new one.
+- Rule (catalog-3): `model_resolve()`'s unknown-model error for `<pid>/<id>`, where `<pid>` is a models.dev route
+  (`catalog_modelsdev_ids()`) with no catalog row, adds "The catalog lists no <pid> models yet;
+  gptr_models(refresh = TRUE) downloads them from models.dev." Formerly the seed-only snapshot (no openrouter,
+  groq, deepseek, mistral, together, xai, cerebras, fireworks, azure or bedrock rows) gave a bare "Unknown model
+  reference". A route with rows, or a provider the user registered, keeps the plain message.
 - Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
   model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal); 07
-  §2.1 and the 04 `model_prepare()` row (P06 prepares).
+  §2.1 and the 04 `model_prepare()` row (P06 prepares); the 04 `model_resolve()` row (the empty-route hint).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
   match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
   "the floor check blames compact_at when it sets the threshold (D-250)", "a model whose max_output is its whole
   window runs and asks for half of it (D-250)"; test-catalog-models.R "a System 2 call prepares its selected
-  Ollama model as System 1 does". Evidence: progress/fixes.md Task FIX-17.
+  Ollama model as System 1 does", "an unknown id on a route with no catalog models says a refresh fills it
+  (D-250)". Evidence: progress/fixes.md Task FIX-17.

@@ -149,6 +149,9 @@ works on the objects already in memory.
   request in each R session, as System 1 calls already did, instead of refusing until
   `gptr_models(provider = "ollama", refresh = TRUE)` had run. A saved default Ollama model now
   works in a new session.
+* An unknown `provider/id` on a route the catalog lists no models for yet (before a refresh,
+  for example OpenRouter, Groq, xAI or Azure) says that `gptr_models(refresh = TRUE)` downloads
+  them from models.dev.
 
 # gptr 0.7.0
 

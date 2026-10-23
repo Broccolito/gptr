@@ -312,6 +312,25 @@ test_that("an alias with no model in the catalog is unknown, not a fuzzy match",
   expect_identical(model_resolve("gemini")$ref, "google/gemini-3.1-pro-preview")
 })
 
+test_that("an unknown id on a route with no catalog models says a refresh fills it (D-250)", {
+  local_catalog(catalog_snapshot(generated = "2026-10-22")$models)
+  hint = "lists no groq models yet; gptr_models\\(refresh = TRUE\\) downloads them from models.dev"
+  for (ref in c("groq/llama-x", "groq/llama-x:high")) {
+    err = expect_error(model_resolve(ref), hint, class = "gptr_error_unknown_model")
+    expect_identical(err$suggestions, character())
+  }
+  # a route with catalog rows keeps its suggestions and gets no refresh hint
+  err = expect_error(model_resolve("anthropic/claude-nope"), class = "gptr_error_unknown_model")
+  expect_gt(length(err$suggestions), 0L)
+  expect_no_match(conditionMessage(err), "refresh", fixed = TRUE)
+  # models.dev does not list a provider registered by the user
+  off = gptr_register(gptr_provider("versa", api = "openai-completions",
+                                    base_url = "https://versa.example/v1"))
+  withr::defer(off())
+  err = expect_error(model_resolve("versa/x"), class = "gptr_error_unknown_model")
+  expect_no_match(conditionMessage(err), "refresh", fixed = TRUE)
+})
+
 test_that("a reference that names a provider gets suggestions from that provider only (#44)", {
   local_catalog()
   ids = paste0("gpt-5.6-", c("sol", "luna", "terra"), "-2026-07-09")
