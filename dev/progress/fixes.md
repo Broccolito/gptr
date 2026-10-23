@@ -2325,3 +2325,27 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-249 (extended). Open: the same-process replay into the recording session keeps
   its live footer (not a replayed session); outside a project the shell replay still prints no
   answer, as S2 lives in this process's `tempdir()`.
+
+### export-1 - Sheet: state what gptr_export() admits and refuses
+- Findings 26, 62 (the sheet's S27 lines follow in the sheet commit).
+- Red: none (wording). `doc_export_chain()` on 15 shapes: admitted `peter("a")`, `mode = "auto"`,
+  `1L, TRUE, NULL`, quoted `model`/`tools` and `peter("a") |> peter("b")`; refused a data object,
+  bare `mode = auto` and `model = opus`, `.opts = list(...)`, `budget = list(...)`, `-0.5`, `NA`,
+  `s |> peter("b")` and `peter("a", fit) |> peter("b")`. Fake provider: a recorded
+  `s = peter("Fit it.", mtcars, mode = auto)` block is fresh and refused as "mixed or non-literal
+  Peter expressions"; edited to `mode = "auto"` without the data object it stays fresh and exports
+  in both formats.
+- Cause: `doc_export_chain()` admits only arguments that are `NULL` or one non-`NA` atomic
+  constant, by design (`?gptr_export`). A symbol or a call is not one, nor is the session that a
+  later `s |> peter()` passes first. The vignette listed the other refusals but not this one, and
+  named only `session$value` for the raw export's handle refusal.
+- Fix: `script-as-history`'s export section names the admitted constants, the refused forms with
+  the refusal's words, that a one-statement pipeline is admitted, that quoting an argument keeps
+  the block fresh, `{name}` prompts ("interpolated inputs need review"), stale blocks, and
+  `session$text` beside `session$value`. The `.Rmd` is the knitted `.Rmd.orig`.
+- Green: `precompute.R script-as-history`: 0 problems, output byte-identical to the edited `.Rmd`.
+  `^(zzz|doc-export)$` PASS 358 (NOT_CRAN=true). Lint: the `.Rmd` is clean; the `.Rmd.orig` keeps
+  its one lint from main (`mode = auto`, now line 365).
+- Deviations: none (the refusals are intended). Not planned: naming the line and argument in the
+  refusal. Open: "later" code holds once export-2's position matching lands; until then the raw
+  export also refuses code before the binding, and after an ordinary rebinding, that names a handle.

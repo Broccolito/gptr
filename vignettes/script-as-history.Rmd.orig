@@ -289,13 +289,22 @@ follow each operand of this separate-line pipeline. Other layouts keep feedback 
 complete statement. Notes and output are comments, not assertions that the analysis is correct.
 Each block keeps at most twelve output lines and eighty characters per output line.
 
-Export requires fresh completed records and no pending sidecar. It refuses computed or nested
-prompts, mixed `peter()`/ordinary pipelines, shared-line statements, interpolated-input hashes,
-missing or edited blocks and secret-marked records. Raw export also refuses later ordinary code
-that depends on a removed session handle, such as `session$value`; put needed results in
-ordinary R objects, or retain the `format = "peter"` output. Earlier unrecorded console input is
-not reconstructed. Preserved user code can still require gptr or other packages, read or write
-files, or call the network. Export is a source transformation, not verified replay.
+Export requires fresh completed records and no pending sidecar. Each argument of an exported
+`peter()` call must be a quoted string, a number, `TRUE`, `FALSE` or `NULL` (not `NA` or a
+negative number). Any other argument is refused as a "mixed or non-literal Peter expression":
+a data object, as in `peter("Fit mpg on wt.", mtcars)`, a bare name such as `mode = auto` or
+`model = opus`, a call such as `.opts = list(max_turns = 4)`, or the session that a later
+`session |> peter("...")` statement continues, since R reads it as `peter(session, "...")`. A
+pipeline written as one statement, such as the first `session` above, is admitted. Write the
+value itself, as in `mode = "auto"`; editing an argument this way keeps its block fresh, so the
+block needs no new recording. Export also refuses computed or nested prompts, prompts that
+interpolate `{name}` values ("interpolated inputs need review"), mixed `peter()`/ordinary
+pipelines, shared-line statements, missing, stale or edited blocks and secret-marked records. A
+raw export refuses later ordinary code that reads a session handle, such as `session$value`
+or `session$text`; put needed results in ordinary R objects, or retain the `format = "peter"`
+output. Earlier unrecorded console input is not reconstructed. Preserved user code can still
+require gptr or other packages, read or write files, or call the network. Export is a source
+transformation, not verified replay.
 
 ## Asking Peter to summarize a completed workflow
 
