@@ -303,7 +303,7 @@ sdk_off = function(id) {
 #' @param x The value. A history document records a bare name by name, and any other argument of a
 #'   top-level call (also piped or over several lines) as an assignment to a hidden name in the
 #'   block, which replay reads. Inside another expression (a branch, braces, an assignment or a
-#'   function) such an argument is not recorded, and replaying its block says so once.
+#'   function) such a value is not recorded, and replaying its block says so once.
 #' @return `NULL` invisibly during a run; `x` invisibly outside a run.
 #' @examples
 #' y = gptr_return(1:3)

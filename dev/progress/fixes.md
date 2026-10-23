@@ -2676,10 +2676,13 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^(doc-blocks|doc-replay|doc-io)$` PASS 1909; `^(doc-.*|gptr-sdk|subagent-team|
   session-object|session-store|mcp-recording|tool-r|northstar|ckpt-rewind|console-commands|
   copy-tools|arch-layers|lint-rules)$` PASS 4707 SKIP 2 (repr; NOT_CRAN=true). Lint clean; Rd
-  regenerated; plan checks unchanged from HEAD. Installed build, fake `r` call, a self-bound
-  `analysis.R` per shape recorded by `Rscript` and replayed by `GPTR_REPLAY=replay Rscript`, with
-  and without `gptr_init()`: the seven top-level shapes print the coefficients, the three nested
-  ones the notice and NULL, files unchanged; under auto a nested one adds the outside-a-run notice.
+  regenerated; plan checks unchanged from HEAD. Full suite `.`: FAIL 0 SKIP 64 PASS 35659. A
+  nested bare name, pinned after, replays by name without the notice (`^(doc-replay|gptr-sdk)$`
+  PASS 929); `?gptr_return` then said "such a value", not "argument". Installed build, fake `r`
+  call, a self-bound `analysis.R` per shape recorded by `Rscript` and replayed by
+  `GPTR_REPLAY=replay Rscript`, with and without `gptr_init()`: the seven top-level shapes print the
+  coefficients, the three nested ones the notice and NULL, files unchanged; under auto a nested one
+  adds the outside-a-run notice.
 - Deviations: D-249 (extended). Open: a team or fan-out child that designates an expression inside
   another expression still replays NULL without a word (its code is recorded only with a value or
   exports); a nested bare name keeps `value=<name>`, as before.
