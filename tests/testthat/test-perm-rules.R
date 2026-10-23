@@ -128,6 +128,22 @@ test_that("rules read every code-argument row; dynamic or mixed code gets no rul
   }
 })
 
+test_that("sh: and category: rules see a program given by its path", {
+  root = local_project()
+  for (code in c("peter$sh('/bin/rm -rf build')", "peter$sh(c('/bin/rm', '-rf', 'build'))",
+                 "system('/bin/rm -rf build')", "system2('/bin/rm', c('-rf', 'build'))",
+                 "peter$sh('/usr/bin/env rm -rf build')", "peter$sh('command /bin/rm -rf build')",
+                 "peter$sh('./rm -rf build')",
+                 "system2('C:\\\\bin\\\\rm.exe', c('-rf', 'build'))")) {
+    call = r_call(code)
+    for (rule in c("r(sh:rm *)", "r(category:file_delete)")) {
+      expect_identical(rule_match(list(deny = rule), call)$deny, rule, label = code)
+    }
+    expect_identical(rule_match(list(allow = "r(sh:rm *)"), call)$allow, character(), label = code)
+    expect_identical(call$risk$level, 3L, label = code)
+  }
+})
+
 test_that("gptr_permissions() adds, lists and removes session rules (6.2)", {
   root = local_project()
   local_permission_rules()

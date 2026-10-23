@@ -3178,6 +3178,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   literal function (`do.call(rbind, ...)`, `get("x")`; the function is checked as a call of its own), when the
   scan flags none of their calls. A path function used as a value (`lapply(1, cat, file = "x")`), whose arguments
   the scan cannot see, stays refused. Was: refused although `gptr_risk()` scores them 0 (GPT lost a turn to it).
+- Rule (sessions-17): a command whose program is a literal path to a program gptr knows (`/bin/rm`, `./rm`,
+  `C:\bin\rm.exe`; `.exe` stripped) is read as that program too, all its rows beside the level-3 `process` row, so
+  deny and ask `sh:` and `category:` rules match it and `gptr_risk()` names its categories (`/usr/bin/git push`:
+  network); levels are unchanged. Was: only its level-4 rows, so `r(sh:rm *)` and `r(category:file_delete)` missed
+  `/bin/rm -rf build` in auto and yolo. An allow rule must cover the path row as well, so `r(sh:/bin/rm -rf*)`, the
+  former `[a]lways` rule, no longer approves it, and such a call is offered no `[a]lways` rule.
 - Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
   `tools`, `.opts` and refusals. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter` `envir`,
   `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and row).
@@ -3185,7 +3191,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   row, IC-66; `?peter` `budget`. 04 §5.1 `text` and `value` rows, §6.5 `gptr_parallel()`, 03 §4.1.6;
   `?session-accessors`, `?gptr_parallel`, vignette teams-and-background. 04 §5.1 `text` row and `print` method, §6.5
   `gptr_map()`, 03 §4.1.6; `?print.gptr_session`, `?session-accessors`, `?gptr_parallel`, the same vignette.
-  03 §6.8 (the execute menu). 04 IC-54 (the plan allowlist).
+  03 §6.8 (the execute menu). 04 IC-54 (the plan allowlist). `gptr_risk()`'s rows and categories of a program
+  given by its path (no spec text describes them).
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...",
   "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
@@ -3196,5 +3203,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   ...", "peter() with a cost limit on a model without prices ..."; subagent-team "NS-6: a team through peter() ...",
   "a continued gptr_parallel() team or fan-out answers ...", "printing a team or fan-out shows each child under its
   name ..."; perm-plan "a readonly session keeps read and r outside plan mode ...", "plan mode runs console
-  output such as cat() ..."; perm-classify "the plan-mode allowlist admits only known read-only calls (IC-54)".
-  Evidence: progress/fixes.md Task FIX-18.
+  output such as cat() ..."; perm-classify "the plan-mode allowlist admits only known read-only calls (IC-54)";
+  perm-rules "sh: and category: rules see a program given by its path"; perm-gate "a deny rule stops a program
+  given by its path ...". Evidence: progress/fixes.md Task FIX-18.

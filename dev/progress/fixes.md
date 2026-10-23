@@ -2221,3 +2221,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   computed positional arguments, which `cat()`'s `...` takes, leaving `file` at its console default; a classifier
   follow-up); `cat('a', file = 'nul')` counts as the null device on every OS; getting-started still says "level-1
   R exploration"; unlisted level-1 functions and helpers the code defines stay refused (by design).
+
+### sessions-17 - Read a program given by its path as that program in rules
+- Red: FAIL 20 in `^perm-(rules|gate)$` (PASS 272; findings 42, 49): `r(sh:rm *)` and `r(category:file_delete)`
+  matched none of `peter$sh('/bin/rm -rf build')`, its argv form, `system()`, `system2()`, `/usr/bin/env rm`,
+  `command /bin/rm`, `./rm` and `C:\bin\rm.exe` (16), and the fake's `peter$sh('/bin/rm -rf build')` ran in auto
+  and yolo and deleted `build/` (4).
+- Cause: `risk_cmd_simple()` read a program given by its path as one level-3 `process` row with the path in its
+  text, and kept only the level-4 rows (`later()`) of its name's reading.
+- Fix: a literal path to a known program (`risk_cmd_known()`, `.exe` stripped) adds that program's whole reading
+  beside the `process` row (so `/usr/bin/env` alone carries `env`'s `secret` row too); a computed or unknown
+  program keeps `later()`. Levels are unchanged.
+- Green: `^perm-(rules|gate)$` PASS 292; `^(perm-|bridge-|agent-dispatch|tool-r|ckpt-|arch-layers|lint-rules|zzz)`
+  PASS 3349 SKIP 12. Full suite (NOT_CRAN=true) FAIL 0 PASS 35455 SKIP 64. Lint and check-plans clean.
+- Deviations: D-251 (extended). From the plan: the rules test also covers `./rm` and `C:\bin\rm.exe`, which
+  the decision names. No live check (the fake run is the gate end to end).
+- Open: such a call whose reading is flagged gets no `[a]lways` rule (no one `sh:` glob covers the path and the
+  name); `peter$bg` is sessions-18; a computed command (`cmd = "rm -rf build"; peter$sh(cmd)`) is nested-1.

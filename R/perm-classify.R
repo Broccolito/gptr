@@ -1076,7 +1076,16 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
   if (path_prog) {
     add(3L, "process")
     control(c(w[1L], a[!nzchar(da)]))
-    if (!nzchar(dyn[1L])) later(c(risk_base(w[1L]), a), c("", da)) else later(a, da)
+    if (nzchar(dyn[1L])) {
+      later(a, da)
+    } else if (risk_cmd_known(w[1L])) {
+      # a literal path to a known program is also read as that program, for deny, ask and
+      # category rules; the process row keeps an allow rule from covering the path
+      out[[length(out) + 1L]] = risk_cmd_simple(
+        c(sub("\\.exe\\z", "", risk_base(w[1L]), perl = TRUE), a), root, dirs, c("", da), quoted)
+    } else {
+      later(c(risk_base(w[1L]), a), c("", da))
+    }
     return(done())
   }
   sub_cmd = a[!startsWith(a, "-")][1L] %if_na% "*"
