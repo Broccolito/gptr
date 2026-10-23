@@ -2552,8 +2552,9 @@ overlay `new.env(parent = home)`), `store_heartbeat(store)` (touches the lock ev
 timer). There is no `store_close()`: the lock is released when the session is collected or the package unloads
 (D-154). Consumers: P06, P15 (replay), P16.
 
-**Replay functions** (`session-object.R`, IC-46): `session_replay_apply(s, block, header, text = NULL)` (advances
-the piped session in place: `gptr.replay` entry, `seen`, `turns`, the `value=` name, `last_text`; returns `s`),
+**Replay functions** (`session-object.R`, IC-46): `session_replay_apply(s, block, header, text = NULL, doc = NULL)`
+(advances the piped session in place: `gptr.replay` entry, `seen`, `turns`, the `value=` name, `last_text`; a
+rebuilt session moves to the block's turn, a reconstructed one gains it from `doc`; returns `s`),
 `session_replay_new(block, header, envir, doc)` (the live session with the header's id, else a `replayed` session
 adopting the recorded id, from the JSONL or reconstructed from the document with `history_source =
 "reconstructed"`),
@@ -4443,14 +4444,19 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   session that recorded it, also as `session_replay_new()` finds it live), sets the value by name from `value=` under
   the value policy unless the session holds a value of that turn (the recording session replayed into another
   environment of the process keeps its own), sets `last_text` from the S2 cache when present, and returns `s`. So `identical(chain_result, first_result)` holds for a replayed
-  pipe chain.
+  pipe chain. A session rebuilt from its JSONL first moves to the end of the block's recorded turn along the path it
+  was rebuilt with, so each piped block brings its turn back and a live call continues from the last one; a live
+  run ends this. A reconstructed session first gains the block's turn from `doc`, reconstructed as below.
 - **No piped session**: `session_replay_new(block, header, envir)` returns a live session holding the header's
   `session=` id if one exists in this process; otherwise a `replayed` session that adopts the recorded id when
   no live session holds it. Its transcript comes from the session JSONL truncated at the recorded turn (no value
   record of a later turn kept) when the file exists, else it is **reconstructed** from the document (the template
-  as the user message, the recorded code as the assistant's `r` call, the `#>` lines as its result, the S2 answer
-  text if cached) with `.d$history_source = "reconstructed"`. A later live continuation of a reconstructed session
-  prints a one-time notice that the history is reconstructed.
+  as the user message, then in body order each run of recorded code as an assistant `r` call with its `#>` lines as
+  the result, each `## Steer:` line as the operator relay a live steer arrives as, each `## Follow-up:` line as a
+  user message after a placeholder answer, then the S2 answer text if cached) with `.d$history_source =
+  "reconstructed"`. A steer or follow-up read from a document reaches the model with the user's authority, as the
+  template does. A later live continuation of a reconstructed session prints a one-time notice that the history is
+  reconstructed.
 - **No answer**: a replayed session, or a replayed team or fan-out child, whose `$text` stays `NA` (no S2 answer,
   live session or session file holds it; outside a workspace the S2 cache and session files are in `tempdir()`)
   informs one `notice` per document and process: "No recorded answer for <doc>: replayed answers ($text) are NA.", plus,

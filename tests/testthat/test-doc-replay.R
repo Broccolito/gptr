@@ -280,6 +280,27 @@ test_that("without a piped session the replayed session is reconstructed from th
   expect_identical(s$value, 32L)
 })
 
+test_that("a reconstruction keeps its block's steers and follow-ups in body order (IC-46)", {
+  local_project()
+  steers = c("## Steer: use base R", "## Follow-up: and plot it", "## Steer: in blue")
+  site = doc_replay_fixture(header = list(session = "s5e6f7a8b9c"),
+                            body = c(steers[1], "n = nrow(mtcars)", "#> [1] 32", steers[2],
+                                     "plot(mtcars$mpg)", steers[3], "## Run: aborted"))
+  s = doc_replay_call(doc_test_call(), site)
+  msgs = path_messages(entries_path(session_data(s)))
+  expect_identical(vapply(msgs, function(m) m$role, ""),
+                   c("user", "operator", "assistant", "tool_result", "assistant", "user",
+                     "assistant", "tool_result", "operator", "assistant"))
+  expect_identical(msgs[[2]]$origin_text, "use base R")
+  expect_identical(msgs[[3]]$content[[1]]$arguments$code, "n = nrow(mtcars)")
+  expect_identical(msg_text(msgs[[4]]), "[1] 32")
+  expect_identical(c(msgs[[6]]$source, msg_text(msgs[[6]])), c("follow_up", "and plot it"))
+  expect_identical(msgs[[7]]$content[[1]]$arguments$code, "plot(mtcars$mpg)")
+  # the recorder writes the reconstructed steers back as the same lines
+  lines = doc_block_lines(s, 1L, site, 1L)
+  expect_identical(grep(doc_re_steer, lines, value = TRUE), steers)
+})
+
 test_that("a fork block is bound to its id for gptr_resume(block =)", {
   local_project()
   local_replay_table()
@@ -2531,6 +2552,60 @@ test_that("a replayed pipe chain is one session; a clone continues from its docu
   req = fake_requests(x$fake)[[5L]]
   texts = vapply(req$messages, function(m) msg_text(m), "")
   expect_true("step one" %in% texts)
+})
+
+test_that("a replayed session keeps the recorded steers and every replayed turn (IC-46, IC-49)", {
+  skip_on_cran()
+  steers = c("1" = "use base R only", "2" = "print two decimals", "4" = "call the result w")
+  replies = list(fake_tool("r", code = "x = 1"), fake_tool("r", code = "y = x + 1"),
+                 fake_text("First answer."), fake_tool("r", code = "w = y * 2"),
+                 fake_text("Second answer."))
+  x = local_doc_e2e(function(request) {
+    k = as.character(request$n)
+    if (k %in% names(steers)) gptr_steer(gptr_last(), steers[[k]])
+    if (request$n <= length(replies)) replies[[request$n]] else fake_text("Live.")
+  })
+  f = file.path(x$root, "steered.R")
+  writeLines(c("s = peter(\"Compute x and y.\")", "s |> peter(\"Now compute w.\")"), f)
+  doc_e2e_source(f)
+  expect_identical(grep("^## Steer:", readLines(f), value = TRUE), paste("## Steer:", steers))
+  needles = c("Compute x and y.", steers[1:2], "First answer.", "Now compute w.", steers[3],
+              "Second answer.", "Third call.")
+  live = function(e, n) {
+    e$s |> peter("Third call.", .opts = list(context = "none"))
+    msgs = fake_requests(x$fake)[[n]]$messages
+    at = vapply(needles, function(p) grep(p, vapply(msgs, msg_text, ""), fixed = TRUE)[1L], 0L)
+    expect_false(anyNA(at))
+    expect_false(is.unsorted(at))
+    msgs
+  }
+  # the session file is kept: each piped block moves the rebuilt session to the end of its turn
+  last_set(NULL)
+  invisible(gc())
+  e = doc_e2e_source(f)
+  expect_identical(session_data(e$s)$history_source, "store")
+  expect_length(fake_requests(x$fake), 5L)
+  expect_length(live(e, 6L), 14L)
+  d = session_data(e$s)
+  on_path = vapply(entries_path(d), function(en) en$id, "")
+  said = Filter(function(en) en$type %in% c("message", "custom_message"), d$entries)
+  expect_true(all(vapply(said, function(en) en$id, "") %in% on_path))
+  # a clone without .gptr/sessions reconstructs both turns from the document
+  clone = withr::local_tempdir("gptr-clone-")
+  file.copy(f, file.path(clone, "steered.R"))
+  dir.create(file.path(clone, ".gptr"))
+  file.copy(file.path(x$root, ".gptr", "cache"), file.path(clone, ".gptr"), recursive = TRUE)
+  withr::local_dir(clone)
+  local_gptr_options(project_root = path_norm(clone))
+  last_set(NULL)
+  rm(e, d, said)
+  invisible(gc())
+  e = doc_e2e_source(file.path(clone, "steered.R"))
+  expect_identical(session_data(e$s)$history_source, "reconstructed")
+  expect_length(fake_requests(x$fake), 6L)
+  msgs = live(e, 7L)
+  expect_length(msgs, 14L)
+  expect_identical(vapply(msgs[c(4, 7, 12)], function(m) m$origin_text, ""), unname(steers))
 })
 
 test_that("two values of an interpolated {gene} never replay each other's block (IC-45)", {

@@ -246,16 +246,43 @@ doc_replay_no_answer = function(site, s) {
 }
 
 #' What a replayed session reconstructs its history from (IC-46; P06's `doc` argument):
-#' list(path, format, template, code, output, text)
+#' list(path, format, template, code, output, text, steps); `code` and `output` are those of all
+#' the block's runs
 #' @noRd
 doc_replay_doc = function(site, call, block_id, text = NULL) {
   body = tryCatch(doc_block_get(site$format, doc_read(site$path)$lines, block_id)$body,
                   error = function(e) NULL) %||% character()
-  outs = grepl("^[ \t]*#>", body)
+  steps = doc_replay_steps(body)
+  runs = Filter(function(st) identical(st$type, "r"), steps)
   list(path = site$path, format = site$format,
        template = site$template %||% call$template %||% call$prompt,
-       code = body[!outs & !grepl("^[ \t]*#", body) & nzchar(trimws(body))],
-       output = sub("^[ \t]*#> ?", "", body[outs]), text = text)
+       code = as.character(unlist(lapply(runs, function(st) st$code))),
+       output = as.character(unlist(lapply(runs, function(st) st$output))), text = text,
+       steps = steps)
+}
+
+#' A block body as ordered steps: each run of code with its `#>` output, list(type = "r", code,
+#' output), split at the `## Steer:` and `## Follow-up:` lines, list(type = "steer" or
+#' "follow_up", text), so a reconstruction puts each message where it was delivered (IC-46)
+#' @noRd
+doc_replay_steps = function(body) {
+  note = grepl(doc_re_steer, body)
+  steps = list()
+  for (seg in split(seq_along(body), cumsum(note))) {
+    lines = body[seg]
+    if (note[seg[1L]]) {
+      kind = if (grepl("^[ \t]*## Steer:", lines[1L])) "steer" else "follow_up"
+      steps = c(steps, list(list(type = kind, text = sub(doc_re_steer, "", lines[1L]))))
+      lines = lines[-1L]
+    }
+    outs = grepl("^[ \t]*#>", lines)
+    code = lines[!outs & !grepl("^[ \t]*#", lines) & nzchar(trimws(lines))]
+    if (length(code)) {
+      steps = c(steps, list(list(type = "r", code = code,
+                                 output = sub("^[ \t]*#> ?", "", lines[outs]))))
+    }
+  }
+  steps
 }
 
 #' The header P06's replay functions receive: the block header plus `doc` and `mode`
@@ -264,7 +291,8 @@ doc_replay_header = function(header, site, mode) {
   utils::modifyList(header, list(doc = doc_rel(site$path), mode = mode))
 }
 
-#' Replay a fresh block (IC-46): the piped session advanced in place, else a replayed session
+#' Replay a fresh block (IC-46): the piped session advanced in place (one reconstructed from its
+#' document gains the block's turn), else a replayed session
 #' (the live one holding the header's id, the JSONL cut at the recorded turn, or the history
 #' reconstructed from the document); a fork block is bound to its id for gptr_resume(block =).
 #' No provider is called and no model is discovered (IC-74).
@@ -276,7 +304,9 @@ doc_replay_call = function(call, site, mode = "replay") {
   answer = doc_s2_answer(s2_get(s2_key(rel, b$id, "", h$prompt %||% "", h$args %||% "")))
   header = doc_replay_header(h, site, mode)
   s = if (!is.null(call$session)) {
-    session_replay_apply(call$session, b$id, header, text = answer)
+    built = identical(session_data(call$session)$history_source, "reconstructed")
+    session_replay_apply(call$session, b$id, header, text = answer,
+                         doc = if (built) doc_replay_doc(site, call, b$id, answer))
   } else {
     session_replay_new(b$id, header, call$envir,
                        doc = doc_replay_doc(site, call, b$id, answer))

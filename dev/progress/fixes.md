@@ -2602,3 +2602,22 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   script-as-history` byte-identical to the edited `.Rmd`.
 - Deviations: D-249 (extended). Not as planned: no list of ended statuses, since `run_settle()` gives
   `agent_end` no other non-idle status. Open: the background `[b]` path is not tested.
+
+### steer-doc-4 - A replayed session keeps the recorded steers and every replayed turn
+- Steering review finding 3 (understated: the whole second turn of a replayed chain was lost).
+- Red: FAIL 16 in `^(doc-replay|session-object)$` (PASS 1300): the live call after a replayed
+  two-block chain whose fake provider queued three `gptr_steer()` steers saw 9 messages with the
+  session file kept (block 2 a dead sibling branch) and 5 in a clone (one merged `r` call, no
+  steer, no block 2); a block with `## Steer:`/`## Follow-up:` lines between runs reconstructed
+  as one call; a rebuilt session replayed block 2 after a live turn by dropping that turn.
+- Cause: `doc_replay_doc()` kept only code lines, `replay_reconstruct()` wrote one `r` call, a piped
+  block only marked the session, and `replay_rebuild()` cut the leaf once, at the first block.
+- Fix: `doc_replay_steps()`; `replay_turn_append()` writes runs, steers as the live operator relay
+  (recorded back as the same line) and follow-ups after a placeholder answer; a reconstructed piped
+  session gains each block's turn; `replay_seek()` moves a rebuilt one to each block's turn until a
+  live run (`replay_notice()`). IC-46 and the 04 replay functions amended.
+- Green: `^(doc-replay|session-object)$` PASS 1319; `^(doc-.*|session-.*|agent-run|mcp-recording|
+  arch-layers|lint-rules)$` PASS 4914 SKIP 2 (NOT_CRAN=true). Lint clean.
+- Deviations: D-249 (extended). Not as planned: both paths give the same 14 messages (the plan's 18
+  had context messages in the recorded turns); a live run also stops the seek. Open: a
+  `gptr.replay` marker of an earlier block stays off the path once the next block moves on.

@@ -1196,6 +1196,34 @@ test_that("session_replay_new() rebuilds from the JSONL, cut at the recorded tur
   expect_true("gptr.replay" %in% replay_types(r))
 })
 
+test_that("each piped block moves a rebuilt session to its turn until a live run (IC-46)", {
+  skip_on_cran()
+  local_store()
+  local_permissive()
+  local_fake_provider(list("first answer", "second answer", "third answer", "live answer"))
+  s = test_session(home = globalenv())
+  for (k in 1:3) {
+    run_text(s, paste("prompt", k))
+    session_append(s, entry_custom("gptr.doc_block", list(doc = "analysis.R",
+                                                          block = paste0("b", k, "b2c3"))))
+  }
+  id = s$id
+  other = test_session()
+  rm(s)
+  invisible(gc())
+  expect_null(session_by_id(id))
+  h = function(k) list(session = id, turn = as.character(k), model = "fake/fake-1")
+  r = session_replay_new("b1b2c3", h(1), envir = new.env(), doc = NULL)
+  expect_identical(list(r$turns, r$text), list(1L, "first answer"))
+  session_replay_apply(r, "b2b2c3", h(2))
+  expect_identical(list(r$turns, r$text), list(2L, "second answer"))
+  expect_identical(roles(r), rep(c("user", "assistant"), 2L))
+  run_text(r, "live prompt")
+  session_replay_apply(r, "b3b2c3", h(3))
+  expect_identical(msg_text(r$messages[[5L]]), "live prompt")
+  expect_identical(r$turns, 4L)
+})
+
 test_that("without a file the session is reconstructed from the document", {
   local_store()
   home = new.env()
