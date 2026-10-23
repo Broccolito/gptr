@@ -1914,3 +1914,28 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the probe nor accepts `initialize`), and a dual-era server that starts slowly is still taken as
   legacy (cached for 7 days), which works. A hung server forced modern now fails after the request
   timeout instead of 5 s.
+
+## Task FIX-19 - Cheat-sheet review: orchestration (2026-10-22, #PR)
+
+### ws-1 - A team, fan-out or nested child's <workspace> block lists the caller objects it can read
+- Findings 123, 126, 156, 184, 199, 201. Red: `^(env-snapshot|subagent-team)$` FAIL 13 PASS 537:
+  each team member's block was `<workspace env="overlay of stats" objects="0">` `(no objects)`, a
+  fan-out child's listed `.x` only; the same held for a nested overlay and a fork overlay.
+- Cause: `env_block_workspace()`, `env_block_changes()`, `env_on_agent_end()` and `env_on_tree()`
+  snapshot `env_home()`, an overlay `new.env(parent = caller)`, and `ls()` never looks at the
+  parent.
+- Fix: `env_view_snapshot()` (R/env-snapshot.R) at all four sites: the overlay's rows, then each
+  lower overlay's and the base's, own names first (`!duplicated()`); an overlay's block starts with
+  `Reads fall through to globalenv; assignments stay here.` (or `<environment>`). The first version
+  pinned a function-frame home: `[.data.frame` called in the frame that bound it kept that frame
+  referenced (copy-eval's new row: 1 copy; test-copy-tools' function-frame `peter()` row still
+  passed), so the helper drops `envir` before subsetting. The label is not `home_label()`, a
+  session-layer function (arch-layers).
+- Green: `^(env-snapshot|subagent-team)$` PASS 551; `^copy-` PASS 155; neighbours (env-, subagent-,
+  session-object, session-store, gptr-gateway, prompt-, northstar, ckpt-rewind, gptr-config,
+  agent-run, doc-blocks, arch-layers, lint-rules) PASS 5505 SKIP 1. Lint clean. Live (m$gpt, the
+  sheet's team example, mode "auto"): both blocks list `fit  lm` under `objects="8"` and both
+  members reviewed fit (48 s).
+- Deviations: D-252 (new). Open: finding 126's container status and `$text` synthesis are
+  sessions-11's; the extra line sits outside `workspace_lines()`'s budget (the block's truncation
+  still applies).

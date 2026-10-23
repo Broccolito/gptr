@@ -465,6 +465,30 @@ test_that("the agent_end hook resets the baseline of workspace_changes", {
   expect_null(env_memory(quiet)$snapshot)
 })
 
+test_that("an overlay's workspace lists the objects it reads through to (D-252)", {
+  skip_on_cran()
+  base = new.env()
+  base$fit = lm(mpg ~ wt, mtcars)
+  base$d = mtcars
+  ov = subagent_overlay(base, "stats")
+  for (home in list(ov, subagent_overlay(ov, "inner"), overlay_new(base, "s1"))) {
+    ctx = fake_ctx(home)
+    b = env_block_workspace(ctx, 600L)
+    expect_identical(b$attrs$objects, "2")
+    lines = strsplit(b$text, "\n")[[1]]
+    expect_identical(lines[1], "Reads fall through to <environment>; assignments stay here.")
+    expect_identical(sort(sub(" .*", "", lines[-1])), c("d", "fit"))
+    expect_null(env_block_changes(ctx, 300L))
+  }
+  ov$fit = 1
+  lines = strsplit(env_block_workspace(fake_ctx(ov), 600L)$text, "\n")[[1]]
+  fit = grep("^fit ", lines, value = TRUE)
+  expect_length(fit, 1L)
+  expect_match(fit, "^fit +numeric +length 1 ")
+  top = env_block_workspace(fake_ctx(subagent_overlay(globalenv(), "g")), 600L)$text
+  expect_match(top, "^Reads fall through to globalenv; assignments stay here.")
+})
+
 test_that("the attached block describes each context object by label", {
   skip_on_cran()
   e = new.env()

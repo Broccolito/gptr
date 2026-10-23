@@ -507,6 +507,26 @@ test_that("each fan-out child gets its own element alone, as .x, for a symbol or
   }
 })
 
+test_that("team members and fan-out children are shown the caller's objects (D-252)", {
+  skip_on_cran()
+  fake = local_team_fake(function(request) "ok")
+  e = new.env()
+  e$fit = lm(mpg ~ wt, mtcars)
+  peter("Review fit.", envir = e,
+        agents = list(stats = agent(system = "A."), code = agent(system = "B.")))
+  peter("Review fit.", envir = e, agents = list(stats = agent(system = "A.")))
+  peter("Summarise.", list(a = 1, b = 2), parallel = 2, envir = e)
+  ws = vapply(fake_requests(fake), function(r) {
+    texts = vapply(r$messages[[1L]]$content, function(b) b$text %||% "", "")
+    paste(grep("^<workspace ", texts, value = TRUE), collapse = "\n")
+  }, "")
+  expect_length(ws, 5L)
+  expect_match(ws, "^<workspace env=\"overlay of ")
+  expect_match(ws, "\nfit +lm ")
+  expect_false(any(grepl("(no objects)", ws, fixed = TRUE)))
+  expect_match(ws[4:5], "\n\\.x +list ")
+})
+
 test_that("a fan-out with context = \"none\" is refused before any child starts", {
   fake = local_team_fake()
   b = list(A = 1:3, B = letters)

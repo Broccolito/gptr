@@ -2260,7 +2260,11 @@ anchor. The compaction request and checkpoint block are G4 §3.6's verbatim text
 - `<workspace>`: one line per object from `env_snapshot()` (name, class, shape, size), largest first (an unknown
   size other than a function's or environment's ranks at the median), at most 12 lines and 600 tokens; sizes from
   an address-keyed `object.size()` cache; never forces promises or active bindings (reported as
-  `<promise>`/`<active>`).
+  `<promise>`/`<active>`). An overlay home (a team member, fan-out child, nested call or fork overlay) lists what
+  its code reads (`env_view_snapshot()`: its own bindings, then those of each overlay below it and of the first
+  other environment, a nearer binding shadowing), `objects` counts them, and the first line is `Reads fall
+  through to globalenv; assignments stay here.` (`<environment>` for another base); `<workspace_changes>` diffs
+  the same view (D-252).
 - `<attached>`: `gptr_describe(x, budget = 150)` per context object (at most 300): level-based methods return
   successively richer descriptions and the harness picks the richest that fits `est_tokens(, "describe")`
   [G2 (c)]. Built-in methods: default, data.frame (column types and 3 rows), matrix, list (nested names), Date,

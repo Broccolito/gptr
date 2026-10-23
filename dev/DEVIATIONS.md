@@ -3117,3 +3117,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `env_snapshot()` and `workspace_lines()`; `?gptr_options`, `?gptr_risk`, `?gptr_artifacts`, `?gptr_rewind`.
 - Tests: env-snapshot, env-describe, ckpt-objects, ckpt-rewind, perm-classify, gptr-capture, session-object (a
   ggplot2 guard), utils-options, subagent-team, copy-eval, arch-layers. Evidence: progress/fixes.md Task FIX-13.
+
+## D-252 - FIX-19 Cheat-sheet review: orchestration (2026-10-22)
+- Rule (ws-1): the `<workspace>` block of an overlay home (a team member, fan-out child, nested `peter()` from
+  model code, `gptr_fork(envir = "overlay")`) lists what its code reads. `env_view_snapshot()` takes the overlay's
+  own rows, then each lower overlay's and the first other environment's (the walk of `binding_env()`), a nearer
+  binding shadowing a farther; `objects` counts them all, and the first line is `Reads fall through to globalenv;
+  assignments stay here.` (`<environment>` for another base), which also says why `ls()` is empty there.
+  `<workspace_changes>` and the `agent_end` and `session_tree` baselines use the same view, so inherited objects
+  are never reported as added or removed. Formerly every member was told `objects="0"` `(no objects)` while
+  `summary(fit)` worked in it.
+- Contract-visible: 03 §7.5 `<workspace>`; 04 §7.9 `env_view_snapshot()`.
+- Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
+  and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame). Evidence:
+  progress/fixes.md Task FIX-19 ws-1.
