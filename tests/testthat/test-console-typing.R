@@ -123,6 +123,8 @@ test_that("the person's line is on the band; a queue line is dim and cut to thre
   local_console_test()
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.num_colors = 256L, cli.width = 40L)
+  # a T console's band; its probe at the REPL's start gets no answer (no stty), so it stays dark
+  local_mocked_bindings(console_class = function() "T")
   old = the$background
   the$background = "dark"
   withr::defer(assign("background", old, envir = the))
@@ -130,6 +132,8 @@ test_that("the person's line is on the band; a queue line is dim and cut to thre
   fake = slow_first()
   local_typed(typed_once(long, function() length(fake_requests(fake)) == 1L))
   res = typing_console(fake, c("go", "/exit"))
+  # the reset after the prompt's read (on the band, IC-82) starts the row after it
+  res$out = sub("^\033\\[0m\033\\[K", "", res$out)
   sym = console_style()
   plain = cli::ansi_strip(res$out)
   q = which(startsWith(plain, queue_line("steer", "use")))

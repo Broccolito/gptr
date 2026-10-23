@@ -134,22 +134,22 @@ working directory restored. Plan-specific rules:
 | `R/agent-run.R`, `R/agent-loop.R` (doc only) | 4, 5 |
 | `R/session-object.R`, `R/ext-events.R` | 5 |
 | `R/agent-dispatch.R` | 6 |
-| `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 15, 17, 18, 21, 26 |
+| `R/console-render.R` | 7, 8, 9, 10, 11, 12, 13, 15, 17, 18, 21, 25, 26 |
 | `R/auth-oauth.R` (input prompts) | 12 |
 | `R/console-ui.R` | 2, 3, 8, 12, 19, 20 |
 | `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 17, 18, 20, 21, 22, 23, 24, 25, 26 |
 | `R/console-interrupt.R` | 3, 13, 14, 15, 17, 18, 20 |
-| `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21, 22, 24 |
+| `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21, 22, 24, 25 |
 | `R/console-complete.R` (new) | 22, 23 |
 | `R/utils-options.R` (`readline_answer()`, tty wrappers, `console_class()`) | 2, 3, 17, 18, 25 |
-| `R/utils-conditions.R` (`console_colors()`, `console_style()`; `gptr_message_write()` clears and redraws the live row) | 8, 11, 17 |
+| `R/utils-conditions.R` (`console_colors()`, `console_style()`; `gptr_message_write()` clears and redraws the live row) | 8, 11, 17, 25 |
 | `R/eval-core.R` (an evaluation holds the console's colours; printed output as result rows, visual review) | 11 |
 | `R/gptr-config.R` (`type_ahead` description) | 18 |
 | `R/console-commands.R` (`/help`, `/context`), `tests/testthat/test-console-commands.R` | 26, 27 |
 | `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress,message-stream,setup,notice,process-launch}.R`, `helper-console-input.R` | their tasks |
 | `tests/testthat/test-cli-{codex,claude}.R` (expected tool lines), `fixtures/cli/claude-toolstream.ndjson` (rows) | 8, 10, 11, 12 |
 | `tests/testthat/test-subagent-team.R`, `test-gptr-gateway.R` (expected sub-agent lines) | 11, 12 |
-| `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19, 22, 24 |
+| `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19, 22, 24, 25 |
 | `tests/testthat/test-agent-{run,loop,dispatch}.R`, `fixtures/oracles/report02/loop.json`, `test-session-object.R`, `test-provider-transform.R` | 4, 5, 6 |
 | `tests/testthat/helper-arch.R` (the console's contract edges; new files' layer rows), `test-arch-layers.R` | 15, 16, 22 |
 | `tests/testthat.R` (CRAN list, D-240) | 16 |
@@ -1303,18 +1303,43 @@ Decisions:
 - The live row, delivered steers (`› text`) and follow-ups echoed at `peter> ` use the same band,
   so everything the person wrote looks the same.
 - The band never appears in RStudio (no SGR in prompts), on Windows, in D or P, or under NO_COLOR.
+- (Amended in Task 25:)
+  - One rule: `console_style()$band` needs a T console (`console_class()`), so the live row, the idle
+    editor, delivered steers and the reader's echoes inherit it; the live row's own class check and
+    `console_live()`'s argument go. `band_dim` still needs only the colours and a known background, as the
+    live row may be drawn inside an evaluation, whose class is not T.
+  - The probe sets `the$background` only when the terminal answers; else `COLORFGBG` decides, read once as
+    before, and a REPL whose terminal does not answer keeps an earlier answer. It is skipped below 256
+    colours (`NO_COLOR` too) and for TERM=linux; TERM=dumb and non-tty output are never T. Any 1 to 4 hex
+    digits a component are read; the luminance is weighed as Codex's `is_light()` (0.299, 0.587, 0.114).
+  - Keys typed before or during the probe are read with the replies. They are the REPL reader's, read as
+    the composer reads them: the lines they end are its next prompts, the rest a draft at the prompt's
+    editor. Dropped, they would be lost: the person types while gptr starts.
+  - The reader puts the band around readline's prompt (`peter> `, `... `, `+ `), not `repl_prompt()`,
+    whose text it also echoes; it echoes a held line (a follow-up, the editor's line) row by row on the band
+    (`console_band()`), as a delivered steer is written.
 
 Tests (`test-console-repl.R`, `test-console-input.R`), RED first:
 - The reply parser: BEL and ST, 2- and 4-digit hex, DA1 only, timeout.
 - `COLORFGBG` cases.
 - pty: the prompt bytes and the reset appear.
 - No band for an unknown background, 16 colours, `NO_COLOR`, or RStudio or Windows (mocked).
+- (Amended in Task 25:) the probe asked once at a T REPL's start, its answer winning over `COLORFGBG`, and
+  not asked below 256 colours or for TERM=linux; the keys typed meanwhile; Ctrl-C at the prompt resets;
+  TERM=dumb has no band; the T-only rule in `test-console-render.R`; the cases that drew the band without
+  a T console (`test-console-{input,typing,spinner-gui}.R`); the pty case's answer is never typed text.
 
-Spec: IC-82, 04 §7.1.
+Spec: IC-82, 04 §7.1. (Amended in Task 25:) Also 04 §7.14 (`console_live()`), IC-76 (the editor's
+echo), 03 §6.17 and D-245's Task 25 note.
 
 Files: `R/console-repl.R` (`repl_prompt()`, `console_reader()`), `R/console-render.R`
 (`console_style()`), `R/utils-options.R` (probe and mode wrappers),
-`tests/testthat/test-console-repl.R`, `tests/testthat/test-console-input.R`.
+`tests/testthat/test-console-repl.R`, `tests/testthat/test-console-input.R`. (Amended in Task 25:)
+`repl_prompt()` is unchanged; the style table is in `R/utils-conditions.R` since the visual review
+(`console_style()`, `background_reply()`); also `R/console-repl.R` (`repl_background()`, `repl_main()`),
+`R/console-render.R` (`console_band()`, the delivered steer), `R/console-input.R` (`console_live()`), and
+`test-console-{render,typing,spinner-gui,spinner-width}.R`, `helper-console-input.R` (no terminal
+answers the probe in `local_no_fd0()`).
 
 Commit: `feat(console): a shaded input band where the background is known`.
 

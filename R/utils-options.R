@@ -181,6 +181,32 @@ tty_drain_mode = function() {
   modes
 }
 
+#' Mockable: the terminal's answer to `query` (IC-82): with fd 0 in `stty -icanon -echo min 0 time
+#' 0`, `query` is written to stdout, then fd 0 is read until a DA1 reply (`ESC [ ? ... c`) arrives,
+#' at most `ms` milliseconds, and the modes are restored. What was read, "" when stty fails
+#' @noRd
+tty_query = function(query, ms = 250) {
+  modes = tty_modes()
+  if (length(modes) != 1L) return("")
+  on.exit(tty_modes(modes), add = TRUE)
+  tty_modes(c("-icanon", "-echo", "min", "0", "time", "0"))
+  cat(query)
+  flush(stdout())
+  end = proc.time()[["elapsed"]] + ms / 1000
+  got = ""
+  tryCatch({
+    fd = processx::conn_create_fd(0L, close = FALSE)
+    while (!grepl("\033\\[\\?[0-9;]*c", got)) {
+      left = ceiling((end - proc.time()[["elapsed"]]) * 1000)
+      if (left <= 0 || !identical(processx::poll(list(fd), left)[[1L]], "ready")) break
+      x = processx::conn_read_chars(fd)
+      if (!nzchar(x)) break
+      got = paste0(got, x)
+    }
+  }, error = function(e) NULL)
+  got
+}
+
 #' Mockable wrapper of readline(); the answer is normalised to UTF-8 (IC-62). The REPL passes its
 #' own copy of readline() as `read` (console_reader()). The seconds it waited go to
 #' `the$readline_secs` (readline_answer()); readline() keeps only 255 bytes of a prompt, so one

@@ -478,6 +478,7 @@ test_that("console_style() holds the logo's cursor glyphs, ASCII where they may 
 
 test_that("console_style() gives the logo accents by depth and the band by background (D-245)", {
   local_background(NULL)
+  local_mocked_bindings(console_class = function() "T")
   want = list(
     `16777216` = c("\033[38;2;184;84;80mx\033[39m", "\033[38;2;85;126;168mx\033[39m"),
     `256` = c("\033[38;5;167mx\033[39m", "\033[38;5;67mx\033[39m"),
@@ -498,6 +499,15 @@ test_that("console_style() gives the logo accents by depth and the band by backg
                        info = paste(n, bg))
     }
   }
+  # only a T console has the band: never TERM=dumb (D), RStudio, Positron or Windows (L), or
+  # Rscript (P); the live row's words keep the band's grey, as it may be drawn inside an evaluation
+  withr::local_options(cli.num_colors = 256L)
+  the$background = "dark"
+  for (cls in c("D", "L", "P")) {
+    local_mocked_bindings(console_class = function() cls)
+    st = console_style()
+    expect_identical(c(st$band, st$band_dim("x")), c("", "\033[38;5;247mx\033[39m"), info = cls)
+  }
 })
 
 test_that("the background comes from COLORFGBG's last field, read once (D-245)", {
@@ -515,6 +525,7 @@ test_that("the background comes from COLORFGBG's last field, read once (D-245)",
 
 test_that("NO_COLOR keeps the glyphs and drops every SGR (D-245)", {
   local_background("dark")
+  local_mocked_bindings(console_class = function() "T")
   withr::local_options(cli.num_colors = NULL, crayon.enabled = NULL, cli.default_num_colors = 256L,
                        cli.unicode = TRUE)
   withr::local_envvar(NO_COLOR = NA, R_CLI_NUM_COLORS = NA)

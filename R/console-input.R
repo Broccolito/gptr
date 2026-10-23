@@ -417,18 +417,18 @@ live_fit = function(x, n = NULL, ell = "", tail = FALSE) {
 #' foreground run works, at column 0 like the person's input. `draw(state)` writes
 #' console_live_row() (by default the state of the run's record `rec`, console_live_state()) and
 #' `clear()` erases it; the cursor stays at the row's end. Where `\033[K` ends the line (an ANSI
-#' terminal; RStudio) a row is `\r`, the row and `\033[K`, on the input band in a T console (then
-#' `\033[0m`); elsewhere (R.app, Rgui, TERM=dumb, and Positron, whose console erases by writing
-#' spaces) it is padded with spaces to width - 1, and a clear writes spaces. Both `write` as every
-#' console control is (console_cat()), so from inside an evaluation too the row reaches the console,
-#' never the tool's output. `the$live_row` holds the row while it is up, so gptr_message_write()
-#' clears it before other output at its sink (`sinks`) and redraws it after (`erase`), writing it
-#' itself; `on` says the run wants it drawn.
+#' terminal; RStudio) a row is `\r`, the row and `\033[K`, on the input band where it shows
+#' (console_style(): a T console's; then `\033[0m`); elsewhere (R.app, Rgui, TERM=dumb, and
+#' Positron, whose console erases by writing spaces) it is padded with spaces to width - 1, and a
+#' clear writes spaces. Both `write` as every console control is (console_cat()), so from inside an
+#' evaluation too the row reaches the console, never the tool's output. `the$live_row` holds the
+#' row while it is up, so gptr_message_write() clears it before other output at its sink (`sinks`)
+#' and redraws it after (`erase`), writing it itself; `on` says the run wants it drawn.
 #' @noRd
-console_live = function(cls) {
+console_live = function() {
   row = new.env(parent = emptyenv())
   row$erase = cli::is_ansi_tty() || front_end() == "rstudio"
-  row$band = if (identical(cls, "T")) console_style()$band else ""
+  row$band = console_style()$band
   row$sinks = sink.number()
   row$shown = FALSE
   row$on = TRUE
@@ -502,12 +502,11 @@ console_live_start = function(rec) {
   rec$frozen = NULL
   row = the$live_row
   if (!identical(row$rec, rec)) {
-    cls = console_class()
-    if (!cli::is_dynamic_tty() || cls == "P" || platform_gui() == "AQUA") {
+    if (!cli::is_dynamic_tty() || console_class() == "P" || platform_gui() == "AQUA") {
       return(invisible(NULL))
     }
     console_live_stop()
-    row = console_live(cls)
+    row = console_live()
     row$rec = rec
     the$live_row = row
     row$task = reactor_task(function() {

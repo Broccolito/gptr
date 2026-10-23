@@ -2228,6 +2228,7 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with the modes a console call saved (`the$tty$saved`, `tty_call()`), then sets the call's again (IC-76) | P11, P14, P26 |
 | `tty_call(keys)`, `tty_restore(tty = the$tty)`, `tty_question(on)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten -isig min 1 time 0` for a T console's composer (`keys`; Ctrl-C is a key it reads, `console_keys()` interrupting with `rlang::interrupt()` and the idle editor keeping the draft, as a SIGINT could be lost under load; opost stays on, `min 1` keeps a tool reading stdin waiting, never at an end of input; `tty_isig_on()` and `tty_isig_off()` turn isig on while `eval_open()`'s R code runs, so Ctrl-C interrupts it) or `-echo` for a D console; `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails; `tty_question(TRUE)` switches to the saved modes before a console question's rows are written (`console_before_message(kind = "prompt")`, the pause menu) and `tty_question(FALSE)` back when it returns (`console_asked()`), so readline starts as soon as the question shows, and `gptr_readline()` switches only outside such a question (review of Tasks 16-21) | P28 |
 | `tty_drain_mode()` | the modes to restore (`tty_modes()`; NULL when stty fails) after setting `stty -icanon min 0 time 0` on fd 0, the echo unchanged, so the partial line a canonical terminal holds can be read (mockable); the drain before a question restores them on exit (IC-76, D-243) | P28 |
+| `tty_query(query, ms = 250)` | `chr(1)`: the terminal's answer to `query` (IC-82, P28 Task 25): `stty -icanon -echo min 0 time 0` on fd 0 (the saved modes restored on exit), `query` written to stdout, then fd 0 read until a DA1 reply (`ESC [ ? ... c`) arrives or `ms` milliseconds pass; `""` when stty fails (mockable); the T REPL's background probe (`repl_background()`) | P28 |
 | `readline_answer(prompt, keep = console_history_add, accept = NULL)`, `answer_stale(secs)`, `console_history_add(x)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer is stale (`answer_stale(the$readline_secs)`: under 0.1 s, so typed or pasted before the question), at most 100 reads, then the last answer; a stale line that is one of `accept` (trimmed, lower case; TRUE: any line) answers all the same (the pause menu's keys and its [s]/[f] text, typed just after Ctrl-C; review of Tasks 16-21); each line read past that is not blank goes to the upper layer's callback `keep(line)` (03 §2.2; NULL keeps nothing): `console_history_add()` (`utils::timestamp()` when `gptr.history` is on, TRUE when added; never fails; text of several lines that is not a `"""` block or a fence is added as a `"""` block, so Up then Enter sends it back as one input, D-243) by default, `console_typed_ahead()` for the console questions (IC-75 in §15.10); used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26, P28 |
 | `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()`; reads with `readline_answer()` (IC-75) | P08, P15 |
 | `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; inherited `RSTUDIO=1`/`POSITRON=1` count only for an interactive R without a tty (an IDE's terminal tab is `terminal`, D-183); ark's `tools:positron` on the search path is `positron` (Positron's console, whose stdin is a tty; P28 visual review) | P07, P14, P15 |
@@ -2829,7 +2830,7 @@ res = s1_request(model_resolve("jev"), states, q, list())
 | `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s`; first-use setup per §6.1.1 before its banner/input; returns the session invisibly on `/exit`, or `NULL` when setup returns before starting it | P08 (route) |
 | `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu, a console question (`? Paused` and the keys `s steer`, `f follow-up`, `c continue`, `a abort`, `b background` for foreground calls when P21 is loaded, read at `› `; IC-76 in §15.10), writes to stdout through the console writer and resumes through the `resume` restart; a second Ctrl-C aborts; `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Rgui, IDE consoles) | P06, P08 |
 | `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)` and `finish(cut = FALSE)`; chunk-invariant; writes whole rows only, each at its line end or its wrap (prose wraps at 100 columns at most [D-245]; `finish()` ends the held partial row, `finish(cut = TRUE)` (an aborted, failed or truncated answer, the pause menu's [b], an unusual end) writes all it received and ends the held row with a dim `…` [D-245]; other output goes between whole rows and the held row continues after it; a fenced line is written once, at its line end) [D-245]; untrusted text never used as a format string | P14 |
-| `console_live(cls)`, `console_live_row(state, width)` | `console-input.R` | the live row (IC-82 in §15.10): an environment with `draw(state)` and `clear()`, held in `the$live_row` while a foreground run works, so `gptr_message_write()` clears it before every console write and redraws it after; `console_live_row()` is its text, fitted to width - 1 | P28 |
+| `console_live()`, `console_live_row(state, width)` | `console-input.R` | the live row (IC-82 in §15.10), on the input band where `console_style()` gives one (a T console's; Task 25): an environment with `draw(state)` and `clear()`, held in `the$live_row` while a foreground run works, so `gptr_message_write()` clears it before every console write and redraws it after; `console_live_row()` is its text, fitted to width - 1 | P28 |
 | `builtin_jsonl(gptr)`, `jsonl_sink(session, con)` | `console-jsonl.R` | the `frontend` `jsonl`: subscribes to the session's events and writes one redacted JSON object per line in the §4.5 JSON form (event names verbatim) | P19 (worker children), P24 |
 
 Example calls:
@@ -5482,7 +5483,8 @@ its part in its own commit, and Task 27 finalises them.
     which it completes (IC-81, Task 22), listing several candidates on a dim row at column 2 above the
     prompt's row, as readline lists them; a cursor key (Left, Right, Home, End, Ctrl-A, Ctrl-E) hands the draft over
     as Ctrl-C does, so Up recalls it with readline's editing (review of Tasks 16-21: they were dropped). The row is cleared when the read ends. Enter returns the line, which the
-    reader echoes as it echoes a follow-up (`peter> <line>`, escaped, as readline leaves it) and the REPL takes
+    reader echoes as it echoes a follow-up (`peter> <line>`, escaped, as readline leaves it, on the input band
+    where it shows, IC-82, Task 25) and the REPL takes
     as readline's: `/command`, `!code`, fences and continuation reads (`+ `, `... `) go on as usual, through
     readline once the draft is sent. Once the draft is empty (DEL, Ctrl-U, Ctrl-W), at Ctrl-C, or when nothing
     is read (an end of input), a draft left goes to the console history and is listed
@@ -5585,7 +5587,7 @@ its part in its own commit, and Task 27 finalises them.
     key (IC-82; they do not widen the padded status, so the draft moves only while they show), or, at the idle
     editor, are listed on a dim row at column 2 above the prompt's row; none does nothing, and Tab on a trigger
     word never queues.
-- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 24, 25); Task 25 pending.
+- **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 24, 25).
   - One style table (Task 8): `console_style()` holds the glyphs, the two accents, dim and the input band, and
     every console glyph comes from it. The glyphs come from the logo's cursor shapes: the person's chevron, a tool
     call's thin strip, the agent's block. ASCII applies where `cli::is_utf8_output()` is FALSE, and in Windows
@@ -5627,9 +5629,26 @@ its part in its own commit, and Task 27 finalises them.
     keeps the glyphs and drops every SGR. In the margin the renderer reads the Markdown at every depth (inline code
     and emphasis lose their markers, bullets are `•`, headings lose `#`), so the text, and where it wraps, is that of
     a colour console; only the plain mode without colour keeps the markdown characters (visual review: NO_COLOR,
-    TERM=dumb and R.app wrapped paragraphs at other words). The background (`console_background()`) is read once into
-    `the$background`: `"dark"` or `"light"` from the last field of `COLORFGBG` (0-6 or 8 dark, 7 or 9-15 light),
-    else NA, and an unknown background has no band. Task 25 adds the terminal probe.
+    TERM=dumb and R.app wrapped paragraphs at other words).
+  - The input band (Task 25) is a T console's only (`console_class()`: never RStudio's, Positron's or a Windows
+    console, TERM=dumb or Rscript), where 256 colours show and the background is known (`console_background()`,
+    `the$background`); `band_dim`, the grey of words on it, needs only the colours and the background, as the live
+    row may be drawn inside an evaluation. A T REPL asks the terminal once, at its start (`repl_background()`):
+    `ESC ] 11 ; ? ESC \` and DA1 `ESC [ c` are written with fd 0 in `stty -icanon -echo min 0 time 0`, and fd 0 is
+    read until the DA1 reply `ESC [ ? ... c` or 250 ms (`tty_query()`, §7.1), the modes then restored. The answer's
+    `rgb:` colour (1 to 4 hex digits a component, ended by BEL or ST) is dark where its luminance, weighed as Codex
+    weighs it (0.299 red, 0.587 green, 0.114 blue), is below 0.5, else light (`background_reply()`). It is not
+    asked below 256 colours (`NO_COLOR` too), where no band shows, or on the Linux console (TERM=linux). Without
+    an answer the last field of `COLORFGBG` decides, read once (0-6 or 8 dark, 7 or 9-15 light); else the
+    background is unknown and there is no band. Keys typed before or during the probe are the REPL reader's, read
+    as the composer reads them (`console_compose()`): the lines they end are its next prompts, the rest a draft at
+    the prompt (`console_idle()`); the probe never drops them. On the band readline reads at
+    `\001<band>\002<prompt>\001\033[K\002` (`peter> `, `... ` and `+ `): readline counts only the prompt's
+    text, the typed text inherits the band and its row is shaded to its end; after every read, also at Ctrl-C and
+    an end of input, `\033[0m\033[K` resets the attributes and erases the band the line's end gave the row below.
+    The live row, the idle editor's row, delivered steers and the lines the reader echoes after the prompt (a
+    follow-up, the editor's line, each row) are on the same band (`console_band()`: band, row, `\033[K\033[0m`),
+    so everything the person wrote has one look. A wrapped input's second row is shaded only under its text.
   - R code (Task 9): R in answer fences and in tool calls is highlighted by `console_code()` above 1 colour only,
     with `cli::code_highlight(code, getOption("cli.code_theme") %||% console_style()$code)`, so a user's
     `cli.code_theme` wins, and with `cli.hyperlink_help = FALSE`: RStudio turned every call into a help link with a

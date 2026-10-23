@@ -140,9 +140,10 @@ console_colors = function() console_eval_value(".gptr_console_colors") %||% cli:
 #' person's chevron, a tool call's thin strip, the agent's block), the logo's red and a darker
 #' logo blue (basic red and blue below 256 colours; cli drops them at 1 colour, `NO_COLOR`), the
 #' one grey `dim` (halfway between the logo's ink and cream where 256 colours show, as consoles
-#' that ignore SGR 2 show it too; else SGR 2), the input band where the background is known and
-#' 256 colours show it, with `band_dim` the grey of words on it, and the R code theme in those
-#' colours. ASCII where the output is not
+#' that ignore SGR 2 show it too; else SGR 2), the input band in a T console (console_class())
+#' where the background is known and 256 colours show it, with `band_dim` the grey of words on it
+#' (also where the band is drawn inside an evaluation), and the R code theme in those colours.
+#' ASCII where the output is not
 #' UTF-8 and in Windows consoles outside Windows Terminal and RStudio (Rgui among them), whose
 #' fonts lack U+258E and U+21B3 (WGL4); there the person's chevron is doubled, `>>`, so an answer
 #' never reads as R's own prompt. Here in L0, so an evaluation's display of its output can use it
@@ -162,24 +163,30 @@ console_style = function() {
   red = if (deep) "#b85450" else "red"
   blue = if (deep) "#557ea8" else "blue"
   grey = if (deep) "#878787" else "dim"
-  bands = c(dark = "\033[48;5;237m", light = "\033[48;5;254m")
   bg = console_background()
-  band = deep && !is.na(bg)
+  known = deep && !is.na(bg)
+  # never in RStudio's or a Windows console, TERM=dumb or Rscript
+  band = if (known && console_class() == "T") {
+    c(dark = "\033[48;5;237m", light = "\033[48;5;254m")[[bg]]
+  } else {
+    ""
+  }
   # the grey of words on the band, a step darker (light) or lighter (dark), so they keep contrast
-  on_band = if (band) c(dark = "#a8a8a8", light = "#6c6c6c")[[bg]] else grey
+  on_band = if (known) c(dark = "#a8a8a8", light = "#6c6c6c")[[bg]] else grey
   c(glyphs, list(
     red = cli::make_ansi_style(red),
     blue = cli::make_ansi_style(blue),
     dim = cli::make_ansi_style(grey),
-    band = if (band) bands[[bg]] else "",
+    band = band,
     band_dim = cli::make_ansi_style(on_band),
     code = list(reserved = red, string = blue, number = blue, null = blue, call = "bold",
                 comment = grey)
   ))
 }
 
-#' The terminal's background, "dark", "light" or NA, read once into `the$background`: the last
-#' field of COLORFGBG, 0-6 or 8 dark, 7 or 9-15 light (IC-82)
+#' The terminal's background, "dark", "light" or NA, in `the$background` (IC-82): a T REPL's
+#' terminal answers at its start (repl_background()); else the last field of COLORFGBG, read once,
+#' 0-6 or 8 dark, 7 or 9-15 light
 #' @noRd
 console_background = function() {
   if (is.null(the$background)) {
@@ -187,6 +194,19 @@ console_background = function() {
     the$background = if (i %in% c(0:6, 8L)) "dark" else if (i %in% 0:15) "light" else NA_character_
   }
   the$background
+}
+
+#' The background a terminal's answer to `ESC ] 11 ; ?` in `x` names (IC-82): "dark" where the
+#' luminance of its `rgb:` colour (1 to 4 hex digits a component, ended by BEL or ST), weighed as
+#' Codex does (0.299 red, 0.587 green, 0.114 blue), is below 0.5, else "light"; NA without one
+#' @noRd
+background_reply = function(x) {
+  hex = "([[:xdigit:]]{1,4})"
+  m = regmatches(x, regexec(paste0("\033\\]11;rgb:", hex, "/", hex, "/", hex, "(\a|\033\\\\)"),
+                            x, perl = TRUE))[[1L]]
+  if (!length(m)) return(NA_character_)
+  v = strtoi(m[2:4], 16L) / (16^nchar(m[2:4]) - 1)
+  if (sum(c(0.299, 0.587, 0.114) * v) < 0.5) "dark" else "light"
 }
 
 #' Notice lines inside the console margin; a line that does not fit is word-wrapped at the

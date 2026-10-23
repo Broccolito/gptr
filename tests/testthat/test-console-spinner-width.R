@@ -1,6 +1,6 @@
 # The live row (it replaced the spinner, D-243) stays on one row at the console's current width.
 live_draw = function(state = list(what = "thinking", secs = 0, key = "Ctrl-C")) {
-  row = console_live("L")
+  row = console_live()
   c(written(function() row$draw(state)), written(row$clear))
 }
 

@@ -6,7 +6,7 @@ test_that("dynamic front ends, R GUIs too, draw and clear the live row without a
   state = list(what = "thinking", secs = 3, key = "Esc", pause = FALSE)
   for (frontend in c("rgui", "terminal", "vscode", "rstudio", "positron", "unknown")) {
     local_mocked_bindings(front_end = function() frontend)
-    row = console_live("L")
+    row = console_live()
     drawn = written(function() row$draw(state))
     expect_true(startsWith(drawn, "\r# thinking 3s - esc stop"), info = frontend)
     cleared = written(row$clear)
@@ -24,14 +24,16 @@ test_that("a terminal's live row is on the input band where the background is kn
                        cli.num_colors = 256L, cli.width = 40L)
   local_mocked_bindings(front_end = function() "terminal")
   state = list(what = "r", secs = 1, key = "Ctrl-C", pause = TRUE)
-  local_mocked_bindings(console_background = function() "light")
-  expect_identical(written(function() console_live("T")$draw(state)),
+  local_mocked_bindings(console_background = function() "light", console_class = function() "T")
+  expect_identical(written(function() console_live()$draw(state)),
                    paste0("\r\033[48;5;254m", console_live_row(c(state, band = TRUE), 40L),
                           "\033[K\033[0m"))
   # an IDE console has no band; nor has a terminal whose background is unknown
-  expect_identical(written(function() console_live("L")$draw(state)),
+  local_mocked_bindings(console_class = function() "L")
+  expect_identical(written(function() console_live()$draw(state)),
                    paste0("\r", console_live_row(state, 40L), "\033[K"))
-  local_mocked_bindings(console_background = function() NA_character_)
-  expect_identical(written(function() console_live("T")$draw(state)),
+  local_mocked_bindings(console_background = function() NA_character_,
+                        console_class = function() "T")
+  expect_identical(written(function() console_live()$draw(state)),
                    paste0("\r", console_live_row(state, 40L), "\033[K"))
 })

@@ -1994,8 +1994,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   Glyphs and colours come from one style table, `console_style()` [IC-82, D-245]: the logo's cursor shapes (`›`
   the person, `▎` a tool call, `▌` the agent, whose live row's block does not move, `↳` a queued message), ASCII where
   the output is not UTF-8 and in Windows consoles outside Windows Terminal and RStudio; the logo's red and a
-  darker logo blue (basic red and blue below 256 colours), dim, and an input band where `COLORFGBG` gives the
-  background; no Braille or U+25CF.
+  darker logo blue (basic red and blue below 256 colours), dim, and an input band in a terminal (T class) whose
+  background its answer to OSC 11 or `COLORFGBG` gives, under the prompts, the live row and the person's lines;
+  no Braille or U+25CF.
   Where the renderer is active (verbosity 2 on a dynamic TTY; `capture.output()` of an
   interactive call captures it too), a run's lines (text, lists, quotes, tables, code, tool
   lines, notices, prompts, the status line) keep a two-column margin and wrap at

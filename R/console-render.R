@@ -54,6 +54,14 @@ console_person_rows = function(glyph, text, n = Inf) {
   paste0(ifelse(seq_along(rows) == 1L, lead, strrep(" ", nchar(lead))), rows)
 }
 
+#' The person's rows on the input band, where it shows (console_style()$band, IC-82): each row
+#' after the band, shaded to its end and reset (`\033[K\033[0m`); else as they are
+#' @noRd
+console_band = function(rows) {
+  band = console_style()$band
+  if (nzchar(band)) paste0(band, rows, "\033[K\033[0m") else rows
+}
+
 #' Every console write: through gptr_message_write(), so it is plain stdout outside an evaluation
 #' and reaches the console, never the captured output, inside one (D-188)
 #' @noRd
@@ -1242,11 +1250,10 @@ console_on_queue_update = function(event, ctx) {
   rec = console_record(event)
   if (is.null(rec) || !identical(event$op, "take") || !(event$source %in% queue_user_sources) ||
       !console_render_on(rec)) return(NULL)
-  sym = console_style()
-  rows = console_person_rows(sym$person, event$text)
+  rows = console_person_rows(console_style()$person, event$text)
   console_pause_one(rec)
   console_gap(rec, "person")
-  console_write(if (nzchar(sym$band)) paste0(sym$band, rows, "\033[K\033[0m") else rows)
+  console_write(console_band(rows))
   NULL
 }
 

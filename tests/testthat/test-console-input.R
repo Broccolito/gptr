@@ -364,7 +364,8 @@ test_that("the live row is drawn with \\r and erased to the line end, or padded 
   state = live_states$menu
   row = "▌ r 1m 05s · ctrl-c pause"
   draws = function(cls) {
-    lv = console_live(cls)
+    local_mocked_bindings(console_class = function() cls)
+    lv = console_live()
     c(written(function() lv$draw(state)), written(lv$clear), written(lv$clear))
   }
   # a T console: on the input band where the background is known, then the reset
@@ -392,18 +393,18 @@ test_that("the live row is drawn with \\r and erased to the line end, or padded 
 test_that("on the input band the live row's words take the band's grey (review)", {
   local_utf8_glyphs()
   withr::local_options(cli.num_colors = 256L, cli.width = 40L, cli.ansi = TRUE)
-  local_mocked_bindings(front_end = function() "terminal")
+  local_mocked_bindings(front_end = function() "terminal", console_class = function() "T")
   state = live_states$menu
   # #878787 on the band was about 2.8:1 (light) and 3.2:1 (dark)
   local_mocked_bindings(console_background = function() "light")
-  expect_match(written(function() console_live("T")$draw(state)),
+  expect_match(written(function() console_live()$draw(state)),
                "\033[38;5;242mr 1m 05s", fixed = TRUE)
   local_mocked_bindings(console_background = function() "dark")
-  expect_match(written(function() console_live("T")$draw(state)),
+  expect_match(written(function() console_live()$draw(state)),
                "\033[38;5;247mr 1m 05s", fixed = TRUE)
   # off the band, and in the transcript, the one grey stays
   local_mocked_bindings(console_background = function() NA)
-  expect_match(written(function() console_live("T")$draw(state)),
+  expect_match(written(function() console_live()$draw(state)),
                "\033[38;5;244mr 1m 05s", fixed = TRUE)
 })
 
@@ -417,7 +418,7 @@ test_that("the live row keeps the console's colours when drawn inside an evaluat
   inside = function() {
     .gptr_console_colors = 256L
     force(.gptr_console_colors)
-    written(function() console_live("T")$draw(state))
+    written(function() console_live()$draw(state))
   }
   expect_identical(inside(), paste0("\r", coloured, "\033[K"))
 })
@@ -432,7 +433,7 @@ test_that("a console write clears the live row and redraws it after its whole li
   draw = function() written(function() the$live_row$draw())
   withr::defer(assign("live_row", NULL, envir = the))
   # the row is drawn and written at the sink written() opens
-  the$live_row = console_live("T")
+  the$live_row = console_live()
   the$live_row$sinks = sink.number() + 1L
   expect_identical(writes("x\n"), "x\n")
   expect_identical(draw(), row)
@@ -446,7 +447,7 @@ test_that("a console write clears the live row and redraws it after its whole li
   # where the row is padded, the first write ends it: no spaces stay on the rows after it
   local_mocked_bindings(front_end = function() "rgui")
   withr::local_options(cli.ansi = FALSE)
-  the$live_row = console_live("L")
+  the$live_row = console_live()
   the$live_row$sinks = sink.number() + 1L
   draw()
   expect_identical(writes("  one\n", "  two\n"),
@@ -560,10 +561,12 @@ test_that("a draft a run left is edited at the prompt; Enter returns it as readl
                fixed = TRUE)
   expect_identical(r$rows, c("peter> !summary(x)", ""))
   expect_match(r$out, "peter> !summary(x)\n", fixed = TRUE)
-  # the row is on the input band where the background is known
-  local_mocked_bindings(console_background = function() "dark")
+  # in a T console the row is on the input band where the background is known, and so is the
+  # line Enter writes (IC-82)
+  local_mocked_bindings(console_background = function() "dark", console_class = function() "T")
   r = idle_read("x", "\r")
   expect_match(r$out, "\r\033[48;5;237mpeter> x\033[K\033[0m", fixed = TRUE)
+  expect_true(endsWith(r$out, "\r\033[K\033[48;5;237mpeter> x\033[K\033[0m\n"))
 })
 
 test_that("a draft at the prompt completes a trigger word; several are listed above (IC-81)", {

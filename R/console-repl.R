@@ -96,7 +96,8 @@ readline_limit = function() {
 #' unechoed (the terminal showed them); `typed`, the /command and !code lines and the follow-ups
 #' typed during an answer, which it returns next, in order, echoed after the prompt (IC-76,
 #' D-242); `compose`, the state of a T console's composer (console_compose(): its draft), whose
-#' draft a run left it then edits at the prompt (console_idle()), the line sent echoed alike,
+#' draft a run left it then edits at the prompt (console_idle()), the line sent echoed alike, on
+#' the input band (console_band()) as are readline()'s prompts in a T console (IC-82),
 #' `sent`, the kind of message queued last (policy_enqueue()), and `complete`, TRUE where the REPL
 #' completes after its trigger characters (repl_main(), IC-81): the console reader's readline()
 #' then has console_completer() as R's custom completer, the caller's kept for ! lines, but at
@@ -147,13 +148,20 @@ console_reader = function(stdin = FALSE, echo = stdin) {
         x = console_idle(rd, prompt)
       }
       if (!is.null(x)) {
-        console_write(paste0(prompt, console_escape(x)))
+        console_write(console_band(strsplit(paste0(prompt, console_escape(x)), "\n")[[1L]]))
         return(x)
       }
       if (isTRUE(rd$complete) && !identical(prompt, "+ ")) {
         prev = utils::rc.getOption("custom.completer")
         utils::rc.options(custom.completer = console_completer(prev))
         on.exit(utils::rc.options(custom.completer = prev), add = TRUE)
+      }
+      # on the input band readline counts only the prompt's text; after the read the attributes are
+      # reset and the band erased from the row below, which the line's end gave it
+      band = console_style()$band
+      if (nzchar(band)) {
+        prompt = paste0("\001", band, "\002", prompt, "\001\033[K\002")
+        on.exit(console_cat("\033[0m\033[K"), add = TRUE)
       }
       x = gptr_readline(prompt, rl)
       if (length(x) != 1L || is.na(x)) return(NA_character_)
@@ -177,6 +185,29 @@ console_reader = function(stdin = FALSE, echo = stdin) {
     invisible(NULL)
   }
   rd
+}
+
+#' The terminal's background, asked once at a T REPL's start (IC-82, D-245): OSC 11 with a DA1
+#' query after it, whose reply ends the wait (tty_query()); an answer sets `the$background`
+#' (background_reply()), else COLORFGBG decides (console_background()). Not asked where no band
+#' shows, below 256 colours (`NO_COLOR` too), nor on the Linux console. Keys typed meanwhile are
+#' the reader `rd`'s, read as the composer reads them (console_compose()): the lines they end are
+#' its next prompts, the rest a draft at the prompt (console_idle())
+#' @noRd
+repl_background = function(rd) {
+  if (cli::num_ansi_colors() < 256L || identical(Sys.getenv("TERM"), "linux")) {
+    return(invisible(NULL))
+  }
+  got = tty_query("\033]11;?\033\\\033[c")
+  bg = background_reply(got)
+  if (!is.na(bg)) the$background = bg
+  keys = gsub("\033\\][^\a\033]*(\a|\033\\\\)?|\033\\[\\?[0-9;]*c", "", got, perl = TRUE)
+  if (nzchar(keys)) {
+    res = console_compose(list(), keys, reactor_now(), "steer", console_complete)
+    if (identical(res$action$type, "send")) rd$typed = c(rd$typed, res$action$text)
+    if (nzchar(res$state$draft)) rd$compose = res$state
+  }
+  invisible(NULL)
 }
 
 #' Does R's own Unix readline read this console from a tty (terminal R, an IDE's terminal tab)?
@@ -860,6 +891,7 @@ repl_main = function(rs) {
   piped = rs$session
   on.exit(repl_close(rs), add = TRUE)
   rs$reader = console_reader(rs$stdin)
+  if (!rs$stdin && console_class() == "T") repl_background(rs$reader)
   # completion only after the trigger characters (IC-81) where R's completion calls the custom
   # completer (console_completes()); on R's own Unix readline on a tty (an IDE's terminal tab too)
   # ! breaks its words, so the R code after !/!! is completed; a caller-owned completer keeps its

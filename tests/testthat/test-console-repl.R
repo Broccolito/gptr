@@ -956,3 +956,168 @@ test_that("an interpolated prompt is shown once, by the gateway's notice, at ver
   expect_identical(sum(grepl("describe cluster 4", out, fixed = TRUE)), 1L)
   expect_true("Interpolated prompt: describe cluster 4" %in% out)
 })
+
+# ---- P28 Task 25: a shaded input band where the background is known ----------------------------
+
+test_that("a terminal's answer to OSC 11 names its background: BEL or ST, 2 or 4 digits (IC-82)", {
+  da1 = "\033[?62;22c"
+  expect_identical(background_reply(paste0("\033]11;rgb:ffff/ffff/ffff\033\\", da1)), "light")
+  expect_identical(background_reply(paste0("\033]11;rgb:1c1c/1c1c/1c1c\a", da1)), "dark")
+  # Solarized light and dark, two hex digits a component
+  expect_identical(background_reply("\033]11;rgb:fd/f6/e3\a"), "light")
+  expect_identical(background_reply("\033]11;rgb:00/2b/36\033\\"), "dark")
+  # the luminance Codex weighs: a pure blue is dark, a pure yellow light
+  expect_identical(background_reply("\033]11;rgb:0000/0000/ffff\a"), "dark")
+  expect_identical(background_reply("\033]11;rgb:ffff/ffff/0000\a"), "light")
+  # DA1 only (a detached tmux answers no OSC 11), nothing in 250 ms, or an answer cut short
+  expect_identical(background_reply(da1), NA_character_)
+  expect_identical(background_reply(""), NA_character_)
+  expect_identical(background_reply("\033]11;rgb:ffff/ff"), NA_character_)
+})
+
+test_that("a T REPL asks the background once at its start; else COLORFGBG decides (IC-82)", {
+  local_console_test()
+  old = the$background
+  withr::defer(assign("background", old, envir = the))
+  asked = character()
+  reply = "\033]11;rgb:1c1c/1c1c/1c1c\033\\\033[?62;22c"
+  local_mocked_bindings(tty_query = function(query, ...) {
+    asked <<- c(asked, query)
+    reply
+  })
+  withr::local_options(cli.num_colors = 256L)
+  withr::local_envvar(COLORFGBG = "0;15", TERM = "xterm-256color")
+  run = function(cls) {
+    local_mocked_bindings(console_class = function() cls)
+    local_readline("/exit")
+    the$background = NULL
+    rs = repl_state(NULL, new.env())
+    rs$model = gptr_fake_provider(list("ok"))
+    utils::capture.output(repl_main(rs))
+    console_background()
+  }
+  # the terminal's answer wins over COLORFGBG
+  expect_identical(run("T"), "dark")
+  expect_identical(asked, "\033]11;?\033\\\033[c")
+  # only a T console is asked: COLORFGBG decides elsewhere
+  for (cls in c("D", "L", "P")) expect_identical(run(cls), "light", info = cls)
+  expect_length(asked, 1L)
+  # no answer (DA1 only): COLORFGBG decides; without it the background is unknown
+  reply = "\033[?62;22c"
+  expect_identical(run("T"), "light")
+  withr::local_envvar(COLORFGBG = NA)
+  expect_identical(run("T"), NA_character_)
+  expect_length(asked, 3L)
+  # not asked where no band can show: 16 colours, NO_COLOR, or the Linux console
+  rd = console_reader()
+  withr::with_options(list(cli.num_colors = 16L), repl_background(rd))
+  withr::with_options(list(cli.num_colors = NULL, crayon.enabled = NULL),
+                      withr::with_envvar(c(NO_COLOR = "1", R_CLI_NUM_COLORS = NA),
+                                         repl_background(rd)))
+  withr::with_envvar(c(TERM = "linux"), repl_background(rd))
+  expect_length(asked, 3L)
+})
+
+test_that("keys typed before or during the probe are the reader's, never lost (IC-82)", {
+  local_console_test()
+  old = the$background
+  withr::defer(assign("background", old, envir = the))
+  withr::local_options(cli.num_colors = 256L)
+  withr::local_envvar(TERM = "xterm-256color")
+  probe = function(reply) {
+    local_mocked_bindings(tty_query = function(query, ...) reply)
+    rd = console_reader()
+    repl_background(rd)
+    list(typed = rd$typed, draft = rd$compose$draft)
+  }
+  # a draft typed around the answers is edited at the prompt (console_idle())
+  got = probe("hel\033]11;rgb:ffff/ffff/ffff\alo\033[?62;22c")
+  expect_identical(got, list(typed = character(), draft = "hello"))
+  expect_identical(the$background, "light")
+  # a line ended before the probe is the first prompt, the rest the draft; edit keys apply
+  got = probe("summary(fuel)\nplox\177t it\033[?1;2c")
+  expect_identical(got, list(typed = "summary(fuel)", draft = "plot it"))
+  expect_identical(probe("\033[?1;2c"), list(typed = character(), draft = NULL))
+})
+
+test_that("on the input band readline reads after the band's prompt, reset after (IC-82)", {
+  local_console_test()
+  local_mocked_bindings(console_class = function() "T", console_background = function() "dark")
+  withr::local_options(cli.num_colors = 256L)
+  rl = local_readline(c("hello", "more"))
+  rd = console_reader()
+  got = character()
+  out = written(function() got <<- c(rd$read("peter> "), rd$read("... ")))
+  band = "\033[48;5;237m"
+  expect_identical(got, c("hello", "more"))
+  # readline counts only the prompt's text (\001 \002); \033[K shades the row to its end
+  expect_identical(rl$prompts, paste0("\001", band, "\002", c("peter> ", "... "), "\001\033[K\002"))
+  # after each read: the attributes reset and the band erased from the row below
+  expect_identical(out, strrep("\033[0m\033[K", 2L))
+  # a line the composer held is echoed after the prompt, each of its rows on the band
+  rd$typed = "plot it\nand label"
+  out = written(function() rd$read("peter> "))
+  expect_identical(out, paste0(band, c("peter> plot it", "and label"), "\033[K\033[0m\n",
+                               collapse = ""))
+  # Ctrl-C at the prompt resets too
+  local_mocked_bindings(gptr_readline = function(...) rlang::interrupt())
+  out = written(function() tryCatch(rd$read("peter> "), interrupt = function(e) NULL))
+  expect_identical(out, "\033[0m\033[K")
+})
+
+test_that("no band for an unknown background, 16 colours, NO_COLOR, RStudio or Windows (IC-82)", {
+  local_console_test()
+  local_mocked_bindings(gptr_is_interactive = function() TRUE, stdin_tty = function() TRUE,
+                        is_windows = function() FALSE, front_end = function() "terminal",
+                        console_background = function() "dark")
+  withr::local_envvar(RADIAN_VERSION = NA)
+  withr::local_options(cli.ansi = TRUE, cli.dynamic = TRUE, cli.num_colors = 256L)
+  # a held line, then readline: the prompts readline shows and what is written
+  read = function() {
+    rl = local_readline("x")
+    rd = console_reader()
+    rd$typed = "y"
+    out = written(function() c(rd$read("peter> "), rd$read("peter> ")))
+    c(rl$prompts, out)
+  }
+  plain = c("peter> ", "peter> y\n")
+  # a T console with a known background has it
+  expect_identical(read(), c("\001\033[48;5;237m\002peter> \001\033[K\002",
+                             "\033[48;5;237mpeter> y\033[K\033[0m\n\033[0m\033[K"))
+  local_mocked_bindings(console_background = function() NA_character_)
+  expect_identical(read(), plain)
+  local_mocked_bindings(console_background = function() "dark")
+  withr::with_options(list(cli.num_colors = 16L), expect_identical(read(), plain))
+  withr::with_options(list(cli.num_colors = NULL, crayon.enabled = NULL),
+                      withr::with_envvar(c(NO_COLOR = "1", R_CLI_NUM_COLORS = NA),
+                                         expect_identical(read(), plain)))
+  # TERM=dumb (D), RStudio's console and a Windows console (L)
+  withr::with_options(list(cli.ansi = FALSE), expect_identical(read(), plain))
+  local_mocked_bindings(stdin_tty = function() FALSE, front_end = function() "rstudio")
+  expect_identical(read(), plain)
+  local_mocked_bindings(stdin_tty = function() TRUE, front_end = function() "terminal",
+                        is_windows = function() TRUE)
+  expect_identical(read(), plain)
+})
+
+test_that("a terminal answering the probe has its prompt on the band, reset after reads (IC-82)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.num_colors = 256L)",
+    "fake = gptr_fake_provider(function(req) paste0('GOT ', req$last_user, ' END'))",
+    "invisible(peter(model = fake, envir = new.env()))"
+  ))
+  expect_true(pty$wait("\033]11;?\033\\\033[c", timeout = 120))
+  pty$send("\033]11;rgb:ffff/ffff/ffff\033\\\033[?62;22c")
+  expect_true(pty$wait("\033[48;5;254mpeter> \033[K"))
+  pty$send("hi\r")
+  expect_true(pty$wait("\033[0m\033[K"))
+  expect_true(pty$wait("GOT hi END"))
+  expect_true(pty$wait("\033[48;5;254mpeter> \033[K"))
+  # the answer was read by the probe, never typed or echoed
+  expect_identical(pty$seen("rgb:"), 0L)
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+})

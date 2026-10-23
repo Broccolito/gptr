@@ -3724,3 +3724,23 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     `38;5;242`) on the light band and `#a8a8a8` (`38;5;247`) on the dark one, about 4:1, where the one grey
     `#878787` was about 2.8:1 and 3.2:1. The transcript keeps its grey. Contract-visible: 04 §15.10 IC-82. Tests:
     test-console-input.R "on the input band the live row's words take the band's grey (review)".
+- Task 25: a shaded input band where the background is known. A T REPL asks the terminal once, at its start:
+  `ESC ] 11 ; ?` with DA1 after it as the sentinel, fd 0 read until DA1's reply or 250 ms in `stty -icanon -echo
+  min 0 time 0` (`tty_query()`), the answer's colour dark below a luminance of 0.5, weighed as Codex weighs it
+  (`background_reply()`); without an answer `COLORFGBG` decides as before. It is not asked below 256 colours
+  (`NO_COLOR` too) or for TERM=linux. On the band readline reads at `\001<band>\002peter> \001\033[K\002` (and at
+  `... ` and `+ `), and `\033[0m\033[K` follows every read, also at Ctrl-C; the lines the reader echoes after the
+  prompt (a follow-up, the prompt editor's line) are on the band row by row (`console_band()`), as the live row and
+  delivered steers were. The band is now a T console's only: `console_style()` asks `console_class()`, so where
+  `COLORFGBG` is set a delivered steer is no longer shaded in RStudio's, Positron's or a Windows console, at
+  TERM=dumb or in Rscript, and `console_live()` lost its class argument. Keys typed before or during the probe,
+  which it reads with the replies (the plan said nothing of them), are the REPL reader's, read as the composer
+  reads them: the lines they end are its next prompts, the rest a draft at the prompt's editor. Contract-visible:
+  04 §7.1, §7.14, §15.10 IC-76 and IC-82; 03 §6.17. Tests: test-console-repl.R "a terminal's answer to OSC 11
+  names its background: BEL or ST, 2 or 4 digits (IC-82)", "a T REPL asks the background once at its start; else
+  COLORFGBG decides (IC-82)", "keys typed before or during the probe are the reader's, never lost (IC-82)", "on
+  the input band readline reads after the band's prompt, reset after (IC-82)", "no band for an unknown
+  background, 16 colours, NO_COLOR, RStudio or Windows (IC-82)", "a terminal answering the probe has its prompt
+  on the band, reset after reads (IC-82)"; test-console-render.R "console_style() gives the logo accents by depth
+  and the band by background (D-245)"; test-console-input.R "a draft a run left is edited at the prompt; Enter
+  returns it as readline would".

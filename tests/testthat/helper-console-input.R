@@ -21,11 +21,13 @@ local_readline = function(answers, secs = 1, .env = parent.frame()) {
   box
 }
 
-# No lines wait on fd 0 and stty finds no terminal there: a test that drives the console never
-# reads the developer's own keystrokes or changes their terminal when the tests run in one (P26)
+# No lines wait on fd 0, stty finds no terminal there and no terminal answers the background probe:
+# a test that drives the console never reads the developer's own keystrokes or changes their
+# terminal when the tests run in one (P26)
 local_no_fd0 = function(.env = parent.frame()) {
   testthat::local_mocked_bindings(console_typed_chars = function(rd, ...) "",
-                                  tty_modes = function(modes = "-g") NULL, .env = .env)
+                                  tty_modes = function(modes = "-g") NULL,
+                                  tty_query = function(query, ...) "", .env = .env)
 }
 
 # The style table's UTF-8 glyphs (D-245): cli's unicode output, and no Windows console, where
