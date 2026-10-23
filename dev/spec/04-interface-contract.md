@@ -1454,12 +1454,15 @@ if (interactive()) {
 gptr_doc(path = NULL, format = NULL, sync = FALSE)
 ```
 
-`path = NULL`: returns the current binding `list(path, format)` or `NULL`, visibly. A path binds every `peter()`
-call of this R process (console and script) to that document, which is explicit consent to write it (IC-45);
-`FALSE` unbinds. `sync = TRUE` applies the pending blocks recorded for that document (a Jupyter notebook that was
-open while recording, or unapplied deferred-write sidecars) through the format's writer (IC-50, IC-51) and informs a
-`notice`: "Wrote N block(s) into <doc>." or "No pending blocks for <doc>." (D-249). `format`: `"r"`, `"rmd"`,
-`"qmd"`, `"ipynb"`, `"transcript"`; `NULL` = from the extension. Returns the previous binding invisibly.
+`path = NULL`: returns the current binding `list(path, format)` or `NULL`, visibly. A path binds that document to
+this R process, which is explicit consent to write it (IC-45): calls located in it record below themselves, and
+calls located in no document (console, `Rscript -e`, stdin) are appended to it unless it is a notebook (IC-49). A
+call located in another document needs that document's consent; when it cannot be asked, the call is not recorded
+and a `notice` names both documents, once per document (D-249). `FALSE` unbinds. `sync = TRUE` applies the pending
+blocks recorded for that document (a Jupyter notebook that was open while recording, or unapplied deferred-write
+sidecars) through the format's writer (IC-50, IC-51) and informs a `notice`: "Wrote N block(s) into <doc>." or "No
+pending blocks for <doc>." (D-249). `format`: `"r"`, `"rmd"`, `"qmd"`, `"ipynb"`, `"transcript"`; `NULL` = from the
+extension. Returns the previous binding invisibly.
 Conditions: `invalid_argument`.
 
 The binding lives in `the$doc_binding` for this R process; nothing is written until a block is recorded.
@@ -4409,9 +4412,10 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 - `document` (order 50) matches a **top-level** call located in a document (any `doc_locate()` site with a
   path) that **contains a block owned by this call**. Replay needs no write consent. Without a block it sets
   `call$doc` when write consent exists and passes.
-- **Write consent** is checked only in `doc_upsert()`: `gptr_doc(path)` in this process (binds that document for
-  every `peter()` call of the process, console or script), `options(gptr.record = "auto")`, user-scope setting
-  `record = "auto"`, or an interactive yes (remembered per document in the user-level project file, IC-52).
+- **Write consent** is checked only in `doc_upsert()`: `gptr_doc(path)` in this process (consent for that
+  document, which also receives console calls; never for another one, D-249), `options(gptr.record = "auto")`,
+  user-scope setting `record = "auto"`, or an interactive yes (remembered per document in the user-level project
+  file, IC-52).
   `record` is a tighten-type setting, so a project can only turn it off; the earlier "trusted `record = auto`"
   wording is deleted.
 - **Freshness** also covers interpolated values: header key `args=<8 hex>` = the first 8 hex of sha256 of the

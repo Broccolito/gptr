@@ -770,8 +770,9 @@ gptr_cache(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tm
 gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)
 ```
 
-`gptr_doc()` binds every `peter()` call of the process to a document (explicit consent to write it), shows the
-binding, or (`sync = TRUE`) applies pending blocks of a notebook that was open while recording [IC-45, IC-50].
+`gptr_doc()` binds a document to the process (explicit consent to write it: its own calls and console calls record
+there, a call in another document needs that document's consent, D-249), shows the binding, or (`sync = TRUE`)
+applies pending blocks of a notebook that was open while recording [IC-45, IC-50].
 `gptr_source()` regenerates stale or live blocks without executing the old block, which base `source()`
 cannot do [14 §4.4.2]. `gptr_blocks()` lists blocks (id, prompt hash, fresh/stale/user-edited/undone, model,
 date, tokens, cost). `gptr_artifacts()` without `id` is a data frame; with `id` it returns a `gptr_artifact`

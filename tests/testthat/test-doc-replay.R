@@ -1949,6 +1949,56 @@ test_that("per-call record TRUE does not grant recording consent under persisten
   expect_identical(nrow(gptr_blocks(f)), 0L)
 })
 
+test_that("a script call gptr_doc() cannot record, as it bound another document, says so once", {
+  x = local_doc_e2e(rep(list(fake_tool("r", code = "x = 1"), fake_text("x is one.")), 3L),
+                     record = NULL)
+  local_gptr_options(interactive = FALSE, quiet = FALSE)
+  out = file.path(x$root, "out.R")
+  fk = file.path(x$root, "fk.R")
+  job = file.path(x$root, "job.R")
+  writeLines('s = peter("Compute x.")', fk)
+  writeLines('s = peter("Compute y.")', job)
+  local_doc_binding(out)
+  said = function(f) paste0("it is in ", basename(f), ", but gptr_doc\\(\\) bound out.R")
+  e = NULL
+  msgs = testthat::capture_messages({
+    e = doc_e2e_source(fk)
+  })
+  expect_identical(e$x, 1)
+  expect_length(grep(said(fk), msgs), 1L)
+  expect_length(grep(said(fk), testthat::capture_messages(doc_e2e_source(fk))), 0L)
+  # under Rscript the call is sited in the script the process runs
+  testthat::local_mocked_bindings(doc_command_args = function() c("R", paste0("--file=", job)))
+  msgs = testthat::capture_messages(eval(doc_e2e_call(prompt = "Compute y."),
+                                         new.env(parent = globalenv())))
+  expect_length(grep(said(job), msgs), 1L)
+  expect_length(fake_requests(x$fake), 6L)
+  expect_false(file.exists(out))
+  expect_identical(readLines(fk), 's = peter("Compute x.")')
+  expect_identical(readLines(job), 's = peter("Compute y.")')
+})
+
+test_that("no such notice without a binding, for the bound script, record FALSE or replay", {
+  x = local_doc_e2e(rep(list(fake_tool("r", code = "x = 1"), fake_text("x is one.")), 4L),
+                     record = NULL)
+  local_gptr_options(interactive = FALSE, quiet = FALSE)
+  run = function(name, code = 's = peter("Compute x.")') {
+    f = file.path(x$root, name)
+    writeLines(code, f)
+    expect_length(grep("bound", testthat::capture_messages(doc_e2e_source(f))), 0L)
+    f
+  }
+  run("none.R")
+  local_doc_binding(file.path(x$root, "out.R"))
+  run("off.R", 's = peter("Compute x.", .opts = list(record = FALSE))')
+  withr::with_options(list(gptr.replay = "replay"), run("replay.R"))
+  self = file.path(x$root, "self.R")
+  local_doc_binding(self)
+  run("self.R")
+  expect_identical(nrow(gptr_blocks(self)), 1L)
+  expect_length(fake_requests(x$fake), 8L)
+})
+
 test_that("per-call record FALSE suppresses a System 1 document summary", {
   root = local_project()
   local_gptr_options(record = "auto", replay = "auto", interactive = FALSE)

@@ -22,8 +22,14 @@ With \code{path = NULL}, the binding \code{list(path, format)} or \code{NULL}, v
 previous binding, invisibly.
 }
 \description{
-\code{gptr_doc(path)} binds every \code{peter()} call of this R process, at the console and in scripts,
-to a history document, and is your explicit consent that gptr writes agent blocks into it.
+\code{gptr_doc(path)} binds a history document to this R process and is your explicit consent that
+gptr writes agent blocks into it. Calls written in that document (run with \code{source()},
+\code{\link[=gptr_source]{gptr_source()}}, \code{Rscript}, knitr or Jupyter) get their blocks below them. Calls in no
+document (the console, \code{Rscript -e}, standard input) are appended to it, except to a notebook,
+as \verb{s_<id> = peter("prompt", <context names>)} (later turns of that session as
+\verb{s_<id> |> peter(...)}): your variable name and the other arguments are not recorded. A call in
+another document is recorded only into that document, with its own consent; a run that cannot
+ask for it records nothing and says so once per document.
 Nothing is written until a block is recorded. \code{gptr_doc(FALSE)} removes the binding and
 \code{gptr_doc()} shows it. \code{sync = TRUE} writes the blocks that were recorded while the document
 could not be written, and says how many: a Jupyter notebook that was open (run it from another

@@ -1984,3 +1984,23 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Open: `gptr_cache("info")`, which the conflict warning names, lists only the workspace root's
   sidecars, not `pending/`; `doc_lock_dir()` still uses this process's workspace root, so two
   processes recording one document outside `.gptr/` do not exclude each other (finding 15).
+
+### doc-2 - Say when a script call is not recorded because gptr_doc() bound another document
+- Findings 22, 149, 174.
+- Red: FAIL 2 in `^doc-replay$` (PASS 613): bound to `out.R`, non-interactive, `record` unset, a fake
+  `peter()` call in `fk.R` run by `source()` and one in `job.R` under a mocked `Rscript --file=` gave
+  no notice (out.R absent and both scripts unchanged, as expected).
+- Cause: `doc_locate()` sites a call in the document that holds it; the binding is consent for its own
+  path and the target only of calls in no document (console, `-e`, stdin). Unable to ask, `doc_keep()`
+  dropped the site before `doc_upsert()`, whose "no write consent" notice was never reached.
+- Fix: `doc_keep()` informs a `notice` once per document when a call that could record (record not
+  FALSE, not replay mode) gets no consent while a binding exists: "gptr did not record this call: it is
+  in fk.R, but gptr_doc() bound out.R. Calls are recorded into the document that holds them; run
+  gptr_doc("fk.R") to record them there." No binding stays silent (IC-45). `?gptr_doc`, 04 §6.4 and
+  IC-45, 03 §4.3 say what a binding covers; the help also how console turns are written (IC-49).
+- Green: `^doc-replay$` PASS 615 (dropping the guards fails the silent cases: no binding, record FALSE,
+  replay); `^(doc-.*|arch-layers|lint-rules)$` PASS 2519 SKIP 2 (NOT_CRAN=true). Lint clean. Rd
+  regenerated; plan checks pass. Installed build, real `Rscript driver.R`, fake provider: one notice for
+  two calls, no out.R, driver.R unchanged; a self-bound script records both blocks, no notice.
+- Deviations: D-249 (extended). Open: an interactive run whose answer for a document is a remembered
+  "off" also gets the notice once while another document is bound.

@@ -3125,7 +3125,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `gptr_cache()` prune and clear never touch it (IC-51).
 - Rule: `gptr_doc(path, sync = TRUE)` informs a `notice`, "Wrote N block(s) into <doc>." or "No pending blocks for
   <doc>.", and leaves a dead run's recovery to the sync, so the count includes it.
-- Contract-visible: 04 §6.4 `gptr_doc()`, §11.9, §15.3 IC-51; 03 §6.9.1; `?gptr_doc`; vignette
+- Rule: a `gptr_doc()` binding is consent for its own document only; a call located in another document (a sourced
+  or `Rscript` script) records there or nowhere. When that document's consent cannot be given, a call that could
+  record (record not FALSE, not replay mode) informs a `notice` once per document: "gptr did not record this call:
+  it is in <doc>, but gptr_doc() bound <bound>. ..." (was silent); without a binding it stays silent (IC-45).
+- Contract-visible: 04 §6.4 `gptr_doc()`, §11.9, §15.3 IC-45, IC-51; 03 §4.3, §6.9.1; `?gptr_doc`; vignette
   script-as-history.
-- Tests: test-doc-io: the user-cache sidecar, the cross-process kernel and killed-run sync, the live-run sync.
-  Evidence: progress/fixes.md Task FIX-16 doc-1.
+- Tests: test-doc-io: the user-cache sidecar, the cross-process kernel and killed-run sync, the live-run sync;
+  test-doc-replay: the other-binding notice and its four silent cases. Evidence: progress/fixes.md Task FIX-16
+  doc-1, doc-2.

@@ -417,11 +417,20 @@ doc_skip_undone = function(site) {
 }
 
 #' Keep `site` in `call$doc` for recording when the call may record: not in replay mode and write
-#' consent can still be given (IC-45); else NULL
+#' consent can still be given (IC-45); else NULL. A call that cannot record because gptr_doc()
+#' bound another document says so once per document (without a binding it stays silent).
 #' @noRd
 doc_keep = function(call, site, mode) {
-  ok = !is.null(site) && !isFALSE(call$args$opts$record) && !identical(mode, "replay") &&
-    doc_consent_possible(site$path)
+  may = !is.null(site) && !isFALSE(call$args$opts$record) && !identical(mode, "replay")
+  ok = may && doc_consent_possible(site$path)
+  b = the$doc_binding$path
+  if (may && !ok && rlang::is_string(b)) {
+    rel = doc_rel(site$path)
+    gptr_inform(paste0("gptr did not record this call: it is in ", rel, ", but gptr_doc() bound ",
+                       doc_rel(b), ". Calls are recorded into the document that holds them; run ",
+                       "gptr_doc(\"", rel, "\") to record them there."), "notice",
+                .once = paste0("doc_other_binding:", path_key(site$path)))
+  }
   assign("doc", if (ok) site else NULL, envir = call)
 }
 
@@ -827,8 +836,14 @@ doc_console_append = function(lines, session = NULL) {
 
 #' Bind this R process to a history document
 #'
-#' `gptr_doc(path)` binds every `peter()` call of this R process, at the console and in scripts,
-#' to a history document, and is your explicit consent that gptr writes agent blocks into it.
+#' `gptr_doc(path)` binds a history document to this R process and is your explicit consent that
+#' gptr writes agent blocks into it. Calls written in that document (run with `source()`,
+#' [gptr_source()], `Rscript`, knitr or Jupyter) get their blocks below them. Calls in no
+#' document (the console, `Rscript -e`, standard input) are appended to it, except to a notebook,
+#' as `s_<id> = peter("prompt", <context names>)` (later turns of that session as
+#' `s_<id> |> peter(...)`): your variable name and the other arguments are not recorded. A call in
+#' another document is recorded only into that document, with its own consent; a run that cannot
+#' ask for it records nothing and says so once per document.
 #' Nothing is written until a block is recorded. `gptr_doc(FALSE)` removes the binding and
 #' `gptr_doc()` shows it. `sync = TRUE` writes the blocks that were recorded while the document
 #' could not be written, and says how many: a Jupyter notebook that was open (run it from another
