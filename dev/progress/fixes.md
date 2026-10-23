@@ -2199,3 +2199,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: none (no contract change; 03 §6.8.5 already says it).
 - Open: with `gptr.plan_handoff = FALSE` `plan_capture()` still stores a record and the next call prints its discard
   notice, and under `gptr.quiet` the hand-off prints no notice (finding 90, follow-ups); the sheet's row is S34.
+
+### sessions-15 - Plan mode runs console output such as cat()
+- Red: FAIL 3 in `^(perm-classify|perm-plan)$` (PASS 1026; finding 70): the allowlist refused `cat('a\n')`,
+  `base::cat(nrow(df), file = stdout())`, `writeLines('b')`, `dput(1:3)` and `do.call(rbind, lapply(...))`, and the
+  fake's plan-mode `r` call `cat('a\n')` got "Permission denied: not known to be read-only in plan mode: cat.",
+  though `gptr_risk()` scores each 0.
+- Cause: `risk_plan_disallowed()` admitted only level-0 `read` rows; the rows of `cat`, `writeLines` and `dput`
+  record their worst case (`file_write` through `path_arg`), `do.call`'s is `dynamic`, and the scan's verdict per
+  call (a console target, a literal function: no flag) was not read.
+- Fix: a `file_write` row with a path argument, or a `risk_lookups` function with a `dynamic` row, passes when the
+  scan flags none of its calls; the path row also must never be used as a function value (`risk_scan()` now returns
+  `values`, the names `use_value()` saw), whose arguments the scan cannot see. The interactive-console vignette
+  (`.Rmd`, `.Rmd.orig`) says "R calls known to be read-only", not "level-1 R exploration". 04 IC-54.
+- Green: `^(perm-classify|perm-plan)$` PASS 1029; `^(perm-|ckpt-|tool-r|arch-layers|lint-rules|zzz)` PASS 2558.
+  Full suite (NOT_CRAN=true) FAIL 0 PASS 35419 SKIP 64. Lint and check-plans clean.
+- Deviations: D-251 (extended). From the plan: the value rule and its two tests, because the planned rule admitted
+  `lapply(1, cat, file = 'x.txt')` and `do.call(cat, list('a', file = 'x.txt'))`, which the scan scores 0 and
+  which write; a lookup also needs its `dynamic` row.
+- Open: `gptr_risk()` scores those value uses 0, so `manual` runs them unasked (a slot function is read with
+  computed positional arguments, which `cat()`'s `...` takes, leaving `file` at its console default; a classifier
+  follow-up); `cat('a', file = 'nul')` counts as the null device on every OS; getting-started still says "level-1
+  R exploration"; unlisted level-1 functions and helpers the code defines stay refused (by design).

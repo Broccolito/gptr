@@ -2280,7 +2280,8 @@ risk_bound = function(exprs) {
   list(fun = setdiff(fun, val), val = unique(val), all = unique(c(all, fun)))
 }
 
-#' The one parse walk (IC-31): list(flags, targets, calls, sizes)
+#' The one parse walk (IC-31): list(flags, targets, sizes, calls, values); `values` names the
+#' functions used as values (in a function slot or an assignment), whose arguments it cannot see
 #' @noRd
 risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
   on.exit(assign("envir", NULL), add = TRUE)
@@ -2290,6 +2291,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
             remove = character(), super = character(), files = character(),
             unknown = character(), process = character())
   calls = list(fn = character(), package = character(), line = integer())
+  values = character()
   # Paths held in names: every value a name may hold, NA for one the code computes. A
   # straight-line assignment replaces them (the code stops at its first error) unless the code
   # assigns the name with <<- (a function may do so later); one in a branch, loop or call adds
@@ -2587,6 +2589,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     }
     if (!slot && is.null(risk_lookup(r$name, r$pkg))) return(invisible())
     add_call(r$name, r$pkg, ctx$line)
+    values <<- c(values, r$name)
     use_fun(r$name, r$pkg, NULL, ctx)
   }
 
@@ -2712,7 +2715,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
   fl = if (length(flags)) do.call(risk_flags_bind, flags) else risk_flags_empty()
   list(flags = fl, targets = lapply(tg, function(x) unique(x[!is.na(x)])), sizes = sizes,
        calls = data.frame(fn = calls$fn, package = calls$package, line = calls$line,
-                          stringsAsFactors = FALSE))
+                          stringsAsFactors = FALSE), values = unique(values))
 }
 
 #' Flags of a gateway member call (04 section 9.4); every row's fn is `peter$<member>`; a path
@@ -2790,15 +2793,20 @@ code_targets = function(code) {
 #'
 #' Every call head and function value must be plan syntax, a level-0 `read` row of the risk
 #' table, `gptr_describe()`, a nested `peter()` (its child inherits plan mode) or a peter$ read
-#' member whose own classification is level 0, and no call may be flagged at level 2 or more
-#' (a read row used to write, such as `file("a.csv", "w")`, or a network read). Returns the
-#' offending names (empty = allowed).
+#' member whose own classification is level 0; a `file_write` row whose risk is its path
+#' argument (`cat()` to the console) or a lookup of a literal function (`do.call(rbind, ...)`,
+#' whose function is checked as a call of its own) passes when the scan flags none of its calls
+#' and, for the path row, never uses it as a value, whose arguments it cannot see. No call may be
+#' flagged at level 2 or more (a read row used to write, such as `file("a.csv", "w")`, or a
+#' network read). Returns the offending names (empty = allowed).
 #' @noRd
 risk_plan_disallowed = function(code, root = project_root()) {
   parsed = risk_parse(code)
   if (!is.null(parsed$error)) return(character())
   scan = risk_scan(parsed$exprs, envir = NULL, root = root, depth = 0L)
   calls = scan$calls
+  fl = scan$flags
+  flagged = fl$fn[!is.na(fl$fn) & fl$level > 0L]
   gw = paste0(risk_gateway, "$")
   bad = character()
   for (i in seq_len(nrow(calls))) {
@@ -2811,9 +2819,11 @@ risk_plan_disallowed = function(code, root = project_root()) {
     }
     row = risk_lookup(fn, pkg)
     if (!is.null(row) && identical(row$level, 0L) && identical(row$category, "read")) next
+    if (!is.null(row) && !fn %in% flagged &&
+          ((row$category == "file_write" && nzchar(row$path_arg) && !fn %in% scan$values) ||
+             (row$category == "dynamic" && fn %in% names(risk_lookups)))) next
     bad = c(bad, if (is.na(pkg)) fn else paste0(pkg, "::", fn))
   }
-  fl = scan$flags
   member = !is.na(fl$fn) & startsWith(fl$fn, gw)
   unique(c(bad, fl$fn[member & fl$level > 0L], fl$fn[!is.na(fl$fn) & !member & fl$level >= 2L]))
 }

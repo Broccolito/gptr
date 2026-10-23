@@ -4619,8 +4619,11 @@ P24's `test-injection-e2e.R` adds an injected model trying each path above; ever
   httr2 and curl) is at least level 2 (delete verbs 3). User and plugin `risk_rule` rows (IC-69) may lower
   levels explicitly.
 - Plan mode evaluates an `r` call only when every call in it resolves to an allowlisted read-only function
-  (level-0 `read` rows, base/stats/utils getters and summaries, describers, gptr read members); otherwise the
-  call is denied with "not known to be read-only in plan mode".
+  (level-0 `read` rows, base/stats/utils getters and summaries, describers, gptr read members), to a `file_write`
+  row whose risk is its path argument called directly (`cat()`, `writeLines()` or `dput()` to the console), or to
+  a lookup of a literal function (`do.call(rbind, ...)`, whose function is checked as a call of its own), the
+  last two only when the scan flags none of their calls; otherwise the call is denied with "not known to be
+  read-only in plan mode" (D-251).
 - `path_class()` gains `control` (level 4, `ask_human`, never pre-approved by rules): `.gptr/settings*.json`,
   `.gptr/mcp.json`, `.gptr/extensions/`, `.gptr/plugins/`, `.gptr/SYSTEM.md`, `.gptr/APPEND_SYSTEM.md`,
   `.gptr/agents/`, all of `R_user_dir("gptr", "config")`, `.git/hooks/`, `.git/config`, `.Rprofile` anywhere,

@@ -3173,6 +3173,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   in the plan menu declares `edit` and `write` (`plan_execute()`). Was: P11's `agent_start` hook
   (`plan_on_agent_start()`, removed) declared them at every run outside plan mode, so `tools = readonly` was told
   "New tools are available from now on: edit, write." from its first request. `r` can still change files there.
+- Rule (sessions-15): plan mode's allowlist (IC-54) also admits a `file_write` row whose risk is its path argument
+  called directly (`cat("a\n")`, `writeLines()`, `dput()`, `write.table()` to the console) and a lookup of a
+  literal function (`do.call(rbind, ...)`, `get("x")`; the function is checked as a call of its own), when the
+  scan flags none of their calls. A path function used as a value (`lapply(1, cat, file = "x")`), whose arguments
+  the scan cannot see, stays refused. Was: refused although `gptr_risk()` scores them 0 (GPT lost a turn to it).
 - Contract-visible: 04 §6.1 `tools` and `.opts` rows, §6.1.2 (a refused call), §7.5 `provider_ready()`; `?peter`
   `tools`, `.opts` and refusals. 04 §2.2 messages, §5.1 `envir` accessor row, IC-40; `?peter` `envir`,
   `?session-accessors`. 04 §2.2 warnings, §6.1 and §6.1.5; `?peter` dots. 04 §4.3 `estimated` (message and row).
@@ -3180,7 +3185,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   row, IC-66; `?peter` `budget`. 04 §5.1 `text` and `value` rows, §6.5 `gptr_parallel()`, 03 §4.1.6;
   `?session-accessors`, `?gptr_parallel`, vignette teams-and-background. 04 §5.1 `text` row and `print` method, §6.5
   `gptr_map()`, 03 §4.1.6; `?print.gptr_session`, `?session-accessors`, `?gptr_parallel`, the same vignette.
-  03 §6.8 (the execute menu).
+  03 §6.8 (the execute menu). 04 IC-54 (the plan allowlist).
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice that cannot be reached falls back ...",
   "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
@@ -3190,5 +3195,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   next request would exceed says so ...", "a call's own cost limit says once that an unknown cost counts nothing
   ...", "peter() with a cost limit on a model without prices ..."; subagent-team "NS-6: a team through peter() ...",
   "a continued gptr_parallel() team or fan-out answers ...", "printing a team or fan-out shows each child under its
-  name ..."; perm-plan "a readonly session keeps read and r outside plan mode ...". Evidence: progress/fixes.md
-  Task FIX-18.
+  name ..."; perm-plan "a readonly session keeps read and r outside plan mode ...", "plan mode runs console
+  output such as cat() ..."; perm-classify "the plan-mode allowlist admits only known read-only calls (IC-54)".
+  Evidence: progress/fixes.md Task FIX-18.

@@ -967,6 +967,21 @@ test_that("the plan-mode allowlist admits only known read-only calls (IC-54)", {
   expect_identical(risk_plan_disallowed("gptr_artifacts()", root), character())
   expect_true("read.csv" %in% risk_plan_disallowed("x = read.csv('https://x.org/a.csv')", root))
   expect_identical(risk_plan_disallowed("this is not R (", root), character())
+  # console output and a lookup of a literal function, unless the scan flags or cannot see a write
+  expect_identical(risk_plan_disallowed(paste("cat('a\\n'); base::cat(nrow(df), file = stdout());",
+                                              "writeLines('b'); dput(1:3)"), root), character())
+  expect_identical(risk_plan_disallowed("do.call(rbind, lapply(split(df$a, df$g), summary))", root),
+                   character())
+  for (code in c("cat('a', file = 'x.txt')", "cat('a', file = tempfile())",
+                 "f = 'x.txt'; cat('a', file = f)", "cat('a'); cat('b', file = 'y.txt')",
+                 "lapply(1, cat, file = 'x.txt')", "do.call(cat, list('a', file = 'x.txt'))")) {
+    expect_true("cat" %in% risk_plan_disallowed(code, root), info = code)
+  }
+  expect_true("writeLines" %in% risk_plan_disallowed("writeLines('a', 'y.txt')", root))
+  expect_true("write" %in% risk_plan_disallowed("write(1:3)", root))
+  expect_true("sink" %in% risk_plan_disallowed("sink('s.txt')", root))
+  expect_true("system" %in% risk_plan_disallowed("do.call('system', list('ls'))", root))
+  expect_true("do.call" %in% risk_plan_disallowed("g = 'system'; do.call(g, list('ls'))", root))
 })
 
 test_that("a read of a path the classifier cannot resolve is level 1, as outside one", {

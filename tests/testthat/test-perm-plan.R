@@ -400,6 +400,19 @@ test_that("plan mode on the fake provider: denied writes, scratch r, a plan hand
   expect_false(grepl("<plan", first_text(fake_requests(fake)[[5L]]), fixed = TRUE))
 })
 
+test_that("plan mode runs console output such as cat() and still denies a file write", {
+  skip_on_cran()
+  root = local_project()
+  local_plan_store()
+  fake = local_fake_provider(list(fake_tool("r", code = "cat('a\\n')"),
+                                  fake_tool("r", code = "cat('a', file = 'x.txt')"), "Done."))
+  peter("Look.", model = fake, envir = new.env(), mode = "plan")
+  res = vapply(fake_requests(fake)[2:3], function(q) msg_text(q$last_results[[1L]]), "")
+  expect_identical(trimws(res[1L]), "a")
+  expect_match(res[2L], "Permission denied", fixed = TRUE)
+  expect_false(file.exists(file.path(root, "x.txt")))
+})
+
 test_that("a plan is pending for the environment its run evaluated in (IC-40, IC-56)", {
   skip_on_cran()
   root = local_project()
