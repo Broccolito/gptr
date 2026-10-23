@@ -5425,8 +5425,9 @@ its part in its own commit, and Task 27 finalises them.
     next step boundary, a follow-up in the reader's `typed` lines for the next prompt), and Up on an empty draft
     takes back into the draft the newest message waiting (`console_newest(session, rd, take = TRUE)`: the last
     of the reader's `typed` lines, else the newest item the console holds, else `session_unqueue(session,
-    "steer")`; when both kinds wait, the kind the composer sent last, `rd$sent`). Tab completes nothing until
-    IC-81's completer (Task 22). The live row (IC-82) shows the draft, or the newest message waiting, or the
+    "steer")`; when both kinds wait, the kind the composer sent last, `rd$sent`). Tab on a trigger word
+    completes it with IC-81's completer (Task 22), several candidates kept as `rd$compose$candidates` until the
+    next key. The live row (IC-82) shows the draft, or the newest message waiting, or the
     keys, and is drawn again on every key. A question's drain gives what waits on fd 0 to the composer, so a
     partial line stays the draft, never the history. A draft a run left after status `idle` or `max_turns` stays
     in the composer for the next prompt (Task 21); after any other end it joins the kept list above.
@@ -5476,8 +5477,9 @@ its part in its own commit, and Task 27 finalises them.
     draft's tail fitted to `width - 1` (`live_fit()`), `\033[K` (then `\033[0m` on the band), drawn again
     after every key, in character mode (`tty_call(TRUE)`, the saved modes back on return, error and
     interrupt), reading fd 0 without a time limit (`console_typed_chars(rd, -1L)`). The keys are the
-    composer's (`console_compose()`); Up and Ctrl-D do nothing, and Tab does nothing unless on a trigger word
-    (IC-81's completion, Task 22); a cursor key (Left, Right, Home, End, Ctrl-A, Ctrl-E) hands the draft over
+    composer's (`console_compose()`); Up and Ctrl-D do nothing, and Tab does nothing unless on a trigger word,
+    which it completes (IC-81, Task 22), listing several candidates on a dim row at column 2 above the
+    prompt's row, as readline lists them; a cursor key (Left, Right, Home, End, Ctrl-A, Ctrl-E) hands the draft over
     as Ctrl-C does, so Up recalls it with readline's editing (review of Tasks 16-21: they were dropped). The row is cleared when the read ends. Enter returns the line, which the
     reader echoes as it echoes a follow-up (`peter> <line>`, escaped, as readline leaves it) and the REPL takes
     as readline's: `/command`, `!code`, fences and continuation reads (`+ `, `... `) go on as usual, through
@@ -5539,7 +5541,39 @@ its part in its own commit, and Task 27 finalises them.
     lines; visual review). The console leaves them out (`code = FALSE`) when the call line just above is this
     request's and showed its code whole (at most 20 lines); the RStudio dialog keeps them and gets the text without
     SGR.
-- **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23): pending.
+- **IC-81 Trigger-only completion** (D-244; P28 Tasks 22, 23); Task 23 pending.
+  - The completer (Task 22): `console_complete(line, end)` takes the word before the cursor (`end`) from
+    `console_trigger()` (IC-76) and returns full words, in a REPL whose reader completes (`rd$complete`) and
+    only on a trigger word:
+    - a line starting with optional spaces, then `!` or `!!`: R's own completion of the code, through utils'
+      `.assignLinebuffer()`, `.assignEnd()`, `.guessTokenFromLine()`, `.completeToken()` and
+      `.retrieveCompletions()` (by `getFromNamespace()`); `.completeToken()` calls a caller-owned
+      `custom.completer`;
+    - a word starting with `@`: the objects an @mention names (`console_objects()`: bound in the REPL's
+      environment and its parents up to the global one; syntactic names), then the files and directories under
+      the working directory (a directory ending in `/`), all `@`-prefixed; names starting with a dot only when
+      the word does; `a@b.com` gives nothing;
+    - a word `@obj$...`: `.DollarNames(obj)`;
+    - a word starting with `peter$`: peter's members (the `ns.names` service);
+    - a first word starting with `/`: the registered commands (plugin commands among them) and
+      `/skill:<name>` for each skill;
+    - anything else, and a failure: `character(0)` (natural language, `$5`, a bare `$name`, `x$y`, `wow! x`).
+  - The adapter: `console_completer(prev)` is R's `custom.completer`. It sets `fileName` to FALSE and `comps`
+    to `character()` first (without `fileName` R's readline aborts the `readline()` call), then gives the
+    completions of the line before the cursor as completions of R's token (`completion_shift()`: readline's
+    word, or utils' guess in RStudio and Windows; the longer one's extra head is cut or added), with `prev`,
+    the caller's completer (NULL when none), as the custom one meanwhile, so a `!` line calls it.
+  - Scope: wherever R's own Unix readline reads a tty (`console_readline_tty()`), not under `.stdin` and not
+    with `R_COMPLETION=FALSE`, `repl_main()` sets the reader's `complete`. The terminal reader then installs
+    the adapter around its `readline()` (`peter>` and `... ` reads; not `+ `, which continues `!` code and
+    keeps R's own completion), restoring the completer it found on exit. Questions, the pause menu and tool
+    `readline()` calls keep the caller's completion. The `!` word break of D-183 stays, and a caller-owned
+    completer still keeps its words (no `!` break).
+  - The composer (T): Tab on a trigger word calls the same completer (IC-76): the longest common prefix replaces
+    the word when it is longer; else two or more candidates replace the live row's status words until the next
+    key (IC-82; they do not widen the padded status, so the draft moves only while they show), or, at the idle
+    editor, are listed on a dim row at column 2 above the prompt's row; none does nothing, and Tab on a trigger
+    word never queues.
 - **IC-82 The console output vocabulary** (D-245; P28 Tasks 8, 9, 11, 17, 25); Task 25 pending.
   - One style table (Task 8): `console_style()` holds the glyphs, the two accents, dim and the input band, and
     every console glyph comes from it. The glyphs come from the logo's cursor shapes: the person's chevron, a tool

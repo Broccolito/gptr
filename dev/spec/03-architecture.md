@@ -299,7 +299,7 @@ Final areas, in layer order:
 `doc`, `artifact` (L4); `console` (L5); `gptr` (L6); plus `zzz.R`. `cli` means the subscription-CLI
 providers, never the cli package.
 
-### 3.2 `R/` files (123 files after the Rscript launcher amendment, P26's Bedrock adapter and P28's composer)
+### 3.2 `R/` files (124 files after the Rscript launcher amendment, P26's Bedrock adapter and P28's composer and completer)
 
 Every file has exactly one owning plan (`05-plan-decomposition.md`). "Builtin" names the factory the file
 declares, if any.
@@ -399,6 +399,7 @@ declares, if any.
 | `console-commands.R` | L5 | built-in slash commands | - | P14 |
 | `console-jsonl.R` | L5 | JSONL event-sink front end (Pi-named events, redacted) | jsonl | P14 |
 | `console-input.R` | L5 | the terminal composer: its key machine and trigger words [IC-76] | - | P28 |
+| `console-complete.R` | L5 | completion only after the trigger characters: the completer and R's custom-completer adapter [IC-81] | - | P28 |
 | `doc-locate.R` | L4 | locate the calling statement (srcref, source frame, knitr, Quarto, IRkernel, Rscript, IDE, console) | - | P15 |
 | `doc-blocks.R` | L4 | block grammar, ownership, idempotent upsert, stale and user-edited detection | - | P15 |
 | `doc-io.R` | L4 | atomic raw I/O (EOL/BOM), md5 conflict checks, deferred Rscript writes, IDE backends | - | P15 |
@@ -1925,12 +1926,20 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   trailing backslash, `@file` and `@object` mentions; a warning near the readline line limit (4,095 bytes on
   R < 4.5, 8,190 on R >= 4.5 [18 fact-check]); optional history through `utils::timestamp()`
   (`gptr.history`). Banner: `gptr 1.0.0 | model ... | mode ... | .gptr/ found` plus the workspace summary.
-- **REPL completion** [D-183]: wherever R's own Unix readline reads a tty (terminal R, an IDE's terminal tab)
-  the REPL adds `!` to `rl_word_breaks` for its duration (restored on exit; a caller's `custom.completer`
-  keeps its policy), so R completes the code after `!`/`!!`. The REPL reads its lines with a copy of
+- **REPL completion** [D-183, D-244]: completion comes only after gptr's trigger characters, never on natural
+  language [IC-81]: R's own completion of the code on a `!`/`!!` line; objects, then files and directories
+  after `@`; the object's members after `@obj$`; peter's members after `peter$`; commands and `/skill:<name>`
+  for a first word starting with `/` (`console_complete()`). Wherever R's own Unix readline reads a tty
+  (terminal R, an IDE's terminal tab; not with `R_COMPLETION=FALSE`) the REPL's reader installs
+  `console_completer()` as `custom.completer` around its prompt reads (`peter>`, `... `; not `+ `, which
+  continues `!` code), so questions, the pause menu and tool `readline()` calls keep R's; a caller's
+  completer is kept and completes the `!` lines. The REPL adds `!` to `rl_word_breaks` for its duration
+  (restored on exit; not for a caller-owned completer, whose words stay its own). The terminal composer's Tab
+  calls the same completer [IC-76]. The REPL reads its lines with a copy of
   `base::readline` carrying one attribute: RStudio's console completes nothing inside a frame `identical()` to
   `base::readline`, so it completes R code at `peter>`, while approval and menu prompts keep `readline()` and
-  RStudio's choice completion. radian and Positron's console offer no completion at the prompt.
+  RStudio's choice completion (until P28 Task 23). radian and Positron's console offer no completion at the
+  prompt.
 - **Pasted and typed-ahead input** [IC-75, D-184]: on a macOS terminal (R's own readline on a tty, where the
   BSD tty driver hands waiting input over as complete lines), the lines already waiting on fd 0 after a prompt,
   slash or `!code` line is read (a paste) join it, a dim `(pasted: Enter sends it as one message)` hint follows

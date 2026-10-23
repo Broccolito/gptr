@@ -3463,6 +3463,29 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
   natural language; `!`, `/` and `@` show what they do. Amends D-183.
+- Task 22: in terminal R (R's own Unix readline on a tty, `R_COMPLETION` not FALSE) Tab completes only after the
+  trigger characters. `console_complete(line, end)` (new `console-complete.R`) gives full words: R's own
+  completion of the code on a `!` line, objects then files and directories after `@`, members after `@obj$` and
+  `peter$`, commands and `/skill:<name>` for a first word starting with `/`, else nothing. The REPL's reader
+  installs `console_completer()` as `custom.completer` around its `peter>` and `... ` reads only, so questions,
+  the pause menu and tool `readline()` calls keep R's completion, and `+ ` (continuing `!` code) keeps R's own; a
+  caller's completer is kept and completes the `!` lines. The composer's Tab calls the same completer: during a
+  run several candidates replace the live row's status words until the next key, without widening the padded
+  status (the draft moves only while they show), and at the idle editor they are listed on a dim row at column
+  2 above the prompt's row, as readline lists them at its prompt.
+  `console_object_visible()` became `console_objects()`, which @mentions and the completer share. Visible
+  now: `summarise the da` + Tab stays as typed (R completed `da` to `dat`); `@mtc` completes `@mtcars_copy`;
+  `/re` + Tab-Tab lists `/redo /resume /retry /review /rewind`, not R's `/read.csv ... /rep`. The plan
+  installed the completer around every continuation read; `+ ` is left out, since the line there is R code.
+  Contract-visible: 04 §15.10 IC-81, IC-76; 03 §3.2 and §6.17. Tests: test-console-completion.R "completion
+  comes only after @, !, !!, / and peter$, in full words (IC-81)", "R's completion through the adapter gives
+  the table's words as its token's (IC-81)", "the adapter sets fileName first, so a failure completes nothing
+  (IC-81)", "a caller-owned completer completes ! lines; the triggers stay gptr's (IC-81)", "the reader
+  completes around its prompt reads, not at + and not unflagged (IC-81)", "a terminal: Tab completes after @,
+  / and ! and never natural language (IC-81)"; test-console-typing.R "Tab completes a trigger word; several
+  show on the live row until a key (IC-81)"; test-console-input.R "a draft at the prompt completes a trigger
+  word; several are listed above (IC-81)", "the draft keeps its column as the status changes; the status only
+  widens (review)".
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Pending (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three

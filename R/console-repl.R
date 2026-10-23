@@ -96,10 +96,13 @@ readline_limit = function() {
 #' unechoed (the terminal showed them); `typed`, the /command and !code lines and the follow-ups
 #' typed during an answer, which it returns next, in order, echoed after the prompt (IC-76,
 #' D-242); `compose`, the state of a T console's composer (console_compose(): its draft), whose
-#' draft a run left it then edits at the prompt (console_idle()), the line sent echoed alike, and
-#' `sent`, the kind of message queued last (policy_enqueue()). With `echo` the stdin reader
-#' writes the prompt and the escaped line (never a `secret` one) on `stream`, so a piped session
-#' reads like a terminal session.
+#' draft a run left it then edits at the prompt (console_idle()), the line sent echoed alike,
+#' `sent`, the kind of message queued last (policy_enqueue()), and `complete`, TRUE where the REPL
+#' completes after its trigger characters (repl_main(), IC-81): the terminal reader's readline()
+#' then has console_completer() as R's custom completer, the caller's kept for ! lines, but at
+#' `+ `, where the line continues !code and R's own completion applies. With `echo` the stdin
+#' reader writes the prompt and the escaped line (never a `secret` one) on `stream`, so a piped
+#' session reads like a terminal session.
 #' @noRd
 console_reader = function(stdin = FALSE, echo = stdin) {
   rd = new.env(parent = emptyenv())
@@ -146,6 +149,11 @@ console_reader = function(stdin = FALSE, echo = stdin) {
       if (!is.null(x)) {
         console_write(paste0(prompt, console_escape(x)))
         return(x)
+      }
+      if (isTRUE(rd$complete) && !identical(prompt, "+ ")) {
+        prev = utils::rc.getOption("custom.completer")
+        utils::rc.options(custom.completer = console_completer(prev))
+        on.exit(utils::rc.options(custom.completer = prev), add = TRUE)
       }
       x = gptr_readline(prompt, rl)
       if (length(x) != 1L || is.na(x)) return(NA_character_)
@@ -343,17 +351,19 @@ repl_file_block = function(path, shown, max_lines = 40L) {
          ">\n", paste(x, collapse = "\n"), "\n</file>")
 }
 
-#' Is `name` bound in `env` or one of its parents up to the global environment? (exists() forces
-#' nothing; namespaces and base are not searched, so `@c` is not the function c)
+#' The objects an @mention names: those bound in `env` and its parents up to the global
+#' environment, names starting with a dot only with `all` (ls() forces nothing; namespaces and
+#' base are not searched, so `@c` is not the function c), sorted
 #' @noRd
-console_object_visible = function(name, env) {
+console_objects = function(env, all = TRUE) {
+  out = character()
   e = env
   while (!identical(e, emptyenv()) && !isNamespace(e) && !identical(e, baseenv())) {
-    if (exists(name, envir = e, inherits = FALSE)) return(TRUE)
+    out = c(out, ls(e, all.names = all, sorted = FALSE))
     if (identical(e, globalenv())) break
     e = parent.env(e)
   }
-  FALSE
+  sort(unique(out), method = "radix")
 }
 
 #' Resolve @mentions: files (relative to the working directory or the project root, or
@@ -371,7 +381,7 @@ repl_mentions = function(text, env) {
     hit = cand[path_info(cand)$isdir %in% FALSE]
     if (length(hit)) {
       files = c(files, repl_file_block(hit[[1L]], path_rel(hit[[1L]])))
-    } else if (identical(make.names(nm), nm) && console_object_visible(nm, env)) {
+    } else if (identical(make.names(nm), nm) && nm %in% console_objects(env)) {
       objects = c(objects, nm)
     }
   }
@@ -807,12 +817,14 @@ repl_main = function(rs) {
   piped = rs$session
   on.exit(repl_close(rs), add = TRUE)
   rs$reader = console_reader(rs$stdin)
-  # R's own Unix readline on a tty (an IDE's terminal tab too) keeps ! in its completion token.
-  # Let it complete the R expression after !/!! without changing a caller-owned completer.
-  if (!rs$stdin && console_readline_tty() && !identical(Sys.getenv("R_COMPLETION"), "FALSE") &&
-      !is.function(utils::rc.getOption("custom.completer"))) {
+  # R's own Unix readline on a tty (an IDE's terminal tab too) completes only after the trigger
+  # characters (IC-81), and ! breaks its words, so the R code after !/!! is completed; a
+  # caller-owned completer keeps its words and completes the ! lines
+  if (!rs$stdin && console_readline_tty() && !identical(Sys.getenv("R_COMPLETION"), "FALSE")) {
+    rs$reader$complete = TRUE
     breaks = getOption("rl_word_breaks", " \t\n\"\\'`><=%;,|&{()}")
-    if (!grepl("!", breaks, fixed = TRUE)) {
+    if (!is.function(utils::rc.getOption("custom.completer")) &&
+        !grepl("!", breaks, fixed = TRUE)) {
       completion_options = options(rl_word_breaks = paste0(breaks, "!"))
       on.exit(options(completion_options), add = TRUE)
     }

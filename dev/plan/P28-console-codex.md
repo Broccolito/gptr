@@ -139,7 +139,7 @@ working directory restored. Plan-specific rules:
 | `R/console-ui.R` | 2, 3, 8, 12, 19, 20 |
 | `R/console-repl.R` | 2, 3, 7, 8, 13, 14, 15, 17, 18, 20, 21, 22, 24, 25, 26 |
 | `R/console-interrupt.R` | 3, 13, 14, 15, 17, 18, 20 |
-| `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21 |
+| `R/console-input.R` (new: key machine, live row, typing loop) | 16, 17, 18, 19, 20, 21, 22 |
 | `R/console-complete.R` (new) | 22, 23 |
 | `R/utils-options.R` (`readline_answer()`, tty wrappers, `console_class()`) | 2, 3, 17, 18, 25 |
 | `R/utils-conditions.R` (`console_colors()`, `console_style()`; `gptr_message_write()` clears and redraws the live row) | 8, 11, 17 |
@@ -149,7 +149,7 @@ working directory restored. Plan-specific rules:
 | `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress,message-stream,setup,notice,process-launch}.R`, `helper-console-input.R` | their tasks |
 | `tests/testthat/test-cli-{codex,claude}.R` (expected tool lines), `fixtures/cli/claude-toolstream.ndjson` (rows) | 8, 10, 11, 12 |
 | `tests/testthat/test-subagent-team.R`, `test-gptr-gateway.R` (expected sub-agent lines) | 11, 12 |
-| `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19 |
+| `tests/testthat/test-console-input.R` (new, pure) | 16, 17, 19, 22 |
 | `tests/testthat/test-agent-{run,loop,dispatch}.R`, `fixtures/oracles/report02/loop.json`, `test-session-object.R`, `test-provider-transform.R` | 4, 5, 6 |
 | `tests/testthat/helper-arch.R` (the console's contract edges; new files' layer rows), `test-arch-layers.R` | 15, 16, 22 |
 | `tests/testthat.R` (CRAN list, D-240) | 16 |
@@ -1144,6 +1144,23 @@ Decisions:
     lines.
   - Questions, the pause menu and tool `readline()` calls get nothing.
   - The `!` word break stays.
+- (Amended in Task 22:)
+  - Not at `+ `: the line there continues `!` code, so R's own completion (or the caller's) applies.
+  - The composer's Tab (Task 16) calls `console_complete()`, in `console_keys()` and the idle editor
+    (`console_idle()`). During a run several candidates are kept as `rd$compose$candidates` and replace
+    the live row's status words until the next key (Task 17); they do not widen Task 17's padded status
+    (found in the visual check: after one list the draft kept an 8-column gap for the rest of the run),
+    so the draft moves only while they show. At the idle editor, which has no status words, they are
+    listed on a dim row at column 2 above the prompt's row, as readline lists them.
+  - `rd$complete`, set by `repl_main()`, is the one flag: the reader installs the adapter where it is
+    set, and `console_complete()` completes nothing elsewhere, so the composer honours `R_COMPLETION=FALSE`
+    too.
+  - The `tryCatch` is `console_complete()`'s, which the composer shares; the adapter sets `fileName` and
+    `comps` before it. `completion_shift()` also adds the host token's head where the token is longer
+    than the word: readline keeps `!` in its word for a caller-owned completer (no `!` break).
+  - `console_objects()` (the objects an @mention names) replaces `console_object_visible()`, so
+    `repl_mentions()` and the completer read one rule. Objects are syntactic names, sorted (radix), as
+    are files and commands; names starting with a dot only when the word does.
 
 Tests (`test-console-completion.R`), RED first:
 - The trigger table, through utils' `.assignLinebuffer`, `.assignEnd`, `.guessTokenFromLine`,
@@ -1151,12 +1168,20 @@ Tests (`test-console-completion.R`), RED first:
 - The missing-`fileName` guard.
 - The caller-owned completer.
 - pty: `summarise the da` + Tab leaves the line unchanged; `@mtc`, `/mo` and `!summ` complete.
+- (Amended in Task 22:) The reader installs the completer around `peter>` and `... ` only; repl_main()
+  sets `rd$complete` (also with a caller-owned completer) and not in the unsupported modes. The pty case
+  lists `/re` with Tab-Tab (`/mo` completes to `/mode`, itself a candidate, which libedit does not list).
+  The composer's Tab (`test-console-typing.R`) and the idle editor's (`test-console-input.R`).
 
-Spec: IC-81, 03 §6.17 completion bullet (amends D-183), 03 §3.2 (the new file's row).
+Spec: IC-81, 03 §6.17 completion bullet (amends D-183), 03 §3.2 (the new file's row). (Amended in Task
+22:) Also IC-76 (the composer's Tab) and D-244's Task 22 note.
 
 Files: `R/console-complete.R` (new), `R/console-repl.R` (`repl_main()`, `console_reader()`),
 `tests/testthat/test-console-completion.R`, `tests/testthat/helper-arch.R` and
-`tests/testthat/test-arch-layers.R` (the layer row).
+`tests/testthat/test-arch-layers.R` (the layer row). (Amended in Task 22:) Also `R/console-repl.R`
+(`console_objects()`, `repl_mentions()`), `R/console-input.R` (`console_keys()`, `console_idle()`,
+`console_live_state()`, `live_candidates()`), `tests/testthat/test-console-typing.R` and
+`tests/testthat/test-console-input.R`.
 
 Commit: `feat(console): completion only after @, !, / and peter$`.
 

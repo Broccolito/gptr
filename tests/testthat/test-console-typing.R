@@ -714,6 +714,41 @@ test_that("a T console's keys edit the draft on the live row; Enter steers (D-24
   expect_identical(sum(rows == paste0(sym$person, " use base R")), 1L)
 })
 
+test_that("Tab completes a trigger word; several show on the live row until a key (IC-81)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE, cli.num_colors = 1L,
+                       cli.unicode = TRUE, cli.width = 80L)
+  local_mocked_bindings(front_end = function() "terminal")
+  # a reader that completes, as on a readline tty (IC-81)
+  reader = console_reader
+  local_mocked_bindings(console_reader = function(...) {
+    rd = reader(...)
+    rd$complete = TRUE
+    rd
+  })
+  fake = gptr_fake_provider(list(list(text = "first", delay = 1), "second"))
+  local_keys(keys_once(c("use @mtc", "\t", "\025/mo", "\t", "\t", "l", "\025"),
+                       function() length(fake_requests(fake)) == 1L))
+  env = new.env()
+  env$mtcars_copy = mtcars
+  res = typing_console(fake, c("go", "/exit"), envir = env)
+  expect_length(fake_requests(fake), 1L)
+  sym = console_style()
+  bytes = paste(res$out, collapse = "\n")
+  expect_match(bytes, paste0(sym$person, " use @mtcars_copy\033[K"), fixed = TRUE)
+  expect_match(bytes, paste0(sym$person, " /mode\033[K"), fixed = TRUE)
+  # the candidates replace the status words, the draft where it was, until the next key
+  expect_match(bytes, paste0("\r", sym$agent, " /mode  /model   ", sym$person, " /mode\033[K"),
+               fixed = TRUE)
+  # and the draft returns to its column after them
+  expect_match(bytes, paste0("\r", sym$agent, " thinking 0s   ", sym$person, " /model\033[K"),
+               fixed = TRUE)
+  # completion never queues: one request, nothing kept
+  expect_identical(res$kept, character())
+})
+
 test_that("Tab sends a follow-up, the next prompt; Up takes it back and Ctrl-U discards it", {
   skip_on_cran()
   local_console_test()

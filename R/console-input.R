@@ -99,22 +99,26 @@ console_trigger = function(line) {
 #' Apply one read batch `chars` of a T console (IC-76, D-243) to the composer of the REPL reader
 #' `rd` (`rd$compose`, console_compose()) for session `s`: a message is queued as its kind says
 #' (policy_enqueue(): a steer for the next step boundary, a follow-up in `rd$typed` for the next
-#' prompt) and Up takes back the newest one (console_newest()); the live row is drawn again where
-#' it shows. Tab completes nothing yet. Ctrl-C, a key in character mode (tty_call()), interrupts
-#' as SIGINT would, after the keys before it; the keys after it in the batch are dropped
+#' prompt) and Up takes back the newest one (console_newest()); Tab on a trigger word completes it
+#' (console_complete()), and several candidates are kept as `rd$compose$candidates`, which the live
+#' row shows until the next key; the live row is drawn again where it shows. Ctrl-C, a key in
+#' character mode (tty_call()), interrupts as SIGINT would, after the keys before it; the keys
+#' after it in the batch are dropped
 #' @noRd
 console_keys = function(rd, s, chars) {
   ctrl_c = regexpr("\003", chars, fixed = TRUE)
   if (ctrl_c > 0L) chars = substr(chars, 1L, ctrl_c - 1L)
   if (nzchar(chars)) {
     res = console_compose(rd$compose, chars, reactor_now(), setting_get("type_ahead", s),
-                          function(line, end) character())
+                          console_complete)
     rd$compose = res$state
     act = res$action
     if (identical(act$type, "send")) {
       policy_enqueue(s, act$text, act$kind, source = "repl")
     } else if (identical(act$type, "take_back")) {
       rd$compose$draft = console_newest(s, rd, take = TRUE)$text %||% ""
+    } else if (identical(act$type, "complete")) {
+      rd$compose$candidates = act$candidates
     }
     if (isTRUE(the$live_row$shown)) the$live_row$draw()
   }
@@ -126,7 +130,9 @@ console_keys = function(rd, s, chars) {
 #' and the draft's tail are one row (on the input band, as the live row), edited with the
 #' composer's keys in character mode (tty_call()) and drawn again after every key; the row is
 #' cleared when the read ends. Enter returns the line, which the reader echoes after the prompt
-#' as readline() leaves it; Up and Ctrl-D do nothing, nor does Tab but on a trigger word. Once the
+#' as readline() leaves it; Up and Ctrl-D do nothing, nor does Tab but on a trigger word, which it
+#' completes (console_complete()), several candidates listed on a dim row at column 2 above the
+#' prompt's row, as readline lists them. Once the
 #' draft is empty, at Ctrl-C, at a cursor key (Left, Right, Home, End, Ctrl-A, Ctrl-E: readline's
 #' editing, where Up recalls the draft) or when nothing is read, a draft left goes to the console
 #' history (console_keep()) and NULL is returned, so readline() reads at the same prompt
@@ -156,12 +162,16 @@ console_idle = function(rd, prompt) {
         keys = sub("\t$", "", keys)
       }
       if (nzchar(keys)) {
-        res = console_compose(rd$compose, keys, reactor_now(), "steer",
-                              function(line, end) character())
+        res = console_compose(rd$compose, keys, reactor_now(), "steer", console_complete)
         rd$compose = res$state
         if (identical(res$action$type, "send")) {
           line = res$action$text
           break
+        }
+        if (identical(res$action$type, "complete")) {
+          console_cat("\r\033[K")
+          console_write(paste0("  ", sym$dim(live_candidates(res$action$candidates,
+                                                             cli::console_width() - 3L))))
         }
       }
       if (hand > 0L) break
@@ -259,7 +269,7 @@ console_newest = function(s, rd, take = FALSE) {
 #' input band, its words
 #' in the band's grey) and `status_w` (the widest status a row with a draft had this run: the
 #' status is padded to it, so the draft never moves left; attr "status_w" of the result is this
-#' row's). In the style table's glyphs:
+#' row's, 0 for a row of completions, which shows until the next key). In the style table's glyphs:
 #' without a composer the status ends with the key and its verb, as the composer's keys read,
 #' `<sep>esc stop`; with an empty draft the newest message follows, `<queued> steer<sep><text><sep>
 #' <up> edit`, or the keys, `enter steer<sep>tab follow-up<sep>ctrl-c pause`; else `<person>
@@ -308,8 +318,7 @@ console_live_row = function(state, width) {
   if (room < live_fit(clock)) return("")
   fit = if (is.null(input)) room else max(live_fit(clock), room - live_fit(gap) - live_fit(input))
   if (length(state$candidates)) {
-    shown = paste(vapply(state$candidates, live_text, ""), collapse = "  ")
-    status = live_fit(shown, fit, sym$ellipsis)
+    status = live_candidates(state$candidates, fit)
   } else {
     # dropped whole, from the right: the hint's terms, then the queue and a waiting question;
     # then the queued message is cut, keeping its head; at least the block and the time
@@ -344,7 +353,15 @@ console_live_row = function(state, width) {
   if (left > live_fit(sym$ellipsis)) {
     row = paste0(row, gap, live_fit(input, left, sym$ellipsis, tail = TRUE))
   }
-  structure(row, status_w = shown)
+  # completions show until the next key: they move the draft only while they show
+  structure(row, status_w = if (length(state$candidates)) 0L else shown)
+}
+
+#' Completion candidates on one row of `n` columns (IC-81): each escaped (live_text()), two blanks
+#' apart, cut with an ellipsis
+#' @noRd
+live_candidates = function(cands, n) {
+  live_fit(paste(vapply(cands, live_text, ""), collapse = "  "), n, console_style()$ellipsis)
 }
 
 #' The person's text on one row of the live row or the idle editor: its lines escaped
@@ -430,8 +447,8 @@ console_live = function(cls) {
 #' word (`rec$what`; `sub-agent <label>` while a sub-agent it shows runs), the run's seconds, the
 #' person's messages waiting for its session, whether a question waits (`rec$question`,
 #' console_ask_wait()), and the console's interrupt key and what it does; where a T console's
-#' composer reads keys (tty_call()), its draft, the newest message waiting (console_newest()) and
-#' the kind Enter sends
+#' composer reads keys (tty_call()), its draft, the newest message waiting (console_newest()), the
+#' completion candidates its last key listed and the kind Enter sends
 #' @noRd
 console_live_state = function(rec) {
   kids = Filter(function(r) !is.null(r$child), as.list(console_state()$active))
@@ -443,7 +460,7 @@ console_live_state = function(rec) {
        question = isTRUE(rec$question), frozen = isTRUE(rec$frozen),
        key = console_interrupt_key(), pause = console_menu_available(),
        steer = console_menu_available() && front_end() == "positron",
-       draft = if (!is.null(rd)) rd$compose$draft %||% "",
+       draft = if (!is.null(rd)) rd$compose$draft %||% "", candidates = rd$compose$candidates,
        newest = if (!is.null(rd)) console_newest(s, rd), enter = setting_get("type_ahead", s))
 }
 

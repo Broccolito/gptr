@@ -99,6 +99,7 @@ arch_layer_table = function() {
     "console-commands.R", "L5", "P14",
     "console-jsonl.R", "L5", "P14",
     "console-input.R", "L5", "P28",
+    "console-complete.R", "L5", "P28",
     "doc-locate.R", "L4", "P15",
     "doc-blocks.R", "L4", "P15",
     "doc-io.R", "L4", "P15",

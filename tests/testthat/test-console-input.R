@@ -279,6 +279,11 @@ test_that("the draft keeps its column as the status changes; the status only wid
   # `r 5s` keeps `thinking 5s`'s column; a wider status moves the draft right once, never back
   expect_identical(c(regexpr("›", r, fixed = TRUE)), c(17L, 17L, 18L, 18L))
   expect_identical(r[[2L]], "▌ r 5s          › and label the axes")
+  # a completion list, shown until the next key, moves the draft only while it shows (IC-81)
+  r = rows(list(what = "thinking", secs = 5),
+           list(what = "thinking", secs = 5, candidates = c("@fuel", "@fuel.csv")),
+           list(what = "thinking", secs = 6))
+  expect_identical(c(regexpr("›", r, fixed = TRUE)), c(17L, 22L, 17L))
 })
 
 test_that("in a CJK locale every character outside ASCII counts two columns (D-243)", {
@@ -502,6 +507,24 @@ test_that("a draft a run left is edited at the prompt; Enter returns it as readl
   local_mocked_bindings(console_background = function() "dark")
   r = idle_read("x", "\r")
   expect_match(r$out, "\r\033[48;5;237mpeter> x\033[K\033[0m", fixed = TRUE)
+})
+
+test_that("a draft at the prompt completes a trigger word; several are listed above (IC-81)", {
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L, cli.width = 80L)
+  withr::local_dir(withr::local_tempdir())
+  # a REPL that completes, on two objects
+  rs = repl_state(NULL, list2env(list(mtcars_copy = 1, mtcars_two = 2), parent = emptyenv()))
+  rs$reader = list(complete = TRUE)
+  .gptr_repl = rs
+  r = idle_read("use @mt", list("\t", "\t", "c", "\t", "\r"))
+  expect_identical(r$x, "use @mtcars_copy")
+  # at column 2, as the live row shows them, then the row again under them
+  expect_identical(r$rows, c("  @mtcars_copy  @mtcars_two", "peter> use @mtcars_copy", ""))
+  expect_match(r$out, "\rpeter> use @mtcars_\033[K", fixed = TRUE)
+  # Tab on plain text still does nothing
+  r = idle_read("use the mt", list("\t", "\r"))
+  expect_identical(r$x, "use the mt")
 })
 
 test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C keeps it first", {
