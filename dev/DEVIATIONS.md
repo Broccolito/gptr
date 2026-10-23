@@ -3160,11 +3160,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (`settings_project_value()`) is not what trust would apply, with `gptr_trust("<root>", trust = TRUE)` and
   `.scope = "session"` as the ways out. Tightening (`mode = plan`, deny and ask rules) stays silent. Formerly the
   value was saved without a word and, for a recorded "no", nothing ever mentioned trust.
+- Rule (config-3): after any write, `gptr_config()` checks `model`, `small_model` and `system1` (less
+  `emulate:`; a router name or `router:` passes) with `model_canonical(strict = TRUE)` and on `unknown_model`
+  warns `unknown_model_setting` with that message and the undo call; the value is kept (a later
+  `gptr_register()` or refresh can make it valid, §6.1.3). Formerly a typo such as `model = opuss` saved at user
+  scope was silent and failed every later bare `peter()`, while the console's `/model` checks at once.
 - Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
   model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal); 07
   §2.1 and the 04 `model_prepare()` row (P06 prepares); the 04 `model_resolve()` row (the empty-route hint); 04
   §7.0 (`prices.table`) and §10.2 rows 1 and 3 (`prices`), `?gptr_provider`; 04 `gptr_config()` and §2.2
-  warnings (`untrusted_setting`).
+  warnings (`untrusted_setting`, `unknown_model_setting`).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
   match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
@@ -3173,4 +3178,5 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   Ollama model as System 1 does", "an unknown id on a route with no catalog models says a refresh fills it
   (D-250)"; test-ext-specs.R "model prices are a data frame or a list of price records, checked at
   registration"; test-aaa-state.R (40 services); test-gptr-config.R "gptr_config() warns when an untrusted
-  project will not apply what it saved (D-250)". Evidence: progress/fixes.md Task FIX-17.
+  project will not apply what it saved (D-250)", "gptr_config() warns when a saved model setting names no known
+  model (D-250)". Evidence: progress/fixes.md Task FIX-17.

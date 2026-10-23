@@ -163,6 +163,10 @@ works on the objects already in memory.
 * `gptr_config()` warns when it saves a setting to a project that is not trusted and so does not
   apply it (for example `providers` or `model`), naming `gptr_trust()` and `.scope = "session"`;
   settings that only tighten, such as `mode = plan`, stay silent.
+* `gptr_config(model = opuss)` (or `small_model`, `system1`) warns when the name is not a model
+  gptr knows in this session, as the console's `/model` already checked, with the reason and how
+  to undo it; the value is still saved, since a provider registered later or a catalog refresh
+  can make it valid.
 
 # gptr 0.7.0
 

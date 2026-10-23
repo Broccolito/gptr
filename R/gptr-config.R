@@ -1294,6 +1294,25 @@ settings_untrusted_warn = function(patch) {
             .once = paste0("untrusted_setting:", path_key(root), ":", paste(lost, collapse = ",")))
 }
 
+#' Warns when a saved model setting names no model this session resolves; it is kept, since a
+#' provider registered later or a catalog refresh can make it valid (04 6.1.3). Routers and the
+#' `emulate:` prefix of `system1` are not models.
+#' @noRd
+settings_model_warn = function(patch, scope) {
+  for (k in intersect(names(patch), c("model", "small_model", "system1"))) {
+    v = patch[[k]]
+    if (is.null(v)) next
+    ref = if (identical(k, "system1")) sub("^emulate:", "", v) else v
+    if (!is.null(registry_get("router", ref))) next
+    tryCatch(model_canonical(ref, strict = TRUE), gptr_error_unknown_model = function(e) {
+      gptr_warn(paste0("`", k, "` = ", encodeString(v, quote = "\""), " was saved to the ", scope,
+                       " settings, but gptr does not know that model in this session: ",
+                       conditionMessage(e), " Undo with gptr_config(", k, " = NULL, .scope = \"",
+                       scope, "\")."), "unknown_model_setting", key = k, ref = v)
+    })
+  }
+}
+
 #' Show or change gptr's settings
 #'
 #' With no arguments, returns the effective settings with the layer each value came from:
@@ -1384,6 +1403,7 @@ gptr_config = function(..., .scope = NULL) {
     }
   }
   if (identical(scope, "project")) settings_untrusted_warn(patch)
+  settings_model_warn(patch, scope)
   invisible(prev)
 }
 

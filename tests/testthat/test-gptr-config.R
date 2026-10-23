@@ -1170,6 +1170,30 @@ test_that("gptr_config() takes bare identifiers and returns the previous values"
   expect_identical(gptr_config()$mode, "manual")
 })
 
+test_that("gptr_config() warns when a saved model setting names no known model (D-250)", {
+  skip_on_cran()
+  local_gw(workspace = FALSE)
+  cnd = expect_warning(gptr_config(model = opuss, .scope = "session"),
+                       class = "gptr_warning_unknown_model_setting")
+  expect_match(conditionMessage(cnd), "Unknown model reference 'opuss'", fixed = TRUE)
+  expect_match(conditionMessage(cnd), "gptr_config(model = NULL, .scope = \"session\")",
+               fixed = TRUE)
+  expect_identical(settings_read("session")$model, "opuss")
+  expect_warning(gptr_config(small_model = hakiu, .scope = "session"),
+                 class = "gptr_warning_unknown_model_setting")
+  expect_warning(gptr_config(system1 = "emulate:opuss", .scope = "session"),
+                 class = "gptr_warning_unknown_model_setting")
+  expect_identical(settings_read("session")$system1, "emulate:opuss")
+  # a name that resolves, an Ollama tag, a router: nothing to say
+  off = gptr_register(gptr_router("cheapest", route = function(request, ctx) "fake/fake-1"))
+  withr::defer(off())
+  expect_no_warning(gptr_config(model = opus, small_model = haiku, system1 = "emulate:sonnet",
+                                .scope = "session"))
+  expect_no_warning(gptr_config(model = "ollama/any-tag:1b", .scope = "session"))
+  expect_no_warning(gptr_config(model = cheapest, .scope = "session"))
+  expect_no_warning(gptr_config(model = "router:cheapest", .scope = "session"))
+})
+
 test_that("gptr_config(.scope = NULL) writes the project file when a workspace exists (IC-71)", {
   skip_on_cran()
   local_gw()

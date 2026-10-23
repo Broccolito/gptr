@@ -2082,3 +2082,21 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   lint-rules PASS 4280. Lint clean; no Rd change.
 - Deviations: D-250 (config-2 rule). Open: a project value that loosens a tighten key (`mode = yolo`) is dropped
   silently, trusted or not (§11.2, not a trust matter).
+
+### config-3 - gptr_config() warns when a saved model setting names no known model
+- Finding 58. Red: `^gptr-config$` FAIL 2, PASS 535: `gptr_config(model = opuss, .scope = "session")` raised no
+  condition.
+- Cause: `model`, `small_model` and `system1` pass `resolve_identifier()`, which returns an unknown unbound symbol
+  as its literal name, and the `ident` validator is only `check_string()`; nothing read the catalog until the
+  next bare `peter()` (in every later session, for a user-scope value), while the console's `/model` checks with
+  `model_canonical(strict = TRUE)`.
+- Fix: `settings_model_warn()` runs after the write: each of the three keys (`system1` less `emulate:`; a
+  registered router or `router:` passes) goes through `model_canonical(strict = TRUE)`, and an `unknown_model`
+  becomes warning `unknown_model_setting` (fields `key`, `ref`) quoting that message and the undo call. The value
+  is kept. 04 `gptr_config()` and §2.2 warnings amended; NEWS entry.
+- Green: `^gptr-config$` PASS 546 (opus, haiku, `emulate:sonnet`, `ollama/any-tag:1b`, a router by name and as
+  `router:` stay silent); 20 neighbour files PASS 5657; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 64, PASS 35379.
+  Lint clean; no Rd change.
+- Deviations: D-250 (config-3 rule). The warning quotes the `unknown_model` message instead of rebuilding its
+  suggestions, so catalog-2's alias and catalog-3's refresh hints carry over. Open: the use-time error of a bad
+  saved model still does not name its settings layer (the verifier's optional step 2, not planned).
