@@ -3194,13 +3194,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule (mcp-trusted): the `trusted` column of `gptr_mcp()` is the server spec's `trusted` (§11.7: a user `mcp.json`
   entry marked `"trusted": true`, whose `readOnlyHint` lowers tool risk); project trust is status `untrusted`.
   Formerly the column was `TRUE` for every startable server, opposite the spec's value (finding 105).
+- Rule (art-1): `peter$app(launch = NULL)`, both forms, launches when `gptr_has_human()`; when it does not, the
+  handle's `checks$messages` (and so the tool result) add `not launched: nobody is at an interactive console, so
+  vNNN was saved without starting it; pass launch = TRUE ...`. Formerly the default was base `interactive()`, deaf
+  to `gptr.interactive`, and the bare `(stopped)` led models in Rscript to build a second version (finding 56).
 - Contract-visible: 03 §4.1.3 and 04 §6.1.3 (identifier table, ident-1), 03 §4.3 (fork), §5.1 (resume status), §6.2
   (background asks), §6.10 (trust gates, tpl-2), §6.12 (also the guard), §6.17 (templates), §6.18 and §7.5
   `<workspace>`; 04 §4.6 (`gptr.container_end`), `gptr_fork(envir)`, `gptr_resume()`, `gptr_init()` and
-  `gptr_trust()` (tpl-2; its read, sessions-23), §5.12 `gptr_mcp_servers` `trusted` (mcp-trusted), §6.1.2 and `gptr_parallel()` (team-1), §7.0 and §7.17
-  `templates.sync` (tpl-1), §7.6 `opts$mode_from` and `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and
-  `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7, IC-52 (when the trust question is asked), IC-57;
-  `?gptr-background`, `?gptr_trust`.
+  `gptr_trust()` (tpl-2; its read, sessions-23), §5.12 `gptr_mcp_servers` `trusted` (mcp-trusted), §9.4 `app` (art-1;
+  also 03 §4.2), §6.1.2 and `gptr_parallel()` (team-1), §7.0 and §7.17 `templates.sync` (tpl-1), §7.6
+  `opts$mode_from` and `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and `eval_guard()`, §7.21, §10.2 row 22
+  (`how`), §15.7, IC-52 (when the trust question is asked), IC-57; `?gptr-background`, `?gptr_trust`.
 - Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team "team members
   and fan-out children are shown the caller's objects"; copy-eval (an overlay of a function frame);
   session-object "a fork's change report names the source objects its code changed in place"; eval-guard "q bound
@@ -3214,6 +3218,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   project registers its templates", "every project skill, agent and instruction location counts ...", "a relative
   skills.paths directory counts, and the question names skills", "a changed trust-gated file makes the project
   untrusted again"; gptr-capture "a bare hyphenated name is refused with its quoted form"; mcp-config "gptr_mcp()'s
-  trusted is the spec's ...".
+  trusted is the spec's ..."; artifact-app "peter$app() launches by default only at the console ...".
   Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1, gate-hint, tpl-1,
-  tpl-2, sessions-23, ident-1, mcp-trusted.
+  tpl-2, sessions-23, ident-1, mcp-trusted, art-1.

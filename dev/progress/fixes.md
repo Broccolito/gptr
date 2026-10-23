@@ -2229,3 +2229,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   trusted project's server stays FALSE with status configured); with mcp-*, arch-layers, lint-rules PASS 916 SKIP 1;
   zzz PASS 145. Lint clean; plan checks pass; `gptr_mcp.Rd` regenerated.
 - Deviations: D-252 (extended). Open: none.
+
+### art-1 - peter$app() launches by default only at the console, and says why it did not
+- Finding 56. Red: `^artifact-app$` FAIL 4 PASS 521: without `launch` in a non-interactive run the tool result
+  read only `(stopped)`; with `gptr.interactive = TRUE` nothing launched; the formals pinned `interactive()`.
+- Cause: both forms defaulted to base `interactive()`, which ignores `gptr.interactive`, and the skip gave no
+  reason, so a model in Rscript took it for a failure and built v002 with `launch = TRUE`.
+- Fix: `launch = NULL` in both forms, resolved in `artifact_app()` as `launch %||% gptr_has_human()`; a skip that
+  nobody asked for adds the message `not launched: nobody is at an interactive console, so v001 was saved without
+  starting it; pass launch = TRUE to start and check it now, or gptr_artifacts("x", open = TRUE) later`. The tool's
+  `launch` description, `?gptr_artifacts`, the tools-and-artifacts vignette, 03 §4.2 and 04 §9.4 say so.
+- Green: `^artifact-app$` PASS 525 (one version, no process record; `launch = FALSE` has no message; at the console
+  the start path runs); with artifact-*, copy-artifact, arch-layers, lint-rules, zzz (NOT_CRAN=true) PASS 3294 SKIP
+  10. Lint clean; plan checks pass; `gptr_artifacts.Rd` regenerated.
+- Deviations: D-252 (extended). The message is added once in `artifact_app()`, not in each caller; the test mocks
+  `artifact_start()` rather than the type's launch; D-252's contract line, left 156 wide by mcp-trusted, rewrapped.
+  Open: none.

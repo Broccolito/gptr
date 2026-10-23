@@ -697,7 +697,7 @@ evaluation without binding anything in the user's environment; recorded code kee
 | `py` | `peter$py(code, name = NULL, max_rows = 10L)` | `gptr_py` (`$value` converts to R); reticulate (Suggests) |
 | `sql` | `peter$sql(query, name = NULL, con = NULL, n = 10L)` | data frame (all rows); prints dims + `n` rows; duckdb registration of named frames, else the DBI connection in scope |
 | `knit` | `peter$knit(engine, code)` | output of a knitr engine; the shell engines run through `peter$sh()` [IC-67] |
-| `app` | `peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = interactive())` | `gptr_artifact`; URL, checks, screenshot image for the model; `kind` is any registered `artifact_type` |
+| `app` | `peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = NULL)` | `gptr_artifact`; URL, checks, screenshot image for the model; `kind` is any registered `artifact_type`; `launch = NULL` launches when `gptr_has_human()`, else the handle's messages say why not and how to start it |
 | `help` | `peter$help(name, package = NULL, budget = 800L)` | tool schema (`"<server>/<tool>"`, member names) or R help text via `tools::Rd2txt`, budgeted; `record = FALSE` |
 | `search` | `peter$search(words, limit = 8L)` | BM25 over members, plugin and MCP tools, skills and `search_source` records; `record = FALSE` |
 | `describe` | `peter$describe(x, budget = 150L)` | same as `gptr_describe()`; `record = FALSE` |
