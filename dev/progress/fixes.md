@@ -2697,3 +2697,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `precompute.R --check script-as-history` 0 problems; its knitted `.Rmd` is byte-identical
   to the edited one.
 - Deviations: none. Open: none.
+
+### steer-doc-5b - Every source of a script in one process keeps its recorded steers unsent
+- Second validation of steer-doc-5 (high).
+- Red: FAIL 7 in `^doc-replay$` (PASS 836): the follow-up, `gptr_steer()` and pipe-steer scripts,
+  each sourced again three times in the recording process (auto, replay, auto), sent the recorded
+  steer from the second source on (one or two more requests each), and the pipe steer wrote a
+  second block into the file.
+- Cause: session_replay_apply() set a block's notes only while the block was not yet `seen`, and
+  replay_note_take() used them up, so the live session that had seen the block got none again.
+- Fix: replay_notes_add(s, block, doc) sets the block's notes anew on every replay, keyed by block
+  (no pile-up), also from replay_adopt(); replay_note_take() takes a text from the block holding
+  it. IC-55 and D-249 amended.
+- Green: `^(doc-replay|gptr-sdk)$` PASS 947; `^(session-object|gptr-gateway|agent-background|
+  doc-blocks|utils-text|arch-layers|lint-rules)$` PASS 1598 (NOT_CRAN=true). Lint clean.
+- Deviations: D-249 (extended). Open: none.

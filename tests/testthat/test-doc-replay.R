@@ -2652,21 +2652,22 @@ test_that("a replayed session keeps the recorded steers and every replayed turn 
   expect_identical(vapply(msgs[c(4, 7, 12)], function(m) m$origin_text, ""), unname(steers))
 })
 
-# Record `lines` as a script, then replay it in replay mode: no request, the file unchanged, the
-# session's queue empty; returns the replay's environment
-doc_steer_replay = function(x, lines, note, .env = parent.frame()) {
+# Record `lines` as a script, then source it again three times in this process, in auto and replay
+# mode, as one does interactively: each time no request, the file unchanged, the queue empty
+doc_steer_replay = function(x, lines, note) {
   f = file.path(x$root, "steer.R")
   writeLines(lines, f)
   doc_e2e_source(f)
   recorded = readLines(f)
   expect_true(note %in% recorded)
   n = length(fake_requests(x$fake))
-  local_gptr_options(replay = "replay", .env = .env)
-  e = doc_e2e_source(f)
-  expect_length(fake_requests(x$fake), n)
-  expect_identical(readLines(f), recorded)
-  expect_identical(session_data(e$s)$queue, list(steer = list(), follow_up = list()))
-  e
+  for (mode in c("auto", "replay", "auto")) {
+    local_gptr_options(replay = mode)
+    e = doc_e2e_source(f)
+    expect_length(fake_requests(x$fake), n)
+    expect_identical(readLines(f), recorded)
+    expect_identical(session_data(e$s)$queue, list(steer = list(), follow_up = list()))
+  }
 }
 
 doc_bg_script = list(fake_tool("r", code = "a = 1"), fake_tool("r", code = "e = a + 100"),

@@ -3193,11 +3193,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   a new session; IC-49). A replay reconstructs a block's steers and follow-ups in body order, between its runs of
   code (a steer as the live relay); a reconstructed piped session gains each block's turn, and one rebuilt from its
   JSONL moves to the end of each block's turn until a live run (was one merged `r` call and no steer, and every
-  piped turn after the first lost, a dead branch in the session file; IC-46). A replayed block's steer and follow-up
-  texts stay on the session as notes: `gptr_steer()` or a pipe into the idle replayed session drops an equal text
-  with one notice, and a matching item already queued is taken back (was sent again: replay mode failed for want of a
-  record, auto mode made an extra model call and recorded the steer twice); a live run clears them. A turn
-  `gptr_step()` or `gptr_wait()` starts from queued input under a binding says once that it is not recorded (IC-55).
+  piped turn after the first lost, a dead branch in the session file; IC-46). Each replay of a block, also a second
+  source in one process, sets its steer and follow-up texts on the session as its notes: `gptr_steer()` or a pipe
+  into the idle replayed session drops an equal text with one notice, and a matching item already queued is taken
+  back (was sent again: replay mode failed for want of a record, auto mode made an extra model call and recorded the
+  steer twice, and a second source in one process found no notes); a live run clears them. A turn `gptr_step()` or
+  `gptr_wait()` starts from queued input under a binding says once that it is not recorded (IC-55).
 - Contract-visible: 04 §4.4 `r` details `outputs` and `value`, §5.1 `print` and `.d` `replay_rows`, §6.4
   `gptr_doc()` and `gptr_cache()`, §6.5 `gptr_resume()` and `gptr_steer()`, §6.6 `gptr_return()`, §7.6 replay
   functions, §7.15 `doc_block_lines()`, §11.5 `cost`, `value`, `children`, body and transcript, §11.9, §15.3
@@ -3222,4 +3223,4 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   rebuilt and reconstructed, steers and follow-ups between runs, recorded steers not sent again; test-session-object:
   the seek along piped blocks; test-gptr-sdk: the unrecorded-turn notice. Evidence: progress/fixes.md Task FIX-16
   doc-1, doc-2, doc-8, doc-10, doc-11, replay-1, replay-2, replay-2c to -2f, replay-3, replay-4b,
-  replay-5, export-2, export-2b, store-1, doc-1b, steer-doc-1 to -5.
+  replay-5, export-2, export-2b, store-1, doc-1b, steer-doc-1 to -5, steer-doc-5b.
