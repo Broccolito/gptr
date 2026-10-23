@@ -1464,6 +1464,50 @@ test_that("a built session needs no key until a run starts it (D-251)", {
   expect_s3_class(session_data(team$a)$condition, "gptr_error_no_key")
 })
 
+test_that("a call, gptr_step() and a parallel member each discover an Ollama model once (D-251)", {
+  local_gw()
+  local_gptr_options(replay = "auto")
+  settings_write("user", list(egress = list(ollama = "ack")))
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  # a window the standard preset fits in (the fixture's num_ctx is 8192)
+  models = ollama_fixture()
+  models$`qwen3:1.7b`$show$parameters = "num_ctx 40960"
+  srv = local_ollama_server(models)
+  # the fake api plays the Ollama model's replies through the live fake named "ollama"; each
+  # request's model carries what discovery found (tool calling), not the catalog's guess
+  engine = gptr_fake_provider(list("local answer"), name = "ollama")
+  seen = new.env()
+  seen$tool_call = logical()
+  off = gptr_register(gptr_adapter("openai-completions", "inprocess",
+                                   stream = function(model, context, opts) {
+                                     seen$tool_call = c(seen$tool_call, model$tool_call)
+                                     fake_stream(model, context, opts)
+                                   }))
+  withr::defer(off())
+  qwen = "ollama/qwen3:1.7b"
+  shows = function() sum(endsWith(srv$calls, "/api/show"))
+  team = gptr_parallel(a = peter("x", model = qwen, envir = new.env()))
+  expect_identical(c(team$a$status, team$a$text), c("idle", "local answer"))
+  expect_identical(shows(), 1L)
+  # each route again without evidence, as in a fresh process: building prepares nothing
+  catalog_reset(discovered = TRUE)
+  s = peter("y", model = qwen, envir = new.env(), .run = FALSE)
+  expect_identical(shows(), 1L)
+  gptr_step(s)
+  expect_identical(list(s$status, shows()), list("idle", 2L))
+  catalog_reset(discovered = TRUE)
+  s = peter("z", model = qwen, envir = new.env())
+  expect_identical(list(s$status, shows()), list("idle", 3L))
+  expect_identical(seen$tool_call, rep(TRUE, 3L))
+  # a member whose model cannot be prepared ends `error`; the team still returns
+  catalog_reset(discovered = TRUE)
+  srv$down = TRUE
+  team = gptr_parallel(a = peter("x", model = qwen, envir = new.env()))
+  expect_identical(team$a$status, "error")
+  expect_s3_class(session_data(team$a)$condition, "gptr_error_network")
+})
+
 test_that("a continuation switches to a provider spec that only its session knows (D-251)", {
   local_gw()
   local_gptr_options(replay = "auto")

@@ -2016,6 +2016,20 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   returns, `gptr_step(s)` refuses with `gptr_error_no_key`, and the session stays on Opus in plan mode with no new
   turn (as on main). `?peter` `.run`, 04 §6.1.2 and D-251 say so. Red: none, a docs unit. Green
   `^(gptr-gateway|zzz|lint-rules|doc-)` PASS 3014 SKIP 2. Lint and Rd clean.
+- Review: r4 (medium) applied. Since r2 a `gptr_parallel()` member is built with `ready = FALSE`, so nothing prepared
+  its Ollama model: its request ran `provider_ready(prepare = FALSE)`, which refuses a model without discovery
+  evidence, and `gptr_parallel(a = peter("x", model = "ollama/qwen3:1.7b"))` in a fresh process ended `error` ("no
+  current discovery evidence"), where 99e12070 discovered it at build. `run_target()` now prepares the session's
+  model at the run's first request to it (`model_prepare()`, discovery only without current evidence), before it
+  resolves the record the run keeps: a member runs on the discovered record (tool calling, window), not the
+  catalog's guess (`tool_call = FALSE`, no window), which preparing inside `provider_stream()` kept (tried). Each
+  route discovers once: a plain call and `gptr_step()` at their checks (their first request runs `model_prepare()`
+  again and discovers nothing), a member at its first request, whose refusal still ends it `error`; building needs
+  no key. A router's choice is unchanged. `ollama_fixture()` and `local_ollama_server()` moved to helper-ollama.R.
+  Red FAIL 7 on af83cfe4 (the member `error`, undiscovered, without tool calling, then the counts; a member whose
+  server is down ended `gptr_error_not_available`, not the server's `gptr_error_network`). Green `^gptr-gateway$`
+  PASS 433; `^(catalog-models|provider-registry|agent-|subagent-|s1-|gptr-|arch-layers|lint-rules|
+  copy-gateway|prompt-compact)` PASS 6591 SKIP 1. 04 §6.1.2; D-251. Lint clean.
 - Deviations: D-251 (extended). From the plan: the continuation guards its target whether or not it changes and
   `gateway_run()` guards only a new session (one check per switch); `session_new()` sets `gptr_last()`, so a
   refused new call restores it.

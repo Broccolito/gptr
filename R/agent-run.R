@@ -445,7 +445,9 @@ input_insert_blocks = function(input, blocks) {
 
 #' The model record of the next request: a pending `ctx$set_model()` switch first, then the router
 #' (`router.call`, IC-69) for `router:` models, else the session's model
-#' A decision-only model is refused before any request is built (IC-74, D-017).
+#' A decision-only model is refused before any request is built (IC-74, D-017). The run's first
+#' request to the session's model prepares it, as the gateway's checks do (model_prepare()
+#' discovers an Ollama model only without current evidence, D-251).
 #' @noRd
 run_target = function(run) {
   d = session_data(run$shell)
@@ -454,6 +456,7 @@ run_target = function(run) {
   if (is.null(run$model) || !identical(run$model_key, d$model)) {
     rec = run_model_resolve(d$model, d$id)
     stream_chat_model(rec)
+    if (catalog_ollama_route(rec, NULL)) rec = model_prepare(rec$ref, run$opts$safety)
     run$model = rec
     run$model_key = d$model
   }

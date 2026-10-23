@@ -3143,11 +3143,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   and replay only (`ready = FALSE`), and its request refuses the rest, as before (a keyless choice:
   `gptr_error_no_key`, no request). So does building a session (`.run = FALSE`, a `gptr_parallel()` member):
   `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a member that cannot reach its model
-  ends `error` (kept by `on_error = "return"`). A piped `.run = FALSE` call applies its model, mode and tools at once;
-  a `gptr_step()` or `gptr_wait()` that then refuses leaves them, with no turn. A failure after a request (HTTP
-  4xx/5xx) keeps INFRA-04. A switch resolves the target as its session sees it (`model_canonical(strict = TRUE,
-  session =)` through `run_model_resolve()`), so a piped `model =` provider spec and a later `.opts$thinking` on it
-  switch (were `gptr_error_unknown_model`).
+  ends `error` (kept by `on_error = "return"`). A run's first request to its session's model prepares it as the
+  guards do (`run_target()`; `model_prepare()` discovers an Ollama model only without current evidence), so a plain
+  call, `gptr_step()`, `gptr_wait()` and a member each discover an Ollama model once, a member at its first request
+  and with the discovered record (was, once building stopped preparing: a member refused for "no current discovery
+  evidence"). A piped `.run = FALSE` call applies its model, mode and tools at once; a `gptr_step()` or `gptr_wait()`
+  that then refuses leaves them, with no turn. A failure after a request (HTTP 4xx/5xx) keeps INFRA-04. A switch
+  resolves the target as its session sees it (`model_canonical(strict = TRUE, session =)` through
+  `run_model_resolve()`), so a piped `model =` provider spec and a later `.opts$thinking` on it switch (were
+  `gptr_error_unknown_model`).
 - Rule (sessions-4): a continuation without `envir =` of a session with no kept home whose `home_label` is a
   function frame (R2) informs once per session (`gptr_message_home_not_kept`) when `home_label(call$envir)`
   differs, naming both and `envir = new.env()`. Was silent. R2 and the IC-40 precedence are unchanged.
@@ -3229,9 +3233,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `?gptr_security` (a computed `system()` command). 04 §4.6 `gptr.frozen`, §6.5 `gptr_resume()`; `?gptr_sessions`.
 - Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking applies ...",
   "a call refused before its run changes neither ...", "a router's choice without a key stops the run ...",
-  "a built session needs no key until a run starts it ...", "a continuation switches to a provider spec that only
-  its session knows ...", "a continuation of a session that kept no workspace
-  ...", "a named dot that abbreviates an argument ...";
+  "a built session needs no key until a run starts it ...", "a call, gptr_step() and a parallel member each discover
+  an Ollama model once ...", "a continuation switches to a provider spec that only its session knows ...",
+  "a continuation of a session that kept no workspace ...", "a named dot that abbreviates an argument ...";
   prompt-sections "the tool array skips unavailable and missing tools ..."; agent-run "a request rejected or never
   received costs nothing ...", "a reported usage keeps its unknown counts ...", "an overflow condition carries the
   provider's prompt count ...", "an extended token budget is checked again ..."; session-budget "a token budget the
