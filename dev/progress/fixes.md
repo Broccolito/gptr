@@ -2435,3 +2435,21 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   recorded through `gptr_source()`: `.gptr_value_<id> = (coef(fit))`, and a simulated later
   process's replay returns the coefficients without a message.
 - Deviations: D-249 (extended). Open: none.
+
+### replay-2d - R served to a CLI route records what gptr_return() designated
+- Review of replay-2 (`R/mcp-server.R`, medium; the CLI-route root cause of findings 155, 151).
+- Red: FAIL 2 in `^mcp-recording$` (PASS 50): a fake model calling a probe tool that serves `fit =
+  lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))` through `mcp_dispatch_local()`, recorded with
+  `gptr_source()`, wrote the `.gptr_value_<id> = (coef(fit))` line but no `value=`, and a simulated
+  later process's replay gave `$value` NULL.
+- Cause: `mcp_serve_r()` (Claude Code, Codex) records a `gptr.mcp_r` entry without `value`, so
+  `doc_turn_r()` never wrote the hidden name, and `doc_turn_body()` skips the boxed `gptr.value`
+  record that could have named one.
+- Fix: `mcp_serve_r()` counts the session's value records before evaluating and adds
+  `value = r_new_value_name()` to the entry, as the `r` tool's `details$value`;
+  `r_new_value_name()` moves from `tool-r.R` to the L4 service file `eval-format.R` beside
+  `r_doc_outputs()`, as `mcp-server.R` may not call `tool-r.R` (IC-33).
+- Green: `^mcp-recording$` PASS 52; `^(mcp-.*|tool-r|eval-format|doc-blocks|doc-replay|cli-codex|
+  cli-claude|arch-layers|lint-rules)$` PASS 2913 SKIP 1 (Windows only; NOT_CRAN=true). Lint clean;
+  plan checks pass. The relayed-Codex test's bare `gptr_return(beta)` is unchanged.
+- Deviations: D-249 (extended). Open: none.

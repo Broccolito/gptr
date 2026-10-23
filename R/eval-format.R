@@ -159,3 +159,13 @@ r_doc_outputs = function(res) {
     list(lines = lines, n = length(o))
   })
 }
+
+#' Name designated through gptr_return() during an evaluation (the newest value record), or NULL;
+#' recorded as `details$value` by the r tool and served MCP R alike
+#' @noRd
+r_new_value_name = function(session, n_before) {
+  if (is.null(session)) return(NULL)
+  vals = session_data(session)$values %||% list()
+  if (length(vals) <= n_before) return(NULL)
+  vals[[length(vals)]]$name
+}

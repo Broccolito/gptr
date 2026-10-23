@@ -95,15 +95,6 @@ r_collect_unhook = function(ids) {
   invisible(NULL)
 }
 
-#' Name designated through gptr_return() during this call (the newest value record), or NULL
-#' @noRd
-r_new_value_name = function(session, n_before) {
-  if (is.null(session)) return(NULL)
-  vals = session_data(session)$values %||% list()
-  if (length(vals) <= n_before) return(NULL)
-  vals[[length(vals)]]$name
-}
-
 #' Messages of the events of one type
 #' @noRd
 r_event_text = function(events, type) {

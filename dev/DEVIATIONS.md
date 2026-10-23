@@ -3145,7 +3145,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   gptr_return()` on one line) is recorded as `.gptr_value_<block id> = (<expression>)` with
   `value=.gptr_value_<block id>`, so every replay and a plain export recompute it (was `value=<its label>` and the
   line dropped: replay said "not bound" and `$value` was NULL); `gptr_return(<name>)` is unchanged; `value=` holds
-  one name, never an expression's label, else is omitted (11.5).
+  one name, never an expression's label, else is omitted (11.5). R served over MCP to a CLI route records the
+  designated name in its `gptr.mcp_r` entry (`value`), as the `r` tool's `details$value`, so the same holds there.
 - Rule: a team or fan-out block records the code of each child that designated a value with `gptr_return()` in its
   child overlay, as for a child with exports (was only with exports), and `children=` entries are
   `<name>:<session id>[:<value>]`, the third field the child's `value=` name (a bare name or
@@ -3178,10 +3179,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-doc-replay: the other-binding notice and its four silent cases; test-doc-formats: the machine-log line with
   and without `.gptr/`; test-doc-blocks: recorded `#>` cuts, the known-zero cost; test-tool-r: per-expression
   outputs; test-doc-replay: the listed zero cost, the in-process replay; test-session-object: a held or undone
-  block; test-doc-blocks, test-doc-replay, test-doc-io, test-doc-export: a recorded `gptr_return(<expression>)`;
-  test-doc-replay: fan-out and team children's values in the recording process, an in-process replay and two
-  simulated later processes, a three-field `children=` entry; test-session-object: the replayed footer;
+  block; test-doc-blocks, test-doc-replay, test-doc-io, test-doc-export, test-mcp-recording: a recorded
+  `gptr_return(<expression>)`; test-doc-replay: fan-out and team children's values in the recording process, an
+  in-process replay and two simulated later processes, a three-field `children=` entry; test-session-object: the
+  replayed footer;
   test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself, handle position;
   test-session-store: the resume hint; test-doc-replay: the no-answer notice in process, under `Rscript` and for
   fan-out children. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1,
-  replay-2, replay-2c, replay-3, replay-5, export-2, store-1.
+  replay-2, replay-2c, replay-2d, replay-3, replay-5, export-2, store-1.
