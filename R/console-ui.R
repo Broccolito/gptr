@@ -316,7 +316,8 @@ ui_parse_choice = function(ans, labels, multiple = FALSE) {
 
 #' Console select() (D-243): `? <title>`, then under its text its details dim, the numbered
 #' choices and a dim hint, then the person's chevron at column 0, each word-wrapped under its own
-#' text; NA = cancelled; attr "other" = free text, unless a console command (ui_console_command())
+#' text; NA = cancelled, also by a fifth invalid answer, which a dim row says; attr "other" = free
+#' text, unless a console command (ui_console_command())
 #' Title line feeds are intentional (also for ask questions); labels and details stay escaped.
 #' @noRd
 ui_console_select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
@@ -355,9 +356,11 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
       next
     }
     if (allow_other && nzchar(trimws(ans))) return(structure(NA_integer_, other = trimws(ans)))
+    if (attempt == 5L) break
     console_write(ui_hint(paste0("Not an answer. Type ", if (multiple) "numbers separated by commas"
                                  else "a number", if (allow_other) ", or your own answer", ".")))
   }
+  console_write(ui_hint("No valid answer after 5 tries; cancelled."))
   NA_integer_
 }
 

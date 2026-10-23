@@ -1085,7 +1085,8 @@ exact name.
 
    The console's first-use setup runs before its banner or chat input only for a new interactive
    console without an explicit or effective configured model. It offers the expected Codex and
-   Claude CLI adapters plus manual API/Ollama instructions. A usable CLI with reported sign-in, or
+   Claude CLI adapters, manual API/Ollama instructions and Cancel, which Enter chooses (cheat-sheet
+   review, IC-77). A usable CLI with reported sign-in, or
    unknown login explicitly selected by the user, saves `codex/default` or `claude-cli/default`
    through `gptr_config(model = ..., .scope = "user")` and continues. Cancellation, manual setup,
    unavailable/signed-out CLI or a same-name non-CLI provider returns `NULL` without saving.
@@ -5568,7 +5569,8 @@ its part in its own commit, and Task 27 finalises them.
     Every row a question writes when it asks again is dim at column 4, under its text as the keys row
     (`ui_hint()`, review of Tasks 16-21): the approval's `Not an answer`, hint, `a and p are not offered` and
     `No valid answer after 5 tries; refused.`, a choice's `Not an answer. Type a number[, or your own
-    answer].` (it was `  Please enter one of the numbers shown.` in ink), a paste's `A pasted block is not an
+    answer].` (it was `  Please enter one of the numbers shown.` in ink) and in place of its fifth
+    `No valid answer after 5 tries; cancelled.` (cheat-sheet review), a paste's `A pasted block is not an
     answer`, and the pause menu's `Paused. Type s, f, c, a or b.`; at column 2, under the `?`, they read as a
     new item. In an IDE console (class L) an invalid approval answer of several words adds `A draft typed
     during the run joins your answer; clear the line first.`: RStudio and R.app keep a draft typed while R was

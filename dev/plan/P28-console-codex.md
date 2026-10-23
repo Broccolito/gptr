@@ -651,6 +651,11 @@ Decisions:
     `Enter = <default>`;
   - the `› ` prompt. (Amended in the review of Tasks 16-21: a free-text answer whose first word names a
     console command waits for the next prompt, and the question reads again; a path stays an answer.)
+  - (Amended in the cheat-sheet review: console-1.) A choice asks at most 5 times; the fifth invalid
+    answer writes `No valid answer after 5 tries; cancelled.` in place of one more `Not an answer`, as
+    an approval's refusal does. The first-use setup menu adds `Cancel and return to R`, its default, so
+    its hint reads `Choose a number; Enter = Cancel and return to R` and Enter cancels (main had no
+    default: Enter or `0` asked again, five times, then cancelled).
   The OAuth inputs drop the `: ` that ended their prompts (amended in Task 12). Each part word-wraps at
   the approval rows' width under its own text: the title's later rows at column 4, a choice's under its
   label (amended in the review of Tasks 8-15: agent questions are usually longer than a row, and the
@@ -679,6 +684,10 @@ Tests (`test-console-ui.R`), RED first:
   read on a terminal sets `-echo` after any restore and before the read and restores the saved modes after it,
   also when the read signals an interrupt; a non-secret read never sets it; where stty fails or the console is
   L the notice shows once; a pty case types a key at `gptr_login(..., method = "key")` and never sees it.
+- (Amended in the cheat-sheet review: console-1.) `test-console-ui.R`: five invalid answers to a choice
+  give NA under `No valid answer after 5 tries; cancelled.`. `test-console-setup.R`: Enter at the setup
+  menu cancels after one read, its Cancel row and hint shown; a scripted 4 cancels; a call with a prompt
+  resolves its model and shows no menu.
 
 Spec: IC-77, 03 §6.8.3, §6.17 and NS-1 (§10.1).
 
@@ -686,9 +695,10 @@ Files: `R/console-ui.R` (`ui_question()`, `ui_permission_lines()`, `ui_console_p
 `ui_console_select()`, `ui_console_input()`), `R/console-render.R` (`console_state()`,
 `console_on_tool_start()`: the last printed call ids; `console_gap()`), `R/auth-oauth.R` (the input
 prompts), `R/utils-options.R` (`gptr_readline()`, `readline_answer()`; amended in the
-cheat-sheet review: auth-2), the tests above, and the approval sentences of
-`vignettes/interactive-console.Rmd` and `vignettes/teams-and-background.Rmd` (and their `.orig`). Amended in
-Task 12.
+cheat-sheet review: auth-2), `R/console-repl.R` (the first-use setup) and `?peter` (`R/gptr-gateway.R`; amended
+in the cheat-sheet review: console-1), the tests above, and the approval sentences of
+`vignettes/interactive-console.Rmd` and `vignettes/teams-and-background.Rmd` (and their `.orig`), with the
+first use paragraph of the former (console-1). Amended in Task 12.
 
 Commit: `feat(console): approvals ask under the call they gate`.
 

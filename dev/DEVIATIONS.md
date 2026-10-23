@@ -3606,6 +3606,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     04 §15.10 IC-77. Tests: test-console-ui.R "a terminal reads a secret with its echo off, then restores it
     (cheat-sheet review)", "a console that shows a secret as typed says so once (cheat-sheet review)", "a
     terminal: gptr_login() reads a key without showing it (cheat-sheet review)".
+- Cheat-sheet review (2026-10-23, console-1): the first-use setup menu adds `4  Cancel and return to R`, its
+  default, so its hint reads `Choose a number; Enter = Cancel and return to R` and Enter cancels at once;
+  before, it had no default, and Enter or `0` asked again, five times under `Not an answer. Type a
+  number.`, and then cancelled. A choice's fifth invalid answer writes `No valid answer after 5 tries;
+  cancelled.` in place of one more `Not an answer`, as an approval's refusal does. Contract-visible: 04 §6.1.1
+  (setup) and §15.10 IC-77. Tests: test-console-setup.R "the console menu offers Cancel, and Enter chooses it
+  (cheat-sheet review)", "a call with a prompt resolves its model and never shows the setup menu";
+  test-console-ui.R "a choice ends after five invalid answers, saying it is cancelled (cheat-sheet review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Pending (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

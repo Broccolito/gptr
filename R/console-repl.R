@@ -1012,13 +1012,13 @@ repl_setup = function(rs) {
   cli_names = c("Codex CLI", "Claude Code CLI")
   labels = c(sprintf("%-*s  %-*s  %s", max(nchar(cli_names)), cli_names,
                       max(nchar(shown_status)), shown_status, shown_login),
-              "Manual setup (API or Ollama)")
+              "Manual setup (API or Ollama)", "Cancel and return to R")
   choice = ui_get()$select(
-    "Welcome to Peter.\nChoose a default model provider.", labels,
+    "Welcome to Peter.\nChoose a default model provider.", labels, default = 4L,
     details = c("Saved in your user settings for future sessions.",
                 "CLI login status does not verify billing or online access.",
                 "Manual setup shows API and Ollama commands, then returns to R."))
-  if (length(choice) != 1L || is.na(choice) || !choice %in% seq_along(labels)) {
+  if (length(choice) != 1L || !choice %in% 1:3) {
     console_notice("Setup cancelled. No default provider was saved.")
     return(FALSE)
   }

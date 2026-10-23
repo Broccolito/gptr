@@ -795,6 +795,16 @@ test_that("every question asks again in one style: dim rows at column 4 (review)
   expect_true(dim("    Not an answer: 'zz' (kept in history).") %in% out$shown)
 })
 
+test_that("a choice ends after five invalid answers, saying it is cancelled (cheat-sheet review)", {
+  withr::local_options(cli.num_colors = 256L)
+  dim = console_style()$dim
+  out = console_try(function() ui_console_select("Pick", c("a", "b")), rep("x", 5L))
+  expect_identical(out$result, NA_integer_)
+  expect_identical(out$asked, 5L)
+  expect_true(utils::tail(out$shown, 1L) == dim("    No valid answer after 5 tries; cancelled."))
+  expect_identical(sum(out$shown == dim("    Not an answer. Type a number.")), 4L)
+})
+
 test_that("in an IDE console an answer of several words names the draft left on the input line", {
   root = local_project()
   local_mocked_bindings(gptr_is_interactive = function() TRUE)

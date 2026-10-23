@@ -36,9 +36,10 @@ permits your explicit choice with a notice; `Not signed in` returns to R with te
 instructions. CLI-reported login does not verify online access or subscription billing; an
 API-key login can also count as signed in. Context-sharing acknowledgment remains separate.
 
-Manual setup prints API and local Ollama commands and returns to R; cancellation, a missing CLI
-or a non-CLI replacement of a shortcut also returns without saving a default. Configure a model
-as shown in [Language models](language-models.html), then call `peter()` again.
+Manual setup prints API and local Ollama commands and returns to R; cancellation (choose Cancel
+or press Enter), a missing CLI or a non-CLI replacement of a shortcut also returns without saving
+a default. Configure a model as shown in [Language models](language-models.html), then call
+`peter()` again.
 An existing session, an explicit or effective configured model, `.stdin = TRUE` and
 noninteractive workflows skip setup. Calls with a prompt use their normal model resolution.
 
