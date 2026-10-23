@@ -1112,6 +1112,26 @@ test_that("verbosity 1 reports tool calls and the end as progress messages", {
     "gptr: done - 0 requests", fixed = TRUE)
 })
 
+test_that("verbosity 1 says a refused call was not run and counts its code lines (console-3)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_project()
+  local_permission_rules()
+  local_gptr_options(verbose = 1L, quiet = FALSE, mode = "manual")
+  code = "cat('== check ==\\n')\nstr(mtcars)\nwriteLines('hi', 'out.txt')"
+  progress = function() {
+    fake = gptr_fake_provider(list(fake_tool("r", code = code), "done"))
+    msgs = testthat::capture_messages(utils::capture.output(tryCatch(
+      peter("check", model = fake, envir = new.env()), gptr_error_permission = function(e) NULL)))
+    paste(msgs, collapse = "")
+  }
+  out = progress()
+  expect_match(out, "gptr: r  cat('== check ==\\n')  (+2 more lines)\n", fixed = TRUE)
+  expect_match(out, "gptr: r not run: approval is needed", fixed = TRUE)
+  expect_no_match(out, "r failed", fixed = TRUE)
+  gptr_permissions(deny = "r(fn:writeLines)")
+  expect_match(progress(), "gptr: r not run: denied by the rule r(fn:writeLines)\n", fixed = TRUE)
+})
+
 test_that("a cut answer keeps what it received, the cut marked (visual review)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   cut = function(text, cut = TRUE) {

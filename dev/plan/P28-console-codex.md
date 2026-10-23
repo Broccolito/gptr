@@ -14,8 +14,9 @@ template, within what R consoles support reliably:
   input area is shaded. R code is highlighted.
 - A minimal status shows the model, the context left and the mode.
 - Completion works only after gptr's trigger characters.
-- Only four small backend changes. History: issues #12, #28, #30 and #46; D-183..D-185, D-221;
-  IC-75..IC-77.
+- Only four small backend changes. (Amended in the cheat-sheet review: console-3 adds a fifth: the
+  end of a refused call carries `refused`, why it did not run, so verbosity 1 says `not run`, not
+  `failed`.) History: issues #12, #28, #30 and #46; D-183..D-185, D-221; IC-75..IC-77.
 
 **Evidence:** five research lanes, then two independent judges (scores 7 and 7); their changes
 are taken below unless a decision says why not:

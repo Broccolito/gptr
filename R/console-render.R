@@ -714,6 +714,12 @@ console_preview = function(input) {
   strsplit(text, "\n", fixed = TRUE)[[1L]]
 }
 
+#' The term after a call's first line that counts its other lines (D-187): `  (+N more lines)`
+#' @noRd
+console_more_lines = function(lines) {
+  if (length(lines) > 1L) paste0("  (+", length(lines) - 1L, " more lines)") else ""
+}
+
 #' A tool's name as the console shows it (D-245): an MCP tool `mcp__<server>__<tool>` as
 #' `server/tool`; escaped
 #' @noRd
@@ -1042,8 +1048,9 @@ console_on_message_end = function(event, ctx) {
 }
 
 #' tool_execution_start: the call's lines (verbosity 2), whose ids its approval reads (D-243), with
-#' the tool's name as the live row's state word, or a progress message (verbosity 1); an r call,
-#' which evaluates in this process, freezes its record, and a shown sub-agent's draws the row once
+#' the tool's name as the live row's state word, or a progress message of its first line and
+#' `(+N more lines)` (verbosity 1); an r call, which evaluates in this process, freezes its
+#' record, and a shown sub-agent's draws the row once
 #' @noRd
 console_on_tool_start = function(event, ctx) {
   rec = console_record(event)
@@ -1057,8 +1064,10 @@ console_on_tool_start = function(event, ctx) {
   call = list(id = event$tool_call_id, name = event$tool_name, input = event$input %||% list())
   v = verbosity()
   if (v == 1L) {
+    lines = console_preview(call$input)
+    lines = lines[nzchar(trimws(lines))]
     console_progress(paste0("gptr: ", console_escape(call$name %||% "?", FALSE), "  ",
-                            console_escape(c(console_preview(call$input), "")[[1L]], FALSE)))
+                            console_escape(c(lines, "")[[1L]], FALSE), console_more_lines(lines)))
   } else if (v >= 2L) {
     assign(paste0("t", call$id), call, envir = rec$tools)
     rec$what = console_tool_name(call$name)
@@ -1074,9 +1083,10 @@ console_on_tool_start = function(event, ctx) {
 }
 
 #' tool_execution_end: queue the pause-menu items and print the artifact lines held while tools
-#' ran, keep the elapsed time for the result line, report a failure at verbosity 1; the end of a
-#' call served in a live run carries its `content` and prints its result line (D-192); a CLI
-#' route's informational tool event leaves its request pending, so the live row says thinking
+#' ran, keep the elapsed time for the result line, report a failure at verbosity 1, a refused
+#' call as not run; the end of a call served in a live run carries its `content` and prints its
+#' result line (D-192); a CLI route's informational tool event leaves its request pending, so the
+#' live row says thinking
 #' @noRd
 console_on_tool_end = function(event, ctx) {
   policy_flush()
@@ -1095,7 +1105,13 @@ console_on_tool_end = function(event, ctx) {
                          event[c("content", "is_error", "details", "elapsed")])
   }
   if (verbosity() == 1L && isTRUE(event$is_error) && console_foreground(rec)) {
-    gptr_inform(paste0("gptr: ", console_escape(event$tool_name %||% "?", FALSE), " failed"),
+    why = event$refused
+    end = if (rlang::is_string(why)) {
+      paste0(" not run", if (nzchar(why)) paste0(": ", console_escape(why, FALSE)))
+    } else {
+      " failed"
+    }
+    gptr_inform(paste0("gptr: ", console_escape(event$tool_name %||% "?", FALSE), end),
                 "progress", .stream = "stderr")
   }
   if (isTRUE(rec$request_pending) && console_render_on(rec)) console_live_start(rec)

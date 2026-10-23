@@ -73,9 +73,18 @@ dispatch_one = function(run, call, st = NULL) {
 }
 
 #' The pipeline of one call: lookup, validation, tool_call hooks, perm_check(), checkpointers,
-#' execution, tool_result hooks; a run aborted while the call is prepared ends it unrun
+#' execution, tool_result hooks; a run aborted while the call is prepared ends it unrun. A call
+#' refused (a hook's block, a denial, the abort) leaves why in `st$refused` (dispatch_finish()).
 #' @noRd
 dispatch_steps = function(run, call, st = NULL) {
+  refuse = function(why, text) {
+    if (!is.null(st)) st$refused = why
+    tool_error(text)
+  }
+  aborted = function() {
+    refuse("the run was aborted", paste0("Tool call not executed: the run was aborted (",
+                                         run$signal$reason %||% "user", ")."))
+  }
   ctx = run_ctx(run)
   if (is.null(call$tool)) return(tool_error(paste0("Tool ", call$name, " not found")))
   v = tool_validate(tool_frozen(run, call$tool), call$input)
@@ -85,14 +94,14 @@ dispatch_steps = function(run, call, st = NULL) {
   }
   call$input = v$input
   call = tool_call_hook(run, call, call_risk(call, ctx, run))
-  if (!is.null(call$blocked)) return(tool_error(call$blocked))
-  if (isTRUE(run$signal$aborted)) return(dispatch_aborted_result(run))
+  if (!is.null(call$blocked)) return(refuse(call$refused, call$blocked))
+  if (isTRUE(run$signal$aborted)) return(aborted())
   dec = perm_check(call, run)
   call$risk = dec$risk
-  if (!identical(dec$decision, "allow")) return(tool_error(perm_denial_text(dec)))
+  if (!identical(dec$decision, "allow")) return(refuse(dec$reason, perm_denial_text(dec)))
   call$input = dec$input %||% call$input
   call$approved_level = risk_level(dec$risk)
-  if (isTRUE(run$signal$aborted)) return(dispatch_aborted_result(run))
+  if (isTRUE(run$signal$aborted)) return(aborted())
   tokens = checkpoint_before(run, call, ctx)
   res = tool_execute_frame(run, call, ctx, st)
   res = checkpoint_after(run, call, ctx, tokens, res)
@@ -102,26 +111,20 @@ dispatch_steps = function(run, call, st = NULL) {
 }
 
 #' The `tool_call` hook chain of a call: the call with a `modify` decision's input, or with
-#' `blocked` (the denial text) when a hook blocks it
+#' `blocked` (the denial text) and `refused` (why it did not run) when a hook blocks it
 #' @noRd
 tool_call_hook = function(run, call, risk = NULL) {
   hk = run_emit(run, "tool_call", tool_name = call$name, tool_call_id = call$id, input = call$input,
                 nested = call$nested, parent_tool_call_id = call$parent_id, risk = risk)
   if (!is.list(hk)) return(call)
   if (identical(hk$decision, "block")) {
-    call$blocked = paste0("Tool execution was blocked: ",
-                          hk$reason %||% "a tool_call hook blocked it")
+    why = hk$reason %||% "a tool_call hook blocked it"
+    call$blocked = paste0("Tool execution was blocked: ", why)
+    call$refused = paste0("blocked by a hook: ", why)
   } else if (identical(hk$decision, "modify") && is.list(hk$input)) {
     call$input = hk$input
   }
   call
-}
-
-#' The error result of a call that the run's abort ended before it executed
-#' @noRd
-dispatch_aborted_result = function(run) {
-  tool_error(paste0("Tool call not executed: the run was aborted (",
-                    run$signal$reason %||% "user", ")."))
 }
 
 #' Execute a tool; the frame marks the running tool for run_current() (`.gptr_tool_run`)
@@ -213,6 +216,7 @@ dispatch_record = function(res, call) {
 #' Append the tool-result message and emit tool_execution_end, message_start and message_end
 #' The append and the `recorded` mark are one uninterruptible step (suspendInterrupts()).
 #' Duration is execution wall time: preparation and approval are excluded; unrun calls take zero.
+#' A refused call's end says why it did not run (`refused`).
 #' @noRd
 dispatch_finish = function(run, call, res, st, msg = tool_result_message(res, call)) {
   suspendInterrupts({
@@ -222,7 +226,7 @@ dispatch_finish = function(run, call, res, st, msg = tool_result_message(res, ca
   run_emit(run, "tool_execution_end", tool_call_id = call$id, tool_name = call$name,
            is_error = isTRUE(res$is_error),
            elapsed = if (is.null(st$exec_t0)) 0 else reactor_now() - st$exec_t0,
-           details = list(fields = names(res$details)))
+           details = list(fields = names(res$details)), refused = st$refused)
   run_emit(run, "message_start", role = "tool_result")
   run_emit(run, "message_end", role = "tool_result", message = msg)
   invisible(msg)

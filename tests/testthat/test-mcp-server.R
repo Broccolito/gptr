@@ -179,6 +179,18 @@ test_that("a call served in a live run is reported as a tool call of the run (D-
   expect_identical(failed$details$error, "no answer")
 })
 
+test_that("the end of a served call that was refused says why it did not run (console-3)", {
+  local_permission_rules()
+  gptr_permissions(deny = "r(fn:writeLines)")
+  seen = serve_in_run(function(event, ctx) {
+    mcp_dispatch_local(r_call("writeLines('x', 'y.txt')", id = 6L), ctx$session)$result
+  })
+  expect_true(seen$out$isError)
+  end = Filter(function(e) identical(e$tool_call_id, "mcp_6"), seen$events)[[2L]]
+  expect_true(end$is_error)
+  expect_identical(end$refused, "denied by the rule r(fn:writeLines)")
+})
+
 test_that("a plot served in a live run is drawn on the person's device, without a run on none", {
   shown = new.env()
   shown$n = 0L

@@ -2209,6 +2209,7 @@ test_that("abort() from a tool_call hook ends the call unrun, then settles the r
   expect_true(res[[1L]]$is_error)
   expect_identical(msg_text(res[[1L]]), "Tool call not executed: the run was aborted (hook stop).")
   expect_identical(vapply(ev(s), function(e) e$type, ""), c("tool_execution_end", "agent_end"))
+  expect_identical(ev(s)[[1L]]$refused, "the run was aborted")
 })
 
 test_that("aborted() and run() still see a run that was aborted while its tool executes", {

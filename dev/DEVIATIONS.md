@@ -3946,3 +3946,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   stays on the line, where it showed `<U+000A>`; other control characters stay escaped. Contract-visible: 04 §15.10
   IC-77. Tests: test-console-render.R "a reason's line breaks fold into one space; other controls stay escaped
   (sessions-7)".
+- Cheat-sheet review (2026-10-23, console-3; a fifth backend change): at verbosity 1 (Rscript, knitr, Jupyter) a
+  call refused before it ran reads `gptr: r not run: denied by the rule r(fn:writeLines)`, where it read `gptr: r
+  failed` as if it had run. The end event of such a call (a `tool_call` hook's block, a permission denial, the run's
+  abort; also a call served to a CLI route) carries `refused`, why; `is_error`, the transcript and the model's text
+  are unchanged. A multi-line call's progress line ends `  (+N more lines)`, the approval's grammar
+  (`console_more_lines()`). Contract-visible: 04 §10.4 `tool_execution_end` row. Tests:
+  test-console-jupyter-progress.R "a refused call was not run; a multi-line call counts its other lines
+  (console-3)"; test-console-render.R "verbosity 1 says a refused call was not run and counts its code lines
+  (console-3)"; test-agent-dispatch.R "the end of a refused call says why it did not run; an error's does not
+  (console-3)"; test-mcp-server.R "the end of a served call that was refused says why it did not run
+  (console-3)".

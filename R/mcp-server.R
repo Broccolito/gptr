@@ -186,7 +186,8 @@ mcp_serve_gate = function(call, run, ctx, sid = NULL) {
 #' stack (the CLI routes, also a nested CLI run inside its parent's tool; an MCP client during a
 #' run), it is reported as `tool_execution_start`/`_end` under its gate's call id, the end with
 #' the result's `content` and `details` and the execution time, and its approval's control tokens
-#' end with it, as for a call of the agent loop (IC-53, D-192)
+#' end with it, as for a call of the agent loop (IC-53, D-192); a refused call's end says why
+#' it did not run (`refused`)
 #' @noRd
 mcp_serve_call = function(target, name, args, id, schema) {
   run = session_live(target$session)$run
@@ -202,7 +203,8 @@ mcp_serve_call = function(target, name, args, id, schema) {
     run_emit(run, "tool_execution_end", tool_call_id = cid, tool_name = name,
              is_error = !isFALSE(st$res$is_error),
              elapsed = if (is.null(st$t0)) 0 else reactor_now() - st$t0,
-             details = st$res$details %||% list(), content = st$res$content %||% list())
+             details = st$res$details %||% list(), content = st$res$content %||% list(),
+             refused = st$refused)
   }, add = TRUE)
   st$res = mcp_serve_exec(target, name, args, id, schema, st)
   st$res
@@ -248,9 +250,13 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   call = list(id = paste0("mcp_", id), name = name, input = input, tool = spec, nested = FALSE,
               risk = risk)
   if (!is.null(run)) call = tool_call_hook(run, call, risk)
-  if (!is.null(call$blocked)) return(gptr_tool_result(call$blocked, is_error = TRUE))
+  if (!is.null(call$blocked)) {
+    if (!is.null(st)) st$refused = call$refused
+    return(gptr_tool_result(call$blocked, is_error = TRUE))
+  }
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
+    if (!is.null(st)) st$refused = d$reason %||% "not allowed"
     return(gptr_tool_result(paste0("Permission denied: ", d$reason %||% "not allowed",
                                    ". To allow it, run it yourself at the R prompt or add a ",
                                    "rule with gptr_permissions(allow = ...)."), is_error = TRUE))

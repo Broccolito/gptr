@@ -82,6 +82,20 @@ test_that("IRkernel tool failure and abnormal completion remain stderr messages"
   expect_null(console_record(list(run = "ujupyter-progress")))
 })
 
+test_that("a refused call was not run; a multi-line call counts its other lines (console-3)", {
+  rec = jupyter_progress_session()
+  captured = jupyter_progress_capture({
+    console_on_tool_end(jupyter_progress_event("tool_execution_end", rec, tool_call_id = "c1",
+      tool_name = "r", is_error = TRUE, refused = "denied by the rule r(fn:writeLines)"), NULL)
+    console_on_tool_start(jupyter_progress_event("tool_execution_start", rec,
+      tool_call_id = "c2", tool_name = "r",
+      input = list(code = "cat('== check ==\\n')\nstr(mtcars)\nwriteLines('hi', 'out.txt')")),
+      NULL)
+  })
+  expect_identical(captured$output, "gptr: r  cat('== check ==\\n')  (+2 more lines)")
+  expect_identical(captured$messages, "gptr: r not run: denied by the rule r(fn:writeLines)\n")
+})
+
 test_that("nonkernel and knitr progress keeps its existing stderr route", {
   for (knitting in c(FALSE, TRUE)) {
     rec = jupyter_progress_session()

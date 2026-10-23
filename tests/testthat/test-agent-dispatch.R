@@ -438,6 +438,29 @@ test_that("gptr.noninteractive_ask = \"deny\" returns a denial the model sees", 
   expect_match(perm_denial_text(dec), "no one can approve", fixed = TRUE)
 })
 
+test_that("the end of a refused call says why it did not run; an error's does not (console-3)", {
+  local_permission_rules()
+  gptr_permissions(deny = "r(fn:writeLines)")
+  ev = local_events("tool_execution_end")
+  fake = gptr_fake_provider(list(fake_tool("r", code = "writeLines('hi', 'out.txt')"),
+                                 fake_tool("r", code = "stop('boom')"), "done"))
+  s = peter("write", model = fake, envir = new.env(), mode = "auto")
+  ends = ev(s)
+  expect_true(ends[[1L]]$is_error)
+  expect_match(ends[[1L]]$refused, "r\\(fn:writeLines\\)")
+  expect_true(ends[[2L]]$is_error)
+  expect_null(ends[[2L]]$refused)
+  expect_identical(msg_text(tool_results(s)[[1L]]),
+                   paste0("Permission denied: denied by the rule r(fn:writeLines). Explain what ",
+                          "you need or choose another approach."))
+  local_permissive()
+  local_tool("echo", function(input, ctx) "ran")
+  local_hook("tool_call", function(event, ctx) list(decision = "block", reason = "held"))
+  s = test_session()
+  dispatch(s, list(tc("echo")))
+  expect_identical(ev(s)[[1L]]$refused, "blocked by a hook: held")
+})
+
 test_that("the UI answers asks when the run's snapshot can prompt", {
   local_gptr_options(interactive = TRUE)
   ui = new.env()
