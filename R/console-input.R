@@ -333,6 +333,8 @@ console_live_row = function(state, width) {
   # question waits, which reads them
   frozen = isTRUE(state$frozen) && !isTRUE(state$question)
   if (frozen) clock = what
+  # a sub-agent's short form, `sub-agent #1`, takes its label's place first where the row is narrow
+  short = if (frozen) state$short %||% what else paste(state$short %||% what, clock)
   words = c(if (frozen) what else paste(what, clock),
             if (frozen && nzchar(state$draft %||% "")) "keys wait",
             if (isTRUE(state$queued > 0)) paste0(state$queued, " queued"),
@@ -378,12 +380,15 @@ console_live_row = function(state, width) {
   if (length(state$candidates)) {
     status = live_candidates(state$candidates, fit)
   } else {
-    # dropped whole, from the right: the hint's terms, then the queue and a waiting question;
-    # then the queued message is cut, keeping its head; at least the block and the time
+    # a sub-agent's short form first; then dropped whole, from the right: the hint's terms, then
+    # the queue and a waiting question; then the queued message is cut, keeping its head; at least
+    # the block and the time
     repeat {
       status = paste0(paste(words, collapse = sym$sep), hint(terms))
       if (live_fit(status) <= fit) break
-      if (length(terms) > !is.null(said)) {
+      if (!identical(words[[1L]], short)) {
+        words[[1L]] = short
+      } else if (length(terms) > !is.null(said)) {
         terms = terms[-length(terms)]
       } else if (length(words) > 1L) {
         words = words[-length(words)]
@@ -403,9 +408,11 @@ console_live_row = function(state, width) {
   }
   grey = if (isTRUE(state$band)) sym$band_dim else sym$dim
   if (is.null(input)) return(paste0(sym$blue(sym$agent), " ", grey(status)))
-  # the draft stays where it was this run: the status keeps the widest width it had (`status_w`)
+  # the draft stays where it was this run: the status keeps the widest width it had (`status_w`),
+  # but a bare clock, all that fits, is not padded
   shown = live_fit(status)
-  status = paste0(status, strrep(" ", max(0L, min(fit, state$status_w %||% 0L) - shown)))
+  pad = if (identical(status, clock)) 0L else min(fit, state$status_w %||% 0L) - shown
+  status = paste0(status, strrep(" ", max(0L, pad)))
   row = paste0(sym$blue(sym$agent), " ", grey(paste0(status, if (later) after)))
   left = room - live_fit(status) - live_fit(gap)
   if (left > live_fit(sym$ellipsis)) {
@@ -523,7 +530,9 @@ console_live_state = function(rec) {
   }
   s = rec$session
   rd = if (isTRUE(the$tty$keys)) console_repl_prompt()$reader
-  list(what = if (length(kids)) paste("sub-agent", kids[[1L]]$child$label) else rec$what,
+  label = if (length(kids)) kids[[1L]]$child$label
+  list(what = if (length(kids)) paste("sub-agent", label) else rec$what,
+       short = if (length(kids)) paste("sub-agent", sub("^.* (#[0-9]+)$", "\\1", label)),
        secs = as.numeric(Sys.time()) - rec$t0, queued = console_queued(s),
        question = isTRUE(rec$question), frozen = isTRUE(frozen),
        key = console_interrupt_key(), pause = console_menu_available(),

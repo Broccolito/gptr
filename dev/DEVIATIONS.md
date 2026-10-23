@@ -3672,6 +3672,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     Contract-visible: 04 §15.10 IC-82. Tests: test-console-input.R "the draft keeps its column as the status
     changes; the status only widens (review)", "a leading ! takes the chevron's place; / and ! drafts say when
     they run (D-244)".
+  - On a narrow live row a sub-agent's label gives way to its number first, `sub-agent #1 4s` (`short` in
+    `console_live_state()`), before the person's queued text is cut or the hint dropped, and a bare clock is not
+    padded to the run's widest status: at 60 columns the row read `▌ 4s` padded beside a draft, cut `↳ steer ·
+    s1…`, or lost `keys show when r returns` in the sub-agent's own `r` call. Contract-visible: 04 §15.10 IC-82.
+    Tests: test-console-input.R "a sub-agent's long label gives way to its number before the person's text
+    (review)", "during a sub-agent the row ticks and shows the queue; keys wait in its r call".
   - The live row's freeze is the `r` call's (`rec$frozen` holds its id): a nested call's end no longer clears
     it while the code runs, and a question waiting shows the clock and the keys, since it reads them; the
     approval of the `r` call comes after its start event, so the row said `keys wait` while Enter, Tab and Up

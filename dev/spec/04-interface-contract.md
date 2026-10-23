@@ -5843,7 +5843,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       hints dim, only the draft ink; on the input band the words take the band's grey (`console_style()$band_dim`:
       `#6c6c6c`, 256 colours `38;5;242`, on the light band; `#a8a8a8`, `38;5;247`, on the dark one), as the one
       grey was about 2.8:1 and 3.2:1 there (review of Tasks 16-21). ASCII: `# thinking 6s - ctrl-c pause`.
-    - One collapse rule: the `/` and `!` hint goes first; then whole terms go from the right, the hint's
+    - One collapse rule: a sub-agent's label gives way to its number first, `sub-agent #1 4s` (review of Tasks
+      22-27: the label crowded out the person's text and the `keys show when r returns` cue, and a draft stood
+      beside a bare clock padded to the run's widest status, which a bare clock no longer is); the `/` and `!`
+      hint goes next; then whole terms go from the right, the hint's
       (`typed lines run next`, `ctrl-c pause`, `tab follow-up`, `enter steer`; the queue view's `↑ edit`), then
       `question waiting`, then
       `<n> queued`; then the queued message

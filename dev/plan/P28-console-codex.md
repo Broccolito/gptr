@@ -1055,6 +1055,8 @@ Decisions:
   REPL's, and reaches its boundary after the `r` call that runs the sub-agent. The sub-agent's run reads
   the keys inside that call, so the live row keeps its clock, its hint and the queue view, and says keys
   wait only while an `r` call evaluates in this process, the sub-agent's own: `keys show when r returns`.
+  (Amended in the review of Tasks 22-27: where the row is narrow the label gives way to the number first,
+  `sub-agent #1 4s`, before the person's text or the cue is cut; a bare clock is not padded.)
   It said `keys show when sub-agent '…' #1 returns`, without a clock, and hid the queued message.
 - The `type_ahead` description in `R/gptr-config.R` and 04 §11.2 becomes: "What Enter does with
   a message typed in a terminal console while the agent works (Tab does the other); in other

@@ -357,7 +357,8 @@ test_that("during a sub-agent the row ticks and shows the queue; keys wait in it
   }
   state = console_live_state(parent)
   expect_false(state$frozen)
-  expect_identical(state$what, "sub-agent 'a' #1")
+  expect_identical(state[c("what", "short")],
+                   list(what = "sub-agent 'a' #1", short = "sub-agent #1"))
   hint = "▌ sub-agent 'a' #1 7s   enter steer · tab follow-up · ctrl-c pause"
   expect_identical(c(row(80L), row(120L)), c(hint, hint))
   newest = list(kind = "steer", text = "s11 during the sub-agent")
@@ -376,6 +377,28 @@ test_that("during a sub-agent the row ticks and shows the queue; keys wait in it
   kid$frozen = NULL
   assign("u_kid", kid, envir = active)
   expect_match(pass(), "sub-agent 'a' #1 [0-9]+s · 1 queued")
+})
+
+test_that("a sub-agent's long label gives way to its number before the person's text (review)", {
+  local_utf8_glyphs()
+  withr::local_options(cli.num_colors = 1L)
+  kid = list(what = "sub-agent 'count the cars in fuel' #1", short = "sub-agent #1", secs = 4,
+             key = "Ctrl-C", pause = TRUE)
+  draft = "s11 during the sub-agent"
+  steer = list(kind = "steer", text = "s1 use the median")
+  expect_identical(live_rows(list(
+    draft = c(kid, draft = draft), queued = c(kid, queued = 1, draft = "", list(newest = steer)),
+    frozen = c(kid, frozen = TRUE, draft = ""), wide = c(kid, draft = "")), 60L), list(
+    draft = "▌ sub-agent #1 4s   › s11 during the sub-agent",
+    queued = "▌ sub-agent #1 4s · 1 queued   ↳ steer · s1 use the median",
+    frozen = "▌ sub-agent #1 · keys show when r returns",
+    wide = "▌ sub-agent #1 4s   enter steer · tab follow-up"
+  ))
+  # the whole label where it fits; a bare clock is not padded to the run's widest status
+  whole = "▌ sub-agent 'count the cars in fuel' #1 4s   enter steer · tab follow-up · ctrl-c pause"
+  expect_identical(c(console_live_row(c(kid, draft = ""), 100L)), whole)
+  expect_identical(c(console_live_row(c(kid, draft = draft, status_w = 30L), 40L)),
+                   "▌ 4s   › s11 during the sub-agent")
 })
 
 test_that("the draft keeps its column as the status changes; the status only widens (review)", {
