@@ -799,7 +799,9 @@ console_diff_rows = function(rows, n, width = NULL, more = "") {
   c(lines, if (left > 0L) sym$dim(paste0("    (+", left, " more lines", more, ")")))
 }
 
-#' The default result lines of a tool call, indented 4 and dim (D-245): an error's message in red,
+#' The default result lines of a tool call, indented 4 and dim (D-245): a call that did not run
+#' (`call$refused`, its end's reason) one row, `not run<sep><why>` with `the user` as `you`, cut to
+#' `width`; an error's message in red,
 #' wrapped to at most 6 rows, then the object changes of `r` (also after an error); nothing else
 #' for a read; the diff of `edit` without its file headers, which the call line names, at most 12
 #' rows (console_diff_rows()), the project-relative path of `write`, else `done`; each with
@@ -819,6 +821,11 @@ console_result_lines = function(call, result, width, kind = "act") {
     if (isTRUE(d$plots >= 1L)) paste0("[", d$plots, if (d$plots == 1L) " plot]" else " plots]")
   )
   changes = if (length(parts)) paste0(pad, console_escape(paste(parts, collapse = "  "), FALSE))
+  why = call$refused
+  if (rlang::is_string(why)) {
+    why = console_escape(sub("^the user ", "you ", why), FALSE)
+    return(sym$dim(console_cut(paste0(pad, "not run", sym$sep, why), width)))
+  }
   if (isTRUE(result$is_error)) {
     err = console_escape(text_lines(d$error %||% console_msg_text(result)), FALSE)
     if (!length(err)) err = "failed"
@@ -1085,10 +1092,10 @@ console_on_tool_start = function(event, ctx) {
 
 #' tool_execution_end: queue the pause-menu items and print the artifact lines held while tools
 #' ran, unfreeze the record at the end of the r call that froze it (not a nested call's), keep the
-#' elapsed time for the result line, report a failure at verbosity 1, a refused
-#' call as not run; the end of a call served in a live run carries its `content` and prints its
-#' result line (D-192); a CLI route's informational tool event leaves its request pending, so the
-#' live row says thinking
+#' elapsed time and why a refused call did not run for the result line, report a failure at
+#' verbosity 1, a refused call as not run; the end of a call served in a live run carries its
+#' `content` and prints its result line (D-192); a CLI route's informational tool event leaves its
+#' request pending, so the live row says thinking
 #' @noRd
 console_on_tool_end = function(event, ctx) {
   policy_flush()
@@ -1100,10 +1107,12 @@ console_on_tool_end = function(event, ctx) {
   call = get0(key, envir = rec$tools, inherits = FALSE)
   if (!is.null(call)) {
     call$elapsed = event$elapsed
+    call$refused = event$refused
     assign(key, call, envir = rec$tools)
   }
   if (!is.null(event$content) && console_render_on(rec)) {
-    console_result_block(rec, call %||% list(name = event$tool_name, input = list()),
+    console_result_block(rec, call %||% list(name = event$tool_name, input = list(),
+                                             refused = event$refused),
                          event[c("content", "is_error", "details", "elapsed")])
   }
   if (verbosity() == 1L && isTRUE(event$is_error) && console_foreground(rec)) {

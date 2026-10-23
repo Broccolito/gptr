@@ -3995,3 +3995,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `tokens_after`), from which the context left is measured; it showed that request unlabelled, larger than the one
   before it. Contract-visible: 04 §15.10 IC-77; 03 §6.11 and §6.17. Tests: test-console-commands.R "/compact
   reports its saving and /context names the compaction request (console-4)".
+- Review fixes of Tasks 22-27 (2026-10-23):
+  - A refused call's result is one dim row at column 4, `not run · you declined`, `not run · you said: <text>`
+    (cut to the width), `not run · denied by the rule r(fn:writeLines)` or `not run · blocked by a hook: <why>`
+    (its end's `refused`, `the user` read as `you`), not a red `error:` of two or three rows worded for the
+    model; red stays for calls that ran and failed. A denial with the person's text ends with `refused` `the
+    user said: <text>` (`perm_refused()`, also for a served call), so verbosity 1 no longer prints the bare
+    text as a reason. Contract-visible: 04 §10.4 (`tool_execution_end`) and the `mcp_serve_exec()` edges.
+    Tests: test-console-render.R "a refused
+    call's result is one dim row that says it was not run (review)"; test-agent-dispatch.R "the model reads n
+    <text> as the person's; the next call is asked (cheat-sheet review)".

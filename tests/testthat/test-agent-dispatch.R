@@ -519,12 +519,15 @@ test_that("the model reads n <text> as the person's; the next call is asked (che
   skip_on_cran()
   local_project()
   ui = local_scripted_ui(list(list(decision = "deny", feedback = "run k2 = 7 instead"), "y"))
+  ev = local_events("tool_execution_end")
   fake = local_fake_provider(list(fake_tool("r", code = "k2 = 100"),
                                   fake_tool("r", code = "k2 = 7"), "7"))
   e = new.env()
-  peter("Set k2.", model = fake, envir = e, mode = "manual")
+  s = peter("Set k2.", model = fake, envir = e, mode = "manual")
   expect_match(msg_text(fake_requests(fake)[[2L]]$last_results[[1L]]),
                "^The user declined this call and said: \"run k2 = 7 instead\"\\. ")
+  # its end says the person's text is why it did not run (review of Tasks 22-27)
+  expect_identical(ev(s)[[1L]]$refused, "the user said: run k2 = 7 instead")
   expect_identical(ui$log$method, c("permission", "permission"))
   expect_identical(e$k2, 7)
 })

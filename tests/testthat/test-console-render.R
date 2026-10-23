@@ -911,6 +911,33 @@ test_that("the end of a call served to a CLI route prints its result line (D-192
                           "  | r  res = 1; stop('boom')", "    error: Error: boom", "    + res"))
 })
 
+test_that("a refused call's result is one dim row that says it was not run (review)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 60, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  call = list(path = "analysis.R", edits = list(list(oldText = "a", newText = "b")))
+  refused = function(why, id) {
+    list(hook_event("tool_execution_start", s, tool_call_id = id, tool_name = "edit", input = call),
+         hook_event("tool_execution_end", s, tool_call_id = id, tool_name = "edit", is_error = TRUE,
+                    elapsed = 0, details = list(), refused = why),
+         hook_event("message_end", s, role = "tool_result", message = msg_tool_result(
+           id, "edit", "Permission denied: the user declined.", is_error = TRUE)))
+  }
+  why = c("the user declined", "the user said: Use base graphics and label the axes in bold",
+          "denied by the rule r(fn:writeLines)", "blocked by a hook: held")
+  out = render_events(s, c(list(hook_event("agent_start", s)),
+                           unlist(Map(refused, why, paste0("c", 1:4)), recursive = FALSE)))
+  expect_identical(out[c(FALSE, TRUE)], c(
+    "    not run - you declined", "    not run - you said: Use base graphics and label the a...",
+    "    not run - denied by the rule r(fn:writeLines)", "    not run - blocked by a hook: held"))
+  # dim, never the red of a call that ran and failed
+  withr::local_options(cli.num_colors = 8L)
+  out = render_events(s, c(list(hook_event("agent_start", s)), refused(why[[1L]], "c5")))
+  expect_identical(out[[2L]], "\033[2m    not run - you declined\033[22m")
+})
+
 test_that("on a CLI route verbosity 2 shows each thinking block's first line, dim (D-192)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)

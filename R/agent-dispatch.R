@@ -98,7 +98,7 @@ dispatch_steps = function(run, call, st = NULL) {
   if (isTRUE(run$signal$aborted)) return(aborted())
   dec = perm_check(call, run)
   call$risk = dec$risk
-  if (!identical(dec$decision, "allow")) return(refuse(dec$reason, perm_denial_text(dec)))
+  if (!identical(dec$decision, "allow")) return(refuse(perm_refused(dec), perm_denial_text(dec)))
   call$input = dec$input %||% call$input
   call$approved_level = risk_level(dec$risk)
   if (isTRUE(run$signal$aborted)) return(aborted())
@@ -738,6 +738,13 @@ perm_denial_text = function(dec) {
   }
   paste0("Permission denied: ", dec$reason %||% "not allowed", ". ",
          dec$how %||% "Explain what you need or choose another approach.")
+}
+
+#' Why a denied call did not run (its end's `refused`): the decision's reason, or the person's own
+#' text as `the user said: <text>`
+#' @noRd
+perm_refused = function(dec) {
+  if (rlang::is_string(dec$feedback)) paste0("the user said: ", dec$feedback) else dec$reason
 }
 
 #' Classify a call: the tool's `risk` function, the `risk.classify` service for `r` code (P11),

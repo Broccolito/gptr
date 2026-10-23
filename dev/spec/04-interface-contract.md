@@ -3532,7 +3532,7 @@ name and semantics follow Pi `1b347794`; `gptr` means gptr-specific. Handlers mu
 | `message_start`, `message_update`, `message_end` | pi | notify | `role`; update: `index`, `kind` (`text`, `thinking`, `toolcall`), `delta`; end: `message` | - | P06 |
 | `tool_call` | pi | decision, **error = block** | `tool_name`, `tool_call_id`, `input`, `nested`, `parent_tool_call_id`, `risk` | `NULL`, `list(decision = "block", reason)`, or `list(decision = "modify", input)` | P06 |
 | `permission_request` | gptr | first decision, **error = deny** | the §7.11 permission request record | `list(decision = "allow" \| "deny", reason)` | P06 |
-| `tool_execution_start`, `tool_execution_update`, `tool_execution_end` | pi | notify | `tool_call_id`, `tool_name`, `input` (start), `text` (update), `is_error`, `elapsed`, `details` summary (end); the end of a call served in a live run (§8.5) carries the result's `content` and full `details`; the end of a call refused before it ran (a `tool_call` hook's block, a permission denial, the run's abort) carries `refused`, why in a few words (`blocked by a hook: <reason>`, the decision's reason, `the run was aborted`), with `is_error` TRUE and its tool result unchanged (P28); a provider's informational events (§8.5) carry `informational = TRUE` and IC-53 does not track them | - | P06, P28 |
+| `tool_execution_start`, `tool_execution_update`, `tool_execution_end` | pi | notify | `tool_call_id`, `tool_name`, `input` (start), `text` (update), `is_error`, `elapsed`, `details` summary (end); the end of a call served in a live run (§8.5) carries the result's `content` and full `details`; the end of a call refused before it ran (a `tool_call` hook's block, a permission denial, the run's abort) carries `refused`, why in a few words (`blocked by a hook: <reason>`, the decision's reason, `the user said: <text>` for a denial with the person's text, `the run was aborted`), and the console shows it as one dim result row, `not run · <why>` with `the user` as `you` (review of Tasks 22-27), with `is_error` TRUE and its tool result unchanged (P28); a provider's informational events (§8.5) carry `informational = TRUE` and IC-53 does not track them | - | P06, P28 |
 | `tool_result` | pi | patch chain | `tool_name`, `tool_call_id`, `input`, `content`, `details`, `is_error` | `list(content, details, is_error)` (any subset) | P06 |
 | `queue_update` | pi | notify | one event per item added, taken by the run or withdrawn: `op` (`add`, `take`, `withdraw`), `which` (`steer`, `follow_up`), `text` (the item's redacted text), `source` (IC-55), then `steer` int, `follow_up` int (what the queue holds after the change) | - | P06, P28 |
 | `retry_start`, `retry_end` | gptr | notify | `attempt`, `delay`, `class`; end: `ok` | - | P06 (from P04) |
@@ -5266,7 +5266,8 @@ totals line names the model and the context left.
   reference that starts with a known `provider/` gets suggestions from that provider's references only (D-226). The
   console and MCP edges (`cmd_model()` -> `model_canonical()`, `cmd_model_label()` -> `pcli_default_model()`,
   `mcp_serve_exec()` -> `tool_call_hook`, `tool_run`, `tool_execute_frame`, `checkpoint_before`,
-  `checkpoint_after`, `perm_denial_text`, which words a denial as the loop does, IC-77) are contract edges of the
+  `checkpoint_after`, `perm_denial_text` and `perm_refused`, which word a denial and why the call did not run as
+  the loop does, IC-77) are contract edges of the
   layering test (12.2). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
   the codex files-only fallback, the served-run mark and the `-32002` busy error (IC-57, IC-58).
 
