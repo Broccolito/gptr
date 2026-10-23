@@ -662,14 +662,18 @@ settings_nest = function(path, value) {
   value
 }
 
-#' Combines a lower and a higher layer: objects merge recursively, anything else is replaced
+#' Combines a lower and a higher layer: objects merge recursively, anything else (an array
+#' included) is replaced, and a NULL in the higher layer removes the key
 #' @noRd
 settings_combine = function(lower, higher) {
-  if (is.list(lower) && !is.object(lower) && is.list(higher) && !is.object(higher) &&
-      !is.null(names(higher))) {
-    return(utils::modifyList(lower, higher))
+  obj = function(x) is.list(x) && !is.object(x) && !is.null(names(x))
+  if (!obj(lower) || !obj(higher)) return(higher)
+  for (k in names(higher)[nzchar(names(higher))]) {
+    v = higher[[k]]
+    lower[k] = list(if (k %in% names(lower)) settings_combine(lower[[k]], v) else v)
+    if (is.null(v)) lower[[k]] = NULL
   }
-  higher
+  lower
 }
 
 #' What one layer may contribute to a top-level key: in `providers`, `local_only` FALSE comes only

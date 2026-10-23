@@ -2051,3 +2051,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   arch-layers and lint-rules PASS 6985 (SKIP 3, platform). Lint clean; no Rd change.
 - Deviations: none (message text; 04 §2.2 `no_key` already carries `variables`). Open: the key variable is still
   reported only after the endpoint is fixed (the verifier's optional one-error variant was not planned).
+
+### config-1 - A higher settings layer's array replaces the lower one's
+- Finding 39. Red: `^gptr-config$` FAIL 4, PASS 518: `settings_combine()` of two `list(a = list(xs = <array>))`
+  kept the lower `xs`; with user-scope `providers.bedrock.models` (`user-id`), `options(gptr.providers =)`
+  (`opt-id`) and a session declaration (`session-id`) were both ignored, and `model_resolve("bedrock/session-id")`
+  raised `unknown_model` ("Did you mean: bedrock/user-id?") while the source read "session".
+- Cause: `settings_combine()` delegated to `utils::modifyList()`, which recurses into any two lists and applies
+  nothing from an unnamed one, so every nested array resolved to the lowest layer that set it.
+- Fix: an explicit merge that recurses only where both sides are named lists and otherwise takes the higher
+  value; a NULL still removes the key (`budget = list(cost = NULL)`). Every other case matches `modifyList()`.
+  NEWS entry.
+- Green: `^gptr-config$` PASS 524 (the user `region` is kept); full suite (NOT_CRAN) PASS 35357, SKIP 64. Lint
+  clean; no Rd change.
+- Deviations: none (restores the rule of the function's doc and `?gptr_config`). Open: none.

@@ -157,6 +157,9 @@ works on the objects already in memory.
   is built, naming the field, instead of failing at the first call.
 * A provider without a valid base URL, such as `azure/` before `AZURE_OPENAI_ENDPOINT` is set, names
   the variable that sets it (or `providers$<id>$base_url` in `gptr_config()`).
+* An unnamed list in a higher settings layer, such as a provider's `models` set with
+  `gptr_config(.scope = "session")` or `options(gptr.providers =)`, replaces the one in a lower
+  layer (for example the user file) instead of being ignored; named lists still merge.
 
 # gptr 0.7.0
 

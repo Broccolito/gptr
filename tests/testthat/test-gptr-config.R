@@ -801,6 +801,28 @@ test_that("a layer whose providers the guard drops entirely contributes nothing"
                    list(value = TRUE, source = "session"))
 })
 
+test_that("a higher layer's array replaces the lower one's; objects still merge (D-250)", {
+  skip_on_cran()
+  expect_identical(settings_combine(list(a = list(xs = list(list(id = "a")))),
+                                    list(a = list(xs = list(list(id = "b")))))$a$xs[[1]]$id, "b")
+  local_gw()
+  models = function(id) list(models = list(list(id = id, tool_call = TRUE)))
+  ids = function() vapply(gptr_config()$providers$bedrock$models, `[[`, "", "id")
+  gptr_config(providers = list(bedrock = c(list(region = "eu-west-1"), models("user-id"))),
+              .scope = "user")
+  withr::with_options(list(gptr.providers = list(bedrock = models("opt-id"))), {
+    expect_identical(ids(), "opt-id")
+  })
+  gptr_config(providers = list(bedrock = models("session-id")), .scope = "session")
+  expect_identical(ids(), "session-id")
+  expect_identical(gptr_config()$providers$bedrock$region, "eu-west-1")
+  expect_identical(model_resolve("bedrock/session-id")$id, "session-id")
+  settings_write("session", list(budget = list(cost = NULL)))
+  budget = settings_get("budget")
+  expect_false("cost" %in% names(budget))
+  expect_identical(budget$tokens, 2000000)
+})
+
 # Task 4: replay mode, the replay guard and the egress acknowledgement.
 
 test_that("replay_mode() resolves argument, option, environment and default", {
