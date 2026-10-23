@@ -1086,12 +1086,13 @@ exact name.
    `console` route signals `gptr_error_not_available`. Every call made while `run_current()` is non-NULL inherits
    the running mode (only tightened) and filters whatever route handles it (IC-53). Top-level team and fan-out
    statements own one document block (IC-47); in replay mode their children pass `replay_guard()`, so
-   `GPTR_REPLAY=replay` still proves that a script makes no model calls. The `nested`, `continue` and `new`
-   routes refuse the System 1 arguments before anything starts: `.opts$system1_images`, then the first of
-   `choices`, `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain`, as
+   `GPTR_REPLAY=replay` still proves that a script makes no model calls. The `team`, `fanout`, `nested`,
+   `continue` and `new` routes refuse the System 1 arguments before anything starts: `.opts$system1_images`,
+   then the first of `choices`, `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain`, as
    `gptr_error_invalid_argument` naming it, since a conversation would ignore them; a decision model serves
    them, and `model = jev` runs through a chat model after `gptr_config(system1 = "emulate:<ref>")`, which
-   alone moves no call to emulation (IC-74, D-250).
+   alone moves no call to emulation (IC-74, D-250). P19's call of P08's `route_refuse_s1_args()` is a
+   contract edge of the layering test (12.2).
 
    The console's first-use setup runs before its banner or chat input only for a new interactive
    console without an explicit or effective configured model. It offers the expected Codex and

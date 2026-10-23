@@ -1122,9 +1122,9 @@ route_needs_subagents = function(call) {
   invisible(TRUE)
 }
 
-#' Refuses the System 1 arguments in the conversational routes, which would drop them silently
-#' (IC-74, 07 section 4; D-250): `.opts$system1_images`, `choices`, `levels`, `min_confidence`,
-#' `uncertain`, and a `threshold` other than its default 0.5
+#' Refuses the System 1 arguments in the conversational routes and P19's team and fan-out, which
+#' would drop them silently (IC-74, 07 section 4; D-250): `.opts$system1_images`, `choices`,
+#' `levels`, `min_confidence`, `uncertain`, and a `threshold` other than its default 0.5
 #' @noRd
 route_refuse_s1_args = function(call) {
   a = call$args

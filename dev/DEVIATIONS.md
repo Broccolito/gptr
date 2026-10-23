@@ -3211,13 +3211,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   accepted spec; comparing `name` keeps a provider registered under its variable's name silent, as an equal
   character value is.
 - Rule (s1-1): `route_refuse_s1_args()` (was `route_refuse_s1_images()`, whose refusal still comes first) runs
-  in the `nested`, `continue` and `new` routes; it refuses the first of `choices`, `levels`, a `threshold`
-  other than 0.5, `min_confidence` and `uncertain` as `invalid_argument` naming it, before any request, and
-  points to a decision model (`model = jev`, which runs through a chat model after `gptr_config(system1 =
-  "emulate:<ref>")`; the setting alone moves no call to emulation). An explicit `threshold = 0.5`
-  passes (no `missing()` tracking). Formerly they were validated and dropped: a chat model returned a
-  session, on which `sum()`, `[` and `gptr_prob()` failed. The `team` and `fanout` routes (P19, L4) still
-  drop them, and `.opts$system1_images` (measured); L4 may not call this P08 helper (test-arch-layers.R).
+  in the `nested`, `continue` and `new` routes, and through `subagent_route_checks()` in the `team` and
+  `fanout` routes (P19, L4; a contract edge of the layering test); it refuses the first of `choices`,
+  `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain` as `invalid_argument` naming it,
+  before any request, and points to a decision model (`model = jev`, which runs through a chat model after
+  `gptr_config(system1 = "emulate:<ref>")`; the setting alone moves no call to emulation). An explicit
+  `threshold = 0.5` passes (no `missing()` tracking). Formerly they were validated and dropped: a chat model
+  returned a session, on which `sum()`, `[` and `gptr_prob()` failed, and `parallel = 2, choices =` ran
+  two sub-agents.
 - Rule (s1-2): `s1_abstain()`'s `uncertain = "stop"` condition adds `index`, `names` (`NULL` for unnamed
   input), `confidence` (what the band tests: `abs(2 * p - 1)` for decisions, the stored confidence otherwise)
   and `value` (every answer, since the abort runs before `s1_record()`); `prob` and `min_confidence` stay.
@@ -3263,6 +3264,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   test-catalog-models.R "a thinking suffix the model lacks is announced with the level used (D-250)";
   test-gptr-capture.R "an alias shadowed by a spec the argument accepts gets the message (D-250)";
   test-gptr-gateway.R "System 1 arguments are refused on a conversational route (D-250)";
+  test-subagent-team.R "teams and fan-outs refuse System 1 arguments before any child starts (D-250)";
   test-s1-route.R "uncertain = \"stop\" names the uncertain inputs and carries every answer (D-250)", "a
   factor answer keeps the call's meta, which its failure warning points to (D-250)". Evidence:
   progress/fixes.md Task FIX-17.

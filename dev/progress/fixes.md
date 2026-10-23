@@ -2248,10 +2248,9 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   03 §4.1 never named the setting). Red `^gptr-gateway$` FAIL 5, PASS 381; green PASS 386; with s1-route,
   arch-layers, zzz and lint-rules PASS 937. Lint clean; `man/peter.Rd` regenerated, `tools::checkRd()` clean.
 - Deviations: D-250 (s1-1 rule). Open: the `team` and `fanout` routes (`agents =`, `parallel =`) still drop
-  these arguments and `.opts$system1_images` (measured: `parallel = 2, choices =` ran two sub-agents).
-  Calling this helper from `subagent_route_checks()` fails test-arch-layers.R (P19 is L4, P08 L6), so it
-  needs a contract edge or a P19 check of its own. The sheet's System 1 card can say these arguments need
-  a decision model (the sheet is edited later).
+  these arguments and `.opts$system1_images` (measured: `parallel = 2, choices =` ran two sub-agents; fixed
+  by s1-1b). The sheet's System 1 card can say these arguments need a decision model (the sheet is edited
+  later).
 
 ### s1-2 - The uncertain = "stop" error names the uncertain inputs and carries the answers
 - Finding 127. Red: `^s1-route$` FAIL 10, PASS 299: for `c(trial, weeks, chose, pilot)` with P(yes) 0.98,
@@ -2339,3 +2338,23 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   answers at `high`).
 - Deviations: D-250 (thinking-1 rule rewritten in place; D-193 pointer). Open: Claude 4.5 and earlier on
   Converse get no thinking (no budget declaration exists); `usage$reasoning` stays 0 on Converse.
+
+### s1-1b - Teams and fan-outs refuse System 1 arguments too
+- s1-1's open item. Red: `^subagent-team$` FAIL 7, PASS 347: `peter("Which tissue?", b, parallel = 2, choices =
+  c("liver", "lung"))`, a team (`agents = list(a = agent(...))`) with `levels =`, and a fan-out with
+  `.opts$system1_images` returned sessions (5 fake requests), while `?peter` says a conversational model
+  refuses them.
+- Cause: only P08's `nested`, `continue` and `new` routes call `route_refuse_s1_args()`; the `team` (15) and
+  `fanout` (16) routes match first on `agents =` / `parallel =`, and the layering test kept P19 (L4) from the P08
+  helper.
+- Fix: `subagent_route_checks()` ends with `route_refuse_s1_args(call)` (the same error, before any child
+  starts); `arch_contract_edges()` admits subagent -> `route_refuse_s1_args`. 04 §6.1.1 step 5 names both routes
+  and the edge; NEWS bullet amended. `?peter` already states the behaviour.
+- Green: `^subagent-team$` PASS 354; gptr-gateway, arch-layers, s1-route, lint-rules, subagent-backends,
+  subagent-defs, copy-subagent and zzz PASS 1245; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 66, PASS 35510.
+  Lint clean; `devtools::document()` changes nothing. Live (installed branch): `m$gpt`, `m$claude` and
+  `m$ollama` with `choices =, parallel = 2` and with `levels =, agents =` (two members) each raise
+  `invalid_argument` naming the argument in 0.2 to 0.3 s; `gptr_usage()` has no row.
+- Deviations: D-250 (s1-1 rule edited in place). Open: the classifier route (order 10) still ignores `agents =`
+  and `parallel =` given with a decision model (measured offline: a classifier fake with `parallel = 2` or
+  `agents =` returned a `gptr_decision`), not this unit.
