@@ -301,6 +301,33 @@ test_that("sinks, options, hooks and the time limit are restored after errors an
   expect_equal(nrow(showConnections()), conns)
 })
 
+test_that("a resumed interrupt is not reported; one that ends the code is (steering review)", {
+  skip_on_cran()
+  e = new.env()
+  interrupt = "signalCondition(structure(class = c('interrupt', 'condition'), list()))"
+  # in a run the pause menu's s, f, c and b resume the code (R's `resume` restart), which runs
+  # to its end: the model reads its output, never that it was interrupted
+  run = structure(new.env(), class = "gptr_run")
+  local({
+    local_mocked_bindings(run_current = function() run)
+    code = paste0("invisible(withRestarts(", interrupt, ", resume = function() NULL))\n1 + 1")
+    res = withCallingHandlers(eval_r(code, e), interrupt = function(cnd) invokeRestart("resume"))
+    expect_identical(res$status, "ok")
+    expect_identical(c(res$n_done, res$n_total), c(2L, 2L))
+    expect_null(res$interrupted_after)
+    expect_false("interrupt" %in% ev_types(res))
+    expect_identical(format_eval_result(res, 1000)$text, "[1] 2")
+  })
+  # outside a run nobody else answers: the interrupt ends the evaluation, reported once with the
+  # seconds it came after
+  res = eval_r(paste0("a1 = 1\n", interrupt, "\na2 = 2"), e)
+  expect_identical(res$status, "interrupt")
+  expect_true(is.numeric(res$interrupted_after))
+  ints = ev_of(res, "interrupt")
+  expect_length(ints, 1L)
+  expect_identical(ints[[1L]]$seconds, res$interrupted_after)
+})
+
 test_that("session-state changes are reported by name, never by value", {
   skip_on_cran()
   e = new.env()

@@ -124,6 +124,7 @@ eval_state_new = function(code, timeout, plots, tee, budget, guard, record, max_
   st$objects = NULL
   st$state1 = NULL
   st$interrupted_after = NULL
+  st$interrupt_seen = NULL
   st$line = NA_integer_
   st$catch_interrupt = is.null(run_current())
   st$restored = FALSE
@@ -332,11 +333,14 @@ eval_loop_catch = function(st, exprs) {
   tryCatch(eval_loop(st, exprs), interrupt = function(cnd) eval_interrupted(st))
 }
 
-#' Record an interrupt that ended the evaluation
+#' Record an interrupt that ended the evaluation: its `interrupt` event, after the seconds
+#' eval_on_interrupt() noted (now when it hit between expressions)
 #' @noRd
 eval_interrupted = function(st) {
   setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
-  if (is.null(st$interrupted_after)) st$interrupted_after = eval_now() - st$t0
+  st$interrupted_after = st$interrupt_seen %||% (eval_now() - st$t0)
+  eval_push(st, "interrupt", message = "Interrupted by the user.",
+            seconds = st$interrupted_after)
   st$status = "interrupt"
   invisible(st)
 }
@@ -511,13 +515,14 @@ eval_overflow = function(st, cnd) {
   "error"
 }
 
-#' Interrupt handler: record and decline, so the run's interrupt policy decides
+#' Interrupt handler: flush, note when, and decline, so the run's interrupt policy decides. Only
+#' an interrupt that ends the evaluation is reported (eval_interrupted(); in a run the abort's
+#' tool_interrupted()): code the pause menu resumes runs to its end, and its result is as if it
+#' had not paused (steering review)
 #' @noRd
 eval_on_interrupt = function(st) {
-  if (is.null(st$interrupted_after)) st$interrupted_after = eval_now() - st$t0
+  st$interrupt_seen = eval_now() - st$t0
   eval_flush(st)
-  eval_push(st, "interrupt", message = "Interrupted by the user.",
-            seconds = st$interrupted_after)
   invisible()
 }
 

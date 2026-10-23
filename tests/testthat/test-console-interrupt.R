@@ -458,6 +458,26 @@ test_that("a steer typed while a tool runs reaches the request after the tool re
   expect_match(json_encode(msgs[[length(msgs)]]), "use mpg", fixed = TRUE)
 })
 
+test_that("an r call the pause menu resumed returns its output, then the steer (steering review)", {
+  local_project()
+  local_gptr_options(unsafe_no_permissions = TRUE)
+  code = paste0("invisible(withRestarts(signalCondition(structure(class = c('interrupt', ",
+                "'condition'), list())), resume = function() NULL))\n1 + 1")
+  fake = local_fake_provider(list(fake_tool("r", code = code), "ack", "done"))
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  local_menu_answers(c("s", "use mpg"))
+  run = local_tracked(run_start(s, msg_user("go")), s)
+  notices(with_interrupt_policy(function() run_wait(run), list(run), mode = "call"))
+  msgs = fake_requests(fake)[[2L]]$messages
+  n = length(msgs)
+  # the code ran to its end, so the model reads its output, never an interrupt, then the relay
+  expect_identical(msgs[[n - 1L]]$role, "tool_result")
+  expect_match(json_encode(msgs[[n - 1L]]), "[1] 2", fixed = TRUE)
+  expect_no_match(json_encode(msgs[[n - 1L]]), "interrupted", fixed = TRUE)
+  expect_identical(msgs[[n]]$role, "operator")
+  expect_match(json_encode(msgs[[n]]), "use mpg", fixed = TRUE)
+})
+
 test_that("a steer typed in a tool and then aborted is kept in the history, never sent later", {
   local_project()
   local_gptr_options(unsafe_no_permissions = TRUE, history = TRUE)

@@ -64,6 +64,11 @@ Typing during an in-process `r` tool:
   16-21: the live row says so, `▌ r · keys show when r returns`, without a clock, which cannot tick then.)
 - The console reads typed input at `turn_end`, before the loop polls steers (Task 7). So a
   message sent before a boundary reaches that boundary.
+- (Amended in the steering review: a pause-menu answer that resumes, s, f, c or b, leaves the call's
+  result as if it had not paused. The evaluator reports an interrupt only where it ends the evaluation,
+  so after s the model reads the code's own output, then the steer relay, and never
+  `[interrupted by the user ...]` for code that ran to its end; an abort still gives
+  `Interrupted after <s> s; side effects may have occurred.`)
 
 CLI routes (claude-cli, codex): the boundary is the end of the CLI's answer, which is often the
 whole run. There a steer behaves like an in-run follow-up, and its queue line says
@@ -155,7 +160,7 @@ working directory restored. Plan-specific rules:
 | `R/console-complete.R` (new) | 22, 23 |
 | `R/utils-options.R` (`readline_answer()`, tty wrappers, `console_class()`) | 2, 3, 17, 18, 25 |
 | `R/utils-conditions.R` (`console_colors()`, `console_style()`; `gptr_message_write()` clears and redraws the live row) | 8, 11, 17, 25 |
-| `R/eval-core.R` (an evaluation holds the console's colours; printed output as result rows, visual review) | 11 |
+| `R/eval-core.R` (an evaluation holds the console's colours; printed output as result rows, visual review; an interrupt is reported only where it ends the evaluation, steering review) | 11 |
 | `R/gptr-config.R` (`type_ahead` description) | 18 |
 | `R/console-commands.R` (`/help`, `/context`), `tests/testthat/test-console-commands.R` | 26, 27 |
 | `tests/testthat/test-console-{typing,ui,render,repl,completion,interrupt,wait,spinner-*,fences,jupyter-progress,message-stream,setup,notice,process-launch}.R`, `helper-console-input.R` | their tasks |

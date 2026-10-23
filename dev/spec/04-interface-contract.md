@@ -925,7 +925,7 @@ interrupted_after), class = "gptr_eval_result")`:
 | `assigned` | chr | static assignment targets of the evaluated code (for the state diff) |
 | `outputs` | list of chr | printed output per top-level expression (cleaned) |
 | `spill`, `out_id` | chr(1)\|NULL | set by `format_eval_result()` when truncated |
-| `interrupted_after` | num(1)\|NULL | seconds |
+| `interrupted_after` | num(1)\|NULL | seconds before the interrupt that ended the evaluation (status `interrupt`, with its `interrupt` event); NULL when none did, also after an interrupt the pause menu resumed (steering review) |
 
 The value of an evaluation is never kept (R8).
 

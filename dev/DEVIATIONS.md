@@ -3106,6 +3106,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     test-gptr-sdk.R "a steer sent before a deferred prompt runs joins it, recorded (steering review)", "a deferred
     prompt run alone records no follow-up line (steering review)"; test-agent-run.R "a steer older than every
     follow-up still opens a run without input (steering review)".
+  - A pause the code continues from is not reported to the model as an interrupt. `eval_on_interrupt()`, the
+    evaluator's innermost calling handler, pushed the `interrupt` event before the pause menu answered, so after s,
+    f, c or b the `r` call ran to its end and the person saw its normal result while the model read
+    `[interrupted by the user after N s; side effects may have occurred]` before the steer relay (an invitation to
+    rerun finished code), and the session JSONL kept it. The handler now flushes and notes the time only; the
+    event and `interrupted_after` are written where the interrupt ends the evaluation, `eval_interrupted()`
+    outside a run. In a run an abort unwinds past the result, and `tool_interrupted()` writes the call's
+    `Interrupted after N s; side effects may have occurred.` as before. Contract-visible: 04 §5.8
+    (`interrupted_after`). Tests: test-eval-core.R "a resumed interrupt is not reported; one that ends the code
+    is (steering review)"; test-console-interrupt.R "an r call the pause menu resumed returns its output, then
+    the steer (steering review)".
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Pending (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue
