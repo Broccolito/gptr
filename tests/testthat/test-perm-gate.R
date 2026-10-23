@@ -318,6 +318,37 @@ test_that("a deny rule stops a program given by its path or in a background job 
   }
 })
 
+test_that("deny and ask rules see the command a nested sh or bg call computes (6.8.4)", {
+  skip_on_cran()
+  root = local_project(files = list("build/a.o" = "x"))
+  build = file.path(root, "build", "a.o")
+  local_permission_rules()
+  gptr_permissions(deny = "r(sh:rm *)")
+  for (fn in c("sh", "bg")) {
+    code = paste0("cmd = paste('rm', '-rf', 'build'); peter$", fn, "(cmd)")
+    for (mode in c("auto", "yolo")) {
+      fake = local_fake_provider(list(fake_tool("r", code = code), "Done."),
+                                 name = paste0(fn, "-", mode))
+      peter("Clean up.", model = fake, mode = mode, envir = new.env())
+      res = fake_requests(fake)[[2]]$last_results[[1]]
+      expect_match(msg_text(res), "denied by the rule r(sh:rm *)", fixed = TRUE,
+                   label = paste(fn, mode))
+      expect_true(file.exists(build), label = paste(fn, mode))
+    }
+  }
+  gptr_permissions(remove = "r(sh:rm *)")
+  gptr_permissions(ask = "r(sh:rm *)")
+  ui = local_scripted_ui(list("n"))
+  fake = local_fake_provider(list(
+    fake_tool("r", code = "cmd = paste('rm', '-rf', 'build'); peter$sh(cmd)"),
+    fake_tool("r", code = "out = peter$sh(paste('echo', 'hi'))$stdout"), "Done."), name = "ask")
+  e = new.env()
+  peter("Clean up.", model = fake, mode = "auto", envir = e)
+  expect_true(file.exists(build))
+  expect_identical(sum(ui$log$method == "permission"), 1L)
+  expect_identical(trimws(e$out), "hi")
+})
+
 test_that("the protect_size policy reads the run's snapshot, not the live option (IC-53)", {
   root = local_project()
   e = new.env()

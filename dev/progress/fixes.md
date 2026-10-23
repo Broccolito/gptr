@@ -2254,3 +2254,25 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   after the G5 table, which keeps its 46 cases. No live check (the fake run is the gate end to end).
 - Open: `peter$script()` still offers `r(sh:peter$script*)`, which would allow every script (finding 45, no
   unit); a computed command is nested-1.
+
+### nested-1 - Deny and ask rules see the real command of a nested peter$sh() or peter$bg() call
+- Red: FAIL 10 in `^perm-gate$` (PASS 144): under `r(sh:rm *)` deny, the fake's `cmd = paste('rm', '-rf',
+  'build'); peter$sh(cmd)` and `peter$bg(cmd)` ran in auto and yolo and deleted `build/` (8); under the ask rule
+  in auto nothing was asked and `build/` went (2).
+- Cause: the static row is `peter$sh(<code the code computes>)`, which no `sh:` glob matches; `dispatch_nested()`
+  re-checked the call only above the outer call's approved level (an in-project `rm` is 3, as the outer call), and
+  then as tool `sh`, which `r(...)` rules never match.
+- Fix: `nested_rules()`: a nested `sh` or `bg` call meets the registered `rules` policy as the literal call
+  `peter$sh("rm -rf build")` (its risk through `call_risk()`, the `risk.classify` service), whatever its level; a
+  deny refuses it with the rule's text, an ask goes through `perm_ask()`. No allow rules; skipped under
+  `gptr.unsafe_no_permissions`, as `perm_check()` is.
+- Green: `^perm-gate$` PASS 154; `^(perm-|bridge-|agent-dispatch|tool-r|ckpt-|arch-layers|lint-rules|zzz)` PASS
+  3370 SKIP 12. Full suite (NOT_CRAN=true) FAIL 0 PASS 35476 SKIP 64. Lint and check-plans clean.
+- Deviations: D-251 (extended); 03 §6.8.4 and 04 §7.6 `dispatch_nested()` amended. From the plan:
+  `perm_policy_rules()` and `risk_command()` are L4, which L2's `agent-dispatch.R` may not call (arch-layers), so
+  the registry's `rules` record is asked through `ext_policy_decide()` and the command is read through the literal
+  call (the reading of sessions-17 and sessions-18, `bg`'s `process` row included). No live check (the fake run is
+  the gate end to end).
+- Open: an `[a]lways` answer to such a question stores `sh` (`perm_on_remember()` recomputes from tool `sh`), an
+  allow rule for every nested `sh` call the level gate asks about, not the shown `r(sh:rm -rf*)` (as for any
+  nested question before; P11's code).
