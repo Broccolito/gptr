@@ -45,7 +45,7 @@ chooses one for each message, and the `type_ahead` setting (`"steer"` or `"follo
 | Step boundary | the response in flight ends without a tool call, or the last tool call of that response returns | n/a |
 | Terminal key (T class) | Enter when `type_ahead = "steer"` (the default), else Tab | the other key |
 | Never | interrupts a request or a tool; waits for the run to end | joins the running run |
-| Shown while queued | on the live row: `n queued`, and the newest message as `↳ steer · <text>` when the draft is empty; `↳ <kind> · <text>` lines in D and L consoles | the same, with `follow-up` as the kind word |
+| Shown while queued | on the live row: `n queued`, and the newest message as `↳ steer · <text>` when the draft is empty; `↳ <kind> · <text>` lines in D and L consoles (amended in the steering review: a line still held for the answer's text block when its steer is delivered is not written; the delivery says it) | the same, with `follow-up` as the kind word |
 | Shown at delivery | `› <text>` on the band, at the boundary, before the next request's output | `peter> <text>` on the band, at the next prompt |
 | Edit or withdraw | Up on an empty draft takes back the newest undelivered message (either kind) into the composer; Ctrl-U discards it | same |
 
@@ -505,7 +505,9 @@ Decisions:
 - Other output (a queue line, a notice, a question) goes between whole rows, and the held row continues after
   it: a typed line clears only the waiting row, keeping its clock, and pauses nothing. A queue line waits for
   an open text block to end and is a block of its own (amended in the visual review: between whole rows it
-  still split a sentence). The pause menu, too, stops only the waiting rows; an abort still ends the
+  still split a sentence; amended in the steering review: a held steer's line is dropped when the steer is
+  delivered, as the delivery says the same, so five steers typed while an answer streamed took five
+  rows, not ten; follow-ups and a CLI route's steer keep theirs). The pause menu, too, stops only the waiting rows; an abort still ends the
   stream (amended in the visual review). `reset_line()` is
   deleted (amended in the review of Tasks 8-15: a queued steer had ended the held row as a short row and
   restarted the waiting row at 0 s inside the answer).

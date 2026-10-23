@@ -3839,3 +3839,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   on the band, reset after reads (IC-82)"; test-console-render.R "console_style() gives the logo accents by depth
   and the band by background (D-245)"; test-console-input.R "a draft a run left is edited at the prompt; Enter
   returns it as readline would".
+- Steering review fixes (2026-10-22):
+  - A queue line still held for the answer's text block when its steer is delivered is not written: the delivery
+    (`› <text>`) says the same. This amends the queue-line bullet above: a held line shows only while its message
+    still waits. In TERM=dumb five steers typed while an answer streamed took ten rows, each queue line right
+    above its delivery and never on screen before. The held entries carry `drop` (a steer not on a CLI
+    route); `console_on_queue_update()` drops them all at the first steer it delivers, as the loop takes every
+    queued steer at once. Follow-up lines and a CLI route's steer stay, and a held steer's line still shows when a
+    tool block starts before the boundary. Below verbosity 2 no delivery is drawn, and the line stays.
+    Contract-visible: 04 §15.10 IC-82. Tests: test-console-typing.R "a line queued while an answer streams waits for its block to end (visual review)", "a
+    held follow-up line stays; a held steer's shows before a tool (steering review)".

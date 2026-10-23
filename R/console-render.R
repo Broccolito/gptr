@@ -602,7 +602,7 @@ console_before_message = function(runs = NULL, kind = "notice", tools = FALSE) {
 #' @noRd
 console_gap = function(rec, kind) {
   if (length(rec$queued) && !identical(kind, "text")) {
-    rows = rec$queued
+    rows = unlist(lapply(rec$queued, `[[`, "rows"))
     rec$queued = NULL
     console_gap(rec, "person")
     console_write(rows)
@@ -1244,7 +1244,8 @@ console_on_shutdown = function(event, ctx) {
 
 #' queue_update: a user's message the loop takes (a steer at its step boundary) is the person's line
 #' at column 0, the person's glyph and the text (ASCII `>> <text>`), on the band, before the next
-#' request's output (D-242)
+#' request's output (D-242). The steers' queue lines still held (console_queue_line()) are dropped:
+#' the loop takes every queued steer at once, and the deliveries say what they said
 #' @noRd
 console_on_queue_update = function(event, ctx) {
   rec = console_record(event)
@@ -1252,6 +1253,7 @@ console_on_queue_update = function(event, ctx) {
       !console_render_on(rec)) return(NULL)
   rows = console_person_rows(console_style()$person, event$text)
   console_pause_one(rec)
+  if (identical(event$which, "steer")) rec$queued = Filter(function(x) !x$drop, rec$queued)
   console_gap(rec, "person")
   console_write(console_band(rows))
   NULL

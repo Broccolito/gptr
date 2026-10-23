@@ -320,9 +320,10 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
 #' question's title names (policy_menu()). Inside an evaluation it has the console's
 #' colours. It is a block of the person's lines (console_gap()), except right under a question
 #' whose read routed it; while an answer of the session's foreground run streams, it waits in the
-#' run's record (`rec$queued`) for the answer's block to end, so it never splits a sentence (D-245).
-#' Where a T console's composer reads keys, the live row shows the queue while it is up (D-243), so
-#' only a CLI route's steer prints its line then.
+#' run's record (`rec$queued`) for the answer's block to end, so it never splits a sentence (D-245);
+#' a steer's line still held when the steer is delivered is dropped, its delivery saying the same
+#' (a CLI route's kept). Where a T console's composer reads keys, the live row shows the queue
+#' while it is up (D-243), so only a CLI route's steer prints its line then.
 #' @noRd
 console_queue_line = function(s, text, as) {
   steer = identical(as, "steer")
@@ -339,7 +340,8 @@ console_queue_line = function(s, text, as) {
   rec = Find(function(rec) identical(rec$session, s) && console_foreground(rec, tools = TRUE),
              as.list(console_state()$active))
   if (!is.null(rec$md) && identical(rec$last, "text")) {
-    rec$queued = c(rec$queued, rows)
+    # a held steer's line gives way to its delivery (console_on_queue_update())
+    rec$queued = c(rec$queued, list(list(rows = rows, drop = steer && !on_cli)))
     return(invisible(NULL))
   }
   if (!is.null(rec) && !identical(rec$last, "prompt")) console_gap(rec, "person")

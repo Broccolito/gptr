@@ -159,9 +159,10 @@ test_that("a line queued while an answer streams waits for its block to end (vis
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE, cli.width = 40L, cli.num_colors = 1L)
   words = paste(sprintf("word%02d", 1:40), collapse = " ")
-  fake = gptr_fake_provider(list(list(text = words, chunk = 8L, gap = 0.02), "second"))
-  # typed once the answer's first row is written, while the rest of it streams
-  local_typed(typed_once("use base R", function() {
+  fake = gptr_fake_provider(list(list(text = words, chunk = 8L, gap = 0.03), "second"))
+  # typed in three looks once the answer's first row is written, while the rest of it streams
+  steers = c("use base R", "and log2", "and plot it")
+  local_typed(keys_once(steers, function() {
     any(vapply(as.list(console_state()$active), function(r) identical(r$last, "text"), NA))
   }))
   res = typing_console(fake, c("go", "/exit"))
@@ -170,15 +171,40 @@ test_that("a line queued while an answer streams waits for its block to end (vis
   rows = sub(".*\r", "", res$out)
   first = grep("word01", rows, fixed = TRUE)
   last = grep("word40", rows, fixed = TRUE)
-  q = which(rows == queue_line("steer", "use base R"))
-  expect_length(q, 1L)
-  # the paragraph is whole, never split at the queue line, and no waiting row comes back inside
-  # it; the line follows the answer's block as a block of its own, before its delivery
+  # the paragraph is whole, never split at a queue line, and no waiting row comes back inside it;
+  # the held queue lines give way to the deliveries, which say the same (steering review)
   expect_identical(rows[first:last], whole)
   expect_false(any(grepl("thinking", res$out[(first + 1L):last], fixed = TRUE)))
-  expect_identical(rows[last + 1:3],
-                   c("", queue_line("steer", "use base R"),
-                     paste0(console_style()$person, " use base R")))
+  expect_identical(rows[last + 1:4], c("", paste0(console_style()$person, " ", steers)))
+  expect_false(any(startsWith(rows, queue_line("steer", ""))))
+})
+
+test_that("a held follow-up line stays; a held steer's shows before a tool (steering review)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.width = 40L, cli.num_colors = 1L)
+  words = paste(sprintf("word%02d", 1:40), collapse = " ")
+  streaming = function() {
+    any(vapply(as.list(console_state()$active), function(r) identical(r$last, "text"), NA))
+  }
+  person = paste0(console_style()$person, " use base R")
+  # a /command waits for the next prompt: its follow-up line shows, the steer's gives way
+  fake = gptr_fake_provider(list(list(text = words, chunk = 8L, gap = 0.03), "second"))
+  local_typed(typed_once(c("/status", "use base R"), streaming))
+  rows = sub(".*\r", "", typing_console(fake, c("go", "/exit"))$out)
+  last = grep("word40", rows, fixed = TRUE)
+  expect_identical(rows[last + 1:3], c("", queue_line("follow-up", "/status"), person))
+  # a tool block before the step boundary: the held line first, the delivery after the result
+  fake = gptr_fake_provider(list(list(text = words, chunk = 8L, gap = 0.03, tool = "r",
+                                      input = list(code = "zz = 1")), "second"))
+  local_typed(typed_once("use base R", streaming))
+  rows = sub(".*\r", "", typing_console(fake, c("go", "/exit"))$out)
+  q = which(rows == queue_line("steer", "use base R"))
+  tool = grep("zz = 1", rows, fixed = TRUE)
+  expect_length(q, 1L)
+  expect_true(grep("word40", rows, fixed = TRUE) < q && q < tool[[1L]] &&
+                tool[[1L]] < which(rows == person))
 })
 
 test_that("a queue line is a block of its own: a blank row before the text after it", {
