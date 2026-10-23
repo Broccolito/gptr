@@ -3202,6 +3202,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   gptr_fake_provider(...)` then `model = opus` ran the alias's model without a word. The plan named every
   accepted spec; comparing `name` keeps a provider registered under its variable's name silent, as an equal
   character value is.
+- Rule (s1-1): `route_refuse_s1_args()` (was `route_refuse_s1_images()`, whose refusal still comes first) runs
+  in the `nested`, `continue` and `new` routes; it refuses the first of `choices`, `levels`, a `threshold`
+  other than 0.5, `min_confidence` and `uncertain` as `invalid_argument` naming it, before any request, and
+  points to a decision model or `gptr_config(system1 = "emulate:<ref>")`. An explicit `threshold = 0.5`
+  passes (no `missing()` tracking). Formerly they were validated and dropped: a chat model returned a
+  session, on which `sum()`, `[` and `gptr_prob()` failed. The `team` and `fanout` routes (P19, L4) still
+  drop them, and `.opts$system1_images` (measured); L4 may not call this P08 helper (test-arch-layers.R).
 - Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
   model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal); 07
   §2.1 and the 04 `model_prepare()` row (P06 prepares); the 04 `model_resolve()` row (the empty-route hint); 04
@@ -3212,7 +3219,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (thinking) and `?gptr_provider`'s bedrock-converse example (`reasoning`, `capabilities`); 04 §1.1 (a
   string that is not a choice); 04 §2.2 messages (`thinking_clamped`), §4.9 `thinking` row, 03 §8.4 model
   references and `?gptr_provider` (`thinking_levels`); 03 §4.1.3 and 04 §6.1.3 (`alias_shadowed` for a
-  spec).
+  spec); 03 §4.1, 04 §6.1.1 step 5 and `?peter` (System 1 arguments on a conversational route).
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
   match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
@@ -3230,4 +3237,5 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   reported as such, never quoted (D-250)"; test-agent-run.R "a thinking level the model lacks is announced once
   per model and level (D-250)"; test-catalog-models.R "a thinking suffix the model lacks is announced with the
   level used (D-250)"; test-gptr-capture.R "an alias shadowed by a spec the argument accepts gets the message
-  (D-250)". Evidence: progress/fixes.md Task FIX-17.
+  (D-250)"; test-gptr-gateway.R "System 1 arguments are refused on a conversational route (D-250)". Evidence:
+  progress/fixes.md Task FIX-17.

@@ -2206,3 +2206,22 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `local = gptr_provider("local", ...)` registered and passed as `model = local` (measured), which names the
   same provider; comparing `name` keeps it silent. Open: a call such as `model = if (x) haiku else opus` is
   evaluated in the alias mask and stays silent (by design, 03 §4.1.3).
+
+### s1-1 - System 1 arguments on a conversational model are refused, as .opts$system1_images is
+- Finding 132. Red: `^gptr-gateway$` FAIL 3, PASS 355: `peter("Which?", model = fake, choices = c("a",
+  "b"))`, and the same with `levels`, `threshold = 0.7`, `min_confidence` or `uncertain`, returned a session
+  without a word.
+- Cause: `gateway_args()` validates the five arguments, but only the classifier route reads them; the
+  nested, continue and new routes refused only `.opts$system1_images` (`route_refuse_s1_images()`, IC-74 §4).
+- Fix: `route_refuse_s1_args()` replaces it at its three call sites. After the images check it refuses the
+  first of `choices`, `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain` as
+  `invalid_argument` naming it, pointing to `jev`, `"ollama/clef-flash"` or `gptr_config(system1 =
+  "emulate:<ref>")`. The continue route and a configured default chat model refuse too; an explicit
+  `threshold = 0.5` runs. `?peter`, 03 §4.1 and 04 §6.1.1 step 5 amended; NEWS entry.
+- Green: `^gptr-gateway$` PASS 384; with s1-route and arch-layers PASS 720; full suite (NOT_CRAN) FAIL
+  0, WARN 0, SKIP 65, PASS 35466. Lint clean; `man/peter.Rd` regenerated, `tools::checkRd()` clean.
+- Deviations: D-250 (s1-1 rule). Open: the `team` and `fanout` routes (`agents =`, `parallel =`) still drop
+  these arguments and `.opts$system1_images` (measured: `parallel = 2, choices =` ran two sub-agents).
+  Calling this helper from `subagent_route_checks()` fails test-arch-layers.R (P19 is L4, P08 L6), so it
+  needs a contract edge or a P19 check of its own. The sheet's System 1 card can say these arguments need
+  a decision model (the sheet is edited later).

@@ -1070,6 +1070,41 @@ test_that(".opts$system1_images is refused on a conversational route (IC-74 sect
   expect_length(fake_requests(fake), 0L)
 })
 
+test_that("System 1 arguments are refused on a conversational route (D-250)", {
+  local_gw()
+  fake = local_fake_provider(list("ok", "ok", "ok"))
+  ask = list(
+    choices = function(e) peter("Which?", model = fake, envir = e, choices = c("a", "b")),
+    levels = function(e) peter("Which?", model = fake, envir = e, levels = c("lo", "hi")),
+    threshold = function(e) peter("Which?", model = fake, envir = e, threshold = 0.7),
+    min_confidence = function(e) peter("Which?", model = fake, envir = e, min_confidence = 0.8),
+    uncertain = function(e) peter("Which?", model = fake, envir = e, uncertain = "stop"))
+  for (arg in names(ask)) {
+    cnd = expect_error(ask[[arg]](new.env()), class = "gptr_error_invalid_argument")
+    expect_identical(cnd$arg, arg)
+    expect_match(conditionMessage(cnd), paste0("`", arg, "` shapes a System 1 decision"),
+                 fixed = TRUE)
+    expect_match(conditionMessage(cnd), "emulate:<ref>", fixed = TRUE)
+  }
+  expect_length(fake_requests(fake), 0L)
+  # the default threshold, and an explicit 0.5, are no System 1 request
+  s = peter("Start.", model = fake, envir = new.env())
+  expect_length(fake_requests(fake), 1L)
+  # the continue route refuses before the turn
+  cnd = expect_error(s |> peter("Which?", levels = c("lo", "hi")),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "levels")
+  expect_length(fake_requests(fake), 1L)
+  s |> peter("Go on.", threshold = 0.5)
+  expect_length(fake_requests(fake), 2L)
+  # so does a configured default chat model
+  local_gptr_options(model = "fake/fake-1")
+  cnd = expect_error(peter("Which?", envir = new.env(), choices = c("a", "b")),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "choices")
+  expect_length(fake_requests(fake), 2L)
+})
+
 test_that("gateway_model_ref() and router_model() keep colon ids and thinking levels (IC-74)", {
   local_gw()
   local_fake_provider(list("x"), name = "fake2")

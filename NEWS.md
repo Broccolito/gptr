@@ -192,6 +192,10 @@ works on the objects already in memory.
   name, and gptr now says so when the variable holds a spec the argument takes (a provider or
   router for `model`, a tool for `tools`), as it did for a character value: after
   `opus = gptr_fake_provider(...)`, `model = opus` uses the alias and suggests `!!opus`.
+* `choices`, `levels`, `threshold`, `min_confidence` and `uncertain` given to a conversational model
+  are refused, naming the argument; they were ignored, and the call returned a session on which
+  `sum()`, `[` and `gptr_prob()` then failed. Use a decision model such as `jev`, or opt into
+  emulation with `gptr_config(system1 = "emulate:<ref>")`.
 
 # gptr 0.7.0
 

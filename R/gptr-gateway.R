@@ -74,7 +74,10 @@
 #'   Each child gets its element alone as `.x`, a named list of one attached as `.x[["A"]]`;
 #'   `.opts = list(context = "none")`, which would drop it, is refused. A child that succeeds
 #'   keeps only the values it returned with [gptr_return()], so they must be self-contained.
-#' @param choices,levels,threshold,min_confidence,uncertain System 1 answer shape and abstention.
+#' @param choices,levels,threshold,min_confidence,uncertain System 1 answer shape and abstention,
+#'   for a decision model (`jev`, `"ollama/clef-flash"`) or opt-in emulation
+#'   (`gptr_config(system1 = "emulate:<ref>")`). A conversational model refuses them (`threshold`
+#'   only when it is not 0.5) rather than ignore them.
 #' @param prompt An explicit prompt; wins over positional selection.
 #' @param envir Where the agent evaluates R code and creates objects. A call made by the agent's
 #'   own R code without `envir` evaluates in a new environment whose parent is the caller's,
@@ -1084,7 +1087,7 @@ gateway_signal = function(s, run = NULL) {
 #' @noRd
 route_continue = function(call) {
   route_needs_subagents(call)
-  route_refuse_s1_images(call)
+  route_refuse_s1_args(call)
   s = call$session
   if (session_data(s)$status %in% c("running", "waiting")) {
     session_control_check("gptr_steer", s)
@@ -1109,17 +1112,35 @@ route_needs_subagents = function(call) {
   invisible(TRUE)
 }
 
-#' Refuses `.opts$system1_images` in the conversational routes, which would drop them silently
-#' (IC-74, 07 section 4)
+#' Refuses the System 1 arguments in the conversational routes, which would drop them silently
+#' (IC-74, 07 section 4; D-250): `.opts$system1_images`, `choices`, `levels`, `min_confidence`,
+#' `uncertain`, and a `threshold` other than its default 0.5
 #' @noRd
-route_refuse_s1_images = function(call) {
-  if (!length(call$args$opts$system1_images)) return(invisible(TRUE))
-  gptr_abort(c(paste0("`.opts$system1_images` holds the images of System 1 decisions; this call ",
-                      "starts a conversation, which would not send them."),
-               paste0("Use a decision model (a classifier) for them, or attach images to a ",
-                      "conversation with .opts = list(images = ...).")),
-             "invalid_argument", arg = ".opts$system1_images",
-             expected = "a decision (classifier) model, or .opts$images")
+route_refuse_s1_args = function(call) {
+  a = call$args
+  if (length(a$opts$system1_images)) {
+    gptr_abort(c(paste0("`.opts$system1_images` holds the images of System 1 decisions; this ",
+                        "call starts a conversation, which would not send them."),
+                 paste0("Use a decision model (a classifier) for them, or attach images to a ",
+                        "conversation with .opts = list(images = ...).")),
+               "invalid_argument", arg = ".opts$system1_images",
+               expected = "a decision (classifier) model, or .opts$images")
+  }
+  given = c(choices = !is.null(a$choices), levels = !is.null(a$levels),
+            threshold = !is.null(a$threshold) && !identical(a$threshold, 0.5),
+            min_confidence = !is.null(a$min_confidence), uncertain = !is.null(a$uncertain))
+  if (!any(given)) return(invisible(TRUE))
+  arg = names(given)[given][1L]
+  label = gateway_model_label(call$ids$model)
+  who = if (is.na(label)) "the model of this call" else paste("model", label)
+  gptr_abort(c(paste0("`", arg, "` shapes a System 1 decision; ", who, " is conversational, so ",
+                      "peter() would start a conversation and ignore it."),
+               paste0("Use a decision model (model = jev or \"ollama/clef-flash\"), opt into ",
+                      "emulation with gptr_config(system1 = \"emulate:<ref>\"), or drop the ",
+                      "argument.")),
+             "invalid_argument", arg = arg,
+             expected = paste("a decision (classifier) model, or emulation enabled with",
+                              "gptr_config(system1 =)"))
 }
 
 #' TRUE unless the call's model is a classifier, left to P13's `classifier` route (IC-74)
@@ -1140,7 +1161,7 @@ gateway_routes = function() {
               },
               run = function(call) {
                 route_needs_subagents(call)
-                route_refuse_s1_images(call)
+                route_refuse_s1_args(call)
                 gateway_run(call, NULL)
               }),
     gptr_spec("route", "continue", order = 60,
@@ -1154,7 +1175,7 @@ gateway_routes = function() {
               match = function(call) !is.null(call$prompt) && route_conversational(call),
               run = function(call) {
                 route_needs_subagents(call)
-                route_refuse_s1_images(call)
+                route_refuse_s1_args(call)
                 gateway_run(call, NULL)
               }))
 }

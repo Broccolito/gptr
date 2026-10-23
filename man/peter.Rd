@@ -34,7 +34,10 @@ Each child gets its element alone as \code{.x}, a named list of one attached as 
 \code{.opts = list(context = "none")}, which would drop it, is refused. A child that succeeds
 keeps only the values it returned with \code{\link[=gptr_return]{gptr_return()}}, so they must be self-contained.}
 
-\item{choices, levels, threshold, min_confidence, uncertain}{System 1 answer shape and abstention.}
+\item{choices, levels, threshold, min_confidence, uncertain}{System 1 answer shape and abstention,
+for a decision model (\code{jev}, \code{"ollama/clef-flash"}) or opt-in emulation
+(\code{gptr_config(system1 = "emulate:<ref>")}). A conversational model refuses them (\code{threshold}
+only when it is not 0.5) rather than ignore them.}
 
 \item{prompt}{An explicit prompt; wins over positional selection.}
 
