@@ -2022,3 +2022,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   narrowed to models.dev routes, since a refresh brings nothing for a provider the user registered. Open: the
   maintainer's online `dev/catalog/build_models.R` run so the shipped snapshot carries these routes (release
   step, after catalog-1 and prompt-1); the refresh-scope wording is sheet entries S16 and S18.
+
+### provider-2 - Model records accept prices as a list of records and check them at registration
+- Finding 85. Red: `^ext-specs$` FAIL 1, PASS 305: `gptr_provider(..., models = list(list(id = "m", prices =
+  list(list(input = 5, output = 25)))))` failed "field 'models[[1]].prices' must be a data frame".
+- Cause: `spec_model_rules()` typed `prices` as `df` and `spec_model_metadata()` never normalised it, while
+  `prices_df()` (and `gptr_config(providers =)`) take a list of records; a string price or duplicate tiers passed
+  registration and failed at the first call with no provider, model or field named.
+- Fix: `prices = f("df|list")`; `spec_model_metadata()` normalises it and re-raises a bad table as
+  `invalid_spec` naming `models[[i]].prices` ("must be a data frame or a list of price records: invalid
+  price.input, expected ..."). `?gptr_provider` documents the price shape. NEWS entry; 04 §7.0, §10.2 amended.
+- Green: `^(ext-specs|aaa-state)$` PASS 354; ext-*, aaa-state, provider-*, catalog-*, session-budget,
+  arch-layers, lint-rules, gptr-config, gptr-gateway and agent-run PASS 6972. Lint clean; Rd regenerated.
+- Deviations: D-250 (provider-2 rule). The plan's direct `prices_df()` call fails the layering test (ext-specs.R
+  is L0, provider-usage.R L1), so P05 provides `prices_df()` as the `prices.table` service (IC-09), the pattern
+  of `check.adapter`; without the service the table is checked when the model is resolved, as before. Open: a
+  second user registration of the same provider id is ignored silently (verifier's side finding; not this unit).

@@ -152,6 +152,9 @@ works on the objects already in memory.
 * An unknown `provider/id` on a route the catalog lists no models for yet (before a refresh,
   for example OpenRouter, Groq, xAI or Azure) says that `gptr_models(refresh = TRUE)` downloads
   them from models.dev.
+* `gptr_provider()` and `gptr_spec("model")` accept a model's `prices` as a list of price records
+  as well as a data frame, as `gptr_config(providers =)` does, and check the table when the spec
+  is built, naming the field, instead of failing at the first call.
 
 # gptr 0.7.0
 

@@ -300,7 +300,7 @@ spec_model_rules = function() {
     type = f("enum", values = c("chat", "classifier", "cli")),
     release_date = f("chrna|numna"), context = f("numna"), max_output = f("numna"),
     reasoning = f("lgl1"), thinking_levels = f("chr"), thinking = f("chr1"), input = f("chr"),
-    tool_call = f("lgl1"), structured_output = f("lgl1"), prices = f("df"),
+    tool_call = f("lgl1"), structured_output = f("lgl1"), prices = f("df|list"),
     cache_min = f("numna"), capabilities = f("nlist"), aliases = f("chr"),
     decision = f("nlist"), digest = f("chr1"), server_version = f("chr1"),
     locality = f("enum", values = c("local", "remote", "unknown")),
@@ -318,6 +318,14 @@ spec_model_metadata = function(spec, model, prefix = "") {
   for (name in names(rules)) {
     value = model[[name]]
     if (!is.null(value)) model[[name]] = field_check(name, value, rules[[name]])
+  }
+  normalise = if (is.null(model[["prices"]])) NULL else ext_service_try("prices.table")
+  if (!is.null(normalise)) {
+    model$prices = tryCatch(normalise(model[["prices"]]),
+      gptr_error_invalid_argument = function(e) {
+        spec_abort(spec, paste0(prefix, "prices"), paste0("must be a data frame or a list of ",
+          "price records: invalid ", e$arg, ", expected ", e$expected))
+      })
   }
   for (name in c("digest", "server_version")) {
     if (isFALSE(nzchar(model[[name]]))) spec_abort(spec, paste0(prefix, name), "must not be empty")
@@ -1005,7 +1013,10 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #' @param api Wire api (the name of an adapter), for example `"openai-completions"`.
 #' @param base_url Endpoint base URL.
 #' @param auth Character vector of environment-variable names, a function, or `NULL`.
-#' @param models List of model records (each with at least `id`).
+#' @param models List of model records (each with at least `id`). A record's `prices` is a data
+#'   frame or a list of price records: `input` and `output` in USD per million tokens, optional
+#'   `cache_read`, `cache_write_5m`, `cache_write_1h`, `from` (a `"YYYY-MM-DD"` date) and `tier`
+#'   (`"default"` or `">200k"`); it is checked here, and without it the cost is unknown.
 #' @param compat Named list of compatibility switches for the adapter (for
 #'   `api = "bedrock-converse"`, `region`: the AWS region requests are signed for).
 #' @param type `"chat"`, `"classifier"` (System 1) or `"cli"`.

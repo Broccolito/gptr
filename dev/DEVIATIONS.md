@@ -3150,13 +3150,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   gptr_models(refresh = TRUE) downloads them from models.dev." Formerly the seed-only snapshot (no openrouter,
   groq, deepseek, mistral, together, xai, cerebras, fireworks, azure or bedrock rows) gave a bare "Unknown model
   reference". A route with rows, or a provider the user registered, keeps the plain message.
+- Rule (provider-2): a model record's `prices` (in `gptr_provider(models =)` and `gptr_spec("model")`) is a
+  data frame or a list of price records; `spec_model_metadata()` normalises it with `prices_df()` through the new
+  `prices.table` service (P05; L0 may not call L1, IC-09, IC-33) and re-raises a bad table as `invalid_spec`
+  naming `<prefix>prices`. Formerly only a data frame passed (the list form works in `gptr_config(providers =)`),
+  and a string price or duplicate tiers passed registration and failed at the first call without context.
 - Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule; an alias with no
   model); 03 §6.11 and 04 §7.7 (threshold formula), §8.1 (`params$max_tokens`), §15 IC-71 (the refusal); 07
-  §2.1 and the 04 `model_prepare()` row (P06 prepares); the 04 `model_resolve()` row (the empty-route hint).
+  §2.1 and the 04 `model_prepare()` row (P06 prepares); the 04 `model_resolve()` row (the empty-route hint); 04
+  §7.0 (`prices.table`) and §10.2 rows 1 and 3 (`prices`), `?gptr_provider`.
 - Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
   gptr is ignored and downloaded again in full", "an alias with no model in the catalog is unknown, not a fuzzy
   match"; test-prompt-compact.R "the output reserve is at most half the window (D-250)"; test-prompt-sections.R
   "the floor check blames compact_at when it sets the threshold (D-250)", "a model whose max_output is its whole
   window runs and asks for half of it (D-250)"; test-catalog-models.R "a System 2 call prepares its selected
   Ollama model as System 1 does", "an unknown id on a route with no catalog models says a refresh fills it
-  (D-250)". Evidence: progress/fixes.md Task FIX-17.
+  (D-250)"; test-ext-specs.R "model prices are a data frame or a list of price records, checked at
+  registration"; test-aaa-state.R (40 services). Evidence: progress/fixes.md Task FIX-17.

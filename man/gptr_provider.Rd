@@ -30,7 +30,10 @@ gptr_provider(
 
 \item{auth}{Character vector of environment-variable names, a function, or \code{NULL}.}
 
-\item{models}{List of model records (each with at least \code{id}).}
+\item{models}{List of model records (each with at least \code{id}). A record's \code{prices} is a data
+frame or a list of price records: \code{input} and \code{output} in USD per million tokens, optional
+\code{cache_read}, \code{cache_write_5m}, \code{cache_write_1h}, \code{from} (a \code{"YYYY-MM-DD"} date) and \code{tier}
+(\code{"default"} or \code{">200k"}); it is checked here, and without it the cost is unknown.}
 
 \item{compat}{Named list of compatibility switches for the adapter (for
 \code{api = "bedrock-converse"}, \code{region}: the AWS region requests are signed for).}
