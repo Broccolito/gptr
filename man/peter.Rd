@@ -108,10 +108,11 @@ A literal prompt gets \code{{name}} interpolation from \code{envir} (atomic vect
 Terminal statuses become conditions carrying the session as \verb{$session}: \code{error} signals
 \code{gptr_error_provider}, \code{blocked} \code{gptr_error_permission}, \code{budget} \verb{gptr_error_budget_<kind>}
 and \code{max_turns} \code{gptr_error_max_turns}. A call whose model cannot be reached (no egress
-acknowledgement, replay mode, a disabled provider, a missing key) is refused before anything
-changes: no turn, no model or mode switch, no new \code{\link[=gptr_last]{gptr_last()}} and no \verb{$session}. \code{peter()}
-with no prompt opens the console when someone can answer, and signals
-\code{gptr_error_noninteractive} otherwise.
+acknowledgement, replay mode, a disabled provider, a missing key) is refused before its run:
+no turn, no model or mode switch, no new \code{\link[=gptr_last]{gptr_last()}} and no \verb{$session}. A piped call loads
+its \code{extensions}, \code{plugins} (filters included) and specs first, since they can define that
+model, and a refused one leaves them loaded for later turns. \code{peter()} with no prompt opens
+the console when someone can answer, and signals \code{gptr_error_noninteractive} otherwise.
 
 A new interactive console without an explicit or configured model first offers CLI selection
 or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;

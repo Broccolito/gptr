@@ -1400,10 +1400,18 @@ test_that("a call refused before its run changes neither the session nor gptr_la
                           auth = "GPTR_TEST_ABSENT_KEY",
                           models = list(list(id = "m", tool_call = TRUE)))
   none = list(context = "none")
-  refused("gptr_error_no_key", s, "UNSENT", model = keyless, .opts = none)
+  seen = new.env()
+  seen$n = 0L
+  hook = gptr_hook("agent_start", function(event, ctx) {
+    seen$n = seen$n + 1L
+    NULL
+  })
+  ext = function(gptr) gptr$register(hook)
+  refused("gptr_error_no_key", s, "UNSENT", model = keyless, extensions = ext, .opts = none)
   gptr_config(providers = list(openai = list(enabled = FALSE)), .scope = "session")
   refused("gptr_error_not_available", s, "UNSENT", model = "openai/gpt-6-sol", .opts = none)
   expect_identical((s |> peter("second"))$text, "two")
+  expect_identical(seen$n, 1L) # the refused call's extension stays loaded (?peter)
   sent = fake_requests(fake)[[2L]]$messages
   expect_identical(vapply(sent, function(m) m$role, ""), c("user", "assistant", "user"))
   expect_false(any(grepl("UNSENT", vapply(sent, msg_text, ""), fixed = TRUE)))

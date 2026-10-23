@@ -1984,6 +1984,12 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   run starts, and a member's request does. `?peter` `.run`, `?gptr_wait`; 04 §6.1.2. Red FAIL 1 on 99e12070 (the
   build and, alone, the team). Green `^gptr-gateway$` PASS 414; `^(gptr-|agent-run$|subagent-|provider-registry$|
   doc-|console-render$|copy-gateway$|arch-layers$|lint-rules$)` PASS 6542 SKIP 3. Lint and Rd clean.
+- Review: r2 documented. A refused continuation is not refused "before anything changes": `gateway_register()` runs
+  before `gateway_guards()`, so its extension fired on the next turn and its `model =` spec stayed registered.
+  Moving the registration after the guards is not safe: they read it (a `model =` spec, a provider an extension
+  registers; tried, `model = keyless` became `gptr_error_unknown_model`). `?peter` says a refused piped call leaves
+  its extensions, plugins (filters) and specs loaded; 04 §6.1.2 and D-251 likewise. The refused-call test pins it.
+  Green `^gptr-gateway$` PASS 415; `^(gptr-|lint-rules$|arch-layers$|zzz)` PASS 1619. Lint and Rd clean.
 - Deviations: D-251 (extended). From the plan: the continuation guards its target whether or not it changes and
   `gateway_run()` guards only a new session (one check per switch); `session_new()` sets `gptr_last()`, so a
   refused new call restores it.

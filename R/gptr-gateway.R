@@ -34,10 +34,11 @@
 #' Terminal statuses become conditions carrying the session as `$session`: `error` signals
 #' `gptr_error_provider`, `blocked` `gptr_error_permission`, `budget` `gptr_error_budget_<kind>`
 #' and `max_turns` `gptr_error_max_turns`. A call whose model cannot be reached (no egress
-#' acknowledgement, replay mode, a disabled provider, a missing key) is refused before anything
-#' changes: no turn, no model or mode switch, no new [gptr_last()] and no `$session`. `peter()`
-#' with no prompt opens the console when someone can answer, and signals
-#' `gptr_error_noninteractive` otherwise.
+#' acknowledgement, replay mode, a disabled provider, a missing key) is refused before its run:
+#' no turn, no model or mode switch, no new [gptr_last()] and no `$session`. A piped call loads
+#' its `extensions`, `plugins` (filters included) and specs first, since they can define that
+#' model, and a refused one leaves them loaded for later turns. `peter()` with no prompt opens
+#' the console when someone can answer, and signals `gptr_error_noninteractive` otherwise.
 #'
 #' A new interactive console without an explicit or configured model first offers CLI selection
 #' or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;
@@ -655,10 +656,11 @@ gateway_continue_envir = function(call, s) {
   invisible(call)
 }
 
-#' Applies a continuation's changes after refusing an unknown tool name or two presets and, under
-#' `safety`, a model the call cannot reach (gateway_guards(), D-251): model, or `.opts$thinking`
-#' alone, an explicit `mode =` (tightened inside a run) and tools through session.add_tools (IC-69).
-#' An inherited mode is never written to the session (IC-53 item 4).
+#' Registers the call's specs, extensions and plugins (the checks read them, so a refused call
+#' keeps them), then applies a continuation's changes after refusing an unknown tool name or two
+#' presets and, under `safety`, a model the call cannot reach (gateway_guards(), D-251): model, or
+#' `.opts$thinking` alone, an explicit `mode =` (tightened inside a run) and tools through
+#' session.add_tools (IC-69). An inherited mode is never written to the session (IC-53 item 4).
 #' @noRd
 gateway_continue_session = function(call, s, cur, safety) {
   d = session_data(s)
