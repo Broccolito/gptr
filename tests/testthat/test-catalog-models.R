@@ -209,6 +209,30 @@ local_catalog = function(models = fx_models(), .env = parent.frame()) {
   invisible(dir)
 }
 
+test_that("each models.dev price tier is read once; the legacy field mirrors the first tier", {
+  cost = function(...) {
+    premium = list(input = 4, output = 12, cache_read = 1)
+    tiers = lapply(c(...), function(n) c(premium, list(tier = list(type = "context", size = n))))
+    list(input = 2, output = 6, cache_read = 0.5, tiers = tiers, context_over_200k = premium)
+  }
+  tiers = function(p) vapply(p, function(x) x$tier, "")
+  p = catalog_prices_from(cost(200000))
+  expect_identical(tiers(p), c("default", ">200k"))
+  expect_equal(prices_df(p)$input, c(2, 4))
+  p = prices_df(catalog_prices_from(cost(272000)))
+  expect_identical(p$tier, c("default", ">272k"))
+  expect_equal(price_select(p, 250000)$input, 2)
+  expect_equal(price_select(p, 300000)$input, 4)
+  expect_identical(tiers(catalog_prices_from(cost(200000, 200001))), c("default", ">200k"))
+  api = list(xai = list(id = "xai", models = list(`grok-4.7` = list(
+    id = "grok-4.7", name = "Grok 4.7", family = "grok", tool_call = TRUE,
+    release_date = "2026-09-01", limit = list(context = 2e6, output = 64000),
+    modalities = list(input = list("text"), output = list("text")), cost = cost(200000)
+  ))))
+  local_catalog(catalog_snapshot(api, generated = "2026-10-22")$models)
+  expect_identical(model_resolve("xai/grok-4.7")$prices$tier, c("default", ">200k"))
+})
+
 test_that("references resolve: exact, alias, family, normalised, owner, thinking", {
   local_catalog()
   expect_equal(model_resolve("anthropic/claude-sonnet-5-5")$ref, "anthropic/claude-sonnet-5-5")
@@ -676,6 +700,30 @@ test_that("an explicit refresh revalidates with the ETag and caches in R_user_di
   })
   unlink(file.path(dir, "cache-models.etag"))
   expect_error(catalog_refresh(), class = "gptr_error_network")
+})
+
+test_that("a cache converted by an older gptr is ignored and downloaded again in full", {
+  dir = local_catalog()
+  cache = file.path(dir, "cache-models.json")
+  old = list(schema_version = 1L, generated = "2026-10-22", source = "older converter",
+             providers = list(), models = list(), aliases = list())
+  writeLines(json_encode(old), cache, useBytes = TRUE)
+  writeLines("W/\"v1\"", file.path(dir, "cache-models.etag"))
+  expect_identical(catalog_read_base()$source, "test fixture")
+  api = list(xai = list(id = "xai", models = list(`grok-4.7` = list(
+    id = "grok-4.7", tool_call = TRUE, modalities = list(output = list("text"))
+  ))))
+  seen = new.env()
+  local_mocked_bindings(catalog_http_request = function(url, headers = list(), timeout = 30, ...) {
+    if (!identical(url, catalog_source_url)) return(list(status = 404L, headers = list(),
+                                                         body = raw()))
+    seen$headers = headers
+    list(status = 200L, headers = list(ETag = "W/\"v1\""), body = charToRaw(json_encode(api)))
+  })
+  expect_true(catalog_refresh())
+  expect_null(seen$headers[["if-none-match"]])
+  expect_identical(catalog_read(cache)$converter, 2L)
+  expect_identical(catalog_read_base()$source, "models.dev (MIT) + gptr overrides")
 })
 
 test_that("resolution is offline: builtins and gptr_models('sonnet') start no transfer", {

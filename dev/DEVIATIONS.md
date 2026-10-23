@@ -3117,3 +3117,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `env_snapshot()` and `workspace_lines()`; `?gptr_options`, `?gptr_risk`, `?gptr_artifacts`, `?gptr_rewind`.
 - Tests: env-snapshot, env-describe, ckpt-objects, ckpt-rewind, perm-classify, gptr-capture, session-object (a
   ggplot2 guard), utils-options, subagent-team, copy-eval, arch-layers. Evidence: progress/fixes.md Task FIX-13.
+
+## D-250 - FIX-17 Cheat-sheet review: models (2026-10-22)
+- Rule (catalog-1): `catalog_prices_from()` turns each models.dev context tier into one `>Nk` row and reads the
+  legacy `cost.context_over_200k` only when no context tier is given (models.dev now ships it as a copy of
+  `tiers[[1]]`, 620 of 620 models); a repeated tier label is dropped. Formerly a 200k tier gave two `>200k` rows,
+  which `prices_df()` rejects (31 refreshed models failed to resolve), and a 272k or 256k tier gained a `>200k`
+  premium row (76 models). `prices_df()` stays strict for declared prices. `catalog_snapshot()` stamps
+  `converter = 2L` (`catalog_converter`); a refreshed cache without it is ignored in favour of the snapshot and
+  is refreshed without `If-None-Match`, because models.dev answers 304 and kept the old rows. The shipped
+  snapshot is not checked; `schema_version` stays 1.
+- Contract-visible: 04 §11.9 (model catalog key), §11.10 (`converter` and the conversion rule).
+- Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by an older
+  gptr is ignored and downloaded again in full". Evidence: progress/fixes.md Task FIX-17.

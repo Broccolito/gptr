@@ -3908,7 +3908,7 @@ under `egress` (§11.2).
 | System 2 answers (P15) | `<root>/cache/s2/<2hex>/<sha256>.json` | `hash_sha256(canonical_json(list(schema = 2L, doc = <path relative to root>, block = <id>, part = <"" \| child name \| "n<ordinal>">, prompt = <prompt hash>, args = <args hash or "">)))` (IC-45, IC-47) | `{"block", "doc", "part", "prompt", "model", "answer" (redacted final text), "usage", "cost", "session", "turn", "date"}` |
 | Spill files (P01) | `<root>/cache/tmp/gptr-output-<id>.txt` | the out id | redacted full text |
 | Deferred document writes (P15) | `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.rds` | document path | `list(doc, base_md5, upserts = list(list(block_id, lines, site)), session, pid, time)` (IC-51); never pruned automatically |
-| Model catalog (P05) | `R_user_dir("gptr", "cache")/models.json`, `models.etag` | ETag | the refreshed catalog (§11.10 shape) |
+| Model catalog (P05) | `R_user_dir("gptr", "cache")/models.json`, `models.etag` | ETag (sent only for a cache of the current `converter`) | the refreshed catalog (§11.10 shape) |
 | MCP tool lists (P18) | `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json` | `hash_sha256(canonical_json(command + args, or URL origin + path))` | `{"tools", "fetched_at", "ttl_ms", "cache_scope"}` (not stored when `cacheScope` is `private` and credentials are not the user's own) |
 | MCP era (P18) | `R_user_dir("gptr", "cache")/mcp-era/<hash>.json` | as above | `{"era": "modern" \| "legacy", "version", "date"}`, 7-day expiry |
 | Serialised entries (P06/P07) | memory (`live$memo`) | `<entry id>\|<api>\|<same model>\|<caps hash>` | the entry's JSON text for that api |
@@ -3917,7 +3917,7 @@ under `egress` (§11.2).
 ### 11.10 `inst/extdata/models.json.gz` (P05)
 
 ```json
-{"schema_version": 1, "generated": "2026-09-29", "source": "models.dev (MIT) + gptr overrides",
+{"schema_version": 1, "converter": 2, "generated": "2026-09-29", "source": "models.dev (MIT) + gptr overrides",
  "providers": {"anthropic": {"api": "anthropic-messages", "base_url": "https://api.anthropic.com",
                              "env": ["ANTHROPIC_API_KEY"], "compat": {}, "local": false}},
  "models": [{"provider": "anthropic", "id": "claude-sonnet-5-5", "name": "Claude Sonnet 5.5",
@@ -3939,10 +3939,13 @@ under `egress` (§11.2).
              "codex": {"ref": "codex/default"}}}
 ```
 
-(Values shown are illustrative except the structure.) A family alias resolves to the newest `active` model of the
-family by `release_date`; `claude-cli/default` and `codex/default` resolve through the CLI provider's `status()` to
-a full id before any invocation (CLI invocations always receive full ids). Merge order: snapshot < cache <
-overrides < user config `providers.*.models` < live discovery of local servers.
+(Values shown are illustrative except the structure.) `converter` versions the models.dev price conversion: a
+context tier `size` becomes a `>Nk` row, the legacy `context_over_200k` (a copy of the first tier) is read only
+when no context tier is given, and a repeated tier label is dropped. A refreshed cache of another `converter` is
+ignored (the snapshot is used) and the next refresh downloads it in full (D-250). A family alias resolves to the
+newest `active` model of the family by `release_date`; `claude-cli/default` and `codex/default` resolve through the
+CLI provider's `status()` to a full id before any invocation (CLI invocations always receive full ids). Merge
+order: snapshot < cache < overrides < user config `providers.*.models` < live discovery of local servers.
 
 ### 11.11 Worker protocol (P19; 15 §3.6)
 

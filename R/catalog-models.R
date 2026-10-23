@@ -220,11 +220,17 @@ catalog_prices_from = function(cost) {
       out[[length(out) + 1L]] = row(paste0(">", round(size / 1000), "k"), t)
     }
   }
-  if (is.list(cost[["context_over_200k"]])) {
+  # models.dev mirrors its first context tier, whatever its size, in the legacy field
+  if (length(out) == 1L && is.list(cost[["context_over_200k"]])) {
     out[[length(out) + 1L]] = row(">200k", cost[["context_over_200k"]])
   }
-  out
+  out[!duplicated(vapply(out, function(p) p[["tier"]], ""))]
 }
+
+#' Version of the price conversion stamped on a snapshot; a refreshed cache converted by
+#' another is ignored and downloaded again (D-250)
+#' @noRd
+catalog_converter = 2L
 
 #' A catalog entry from one models.dev model; NULL unless tool-capable, text output and not
 #' deprecated (09 section 4.8)
@@ -365,7 +371,7 @@ catalog_snapshot = function(api = NULL, decision = NULL,
   ov = catalog_overrides()
   models = catalog_merge_models(models, ov[["models"]], patch_only = TRUE)
   models = models[order(names(models), method = "radix")]
-  list(schema_version = 1L, generated = generated,
+  list(schema_version = 1L, converter = catalog_converter, generated = generated,
        source = if (is.null(api)) "gptr seed + overrides" else "models.dev (MIT) + gptr overrides",
        providers = catalog_providers_section(), models = unname(models),
        aliases = ov[["aliases"]])
@@ -385,11 +391,18 @@ catalog_read = function(path) {
   x
 }
 
+#' The refreshed cache; NULL when absent or converted by another gptr
+#' @noRd
+catalog_read_cache = function() {
+  cache = catalog_read(catalog_cache_path())
+  if (identical(cache[["converter"]], catalog_converter)) cache else NULL
+}
+
 #' The newer of the shipped snapshot and the refreshed cache
 #' @noRd
 catalog_read_base = function() {
   snap = catalog_read(catalog_snapshot_path())
-  cache = catalog_read(catalog_cache_path())
+  cache = catalog_read_cache()
   if (is.null(cache)) {
     return(snap %||% list(schema_version = 1L, generated = NA_character_, source = "none",
                           providers = list(), models = list(), aliases = list()))
@@ -1082,7 +1095,7 @@ catalog_refresh = function() {
   json_path = catalog_cache_path()
   etag_path = catalog_etag_path()
   hdr = list(accept = "application/json")
-  if (file.exists(json_path) && file.exists(etag_path)) {
+  if (file.exists(etag_path) && !is.null(catalog_read_cache())) {
     etag = readLines(etag_path, encoding = "UTF-8", warn = FALSE)[1]
     if (rlang::is_string(etag) && nzchar(etag) && !grepl("[[:cntrl:]]", etag)) {
       hdr[["if-none-match"]] = etag

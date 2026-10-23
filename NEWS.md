@@ -131,6 +131,9 @@ works on the objects already in memory.
   Codex commands show without their shell wrapper and Codex messages without a held last word; a
   cut code block says so inside its fence; wide pipe tables stream verbatim; `/model` and
   `/status` name the model behind a CLI's `default`.
+* `gptr_models(refresh = TRUE)` reads each models.dev price tier once, so models with a
+  200k-token price tier resolve and a 272k tier no longer gains a premium from 200k tokens. A
+  catalog refreshed by an earlier build is set aside until the next refresh downloads it again.
 
 # gptr 0.7.0
 

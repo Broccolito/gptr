@@ -1914,3 +1914,24 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the probe nor accepts `initialize`), and a dual-era server that starts slowly is still taken as
   legacy (cached for 7 days), which works. A hung server forced modern now fails after the request
   timeout instead of 5 s.
+
+## Task FIX-17 - Cheat-sheet review: models (2026-10-22, #PR)
+
+### catalog-1 - Convert each models.dev price tier once, and reconvert caches written by the old converter
+- Red: `^catalog-models$` FAIL 5, PASS 410: a 200k tier plus the legacy field gave `default, >200k, >200k`
+  and `prices_df()` refused it ("Invalid prices; expected unique date/tier thresholds."); a converter-less
+  cache was read, and the refresh sent its ETag and kept no `converter`.
+- Cause: `catalog_prices_from()` added a `>Nk` row per context tier, then a `>200k` row from
+  `context_over_200k`, which models.dev now ships as a copy of the first tier (620 of 620 models). A 200k tier
+  doubled (31 refreshed models unresolvable); a 272k or 256k tier gained a `>200k` premium (76 models). The
+  cache stores converted rows behind an ETag and models.dev answers 304, so a code fix alone never reached it.
+- Fix: the legacy field is read only without a context tier, and a repeated tier label is dropped;
+  `catalog_snapshot()` stamps `converter = 2L`; `catalog_read_cache()` ignores a cache of another converter
+  (`catalog_read_base()` falls back to the snapshot) and `catalog_refresh()` sends `If-None-Match` only for a
+  current one. `prices_df()` stays strict. NEWS entry; 04 §11.9, §11.10 amended.
+- Green: `^catalog-models$` PASS 420; with provider-registry, provider-usage, s1-ollama, gptr-gateway,
+  gptr-config, arch-layers and lint-rules PASS 2601. Lint clean. Live (models.dev, 2026-10-22, an old
+  converter-less cache plus a stale ETag in place): the snapshot was used, the refresh downloaded in full, 693
+  refs resolve with 0 failures; grok-4.7 `default, >200k`, gpt-5.6-terra `default, >272k` at $2/M for 250k.
+- Deviations: D-250. Open: the maintainer's online `dev/catalog/build_models.R` run, after prompt-1; the
+  shipped snapshot is not converter-checked.
