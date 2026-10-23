@@ -976,7 +976,7 @@ All are `c("gptr_<name>", "gptr_listing", "data.frame")`, built by `new_listing(
 | `gptr_sessions` | P06 | `id`, `file`, `created`, `updated`, `turns`, `model`, `status`, `title` (first prompt, 60 chars), `live` (lgl) |
 | `gptr_models` | P05 | `ref`, `provider`, `name`, `context`, `max_output`, `input_price`, `output_price`, `reasoning`, `aliases`, `status` |
 | `gptr_providers` | P05 | `id`, `type`, `api`, `credential` (`"NAME #fp"` or `NA`), `source`, `status`, `default_model`, `egress` (`ack`/`needed`), `version` (CLIs); optional `login` when `check_login = TRUE` |
-| `gptr_mcp_servers` | P18 | `name`, `source` (`gptr:user`, `gptr:project`, `claude-code:user`, ...), `transport`, `era`, `status`, `tools`, `exposure`, `tokens`, `trusted` |
+| `gptr_mcp_servers` | P18 | `name`, `source` (`gptr:user`, `gptr:project`, `claude-code:user`, ...), `transport`, `era`, `status`, `tools`, `exposure`, `tokens`, `trusted` (the spec's: annotations trusted by the user file, §11.7; project trust is status `untrusted`) |
 | `gptr_skills` | P17 | `name`, `description`, `source`, `path`, `tokens`, `visible` |
 | `gptr_agents` | P17 | `name`, `description`, `model`, `backend`, `source`, `path` |
 | `gptr_plugins` | P17 | `name`, `version`, `api`, `kind` (`package`, `directory`, `claude-plugin`), `enabled`, `state`, `provides`, `tokens`, `path` |

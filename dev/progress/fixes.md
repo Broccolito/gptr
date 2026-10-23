@@ -2217,3 +2217,15 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   neither the token nor the old line); with mcp-*, arch-layers, lint-rules PASS 907 SKIP 1. Lint clean; Rd
   unchanged.
 - Deviations: none (the contract and vignette do not quote the print). Open: none.
+
+### mcp-trusted - gptr_mcp()'s trusted column means what the server spec's trusted means
+- Finding 105. Red: `^mcp-config$` FAIL 2 PASS 103: after `gptr_mcp_add("docs", url = ...)` the spec said
+  `trusted` FALSE and the `gptr_mcp()` row TRUE; a project server in an untrusted project read TRUE once trusted.
+- Cause: `mcp_server_listing()` filled `trusted` with project trust (`!isFALSE(s$startable)`), which status
+  `"untrusted"` already reports, while the spec's `trusted` is annotation trust read by `mcp_tool_level()`.
+- Fix: the column is `isTRUE(s$trusted)`; `?gptr_mcp` defines it (a user `mcp.json` entry marked `"trusted": true`,
+  whose `readOnlyHint` then lowers tool risk) and the mcp vignette says how to mark a server. 04 §5.12.
+- Green: `^mcp-config$` PASS 106 (marking the entry makes both TRUE; a claude-code:user server reads FALSE; a
+  trusted project's server stays FALSE with status configured); with mcp-*, arch-layers, lint-rules PASS 916 SKIP 1;
+  zzz PASS 145. Lint clean; plan checks pass; `gptr_mcp.Rd` regenerated.
+- Deviations: D-252 (extended). Open: none.

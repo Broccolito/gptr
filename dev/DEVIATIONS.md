@@ -3191,10 +3191,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   "high-performance-r"." (`ident_hyphen_name()`); unary `+name`/`-name` is unchanged. Formerly the alias mask
   evaluated it and base R's "object 'high' not found" escaped, or with numbers bound to the pieces the error
   suggested the quoted name "high - performance - r" (finding 112).
+- Rule (mcp-trusted): the `trusted` column of `gptr_mcp()` is the server spec's `trusted` (§11.7: a user `mcp.json`
+  entry marked `"trusted": true`, whose `readOnlyHint` lowers tool risk); project trust is status `untrusted`.
+  Formerly the column was `TRUE` for every startable server, opposite the spec's value (finding 105).
 - Contract-visible: 03 §4.1.3 and 04 §6.1.3 (identifier table, ident-1), 03 §4.3 (fork), §5.1 (resume status), §6.2
   (background asks), §6.10 (trust gates, tpl-2), §6.12 (also the guard), §6.17 (templates), §6.18 and §7.5
   `<workspace>`; 04 §4.6 (`gptr.container_end`), `gptr_fork(envir)`, `gptr_resume()`, `gptr_init()` and
-  `gptr_trust()` (tpl-2; its read, sessions-23), §6.1.2 and `gptr_parallel()` (team-1), §7.0 and §7.17
+  `gptr_trust()` (tpl-2; its read, sessions-23), §5.12 `gptr_mcp_servers` `trusted` (mcp-trusted), §6.1.2 and `gptr_parallel()` (team-1), §7.0 and §7.17
   `templates.sync` (tpl-1), §7.6 `opts$mode_from` and `perm_check()` (gate-hint), §7.9 `env_view_snapshot()` and
   `eval_guard()`, §7.21, §10.2 row 22 (`how`), §15.7, IC-52 (when the trust question is asked), IC-57;
   `?gptr-background`, `?gptr_trust`.
@@ -3210,6 +3213,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   gptr-config "a project whose only resource is prompt templates gets the trust notice", "a trusted prompts-only
   project registers its templates", "every project skill, agent and instruction location counts ...", "a relative
   skills.paths directory counts, and the question names skills", "a changed trust-gated file makes the project
-  untrusted again"; gptr-capture "a bare hyphenated name is refused with its quoted form".
+  untrusted again"; gptr-capture "a bare hyphenated name is refused with its quoted form"; mcp-config "gptr_mcp()'s
+  trusted is the spec's ...".
   Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1, team-1, team-4, bg-1, gate-hint, tpl-1,
-  tpl-2, sessions-23, ident-1.
+  tpl-2, sessions-23, ident-1, mcp-trusted.

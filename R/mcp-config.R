@@ -870,7 +870,9 @@ mcp_forget_conn = function(name) {
 #' @param refresh `TRUE` to reconnect and refresh the caches.
 #' @return A `gptr_mcp_servers` data frame (`name`, `source`, `transport`, `era`, `status`,
 #'   `tools`, `exposure`, `tokens`, `trusted`) or, with `tools = TRUE`, a data frame with
-#'   `server`, `tool`, `signature`, `exposure` and `tokens`.
+#'   `server`, `tool`, `signature`, `exposure` and `tokens`. `trusted` is `TRUE` only for a
+#'   server in your user `mcp.json` marked `"trusted": true`, whose `readOnlyHint` then lowers
+#'   tool risk; a server of a project you have not trusted has status `"untrusted"`.
 #' @seealso [gptr_mcp_add], [gptr_mcp_remove], [gptr_login], [gptr_mcp_serve];
 #'   `vignette("mcp", package = "gptr")` for setup, authentication and tool calls.
 #' @examples
@@ -943,7 +945,7 @@ mcp_server_listing = function(specs) {
                tools = if (is.null(tl)) NA_integer_ else length(tl),
                exposure = s$exposure %||% setting_get("mcp.exposure", default = "r"),
                tokens = est_tokens(paste(lines, collapse = "\n"), "code"),
-               trusted = !isFALSE(s$startable), stringsAsFactors = FALSE)
+               trusted = isTRUE(s$trusted), stringsAsFactors = FALSE)
   })
   df = if (length(rows)) {
     do.call(rbind, unname(rows))

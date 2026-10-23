@@ -16,7 +16,9 @@ gptr_mcp(server = NULL, tools = FALSE, refresh = FALSE)
 \value{
 A \code{gptr_mcp_servers} data frame (\code{name}, \code{source}, \code{transport}, \code{era}, \code{status},
 \code{tools}, \code{exposure}, \code{tokens}, \code{trusted}) or, with \code{tools = TRUE}, a data frame with
-\code{server}, \code{tool}, \code{signature}, \code{exposure} and \code{tokens}.
+\code{server}, \code{tool}, \code{signature}, \code{exposure} and \code{tokens}. \code{trusted} is \code{TRUE} only for a
+server in your user \code{mcp.json} marked \code{"trusted": true}, whose \code{readOnlyHint} then lowers
+tool risk; a server of a project you have not trusted has status \code{"untrusted"}.
 }
 \description{
 Without \code{tools}, lists gptr's servers (the user \code{mcp.json} and, in a trusted project,
