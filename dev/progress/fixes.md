@@ -2098,9 +2098,9 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 
 ### doc-7 - Transcript header names gptr_source(replay = "live")
 - Finding 44.
-- Red: FAIL 2 in `^doc-formats$` (PASS 252): a new transcript's fourth line was `# options(gptr.replay
-  = "live") re-asks the model.`. FAIL 1 in `^doc-replay$` (PASS 635) on the same line of a console
-  transcript recorded with the fake provider; its behaviour already held (below).
+- Red: FAIL 2 in `^doc-formats$` (PASS 252): a new transcript's fourth line was
+  `# options(gptr.replay = "live") re-asks the model.`. FAIL 1 in `^doc-replay$` (PASS 635) on the
+  same line of a console transcript recorded with the fake provider; its behaviour already held.
 - Cause: `doc_transcript_header()` pointed to the option, which only `gptr_source()`, knitr, an IDE
   or Jupyter can honour; under `source()` or Rscript `doc_decide()` downgrades a regeneration to
   replay with `replay_downgraded` (architecture 6.9.3), so following the hint never re-asked.
@@ -2112,3 +2112,23 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `^(doc-.*|arch-layers|lint-rules)$` PASS 2541 SKIP 2 (NOT_CRAN=true). Lint clean.
 - Deviations: none (04 §11.5 names only the `source()` line). Open: the name is the file's at
   recording; a renamed or moved transcript keeps the old one.
+
+### doc-8 - No temporary machine-log path in a transcript header
+- Finding 18.
+- Red: FAIL 2 in `^doc-formats$` (PASS 257): `doc_on_agent_end()` with a console site in a
+  project without `.gptr/` wrote `# machine log: /private/var/folders/.../Rtmp.../gptr/sessions/
+  <stamp>_<id>.jsonl`.
+- Cause: without `.gptr/`, `workspace_root()` is `tempdir()/gptr`, which R deletes at exit;
+  `doc_on_agent_end()` copied the session file's absolute path into `site$session_file`, and the
+  durable transcript named a file gone after exit.
+- Fix: `doc_on_agent_end()` leaves `session_file` NULL when the log is inside exactly
+  `tempdir()/gptr`; `doc_transcript_header()` then writes `# machine log: none kept (gptr_init()
+  keeps session logs in .gptr/)` (was `(none)`). 04 §11.5's transcript row says so.
+- Green: `^(doc-formats|doc-replay)$` PASS 895 (a `.gptr/` project under `tempdir()` keeps
+  `.gptr/sessions/<file>`); `^(doc-.*|arch-layers|lint-rules)$` PASS 2546 SKIP 2 (NOT_CRAN=true).
+  Lint clean; plan checks pass. Installed build, fake provider, an `Rscript -e` console turn bound
+  with `gptr_doc("log.R", format = "transcript")`: "none kept" outside `.gptr/`, the kept relative
+  log inside it.
+- Deviations: D-249 (extended). Open: replayed text comes from the S2 cache, also in
+  `tempdir()/gptr` without `.gptr/`, so a later process's replay has `text` NA; `doc_conflict`'s
+  "the session log has it" is equally untrue there after exit.

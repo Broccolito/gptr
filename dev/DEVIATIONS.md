@@ -3129,8 +3129,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   or `Rscript` script) records there or nowhere. When that document's consent cannot be given, a call that could
   record (record not FALSE, not replay mode) informs a `notice` once per document: "gptr did not record this call:
   it is in <doc>, but gptr_doc() bound <bound>. ..." (was silent); without a binding it stays silent (IC-45).
-- Contract-visible: 04 §6.4 `gptr_doc()`, §11.9, §15.3 IC-45, IC-51; 03 §4.3, §6.9.1; `?gptr_doc`; vignette
-  script-as-history.
+- Rule: a transcript's `# machine log:` names the session log only outside `tempdir()/gptr`, which R deletes at
+  exit; else, or without a log, it reads `none kept (gptr_init() keeps session logs in .gptr/)` (was the dead
+  absolute path, or `(none)`).
+- Contract-visible: 04 §6.4 `gptr_doc()`, §11.5 transcript, §11.9, §15.3 IC-45, IC-51; 03 §4.3, §6.9.1;
+  `?gptr_doc`; vignette script-as-history.
 - Tests: test-doc-io: the user-cache sidecar, the cross-process kernel and killed-run sync, the live-run sync;
-  test-doc-replay: the other-binding notice and its four silent cases. Evidence: progress/fixes.md Task FIX-16
-  doc-1, doc-2.
+  test-doc-replay: the other-binding notice and its four silent cases; test-doc-formats: the machine-log line with
+  and without `.gptr/`. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8.

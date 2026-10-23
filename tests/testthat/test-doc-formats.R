@@ -143,6 +143,28 @@ test_that("console transcripts record the first prompt as an assignment and late
   expect_identical(rmd[7], "```{r gptr-a1b2c3}")
 })
 
+test_that("a transcript names the machine log only when it outlives R (.gptr/)", {
+  console_turn = function(proj) {
+    t = file.path(proj, "log.R")
+    local_doc_binding(t, "transcript")
+    s = doc_test_session(list(doc_test_turn("n = nrow(mtcars)")))
+    site = doc_console_site(session_id = session_data(s)$id, template = "count rows")
+    doc_on_agent_end(list(status = "idle", doc = site, turns = 1L), list(session = s))
+    list(file = session_data(s)$file, text = readLines(t))
+  }
+  # without .gptr/ the log is in tempdir()/gptr, which R deletes at exit
+  x = console_turn(local_project(gptr = FALSE))
+  expect_true(path_inside(x$file, file.path(tempdir(), "gptr")))
+  expect_identical(x$text[2],
+                   "# machine log: none kept (gptr_init() keeps session logs in .gptr/)")
+  for (tmp in unique(c(tempdir(), path_norm(tempdir())))) {
+    expect_false(any(grepl(tmp, x$text, fixed = TRUE)))
+  }
+  # a .gptr/ project under tempdir() keeps its relative path
+  x = console_turn(local_project())
+  expect_identical(x$text[2], paste0("# machine log: .gptr/sessions/", basename(x$file)))
+})
+
 # ---- adaptations (dev/DEVIATIONS.md D-070) ------------------------------------------------------
 
 # Chunk headers, option lines and fences as knitr 1.52 (xfun 0.61) reads them, and the labels it

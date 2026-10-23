@@ -703,7 +703,9 @@ doc_on_agent_end = function(event, ctx) {
   d = session_data(s)
   if (isTRUE(site$console)) {
     site$session_id = d$id
-    site$session_file = if (is.null(d$file)) NULL else doc_rel(d$file)
+    # without .gptr/ the log is in tempdir()/gptr, which R deletes at exit
+    kept = !is.null(d$file) && !path_inside(d$file, file.path(tempdir(), "gptr"))
+    site$session_file = if (kept) doc_rel(d$file)
   }
   turn = if (d$kind %in% c("team", "fanout")) 1L else as.integer(event$turns %||% d$turns)
   lines = doc_block_lines(s, turn, site, site$ordinal %||% 1L)
