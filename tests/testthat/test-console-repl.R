@@ -345,7 +345,7 @@ test_that("in Positron the banner says typed text waits as R code (steering revi
   local_gptr_options(interactive = TRUE)
   expect_identical(utils::tail(banner_rows("positron", complete = FALSE), 3L), c(
     "/help lists commands - ctrl-c twice leaves",
-    "text typed while peter works waits as R code - ctrl-c, then s, steers", ""))
+    "text typed while peter works waits as R code - ctrl-c, then s, to steer", ""))
   for (fe in c("terminal", "rstudio")) {
     expect_false(any(grepl("waits as R code", banner_rows(fe))), info = fe)
   }

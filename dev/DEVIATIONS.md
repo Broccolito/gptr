@@ -4030,3 +4030,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     (review)"; test-console-repl.R "the banner names the console's key and promises nothing it lacks (review,
     Task 26)"; test-console-ui.R "the keys are a row under the question, a and p only with a rule (D-243)";
     test-console-interrupt.R (the pause menu's keys).
+  - Positron's banner says `ctrl-c, then s, to steer`, the live row's words, which show beside it; it said `ctrl-c,
+    then s, steers`. Contract-visible: 03 §6.17. Tests: test-console-repl.R "in Positron the banner says typed text
+    waits as R code (steering review)".

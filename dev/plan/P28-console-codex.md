@@ -1504,7 +1504,8 @@ Decisions:
   live row does: its console holds what is typed while peter works.) (Amended in the steering review: in
   Positron, where the menu is offered, the old banner has one more line, `Text typed while peter works
   waits as R code; Ctrl-C, then s, steers.`; this rewrite keeps it as a fourth dim line at column 2,
-  `text typed while peter works waits as R code · ctrl-c, then s, steers`.)
+  `text typed while peter works waits as R code · ctrl-c, then s, steers`. Amended in the review of Tasks 22-27:
+  `ctrl-c, then s, to steer`, the live row's words, as both show at once.)
 - The mode stays in the prompt (`peter[auto]>`). Shift-Tab is not added; readline cannot bind it
   portably.
 - (Amended in Task 26:)

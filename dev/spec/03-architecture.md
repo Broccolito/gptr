@@ -1943,7 +1943,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   `objects: ` and up to six names, then the keys in bold, `/help lists commands · tab completes after @ ! / ·
   ctrl-c twice leaves` (the tab only where the REPL completes, after `! /` in RStudio's console; the console's
   own key, `esc` in RStudio, R.app and Rgui, which does not pause at the prompt), in Positron a line `text typed
-  while peter works waits as R code · ctrl-c, then s, steers`, then a blank line.
+  while peter works waits as R code · ctrl-c, then s, to steer` (the live row's words), then a blank line.
 - **REPL completion** [D-183, D-244]: completion comes only after gptr's trigger characters, never on natural
   language [IC-81]: R's own completion of the code on a `!`/`!!` line; objects, then files and directories
   after `@`; the object's members after `@obj$`; peter's members after `peter$`; commands and `/skill:<name>`
