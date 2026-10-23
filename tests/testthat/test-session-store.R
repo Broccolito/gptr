@@ -1147,6 +1147,42 @@ test_that("an entry or header time that is not ISO 8601 never blocks a resume", 
   expect_true(is.finite(as.numeric(listed$created[listed$id == id])))
 })
 
+test_that("a settled team or fan-out lists and resumes idle with its model; an unsettled one not", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(mode = "auto", interactive = FALSE)
+  fake = gptr_fake_provider(function(request) "done")
+  f = peter("Summarise.", list(a = 1, b = 2), parallel = 2, model = fake, envir = new.env())
+  tm = peter("Review.", agents = list(x = agent(system = "Review."), y = agent(system = "Check.")),
+             model = fake, envir = new.env())
+  p = gptr_parallel(a = peter("A.", model = fake, envir = new.env()),
+                    b = peter("B.", model = fake, envir = new.env()))
+  expect_identical(c(f$status, tm$status, p$status), rep("idle", 3L))
+  files = c(f$file, tm$file, p$file)
+  ids = c(f$id, tm$id, p$id)
+  # a copy of the fan-out cut before its settlement, as an interrupted fan-out leaves it
+  lines = readLines(f$file, encoding = "UTF-8")
+  expect_match(lines[[length(lines)]], "\"gptr.container_end\"", fixed = TRUE)
+  cut = file.path(withr::local_tempdir(), "cut.jsonl")
+  writeLines(lines[-length(lines)], cut, useBytes = TRUE)
+  rows = gptr_sessions()
+  rows = rows[match(ids, rows$id), ]
+  expect_identical(rows$status, rep("idle", 3L))
+  expect_identical(rows$model, rep("fake/fake-1", 3L))
+  expect_identical(session_file_summary(cut)[c("status", "model")],
+                   data.frame(status = "interrupted", model = "fake/fake-1"))
+  x = store_read(cut)
+  expect_identical(rebuild_status(path_of_entries(x$entries, x$entries[[length(x$entries)]]$id)),
+                   "interrupted")
+  # rebuilt from the files once the live sessions are gone
+  rm(f, tm, p)
+  other = test_session()
+  invisible(gc())
+  expect_true(all(vapply(ids, function(id) is.null(session_by_id(id)), NA)))
+  expect_identical(vapply(files, function(x) gptr_resume(x, envir = new.env())$status, "",
+                          USE.NAMES = FALSE), rep("idle", 3L))
+})
+
 
 test_that("new JSONL bytes are private before writing and existing modes are preserved", {
   skip_on_os("windows")

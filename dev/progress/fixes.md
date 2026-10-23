@@ -2008,3 +2008,21 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   04 §6.1.2's terminal-status list, which ?peter mirrors, says the same. Rd regenerated.
 - Green: gptr-gateway, utils-options, tool-ask PASS 472. Lint clean; plan checks pass.
 - Deviations: none (the contract already said so). Open: none.
+
+### team-4 - gptr_sessions() lists a settled team or fan-out as idle, with its model
+- Finding 74. Red: `^session-store$` FAIL 5 PASS 276: a settled fan-out, team and `gptr_parallel()`
+  team listed `interrupted` with model NA and resumed (from the file, the live objects gone)
+  `interrupted`, while each live object was `idle`.
+- Cause: the stored status comes from the last message, and a container never writes an assistant
+  message (its tail is the `<agent_reports>` user message); the listing took the model only from
+  an assistant message, where `rebuild_model()` also reads `model_change` and `gptr.frozen`.
+- Fix: `subagent_settle_container()` appends `gptr.container_end` `{status}`; `rebuild_status()` and
+  `session_file_summary()` let the last message or end decide (an end is idle only with status
+  idle; a later synthesis turn decides by itself); a row with no answer naming the model takes
+  `rebuild_model()` of the head and tail lines. 04 §4.6 and `gptr_resume()`, 03 §5.1, ?gptr_resume.
+- Green: `^(session-store|subagent-team)$` PASS 650; with subagent-backends, session-object,
+  injection-e2e, gptr-gateway, arch-layers, lint-rules, ckpt-rewind PASS 2232; full suite
+  (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35337. Lint clean; plan checks pass.
+- Deviations: D-252 (extended). The plan's copy-under-another-id check cannot work (a durable usage
+  record is bound to its header id), so the test cuts a copy for the negative case and resumes the
+  real files after dropping the live sessions. Open: a `gptr_parallel()` row's title is still empty.

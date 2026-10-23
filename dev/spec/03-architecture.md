@@ -970,8 +970,8 @@ never starts a nested run and never forks.
 `saveRDS()`, knitr caches and callr produce detached copies. Continuing a copy: a live original in the same
 process -> `gptr_error_split_brain`; another live process holding the pid lock -> split brain; otherwise the
 copy continues from its own leaf and the file gains a sibling branch. `gptr_resume(x = NULL | id | path)`
-returns the live object or rebuilds from JSONL (status `idle` if the tail is a final answer, else
-`interrupted`).
+returns the live object or rebuilds from JSONL (status `idle` if the tail is a final answer or, for a team or
+fan-out, an idle `gptr.container_end`, else `interrupted`).
 
 ### 5.2 Transcript entries, messages and content blocks (INFRA-07)
 

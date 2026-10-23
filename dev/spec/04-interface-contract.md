@@ -633,6 +633,7 @@ has `type`, `id` (8 hex), `parentId` (id or `null` for the first entry), `timest
 | `gptr.checkpoint` | P16 | G7 §3.1 shape (object names, addresses, sizes, classes, capture mode; file paths, hashes, modes; state names; artifact `current` before/after); never values |
 | `gptr.rewind` | P16 | `{from, to, keep, restore, report: [chr]}`; parented at the target, becomes the leaf |
 | `gptr.subagent` | P19 | `{child, backend, model, agent, status, file, usage: {...}}` |
+| `gptr.container_end` | P19 | `{status}`: a team, fan-out or `gptr_parallel()` team settled; written after its last message, it decides the stored status as a final answer does (D-252) |
 | `gptr.artifact` | P23 | `{id, version, url, status, checks}` |
 | `gptr.plan` | P11 | `{path, text_hash, status: "pending"\|"used"\|"superseded"}` |
 | `gptr.cache_break` | P07 | `{provider, model, firstDiff, entry, culprit}` |
@@ -1719,9 +1720,9 @@ in that store. Reads only the header and last lines of each file.
 
 `gptr_resume()`: `x` = `NULL` (the most recently updated stored session), a session id, a file path, or a detached
 `<session>` (from `saveRDS()`/knitr cache/callr). Returns the live object if one exists in this process;
-otherwise rebuilds the session from its JSONL (leaf = last entry; status `idle` when the tail is a final answer,
-else `interrupted`) with home `envir`; a rebuilt **fork** always gets a fresh `new.env(parent = envir)` overlay
-(IC-46). A file from another machine or tracked by git is rebuilt with a freshly frozen prompt and its user turns
+otherwise rebuilds the session from its JSONL (leaf = last entry; status `idle` when the tail is a final answer
+or, for a team or fan-out, a `gptr.container_end` with status `idle`, else `interrupted`; D-252) with home
+`envir`; a rebuilt **fork** always gets a fresh `new.env(parent = envir)` overlay (IC-46). A file from another machine or tracked by git is rebuilt with a freshly frozen prompt and its user turns
 marked `imported` (IC-52). A detached copy follows the split-brain rules of §5.1 of `03` (`gptr_error_split_brain`).
 `block = "<id>"` (and `child = "<name>"` for team blocks) returns the session that replay bound to that document
 block in this process, or signals `gptr_error_replay_unbound`; it never falls back to `envir` (IC-46). Conditions:

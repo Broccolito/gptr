@@ -485,12 +485,17 @@ rebuild_mode = function(entries) {
   if (is.null(e)) setting_get("mode", default = "manual") else e$data$to
 }
 
-#' `idle` when the path ends with a final answer, else `interrupted`
+#' `idle` when the last message or team settlement (`gptr.container_end`, written after a team's
+#' or fan-out's last message) of the path is a final answer or idle, else `interrupted`
 #' @noRd
 rebuild_status = function(path) {
-  msgs = Filter(function(e) identical(e$type, "message"), path)
-  if (!length(msgs)) return("idle")
-  if (msg_final(msgs[[length(msgs)]]$message)) "idle" else "interrupted"
+  ends = Filter(function(e) {
+    identical(e$type, "message") || identical(e$custom_type, "gptr.container_end")
+  }, path)
+  if (!length(ends)) return("idle")
+  e = ends[[length(ends)]]
+  ok = if (is.null(e$message)) identical(e$data$status, "idle") else msg_final(e$message)
+  if (ok) "idle" else "interrupted"
 }
 
 #' The frozen prompt of a rebuilt session from the last gptr.frozen entry of the active path, or
@@ -706,23 +711,34 @@ session_file_summary = function(path) {
   model = NA_character_
   status = "idle"
   turns = NA_integer_
-  last_msg = NULL
-  for (line in rev(file_chunk_lines(path, from_end = TRUE))) {
+  last = NULL
+  tail = file_chunk_lines(path, from_end = TRUE)
+  for (line in rev(tail)) {
     obj = tryCatch(json_decode(line), error = function(e) NULL)
-    if (!is.list(obj) || !identical(obj$type, "message")) next
+    if (!is.list(obj)) next
+    if (is.null(last) && identical(obj$customType, "gptr.container_end")) last = obj
+    if (!identical(obj$type, "message")) next
     m = obj$message
-    if (is.null(last_msg)) last_msg = m
+    if (is.null(last)) last = obj
     if (is.na(model) && identical(m$role, "assistant")) model = paste0(m$provider, "/", m$model)
     if (identical(m$role, "user")) {
       turns = as.integer(obj$gptr$turn %||% NA_integer_)
       break
     }
   }
-  if (!is.null(last_msg)) {
-    calls = vapply(last_msg$content %||% list(), function(b) identical(b$type, "toolCall"), NA)
-    final = identical(last_msg$role, "assistant") && !any(calls) &&
-      !(last_msg$stopReason %||% "stop") %in% c("error", "aborted")
+  if (!is.null(last)) {
+    m = last$message
+    calls = vapply(m$content %||% list(), function(b) identical(b$type, "toolCall"), NA)
+    final = identical(m$role, "assistant") && !any(calls) &&
+      !(m$stopReason %||% "stop") %in% c("error", "aborted")
+    if (is.null(m)) final = identical(last$data$status, "idle")
     status = if (final) "idle" else "interrupted"
+  }
+  # no answer names the model (a team, a fan-out, a chat stopped before it): as at resume
+  if (is.na(model)) {
+    model = rebuild_model(lapply(c(head, tail), function(line) {
+      tryCatch(entry_from_json(json_decode(line)), error = function(e) NULL)
+    })) %||% NA_character_
   }
   created = (iso_ms(hdr$timestamp) %||% (1000 * as.numeric(file.mtime(path)))) / 1000
   data.frame(id = hdr$id, file = normalizePath(path, winslash = "/"),
@@ -761,12 +777,12 @@ file_chunk_lines = function(path, from_end = FALSE, n = 65536) {
 #' @description
 #' `gptr_resume()` returns the live object when one exists in this process; otherwise it rebuilds
 #' the session from its JSONL file (leaf = the last entry; status `idle` when the tail is a final
-#' answer, else `interrupted`) with home `envir`. A rebuilt fork always gets a fresh overlay of
-#' `envir`. A detached copy (from `saveRDS()`, a knitr cache or callr) is attached under the
-#' split-brain rules. `block =` returns the session that a document replay bound to that block.
-#' Resuming restores conversation state, not a complete analysis workspace, and does not
-#' rerun the R tool code. Make required objects available in `envir`; use document replay
-#' when the intention is to execute the recorded analysis again.
+#' answer or, for a team or fan-out, an idle settlement, else `interrupted`) with home `envir`. A
+#' rebuilt fork always gets a fresh overlay of `envir`. A detached copy (from `saveRDS()`, a knitr
+#' cache or callr) is attached under the split-brain rules. `block =` returns the session that a
+#' document replay bound to that block. Resuming restores conversation state, not a complete
+#' analysis workspace, and does not rerun the R tool code. Make required objects available in
+#' `envir`; use document replay when the intention is to execute the recorded analysis again.
 #' @param x `NULL` (the most recently updated stored session), a session id, a file path, or a
 #'   detached `gptr_session`.
 #' @param envir The home of a rebuilt session.

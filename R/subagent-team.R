@@ -228,7 +228,8 @@ gptr_parallel = function(..., .list = NULL, max_active = NULL, on_error = c("ret
 
 #' Settle a team or fan-out on its children (04 section 6.1.2): it stays idle when every child is;
 #' else it takes the first other child's status and stored condition, and its reason names each
-#' such child
+#' such child. A `gptr.container_end` entry records the settlement, which a container's file
+#' cannot otherwise show: it never holds an assistant message (04 section 4.6)
 #' @noRd
 subagent_settle_container = function(s) {
   d = session_data(s)
@@ -240,6 +241,8 @@ subagent_settle_container = function(s) {
                       paste0(names(st)[bad], " (", st[bad], ")", collapse = ", "))
     d$condition = session_data(d$children[[bad[[1L]]]])$condition
   }
+  session_append(s, list(type = "custom", custom_type = "gptr.container_end",
+                         data = list(status = d$status)))
   invisible(s)
 }
 
