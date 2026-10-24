@@ -919,6 +919,14 @@ test_that("keys read on the polling beat are a paste; after a stall they are typ
     read(2.35, "e\rfg")
     expect_identical(steers(), c("a", "b\nc\nd", "a", "b", "de"))
     expect_identical(rs$reader$compose$draft, "fg")
+    # an Up read with the Enter before it takes back what that Enter sent; a Tab there is no text
+    # (Task 35)
+    read(2.4, "\r\033[A")
+    expect_identical(steers(), c("a", "b\nc\nd", "a", "b", "de"))
+    expect_identical(rs$reader$compose$draft, "fg")
+    read(4.4, "\r\t")
+    expect_identical(steers(), c("a", "b\nc\nd", "a", "b", "de", "fg"))
+    expect_identical(rs$reader$compose$draft, "")
   })
 })
 

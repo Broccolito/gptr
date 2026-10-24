@@ -122,7 +122,9 @@ console_trigger = function(line) {
 #' 0.2 s after the reader's last read (`rd$polled`, an empty read too) is on the polling beat, and
 #' one there holding more keys than a person types since that read (one in 30 ms, plus one) is a
 #' paste to console_compose(); fewer were typed, as when a late read under load holds Enter and the
-#' next key. Ctrl-C, a key in character mode (tty_call()), interrupts
+#' next key. A Tab or Up that ends a batch right after a newline is a key of its own, after the
+#' message the newline sent (console_compose() acts once a batch), as when Enter and Up share a late
+#' read. Ctrl-C, a key in character mode (tty_call()), interrupts
 #' as SIGINT would, after the keys before it; the keys after it in the batch (a further Ctrl-C
 #' dropped) are the pause menu's answers (`rd$after_interrupt`, console_ahead()), and those it
 #' leaves are read here once it resumes, as if typed after it
@@ -141,6 +143,11 @@ console_keys = function(rd, s, chars) {
   }
   compose = function(chars) {
     if (!nzchar(chars)) return()
+    key = regmatches(chars, regexpr("[\r\n](\t|\033\\[A|\033OA)$", chars))
+    if (length(key)) {
+      compose(substr(chars, 1L, nchar(chars) - nchar(key) + 1L))
+      return(compose(substring(key, 2L)))
+    }
     res = console_compose(rd$compose, chars, now, setting_get("type_ahead", s), console_complete,
                           paste)
     rd$compose = res$state

@@ -3732,6 +3732,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   line. Contract-visible: 04 §5 `tty_question()` row. Tests: test-console-interrupt.R "an abort at the pause menu
   takes the call's modes back before the run stops (Task 34)".
 
+- Live dogfood fixes (Task 28, 2026-10-23): Task 35: a Tab or Up that ends a read right after a newline is a key
+  of its own, after the message the newline sent (`console_keys()`); console_compose() acts once a batch, so it
+  dropped such an Up. In S4 on Versa GPT-5.6, Bedrock Opus 4.8 and codex, `s2: cylinders`, Enter and Up 40 ms
+  apart shared a read: Up took nothing back and the edit became a third steer. Contract-visible: 04 §15.10 IC-76.
+  Tests: test-console-typing.R "keys read on the polling beat are a paste; after a stall they are typed
+  (review)".
+
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
   natural language; `!`, `/` and `@` show what they do. Amends D-183.

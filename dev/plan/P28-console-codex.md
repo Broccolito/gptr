@@ -901,7 +901,9 @@ Decisions:
   only as a batch of their own: in any other batch Tab is text and Up is dropped. (Amended in the review of
   Tasks 16-21: also at the end of a batch without a newline, as the key after the batch's text; keys typed
   during an in-process tool arrive as one batch, so `then plot` and Tab gave a literal tab, never a
-  follow-up. A Tab inside text stays text.) (Amended in the steering review: a batch read on the
+  follow-up. A Tab inside text stays text. Amended in Task 35: one that ends a batch right after a
+  newline is a batch of its own after the message the newline sent; Enter and Up shared a late read
+  and the take-back was dropped.) (Amended in the steering review: a batch read on the
   polling beat that holds newlines and ends in text is a paste: its newlines stay in the draft,
   leading blank lines dropped, and Enter later sends it as one message, as at the idle prompt.
   During a run a paste without a final newline was split, its head sent at once as a steer and its
@@ -1690,7 +1692,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 31 | Code served to a CLI route does not show what it prints | 747e04d7 |
 | 32 | Under load an Enter typed during a run stays in the draft | 3dae3324 |
 | 33 | A CLI route's run status names its model `default` | 6b2ffd3c |
-| 34 | A key typed while an aborted run stops is echoed | (this commit) |
+| 34 | A key typed while an aborted run stops is echoed | 5831cb0b |
+| 35 | Up read with the Enter before it takes nothing back | (this commit) |
 
 ## Out of scope
 
