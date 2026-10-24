@@ -1536,7 +1536,7 @@ test_that("a document outside a .gptr/ project keeps its sidecar and lock in the
   doc_sidecar_write(rec)
   info = gptr_cache()
   expect_identical(info$kind, c("s1", "s2", "tmp", "sidecar", "sidecar"))
-  expect_identical(info$entries[info$path == dirname(side)], 1L)
+  expect_identical(info$entries[path_key(info$path) == path_key(dirname(side))], 1L)
   ws = local_project()
   wnb = file.path(ws, "analysis.ipynb")
   expect_identical(path_key(dirname(doc_sidecar_path(wnb))),

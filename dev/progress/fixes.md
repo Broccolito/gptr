@@ -2181,6 +2181,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Open: `gptr_cache("info")`, which the conflict warning names, lists only the workspace root's
   sidecars, not `pending/`; `doc_lock_dir()` still uses this process's workspace root, so two
   processes recording one document outside `.gptr/` do not exclude each other (finding 15).
+- Windows CI (#77): the user-cache sidecar test compared `gptr_cache()`'s path with `dirname(doc_sidecar_path())` as strings; on Windows the two spell the same directory differently (FAIL 1 on shard 1/4, release and oldrel-4). It now compares them with `path_key()`, as the test's later lines already do.
 
 ### doc-2 - Say when a script call is not recorded because gptr_doc() bound another document
 - Findings 22, 149, 174.
