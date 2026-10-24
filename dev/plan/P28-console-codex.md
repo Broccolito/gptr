@@ -1697,7 +1697,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 36 | A sub-agent's start line loses `started` when cut | d88014eb |
 | 37 | On a CLI route a taken-back steer's printed line stays in the scrollback | 5ee252d9 |
 | 38 | Keys typed during a CLI route's first probe wait without a cue (not changed) | 31872d53 |
-| 39 | In RStudio a notice during a run is boxed by RStudio and the live row stays | (this commit) |
+| 39 | In RStudio a notice during a run is boxed by RStudio and the live row stays | 1c6f9ae0 |
+| 40 | Under `R < file` the piped console reads end of input at once | (this commit) |
 
 ## Out of scope
 

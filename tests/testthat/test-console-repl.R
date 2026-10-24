@@ -832,6 +832,23 @@ test_that("the end of piped input leaves the REPL like /exit", {
   expect_identical(res$text, "ok")
 })
 
+test_that("under R < file the piped console reads the lines after its call, echoed once (IC-59)", {
+  skip_on_cran()
+  dir = withr::local_tempdir()
+  f = file.path(dir, "in.R")
+  line = "cat(\"RAN\", \"AS R\\n\")"
+  writeLines(c(paste0(tracemem_loader(), "; peter(model = gptr_fake_provider(list(\"PONG\")), ",
+                      ".stdin = TRUE)"), line, "/exit"), f)
+  libs = paste(.libPaths(), collapse = .Platform$path.sep)
+  # an absolute path, so R CMD check's dummy `R` on PATH is never used (IC-60); R echoes its input
+  res = processx::run(file.path(R.home("bin"), "R"), c("--vanilla", "--quiet"), stdin = f,
+                      wd = dir, error_on_status = FALSE, timeout = 60,
+                      env = c("current", R_LIBS = libs))
+  expect_match(res$stdout, "PONG", fixed = TRUE)
+  expect_no_match(res$stdout, "RAN AS R", fixed = TRUE)
+  expect_identical(lengths(regmatches(res$stdout, gregexpr(line, res$stdout, fixed = TRUE))), 1L)
+})
+
 test_that("in IRkernel peter() without a prompt starts the console on gptr_readline() (acc. 7)", {
   skip_on_cran()
   local_console_test()

@@ -75,10 +75,15 @@ repl_prompt = function(rs) {
 }
 
 #' The persistent stdin connection of `peter(.stdin = TRUE)` (tests mock this function): a fresh
-#' file("stdin") per read loses buffered lines (report 18 2.1.3)
+#' file("stdin") per read loses buffered lines (report 18 2.1.3). Where R reads its own commands
+#' from the process's standard input (`R < file`: not interactive, no -f, --file= or -e), R's
+#' console connection, whose buffer already holds the lines after the call
 #' @noRd
 console_stdin_open = function() {
-  file("stdin", open = "r")
+  args = commandArgs()
+  args = args[seq_len(match("--args", args, nomatch = length(args) + 1L) - 1L)]
+  piped = !interactive() && !any(args %in% c("-f", "-e") | startsWith(args, "--file="))
+  if (piped) stdin() else file("stdin", open = "r")
 }
 
 #' The longest console line readline() delivers whole (report 18 fact-check 2)
@@ -123,6 +128,11 @@ console_reader = function(stdin = FALSE, echo = stdin) {
       if (is.null(rd$con)) return(NA_character_)
       stream = gptr_message_stream(stream)
       if (echo) gptr_message_write(prompt, stream)
+      # R's console connection echoes what it reads where R echoes its input; the reader echoes
+      if (as.integer(rd$con) == 0L) {
+        old = options(echo = FALSE)
+        on.exit(options(old), add = TRUE)
+      }
       x = readLines(rd$con, n = 1L, warn = FALSE, encoding = "UTF-8")
       if (!length(x)) {
         if (echo) gptr_message_write("\n", stream)
@@ -193,7 +203,8 @@ console_reader = function(stdin = FALSE, echo = stdin) {
     con = rd$con
     rd$con = NULL
     rd$fd = NULL
-    if (!is.null(con)) close(con)
+    # R's console connection (number 0) stays open
+    if (!is.null(con) && as.integer(con) != 0L) close(con)
     invisible(NULL)
   }
   rd

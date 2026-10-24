@@ -1062,7 +1062,7 @@ context and signals the warning `partial_name` naming each such formal (D-251).
 | `replay` | `chr(1)` or `NULL` | `"auto"`, `"replay"`, `"live"`, `"record"` (document replay mode, P15) |
 | `.opts` | named list | rare switches: `thinking` (chr(1); on a continuation without `model =` it switches the session's level for this and later turns, as `model = "<ref>:<level>"` does, D-251), `max_turns` (int(1): this call's model requests), `context` (`"summary"`, `"names"`, `"none"`), `record` (lgl(1)), `interpolate` (lgl(1)), `timeout` (num(1), seconds for `r`), `output` (`"factor"`), `system` (chr(1) replacing `preamble`/`tools`/`rules`, or a named list overriding sections, `NULL` elements remove), `preset` (a registered `preset` name), `returns` (a JSON Schema list: structured final answer, INFRA-25), `max_active` (int(1)), `backend` (a registered `backend` name or `"auto"`), `frontend` (a registered `frontend` name), `images` (list of image paths, `ggplot` or `recordedplot` objects, IC-44), `seed` (int(1): reproducible sub-agent RNG streams, IC-61), and entries named by a plugin namespace (validated by that plugin's `setting` specs, IC-44); other unknown names signal `gptr_error_invalid_argument` |
 | `.run` | `lgl(1)` | `FALSE`: build the session with the prompt queued and return it (SDK) |
-| `.stdin` | `lgl(1)` | drive the console from piped standard input [18 §4.2] |
+| `.stdin` | `lgl(1)` | drive the console from piped standard input [18 §4.2]; where R reads its own commands from it (`R < file`: not interactive, no `-f`, `--file=` or `-e`), through R's console connection `stdin()`, whose buffer holds the lines after the call (P28 Task 40) |
 
 #### 6.1.1 Dispatch
 
@@ -4818,7 +4818,7 @@ CLI child evaluates in the fork overlay and a plan-mode parent gates in plan mod
   writes and flushes inside `suspendInterrupts()`, per entry or per batch at a turn boundary. No R connection
   outlives a gptr call; the live record keeps the path and the lock only. The same rule holds for the wire log,
   the JSONL frontend (it writes to a connection its caller owns) and the `.stdin` REPL connection (closed on
-  `/exit` and by `on.exit()`). R allows 125 user connections, and `--as-cran` examples fail with "connections left
+  `/exit` and by `on.exit()`; R's console connection, read under `R < file`, stays open). R allows 125 user connections, and `--as-cran` examples fail with "connections left
   open" (both reproduced).
 - **Torn-line recovery**: opening an existing file for a resume reads its last byte; when it is not LF, gptr
   appends `"\n"` and a `gptr.recovered` custom entry naming the torn byte range before any new entry.
