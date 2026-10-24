@@ -318,6 +318,17 @@ test_that("/skill: completes the project's skills before the first prompt (Task 
   expect_identical(console_complete("/skill:ti"), "/skill:tidy-up")
 })
 
+test_that("/ completes the project's template commands before the first prompt (D-252)", {
+  withr::defer(res_prune("prompts:", character()))
+  local_project(list(".gptr/prompts/check.md" = "Check $1."), trust = TRUE)
+  res_prune("prompts:", character())
+  rs = repl_state(NULL, new.env())
+  rs$reader = console_reader()
+  rs$reader$complete = TRUE
+  .gptr_repl = rs
+  expect_identical(console_complete("/ch"), c("/check", "/checkpoints"))
+})
+
 test_that("R's completion through the adapter gives the table's words as its token's (IC-81)", {
   .gptr_repl = local_completing_repl()
   # RStudio and Windows: utils guesses the token (`mo` after /, `a` after /)

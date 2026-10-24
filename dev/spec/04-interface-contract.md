@@ -2264,7 +2264,7 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `agent_def.get` | P17 | `gptr_agent()` (P02) | `function(name, file = NULL) <spec:agent>` |
 | `skill.catalog`, `skill.body` | P17 | `skills =` preloads (P08/P07), `peter$search()` (P10) | `function(session, budget) chr(1)`; `function(name) list(text, dir)` |
 | `plugin.enable` | P17 | `peter(plugins =, extensions =)` (P08) | `function(name, rank, session = NULL) invisible(lgl(1))` |
-| `templates.sync` | P17 | the console's `/help` and a command name not registered (P14), so templates work before a session starts and one saved since is found (D-252) | `function() invisible(NULL)`: what `builtin:prompts`' `session_start` hook does (settings plugins enabled, templates and their commands synced) |
+| `templates.sync` | P17 | the console's `/help`, its `/` completion (P28) and a command name not registered (P14), so templates work before a session starts and one saved since is found (D-252) | `function() invisible(NULL)`: what `builtin:prompts`' `session_start` hook does (settings plugins enabled, templates and their commands synced) |
 | `mcp.catalog` | P18 | `peter$search()` (P10) | `function(session, budget) chr(1) or NULL` |
 | `mcp.dispatch_local` | P18 | `cli-claude`, `cli-codex` (P20) | `function(message, session) list` (JSON-RPC response) |
 | `bg.register` | P21 | `peter(background = TRUE)` (P08), the pause menu (P14) | `function(session) invisible(session)` |
@@ -5829,9 +5829,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       the word does; `a@b.com` gives nothing;
     - a word `@obj$...`: `.DollarNames(obj)`;
     - a word starting with `peter$`: peter's members (the `ns.names` service);
-    - a first word starting with `/`: the registered commands (plugin commands among them) and
-      `/skill:<name>` for each skill registered or listed by `gptr_skills()` (as `/skills` lists them, also
-      before the first prompt has registered any; P28 Task 30);
+    - a first word starting with `/`: the registered commands (plugin and template commands among them,
+      registered first as `/help` does, D-252) and `/skill:<name>` for each skill registered or listed by
+      `gptr_skills()` (as `/skills` lists them, also before the first prompt has registered any; P28 Task 30);
     - anything else, and a failure: `character(0)` (natural language, `$5`, a bare `$name`, `x$y`, `wow! x`).
   - The adapter: `console_completer(prev)` is R's `custom.completer`. It sets `fileName` to FALSE and `comps`
     to `character()` first (without `fileName` R's readline aborts the `readline()` call), then gives the

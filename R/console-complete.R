@@ -26,9 +26,10 @@ console_completes = function(stdin = FALSE) {
 #' after @, the objects an @mention names (console_objects()), then the files and directories
 #' under the working directory, a directory ending in /, names starting with a dot only when the
 #' word does; after peter$, peter's members (the `ns.names` service); a first word starting with
-#' /, the registered commands, plugin commands among them, and /skill:<name> for each skill
-#' registered or listed by gptr_skills() (as /skills lists them, before the first prompt has
-#' registered any). Anything else, and a failure, gives character(0).
+#' /, the registered commands, plugin and template commands among them (registered now, as /help
+#' does, D-252), and /skill:<name> for each skill registered or listed by gptr_skills() (as
+#' /skills lists them, before the first prompt has registered any). Anything else, and a
+#' failure, gives character(0).
 #' @noRd
 console_complete = function(line, end = nchar(line)) {
   line = substr(line, 1L, end)
@@ -67,6 +68,7 @@ console_complete = function(line, end = nchar(line)) {
       }
     } else {
       s = rs$session
+      console_templates_sync()
       skills = unique(c(registry_names("skill", s), gptr::gptr_skills()$name))
       c(paste0("/", sort(registry_names("command", s), method = "radix"), recycle0 = TRUE),
         paste0("/skill:", sort(skills, method = "radix"), recycle0 = TRUE))

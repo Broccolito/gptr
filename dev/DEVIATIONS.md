@@ -4823,10 +4823,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   hint named no layer (a `gptr_init()` project's `manual` overrode a user `auto` unseen) and told a knitting user to
   run interactively. The gateway records the origin because `perm_ask()` (L2) may not call `settings_layered()` (L6).
 - Rule (tpl-1): the service `templates.sync` (P17, owned by `builtin:prompts`) is the `session_start` hook's
-  `plugins_sync()` then `template_sync()`; the console calls it at `/help` and before it calls a command name
-  unknown, then looks again. Formerly no template command (project, user, `/review`, `/explain`) existed until a
-  session had started, so `/check` as the console's first input was "Unknown command", and a template saved later
-  waited for the next session start.
+  `plugins_sync()` then `template_sync()`; the console calls it at `/help`, at a `/` completion and before it calls
+  a command name unknown, then looks again. Formerly no template command (project, user, `/review`, `/explain`)
+  existed until a session had started, so `/check` as the console's first input was "Unknown command", and a
+  template saved later waited for the next session start.
 - Rule (tpl-2): the trust question, or without a human the untrusted notice, covers every project location gptr
   reads under trust. `trust_resources_present()` counts the trust-gated files, `AGENTS.md`, `AGENTS.override.md`,
   `CLAUDE.md`, `CLAUDE.local.md`, `.gptr/vignette.Rmd`, the directories `.gptr/{skills,prompts,agents}`,
@@ -4884,7 +4884,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   whose ask tool was blocked is told to ask again", "a message piped into a waiting session is delivered with the
   console note"; console-ui "a denial keeps the UI's how ..."; agent-dispatch "a blocked call's hint names where its
   mode came from"; console-commands "template commands exist before the first prompt ...", "a template command is
-  the console's first input (end to end)"; gptr-config "a project whose only resource is prompt templates gets the
+  the console's first input (end to end)"; console-completion "/ completes the project's template commands before
+  the first prompt (D-252)"; gptr-config "a project whose only resource is prompt templates gets the
   trust notice", "a trusted prompts-only project registers its templates", "every project skill, agent and
   instruction location counts ...", "a relative skills.paths directory counts, and the question names skills", "a
   changed trust-gated file makes the project untrusted again"; gptr-capture "a bare hyphenated name is refused with
