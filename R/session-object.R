@@ -1329,7 +1329,7 @@ replay_adopt = function(s, block, header, doc) {
 #' The texts of a replayed block's `## Steer:` and `## Follow-up:` lines (`doc$steps`) become the
 #' session's notes of that block, set anew each time the block is replayed (a script sourced again
 #' sends them again): replay_note_take() keeps them from reaching the model twice. A matching item
-#' the script queued before the call that took it is taken back now.
+#' the script queued before the call that took it is taken back now (a `withdraw` each).
 #' @noRd
 replay_notes_add = function(s, block, doc) {
   notes = Filter(function(st) st$type %in% c("steer", "follow_up"), doc$steps %||% list())
@@ -1338,15 +1338,13 @@ replay_notes_add = function(s, block, doc) {
   kept = d$replay_notes %||% list()
   kept[[block]] = vapply(notes, function(st) st$text, "")
   d$replay_notes = kept
-  q = d$queue
   for (which in c("steer", "follow_up")) {
-    q[[which]] = Filter(function(it) {
-      !(it$source %in% c("api_user", "pipe") && replay_note_take(s, it$text))
-    }, q[[which]])
-  }
-  if (!identical(q, d$queue)) {
-    d$queue = q
-    session_emit(s, "queue_update", steer = length(q$steer), follow_up = length(q$follow_up))
+    items = d$queue[[which]]
+    taken = vapply(items, function(it) {
+      it$source %in% c("api_user", "pipe") && replay_note_take(s, it$text)
+    }, NA)
+    d$queue[[which]] = items[!taken]
+    for (item in items[taken]) queue_emit(s, "withdraw", which, item)
   }
   invisible(s)
 }

@@ -617,6 +617,20 @@ test_that("session_unqueue() returns NULL on an empty queue and emits nothing", 
   expect_length(ev(s), 0L)
 })
 
+test_that("a replayed block's notes take back queued items with one withdraw each (D-242)", {
+  ev = local_events("queue_update")
+  s = test_session()
+  session_enqueue(s, "use TPM", as = "steer", source = "api_user")
+  session_enqueue(s, "then plot", as = "follow_up", source = "pipe")
+  steps = list(list(type = "steer", text = "use TPM"), list(type = "follow_up", text = "then plot"))
+  replay_notes_add(s, "b1", list(steps = steps))
+  expect_identical(lapply(ev(s)[3:4], `[`, queue_fields), list(
+    list(op = "withdraw", which = "steer", text = "use TPM", source = "api_user", steer = 0L,
+         follow_up = 1L),
+    list(op = "withdraw", which = "follow_up", text = "then plot", source = "pipe", steer = 0L,
+         follow_up = 0L)))
+})
+
 test_that("session_root_id() follows live parents to the root", {
   root = test_session()
   child = test_session(kind = "child", parent = root)

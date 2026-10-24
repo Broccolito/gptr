@@ -3090,7 +3090,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   besides the counts, one event per item; `session_unqueue(s, which)` takes back the newest user item for the
   console's Up and Task 15's leftovers. Tests: test-session-object.R "queue_update names the item it adds ...",
   "session_unqueue() takes back the newest user item and emits withdraw (D-242)", "session_unqueue() returns NULL
-  on an empty queue and emits nothing"; test-agent-run.R "queue_update names each item the run takes, after it
+  on an empty queue and emits nothing", "a replayed block's notes take back queued items with one withdraw each
+  (D-242)"; test-agent-run.R "queue_update names each item the run takes, after it
   left the queue (D-242)".
 - Task 7: `builtin_console` hooks `turn_end`, which after_turn emits just before it polls steers; the hook runs
   `console_typed()`, which queues through `policy_enqueue()` (and that flushes), so a line typed before a step

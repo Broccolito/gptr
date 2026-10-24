@@ -4770,7 +4770,7 @@ as steers. `ctx$send()` and `gptr_steer()` called from model-evaluated code of t
 with `gptr_error_permission`. Test: a child agent's text never appears in an operator message.
 Each replay of a block (IC-46), also a second source of its script in one process, sets the texts of the
 block's `## Steer:` and `## Follow-up:` lines on the session as its notes, and takes back a queued `api_user` or
-`pipe` item equal to one. While the session is idle, `gptr_steer()` and a pipe into it drop a text equal to a note
+`pipe` item equal to one (a `queue_update` `withdraw` each). While the session is idle, `gptr_steer()` and a pipe into it drop a text equal to a note
 (as `doc_one_line()` writes it, either kind; the note is consumed) with one `notice`, "A steer this script sends
 is already recorded in the replayed block; it was not sent again.", so a replayed script does not send its
 recorded steers twice; a live run clears the notes. A run that `gptr_step()` or `gptr_wait()` starts from queued
