@@ -755,6 +755,24 @@ test_that("a sub-agent's started line cut to the width keeps its last word (Task
   expect_identical(start, "  # sub-agent a (a-provider-w... started")
 })
 
+test_that("a sub-agent's rows are the block of the r call that runs them (visual round 2)", {
+  skip_on_cran()
+  # a person watches, so the call's printed value shows
+  local_gptr_options(mode = "auto", verbose = 2L, quiet = FALSE, interactive = TRUE)
+  withr::local_options(cli.num_colors = 1L, cli.unicode = FALSE, cli.width = 80L,
+                       cli.dynamic = TRUE)
+  e = new.env()
+  e$kid = local_fake_provider(function(request) "ok", name = "kid")
+  code = "res = peter('each', list(a = 1), model = kid, parallel = 1); 'sub-agent done'"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("fan out", model = lead, envir = e))
+  # the call's rows, the sub-agent's, the printed value and the end row: no blank row among them
+  rows = out[seq(grep("| r", out, fixed = TRUE)[[1L]], grep("+ res", out, fixed = TRUE)[[1L]])]
+  expect_true(any(grepl("sub-agent a done", rows, fixed = TRUE)))
+  expect_true(any(grepl("[1] \"sub-agent done\"", rows, fixed = TRUE)))
+  expect_false(any(rows == ""))
+})
+
 test_that("the ask tool's call line counts its questions in words (visual review)", {
   q = list(id = "fit", question = "Which fit?", options = list("lm", "loess"))
   expect_identical(console_preview(list(questions = list(q))), "1 question")

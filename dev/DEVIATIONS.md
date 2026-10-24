@@ -4309,6 +4309,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   before the abort:` showed `would Eigh…` for `would be. Eight-cylinder`. Contract-visible: 04 §7.14's
   `render_markdown_stream()` row. Tests: test-console-render.R "an interrupt while a row is written loses none of
   its delta (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 60: a sub-agent's started and done lines are rows of the block
+  of the `r` call that runs them (`console_child_line()` opens a `tool` block while a tool runs on the stack): the
+  lines opened a notice block, so a blank row came before them and another between the call's printed value and
+  its result line. Contract-visible: 04 §15.10 IC-82 (tool calls). Tests: test-console-render.R "a sub-agent's
+  rows are the block of the r call that runs them (visual round 2)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

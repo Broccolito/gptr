@@ -6026,7 +6026,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     and its other lines (hunk headers) are dim; a diff row wider than the console is cut with `…`, never wrapped,
     so its code keeps its spaces and every row its sign (visual review). A tool's `render()`
     (IC-69) still wins. At 256 colours the act strip is `38;5;167` and the block `38;5;67`; `NO_COLOR` keeps the
-    glyphs; ASCII shows `|` and `#`. A sub-agent's lines are drawn inside the agent's `r` evaluation, whose options
+    glyphs; ASCII shows `|` and `#`. A sub-agent's lines are drawn inside the agent's `r` evaluation, and are rows
+    of that call's block (`console_before_message(kind = "tool")` while a tool runs on the stack; a top-level team
+    or fan-out's open a notice block): no blank row splits the call's code, the sub-agent's rows, what the code
+    prints and its result line (P28 Task 60, visual round 2). The evaluation's options
     say 1 colour, so they take the colours of the console it started from: `eval_one()` holds
     `.gptr_console_colors` beside `.gptr_console_pad`, and `console_colors()` reads it (else
     `cli::num_ansi_colors()`), as `console_pad()` reads the margin.

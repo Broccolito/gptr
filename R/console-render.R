@@ -551,11 +551,12 @@ console_child_shown = function(run) {
 }
 
 #' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188), after
-#' the agent's blue block in the console's colours, also from the agent's r code (D-245), cut to
-#' the console width (D-224) before its last words `keep`, which stay (Task 36: ` started`)
+#' the agent's blue block in the console's colours, also from the agent's r code (D-245), whose
+#' call's block it then belongs to, cut to the console width (D-224) before its last words `keep`,
+#' which stay (Task 36: ` started`)
 #' @noRd
 console_child_line = function(rec, text, keep = "") {
-  console_before_message(tools = TRUE)
+  console_before_message(kind = if (is.null(run_current())) "notice" else "tool", tools = TRUE)
   old = options(cli.num_colors = console_colors())
   on.exit(options(old), add = TRUE)
   sym = console_style()
