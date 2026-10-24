@@ -160,15 +160,16 @@ arch_kernel_sdk = function() {
 # with P06's session_new(); a served MCP call runs P06's tool_call_hook(), its tool and the
 # checkpointers as the loop does (tool_run(), tool_execute_frame(), checkpoint_before(),
 # checkpoint_after()), the console's /model checks a reference with P06's model_canonical()
-# (IC-79), and /model and /status name the full id behind a CLI's `default` with P20's
-# pcli_default_model() (section 11.10, D-226)
+# (IC-79), /model and /status name the full id behind a CLI's `default` with P20's
+# pcli_default_model() (section 11.10, D-226), and P19's team and fan-out routes refuse the
+# System 1 arguments with P08's route_refuse_s1_args() (section 6.1.1 step 5, D-250)
 arch_contract_edges = function() {
   data.frame(
     caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "console",
-                    "console"),
+                    "console", "subagent"),
     callee = c("code_targets", "session_new", "session_new", "tool_call_hook", "tool_run",
                "tool_execute_frame", "checkpoint_before", "checkpoint_after", "model_canonical",
-               "pcli_default_model")
+               "pcli_default_model", "route_refuse_s1_args")
   )
 }
 

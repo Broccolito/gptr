@@ -286,16 +286,52 @@ test_that("the execute menu follows the plan run: mode, tools, a queued go-ahead
   expect_identical(session_data(s)$mode, "auto")
   expect_identical(session_data(s)$queue[[1L]], list(text = "Go ahead with the plan above.",
                                           as = "follow_up", source = "pause_menu"))
-  expect_match(paste(msgs, collapse = ""), "gptr_step(gptr_last())", fixed = TRUE)
+  expect_match(paste(msgs, collapse = ""), "gptr_wait(gptr_last())", fixed = TRUE)
   expect_identical(vapply(session_data(s)$entries, function(e) e$data$status, ""),
                    c("pending", "used"))
   expect_false(exists(home_address(home), envir = plan_store(), inherits = FALSE))
   added = vapply(ctx$added$specs, function(sp) sp$name, "")
   expect_true(all(c("edit", "write") %in% added))
-  plan_on_agent_start(list(), ctx)
-  expect_identical(vapply(ctx$added$specs, function(sp) sp$name, ""), added)
   plan_on_agent_end(list(status = "idle"), ctx)
   expect_identical(nrow(st$log), 1L)
+})
+
+test_that("the call the go-ahead notice names runs the whole plan", {
+  skip_on_cran()
+  root = local_project()
+  local_plan_store()
+  local_gptr_options(quiet = FALSE)
+  local_scripted_ui(list(2L))
+  fake = local_fake_provider(list("<proposed_plan>1. write f.txt 2. read it</proposed_plan>",
+                                  fake_tool("write", path = "f.txt", content = "hi"),
+                                  fake_tool("read", path = "f.txt"), "Done."))
+  msgs = testthat::capture_messages(peter("Create f.txt", model = fake, mode = "plan"))
+  s = gptr_last()
+  hint = grep("runs the plan", msgs, value = TRUE, fixed = TRUE)
+  cmd = regmatches(hint, regexpr("[a-z_]+\\(gptr_last\\(\\)\\)", hint))
+  expect_length(cmd, 1L)
+  testthat::capture_messages(eval(parse(text = cmd)))
+  expect_identical(s$status, "idle")
+  expect_length(fake_requests(fake), 4L)
+  expect_true(file.exists(file.path(root, "f.txt")))
+})
+
+test_that("the go-ahead request tells the model the mode the menu chose", {
+  skip_on_cran()
+  local_project()
+  local_plan_store()
+  local_scripted_ui(list(2L))
+  fake = local_fake_provider(list("<proposed_plan>1. write f.txt</proposed_plan>",
+                                  fake_tool("write", path = "f.txt", content = "hi"), "Done."))
+  s = peter("Create f.txt", model = fake, mode = "plan")
+  gptr_wait(s)
+  expect_identical(s$status, "idle")
+  msgs = fake_requests(fake)[[2L]]$messages
+  last = msgs[[length(msgs)]]
+  expect_identical(last$role, "user")
+  expect_identical(msg_text(last), "Go ahead with the plan above.")
+  modes = Filter(function(b) identical(b$kind, "mode"), last$content)
+  expect_identical(vapply(modes, function(b) b$attrs$name, ""), "edits")
 })
 
 test_that("keep planning, a non-interactive run or a nested session show no menu", {
@@ -364,6 +400,19 @@ test_that("plan mode on the fake provider: denied writes, scratch r, a plan hand
   expect_false(grepl("<plan", first_text(fake_requests(fake)[[5L]]), fixed = TRUE))
 })
 
+test_that("plan mode runs console output such as cat() and still denies a file write", {
+  skip_on_cran()
+  root = local_project()
+  local_plan_store()
+  fake = local_fake_provider(list(fake_tool("r", code = "cat('a\\n')"),
+                                  fake_tool("r", code = "cat('a', file = 'x.txt')"), "Done."))
+  peter("Look.", model = fake, envir = new.env(), mode = "plan")
+  res = vapply(fake_requests(fake)[2:3], function(q) msg_text(q$last_results[[1L]]), "")
+  expect_identical(trimws(res[1L]), "a")
+  expect_match(res[2L], "Permission denied", fixed = TRUE)
+  expect_false(file.exists(file.path(root, "x.txt")))
+})
+
 test_that("a plan is pending for the environment its run evaluated in (IC-40, IC-56)", {
   skip_on_cran()
   root = local_project()
@@ -374,4 +423,21 @@ test_that("a plan is pending for the environment its run evaluated in (IC-40, IC
   s = peter("start", model = fake, envir = e1)
   s |> peter("plan it", envir = e2, mode = "plan")
   expect_identical(plan_addresses(), home_address(e2))
+})
+
+test_that("a readonly session keeps read and r outside plan mode (D-251)", {
+  local_gw()
+  f = gptr_fake_provider(list(fake_tool("write", path = "ro.txt", content = "x"), "done",
+                              "again"))
+  s = peter("x", model = f, mode = auto, tools = readonly, envir = new.env())
+  s |> peter("again")
+  expect_identical(f$log$n, 3L)
+  res = Filter(function(m) identical(m$role, "tool_result"), s$messages)
+  expect_identical(msg_text(res[[1L]]), "Tool write not found")
+  expect_false(file.exists("ro.txt"))
+  for (q in f$log$requests) {
+    expect_identical(q$tools, c("read", "r"))
+    said = vapply(q$messages, function(m) paste(msg_text(m), collapse = "\n"), "")
+    expect_false(any(grepl("New tools are available", said, fixed = TRUE)))
+  }
 })

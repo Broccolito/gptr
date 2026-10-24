@@ -231,17 +231,77 @@ doc_s2_answer = function(rec) {
   if (rlang::is_string(a) && nzchar(a)) a else NULL
 }
 
+#' Say once per document and process that a replayed session has no answer (`$text` NA): no S2
+#' record, live session or session file held it; outside a `.gptr/` workspace the S2 cache and the
+#' session files are in this process's `tempdir()` (IC-46)
+#' @noRd
+doc_replay_no_answer = function(site, s) {
+  if (!is.na(session_data(s)$last_text)) return(invisible(NULL))
+  hint = if (is.null(workspace_dir())) {
+    " gptr_init(\".\") keeps answers in .gptr/ for later R sessions."
+  }
+  gptr_inform(paste0("No recorded answer for ", doc_rel(site$path), ": replayed answers ($text) ",
+                     "are NA.", hint), "notice",
+              .once = paste0("doc_no_answer:", path_key(site$path)))
+}
+
+#' Say once per block and process that a replayed block's code designated a value no replay
+#' restores: its header names none, its code still calls gptr_return(), which the recorder leaves
+#' only inside another expression (IC-48), and the replayed session `s` holds no value of its
+#' turn (the live session that recorded it does, as replay_value() reads it)
+#' @noRd
+doc_replay_no_value = function(site, block, code, s) {
+  if (!is.null(block$header$value)) return(invisible(NULL))
+  d = session_data(s)
+  if (any(vapply(d$values, function(v) !is.null(v$value) && as.integer(v$turn) == d$turns, NA))) {
+    return(invisible(NULL))
+  }
+  ex = tryCatch(doc_parse_text(code, keep_source = FALSE), error = function(e) NULL)
+  if (!"gptr_return" %in% all.names(ex)) return(invisible(NULL))
+  gptr_inform(paste0("No recorded value for block ", block$id, " of ", doc_rel(site$path), ": a ",
+                     "document records gptr_return() only as a top-level call, so $value is not ",
+                     "replayed."), "notice",
+              .once = paste0("doc_no_value:", path_key(site$path), ":", block$id))
+}
+
 #' What a replayed session reconstructs its history from (IC-46; P06's `doc` argument):
-#' list(path, format, template, code, output, text)
+#' list(path, format, template, code, output, text, steps); `code` and `output` are those of all
+#' the block's runs
 #' @noRd
 doc_replay_doc = function(site, call, block_id, text = NULL) {
   body = tryCatch(doc_block_get(site$format, doc_read(site$path)$lines, block_id)$body,
                   error = function(e) NULL) %||% character()
-  outs = grepl("^[ \t]*#>", body)
+  steps = doc_replay_steps(body)
+  runs = Filter(function(st) identical(st$type, "r"), steps)
   list(path = site$path, format = site$format,
        template = site$template %||% call$template %||% call$prompt,
-       code = body[!outs & !grepl("^[ \t]*#", body) & nzchar(trimws(body))],
-       output = sub("^[ \t]*#> ?", "", body[outs]), text = text)
+       code = as.character(unlist(lapply(runs, function(st) st$code))),
+       output = as.character(unlist(lapply(runs, function(st) st$output))), text = text,
+       steps = steps)
+}
+
+#' A block body as ordered steps: each run of code with its `#>` output, list(type = "r", code,
+#' output), split at the `## Steer:` and `## Follow-up:` lines, list(type = "steer" or
+#' "follow_up", text), so a reconstruction puts each message where it was delivered (IC-46)
+#' @noRd
+doc_replay_steps = function(body) {
+  note = grepl(doc_re_steer, body)
+  steps = list()
+  for (seg in split(seq_along(body), cumsum(note))) {
+    lines = body[seg]
+    if (note[seg[1L]]) {
+      kind = if (grepl("^[ \t]*## Steer:", lines[1L])) "steer" else "follow_up"
+      steps = c(steps, list(list(type = kind, text = sub(doc_re_steer, "", lines[1L]))))
+      lines = lines[-1L]
+    }
+    outs = grepl("^[ \t]*#>", lines)
+    code = lines[!outs & !grepl("^[ \t]*#", lines) & nzchar(trimws(lines))]
+    if (length(code)) {
+      steps = c(steps, list(list(type = "r", code = code,
+                                 output = sub("^[ \t]*#> ?", "", lines[outs]))))
+    }
+  }
+  steps
 }
 
 #' The header P06's replay functions receive: the block header plus `doc` and `mode`
@@ -250,7 +310,8 @@ doc_replay_header = function(header, site, mode) {
   utils::modifyList(header, list(doc = doc_rel(site$path), mode = mode))
 }
 
-#' Replay a fresh block (IC-46): the piped session advanced in place, else a replayed session
+#' Replay a fresh block (IC-46): the piped session advanced in place (one reconstructed from its
+#' document gains the block's turn; the block's steers become notes), else a replayed session
 #' (the live one holding the header's id, the JSONL cut at the recorded turn, or the history
 #' reconstructed from the document); a fork block is bound to its id for gptr_resume(block =).
 #' No provider is called and no model is discovered (IC-74).
@@ -261,13 +322,15 @@ doc_replay_call = function(call, site, mode = "replay") {
   rel = doc_rel(site$path)
   answer = doc_s2_answer(s2_get(s2_key(rel, b$id, "", h$prompt %||% "", h$args %||% "")))
   header = doc_replay_header(h, site, mode)
+  doc = doc_replay_doc(site, call, b$id, answer)
   s = if (!is.null(call$session)) {
-    session_replay_apply(call$session, b$id, header, text = answer)
+    session_replay_apply(call$session, b$id, header, text = answer, doc = doc)
   } else {
-    session_replay_new(b$id, header, call$envir,
-                       doc = doc_replay_doc(site, call, b$id, answer))
+    session_replay_new(b$id, header, call$envir, doc = doc)
   }
   if (!is.null(h$fork)) session_replay_bind(b$id, s)
+  doc_replay_no_answer(site, s)
+  doc_replay_no_value(site, b, doc$code, s)
   doc_source_log(site$path, b$id, "replayed")
   assign("doc", NULL, envir = call)
   s
@@ -311,9 +374,10 @@ doc_run_block_nested = function(call, site, mode) {
   session_replay_new(part, header, call$envir, doc = doc)
 }
 
-#' Replay a fresh team or fan-out block (IC-47): one replayed child per `children=` entry, with
-#' its cached S2 text, in a fresh overlay of the caller's environment, bound to (block, child)
-#' for gptr_resume(block =, child =); then the team session itself, bound to the block. Zero
+#' Replay a fresh team or fan-out block (IC-47): one replayed child per `children=` entry
+#' (`<name>:<session id>`, and the child's `value=` name as an optional third field), with its
+#' cached S2 text, in a fresh overlay of the caller's environment, bound to (block, child) for
+#' gptr_resume(block =, child =); then the team session itself, bound to the block. Zero
 #' requests (IC-74: no provider, no discovery).
 #' @noRd
 doc_replay_team = function(call, site, mode) {
@@ -323,17 +387,19 @@ doc_replay_team = function(call, site, mode) {
   pairs = strsplit(strsplit(h$children %||% "", ",", fixed = TRUE)[[1L]], ":", fixed = TRUE)
   texts = character()
   for (kv in pairs) {
-    if (length(kv) != 2L || !all(nzchar(kv))) next
+    if (!length(kv) %in% 2:3 || !all(nzchar(kv))) next
     rec = s2_get(s2_key(rel, b$id, kv[1L], h$prompt %||% "", h$args %||% ""))
     answer = doc_s2_answer(rec)
     child_header = list(model = rec$model %||% h$model, session = kv[2L],
                         turn = as.character(rec$turn %||% 1L), doc = rel, mode = mode)
+    child_header$value = if (length(kv) == 3L) kv[3L]
     overlay = new.env(parent = call$envir)
     child = session_replay_new(paste0(b$id, "/", kv[1L]), child_header, overlay,
                                doc = list(path = site$path, format = site$format,
                                           template = site$template, code = character(),
                                           output = character(), text = answer))
     session_replay_bind(b$id, child, child = kv[1L])
+    doc_replay_no_answer(site, child)
     texts = c(texts, paste0("### ", kv[1L], " (", rec$model %||% h$model, ")\n", answer %||% ""))
   }
   text = if (length(texts)) paste(texts, collapse = "\n\n") else NULL
@@ -410,18 +476,28 @@ doc_route_match = function(call) {
 #' @noRd
 doc_skip_undone = function(site) {
   gptr_inform(paste0("Block ", site$block$id, " of ", doc_rel(site$path), " was undone by ",
-                     "/rewind; edit or delete the prompt, or run live to regenerate it."),
-              "notice")
+                     "/rewind; edit or delete the prompt, or run it with replay = \"record\" ",
+                     "to regenerate it."), "notice")
   doc_source_log(site$path, site$block$id, "skipped")
   invisible(NULL)
 }
 
 #' Keep `site` in `call$doc` for recording when the call may record: not in replay mode and write
-#' consent can still be given (IC-45); else NULL
+#' consent can still be given (IC-45); else NULL. A call that cannot record because gptr_doc()
+#' bound another document says so once per document (without a binding it stays silent); the
+#' gptr_doc() it suggests names the document as gptr_doc() resolves it, from the working directory.
 #' @noRd
 doc_keep = function(call, site, mode) {
-  ok = !is.null(site) && !isFALSE(call$args$opts$record) && !identical(mode, "replay") &&
-    doc_consent_possible(site$path)
+  may = !is.null(site) && !isFALSE(call$args$opts$record) && !identical(mode, "replay")
+  ok = may && doc_consent_possible(site$path)
+  b = the$doc_binding$path
+  if (may && !ok && rlang::is_string(b)) {
+    gptr_inform(paste0("gptr did not record this call: it is in ", doc_rel(site$path), ", but ",
+                       "gptr_doc() bound ", doc_rel(b), ". Calls are recorded into the document ",
+                       "that holds them; run gptr_doc(",
+                       doc_str_literal(path_rel(site$path, getwd())), ") to record them there."),
+                "notice", .once = paste0("doc_other_binding:", path_key(site$path)))
+  }
   assign("doc", if (ok) site else NULL, envir = call)
 }
 
@@ -684,20 +760,29 @@ doc_replay_service = function(call) {
 # ---- hooks --------------------------------------------------------------------------------------
 
 #' agent_end: write the block of a settled top-level run whose run options carry a document site
-#' (contract 7.15); only runs that ended `idle` are recorded
+#' (contract 7.15). A script document records only runs that ended `idle`; a console transcript,
+#' the history of what happened, records every settled run, one that did not end `idle` with a
+#' last `## Run: <status>` line and no cached answer (IC-49)
 #' @noRd
 doc_on_agent_end = function(event, ctx) {
   site = event$doc
   s = ctx$session
   if (is.null(site) || is.null(site$path) || is.null(s)) return(NULL)
-  if (!identical(event$status %||% "idle", "idle")) return(NULL)
+  status = event$status %||% "idle"
+  if (!identical(status, "idle") && !isTRUE(site$console)) return(NULL)
   d = session_data(s)
   if (isTRUE(site$console)) {
     site$session_id = d$id
-    site$session_file = if (is.null(d$file)) NULL else doc_rel(d$file)
+    # without .gptr/ the log is in tempdir()/gptr, which R deletes at exit
+    kept = !is.null(d$file) && !path_inside(d$file, file.path(tempdir(), "gptr"))
+    site$session_file = if (kept) doc_rel(d$file)
   }
   turn = if (d$kind %in% c("team", "fanout")) 1L else as.integer(event$turns %||% d$turns)
   lines = doc_block_lines(s, turn, site, site$ordinal %||% 1L)
+  if (!identical(status, "idle")) {
+    lines[length(lines) + 1L] = paste0("## Run: ", status)
+    attr(lines, "answer") = NA_character_
+  }
   doc_upsert(site, lines, block_id = site$block_id)
   NULL
 }
@@ -827,12 +912,20 @@ doc_console_append = function(lines, session = NULL) {
 
 #' Bind this R process to a history document
 #'
-#' `gptr_doc(path)` binds every `peter()` call of this R process, at the console and in scripts,
-#' to a history document, and is your explicit consent that gptr writes agent blocks into it.
+#' `gptr_doc(path)` binds a history document to this R process and is your explicit consent that
+#' gptr writes agent blocks into it. Calls written in that document (run with `source()`,
+#' [gptr_source()], `Rscript`, knitr or Jupyter) get their blocks below them. Calls in no
+#' document (the console, `Rscript -e`, standard input) are appended to it, except to a notebook,
+#' as `s_<id> = peter("prompt", <context names>)` (later turns of that session as
+#' `s_<id> |> peter(...)`): your variable name and the other arguments are not recorded. A call in
+#' another document is recorded only into that document, with its own consent; a run that cannot
+#' ask for it records nothing and says so once per document.
 #' Nothing is written until a block is recorded. `gptr_doc(FALSE)` removes the binding and
 #' `gptr_doc()` shows it. `sync = TRUE` writes the blocks that were recorded while the document
-#' could not be written: a Jupyter notebook that was open, or the deferred writes of an `Rscript`
-#' run that was killed.
+#' could not be written, and says how many: a Jupyter notebook that was open (run it from another
+#' R session after closing the notebook), or the deferred writes of an `Rscript` run that was
+#' killed. Such blocks wait in the `.gptr/` of the document's project, else in
+#' `tools::R_user_dir("gptr", "cache")`, so any R process of the same user can apply them.
 #'
 #' Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
 #' or functions do not. Binding supplies recording consent even when automatic recording is
@@ -845,7 +938,8 @@ doc_console_append = function(lines, session = NULL) {
 #' @param format `NULL` (from the file extension) or the format of that extension: `"r"`,
 #'   `"rmd"`, `"qmd"` or `"ipynb"`; `"transcript"` records console turns into an `.R` file as
 #'   one steered session.
-#' @param sync `TRUE` applies the pending blocks of the document now.
+#' @param sync `TRUE` applies the pending blocks of the document now and reports how many it
+#'   wrote.
 #' @return With `path = NULL`, the binding `list(path, format)` or `NULL`, visibly. Otherwise the
 #'   previous binding, invisibly.
 #' @section Options:
@@ -890,8 +984,7 @@ gptr_doc = function(path = NULL, format = NULL, sync = FALSE) {
                arg = "path", expected = "a path in an existing directory")
   }
   the$doc_binding = list(path = full, format = fmt)
-  if (file.exists(full)) doc_recover(full)
-  if (sync) doc_sync(full)
+  if (sync) doc_sync(full) else if (file.exists(full)) doc_recover(full)
   invisible(old)
 }
 
@@ -928,7 +1021,8 @@ doc_bind_format = function(full, format) {
 #'
 #' @param file Path of the document.
 #' @return A `gptr_blocks` data frame with columns `id`, `lines`, `prompt`, `status`, `model`,
-#'   `date`, `tokens`, `cost`, `session`.
+#'   `date`, `tokens`, `cost`, `session`. `cost` is in USD: `0` for a known free route (a local
+#'   model), `NA` when unknown or not recorded.
 #' @export
 #' @examples
 #' f = tempfile(fileext = ".R")
@@ -1051,8 +1145,9 @@ doc_blocks_ipynb = function(text) {
 #' Inspect, prune or clear gptr's caches
 #'
 #' `info` lists the System 1 answer cache, the System 2 answer cache used for replay, temporary
-#' spill files and unapplied document sidecars (deferred or pending blocks; they are never
-#' removed here: apply them with `gptr_doc(path, sync = TRUE)`). `prune` removes System 2 answers
+#' spill files and unapplied document sidecars (deferred or pending blocks; a second row lists
+#' those of documents outside any `.gptr/`, kept in the user cache; they are never removed here:
+#' apply them with `gptr_doc(path, sync = TRUE)`). `prune` removes System 2 answers
 #' whose block is neither in its document nor queued for it in a sidecar, System 1 answers unused
 #' for 90 days, temporary files older than `getOption("gptr.spill_days", 7)` days and older
 #' refreshed model catalogs; `clear` removes a kind entirely.
@@ -1087,37 +1182,50 @@ gptr_cache = function(action = c("info", "prune", "clear"), kind = c("all", "s1"
 }
 
 #' Files of one cache kind under the workspace root (`sidecar`: the unapplied document sidecars,
-#' which are never removed, IC-51; the S1 cache's `salt` file is not an entry)
+#' which are never removed, IC-51, with those of documents outside any `.gptr/` in
+#' doc_pending_dir(); the S1 cache's `salt` file is not an entry)
 #' @noRd
 doc_cache_files = function(kind) {
   if (!kind %in% c("s1", "s2", "tmp", "sidecar")) return(character())
+  side = "^pending-.*[.](json|rds)$"
+  pending = character()
+  if (identical(kind, "sidecar")) {
+    p = doc_pending_dir()
+    pending = list.files(p, pattern = side, full.names = TRUE)
+    pending = pending[path_inside(pending, p) & path_info(pending)$isdir %in% FALSE]
+  }
   root = doc_root()
   cache = file.path(root, "cache")
   dir = file.path(cache, if (identical(kind, "sidecar")) "tmp" else kind)
-  if (!all(path_inside(c(cache, dir), root))) return(character())
+  if (!all(path_inside(c(cache, dir), root))) return(pending)
   answers = kind %in% c("s1", "s2")
   f = list.files(dir, pattern = if (answers) "[.]json$" else NULL, recursive = answers,
                  full.names = TRUE)
   f = f[path_inside(f, dir)]
-  sidecars = grepl("^pending-.*[.](json|rds)$", basename(f))
+  sidecars = grepl(side, basename(f))
   if (identical(kind, "tmp")) f = f[!sidecars]
   if (identical(kind, "sidecar")) f = f[sidecars]
-  f[path_info(f)$isdir %in% FALSE]
+  c(f[path_info(f)$isdir %in% FALSE], pending)
 }
 
-#' The gptr_cache_info listing (one row per kind plus the sidecars)
+#' The gptr_cache_info listing: one row per kind, then the sidecars under the workspace root and
+#' those in doc_pending_dir()
 #' @noRd
 doc_cache_info = function(kinds) {
   cache = file.path(doc_root(), "cache")
-  rows = lapply(c(kinds, "sidecar"), function(k) {
-    f = doc_cache_files(k)
+  pend = doc_pending_dir()
+  side = doc_cache_files("sidecar")
+  away = path_inside(side, pend)
+  row = function(k, f, path) {
     info = file.info(f, extra_cols = FALSE)
     mtime = info$mtime[!is.na(info$mtime)]
     data.frame(kind = k, entries = length(f), bytes = sum(info$size, na.rm = TRUE),
                oldest = if (length(mtime)) min(mtime) else with_calendar_preserved(as.POSIXct(NA)),
-               path = file.path(cache, if (identical(k, "sidecar")) "tmp" else k),
-               stringsAsFactors = FALSE)
-  })
+               path = path, stringsAsFactors = FALSE)
+  }
+  rows = c(lapply(kinds, function(k) row(k, doc_cache_files(k), file.path(cache, k))),
+           list(row("sidecar", side[!away], file.path(cache, "tmp")),
+                row("sidecar", side[away], pend)))
   new_listing(do.call(rbind, rows), "gptr_cache_info")
 }
 
@@ -1214,9 +1322,9 @@ doc_catalog_prune = function() {
 #' Evaluates `file` top-level expression by expression in `envir`, like [source()] with
 #' `keep.source = TRUE`. A `peter()` call whose block is fresh replays without calling a model
 #' and the block's code then runs as ordinary R. A call whose block is stale (its prompt or the
-#' values interpolated into it changed), or every call under `replay = "live"`, asks the model
-#' again and rewrites its block in place, and the old block is skipped, which base `source()`
-#' cannot do.
+#' values interpolated into it changed), or every call under `replay = "live"` (an undone block
+#' runs without being rewritten; `replay = "record"` regenerates it), asks the model again and
+#' rewrites its block in place, and the old block is skipped, which base `source()` cannot do.
 #'
 #' Replay executes the recorded R code, including its ordinary side effects. It does not
 #' freeze package versions, supply external inputs or validate the analysis. This function

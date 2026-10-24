@@ -423,6 +423,30 @@ test_that("an alias shadowed by a character variable wins, with a message (contr
   expect_identical(resolve_identifier(bang, "model", e), "my-own-model")
 })
 
+test_that("an alias shadowed by a spec the argument accepts gets the message (D-250)", {
+  skip_on_cran()
+  keys = paste0("message:alias_shadowed:", c("model:opus", "model:fe", "tools:grep", "tools:write"))
+  rm(list = intersect(keys, names(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect(keys, names(the$once)), envir = the$once))
+  fe = gptr_fake_provider(list("x"), name = "fe")
+  off = gptr_register(fe)
+  withr::defer(off())
+  e = new.env()
+  e$opus = fe
+  e$fe = fe
+  e$grep = gptr_tool("mygrep", "My grep.", fun = function(pattern) "hit")
+  e$write = function(...) NULL
+  local_gptr_options(quiet = FALSE)
+  expect_message(expect_identical(resolve_identifier(quote(opus), "model", e), "opus"),
+                 class = "gptr_message_alias_shadowed")
+  bang = quote(!!opus)
+  expect_s3_class(resolve_identifier(bang, "model", e), "gptr_provider")
+  expect_message(resolve_identifier(quote(grep), "tools", e), class = "gptr_message_alias_shadowed")
+  # a function, and a spec bound to its own registered name, shadow nothing
+  expect_no_message(resolve_identifier(quote(write), "tools", e))
+  expect_no_message(resolve_identifier(quote(fe), "model", e))
+})
+
 test_that("skill names compare after name_norm() (IC-42)", {
   d = withr::local_tempdir()
   writeLines(c("---", "name: single-cell", "description: Single-cell analysis", "---"),
@@ -546,6 +570,28 @@ test_that("a decimal-looking model name is taken literally and echoed once (cont
   expect_no_message(expect_identical(resolve_identifier(quote(gpt5.1), "model", e), "gpt5.1"))
   # only model arguments echo it
   expect_no_message(resolve_identifier(quote(v1.2), "skills", e))
+})
+
+test_that("a bare hyphenated name is refused with its quoted form (contract 6.1.3)", {
+  e = new.env()
+  hyphen = str2lang("high-performance-r")
+  how = "skills = \"high-performance-r\""
+  expect_error(resolve_identifier(hyphen, "skills", e), how,
+               class = "gptr_error_invalid_identifier", fixed = TRUE)
+  e$high = 1
+  e$performance = 2
+  e$r = 3
+  expect_error(resolve_identifier(hyphen, "skills", e), how, class = "gptr_error_invalid_argument",
+               fixed = TRUE)
+  expect_error(resolve_identifier(str2lang("claude-opus-4-6"), "model", e),
+               "model = \"claude-opus-4-6\"", class = "gptr_error_invalid_identifier", fixed = TRUE)
+  fake = local_fake_provider(list("ok"))
+  # R parses skills = high-performance-r as this subtraction
+  expect_error(peter("x", skills = high - performance - r, model = fake, envir = new.env()), how,
+               class = "gptr_error_invalid_argument", fixed = TRUE)
+  expect_length(fake_requests(fake), 0L)
+  expect_identical(resolve_identifier(quote(c(+grep, -write)), "tools", e), c("+grep", "-write"))
+  expect_identical(name_norm(resolve_identifier(quote(shiny_bslib), "skills", e)), "shiny-bslib")
 })
 
 test_that("bound values must be character or a spec of the right kind (contract 6.1.3)", {

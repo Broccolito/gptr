@@ -1,15 +1,17 @@
 # The `edit` tool and `peter$edit()` (P10; research 11 section 5.5, research 01 sections 2.5, 3.4):
-# Pi's all-or-nothing multi-edit, the fuzzy fallback that rewrites only touched lines, other bytes
-# kept exactly, `replace_all`, and Codex `*** Begin Patch` envelopes. Occurrences are counted in
-# fuzzy space as in Pi; patch paths are compared by the file system, never by spelling.
+# Pi's all-or-nothing multi-edit, the fuzzy fallback that changes only the matched spans (Pi
+# rewrites the touched lines; D-248), other bytes kept exactly, `replace_all`, and Codex
+# `*** Begin Patch` envelopes. Occurrences are counted in fuzzy space as in Pi; patch paths are
+# compared by the file system, never by spelling.
 
 #' Pi normalizeForFuzzyMatch() applied line by line (the line structure is unchanged). Every class
-#' pattern starts with (*UTF) so it compiles on all-ASCII input (report 11 P5)
+#' pattern starts with (*UTF) so it compiles on all-ASCII input (report 11 P5); `strip = FALSE`
+#' keeps trailing whitespace (single characters, for fuzzy_offsets())
 #' @noRd
-fuzzy_normalize_lines = function(x) {
+fuzzy_normalize_lines = function(x, strip = TRUE) {
   x = utf8_mark(x)
   if (requireNamespace("stringi", quietly = TRUE)) x = stringi::stri_trans_nfkc(x)
-  x = sub("(*UTF)[\\h\\v\\x{FEFF}]+$", "", x, perl = TRUE)
+  if (strip) x = sub("(*UTF)[\\h\\v\\x{FEFF}]+$", "", x, perl = TRUE)
   x = gsub("(*UTF)[\\x{2018}\\x{2019}\\x{201A}\\x{201B}]", "'", x, perl = TRUE)
   x = gsub("(*UTF)[\\x{201C}\\x{201D}\\x{201E}\\x{201F}]", "\"", x, perl = TRUE)
   x = gsub("(*UTF)[\\x{2010}-\\x{2015}\\x{2212}]", "-", x, perl = TRUE)
@@ -58,10 +60,11 @@ splice_bytes = function(x, start, len, new) {
   rawToChar(unlist(pieces))
 }
 
-#' Signal an edit error with Pi's single-edit or multi-edit wording (`i` is 1-based, shown 0-based)
+#' Signal an edit error with Pi's single-edit or multi-edit wording; edits count from 1, as in R
+#' and the schema gate (D-248)
 #' @noRd
 edit_error = function(single, multi, path, i, n) {
-  msg = if (n == 1L) sprintf(single, path) else sprintf(multi, i - 1L, path)
+  msg = if (n == 1L) sprintf(single, path) else sprintf(multi, i, path)
   gptr_abort(msg, "invalid_argument", arg = "edits", expected = "edits that match the file")
 }
 
@@ -136,7 +139,7 @@ apply_edits = function(text, edits, path = "file", replace_all = FALSE) {
           paste0("Found ", occ, " occurrences of the text in ", path,
                  ". The text must be unique. Please provide more context to make it unique.")
         } else {
-          paste0("Found ", occ, " occurrences of edits[", i - 1L, "] in ", path,
+          paste0("Found ", occ, " occurrences of edits[", i, "] in ", path,
                  ". Each oldText must be unique. Please provide more context to make it unique.")
         }
         gptr_abort(msg, "invalid_argument", arg = "edits", expected = "a unique oldText")
@@ -156,17 +159,17 @@ apply_edits = function(text, edits, path = "file", replace_all = FALSE) {
   owner = owner[o]
   ov = which(starts[-1L] < (starts + lens)[-length(starts)])
   if (length(ov)) {
-    gptr_abort(paste0("edits[", owner[ov[1L]] - 1L, "] and edits[", owner[ov[1L] + 1L] - 1L,
+    gptr_abort(paste0("edits[", owner[ov[1L]], "] and edits[", owner[ov[1L] + 1L],
                       "] overlap in ", path,
                       ". Merge them into one edit or target disjoint regions."),
                "invalid_argument", arg = "edits", expected = "non-overlapping edits")
   }
-  new_text = if (!used_fuzzy) {
-    edit_splice_exact(text, body, has_cr, k, eol, starts, lens, repl)
+  sp = if (!used_fuzzy) {
+    list(text = edit_splice_exact(text, body, has_cr, k, eol, starts, lens, repl))
   } else {
     edit_splice_fuzzy(body, fz_lines, has_cr, k, eol, starts, lens, repl)
   }
-  new_text = remark(new_text)
+  new_text = remark(sp$text)
   if (identical(new_text, text)) {
     msg = if (n == 1L) {
       paste0("No changes made to ", path, ". The replacement produced identical content. ",
@@ -179,8 +182,8 @@ apply_edits = function(text, edits, path = "file", replace_all = FALSE) {
   }
   eol_changed = identical(eol, "\r\n") && any(grepl("\n", news, fixed = TRUE))
   base_new = remark(gsub("\r\n", "\n", new_text, fixed = TRUE, useBytes = TRUE))
-  list(text = new_text, base_old = base, base_new = base_new, fuzzy = used_fuzzy, counts = counts,
-       eol_changed = eol_changed)
+  list(text = new_text, base_old = base, base_new = base_new, fuzzy = used_fuzzy,
+       rewrote = isTRUE(sp$rewrote), counts = counts, eol_changed = eol_changed)
 }
 
 #' Exact path: map offsets of the LF view to the original by adding one byte per CRLF before them,
@@ -199,14 +202,49 @@ edit_splice_exact = function(text, body, has_cr, k, eol, starts, lens, repl) {
   splice_bytes(text, o_start, o_end - o_start, repl_eol)
 }
 
-#' Fuzzy path (Pi applyReplacementsPreservingUnchangedLines()): lines carry their terminators,
-#' touched line groups are rewritten from the fuzzy view, every other line keeps its original bytes
+#' Original byte offsets of 0-based byte offsets into the fuzzy view of one line. The per-character
+#' normalisation is aligned with the line's own from both ends; NA for an offset between the two
+#' common parts (by a combining sequence) or inside one character's normalised form (a ligature)
+#' @noRd
+fuzzy_offsets = function(line, off) {
+  ch = strsplit(line, "", fixed = TRUE)[[1L]]
+  nc = fuzzy_normalize_lines(ch, strip = FALSE)
+  pc = charToRaw(paste(nc, collapse = ""))
+  w = charToRaw(fuzzy_normalize_lines(line, strip = FALSE))
+  n = min(length(pc), length(w))
+  a = match(FALSE, pc[seq_len(n)] == w[seq_len(n)], nomatch = n + 1L) - 1L
+  z = match(FALSE, rev(pc)[seq_len(n - a)] == rev(w)[seq_len(n - a)], nomatch = n - a + 1L) - 1L
+  cb = function(x) c(0, cumsum(nchar(x, type = "bytes")))
+  left = cb(ch)[match(off, cb(nc))]
+  right = sum(nchar(ch, type = "bytes")) - cb(rev(ch))[match(length(w) - off, cb(rev(nc)))]
+  ifelse(off <= a, left, ifelse(off >= length(w) - z, right, NA_real_))
+}
+
+#' Fuzzy path: the matched spans are mapped back to the original bytes and newText (with the file's
+#' line ending) is spliced there, so only they change (D-248). When a span boundary cannot be
+#' mapped, Pi's applyReplacementsPreservingUnchangedLines(): the touched line groups are rewritten
+#' from the fuzzy view (`rewrote`), every other line keeps its original bytes.
+#' Returns `list(text, rewrote)`.
 #' @noRd
 edit_splice_fuzzy = function(body, fz_lines, has_cr, k, eol, starts, lens, repl) {
   term = ifelse(seq_len(k) < k, "\n", "")
   fz_with = paste0(fz_lines, term)
   orig_with = paste0(body, ifelse(has_cr, "\r\n", term))
   line_start = c(0, cumsum(nchar(fz_with, type = "bytes")))[seq_len(k)]
+  offs = c(starts, starts + lens)
+  ln = findInterval(offs, line_start)
+  orig = c(0, cumsum(nchar(orig_with, type = "bytes")))[ln]
+  for (i in split(seq_along(offs), ln)) {
+    l = ln[i[1L]]
+    orig[i] = orig[i] + fuzzy_offsets(body[l], offs[i] - line_start[l])
+  }
+  if (!anyNA(orig)) {
+    n = length(starts)
+    eol_repl = if (eol == "\r\n") gsub("\n", "\r\n", repl, fixed = TRUE, useBytes = TRUE) else repl
+    text = splice_bytes(paste(orig_with, collapse = ""), orig[seq_len(n)],
+                        orig[n + seq_len(n)] - orig[seq_len(n)], eol_repl)
+    return(list(text = text, rewrote = FALSE))
+  }
   s_line = findInterval(starts, line_start)
   e_line = findInterval(starts + lens - 1L, line_start)
   grp = cumsum(c(TRUE, s_line[-1L] > cummax(e_line)[-length(e_line)]))
@@ -224,12 +262,13 @@ edit_splice_fuzzy = function(body, fz_lines, has_cr, k, eol, starts, lens, repl)
     cur = g_e[g] + 1L
   }
   if (cur <= k) out = c(out, orig_with[cur:k])
-  paste(out, collapse = "")
+  list(text = paste(out, collapse = ""), rewrote = TRUE)
 }
 
 #' Pi prepareEditArguments(): edits as a JSON string, a single object, a data frame or a list
-#' json_decode(), never jsonlite::fromJSON(), which reads a non-JSON string as a file or URL; every
-#' present `oldText`/`newText` (or `old_text`/`new_text`) must be one string.
+#' json_decode(), never jsonlite::fromJSON(), which reads a non-JSON string as a file or URL; a
+#' named list of non-lists is one edit; every edit has `oldText` and `newText` (or `old_text` and
+#' `new_text`), each one string: the console path has no schema gate to say so (D-248).
 #' @noRd
 edit_normalize_args = function(edits) {
   if (is.character(edits) && length(edits) == 1L && !patch_is_envelope(edits)) {
@@ -241,17 +280,29 @@ edit_normalize_args = function(edits) {
     row_edit = function(i) lapply(as.list(edits[i, , drop = FALSE]), unfactor)
     edits = lapply(seq_len(nrow(edits)), row_edit)
   }
-  single = is.list(edits) && !is.null(names(edits))
-  if (single && !is.null(edits[["oldText"]] %||% edits[["old_text"]])) edits = list(edits)
+  if (is.list(edits) && !is.null(names(edits)) && !all(vapply(edits, is.list, NA))) {
+    edits = list(edits)
+  }
   if (!is.list(edits) || !length(edits) || !all(vapply(edits, is.list, NA))) {
     gptr_abort("Edit tool input is invalid. edits must contain at least one replacement.",
                "invalid_argument", arg = "edits", expected = "a list of list(oldText =, newText =)")
   }
   for (i in seq_along(edits)) {
+    e = edits[[i]]
+    miss = c("oldText", "newText")[c(is.null(e[["oldText"]] %||% e[["old_text"]]),
+                                     is.null(e[["newText"]] %||% e[["new_text"]]))]
+    if (length(miss)) {
+      has = names(e)[nzchar(names(e))]
+      msg = paste0("Edit tool input is invalid. edits[", i, "] has no ",
+                   paste(miss, collapse = " or "), " (it has: ",
+                   if (length(has)) paste(has, collapse = ", ") else "no names",
+                   "). Use list(list(oldText = \"...\", newText = \"...\")).")
+      gptr_abort(msg, "invalid_argument", arg = "edits", expected = "oldText and newText")
+    }
     for (f in c("oldText", "old_text", "newText", "new_text")) {
-      v = edits[[i]][[f]]
+      v = e[[f]]
       if (!is.null(v) && !rlang::is_string(v)) {
-        msg = paste0("Edit tool input is invalid. edits[", i - 1L, "].", f, " must be a string.")
+        msg = paste0("Edit tool input is invalid. edits[", i, "].", f, " must be a string.")
         gptr_abort(msg, "invalid_argument", arg = "edits", expected = "string oldText and newText")
       }
     }
@@ -317,6 +368,7 @@ edit_view = function(cp, x) {
 edit_reasons = function(cp) {
   enc = cp$dec$encoding
   c(if (cp$res$fuzzy) "matched after whitespace, quote or dash normalisation",
+    if (isTRUE(cp$res$rewrote)) "the touched lines were rewritten in normalised form",
     if (cp$res$eol_changed) "line endings written as CRLF",
     if (!identical(enc, "UTF-8")) paste0("file re-encoded as ", enc),
     if (isTRUE(cp$dec$lossy)) "invalid UTF-8 bytes kept")
@@ -657,15 +709,18 @@ edit_from_patch = function(envelope) {
                       reasons = reasons, encoding = "UTF-8", files = pa$files))
 }
 
-#' The value of `peter$edit()` (contract section 5.10)
+#' The value of `peter$edit()` (contract section 5.10); `reasons`: edit_reasons(), as the model
+#' sees them (D-248)
 #' @noRd
-new_gptr_patch = function(path, message, diff, n_edits, fuzzy) {
+new_gptr_patch = function(path, message, diff, n_edits, fuzzy, reasons = character()) {
   structure(list(path = path, message = message, diff = as.character(diff),
-                 n_edits = as.integer(n_edits), fuzzy = isTRUE(fuzzy)),
+                 n_edits = as.integer(n_edits), fuzzy = isTRUE(fuzzy),
+                 reasons = as.character(reasons)),
             class = "gptr_patch")
 }
 
-#' Print a gptr patch: the message, and the diff only when the fuzzy fallback was used
+#' Print a gptr patch: the message, and only when the fuzzy fallback was used, the bracketed
+#' reasons and the diff, as edit_result_text() gives them to the model
 #'
 #' @param x A `gptr_patch`.
 #' @param ... Ignored.
@@ -674,7 +729,10 @@ new_gptr_patch = function(path, message, diff, n_edits, fuzzy) {
 #' @noRd
 print.gptr_patch = function(x, ...) {
   lines = x$message
-  if (isTRUE(x$fuzzy) && length(x$diff)) lines = c(lines, x$diff)
+  if (isTRUE(x$fuzzy) && length(x$diff)) {
+    why = if (length(x$reasons)) paste0("[", paste(x$reasons, collapse = "; "), "]")
+    lines = c(lines, why, x$diff)
+  }
   ns_print_lines(lines)
   invisible(x)
 }

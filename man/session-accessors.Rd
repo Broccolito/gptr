@@ -41,8 +41,16 @@ The member's value; \code{names()} and \code{.DollarNames()} return the member n
 \code{messages}, \code{model}, \code{mode}, \code{status}, \code{reason}, \code{id}, \code{kind}, \code{file}, \code{turns}, \code{envir},
 \code{children}, \code{ext}, \code{plan}, \code{last_rewind}, \code{editor_text}, and the names of child sessions.
 Sessions are changed only through \code{peter()} and the \verb{gptr_*()} verbs, so \verb{$<-} and \verb{[[<-}
-signal \code{gptr_error_readonly}. Usage a provider did not report stays unknown: \code{cost} is \code{NA}
-when the cost of any request is unknown.
+signal \code{gptr_error_readonly}. A team's \code{text} joins its members' reports under
+\verb{### <name> (<model>)} headings, where a member that did not finish says
+\verb{(ended with status <status>)}; a fan-out's is the named chr of its children's texts, printed
+under the same headings; and \code{value} is the named list of their values, until the team or
+fan-out is continued with \code{\link[=peter]{peter()}}: then \code{text} is its own answer and \code{value} its own value
+once a turn designates one, while each member's stay at \verb{x$<name>$text} and
+\verb{x$<name>$value}. Usage a provider did not report stays unknown: \code{cost} is \code{NA} when the cost
+of any request is unknown, as for a model without prices. \code{envir} is the session's kept
+workspace: \code{NULL} for a session started inside a function without \verb{envir =} (a function
+frame is never kept), whose later turns evaluate in their caller's frame.
 \code{history} is the complete recorded-message table with a concise display, like
 \code{summary(x)}. Use \code{print(x$history, n = Inf)} to show all rows or \code{as.data.frame(x$history)}
 to obtain an ordinary data frame.

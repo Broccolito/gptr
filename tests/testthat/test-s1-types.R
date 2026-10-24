@@ -143,7 +143,15 @@ test_that("as.data.frame gives one row per element with probability columns", {
   expect_identical(names(df), c("value", "confidence", "p_liver", "p_lung", "p_other"))
   expect_identical(row.names(df), c("x", "y"))
   expect_identical(names(as.data.frame(s1_dec())), c("value", "prob"))
-  expect_identical(names(as.data.frame(s1_sco())), c("value", "confidence", "p_0", "p_1", "p_2"))
+  expect_identical(names(as.data.frame(s1_sco())),
+                   c("value", "confidence", "p_Very negative", "p_Neutral", "p_Very positive"))
+})
+
+test_that("as.data.frame names the probability columns as gptr_prob() does (D-250)", {
+  for (x in list(s1_cho(), s1_sco())) {
+    expect_identical(names(as.data.frame(x))[-(1:2)],
+                     paste0("p_", colnames(gptr_prob(x, "probabilities"))))
+  }
 })
 
 test_that("as.data.frame and Summary take the generics' row.names and na.rm through ...", {
@@ -172,6 +180,16 @@ test_that("gptr_prob() reads prob, confidence and probabilities", {
   expect_identical(rownames(gptr_prob(s1_cho(), "probabilities")), c("x", "y"))
   expect_error(gptr_prob(TRUE), class = "gptr_error_invalid_argument")
   expect_error(gptr_prob(d, "odds"), class = "gptr_error_invalid_argument")
+})
+
+test_that("?gptr_prob's example of the engines' confidence scales matches the code (D-078)", {
+  p = c(0.9, 0.05, 0.05)
+  expect_equal(s1_confidence_choice(p), 0.85)
+  expect_equal(s1_ollama_confidence(p), 0.641, tolerance = 1e-3)
+  man = testthat::test_path("..", "..", "man")
+  skip_if_not(dir.exists(man), "man/ is not available (installed tests)")
+  rd = paste(readLines(file.path(man, "gptr_prob.Rd"), encoding = "UTF-8"), collapse = " ")
+  expect_match(rd, "0.90, 0.05 and 0.05 has confidence 0.85 on Jev and 0.64 on", fixed = TRUE)
 })
 
 test_that("vctrs methods keep the probabilities through slicing and combining", {

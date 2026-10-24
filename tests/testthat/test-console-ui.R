@@ -121,6 +121,16 @@ test_that("[a]lways is offered only with a suggested rule; a and p say why not (
   expect_null(ui_answer_norm(list(decision = "allow", remember = "session"), req)$remember)
 })
 
+test_that("a denial keeps the UI's how; other answers drop it (D-252)", {
+  req = ui_request("x = 2")
+  expect_identical(ui_answer_norm(list(decision = "deny", how = "Repeat it later."), req),
+                   list(decision = "deny", remember = NULL, feedback = NULL,
+                        how = "Repeat it later."))
+  expect_false("how" %in% names(ui_answer_norm(list(decision = "allow", how = "x"), req)))
+  expect_false("how" %in% names(ui_answer_norm(list(decision = "deny", how = ""), req)))
+  expect_false("how" %in% names(ui_answer_norm(list(decision = "deny", how = 1), req)))
+})
+
 test_that("the detail view shows the code as a plain fence of at most 40 lines (D-187)", {
   skip_on_cran()
   root = local_project()

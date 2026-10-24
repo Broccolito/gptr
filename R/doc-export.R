@@ -92,9 +92,22 @@ doc_export_prompt = function(prompt) {
   out[seq_len(i)]
 }
 
+#' The path of a top-level gptr_doc() call whose string literal names the exported source
+#' (relative to its directory or the working directory), else NULL; no argument is evaluated.
+#' @noRd
+doc_export_bind = function(expr, path) {
+  if (!is.call(expr)) return(NULL)
+  head = doc_call_norm(expr[[1L]])
+  if (!identical(head, quote(gptr_doc)) && !identical(head, quote(gptr::gptr_doc))) return(NULL)
+  lit = tryCatch(match.call(gptr_doc, expr)$path, error = function(e) NULL)
+  if (!rlang::is_string(lit) || !nzchar(lit)) return(NULL)
+  rel = !is_abs_path(lit) && !startsWith(lit, "~")
+  if (path_key(path) %in% path_key(c(if (rel) file.path(dirname(path), lit), lit))) lit
+}
+
 #' Validate ownership and transform lines without invoking a model, source() or recovery.
 #' @noRd
-doc_export_lines = function(lines, format) {
+doc_export_lines = function(lines, format, path, target) {
   blocks = doc_find_blocks(lines)
   if (isTRUE(attr(blocks, "malformed"))) doc_export_refuse("malformed record markers")
   if (nrow(blocks) > doc_sidecar_bounds()$upserts) doc_export_refuse("too many records")
@@ -114,7 +127,7 @@ doc_export_lines = function(lines, format) {
   if (any(top$nested) || anyNA(top$prompt)) doc_export_refuse("nested or computed Peter calls")
   claimed = integer()
   edits = list()
-  handles = character()
+  bound = vector("list", length(parsed))
   owning = integer()
   for (j in seq_along(parsed)) {
     sr = refs[[j]]
@@ -135,7 +148,7 @@ doc_export_lines = function(lines, format) {
     overlap = vapply(refs, function(r) r[1L] <= sr[3L] && r[3L] >= sr[1L], NA)
     if (sum(overlap) != 1L) doc_export_refuse("shared-line Peter statements")
     owning = c(owning, j)
-    handles = c(handles, binding)
+    bound[j] = list(binding)
     run = doc_blocks_after(lines, sr[3L], blocks)
     if (nrow(run) != length(rows)) doc_export_refuse("missing or extra recorded turns")
     separate = identical(format, "peter") && length(rows) > 1L &&
@@ -197,12 +210,49 @@ doc_export_lines = function(lines, format) {
     }
   }
   if (length(claimed) != nrow(blocks)) doc_export_refuse("unowned recorded blocks")
-  for (j in setdiff(seq_along(parsed), owning)) {
-    names = all.names(parsed[[j]])
-    if ("peter" %in% names) doc_export_refuse("unresolved Peter references")
-    if (identical(format, "r") && any(names %in% handles)) {
+  # A session handle is live from its peter() statement until ordinary code assigns the name; a
+  # function reads names when it is called, so one naming any handle of the document is refused.
+  live = character()
+  for (j in seq_along(parsed)) {
+    expr = parsed[[j]]
+    if (j %in% owning) {
+      live = union(live, bound[[j]])
+      next
+    }
+    sr = refs[[j]]
+    lit = doc_export_bind(expr, path)
+    if (!is.null(lit)) {
+      stmt = lines[sr[1L]:sr[3L]]
+      own = tokens$token == "STR_CONST" & tokens$line1 >= sr[1L] & tokens$line2 <= sr[3L]
+      text = utils::getParseText(tokens, tokens$id[own])
+      old = text[vapply(text, function(t) identical(doc_unquote(t), lit), NA)][1L]
+      overlap = vapply(refs, function(r) r[1L] <= sr[3L] && r[3L] >= sr[1L], NA)
+      if (sum(overlap) != 1L || is.na(old)) doc_export_refuse("unrewritable source gptr_doc() call")
+      if (identical(format, "r")) {
+        stmt = paste0("# ", stmt)
+      } else {
+        # In the source's directory only the file name changes; elsewhere the full path.
+        same = identical(path_key(dirname(target)), path_key(dirname(path)))
+        new = if (same) paste0(sub("[^/\\\\]*$", "", lit), basename(target)) else target
+        stmt = sub(old, doc_str_literal(new), paste(stmt, collapse = "\n"), fixed = TRUE)
+        stmt = strsplit(stmt, "\n", fixed = TRUE)[[1L]]
+      }
+      edits[[length(edits) + 1L]] = list(start = sr[1L], end = sr[3L], lines = stmt)
+      next
+    }
+    if ("peter" %in% all.names(expr)) doc_export_refuse("unresolved Peter references")
+    set = NULL
+    if (is.call(expr) && as.character(expr[[1L]])[1L] %in% c("=", "<-") && length(expr) == 3L &&
+        is.symbol(expr[[2L]])) {
+      set = as.character(expr[[2L]])
+      expr = expr[[3L]]
+    }
+    used = all.names(expr)
+    if (identical(format, "r") &&
+        any(used %in% if ("function" %in% used) unlist(bound) else live)) {
       doc_export_refuse("ordinary code depends on a removed session handle")
     }
+    live = setdiff(live, set)
   }
   if (length(edits)) {
     order = order(vapply(edits, function(e) e$start, 0L), decreasing = TRUE)
@@ -228,8 +278,15 @@ doc_export_lines = function(lines, format) {
 #' are admitted. Distinct statements sharing a line (including semicolon-separated statements),
 #' mixed pipelines, nested or computed calls, pending writes, missing or edited blocks, secret
 #' markers and interpolated-input hashes are refused.
-#' Raw exports also refuse ordinary code that uses a removed session handle. The Peter format
+#' Raw exports also refuse ordinary code that reads a session handle after its Peter statement
+#' and before ordinary code assigns that name again, and a function that names any session handle
+#' of the document, wherever it is defined, as it reads the name when called. The Peter format
 #' retains such ordinary references, since its calls remain active.
+#' A top-level `gptr_doc()` whose string literal names the source (relative to the source's
+#' directory or the working directory) becomes a comment in raw R and binds the destination in
+#' the Peter format, so its calls record there: in the source's directory only the file name
+#' changes, elsewhere the literal becomes the destination's full path. It must be alone on its
+#' lines. Other `gptr_doc()` calls are kept.
 #' Feedback follows each pipeline operand when calls end on separate lines and only its
 #' pipe operator or a comment follows the closing call. Feedback follows the next operand's
 #' indentation (at most 74 characters); other layouts keep feedback after the complete
@@ -274,7 +331,7 @@ gptr_export = function(file, to, format = c("r", "peter")) {
   if (doc_export_pending(path)) doc_export_refuse("pending writes must be synchronized first")
   doc = doc_read(path)
   if (length(doc$lines) > doc_sidecar_bounds()$lines) doc_export_refuse("source line limit")
-  lines = doc_export_lines(doc$lines, format)
+  lines = doc_export_lines(doc$lines, format, path, target)
   bytes = doc_serialize(lines, doc$eol, doc$bom, doc$final_nl)
   if (length(bytes) > doc_sidecar_limit()) doc_export_refuse("export byte limit")
   if (!identical(unname(tools::md5sum(path)), doc$md5)) doc_export_refuse("source changed")

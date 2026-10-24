@@ -319,15 +319,17 @@ artifact_list = function() {
 #' List, open, relaunch and stop artifacts
 #'
 #' Artifacts are Shiny apps the agent builds from objects in your session. It writes
-#' `.gptr/artifacts/<id>/app.R` and launches it with `peter$app("<id>", data = c("obj"))`, which
-#' snapshots the named objects into an immutable version directory (`v001/`, `v002/`, ...) and
-#' serves it from a supervised background R process on `127.0.0.1`, so the console stays free.
+#' `.gptr/artifacts/<id>/app.R` and calls `peter$app("<id>", data = c("obj"))`, which snapshots
+#' the named objects into an immutable version directory (`v001/`, `v002/`, ...) and, when a
+#' person is at the console or with `launch = TRUE`, serves it from a supervised background R
+#' process on `127.0.0.1`, so the console stays free.
 #' `gptr_artifacts()` lists the artifacts of the workspace (`.gptr/`, else a temporary
 #' directory) and manages their processes.
 #'
 #' The built-in `kind = "html"` uses a working `page.html` and a Shiny serving wrapper.
-#' Both built-in kinds need Shiny to launch. `peter$app(..., launch = FALSE)` creates a version
-#' without launching it; startup and browser checks therefore remain unperformed. Browser
+#' Both built-in kinds need Shiny to launch. `peter$app(..., launch = FALSE)`, or the default in
+#' a script, knitr or tests (its messages say how to start it), creates a version without
+#' launching it; startup and browser checks therefore remain unperformed. Browser
 #' session checks and screenshots additionally need chromote and Chrome. A check value of
 #' `NA` means it was skipped. Separate processes organize execution but are not OS sandboxes.
 #'

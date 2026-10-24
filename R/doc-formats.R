@@ -455,10 +455,12 @@ doc_transcript_header = function(text, site) {
   if (any(startsWith(text, paste0("# gptr session ", id, " ")))) return(character())
   head = c(paste0("# gptr session ", id, " -- started ",
                  with_calendar_preserved(format(Sys.time(), "%Y-%m-%d %H:%M:%S"))),
-           paste0("# machine log: ", site[["session_file"]] %||% "(none)"))
+           paste0("# machine log: ", site[["session_file"]] %||%
+                    "none kept (gptr_init() keeps session logs in .gptr/)"))
   if (!length(text)) {
     head = c(head, "# source() this file to replay the recorded code without calling a model;",
-             "# options(gptr.replay = \"live\") re-asks the model.", "library(gptr)")
+             paste0("# gptr_source(", doc_str_literal(doc_rel(site[["path"]])),
+                    ", replay = \"live\") re-asks the model."), "library(gptr)")
   }
   c(if (length(text)) "", head)
 }

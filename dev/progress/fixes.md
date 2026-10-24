@@ -1914,3 +1914,2561 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   the probe nor accepts `initialize`), and a dual-era server that starts slowly is still taken as
   legacy (cached for 7 days), which works. A hung server forced modern now fails after the request
   timeout instead of 5 s.
+
+## Task FIX-15 - Cheat-sheet review: tools (2026-10-22, #77)
+
+### tools-1 - Dispatch refuses a direct call to a tool the session did not offer
+- Red: FAIL 7 in `agent-dispatch` (PASS 221), mode auto with the fake provider: `write` under
+  `tools = "-write"` wrote w.txt, `r` under `"-r"` bound `made_here`, `grep` under standard ran,
+  and a non-interactive `ask` stopped the run with `gptr_error_noninteractive` (findings 12, 17).
+- Cause: `call_record()` resolved a call with `tool_lookup()`, the registry alone (registered,
+  `execute`, not hidden), never what the session declared; presets, `-name`, `tools.disable`,
+  deferred and unavailable tools only shaped the array, and only the mode stood in the way.
+- Fix: `run_tools()` takes the offered names once per batch (the frozen array plus every
+  `tool_change` addition on the path and in the queue, `prompt_tools_known()`) and
+  `call_record(run, block, offered)` resolves only those; any other name is "Tool <name> not
+  found" before hooks and the permission check. `dispatch_nested()` is unchanged. The report02
+  harness's `dispatch()` freezes the blocks' declarations (`freeze_tool_decl()`) when unfrozen.
+- Green: `agent-dispatch` PASS 228; `^(agent-dispatch|agent-run|dispatch-elapsed|bridge-lang|
+  bridge-sh|arch-layers|lint-rules)$` PASS 1383 SKIP 6; full suite (NOT_CRAN=true) FAIL 4 SKIP 64
+  PASS 35277, all four the bridge tests below, then fixed. Lint clean. Live (Claude Opus 4.8,
+  `tools = "-r"`, auto, 3 runs): 2 called `r`, got "Tool r not found" and wrote the code to a
+  file instead; `sds` never created; all idle.
+- Deviations: D-248. The frozen-schema test starts from the harness's freeze. The bridge
+  through-run tests (py, sql, knit, sh) now read "Tool <name> not found", still refused before the
+  permission check; the S-4 text "is an R function, not a tool" is now reached only by a bridge a
+  continued session adds by value (`tools = "+sh"`, measured) and keeps its unit test.
+- Reviews: r1 1 finding (low), applied: D-248 recorded the new refusal of an undeclared bridge
+  only here; its first Rule now states it (`Tool <name> not found` before any hook; the S-4 hook
+  text only for a bridge declared by value), Contract-visible lists P22 Task 5, and P22's S-4
+  paragraph and self-review item 10 point to it. Plan checks pass.
+- Open: the fixed preamble still says "with the r tool" when r is removed (by decision);
+  `tool_change` declarations count after a switch to a provider that cannot take additions.
+
+### tools-5 - Non-interactive manual mode with noninteractive_ask = deny says questions are refused
+- Red: FAIL 1 in `prompt-context` (PASS 87): with deny, `context_mode_body("manual", FALSE)` still
+  ended "questions asked with the ask tool, stop the run" (verdict of finding 168, item a).
+- Cause: `context_mode_body()` chose the manual suffix before it looked at `deny`, while under deny
+  a manual run's `ask` call is denied and the run goes on to idle.
+- Fix: test deny first. The deny suffix ("are refused. State your assumptions instead of asking.")
+  holds for a denied ask too; no new text, `preset_ask()` unchanged.
+- Green: `prompt-context` PASS 88; `^(prompt-context|prompt-text|prompt-compact|tool-ask)$` PASS
+  572. Lint clean; plan checks pass.
+- Deviations: D-248 (04 §9.3 suffix order). Open: none.
+
+### tools-6 - Edit errors number edits from 1
+- Red: FAIL 1 in `tool-edit` (PASS 170): `peter$edit()` with the first of two edits missing said
+  "Could not find edits[0]", which an R reader takes for no edit (finding 4).
+- Cause: `apply_edits()` and `edit_normalize_args()` printed `i - 1L`, Pi's JSON wording, on every
+  path (console, inside `r`, direct tool), while the schema gate on the same tool counts from 1.
+- Fix: the five messages (not found, empty oldText, occurrences, overlap, must be a string) print
+  `i`; one rule for every caller, no base argument.
+- Green: `tool-edit` PASS 179 (6 pins moved to 1-based); `^(tool-edit|tool-namespace|doc-replay|
+  utils-paths|json-schema|doc-edit)$` PASS 1407 SKIP 1. Lint clean.
+- Deviations: D-248 (no contract text names the index). Open: none.
+
+### tools-7 - peter$edit names the fields it expects, and peter$help("edit") lists its arguments
+- Red: FAIL 3 in `^(tool-edit|tool-namespace)$` (PASS 588): `peter$edit(f, list(list(old =,
+  new =)))` said "oldText must not be empty", and `peter$help("edit")` had no Arguments block
+  (finding 20).
+- Cause: `edit_normalize_args()` never checked that the fields exist and `apply_edits()` read a
+  missing one as "" (so an edit without newText deleted its text, measured); a named list counted
+  as one edit only when it had oldText. `ns_tool_help()` listed arguments only when the schema's
+  properties equalled the formals, and `edit` has `replace_all` beyond its schema.
+- Fix: a named list of non-lists is one edit; an edit missing a field is refused with "edits[i]
+  has no oldText or newText (it has: old, new). Use list(list(oldText = ..., newText = ...))."
+  Help lists the schema arguments when they are among the formals, plus "[items: oldText,
+  newText]" for an array; `find` now lists its arguments too. Inside `r` the schema gate already
+  answered, so only the console changes.
+- Green: PASS 595; `^(tool-edit|tool-namespace|doc-replay|doc-edit|utils-paths|json-schema|mcp-.*|
+  skill-.*|bridge-lang|bridge-sh)$` PASS 2968 SKIP 8; `^(console-commands|northstar)$` PASS 175.
+  Lint clean; Rd unchanged.
+- Deviations: D-248. Open: none.
+
+### tools-8 - A fuzzy peter$edit changes only what it matched, and says why it was not exact
+- Red: FAIL 6 in `tool-edit` (PASS 188): `1 - 2` -> `1 to 2` against an en dash also straightened
+  a curly apostrophe later on the line, unfolded the fi ligature, turned U+00B5 into U+03BC and NBSP
+  into a space and dropped the trailing spaces; a printed fuzzy `gptr_patch` showed no reasons
+  line (finding 1).
+- Cause: `edit_splice_fuzzy()` (Pi's applyReplacementsPreservingUnchangedLines()) rebuilt each
+  touched line group from the fuzzy view; `new_gptr_patch()` dropped `edit_reasons()`, which only
+  the model saw.
+- Fix: the splice landed (sheet entry S31 takes the vignette's wording: "changes only the matched
+  text, unless the match starts or ends inside a ligature or between two letters with combining
+  accents on one line; those lines are rewritten in normalised form").
+  `fuzzy_offsets()` maps a fuzzy-view offset back to the original line by per-character
+  normalisation (`fuzzy_normalize_lines(strip = FALSE)`) aligned with the line's own from both
+  ends, and newText (file line ending) is spliced into the original bytes. When a boundary cannot
+  be mapped (between two combining accents on its line, inside a ligature) the old line rewrite
+  runs and the reasons add "the touched lines were rewritten in normalised form". `gptr_patch`
+  gains `reasons` (all three call sites) and prints them bracketed between the message and the
+  diff when fuzzy. Vignette sentence corrected in .Rmd and .Rmd.orig; Pi's not-found wording stays.
+- Green: `tool-edit` PASS 194; `^(tool-edit|tool-namespace|tool-r|doc-replay|doc-formats|
+  doc-blocks|utils-paths|json-schema)$` PASS 2129 SKIP 1; every existing fuzzy expectation (tws.txt
+  included: covered trailing spaces go) unchanged. 20,000 fuzzy matches with replace_all: 1.8 s
+  (was 2.7 s). Lint clean; Rd unchanged.
+- Reviews: r1 2 findings (low), both applied. (1) The vignette sentence said "still changes only
+  the matched text" with no exception for the fallback, and left out NFKC compatibility forms
+  (ligatures, full-width letters, U+00B5, with stringi): both vignette files now name them and the
+  exception, and say the printed result names the normalisation. (2) The first version sent a
+  whole edit to the line rewrite when one combining sequence sat anywhere on a touched line:
+  `cafe\u0301 \u2018x\u2019 \u2018y\u2019` edited `'x'` -> `'z'` composed the accent and
+  straightened the other quote (red FAIL 2 in `tool-edit`, PASS 194). Aligned from both ends:
+  `tool-edit` PASS 196; the neighbours above PASS 2137 SKIP 1; 20,000 matches 1.7 s (1.4 s before,
+  same run). Lint clean.
+- Deviations: D-248 (04 §5.10, §7.10). Open: the fallback still rewrites the lines when a boundary
+  lies between two combining accents on its line or inside a ligature (said in the reasons); a
+  non-fuzzy deviation (CRLF, re-encoding) still prints only the message.
+
+### tools-9 - The r_session prompt mentions record = false only when the r tool has it
+- Red: FAIL 1 in `tool-namespace` (PASS 415): a session with no document froze "Use peter$out(),
+  peter$help(), peter$search() and peter$plot() only with record = false." while its `r` schema
+  had only `code` (from the verdict of finding 20: `peter$help("edit", record = FALSE)` failed).
+- Cause: `r_session_out_text` was a fixed string, while `record` is an `r` argument only with a
+  document bound at freeze (`r_schema(document = TRUE)`).
+- Fix: the fragment is a `function(ctx)` that adds the sentence only when `ctx$input$document` is
+  set, the test `<documents>` uses; frozen once per session, so the cache prefix is unchanged.
+- Green: `tool-namespace` PASS 417 (the stand-in and registration pins render the document
+  text); `^(tool-namespace|tool-r|prompt-.*|northstar|bench-context|doc-formats|lint-rules|
+  arch-layers)$` PASS 2031. Lint clean; Rd unchanged.
+- Deviations: D-248 (03 §7.3, IC-48). Open: none.
+
+### tools-10 - read and peter$read count lines as readLines() does
+- Red: FAIL 14 in `tool-read` (PASS 221): a 3-line `writeLines()` file read total 4 with a final
+  "", "[2 more lines ...]" at limit 2, offset 4 accepted; 3000 lines at offset 2990, limit 5 said
+  7 more; 2500 lines "of 2501"; `writeLines("done")` at limit 1 said 1 more (finding 5).
+- Cause: Pi's `split("\n")` count, kept on all three paths: `length(nl) + 1L` in
+  `read_window_small()`, `split_lines_js()` on UTF-16/32, the newline count plus one in
+  `read_line_index_build()`. Every fixture was built with `paste(collapse = "\n")`.
+- Fix: a final newline ends the last line on each path (subtract it; drop a final "" of more than
+  one element); "" stays empty and "\n" alone is one empty line. Vignette: `read()` returns the
+  file's lines, without line numbers (.Rmd and .Rmd.orig).
+- Green: `tool-read` PASS 235 (Pi's count moved in seven tests: UTF-16, BOM CRLF, streaming
+  index, BM text, cap, giant line, non-ASCII index); `tool-namespace` PASS 417 ("direct tools return Pi's texts" now
+  "x = 1\ny = 2", total 2); `^(tool-.*|console-render|context-prefix|ext-api|ext-events|mcp-
+  namespace|mcp-server|prompt-.*|session-object|skill-.*|doc-.*|lint-rules|arch-layers)$` PASS
+  7261 SKIP 2 before that pin; full suite (NOT_CRAN=true) FAIL 2 SKIP 64 PASS 35324, both
+  `proc-windows-backpressure` (a ps `access_denied` memory sample under load; the file alone PASS
+  254). Lint clean; Rd unchanged.
+- Deviations: D-248 (04 §7.10 `read_file()`). Open: none.
+
+### tools-11 - A finished background job's run time stops growing
+- Red: FAIL 1 in `bridge-sh` (PASS 286): with `reactor_now()` mocked 100 s later, a waited-on
+  done job and a killed one read `peter$jobs()` seconds and `read()` footers 101, 101, 100, 100
+  instead of 1, 1, 0, 0 (finding 6; live GPT called a 2 s job 48 s).
+- Cause: a `gptr_job` kept only `.started`; the footer and the `seconds` column measured to now
+  whatever the status.
+- Fix: `bridge_job_status()` sets `.ended` the first time it sees the process dead;
+  `bridge_job_seconds()` (end, else now, minus start) serves both reports; `wait()`'s `settled()`
+  asks the status, so a waited-on job stops within one 200 ms pump.
+- Green: `bridge-sh` PASS 287 SKIP 2; `^(bridge-sh|bridge-lang|proc-supervise|gptr-jobs|
+  copy-bridge|lint-rules|arch-layers)$` PASS 648 SKIP 6. Lint clean; Rd unchanged.
+- Deviations: none (the contract does not define `seconds`). Open: a job nobody looks at until
+  long after it ended (including after `kill()`) stops at that first look, an upper bound.
+
+### tools-12 - peter$py() refuses RETICULATE_PYTHON=managed and gives advice an R user can follow
+- Red: FAIL 1 in `bridge-lang` (PASS 106): with `RETICULATE_PYTHON=managed`, `py_available()`
+  mocked FALSE and `import_main()` mocked to stop, `bridge_py_main()` reached `import_main()`
+  (finding 2: reticulate then downloads a uv-managed Python, which the refusal says gptr never
+  lets happen); the unconfigured refusal said "activate a virtual environment", which in R reads
+  as `reticulate::use_virtualenv()`, refused by the same guard.
+- Cause: the guard asked only `nzchar()` of `RETICULATE_PYTHON`, `RETICULATE_PYTHON_ENV` and
+  `VIRTUAL_ENV`; "managed" is non-empty.
+- Fix: `identical(Sys.getenv("RETICULATE_PYTHON"), "managed")` (reticulate's own `==` test) is
+  refused like an unconfigured Python, first line "RETICULATE_PYTHON=managed asks reticulate to
+  download a Python for peter$py()."; both refusals advise a Python executable in
+  `RETICULATE_PYTHON` (or R started from an activated virtual environment), or
+  `reticulate::use_python("<path>")` then `reticulate::py_config()` before the first call.
+  P22 Task 7's guard rule amended.
+- Green: `bridge-lang` PASS 115; `^(bridge-.*|copy-bridge|perm-classify|lint-rules|arch-layers)$`
+  PASS 1546 SKIP 12. Unmocked (no Python configured, reticulate 1.47.0) `peter$py("1 + 1")` with
+  `RETICULATE_PYTHON=managed` refuses and Python stays uninitialised. Lint clean; Rd unchanged
+  (`@noRd`).
+- Deviations: D-248 (P22 Task 7). Open: `use_python()`/`use_virtualenv()` without `py_config()`
+  are still refused (accepting them needs reticulate internals or `RETICULATE_USE_MANAGED_VENV`
+  handling, a later change); the cheat sheet takes sheet entry S32.
+
+### tools-13 - A broken fake-provider script fails at once instead of being retried as overloaded
+- Red: FAIL 7 in `provider-fake` (PASS 199): with `agent_retry_delay()` mocked to 0, a number
+  as reply 2 of a list script made 4 requests and signalled `gptr_error_overloaded` (finding 10:
+  "retrying in 2.0 s (overloaded)", then 4.0 s); a script function that stops ("boom 500
+  timeout") and an empty script made 3 each; the no-script error event had class "provider"; a
+  failing classifier script and a classifier with no script gave `gptr_error_s1_overloaded`.
+- Cause: `fake_script_reply()` and `fake_pick()` reported gptr's own script failures as status
+  500, which `fake_status_class()` names "overloaded", so `run_retryable()` retried them twice
+  against its own rule (never a local failure); `fake_missing_events()` sent class "provider"
+  with 500, which `err_class()` drops and reads back as overloaded; the classifier fake passed
+  500 to `fake_s1_error()`.
+- Fix: `fake_script_error()` gives a broken script's reply `status = NA` and class
+  "invalid_spec" (never retried, signalled as `gptr_error_provider`); `fake_plan()` takes
+  `reply$class` before the status; the no-script event is "invalid_spec" with no status. A
+  scripted `list(error =, status = 529L)` still retries. Beyond the plan, the classifier fake's
+  failures (a failing or empty script, no script found) follow through the same helper and an NA
+  status: `gptr_error_s1_response`, never retried. No construction-time check of list elements:
+  the request already names the misuse.
+- Green: `provider-fake` PASS 206; `^(provider-.*|agent-run|agent-loop.*|s1-.*|gptr-gateway|
+  lint-rules|arch-layers)$` PASS 5442; full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35358.
+  Lint clean; Rd unchanged (`@noRd`).
+- Deviations: none (04 §12.1 does not define a broken script; the fix restores
+  `run_retryable()`'s rule). Open: none.
+
+## Task FIX-16 - Cheat-sheet review: doc (2026-10-22, #77)
+
+### paths-1 - Memoise the *.Rproj probe of project_root() by directory mtime
+- Findings 3, 36, 69, 83, 118, 159, 178; 60 and 157 (sessions-1, merged here).
+- Red: FAIL 2 in `^utils-paths$` (PASS 154), with the listing moved into `dir_list_rproj()` and
+  no memo: 11 walks from `a/b` listed `a` and `b` 22 times (expected 2), and an unpinned fake
+  `peter()` call from a marker-less temp dir listed an ancestor again at an unchanged mtime.
+- Cause: `project_root()` walks every ancestor up to `/` on each of the 80 to 160 calls of one
+  `peter()` call, and `is_project_dir()` listed each unmarked one for `*.Rproj`, uncached. Under
+  macOS `$TMPDIR` (79k to 107k entries) one listing takes 0.2 to 0.8 s: 9 to 66 s per offline call,
+  and a false "Checkpoint scans ... take longer than gptr.checkpoint_scan_budget" notice, as
+  `ckpt_prune()` walks inside the timed scan. The suite pins the root, so no test walked.
+- Fix: the four stat probes stay live; the listing's answer is kept per directory in `the$rproj`
+  and redone when `file.mtime(dir)` changes, as adding, removing or renaming an entry does.
+- Green: `^utils-paths$` PASS 156; `^(utils-paths|aaa-state|arch-layers|lint-rules|gptr-config|
+  ckpt-files)$` PASS 1052 (NOT_CRAN=true). Lint clean. Fake one-request call from a project under
+  `$TMPDIR` (79,229 entries): main 6.37 and 6.05 s, fix 1.08 and 1.01 s (86 and 83 walks; 11, then
+  0 listings).
+- Deviations: none. Open: an `*.Rproj` created within the mtime granularity of a cached listing
+  (2 s on FAT) is seen only at the directory's next change.
+
+### ckpt-1 - Time only the walk against gptr.checkpoint_scan_budget
+- Findings 150, 196.
+- Red: FAIL 2 in `^ckpt-files$` (PASS 251): with `ckpt_prune()` slowed by 0.3 s and the budget at
+  0.25 s, a fake `peter()` call in mode auto whose `r` call writes `out.txt` in an empty
+  marker-less project printed the "Checkpoint scans of ... take longer than
+  gptr.checkpoint_scan_budget" notice and set the tracker's `per_turn`.
+- Cause: `ckpt_files_after()` timed all of `ckpt_files_step()`, which includes
+  `ckpt_prune()` -> `workspace_root()` -> `project_root()` on every walk and every predicted path,
+  and the blob-store root while storing; a slow root lookup alone switched the session to per-turn
+  scans and the notice blamed the scan.
+- Fix: the tracker computes its prune pattern once (`ckpt_files_tr()`: `prune`); `ckpt_walk(root,
+  prune = ckpt_prune(root))` and `ckpt_walked()` use it; `ckpt_files_scan()` notes the walk's own
+  time in `tr$walk_secs`, which `ckpt_files_after()` compares with the budget.
+- Green: `^ckpt-files$` PASS 253, with a new guard that a walk slowed past the budget still
+  switches once with one notice; `^(ckpt-.*|utils-paths|windows-security|windows-link-policy|
+  arch-layers|lint-rules)$` PASS 974 SKIP 12 (Windows only; NOT_CRAN=true). Lint clean. One
+  `after()` in an empty project with `ckpt_prune()` slowed by 0.3 s (3 runs, load 11): before
+  0.31 to 0.37 s and per-turn mode, after 0.001 to 0.06 s (walk 0.001 to 0.046 s), no switch.
+- Deviations: none; the documented contract already says walk time (`gptr.checkpoint_scan_budget`
+  in `?gptr_options`, P16). Two tests follow the new signature (a hand-made tracker carries
+  `prune`; the FIFO test's `ckpt_walk` mock takes it). Open: the prune pattern is fixed when the
+  tracker is made, as its root is. `.gptr/` is pruned at any depth, so only `tempdir()/gptr` can
+  escape it: when the root contains `tempdir()` and a `setwd()` mid-session leaves `.gptr/`.
+
+### doc-1 - Keep pending sidecars of documents outside .gptr/ where every process finds them
+- Findings 11, 15.
+- Red: FAIL 4 in `^doc-io$` (PASS 679): in a project without `.gptr/`, `doc_sidecar_path()` was
+  under `tempdir()/gptr`; a child Rscript acting as a Jupyter kernel queued its cell's block and
+  exited, then `gptr_doc(nb, sync = TRUE)` here said nothing and wrote no cell. With the old path
+  only, a child killed by SIGKILL after one recorded call: FAIL 2, "No pending blocks for job.R."
+  and 0 blocks.
+- Cause: `doc_sidecar_path()` fell back to `doc_root()`, `tempdir()/gptr`, when the document's
+  project had no `.gptr/` (`.git` or `DESCRIPTION` do not count): each process looked in its own
+  `tempdir()`, R deleted the kernel's at exit, a killed run's was orphaned. `doc_sync()` returned
+  0 silently and `gptr_doc()` dropped the count.
+- Fix: without `.gptr/` the sidecar is `R_user_dir("gptr", "cache")/pending/pending-<sha1>.json`
+  (`doc_sidecar_write()` already makes the folder and a 0600 file; trust checks and the legacy path
+  follow); `doc_sync()` informs "Wrote N block(s) into <doc>." or "No pending blocks for <doc>.";
+  `gptr_doc(sync = TRUE)` leaves a dead run's recovery to `doc_sync()`, so the count includes it.
+- Green: `^doc-io$` PASS 690; `^(doc-.*|arch-layers|lint-rules|utils-paths)$` PASS 2660 SKIP 3
+  (repr not installed; Windows only); `^(doc-io|doc-formats|doc-replay|doc-export)$` PASS 1756
+  (NOT_CRAN=true). Lint clean. Rd regenerated; plan checks pass.
+- Deviations: D-249 (new). Not in the plan: `gptr_doc(sync = TRUE)` no longer runs
+  `doc_recover()` first (it applied a killed run's blocks, and the sync then said "No pending
+  blocks"); two existing syncs in test-doc-io and test-doc-formats now assert the message.
+- Open: `gptr_cache("info")`, which the conflict warning names, lists only the workspace root's
+  sidecars, not `pending/`; `doc_lock_dir()` still uses this process's workspace root, so two
+  processes recording one document outside `.gptr/` do not exclude each other (finding 15).
+- Windows CI (#77): the user-cache sidecar test compared `gptr_cache()`'s path with `dirname(doc_sidecar_path())` as strings; on Windows the two spell the same directory differently (FAIL 1 on shard 1/4, release and oldrel-4). It now compares them with `path_key()`, as the test's later lines already do.
+
+### doc-2 - Say when a script call is not recorded because gptr_doc() bound another document
+- Findings 22, 149, 174.
+- Red: FAIL 2 in `^doc-replay$` (PASS 613): bound to `out.R`, non-interactive, `record` unset, a fake
+  `peter()` call in `fk.R` run by `source()` and one in `job.R` under a mocked `Rscript --file=` gave
+  no notice (out.R absent and both scripts unchanged, as expected).
+- Cause: `doc_locate()` sites a call in the document that holds it; the binding is consent for its own
+  path and the target only of calls in no document (console, `-e`, stdin). Unable to ask, `doc_keep()`
+  dropped the site before `doc_upsert()`, whose "no write consent" notice was never reached.
+- Fix: `doc_keep()` informs a `notice` once per document when a call that could record (record not
+  FALSE, not replay mode) gets no consent while a binding exists: "gptr did not record this call: it is
+  in fk.R, but gptr_doc() bound out.R. Calls are recorded into the document that holds them; run
+  gptr_doc("fk.R") to record them there." No binding stays silent (IC-45). `?gptr_doc`, 04 §6.4 and
+  IC-45, 03 §4.3 say what a binding covers; the help also how console turns are written (IC-49).
+- Green: `^doc-replay$` PASS 615 (dropping the guards fails the silent cases: no binding, record FALSE,
+  replay); `^(doc-.*|arch-layers|lint-rules)$` PASS 2519 SKIP 2 (NOT_CRAN=true). Lint clean. Rd
+  regenerated; plan checks pass. Installed build, real `Rscript driver.R`, fake provider: one notice for
+  two calls, no out.R, driver.R unchanged; a self-bound script records both blocks, no notice.
+- Deviations: D-249 (extended). Open: an interactive run whose answer for a document is a remembered
+  "off" also gets the notice once while another document is bound.
+
+### doc-3 - Sheet: gptr_doc() binds this R session; bind quarto and Knit documents in their setup chunk
+- Finding 19, its rendering half (doc-1 fixed the notebook and crash-recovery half).
+- Red: none (wording). Installed build, fake provider, quarto 1.10.18: a `.qmd` bound at the
+  console, then `quarto render`, got no block and no message; `rmarkdown::render()` of an `.Rmd`
+  in the binding session recorded one.
+- Cause: a binding is this R process's consent (`the$doc_binding`; 04 §6.4 already says "this R
+  process"). `quarto render`, `quarto::quarto_render()` and RStudio's Knit and Render buttons knit
+  in another process, which cannot ask, so `doc_keep()` drops the call and, unbound, says nothing
+  (IC-45). The vignette's "Bind the report, run it with its normal renderer" and "Use `quarto
+  render analysis.qmd`" was a recipe that records nothing.
+- Fix: `script-as-history` says a binding belongs to the process that made it, keeps the in-process
+  `rmarkdown::render()` example, and says to bind a document rendered elsewhere in its own setup
+  chunk, shown as `library(gptr); gptr_doc("analysis.qmd")`. The `.Rmd` is the knitted `.Rmd.orig`.
+- Green: a setup-chunk binding plus `quarto render` wrote `#| label: gptr-<id>`, outside and inside
+  a `gptr_init()` project. `precompute.R script-as-history`: 0 problems, output byte-identical to
+  the edited `.Rmd`. `^zzz$` PASS 145 (NOT_CRAN=true). Lint: the `.Rmd` is clean; the `.Rmd.orig`
+  keeps its one lint from main (`mode = auto` in an `eval = FALSE` chunk, line 338).
+- Deviations: none (the contract already binds this process). Not in the plan: no
+  `gptr_config(record = "auto")` alternative. Measured with `quarto render`, it records only at
+  user scope outside a `gptr_init()` project: the default scope is this session there, and inside
+  a project the template's `record: "ask"` holds against a user "auto", and an untrusted
+  project's own "auto" cannot loosen it. Open: none.
+
+### doc-4 - Sheet: recording under Rscript or render() needs auto mode or allow rules
+- Finding 16, its wording half (config-4 in the models group and gate-hint in the orchestration
+  group carry its code items).
+- Red: none (wording). Installed build, fake provider whose `r` call runs `fit = lm(mpg ~ wt,
+  data = mtcars)`, `Rscript` on a script that binds itself with `gptr_doc()`: with default
+  settings, rc 1, "The run stopped: `r` needs approval and no one can answer in this run", no
+  block; the same in a `gptr_init()` project whose user level is auto.
+- Cause: in the default manual mode a change waits for approval, and `gptr_can_prompt()` is FALSE
+  under `Rscript` and while knitting (`is_knitting()`), even from an interactive console, so the
+  gate stops the run before any block is written. The vignette's driver and its
+  `rmarkdown::render()` example never said a mode was needed.
+- Fix: `script-as-history` says recording needs the agent's code to run, that nobody can approve
+  under `Rscript` or in `rmarkdown::render()`, and to run `gptr_config(mode = auto, .scope =
+  "session")`, pass `mode = auto` or add `gptr_permissions()` rules; replays need no approval.
+  The R Markdown section points back to it. Session scope, because it holds inside a
+  `gptr_init()` project with or without config-4. The `.Rmd` is the knitted `.Rmd.orig`.
+- Green: session scope and the call's `mode = auto` each wrote the block (rc 0), also in that
+  `gptr_init()` project (effective mode manual there); `GPTR_REPLAY=replay` of the recorded
+  script in manual mode rebuilt `fit` without asking. `precompute.R script-as-history`: 0
+  problems, output byte-identical to the edited `.Rmd`. `^zzz$` PASS 145 (NOT_CRAN=true). Lint:
+  the `.Rmd` is clean; the `.Rmd.orig` keeps its one lint from main (`mode = auto`, now line 350).
+- Deviations: none (the gate is intended). Open: an empty block when the model passes
+  `record = false` is by design and rare, so neither the sheet nor the vignette mentions it.
+
+### doc-5 - The undone-block notice names replay = "record", the mode that regenerates it
+- Finding 13.
+- Red: FAIL 4 in `^doc-replay$` (PASS 625): under `auto` and `replay`, an undone team block's
+  notice said "or run live to regenerate it" and did not name `replay = "record"`.
+- Cause: G7 section 3.8's undone row gave the notice "run live to regenerate" while its `live`
+  column is "run, no write"; `doc_skip_undone()` copied the one, `doc_decide()` the other. So
+  `gptr_source(f, replay = "live")` called the model, left the block inert and wrote nothing.
+- Fix: the notice ends `or run it with replay = "record" to regenerate it.`; `?gptr_source`
+  and the `script-as-history` modes table say an undone block runs under `"live"` without being
+  rewritten and `"record"` regenerates it; G7 3.8 and the P15 plan's copy say the same.
+- Green: `^doc-replay$` PASS 629, with an end-to-end guard (fake provider, bound `.R`): an
+  undone block stays undone and byte-identical under `"live"`, then `"record"` gives
+  `regenerated` and `fresh`; `^(doc-.*|ckpt-rewind|arch-layers|lint-rules)$` PASS 2774 SKIP 2
+  (NOT_CRAN=true). Lint clean (the `.Rmd.orig` keeps its one lint from main, line 350). Rd
+  regenerated; plan checks pass. `precompute.R script-as-history`: 0 problems, output
+  byte-identical to the edited `.Rmd`.
+- Deviations: none (the G7 3.8 behaviour stands; only its notice text changed). Not in the plan:
+  the guard scripts six replies, as it makes three model runs.
+- Open: `gptr_source()` still lists the `"live"` run of an undone block as `NA`, which its
+  `@return` keeps for blocks no call touched; making `"live"` regenerate undone blocks is the
+  maintainer's call.
+
+### doc-6 - Sheet: say where replay = "live" re-asks the model
+- Finding 14, its driver half (doc-5 fixed the undone half; the sheet line is S26).
+- Red: none (wording). Installed build, fake provider, a self-bound `live.R` with
+  `peter(..., mode = "auto", replay = "live")`: the first `Rscript` made 2 requests and wrote
+  the block; the second made 0, warned "Block 2d55a7 of live.R was not regenerated: under
+  source() or Rscript the recorded code runs anyway, so it was replayed.", and left the file
+  byte-identical; `gptr_source("live.R")` then listed it `regenerated` with a new sha.
+- Cause: `doc_decide()` regenerates only under a driver that can skip the old block
+  (`gptr_source()`, knitr or Quarto, an IDE, Jupyter); under base `source()` or Rscript every
+  regeneration downgrades to replay with `replay_downgraded` (architecture 6.9.3). The modes
+  table said `"live"` rewrites recorded blocks without naming a driver.
+- Fix: the `script-as-history` live row names the four drivers and says a recorded block
+  replays with a warning under base `source()` or Rscript. It does not say "at the console": a
+  call typed there is a transcript turn and never re-asks a recorded block. The `.Rmd` is the
+  knitted `.Rmd.orig`.
+- Green: `precompute.R script-as-history`: 0 problems, output byte-identical to the edited
+  `.Rmd`. `^zzz$` PASS 145 (NOT_CRAN=true). Lint: the `.Rmd` is clean; the `.Rmd.orig` keeps its
+  one lint from main (`mode = auto`, line 350).
+- Deviations: none (the downgrade is intended). Open: the `replay_downgraded` warning itself says
+  "or run the call interactively to regenerate it", which holds in an IDE but not at a plain
+  console.
+
+### doc-7 - Transcript header names gptr_source(replay = "live")
+- Finding 44.
+- Red: FAIL 2 in `^doc-formats$` (PASS 252): a new transcript's fourth line was
+  `# options(gptr.replay = "live") re-asks the model.`. FAIL 1 in `^doc-replay$` (PASS 635) on the
+  same line of a console transcript recorded with the fake provider; its behaviour already held.
+- Cause: `doc_transcript_header()` pointed to the option, which only `gptr_source()`, knitr, an IDE
+  or Jupyter can honour; under `source()` or Rscript `doc_decide()` downgrades a regeneration to
+  replay with `replay_downgraded` (architecture 6.9.3), so following the hint never re-asked.
+- Fix: the line is `# gptr_source("<file name>", replay = "live") re-asks the model.`; the
+  `source()` line above it stays.
+- Green: `^(doc-formats|doc-replay)$` PASS 890, with a guard (fake provider): `source()` of the
+  recorded transcript under `gptr.replay = "live"` warns `replay_downgraded` and sends nothing,
+  `gptr_source(t, replay = "live")` sends two requests and gives `regenerated`;
+  `^(doc-.*|arch-layers|lint-rules)$` PASS 2541 SKIP 2 (NOT_CRAN=true). Lint clean.
+- Deviations: none (04 §11.5 names only the `source()` line). Open: the name is the file's at
+  recording; a renamed or moved transcript keeps the old one.
+
+### doc-8 - No temporary machine-log path in a transcript header
+- Finding 18.
+- Red: FAIL 2 in `^doc-formats$` (PASS 257): `doc_on_agent_end()` with a console site in a
+  project without `.gptr/` wrote `# machine log: /private/var/folders/.../Rtmp.../gptr/sessions/
+  <stamp>_<id>.jsonl`.
+- Cause: without `.gptr/`, `workspace_root()` is `tempdir()/gptr`, which R deletes at exit;
+  `doc_on_agent_end()` copied the session file's absolute path into `site$session_file`, and the
+  durable transcript named a file gone after exit.
+- Fix: `doc_on_agent_end()` leaves `session_file` NULL when the log is inside exactly
+  `tempdir()/gptr`; `doc_transcript_header()` then writes `# machine log: none kept (gptr_init()
+  keeps session logs in .gptr/)` (was `(none)`). 04 §11.5's transcript row says so.
+- Green: `^(doc-formats|doc-replay)$` PASS 895 (a `.gptr/` project under `tempdir()` keeps
+  `.gptr/sessions/<file>`); `^(doc-.*|arch-layers|lint-rules)$` PASS 2546 SKIP 2 (NOT_CRAN=true).
+  Lint clean; plan checks pass. Installed build, fake provider, an `Rscript -e` console turn bound
+  with `gptr_doc("log.R", format = "transcript")`: "none kept" outside `.gptr/`, the kept relative
+  log inside it.
+- Deviations: D-249 (extended). Open: replayed text comes from the S2 cache, also in
+  `tempdir()/gptr` without `.gptr/`, so a later process's replay has `text` NA; `doc_conflict`'s
+  "the session log has it" is equally untrue there after exit.
+
+### doc-9 - /doc and /status see a gptr_doc() binding before the first prompt
+- Finding 25.
+- Red: FAIL 4 in `^console-commands$` (PASS 97): with `gptr_doc("log.R")` bound and no session,
+  `cmd_doc_site(NULL)` was NULL, `/doc` said "No document is bound." and `/status` had no
+  `document` line.
+- Cause: `cmd_doc_site()` returned NULL for a NULL session without asking the doc.site service,
+  whose answer without a session is the `gptr_doc()` binding (`doc_site_service()`, which
+  `prompt_doc()` asks the same way); `cmd_status()` printed no document line before a session.
+- Fix: `cmd_doc_site()` asks the service with the session as given; `/status` before the first
+  prompt adds `document  <path>` or `(none)`. The `script-as-history` transcript paragraph says
+  an `.R` binding is the transcript (`format = "transcript"` only labels it); that it holds each
+  console `peter()` call and prompt as `s_<id> = peter("prompt", <context names>)` with its
+  block, the console's `!`, `!!` and fenced R lines under `# direct R (no model)` and slash
+  commands as comments; and that other code typed at R's `>` prompt is not recorded, so a
+  transcript using objects made there fails on replay: make them with `!code`. The `.Rmd` is the
+  knitted `.Rmd.orig`.
+- Green: `^console-commands$` PASS 101; `^(console-.*|perm-plan|doc-replay|arch-layers|
+  lint-rules)$` PASS 2690 SKIP 1 (INFRA-03, interactive R on CI; NOT_CRAN=true). Lint clean (the
+  `.Rmd.orig` keeps its one lint from main, now line 356). `precompute.R script-as-history`: 0
+  problems, output byte-identical to the edited `.Rmd`. Rd unchanged.
+- Deviations: none (03 §6.17 lists `/status` and `/doc` without their lines; the doc.site service
+  already answered the binding without a session). Not in the plan: `/status` before a session
+  gains the `document` line, as it had none to correct.
+- Open: the transcript still does not see R's own `>` prompt (no task callback; P15/IC-49). The
+  verdict's other passing bug, `eval_guard()` refusing a `q` bound to a non-function, is the
+  orchestration group's guard-1.
+
+### doc-10 - Mark every cut of recorded #> output with the right count
+- Finding 24.
+- Red: FAIL 9 in `^(doc-blocks|tool-r)$` (PASS 451), fake `peter()` into a bound `.R`: `for (i in
+  1:30) print(i)` and `summary(fit)` kept 12 lines with no marker; three expressions said "(3 more
+  lines)" for 11; `doc$output_lines = 30` with the option unset still kept 12; `peter$describe(x)`'s
+  two lines stayed under `sum(x)`; `r_doc_outputs()` returned a flat vector.
+- Cause: `r_doc_outputs()` cut each expression to the option's 12 lines silently and flattened them;
+  `doc_output_lines()` cut again and counted only the survivors, and `doc_turn_r()`'s `outs[kept]`
+  never met a per-expression list.
+- Fix: `r_doc_outputs()` keeps `list(lines, n)` per expression, capped by `doc_max_output_lines()`
+  (moved to `eval-format.R`, as an L4 service file may be called from `tool-r.R`); `doc_output_lines()`
+  shows lines up to the first cut one, cuts once and counts `sum(n)`; a flat vector still renders.
+- Green: `^(doc-blocks|tool-r)$` PASS 460; `^(doc-.*|eval-format|tool-r|mcp-server|arch-layers|
+  lint-rules)$` PASS 2879 SKIP 2 (repr), `^(mcp-recording|eval-core)$` PASS 346 (NOT_CRAN=true). Lint
+  clean; plan checks pass. `local_doc_e2e()` and `doc_e2e_source()` moved to `helper-doc.R`.
+- Deviations: D-249 (extended; 04 §4.4 `outputs`, §11.5). Open: none.
+
+### doc-11 - Write a known zero cost as cost=0 in block headers
+- Finding 122.
+- Red: FAIL 2 in `^(doc-blocks|doc-replay)$` (PASS 972): a turn whose answers cost a known `0`
+  had no `cost` header key; a fake `peter()` call recorded into `analysis.R` listed
+  `gptr_blocks(f)$cost` NA while `s$cost` was 0.
+- Cause: `doc_block_lines()` wrote `cost=` only when known and above 0, and `doc_block_row()` reads
+  a missing key as NA, the value IC-74 keeps for unknown.
+- Fix: the guard is `tb$cost_known`; an unknown cost stays omitted. `?gptr_blocks` says `cost` is
+  `0` for a known free route and `NA` when unknown or not recorded; 04 §11.5's `cost` row says when
+  it is written.
+- Green: `^(doc-.*|subagent-team|ckpt-rewind|session-object|mcp-recording|console-commands|
+  arch-layers|lint-rules)$` PASS 3820 SKIP 2 (repr; NOT_CRAN=true). Lint clean; Rd regenerated;
+  plan checks pass. The IC-74 test's local-model case now expects `"0"` (its cost was a known 0).
+- Deviations: D-249 (extended). Open: none.
+
+### replay-1 - Replaying into the session that recorded the block adds no turn
+- Finding 84.
+- Red: FAIL 5 in `^(doc-replay|session-object)$` (PASS 1171): a two-block pipe chain recorded with
+  `gptr_source(replay = "record")` read 4 turns after `gptr_source(replay = "replay")` in the same
+  process, the next live turn was 5 and the user turns 1, 2, 5; `session_replay_new()` advanced a
+  live session whose path held the block's `gptr.doc_block` entry.
+- Cause: `replay_mark(advance = TRUE)` (both `session_replay_apply()` and `session_replay_new()`'s
+  live-session branch) skipped only blocks in `seen`, which recording never fills, so the session
+  that already held the turn gained one per block.
+- Fix: `replay_mark()` advances only when `replay_holds_block()` finds no `gptr.doc_block` entry
+  for the block, not undone, on the active path; it still records `gptr.replay`, `seen` and
+  `value=` (a session rebuilt from JSONL holds the block and needs its value). IC-46 says so.
+- Green: `^(doc-replay|session-object)$` PASS 1176; `^(doc-.*|session-.*|subagent-team|ckpt-rewind|
+  arch-layers|lint-rules)$` PASS 4577 SKIP 2 (repr; NOT_CRAN=true). Lint clean; plan checks pass.
+- Deviations: D-249 (extended). Open: replaying block 1 into the live session after turn 2 records
+  its `gptr.replay` and `value=` at turn 2, the session's current turn.
+
+### replay-2 - Record gptr_return(<expression>) so replay restores the value
+- Findings 155, 151, 114 (their expression half; replay-3 has fan-out values, store-1 `$text`).
+- Red: FAIL 17 in `^(doc-blocks|doc-replay|doc-export|doc-io)$` (PASS 1894): fake `r` code `fit =
+  lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))` recorded `value=coef(fit)` and dropped the line; a
+  same-process `gptr_source(replay = "replay")` gave `$value` NULL with "value `coef(fit)` (turn 1)
+  is not bound in this R process"; a `GPTR_REPLAY=replay Rscript` replay failed its value check
+  with and without `.gptr/`; a plain export held no line computing it.
+- Cause: `gptr_return()` boxes an expression under its deparsed label, `r_new_value_name()` hands
+  the label on, `doc_turn_r()` wrote it as `value=` and `doc_drop_expr()` cut the call, so replay
+  looked the label up as a binding name and nothing in the document recomputed it.
+- Fix: `doc_rewrite_return()` turns a top-level `gptr_return(<one unnamed argument, not a name>)`
+  into `.gptr_value_<block id> = (<argument>)` (backquoted until `doc_prepare()` fills the id into
+  the body and header); `doc_turn_r()` writes that name, keeps a syntactic name and omits a label.
+  Replay uses the name path unchanged. `?gptr_return`, 04 §4.4, §7.15, §11.5, IC-48, 03 §6.9.3.
+- Green: PASS 1911; `^(doc-.*|gptr-sdk|subagent-team|session-object|session-store|mcp-recording|
+  tool-r|northstar|ckpt-rewind|console-commands|copy-tools|arch-layers|lint-rules)$` PASS 4442 SKIP
+  2 (repr; NOT_CRAN=true). Lint clean; Rd regenerated; plan checks pass. Installed build, fake
+  provider, a self-bound `analysis.R`: the block reads `.gptr_value_c5b47c = (coef(fit))`; the
+  same-process and `GPTR_REPLAY=replay Rscript` replays print the coefficients, 0 requests, file
+  unchanged.
+- Deviations: D-249 (extended). Not in the plan: the Rscript case is in test-doc-io.R, beside its
+  child-script helpers; the bare-name case is the existing acceptance-4 test; no test-doc-io case
+  assumed a dropped expression line.
+- Open: a same-process replay into an environment other than the recording one (and not the
+  global one) still resolves `value=` in the recording home ("not bound"; a bare name gets the
+  object of recording time); a `gptr_return(<expression>)` inside braces or a branch, or with its
+  name split over lines, is not rewritten and its value is not recorded.
+
+### replay-3 - Record team and fan-out child code and values for replay
+- Findings 66, 65, 119 (their fan-out and team half; replay-2 has expressions, store-1 `$text`).
+- Red: FAIL 17 in `^doc-replay$` (PASS 670): a fake fan-out
+  `f = peter("Average .x", list(a = c(1, 2, 3), b = c(10, 20)), parallel = 1)` whose children ran
+  `m = mean(.x[[1]]); gptr_return(m)`, recorded through `gptr_source()`, wrote
+  `children="a:<sid>,b:<sid>"` and no child code, and `f$value` was `list(a = NULL, b = NULL)` in a
+  simulated later process with and without the session store and S2 answers; the same for
+  `gptr_return(mean(.x[[1]]))`; a one-agent team running `n = nrow(mtcars); gptr_return(n)` gave
+  `tm$x$value` NULL with and without `export = "n"`; a three-field `children=` entry was skipped.
+- Cause: `doc_team_block_lines()` wrote a child's code only when it had exports and never its value
+  name; `doc_replay_team()` built each child with no `value=`, and a replayed fan-out child's home
+  had no `.x`.
+- Fix: `doc_session_code()` also gives the latest `value=` name; a child with one gets its code in
+  `local({...}, envir = gptr_resume(block =, child =)$envir)` and the entry
+  `<name>:<session id>:<value>` (replay-2's hidden name for an expression, its token filled in with
+  the header's). `doc_replay_team()` reads two or three fields and passes the third as the child's
+  `value=`. `route_fanout_run()` binds each replayed child's element as `.x` in its home
+  (`subagent_fanout_element()`, shared with `subagent_fanout_spec()`). `replay_rebuild()` keeps no
+  value record past the recorded turn: the same-process replay advanced a team child and stored a
+  turn-2 copy record without its payload, which hid the value in the next process (the last red,
+  FAIL 1: no exports, store kept). 04 §11.5 `children` and body, IC-46, IC-47; 03 §6.9.3; P15; the
+  one teams-and-background paragraph.
+- Green: `^doc-replay$` PASS 689; `^(doc-.*|session-.*|subagent-.*|copy-subagent|northstar|
+  ckpt-rewind|arch-layers|lint-rules|console-commands|mcp-recording|gptr-sdk|tool-r)$` PASS 5687
+  SKIP 3 (repr; Windows worker; NOT_CRAN=true). Lint clean; no Rd change; plan checks pass.
+  Installed build, fake provider, a self-bound `analysis.R` in a `gptr_init()` project with that
+  fan-out and team: recording printed `2 15`, `32`, sum 17 (6 requests); the same-process replay, a
+  `GPTR_REPLAY=replay Rscript` run and one without `.gptr/sessions` and `.gptr/cache/s2` printed the
+  same with 0 requests, rc 0, file unchanged.
+- Deviations: D-249 (extended). Not as planned: the fan-out route (P19) binds `.x`, as
+  `doc_replay_team()` may not call the fan-out helpers (IC-33), and binds only `.x`, all a live
+  child's home holds (`.e1` stays in its private values environment); `replay_rebuild()`
+  (session-object.R) was not in the plan; later processes are simulated in the tests (live table,
+  replay table, and for the last one store and S2 cleared), the subprocess is the live check.
+- Open: a same-process replay still advances a live team child one turn (replay-1 covers blocks); a
+  replayed fan-out child keeps `.x` in its home (a live one's is removed when it settles); a child
+  name holding `:` or `,` has no replayable entry; a child value whose code was not recorded replays
+  "not bound", as a block's does.
+
+### replay-4 - gptr_return() outside a run prints a one-time notice
+- Findings 138, 190.
+- Red: none (docs). The new test passes on main: with replay off, the first top-level
+  `gptr_return(1)` signals the `gptr_message_notice` "only designates a value", the second is
+  silent, and so is a call under `gptr.quiet`; the help page's own example prints it.
+- Cause: the code follows IC-48 (a once-per-session notice, silent while replaying); `?gptr_return`
+  and 03 §4.3 copied "returns its argument invisibly and does nothing else".
+- Fix: both say it designates nothing and the first such call in an R session prints a one-line
+  notice, silent while a document is replayed, with `options(gptr.quiet = TRUE)` or
+  `suppressMessages()`.
+- Green: `^(gptr-sdk|arch-layers|lint-rules)$` PASS 188 (NOT_CRAN=true). Lint clean; Rd
+  regenerated; plan checks pass.
+- Deviations: none. Open: the notice goes to stdout, like every `gptr_inform()` display.
+
+### sessions-26 - Say that s$value keeps the newest returned value
+- Finding 164 (moved from the sessions group: it edits `?gptr_return` after replay-2 and replay-4).
+- Red: none (docs). The new session-level test passes on main: a fake session whose turns run
+  `gptr_return(1)`, `gptr_return(2)` and nothing reads `$value` 2, `$turns` 3, `$text` "ok"; a
+  fourth turn running `gptr_return(NULL)` reads NULL.
+- Cause: `session_value_get()` returns the newest designated value of any turn, by design (G3, the
+  existing "latest designated value" test), which a pipe such as `s |> peter("Explain the
+  result.")` relies on; `?gptr_return` and `?peter` called it the run's result.
+- Fix: `?gptr_return` says `$value` is the newest value designated in any turn, kept by a turn that
+  designates none (`$values` by turn; `gptr_return(NULL)` clears it); `?peter`'s "Sessions and
+  results" says the same, and that `$text` is the last turn's answer.
+- Green: `^(session-object|gptr-sdk|gptr-gateway|arch-layers|lint-rules)$` PASS 1078
+  (NOT_CRAN=true). Lint clean; Rd regenerated.
+- Deviations: none. Open: the sheet's S06 and S09 lines follow in the sheet commit.
+
+### replay-5 - Footer marks a replayed session and never prints a known zero
+- Finding 21.
+- Red: FAIL 2 in `^session-object$` (PASS 539): a one-turn fake session forgotten and rebuilt from
+  its JSONL by `session_replay_new()` printed `idle . fake/fake-1 . 1 turn . 1.7k tokens . $0.0000`,
+  as the live run did; one reconstructed from a document alone printed `0 tokens . $0.0000`.
+- Cause: `session_footer()` never showed that a session was replayed, and a reconstruction holds no
+  usage row, which `format_count()` and `format_cost()` print as a known zero.
+- Fix: `replay_mark()` keeps the usage row count in `d$replay_rows`; while a replayed session
+  still has that many rows its footer status reads `replayed`, and with none its tokens and cost
+  read unknown. A live request adds a row and the footer is the usual one. `?print.gptr_session`,
+  04 §5.1 (`print`, `.d` `replay_rows`), 03 §5.1.
+- Green: `^session-object$` PASS 541; `^(doc-.*|session-.*|subagent-team|ckpt-rewind|
+  console-commands|mcp-recording|gptr-sdk|arch-layers|lint-rules)$` PASS 4900 SKIP 2 (repr;
+  NOT_CRAN=true). Lint clean; Rd regenerated; plan checks pass. Installed build, fake provider,
+  a self-bound `analysis.R` run by `Rscript`, then `GPTR_REPLAY=replay Rscript`: in a
+  `gptr_init()` project `replayed . fake/fake-1 . 1 turn . 3.7k tokens . $0.0000`, outside one
+  `replayed . ... . unknown tokens . unknown cost`; file unchanged both times.
+- Deviations: D-249 (extended). Open: the same-process replay into the recording session keeps
+  its live footer (not a replayed session); outside a project the shell replay still prints no
+  answer, as S2 lives in this process's `tempdir()`.
+
+### export-1 - Sheet: state what gptr_export() admits and refuses
+- Findings 26, 62 (the sheet's S27 lines follow in the sheet commit).
+- Red: none (wording). `doc_export_chain()` on 15 shapes: admitted `peter("a")`, `mode = "auto"`,
+  `1L, TRUE, NULL`, quoted `model`/`tools` and `peter("a") |> peter("b")`; refused a data object,
+  bare `mode = auto` and `model = opus`, `.opts = list(...)`, `budget = list(...)`, `-0.5`, `NA`,
+  `s |> peter("b")` and `peter("a", fit) |> peter("b")`. Fake provider: a recorded
+  `s = peter("Fit it.", mtcars, mode = auto)` block is fresh and refused as "mixed or non-literal
+  Peter expressions"; edited to `mode = "auto"` without the data object it stays fresh and exports
+  in both formats.
+- Cause: `doc_export_chain()` admits only arguments that are `NULL` or one non-`NA` atomic
+  constant, by design (`?gptr_export`). A symbol or a call is not one, nor is the session that a
+  later `s |> peter()` passes first. The vignette listed the other refusals but not this one, and
+  named only `session$value` for the raw export's handle refusal.
+- Fix: `script-as-history`'s export section names the admitted constants, the refused forms with
+  the refusal's words, that a one-statement pipeline is admitted, that quoting an argument keeps
+  the block fresh, `{name}` prompts ("interpolated inputs need review"), stale blocks, and
+  `session$text` beside `session$value`. The `.Rmd` is the knitted `.Rmd.orig`.
+- Green: `precompute.R script-as-history`: 0 problems, output byte-identical to the edited `.Rmd`.
+  `^(zzz|doc-export)$` PASS 358 (NOT_CRAN=true). Lint: the `.Rmd` is clean; the `.Rmd.orig` keeps
+  its one lint from main (`mode = auto`, now line 365).
+- Deviations: none (the refusals are intended). Not planned: naming the line and argument in the
+  refusal. Open: "later" code holds once export-2's position matching lands; until then the raw
+  export also refuses code before the binding, and after an ordinary rebinding, that names a handle.
+
+### export-2 - gptr_export() rebinds its gptr_doc() line and refuses only live handles
+- Findings 27, 62 (the position bug).
+- Red: FAIL 6 in `^doc-export$` (PASS 218): `gptr_doc("history.R")` and an absolute
+  `gptr::gptr_doc(path = ...)` were copied verbatim in both formats, one sharing a line was
+  admitted, and `gptr_source()` of the exported Peter script (fake provider, record "ask", not
+  interactive) recorded no block; the raw export refused `s = "earlier"; print(s)` before `s =
+  peter("one")` and `s = 1; print(s)` after it.
+- Cause: `doc_export_lines()` kept every non-Peter statement, so the export bound the source, whose
+  binding is consent for the source only (doc-2): its calls recorded nowhere and console turns went
+  into the source. Handle names were refused in any other statement, whatever its position.
+- Fix: `doc_export_bind()` finds a top-level `gptr_doc()` whose `path` literal (`match.call()`,
+  nothing evaluated) names the source from its directory or the working directory; raw R comments it
+  out, the Peter format writes the destination into the literal (only the file name in the same
+  directory, else the full path); one sharing a line, or not read by `doc_unquote()`, is refused.
+  One ordered pass keeps a handle live from its `peter()` statement until ordinary code assigns the
+  name. `?gptr_export` @details.
+- Green: `^doc-export$` PASS 224; `^(doc-export|doc-replay|doc-blocks|zzz|arch-layers|lint-rules)$`
+  PASS 1493 (NOT_CRAN=true). Lint clean; Rd regenerated. Probe: a three-line
+  `gptr_doc('sub/history.R', format = "transcript")` exported from the project root became
+  `"sub/p1.R"` (same directory), the full path (another one), three comment lines (raw R).
+- Deviations: D-249 (extended). From the plan: the working directory also resolves the literal (the
+  verifier's fix), the literal keeps its directory part, and the commented line has no `# removed by
+  gptr_export()` suffix. Open: a `gptr_doc()` assigned or with a computed path is kept; the handle
+  refusal still names neither the handle nor its line.
+
+### store-1 - Say that sessions and answers outlive R only in a .gptr/ workspace
+- Findings 124, 139, 152 (the `$text` halves of 114 and 119; the sheet's S03, S12, S23 lines follow in the
+  sheet commit).
+- Red: FAIL 5. `^session-store$`: `gptr_resume("s0123456789")` outside a workspace said only "no stored session
+  matches". `^doc-replay$`: a replay that restored no answer was silent in process, under `GPTR_REPLAY=replay
+  Rscript` (exit 0, `TEXT NA`) and for fan-out children whose answers were removed.
+- Cause: without `.gptr/`, `workspace_root()` is `tempdir()/gptr`, so the session store and the S2 answer cache end
+  with R (intended: gptr writes only where named). Nothing said so where the loss is felt.
+- Fix: both `resume_path()` store misses add "Without a .gptr/ workspace, sessions last until R exits;
+  gptr_init(\".\") keeps them." when `workspace_dir()` is NULL. `doc_replay_no_answer()`, called for a replayed call
+  and each team child, informs one `notice` per document and process when `$text` stays NA: "No recorded answer
+  for <doc>: replayed answers ($text) are NA.", plus " gptr_init(\".\") keeps answers in .gptr/ for later R
+  sessions." outside a workspace. NEWS: sessions are saved in `.gptr/` (without one, until R exits). 04 §6.5, IC-46.
+- Green: `^(doc-replay|session-store)$` PASS 982 (703 + 279); `^(doc-.*|session-.*|subagent-.*|ckpt-rewind|
+  console-commands|console-repl|mcp-recording|gptr-sdk|gptr-source|knitr.*|arch-layers|lint-rules|zzz)$` PASS 5884
+  SKIP 3 (NOT_CRAN=true). Lint clean; no Rd change. Installed build, fake provider, two `Rscript` runs: outside a
+  workspace the replay prints the notice with the hint, `TEXT NA`, exit 0, and `gptr_resume(id)` and
+  `gptr_resume()` carry the hint; after `gptr_init(".")` neither error has it, a replay restores the text, still
+  after `gptr_cache("clear", "s2")` (from the session file), and with `.gptr/sessions` removed too the notice comes
+  without the hint.
+- Deviations: D-249 (extended). From the plan: the notice keys on the outcome (`$text` NA after replay), not on a
+  missing S2 record, which in a workspace or a live session is no loss (the session file or the live session holds
+  the answer); the workspace text omits "the answer cache was cleared", as a copied document, a block recorded
+  before `gptr_init()` or one recorded without an answer gives the same miss. Open: a piped replay keeps the
+  previous turn's `$text` when its block's answer is missing (no notice there); a bare `/resume` still lists
+  "# 0 rows" without the hint.
+
+### replay-2b - A knitted first render shows a recorded gptr_return() with its block id
+- Review of replay-2 (`R/doc-knitr.R`, medium).
+- Red: FAIL 3 in `^doc-knitr$` (PASS 74): `knit_print()` of a live turn whose code ends in
+  `gptr_return(coef(fit))` showed `` `.gptr_value_@@GPTR_BLOCK@@` = (coef(fit)) `` in its code
+  fence, with and without a `gptr.doc_block` entry, and so did a first `knitr::knit()` (fake
+  provider) of a report whose agent runs `gptr_return(n * 2)`.
+- Cause: replay-2's rewrite leaves the hidden name backquoted with a token until `doc_prepare()`
+  fills in the block id; `doc_knit_code()` printed `doc_turn_body()`'s body before that step.
+- Fix: `doc_fill_id()` (both substitutions, shared with `doc_prepare()`); `doc_knit_code()` fills
+  in the id of the turn's newest `gptr.doc_block` entry, else shows the line as the
+  `gptr_return()` call it records.
+- Green: `^doc-knitr$` PASS 77; `^(doc-.*|arch-layers|lint-rules)$` PASS 2656 SKIP 2 (repr;
+  NOT_CRAN=true). Lint clean. The knit writes the block before the chunk prints, so the first
+  render shows `.gptr_value_<id> = (n * 2)`.
+- Deviations: none (the shown code is the block's). Open: none.
+
+### replay-2c - Record the native-pipe form `<expression> |> gptr_return()` too
+- Review of replay-2 (`R/doc-blocks.R`, medium).
+- Red: FAIL 2 in `^doc-blocks$` (PASS 349): `doc_code_clean()` kept `coef(fit) |> gptr_return()`
+  and `mtcars |> nrow() |> gptr::gptr_return( ) # done` as written, `returned` FALSE.
+- Cause: the pipe form parses to `gptr_return(<expression>)`, so `doc_drop_expr()` kept it, but
+  `doc_rewrite_return()` looked for the function name at the expression's start, found the
+  argument's, and skipped it: `value=` was omitted and every replay gave `$value` NULL without a
+  word, while the kept line printed the outside-a-run notice under `replay = "auto"`.
+- Fix: when the top-level expression's own `PIPE` token ends on its last line, the hidden name
+  and `(` go before the expression and the pipe with the call become `)`; a pipe split from its
+  call over lines is kept as written, as a split call name is. IC-48 says so.
+- Green: `^doc-blocks$` PASS 351 (a bare `fit |> gptr_return()` is still dropped);
+  `^(doc-.*|tool-r|mcp-recording|gptr-sdk|arch-layers|lint-rules)$` PASS 2933 SKIP 2 (repr;
+  NOT_CRAN=true). Lint clean; plan checks pass. Fake provider, `coef(fit) |> gptr_return()`
+  recorded through `gptr_source()`: `.gptr_value_<id> = (coef(fit))`, and a simulated later
+  process's replay returns the coefficients without a message.
+- Deviations: D-249 (extended). Open: none.
+
+### replay-2d - R served to a CLI route records what gptr_return() designated
+- Review of replay-2 (`R/mcp-server.R`, medium; the CLI-route root cause of findings 155, 151).
+- Red: FAIL 2 in `^mcp-recording$` (PASS 50): a fake model calling a probe tool that serves `fit =
+  lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))` through `mcp_dispatch_local()`, recorded with
+  `gptr_source()`, wrote the `.gptr_value_<id> = (coef(fit))` line but no `value=`, and a simulated
+  later process's replay gave `$value` NULL.
+- Cause: `mcp_serve_r()` (Claude Code, Codex) records a `gptr.mcp_r` entry without `value`, so
+  `doc_turn_r()` never wrote the hidden name, and `doc_turn_body()` skips the boxed `gptr.value`
+  record that could have named one.
+- Fix: `mcp_serve_r()` counts the session's value records before evaluating and adds
+  `value = r_new_value_name()` to the entry, as the `r` tool's `details$value`;
+  `r_new_value_name()` moves from `tool-r.R` to the L4 service file `eval-format.R` beside
+  `r_doc_outputs()`, as `mcp-server.R` may not call `tool-r.R` (IC-33).
+- Green: `^mcp-recording$` PASS 52; `^(mcp-.*|tool-r|eval-format|doc-blocks|doc-replay|cli-codex|
+  cli-claude|arch-layers|lint-rules)$` PASS 2913 SKIP 1 (Windows only; NOT_CRAN=true). Lint clean;
+  plan checks pass. The relayed-Codex test's bare `gptr_return(beta)` is unchanged.
+- Deviations: D-249 (extended). Open: none.
+
+### replay-2e - A replay into another environment of the recording process keeps the value
+- Validation of replay-2 (low; not a regression: main gave NULL in every case).
+- Red: FAIL 2 in `^doc-replay$` (PASS 704): after `gptr_source(f, envir = e)` recorded
+  `gptr_return(coef(fit))`, `gptr_source(f, replay = "replay", envir = e3)` gave `e3$s$value` NULL
+  with "value `.gptr_value_<id>` (turn 1) is not bound in this R process".
+- Cause: the header's session is live here, so the replay marks it; `replay_value()` runs before
+  the block's code, finds the hidden name unbound in the session's home `e`, and adds a name-only
+  record at turn 1, which shadows the turn's held box. The code then binds the name in `e3`, where
+  the record is never resolved.
+- Fix: `replay_value()` adds no name-only record when the session holds a value of that turn; the
+  recording session keeps its own. IC-46 says so.
+- Green: `^doc-replay$` PASS 706; `^(doc-.*|session-.*|subagent-.*|copy-subagent|northstar|
+  ckpt-rewind|console-commands|mcp-recording|gptr-sdk|tool-r|arch-layers|lint-rules)$` PASS 5747
+  SKIP 3 (repr; Windows worker; NOT_CRAN=true). Lint clean; plan checks pass.
+- Deviations: D-249 (extended). Open: a bare `gptr_return(fit)` replayed into another environment
+  still gives the recording home's `fit`, as replay-2 left it.
+
+### doc-1b - A document outside .gptr/ takes its lock beside its sidecar, and gptr_cache() lists both
+- Review of doc-1 (`R/doc-io.R`, medium; the lock and listing half of finding 15).
+- Red: FAIL 3 in `^doc-io$` (PASS 702): for a notebook in a project without `.gptr/`,
+  `doc_lock_dir()` was under `tempdir()/gptr`, not beside its sidecar in the user cache's
+  `pending/`, and `gptr_cache()` listed no row with the sidecar written there.
+- Cause: `doc_lock_dir()` used this process's `workspace_root()`, so two runs of one document
+  outside `.gptr/` shared doc-1's sidecar without sharing the lock that guards it (IC-51): either
+  run's write could replace the other's record, and the first run's exit unlink the second's.
+  `doc_cache_files("sidecar")` read only the workspace root's `cache/tmp`, which the conflict
+  warning ("see gptr_cache(\"info\")") and IC-51 point to.
+- Fix: `doc_pending_dir()`; `doc_lock_dir()` uses the document's `.gptr/` else that directory, as
+  `doc_sidecar_path()` does; the sidecar listing adds its `pending-*` files, and `gptr_cache()`
+  gives them a second `sidecar` row with that path. `?gptr_cache`, 04 §6.4, IC-51.
+- Green: `^(doc-io|doc-replay|storage-boundaries|windows-security)$` PASS 1548 SKIP 11;
+  `^(doc-.*|storage-boundaries|windows-.*|console-.*|zzz|arch-layers|lint-rules)$` PASS 4830
+  SKIP 14 (Windows filesystem; repr; INFRA-03; NOT_CRAN=true). Lint clean; Rd regenerated; plan
+  checks pass. Seven `gptr_cache()` expectations in test-doc-replay gain the fifth row.
+- Deviations: D-249 (extended). Not as suggested: the sidecar keeps doc-1's path (no shared
+  `cache/tmp` under `pending/`). Open: a document in a `.gptr/` project now locks in that `.gptr/`
+  also when this process works in another project (was this process's root).
+
+### doc-7b - The transcript header names the transcript from the project root
+- Review of doc-7 (`R/doc-formats.R`, low).
+- Red: FAIL 2 in `^doc-formats$` (PASS 258): a transcript at `.gptr/transcripts/gptr-session-
+  20260929-183000.R` read `# gptr_source("gptr-session-20260929-183000.R", replay = "live")`, a
+  file `gptr_source()` refuses from the project root; one outside the project gave its file name.
+- Cause: doc-7 built the literal from `basename(site$path)`, while console transcripts made by the
+  default choice (`doc_new_transcript()`) live in `.gptr/transcripts/`.
+- Fix: the literal is `doc_rel(site$path)`: relative to the project root, absolute outside it.
+- Green: `^doc-formats$` PASS 260; `^(doc-formats|doc-replay|console-.*|arch-layers|lint-rules)$`
+  PASS 2914 SKIP 1 (INFRA-03; NOT_CRAN=true). Lint clean. A root-level `log.R` still reads
+  `"log.R"`.
+- Deviations: none. Open: doc-7's, a moved transcript keeps the path it had when recorded.
+
+### doc-2b - The other-binding notice suggests gptr_doc() with the path it resolves
+- Review of doc-2 (`R/doc-replay.R`, low).
+- Red: FAIL 1 in `^doc-replay$` (PASS 707): run from `analysis/` of a project bound to `out.R`, a
+  fake `peter()` call in `analysis/driver.R` suggested `run gptr_doc("analysis/driver.R")`.
+- Cause: the literal came from `doc_rel()`, relative to the project root, while `gptr_doc()`
+  resolves its argument against the working directory (`analysis/analysis/driver.R`, refused as
+  not in an existing directory); it was also pasted without escaping.
+- Fix: the suggestion is `doc_str_literal(path_rel(site$path, getwd()))`: relative inside the
+  working directory, absolute outside it; the sentence keeps `doc_rel()` for both documents.
+- Green: `^(doc-.*|arch-layers|lint-rules)$` PASS 2672 SKIP 2 (repr; NOT_CRAN=true). Lint clean.
+- Deviations: none (the notice's form in D-249 stands). Open: none.
+
+### export-2b - A raw export refuses a function that names a session handle
+- Validation and review of export-2 (`R/doc-export.R`, low; one finding reported twice).
+- Red: FAIL 3 in `^doc-export$` (PASS 224): `report = function() cat(s$text)` before `s =
+  peter("one")` and `report()` after it exported, and so did `s = 1; report = \() s$text;
+  report()` before the call: the plain scripts fail with "object 's' not found" or report `1`.
+- Cause: export-2's ordered pass counts a read only after the handle's `peter()` statement; a
+  function reads its names when called, which `report()` does not show.
+- Fix: a statement whose `all.names()` hold `function` (also `\()`) is refused when it names any
+  handle a `peter()` statement of the document binds; direct reads keep the position rule.
+  `?gptr_export` and the `script-as-history` export paragraph say so.
+- Green: `^doc-export$` PASS 228; `^(doc-export|doc-replay|doc-blocks|zzz|arch-layers|lint-rules)$`
+  PASS 1522 (NOT_CRAN=true). Lint clean (the `.Rmd.orig` keeps its one lint from main, line 365);
+  Rd regenerated; plan checks pass. `precompute.R script-as-history`: 0 problems, output
+  byte-identical to the edited `.Rmd`.
+- Deviations: D-249 (extended). Open: a function whose own argument or local shares a handle's
+  name is refused too (conservative).
+
+### replay-4b - The gptr_return() notice is said to be silent in replay mode, as it is
+- Review of replay-4 (`R/gptr-sdk.R`, low).
+- Red: none (docs). The extended test passes before the change: with `gptr.replay = "replay"` the
+  first call is silent, and a file holding `gptr_return(1)` sourced under `"auto"` gives the notice.
+- Cause: replay-4 copied IC-48's "silent while a document is replayed" into `?gptr_return` and 03
+  §4.3; the code is silent only when `replay_mode()` is `"replay"` (P08 adaptation 13), so a
+  recorded `gptr_return()` that stays in the code (nested, or a pipe split over lines) prints it
+  when the document is sourced under the default `"auto"`.
+- Fix: `?gptr_return`, 03 §4.3, 04 §6.6 and IC-48 say "silent in replay mode (`replay = "replay"`
+  or `GPTR_REPLAY=replay`)".
+- Green: `^(gptr-sdk|arch-layers|lint-rules)$` PASS 189 (NOT_CRAN=true). Lint clean; Rd
+  regenerated; plan checks pass.
+- Deviations: D-249 (extended: the contract text now names the implemented rule). Open: none.
+
+### steer-doc-1 - A steer line reads the same with or without its trailing space; only gptr's lines get the block id
+- Steering review finding 5, the record half (its ingress half, refusing a blank steer, is P28's
+  steer-14).
+- Red: FAIL 6 in `^doc-blocks$` (PASS 352): a blank steer relay and an attachment-only follow-up
+  were written `## Steer: ` and `## Follow-up: `; a recorded block whose `## Steer: ` an editor
+  trimmed read `user-edited` in `gptr_blocks()` and `gptr_export()` refused it; a steer and r code
+  holding `@@GPTR_BLOCK@@` were written with the block id, also inside a child overlay.
+- Cause: `doc_re_steer` needed the space after the colon, the three writers kept it after an empty
+  text, and `doc_fill_id()` replaced the placeholder in every body line.
+- Fix: `doc_re_steer` ends `:( |$)`; the writers use `doc_steer_line()`, which drops a trailing
+  space; `doc_fill_id()` fills the id only into the hidden value name and `gptr_resume(block = `
+  homes (the header keeps its substitution). IC-49 and P15 amended.
+- Green: `^doc-blocks$` PASS 358; `^(doc-blocks|doc-replay|doc-export|doc-knitr)$` PASS 1371
+  (NOT_CRAN=true). Lint clean; plan checks pass (index findings unchanged). Live: see steer-doc-2.
+- Deviations: D-249 (extended). Open: with `.run = FALSE`, steers queued before the run go ahead of
+  the deferred prompt, so the first is the turn's first message and is not recorded, and the prompt
+  is recorded as `## Follow-up:` (seen live; steering audit finding 1, P28's).
+
+### steer-doc-2 - Recorded steer, follow-up, decision and agent lines escape control characters
+- Steering review finding 2 (partly confirmed: one line is the IC-49 design and a cut is
+  `source()`'s, not ours; raw control characters are real).
+- Red: FAIL 3 in `^doc-blocks$` (PASS 360): a turn whose `note`, steer relay and follow-up held ESC,
+  BEL, FF, VT, U+0085, U+2028 and U+2029 wrote them raw into its `## Decision:`, `## Steer:` and
+  `## Follow-up:` lines, also with `LC_CTYPE` C; `source(echo = TRUE)` then drew them.
+- Cause: `doc_one_line()` collapsed only `[\r\n\t]`.
+- Fix: it also turns U+0085, U+2028 and U+2029 into spaces and passes `ui_escape()` (rule C1),
+  which writes control, bidi and zero-width characters as `<U+XXXX>`; the `## Agent` line, an S1
+  block's `#>` line and a console command's `#` comment share it. Written blocks keep their bytes.
+  04 §11.5 amended.
+- Green: `^doc-blocks$` PASS 363; `^(doc-blocks|doc-replay|doc-export|doc-knitr|doc-io|arch-layers|
+  lint-rules)$` PASS 2171 (NOT_CRAN=true, the IC-49 menu-steer replay included). Lint clean.
+  Live, installed build, with steer-doc-1 (GPT-5.6 Sol, Claude Opus 4.8, Ollama qwen3.8:27b): a
+  `background = TRUE` script given `gptr_steer(s, "   ")` and a steer holding ESC, BEL and
+  `@@GPTR_BLOCK@@`, run by `gptr_source()`, recorded `## Steer:` and the escaped text with the token
+  kept; no raw control byte in the file or in `source(echo = TRUE)` of its export; `gptr_blocks()`
+  fresh with and without the trailing space.
+- Deviations: D-249 (extended). Open: none.
+
+### steer-doc-3 - A console transcript records a run that ended aborted, at max_turns or with an error
+- Steering review finding 10.
+- Red: FAIL 37 in `^doc-replay$` (PASS 714): for each of `aborted`, `error`, `max_turns`, `blocked`
+  and `budget`, a console turn's prompt, code and `## Steer:` were missing, the next turn was written
+  `s_<hex> = peter("predict")` and its partial answer cached; a transcript whose errored first run
+  set `x_err` failed to re-source with "object 'x_err' not found".
+- Cause: `doc_on_agent_end()` wrote only `idle` runs (P15 decision 5), a rule made for script blocks,
+  whose block caches the answer, and never weighed for a transcript, the history of what happened.
+- Fix: a console site records every settled run; one that did not end `idle` gets a last
+  `## Run: <status>` line (in the body and its sha) and no cached answer. Script documents keep
+  decision 5. IC-49, P15 decision 5, the hook's roxygen, the script-as-history vignette and NEWS.
+- Green: `^doc-replay$` PASS 752; `^(doc-replay|doc-blocks|doc-formats|doc-export|arch-layers|
+  lint-rules)$` PASS 1693 (NOT_CRAN=true). Lint clean; plan checks unchanged; `precompute.R
+  script-as-history` byte-identical to the edited `.Rmd`. Live, installed build (GPT-5.6 Sol,
+  Claude Opus 4.8, Ollama qwen3.8:27b): an `Rscript -e` console transcript of a steered
+  `background = TRUE` run stopped by `max_turns = 2`, then a piped turn, recorded the steer, both
+  runs' code and `## Run: max_turns`, and `s_<hex> |> peter(...)`; `GPTR_REPLAY=replay` re-sourced
+  it to `x_err`, `y_err`, `w_err` 21, 22, 42.
+- Deviations: D-249 (extended). Not as planned: no list of ended statuses, since `run_settle()` gives
+  `agent_end` no other non-idle status. Open: the background `[b]` path is not tested.
+
+### steer-doc-4 - A replayed session keeps the recorded steers and every replayed turn
+- Steering review finding 3 (understated: the whole second turn of a replayed chain was lost).
+- Red: FAIL 16 in `^(doc-replay|session-object)$` (PASS 1300): the live call after a replayed
+  two-block chain whose fake provider queued three `gptr_steer()` steers saw 9 messages with the
+  session file kept (block 2 a dead sibling branch) and 5 in a clone (one merged `r` call, no
+  steer, no block 2); a block with `## Steer:`/`## Follow-up:` lines between runs reconstructed
+  as one call; a rebuilt session replayed block 2 after a live turn by dropping that turn.
+- Cause: `doc_replay_doc()` kept only code lines, `replay_reconstruct()` wrote one `r` call, a piped
+  block only marked the session, and `replay_rebuild()` cut the leaf once, at the first block.
+- Fix: `doc_replay_steps()`; `replay_turn_append()` writes runs, steers as the live operator relay
+  (recorded back as the same line) and follow-ups after a placeholder answer; a reconstructed piped
+  session gains each block's turn; `replay_seek()` moves a rebuilt one to each block's turn until a
+  live run (`replay_notice()`). IC-46 and the 04 replay functions amended.
+- Green: `^(doc-replay|session-object)$` PASS 1319; `^(doc-.*|session-.*|agent-run|mcp-recording|
+  arch-layers|lint-rules)$` PASS 4914 SKIP 2 (NOT_CRAN=true). Lint clean. Live, the three routes:
+  that transcript re-sourced in a new process, with its session log and as a clone without one
+  (`history_source` `store`, `reconstructed`), then continued live: each model quoted both prompts
+  and the steer and named the three variables.
+- Deviations: D-249 (extended). Not as planned: both paths give the same 14 messages (the plan's 18
+  had context messages in the recorded turns); a live run also stops the seek. Open: a
+  `gptr.replay` marker of an earlier block stays off the path once the next block moves on.
+
+### steer-doc-5 - Replaying a script does not send its recorded steers again
+- Steering review finding 0 (medium: the console never writes a `gptr_steer()` statement), and finding
+  4's residual sentence for `?gptr_steer`.
+- Red: FAIL 5 in `^(doc-replay|gptr-sdk)$` (PASS 888): replaying a recorded `.run = FALSE` +
+  `gptr_steer(as = "follow_up")` + `gptr_wait()` script, and `background = TRUE` ones with
+  `gptr_steer()` or a pipe steer, each made one more request under `replay = "replay"`; in auto mode
+  a steer left over after run 1 was recorded again in an appended block; a turn `gptr_wait()` started
+  from queued input under a binding said nothing. A steer with new text was sent (control).
+- Cause: replay kept nothing of a block's steer lines; `gptr_steer()` queued and `route_continue()`
+  started a run on the idle replayed session; `sdk_launch()` gives such a run no document site.
+- Fix: a replayed block's steer and follow-up texts become session notes (`replay_notes_add()`, which
+  takes back a matching queued item); `gptr_steer()` and `route_continue()` drop an equal text on an
+  idle session with one notice (`replay_note_take()`); a live run clears the notes; `sdk_launch()`
+  informs once. `doc_one_line()` moves to `utils-text.R` (L0). `?gptr_steer`, 04 §6.5, IC-55, vignette.
+- Green: `^(doc-replay|gptr-sdk)$` PASS 893; `^(doc-replay|gptr-sdk|session-object|gptr-gateway|
+  agent-background|doc-blocks|utils-text|arch-layers|lint-rules)$` PASS 2474 (NOT_CRAN=true). Full
+  suite `.`: FAIL 4 SKIP 64 PASS 35558, the 4 a `ps` memory sample refused (`access_denied`) under
+  load in `proc-marker-family` and `proc-rscript-native`, which alone pass (PASS 213). Lint clean;
+  Rd regenerated; `precompute.R script-as-history` byte-identical to the edited `.Rmd`. Live, the
+  three routes: `Rscript analysis.R` bound to itself, a `background = TRUE` call plus `gptr_steer()`
+  and `gptr_wait()`, recorded the steer; rerun under `GPTR_REPLAY=replay` and under auto it exited
+  0 with the notice, one turn and the file unchanged.
+- Deviations: D-249 (extended). Not as planned: the notes reach the session through the replay
+  functions' `doc` (an L4 file calls only the kernel SDK); a live run clears them in `run_start()`
+  (`replay_notice()`), not `gateway_run_start()`; the drain takes back only `api_user` and `pipe`
+  items, never a typed steer. Open: at the P28 merge the drain emits `queue_emit(s, "withdraw", ...)`.
+- Open: a new `s |> peter("<text>")` turn whose text equals a steer or follow-up recorded in an earlier
+  replayed block, which the script does not send itself, is skipped on replay with the notice "A steer this
+  script sends is already recorded..." (IC-55 says either kind; low; found by the round-2 validation).
+
+### replay-2f - Every gptr_return() shape replays its value or says once why not
+- Second validation of replay-2 (medium; a regression: main said "not bound" for every expression).
+- Red: FAIL 24 in `^(doc-blocks|doc-replay|doc-io)$` (PASS 1885): recorded through `gptr_source()`
+  and replayed as a later process, `coef(fit) |>\n  gptr_return()`, a four-line chain with a
+  comment and `gptr_return(x = coef(fit))` gave `$value` NULL with no message, and so did
+  `if (TRUE) gptr_return(...)`, `y = gptr_return(...)` and braces; `gptr_return(coef(fit))` then
+  `if (TRUE) gptr_return(1)` replayed the coefficients, not 1; the same under `GPTR_REPLAY=replay
+  Rscript`, with and without `.gptr/`.
+- Cause: `doc_rewrite_return()` rewrote a call only when its name, or its pipe and call, sat on one
+  line, `doc_drop_expr()` dropped an `x =` call, and `returned` held once any call was rewritten;
+  `doc_turn_r()` then wrote no `value=` (or the wrong one), and nothing told the replay.
+- Fix: one rule: any top-level call, piped or over lines, its argument unnamed or `x`, becomes
+  `.gptr_value_<id> = (<argument>)` (checked by re-parsing), and `returned` holds only when no
+  `gptr_return()` is left in the code. A replayed block with no `value=` whose code still calls
+  `gptr_return()` informs once per block and process, "No recorded value for block <id> of <doc>: a
+  document records gptr_return() only as a top-level call, so $value is not replayed."
+  `?gptr_return`, 04 §11.5, IC-46, IC-48, 03 §6.9.3, P15.
+- Green: `^(doc-blocks|doc-replay|doc-io)$` PASS 1909; `^(doc-.*|gptr-sdk|subagent-team|
+  session-object|session-store|mcp-recording|tool-r|northstar|ckpt-rewind|console-commands|
+  copy-tools|arch-layers|lint-rules)$` PASS 4707 SKIP 2 (repr; NOT_CRAN=true). Lint clean; Rd
+  regenerated; plan checks unchanged from HEAD. Full suite `.`: FAIL 0 SKIP 64 PASS 35659. A
+  nested bare name, pinned after, replays by name without the notice (`^(doc-replay|gptr-sdk)$`
+  PASS 929); `?gptr_return` then said "such a value", not "argument". Installed build, fake `r`
+  call, a self-bound `analysis.R` per shape recorded by `Rscript` and replayed by
+  `GPTR_REPLAY=replay Rscript`, with and without `gptr_init()`: the seven top-level shapes print the
+  coefficients, the three nested ones the notice and NULL, files unchanged; under auto a nested one
+  adds the outside-a-run notice.
+- Deviations: D-249 (extended). Open: a team or fan-out child that designates an expression inside
+  another expression still replays NULL without a word (its code is recorded only with a value or
+  exports); a nested bare name keeps `value=<name>`, as before.
+
+### export-2c - The script-as-history export paragraph is wrapped at 100 columns
+- Second validation of export-2b (low).
+- Red: none (docs): `vignettes/script-as-history.Rmd` line 331 and its `.Rmd.orig` line 309 were
+  145 columns.
+- Cause: export-2b added the sentence on functions that name a handle without re-wrapping.
+- Fix: the paragraph's last lines re-wrapped to 100 columns, identically in both files (longer lines
+  remain only in a table row and the logo data); two lines of the replay-2f record wrapped too.
+- Green: `precompute.R --check script-as-history` 0 problems; its knitted `.Rmd` is byte-identical
+  to the edited one.
+- Deviations: none. Open: none.
+
+### steer-doc-5b - Every source of a script in one process keeps its recorded steers unsent
+- Second validation of steer-doc-5 (high).
+- Red: FAIL 7 in `^doc-replay$` (PASS 836): the follow-up, `gptr_steer()` and pipe-steer scripts,
+  each sourced again three times in the recording process (auto, replay, auto), sent the recorded
+  steer from the second source on (one or two more requests each), and the pipe steer wrote a
+  second block into the file.
+- Cause: session_replay_apply() set a block's notes only while the block was not yet `seen`, and
+  replay_note_take() used them up, so the live session that had seen the block got none again.
+- Fix: replay_notes_add(s, block, doc) sets the block's notes anew on every replay, keyed by block
+  (no pile-up), also from replay_adopt(); replay_note_take() takes a text from the block holding
+  it. IC-55 and D-249 amended.
+- Green: `^(doc-replay|gptr-sdk)$` PASS 947; `^(session-object|gptr-gateway|agent-background|
+  doc-blocks|utils-text|arch-layers|lint-rules)$` PASS 1598 (NOT_CRAN=true). Lint clean. Live,
+  installed build (GPT-5.6 Sol, Claude Opus 4.8, Ollama qwen3.8:27b): the follow-up script and a
+  `background = TRUE` one with a pipe steer, recorded, then sourced three more times in that
+  process with gptr_source() (auto, replay, auto): no request, the file unchanged, the queue empty.
+- Deviations: D-249 (extended). Open: none.
+
+### steer-doc-4b - A rebuilt session seeks each block's own record, not the file's last entry
+- Second validation of steer-doc-4 (medium).
+- Red: FAIL 3 in `^session-object$` (PASS 543): after a replay of b1 alone (forgotten, as at a
+  process exit), a rebuilt b1 piped into b2 had `turns` 2 but one user/assistant pair and `$text`
+  "first answer", and the next live call lacked turn 2.
+- Cause: replay_seek() could only cut back from the rebuilt leaf, the file's last entry, which a
+  replay that stopped sooner (one line run, an interrupt, the pre-fix code) left on turn 1's branch.
+- Fix: replay_seek(s, turn, block) moves to the block's last `gptr.doc_block` record not undone
+  (replay_block_record(), shared with replay_holds_block()), else cuts from the tip as before;
+  session_replay_apply() and replay_rebuild() pass the block. IC-46 and D-249 amended.
+- Green: `^session-object$` PASS 547; `^(doc-.*|session-.*|agent-run|mcp-recording|arch-layers|
+  lint-rules)$` PASS 5004 SKIP 2 (repr; NOT_CRAN=true). Lint clean. Live, the three routes: a
+  two-statement chain recorded, its first block replayed alone in a second process (the file's
+  last entry then a `gptr.replay` on turn 1's branch) and the whole file in a third: `turns` 2,
+  8 messages, `$text` the second answer; a live call then named a = 1 and b = 2.
+- Deviations: D-249 (extended). Open: a block without a record (a team child, a nested call)
+  still seeks along the rebuilt path.
+
+### replay-2g - A nested gptr_return() before the last top-level one keeps value=
+- Second validation of replay-2f (low; a regression from 2df56eaa).
+- Red: FAIL 3 in `^(doc-blocks|doc-replay)$` (PASS 1227): `if (FALSE) gptr_return(1)` then
+  `gptr_return(coef(fit))` was recorded without `value=`; replayed in a later process `$value` was
+  NULL with the false "only as a top-level call" notice.
+- Cause: doc_rewrite_return() denied `returned` for any gptr_return() left in the code, also one
+  that cannot run after the last rewritten call.
+- Fix: only a leftover in a later top-level expression, or inside a function literal (which may
+  be called later), denies it. `?gptr_return`, IC-48 and D-249 amended.
+- Green: `^(doc-blocks|doc-replay|doc-io|doc-export|mcp-recording)$` PASS 2217; `^(gptr-sdk|
+  arch-layers|lint-rules)$` PASS 194 (NOT_CRAN=true). Lint clean; Rd regenerated. Live, the
+  three routes ran that code as asked: the block got `value=`, and a later process replayed the
+  coefficients without a notice.
+- Deviations: D-249 (extended). Open: none.
+
+### replay-2h - No false no-value notice when the recording session replays its own value
+- Second validation of replay-2f (low).
+- Red: FAIL 1 in `^doc-replay$` (PASS 847): `if (TRUE) gptr_return(2)` recorded through
+  gptr_source() and re-sourced with `replay = "replay"` in the same process gave `$value` 2 and
+  yet "No recorded value for block <id> of analysis.R: ... so $value is not replayed."
+- Cause: doc_replay_no_value() read only the header and the code, not the replayed session.
+- Fix: it takes the session and is silent when it holds a value of its turn (replay_value()'s
+  test). `?gptr_return` (the notice is a later R session's), IC-46 and D-249 amended.
+- Green: `^(doc-replay|doc-blocks|doc-io|gptr-sdk|subagent-team|session-object|arch-layers|
+  lint-rules)$` PASS 3027 (NOT_CRAN=true); the later-process shapes keep their notice. Full suite
+  `.` after the four round-2 units: FAIL 0 SKIP 64 PASS 35689. Lint clean; Rd regenerated. Live
+  (GPT-5.6 Sol, Claude Opus 4.8): that code replayed in the recording
+  process to 2 without a notice, in a later one to NULL with it; Ollama ran it with
+  `record = false`, so its block holds no code and its replays say nothing.
+- Deviations: D-249 (extended). Open: none.
+
+## Task FIX-17 - Cheat-sheet review: models (2026-10-22, #77)
+
+### catalog-1 - Convert each models.dev price tier once, and reconvert caches written by the old converter
+- Red: `^catalog-models$` FAIL 5, PASS 410: a 200k tier plus the legacy field gave `default, >200k, >200k`
+  and `prices_df()` refused it ("Invalid prices; expected unique date/tier thresholds."); a converter-less
+  cache was read, and the refresh sent its ETag and kept no `converter`.
+- Cause: `catalog_prices_from()` added a `>Nk` row per context tier, then a `>200k` row from
+  `context_over_200k`, which models.dev now ships as a copy of the first tier (620 of 620 models). A 200k tier
+  doubled (31 refreshed models unresolvable); a 272k or 256k tier gained a `>200k` premium (76 models). The
+  cache stores converted rows behind an ETag and models.dev answers 304, so a code fix alone never reached it.
+- Fix: the legacy field is read only without a context tier, and a repeated tier label is dropped;
+  `catalog_snapshot()` stamps `converter = 2L`; `catalog_read_cache()` ignores a cache of another converter
+  (`catalog_read_base()` falls back to the snapshot) and `catalog_refresh()` sends `If-None-Match` only for a
+  current one. `prices_df()` stays strict. NEWS entry; 04 §11.9, §11.10 amended.
+- Green: `^catalog-models$` PASS 420; with provider-registry, provider-usage, s1-ollama, gptr-gateway,
+  gptr-config, arch-layers and lint-rules PASS 2601. Lint clean. Live (models.dev, 2026-10-22, an old
+  converter-less cache plus a stale ETag in place): the snapshot was used, the refresh downloaded in full, 693
+  refs resolve with 0 failures; grok-4.7 `default, >200k`, gpt-5.6-terra `default, >272k` at $2/M for 250k.
+- Deviations: D-250. Open: the maintainer's online `dev/catalog/build_models.R` run, after prompt-1; the
+  shipped snapshot is not converter-checked.
+
+### catalog-2 - An alias with no model in the catalog is an unknown-model error, not a fuzzy match
+- Finding 35. Red: `^catalog-models$` FAIL 3, PASS 422: with the seed catalog `model_resolve("gemini")` and
+  `"gemini:high"` returned google/gemini-3.8-flash, and `strict = FALSE` returned it instead of NULL.
+- Cause: the seed has no Gemini Pro, so the `gemini` alias target is NA; `model_match()` then went on to the
+  provider and fuzzy steps, whose substring match picked Flash, and `model_resolve()`'s alias error covered only
+  a target whose provider is not registered.
+- Fix: `model_match()` stops at an alias name without a model (either case) and carries the alias;
+  `model_lookup()` keeps it behind a thinking suffix; `model_resolve()` says the alias names no model and to run
+  `gptr_models(refresh = TRUE)` or name a `provider/id`. The orchestration skill's two `"gemini"` examples use
+  `"flash"`. NEWS entry; 04 §11.10 amended.
+- Green: `^catalog-models$` PASS 425 (a models.dev-shaped gemini-3.1-pro-preview resolves as `gemini`); with
+  provider-registry, provider-usage, s1-ollama, gptr-gateway, gptr-capture, gptr-config, subagent-backends,
+  agent-run, arch-layers and lint-rules PASS 3779. Lint clean.
+- Review fix: the alias stop came before IC-19's provider step, so a registered provider named like an alias
+  without a model (`gptr_provider("gemini", models = corp-gemini)`) raised the alias error instead of running
+  gemini/corp-gemini, as main did. It now follows the provider step and still precedes the fuzzy step. Red
+  `^catalog-models$` ERROR 1, PASS 455; green PASS 457; catalog-*, provider-registry, gptr-gateway,
+  gptr-config, subagent-backends, agent-run, arch-layers and lint-rules PASS 3062. Lint clean; 04 §11.10 and
+  the D-250 rule amended.
+- Deviations: D-250 (catalog-2 rule). Open: none.
+
+### prompt-1 - Cap the output reserve at half the window, and blame compact_at when it sets the threshold
+- Findings 51, 160 (sessions-25). Red: `^prompt-compact$` FAIL 4, PASS 344: `compact_threshold()` of (524288,
+  524288), (262144, 262144) and (131072, 131072) gave -8,000; `^prompt-sections$` FAIL 11, PASS 383: `peter()` on a
+  fake model with context = max_output = 131072 was refused at freeze ("too small", threshold -8,000), a
+  1,050,000-token model with `compact_at = 5000` was refused with `arg = "model"`, and both refusals hinted
+  `preset = "minimal" or context = "names"`.
+- Cause: `compact_threshold()` reserved `max(16384, max_output + 2 * r_cap)` with max_output unbounded, and
+  models.dev often gives the whole window as max_output (40 refreshed models refused); the request builders sent
+  that value as `max_tokens`. `prompt_floor_check()` used the compact_at wording only for an unknown window, and
+  `peter()` takes `preset =` and `context =` as context objects (`context = "names"` never lowers the floor).
+- Fix: `model_output_cap()` (`R/prompt-compact.R`), min(max_output, window / 2), in `compact_threshold()`,
+  `prompt_request_context()` and `request_fallback()`; the refusal names compact_at when the threshold equals the
+  cap alone, and hints `tools = "minimal"` (none for the minimal preset). The ten architecture-6.11 expectations
+  hold; no shipped model's max_output exceeds half its window. NEWS entry; 03 §6.11, 04 §7.7, §8.1, §15 amended.
+- Green: `^prompt-compact$` PASS 351, `^prompt-sections$` PASS 398; prompt-*, agent-*, arch-layers, lint-rules,
+  gptr-gateway, gptr-sdk and catalog-models PASS 3199. Lint clean; no Rd change.
+- Deviations: D-250 (prompt-1 rule; pointer lines under D-067 and D-069). Open: the refusal does not compute the
+  smallest passing compact_at (the floor rises with the 25% re-injection cut).
+
+### ollama-1 - Ollama refusals name gptr_models(), not the unexported model_prepare()
+- Finding 54. Red: `^(catalog-models|provider-registry)$` FAIL 8, PASS 1153: the missing-evidence refusal
+  (`provider_preflight()` and `provider_stream()`) named `model_prepare()`, the endpoint-change refusal named
+  only it ("prepare it again with model_prepare()"), and the not-installed text said "then prepare it again".
+- Cause: `provider_preflight()` built both evidence refusals around `model_prepare()`, which is `@noRd` and not
+  exported; two tests pinned that wording.
+- Fix: missing evidence says `run gptr_models(provider = "<pid>", refresh = TRUE) while the server runs with
+  the model installed`, stale evidence `<why>; run gptr_models(provider = "<pid>", refresh = TRUE) again`, not
+  installed `then call again`. NEWS entry.
+- Green: `^(catalog-models|provider-registry)$` PASS 1161; catalog-*, provider-*, s1-*, gptr-gateway,
+  gptr-config, gptr-capture, arch-layers and lint-rules PASS 5943. Lint clean; no Rd change.
+- Deviations: none (message text; 07 §2.1 asks only for actionable failures). Open: a new R session still
+  needs discovery before its first Ollama call (ollama-2).
+
+### ollama-2 - System 2 prepares a selected Ollama model on a live call, as System 1 does
+- Findings 23, 33, 113, 115. Red: `^catalog-models$` FAIL 7, PASS 435: `peter("p", model = "ollama/qwen3:1.7b")`
+  reached `provider_stream()` with the undiscovered record (tool_call FALSE) and no server call, so the real
+  preflight refused it in every new R session; a router's fallback default under replay was not refused.
+- Cause: only System 1 prepared (`s1_ready()` -> `model_prepare()`). `run_target()` and `run_route()` used
+  `run_model_resolve()` and `provider_stream()` runs only the pure `provider_preflight()`, while discovery
+  evidence lives in memory only (07 §2.1); a saved default Ollama model failed in each new session.
+- Fix: `run_model_ready()` (`R/agent-run.R`) for `run_target()`, `route_answer()` and `route_default()`: an
+  Ollama route not named by a session-only provider passes `replay_guard()`, then `model_prepare(ref, safety =
+  stream_safety(NULL, run))`; a router's thinking is clamped to the prepared levels. 07 §2.1 and the 04
+  `model_prepare()` row amended; NEWS entry.
+- Green: `^catalog-models$` PASS 443; agent-*, catalog-*, provider-*, s1-*, session-*, prompt-*,
+  compaction-*, subagent-*, gptr-gateway, gptr-config, arch-layers and lint-rules PASS 10890 (SKIP 1, Windows
+  only). Lint clean; no Rd change. Live (Ollama 0.40.8, fresh process, no `gptr_models()`):
+  `ollama/qwen3.8:27b` answered "OK" (24.7 s), evidence held for that model only, and a tool run returned
+  20.091 (20.0 s).
+- Deviations: D-250 (ollama-2 rule). Beyond the plan: the `replay_guard()` line, since `route_default()` (after
+  `router.call` fails, as under replay) has no earlier guard, and the test fixture drops `num_ctx` (8K is below
+  the standard preset's compaction floor). Open: that fallback still sends a non-Ollama default's request
+  under replay (by reading; pre-existing). The lmstudio/llamacpp/vllm tools note is sheet entry S17.
+
+### catalog-3 - An unknown model on a route with no catalog models says a refresh fills it
+- Findings 30, 41. Red: `^catalog-models$` FAIL 1, PASS 443: with the seed catalog `model_resolve("groq/llama-x")`
+  said only "Unknown model reference 'groq/llama-x'." (no suggestions, no remedy).
+- Cause: the shipped snapshot is seed-only (anthropic 4, google 1, ollama 2, openai 2, typesafe 1), so every
+  openrouter, groq, deepseek, mistral, together, xai, cerebras, fireworks, azure or bedrock id is unknown until
+  `gptr_models(refresh = TRUE)`, and `model_resolve()` gave no hint; the provider-scoped suggestions are empty.
+- Fix: `model_resolve()` adds "The catalog lists no <pid> models yet; gptr_models(refresh = TRUE) downloads them
+  from models.dev." when the reference names a models.dev route (`catalog_modelsdev_ids()`) with no catalog row,
+  also with a thinking suffix. 04 `model_resolve()` row amended; NEWS entry.
+- Green: `^catalog-models$` PASS 452 (anthropic/claude-nope keeps its suggestions and no hint; a user-registered
+  provider gets no hint); catalog-*, provider-registry, gptr-gateway, agent-run, s1-client, session-object,
+  console-commands, arch-layers and lint-rules PASS 3283. Lint clean; no Rd change. On the shipped snapshot:
+  groq/llama-3.3-70b-versatile, azure/gpt-x, openrouter/openai/gpt-5-mini and xai/grok-4.7:high carry the hint.
+- Deviations: D-250 (catalog-3 rule). The plan's condition ("a known provider with no catalog rows") is
+  narrowed to models.dev routes, since a refresh brings nothing for a provider the user registered. Open: the
+  maintainer's online `dev/catalog/build_models.R` run so the shipped snapshot carries these routes (release
+  step, after catalog-1 and prompt-1); the refresh-scope wording is sheet entries S16 and S18.
+
+### provider-2 - Model records accept prices as a list of records and check them at registration
+- Finding 85. Red: `^ext-specs$` FAIL 1, PASS 305: `gptr_provider(..., models = list(list(id = "m", prices =
+  list(list(input = 5, output = 25)))))` failed "field 'models[[1]].prices' must be a data frame".
+- Cause: `spec_model_rules()` typed `prices` as `df` and `spec_model_metadata()` never normalised it, while
+  `prices_df()` (and `gptr_config(providers =)`) take a list of records; a string price or duplicate tiers passed
+  registration and failed at the first call with no provider, model or field named.
+- Fix: `prices = f("df|list")`; `spec_model_metadata()` normalises it and re-raises a bad table as
+  `invalid_spec` naming `models[[i]].prices` ("must be a data frame or a list of price records: invalid
+  price.input, expected ..."). `?gptr_provider` documents the price shape. NEWS entry; 04 §7.0, §10.2 amended.
+- Green: `^(ext-specs|aaa-state)$` PASS 354; ext-*, aaa-state, provider-*, catalog-*, session-budget,
+  arch-layers, lint-rules, gptr-config, gptr-gateway and agent-run PASS 6972. Lint clean; Rd regenerated.
+- Review fix (docs): `?gptr_provider` gave `tier` as `"default"` or `">200k"`, while `price_threshold()`
+  takes any `">Nk"` (catalog-1 makes `>272k` and `>256k`); it now reads `">Nk"` for prompts above N thousand
+  tokens. `^(ext-specs|zzz|lint-rules)$` PASS 503. Lint clean; `man/gptr_provider.Rd` regenerated,
+  `tools::checkRd()` clean.
+- Deviations: D-250 (provider-2 rule). The plan's direct `prices_df()` call fails the layering test (ext-specs.R
+  is L0, provider-usage.R L1), so P05 provides `prices_df()` as the `prices.table` service (IC-09), the pattern
+  of `check.adapter`; without the service the table is checked when the model is resolved, as before. Open: a
+  second user registration of the same provider id is ignored silently (verifier's side finding; not this unit).
+
+### provider-3 - A provider without a valid base URL names the variable that sets it
+- Finding 37. Red: `^provider-registry$` FAIL 5, PASS 735: with `AZURE_OPENAI_ENDPOINT` unset or `"not a url"`,
+  `provider_credential(provider_get("azure"))` said "needs a valid configured origin before credentials can be
+  bound" with `variables = character()`; a provider without env said the same.
+- Cause: the no-origin branch of `provider_credential()` ignored the record's `compat$base_url_env`.
+- Fix: "Provider <id> has no valid base URL: set <env> (for example with gptr_env()) or providers$<id>$base_url
+  with gptr_config()." (`env` joined with " or "; without one only the `gptr_config()` clause), `variables =
+  env`, class `no_key` kept. With the endpoint set and no key, "Set AZURE_OPENAI_API_KEY" is unchanged. NEWS entry.
+- Green: `^provider-registry$` PASS 740; provider-*, catalog-models, gptr-config, gptr-gateway, s1-*, auth-*,
+  arch-layers and lint-rules PASS 6985 (SKIP 3, platform). Lint clean; no Rd change.
+- Deviations: none (message text; 04 §2.2 `no_key` already carries `variables`). Open: the key variable is still
+  reported only after the endpoint is fixed (the verifier's optional one-error variant was not planned).
+
+### config-1 - A higher settings layer's array replaces the lower one's
+- Finding 39. Red: `^gptr-config$` FAIL 4, PASS 518: `settings_combine()` of two `list(a = list(xs = <array>))`
+  kept the lower `xs`; with user-scope `providers.bedrock.models` (`user-id`), `options(gptr.providers =)`
+  (`opt-id`) and a session declaration (`session-id`) were both ignored, and `model_resolve("bedrock/session-id")`
+  raised `unknown_model` ("Did you mean: bedrock/user-id?") while the source read "session".
+- Cause: `settings_combine()` delegated to `utils::modifyList()`, which recurses into any two lists and applies
+  nothing from an unnamed one, so every nested array resolved to the lowest layer that set it.
+- Fix: an explicit merge that recurses only where both sides are named lists and otherwise takes the higher
+  value; a NULL still removes the key (`budget = list(cost = NULL)`). Every other case matches `modifyList()`.
+  NEWS entry.
+- Green: `^gptr-config$` PASS 524 (the user `region` is kept); full suite (NOT_CRAN) PASS 35357, SKIP 64. Lint
+  clean; no Rd change.
+- Deviations: none (restores the rule of the function's doc and `?gptr_config`). Open: none.
+
+### config-2 - gptr_config() warns when an untrusted project will not apply a saved setting
+- Finding 32. Red: `^gptr-config$` FAIL 2, PASS 524: in an untrusted project `gptr_config(providers =
+  list(bedrock = list(models = list(m))))` raised no condition, while `settings_get("providers")$bedrock` stayed
+  NULL.
+- Cause: with a `.gptr/` workspace the default scope is the project, whose non-tightening keys
+  `settings_project_value()` drops while it is untrusted; `gptr_config()` saved them silently, and a recorded "no"
+  skips even the one-time trust notice, so `peter()` failed later with a bare "Unknown model reference".
+- Fix: `settings_untrusted_warn()` runs after a project write when `trust_get()` is FALSE and warns
+  `untrusted_setting` (fields `keys`, `path`; once per root and keys) for each key whose untrusted contribution
+  differs from the trusted one (`providers` counts as written, so no base-URL question is asked), naming
+  `gptr_trust("<root>", trust = TRUE)` and `.scope = "session"`. The write is kept. 04 `gptr_config()` and §2.2
+  warnings amended; NEWS entry.
+- Green: `^gptr-config$` PASS 535; with the 13 other test files that call `gptr_config()`, arch-layers and
+  lint-rules PASS 4280. Lint clean; no Rd change.
+- Review fix: `permissions` was reported whole, though an untrusted project applies its deny and ask rules
+  (`settings_project_value()`, `perm_rules_table()`) and drops only allow. A write with allow rules now names
+  `permissions.allow`; deny or ask alone stays silent. Red `^gptr-config$` FAIL 2, PASS 569; green PASS 571;
+  with perm-*, arch-layers and lint-rules PASS 1915. Lint clean; NEWS, 04 `gptr_config()` and the D-250 rule
+  amended.
+- Deviations: D-250 (config-2 rule). Open: a project value that loosens a tighten key (`mode = yolo`) is dropped
+  silently, trusted or not (§11.2, not a trust matter).
+
+### config-3 - gptr_config() warns when a saved model setting names no known model
+- Finding 58. Red: `^gptr-config$` FAIL 2, PASS 535: `gptr_config(model = opuss, .scope = "session")` raised no
+  condition.
+- Cause: `model`, `small_model` and `system1` pass `resolve_identifier()`, which returns an unknown unbound symbol
+  as its literal name, and the `ident` validator is only `check_string()`; nothing read the catalog until the
+  next bare `peter()` (in every later session, for a user-scope value), while the console's `/model` checks with
+  `model_canonical(strict = TRUE)`.
+- Fix: `settings_model_warn()` runs after the write: each of the three keys (`system1` less `emulate:`; a
+  registered router or `router:` passes) goes through `model_canonical(strict = TRUE)`, and an `unknown_model`
+  becomes warning `unknown_model_setting` (fields `key`, `ref`) quoting that message and the undo call. The value
+  is kept. 04 `gptr_config()` and §2.2 warnings amended; NEWS entry.
+- Green: `^gptr-config$` PASS 546 (opus, haiku, `emulate:sonnet`, `ollama/any-tag:1b`, a router by name and as
+  `router:` stay silent); 20 neighbour files PASS 5657; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 64, PASS 35379.
+  Lint clean; no Rd change.
+- Review fix: only `unknown_model` was caught, so another resolution error escaped after the save (a declared
+  `bedrock/m1` with two default price rows: `invalid_argument` "Invalid prices", yet the session held the
+  value; main was silent). Any other `gptr_error` is now ignored and left to the call that uses the model. Red
+  `^gptr-config$` FAIL 1, PASS 566; green PASS 568; with catalog-models, provider-usage, arch-layers and
+  lint-rules PASS 1334. Lint clean; 04 `gptr_config()` and the D-250 rule amended.
+- Deviations: D-250 (config-3 rule). The warning quotes the `unknown_model` message instead of rebuilding its
+  suggestions, so catalog-2's alias and catalog-3's refresh hints carry over. Open: the use-time error of a bad
+  saved model still does not name its settings layer (the verifier's optional step 2, not planned).
+
+### config-4 - A gptr_init() project no longer pins mode and record, and a trusted project may set mode
+- Finding 16 (items 2 and 3). Red: `^gptr-config$` FAIL 9, PASS 553: after `gptr_config(mode = auto, record =
+  "auto", .scope = "user")` and `gptr_init()`, `gptr_config()` gave `manual` and `ask` from `[project]`; a trusted
+  project's `{"mode": "auto"}`, and `gptr_config(mode = auto)` at the default project scope, resolved `manual`;
+  `gptr_config(mode = yolo)` was saved to the project; the template read `version, mode, record`.
+- Cause: the template pinned the defaults `"mode": "manual"` and `"record": "ask"`, and `settings_project_value()`
+  applies a tighten-type key from any project, so the pinned `manual` beat a user-level `auto`; its tighten branch
+  also ran for a trusted project, which could never loosen the mode it saved.
+- Fix: the template is `{"version": 1}`; a trusted project's `mode` applies as written unless it is `yolo` (or no
+  mode); `settings_config_value()` refuses `mode = yolo` at project scope (`invalid_argument`, naming `.scope =
+  "user"` and `"session"`). config-2's warning now names `mode` when an untrusted project saves a looser one.
+  `?gptr_config`, the configuration vignette (.Rmd and .Rmd.orig), 04 and 03 amended; NEWS entry.
+- Green: `^gptr-config$` PASS 566 (the template pin is now `list(version = 1L)`); full suite (NOT_CRAN) FAIL 0,
+  WARN 0, SKIP 64, PASS 35399. Lint clean; `man/gptr_config.Rd` regenerated; plan checks pass.
+- Deviations: D-250 (config-4 rule). Narrower than planned: the plan freed every tighten-type key of a trusted
+  project; only `mode` is freed, since a project `record = "auto"` would be write consent, which IC-45 reserves to
+  the person (req-7, P15 acceptance 5), and `context` bounds what reaches providers. Beyond the plan: the
+  write-time refusal of a project `yolo`, because `settings_guard()`, which the plan said refuses it, covers only
+  `providers`; the value was dropped silently. Open: the blocked-run hint (item 4) is orchestration's gate-hint;
+  projects made earlier keep their pinned file (NEWS says to delete the two keys); a project `record = "auto"` or
+  a looser `context` is still saved without a word in a trusted project.
+
+### thinking-1 - bedrock-converse sends the thinking level to Claude models
+- Findings 40, 79 and 88. Red: `^provider-bedrock$` FAIL 3, PASS 152: with `thinking = "high"`, an adaptive and a
+  budget Claude record got no `additionalModelRequestFields`.
+- Cause: `bedrock_build()` read only `params$max_tokens` and `temperature`, though `prompt_request_context()` puts
+  the level in `params$thinking`; D-193 cut the request side, so every level, `:max` and `off` sent one body and
+  nothing said so, while the normaliser already decoded and replayed signed reasoning.
+- Fix: `bedrock_thinking()` gives a Claude id (`anthropic.claude`) the fields of `anthropic_thinking()` in
+  `additionalModelRequestFields`; `anthropic_thinking()` now holds the budget clamp (moved from `anthropic_build()`)
+  and returns `max_tokens`, which a budget sets as `inferenceConfig.maxTokens`. Another model's level gives a
+  `notice` once per model. `?gptr_provider`'s example declares `reasoning` and the adaptive capabilities; IC-80
+  amended; NEWS entry.
+- Green: `^provider-bedrock$` PASS 163; provider-anthropic, ext-specs, live-bedrock and lint-rules PASS 1096
+  (SKIP 2, live); full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 65, PASS 35413. Live on the Versa gateway:
+  `^live-bedrock$` PASS 6 (Opus 4.8 declared adaptive returns signed thinking at `high`); Sonnet 4.6 on a budget
+  with `anthropic_beta` returns signed thinking. Lint clean; `man/gptr_provider.Rd` regenerated.
+- Review fix (docs): the NEWS bullet's first line was 101 columns, over the 100-column rule; rewrapped (no NEWS
+  line now exceeds 100).
+- Deviations: D-250 (thinking-1 rule), pointer under D-193. Beyond the plan: test-live-bedrock.R registers its
+  endpoint through one local helper for both live tests. Open: an Opus 4.8 record declared without
+  `capabilities` and given a level now gets the provider's HTTP 400 ("Use thinking.type.adaptive ...") instead
+  of a silent no-op (fixed by thinking-1b); `:max` still clamps to `high` on a
+  record without `thinking_levels` (thinking-4); `usage$reasoning` stays 0 on Converse.
+
+### thinking-3 - A string that is not one of the choices is reported as such
+- Finding 161. Red: `^utils-conditions$` FAIL 3, PASS 64: `check_choice("ultra", c("off", "high"),
+  "thinking")` said "must be one of "off", "high", not a character of length 1." and `"HIGH"` got no hint.
+- Cause: `check_choice()` and `gateway_choice()` fell through to `arg_abort()`, which describes class and length
+  only, so a right-typed value that is not a choice read as a type error (`.opts$thinking`, `.opts$context`,
+  `replay`, `.scope`).
+- Fix: `choice_abort()` (`R/utils-conditions.R`), called by both: a string gets "...; the string given is not
+  one of them." plus "Did you mean "<choice>"?" when it equals a choice but for case (the hint names the choice,
+  never the value); anything else keeps `arg_abort()`. 04 §1.1 amended; NEWS entry.
+- Green: `^utils-conditions$` PASS 70 (a fake key is still never quoted; `peter(.opts = list(thinking =
+  "ultra"))` gives the new text); gptr-capture, gptr-config, gptr-gateway, doc-replay, arch-layers and
+  lint-rules PASS 2039. Lint clean; no Rd change.
+- Deviations: D-250 (thinking-3 rule). Open: NA still reads "not a character of length 1" (not a string).
+
+### thinking-4 - A clamped thinking level is announced once
+- Finding 167. Red: `^(agent-run|catalog-models)$` FAIL 2, PASS 1120: `peter("x", model = "fake/fake-1", .opts =
+  list(thinking = "max"))` (levels off..high) sent `high` and `model_resolve("opus:off")` gave `low`, both with
+  no message.
+- Cause: `model_clamp_thinking()` moves a level the model lacks to the nearest it has (IC-74, by design), and
+  its callers (`run_target()`, `run_model_resolve()`, `route_answer()`, `model_resolve()`) did it silently; a
+  reasoning record without `thinking_levels` gets off..high, which `?gptr_provider` never said.
+- Fix: `model_clamp_thinking(levels, level, ref)` informs `thinking_clamped` ("<ref> has no thinking level
+  "<asked>"; using "<got>".") once per model and level when the level changes; the four callers pass the
+  model's ref, `prompt_request_context()` stays silent. Same clamp in four lines (1179 level/subset cases equal
+  the old body). `?gptr_provider` documents `thinking_levels`. 04 §2.2 and §4.9 `thinking` row, 03 §8.4 amended;
+  NEWS entry.
+- Green: `^(agent-run|catalog-models)$` PASS 1122 (a second identical call and `high` stay silent); full
+  suite (NOT_CRAN) FAIL 2, WARN 0, SKIP 65, PASS 35417, both in `proc-rscript-native` artifact-cancel (a `ps`
+  memory sample of the cancelled child got `access_denied`, with three other worktrees' suites running), which
+  alone passes (PASS 132). Lint clean; `man/gptr_provider.Rd` regenerated.
+- Deviations: D-250 (thinking-4 rule). Open: the sheet line is entry S15; the session still records the
+  requested level (`session_data()$thinking`).
+
+### bedrock-docs - Say that bedrock-converse requests no prompt caching
+- Finding 89 (docs only). The verifier measured 0 cache reads over 7 requests on Opus 4.8 through the Versa
+  gateway; with three injected `cachePoint`s the same run read 36,145 cached tokens (about 70% less input
+  cost), so the gateway accepts them.
+- Cause: `bedrock_caps()` declares `cache = "none"` and `bedrock_build()` writes no `cachePoint` (IC-80, D-193,
+  P26 open item), while NEWS promised prompt caching "where the model supports them", which Claude on Bedrock
+  does.
+- Fix: the NEWS providers bullet says "not yet through `api = "bedrock-converse"`"; `?gptr_provider`'s
+  bedrock-converse example and the language-models vignette (.Rmd and .Rmd.orig, which now also points to
+  `api = "bedrock-converse"` for SigV4) say the adapter requests no caching, so each request sends the full
+  prompt at the uncached rate.
+- Green: `^(ext-specs|zzz)$` PASS 457; `tools::checkRd()` clean. Lint clean; `man/gptr_provider.Rd`
+  regenerated.
+- Deviations: none (the specs already state it). Open: Converse `cachePoint`s (plan anchors, the four-point
+  limit, `cacheDetails[].ttl` attribution in the normaliser), a feature.
+
+### capture-1 - A spec bound to an alias name gets the alias-shadowed notice
+- Finding 92. Red: `^gptr-capture$` FAIL 2, PASS 361: `opus = gptr_fake_provider(...)` and `grep =
+  gptr_tool("mygrep", ...)` resolved to the alias "opus" and the built-in "grep" with no `alias_shadowed`.
+- Cause: `ident_shadow_notice()` spoke only for a character variable. The known identifier wins by design
+  (packages export `claude`, `plan`, `write`), but a spec, which only a gptr user makes, was dropped silently.
+- Fix: a spec the argument accepts (`ident_spec_ok()`) counts as its `name`, then the character rule applies;
+  a function or another object stays silent. 03 §4.1.3 and 04 §6.1.3 amended; NEWS entry.
+- Green: `^gptr-capture$` PASS 363; with gptr-gateway and gptr-config PASS 1284; full suite (NOT_CRAN) FAIL 0,
+  WARN 0, SKIP 65, PASS 35437. Lint clean; no Rd change.
+- Deviations: D-250 (capture-1 rule). The plan's trigger (every accepted spec) also fired for
+  `local = gptr_provider("local", ...)` registered and passed as `model = local` (measured), which names the
+  same provider; comparing `name` keeps it silent. Open: a call such as `model = if (x) haiku else opus` is
+  evaluated in the alias mask and stays silent (by design, 03 §4.1.3).
+
+### s1-1 - System 1 arguments on a conversational model are refused, as .opts$system1_images is
+- Finding 132. Red: `^gptr-gateway$` FAIL 3, PASS 355: `peter("Which?", model = fake, choices = c("a",
+  "b"))`, and the same with `levels`, `threshold = 0.7`, `min_confidence` or `uncertain`, returned a session
+  without a word.
+- Cause: `gateway_args()` validates the five arguments, but only the classifier route reads them; the
+  nested, continue and new routes refused only `.opts$system1_images` (`route_refuse_s1_images()`, IC-74 §4).
+- Fix: `route_refuse_s1_args()` replaces it at its three call sites. After the images check it refuses the
+  first of `choices`, `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain` as
+  `invalid_argument` naming it, pointing to `jev` or `"ollama/clef-flash"` (after `gptr_config(system1 =
+  "emulate:<ref>")`, `model = jev` runs a chat model). The continue route and a configured default chat model
+  refuse too; an explicit `threshold = 0.5` runs. `?peter`, 03 §4.1 and 04 §6.1.1 step 5 amended; NEWS entry.
+- Green: `^gptr-gateway$` PASS 384; with s1-route and arch-layers PASS 720; full suite (NOT_CRAN) FAIL
+  0, WARN 0, SKIP 65, PASS 35466. Lint clean; `man/peter.Rd` regenerated, `tools::checkRd()` clean.
+- Review fix: the remedy said to opt into emulation with `gptr_config(system1 = "emulate:<ref>")`, but
+  emulation answers only `model = jev` or `"emulate:<ref>"` (`s1_target()`), so the setting alone left the
+  call refused with the same advice. It now names `model = jev` (also `expected`, `?peter`, NEWS, 04, D-250;
+  03 §4.1 never named the setting). Red `^gptr-gateway$` FAIL 5, PASS 381; green PASS 386; with s1-route,
+  arch-layers, zzz and lint-rules PASS 937. Lint clean; `man/peter.Rd` regenerated, `tools::checkRd()` clean.
+- Deviations: D-250 (s1-1 rule). Open: the `team` and `fanout` routes (`agents =`, `parallel =`) still drop
+  these arguments and `.opts$system1_images` (measured: `parallel = 2, choices =` ran two sub-agents; fixed
+  by s1-1b). The sheet's System 1 card can say these arguments need a decision model (the sheet is edited
+  later).
+
+### s1-2 - The uncertain = "stop" error names the uncertain inputs and carries the answers
+- Finding 127. Red: `^s1-route$` FAIL 10, PASS 299: for `c(trial, weeks, chose, pilot)` with P(yes) 0.98,
+  0.12, 0.05, 0.32 and `min_confidence = 0.8`, the error had no `index`, `names`, `confidence` or `value`,
+  and its message ended "(confidence below 0.8)." without naming an input.
+- Cause: `s1_abstain()` built the condition from `prob = unname(gptr_prob(out)[unsure])` only: P(yes) or the
+  chosen option's probability, not the confidence the band tests, and the abort before `s1_record()`
+  discarded every other answer.
+- Fix: the condition adds `index`, `names` (`NULL` for unnamed input), `confidence` and `value` (the whole
+  answer); `prob` stays (the IC-74 test pins it). The message lists the first ten names, a position where a
+  name is empty, "and N more" beyond, and a second line: "The error's $value holds every answer;
+  uncertain = NA keeps the others." 04 §2.2 row amended; NEWS entry.
+- Green: `^s1-route$` PASS 309 (unnamed input lists "2, 4"; a choice reports its stored confidence 0.91,
+  not the chosen 0.94); the `s1-*` files PASS 1435. Lint clean; no Rd change.
+- Deviations: D-250 (s1-2 rule). The plan's second line, "e$value holds every answer", names a variable the
+  user may not have; it reads "The error's $value". Open: the system-one vignette does not describe the
+  fields (the message does).
+
+### s1-3 - as.data.frame() of a score names its probability columns by level
+- Finding 125. Red: `^s1-types$` FAIL 2, PASS 217: a score with levels "Very negative", "Neutral", "Very
+  positive" gave the columns `p_0`, `p_1`, `p_2`, while `gptr_prob(x, "probabilities")` and a choice use the
+  level names.
+- Cause: `as.data.frame.gptr_s1()` named a score's columns by 0-based level index, against 04 §5.2's
+  `p_<level>`; P13's test copied that deviation, and no user doc mentioned it.
+- Fix: every type takes `colnames()` of the stored matrix (levels are unique, `s1-client.R`). NEWS entry.
+- Green: `^s1-types$` PASS 219 (the new test ties both accessors for a choice and a score); the `s1-*`,
+  `copy-s1` and `s11-conformance` files PASS 1504. Lint clean; no Rd change.
+- Deviations: none (the contract already says `p_<level>`). Open: none.
+
+### s1-4 - A factor-returning choice keeps its errors, and the factor result is documented
+- Finding 131. Red: `^s1-route$` FAIL 1, PASS 314: with the mocked /systemone answering one of two states
+  without probabilities, `choices = factor(c("liver", "lung", "other"))` warned "see attr(x,
+  "meta")$errors" and returned a factor whose `meta` was NULL.
+- Cause: `s1_run()` returns `factor(s1_bare(out), levels = q$options)` (by design, P13, INFRA-18), and
+  `s1_bare()` strips every attribute after `s1_failures()` has warned; no user doc said a factor comes back.
+- Fix: the factor keeps `meta = list(errors = <df>)` when elements failed and nothing else. `?peter` (System
+  1 arguments paragraph), `?gptr_prob` and the system-one vignette (.Rmd and .Rmd.orig) say that factor
+  `choices` or `.opts = list(output = "factor")` return a plain factor without probabilities. 03 §4.1.5
+  amended; NEWS entry.
+- Green: `^s1-route$` PASS 316 (an answer without failures has only names, levels and class);
+  s1-route, s1-types and gptr-gateway PASS 919; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 65, PASS
+  35492. Lint clean; `man/peter.Rd` and `man/gptr_prob.Rd` regenerated, `tools::checkRd()` clean.
+- Deviations: D-250 (s1-4 rule). The plan kept the whole `meta`, which `print.factor()` prints with every
+  answer (63 lines for two elements, measured, instead of 3); only `errors`, and only on failure, makes the
+  warning true without that. Open: `gptr_prob()` on a factor still says only that `x` is not a `gptr_s1`.
+
+### s1-5 - Say what confidence means where min_confidence is offered
+- Findings 121 and 128. Red: `^s1-types$` FAIL 1, PASS 221: the guard's numbers already held
+  (`s1_confidence_choice(c(.9, .05, .05))` 0.85, `s1_ollama_confidence()` 0.641), but `man/gptr_prob.Rd` did
+  not give that example; `?peter` covered `min_confidence` and `uncertain` only as "System 1 answer shape and
+  abstention".
+- Cause: no user doc defined confidence. For yes/no it is `abs(2 * p - 1)`, so 0.8 abstains for 0.1 < p < 0.9,
+  not "80% sure"; for choices and scores each engine keeps its own measure (D-078 item 2, D-120), Jev's
+  peak or MAD formula against Clef's entropy, and `?gptr_prob` and the vignette said only "concentration".
+- Fix: docs only. `?peter` splits out `min_confidence` (the definition, the 0.8 band, the engine's own scale)
+  and `uncertain` (`NA`, `TRUE`/`FALSE` for yes/no only, `function(state, answer)`, `"stop"`; no effect
+  without `min_confidence`). `?gptr_prob` @details gives the three formulas and the 0.85 vs 0.64 example; the
+  system-one vignette (.Rmd and .Rmd.orig) adds the example and "re-tune `min_confidence` when you switch
+  engine".
+- Green: `^s1-types$` PASS 222; s1-types and gptr-gateway PASS 606; lint-rules, zzz, s1-client and s1-ollama
+  PASS 834. Lint clean; `man/peter.Rd` and `man/gptr_prob.Rd` regenerated, `tools::checkRd()` clean.
+- Deviations: none (04 §6.1 already defines the band). The guard also reads `man/gptr_prob.Rd` (skipped when
+  installed, as test-agent-background.R does), so the example cannot drift from the code. The verifier's "the
+  same value is stricter on Clef" is not used: 0.50/0.50/0 gives 0.25 on Jev and 0.37 on Clef (measured).
+- Open: the sheet's S14 caption is applied by the sheet commit. `peter("Is it?", "p=0.85", model = <System 1
+  model>)` still warns `two_prompts` "the second is context" (finding 121's side note; measured at HEAD, not
+  planned).
+
+### thinking-1b - An undeclared Claude record on bedrock-converse gets no thinking, never an HTTP 400
+- Review of thinking-1 (high). Red: `^provider-bedrock$` FAIL 3, PASS 160: a record shaped like the live `m$claude`
+  (`us.anthropic.claude-opus-4-8`, `reasoning = TRUE`, no `capabilities`) got `thinking` `enabled` with a
+  budget at `high` and `max`, and no notice.
+- Cause: `model_capabilities()` fills undeclared flags with `FALSE`, so thinking-1 sent every Claude record
+  without `adaptive_thinking` a budget; Opus 4.8 refuses it ("thinking.type.enabled is not supported for this
+  model", HTTP 400, `gptr_error_provider`), where main sent nothing and answered.
+- Fix: `bedrock_thinking()` sends thinking only to a Claude record declaring `adaptive_thinking` (adaptive
+  fields); any other model gets none and a notice once per model naming `capabilities = list(adaptive_thinking =
+  TRUE, effort = TRUE)`. The budget path and `anthropic_beta` leave `bedrock_build()`. IC-80, `?gptr_provider`'s
+  example comment, NEWS and the D-250 rule (why: no budget declaration, no id inference) amended.
+- Green: `^provider-bedrock$` PASS 163; provider-bedrock, provider-anthropic, ext-specs, live-bedrock,
+  lint-rules, zzz and arch-layers PASS 1285 (SKIP 3, live); full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 66,
+  PASS 35503. Lint clean; `man/gptr_provider.Rd` regenerated. Live (Versa gateway, installed branch): `m$claude`
+  at `high`, `max` and `:high` answers "ready" (one notice; `max` also the thinking-4 clamp message); Opus 4.8
+  declared adaptive at `high` returns a thinking block; `^live-bedrock$` PASS 7 (+1: an undeclared record
+  answers at `high`).
+- Review fix (simplicity): with the budget path gone, thinking-1's refactor of the anthropic-messages adapter
+  (the budget clamp moved from `anthropic_build()` into `anthropic_thinking()`, which returned `max_tokens`) had
+  no second caller, so it is reverted: `R/provider-anthropic.R` is main's again, and `bedrock_thinking()` reads
+  only the `thinking` and `effort` that main's `anthropic_thinking()` returns. provider-anthropic,
+  provider-bedrock and arch-layers PASS 782; the D-250 sentence about the clamp is deleted.
+- Deviations: D-250 (thinking-1 rule rewritten in place; D-193 pointer). Open: Claude 4.5 and earlier on
+  Converse get no thinking (no budget declaration exists); `usage$reasoning` stays 0 on Converse.
+
+### s1-1b - Teams and fan-outs refuse System 1 arguments too
+- s1-1's open item. Red: `^subagent-team$` FAIL 7, PASS 347: `peter("Which tissue?", b, parallel = 2, choices =
+  c("liver", "lung"))`, a team (`agents = list(a = agent(...))`) with `levels =`, and a fan-out with
+  `.opts$system1_images` returned sessions (5 fake requests), while `?peter` says a conversational model
+  refuses them.
+- Cause: only P08's `nested`, `continue` and `new` routes call `route_refuse_s1_args()`; the `team` (15) and
+  `fanout` (16) routes match first on `agents =` / `parallel =`, and the layering test kept P19 (L4) from the P08
+  helper.
+- Fix: `subagent_route_checks()` ends with `route_refuse_s1_args(call)` (the same error, before any child
+  starts); `arch_contract_edges()` admits subagent -> `route_refuse_s1_args`. 04 §6.1.1 step 5 names both routes
+  and the edge; NEWS bullet amended. `?peter` already states the behaviour.
+- Green: `^subagent-team$` PASS 354; gptr-gateway, arch-layers, s1-route, lint-rules, subagent-backends,
+  subagent-defs, copy-subagent and zzz PASS 1245; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 66, PASS 35510.
+  Lint clean; `devtools::document()` changes nothing. Live (installed branch): `m$gpt`, `m$claude` and
+  `m$ollama` with `choices =, parallel = 2` and with `levels =, agents =` (two members) each raise
+  `invalid_argument` naming the argument in 0.2 to 0.3 s; `gptr_usage()` has no row.
+- Deviations: D-250 (s1-1 rule edited in place). Open: the classifier route (order 10) ignored `agents =`
+  and `parallel =` given with a decision model (measured offline: a classifier fake with `parallel = 2` or
+  `agents =` returned a `gptr_decision`), where this refusal's advice led; fixed by s1-1c.
+
+### s1-1c - A decision model refuses agents = and parallel =, and a call without a model is "this call"
+- Review of s1-1b (low). Red: `^s1-route$` FAIL 5, PASS 316: with a classifier fake, `peter("Is it fine?", x,
+  model = judge, agents = list(a = agent(...)))` and the same with `parallel = 2` returned a `gptr_decision`
+  (one fake request, the argument ignored); `^subagent-team$` FAIL 1: a team naming no model was told "the
+  model of this call is conversational".
+- Cause: the classifier route (order 10) matches before `team` (15) and `fanout` (16) and never read
+  `agents` or `parallel`, so s1-1b's advice "Use a decision model" led to a silent drop (IC-74 section 4);
+  `route_refuse_s1_args()` named the call's model when the call had none.
+- Fix: `s1_call()` refuses `agents =` (`length(call$ids$agents)`), then `parallel =`, as `invalid_argument`
+  naming it ("... a decision model answers in one call (an answer per input element); drop `agents =`."),
+  before `s1_ready()`; with no model the refusal says "this call is conversational". `?peter` (`agents`), 03
+  §4.1, 04 §6.1.1 step 5 and the NEWS bullet amended.
+- Green: `^s1-route$` PASS 321; s1-route, subagent-team, gptr-gateway, arch-layers, lint-rules, zzz, copy-s1
+  and s1-types PASS 1522; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 66, PASS 35515. Lint clean;
+  `man/peter.Rd` regenerated, `tools::checkRd()` clean. Live (installed branch): a team naming no model with
+  `levels =` on `m$gpt`, `m$claude` and `m$ollama` reads "this call is conversational"; `"ollama/clef-flash"`
+  and `jev` emulated on `m$gpt` and `m$claude` refuse `agents =` and `parallel = 2` naming the argument in 0.1
+  to 0.3 s with no usage row; dropping them, `jev` on `m$gpt` answers a `gptr_decision` (the local clef-flash
+  copy answered HTTP 400 "format that is no longer supported", a stale Ollama download).
+- Deviations: D-250 (s1-1 rule edited in place). The reviewer's smaller alternative (a team wording in
+  `subagent_route_checks()`) is not used: it would leave the drop. Open: none.
+
+## Task FIX-18 - Cheat-sheet review: sessions (2026-10-22, #77)
+
+### tools-3 - Unknown names in tools = are refused, not silently ignored
+- Red: FAIL 11 in `^gptr-gateway$` (PASS 357; finding 8): `tools = extendd`, `"Extended"`, `"-wirte"`
+  and `"+gerp"` raised nothing and sent the request with the standard preset's tools,
+  `c(readonly, extended)` ran `readonly`, and a continuation's `"+gerp"` ran.
+- Cause: an unknown bare symbol is a literal string (`ident_symbol()`), `gateway_tool_mods()` passes
+  every non-preset name on, `preset_tools()` unions or drops it and `prompt_tool_array()` leaves an
+  unregistered name out with only a `missing_tool` diagnostic; `gateway_preset()` took the first preset.
+- Fix: `prompt_tools_check()` refuses a call's name (`+`/`-` stripped) that names no tool of the
+  session, hinting the closest preset or tool (`utils::adist()`, case-insensitive, at most 2). It runs
+  in `prompt_compose_preset()` for run options that carry the call (after `session_start`; the run's
+  startup failure re-signals it before any request) and, for a continuation, in `gateway_checks()` after
+  the call's specs register (in `gateway_continue_session()` until gateway-1's r5). `gateway_preset()`
+  refuses two presets. `?peter` `tools`: a bare name adds.
+- Green: `^gptr-gateway$` PASS 368, `^prompt-sections$` PASS 387;
+  `^(prompt-|gptr-|subagent-|arch-layers$|lint-rules$)` PASS 3383 SKIP 1. Lint clean.
+- Review: r1 (low) applied. A continuation's `tools = c(readonly, extended)` passed `prompt_tools_check()` (presets
+  dropped) and was refused only in `gateway_run_opts()`, after its model and mode switched (2 entries). It now calls
+  `gateway_preset()` beside `prompt_tools_check()`. Red FAIL 1 (model `fb/fb-1`, mode `plan`, 5 entries for 3).
+  Green `^gptr-gateway$` PASS 409; `^(gptr-|prompt-sections$|subagent-team$|copy-gateway$|arch-layers$|
+  lint-rules$)` PASS 2254. Lint and check-plans clean.
+- Deviations: D-251. From the plan: an agent definition's allowlist (sub-agent run options carry no
+  call) stays unchecked, so a file agent's `mcp__` tool that is not loaded still degrades quietly.
+  Open: a preset named in a continuation's `tools =` is still ignored; `gptr_config(preset =)` still
+  accepts an unknown preset (finding 8, in passing).
+
+### sessions-3 - A continuation's .opts$thinking applies without model =
+- Red: FAIL 3 in `^gptr-gateway$` (PASS 369; findings 29 and 200): `s |> peter("y", .opts =
+  list(thinking = "low"))` sent `high` and kept it, a session started without a level stayed
+  without one, and a router session's level stayed NULL.
+- Cause: `gateway_continue_session()` read `.opts$thinking` only inside `if (!is.null(call$ids$model))`;
+  the level lives only on the session (`d$thinking`).
+- Fix: without `model =`, a level goes through `kernel_model_switch(s, d$model, th, reason = "user")`
+  (clamped; `model_change` only when it changes; a router keeps its model and takes `d$thinking`).
+  `?peter` `.opts`: `thinking` applies to this call and the session's later turns.
+- Green: `^gptr-gateway$` PASS 372; `^(gptr-|arch-layers$|lint-rules$|session-object$|agent-run$)`
+  PASS 2620. Lint clean.
+- Deviations: D-251 (extended). Open: none (the Bedrock and announced-clamp parts of finding 200
+  belong to the models group).
+
+### gateway-1 - A call that cannot reach its model changes nothing
+- Red: FAIL 1 in `^gptr-gateway$` (PASS 372; findings 101, 67, 80, 106, 130, 140, 142): the refused switch to `corp`
+  reached `session_set_model()` before egress. With every case evaluated, FAIL 8: a refused new session became
+  `gptr_last()`; a switch to a disabled `openai` stayed, with 2 turns, status error and 2 entries, and the next
+  plain pipe was refused for openai. The router test failed with `gptr_error_no_key`.
+- Cause: `gateway_run()` applied the continuation (model, mode, tools) and `last_set()` (`session_new()` too, for a
+  root session) before `gateway_guards()`; key, disabled-provider and preflight refusals came in `provider_stream()`
+  after `run_start()` recorded the turn and prompt, which `project_structure()` keeps for the next request.
+- Fix: `provider_ready()` (disabled provider, preflight; `prepare = TRUE` via `model_prepare()`) serves
+  `provider_stream()` and `gateway_guards()`, which after egress and replay adds `stream_chat_model()` and
+  `provider_credential(register = FALSE)`. A continuation guards its target before any change; a refused new call
+  restores the previous `gptr_last()`. `?peter`; 04 §6.1.2, §7.5.
+- Green: `^gptr-gateway$` PASS 386; `^(gptr-|provider-registry|provider-transform|console-render|catalog-models|
+  agent-run|session-object|subagent-team|copy-gateway|arch-layers|lint-rules)` PASS 4546 (INFRA-04 included). Full
+  suite FAIL 4 PASS 35297 SKIP 64: three load-timing failures in `proc-windows-backpressure` (alone PASS 254) and
+  `console-render` "a failed sub-agent line ...", whose session is now made before it mocks the key away. Lint and
+  check-plans clean.
+- Review: r1 (high) applied. `router_guards()` ran the new readiness checks too, so a keyless router choice raised
+  in `router_call()` and `run_route()` sent the turn to the default model, unchecked for egress (1 request). It
+  keeps egress and replay only (`gateway_guards(ready = FALSE)`): the choice stops with `gptr_error_no_key` after
+  0 requests, as on main. Red FAIL 2 (the router test, rewritten). Green `^gptr-gateway$` PASS 406;
+  `^(gptr-|agent-run$|prompt-compact$|subagent-|provider-registry$|arch-layers$|lint-rules$)` PASS 4183 SKIP 1.
+- Review: r2 (medium) applied. The readiness checks also ran when a session was only built, so a keyless Opus
+  stopped `peter(.run = FALSE)` and the whole `gptr_parallel()` with `gptr_error_no_key`, where main returned an
+  idle session and a team whose member ended `error` (vignette teams-and-background, `?peter` `.run`). Building
+  passes `ready = isTRUE(call$args$run)`; `sdk_check()` (`gptr_step()`, `gptr_wait()`) checks readiness before a
+  run starts, and a member's request does. `?peter` `.run`, `?gptr_wait`; 04 §6.1.2. Red FAIL 1 on 99e12070 (the
+  build and, alone, the team). Green `^gptr-gateway$` PASS 414; `^(gptr-|agent-run$|subagent-|provider-registry$|
+  doc-|console-render$|copy-gateway$|arch-layers$|lint-rules$)` PASS 6542 SKIP 3. Lint and Rd clean.
+- Review: r2 documented, then reversed by r3 (7f1da628). A refused continuation was not refused "before anything
+  changes": `gateway_register()` runs before `gateway_guards()`, so its extension fired on the next turn and its
+  `model =` spec stayed registered. Moving the registration after the guards is not safe: they read it (a `model =`
+  spec, a provider an extension registers; tried, `model = keyless` became `gptr_error_unknown_model`). r2 only
+  documented the leak (`?peter`, 04 §6.1.2 and D-251 said a refused piped call left its extensions, plugins and specs
+  loaded, and the refused-call test pinned it). No longer true: since r3 a refused call undoes its registrations and
+  keeps no filters, and `?peter`, 04 §6.1.2, D-251 and the refused-call test say so (r3 below). Green (r2)
+  `^gptr-gateway$` PASS 415; `^(gptr-|lint-rules$|arch-layers$|zzz)` PASS 1619. Full suite (NOT_CRAN=true, in five
+  filters) FAIL 0 PASS 35496 SKIP 64. Lint and Rd clean.
+- Review: r3 (medium) applied. A piped `model =` provider spec never switched (on main too): the session's spec
+  passed the guards, but `session_set_model()` and `kernel_model_ref()` resolved through `model_canonical(strict =
+  TRUE)`, the global catalog only, so `s |> peter("next", model = corp)` was `gptr_error_unknown_model`, and so was a
+  later `.opts$thinking` on a session started on such a spec. `model_canonical(strict = TRUE, session =)` resolves
+  through `run_model_resolve()` (the session's rank-0 provider next); both pass the session. Red FAIL 1 (the new
+  spec-switch test). Green `^gptr-gateway$` PASS 419; `^(gptr-|session-|agent-|console-commands|ext-|catalog-models|
+  arch-layers|lint-rules)` PASS 6505. Lint and Rd clean.
+- Review: r3 applied. A refused call still changed something: `gateway_register()` ran before the checks with no
+  rollback, so a refused continuation's extension fired on the next turn, its `tools =` spec stayed registered and
+  an earlier spec of the same name it replaced was lost, and any refused call, new ones too, left its `plugins =
+  "-x"` filters in force for the R session. r2's test pinned the leak and passed on its parent 095268e3 (PASS 415).
+  `gateway_register()` returns an undo (`registry_session_mark()`/`registry_session_undo()`: records added removed,
+  records removed put back, extensions forgotten, P17's plugin and extension-file table entries restored), which
+  `gateway_continue_session()` runs when its tools, preset, guards or filters refuse; `gateway_filters_apply(call)`
+  runs after the guards, for new calls too. The refused-call test expects none of it. Red FAIL 4 on d3db8eff. Green
+  `^gptr-gateway$` PASS 425; `^(gptr-|ext-|skill-|mcp-|subagent-|session-|prompt-|copy-gateway|console-commands|
+  arch-layers|lint-rules|zzz)` PASS 8205 SKIP 2. `?peter`, 04 §6.1.2 (`agents =` dropped: a piped team is refused
+  before any registration). Lint and Rd clean.
+- Review: r3 documented (low). Since r2 a piped `.run = FALSE` call skips readiness, so its model, mode and tools
+  apply before any key check: `s |> peter("next", model = opus, mode = "plan", .run = FALSE)` without a key
+  returns, `gptr_step(s)` refuses with `gptr_error_no_key`, and the session stays on Opus in plan mode with no new
+  turn (as on main). `?peter` `.run`, 04 §6.1.2 and D-251 say so. Red: none, a docs unit. Green
+  `^(gptr-gateway|zzz|lint-rules|doc-)` PASS 3014 SKIP 2. Lint and Rd clean.
+- Review: r4 (medium) applied. Since r2 a `gptr_parallel()` member is built with `ready = FALSE`, so nothing prepared
+  its Ollama model: its request ran `provider_ready(prepare = FALSE)`, which refuses a model without discovery
+  evidence, and `gptr_parallel(a = peter("x", model = "ollama/qwen3:1.7b"))` in a fresh process ended `error` ("no
+  current discovery evidence"), where 99e12070 discovered it at build. `run_target()` now prepares the session's
+  model at the run's first request to it (`model_prepare()`, discovery only without current evidence), before it
+  resolves the record the run keeps: a member runs on the discovered record (tool calling, window), not the
+  catalog's guess (`tool_call = FALSE`, no window), which preparing inside `provider_stream()` kept (tried). Each
+  route discovers once: a plain call and `gptr_step()` at their checks (their first request runs `model_prepare()`
+  again and discovers nothing), a member at its first request, whose refusal still ends it `error`; building needs
+  no key. A router's choice is unchanged. `ollama_fixture()` and `local_ollama_server()` moved to helper-ollama.R.
+  Red FAIL 7 on af83cfe4 (the member `error`, undiscovered, without tool calling, then the counts; a member whose
+  server is down ended `gptr_error_not_available`, not the server's `gptr_error_network`). Green `^gptr-gateway$`
+  PASS 433; `^(catalog-models|provider-registry|agent-|subagent-|s1-|gptr-|arch-layers|lint-rules|
+  copy-gateway|prompt-compact)` PASS 6591 SKIP 1. 04 §6.1.2; D-251. Lint clean.
+- Review: r5 applied. r3's undo did not cover every refusal, so r3's bullet above, `?peter` and 04 §6.1.2 said
+  more than the code did. A refusal while the call registered (an unknown plugin name, after an extension it loaded
+  or beside a `plugins = "-x"` filter) came before the undo existed: its extension fired on the next turn and its
+  tools stayed. The `skills =` preload, `.opts$images` and prompt_secrets "ask" refusals came in `gateway_input()`,
+  after a continuation switched model and mode with its filters applied, and after a new call became
+  `gptr_last()`: the next turn ran on the refused call's model with its hook. `gateway_undo()` marks the session's
+  registrations and the R session's filters before the call registers; `gateway_run()` registers inside the
+  `tryCatch` of `gateway_checks()`, which now holds every refusal before anything switches: a continuation's
+  tools, presets and model, the guards, images on the model the call runs, `background = TRUE` without later, the
+  filters, the preloads and, last, the prompt's secrets. Red FAIL 7 on 8185ebdc (the new test: model, mode and
+  entries switched, the filter and 'probe' kept, the next turn on corp with the hook, a new call's
+  `gptr_last()` and filter). Green `^gptr-gateway$` PASS 446; `^(gptr-|agent-|artifact-app|catalog-models|
+  console-abort-stream|console-repl|console-commands|eval-format|ext-|doc-replay|env-snapshot|mcp-|s1-|s11-|
+  prompt-|provider-message|provider-registry|session-|subagent-|skill-|tool-namespace|tool-r$|copy-gateway|
+  arch-layers|lint-rules|zzz)` PASS 14237 SKIP 2; `^(gptr-gateway|doc-|copy-gateway|lint-rules|zzz)` PASS 3056
+  SKIP 2. `?peter`, 04 §6.1.2, D-251. Lint and Rd clean. The work in progress found uncommitted on the branch was
+  this fix; r5 finishes it (the prompt check moved last, the test names each refusal) and pushes r3 and r4 with it.
+- Deviations: D-251 (extended). From the plan: the continuation guards its target whether or not it changes and
+  `gateway_run()` guards only a new session (one check per switch); `session_new()` sets `gptr_last()`, so a
+  refused new call restores it.
+- Open: a new call's unknown tool name is refused when its prompt freezes, at the run's start (extension and MCP
+  tools register at `session_start`), so the refused session still becomes `gptr_last()` (status `error`, no turn;
+  04 §6.1.2 claims only a continuation's); a router choice refused for egress or replay still falls back through
+  `route_default()`, which checks no egress on the default model (r1, on main too: L3's `run_route()` cannot call
+  the L6 guards, so closing it changes IC-69's fallback; the models group edits `run_route()` in parallel).
+
+### sessions-4 - Say when a continued session has no kept workspace
+- Red: FAIL 2 in `^gptr-gateway$` (PASS 387; findings 97, 134, 143): `s = f(); s |> peter("Report z.")` for a
+  session started inside `f()` (`s$envir` NULL) evaluated in the caller's environment and said nothing.
+- Cause: R2 (`home_keep()`) never keeps a function frame, and `gateway_continue_envir()` fell back to the caller
+  frame silently; `gptr_fork()` already informs for the same condition.
+- Fix: without `envir =`, a session with no kept home whose `home_label` is a function frame informs once
+  (`home_not_kept`) when `home_label(call$envir)` differs, naming both and `envir = new.env()`; a pipe inside the
+  same function stays silent. `?session-accessors` (`envir` NULL inside a function, `cost` NA without prices),
+  `?peter` `envir`; 04 §2.2, §5.1, IC-40.
+- Green: `^gptr-gateway$` PASS 392; `^(gptr-|session-|subagent-|doc-|copy-gateway|console-render|agent-run|env-|
+  arch-layers|lint-rules)` PASS 7623 SKIP 3. Full suite FAIL 5 PASS 35302 SKIP 64, all load timing in
+  `proc-windows-backpressure` (alone PASS 254). Lint, Rd and check-plans clean.
+- Deviations: D-251 (extended). From the plan: `?peter` `envir` also says a function frame, `environment()`
+  included, is not kept (finding 143).
+- Open: labels compare by name, so a session made in one call of `f()` and continued in another call of `f()`
+  stays silent; the sheet's `s$envir` line is entry S07.
+
+### sessions-5 - Warn when a misspelled peter() argument becomes context
+- Red: FAIL 2 in `^gptr-gateway$` (PASS 392; finding 144): `peter("x", mo = "plan", model = fake)` warned nothing
+  (its message check then errored); `mo`, `mod`, `tool` and `.opt` were attached as context in silence.
+- Cause: every formal follows `...`, so only exact names match; `select_prompt()` and `gateway_context_items()` take
+  any other named dot as context, and nothing compared its name with the formals.
+- Fix: `warn_partial_names()` (gptr-capture.R), called after `select_prompt()`, reads facts only: a named context dot
+  whose name is a prefix of a formal, or the formal plus `s`, and whose value fits it (character, plain list,
+  function or spec) warns `partial_name`, naming each formal; the dot stays context. `?peter` dots; 04 §2.2, §6.1,
+  §6.1.5.
+- Green: `^gptr-gateway$` PASS 401; `^(gptr-|session-|subagent-|doc-|copy-gateway|console-|agent-|env-|arch-layers|
+  lint-rules)` PASS 9741 SKIP 4. Full suite (NOT_CRAN=true) FAIL 0 PASS 35316 SKIP 64. Lint, Rd and check-plans
+  clean.
+- Deviations: D-251 (extended). From the plan: names of one character stay silent, as the verifier advised, since
+  `a = list(1)` or `p = "a title"` would otherwise warn as `agents =`, `prompt =` or `plugins =`.
+- Open: an unbound bare value (`mo = auto`) still stops in capture with "object 'auto' not found", not naming `mo`
+  (the verifier's optional `dot_get()` change, not planned).
+
+### sessions-6 - Charge nothing for a request that was rejected or never connected
+- Red: FAIL 13 in `^agent-run$` (PASS 661; findings 47, 95, 135): on a fake priced at $4/$20 per M, a 401 recorded
+  2626 estimated input tokens and $0.011; a 529 under `budget = list(cost = 0.001)` ended as
+  `gptr_error_budget_cost` after 1 request, not `gptr_error_overloaded` after 3; a refused connection to
+  127.0.0.1:9 on the real HTTP transport did the same, not `gptr_error_network`; the fake 400 and overflow 400 rows
+  were estimated, and `run_overflow_tokens()` read an all-zero record as 0.
+- Cause: `run_response()` gave every reply without reported usage the whole prompt's estimate (`run$tokens_est`,
+  `estimated = TRUE`), failed requests included; `usage_row()` priced it at the catalog rate, and `run_used()`
+  counted it before the retry's `budget_check()`.
+- Fix: `run_unbilled()`: a failed reply with no content whose request was rejected (`err_status() >= 400`) or never
+  received (`err_class()` `network` or `timeout_connect`) records `usage_new(input = 0, output = 0)`, chosen inside
+  the unreported branch (an all-zero record reads as unreported). `run_overflow_tokens()` also requires
+  `run_usage_reported()`. 04 §4.3 `estimated` (message and row).
+- Green: `^agent-run$` PASS 674. Full suite (NOT_CRAN=true) FAIL 6 PASS 35323 SKIP 64, all load timing in
+  `proc-windows-backpressure` (`^(agent-run|proc-windows-backpressure)$` PASS 928). Lint and check-plans clean.
+- Deviations: D-251 (extended). From the plan: the optional loopback check is the last part of the new test (port 9,
+  `gptr.max_attempts = 1`); a priced 500 after 2 deltas stays estimated with cost > 0.
+- Open: acceptance is not tracked (finding 135's `stream_http()` route, not chosen), so a stream the provider took
+  and then lost (curl or adapter `network` class) before any content block also counts zero. A zero row of a model
+  without prices is still "unknown cost" (`usage_row()` prices nothing without a tier). `turns` still counts each
+  retry, as documented.
+
+### sessions-8 - A token-budget stop names the next request, and an extension is checked again
+- Red: FAIL 8 in `^(session-budget|agent-run)$` (PASS 887; findings 75, 81, 137, 188): `budget = list(tokens =
+  10)` stopped with "the tokens budget of this call (10) is reached" and no `estimate` in the condition, entry or
+  event; with "Extend" answered, the request went out (1 request, status idle) and no second question came; the
+  extend question named no usage.
+- Cause: `budget_check()` stops when `used + estimate > limit` but returned only `used`; `run_stop_budget()` and
+  `run_budget_extend()` always said "is reached"; `run_request()` sent after an extension without checking again.
+- Fix: every hit carries `estimate`; `run_budget_reason()` words the stop and the question (a token hit with used <
+  budget: "the next request (~N tokens) would exceed the tokens budget of this call (B; used U)", else "is reached
+  (used U)"). The hit is the `gptr.budget` entry and the condition's data; `budget_exceeded` adds `estimate`.
+  `run_request()` asks again until the request fits or the run stops. 04 §4.6, §7.6, §10.4, IC-66.
+- Green: `^(session-budget|agent-run|ext-events)$` PASS 1095; `^(session-|agent-|ext-|gptr-|prompt-compact|
+  subagent-|console-render|arch-layers|lint-rules)` PASS 7522 SKIP 1. Full suite (NOT_CRAN=true) FAIL 0 PASS
+  35342 SKIP 64. Lint and check-plans clean.
+- Deviations: D-251 (extended). From the plan: every hit kind carries `estimate` (one shape for the entry, event and
+  condition), and the two extend-question tests now pass `used`.
+- Open: the estimate is uncalibrated (finding 75 in passing: 3.9k against 5.9k sent on Bedrock Claude), so the
+  reservation can still run low; `gateway_signal()`'s fallback for a session without a stored condition carries no
+  `estimate`.
+
+### sessions-9 - Say that budget turns count model requests
+- Red: none, a docs unit (findings 78, 145, 162, 163, 182, 197). The new pin "budget turns and max_turns count
+  model requests; session$turns counts prompts" passes on the base (`^gptr-gateway$` PASS 405): three scripted `r`
+  calls under `budget = list(turns = 2)` or `.opts = list(max_turns = 2L)` stop after 2 requests with `s$turns` 1.
+- Cause: `run_used()` counts usage rows and `loop_at_limit()` loop requests, while `s$turns` counts prompts
+  (`run_append_messages()`); `?peter` said only "limits for this call" and 04 §6.1 named no unit.
+- Fix: `?peter` `budget`: `turns` counts model requests, retries and sub-agents' included, `session$turns` prompts;
+  `.opts`: `max_turns` caps this call's model requests. 04 §6.1's `budget` and `.opts` rows name the unit.
+- Green: `^gptr-gateway$` PASS 405; `^(gptr-|doc-|copy-gateway|session-budget|arch-layers|lint-rules)` PASS 4102
+  SKIP 2. Lint, Rd and check-plans clean.
+- Deviations: none (no contract change). From the plan: the spec rows also name the unit; the pin's second
+  provider is `fake2`, because a bare `model = fake` names the registered provider `fake`, not the variable.
+- Open: `gptr_step()`'s "model turns" and the `s$turns` accessor keep their wording (the doc group's sessions-26);
+  the sheet's lines are S06 and S08.
+
+### sessions-10 - Tell the caller when a cost limit meets an unpriced model
+- Red: FAIL 3 in `^session-budget$` (PASS 223; findings 133, 158): `budget_near()` under `budget = list(cost = 1)`
+  with a request of cost NA signalled nothing, and `peter(..., budget = list(cost = 0.01))` on a registered fake
+  without `prices` ran 2 requests to `idle`, `s$cost` NA, with no notice (the verifiers' live repro: Versa
+  `gpt-5.6-sol` under `cost = 1e-6` the same; registered with prices, it stopped after 1 request).
+- Cause: `run_used()` sums the cost with `na.rm = TRUE`, so an unpriced request counts nothing (D-025 item 2: failing
+  closed would stop every unpriced model under the default 5 USD); nothing told a caller whose own limit could not
+  be enforced, only the footer's "unknown cost".
+- Fix: `budget_unpriced()`, called at the end of `budget_near()`: when the run's own `opts$budget$cost` is set and a
+  usage row since `run$usage_start` has NA cost, `gptr_inform()` once (`gptr_message_budget_unpriced`, fields
+  `budget`, `model`; "cost_unknown" recorded in `near` of the run, or of the team or fan-out pool so members say it
+  once). The settings default says nothing. `?peter` `budget`; 04 §2.2 messages, §6.1 `budget` row, IC-66.
+- Green: `^session-budget$` PASS 231; `^(session-budget|gptr-gateway|agent-run|ext-events|arch-layers|lint-rules)$`
+  PASS 1602. Full suite (NOT_CRAN=true) FAIL 0 PASS 35358 SKIP 64. Lint, Rd and check-plans clean. Live (Versa
+  `gpt-5.6-sol`, `budget = list(cost = 1e-6)`): 2 requests, status idle, cost NA, exactly one notice.
+- Deviations: D-251 (extended), pointer under D-025. From the plan: the team or fan-out pool holds the record, so a
+  call's members say it once, not once each; the condition carries `budget` and `model`.
+- Open: the notice prints a limit under $0.00005 as "$0.0000" (`format_cost()`, cosmetic); `gptr_provider()` still
+  does not document `prices` (the verifier's docs suggestion, not planned); no `budget_unenforced` event (not
+  planned); the sheet's budget line is S08.
+
+### sessions-11 - A continued team or fan-out shows its own synthesis in $text and $value
+- Red: FAIL 11 in `^subagent-team$` (PASS 353; findings 77, 116, 120, 170, 172): after NS-6's `reviews |>
+  peter("Reconcile ...")`, `reviews$text`, `format()` and `print()` still gave the joined `### stats ...` reports;
+  a `gptr_parallel()` team and a `parallel = 2` fan-out continued with "Combine." kept the reports (the fan-out its
+  named chr), and `$value` stayed the members' list although the synthesis turn ran `gptr_return(42)`.
+- Cause: `session_text()` and `session_value_get()` chose by kind alone; the continuation's answer and value sit in
+  the container's `last_text` and `values`, which only NS-6's internal `session_data()` read checked.
+- Fix: `session_text()` returns `last_text` once set, else joins or lists; `session_value_get()` delegates to the
+  children only while the container has no values. `?session-accessors`, `?gptr_parallel` (first paragraph), the
+  vignette's two paragraphs; 04 §5.1 `text` and `value` rows, §6.5 `gptr_parallel()`, 03 §4.1.6.
+- Green: `^subagent-team$` PASS 364; `^(subagent-|session-|doc-|ckpt-|console-render|gptr-gateway|copy-gateway|
+  arch-layers|lint-rules|vignette)` PASS 6287 SKIP 3. Full suite (NOT_CRAN=true) FAIL 0 PASS 35375 SKIP 64.
+  Lint, Rd and check-plans clean.
+- Deviations: D-251 (extended). From the plan: rewinding the synthesis turn resets `last_text` (the reports come
+  back to `$text`) but not `values`, so `$value` keeps that turn's value, as `gptr_rewind()` does for every session
+  (measured: a plain session rewound to turn 0 keeps `$value` 42). One test holds both twins and the value case. A
+  replay into a live team (`replay_mark()`) sets `last_text` to the recorded joined reports, so `$text` reads alike.
+- Open: `doc_block_lines()` still writes a continued team's turn as the team block (finding 170); a blocked or failed
+  member's section of the joined `$text` has no status note (findings 77, 120); rewinding keeps `values` for every
+  session. Finding 120 part 1 is the sheet's S05, S35 and S43 (sessions-21).
+
+### team-2 - Printed teams and fan-outs show each child under its name, and mark a child that did not finish
+- Red: FAIL 5 in `^subagent-team$` (PASS 374; finding 177): `print()` and the notebook repr of `peter("Sum.",
+  list(a = 1, b = 2), parallel = 2)` showed "A report." twice with no `### a (fake/fake-1)` heading (`knit_print`
+  too, an expectation later dropped); a `gptr_parallel()` team whose member `ko` failed with a 400 gave an empty
+  `### ko (fake/fake-1)` section in `$text` and in print.
+- Cause: `print.gptr_session()` and `doc_session_repr_text()` passed a fan-out's named chr through `msg_verbatim()`
+  and `paste()`, which drop the names (and left out a child without an answer); `session_text()`'s team branch
+  wrote no status.
+- Fix: `session_child_reports(d)`, the team branch with `(ended with status <status>)` for a child that did not end
+  idle (the marker of `subagent_reports_block()`), serves a team's `$text` and `session_display_text()`, which
+  `print()` and the repr use: a fan-out without its own answer (sessions-11's rule) shows the headings, else
+  `$text`. A fan-out's `$text`, `format()` and `as.character()` stay the named chr. `?print.gptr_session`,
+  `?session-accessors`, `?gptr_parallel`, the vignette's team and fan-out paragraphs; 04 §5.1 `text` row and
+  `print` method, §6.5 `gptr_map()`, 03 §4.1.6.
+- Green: `^subagent-team$` PASS 378; `^(subagent-|session-|doc-|ckpt-|console-render|gptr-gateway|copy-gateway|
+  arch-layers|lint-rules|vignette)` PASS 6301 SKIP 3. Full suite (NOT_CRAN=true) FAIL 0 PASS 35389 SKIP 64. Lint,
+  Rd and check-plans clean.
+- Deviations: D-251 (extended). From the plan: `knit_print` is unchanged, because doc-knitr.R (L5) may not call
+  session-object.R (L3) internals (`arch-layers` failed on the first attempt), so a knitted fan-out still joins its
+  answers without names. The failed member gets a 400 (not retried) in place of the plan's 529. The display helper
+  handles only the fan-out, since a team's `$text` already is its reports.
+- Open: `knit_print` of a fan-out (above; it needs a contract edge or an SDK verb); a fan-out's headings repeat the
+  one model its children share (kept for one form with the team).
+
+### tools-2 - A readonly session stays readonly outside plan mode
+- Red: FAIL 3 in `^perm-plan$` (PASS 110; finding 9): `peter("x", model = fake, mode = auto, tools = readonly)`
+  then `s |> peter("again")`: each of the 3 requests offered `read`, `r` and carried "New tools are available from
+  now on: edit, write." (measured on HEAD).
+- Cause: `plan_on_agent_start()` (P11's `agent_start` hook) called `plan_add_tools()` at every run outside plan
+  mode of a session frozen with `readonly`; that reads the configured preset (`readonly` as `standard`) and declared
+  `edit` and `write`. Plan mode here freezes the configured preset, so the hook only widened a readonly choice.
+- Fix: the hook and its registration are gone; `plan_execute()` (Execute in the plan menu) still calls
+  `plan_add_tools()`. The menu test drops its two `plan_on_agent_start()` lines. 03 §6.8 says so.
+- Green: `^perm-plan$` PASS 112; `^(perm-|prompt-|gptr-gateway|mcp-server|ext-|bridge-sh|gptr-capture|gptr-config|
+  arch-layers|lint-rules)` PASS 5961 SKIP 2; `^(tool-r|session-object)$` PASS 653. Full suite (NOT_CRAN=true)
+  FAIL 0 PASS 35395 SKIP 64. Lint, Rd and check-plans clean.
+- Deviations: D-251 (extended). As planned; the scripted `write` still runs and creates `ro.txt` (measured), which
+  the tools group's tools-1 refuses ("Tool write not found"), a post-merge check. Merged with tools-1, the test
+  asserts that refusal and no `ro.txt`: `^perm-plan$` PASS 125.
+- Open: plan mode freezes the configured preset, not `readonly` as 03 §6.8 and §10.8 say (finding 9, in passing);
+  `r` under `readonly` can still change files outside plan mode (by design; the sheet's S29).
+
+### sessions-12 - The plan go-ahead notice names a call that runs the whole plan
+- Red: FAIL 3 in `^perm-plan$` (PASS 113; findings 86, 96, 166): with Execute answered "edits", `peter("Create
+  f.txt", model = fake, mode = "plan")` printed "... gptr_step(gptr_last()) runs the plan."; evaluating that call
+  left the session `running` after 2 of 4 fake requests (write done, read and the answer not).
+- Cause: `plan_execute()` named `gptr_step()`, whose default `turns = 1L` returns after one model turn; a plan that
+  calls a tool needs at least two, and the leftover run then advanced inside the next unrelated `peter()`.
+- Fix: the notice reads "Queued the go-ahead in session <id> (mode <m>): gptr_wait(gptr_last()) runs the plan."
+  The new test evaluates the call the notice prints and expects `idle`, 4 requests and `f.txt`.
+- Green: `^perm-plan$` PASS 116; `^(perm-|gptr-sdk|gptr-gateway|console-|arch-layers|lint-rules)` PASS 3705
+  SKIP 1. Full suite (NOT_CRAN=true) FAIL 0 PASS 35399 SKIP 64. Lint and check-plans clean.
+- Deviations: none (the notice text is in no contract; P11's plan prose keeps the old call as history).
+- Open: the reactor still pumps any unsettled run inside a later call, and the spinner `gptr_step()` leaves on an
+  unsettled run is not cleared (follow-ups); the go-ahead's missing `<mode>` note is sessions-13, the hand-off
+  sessions-14.
+
+### sessions-13 - The plan go-ahead tells the model the chosen mode
+- Red: FAIL 1 in `^perm-plan$` (PASS 119; finding 198): with Execute answered "edits", the go-ahead request
+  (`fake_requests(fake)[[2]]`) ended with the user message "Go ahead with the plan above." carrying no `<mode>`
+  block, so the only one the model saw was the plan run's `<mode name="plan">`.
+- Cause: the queued go-ahead starts through `sdk_launch()` -> `gateway_run_start(s, NULL, ...)`, which renders no
+  turn context, and `session_set_mode()` on an idle session leaves the `<mode>` block to the next user message
+  (04 §7.6); that message was the go-ahead, enqueued without blocks.
+- Fix: `plan_execute()` enqueues the go-ahead with P07's `context.turn` blocks (rendered after the mode switch and
+  the plan's removal from the store), so it carries `<mode name="edits">` with the edits body, as a continuation
+  turn would. The new test checks the last message of request 2: role `user`, the go-ahead text, one `mode` block
+  named `edits`.
+- Green: `^perm-plan$` PASS 120; `^(perm-|arch-layers|lint-rules|gptr-sdk|gptr-gateway|console-|prompt-context|
+  agent-run|session-object)` PASS 5003 SKIP 1. Full suite (NOT_CRAN=true) FAIL 0 PASS 35403 SKIP 64. Lint and
+  check-plans clean. Live m$gpt, Execute "edits" then `gptr_wait(gptr_last())`: HEAD refused in 1 of 2 runs
+  ("the session remains in read-only plan mode"); the fix wrote and read back the file in 2 of 2.
+- Deviations: none (04 §7.6 already says the next user message carries the new `<mode>` block). Plan deviation:
+  the planned `prompt_pending_add(s, msg_operator("mode", mode_block_text(s, mode)))` in `perm-plan.R` (L4) fails
+  `test-arch-layers.R` (L4 reaches L3 only through the kernel SDK and services; both helpers are L3), so the
+  go-ahead carries the turn blocks through the declared `context.turn` service instead.
+- Open: any other follow-up queued on an idle session after a mode change still starts without turn context (the
+  general `sdk_launch()` gap); the plan hand-off is sessions-14.
+
+### sessions-14 - Document the plan hand-off to the next call
+- Red: none, a docs unit (findings 90, 171). The hand-off is the designed IC-56 one, kept by safe-19 for the
+  two-statement script idiom and pinned by `test-perm-plan.R`'s hand-off and discard tests; only `?gptr_options`
+  named it ("hand a plan from `plan` mode to the next call").
+- Cause: `?peter` `mode`, the execution-model vignette and the sheet's plan row describe plan mode only as
+  read-only.
+- Fix: `?peter` `mode`, the vignette's permissions paragraph (`.Rmd` and `.Rmd.orig`) and `?gptr_options`
+  `gptr.plan_handoff`: the plan goes once, as a `<plan>` block, to the next top-level `peter()` call from the same
+  environment, within an hour and in another mode, whatever that call asks; another call first, or a next call
+  inside a loop or a run, discards it; the option turns it off.
+- Green: `^(perm-plan|gptr-gateway|utils-options)$` PASS 601; `^(zzz|lint-rules|arch-layers)$` PASS 235. Lint and
+  Rd clean.
+- Deviations: none (no contract change; 03 §6.8.5 already says it).
+- Open: with `gptr.plan_handoff = FALSE` `plan_capture()` still stores a record and the next call prints its discard
+  notice, and under `gptr.quiet` the hand-off prints no notice (finding 90, follow-ups); the sheet's row is S34.
+
+### sessions-15 - Plan mode runs console output such as cat()
+- Red: FAIL 3 in `^(perm-classify|perm-plan)$` (PASS 1026; finding 70): the allowlist refused `cat('a\n')`,
+  `base::cat(nrow(df), file = stdout())`, `writeLines('b')`, `dput(1:3)` and `do.call(rbind, lapply(...))`, and the
+  fake's plan-mode `r` call `cat('a\n')` got "Permission denied: not known to be read-only in plan mode: cat.",
+  though `gptr_risk()` scores each 0.
+- Cause: `risk_plan_disallowed()` admitted only level-0 `read` rows; the rows of `cat`, `writeLines` and `dput`
+  record their worst case (`file_write` through `path_arg`), `do.call`'s is `dynamic`, and the scan's verdict per
+  call (a console target, a literal function: no flag) was not read.
+- Fix: a `file_write` row with a path argument, or a `risk_lookups` function with a `dynamic` row, passes when the
+  scan flags none of its calls; the path row also must never be used as a function value (`risk_scan()` now returns
+  `values`, the names `use_value()` saw), whose arguments the scan cannot see. The interactive-console vignette
+  (`.Rmd`, `.Rmd.orig`) says "R calls known to be read-only", not "level-1 R exploration". 04 IC-54.
+- Green: `^(perm-classify|perm-plan)$` PASS 1029; `^(perm-|ckpt-|tool-r|arch-layers|lint-rules|zzz)` PASS 2558.
+  Full suite (NOT_CRAN=true) FAIL 0 PASS 35419 SKIP 64. Lint and check-plans clean.
+- Deviations: D-251 (extended). From the plan: the value rule and its two tests, because the planned rule admitted
+  `lapply(1, cat, file = 'x.txt')` and `do.call(cat, list('a', file = 'x.txt'))`, which the scan scores 0 and
+  which write; a lookup also needs its `dynamic` row.
+- Open: `gptr_risk()` scores those value uses 0, so `manual` runs them unasked (a slot function is read with
+  computed positional arguments, which `cat()`'s `...` takes, leaving `file` at its console default; a classifier
+  follow-up); `cat('a', file = 'nul')` counts as the null device on every OS; getting-started still says "level-1
+  R exploration"; unlisted level-1 functions and helpers the code defines stay refused (by design).
+
+### sessions-17 - Read a program given by its path as that program in rules
+- Red: FAIL 20 in `^perm-(rules|gate)$` (PASS 272; findings 42, 49): `r(sh:rm *)` and `r(category:file_delete)`
+  matched none of `peter$sh('/bin/rm -rf build')`, its argv form, `system()`, `system2()`, `/usr/bin/env rm`,
+  `command /bin/rm`, `./rm` and `C:\bin\rm.exe` (16), and the fake's `peter$sh('/bin/rm -rf build')` ran in auto
+  and yolo and deleted `build/` (4).
+- Cause: `risk_cmd_simple()` read a program given by its path as one level-3 `process` row with the path in its
+  text, and kept only the level-4 rows (`later()`) of its name's reading.
+- Fix: a literal path to a known program (`risk_cmd_known()`, `.exe` stripped) adds that program's whole reading
+  beside the `process` row (so `/usr/bin/env` alone carries `env`'s `secret` row too); a computed or unknown
+  program keeps `later()`. Levels are unchanged.
+- Green: `^perm-(rules|gate)$` PASS 292; `^(perm-|bridge-|agent-dispatch|tool-r|ckpt-|arch-layers|lint-rules|zzz)`
+  PASS 3349 SKIP 12. Full suite (NOT_CRAN=true) FAIL 0 PASS 35455 SKIP 64. Lint and check-plans clean.
+- Review: r1 (low) applied. `.exe` was stripped case-sensitively before `tolower()`, so `C:\bin\RM.EXE -rf build`
+  was not a known program and kept `later()`: `r(category:file_delete)` and `r(sh:RM *)` missed it (and a bare
+  `RM.EXE` was one `process` row). `risk_cmd_name()` strips it in any case at the four sites. Red FAIL 2. Green
+  `^perm-` PASS 1345; `^(bridge-|agent-dispatch$|tool-r$|ckpt-|arch-layers$|lint-rules$|zzz$)` PASS 1816 SKIP 12.
+  Lint and check-plans clean.
+- Deviations: D-251 (extended). From the plan: the rules test also covers `./rm` and `C:\bin\rm.exe`, which
+  the decision names. No live check (the fake run is the gate end to end).
+- Open: such a call whose reading is flagged gets no `[a]lways` rule (no one `sh:` glob covers the path and the
+  name); `peter$bg` is sessions-18; a computed command (`cmd = "rm -rf build"; peter$sh(cmd)`) is nested-1. `sh:`
+  globs match a name as written, so `r(sh:rm *)` misses a bare `rm.exe` or `RM.EXE` and `C:\bin\RM.EXE` (`RM`).
+
+### sessions-18 - Classify peter$bg() commands like peter$sh()
+- Red: FAIL 9 in `^perm-(rules|gate|classify)$` (PASS 1198; finding 45): `r(sh:rm *)` deny and ask matched neither
+  `peter$bg('rm -rf build')` nor its argv form, `r(sh:python3 -m*)` did not allow `peter$bg('python3 -m
+  http.server 8000')`, `[a]lways` offered `r(sh:peter$bg*)`, `gptr_risk("peter$bg('rm -rf ~')")` was 3, and the
+  fake's `peter$bg('rm -rf build')` ran in auto and yolo and deleted `build/` (4).
+- Cause: `risk_member_flags()` returned one `peter$bg` row at level 3 and never read the command.
+- Fix: `bg` folds its `cmd` as `sh` does: a literal command gets `risk_command()`'s rows plus a level-3 `process`
+  row carrying the command text; a computed one the `dynamic` level-3 row.
+- Green: `^perm-(rules|gate|classify)$` PASS 1207; `^(perm-|bridge-|agent-dispatch|tool-r|ckpt-|arch-layers|
+  lint-rules|zzz)` PASS 3359 SKIP 12. Full suite (NOT_CRAN=true) FAIL 0 PASS 35465 SKIP 64. Lint and
+  check-plans clean.
+- Deviations: D-251 (extended); 04 §9.4 `bg` risk cell amended. From the plan: the level-4 case is an expectation
+  after the G5 table, which keeps its 46 cases. No live check (the fake run is the gate end to end).
+- Open: `peter$script()` still offers `r(sh:peter$script*)`, which would allow every script (finding 45, no
+  unit); a computed command is nested-1.
+
+### nested-1 - Deny and ask rules see the real command of a nested peter$sh() or peter$bg() call
+- Red: FAIL 10 in `^perm-gate$` (PASS 144): under `r(sh:rm *)` deny, the fake's `cmd = paste('rm', '-rf',
+  'build'); peter$sh(cmd)` and `peter$bg(cmd)` ran in auto and yolo and deleted `build/` (8); under the ask rule
+  in auto nothing was asked and `build/` went (2).
+- Cause: the static row is `peter$sh(<code the code computes>)`, which no `sh:` glob matches; `dispatch_nested()`
+  re-checked the call only above the outer call's approved level (an in-project `rm` is 3, as the outer call), and
+  then as tool `sh`, which `r(...)` rules never match.
+- Fix: `nested_rules()`: a nested `sh` or `bg` call meets the registered `rules` policy as the literal call
+  `peter$sh("rm -rf build")` (its risk through `call_risk()`, the `risk.classify` service), whatever its level; a
+  deny refuses it with the rule's text, an ask goes through `perm_ask()`. No allow rules; skipped under
+  `gptr.unsafe_no_permissions`, as `perm_check()` is.
+- Green: `^perm-gate$` PASS 154; `^(perm-|bridge-|agent-dispatch|tool-r|ckpt-|arch-layers|lint-rules|zzz)` PASS
+  3370 SKIP 12. Full suite (NOT_CRAN=true) FAIL 0 PASS 35476 SKIP 64. Lint and check-plans clean.
+- Review: r1 (medium) applied. The question offered `[a]lways r(sh:rm -rf*)`, but `perm_on_remember()` recomputes
+  from tool `sh` and stored the allow rule `sh` (every nested shell call the level gate asks about; in project
+  settings for `[p]`), and allow rules are not applied here anyway. `nested_rules()` clears `suggested_rule` before
+  `perm_ask()`, so an ask rule asks every time and offers no `[a]lways`. Red FAIL 1 (an `a` answer: allow `sh`).
+  Green `^perm-gate$` PASS 156; `^(perm-|agent-dispatch$|bridge-|tool-r$|console-ui$|arch-layers$|lint-rules$)`
+  PASS 2428 SKIP 12. Lint and check-plans clean. 03 §6.8.4 and 04 §7.6 say so.
+- Deviations: D-251 (extended); 03 §6.8.4 and 04 §7.6 `dispatch_nested()` amended. From the plan:
+  `perm_policy_rules()` and `risk_command()` are L4, which L2's `agent-dispatch.R` may not call (arch-layers), so
+  the registry's `rules` record is asked through `ext_policy_decide()` and the command is read through the literal
+  call (the reading of sessions-17 and sessions-18, `bg`'s `process` row included). No live check (the fake run is
+  the gate end to end).
+- Open: a command computed at run time and run through base `system()` (`cmd = paste("rm", "-rf", "build");
+  system(cmd)`) still escapes a deny `r(sh:rm *)` in auto and yolo (fake run: `build/` deleted in both): its static
+  row is `dynamic` (level 3, as is `system2("rm", a)`), which no `sh:` glob matches, and nested-1 re-checks only
+  nested `peter$sh` and `peter$bg` calls. No code change (the gate is advisory); `?gptr_security` ("What the gate
+  cannot do") names the limit. Docs: `^(zzz|lint-rules|doc-|gptr-config$)` PASS 3106 SKIP 2; check-docs 0
+  problems; release doc tests PASS 49. Lint and check-plans clean.
+
+### sessions-22 - Keep a resumed session's mode
+- Red: FAIL 5 in `^session-store$` (PASS 274; findings 148, 153): `peter(mode = "plan")`'s `gptr.frozen` held no
+  mode, and its path rebuilt as `auto` under an `auto` setting; an `auto` session as `manual` under `manual`;
+  `gptr_resume()` of the plan session's file came back `auto`; a stored `mode_change` to `"bogus"` was taken.
+- Cause: nothing recorded a session's starting mode (not the header, not `gptr.frozen`, no `gptr.mode_change` at
+  creation); `rebuild_mode()` took the last `gptr.mode_change`, else the resuming process's `mode` setting.
+  `path_fields()` (replay cut) used the same function.
+- Fix: `prompt_frozen_entry(frozen, mode)` and `freeze_fallback()` write `mode = d$mode` into `gptr.frozen`;
+  `rebuild_mode()` walks the active path in order and keeps the last `gptr.frozen` `mode` or `gptr.mode_change`
+  `to` that is one of `session_modes` (read with `[[`: `data$mode` partially matches `model`), else the setting.
+- Green: `^session-store$` PASS 279; `^(session-|agent-run|prompt-|ckpt-rewind|gptr-gateway|console-commands|
+  doc-replay|subagent-)` PASS 5457 SKIP 1. Two `Rscript` processes on one `.gptr/` project (fake provider): a
+  `plan` session resumed under `gptr_config(mode = "auto")` reports `plan`. Full suite (NOT_CRAN=true) FAIL 0 PASS
+  35482 SKIP 64. Lint and check-plans clean.
+- Deviations: D-251 (extended); 04 §4.6 `gptr.frozen` row and §6.5 `gptr_resume()` amended; `?gptr_sessions`.
+  From the plan: the in-process rebuild from the file is the test (no callr test); the 1.0.0 user message's `mode`
+  context block is not read, so such files keep the setting fallback.
+- Open: the second half of 148 is designed (without `.gptr/` the store is `tempdir()`); the `/resume` row says so
+  with the sheet (entry S12). Whether an imported (foreign) file may restore `yolo` (possible through
+  `gptr.mode_change` before). A fork cut before a later mode change of its source runs in the source's mode
+  (`edits`), but its file records the mode at the cut (`plan`), which its own rebuild reads (measured).
+
+### sessions-24 - Say that gptr_init() asks the trust question
+- Red: none, a docs unit (finding 46). In a pty `gptr_init(".")` itself asks "Trust this project (its settings,
+  extensions and MCP servers)? [y/N]"; pasted as one block, the next line is taken by that question and dropped
+  by `readline_answer()`'s 0.1 s guard (IC-75), so `gptr_trust(".", trust = TRUE)` never runs (verifier's
+  reproduction).
+- Cause: the configuration vignette (`.Rmd` and `.Rmd.orig`) showed `gptr_init()`, `gptr_trust()` and two
+  `gptr_config()` lines as one block, without the question `gptr_init()` asks when `gptr_can_prompt()`.
+- Fix: three blocks: `gptr_init()` alone, with "at the console it asks whether to trust the project; the default is
+  No" and "run that line on its own"; `gptr_trust(path, trust = TRUE)` for a script, which records no decision, or
+  to change an earlier answer, read back as `TRUE`, `FALSE` or `NA`; then the `gptr_config()` lines.
+- Green: `^(zzz|lint-rules|doc-)` PASS 2589 SKIP 2; the vignette renders. Lint and check-plans clean.
+- Deviations: none (no contract change; `?gptr_init` already says it asks). From the plan: no
+  `gptr_init(trust =)` argument.
+- Open: a recorded No is silent afterwards, unlike the undecided notice; `readline_answer()` drops a pasted line
+  without saying so (finding 46, follow-ups); the sheet's card is S03.
+
+### gateway-1b - A refused call does not announce its registry filters (2026-10-23)
+- Last validation of gateway-1 (low). Red: FAIL 2 in `^gptr-gateway$` (PASS 480): a continuation with
+  `plugins = "-builtin:memory"` refused for an unknown `skills =` preload printed "The filters -builtin:memory
+  apply to every later peter() call of this R session ..." and used up its `.once` key, so the next accepted call
+  with that filter said nothing.
+- Cause: `gateway_filters_apply()` informed as it applied the filters, before the preload and prompt-secret
+  checks that can still refuse the call (and undo them).
+- Fix: it returns the announcement, which `gateway_checks()` makes after its last check.
+- Green: `^(gptr-gateway|gptr-config|ext-registry|ext-plugins|arch-layers|lint-rules)$` PASS 1792. Lint clean.
+- Deviations: none. Open: none.
+
+### gateway-1c - An interrupt before the turn starts undoes the call too (2026-10-23)
+- Last validation of gateway-1 (low). Red: FAIL 4 in `^gptr-gateway$` (PASS 485): Ctrl-C at the secret question
+  (`gptr_confirm()` mocked to signal an interrupt) left a continuation's `-builtin:memory` filter, its `probe` tool
+  and its extension's hook, which fired on the next turn, and a new call stayed `gptr_last()`.
+- Cause: `gateway_run()` undid the registrations and restored `gptr_last()` only in an `error` handler.
+- Fix: the registration and checks run in `tryCatch(finally =)`, which undoes both on any exit before
+  `gateway_checks()` returns. `?peter`, 04 §6.1.2 and D-251 say "or interrupted".
+- Green: `^gptr-gateway$` PASS 489; `^(gptr-.*|console-.*|copy-gateway|subagent-team|session-object|doc-replay|
+  arch-layers|lint-rules)$` PASS 5369 SKIP 1. Lint clean; Rd regenerated.
+- Deviations: D-251 (extended). Open: none.
+
+## Task FIX-19 - Cheat-sheet review: orchestration (2026-10-22, #77)
+
+### ws-1 - A team, fan-out or nested child's <workspace> block lists the caller objects it can read
+- Findings 123, 126, 156, 184, 199, 201. Red: `^(env-snapshot|subagent-team)$` FAIL 13 PASS 537:
+  each team member's block was `<workspace env="overlay of stats" objects="0">` `(no objects)`, a
+  fan-out child's listed `.x` only; the same held for a nested overlay and a fork overlay.
+- Cause: `env_block_workspace()`, `env_block_changes()`, `env_on_agent_end()` and `env_on_tree()`
+  snapshot `env_home()`, an overlay `new.env(parent = caller)`, and `ls()` never looks at the
+  parent.
+- Fix: `env_view_snapshot()` (R/env-snapshot.R) at all four sites: the overlay's rows, then each
+  lower overlay's and the base's, own names first (`!duplicated()`); an overlay's block starts with
+  `Reads fall through to globalenv; assignments stay here.` (or `<environment>`). The first version
+  pinned a function-frame home: `[.data.frame` called in the frame that bound it kept that frame
+  referenced (copy-eval's new row: 1 copy; test-copy-tools' function-frame `peter()` row still
+  passed), so the helper drops `envir` before subsetting. The label is not `home_label()`, a
+  session-layer function (arch-layers).
+- Green: `^(env-snapshot|subagent-team)$` PASS 551; `^copy-` PASS 155; neighbours (env-, subagent-,
+  session-object, session-store, gptr-gateway, prompt-, northstar, ckpt-rewind, gptr-config,
+  agent-run, doc-blocks, arch-layers, lint-rules) PASS 5505 SKIP 1. Lint clean. Live (m$gpt, the
+  sheet's team example, mode "auto"): both blocks list `fit  lm` under `objects="8"` and both
+  members reviewed fit (48 s).
+- Deviations: D-252 (new). Open: finding 126's container status and `$text` synthesis are
+  sessions-11's; the extra line sits outside `workspace_lines()`'s budget (the block's truncation
+  still applies).
+
+### sessions-20 - A fork's change report names the source objects its code changed in place
+- Findings 99, 110. Red: `^session-object$` FAIL 4 PASS 534: after the fork ran
+  `dt[, z := 1]; e$flag = 'x'; v <<- 2; w = 3`, its r result had `added` = e, w and `modified`
+  empty, while home's dt, e and v had changed (the source's turns and file md5 did not).
+- Cause: `gptr_fork(envir = "overlay")` is `new.env(parent = home)`, which isolates bindings only,
+  and `eval_run()` diffed snapshots of the overlay alone, so in-place edits below it were invisible
+  and `e$flag = 'x'` (which binds the source's `e` in the overlay) looked new.
+- Fix: `eval_run()` diffs `env_view_snapshot(sizes = FALSE)` (new `sizes` argument and `own`
+  column); `eval_objects()` adds `(in the source workspace)` to a modified row not `own`, or whose
+  new own binding shares the old row's object (a rebinding `k = 5` stays unmarked). The
+  `gptr_fork()` doc and interactive-console vignette say in-place edits reach the source's objects.
+- Green: `^session-object$` PASS 538; session-object, env-snapshot, eval-core, eval-format,
+  eval-guard, copy-eval, copy-tools and tool-r PASS 1366; full suite (NOT_CRAN=true) FAIL 0 SKIP 64
+  PASS 35300. Lint clean; plan checks pass. Live (m$gpt, the finding's data.table fork): the model
+  ran `dt[, logmpg := log(mpg)]` and its result read `~ dt <data.table> modified (in the source
+  workspace)`.
+- Deviations: D-252 (extended). Open: no fork-scoped policy asks before `:=` or `<<-` (plan); an
+  object a fork creates in the source with `<<-` is still listed as `+ name` without the mark.
+
+### guard-1 - A q or quit bound to data in the workspace is not refused as quitting R
+- Finding 25 (in passing). Red: `^eval-guard$` FAIL 4 PASS 126: `eval_guard()` took no `envir`,
+  and a fake `r` call `summary(q)` in a session whose envir held `quantile(1:10)` came back
+  `blocked`, "Not run: the code calls or refers to q()".
+- Cause: a `q`/`quit` value passed only when the code itself assigned it; the guard never saw the
+  workspace, so the user's own `q` (a quantile vector, a query) read as `base::q`.
+- Fix: `eval_guard(exprs, envir = NULL)`; `eval_run()` passes `st$envir`. A value passes when the
+  first binding R's value lookup finds from `envir` is data (`eval_guard_is_data()`; a promise or
+  active binding is not forced and counts as unknown). Calls, `base::q`, `do.call("q")` and
+  `sapply(x, q)` stay refused.
+- Green: `^eval-guard$` PASS 136 (the end-to-end test needs no permission bypass in auto mode);
+  eval-*, copy-eval, copy-tools, tool-r, arch-layers, lint-rules, s1-* PASS 2229; agent-dispatch,
+  agent-loop, doc-blocks, gptr-gateway, injection-e2e, perm-gate, northstar, console-* PASS 3297
+  SKIP 1. Lint clean; plan checks pass.
+- Deviations: D-252 (extended): R's own lookup, not the plan's `binding_env()`, an L3 function the
+  eval layer may not call that skips the parents of a function-frame home (a nearer `base::q`).
+  Open: `rm(q); g = q; g()` passes, as `eval(parse(text = ...))` already does (advisory guard).
+
+### team-1 - A team or fan-out with failed members reports it, and signals when none finished
+- Findings 71, 72, 129, 185. Red: `^subagent-team$` FAIL 13 PASS 354: a manual-mode team and a
+  fan-out whose members were both `blocked` returned `idle` with no condition (a single call
+  signals `gptr_error_permission`), a mixed team was `idle` with `$reason` NULL while its
+  `agent_end` said `error`, and a `gptr_parallel()` team with a failed member stayed `idle`.
+- Cause: `subagent_run_children()` computed the outcome only for the `agent_end` event and never
+  wrote it to the container, which `session_new()` leaves `idle`; the routes return it without
+  the gateway's signal step.
+- Fix: `subagent_settle_container()` gives a team, fan-out or `gptr_parallel()` team the first
+  non-idle child's status and stored condition and the reason `k of n sub-agents did not finish:
+  b (blocked)`; `agent_end` carries both; `agents =` and `parallel =` re-signal the condition with
+  the container as `$session` (`subagent_signal()`, shared with `on_error = "stop"`) when no
+  child ended idle. ?peter, the teams vignette and 04 §6.1.2 say so.
+- Green: `^(subagent-team|injection-e2e)$` PASS 571; with gptr-gateway PASS 926; full
+  suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35329. Lint clean; plan checks pass. Live (m$gpt, the
+  sheet's team code under Rscript, manual mode): stats blocked, code idle; the team returned
+  `blocked`, reason `1 of 2 sub-agents did not finish: stats (blocked)` (30 s).
+- Deviations: D-252 (extended): the plan's `gateway_signal()` is L6, which an L4 file may not call
+  (arch-layers); every status it signals stores its condition, so re-signalling that is the same.
+  Open: none.
+
+### tools-4 - ?peter and ?gptr_options name gptr_error_noninteractive for a blocked ask
+- Findings 7, 73, 168, 180, 194 (docs). Red: none (wording; the behaviour is pinned by
+  agent-dispatch "a non-interactive ask call stops blocked with gptr_error_noninteractive").
+- Cause: ?peter mapped `blocked` only to `gptr_error_permission`, and ?gptr_options said
+  `gptr.noninteractive_ask = "stop"` raises it; an `ask` tool call nobody can answer raises
+  `gptr_error_noninteractive` (03 §6.8.5, IC-68). `preset_ask()` is right and unchanged.
+- Fix: both items add "(`gptr_error_noninteractive` when the `ask` tool has no one to answer)";
+  04 §6.1.2's terminal-status list, which ?peter mirrors, says the same. Rd regenerated.
+- Green: gptr-gateway, utils-options, tool-ask PASS 472. Lint clean; plan checks pass.
+- Deviations: none (the contract already said so). Open: none.
+
+### team-4 - gptr_sessions() lists a settled team or fan-out as idle, with its model
+- Finding 74. Red: `^session-store$` FAIL 5 PASS 276: a settled fan-out, team and `gptr_parallel()`
+  team listed `interrupted` with model NA and resumed (from the file, the live objects gone)
+  `interrupted`, while each live object was `idle`.
+- Cause: the stored status comes from the last message, and a container never writes an assistant
+  message (its tail is the `<agent_reports>` user message); the listing took the model only from
+  an assistant message, where `rebuild_model()` also reads `model_change` and `gptr.frozen`.
+- Fix: `subagent_settle_container()` appends `gptr.container_end` `{status}`; `rebuild_status()` and
+  `session_file_summary()` let the last message or end decide (an end is idle only with status
+  idle; a later synthesis turn decides by itself); a row with no answer naming the model takes
+  `rebuild_model()` of the head and tail lines. 04 §4.6 and `gptr_resume()`, 03 §5.1, ?gptr_resume.
+- Green: `^(session-store|subagent-team)$` PASS 650; with subagent-backends, session-object,
+  injection-e2e, gptr-gateway, arch-layers, lint-rules, ckpt-rewind PASS 2232; full suite
+  (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35337. Lint clean; plan checks pass.
+- Deviations: D-252 (extended). The plan's copy-under-another-id check cannot work (a durable usage
+  record is bound to its header id), so the test cuts a copy for the negative case and resumes the
+  real files after dropping the live sessions. Open: a `gptr_parallel()` row's title is still empty.
+
+### bg-1 - A resumed background session tells the model the user can now be asked
+- Findings 191, 204. Red: `^agent-background$` FAIL 6 PASS 194: with a fake model that does not
+  repeat the call, the resumed request ended on the stale tool result "Permission denied: the user
+  could not be asked ... Explain what you need or choose another approach." (for a blocked `ask`,
+  "Tool execution was blocked: ..."); no message said the user was there.
+- Cause: `bg_resume()` called `run_start(s, NULL)` with no input, so the run went on from the
+  denial, and the denial's `how` was lost (`ui_answer_norm()` rebuilt the answer without it,
+  `perm_ask()` passed none), so `perm_denial_text()` added "choose another approach". GPT read it
+  as final: 7 of 8 runs ended without asking.
+- Fix: `bg_resume()` queues a steer from the user (`api_user`) before `run_start()`,
+  `bg_resume_text()`: "I am at the console now. Repeat the call that could not be approved
+  (<summary>) with the same input; I will be asked to approve it." or "I am at the console now;
+  ask again."; a resume that cannot start restores the queue. The idle-tick `permission()` answer
+  carries `how = "Nothing ran and nobody declined; repeat the call when the session continues."`,
+  which `ui_answer_norm()` keeps for a denial and `perm_ask()` gives `perm_result()`.
+  ?gptr-background and the teams vignette say so; 03 §6.2, 04 §7.21, §10.2 row 22, IC-57.
+- Green: `^agent-background$` PASS 200; with agent-dispatch, console-ui, perm-*, tool-ask,
+  subagent-worker, injection-e2e, ext-specs, agent-run, agent-loop PASS 3293 SKIP 1; full suite
+  (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35354. Lint clean; plan checks pass. Live (m$gpt, manual
+  mode, `peter("Check fit.", fit, background = TRUE)` at an interactive pty console): parked
+  "waiting for approval", then `gptr_wait(b)` raised the allow? prompt in 3 of 3 runs (the
+  verifier's baseline: 1 of 6).
+- Deviations: D-252 (extended). `R/console-ui.R` (not in the plan's files) had to keep `how`. The
+  "cannot continue" test now fails `run_start()` with a mock: a queued note gives its finished
+  session something to run. Open: P28's sessions-16 also edits `perm_ask()` and `bg_ui_spec()`
+  (the second merge keeps both); no notice backs up a model that still does not repeat the call.
+
+### gate-hint - A blocked call's hint names where its mode came from, and knitting is not sent to the console
+- Finding 16, item 4 (doc-4 holds the id). Red: `^agent-dispatch$` FAIL 6 PASS 229: a manual-mode `r` call
+  under `gptr.interactive = FALSE` raised `gptr_error_permission` whose `how_to_allow` was always "Allow it with
+  mode = "auto", a permission rule (gptr_permissions()), or run interactively.", naming no layer, the same
+  with the mode set at session scope, by a project file over a user `auto`, by the call or by the session it
+  continued, and with `knitr.in.progress = TRUE`.
+- Cause: `perm_ask()` built a fixed sentence; it never looked at the run's mode or its origin, nor at
+  `is_knitting()`, under which `gptr_can_prompt()` is FALSE even at a console.
+- Fix: `gateway_run_opts()` records a top-level call's `mode_from = list(mode, from)`
+  (`gateway_mode_from()`: the call's `mode =`, the continued session, else the `settings_layered("mode")`
+  layer when it holds that mode); `perm_blocked_how()` starts the hint `Mode "manual" comes from
+  .gptr/settings.json.` while the run keeps that mode, and while knitting ends "... or a permission rule
+  (gptr_permissions()); knitting cannot ask." The `ask_human` text and `gateway_signal()` are unchanged.
+  04 §7.6 (run options) and the `perm_check()` row amended.
+- Green: `^agent-dispatch$` PASS 235; with gptr-gateway, gptr-config, gptr-sdk, perm-gate, doc-replay,
+  mcp-server, northstar, agent-run, agent-background, subagent-team, injection-e2e, arch-layers, lint-rules
+  PASS 3704; full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35374. Lint clean; plan checks pass; Rd unchanged.
+- Deviations: D-252 (extended). The plan's `settings_layered()` call in `perm_ask()` would cross layers
+  (L2 to L6), so the gateway records the origin; a nested call's origin is not named (its run may have
+  tightened the mode); a continued session names itself, not a settings layer it no longer follows.
+  Open: none.
+
+### tpl-1 - Prompt-template commands exist in the console before the first prompt
+- Findings 104, 109 (the trust half of 104 is tpl-2). Red: `^console-commands$` FAIL 7 PASS 94: with no
+  sync run, `/check mtcars` (a trusted `.gptr/prompts/check.md`) was "Unknown command", `/help` listed no
+  `/check`, `/review` or `/explain`, a `later.md` saved afterwards stayed unknown, and a `.stdin` console whose
+  first input was `/check mtcars` never reached the fake model.
+- Cause: templates reach the command registry only through `template_sync()`, called only by
+  `builtin:prompts`' `session_start` hook, and the console dispatches commands before its first session starts.
+- Fix: `prompts_sync()` (the hook's `plugins_sync()` then `template_sync()`) is the service `templates.sync`
+  (P17, owned by `builtin:prompts`, so filtering it keeps templates off); `console_command()` calls it when
+  neither lookup finds the name and looks again; `cmd_help()` calls it first. 03 §6.17, 04 §7.0, §7.17.
+- Green: `^console-commands$` PASS 102; aaa-state, console-*, skill-*, ext-*, arch-layers, lint-rules PASS 4209
+  SKIP 1; full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35382. Lint clean; plan checks pass; Rd unchanged.
+  Installed branch, piped console (fake model): `/help check`, `/check mtcars` and `/review x` work as the
+  first inputs.
+- Deviations: D-252 (extended). The service needs its `service_plans` entry (`R/aaa-state.R`, which the arch
+  helper reads; test-aaa-state's count 39 to 40), not in the plan's files; helper-arch.R needed no change. No
+  sync in `repl_main()`, as planned. Open: none.
+
+### tpl-2 - Projects whose only resources are prompts or agent-tool folders get the trust question
+- Findings 117, 147 (its code items; the caption is sheet entry S37, the messages trust-msg, skipped files
+  skills-2). Red: `^gptr-config$` FAIL 15 PASS 537: `trust_resources_present()` was FALSE for a project holding
+  only `.gptr/prompts/check.md`, `.claude/skills`, `.agents/skills`, `.claude/agents`, `.codex/agents`,
+  `.pi/agents`, `AGENTS.override.md`, `CLAUDE.local.md`, `.gptr/vignette.Rmd` or a relative `skills.paths`
+  directory, so `trust_resolve()` returned FALSE with no question, notice or `project_trust` event and
+  `template_roots()` dropped the root; the question named no skills.
+- Cause: the check listed `AGENTS.md`, `CLAUDE.md`, `.gptr/skills` and `.gptr/agents` only, not every location
+  skill, template, agent and instruction discovery reads under trust.
+- Fix: it counts those instruction files and directories plus the relative `skills.paths` entries of the
+  settings in force (`trust_skill_paths()`, through `settings_layered()`, which resolves no trust); the question
+  of `trust_resolve()` and `gptr_init()` names skills, prompt templates and agent files; `?gptr_trust` lists
+  project skills and prompt templates. 03 §6.10, 04 `gptr_init()`, `gptr_trust()`, IC-52.
+- Green: `^gptr-config$` PASS 552; full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35417. Lint clean; plan checks
+  pass; `gptr_trust.Rd` regenerated. Installed branch, fake model, a prompts-only project: a script's `peter()`
+  now gets the untrusted notice (none before); the console asks the trust question at the first prompt, and
+  after `y` `/check mtcars` runs the template and `gptr_trust(".")` reads TRUE.
+- Deviations: D-252 (extended). Also counts `.gptr/vignette.Rmd`, an instruction file whose authority follows
+  trust, which the plan's list lacked. `skills.paths` is read through `settings_layered()` (the layers skill
+  discovery reads; a project settings file is itself gated) rather than the two files as written. `gptr_init()`
+  asks the same question, so its text changed too (one test-gptr-config expectation). Open: none.
+
+### trust-msg - Untrusted-resource messages name the call that actually trusts
+- Motivated by findings 111, 147 (sheet units). Red: `^(skill-discover|ext-plugins)$` FAIL 3 PASS 562: the
+  untrusted skill notice, `skill_body()`'s `gptr_error_untrusted` and the untrusted-plugin notice said
+  `(gptr_trust())` or `trust it with gptr_trust()`, the read-only form, which returns `NA` and trusts nothing.
+- Cause: the advice named the function, not the call; with `trust = NULL`, `gptr_trust()` only reads.
+- Fix: all nine messages (skill notice and error, extension and plugin notices, `trust_resolve()`'s notice,
+  project MCP server, project instructions, agent notice and error) name `gptr_trust(".", trust = TRUE)`, the
+  form the sheet's Set up row uses. Text only.
+- Green: `^(skill-discover|ext-plugins)$` PASS 565; with mcp-config, gptr-config, prompt-context, subagent-defs,
+  lint-rules, arch-layers PASS 1538. Lint clean.
+- Deviations: none (the contract quotes none of these messages). Open: none.
+
+### sessions-23 - Report lapsed project trust as undecided
+- Finding 52. Red: `^gptr-config$` FAIL 1 PASS 555: after `.gptr/settings.json` changed in a trusted project,
+  `trust_get()` was FALSE but `gptr_trust(proj)` read TRUE.
+- Cause: the read returned the recorded flag without the fingerprint check `trust_get()` and `trust_resolve()`
+  apply, so it said TRUE while the run printed the untrusted notice and dropped the changed `SYSTEM.md`.
+- Fix: a recorded TRUE whose fingerprint no longer matches (`trust_holds(root)$record`) reads NA, as the run
+  treats it (asked again); a recorded FALSE stays FALSE; the write and its invisible previous value are unchanged.
+  `@return` and 04 `gptr_trust()` amended.
+- Green: `^gptr-config$` PASS 555 (after re-trusting, the read is TRUE and `SYSTEM.md` starts the next fake
+  request's system prompt; a refusal stays FALSE after `SYSTEM.md` changes); with injection-e2e, perm-plan,
+  prompt-sections, ext-plugins, lint-rules, arch-layers PASS 1718. Lint clean; plan checks pass; Rd regenerated.
+- Deviations: D-252 (extended). Open: a `project_trust` hook's unremembered yes still reads NA (record only).
+
+### plug-1 - gptr_plugins() lists the usable entry of a plugin first
+- Finding 108. Red: `^ext-plugins$` FAIL 1 PASS 382: after `plugin_enable(lab, 0L, session = d1)` in an untrusted
+  project, `gptr_trust(proj, TRUE)` and `plugin_enable(lab, 0L, session = d2)` (TRUE), `gptr_plugins()` listed
+  `stale-lab` enabled FALSE, state `disabled`.
+- Cause: entries were ordered process-before-session only and the first per path was kept, so the untrusted
+  session's disabled entry hid the trusted session's until GC drained the first session.
+- Fix: order entries usable first (enabled and not failed), then process before session.
+- Green: `^ext-plugins$` PASS 383 (the "a plugin enabled twice once" row still lists the process entry); full
+  suite (NOT_CRAN=true, with trust-msg and sessions-23) FAIL 0 SKIP 64 PASS 35426. Lint clean.
+- Deviations: none (04 `gptr_plugins()` does not say which entry is listed). Open: none.
+
+### skills-1 - gptr_skills() and gptr_agents() list the plugins of live sessions and of the settings
+- Findings 93, 107. Red: `^ext-plugins$` FAIL 4 PASS 388: with a live `peter(plugins = d)` session,
+  `gptr_skills()` had no `listed-skill` row and `gptr_agents()` no `listed-agent`; with
+  `options(gptr.plugins = d)` and no session started, `gptr_skills()` had no `unsynced-skill` row.
+- Cause: `res_plugin_dirs()` dropped every session entry, and `peter(plugins =)` plugins are always
+  session-scoped; settings plugins enter the plugin table only through `plugins_sync()` at a session start.
+  The session's catalog and `gptr_plugins()` showed both, so the listings disagreed with them.
+- Fix: `res_plugin_dirs(type, listing)` and `res_roots(..., listing)`; with `listing = TRUE`, used only by
+  `skill_discover()` and `agent_discover()` (through `skill_roots(listing)`, `agent_roots(listing)` and
+  `agent_collect(roots = )`), they add the entries of live sessions and, at rank 3, the `plugins` setting's
+  plugins with no enabled or failed entry, resolved by `plugin_resolve()` and read with `plugin_type_paths()`
+  only, skipped where `plugin_trusted()` (now shared with `plugin_enable()`) refuses. Syncs keep `FALSE`.
+- Green: `^ext-plugins$` PASS 392 (the IC-69 test unchanged; the eager `extensions/m.R` never ran; a settings
+  plugin inside an untrusted project is not listed, which fails with the trust check removed); with skill-*,
+  subagent-defs, arch-layers, lint-rules, console-commands PASS 1085; full suite (NOT_CRAN=true) FAIL 0 SKIP 64
+  PASS 35435. Lint clean; Rd unchanged.
+- Deviations: none (04 `gptr_skills()` does not say which plugins are listed; the fix meets `?gptr_skills`, "those
+  of enabled plugins"). A settings plugin whose entry failed is not listed (the plan said "no enabled entry"), and
+  no separate dedupe: discovery keeps one row per path and source. Open: none.
+
+### skills-2 - A skipped SKILL.md is named by gptr_skills() and by a preload of its name
+- Finding 103. Red: `^skill-discover$` FAIL 2 PASS 187: in a trusted project holding `.gptr/skills/nodesc`
+  (no description) and `.gptr/skills/Bad_Name`, `gptr_skills("project")` printed `# 0 rows` only, and
+  `peter(skills = "nodesc")` said "No skill with this name is available; gptr_skills() lists them."
+- Cause: `skill_parse()` wrote its reasons to the registry diagnostics only and `skill_collect()` dropped the
+  NULL spec, so neither the listing nor `skill_body()`'s not-found branch knew of the file.
+- Fix: `skill_collect()` also returns `skipped` (origin by path); `gptr_skills()` prints the footer `# 2 SKILL.md
+  files skipped: .gptr/skills/Bad_Name, .gptr/skills/nodesc; gptr_registry(diagnostics = TRUE) says why.`;
+  when a skipped file's directory name matches, `skill_body()` raises `gptr_error_invalid_argument` "The skill
+  file .gptr/skills/nodesc/SKILL.md was skipped: description is required." Discovery still never errors.
+- Green: `^skill-discover$` PASS 192 (no request reaches the fake model; an unknown name keeps its message); with
+  skill-*, ext-plugins, tool-read, gptr-gateway, subagent-defs, console-commands, arch-layers, lint-rules PASS
+  1660. Lint clean; Rd unchanged.
+- Deviations: none (the contract quotes neither text). The reasons come from parsing the file again with a
+  `diag` callback (new `skill_parse()` argument), not from the latest diagnostic as planned: a cached skip
+  whose diagnostic left the log (1,000 rows, a swapped registry) would have had none. Open: `read
+  skill:nodesc/SKILL.md` still says "Unknown skill" (`skill_file_path()` in R/tool-read.R drops the reason).
+
+### ident-1 - A bare hyphenated name gets a gptr error naming the quoted form
+- Finding 112. Red: `^gptr-capture$` FAIL 1 PASS 357: `resolve_identifier(high-performance-r, "skills")` raised
+  base R's simpleError "object 'high' not found" from `eval(expr, mask)`.
+- Cause: R parses the name as `(high - performance) - r`; `resolve_identifier()` treats only unary `+`/`-`
+  specially, so the binary call reached `ident_mask()`, which binds whole identifiers only (with numbers bound to
+  the pieces, the error suggested quoting "high - performance - r").
+- Fix: before the mask, a binary `-` whose leaves are names or numbers (`ident_hyphen_name()`) is refused with
+  `gptr_error_invalid_identifier` "`high-performance-r` reads as subtraction; quote the name: skills =
+  "high-performance-r"." Nothing is evaluated, so bound pieces change nothing. 03 §4.1.3, 04 §6.1.3.
+- Green: `^gptr-capture$` PASS 364 (`peter(skills = high-performance-r)` sends no request; `c(+grep, -write)` and
+  `shiny_bslib` unchanged); with gptr-*, copy-gateway, subagent-defs, skill-discover, arch-layers, lint-rules PASS
+  1819. Lint clean; plan checks pass; Rd unchanged.
+- Deviations: D-252 (extended). The test spells the call `high - performance - r` (the same parse) or builds it
+  with `str2lang()`, as lintr's infix rule refuses the bare spelling. Open: none.
+
+### mcp-print - print(h) says where the serve token is and what the served mode allows
+- Finding 102 (and finding 100's point, shown on the handle). Red: `^mcp-server$` (NOT_CRAN=true) FAIL 3 PASS
+  167: `print(h)` said "token: in the environment variable GPTR_MCP_TOKEN of the client, as $config shows" and no
+  mode line, while the claude_code, claude_desktop and cursor snippets embed `Bearer <token>`.
+- Cause: the hard-coded token line described the codex snippet only.
+- Fix: `token: inside the $config snippets, printed redacted (as.character() gives the text; $config$codex passes
+  it as GPTR_MCP_TOKEN)`, and while the handle is the running server's, `mode: manual; calls that need approval
+  are refused (set the mode, then restart the server to change it)` from its dedicated session.
+- Green: `^mcp-server$` PASS 170 (the three JSON snippets hold the token, the codex `$args` do not; the print holds
+  neither the token nor the old line); with mcp-*, arch-layers, lint-rules PASS 907 SKIP 1. Lint clean; Rd
+  unchanged.
+- Deviations: none (the contract and vignette do not quote the print). Open: none.
+
+### mcp-trusted - gptr_mcp()'s trusted column means what the server spec's trusted means
+- Finding 105. Red: `^mcp-config$` FAIL 2 PASS 103: after `gptr_mcp_add("docs", url = ...)` the spec said
+  `trusted` FALSE and the `gptr_mcp()` row TRUE; a project server in an untrusted project read TRUE once trusted.
+- Cause: `mcp_server_listing()` filled `trusted` with project trust (`!isFALSE(s$startable)`), which status
+  `"untrusted"` already reports, while the spec's `trusted` is annotation trust read by `mcp_tool_level()`.
+- Fix: the column is `isTRUE(s$trusted)`; `?gptr_mcp` defines it (a user `mcp.json` entry marked `"trusted": true`,
+  whose `readOnlyHint` then lowers tool risk) and the mcp vignette says how to mark a server. 04 §5.12.
+- Green: `^mcp-config$` PASS 106 (marking the entry makes both TRUE; a claude-code:user server reads FALSE; a
+  trusted project's server stays FALSE with status configured); with mcp-*, arch-layers, lint-rules PASS 916 SKIP 1;
+  zzz PASS 145. Lint clean; plan checks pass; `gptr_mcp.Rd` regenerated.
+- Deviations: D-252 (extended). Open: none.
+
+### art-1 - peter$app() launches by default only at the console, and says why it did not
+- Finding 56. Red: `^artifact-app$` FAIL 4 PASS 521: without `launch` in a non-interactive run the tool result
+  read only `(stopped)`; with `gptr.interactive = TRUE` nothing launched; the formals pinned `interactive()`.
+- Cause: both forms defaulted to base `interactive()`, which ignores `gptr.interactive`, and the skip gave no
+  reason, so a model in Rscript took it for a failure and built v002 with `launch = TRUE`.
+- Fix: `launch = NULL` in both forms, resolved in `artifact_app()` as `launch %||% gptr_has_human()`; a skip that
+  nobody asked for adds the message `not launched: nobody is at an interactive console, so v001 was saved without
+  starting it; pass launch = TRUE to start and check it now, or gptr_artifacts("x", open = TRUE) later`. The tool's
+  `launch` description, `?gptr_artifacts`, the tools-and-artifacts vignette, 03 §4.2 and 04 §9.4 say so.
+- Green: `^artifact-app$` PASS 525 (one version, no process record; `launch = FALSE` has no message; at the console
+  the start path runs); with artifact-*, copy-artifact, arch-layers, lint-rules, zzz (NOT_CRAN=true) PASS 3294 SKIP
+  10. Lint clean; plan checks pass; `gptr_artifacts.Rd` regenerated.
+- Deviations: D-252 (extended). The message is added once in `artifact_app()`, not in each caller; the test mocks
+  `artifact_start()` rather than the type's launch; D-252's contract line, left 156 wide by mcp-trusted, rewrapped.
+  Open: none.
+
+### art-2 - An artifact in a temporary workspace is announced to the user and the model
+- Finding 48. Red: `^artifact-app$|^prompt-context$` FAIL 4 PASS 617: without `.gptr/` the environment block read
+  `Artifacts: /var/folders/.../T//Rtmp.../gptr/artifacts` with no word that it is temporary, and `peter$app()`
+  signalled no notice.
+- Cause: the tempdir fallback is intended (`?gptr_artifacts`), but neither the model nor the user was told, so models
+  shortened the opaque path to a relative `artifacts/<id>/app.R` that does not exist (3/3 GPT runs).
+- Fix: the line is `Artifacts: <path_norm(tempdir()/gptr/artifacts)> (temporary: deleted when R exits; cite this full
+  path; gptr_init() keeps artifacts)`; after a version is built without `.gptr/`, `artifact_app()` sends
+  `gptr_inform(... "notice", .once = "artifact-temp-workspace")` naming `path_norm(artifact_dir(id))` and
+  `gptr_init()`. 03 §5.7.
+- Green: `^artifact-app$|^prompt-context$` PASS 621 (one notice, none on the second call or with `.gptr/`; after
+  `gptr_init()` the line is `.gptr/artifacts`); full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35482. Lint clean;
+  plan checks pass; Rd unchanged.
+- Deviations: D-252 (extended). The prompt's path is normalised (the plan's `tempdir()` path had a `//` and the
+  unresolved `/var` link), so it is the prefix of the path the notice names. Open: none.
+
+### reg-1 - Registering the same kind and name again replaces your earlier record
+- Findings 38, 31 (absorbs the models plan's provider-1). Red: `ext-registry` FAIL 8 PASS 211: a second
+  `gptr_register()` of provider `corp` left `base_url` at `a.invalid`, the new row `overridden`, no diagnostic and
+  no message, the first `off()` returned `TRUE`; a re-registered `shout` tool kept its old `fun`.
+- Cause: `gptr_register()` only appended a rank-3 `user` record; `registry_sort()` keeps the first at equal rank
+  and `registry_collision()` skips same-source ties, so the stale record won silently (and kept the old egress).
+- Fix: for `first`-resolving kinds, `gptr_register()` adds the new record, then removes the earlier process-level
+  `user` records of that `(kind, name)`, logs a `replaced` diagnostic and sends the `notice` "Replaced your earlier
+  <kind> '<name>'."; a spec that fails validation leaves the old one; hooks and policies keep both.
+  `?gptr_register`, 03 §4.3, 04 `gptr_register()` and §10.1.
+- Green: `ext-registry` PASS 219 (one active `corp` at `b.invalid`, the old `off()` `FALSE`, the new one removes it;
+  the tool's second `fun`; a corrupted spec leaves it; two `turn_end` hooks stay); full suite (NOT_CRAN=true) FAIL 0
+  SKIP 64 PASS 35496. Lint clean; plan checks pass; `gptr_register.Rd` regenerated.
+- Deviations: D-252 (extended). The rule removes every earlier `user` record of the key, including one from a
+  user directory, user `mcp.json` or user-scope extension, so the explicit registration wins in either order.
+  Open: none.
+
+### bg-1b - A message piped into a waiting session still opens the resumed run with the console note
+- Review of bg-1 (medium). Red: `^agent-background$` FAIL 2 PASS 203: after a manual-mode background session
+  parked, `s |> peter("also say hi")` then `gptr_step(s)` started the run itself, and the second request held the
+  stale denial and "also say hi" but no "I am at the console now" note.
+- Cause: a piped message (or a follow-up `bg_park_session()` re-queued) made `sdk_check()` see queued input, so
+  `gptr_wait()`/`gptr_step()` started the run through `gateway_run_start()` and the sweep only cleared the ask.
+- Fix: `sdk_check()` returns NULL for a `waiting` session; `gptr_wait()` keeps pumping while it waits and the
+  sweep's `bg_resume()` queues the note and starts the run. `gptr_step()` leaves a waiting session as it is (as
+  with nothing queued); `?gptr_step` and 04 §6.5 say so, 04 §7.21 names `bg_resume()`.
+- Green: `^(agent-background|gptr-sdk)$` PASS 300; with gptr-gateway, agent-run, injection-e2e, arch-layers,
+  lint-rules, zzz (NOT_CRAN=true) PASS 1753. Lint clean; plan checks pass; `gptr_step.Rd` regenerated.
+- Deviations: D-252 (extended). Open: none.
+
+### sessions-20b - Removing a fork's shadowing binding is not reported as a change to the source
+- Review of sessions-20 (low). Red: `^session-object$` FAIL 1 PASS 541: after the fork ran `k = 5`, a second `r`
+  call `rm(k)` read `~ k <numeric> modified (in the source workspace)` while `home$k` was still 1.
+- Cause: the mark took any modified row whose new binding is not `own`, so the source's binding reappearing under
+  a removed overlay binding read as a change to it.
+- Fix: `src = !old$own[k] & (!new$own[j] | env_same(...))`: only a row that was the source's before the code ran
+  and still is, or whose new binding shares its object (`e$flag = 'x'`). `v <<- 2` and `:=` keep the mark; a
+  rebinding and an un-shadowing `rm()` read `~ k <numeric> modified`. 03 §6.12 and 04 §7.9 amended.
+- Green: `^(session-object|eval-core|tool-r|env-snapshot|copy-eval)$` PASS 1196. Lint clean; plan checks pass.
+- Deviations: D-252 (extended). Open: none.
+
+### art-2b - The art-2 test removes its temporary-workspace artifact
+- Review of art-2 (low). Red: a check placed after the test, `dir.exists(file.path(tempdir(), "gptr", "artifacts",
+  "temp-workspace-notice"))`, was TRUE (`^artifact-app$` FAIL 1 PASS 530); the copy held app.R, v001 and v002.
+- Cause: `withr::defer(unlink(artifact_dir(id), ...))` evaluates `artifact_dir(id)` at exit, after the test made
+  `.gptr/`, so it removed the project copy and left the shared temporary workspace's one for later tests.
+- Fix: the path is taken before `.gptr/` exists (`tmp = artifact_dir(id)`), then deferred. Test only.
+- Green: the check FALSE (PASS 531; the check is not kept); `^(artifact-app|prompt-context)$` PASS 621. Lint clean.
+- Deviations: none. Open: none.
+
+### bg-1c - The idle-tick denial says once to repeat the call
+- Review of bg-1 (low). Red: `^agent-background$` FAIL 1 PASS 204: the denial read "... call the tool again with
+  the same input and the user will be asked. Nothing ran and nobody declined; repeat the call when the session
+  continues.", the same instruction twice (convention 11).
+- Cause: bg-1's `how` repeated what `bg_pending_text("approval")`, the denial's reason, already says.
+- Fix: `how = "Nothing ran and nobody declined."`, which still replaces "Explain what you need or choose another
+  approach."; the test matches the whole ending.
+- Green: `^(agent-background|console-ui|perm-ask|tool-ask|agent-dispatch)$` PASS 600; after bg-1b to bg-1c the full
+  suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35504. Lint clean; plan checks pass.
+- Deviations: D-252 (bg-1 quote amended). Open: none.
+
+### guard-1b - A q bound to data is refused as the function argument a base function looks up
+- Follow-up of guard-1. Red: `^eval-guard$` FAIL 9 PASS 139: with `q` bound to `quantile(1:10)` in `envir`,
+  `Negate(q)('no')`, `base::Negate(f = q)`, `sweep(m, 1, s, q)`, `eapply(env, q)`, `.mapply(q, ...)`,
+  `.S3method('print', 'foo', q)`, `Negate('q')('no')` and `Vectorize('q')('no')` passed, and a scan of base found
+  `.mapply`, `.S3method`, `eapply`, `Negate` and `sweep` missing from the function-argument table.
+- Cause: the table and the string list were hand lists of the apply family. With a data global `q`, each form above
+  reaches `base::q` through the callee's `match.fun()` (for a string, `Vectorize()`'s `formals()`), calling it
+  (`Negate(q)('no')`, `.mapply(q, list('no'), NULL)`) or returning or registering it for a later call (`Negate(f =
+  q)`, `.S3method('print', 'foo', q)`).
+- Fix: `eval_guard_fun_arg` holds `do.call()` and every base function that applies `match.fun()` to a formal;
+  `eval_guard_indirect` is its names plus `Vectorize`, `get`, `get0`, `getExportedValue` and `Recall`. `Vectorize(q)`
+  (returns the data) and `Recall(q)` (passes the value to the calling function, as `f(q)` does) still pass: a probe
+  shows neither reaches `base::q`, so neither is refused.
+- Green: `^eval-guard$` PASS 148; eval-*, copy-eval, copy-tools, tool-r, arch-layers, lint-rules, s1-* PASS 2454;
+  full suite (NOT_CRAN=true) FAIL 0 SKIP 64 PASS 35516. Lint clean.
+- Deviations: D-252 (guard-1 rule extended). Open: stats functions that `match.fun()` an argument (`integrate`,
+  `aggregate`, `dendrapply`) and user functions that do still pass a data `q` (advisory guard), and so does a base
+  function given as another's function argument that receives a data `q` through `...` (`sapply(x, lapply, q)`).
+
+### guard-1c - Only a call's function argument is read as a string outside P09's indirect calls
+- Review of guard-1b (low). Red: `^eval-guard$` FAIL 2 PASS 149: `.S3method('edit', 'myclass', function(name, ...)
+  name)` and `Vectorize(function(x, de) x + de, 'de')` were refused as calling `edit()` and `de()` (so was
+  `.S3method('identify', ...)`); all three passed before guard-1b.
+- Cause: guard-1b gave every function-argument call and `Vectorize` the every-string rule, but a generic, a class
+  and `vectorize.args` are not function names.
+- Fix: `eval_guard_indirect` is P09's 18 names again; the walk adds the string function argument of every
+  `eval_guard_fun_arg` call and of `Vectorize(FUN)`, so `Negate('q')`, `Vectorize('q')` and `.S3method('print',
+  'foo', 'q')` stay refused. A `q` symbol is still checked in `eval_guard_fun_arg` calls only: `Vectorize(q)` of
+  data passes.
+- Green: `^eval-guard$` PASS 151; `^(eval-.*|copy-eval|copy-tools|tool-r|arch-layers|lint-rules|s1-.*)$` PASS 2244.
+  Lint clean.
+- Deviations: D-252 (guard-1 rule). Open: none.
+
+### guard-1d - The function-argument rule refuses the argument as passed
+- Review of guard-1b (medium). With a data `q`, `sapply(list('no'), lapply, q)` and `lapply(list('no'), sapply, q)`
+  quit R and pass the guard: the inner function gets `q` through `...`, and its `match.fun()` finds `base::q`.
+  `Map(lapply, list(list('no')), list(q))` only errors (`mapply()` passes `dots[[2L]][[1L]]`).
+- Records only, the review's simplest fix: D-252 and guard-1b's heading say `q` passed directly as the function
+  argument is refused, and guard-1b's Open names this form. A code fix would add one more special case (a `q` beside
+  a base function given as the function argument) to an advisory guard that `eval(parse(text = ...))` evades.
+- Deviations: D-252 (guard-1 rule wording). Open: as guard-1b.
+
+### guard-1e - guard-1b says how each form reaches base::q
+- Review of guard-1b (low) and a round-2 problem. `base::Negate(f = q)` and `.S3method('print', 'foo', q)` leave a
+  child R alive (they return or register `base::q` for a later call), and `sweep(m, 1, s, q)` of a numeric `m` stops
+  in `q()`'s `save` check, yet guard-1b's Cause and the test comment said each form quits R. Both now say each
+  reaches `base::q`, calling it or returning or registering it. Records and a test comment only.
+- The criterion that `Vectorize(q)(1)` and `Recall(q)` be refused is not adopted: neither reaches `base::q` (they
+  stop with "attempt to apply non-function" and "'Recall' called from outside a closure"), as guard-1b records, so
+  refusing them would be a deliberate over-refusal.
+- Green: `^eval-guard$` PASS 151. Lint clean.
+- Deviations: none. Open: none.
+
+### guard-1f - The guard does not keep a function-frame home alive in the installed package (2026-10-23)
+- Found by the integration branch's R CMD check (orchestration tip alone too, from guard-1's 86a35bc7). Red:
+  `test-copy-eval.R` and `test-copy-tools.R` against the installed (byte-compiled) package FAIL 5 PASS 36: "1 copies
+  of `big` (allowed 0)" after `eval_r()` in a function-frame home. `devtools::test()` loads uncompiled code and
+  passed.
+- Cause: guard-1 passes the evaluation environment to `eval_guard()`, and a byte-compiled `for` loop calling a
+  closure (`eval_guard_walk()`) keeps that frame, and so the user's frame, referenced after the call.
+- Fix: the loop is a `while` loop, as `gateway_check_visible()` already does for the same reason.
+- Green: the two files installed PASS 41; `^(eval-.*|copy-.*|arch-layers|lint-rules)$` PASS 815. Lint clean.
+- Deviations: none. Open: none.
+
+## Task CI-91 - PR #77's hosted checks: a C-locale capture, R-devel's Partial() and a late gc shutdown (2026-10-23, #77)
+
+### ci91-1 - The fuzzy-edit print test compares the printed lines in any locale
+- Red: PR #77 head 84fe1f1, R-CMD-check run 40049492168, job 120738934178 (ubuntu-latest release,
+  LC_ALL=C) failed `test-tool-edit.R:309` and `:312` (tools-8's "gptr_patch prints the message, and
+  the diff only when fuzzy"): the printed diff lines held `\342\200\230a\342\200\231` where the
+  expected `p$diff` held `‘a’`. Locally `LC_ALL=C` `^tool-edit$` FAIL 2.
+- Cause: the test, not the print. `print.gptr_patch()` writes UTF-8 bytes (`ns_print_lines()`,
+  `useBytes = TRUE`), the right output for the console; `capture.output()` returns them unmarked in
+  a C locale, so `identical()` compared unknown-encoding bytes with marked UTF-8 strings.
+- Fix: the test marks the captured lines UTF-8 before comparing.
+- Green: `LC_ALL=C` `^tool-edit$` PASS 196; `^(ext-check|eval-guard|tool-edit)$` PASS 605.
+- Deviations: none. Open: none.
+
+### ci91-2 - The q guard knows R-devel's Partial()
+- Red: job 120738934342 (ubuntu-latest devel) failed `test-eval-guard.R:182`: guard-1b's scan of
+  base found `Partial` (new in R-devel; it `match.fun()`s its `f`) missing from
+  `eval_guard_fun_arg`.
+- Cause: the table is written by hand and the test checks it against the running R's base, as
+  guard-1b meant it to; R-devel added a function after it was written. With `q` bound to data,
+  `Partial(q)('no')` would reach `base::q()`.
+- Fix: `Partial = "f"` in the table (an entry for a function this R lacks matches nothing, since
+  `eval_guard_match()` finds no definition); the q-form test adds `Partial(q)('no')` where base has
+  `Partial`.
+- Green: `^eval-guard$` on R 4.6.1 (no `Partial`) PASS; R-devel in hosted CI.
+- Deviations: none (D-252's guard-1 rule names the table, not its entries). Open: none.
+
+### ci91-3 - The D-085 test counts only its own session's shutdown
+- Red: job 120738934119 (ubuntu-latest release) failed `test-ext-check.R:539` ("a session finalized
+  during a check keeps its deferred shutdown (D-085)"): one deferred event was left. The test is
+  main's and unchanged; the release jobs of main's last nine green runs passed it, and locally it
+  passes.
+- Cause: the test, not D-085. `session_finalizer()` is the only caller of `ev_defer()`: every
+  session that gc collects queues its own `session_shutdown` in the registry current at that
+  moment. The asserted event had run (its command was gone, `seen$reasons == "gc"`), so the entry
+  left was another session's, left by an earlier test and collected after the check's drain. A
+  collection before the drain would have added a second `"gc"` to `seen$reasons` the same way.
+- Fix: the hook records only `s1`'s events (the queued payload names `s1`), and the test checks
+  that no deferred event for `s1` is left.
+- Green: `^ext-(check|events)$` PASS 455.
+- Deviations: none. Open: none.

@@ -66,6 +66,8 @@ those descriptions do not establish availability or authorize inference.
 `model_prepare(ref, safety = NULL)` explicitly prepares the selected model,
 performing discovery only when its current evidence is missing or stale, then
 resolving and running `provider_preflight(model, provider, safety = NULL)`.
+A live chat request (P06) and a System 1 call (P13) prepare their selected
+Ollama model this way, so a new R session needs no manual refresh first.
 Explicit `gptr_models(provider = "ollama", refresh = TRUE)` discovers the server's
 installed models. Discovery never runs at package load or during offline replay.
 

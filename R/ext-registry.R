@@ -521,6 +521,50 @@ registry_session_drop = function(sid) {
   invisible(NULL)
 }
 
+#' What session `sid` holds now, for registry_session_undo(): its records, the extension ids and
+#' P17's tables of enabled plugins and loaded extension files
+#' @noRd
+registry_session_mark = function(sid) {
+  reg = registry_env()
+  recs = as.list(reg$recs, all.names = TRUE)
+  res = res_state()
+  list(sid = sid, recs = recs[vapply(recs, function(r) identical(r$session, sid), NA)],
+       exts = ls(reg$exts), tables = list(plugins = res$plugins, loaded = res$loaded))
+}
+
+#' Undoes what changed for session `sid` from mark `a` to mark `b` (a refused call, D-251): the
+#' records added are removed and those removed put back, the extensions loaded are forgotten and
+#' the table entries written return to `a`
+#' @noRd
+registry_session_undo = function(a, b) {
+  reg = registry_env()
+  for (id in setdiff(names(b$recs), names(a$recs))) registry_remove(id)
+  for (rec in a$recs[setdiff(names(a$recs), names(b$recs))]) {
+    assign(rec$id, rec, envir = reg$recs)
+    registry_index_push(reg$by_kind, rec$kind, rec$id)
+    registry_index_push(reg$by_key, paste(rec$kind, rec$name, sep = "\r"), rec$id)
+    if (identical(rec$kind, "hook")) {
+      registry_index_push(reg$hooks, rec$hook_event %||% rec$spec[["event"]] %||% rec$name, rec$id)
+    }
+  }
+  for (eid in setdiff(b$exts, a$exts)) {
+    info = get0(eid, envir = reg$exts, inherits = FALSE)
+    if (identical(info$session, a$sid)) {
+      info$status = "unloaded"
+      ext_forget(info, reg)
+    }
+  }
+  res = res_state()
+  for (tab in names(b$tables)) {
+    was = a$tables[[tab]]
+    for (k in names(b$tables[[tab]])) {
+      if (!identical(was[[k]], b$tables[[tab]][[k]])) res[[tab]][[k]] = was[[k]]
+    }
+  }
+  registry_touch(reg)
+  invisible(NULL)
+}
+
 # ---- control exports (IC-53 point 3) ------------------------------------------------------------
 
 #' Refuse a gptr configuration export called from model code while a tool executes (IC-53),
@@ -573,7 +617,10 @@ registry_unregister_fn = function(id) {
 #' Registers a spec made by [gptr_spec()] or one of the spec constructors at top level: rank 3,
 #' source `"user"`, for the lifetime of the R process. Sessions frozen before the call are not
 #' changed; the next session sees the record. A user record overrides a built-in record of the same
-#' kind and name only (the built-in's other records keep working).
+#' kind and name only (the built-in's other records keep working). Registering the same kind and
+#' name again replaces your earlier record, with a notice, and the function the earlier call
+#' returned then removes nothing (it returns `FALSE`); kinds that keep every record, such as hooks
+#' and policies, keep both.
 #'
 #' Called from model code while a run executes a tool, `gptr_register()` and the function it
 #' returns signal `gptr_error_permission` unless the user approved that call.
@@ -588,6 +635,21 @@ gptr_register = function(spec) {
   check_class(spec, "gptr_spec", "spec")
   ext_control_guard("gptr_register")
   id = registry_add(spec, source = "user", rank = 3L)
+  reg = registry_env()
+  rec = get(id, envir = reg$recs)
+  if (identical(kind_get(rec$kind)$resolve, "first")) {
+    # added first, so a spec that fails validation leaves the earlier record in place
+    ids = get0(paste(rec$kind, rec$name, sep = "\r"), envir = reg$by_key, inherits = FALSE)
+    old = Filter(function(r) identical(r$source, "user") && is.null(r$session),
+                 registry_recs(reg, setdiff(ids, id)))
+    for (r in old) registry_remove(r$id)
+    if (length(old)) {
+      registry_diagnostic("user", "register", "replaced",
+                          paste0(rec$kind, " '", rec$name, "': a new registration replaced ",
+                                 "the earlier one"))
+      gptr_inform(paste0("Replaced your earlier ", rec$kind, " '", rec$name, "'."), "notice")
+    }
+  }
   invisible(registry_unregister_fn(id))
 }
 

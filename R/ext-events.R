@@ -62,7 +62,7 @@ ev_table = rbind(
   ev_row("artifact_stop", "notify", "id, url, version, reason", origin = "gptr"),
   ev_row("usage", "notify", "row", origin = "gptr"),
   ev_row("budget_near", "notify", "kind, budget, used", origin = "gptr"),
-  ev_row("budget_exceeded", "notify", "kind, budget, used", origin = "gptr"),
+  ev_row("budget_exceeded", "notify", "kind, budget, used, estimate", origin = "gptr"),
   ev_row("cache_break", "notify", "provider, model, first_diff, entry, culprit", origin = "gptr"),
   ev_row("bridge_call", "notify",
          "bridge, id, cmd, level, status, seconds, bytes_out, bytes_err, spill, digest",
