@@ -127,6 +127,8 @@ test_that("throw, warn-as-error, time limit and interrupt give paired events (IN
     texts = stats::setNames(vapply(tr, msg_text, ""), ord[seq_len(k)])
     expect_match(texts[["spin"]],
                  "^Interrupted after [0-9.]+ s; side effects may have occurred[.]$")
+    # the console shows the time the text states, once
+    expect_true(isTRUE(tr[[k]]$details$interrupted))
     if ("throw" %in% names(texts)) expect_match(texts[["throw"]], "boom", fixed = TRUE)
     if ("warn2" %in% names(texts)) expect_match(texts[["warn2"]], "warned", fixed = TRUE)
     if ("slowloop" %in% names(texts)) expect_match(texts[["slowloop"]], "time limit|elapsed")

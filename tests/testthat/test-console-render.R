@@ -934,6 +934,15 @@ test_that("an error result shows the lines of its message", {
   expect_identical(out[-1L], c("    error: Error: object 'z' not found", "    In: z + 1"))
 })
 
+test_that("an interrupted call's error row states its time once (visual round 1)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  r = list(id = "c1", name = "r", input = list(code = "Sys.sleep(9)"))
+  cut = c(msg_tool_result("c1", "r", "Interrupted after 2.8 s; side effects may have occurred.",
+                          is_error = TRUE, details = list(interrupted = TRUE)), list(elapsed = 2.8))
+  expect_identical(console_tool_line(r, cut),
+                   "    error: Interrupted after 2.8 s; side effects may have occurred.")
+})
+
 test_that("result lines keep a failed call's objects, project paths and whole errors (#35)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 60, crayon = FALSE, unicode = FALSE)

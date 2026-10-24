@@ -190,8 +190,11 @@ tool_interrupted = function(run, call, st) {
     tool_error("Interrupted before the tool ran; the call was not executed.")
   } else {
     elapsed = reactor_now() - st$exec_t0
-    tool_error(paste0("Interrupted after ", format(round(elapsed, 1), nsmall = 1),
-                      " s; side effects may have occurred."))
+    res = tool_error(paste0("Interrupted after ", format(round(elapsed, 1), nsmall = 1),
+                            " s; side effects may have occurred."))
+    # the text states the time, so the console's row does not repeat it
+    res$details = list(interrupted = TRUE)
+    res
   }
   tryCatch(dispatch_finish(run, call, res, st), error = function(e) NULL)
   invisible(res)

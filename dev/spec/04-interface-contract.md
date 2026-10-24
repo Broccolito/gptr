@@ -3349,7 +3349,8 @@ tokens only when the fuzzy fallback, EOL or encoding normalisation changed what 
 <reason>. <how to proceed>`, and one that carries the person's text (`n <text>`, IC-77 in §15.10): `The user declined
 this call and said: "<text>". This is the user's own instruction: do that instead; any call it needs is approved
 separately.`; hook block: `Tool execution was blocked: <reason>`; interrupted tool: `Interrupted after
-<s> s; side effects may have occurred.`; a `length`/`refusal` stop: `Tool call not executed: the response stopped
+<s> s; side effects may have occurred.` (`details$interrupted` TRUE, so the console's row states the time once;
+P28 Task 43); a `length`/`refusal` stop: `Tool call not executed: the response stopped
 (<reason>) before the call was complete.`
 
 ### 9.3 The system prompt

@@ -830,7 +830,7 @@ console_result_lines = function(call, result, width, kind = "act") {
   if (isTRUE(result$is_error)) {
     err = console_escape(text_lines(d$error %||% console_msg_text(result)), FALSE)
     if (!length(err)) err = "failed"
-    err[[1L]] = paste0("error: ", err[[1L]], secs)
+    err[[1L]] = paste0("error: ", err[[1L]], if (!isTRUE(d$interrupted)) secs)
     rows = console_wrap(paste0(pad, err), width)
     more = if (length(rows) > 6L) paste0(pad, sym$ellipsis)
     return(c(sym$red(c(utils::head(rows, 6L), more)), if (length(changes)) sym$dim(changes)))
