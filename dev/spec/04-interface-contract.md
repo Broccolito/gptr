@@ -5646,8 +5646,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     whole percent from 0; NA where that threshold is infinite, a count is unknown or the route is `plan-cli`
     (D-202). `/context` adds it under the ledger's total (`  context left         82%`). After `/compact` the
     last request is the compaction request (its `gptr.compaction_usage` record): `/context` heads it `Last request
-    <id> (the compaction request; the next is an estimate):`, adds the row `  next request        <n>` (the
-    compaction entry's `tokens_after`) under the total, its value in the ledger's column (review of Tasks 22-27: it
+    <id> (the compaction request):`, adds the row `  next request       ~<n>` (the compaction entry's
+    `tokens_after`, `~` an estimate) under the total, its value in the ledger's column (review of Tasks 22-27: it
     was the sentence `  next request: about <n> tokens` among the right-aligned values), and measures the context
     left from that; `/compact` says `Conversation compacted: <before> ->
     <after> tokens.`, the counts of the automatic notice, `Conversation compacted.` where one is unknown

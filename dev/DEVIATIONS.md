@@ -4108,9 +4108,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     (review)"; test-console-repl.R "the banner names the console's key and promises nothing it lacks (review,
     Task 26)"; test-console-ui.R "the keys are a row under the question, a and p only with a rule (D-243)";
     test-console-interrupt.R (the pause menu's keys).
-  - `/context` after `/compact` writes the next request's estimate as a ledger row, `  next request        3,848`,
-    its value in the column of `total` and `context left`, under the header `Last request <id> (the compaction
-    request; the next is an estimate):`; it was the sentence `  next request: about 3,848 tokens` among them.
+  - `/context` after `/compact` writes the next request's estimate as a ledger row, `  next request       ~3,848`,
+    its value in the column of `total` and `context left`, `~` marking an estimate; it was the sentence `  next
+    request: about 3,848 tokens` among them.
     Contract-visible: 04 §15.10 IC-77, 03 §6.17. Tests: test-console-commands.R "/compact reports its saving and
     /context names the compaction request (console-4)".
   - Positron's banner says `ctrl-c, then s, to steer`, the live row's words, which show beside it; it said `ctrl-c,
