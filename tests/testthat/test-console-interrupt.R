@@ -538,12 +538,13 @@ test_that("[b]ackground hands a foreground run to bg.register (P21) and resumes"
   local_menu_answers("b")
   local_gptr_options(quiet = FALSE)
   withr::local_options(cli.num_colors = 256L)
-  # the answer's cut row closes it right after the menu, then the status rows as one block
+  # the answer's cut row closes it right after the menu, then the status rows as one block of
+  # their own
   local_mocked_bindings(console_render_pause = function() console_write("  the answer's cut..."))
   err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
   dim = console_style()$dim
-  expect_identical(utils::tail(err, 4L), c(
-    "  the answer's cut...", dim("  Background sessions are experimental."),
+  expect_identical(utils::tail(err, 5L), c(
+    "  the answer's cut...", "", dim("  Background sessions are experimental."),
     dim("  in the background - !!gptr::gptr_wait(gptr::gptr_last()) continues it here"), ""))
   expect_false(any(grepl("[gptr]", err, fixed = TRUE)))
   withr::local_options(cli.num_colors = 1L)

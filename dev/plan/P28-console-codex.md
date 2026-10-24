@@ -1711,7 +1711,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 49 | An approval's flag rows read as policy internals, in two shapes (final visual loop, round 1) | 86c49fe0 |
 | 50 | A question's answer is not shown (Task 48, found by its visual check) | b356476c |
 | 51 | A run sent to the background does not move at the chat prompt, and its wait shows nothing (final visual loop, round 1) | 96b139b1 |
-| 52 | Answers to console questions sit off the input band (final visual loop, round 1) | (this commit) |
+| 52 | Answers to console questions sit off the input band (final visual loop, round 1) | d9ddfefa |
+| 53 | After [b] the status block sits right under the answer's tail (Task 47, found by its visual check) | (this commit) |
 
 ## Out of scope
 

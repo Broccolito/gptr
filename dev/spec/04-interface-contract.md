@@ -5683,9 +5683,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     `↳ follow-up`; `the$echoed`); when it resumes it is `notice`, so the next block opens with
     a blank row. Continuing writes no notice (`[gptr] continuing` and `[gptr] nothing queued; continuing` are
     gone) and draws the live row again with the draft (`console_asked()`); after [a] the draft joins the kept
-    list (Task 18). [b] closes the answer with its cut row, then writes the background service's own notices
-    and `  in the background · !!gptr::gptr_wait(gptr::gptr_last()) continues it here` as one dim block and a
-    blank row before the prompt, or the notices and `  cannot run in the background · <why>` in red (review of
+    list (Task 18). [b] closes the answer with its cut row, then, after a blank row, writes the background
+    service's own notices and `  in the background · !!gptr::gptr_wait(gptr::gptr_last()) continues it here` as
+    one dim block and a blank row before the prompt (P28 Task 53: the block sat right under the answer's tail), or the notices and `  cannot run in the background · <why>` in red (review of
     Tasks 16-21: `[gptr] running in the background; ...` in ink, on the prompt; P28 Task 47: the notices came
     first and the cut row floated between them and the status row). Nothing runs a background session while the
     chat prompt waits (`later` runs only at R's own prompt; P28 Task 51: the row said `running in the
