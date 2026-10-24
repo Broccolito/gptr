@@ -17,6 +17,17 @@ test_that("compact_threshold follows architecture 6.11", {
   expect_equal(compact_threshold(200000, 8192), 50000)
 })
 
+test_that("the output reserve is at most half the window (D-250)", {
+  # models.dev often gives a model's whole window as its max_output
+  expect_equal(compact_threshold(524288, 524288), 200000)
+  expect_equal(compact_threshold(262144, 262144), 123072)
+  expect_equal(compact_threshold(131072, 131072), 57536)
+  expect_equal(model_output_cap(131072, 131072), 65536)
+  expect_equal(model_output_cap(200000, 64000), 64000)
+  expect_equal(model_output_cap(NA, 131072), 131072)
+  expect_identical(model_output_cap(131072, NULL), NA_real_)
+})
+
 test_that("NA in gptr.compact_at disables the cap", {
   local_gptr_options(compact_at = NA)
   expect_equal(compact_threshold(1e6, 64000), 900000)

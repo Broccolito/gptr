@@ -154,8 +154,12 @@ checkpoints and artifact data snapshots are separate storage mechanisms.
 
 `manual` is the default: actions classified as read-only can run, while changes require approval.
 `plan` is for inspection and proposals; `edits` allows approved classes of project file edits;
-`auto` allows ordinary tool work without prompting. Critical, secret and control guards remain
-separate. `yolo`, which only you can select, also runs gptr's own configuration functions and
+`auto` allows ordinary tool work without prompting. The plan a `plan` run proposes goes once,
+as a `<plan>` block, to the next top-level `peter()` call from the same environment, within an
+hour and in another mode, whatever that call asks: a script runs the plan with
+`peter("Go ahead.", mode = auto)`. Another `peter()` call first discards it, and
+`options(gptr.plan_handoff = FALSE)` turns the hand-off off. Critical, secret and control guards
+remain separate. `yolo`, which only you can select, also runs gptr's own configuration functions and
 secret reads; deleting protected files, files outside the project or the project itself,
 `options(gptr.*)` and sending a secret over the network still ask.
 A permission gate is not an isolation boundary. External CLIs also have their own sandbox

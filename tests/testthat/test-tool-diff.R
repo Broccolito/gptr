@@ -177,9 +177,12 @@ test_that("many hunks render in linear time", {
   b = a
   i = seq(5L, 200000L, by = 10L)
   b[i] = paste(b[i], "changed")
-  t0 = proc.time()[["elapsed"]]
+  t0 = proc.time()
   d = diff_lines(a, b, max_tokens = Inf)
-  expect_lt(proc.time()[["elapsed"]] - t0, 5)
+  took = proc.time() - t0
+  # A stalled runner adds wall time but no CPU time; superlinear work adds both (CI-80, D-246)
+  expect_lt(took[["user.self"]] + took[["sys.self"]], 5,
+            label = sprintf("CPU time (elapsed %.2f s)", took[["elapsed"]]))
   expect_identical(length(d), 180000L)
   expect_identical(d[c(1L, 10L, 179992L)],
                    c("@@ -2,7 +2,7 @@", "@@ -12,7 +12,7 @@", "@@ -199992,7 +199992,7 @@"))

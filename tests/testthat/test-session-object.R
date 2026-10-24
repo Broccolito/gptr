@@ -407,6 +407,48 @@ test_that("held copies and boxes are trimmed to gptr.values_max_bytes, the lates
   expect_identical(s$value, rep(5, 500))
 })
 
+test_that("a value is copied below value_copy_max unless its copy is none or outgrows it (D-247)", {
+  home = new.env()
+  home$x = rnorm(1e4)                           # 78 KB: copied
+  home$plts = rep(list(structure(list(), class = c("pkg::plot", "S7_object"),   # 78 KB once,
+                                 S7_class = structure(function() NULL, pad = numeric(1e4)))), 3)
+  home$shared = rep(list(rnorm(1e5)), 3)        # 782 KB, but a copy holds 2.3 MB
+  home$idx = seq_len(2e6)                       # a compact sequence: a copy writes out 7.6 MB
+  home$env = new.env()                          # duplicate() returns the environment itself
+  home$big = rep(list(rnorm(1e5)), 100)         # object.size() 76 MB: never duplicated
+  s = test_session(home = home)
+  nms = c("x", "plts", "shared", "idx", "env", "big")
+  for (nm in nms) session_value_set(s, nm, home[[nm]], name = nm)
+  expect_identical(s$values$mode, c("copy", "copy", "name", "name", "name", "name"))
+  expect_identical(s$values$bytes, vapply(nms, function(nm) env_snap_size(home[[nm]], home), 1,
+                                          USE.NAMES = FALSE))
+  expect_lt(s$values$bytes[[2L]], 1e5)          # object.size() 235 KB
+  held = vapply(session_data(s)$values, function(v) !is.null(v$value), NA)
+  expect_identical(held, c(TRUE, TRUE, FALSE, FALSE, FALSE, FALSE))
+  entries = Filter(function(e) identical(e$custom_type, "gptr.value"), session_data(s)$entries)
+  expect_identical(entries[[2L]]$data$bytes, s$values$bytes[[2L]])
+})
+
+test_that("a themed ggplot2 plot the agent builds is the console's, copied, held small (D-247)", {
+  skip_if_not_installed("ggplot2", "4.0.0")
+  local_project()
+  code = c(paste("p = ggplot2::ggplot(mtcars, ggplot2::aes(wt, mpg)) + ggplot2::geom_point() +",
+                 "ggplot2::theme_minimal()"),
+           "p = p + ggplot2::labs(title = 'mpg')")
+  local_fake_provider(list(fake_tool("r", code = code[1L]),
+                           fake_tool("r", code = paste0(code[2L], "; gptr_return(p)")), "done"))
+  agent = new.env(parent = globalenv())
+  s = peter("plot mpg", model = "fake/fake-1", mode = "auto", envir = agent)
+  console = new.env(parent = globalenv())
+  eval(parse(text = code), console)
+  expect_true(identical(serialize(agent$p, NULL), serialize(console$p, NULL)))
+  expect_lt(gptr_checkpoints(s)$held_mb, 0.1)
+  expect_identical(s$values$mode, "copy")
+  expect_gt(s$values$bytes, 5e5)                # object.size() 16 MB
+  expect_lt(s$values$bytes, 2e6)
+  expect_lt(s$values$bytes, as.numeric(utils::object.size(agent$p)) / 10)
+})
+
 test_that("session_value_get(turn =) returns the value of that turn or NULL", {
   s = test_session()
   d = session_data(s)
@@ -416,6 +458,21 @@ test_that("session_value_get(turn =) returns the value of that turn or NULL", {
   expect_identical(session_value_get(s, turn = 0L), "first")
   expect_identical(session_value_get(s), "second")
   expect_null(session_value_get(s, turn = 7L))
+})
+
+test_that("$value keeps the newest returned value through a turn that returns nothing", {
+  local_project()
+  local_fake_provider(list(fake_tool("r", code = "gptr_return(1)"), "one",
+                           fake_tool("r", code = "gptr_return(2)"), "two", "ok",
+                           fake_tool("r", code = "gptr_return(NULL)"), "cleared"))
+  s = peter("a", model = "fake/fake-1", mode = "auto", envir = new.env())
+  s |> peter("b")
+  s |> peter("c")
+  expect_identical(s$value, 2)
+  expect_identical(s$turns, 3L)
+  expect_identical(s$text, "ok")
+  s |> peter("d")
+  expect_null(s$value)
 })
 
 # ---------------------------------------------------------------- verbs
@@ -808,6 +865,45 @@ test_that("an overlay fork reads the source home and writes to its own overlay",
   expect_identical(gptr_fork(x$s, envir = "shared")$envir, x$home)
 })
 
+test_that("a fork's change report names the source objects its code changed in place (D-252)", {
+  skip_on_cran()
+  local_store()
+  has_dt = requireNamespace("data.table", quietly = TRUE)
+  home = new.env(parent = globalenv())
+  home$e = new.env()
+  home$e$flag = "orig"
+  home$v = 1
+  home$k = 1
+  if (has_dt) home$dt = data.table::data.table(a = 1:3)
+  code = paste(c(if (has_dt) "dt[, z := 1]", "e$flag = 'x'", "v <<- 2", "w = 3", "k = 5"),
+               collapse = "\n")
+  fake = local_fake_provider(list("A", fake_tool("r", code = code), fake_tool("r", code = "rm(k)"),
+                                  "done"))
+  s = peter("a", model = fake, mode = "auto", envir = home)
+  file = session_data(s)$file
+  md5 = tools::md5sum(file)
+  b = gptr_fork(s) |> peter("b")
+  expect_false(exists("w", envir = home, inherits = FALSE))
+  expect_true("w" %in% ls(b$envir))
+  expect_identical(list(s$turns, tools::md5sum(file)), list(1L, md5))
+  # the documented semantics: in-place edits reach the source's objects
+  expect_identical(list(home$e$flag, home$v, home$k), list("x", 2, 1))
+  if (has_dt) expect_true("z" %in% names(home$dt))
+  res = tool_results(b)[[1L]]
+  expect_identical(res$details$objects$modified, c(if (has_dt) "dt", "e", "k", "v"))
+  expect_identical(res$details$objects$added, "w")
+  text = msg_text(res)
+  expect_match(text, "~ v <numeric> modified (in the source workspace)", fixed = TRUE)
+  expect_match(text, "~ e <environment> modified (in the source workspace)", fixed = TRUE)
+  expect_match(text, "+ w <numeric length 1>", fixed = TRUE)
+  # a rebinding shadows the source's object without touching it, and removing it un-shadows it
+  expect_match(text, "~ k <numeric> modified\n", fixed = TRUE)
+  expect_identical(home$k, 1)
+  text = msg_text(tool_results(b)[[2L]])
+  expect_match(text, "~ k <numeric> modified", fixed = TRUE)
+  expect_false(grepl("in the source workspace", text, fixed = TRUE))
+})
+
 test_that("gptr_fork(at =) cuts at a turn, at 0 or at an entry id", {
   x = fork_source()
   f1 = gptr_fork(x$s, at = 1)
@@ -1164,6 +1260,18 @@ test_that("session_replay_new() returns the live session holding the header's id
   expect_identical(r, s)
   expect_identical(s$turns, 1L)
   expect_identical(s$text, "cached")
+  # the session that recorded a block holds its turn already; an undone block's turn is gone
+  held = test_session()
+  block = function(id, action) {
+    session_append(held, list(type = "custom", custom_type = "gptr.doc_block",
+                              data = list(doc = "analysis.R", block = id, action = action)))
+  }
+  block("a1b2c3", "insert")
+  block("d4e5f6", "undone")
+  expect_identical(session_replay_new("a1b2c3", list(session = held$id), globalenv()), held)
+  expect_identical(held$turns, 0L)
+  session_replay_new("d4e5f6", list(session = held$id), globalenv())
+  expect_identical(held$turns, 1L)
 })
 
 test_that("session_replay_new() rebuilds from the JSONL, cut at the recorded turn", {
@@ -1190,6 +1298,41 @@ test_that("session_replay_new() rebuilds from the JSONL, cut at the recorded tur
   expect_identical(session_data(r)$doc$path, "analysis.R")
   expect_identical(roles(r), c("user", "assistant"))
   expect_true("gptr.replay" %in% replay_types(r))
+})
+
+test_that("each piped block moves a rebuilt session to its turn until a live run (IC-46)", {
+  skip_on_cran()
+  local_store()
+  local_permissive()
+  local_fake_provider(list("first answer", "second answer", "third answer", "live answer"))
+  s = test_session(home = globalenv())
+  for (k in 1:3) {
+    run_text(s, paste("prompt", k))
+    session_append(s, entry_custom("gptr.doc_block", list(doc = "analysis.R",
+                                                          block = paste0("b", k, "b2c3"))))
+  }
+  id = s$id
+  other = test_session()
+  rm(s)
+  invisible(gc())
+  expect_null(session_by_id(id))
+  h = function(k) list(session = id, turn = as.character(k), model = "fake/fake-1")
+  # a replay that stopped after b1 (one line run, an interrupt) leaves the file's last entry on
+  # turn 1's branch; a later process still finds turn 2 at b2's own record
+  first = session_replay_new("b1b2c3", h(1), envir = new.env(), doc = NULL)
+  lock_release(lock_path(session_data(first)$file))
+  live_forget(first)
+  rm(first)
+  invisible(gc())
+  r = session_replay_new("b1b2c3", h(1), envir = new.env(), doc = NULL)
+  expect_identical(list(r$turns, r$text), list(1L, "first answer"))
+  session_replay_apply(r, "b2b2c3", h(2))
+  expect_identical(list(r$turns, r$text), list(2L, "second answer"))
+  expect_identical(roles(r), rep(c("user", "assistant"), 2L))
+  run_text(r, "live prompt")
+  session_replay_apply(r, "b3b2c3", h(3))
+  expect_identical(msg_text(r$messages[[5L]]), "live prompt")
+  expect_identical(r$turns, 4L)
 })
 
 test_that("without a file the session is reconstructed from the document", {
@@ -1230,6 +1373,33 @@ test_that("a later live run of a reconstructed session gives a one-time notice",
   expect_message(run_text(r, "and then?"), "reconstructed", class = "gptr_message_notice")
   expect_identical(r$text, "continued")
   expect_no_message(run_text(r, "more"), message = "reconstructed")
+})
+
+test_that("the footer marks a replayed session until it runs, and never as a known zero", {
+  skip_on_cran()
+  local_store()
+  local_permissive()
+  local_fake_provider(list("first answer", "second answer", "continued"))
+  s = test_session(home = globalenv())
+  run_text(s, "one")
+  id = s$id
+  ids = s$usage$request_id
+  other = test_session()
+  rm(s)
+  invisible(gc())
+  r = session_replay_new("a1b2c3", list(session = id, turn = "1", model = "fake/fake-1"),
+                         envir = new.env())
+  expect_match(session_footer(r), "^replayed . fake/fake-1 . 1 turn . [0-9.]+k? tokens . \\$0")
+  expect_identical(r$usage$request_id, ids)
+  run_text(r, "two")
+  expect_match(session_footer(r), "^idle .")
+  expect_length(r$usage$request_id, 2L)
+  # reconstructed from the document: no request is known, so its usage is unknown, never zero
+  b = session_replay_new("d4e5f6", list(session = "s0123456788", turn = "1", model = "fake/fake-1"),
+                         envir = new.env(), doc = list(template = "Summarise d", text = "Done."))
+  expect_match(session_footer(b), "^replayed . .* . unknown tokens . unknown cost . s0123456788$")
+  run_text(b, "and then?")
+  expect_no_match(session_footer(b), "replayed|unknown")
 })
 
 # Added to the plan's replay tests: the header fields that name things are checked, `doc` is

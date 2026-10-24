@@ -220,11 +220,17 @@ catalog_prices_from = function(cost) {
       out[[length(out) + 1L]] = row(paste0(">", round(size / 1000), "k"), t)
     }
   }
-  if (is.list(cost[["context_over_200k"]])) {
+  # models.dev mirrors its first context tier, whatever its size, in the legacy field
+  if (length(out) == 1L && is.list(cost[["context_over_200k"]])) {
     out[[length(out) + 1L]] = row(">200k", cost[["context_over_200k"]])
   }
-  out
+  out[!duplicated(vapply(out, function(p) p[["tier"]], ""))]
 }
+
+#' Version of the price conversion stamped on a snapshot; a refreshed cache converted by
+#' another is ignored and downloaded again (D-250)
+#' @noRd
+catalog_converter = 2L
 
 #' A catalog entry from one models.dev model; NULL unless tool-capable, text output and not
 #' deprecated (09 section 4.8)
@@ -365,7 +371,7 @@ catalog_snapshot = function(api = NULL, decision = NULL,
   ov = catalog_overrides()
   models = catalog_merge_models(models, ov[["models"]], patch_only = TRUE)
   models = models[order(names(models), method = "radix")]
-  list(schema_version = 1L, generated = generated,
+  list(schema_version = 1L, converter = catalog_converter, generated = generated,
        source = if (is.null(api)) "gptr seed + overrides" else "models.dev (MIT) + gptr overrides",
        providers = catalog_providers_section(), models = unname(models),
        aliases = ov[["aliases"]])
@@ -385,11 +391,18 @@ catalog_read = function(path) {
   x
 }
 
+#' The refreshed cache; NULL when absent or converted by another gptr
+#' @noRd
+catalog_read_cache = function() {
+  cache = catalog_read(catalog_cache_path())
+  if (identical(cache[["converter"]], catalog_converter)) cache else NULL
+}
+
 #' The newer of the shipped snapshot and the refreshed cache
 #' @noRd
 catalog_read_base = function() {
   snap = catalog_read(catalog_snapshot_path())
-  cache = catalog_read(catalog_cache_path())
+  cache = catalog_read_cache()
   if (is.null(cache)) {
     return(snap %||% list(schema_version = 1L, generated = NA_character_, source = "none",
                           providers = list(), models = list(), aliases = list()))
@@ -720,6 +733,10 @@ model_match = function(pat, ctg) {
   models = if (!is.na(pv)) provider_get(pv)$models
   e = if (length(models)) model_alias_entry(paste0(pv, "/", models[[1L]]$id), ctg)
   if (!is.null(e)) return(list(entry = e, how = "provider"))
+  # an alias with no model is not guessed ("gemini" with no Gemini Pro is no Gemini Flash)
+  if (catalog_norm_id(pat) %in% catalog_norm_id(names(targets))) {
+    return(list(entry = NULL, how = "alias without a model", alias = pat))
+  }
   r = model_match_fuzzy(pat, ctg, every)
   if (!is.null(r)) return(r)
   list(entry = NULL, how = "no match")
@@ -747,7 +764,7 @@ model_lookup = function(text, ctg) {
         hit2$thinking = suffix
         return(hit2)
       }
-      if (!is.null(hit2$provider)) {
+      if (!is.null(hit2$provider) || !is.null(hit2$alias)) {
         hit = hit2
         thinking = suffix
       }
@@ -778,20 +795,19 @@ model_suggestions = function(text, ctg, candidates = NULL) {
   known[order(d, known, method = "radix")][seq_len(min(3L, length(known)))]
 }
 
-#' Clamp a requested thinking level to the supported ones: upwards first, then downwards
+#' Clamp a requested thinking level to the supported ones: upwards first, then downwards; with
+#' the model's `ref`, a changed level is announced once per model and level
 #' @noRd
-model_clamp_thinking = function(levels, level) {
-  first = if (length(levels)) levels[[1]] else "off"
-  if (level %in% levels) return(level)
-  i = match(level, catalog_thinking_levels)
-  if (is.na(i)) return(first)
-  up = catalog_thinking_levels[i:length(catalog_thinking_levels)]
-  hit = up[up %in% levels]
-  if (length(hit)) return(hit[[1]])
-  down = rev(catalog_thinking_levels[seq_len(i - 1L)])
-  hit = down[down %in% levels]
-  if (length(hit)) return(hit[[1]])
-  first
+model_clamp_thinking = function(levels, level, ref = NULL) {
+  known = catalog_thinking_levels
+  i = match(level, known, nomatch = 0L)
+  near = if (i) c(known[i:length(known)], rev(known[seq_len(i - 1L)])) else character()
+  got = c(intersect(c(level, near), levels), levels, "off")[[1L]]
+  if (!is.null(ref) && !identical(got, level)) {
+    gptr_inform(paste0(ref, " has no thinking level \"", level, "\"; using \"", got, "\"."),
+                "thinking_clamped", .once = paste0("thinking_clamped:", ref, ":", level))
+  }
+  got
 }
 
 #' A length-1 number or NA
@@ -866,11 +882,17 @@ model_resolve = function(ref, strict = TRUE) {
   hit = model_lookup(ref, ctg)
   if (is.null(hit$entry)) {
     if (!strict) return(NULL)
-    target = model_alias_target(ref, ctg$alias_targets)
-    if (!is.na(target)) {
-      gptr_abort(paste0("The model alias '", ref, "' points to ", target, ", but its provider ",
-                        sub("/.*$", "", target), " is not registered."),
-                 "unknown_model", ref = ref, suggestions = character())
+    if (!is.null(hit$alias)) {
+      target = model_alias_target(hit$alias, ctg$alias_targets)
+      why = if (is.na(target)) {
+        paste("names no model in this catalog; run gptr_models(refresh = TRUE) or name one as",
+              "provider/id.")
+      } else {
+        paste0("points to ", target, ", but its provider ", sub("/.*$", "", target),
+               " is not registered.")
+      }
+      gptr_abort(paste0("The model alias '", hit$alias, "' ", why), "unknown_model", ref = ref,
+                 suggestions = character())
     }
     sugg = model_suggestions(ref, ctg, hit$candidates)
     lead = if (identical(hit$how, "ambiguous")) {
@@ -879,12 +901,20 @@ model_resolve = function(ref, strict = TRUE) {
     } else {
       paste0("Unknown model reference '", ref, "'.")
     }
+    # a models.dev route with no rows yet (the shipped snapshot is seed-only for most routes)
+    pid = hit$provider %||% ""
+    if (pid %in% names(catalog_modelsdev_ids()) && !(pid %in% ctg$index$provider)) {
+      lead = paste0(lead, " The catalog lists no ", pid, " models yet; ",
+                    "gptr_models(refresh = TRUE) downloads them from models.dev.")
+    }
     gptr_abort(paste0(lead, if (length(sugg)) paste0(" Did you mean: ",
                                                      paste(sugg, collapse = ", "), "?") else ""),
                "unknown_model", ref = ref, suggestions = sugg)
   }
   rec = model_record(hit$entry, ctg)
-  if (!is.null(hit$thinking)) rec$thinking = model_clamp_thinking(rec$thinking_levels, hit$thinking)
+  if (!is.null(hit$thinking)) {
+    rec$thinking = model_clamp_thinking(rec$thinking_levels, hit$thinking, rec$ref)
+  }
   rec
 }
 
@@ -1082,7 +1112,7 @@ catalog_refresh = function() {
   json_path = catalog_cache_path()
   etag_path = catalog_etag_path()
   hdr = list(accept = "application/json")
-  if (file.exists(json_path) && file.exists(etag_path)) {
+  if (file.exists(etag_path) && !is.null(catalog_read_cache())) {
     etag = readLines(etag_path, encoding = "UTF-8", warn = FALSE)[1]
     if (rlang::is_string(etag) && nzchar(etag) && !grepl("[[:cntrl:]]", etag)) {
       hdr[["if-none-match"]] = etag
@@ -1400,7 +1430,7 @@ catalog_ollama_discover = function(p, safety = NULL, only = NULL) {
     if (!length(tags)) {
       catalog_unavailable_abort(target, paste0(
         "it is not installed on the Ollama server at ", ep$origin, ". Install it yourself ",
-        "(for example `ollama pull ", only, "`), then prepare it again; gptr never downloads ",
+        "(for example `ollama pull ", only, "`), then call again; gptr never downloads ",
         "models"), paste0("ollama pull ", only))
     }
   }
@@ -1538,14 +1568,13 @@ provider_preflight = function(model, provider, safety = NULL) {
   if (is.null(ev)) {
     catalog_unavailable_abort(ref, paste0(
       "there is no current discovery evidence from the Ollama server at ", ep$origin,
-      "; prepare it with model_prepare() (or list the server with gptr_models(provider = \"",
-      pid, "\", refresh = TRUE)) while the server runs with the model installed"),
-      "Ollama discovery")
+      "; run gptr_models(provider = \"", pid, "\", refresh = TRUE) while the server runs with ",
+      "the model installed"), "Ollama discovery")
   }
   stale = catalog_evidence_stale(ev, model, provider, ep)
   if (!is.null(stale)) {
-    catalog_unavailable_abort(ref, paste0(stale, "; prepare it again with model_prepare()"),
-                              "Ollama discovery")
+    catalog_unavailable_abort(ref, paste0(stale, "; run gptr_models(provider = \"", pid,
+                                          "\", refresh = TRUE) again"), "Ollama discovery")
   }
   if (local_only && !identical(ev[["locality"]], "local")) {
     catalog_local_only_abort(ref, ep$origin, "discovery did not establish local execution")

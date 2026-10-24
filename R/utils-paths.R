@@ -313,14 +313,29 @@ project_root = function(path = getwd()) {
   start
 }
 
+#' Does `dir` hold a project marker?
+#'
+#' The `*.Rproj` probe lists the directory, which takes seconds in a large ancestor (macOS
+#' `$TMPDIR`) over the 100 or so walks of one call; its answer is kept per directory and redone
+#' when the directory's mtime changes, as adding, removing or renaming an entry does.
 #' @noRd
 is_project_dir = function(dir) {
-  dir.exists(file.path(dir, ".gptr")) ||
-    file.exists(file.path(dir, "DESCRIPTION")) ||
-    file.exists(file.path(dir, ".git")) ||
-    file.exists(file.path(dir, "_quarto.yml")) ||
-    length(list.files(dir, pattern = "\\.Rproj$")) > 0L
+  if (dir.exists(file.path(dir, ".gptr")) || file.exists(file.path(dir, "DESCRIPTION")) ||
+      file.exists(file.path(dir, ".git")) || file.exists(file.path(dir, "_quarto.yml"))) {
+    return(TRUE)
+  }
+  mtime = file.mtime(dir)
+  hit = the$rproj[[dir]]
+  if (is.null(hit) || !identical(hit$mtime, mtime)) {
+    hit = list(mtime = mtime, found = dir_list_rproj(dir))
+    the$rproj[[dir]] = hit
+  }
+  hit$found
 }
+
+#' Does a listing of `dir` hold an `*.Rproj` file?
+#' @noRd
+dir_list_rproj = function(dir) length(list.files(dir, pattern = "\\.Rproj$")) > 0L
 
 #' The existing `.gptr/` directory of the project root of `path`, or NULL
 #' @noRd

@@ -173,11 +173,17 @@ fake_chunks = function(text, chunk) {
 fake_script_reply = function(script, n, args, label) {
   if (is.function(script)) {
     return(tryCatch(do.call(script, args), error = function(e) {
-      list(error = paste(label, "script failed:", conditionMessage(e)), status = 500L)
+      fake_script_error(paste(label, "script failed:", conditionMessage(e)))
     }))
   }
-  if (!length(script)) return(list(error = paste0(label, ": the script is empty"), status = 500L))
+  if (!length(script)) return(fake_script_error(paste0(label, ": the script is empty")))
   script[[min(n, length(script))]]
+}
+
+#' The error reply of a broken script: gptr's own local failure, never retried (not an HTTP 500)
+#' @noRd
+fake_script_error = function(message) {
+  list(error = message, status = NA_integer_, class = "invalid_spec")
 }
 
 #' Pick the reply of request `n` from the script
@@ -186,7 +192,7 @@ fake_pick = function(script, request) {
   reply = fake_script_reply(script, request$n, list(request), "fake provider")
   if (is.character(reply) && length(reply) == 1L) reply = list(text = reply)
   if (!is.list(reply)) {
-    reply = list(error = "fake provider: a reply must be a string or a list", status = 500L)
+    reply = fake_script_error("fake provider: a reply must be a string or a list")
   }
   if (!is.null(reply$json)) reply$text = json_encode(reply$json)
   reply
@@ -258,7 +264,7 @@ fake_plan = function(reply, request, model, context, engine) {
     } else {
       message = as.character(reply$error)[1L]
       status = as.integer(reply$status %||% 500L)
-      class = fake_status_class(status, "provider")
+      class = reply$class %||% fake_status_class(status, "provider")
     }
     msg = msg_assistant(
       content, api = api, provider = provider, model = model_id, stop_reason = "error",
@@ -412,7 +418,8 @@ fake_missing_events = function(model, request_id,
       message = msg_assistant(list(), api = api, provider = provider, model = model_id,
                               stop_reason = "error", error_message = text,
                               request_id = request_id),
-      error = list(class = "provider", status = 500L, request_id = request_id, retry_after = NULL)
+      error = list(class = "invalid_spec", status = NULL, request_id = request_id,
+                   retry_after = NULL)
     )
   )
 }
@@ -438,7 +445,7 @@ fake_classifier_stream = function(model, context, opts) {
 fake_classify = function(model, state, questions, opts) {
   engine = fake_engine(model, opts)
   if (is.null(engine)) {
-    return(fake_s1_error("fake classifier: no script found for this model", 500L, model))
+    return(fake_s1_error("fake classifier: no script found for this model", NA, model))
   }
   answers = list()
   for (id in names(questions)) {

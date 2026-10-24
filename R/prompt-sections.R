@@ -311,6 +311,24 @@ preset_tools = function(preset, human, model = NULL, modifiers = character(), mo
   prompt_tool_order(tools)
 }
 
+#' Refuses a name of the call's `tools =` (`+`/`-` stripped) that names no tool of the session,
+#' hinting the closest preset or tool; settings `tools.enable`/`tools.disable` stay unchecked
+#' @noRd
+prompt_tools_check = function(mods, session_id) {
+  for (m in mods) {
+    nm = sub("^[+-]", "", m)
+    if (nzchar(nm) && !is.null(registry_get("tool", nm, session = session_id))) next
+    known = c(registry_names("preset", session = session_id),
+              registry_names("tool", session = session_id))
+    d = utils::adist(nm, known, ignore.case = TRUE)[1L, ]
+    hint = if (length(d) && min(d) <= 2) paste0("; did you mean \"", known[which.min(d)], "\"?")
+    gptr_abort(paste0("`tools =` names '", nm, "', which is neither a tool nor a preset",
+                      hint %||% "."), "invalid_argument", arg = "tools",
+               expected = "tool names, \"+name\"/\"-name\" or one preset")
+  }
+  invisible(TRUE)
+}
+
 #' Shipped `tools.presets` defaults (IC-73), applied only past break-even
 #' @noRd
 presets_shipped = c("google/gemini-3*" = "extended", "anthropic/claude-haiku-4-5*" = "extended")
@@ -620,6 +638,8 @@ prompt_compose_preset = function(s, ctx, name, opts, model, mode, human, doc, ro
   rec = preset_record(name, sid)
   mods = as.character(opts$tools %||% character())
   mods = mods[!is.na(mods)]
+  # a peter() call's own names; an agent definition's allowlist degrades quietly
+  if (!is.null(opts$call)) prompt_tools_check(mods, sid)
   tool_names = preset_tools(name, human, model, mods, mode, session = sid)
   removed = c(substring(mods[startsWith(mods, "-")], 2L),
               as.character(unlist(setting_get("tools", session = sid)$disable)))
@@ -775,11 +795,12 @@ prompt_reinject_read = function(r) {
   list(project = as.numeric(r$project), skills = as.numeric(r$skills))
 }
 
-#' The gptr.frozen custom entry (contract section 4.6)
+#' The gptr.frozen custom entry (contract section 4.6), with `mode`, the session's mode when the
+#' prompt froze, which a rebuild starts from (D-251)
 #' Extra keys (readers ignore them, contract 11): `human`, the frozen audience, and `reinject`,
 #' only when the floor check cut the budgets (IC-71).
 #' @noRd
-prompt_frozen_entry = function(frozen) {
+prompt_frozen_entry = function(frozen, mode) {
   secs = frozen$sections
   data = list(preset = frozen$preset, t0 = frozen$t0, t1 = frozen$t1,
               toolsJson = frozen$tools_json, toolNames = I(frozen$tool_names),
@@ -787,7 +808,7 @@ prompt_frozen_entry = function(frozen) {
                 list(name = secs$name[i], tier = secs$tier[i], hash = secs$hash[i],
                      tokens = secs$tokens[i])
               }),
-              model = frozen$model, human = frozen$human)
+              model = frozen$model, mode = mode, human = frozen$human)
   cut = prompt_reinject_read(frozen$reinject)
   if (!is.null(cut)) data$reinject = cut
   list(type = "custom", custom_type = "gptr.frozen", data = data)
@@ -820,7 +841,8 @@ prompt_frozen_restore = function(s) {
 
 #' The compaction floor check at freeze (IC-71)
 #' A post-compaction floor (static prefix, project, skills, checkpoint ~634) not below the threshold
-#' cuts re-injection to 25% of it, then refuses; an unknown window honors a finite compact_at.
+#' cuts re-injection to 25% of it, then refuses; an unknown window honors a finite compact_at, and
+#' the refusal names compact_at whenever it sets the threshold (D-250).
 #' @noRd
 prompt_floor_check = function(frozen, project_tokens, skills_budget = 0) {
   m = prompt_model(frozen$model)
@@ -836,23 +858,22 @@ prompt_floor_check = function(frozen, project_tokens, skills_budget = 0) {
   floor = static + min(project_tokens, cut) + min(skills_budget, cut) + 634
   if (floor < thr) return(frozen)
   big = function(x) format(round(x), big.mark = ",", scientific = FALSE)
-  if (!length(window) || is.na(window)) {
+  # peter() takes the preset as tools = "minimal"; context = "names" does not lower the floor
+  offer = !identical(frozen$preset, "minimal")
+  if (!length(window) || is.na(window) || thr == compact_threshold(NA_real_, NA_real_)) {
     gptr_abort(paste0("compact_at (", big(thr), " tokens) is too small for the ", frozen$preset,
                       " preset: after a compaction the context (about ", big(floor),
-                      " tokens) would not be below it. Increase compact_at, or use ",
-                      "preset = \"minimal\" or context = \"names\"."),
+                      " tokens) would not be below it. Increase compact_at",
+                      if (offer) " or use tools = \"minimal\"", "."),
                "invalid_argument", arg = "compact_at",
                expected = "a compact_at above the estimated post-compaction floor")
-  }
-  hint = if (identical(frozen$preset, "minimal")) {
-    "Use a model with a larger context window."
-  } else {
-    "Use preset = \"minimal\" or context = \"names\", or a model with a larger context window."
   }
   gptr_abort(paste0("The model ", frozen$model, " has a context window of ", big(window),
                     " tokens, too small for the ", frozen$preset, " preset: after a compaction ",
                     "the context (about ", big(floor), " tokens) would not be below the ",
-                    "compaction threshold (", big(thr), "). ", hint),
+                    "compaction threshold (", big(thr), "). Use ",
+                    if (offer) "tools = \"minimal\", or ",
+                    "a model with a larger context window."),
              "invalid_argument", arg = "model",
              expected = "a model whose context window leaves room after a compaction")
 }
@@ -879,7 +900,7 @@ prompt_freeze = function(s, opts = list()) {
   skills = if (is.null(registry_get("context_block", "skill_content", session = d$id))) 0 else 10000
   frozen = prompt_floor_check(frozen, proj_tokens, skills)
   d$frozen = frozen
-  session_append(s, prompt_frozen_entry(frozen))
+  session_append(s, prompt_frozen_entry(frozen, d$mode))
   invisible(frozen)
 }
 

@@ -117,11 +117,12 @@ session_id_ok = function(x) {
 
 #' Canonical model reference; lenient (an unknown model fails at the first request, not here)
 #' Pure resolution (IC-74); `type` is NULL when not known here (a router, an unresolved reference).
+#' `strict` also finds a provider spec registered for `session` only (run_model_resolve(), D-251).
 #' @noRd
-model_canonical = function(model, strict = FALSE) {
+model_canonical = function(model, strict = FALSE, session = NULL) {
   if (startsWith(model, "router:")) return(list(ref = model, thinking = NULL, type = NULL))
   rec = if (strict) {
-    model_resolve(model, strict = TRUE)
+    run_model_resolve(model, session)
   } else {
     tryCatch(model_resolve(model, strict = FALSE), error = function(e) NULL)
   }
@@ -272,8 +273,16 @@ final_text = function(path) {
 #' `messages`, `model`, `mode`, `status`, `reason`, `id`, `kind`, `file`, `turns`, `envir`,
 #' `children`, `ext`, `plan`, `last_rewind`, `editor_text`, and the names of child sessions.
 #' Sessions are changed only through `peter()` and the `gptr_*()` verbs, so `$<-` and `[[<-`
-#' signal `gptr_error_readonly`. Usage a provider did not report stays unknown: `cost` is `NA`
-#' when the cost of any request is unknown.
+#' signal `gptr_error_readonly`. A team's `text` joins its members' reports under
+#' `### <name> (<model>)` headings, where a member that did not finish says
+#' `(ended with status <status>)`; a fan-out's is the named chr of its children's texts, printed
+#' under the same headings; and `value` is the named list of their values, until the team or
+#' fan-out is continued with [peter()]: then `text` is its own answer and `value` its own value
+#' once a turn designates one, while each member's stay at `x$<name>$text` and
+#' `x$<name>$value`. Usage a provider did not report stays unknown: `cost` is `NA` when the cost
+#' of any request is unknown, as for a model without prices. `envir` is the session's kept
+#' workspace: `NULL` for a session started inside a function without `envir =` (a function
+#' frame is never kept), whose later turns evaluate in their caller's frame.
 #' `history` is the complete recorded-message table with a concise display, like
 #' `summary(x)`. Use `print(x$history, n = Inf)` to show all rows or `as.data.frame(x$history)`
 #' to obtain an ordinary data frame.
@@ -373,21 +382,41 @@ session_get = function(s, name) {
     })
 }
 
-#' `$text`: the last final answer; team sessions join their reports; fan-outs give a named chr
+#' `$text`: the last final answer; until a team or fan-out has its own (a continuation), a team
+#' joins its reports and a fan-out gives a named chr
 #' @noRd
 session_text = function(s) {
   d = session_data(s)
-  if (identical(d$kind, "team") && length(d$children)) {
-    parts = vapply(names(d$children), function(nm) {
-      cd = session_data(d$children[[nm]])
-      paste0("### ", nm, " (", cd$model, ")\n", if (is.na(cd$last_text)) "" else cd$last_text)
-    }, "")
-    return(paste(parts, collapse = "\n\n"))
-  }
+  if (!is.na(d$last_text)) return(d$last_text)
+  if (identical(d$kind, "team") && length(d$children)) return(session_child_reports(d))
   if (identical(d$kind, "fanout") && length(d$children)) {
     return(vapply(d$children, function(ch) session_data(ch)$last_text, ""))
   }
   d$last_text
+}
+
+#' Each child's report under `### <name> (<model>)`; a child that did not end idle says
+#' `(ended with status <status>)` first, as in the agent_reports block
+#' @noRd
+session_child_reports = function(d) {
+  parts = vapply(names(d$children), function(nm) {
+    cd = session_data(d$children[[nm]])
+    paste0("### ", nm, " (", cd$model, ")\n",
+           if (!identical(cd$status, "idle")) paste0("(ended with status ", cd$status, ")\n"),
+           if (is.na(cd$last_text)) "" else cd$last_text)
+  }, "")
+  paste(parts, collapse = "\n\n")
+}
+
+#' What print() and the notebook repr show: `$text`, but a fan-out without its own answer shows
+#' its children's reports under their names, as a team's `$text` does
+#' @noRd
+session_display_text = function(s) {
+  d = session_data(s)
+  if (identical(d$kind, "fanout") && is.na(d$last_text) && length(d$children)) {
+    return(session_child_reports(d))
+  }
+  session_text(s)
 }
 
 #' `$history`: one row per message on the active path; an assistant's `tokens` is its reported
@@ -423,14 +452,19 @@ session_history = function(s) {
 #' Print a session
 #'
 #' The footer is `status . model . turns . tokens . cost . id`. A token count or cost that a
-#' provider did not report is printed as unknown, never as zero.
+#' provider did not report is printed as unknown, never as zero. A session replayed from a
+#' document shows the status `replayed` until it makes a request; rebuilt from its saved
+#' transcript it shows the recorded usage, reconstructed from the document alone unknown usage.
+#' A team or fan-out without an answer of its own prints each child's answer under a
+#' `### <name> (<model>)` heading, with `(ended with status <status>)` for a child that did not
+#' finish.
 #'
 #' @param x A `gptr_session`.
 #' @param ... Unused.
 #' @return `x`, invisibly.
 #' @export
 print.gptr_session = function(x, ...) {
-  txt = session_text(x)
+  txt = session_display_text(x)
   txt = txt[!is.na(txt) & nzchar(txt)]
   if (length(txt)) msg_verbatim(console_escape(txt))
   msg_verbatim(cli::col_grey(console_escape(session_footer(x), newlines = FALSE)))
@@ -438,15 +472,23 @@ print.gptr_session = function(x, ...) {
 }
 
 #' The footer line: status . model . turns . tokens . cost . id (unknown counts print as unknown,
-#' IC-74, D-021)
+#' IC-74, D-021); a replayed session reads `replayed` until a request adds usage, and one with no
+#' stored request (reconstructed from its document) has unknown usage
 #' @noRd
 session_footer = function(s) {
   d = session_data(s)
   u = session_usage_rows(s)
+  replayed = isTRUE(d$replayed) && isTRUE(nrow(u) == d$replay_rows)
   tokens = sum(u$input + u$output + u$cache_read + u$cache_write_5m + u$cache_write_1h)
+  cost = u$cost
+  if (replayed && !nrow(u)) {
+    tokens = NA_real_
+    cost = NA_real_
+  }
   dot = if (cli::is_utf8_output()) " \u00b7 " else " . "
-  paste(c(d$status, d$model, paste(d$turns, if (identical(d$turns, 1L)) "turn" else "turns"),
-          paste(format_count(tokens), "tokens"), format_cost(u$cost), d$id),
+  paste(c(if (replayed) "replayed" else d$status, d$model,
+          paste(d$turns, if (identical(d$turns, 1L)) "turn" else "turns"),
+          paste(format_count(tokens), "tokens"), format_cost(cost), d$id),
         collapse = dot)
 }
 
@@ -454,7 +496,7 @@ session_footer = function(s) {
 #' displayed independently by doc_pending_add(), so it is not appended a second time here.
 #' @noRd
 doc_session_repr_text = function(x, ...) {
-  txt = session_text(x)
+  txt = session_display_text(x)
   txt = txt[!is.na(txt) & nzchar(txt)]
   redact(paste(c(txt, session_footer(x)), collapse = "\n\n"), "persist")
 }
@@ -635,8 +677,10 @@ str.gptr_session = function(object, ...) {
 # ---------------------------------------------------------------------------- the value policy
 
 #' Designate a value of the session (the section 5.1 value policy of 03)
-#' A name bound in the kept home (or globalenv) is deep-copied below `gptr.value_copy_max`, else
-#' held by name and address; anything else is boxed. The entry holds metadata only (rule R1).
+#' A name bound in the kept home (or globalenv) is deep-copied when its size (env_snap_size()) is
+#' below `gptr.value_copy_max` and its object.size() below `gptr.values_max_bytes`, and the copy is
+#' kept when it is a new object holding below `gptr.value_copy_max` of its own; else the value is
+#' held by name and address. Anything else is boxed. The entry holds metadata only (rule R1).
 #' @noRd
 session_value_set = function(s, label, value, name = NULL, forced_home = NULL) {
   check_string(label, "label")
@@ -648,9 +692,19 @@ session_value_set = function(s, label, value, name = NULL, forced_home = NULL) {
   bound = !is.null(name) && !is.null(where) &&
     (identical(where, globalenv()) || identical(where, kept)) &&
     exists(name, envir = where, inherits = FALSE)
-  facts = value_facts(value)
-  mode = if (!bound) "box" else if (facts$bytes < gptr_opt("value_copy_max")) "copy" else "name"
+  facts = value_facts(value, where)
+  limit = gptr_opt("value_copy_max")
+  # object.size() bounds what duplicate() allocates (each list path, compact sequences expanded)
+  copy = bound && facts$bytes < limit &&
+    as.numeric(utils::object.size(value)) < gptr_opt("values_max_bytes")
+  mode = if (!bound) "box" else if (copy) "copy" else "name"
   held = switch(mode, copy = rlang::duplicate(value, shallow = FALSE), name = NULL, box = value)
+  # no copy (an environment, an R6 object, an external pointer) or a copy that outgrew the value
+  if (mode == "copy" && (identical(rlang::obj_address(held), facts$address) ||
+                         env_snap_size(held, where, value) >= limit)) {
+    held = NULL
+    mode = "name"
+  }
   rec = list(turn = d$turns, mode = mode, name = name %||% label,
              address = if (identical(mode, "name")) facts$address else NA_character_,
              class = facts$class, bytes = facts$bytes, value = held)
@@ -667,8 +721,8 @@ session_value_set = function(s, label, value, name = NULL, forced_home = NULL) {
 
 #' Facts of a value through one leaf (rule R4)
 #' @noRd
-value_facts = function(x) {
-  list(class = class(x)[1L], bytes = as.numeric(utils::object.size(x)),
+value_facts = function(x, home = NULL) {
+  list(class = class(x)[1L], bytes = env_snap_size(x, home),
        address = rlang::obj_address(x))
 }
 
@@ -687,11 +741,12 @@ values_trim = function(d) {
   invisible(d)
 }
 
-#' The designated value: the latest by turn, or the one of `turn`; NULL when none
+#' The designated value: the latest by turn, or the one of `turn`; NULL when none; a team or
+#' fan-out without a value of its own gives the named list of its children's values
 #' @noRd
 session_value_get = function(s, turn = NULL) {
   d = session_data(s)
-  if (d$kind %in% c("team", "fanout") && length(d$children)) {
+  if (d$kind %in% c("team", "fanout") && length(d$children) && !length(d$values)) {
     return(lapply(d$children, function(ch) session_value_get(ch)))
   }
   if (!length(d$values)) return(NULL)
@@ -782,7 +837,7 @@ session_set_model = function(s, ref, reason = "user") {
   check_string(ref, "ref")
   check_string(reason, "reason")
   d = session_data(s)
-  m = model_canonical(ref, strict = TRUE)
+  m = model_canonical(ref, strict = TRUE, session = d$id)
   stream_chat_model(m)
   from = d$model
   if (identical(from, m$ref) && identical(d$thinking, m$thinking)) return(invisible(s))
@@ -961,7 +1016,10 @@ session_root_id = function(s) {
 #' ids. Nothing live is shared (listeners, queue, run, lock, usage); the fork's file is written
 #' lazily at its first own message, with `parentSession` and `gptr.forkOf` in its header. The
 #' fork's workspace is an overlay of the source's kept home: it reads every object of the source
-#' at zero cost, and its writes stay in the overlay.
+#' at zero cost, and its ordinary assignments stay in the overlay, but code that modifies an
+#' object by reference (data.table `:=` and `set*()`, environments and R6 objects, `<<-`,
+#' `assign(envir =)`) changes the source's object too; copy such objects first, for example with
+#' `data.table::copy()`, when a branch must not touch them.
 #'
 #' @param s A `gptr_session`: the source.
 #' @param at `NULL` (the last closed boundary; a running source is cut there), an integer `k >= 0`
@@ -1198,15 +1256,29 @@ replay_key = function(block, child = NULL) if (is.null(child)) block else paste0
 # ---------------------------------------------------------------------------- replay (IC-46)
 
 #' Advance a piped session in place for a fresh recorded block (IC-46)
-#' Records the block (replay_mark()) and returns the same object, so a replayed pipe chain keeps
+#' A session rebuilt from its JSONL moves to the end of the block's turn (replay_seek()); one
+#' reconstructed from its document gains the block's turn from `doc` (replay_turn_append()). The
+#' block's steers become its notes each time it is replayed (replay_notes_add()). Records the
+#' block (replay_mark()) and returns the same object, so a replayed pipe chain keeps
 #' `identical(chain_result, first_result)`.
 #' @noRd
-session_replay_apply = function(s, block, header, text = NULL) {
+session_replay_apply = function(s, block, header, text = NULL, doc = NULL) {
   check_class(s, "gptr_session", "s")
   check_string(block, "block")
   replay_header_check(header)
   check_string(text, "text", null = TRUE)
-  replay_mark(s, block, header, text, advance = TRUE)
+  replay_doc_check(doc)
+  d = session_data(s)
+  added = FALSE
+  if (!block %in% d$seen) {
+    replay_seek(s, replay_turn(header$turn), block)
+    if (identical(d$history_source, "reconstructed") && !is.null(doc)) {
+      replay_turn_append(s, header, doc, d$turns + 1L)
+      added = TRUE
+    }
+  }
+  replay_notes_add(s, block, doc)
+  replay_mark(s, block, header, text, advance = !added)
   s
 }
 
@@ -1221,9 +1293,11 @@ session_replay_new = function(block, header, envir, doc = NULL) {
   replay_doc_check(doc)
   id = header$session
   live_s = if (is.null(id)) NULL else session_by_id(id)
-  if (!is.null(live_s)) return(session_replay_apply(live_s, block, header, doc$text))
+  if (!is.null(live_s)) return(session_replay_apply(live_s, block, header, doc$text, doc))
   path = if (is.null(id)) NULL else store_find(id)
-  if (!is.null(path)) return(replay_adopt(replay_rebuild(path, header, envir), block, header, doc))
+  if (!is.null(path)) {
+    return(replay_adopt(replay_rebuild(path, header, envir, block), block, header, doc))
+  }
   # all or nothing, as store_rebuild(): on.exit() undoes a failed or interrupted reconstruction
   prev_last = the$last
   s = replay_session_new(header, envir)
@@ -1247,8 +1321,52 @@ replay_adopt = function(s, block, header, doc) {
     d$doc = list(path = doc$path, format = doc$format %||% NA_character_, site = NULL,
                  blocks = block)
   }
+  replay_notes_add(s, block, doc)
   replay_mark(s, block, header, doc$text, advance = FALSE)
   s
+}
+
+#' The texts of a replayed block's `## Steer:` and `## Follow-up:` lines (`doc$steps`) become the
+#' session's notes of that block, set anew each time the block is replayed (a script sourced again
+#' sends them again): replay_note_take() keeps them from reaching the model twice. A matching item
+#' the script queued before the call that took it is taken back now.
+#' @noRd
+replay_notes_add = function(s, block, doc) {
+  notes = Filter(function(st) st$type %in% c("steer", "follow_up"), doc$steps %||% list())
+  if (!length(notes)) return(invisible(s))
+  d = session_data(s)
+  kept = d$replay_notes %||% list()
+  kept[[block]] = vapply(notes, function(st) st$text, "")
+  d$replay_notes = kept
+  q = d$queue
+  for (which in c("steer", "follow_up")) {
+    q[[which]] = Filter(function(it) {
+      !(it$source %in% c("api_user", "pipe") && replay_note_take(s, it$text))
+    }, q[[which]])
+  }
+  if (!identical(q, d$queue)) {
+    d$queue = q
+    session_emit(s, "queue_update", steer = length(q$steer), follow_up = length(q$follow_up))
+  }
+  invisible(s)
+}
+
+#' TRUE when `text`, a steer or follow-up a script sends to an idle replayed session, is one of its
+#' notes (as the document writer normalises it, either kind), which it then consumes
+#' @noRd
+replay_note_take = function(s, text) {
+  d = session_data(s)
+  if (!length(d$replay_notes) || !identical(d$status, "idle") || !rlang::is_string(text)) {
+    return(FALSE)
+  }
+  text = doc_one_line(redact(as_utf8(text), "context"))
+  b = Position(function(v) text %in% v, d$replay_notes)
+  if (is.na(b)) return(FALSE)
+  v = d$replay_notes[[b]]
+  d$replay_notes[[b]] = v[-match(text, v)]
+  gptr_inform(paste0("A steer this script sends is already recorded in the replayed block; it was ",
+                     "not sent again."), "notice", .once = "replay_steer_recorded")
+  TRUE
 }
 
 #' Check the header fields that name things before anything is looked up or recorded: `session`
@@ -1272,7 +1390,8 @@ replay_header_check = function(header) {
 replay_model_parts = function(model) c(sub("/.*$", "", model), sub("^[^/]*/", "", model))
 
 #' Check the document fields of a replay before a session is built from them: `path`, `format`,
-#' `template` and `text` are one string or NULL, `code` and `output` character vectors or NULL
+#' `template` and `text` are one string or NULL, `code` and `output` character vectors or NULL,
+#' `steps` a list or NULL
 #' @noRd
 replay_doc_check = function(doc) {
   check_list(doc, "doc", null = TRUE)
@@ -1280,6 +1399,7 @@ replay_doc_check = function(doc) {
     check_string(doc[[f]], paste0("doc$", f), null = TRUE, empty = TRUE)
   }
   for (f in c("code", "output")) check_strings(doc[[f]], paste0("doc$", f), null = TRUE)
+  check_list(doc[["steps"]], "doc$steps", null = TRUE)
   invisible(doc)
 }
 
@@ -1293,24 +1413,41 @@ replay_turn = function(x) {
 }
 
 #' Record a replayed block on a session: `gptr.replay`, `seen`, the turn (one more when
-#' `advance`), the value, `last_text`
+#' `advance`, unless the active path holds the block's turn already: the session that recorded
+#' it, in this process), the value, `last_text`
 #' @noRd
 replay_mark = function(s, block, header, text, advance) {
   d = session_data(s)
   if (block %in% d$seen) return(invisible(s))
-  turn = if (advance) d$turns + 1L else d$turns
+  turn = if (advance && !replay_holds_block(d, block)) d$turns + 1L else d$turns
   session_append(s, entry_custom("gptr.replay", compact(list(
     doc = header$doc %||% d$doc$path, block = block, mode = header$mode %||% "replay",
     turn = turn, value = header$value))))
   d$seen = c(d$seen, block)
   d$turns = turn
+  d$replay_rows = nrow(session_usage_rows(s))
   if (!is.null(header$value)) replay_value(s, header$value)
   if (!is.null(text)) d$last_text = text
   invisible(s)
 }
 
+#' Does the active path hold a record of `block` (replay_block_record())?
+#' @noRd
+replay_holds_block = function(d, block) {
+  any(vapply(entries_path(d), replay_block_record, NA, block = block))
+}
+
+#' Is entry `e` a `gptr.doc_block` record of `block` that a rewind has not undone?
+#' @noRd
+replay_block_record = function(e, block) {
+  identical(e$custom_type, "gptr.doc_block") && is.list(e$data) &&
+    identical(e$data$block, block) && !identical(e$data$action, "undone")
+}
+
 #' Designate the replayed block's `value=` name: through the value policy when the name is bound
-#' in the kept home, else held by name only (resolved when first read)
+#' in the kept home, else held by name only (resolved when first read), unless the session holds
+#' a value of this turn already: the recording session, replayed into another environment of this
+#' process, where the name is bound only after the replay and outside its home
 #' @noRd
 replay_value = function(s, name) {
   home = session_home(s)
@@ -1320,6 +1457,8 @@ replay_value = function(s, name) {
   }
   d = session_data(s)
   vals = d$values
+  held = vapply(vals, function(v) !is.null(v$value) && as.integer(v$turn) == d$turns, NA)
+  if (any(held)) return(invisible(NULL))
   vals[[length(vals) + 1L]] = list(turn = d$turns, mode = "name", name = name,
                                    address = NA_character_, class = NA_character_,
                                    bytes = NA_real_, value = NULL)
@@ -1328,22 +1467,43 @@ replay_value = function(s, name) {
   invisible(NULL)
 }
 
-#' Rebuild a replayed session from its JSONL, the leaf moved back to the end of the recorded turn
+#' Rebuild a replayed session from its JSONL, moved to the end of `block`'s turn; its path and
+#' values as read are kept for the later piped blocks of the chain (replay_seek())
 #' @noRd
-replay_rebuild = function(path, header, envir) {
+replay_rebuild = function(path, header, envir, block) {
   s = store_rebuild(path, envir)
   d = session_data(s)
-  turn = replay_turn(header$turn)
-  if (!is.na(turn) && turn < d$turns) {
-    cut = tryCatch(fork_cut(d, turn), error = function(e) NULL)
-    if (!is.null(cut) && !is.null(cut$entry)) {
-      d$leaf = cut$entry
-      path_fields(d, entries_path(d))
-      d$values = Filter(function(v) as.integer(v$turn) <= cut$turn, d$values)
-      d$status = "idle"
-    }
-  }
+  d$replay_tip = d$leaf
+  d$replay_values = d$values
+  replay_seek(s, replay_turn(header$turn), block)
   s
+}
+
+#' Move a session rebuilt for a replay to the end of `block`'s turn: its last `gptr.doc_block`
+#' record (replay_block_record()), which the writer appends after the turn, wherever the file's
+#' last entry is (an earlier replay that stopped sooner leaves it on a shorter branch); without one,
+#' to the end of recorded turn `turn` of the path it was rebuilt with. No value record of a later
+#' turn is kept: a replay that advanced the live session (a team child) recorded a value of the
+#' next turn, whose copy is not stored, which would hide the block's value. A live run ends the
+#' seeking (run_start()).
+#' @noRd
+replay_seek = function(s, turn, block) {
+  d = session_data(s)
+  if (is.null(d$replay_tip) || is.na(turn)) return(invisible(s))
+  rec = Find(function(e) replay_block_record(e, block), d$entries, right = TRUE)
+  d$leaf = rec$id %||% d$replay_tip
+  path = entries_path(d)
+  cut = if (is.null(rec) && turn < path_turn(path)) {
+    tryCatch(fork_cut(d, turn), error = function(e) NULL)
+  }
+  if (!is.null(cut$entry)) {
+    d$leaf = cut$entry
+    path = entries_path(d)
+  }
+  path_fields(d, path)
+  d$status = if (is.null(cut$entry)) rebuild_status(path) else "idle"
+  d$values = Filter(function(v) as.integer(v$turn) <= d$turns, d$replay_values)
+  invisible(s)
 }
 
 #' The `replayed` session a reconstruction fills: the recorded id and model, with a fresh overlay
@@ -1374,40 +1534,64 @@ session_undo = function(s, prev_last) {
   invisible(NULL)
 }
 
-#' Reconstruct a replayed session's transcript from its document block: the template, the code as
-#' an `r` call, the `#>` lines as its result, then the cached answer
+#' Reconstruct a replayed session's transcript from its document block (replay_turn_append())
 #' @noRd
 replay_reconstruct = function(s, header, doc) {
   d = session_data(s)
   d$history_source = "reconstructed"
   turn = replay_turn(header$turn)
-  d$turns = if (is.na(turn) || turn < 1L) 1L else turn
+  replay_turn_append(s, header, doc, if (is.na(turn) || turn < 1L) 1L else turn)
+}
+
+#' Append turn `turn` reconstructed from a document block: the template, then in body order each
+#' run of code as an `r` call with its `#>` lines as the result, each steer as the relay a live
+#' steer arrives as (which records back as the same `## Steer:` line), each follow-up as the user
+#' message it was, after the earlier answer it followed; then the cached answer. `doc$steps` is
+#' doc_replay_steps(); without it, `doc$code` and `doc$output` are one run.
+#' @noRd
+replay_turn_append = function(s, header, doc, turn) {
+  d = session_data(s)
+  d$turns = turn
   parts = replay_model_parts(header$model %||% "unknown/unknown")
-  provider = parts[[1L]]
-  model_id = parts[[2L]]
+  said = function(content, ...) {
+    session_append(s, entry_message(msg_assistant(content, api = "replay", provider = parts[[1L]],
+                                                  model = parts[[2L]], ...)))
+  }
   session_append(s, entry_message(msg_user(doc$template %||% "(the prompt was not recorded)",
                                            source = "replay")))
-  has_code = length(doc$code) > 0L
-  if (has_code) {
-    call_id = paste0("replay_", d$turns)
-    call = block_tool_call(call_id, "r", list(code = paste(doc$code, collapse = "\n")))
-    session_append(s, entry_message(msg_assistant(list(call), api = "replay", provider = provider,
-                                                  model = model_id, stop_reason = "tool_use")))
-    out = if (length(doc$output)) paste(doc$output, collapse = "\n") else "(no output recorded)"
-    session_append(s, entry_message(msg_tool_result(call_id, "r", out)))
+  steps = doc$steps %||% list(list(type = "r", code = doc$code, output = doc$output))
+  k = 0L
+  for (st in steps) {
+    if (identical(st$type, "steer")) {
+      session_append(s, entry_message(msg_operator(
+        "steer_relay", paste0("The user sent this message while you were working: ", st$text),
+        origin_text = st$text)))
+    } else if (identical(st$type, "follow_up")) {
+      said("(the answer to the earlier request was not recorded)")
+      session_append(s, entry_message(msg_user(st$text, source = "follow_up")))
+    } else if (length(st$code)) {
+      k = k + 1L
+      id = paste0("replay_", turn, if (k > 1L) paste0("_", k))
+      said(list(block_tool_call(id, "r", list(code = paste(st$code, collapse = "\n")))),
+           stop_reason = "tool_use")
+      out = if (length(st$output)) paste(st$output, collapse = "\n") else "(no output recorded)"
+      session_append(s, entry_message(msg_tool_result(id, "r", out)))
+    }
   }
   # a missing answer is said to be missing, and the code is pointed to only when it is there
-  answer = doc$text %||% paste0("(the answer of this turn was not recorded",
-                                if (has_code) "; its code is above", ")")
-  session_append(s, entry_message(msg_assistant(answer, api = "replay", provider = provider,
-                                                model = model_id)))
+  said(doc$text %||% paste0("(the answer of this turn was not recorded",
+                            if (k > 0L) "; its code is above", ")"))
   s
 }
 
-#' The one-time notice when a reconstructed session continues live (IC-46)
+#' A replayed session continues live (run_start()): the one-time notice of a reconstructed history
+#' (IC-46); a later replayed block no longer moves the session along its recorded path
+#' (replay_seek()), which the live turn has left, and a later steer equal to a note is sent
 #' @noRd
 replay_notice = function(s) {
   d = session_data(s)
+  d$replay_tip = NULL
+  d$replay_notes = NULL
   if (!identical(d$history_source, "reconstructed")) return(invisible(NULL))
   gptr_inform(paste0("session ", d$id, " continues from a history reconstructed from its ",
                      "document; earlier tool calls and answers are approximate"),

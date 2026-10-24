@@ -39,9 +39,14 @@ cp_wait_fixture = function(script, budget = NULL, should = TRUE, .env = parent.f
 # Every timed finite wait runs under it, so a stalled synchronous step cannot fail its bound.
 cp_wait_clock = function(.env = parent.frame()) {
   r = reactor_get()
+  # a task an earlier test left is named by the start of its body
+  left = vapply(ls(r$tasks), function(id) {
+    strtrim(paste(trimws(deparse(body(r$tasks[[id]]$fn))), collapse = " "), 70L)
+  }, "")
+  if (length(left)) stop("an earlier test left reactor tasks: ", paste(left, collapse = "; "))
   stopifnot(!length(ls(r$transfers)), !length(ls(r$procs)), !length(ls(r$stdin)),
-            !length(ls(r$runs)), !length(ls(r$timers)), !length(ls(r$tasks)),
-            !length(r$queue), !length(r$fifo), identical(r$depth, 0L))
+            !length(ls(r$runs)), !length(ls(r$timers)), !length(r$queue), !length(r$fifo),
+            identical(r$depth, 0L))
   clock = new.env(parent = emptyenv())
   clock$now = reactor_now()
   original_io = reactor_io

@@ -187,7 +187,8 @@ plan_on_input = function(event, ctx) {
 plan_on_decision = function(event, ctx) plan_count_call()
 
 #' Declare, once, the tools of the session's preset (`readonly` read as `standard`) that its
-#' frozen array lacks (ctx$add_tools(), IC-69)
+#' frozen array lacks (ctx$add_tools(), IC-69). Only the execute menu calls it: a readonly
+#' session that never chose Execute keeps `read` and `r` (D-251)
 #' @noRd
 plan_add_tools = function(s, ctx, mode) {
   d = session_data(s)
@@ -209,7 +210,8 @@ plan_add_tools = function(s, ctx, mode) {
 
 #' Leave plan mode in the same session: the mode, the plan marked used, and a follow-up that the
 #' session's NEXT run takes (P06 fixed this run's scratch overlay at its start, so the plan
-#' cannot execute inside it)
+#' cannot execute inside it). A run started from the queue renders no turn context, so the
+#' go-ahead carries P07's turn blocks, among them the new `<mode>` (04 section 7.6).
 #' @noRd
 plan_execute = function(s, mode, ctx) {
   d = session_data(s)
@@ -220,9 +222,14 @@ plan_execute = function(s, mode, ctx) {
   }
   session_append(s, list(type = "custom", custom_type = "gptr.plan",
                          data = list(text_hash = hash_sha256(d$plan), status = "used")))
-  session_enqueue(s, "Go ahead with the plan above.", as = "follow_up", source = "pause_menu")
+  text = "Go ahead with the plan above."
+  blocks = if (ext_service_has("context.turn")) {
+    ext_service_get("context.turn")(s, list(turn = as.integer(d$turns %||% 0L) + 1L,
+                                            prompt = text))
+  }
+  session_enqueue(s, text, as = "follow_up", source = "pause_menu", blocks = blocks %||% list())
   gptr_inform(paste0("Queued the go-ahead in session ", d$id, " (mode ", mode, "): ",
-                     "gptr_step(gptr_last()) runs the plan."), "plan_handoff")
+                     "gptr_wait(gptr_last()) runs the plan."), "plan_handoff")
   plan_add_tools(s, ctx, mode)
 }
 
@@ -269,17 +276,6 @@ plan_on_agent_end = function(event, ctx) {
   if (!is.environment(ps) || !isTRUE(ps$plan_fresh)) return(NULL)
   ps$plan_fresh = FALSE
   if (identical(event$status %||% "idle", "idle")) plan_menu(s, ctx)
-  NULL
-}
-
-#' Hook `agent_start`: a session frozen with the readonly preset, now outside plan mode, gets
-#' the tools of its preset
-#' @noRd
-plan_on_agent_start = function(event, ctx) {
-  s = ctx$session
-  if (!inherits(s, "gptr_session") || identical(ctx$mode(), "plan")) return(NULL)
-  d = session_data(s)
-  if (identical(d$frozen$preset %||% d$preset, "readonly")) plan_add_tools(s, ctx, ctx$mode())
   NULL
 }
 
@@ -330,7 +326,6 @@ builtin_plan = function(gptr) {
                             "plan mode: only known read-only calls run"))
   gptr$on("turn_end", plan_on_turn_end)
   gptr$on("agent_end", plan_on_agent_end)
-  gptr$on("agent_start", plan_on_agent_start)
   gptr$on("input", plan_on_input)
   gptr$on("decision", plan_on_decision)
   invisible(NULL)

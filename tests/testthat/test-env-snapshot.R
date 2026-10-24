@@ -34,8 +34,9 @@ test_that("env_snapshot lists bindings with facts and never forces promises", {
   expect_equal(s$class[s$name == "df"], "data.frame")
   expect_equal(s$shape[s$name == "df"], "3 x 2")
   expect_equal(s$shape[s$name == "v"], "length 2")
-  expect_true(is.na(s$bytes[s$name == "f"]))
+  expect_gt(s$bytes[s$name == "f"], 0)
   expect_gt(s$bytes[s$name == "df"], 0)
+  expect_true(all(is.na(s$bytes[s$kind != "value"])))
   expect_true(rlang::env_binding_are_lazy(e, "lazy"))
 })
 
@@ -60,14 +61,19 @@ test_that("env_snapshot reuses sizes from the previous snapshot", {
   expect_error(env_snapshot(list()), class = "gptr_error_invalid_argument")
 })
 
-test_that("a compact integer sequence is described without materialising it", {
+test_that("a compact integer sequence counts its state, a changed one its elements (D-247)", {
   e = new.env()
   e$alt = 1:1e9
+  e$mid = 1:1e6
+  e$mid[5e5] = 0L
   t0 = proc.time()[["elapsed"]]
   s = env_snapshot(e)
   expect_lt(proc.time()[["elapsed"]] - t0, 5)
-  expect_equal(s$shape, "length 1,000,000,000 (sequence)")
-  expect_true(is.na(s$bytes))
+  expect_equal(s$shape, c("length 1,000,000,000", "length 1,000,000"))
+  expect_lt(s$bytes[[1L]], 1024)
+  expect_equal(s$bytes[[2L]], 4000048)
+  expect_true(env_compact_seq(1e6:1))
+  expect_false(env_compact_seq(e$mid))
 })
 
 test_that("env_diff reports added, modified, removed, assignment targets and forced promises", {
@@ -115,19 +121,130 @@ test_that("workspace_lines aligns columns, sorts largest first and caps at 12 li
   expect_match(tight[length(tight)], "smaller objects: use ls\\(\\)")
 })
 
-test_that("an S7 object has no size and ranks at the median size; functions stay last (D-189)", {
-  # object.size() counts the class object of every S7 object in full (a ggplot2 4.x plot: 16 MB)
+test_that("every value has a size; promises and active bindings rank last (D-247)", {
   e = new.env()
   e$plt = structure(list(), class = c("pkg::plot", "S7_object"),
                     S7_class = structure(function() NULL, pad = numeric(1e5)))
-  e$fn = function() 1
+  e$fn = local({
+    big = numeric(2e5)
+    function() big
+  })
+  e$env = new.env()
+  e$env$v = numeric(3e5)
+  delayedAssign("lazy", stop("forced!"), assign.env = e)
   for (i in 1:20) assign(sprintf("obj%02d", i), seq_len(i * 100) + 0, envir = e)
   s = env_snapshot(e)
-  expect_true(is.na(s$bytes[s$name == "plt"]))
+  expect_false(anyNA(s$bytes[s$kind == "value"]))
   lines = workspace_lines(s)
-  expect_match(lines[11], "^plt +pkg::plot +length 0$")
-  expect_match(lines[12], "^obj10 ")
-  expect_false(any(grepl("^fn ", lines)))
+  expect_match(lines[1], "^env +environment +1 bindings +2.3 MB$")
+  expect_match(lines[2], "^fn +function +1.5 MB$")
+  expect_match(lines[3], "^plt +pkg::plot +length 0 +78[0-9] KB$")
+  expect_false(any(grepl("^lazy ", lines)))
+  expect_true(rlang::env_binding_are_lazy(e, "lazy"))
+})
+
+test_that("a snapshot re-sizes a list edited in place (its fingerprint changed)", {
+  e = new.env()
+  e$l = list(a = 1, b = 2)
+  s1 = env_snapshot(e)
+  evalq(l$b <- numeric(1e5), e)
+  s2 = env_snapshot(e, previous = s1)
+  expect_identical(s2$address, s1$address)
+  expect_gt(s2$bytes, 8e5)
+})
+
+test_that("env_snap_size() counts each part and each string once (D-247)", {
+  x = rnorm(1e5)
+  expect_equal(env_snap_size(x), 800048)
+  expect_equal(env_snap_size(list(a = x, b = x, c = x)),
+               env_snap_size(x) + env_snap_size(list(a = NULL, b = NULL, c = NULL)))
+  chr = rep(c("alpha", "beta"), 5e5)
+  expect_equal(env_snap_size(chr), 8000048 + 2 * 56)
+  expect_equal(env_snap_size(list(chr, rev(chr))), 48 + 16 + 2 * 8000048 + 2 * 56)
+  expect_equal(env_snap_size(mtcars), as.numeric(utils::object.size(mtcars)) - 3 * 56)
+  expect_identical(env_snap_size(NULL), 0)
+})
+
+test_that("a classed vector counts its stored length, not what its length() method reports", {
+  registerS3method("length", "p09_badlen", function(x) 1L, envir = environment(env_snap_size))
+  x = structure(numeric(1e5), class = "p09_badlen")
+  expect_equal(env_snap_size(x), 800048 + 56 + env_snap_size("p09_badlen"))
+})
+
+test_that("env_snap_size() counts what environments and closures hold, not code or homes (D-247)", {
+  e = new.env()
+  e$v = numeric(1e5)
+  delayedAssign("p", stop("forced!"), assign.env = e)
+  makeActiveBinding("a", function() stop("called!"), e)
+  e$self = e
+  expect_equal(env_snap_size(e), 56 + 4 * 56 + 800048)
+  f = local({
+    v = numeric(1e5)
+    function() v
+  })
+  expect_gt(env_snap_size(f), 8e5)
+  expect_equal(env_snap_size(f) - env_snap_size(f, home = environment(f)), 56 + 56 + 800048)
+  fit = local({
+    big = numeric(1e5)
+    y ~ x
+  })
+  expect_gt(env_snap_size(fit), 8e5)
+  expect_lt(env_snap_size(sum), 100)
+  expect_lt(env_snap_size(environment(sum)), 100)
+  expect_lt(env_snap_size(stats::lm), 1000)
+  expect_equal(env_snap_size(eval(parse(text = "function() 1", keep.source = TRUE), baseenv())), 56)
+  expect_true(rlang::env_binding_are_lazy(e, "p"))
+})
+
+test_that("a checkpoint image counts only what the current value does not reach (D-247)", {
+  cur = list(a = rnorm(1e5), s = sprintf("id%05d", 1:1e4))
+  pre = cur
+  cur$a = 1
+  expect_equal(env_snap_size(pre, shared = cur), 800048 + 64 + 56)
+  cur = pre
+  cur$s[1] = "x"
+  expect_equal(env_snap_size(pre, shared = cur), 80048 + 64 + 56 + 56)
+})
+
+test_that("long lists and environments are sampled: shared parts once, the last item exact", {
+  skip_on_cran()
+  v = rnorm(1e4)
+  t0 = proc.time()[["elapsed"]]
+  expect_lt(abs(env_snap_size(rep(list(v), 6e4)) - (80048 + 48 + 8 * 6e4)), 1000)
+  ints = lapply(1:1e5, function(i) i)
+  expect_lt(abs(env_snap_size(ints) / as.numeric(utils::object.size(ints)) - 1), 0.01)
+  big_last = c(ints, list(rnorm(1e6)))
+  expect_gt(env_snap_size(big_last), 8e6 + 5e6)
+  frame = local({
+    recs = lapply(1:3e4, function(k) list(id = k, v = c(k, k)))
+    environment()
+  })
+  fns = lapply(1:200, function(i) local(function() i, envir = new.env(parent = frame)))
+  one = env_snap_size(frame)
+  expect_gt(env_snap_size(fns), one)
+  expect_lt(env_snap_size(fns), 1.5 * one)
+  e = list2env(stats::setNames(as.list(1:1e5), paste0("k", 1:1e5)))
+  expect_lt(abs(env_snap_size(e) - (56 + 112 * 1e5)), 1e4)
+  deep = list()
+  for (i in 1:2000) deep = list(deep, i)
+  expect_gt(env_snap_size(deep), 2000 * 56)
+  expect_lt(proc.time()[["elapsed"]] - t0, 30)
+})
+
+test_that("environments deeper than 100 levels count object.size(), so the snapshot lists them", {
+  e = new.env()
+  for (i in 1:2000) {
+    node = new.env(parent = emptyenv())
+    node$nxt = e$chain
+    e$chain = node
+  }
+  e$v = numeric(10)
+  s = env_snapshot(e)
+  expect_false(anyNA(s$bytes))
+  expect_gt(s$bytes[s$name == "chain"], 100 * 112)
+  f = function() 1
+  for (i in 1:2000) environment(f) = new.env(parent = environment(f))
+  expect_gt(env_snap_size(f), 100 * 56)
 })
 
 test_that("six objects cost at most 600 tokens and promises stay unforced", {
@@ -306,7 +423,7 @@ test_that("the workspace block lists the environment within its budget", {
   expect_equal(b$attrs, list(env = "<environment>", objects = "2"))
   expect_equal(env_block_workspace(fake_ctx(globalenv()), 600L)$attrs$env, "globalenv")
   lines = strsplit(b$text, "\n")[[1]]
-  expect_equal(lines[1], "mt  data.frame  32 x 11  7 KB")
+  expect_equal(lines[1], "mt  data.frame  32 x 11  6.9 KB")
   expect_match(lines[2], "^v   numeric     length 10  [0-9]+ B$")
   names_only = env_block_workspace(fake_ctx(e, opts = list(context = "names")), 600L)
   expect_equal(names_only$text, "mt, v")
@@ -348,6 +465,30 @@ test_that("the agent_end hook resets the baseline of workspace_changes", {
   expect_null(env_memory(quiet)$snapshot)
 })
 
+test_that("an overlay's workspace lists the objects it reads through to (D-252)", {
+  skip_on_cran()
+  base = new.env()
+  base$fit = lm(mpg ~ wt, mtcars)
+  base$d = mtcars
+  ov = subagent_overlay(base, "stats")
+  for (home in list(ov, subagent_overlay(ov, "inner"), overlay_new(base, "s1"))) {
+    ctx = fake_ctx(home)
+    b = env_block_workspace(ctx, 600L)
+    expect_identical(b$attrs$objects, "2")
+    lines = strsplit(b$text, "\n")[[1]]
+    expect_identical(lines[1], "Reads fall through to <environment>; assignments stay here.")
+    expect_identical(sort(sub(" .*", "", lines[-1])), c("d", "fit"))
+    expect_null(env_block_changes(ctx, 300L))
+  }
+  ov$fit = 1
+  lines = strsplit(env_block_workspace(fake_ctx(ov), 600L)$text, "\n")[[1]]
+  fit = grep("^fit ", lines, value = TRUE)
+  expect_length(fit, 1L)
+  expect_match(fit, "^fit +numeric +length 1 ")
+  top = env_block_workspace(fake_ctx(subagent_overlay(globalenv(), "g")), 600L)$text
+  expect_match(top, "^Reads fall through to globalenv; assignments stay here.")
+})
+
 test_that("the attached block describes each context object by label", {
   skip_on_cran()
   e = new.env()
@@ -355,14 +496,14 @@ test_that("the attached block describes each context object by label", {
   e$v = c(1.5, 2.5)
   one = env_block_attached(fake_ctx(e, call = fake_call(e, "mt")), 1200L)
   expect_equal(one$attrs, list(name = "mt"))
-  expect_match(one$text, "^<data.frame> 32 x 11, 7 KB")
+  expect_match(one$text, "^<data.frame> 32 x 11, 6.9 KB")
   two = env_block_attached(fake_ctx(e, call = fake_call(e, "mt", "v")), 1200L)
   expect_equal(two$attrs, list(name = "mt, v"))
-  expect_match(two$text, "^mt: <data.frame> 32 x 11, 7 KB")
+  expect_match(two$text, "^mt: <data.frame> 32 x 11, 6.9 KB")
   expect_match(two$text, "\nv: <numeric> length 2")
   names_ctx = fake_ctx(e, call = fake_call(e, "mt"), opts = list(context = "names"))
   hdr = env_block_attached(names_ctx, 1200L)
-  expect_equal(hdr$text, "<data.frame> 32 x 11, 7 KB")
+  expect_equal(hdr$text, "<data.frame> 32 x 11, 6.9 KB")
   expect_null(env_block_attached(fake_ctx(e, call = fake_call(e)), 1200L))
 })
 
@@ -420,7 +561,7 @@ test_that("the eval.r and describe services are registered by builtin:workspace"
   res = ext_service_get("eval.r")("z = 2 + 2", envir = e)
   expect_s3_class(res, "gptr_eval_result")
   expect_equal(e$z, 4)
-  expect_equal(ext_service_get("describe")(mtcars, 60L)[1], "<data.frame> 32 x 11, 7 KB")
+  expect_equal(ext_service_get("describe")(mtcars, 60L)[1], "<data.frame> 32 x 11, 6.9 KB")
 })
 
 test_that("the loaded registry holds the workspace records (P02)", {
@@ -557,7 +698,7 @@ test_that("a call's first message sends <attached> after <workspace>, and turns 
   k = block_kinds(b)
   expect_true(which(k == "attached") > which(k == "workspace"))
   expect_match(b[[which(k == "attached")]]$text,
-               "^<attached name=\"mt\">\n<data.frame> 32 x 11, 7 KB")
+               "^<attached name=\"mt\">\n<data.frame> 32 x 11, 6.9 KB")
   turn = context_turn_blocks(s, list(call = cl, turn = 2L, prompt = "y"))
   expect_true("attached" %in% block_kinds(turn))
 })

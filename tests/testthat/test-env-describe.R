@@ -177,10 +177,18 @@ test_that("Seurat-like meta.data dims and columns, Dates, sparse dims, formulas,
   expect_match(dates, "2021-01-0[1-9] to 2023")
   expect_match(describe_value(obj$sparse, 150L)[1],
                "<dgCMatrix> 20,000 x 3,000 sparse, 600,000 non-zero", fixed = TRUE)
-  expect_equal(describe_value(obj$fml, 150L), "<formula> y ~ x + log(dose) + (1 | subject)")
+  expect_match(describe_value(obj$fml, 150L), "<formula> y ~ x + log(dose) + (1 | subject), ",
+               fixed = TRUE)
   nested = paste(describe_value(obj$nested, 150L), collapse = "\n")
   expect_match(nested, "samples: <list> length 2", fixed = TRUE)
   expect_match(nested, "resolution: <numeric> length 1 = 0.8", fixed = TRUE)
+})
+
+test_that("a function whose default is a long call chain is described (CI-82)", {
+  fn = function(x) 1
+  formals(fn)$x = str2lang(paste0("f", strrep("(1)", 500L)))
+  withr::local_options(expressions = 1000L)
+  expect_match(gptr_describe(fn), "^<function> function[(]x = [(f1)]+ [.]{3}$")
 })
 
 test_that("ALTREP 1:1e9 is described without materialising", {
@@ -188,24 +196,39 @@ test_that("ALTREP 1:1e9 is described without materialising", {
   t0 = proc.time()[["elapsed"]]
   d = gptr_describe(x)
   expect_lt(proc.time()[["elapsed"]] - t0, 5)
-  expect_identical(d[1], "<integer> length 1,000,000,000 (compact sequence)")
+  expect_match(d[1], "^<integer> length 1,000,000,000, [0-9]{2,3} B$")
 })
 
-test_that("an S7 object is described without a size (D-189)", {
-  x = structure(list(), class = c("pkg::plot", "S7_object"),
-                S7_class = structure(function() NULL, pad = numeric(1e5)))
-  expect_true(is.na(dsc_leaf_core(x)$size))
-  expect_identical(gptr_describe(x)[1], "<pkg::plot/S7_object> length 0")
+test_that("a description's size leaves out the home it describes in, as the workspace's does", {
+  home = new.env()
+  evalq({
+    big = numeric(1e6)
+    f = function() big
+  }, home)
+  expect_match(describe_binding("f", home)[1], "^f: <function> function\\(\\); [0-9]+ lines, 56 B$")
+  expect_match(describe_binding("big", home)[1], "^big: <numeric> length 1,000,000, 7.6 MB$")
+  expect_gt(env_snap_size(home$f), 8e6)
+})
+
+test_that("an S7 object counts each class copy it holds once (D-247)", {
+  # S7 stores a deep duplicate of the class in every object; object.size() counts it per object
+  cls = structure(function() NULL, pad = numeric(1e5), name = "plot", package = "pkg")
+  x = structure(list(), class = c("pkg::plot", "S7_object"), S7_class = cls)
+  y = structure(list(), class = c("pkg::plot", "S7_object"), S7_class = rlang::duplicate(cls))
+  expect_lt(abs(dsc_leaf_core(x)$size - 8e5), 2000)
+  expect_match(gptr_describe(x)[1], "^<pkg::plot/S7_object> length 0, 78[0-9] KB$")
+  expect_lt(abs(env_snap_size(list(x, x, x)) - 8e5), 2000)
+  expect_lt(abs(env_snap_size(list(x, y)) - 1.6e6), 4000)
 })
 
 test_that("levels: a small budget gives the header, a large one more detail", {
   skip_on_cran()
   lo = gptr_describe(mtcars, budget = 20L)
   hi = gptr_describe(mtcars, budget = 600L)
-  expect_equal(lo[1], "<data.frame> 32 x 11, 7 KB")
+  expect_equal(lo[1], "<data.frame> 32 x 11, 6.9 KB")
   expect_gt(length(hi), length(lo))
   expect_match(paste(hi, collapse = "\n"), "\\$ mpg <dbl> min 10.4, median 19.2, max 33.9; no NA")
-  expect_equal(gptr_describe(mtcars, level = 1L), "<data.frame> 32 x 11, 7 KB")
+  expect_equal(gptr_describe(mtcars, level = 1L), "<data.frame> 32 x 11, 6.9 KB")
   expect_error(gptr_describe(mtcars, budget = 5), class = "gptr_error_invalid_argument")
 })
 
@@ -245,8 +268,9 @@ test_that("ggplot, DBI, Arrow and SingleCellExperiment describers need no packag
   geom = structure(list(), class = c("GeomPoint", "Geom"))
   gg = structure(list(data = mtcars, layers = list(list(geom = geom)),
                       mapping = list(x = quote(wt), y = quote(mpg))), class = c("gg", "ggplot"))
-  expect_equal(gptr_describe(gg, budget = 300L),
-               c("<ggplot> 1 layer (GeomPoint)", "  data: 32 x 11; mapping: x, y"))
+  g = gptr_describe(gg, budget = 300L)
+  expect_match(g[1], "^<ggplot> 1 layer \\(GeomPoint\\), 8\\.[0-9] KB$")
+  expect_identical(g[2], "  data: 32 x 11; mapping: x, y")
   tbl = structure(new.env(), class = c("Table", "ArrowTabular", "ArrowObject", "R6"))
   if (!isNamespaceLoaded("arrow")) {
     expect_equal(gptr_describe(tbl), "<Table/ArrowTabular> (arrow is not loaded)")
@@ -264,13 +288,14 @@ test_that("a patchwork is described by its plots (#45)", {
     base$patches = list(plots = plots)
     structure(base, class = c("patchwork", class(base)))
   }
-  expect_equal(gptr_describe(pw(gg, list(gg, gg))), "<patchwork> of 3 plots")
+  expect_match(gptr_describe(pw(gg, list(gg, gg))), "^<patchwork> of 3 plots, [0-9.]+ KB$")
   filler = structure(list(layers = list()), class = c("plot_filler", "gg", "ggplot"))
-  expect_equal(gptr_describe(pw(filler, list(gg))), "<patchwork> of 1 plot")
-  expect_equal(gptr_describe(pw(gg, list(gg, pw(filler, list(gg, gg))))), "<patchwork> of 4 plots")
+  expect_match(gptr_describe(pw(filler, list(gg))), "^<patchwork> of 1 plot, [0-9.]+ KB$")
+  expect_match(gptr_describe(pw(gg, list(gg, pw(filler, list(gg, gg))))),
+               "^<patchwork> of 4 plots, [0-9.]+ KB$")
   s7 = structure(1L, meta = list(patches = list(plots = list(gg, gg))),
                  class = c("patchwork", "gg", "ggplot"))
-  expect_equal(gptr_describe(s7), "<patchwork> of 3 plots")
+  expect_match(gptr_describe(s7), "^<patchwork> of 3 plots, [0-9.]+ KB$")
 })
 
 test_that("a session is described by kind, model, status, turns and cost (#45)", {
@@ -361,8 +386,8 @@ test_that("describe_binding reports a missing argument and empty dots without ge
 test_that("environments with missing arguments and reference class objects are described", {
   frame = (function(x, y) environment())(1)
   expect_equal(describe_value(frame, 150L),
-               c("<environment> with 2 bindings (0 functions, 0 active, 1 unevaluated promise)",
-                 "  fields: x, y"))
+               c(paste("<environment> with 2 bindings (0 functions, 0 active, 1 unevaluated",
+                       "promise), 168 B"), "  fields: x, y"))
   e = s4_where()
   gen = methods::setRefClass("P09Counter", fields = list(n = "numeric"), where = e)
   withr::defer(methods::removeClass("P09Counter", where = e))

@@ -178,6 +178,44 @@ test_that("/help's keys follow the console, as the banner does (review of Tasks 
                     words("D", complete = FALSE), fixed = TRUE))
 })
 
+test_that("template commands exist before the first prompt, and a template saved later too", {
+  local_console_commands()
+  withr::defer(res_prune("prompts:", character()))
+  p = local_project(list(".gptr/prompts/check.md" = "Check $1."), trust = TRUE)
+  res_prune("prompts:", character())
+  rs = repl_state(NULL, new.env())
+  sent = new.env(parent = emptyenv())
+  send = function(text) sent$text = text
+  expect_identical(run_command(rs, "/check mtcars", send)$res, "prompt")
+  expect_identical(sent$text, "Check mtcars.")
+  res_prune("prompts:", character())
+  listed = sub("^  /([^ ]+) .*", "\\1", cmd_help("", ctx_new(NULL)))
+  expect_true(all(c("check", "review", "explain") %in% listed))
+  writeLines("Later $1.", file.path(p, ".gptr", "prompts", "later.md"))
+  expect_identical(run_command(rs, "/later z", send)$res, "prompt")
+  expect_identical(sent$text, "Later z.")
+})
+
+test_that("a template command is the console's first input (end to end)", {
+  skip_on_cran()
+  local_console_test()
+  withr::defer(res_prune("prompts:", character()))
+  root = getOption("gptr.project_root")
+  dir.create(file.path(root, ".gptr", "prompts"))
+  writeLines("Check $1.", file.path(root, ".gptr", "prompts", "check.md"))
+  gptr_trust(root, trust = TRUE)
+  res_prune("prompts:", character())
+  fake = gptr_fake_provider(list("checked"))
+  local_console_stdin(c("/check mtcars", "/exit"))
+  res = NULL
+  err = utils::capture.output(invisible(utils::capture.output({
+    res = peter(.stdin = TRUE, model = fake, envir = new.env())
+  })), type = "message")
+  expect_false(any(grepl("Unknown command", err, fixed = TRUE)))
+  expect_true(grepl("Check mtcars.", fake$log$requests[[1L]]$last_user, fixed = TRUE))
+  expect_identical(res$text, "checked")
+})
+
 test_that("in the console margin command output wraps inside it; listings fit its width", {
   local_console_commands()
   local_project()
@@ -307,6 +345,25 @@ test_that("/status, /tools and /env describe the console", {
   d$turns = 1L
   expect_identical(run_command(rs, "/status")$out[[1L]],
                    paste0("session   ", s$id, "  (idle, 1 turn)"))
+})
+
+test_that("/doc and /status name a gptr_doc() binding before the first prompt", {
+  local_console_commands()
+  root = local_project()
+  old = the$doc_binding
+  withr::defer(assign("doc_binding", old, envir = the))
+  the$doc_binding = NULL
+  expect_null(cmd_doc_site(NULL))
+  rs = repl_state(NULL, new.env())
+  expect_identical(run_command(rs, "/doc")$out, "No document is bound.")
+  expect_true("document  (none)" %in% run_command(rs, "/status")$out)
+  log = file.path(root, "log.R")
+  gptr_doc(log)
+  expect_identical(cmd_doc_site(NULL), list(path = log, format = "r"))
+  expect_identical(run_command(rs, "/doc")$out, paste0("Document: ", log, " (r)"))
+  status = run_command(rs, "/status")$out
+  expect_match(status[[1L]], "session   (none yet", fixed = TRUE)
+  expect_true(paste0("document  ", log) %in% status)
 })
 
 test_that("/clear starts a new conversation and keeps model and mode", {

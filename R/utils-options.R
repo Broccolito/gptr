@@ -10,7 +10,7 @@ gptr_option_defaults = list(
   quiet = FALSE, interactive = NULL, project_root = NULL, unsafe_no_permissions = FALSE,
   verbose = NULL, ui = NULL, model = NULL, mode = NULL, preset = NULL, system1 = NULL,
   small_model = NULL, replay = NULL, record = NULL, interpolate = TRUE,
-  value_copy_max = 1048576, values_max_bytes = 67108864, max_turns = 50L,
+  value_copy_max = 2097152, values_max_bytes = 67108864, max_turns = 50L,
   max_turns_console = 200L, max_active = 8L, subagents.max_active = 8L,
   subagents.max_cli = 4L, subagents.max_workers = NULL, subagents.max_tasks = 8L,
   subagents.max_depth = 1L, max_nested_calls = 20L, connect_timeout = 20,
@@ -485,7 +485,7 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.max_turns` (integer, `50`): turns per programmatic run.
 #' - `gptr.max_turns_console` (integer, `200`): turns per console prompt.
 #' - `gptr.max_nested_calls` (integer, `20`): [peter()] calls per evaluation of model code.
-#' - `gptr.value_copy_max` (bytes, `1048576`): designated result values below this size are
+#' - `gptr.value_copy_max` (bytes, `2097152`): designated result values below this size are
 #'   copied; larger ones are kept by name.
 #' - `gptr.values_max_bytes` (bytes, `67108864`): value copies held per session.
 #' - `gptr.background_tools` (character, `"idle"`): `"idle"` or `"wait"` for experimental
@@ -532,12 +532,15 @@ s3_register = function(generic, class, method = NULL) {
 #' @section Permissions:
 #' - `gptr.noninteractive_ask` (character, `"stop"`): what a permission question does when
 #'   nobody can answer: `"stop"` ends the run with status `blocked` and a
-#'   `gptr_error_permission` condition; `"deny"` returns a denial to the model.
+#'   `gptr_error_permission` condition (`gptr_error_noninteractive` when the `ask` tool has no one
+#'   to answer); `"deny"` returns a denial to the model.
 #' - `gptr.critical_guard` (logical, `TRUE`): level-4 actions ask even in `auto` mode.
 #' - `gptr.secret_guard` (logical, `TRUE`): reads of registered secrets ask even in `auto`
 #'   mode.
 #' - `gptr.protect_size` (bytes, `1e8`): overwriting a larger object is a level-3 action.
-#' - `gptr.plan_handoff` (logical, `TRUE`): hand a plan from `plan` mode to the next call.
+#' - `gptr.plan_handoff` (logical, `TRUE`): hand the plan a `plan` run proposes, once, to the next
+#'   top-level `peter()` call from the same environment, within an hour and in another mode;
+#'   another `peter()` call first, or a next call inside a loop or a run, discards it.
 #' - `gptr.unsafe_no_permissions` (logical, `FALSE`): turns the permission gate off entirely;
 #'   honored only when set outside a run, for sandboxed continuous integration.
 #'

@@ -58,6 +58,53 @@ test_that("an unknown tool is an error result", {
   expect_true(x$msgs[[1L]]$is_error)
 })
 
+test_that("a direct call to a tool the session did not offer is not found and does not run", {
+  local_project(files = list("R/fit.R" = "n = 10"))
+  e = new.env()
+  last = function(tools, reply) {
+    s = peter("Do it.", model = gptr_fake_provider(list(reply, "done")), envir = e, mode = "auto",
+              tools = tools)
+    utils::tail(tool_results(s), 1L)[[1L]]
+  }
+  res = last("-write", fake_tool("write", path = "w.txt", content = "x"))
+  expect_true(res$is_error)
+  expect_identical(msg_text(res), "Tool write not found")
+  expect_false(file.exists("w.txt"))
+  expect_identical(msg_text(last("-r", fake_tool("r", code = "made_here = 1"))), "Tool r not found")
+  expect_false(exists("made_here", envir = e, inherits = FALSE))
+  grep = fake_tool("grep", pattern = "n", path = "R")
+  expect_identical(msg_text(last(NULL, grep)), "Tool grep not found")
+  res = last("extended", grep)
+  expect_false(res$is_error)
+  expect_match(msg_text(res), "fit.R", fixed = TRUE)
+})
+
+test_that("an ask the non-interactive auto preset did not offer is not found; the run ends idle", {
+  local_project()
+  local_gptr_options(interactive = FALSE)
+  qs = list(list(id = "q1", question = "Which file?"))
+  fake = gptr_fake_provider(list(fake_tool("ask", questions = qs), "done"))
+  s = peter("Do it.", model = fake, envir = new.env(), mode = "auto")
+  expect_identical(msg_text(tool_results(s)[[1L]]), "Tool ask not found")
+  expect_identical(s$status, "idle")
+})
+
+test_that("a tool added to a continued session and an r member under minimal can be called", {
+  local_project(files = list("R/fit.R" = "n = 10"))
+  fake = gptr_fake_provider(list("ok", fake_tool("grep", pattern = "n", path = "R"), "done"))
+  s = peter("Hi.", model = fake, envir = new.env(), mode = "auto")
+  s = peter(s, "Search.", tools = "+grep")
+  res = tool_results(s)[[1L]]
+  expect_false(res$is_error)
+  expect_match(msg_text(res), "fit.R", fixed = TRUE)
+  code = "peter$grep(\"n\", path = \".\")"
+  fake = gptr_fake_provider(list(fake_tool("r", code = code), "done"))
+  s = peter("Search.", model = fake, envir = new.env(), mode = "auto", tools = "minimal")
+  res = tool_results(s)[[1L]]
+  expect_false(res$is_error)
+  expect_match(msg_text(res), "fit.R", fixed = TRUE)
+})
+
 test_that("throw, warn-as-error, time limit and interrupt give paired events (INFRA-10)", {
   skip_on_cran()
   local_permissive()
@@ -753,18 +800,12 @@ test_that("a frozen schema of a tool whose parameters are a function follows the
   local_tool("dyn", function(input, ctx) "ran", parameters = function(ctx) num_schema(a = "number"))
   s = test_session()
   d = session_data(s)
+  # dispatch() freezes the declaration parameters(ctx) gives, which requires `a`
   x = dispatch(s, list(tc("dyn", list(b = 1))))
-  expect_identical(msg_text(x$msgs[[1L]]), "ran")
-  schema = function(prop) {
-    decl = list(name = "dyn", description = "d",
-                input_schema = do.call(num_schema, stats::setNames(list("number"), prop)))
-    json_encode(list(decl))
-  }
+  expect_match(msg_text(x$msgs[[1L]]), "^Invalid arguments for dyn: .*'a'")
+  decl = list(name = "dyn", description = "d", input_schema = num_schema(b = "number"))
   # the session keeps every turn's results: read this dispatch's own messages
-  d$frozen = list(tools_json = schema("a"))
-  x = dispatch(s, list(tc("dyn", list(b = 1))))
-  expect_match(msg_text(x$out$messages[[1L]]), "^Invalid arguments for dyn: .*'a'")
-  d$frozen = list(tools_json = schema("b"))
+  d$frozen = list(tools_json = json_encode(list(decl)))
   x = dispatch(s, list(tc("dyn", list(b = 1))))
   expect_identical(msg_text(x$out$messages[[1L]]), "ran")
 })
@@ -938,4 +979,36 @@ test_that("with no policy a mutating tool asks and the run ends blocked without 
   cnd = session_data(s)$condition
   expect_s3_class(cnd, "gptr_error_permission")
   expect_identical(s$reason, conditionMessage(cnd))
+})
+
+test_that("a blocked call's hint names where its mode came from (finding 16)", {
+  local_gw()
+  local_gptr_options(interactive = FALSE, record = "off")
+  hint = function(...) {
+    fake = gptr_fake_provider(list(fake_tool("r", code = "z = 3"), "never"))
+    cnd = expect_error(peter("go", model = fake, envir = new.env(), ...),
+                       class = "gptr_error_permission")
+    expect_match(conditionMessage(cnd), cnd$how_to_allow, fixed = TRUE)
+    cnd
+  }
+  gptr_config(mode = "manual", .scope = "session")
+  expect_match(hint()$how_to_allow, "Mode \"manual\" comes from this R session's settings. ",
+               fixed = TRUE)
+  gptr_config(mode = NULL, .scope = "session")
+  gptr_config(mode = "auto", .scope = "user")
+  gptr_config(mode = "manual", .scope = "project")
+  expect_match(hint()$how_to_allow, "Mode \"manual\" comes from .gptr/settings.json. ",
+               fixed = TRUE)
+  cnd = hint(mode = "manual")
+  expect_match(cnd$how_to_allow, "Mode \"manual\" comes from this call's mode argument. ",
+               fixed = TRUE)
+  fake = gptr_fake_provider(list(fake_tool("r", code = "z = 4"), "never"))
+  cnd = expect_error(cnd$session |> peter("again", model = fake), class = "gptr_error_permission")
+  expect_match(cnd$how_to_allow, "Mode \"manual\" comes from the session this call continues.",
+               fixed = TRUE)
+  expect_match(cnd$how_to_allow, "or run interactively.", fixed = TRUE)
+  withr::local_options(knitr.in.progress = TRUE)
+  how = hint()$how_to_allow
+  expect_false(grepl("run interactively", how, fixed = TRUE))
+  expect_match(how, "knitting cannot ask", fixed = TRUE)
 })

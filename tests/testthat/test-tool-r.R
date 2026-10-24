@@ -183,11 +183,13 @@ test_that("images beyond gptr.r_max_images are not attached and the result names
                                            "attached: at most 2 per r call]"), fixed = TRUE)
 })
 
-test_that("#> outputs keep at most gptr.doc_output_lines lines of 76 characters per expression", {
+test_that("#> outputs keep per expression its first lines of 76 characters and their count", {
   local_gptr_options(doc_output_lines = 2L)
   res = list(outputs = list(c("[1] 2", "", "[1] 3", "[1] 4"), strrep("x", 100)), n_done = 2L)
-  expect_identical(r_doc_outputs(res), c("[1] 2", "[1] 3", paste0(strrep("x", 73), "...")))
-  expect_identical(r_doc_outputs(list(outputs = list("a"), n_done = 0L)), character())
+  expect_identical(r_doc_outputs(res),
+                   list(list(lines = c("[1] 2", "[1] 3"), n = 3L),
+                        list(lines = paste0(strrep("x", 73), "..."), n = 1L)))
+  expect_identical(r_doc_outputs(list(outputs = list("a"), n_done = 0L)), list())
 })
 
 test_that("bridge digests and artifact paths are collected through session hooks and unhooked", {

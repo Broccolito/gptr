@@ -633,6 +633,8 @@ test_that("G5's 46 polyglot calls are classified through their arguments (G5 p08
   )
   expect_length(cases, 46L)
   for (cs in cases) expect_identical(bridge(cs[[2]]), cs[[1]], label = cs[[2]])
+  # a background job is classified by its command, as peter$sh() is (D-251)
+  expect_identical(gptr_risk("peter$bg('rm -rf ~')", root = root)$level, 4L)
 })
 
 test_that("file connections opened for writing are file writes (plan mode stays read-only)", {
@@ -681,17 +683,20 @@ test_that("an overwrite above gptr.protect_size is level 3 and reports the size"
   expect_identical(gptr_risk("new_obj = 1", envir = e, root = root)$assigned, "new_obj")
 })
 
-test_that("an S7 object's size is unknown, so overwriting it never trips protect_size (D-189)", {
+test_that("protect_size compares the size a list of S7 objects holds, not object.size() (D-247)", {
+  # object.size() counts the class copy once per element: 20 x 1.6 MB here
   root = local_project()
   e = new.env()
-  e$plt = structure(list(), class = c("pkg::plot", "S7_object"),
-                    S7_class = structure(function() NULL, pad = numeric(2e5)))
-  local_gptr_options(protect_size = 1e6)
-  r = gptr_risk("plt = 1", envir = e, root = root)
+  cls = structure(function() NULL, pad = numeric(2e5), name = "plot", package = "pkg")
+  e$plt = structure(list(), class = c("pkg::plot", "S7_object"), S7_class = cls)
+  e$plts = rep(list(e$plt), 20)
+  local_gptr_options(protect_size = 4e6)
+  r = gptr_risk("plts = 1", envir = e, root = root)
   expect_identical(r$level, 2L)
-  expect_true(is.na(r$sizes[["plt"]]))
-  expect_match(r$flagged$call, "overwrites `plt` <pkg::plot, size unknown>", fixed = TRUE,
-               all = FALSE)
+  expect_lt(abs(r$sizes[["plts"]] - 1.6e6), 4000)
+  expect_match(r$flagged$call, "overwrites `plts` <list, 1.5 MB>", fixed = TRUE, all = FALSE)
+  local_gptr_options(protect_size = 1e6)
+  expect_identical(gptr_risk("plt = 1", envir = e, root = root)$level, 3L)
 })
 
 test_that("a plain assignment binds in envir itself, not in an enclosing environment (#32)", {
@@ -964,6 +969,21 @@ test_that("the plan-mode allowlist admits only known read-only calls (IC-54)", {
   expect_identical(risk_plan_disallowed("gptr_artifacts()", root), character())
   expect_true("read.csv" %in% risk_plan_disallowed("x = read.csv('https://x.org/a.csv')", root))
   expect_identical(risk_plan_disallowed("this is not R (", root), character())
+  # console output and a lookup of a literal function, unless the scan flags or cannot see a write
+  expect_identical(risk_plan_disallowed(paste("cat('a\\n'); base::cat(nrow(df), file = stdout());",
+                                              "writeLines('b'); dput(1:3)"), root), character())
+  expect_identical(risk_plan_disallowed("do.call(rbind, lapply(split(df$a, df$g), summary))", root),
+                   character())
+  for (code in c("cat('a', file = 'x.txt')", "cat('a', file = tempfile())",
+                 "f = 'x.txt'; cat('a', file = f)", "cat('a'); cat('b', file = 'y.txt')",
+                 "lapply(1, cat, file = 'x.txt')", "do.call(cat, list('a', file = 'x.txt'))")) {
+    expect_true("cat" %in% risk_plan_disallowed(code, root), info = code)
+  }
+  expect_true("writeLines" %in% risk_plan_disallowed("writeLines('a', 'y.txt')", root))
+  expect_true("write" %in% risk_plan_disallowed("write(1:3)", root))
+  expect_true("sink" %in% risk_plan_disallowed("sink('s.txt')", root))
+  expect_true("system" %in% risk_plan_disallowed("do.call('system', list('ls'))", root))
+  expect_true("do.call" %in% risk_plan_disallowed("g = 'system'; do.call(g, list('ls'))", root))
 })
 
 test_that("a read of a path the classifier cannot resolve is level 1, as outside one", {
@@ -1123,4 +1143,10 @@ test_that("the directory git -C names is read", {
   # neighbours: git run in the project stays level 0
   expect_identical(lv("system('git -C . log')"), 0L)
   expect_identical(lv("system('git status')"), 0L)
+})
+
+test_that("the code text of a long call chain is deparsed (CI-82)", {
+  chain = str2lang(paste0("f", strrep("(1)", 500L)))
+  withr::local_options(expressions = 1000L)
+  expect_match(risk_code_text(chain)[1L], "^[(f1)]+$")
 })

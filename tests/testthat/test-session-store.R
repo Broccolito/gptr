@@ -875,6 +875,19 @@ test_that("gptr_resume() validates x", {
   expect_error(gptr_resume(), class = "gptr_error_invalid_argument")
 })
 
+test_that("without a .gptr/ workspace, a failed resume says sessions end with R (FIX-16)", {
+  dir = local_project(gptr = FALSE)
+  local_mocked_bindings(sessions_dir = function() file.path(dir, "no-store"))
+  expect_error(gptr_resume("s0123456789"), class = "gptr_error_invalid_argument",
+               regexp = "sessions last until R exits; gptr_init(\".\") keeps them", fixed = TRUE)
+  expect_error(gptr_resume(), class = "gptr_error_invalid_argument", regexp = "gptr_init")
+  suppressMessages(gptr_init(dir))
+  for (x in list("s0123456789", NULL)) {
+    err = expect_error(gptr_resume(x), class = "gptr_error_invalid_argument")
+    expect_no_match(conditionMessage(err), "gptr_init")
+  }
+})
+
 test_that("gptr_resume(block =) returns the session replay bound to the block, never a fallback", {
   old = the$replay_blocks
   the$replay_blocks = new.env(parent = emptyenv())
@@ -972,6 +985,36 @@ test_that("a rebuilt session takes its mode, model and frozen prompt from its ac
   expect_identical(session_data(r)$frozen$t0, "T0-refrozen")
   expect_identical(r$model, "fake/fake-1")
   expect_identical(r$status, "interrupted")
+})
+
+# sessions-22 (D-251): the gptr.frozen entry records the mode the session started with, so a
+# rebuild keeps it whatever the resuming process's `mode` setting says
+test_that("a rebuilt session keeps the mode it ran with", {
+  skip_on_cran()
+  local_gw()
+  path = function(s) entries_path(session_data(s))
+  s = peter("hi", model = local_fake_provider(list("ok")), mode = "plan", envir = new.env())
+  gptr_config(mode = "auto", .scope = "session")
+  expect_identical(session_data(s)$entries[[1L]]$data[["mode"]], "plan")
+  expect_identical(rebuild_mode(path(s)), "plan")
+  session_set_mode(s, "edits")
+  expect_identical(rebuild_mode(path(s)), "edits")
+  a = peter("hi", model = local_fake_provider(list("ok")), mode = "auto", envir = new.env())
+  gptr_config(mode = "manual", .scope = "session")
+  expect_identical(rebuild_mode(path(a)), "auto")
+  # rebuilt from its file in this process: a plan session never takes a looser setting
+  p = peter("hi", model = local_fake_provider(list("ok")), mode = "plan", envir = new.env())
+  file = p$file
+  gptr_config(mode = "auto", .scope = "session")
+  other = test_session()
+  rm(s, a, p)
+  invisible(gc())
+  expect_identical(gptr_resume(file, envir = new.env())$mode, "plan")
+  # a file whose gptr.frozen records no mode (the 1.0.0 shape) takes the setting, as before; a
+  # recorded mode that is not one is skipped
+  old = list(entry_custom("gptr.frozen", list(preset = "standard", model = "fake/fake-1")),
+             entry_custom("gptr.mode_change", list(from = "plan", to = "bogus", source = "user")))
+  expect_identical(rebuild_mode(old), "auto")
 })
 
 # FIX-3 (the open item of D-069): P07's gptr.frozen entry also records the audience the prompt
@@ -1145,6 +1188,42 @@ test_that("an entry or header time that is not ISO 8601 never blocks a resume", 
   expect_true(is.finite(session_data(r)$created))
   listed = gptr_sessions()
   expect_true(is.finite(as.numeric(listed$created[listed$id == id])))
+})
+
+test_that("a settled team or fan-out lists and resumes idle with its model; an unsettled one not", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(mode = "auto", interactive = FALSE)
+  fake = gptr_fake_provider(function(request) "done")
+  f = peter("Summarise.", list(a = 1, b = 2), parallel = 2, model = fake, envir = new.env())
+  tm = peter("Review.", agents = list(x = agent(system = "Review."), y = agent(system = "Check.")),
+             model = fake, envir = new.env())
+  p = gptr_parallel(a = peter("A.", model = fake, envir = new.env()),
+                    b = peter("B.", model = fake, envir = new.env()))
+  expect_identical(c(f$status, tm$status, p$status), rep("idle", 3L))
+  files = c(f$file, tm$file, p$file)
+  ids = c(f$id, tm$id, p$id)
+  # a copy of the fan-out cut before its settlement, as an interrupted fan-out leaves it
+  lines = readLines(f$file, encoding = "UTF-8")
+  expect_match(lines[[length(lines)]], "\"gptr.container_end\"", fixed = TRUE)
+  cut = file.path(withr::local_tempdir(), "cut.jsonl")
+  writeLines(lines[-length(lines)], cut, useBytes = TRUE)
+  rows = gptr_sessions()
+  rows = rows[match(ids, rows$id), ]
+  expect_identical(rows$status, rep("idle", 3L))
+  expect_identical(rows$model, rep("fake/fake-1", 3L))
+  expect_identical(session_file_summary(cut)[c("status", "model")],
+                   data.frame(status = "interrupted", model = "fake/fake-1"))
+  x = store_read(cut)
+  expect_identical(rebuild_status(path_of_entries(x$entries, x$entries[[length(x$entries)]]$id)),
+                   "interrupted")
+  # rebuilt from the files once the live sessions are gone
+  rm(f, tm, p)
+  other = test_session()
+  invisible(gc())
+  expect_true(all(vapply(ids, function(id) is.null(session_by_id(id)), NA)))
+  expect_identical(vapply(files, function(x) gptr_resume(x, envir = new.env())$status, "",
+                          USE.NAMES = FALSE), rep("idle", 3L))
 })
 
 

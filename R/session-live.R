@@ -139,7 +139,7 @@ home_label = function(env) {
   while (k > 0L) {
     if (identical(sys.frame(k), env) && !is.primitive(sys.function(k))) {
       fn = sys.call(k)[[1L]]
-      return(paste0("frame of ", paste(deparse(fn, nlines = 1L), collapse = ""), "()"))
+      return(paste0("frame of ", paste(deparse_code(fn, nlines = 1L), collapse = ""), "()"))
     }
     k = k - 1L
   }

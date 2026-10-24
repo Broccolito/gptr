@@ -629,6 +629,13 @@ test_that("gptr_checkpoints() lists the turns of the active path (contract 5.12)
   expect_output(print(cp), "Rewind with gptr_rewind")
 })
 
+test_that("held_mb and disk_mb count 2^20 bytes a megabyte, as the other size reports do", {
+  cps = list(list(data = list(fragments = list(objects = list(id = "f1", objects = list())))))
+  ck = list(obj = list(index = data.frame(frag = "f1", bytes = c(2^20, 2^21),
+                                          where = c("memory", "disk"))))
+  expect_equal(ckpt_turn_counts(cps, ck)[c("held_mb", "disk_mb")], list(held_mb = 1, disk_mb = 2))
+})
+
 test_that("gptr_checkpoints(all = TRUE) adds abandoned branches", {
   skip_on_cran()
   local_project()

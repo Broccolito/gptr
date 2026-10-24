@@ -316,7 +316,7 @@ artifact_data_facts = function(name, envir) {
   if (!nzchar(name) || !exists(name, envir = envir, inherits = TRUE)) return(NULL)
   obj = get(name, envir = envir, inherits = TRUE)
   list(class = class(obj)[1L], dim = as.integer(dim(obj) %||% length(obj)),
-       size = as.numeric(utils::object.size(obj)))
+       size = env_snap_size(obj, envir))
 }
 
 #' Serialise one data object through the leaf function save_rds() (rule R7); returns the file's
@@ -331,7 +331,7 @@ artifact_data_save = function(name, envir, file) {
 #' loader R/gptr_data.R, which shiny sources before app.R (contract 11.6, IC-63)
 #'
 #' Names are free-form (`a/b` becomes data/001.rds; the mapping is in artifact.json). The total
-#' `object.size()` is checked against `gptr.artifact_max_bytes` before anything is written.
+#' size (env_snap_size()) is checked against `gptr.artifact_max_bytes` before anything is written.
 #' `envir` is read only through leaf functions and never kept (rules R1, R2).
 #' @return The `data` records of artifact.json: list(name, file, class, dim, bytes) per object.
 #' @noRd
@@ -1720,6 +1720,7 @@ artifact_ckpt_describe = function(fragment) {
 #' `envir` is where the objects named in `data` are looked up; it is read only through leaf
 #' functions and never kept (rules R1, R2). A version claimed by a call that fails before its build
 #' finished is removed again; a version that fails to launch stays (immutable) with its checks.
+#' `launch = NULL` launches when a person is at the console, else the handle's messages say why not.
 #' @return The `gptr_artifact` handle.
 #' @noRd
 artifact_app = function(id, data, title, kind, check, launch, envir, ctx = NULL) {
@@ -1727,7 +1728,7 @@ artifact_app = function(id, data, title, kind, check, launch, envir, ctx = NULL)
   check_strings(data, "data")
   check_string(title, "title", null = TRUE)
   check_flag(check, "check")
-  check_flag(launch, "launch")
+  check_flag(launch, "launch", null = TRUE)
   type = artifact_type_get(kind, ctx)
   if (!isTRUE(artifact_state$swept)) artifact_sweep()
   dir = artifact_dir(id)
@@ -1759,8 +1760,24 @@ artifact_app = function(id, data, title, kind, check, launch, envir, ctx = NULL)
   )))
   meta$current = n
   artifact_meta_write(id, meta)
-  if (launch) return(artifact_start(id, n, type, ctx = ctx, session_check = check))
-  artifact_handle(id)
+  if (is.null(workspace_dir())) {
+    gptr_inform(paste0("Artifact ", id, " is in a temporary workspace (", path_norm(dir), ") that ",
+                       "is deleted when R exits; run gptr_init() to keep artifacts."),
+                "notice", .once = "artifact-temp-workspace")
+  }
+  if (launch %||% gptr_has_human()) {
+    return(artifact_start(id, n, type, ctx = ctx, session_check = check))
+  }
+  handle = artifact_handle(id)
+  # a skip nobody asked for says why, so a model does not take it for a failure and build again
+  if (is.null(launch)) {
+    handle$checks$messages = c(handle$checks$messages, paste0(
+      "not launched: nobody is at an interactive console, so ", sprintf("v%03d", n), " was ",
+      "saved without starting it; pass launch = TRUE to start and check it now, or ",
+      "gptr_artifacts(\"", id, "\", open = TRUE) later"
+    ))
+  }
+  handle
 }
 
 #' The screenshot of a handle as an image block, or NULL
@@ -1804,7 +1821,7 @@ artifact_attach_image = function(block) {
 #' during the call only (rule R2).
 #' @noRd
 artifact_member_fun = function(id, data = character(), title = NULL, kind = "shiny",
-                               check = TRUE, launch = interactive()) {
+                               check = TRUE, launch = NULL) {
   k = sys.parent()
   envir = if (k > 0L && inherits(sys.function(k), "gptr_member")) {
     sys.frame(sys.parents()[k])
@@ -1822,7 +1839,7 @@ artifact_member_execute = function(input, ctx) {
   envir = run_eval_env(run_current()) %||% ctx$envir %||% globalenv()
   handle = artifact_app(input$id, as.character(unlist(input$data)), input$title,
                         input$kind %||% "shiny", input$check %||% TRUE,
-                        input$launch %||% interactive(), envir = envir, ctx = ctx)
+                        input$launch, envir = envir, ctx = ctx)
   data = list(id = handle$id, version = handle$version,
               url = if (!is.na(handle$url)) handle$url, status = handle$status,
               checks = artifact_checks_json(handle$checks))
@@ -1846,7 +1863,10 @@ artifact_tool_spec = function() {
     title = list(type = "string", description = "Short title."),
     kind = list(type = "string", description = "A registered artifact type: shiny or html."),
     check = list(type = "boolean", description = "Run the static and session checks."),
-    launch = list(type = "boolean", description = "Start the app (default: interactive()).")
+    launch = list(type = "boolean", description = paste(
+      "Start the app and run the launch, HTTP and session checks (default: only when a person",
+      "is at the console; pass TRUE in a script to validate)."
+    ))
   )
   gptr_tool("app", paste0(
     "Launch the Shiny app written in <artifacts>/<id>/app.R as a new immutable version, with ",

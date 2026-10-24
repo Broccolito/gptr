@@ -175,9 +175,11 @@ parallel_start = function(m, nm, backend, team, cur, caller) {
 #' Each argument is a [peter()] call; it is evaluated with deferral on, so it builds its session
 #' without running it, and all members then run together on one reactor, at most `max_active` at
 #' a time. The result is a team session: `team$text` joins the members' answers under
-#' `### <name> (<model>)` headings, `team$value` is the named list of their values, and
-#' `team$<name>` (or `team[[i]]`) is a member's session. Piping the team into [peter()] continues
-#' it.
+#' `### <name> (<model>)` headings (a failed member's says `(ended with status error)`),
+#' `team$value` is the named list of their values, and `team$<name>` (or `team[[i]]`) is a
+#' member's session. Piping the team into [peter()] continues it: then `team$text` (and
+#' printing) is the team's own answer, `team$value` its own value once a turn designates one,
+#' and each member's answer stays at `team$<name>$text`.
 #'
 #' Members evaluate R code in their own environment (`envir =`) with their own random-number
 #' stream, and share one budget, as one `peter()` call does. A member's `tools =`, `budget =` and
@@ -219,21 +221,47 @@ gptr_parallel = function(..., .list = NULL, max_active = NULL, on_error = c("ret
   })
   subagent_schedule(items, max_active, function(i, h) subagent_record_end(team, h))
   subagent_record_reports(team)
+  subagent_settle_container(team)
   if (identical(on_error, "stop")) {
-    for (ch in session_data(team)$children) {
-      cnd = session_data(ch)$condition
-      if (inherits(cnd, "condition")) {
-        cnd$session = ch
-        stop(cnd)
-      }
-    }
+    for (ch in session_data(team)$children) subagent_signal(ch, session_data(ch)$condition)
   }
   team
 }
 
+#' Settle a team or fan-out on its children (04 section 6.1.2): it stays idle when every child is;
+#' else it takes the first other child's status and stored condition, and its reason names each
+#' such child. A `gptr.container_end` entry records the settlement, which a container's file
+#' cannot otherwise show: it never holds an assistant message (04 section 4.6)
+#' @noRd
+subagent_settle_container = function(s) {
+  d = session_data(s)
+  st = vapply(d$children, function(ch) session_data(ch)$status, "")
+  bad = which(st != "idle")
+  if (length(bad)) {
+    d$status = st[[bad[[1L]]]]
+    d$reason = paste0(length(bad), " of ", length(st), " sub-agents did not finish: ",
+                      paste0(names(st)[bad], " (", st[bad], ")", collapse = ", "))
+    d$condition = session_data(d$children[[bad[[1L]]]])$condition
+  }
+  session_append(s, list(type = "custom", custom_type = "gptr.container_end",
+                         data = list(status = d$status)))
+  invisible(s)
+}
+
+#' Signal `cnd`, the stored condition of a terminal status, with `s` as its session (04 6.1.2)
+#' @noRd
+subagent_signal = function(s, cnd) {
+  if (inherits(cnd, "condition")) {
+    cnd$session = s
+    stop(cnd)
+  }
+  invisible(s)
+}
+
 # ---- teams and fan-outs: common parts (contract 6.1.1, IC-39, IC-47, IC-55) ---------------------
 
-#' Team and fan-out calls run to completion in the foreground and start new agents
+#' Team and fan-out calls run to completion in the foreground, start new agents and take no
+#' System 1 arguments, which their conversations would ignore (P08's check, D-250)
 #' @noRd
 subagent_route_checks = function(call) {
   if (isTRUE(call$args$background) || !isTRUE(call$args$run)) {
@@ -248,7 +276,7 @@ subagent_route_checks = function(call) {
                  "Pipe the team into peter() without agents = to continue it."),
                "invalid_argument", arg = "agents", expected = "no piped session")
   }
-  invisible(TRUE)
+  route_refuse_s1_args(call)
 }
 
 #' The replayed session of a fresh team or fan-out block from P15's doc.replay service (NULL
@@ -289,8 +317,9 @@ subagent_choose_backend = function(agent, opts, info) {
 }
 
 #' Run the children of a container: record each settled child, move the exports into
-#' `call$envir` in task order, then dispatch the container's `agent_end` with the statement's
-#' document site (P15 records the block of an idle end, which needs every child idle; IC-47)
+#' `call$envir` in task order, settle the container, then dispatch its `agent_end` with the
+#' statement's document site (P15 records the block of an idle end, which needs every child idle;
+#' IC-47); when no child ended idle, signal the container's condition (04 section 6.1.2)
 #' @noRd
 subagent_run_children = function(container, items, max_total, call) {
   handles = subagent_schedule(items, max_total, function(i, h) {
@@ -302,10 +331,12 @@ subagent_run_children = function(container, items, max_total, call) {
   fan = identical(session_data(container)$kind, "fanout")
   for (h in handles) taken = subagent_export(h, call$envir, taken, clear = fan)
   subagent_record_reports(container)
-  idle = vapply(handles, function(h) identical(session_data(h$session)$status, "idle"), NA)
+  subagent_settle_container(container)
   d = session_data(container)
-  subagent_emit(container, "agent_end", status = if (all(idle)) "idle" else "error",
-                reason = NULL, usage = d$usage, doc = call$doc, turns = d$turns)
+  subagent_emit(container, "agent_end", status = d$status, reason = d$reason, usage = d$usage,
+                doc = call$doc, turns = d$turns)
+  idle = vapply(handles, function(h) identical(session_data(h$session)$status, "idle"), NA)
+  if (!any(idle)) subagent_signal(container, d$condition)
   container
 }
 
@@ -522,15 +553,14 @@ subagent_fanout_names = function(shape) {
 #' that an inline or cli child releases after its first message (a worker's parent keeps it)
 #' @noRd
 subagent_fanout_spec = function(call, fan, agent, target, i, key, backend) {
-  x = call_value(call, target$index)
-  el = if (identical(target$shape$kind, "rows")) x[i, , drop = FALSE] else x[[i]]
+  el = subagent_fanout_element(call, target, i)
   values = new.env(parent = emptyenv())
   assign(".e1", el, envir = values)
   assign(".x", stats::setNames(list(el), key), envir = values)
   ctx = list(list(label = paste0(".x[[", encodeString(key, quote = "\""), "]]"),
                   kind = "value", name = NULL, slot = ".e1", address = NULL,
                   facts = list(class = class(el), dim = dim(el), length = length(el),
-                               bytes = as.numeric(utils::object.size(el)),
+                               bytes = env_snap_size(el),
                                is_chr1 = is.character(el) && length(el) == 1L && !is.na(el))))
   for (it in call$context[-target$index]) {
     if (!is.null(it$slot)) assign(it$slot, get(it$slot, envir = call$values), envir = values)
@@ -575,11 +605,29 @@ gptr_map = function(call, target = subagent_fanout_item(call)) {
   subagent_run_children(fan, items, call$args$parallel, call)
 }
 
-#' `run()` of the fan-out route: a replayed block (IC-47), else gptr_map()
+#' Element `i` of a fan-out's list-like item: a row of a data frame, else `[[i]]`
+#' @noRd
+subagent_fanout_element = function(call, target, i) {
+  x = call_value(call, target$index)
+  if (identical(target$shape$kind, "rows")) x[i, , drop = FALSE] else x[[i]]
+}
+
+#' `run()` of the fan-out route: a replayed block (IC-47), else gptr_map(). Each replayed child
+#' gets its element bound as `.x` in its home, as a live child has it, so the child code the
+#' block records (`local({ ... }, envir = gptr_resume(block =, child =)$envir)`) runs again.
 #' @noRd
 route_fanout_run = function(call) {
   subagent_route_checks(call)
   target = subagent_fanout_item(call)
-  subagent_value(subagent_doc_replay(call, subagent_fanout_names(target$shape), "fanout") %||%
-                   gptr_map(call, target))
+  keys = subagent_fanout_names(target$shape)
+  fan = subagent_doc_replay(call, keys, "fanout")
+  if (is.null(fan)) return(subagent_value(gptr_map(call, target)))
+  kids = session_data(fan)$children
+  for (i in seq_along(keys)) {
+    home = if (!is.null(kids[[keys[i]]])) session_home(kids[[keys[i]]])
+    if (!is.environment(home)) next
+    assign(".x", stats::setNames(list(subagent_fanout_element(call, target, i)), keys[i]),
+           envir = home)
+  }
+  subagent_value(fan)
 }

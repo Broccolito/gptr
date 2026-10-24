@@ -122,6 +122,8 @@ test_that("gptr_parallel() keeps failed members, or signals the first with on_er
   team = gptr_parallel(ok = peter("good", envir = new.env()), ko = peter("bad", envir = new.env()))
   expect_identical(team$ko$status, "error")
   expect_identical(team$ok$status, "idle")
+  expect_identical(team$status, "error")
+  expect_identical(team$reason, "1 of 2 sub-agents did not finish: ko (error)")
   cnd = expect_error(gptr_parallel(ok = peter("good", envir = new.env()),
                                    ko = peter("bad", envir = new.env()), on_error = "stop"),
                      class = "gptr_error")
@@ -279,9 +281,48 @@ test_that("a settled team dispatches agent_end with its document site (IC-47)", 
   withr::defer(hook_remove(id))
   call = team_call("Review", agents = team_agents("a", "b"))
   call$doc = list(note = "the statement's site")
-  route_team_run(call)
+  team = route_team_run(call)
   expect_identical(seen$doc$note, "the statement's site")
   expect_identical(seen$status, "idle")
+  expect_identical(team$status, "idle")
+})
+
+test_that("a team or fan-out takes a failed member's status, and signals when none finished", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(mode = "manual", model = "fake/fake-1", interactive = FALSE)
+  local_fake_provider(function(request) {
+    if (any(grepl("Only read.", request$system, fixed = TRUE))) return("read")
+    fake_tool("r", code = 'writeLines("x", "f.txt")')
+  })
+  seen = new.env()
+  id = hook_add("agent_end", function(event, ctx) {
+    if (ctx$session$kind %in% c("team", "fanout")) seen$status = event$status
+    NULL
+  })
+  withr::defer(hook_remove(id))
+  cnd = expect_error(peter("Write f.", envir = new.env(),
+                           agents = list(a = agent(system = "Write."),
+                                         b = agent(system = "Write."))),
+                     class = "gptr_error_permission")
+  expect_identical(cnd$session$kind, "team")
+  expect_identical(cnd$session$status, "blocked")
+  expect_identical(unname(vapply(cnd$session$children, function(s) s$status, "")),
+                   rep("blocked", 2L))
+  expect_identical(seen$status, "blocked")
+  cnd = expect_error(peter("Write f.", list(a = 1, b = 2), parallel = 2, envir = new.env()),
+                     class = "gptr_error_permission")
+  expect_identical(cnd$session$kind, "fanout")
+  expect_identical(cnd$session$status, "blocked")
+  expect_identical(cnd$session$b$status, "blocked")
+  seen$status = NULL
+  mixed = peter("Write f.", envir = new.env(),
+                agents = list(a = agent(system = "Only read."), b = agent(system = "Write.")))
+  expect_identical(mixed$a$status, "idle")
+  expect_identical(mixed$status, "blocked")
+  expect_identical(mixed$reason, "1 of 2 sub-agents did not finish: b (blocked)")
+  expect_identical(seen$status, "blocked")
+  expect_false(file.exists("f.txt"))
 })
 
 # ---- Task 5: fan-outs ------------------------------------------------------------------------
@@ -379,14 +420,14 @@ test_that("a fan-out child that succeeds keeps only its values held by name (D-1
   skip_on_cran()
   local_team_fake(function(request) {
     if (length(request$last_results)) return("ok")
-    fake_tool("r", code = "scratch = numeric(1e5)\nbig = numeric(2e5)\ngptr::gptr_return(big)")
+    fake_tool("r", code = "scratch = numeric(1e5)\nbig = numeric(3e5)\ngptr::gptr_return(big)")
   })
   e = new.env()
   e$cohorts = list(A = 1, B = 2)
   fan = gptr_map(team_call("x", parallel = 2L, envir = e,
                            context = list(sym_item("cohorts", e$cohorts))))
   expect_identical(names(fan$A$envir), "big")
-  expect_identical(fan$value$A, numeric(2e5))
+  expect_identical(fan$value$A, numeric(3e5))
 })
 
 test_that("user fan-outs queue every element whatever gptr.subagents.max_tasks says (IC-39)", {
@@ -472,12 +513,65 @@ test_that("NS-6: a team through peter(), its members, its text, and its continua
   out = reviews |> peter("Reconcile these into one list of fixes")
   expect_identical(out, reviews)
   expect_identical(reviews$turns, 1L)
-  expect_identical(session_data(reviews)$last_text, "One list of fixes.")
+  expect_identical(reviews$text, "One list of fixes.")
+  expect_identical(format(reviews), "One list of fixes.")
+  expect_output(print(reviews), "One list of fixes.", fixed = TRUE)
+  expect_identical(reviews$stats$text, "Review: Review analysis.R for statistical errors.")
   messages = tail(fake_requests(fake), 1L)[[1L]]$messages
   blocks = unlist(lapply(messages, function(m) m$content), recursive = FALSE)
   reports = Filter(function(b) identical(b$kind, "agent_reports"), blocks)
   expect_length(reports, 1L)
   expect_match(reports[[1L]]$text, "<agent_report from=\"stats\"", fixed = TRUE)
+})
+
+test_that("a continued gptr_parallel() team or fan-out answers with its own text and value", {
+  skip_on_cran()
+  local_team_fake(function(request) {
+    if (!grepl("Combine", request$last_user, fixed = TRUE)) return("A report.")
+    if (length(request$last_results)) return("Combined.")
+    fake_tool("r", code = "gptr::gptr_return(42)")
+  })
+  team = gptr_parallel(a = peter("Plan.", envir = new.env()),
+                       b = peter("Review.", envir = new.env()))
+  fan = peter("p", list(A = 1, B = 2), parallel = 2)
+  expect_identical(team$value, list(a = NULL, b = NULL))
+  expect_identical(fan$text, c(A = "A report.", B = "A report."))
+  for (s in list(team, fan)) {
+    s |> peter("Combine.")
+    expect_identical(s$text, "Combined.")
+    expect_identical(format(s), "Combined.")
+    expect_output(print(s), "Combined.", fixed = TRUE)
+    expect_identical(s$value, 42)
+    expect_identical(s[[1L]]$text, "A report.")
+    expect_null(s[[1L]]$value)
+  }
+})
+
+test_that("printing a team or fan-out shows each child under its name, and marks one that failed", {
+  skip_on_cran()
+  local_team_fake(function(request) {
+    if (identical(request$last_user, "bad")) return(fake_error("bad request", status = 400L))
+    if (grepl("Combine", request$last_user, fixed = TRUE)) "Combined." else "A report."
+  })
+  fan = peter("Sum.", list(a = 1, b = 2), parallel = 2, envir = new.env())
+  reports = "### a (fake/fake-1)\nA report.\n\n### b (fake/fake-1)\nA report."
+  expect_match(paste(capture.output(print(fan)), collapse = "\n"), reports, fixed = TRUE)
+  expect_match(doc_session_repr_text(fan), reports, fixed = TRUE)
+  expect_identical(fan$text, c(a = "A report.", b = "A report."))
+  expect_identical(format(fan), fan$text)
+  team = gptr_parallel(ok = peter("good", envir = new.env()), ko = peter("bad", envir = new.env()))
+  expect_identical(team$text, paste0("### ok (fake/fake-1)\nA report.\n\n",
+                                     "### ko (fake/fake-1)\n(ended with status error)\n"))
+  expect_match(paste(capture.output(print(team)), collapse = "\n"), "(ended with status error)",
+               fixed = TRUE)
+  # once continued, the container's own answer is shown, not the headings
+  for (s in list(fan, team)) {
+    s |> peter("Combine.")
+    for (out in c(paste(capture.output(print(s)), collapse = "\n"), doc_session_repr_text(s))) {
+      expect_match(out, "^Combined\\.")
+      expect_no_match(out, "###", fixed = TRUE)
+    }
+  }
 })
 
 test_that("a fan-out runs every element, parallel at a time (P19 acceptance 6)", {
@@ -507,6 +601,26 @@ test_that("each fan-out child gets its own element alone, as .x, for a symbol or
   }
 })
 
+test_that("team members and fan-out children are shown the caller's objects (D-252)", {
+  skip_on_cran()
+  fake = local_team_fake(function(request) "ok")
+  e = new.env()
+  e$fit = lm(mpg ~ wt, mtcars)
+  peter("Review fit.", envir = e,
+        agents = list(stats = agent(system = "A."), code = agent(system = "B.")))
+  peter("Review fit.", envir = e, agents = list(stats = agent(system = "A.")))
+  peter("Summarise.", list(a = 1, b = 2), parallel = 2, envir = e)
+  ws = vapply(fake_requests(fake), function(r) {
+    texts = vapply(r$messages[[1L]]$content, function(b) b$text %||% "", "")
+    paste(grep("^<workspace ", texts, value = TRUE), collapse = "\n")
+  }, "")
+  expect_length(ws, 5L)
+  expect_match(ws, "^<workspace env=\"overlay of ")
+  expect_match(ws, "\nfit +lm ")
+  expect_false(any(grepl("(no objects)", ws, fixed = TRUE)))
+  expect_match(ws[4:5], "\n\\.x +list ")
+})
+
 test_that("a fan-out with context = \"none\" is refused before any child starts", {
   fake = local_team_fake()
   b = list(A = 1:3, B = letters)
@@ -514,6 +628,25 @@ test_that("a fan-out with context = \"none\" is refused before any child starts"
                "context = \"names\"", fixed = TRUE, class = "gptr_error_invalid_argument")
   local_gptr_options(context = "none")
   expect_error(peter("p", b, parallel = 2), class = "gptr_error_invalid_argument")
+  expect_length(fake_requests(fake), 0L)
+})
+
+test_that("teams and fan-outs refuse System 1 arguments before any child starts (D-250)", {
+  fake = local_team_fake()
+  b = list(A = 1:3, B = letters)
+  cnd = expect_error(peter("Which tissue?", b, parallel = 2, choices = c("liver", "lung")),
+                     "`choices` shapes a System 1 decision", fixed = TRUE,
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "choices")
+  cnd = expect_error(peter("Which?", agents = list(a = agent(model = "fake/fake-1")),
+                           levels = c("lo", "hi")),
+                     "`levels` shapes a System 1 decision; this call is conversational",
+                     fixed = TRUE, class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "levels")
+  img = list(list(data = as.raw(c(0x89, 0x50, 0x4e, 0x47)), mime = "image/png"))
+  cnd = expect_error(peter("Is it ok?", b, parallel = 2, .opts = list(system1_images = img)),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, ".opts$system1_images")
   expect_length(fake_requests(fake), 0L)
 })
 
@@ -1021,7 +1154,8 @@ test_that("active and failed child work is not inferred from a malicious final r
   expect_true(all(vapply(probe$active, function(x) {
     x$pending && x$results > 0L && !grepl("R tool results:", x$text, fixed = TRUE)
   }, FALSE)))
-  failed = peter("Provider failure", agents = list(first = agent(model = "fake/fake-1")))
+  failed = tryCatch(peter("Provider failure", agents = list(first = agent(model = "fake/fake-1"))),
+                    gptr_error = function(e) e$session)
   expect_identical(failed$first$status, "error")
   expect_false(grepl("R tool results:", subagent_reports_block(list(session = failed), 20000L),
                      fixed = TRUE))

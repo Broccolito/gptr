@@ -36,7 +36,7 @@ doc_source_log = function(path, block_id, action) {
   invisible(NULL)
 }
 
-#' The root of P15's files (cache/s2, cache/tmp sidecars, locks); never created by a read
+#' The root of P15's files (cache/s2, cache/tmp, locks); never created by a read
 #' @noRd
 doc_root = function() {
   workspace_root(create = FALSE)
@@ -206,10 +206,13 @@ doc_lock_acquire = function(dir, tries = 10L) {
   NULL
 }
 
-#' The lock directory of a document: `<root>/locks/<sha1 of path_key>` (contract 11.1)
+#' The lock directory of a document: `<root>/locks/<sha1 of path_key>` (contract 11.1), `<root>`
+#' the `.gptr/` of the document's own project, else doc_pending_dir(): the place of its sidecar,
+#' so every process that records the document takes the same lock
 #' @noRd
 doc_lock_dir = function(path) {
-  file.path(workspace_root(), "locks", cli::hash_sha1(path_key(path)))
+  root = workspace_dir(dirname(path_norm(path))) %||% doc_pending_dir()
+  file.path(root, "locks", cli::hash_sha1(path_key(path)))
 }
 
 #' Lock a document for one write: list(dir, own) or NULL; a lock this process holds for its
@@ -347,15 +350,20 @@ doc_ide_backend = function() {
 # ---- deferred Rscript writes, Jupyter pending blocks and their sidecars (IC-50, IC-51) ----------
 
 #' The sidecar of a document's deferred or pending upserts (contract 11.9):
-#' `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json`. `<root>` is the `.gptr/` of the
-#' document's own project, so every process finds the sidecar whatever its working directory (a
-#' job that leaves its project, or one cron starts elsewhere); doc_root() for a document outside
-#' a project with `.gptr/`.
+#' `<dir>/pending-<sha1(path_key(doc path))>.json`. `<dir>` is `cache/tmp` in the `.gptr/` of the
+#' document's own project, else `pending` in the user cache directory, never a tempdir(): every
+#' process finds the sidecar whatever its working directory (a job that leaves its project, or
+#' one cron starts elsewhere), after the process that wrote it has exited or been killed.
 #' @noRd
 doc_sidecar_path = function(path) {
-  root = workspace_dir(dirname(path_norm(path))) %||% doc_root()
-  file.path(root, "cache", "tmp", paste0("pending-", cli::hash_sha1(path_key(path)), ".json"))
+  ws = workspace_dir(dirname(path_norm(path)))
+  dir = if (is.null(ws)) doc_pending_dir() else file.path(ws, "cache", "tmp")
+  file.path(dir, paste0("pending-", cli::hash_sha1(path_key(path)), ".json"))
 }
+
+#' Where the sidecars and locks of documents outside any `.gptr/` live: the user cache directory
+#' @noRd
+doc_pending_dir = function() file.path(gptr_user_dir("cache"), "pending")
 
 #' The retained legacy RDS sidecar at the same document-owned location
 #' @noRd
@@ -652,7 +660,7 @@ doc_sidecar_data = function(rec) {
       if (!is.null(call0) && !doc_sidecar_value_ok(call0, call = TRUE)) {
         stop("Unsupported call identity structure")
       }
-      text = if (!is.null(call0)) paste(deparse(doc_call_norm(call0)), collapse = "\n")
+      text = if (!is.null(call0)) paste(deparse_code(doc_call_norm(call0)), collapse = "\n")
       if (!is.null(call0) && !identical(doc_sidecar_call(text), doc_call_norm(call0))) {
         stop("Unsupported call identity")
       }
@@ -1209,7 +1217,8 @@ doc_notebook_attached = function(path) {
 }
 
 #' Apply the pending (Jupyter) and unapplied deferred upserts of a document now
-#' (`gptr_doc(path, sync = TRUE)`); returns the number of blocks written, invisibly. The script
+#' (`gptr_doc(path, sync = TRUE)`, which leaves a dead run's recovery to it) and say how many
+#' blocks were written; returns that number, invisibly. The script
 #' this process runs under Rscript is not written (its blocks wait for the exit), nor is the
 #' script of another live process's deferred record (IC-51 recovers only a dead pid's upserts:
 #' that run, whose run lock may be in another workspace root, writes them at its exit; a
@@ -1231,7 +1240,10 @@ doc_sync = function(path) {
     st$docs[[key]] = if (length(rec$upserts)) rec else NULL
   }
   rec = rec %||% doc_sidecar_read(path)
-  if (is.null(rec) || !length(rec$upserts)) return(invisible(0L))
+  if (is.null(rec) || !length(rec$upserts)) {
+    gptr_inform(paste0("No pending blocks for ", doc_rel(path), "."), "notice")
+    return(invisible(0L))
+  }
   if (identical(rec$kind, "deferred") && pid_alive(rec$pid, rec$create_time)) {
     gptr_inform(paste0("An R process that is still running records into ", doc_rel(path),
                        "; its blocks are written when it exits."), "notice")
@@ -1252,6 +1264,8 @@ doc_sync = function(path) {
   }
   doc_keep_conflicts(rec, res)
   st$docs[[key]] = NULL
+  gptr_inform(paste0("Wrote ", length(res$applied), " block(s) into ", doc_rel(path), "."),
+              "notice")
   invisible(length(res$applied))
 }
 

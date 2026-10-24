@@ -18,7 +18,8 @@ gptr_step(s, turns = 1L)
 \description{
 Starts the queued input of an idle session (built with \code{.run = FALSE}, or given a follow-up
 with \code{\link[=gptr_steer]{gptr_steer()}}) and pumps it until \code{turns} model turns have ended or the run settles. A
-running session is advanced the same way.
+running session is advanced the same way; a waiting background session is left as it is
+(\code{\link[=gptr_wait]{gptr_wait()}} continues it, see \link{gptr-background}).
 }
 \details{
 \code{.run = FALSE} builds a session without making its model request; \code{\link[=gptr_step]{gptr_step()}} or

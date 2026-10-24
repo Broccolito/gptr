@@ -181,15 +181,16 @@ test_that("names deparse() rejects in a UTF-8 locale are logged as a note", {
   expect_equal(user_expr_log(), c(rep("<expression that cannot be deparsed>", 4L), "z = 2"))
 })
 
-test_that("a call chain that exhausts deparse()'s C stack check does not make the callback throw", {
+test_that("a long call chain is logged as its text, without R recursion over its heads (CI-82)", {
   skip_on_cran()
   local_history()
   # f(1)(1)...(1) evaluates at the top level when f returns itself. At 3,000 calls it is under
-  # the 5,000-call cap, and deparse() of it as a whole expression fails its C stack check
-  # with an 8 MB stack (from about 800 calls); a larger stack deparses it and cuts the text.
+  # the 5,000-call cap. Base deparse()'s default `backtick` calls mode(), which deparses the
+  # head with that default again: about 3 R frames per head, past options(expressions) here.
   chain = str2lang(paste0("f", strrep("(1)", 3000L)))
+  withr::local_options(expressions = 1000L)
   expect_true(user_log_callback(chain, NULL, TRUE, TRUE))
-  expect_match(user_expr_log(n = 1L), "^(<expression that cannot be deparsed>|.{117}\\.\\.\\.)$")
+  expect_match(user_expr_log(n = 1L), "^[(f1)]{117}[.]{3}$")
   expect_true(user_log_callback(str2lang("z = 2"), NULL, TRUE, TRUE))
   expect_equal(user_expr_log(n = 1L), "z = 2")
 })

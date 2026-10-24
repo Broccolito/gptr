@@ -180,23 +180,28 @@ ckpt_is_link = function(path) {
 #' The files of a project through P10's walker (contract 7.10): hidden and git-ignored files
 #' included (an ignored data file the agent overwrote must be restorable), symbolic links and files
 #' that cannot be read listed, never followed or read
+#' @param prune What the walk prunes (`ckpt_prune()`; a tracker keeps its own).
 #' @return df(path (relative), size, mtime (numeric), link).
 #' @noRd
-ckpt_walk = function(root) {
-  w = walk_files(root, "any", gitignore = FALSE, hidden = TRUE, prune = ckpt_prune(root))
+ckpt_walk = function(root, prune = ckpt_prune(root)) {
+  w = walk_files(root, "any", gitignore = FALSE, hidden = TRUE, prune = prune)
   w = w[w$type != "dir", , drop = FALSE]
   data.frame(path = w$path, size = pmax(w$size, 0, na.rm = TRUE),
              mtime = pmax(as.numeric(w$mtime), 0, na.rm = TRUE), link = w$type == "link")
 }
 
-#' The session's file tracker, made on first use at project_root(): `stat`, the last walk, taken at
-#' `walk_time`; `hash` and `mode`, the content hash and mode bits of each captured relative path;
-#' `explicit` and `explicit_mode`, predicted absolute paths the walk does not cover, or every
-#' predicted path in per-turn mode ("" absent, "?" not capturable); `per_turn`, one scan per turn
+#' The session's file tracker, made on first use at project_root(): `prune`, what its walks prune;
+#' `stat`, the last walk, taken at `walk_time`; `walk_secs`, how long the last scan's walk took;
+#' `hash` and `mode`, the content hash and mode bits of each captured relative path; `explicit`
+#' and `explicit_mode`, predicted absolute paths the walk does not cover, or every predicted path
+#' in per-turn mode ("" absent, "?" not capturable); `per_turn`, one scan per turn
 #' (`scanned_turn`) once walks are slow
 #' @noRd
 ckpt_files_tr = function(ck) {
-  if (is.null(ck$files)) ck$files = list2env(list(root = project_root()), parent = emptyenv())
+  if (is.null(ck$files)) {
+    root = project_root()
+    ck$files = list2env(list(root = root, prune = ckpt_prune(root)), parent = emptyenv())
+  }
   ck$files
 }
 
@@ -210,7 +215,7 @@ ckpt_walked = function(tr, full) {
   dirs = as.character(Reduce(function(a, b) paste0(a, "/", b), parts[-length(parts)],
                              accumulate = TRUE))
   ic = fs_case_insensitive(tr$root)
-  pruned = ignore_eval(ignore_compile(ckpt_prune(tr$root), "", ic), dirs, TRUE, ic) %in% TRUE
+  pruned = ignore_eval(ignore_compile(tr$prune, "", ic), dirs, TRUE, ic) %in% TRUE
   if (any(pruned)) NA_character_ else rel
 }
 
@@ -257,7 +262,7 @@ ckpt_capturable = function(full) {
 #' @noRd
 ckpt_files_baseline = function(tr) {
   tr$walk_time = as.numeric(Sys.time())
-  w = ckpt_walk(tr$root)
+  w = ckpt_walk(tr$root, tr$prune)
   tr$stat = w
   w = w[!w$link & w$size <= gptr_opt("checkpoint_track_file_max") &
           file.access(file.path(tr$root, w$path), 4L) == 0L, , drop = FALSE]
@@ -266,13 +271,16 @@ ckpt_files_baseline = function(tr) {
   ckpt_ingest(tr, w$path[cumsum(w$size) <= gptr_opt("checkpoint_track_total")])
 }
 
-#' Walk and compare with the last walk; a readable tracked file of unchanged size and mtime is
-#' hashed when its mtime lies within 2 s of that walk (git's racy-clean rule)
+#' Walk (its duration noted in `tr$walk_secs`) and compare with the last walk; a readable tracked
+#' file of unchanged size and mtime is hashed when its mtime lies within 2 s of that walk (git's
+#' racy-clean rule)
 #' @return `list(walk, time, created, modified, deleted)`.
 #' @noRd
 ckpt_files_scan = function(tr) {
   time = as.numeric(Sys.time())
-  w = ckpt_walk(tr$root)
+  t0 = proc.time()[["elapsed"]]
+  w = ckpt_walk(tr$root, tr$prune)
+  tr$walk_secs = proc.time()[["elapsed"]] - t0
   old = tr$stat
   both = intersect(w$path, old$path)
   o = old[match(both, old$path), , drop = FALSE]
@@ -445,7 +453,7 @@ ckpt_files_explicit = function(tr, paths) {
   rows
 }
 
-#' Files checkpointer, after the call: a walk (when one takes longer than
+#' Files checkpointer, after the call: a walk (when the walk alone takes longer than
 #' gptr.checkpoint_scan_budget seconds, the session switches to one scan per turn) and the
 #' explicit paths
 #' @return `list(id, turn, root, files = list(<row>))`, or NULL when nothing changed.
@@ -454,9 +462,8 @@ ckpt_files_after = function(ck, call, token) {
   tr = ckpt_files_tr(ck)
   rows = list()
   if (!isTRUE(tr$per_turn)) {
-    t0 = proc.time()[["elapsed"]]
     rows = ckpt_files_step(tr)
-    if (proc.time()[["elapsed"]] - t0 > gptr_opt("checkpoint_scan_budget")) {
+    if (tr$walk_secs > gptr_opt("checkpoint_scan_budget")) {
       tr$per_turn = TRUE
       gptr_inform(paste0("Checkpoint scans of ", tr$root, " take longer than ",
                          "gptr.checkpoint_scan_budget; gptr now scans once per turn plus the ",

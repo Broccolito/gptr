@@ -610,6 +610,7 @@ test_that("gptr_mcp_serve() refuses a port other than the running socket's", {
 
 test_that("client snippets carry a 3,600 s tool timeout and print without the token", {
   skip_without_server()
+  local_gptr_options(mode = "manual")
   h = gptr_mcp_serve(envir = new.env())
   withr::defer(gptr_mcp_serve(stop = TRUE))
   expect_setequal(names(h$config), c("codex", "claude_code", "claude_desktop", "cursor"))
@@ -625,9 +626,16 @@ test_that("client snippets carry a 3,600 s tool timeout and print without the to
   shown = paste(utils::capture.output(print(h$config$codex)), collapse = "\n")
   expect_false(grepl(value, shown, fixed = TRUE))
   expect_match(shown, "GPTR_MCP_TOKEN=[secret:GPTR_MCP_TOKEN]", fixed = TRUE)
+  for (n in c("claude_code", "claude_desktop", "cursor")) {
+    expect_true(grepl(value, as.character(h$config[[n]]), fixed = TRUE))
+  }
+  expect_false(any(grepl(value, h$config$codex$args, fixed = TRUE)))
   shown = paste(utils::capture.output(print(h)), collapse = "\n")
   expect_match(shown, "<gptr MCP server> http://127.0.0.1:", fixed = TRUE)
   expect_false(grepl(value, shown, fixed = TRUE))
+  expect_false(grepl("in the environment variable", shown, fixed = TRUE))
+  expect_match(shown, "token: inside the $config snippets", fixed = TRUE)
+  expect_match(shown, "mode: manual; calls that need approval are refused", fixed = TRUE)
   expect_null(gptr_mcp_serve(stop = TRUE))
   expect_null(the$mcp_server)
   expect_false("mcp_serve" %in% job_list()$kind)

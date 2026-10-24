@@ -72,6 +72,10 @@ console_command = function(text, session = NULL, send = NULL) {
     return(invisible("prompt"))
   }
   ev_dispatch("console:command", list(data = list(text = text)), session = session)
+  if (is.null(registry_get("command", cmd$full, session = session)) &&
+      is.null(registry_get("command", cmd$name, session = session))) {
+    console_templates_sync()
+  }
   spec = registry_get("command", cmd$full, session = session)
   args = cmd$rest
   if (is.null(spec)) {
@@ -98,10 +102,19 @@ console_command = function(text, session = NULL, send = NULL) {
   invisible("done")
 }
 
-#' The bound history document of `s` (the `doc.site` service, P15), or NULL
+#' Register the prompt templates now (the `templates.sync` service, P17): a session registers
+#' them when it starts, which in the console is after the first prompt (D-252)
+#' @noRd
+console_templates_sync = function() {
+  if (ext_service_has("templates.sync")) ext_service_get("templates.sync")()
+  invisible(NULL)
+}
+
+#' The bound history document of `s`, or the gptr_doc() binding before the console's first
+#' prompt when `s` is NULL (the `doc.site` service, P15), or NULL
 #' @noRd
 cmd_doc_site = function(s) {
-  if (is.null(s) || !ext_service_has("doc.site")) return(NULL)
+  if (!ext_service_has("doc.site")) return(NULL)
   tryCatch(ext_service_get("doc.site")(s), error = function(e) NULL)
 }
 
@@ -112,6 +125,7 @@ cmd_doc_site = function(s) {
 #' @noRd
 cmd_help = function(args, ctx) {
   s = ctx$session
+  console_templates_sync()
   if (nzchar(args)) {
     nm = sub("^/", "", args)
     spec = registry_get("command", nm, session = s)
@@ -366,7 +380,8 @@ cmd_status = function(args, ctx) {
     return(c("session   (none yet: the first prompt starts one)",
              paste0("model     ",
                     cmd_model_label(if (!is.null(rs)) repl_model(rs) else "the default model")),
-             paste0("mode      ", if (!is.null(rs)) repl_mode(rs) else "manual")))
+             paste0("mode      ", if (!is.null(rs)) repl_mode(rs) else "manual"),
+             paste0("document  ", cmd_doc_site(NULL)$path %||% "(none)")))
   }
   d = session_data(s)
   c(paste0("session   ", d$id, "  (", d$status, ", ", d$turns,

@@ -176,7 +176,7 @@ eval_run = function(st) {
   st$outputs = rep(list(character()), st$n_total)
   if (!st$n_total) return(invisible(st))
   if (st$guard) {
-    g = eval_guard(parsed)
+    g = eval_guard(parsed, st$envir)
     if (!is.null(g$reason)) {
       eval_error(st, g$reason, "gptr_blocked")
       st$status = "blocked"
@@ -185,11 +185,11 @@ eval_run = function(st) {
   }
   exprs = gptr_shim(parsed, st$envir)
   st$assigned = eval_assign_targets(exprs)
-  snap0 = env_snapshot_rows(st$envir, NULL, sizes = FALSE)
+  snap0 = env_view_snapshot(st$envir, sizes = FALSE)
   eval_open(st)
   if (st$catch_interrupt) eval_loop_catch(st, exprs) else eval_loop(st, exprs)
   eval_finish(st)
-  snap1 = env_snapshot_rows(st$envir, NULL, sizes = FALSE)
+  snap1 = env_view_snapshot(st$envir, sizes = FALSE)
   st$objects = eval_objects(snap0, snap1, st$assigned)
   invisible(st)
 }
@@ -536,7 +536,7 @@ eval_is_own_call = function(cl) {
 #' @noRd
 eval_call_text = function(cl) {
   if (is.null(cl) || eval_is_own_call(cl)) return(NULL)
-  paste(deparse(cl, nlines = 1L, width.cutoff = 500L), collapse = "")
+  paste(deparse_code(cl, nlines = 1L, width.cutoff = 500L), collapse = "")
 }
 
 #' Did the harness time limit end the expression?
@@ -599,7 +599,7 @@ eval_format_calls = function(calls, max_calls = 20L, width = 120L) {
   out = character()
   for (i in keep) {
     cl = calls[[i]]
-    txt = paste(deparse(cl, width.cutoff = 500L, nlines = 2L), collapse = " ")
+    txt = paste(deparse_code(cl, width.cutoff = 500L, nlines = 2L), collapse = " ")
     if (nchar(txt) > width) txt = paste0(substr(txt, 1L, width - 3L), "...")
     sr = attr(cl, "srcref")
     loc = ""
@@ -753,7 +753,9 @@ eval_plots_done = function(st) {
 }
 
 #' Object changes of an evaluation with their model-facing lines
-#' An added promise or active binding shows its kind, never its class; lines are valid UTF-8.
+#' An added promise or active binding shows its kind, never its class; lines are valid UTF-8. A
+#' modified object that was below an overlay, and still is or is shared by its new binding, is the
+#' source's (D-252).
 #' @noRd
 eval_objects = function(old, new, assigned) {
   d = env_diff(old, new, assigned)
@@ -768,7 +770,10 @@ eval_objects = function(old, new, assigned) {
   mod = character()
   if (length(j)) {
     cls = ifelse(is.na(new$class[j]), new$kind[j], new$class[j])
-    mod = sprintf("~ %s <%s> modified", env_text(d$modified), env_text(cls))
+    k = match(d$modified, old$name)
+    src = !old$own[k] & (!new$own[j] | env_same(old$address[k], new$address[j]))
+    mod = sprintf("~ %s <%s> modified%s", env_text(d$modified), env_text(cls),
+                  ifelse(src, " (in the source workspace)", ""))
   }
   rem = if (length(d$removed)) sprintf("- %s removed", env_text(d$removed)) else character()
   c(d, list(lines = c(add, mod, rem)))

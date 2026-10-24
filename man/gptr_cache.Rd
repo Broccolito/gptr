@@ -20,8 +20,9 @@ gptr_cache(
 }
 \description{
 \code{info} lists the System 1 answer cache, the System 2 answer cache used for replay, temporary
-spill files and unapplied document sidecars (deferred or pending blocks; they are never
-removed here: apply them with \code{gptr_doc(path, sync = TRUE)}). \code{prune} removes System 2 answers
+spill files and unapplied document sidecars (deferred or pending blocks; a second row lists
+those of documents outside any \verb{.gptr/}, kept in the user cache; they are never removed here:
+apply them with \code{gptr_doc(path, sync = TRUE)}). \code{prune} removes System 2 answers
 whose block is neither in its document nor queued for it in a sidecar, System 1 answers unused
 for 90 days, temporary files older than \code{getOption("gptr.spill_days", 7)} days and older
 refreshed model catalogs; \code{clear} removes a kind entirely.

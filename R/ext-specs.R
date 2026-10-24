@@ -300,7 +300,7 @@ spec_model_rules = function() {
     type = f("enum", values = c("chat", "classifier", "cli")),
     release_date = f("chrna|numna"), context = f("numna"), max_output = f("numna"),
     reasoning = f("lgl1"), thinking_levels = f("chr"), thinking = f("chr1"), input = f("chr"),
-    tool_call = f("lgl1"), structured_output = f("lgl1"), prices = f("df"),
+    tool_call = f("lgl1"), structured_output = f("lgl1"), prices = f("df|list"),
     cache_min = f("numna"), capabilities = f("nlist"), aliases = f("chr"),
     decision = f("nlist"), digest = f("chr1"), server_version = f("chr1"),
     locality = f("enum", values = c("local", "remote", "unknown")),
@@ -318,6 +318,14 @@ spec_model_metadata = function(spec, model, prefix = "") {
   for (name in names(rules)) {
     value = model[[name]]
     if (!is.null(value)) model[[name]] = field_check(name, value, rules[[name]])
+  }
+  normalise = if (is.null(model[["prices"]])) NULL else ext_service_try("prices.table")
+  if (!is.null(normalise)) {
+    model$prices = tryCatch(normalise(model[["prices"]]),
+      gptr_error_invalid_argument = function(e) {
+        spec_abort(spec, paste0(prefix, "prices"), paste0("must be a data frame or a list of ",
+          "price records: invalid ", e$arg, ", expected ", e$expected))
+      })
   }
   for (name in c("digest", "server_version")) {
     if (isFALSE(nzchar(model[[name]]))) spec_abort(spec, paste0(prefix, name), "must not be empty")
@@ -1005,7 +1013,15 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #' @param api Wire api (the name of an adapter), for example `"openai-completions"`.
 #' @param base_url Endpoint base URL.
 #' @param auth Character vector of environment-variable names, a function, or `NULL`.
-#' @param models List of model records (each with at least `id`).
+#' @param models List of model records (each with at least `id`). A reasoning model
+#'   (`reasoning = TRUE`) lists the levels it accepts in `thinking_levels`, a subset of `"off"`,
+#'   `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"` and `"max"`; without it `"off"` to
+#'   `"high"` is assumed. A requested level the model lacks becomes the nearest one it has, with a
+#'   message. A record's `prices` is a data frame or a list of price records: `input` and
+#'   `output` in USD per million tokens, optional `cache_read`, `cache_write_5m`,
+#'   `cache_write_1h`, `from` (a `"YYYY-MM-DD"` date) and `tier` (`"default"`, or `">Nk"` for
+#'   prompts above N thousand tokens, such as `">200k"`); it is checked here, and without it the
+#'   cost is unknown.
 #' @param compat Named list of compatibility switches for the adapter (for
 #'   `api = "bedrock-converse"`, `region`: the AWS region requests are signed for).
 #' @param type `"chat"`, `"classifier"` (System 1) or `"cli"`.
@@ -1023,10 +1039,16 @@ gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun =
 #'               auth = "CORP_LLM_KEY", models = list(list(id = "corp-large", context = 128000)))
 #' # Amazon Bedrock's Converse API through a SigV4 gateway (region and endpoint are record data):
 #' # the IAM key pair is read from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (and
-#' # AWS_SESSION_TOKEN when set); gptr_env(aliases = ...) maps other names onto them.
+#' # AWS_SESSION_TOKEN when set); gptr_env(aliases = ...) maps other names onto them. Thinking
+#' # levels are sent only to a Claude model whose `capabilities` declare adaptive thinking with
+#' # an effort (Claude 4.6 and later); other models get no thinking, with a message. The
+#' # bedrock-converse adapter does not request prompt caching, so each request sends the full
+#' # prompt at the uncached rate.
 #' gptr_provider("gateway", api = "bedrock-converse", base_url = "https://ai.corp.example/awsai",
 #'               auth = "AWS_SECRET_ACCESS_KEY", compat = list(region = "us-west-2"),
-#'               models = list(list(id = "us.anthropic.claude-opus-4-8", tool_call = TRUE)))
+#'               models = list(list(id = "us.anthropic.claude-opus-4-8", tool_call = TRUE,
+#'                                  reasoning = TRUE,
+#'                                  capabilities = list(adaptive_thinking = TRUE, effort = TRUE))))
 #' @export
 gptr_provider = function(id, api, base_url = NULL, auth = NULL, models = NULL, compat = list(),
                          type = c("chat", "classifier", "cli"), headers = list(), discover = NULL,

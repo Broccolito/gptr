@@ -30,17 +30,6 @@ env_text = function(x) {
   x
 }
 
-#' Is x a compact-looking integer sequence (ALTREP 1:n)? (a leaf)
-#' Reads three elements through .subset(), which never materialises a compact sequence.
-#' @noRd
-env_compact_seq = function(x) {
-  if (!is.integer(x) || !is.null(attributes(x))) return(FALSE)
-  n = length(x)
-  if (n < 1e6) return(FALSE)
-  e = .subset(x, c(1L, 2L, n))
-  !anyNA(e) && e[2L] - e[1L] == 1L && as.numeric(e[3L]) - e[1L] == n - 1
-}
-
 #' Facts of a Seurat object through attributes only (a leaf; not in Suggests, IC-71)
 #' Handles v5 Assay5 (a `features` LogMap) and v3 Assay (a `data` dgCMatrix).
 #' @noRd
@@ -85,9 +74,7 @@ env_shape = function(x) {
   }
   if (is.function(x)) return("")
   if (is.environment(x)) return(paste(env_fmt_n(length(x)), "bindings"))
-  s = paste("length", env_fmt_n(length(x)))
-  if (env_compact_seq(x)) s = paste(s, "(sequence)")
-  s
+  paste("length", env_fmt_n(length(x)))
 }
 
 #' Snapshot facts of one binding value, without its size (a leaf)
@@ -130,19 +117,7 @@ env_snap_facts = function(box, name) {
            error = function(e) env_snap_bare(get(name, envir = box$envir, inherits = FALSE)))
 }
 
-#' Size in bytes of one binding value; NA for environments, functions, external pointers,
-#' compact sequences and S7 objects (object.size() overstates them; it counts an S7 object's class
-#' object in full) (a leaf)
-#' @noRd
-env_snap_size = function(x) {
-  if (is.environment(x) || is.function(x) || typeof(x) == "externalptr" || env_compact_seq(x) ||
-      inherits(x, "S7_object")) {
-    return(NA_real_)
-  }
-  as.numeric(utils::object.size(x))
-}
-
-#' Snapshot rows; `sizes = FALSE` skips object.size() (the evaluator needs no sizes)
+#' Snapshot rows; `sizes = FALSE` skips env_snap_size() (the evaluator needs no sizes)
 #' `envir` is held only in a box binding reset on exit: a loop in a frame binding a function-frame
 #' home left it referenced (tracemem), so the loop is in env_snap_rows().
 #' @noRd
@@ -188,11 +163,12 @@ env_snap_rows = function(box, previous, sizes) {
     if (!sizes || is.na(f$address)) next
     j = prev[i]
     reuse = !is.na(j) && identical(previous$address[j], f$address) &&
-      identical(previous$class[j], f$class) && identical(previous$shape[j], f$shape)
+      identical(previous$class[j], f$class) && identical(previous$shape[j], f$shape) &&
+      identical(previous$fp[j], f$fp)
     bytes[i] = if (reuse) {
       previous$bytes[j]
     } else {
-      env_snap_size(get(nms[i], envir = box$envir, inherits = FALSE))
+      env_snap_size(get(nms[i], envir = box$envir, inherits = FALSE), box$envir)
     }
   }
   data.frame(name = nms, kind = kind, address = address, class = cls, bytes = bytes,
@@ -201,7 +177,8 @@ env_snap_rows = function(box, previous, sizes) {
 
 #' Copy-safe snapshot of an environment, forcing no promise and calling no active binding (R4)
 #' One row per binding: name, kind (value, promise, active), address, class, bytes (reused from
-#' `previous` while address, class and shape hold), shape, fp; missing arguments are `<missing>`.
+#' `previous` while address, class, shape and fp hold), shape, fp; missing arguments are
+#' `<missing>`.
 #' @noRd
 env_snapshot = function(envir, previous = NULL) {
   check_env(envir, "envir")
@@ -210,6 +187,24 @@ env_snapshot = function(envir, previous = NULL) {
                arg = "previous", expected = "a data frame or NULL")
   }
   env_snapshot_rows(envir, previous, sizes = TRUE)
+}
+
+#' Snapshot of what code in `envir` reads: an overlay's own rows, then each lower overlay's and
+#' the first other environment's (binding_env()), a nearer binding shadowing a farther; column
+#' `own` is TRUE for a binding of `envir` itself (D-252)
+#' @noRd
+env_view_snapshot = function(envir, previous = NULL, sizes = TRUE) {
+  check_env(envir, "envir")
+  snap = env_snapshot_rows(envir, previous, sizes)
+  n = nrow(snap)
+  while (!is.null(attr(envir, "gptr_overlay", exact = TRUE))) {
+    envir = parent.env(envir)
+    snap = rbind(snap, env_snapshot_rows(envir, previous, sizes))
+  }
+  # Dropped first: `[.data.frame` left this frame referenced, pinning a function-frame home (R2)
+  envir = NULL
+  snap$own = seq_len(nrow(snap)) <= n
+  snap[!duplicated(snap$name), , drop = FALSE]
 }
 
 #' TRUE where two character vectors are equal, NA matching NA
@@ -253,18 +248,14 @@ env_align = function(name, cls, shape, size) {
 
 #' Lines of the `<workspace>` block within `budget` estimated tokens
 #' At most 12 lines `name  class  shape  size`, largest first, then `(+ n smaller objects: use
-#' ls())`; promises and active bindings show as `<promise>` and `<active>`. A value of unknown
-#' size other than a function or environment (an S7 plot) ranks at the median known size, so it is
-#' not always cut; the rest rank last.
+#' ls())`; promises and active bindings show as `<promise>` and `<active>` and, having no size,
+#' rank last.
 #' @noRd
 workspace_lines = function(snapshot, budget = 600L) {
   check_number(budget, "budget", min = 20)
   n = nrow(snapshot)
   if (!n) return(character())
   size = snapshot$bytes
-  lift = is.na(size) & snapshot$kind == "value" &
-    !snapshot$class %in% c("function", "environment")
-  size[lift] = stats::median(size, na.rm = TRUE)
   size[is.na(size)] = -1
   s = snapshot[order(-size, snapshot$name, method = "radix"), , drop = FALSE]
   value = s$kind == "value"
@@ -361,13 +352,14 @@ env_names_lines = function(snap, budget) {
   dsc_fit(paste(snap$name, collapse = ", "), budget)
 }
 
-#' `<workspace env=".." objects="n">`: one line per object, largest first (first message)
+#' `<workspace env=".." objects="n">`: one line per object, largest first (first message); an
+#' overlay's first line says where its reads fall through to (D-252)
 #' @noRd
 env_block_workspace = function(ctx, budget) {
   mode = env_context_mode(ctx)
   envir = env_home(ctx)
   if (identical(mode, "none") || is.null(envir)) return(NULL)
-  snap = env_snapshot(envir, env_memory(ctx)$snapshot)
+  snap = env_view_snapshot(envir, env_memory(ctx)$snapshot)
   env_remember(ctx, snap)
   lines = if (identical(mode, "names")) {
     env_names_lines(snap, budget)
@@ -375,6 +367,12 @@ env_block_workspace = function(ctx, budget) {
     workspace_lines(snap, budget)
   }
   if (!length(lines)) lines = "(no objects)"
+  base = envir
+  while (!is.null(attr(base, "gptr_overlay", exact = TRUE))) base = parent.env(base)
+  if (!identical(base, envir)) {
+    where = if (identical(base, globalenv())) "globalenv" else "<environment>"
+    lines = c(paste0("Reads fall through to ", where, "; assignments stay here."), lines)
+  }
   # P06's home_label is "<none>" for a session without a home (the run's environment is listed)
   label = if (is.null(ctx$session)) NULL else session_data(ctx$session)$home_label
   if (!is.character(label) || length(label) != 1L || is.na(label) || label == "<none>") {
@@ -392,7 +390,7 @@ env_block_changes = function(ctx, budget) {
   if (identical(env_context_mode(ctx), "none") || is.null(envir)) return(NULL)
   mem = env_memory(ctx)
   old = mem$snapshot
-  new = env_snapshot(envir, old)
+  new = env_view_snapshot(envir, old)
   ran = user_expr_log(since = mem$since)
   env_remember(ctx, new)
   d = if (is.null(old)) {
@@ -487,7 +485,7 @@ env_eval_service = function(code, envir, ...) {
 env_on_agent_end = function(event, ctx) {
   envir = env_home(ctx)
   old = env_memory(ctx)$snapshot
-  if (!is.null(envir) && !is.null(old)) env_remember(ctx, env_snapshot(envir, old))
+  if (!is.null(envir) && !is.null(old)) env_remember(ctx, env_view_snapshot(envir, old))
   NULL
 }
 
@@ -499,7 +497,7 @@ env_on_tree = function(event, ctx) {
   envir = env_home(ctx)
   mem = env_memory(ctx)
   if (!identical(event$restore, "workspace") && !is.null(envir) && !is.null(mem$snapshot)) {
-    mem$snapshot = env_snapshot(envir, mem$snapshot)
+    mem$snapshot = env_view_snapshot(envir, mem$snapshot)
   }
   NULL
 }

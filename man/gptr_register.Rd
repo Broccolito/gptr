@@ -16,7 +16,10 @@ A function that removes the record again, invisibly.
 Registers a spec made by \code{\link[=gptr_spec]{gptr_spec()}} or one of the spec constructors at top level: rank 3,
 source \code{"user"}, for the lifetime of the R process. Sessions frozen before the call are not
 changed; the next session sees the record. A user record overrides a built-in record of the same
-kind and name only (the built-in's other records keep working).
+kind and name only (the built-in's other records keep working). Registering the same kind and
+name again replaces your earlier record, with a notice, and the function the earlier call
+returned then removes nothing (it returns \code{FALSE}); kinds that keep every record, such as hooks
+and policies, keep both.
 }
 \details{
 Called from model code while a run executes a tool, \code{gptr_register()} and the function it

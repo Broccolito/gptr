@@ -79,7 +79,15 @@ jobs:
           r-version: release
           Ncpus: 2
           use-public-rspm: true
+      - uses: actions/checkout@v6
+        with:
+          path: controller
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./controller/.github/actions/system-libraries
       - uses: r-lib/actions/setup-r-dependencies@v2
+        env:
+          PKG_SYSREQS: 'false'
         with:
           working-directory: source
           extra-packages: any::rcmdcheck
@@ -270,7 +278,17 @@ jobs:
           http-user-agent: release
           Ncpus: 2
           use-public-rspm: true
+      - uses: actions/checkout@v6
+        if: runner.os == 'Linux'
+        with:
+          path: controller
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./controller/.github/actions/system-libraries
+        if: runner.os == 'Linux'
       - uses: r-lib/actions/setup-r-dependencies@v2
+        env:
+          PKG_SYSREQS: 'false'
         with:
           working-directory: metadata/gptr
           packages: deps::., any::sessioninfo
@@ -441,8 +459,11 @@ jobs:
           set -euo pipefail
           Rscript --vanilla controller/dev/ci/test-profile-publication.R \
             controller/dev/ci/exact-profile.R
+      - uses: ./controller/.github/actions/system-libraries
       - uses: r-lib/actions/setup-r-dependencies@v2
         id: profile_dependencies
+        env:
+          PKG_SYSREQS: 'false'
         with:
           working-directory: metadata/gptr
           packages: deps::., any::sessioninfo
