@@ -911,6 +911,14 @@ test_that("keys read on the polling beat are a paste; after a stall they are typ
     read(2.15, "a\rb")
     expect_identical(steers(), c("a", "b\nc\nd", "a"))
     expect_identical(rs$reader$compose$draft, "b")
+    # keys no faster than a person types, one in 30 ms, are typed on the beat too (Task 32): two
+    # keys read 0.05 s after the last read, as under load, and four 0.15 s after it
+    read(2.2, "\rd")
+    expect_identical(steers(), c("a", "b\nc\nd", "a", "b"))
+    expect_identical(rs$reader$compose$draft, "d")
+    read(2.35, "e\rfg")
+    expect_identical(steers(), c("a", "b\nc\nd", "a", "b", "de"))
+    expect_identical(rs$reader$compose$draft, "fg")
   })
 })
 

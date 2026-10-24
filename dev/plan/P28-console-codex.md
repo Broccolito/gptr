@@ -144,7 +144,8 @@ working directory restored. Plan-specific rules:
   - Pure functions with an injected clock hold the timing rules: 0.05 s poll, 0.1 s stale line,
     1 s typing idle (3 s with a draft), 50 ms escape hold, the batch rule. (Amended in the steering
     review: a batch read on the polling beat, within 0.2 s of the last read, that holds newlines and
-    ends in text is a paste and stays one draft.)
+    ends in text is a paste and stays one draft. Amended in Task 32: and that holds more keys than
+    one in 30 ms since that read, plus one.)
   - pty children: `processx` pty, `skip_on_cran()`, `skip_on_os("windows")`, TERM=xterm-256color,
     80x24, temporary R_USER_* and GPTR_PROJECT_ROOT. One case per guarantee, run on the macOS and
     Linux NOT_CRAN lanes.
@@ -908,7 +909,10 @@ Decisions:
   `console_compose(..., paste = FALSE)`: `console_keys()` passes TRUE when the reader read at most
   0.2 s before (`rd$polled`, empty reads included), the idle editor always; a batch that ends in a
   newline or in edit keys only, and any batch read after a stall (a run's first read, keys piled up
-  during an in-process tool), sends up to its last newline as before.)
+  during an in-process tool), sends up to its last newline as before. Amended in Task 32: a batch on
+  the beat is a paste only when it holds more keys than a person types since that read, one in 30
+  ms plus one; under load a late read held Enter and the next key, and the Enter stayed in the
+  draft.)
 - `/` and `!` drafts send as follow-ups.
 - No cursor movement: the draft is edited at its end, and Left, Right, Ctrl-A and Ctrl-E are
   dropped. Full editing is readline's, at the prompt.
@@ -1682,7 +1686,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 |---|---|---|
 | 29 | A console started from a sourced script records none of its turns | 7fe1e0dc |
 | 30 | `/skill:` completes nothing before the first prompt | 146028a1 |
-| 31 | Code served to a CLI route does not show what it prints | (this commit) |
+| 31 | Code served to a CLI route does not show what it prints | 747e04d7 |
+| 32 | Under load an Enter typed during a run stays in the draft | (this commit) |
 
 ## Out of scope
 

@@ -3719,6 +3719,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     row has no clock and says keys wait (review)", "the r call's own end unfreezes the row, not a nested call's
     (review)".
 
+- Live dogfood fixes (Task 28, 2026-10-23): Task 32: a batch on the polling beat is a paste only when it holds
+  more keys than a person types since the reader's last read, one in 30 ms plus one. The steering review's
+  premise, that no person types a newline and more inside one read, failed under load: reads came late, two
+  keys each, and `steer six: red car`, Enter, `draft six` stayed one two-line draft (S6 on claude-cli, codex and
+  Bedrock Opus 4.8 at load average 80-180). Contract-visible: 04 §15.10 IC-76. Tests: test-console-typing.R
+  "keys read on the polling beat are a paste; after a stall they are typed (review)".
+
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
   natural language; `!`, `/` and `@` show what they do. Amends D-183.

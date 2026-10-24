@@ -5431,8 +5431,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     edit keys reach. With `paste` (steering review) a batch with text after its last newline, not only edit
     keys, is a paste: its newlines stay in the draft, leading blank lines dropped, and Enter later sends it as
     one message, as at the idle prompt. `console_keys()` passes TRUE for a batch read on the polling beat, at
-    most 0.2 s after the reader's last read (`rd$polled`, empty reads included), as no person types a newline
-    and more inside one 50 ms read; the idle editor always; the background probe never. A run's first read and
+    most 0.2 s after the reader's last read (`rd$polled`, empty reads included), that holds more keys than a
+    person types since that read, one in 30 ms plus one (P28 Task 32: a read late under load held Enter and the
+    next key, and the steer stayed in the draft); the idle editor always; the background probe never. A run's first read and
     the keys piled up during an in-process tool keep the rule above (during a run a paste without a final
     newline was split: its head went at once as a steer, its last line stayed the draft). A message starting
     with `/` or `!` is always a follow-up, and a blank one is not sent. Two

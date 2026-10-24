@@ -119,8 +119,10 @@ console_trigger = function(line) {
 #' prompt) and Up takes back the newest one (console_newest()); Tab on a trigger word completes it
 #' (console_complete()), and several candidates are kept as `rd$compose$candidates`, which the live
 #' row shows until the next key; the live row is drawn again where it shows. A batch read at most
-#' 0.2 s after the reader's last read (`rd$polled`, an empty read too) is on the polling beat, so
-#' console_compose() takes it as a paste. Ctrl-C, a key in character mode (tty_call()), interrupts
+#' 0.2 s after the reader's last read (`rd$polled`, an empty read too) is on the polling beat, and
+#' one there holding more keys than a person types since that read (one in 30 ms, plus one) is a
+#' paste to console_compose(); fewer were typed, as when a late read under load holds Enter and the
+#' next key. Ctrl-C, a key in character mode (tty_call()), interrupts
 #' as SIGINT would, after the keys before it; the keys after it in the batch (a further Ctrl-C
 #' dropped) are the pause menu's answers (`rd$after_interrupt`, console_ahead()), and those it
 #' leaves are read here once it resumes, as if typed after it
@@ -128,7 +130,8 @@ console_trigger = function(line) {
 console_keys = function(rd, s, chars) {
   # the first read of a run, or one after an in-process tool held the reactor, is off the beat
   now = reactor_now()
-  paste = !is.null(rd$polled) && now - rd$polled <= 0.2
+  gap = now - (rd$polled %||% -Inf)
+  paste = gap <= 0.2 && nchar(chars) > 1 + gap / 0.03
   rd$polled = now
   ctrl_c = regexpr("\003", chars, fixed = TRUE)
   if (ctrl_c > 0L) {
