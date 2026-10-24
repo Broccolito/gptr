@@ -1695,7 +1695,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 34 | A key typed while an aborted run stops is echoed | 5831cb0b |
 | 35 | Up read with the Enter before it takes nothing back | fa3e1059 |
 | 36 | A sub-agent's start line loses `started` when cut | d88014eb |
-| 37 | On a CLI route a taken-back steer's printed line stays in the scrollback | (this commit) |
+| 37 | On a CLI route a taken-back steer's printed line stays in the scrollback | 5ee252d9 |
+| 38 | Keys typed during a CLI route's first probe wait without a cue (not changed) | (this commit) |
 
 ## Out of scope
 
