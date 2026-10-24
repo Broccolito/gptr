@@ -717,6 +717,17 @@ test_that("a question during a terminal call reads with the saved modes, then th
   tty$log = character()
   expect_identical(gptr_readline("peter> ", read), "y")
   expect_identical(tty$log, "read peter> ")
+  # a question that readline reads kept the echo off from its rows on (tty_question()): the echo
+  # comes back as readline starts, which echoes what it reads, and its prompt erases a key the
+  # terminal echoed in that moment; once (visual check of Task 48: the answers were not shown)
+  local_mocked_bindings(console_readline_tty = function() TRUE)
+  the$tty = list2env(list(saved = "SAVED", set = char_mode))
+  tty$log = character()
+  tty_question(TRUE)
+  expect_identical(c(gptr_readline("\u203a ", read), gptr_readline("\u203a ", read)), c("y", "y"))
+  tty_question(FALSE)
+  expect_identical(tty$log, c("SAVED", "-echo", "SAVED", paste0("read \001\r\033[K\002", "\u203a "),
+                              "read \u203a ", char_mode))
 })
 
 test_that("a terminal call's question reads in the saved modes from before its rows (review)", {

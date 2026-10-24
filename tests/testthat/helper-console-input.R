@@ -115,7 +115,8 @@ kept_line = function(texts, kept = TRUE, utf8 = cli::is_utf8_output()) {
 # Terminal R in a pty (80x24, TERM `term`, echo on as in a terminal unless `echo` is FALSE) that
 # loads gptr and sources `child`, the child's code (its options too). `send(x)` types; `wait(x)`
 # reads until `x` is shown and consumes the output through it, so the next wait() looks after it;
-# `pending()` reads for 0.5 s and returns what followed, its escapes dropped; `all` keeps
+# `pending()` reads for 0.5 s and returns what followed, its escapes and a CR at a row's start (a
+# question's prompt clears its row, tty_question()) dropped; `all` keeps
 # everything shown and `seen(x)` counts `x` in it. The child dies with the test.
 local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = parent.frame()) {
   dir = withr::local_tempdir("gptr-pty-", .local_envir = .env)
@@ -162,7 +163,7 @@ local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = paren
   pty$pending = function() {
     deadline = Sys.time() + 0.5
     while (Sys.time() < deadline) read(50L)
-    gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$out)
+    gsub("\n\r", "\n", gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$out), fixed = TRUE)
   }
   pty$seen = function(x) sum(gregexpr(x, pty$all, fixed = TRUE, useBytes = TRUE)[[1L]] > 0L)
   pty$wait("> ")

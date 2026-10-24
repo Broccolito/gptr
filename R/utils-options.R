@@ -169,14 +169,15 @@ console_readline_tty = function() {
 #' A console question of a terminal call reads in the saved modes from before its rows are written
 #' (`on` TRUE) until it returns (FALSE), so readline starts as soon as the person sees the question,
 #' never after a slow stty (D-243); gptr_readline() then switches nothing. Where readline reads the
-#' tty, which echoes what it reads, the echo stays off, so a key typed while the rows are written is
-#' not echoed before the chevron too
+#' tty the echo stays off (`tty$quiet`) until gptr_readline() starts it, so a key typed while the
+#' rows are written is not echoed before the chevron and again by readline
 #' @noRd
 tty_question = function(on) {
   tty = the$tty
   if (is.null(tty$saved) || identical(isTRUE(tty$asking), on)) return(invisible(NULL))
   tty$asking = on
-  tty_modes(if (on) c(tty$saved, if (console_readline_tty()) "-echo") else tty$set)
+  tty$quiet = on && console_readline_tty()
+  tty_modes(if (on) c(tty$saved, if (tty$quiet) "-echo") else tty$set)
   invisible(NULL)
 }
 
@@ -264,6 +265,12 @@ gptr_readline = function(prompt = "", read = readline, hide = NULL) {
   if (!is.null(tty$saved) && !isTRUE(tty$asking)) {
     tty_modes(tty$saved)
     on.exit(tty_modes(tty$set), add = TRUE)
+  } else if (isTRUE(tty$quiet)) {
+    # readline shows what it reads only where the echo is on as it starts; its prompt erases a key
+    # the terminal echoed in that moment (tty_question())
+    tty$quiet = FALSE
+    tty_modes(tty$saved)
+    prompt = paste0("\001\r\033[K\002", prompt)
   }
   if (!is.null(hide)) {
     on.exit(tty_modes(hide), add = TRUE, after = FALSE)

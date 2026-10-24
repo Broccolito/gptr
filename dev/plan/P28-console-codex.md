@@ -1707,7 +1707,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 46 | The approval's `?` view runs past a narrow console (final visual loop, round 1) | ac06d73e |
 | 47 | After the pause menu's [b] the rows are grouped wrongly (final visual loop, round 1) | 2a33f46b |
 | 48 | Keys typed while a question's rows are drawn are echoed, then read again (final visual loop, round 1) | 35eaaaf7 |
-| 49 | An approval's flag rows read as policy internals, in two shapes (final visual loop, round 1) | (this commit) |
+| 49 | An approval's flag rows read as policy internals, in two shapes (final visual loop, round 1) | 86c49fe0 |
+| 50 | A question's answer is not shown (Task 48, found by its visual check) | (this commit) |
 
 ## Out of scope
 
