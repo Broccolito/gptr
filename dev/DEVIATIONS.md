@@ -3797,6 +3797,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   change row and a flagged call ran past the edge, and the terminal continued them at column 0. Contract-visible:
   04 §15.10 IC-82 (the `?` view). Tests: test-console-ui.R "the ? view wraps its rows to the console, each under
   its own text (visual round 1)".
+- Final visual loop, round 1 (2026-10-24): Task 47: after the pause menu's [b] the answer's cut row comes first,
+  then the background service's notices and the `running in the background` row as one dim block; on a refusal
+  the notices come before the red row. The notices were written as the service gave them, so the answer's tail
+  floated between two halves of the status block. Contract-visible: 04 §15.10 (the pause menu). Tests:
+  test-console-interrupt.R "[b]ackground hands a foreground run to bg.register (P21) and resumes".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

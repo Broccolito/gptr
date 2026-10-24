@@ -1704,7 +1704,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 43 | An interrupted call's row states its time twice (final visual loop, round 1) | 0d29db9c |
 | 44 | A failed run states its reason twice, the first copy cut (final visual loop, round 1) | 82b480ce |
 | 45 | On a tinted background the input band changes hue (final visual loop, round 1) | 045cee58 |
-| 46 | The approval's `?` view runs past a narrow console (final visual loop, round 1) | (this commit) |
+| 46 | The approval's `?` view runs past a narrow console (final visual loop, round 1) | ac06d73e |
+| 47 | After the pause menu's [b] the rows are grouped wrongly (final visual loop, round 1) | (this commit) |
 
 ## Out of scope
 

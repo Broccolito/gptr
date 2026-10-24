@@ -167,9 +167,10 @@ console_ahead = function(rd, accept) {
 #' answer continues, anything else is kept in the history, never sent, under a dim hint that names
 #' it and the keys. [s] and [f] read their text at the chevron of their own question, `?
 #' Steer` or `? Follow-up`, and queue it as Enter and Tab do (policy_enqueue()), their queue line,
-#' without the text it shows under, right under it, as under any question. [b] says
-#' in dim rows that the run went to the background (with the service's notices), then lists what
-#' the REPL held for after the run as kept (console_background_settle()), or in red why not.
+#' without the text it shows under, right under it, as under any question. [b] closes the
+#' answer's cut row, then says in one dim block the service's notices and that the run went to the
+#' background, then lists what the REPL held for after the run as kept
+#' (console_background_settle()), or in red, after the notices, why not.
 #' It resumes the interrupted computation, the next block a blank row below the menu (where a tool
 #' runs, its call's block continues: its code's further output and its result line) and the live
 #' row with a T console's draft drawn again (console_asked()), or returns to let the policy's
@@ -241,19 +242,21 @@ policy_menu = function(cnd, pol) {
       say = function(text, style = sym$dim) {
         console_write(style(console_wrap(paste0("  ", text), ui_width())))
       }
+      # the service's notices are dim rows of the menu's status, after the answer's cut row
+      said = character()
       tryCatch({
-        # the service's notices are the menu's dim rows
         withCallingHandlers(ext_service_get("bg.register")(s), gptr_message = function(m) {
-          say(console_escape(text_lines(conditionMessage(m)), FALSE))
+          said <<- c(said, console_escape(text_lines(conditionMessage(m)), FALSE))
           invokeRestart("muffleMessage")
         })
         tty_question(FALSE)
         console_render_pause()
-        say(paste0("running in the background", sym$sep, "gptr_wait() brings it back"))
+        say(c(said, paste0("running in the background", sym$sep, "gptr_wait() brings it back")))
         console_background_settle()
         console_write("")
         invokeRestart("resume")
       }, error = function(e) {
+        if (length(said)) say(said)
         say(paste0("cannot run in the background", sym$sep,
                    console_escape(conditionMessage(e), FALSE)), sym$red)
       })
