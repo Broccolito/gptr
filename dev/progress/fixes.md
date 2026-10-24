@@ -4430,3 +4430,18 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Fix: the loop is a `while` loop, as `gateway_check_visible()` already does for the same reason.
 - Green: the two files installed PASS 41; `^(eval-.*|copy-.*|arch-layers|lint-rules)$` PASS 815. Lint clean.
 - Deviations: none. Open: none.
+
+## Task CI-91 - PR #77's hosted checks: a C-locale capture, R-devel's Partial() and a late gc shutdown (2026-10-23, #77)
+
+### ci91-1 - The fuzzy-edit print test compares the printed lines in any locale
+- Red: PR #77 head 84fe1f1, R-CMD-check run 40049492168, job 120738934178 (ubuntu-latest release,
+  LC_ALL=C) failed `test-tool-edit.R:309` and `:312` (tools-8's "gptr_patch prints the message, and
+  the diff only when fuzzy"): the printed diff lines held `\342\200\230a\342\200\231` where the
+  expected `p$diff` held `‘a’`. Locally `LC_ALL=C` `^tool-edit$` FAIL 2.
+- Cause: the test, not the print. `print.gptr_patch()` writes UTF-8 bytes (`ns_print_lines()`,
+  `useBytes = TRUE`), the right output for the console; `capture.output()` returns them unmarked in
+  a C locale, so `identical()` compared unknown-encoding bytes with marked UTF-8 strings.
+- Fix: the test marks the captured lines UTF-8 before comparing.
+- Green: `LC_ALL=C` `^tool-edit$` PASS 196; `^(ext-check|eval-guard|tool-edit)$` PASS 605.
+- Deviations: none. Open: none.
+

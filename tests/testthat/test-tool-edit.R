@@ -300,16 +300,22 @@ test_that("gptr_patch prints the message, and the diff only when fuzzy", {
   p$fuzzy = TRUE
   expect_identical(utils::capture.output(print(p)), c("Successfully replaced 1 block(s) in a.R.",
                                                       "@@ -1 +1 @@", "-a", "+b"))
-  # The user is told why a match was not exact, as the model is (D-248)
+  # The user is told why a match was not exact, as the model is (D-248). The lines are printed
+  # as UTF-8 bytes, which capture.output() returns unmarked in a C locale.
   skip_on_cran()
+  printed = function(x) {
+    out = utils::capture.output(print(x))
+    Encoding(out) = "UTF-8"
+    out
+  }
   td = withr::local_tempdir()
   f = put_file(td, "q.R", "x = \u2018a\u2019\nz = \u2018a\u2019\ny = 1\n")
   p = member_edit(f, e1("x = 'a'", "x = 'b'"))
   why = "[matched after whitespace, quote or dash normalisation]"
-  expect_identical(utils::capture.output(print(p)), c(p$message, why, p$diff))
+  expect_identical(printed(p), c(p$message, why, p$diff))
   expect_identical(p$reasons, "matched after whitespace, quote or dash normalisation")
   v = tool_edit_execute(list(path = f, edits = e1("z = 'a'", "z = 'c'")), NULL)$value
-  expect_identical(utils::capture.output(print(v)), c(v$message, why, v$diff))
+  expect_identical(printed(v), c(v$message, why, v$diff))
   p = member_edit(f, e1("y = 1", "y = 2"))
   expect_identical(utils::capture.output(print(p)), p$message)
 })
