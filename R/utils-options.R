@@ -283,6 +283,18 @@ gptr_readline = function(prompt = "", read = readline, hide = NULL) {
   x
 }
 
+#' `read(prompt)` on the input band (IC-82) where console_style() gives one (a T console), so every
+#' line the person writes has one look: readline counts only the prompt's text (\001 \002) and
+#' \033[K shades the row to its end; after the read the attributes are reset and the band erased
+#' from the row below, which the line's end gave it
+#' @noRd
+band_read = function(prompt, read) {
+  band = console_style()$band
+  if (!nzchar(band)) return(read(prompt))
+  on.exit(gptr_message_write("\033[0m\033[K", gptr_message_stream("stdout")), add = TRUE)
+  read(paste0("\001", band, "\002", prompt, "\001\033[K\002"))
+}
+
 #' The answer to a question: in an interactive session a line readline() returns too soon
 #' (answer_stale()) was typed or pasted before the question was shown, so it is asked again; at
 #' most 100 reads, as readline() returns at once at the end of a pipe. Each line read past that is

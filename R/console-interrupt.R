@@ -120,7 +120,8 @@ console_ask = function(accept = NULL) {
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
       rs$reader$read(prompt, stream = "stdout")
     } else {
-      readline_answer(prompt, if (is.null(accept)) console_typed_ahead else console_keep, accept)
+      readline_answer(prompt, if (is.null(accept)) console_typed_ahead else console_keep, accept,
+                      read = function(p) band_read(p, gptr_readline))
     }
     if (length(x) != 1L || is.na(x)) NA_character_ else as_utf8(x)
   }, interrupt = function(e) NA_character_)

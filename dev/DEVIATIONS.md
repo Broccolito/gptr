@@ -4267,6 +4267,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   Page: 222, an orange strip on yellow; Novel: 187, khaki), while the accents were already 24-bit. Contract-visible:
   04 §15.10 IC-82. Tests: test-console-render.R "a probed background's band is Codex's fill in its nearest cell
   (review)".
+- Final visual loop, round 1 (2026-10-24): Task 52: a console question's answer is read on the input band, as
+  the REPL's prompts are (`band_read()`, shared by the REPL reader, `console_ask()` and `ui_console_read()`; a
+  secret is read off it): `› y`, `› 1` and `› c` were plain while a delivered steer, `peter[edits]> ...` and the
+  live row's draft were banded, against IC-82's one look for everything the person writes. Only T consoles
+  change. Contract-visible: 04 §15.10 IC-82. Tests: test-console-ui.R "a T console's answers are read on the
+  input band, as its prompts are (visual round 1)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

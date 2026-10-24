@@ -5961,6 +5961,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     an end of input, `\033[0m\033[K` resets the attributes and erases the band the line's end gave the row below.
     The live row, the idle editor's row, delivered steers and the lines the reader echoes after the prompt (a
     follow-up, the editor's line, each row) are on the same band (`console_band()`: band, row, `\033[K\033[0m`),
+    and a console question's answer is read at the person's chevron on it as the prompt is (`band_read()`: an
+    approval's, the pause menu's, an ask's; not a secret; P28 Task 52: `› y` was plain under a banded steer),
     so everything the person wrote has one look. A wrapped input's second row is shaded only under its text.
   - R code (Task 9): R in answer fences and in tool calls is highlighted by `console_code()` above 1 colour only,
     with `cli::code_highlight(code, getOption("cli.code_theme") %||% console_style()$code)`, so a user's

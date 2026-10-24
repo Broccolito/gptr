@@ -355,7 +355,10 @@ ui_undo_note = function(request) {
 ui_console_read = function(prompt, secret = FALSE) {
   rd = console_repl_find()$reader
   hide = if (secret) tty_secret()
-  read = if (is.null(hide)) gptr_readline else function(p) gptr_readline(p, hide = hide)
+  # an answer on the input band as the prompts are; a secret off it, as typed without echo
+  read = if (secret) function(p) gptr_readline(p, hide = hide) else function(p) {
+    band_read(p, gptr_readline)
+  }
   repeat {
     console_typed(drain = TRUE)
     ui_draft_kept()

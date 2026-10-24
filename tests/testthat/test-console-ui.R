@@ -595,6 +595,22 @@ test_that("lines typed or pasted before the approval prompt never answer it (IC-
   expect_identical(rl$kept, character())
 })
 
+test_that("a T console's answers are read on the input band, as its prompts are (visual round 1)", {
+  local_console_test()
+  local_mocked_bindings(console_class = function() "T", console_background = function() "dark")
+  withr::local_options(cli.num_colors = 256L, cli.unicode = TRUE)
+  rl = local_readline(c("y", "sk-answer"))
+  out = written(function() {
+    ui_console_permission(ui_request("zz = 1"))
+    ui_console_read("Key: ", secret = TRUE)
+  })
+  # readline counts only the chevron (\001 \002); after the read the band is erased below it
+  expect_identical(rl$prompts[[1L]], paste0("\001\033[48;5;237m\002", "\u203a ", "\001\033[K\002"))
+  expect_match(out, "\033[0m\033[K", fixed = TRUE)
+  # a secret is read off the band, as typed with the echo off
+  expect_identical(rl$prompts[[2L]], "Key: ")
+})
+
 test_that("a console command typed as a free-text answer waits for the next prompt (review)", {
   local_console_test()
   local_gptr_options(history = TRUE)

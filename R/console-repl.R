@@ -174,18 +174,14 @@ console_reader = function(stdin = FALSE, echo = stdin) {
           console_completer(caller))
         on.exit(utils::rc.options(custom.completer = prev), add = TRUE)
       }
-      # on the input band readline counts only the prompt's text; after the read the attributes are
-      # reset and the band erased from the row below, which the line's end gave it
-      band = console_style()$band
-      if (nzchar(band)) {
-        prompt = paste0("\001", band, "\002", prompt, "\001\033[K\002")
-        on.exit(console_cat("\033[0m\033[K"), add = TRUE)
-      }
-      if (!is.null(tty)) {
-        prompt = paste0("\001\r\033[K\002", prompt)
-        tty_restore(tty)
-      }
-      x = gptr_readline(prompt, rl)
+      # on the input band, as a question's answer is (band_read())
+      x = band_read(prompt, function(p) {
+        if (!is.null(tty)) {
+          p = paste0("\001\r\033[K\002", p)
+          tty_restore(tty)
+        }
+        gptr_readline(p, rl)
+      })
       if (length(x) != 1L || is.na(x)) return(NA_character_)
       n = nchar(x, type = "bytes")
       if (n >= readline_limit()) {
@@ -1283,8 +1279,8 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' queued for after the answer and the draft go to the history, unsent, as after an abort, and
 #' another prompt steers the running session. Nothing runs it while the chat waits for input: use
 #' `!!gptr::gptr_wait(gptr::gptr_last())` there to continue it, its answer then shown as a prompt's
-#' and Enter steering it. Under Rscript, background runs advance only inside blocking gptr calls. Where an
-#' interrupt cannot be resumed (Windows' Rgui, Jupyter) the key stops the answer instead.
+#' and Enter steering it. Under Rscript, background runs advance only inside blocking gptr calls.
+#' Where an interrupt cannot be resumed (Windows' Rgui, Jupyter) the key stops the answer instead.
 #'
 #' `/exit`, two consecutive interrupts at the prompt or the end of piped input return the session
 #' invisibly, so `session = peter()` keeps the conversation. In a terminal the chat reads keys with

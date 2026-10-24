@@ -247,8 +247,8 @@ the history, unsent. Background returns to the chat prompt and keeps the run: wh
 queued for after the answer and the draft go to the history, unsent, as after an abort, and
 another prompt steers the running session. Nothing runs it while the chat waits for input: use
 \code{!!gptr::gptr_wait(gptr::gptr_last())} there to continue it, its answer then shown as a prompt's
-and Enter steering it. Under Rscript, background runs advance only inside blocking gptr calls. Where an
-interrupt cannot be resumed (Windows' Rgui, Jupyter) the key stops the answer instead.
+and Enter steering it. Under Rscript, background runs advance only inside blocking gptr calls.
+Where an interrupt cannot be resumed (Windows' Rgui, Jupyter) the key stops the answer instead.
 
 \verb{/exit}, two consecutive interrupts at the prompt or the end of piped input return the session
 invisibly, so \code{session = peter()} keeps the conversation. In a terminal the chat reads keys with
