@@ -279,12 +279,17 @@ test_that("the output of resumed code and its result stay one block below the me
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   rec = console_record(list(run = run$id))
-  rec$last = "tool"
+  # an r call the person approved: its ask was the record's last block
+  rec$last = "prompt"
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
   local_menu_answers("c")
   out = notices({
-    with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call")
+    # the menu opens inside the call's evaluation, a tool on the stack
+    with_interrupt_policy(function() {
+      .gptr_tool_run = run
+      fake_interrupt()
+    }, list(run), mode = "call")
     # the evaluator's tee writes the rest of the code's output with no block gap, then the result
     cat("    Min. 1st Qu.\n")
     console_gap(rec, "tool")
