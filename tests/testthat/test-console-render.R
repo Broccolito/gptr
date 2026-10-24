@@ -836,6 +836,18 @@ test_that("a compaction during a foreground run prints one dim notice with its c
                    "\033[2m  conversation compacted: 98.2k -> 4.1k tokens\033[22m")
 })
 
+test_that("a retry names its error's class, and no class when it has none (visual round 1)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  retry = function(class) hook_event("retry_start", s, attempt = 1L, delay = 2, class = class)
+  expect_identical(render_events(s, list(hook_event("agent_start", s), retry("rate_limit"),
+                                         retry(NA_character_))),
+                   c("  retrying in 2.0 s (rate_limit)", "  retrying in 2.0 s"))
+})
+
 test_that("an answer without deltas is printed whole at message_end", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)

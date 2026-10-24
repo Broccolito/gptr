@@ -1145,16 +1145,18 @@ console_on_tool_end = function(event, ctx) {
   NULL
 }
 
-#' retry_start: say that a request is retried
+#' retry_start: say that a request is retried, and the class of its error where it has one
 #' @noRd
 console_on_retry = function(event, ctx) {
   rec = console_record(event)
   if (is.null(rec) || !console_render_on(rec)) return(NULL)
   console_pause_one(rec)
   console_gap(rec, "notice")
-  console_write(console_style()$dim(sprintf("  retrying in %.1f s (%s)",
-                                            as.numeric(event$delay %||% 0),
-                                            console_escape(event$class %||% "error", FALSE))))
+  # err_class() gives NA for an error of no known class, a retry its text chose
+  cls = event$class
+  why = if (rlang::is_string(cls) && !is.na(cls)) paste0(" (", console_escape(cls, FALSE), ")")
+  console_write(console_style()$dim(sprintf("  retrying in %.1f s%s",
+                                            as.numeric(event$delay %||% 0), why %||% "")))
   NULL
 }
 

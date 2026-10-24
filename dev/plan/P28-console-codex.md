@@ -1699,7 +1699,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 38 | Keys typed during a CLI route's first probe wait without a cue (not changed) | 31872d53 |
 | 39 | In RStudio a notice during a run is boxed by RStudio and the live row stays | 1c6f9ae0 |
 | 40 | Under `R < file` the piped console reads end of input at once | 99bb3d6f |
-| 41 | On Terminal.app's Ocean and Grass profiles the dim rows and inline code nearly vanish | (this commit) |
+| 41 | On Terminal.app's Ocean and Grass profiles the dim rows and inline code nearly vanish | 0ab59e78 |
+| 42 | A retry notice prints a raw missing value (final visual loop, round 1) | (this commit) |
 
 ## Out of scope
 
