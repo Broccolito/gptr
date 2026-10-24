@@ -49,14 +49,17 @@ ui_wrap = function(ui) {
   ui
 }
 
-#' A permission answer (contract section 10.2 row 22)
+#' A permission answer (contract section 10.2 row 22); `how`, what the model should do instead of
+#' the call, only when given (D-252)
 #' @noRd
-ui_answer = function(decision, remember = NULL, feedback = NULL) {
-  list(decision = decision, remember = remember, feedback = feedback)
+ui_answer = function(decision, remember = NULL, feedback = NULL, how = NULL) {
+  out = list(decision = decision, remember = remember, feedback = feedback)
+  if (!is.null(how)) out$how = how
+  out
 }
 
 #' Normalise a permission answer: anything unusable is a denial (a failing dialog is not an
-#' approval); `remember` only for an approval that may become a rule
+#' approval); `remember` only for an approval that may become a rule, `how` only for a denial
 #' @noRd
 ui_answer_norm = function(ans, request) {
   if (!is.list(ans) || !isTRUE(ans[["decision"]] %in% c("allow", "deny", "abort"))) {
@@ -66,7 +69,9 @@ ui_answer_norm = function(ans, request) {
   keep = identical(ans[["decision"]], "allow") && isTRUE(rem %in% c("session", "project")) &&
     is.null(ui_no_rule(request))
   fb = ans[["feedback"]]
-  ui_answer(ans[["decision"]], if (keep) rem, if (rlang::is_string(fb) && nzchar(fb)) fb)
+  how = ans[["how"]]
+  how = if (identical(ans[["decision"]], "deny") && rlang::is_string(how) && nzchar(how)) how
+  ui_answer(ans[["decision"]], if (keep) rem, if (rlang::is_string(fb) && nzchar(fb)) fb, how)
 }
 
 #' Why an approval of this request cannot become a rule (IC-77 item 3), else NULL: never for

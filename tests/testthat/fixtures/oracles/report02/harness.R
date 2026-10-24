@@ -146,12 +146,21 @@ answered_session = function(text = "The data has 32 rows.") {
 # The two helpers of test-agent-dispatch.R (P06 Task 7), kept here so that lintr's
 # object_usage_linter sees the harness helpers they call (as written_session() above).
 
-#' Dispatch one assistant message's tool calls on a run that is attached but not started
+#' Dispatch one assistant message's tool calls on a run that is attached but not started; an
+#' unfrozen session gets a frozen array declaring the blocks' registered tools, as run_tools()
+#' offers only declared tools (D-248)
 dispatch = function(s, blocks, stop_reason = "tool_use", opts = list(), .env = parent.frame()) {
+  d = session_data(s)
+  if (!length(d$frozen)) {
+    nms = unique(vapply(blocks, function(b) b$name, ""))
+    decls = lapply(nms, function(n) freeze_tool_decl(tool_lookup(n, d$id), session_live(s)$ctx))
+    d$frozen = list(tools_json = json_encode(Filter(Negate(is.null), decls)))
+  }
   run = test_run(s, opts, .env = .env)
   run$message = msg_assistant(blocks, api = "fake", provider = "fake", model = "fake-1",
                               stop_reason = stop_reason)
-  calls = lapply(blocks, function(b) call_record(run, b))
+  offered = names(prompt_tools_known(s, d$frozen)$decls)
+  calls = lapply(blocks, function(b) call_record(run, b, offered))
   out = dispatch_tools(run, calls)
   list(run = run, out = out, msgs = tool_results(s))
 }

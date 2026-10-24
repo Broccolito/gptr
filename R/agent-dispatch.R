@@ -258,11 +258,13 @@ tool_result_hooks = function(run, call, res) {
   res
 }
 
-#' The call record of a tool_call block (04 section 4.4)
+#' The call record of a tool_call block (04 section 4.4); a name not in `offered`, the tools the
+#' session declared to the model, resolves to no tool, so the call is "Tool <name> not found"
 #' @noRd
-call_record = function(run, block) {
+call_record = function(run, block, offered) {
+  tool = if (block$name %in% offered) tool_lookup(block$name, run$session)
   list(id = block$id, name = block$name, input = block$arguments %||% json_obj(),
-       raw = block$raw_arguments, tool = tool_lookup(block$name, run$session), nested = FALSE,
+       raw = block$raw_arguments, tool = tool, nested = FALSE,
        parent_id = NULL, outer_level = NULL, risk = NULL)
 }
 
@@ -397,8 +399,9 @@ checkpoint_after = function(run, call, ctx, tokens, res) {
 #' Nested `peter$...` calls made while an `r` evaluation runs (04 section 7.6)
 #' A member listed by the outer call's analysis at or below its approved level, whose own risk of
 #' its actual input (call_risk(): a patch's Delete File, a computed command) is not above that
-#' level either, runs without a second prompt; others pass perm_check(). Recorded in
-#' `details$nested` (at most 20).
+#' level either, runs without a second prompt; others pass perm_check(). The command of a sh or bg
+#' call meets the deny and ask rules first, whatever its level. Recorded in `details$nested` (at
+#' most 20).
 #' @noRd
 dispatch_nested = function(name, input, ctx) {
   check_string(name, "name")
@@ -427,6 +430,11 @@ dispatch_nested = function(name, input, ctx) {
     nested_record(run, outer$id, name, tool_error("blocked"), NA_integer_)
     gptr_abort(call$blocked, "tool", tool = name, status = "blocked")
   }
+  dec = if (name %in% c("sh", "bg")) nested_rules(call, run)
+  if (!is.null(dec)) {
+    nested_record(run, outer$id, name, tool_error(dec$reason), risk_level(dec$risk))
+    gptr_abort(perm_denial_text(dec), "tool", tool = name, status = "denied")
+  }
   level = nested_listed_level(outer, name)
   own = risk_level(call_risk(call, ctx, run))
   if (is.null(level) || max(level, own) > call$outer_level) {
@@ -441,6 +449,32 @@ dispatch_nested = function(name, input, ctx) {
   res = nested_execute(run, call, ctx)
   nested_record(run, outer$id, name, res, level)
   nested_value(res, name)
+}
+
+#' Deny and ask rules on the actual command of a nested sh or bg call, which the outer call's
+#' static reading cannot see when the code computes it: the `rules` policy decides as for the
+#' literal call. Allow rules are not applied: the nested gate never loosens.
+#' @return NULL, or perm_check()'s denial.
+#' @noRd
+nested_rules = function(call, run) {
+  recs = Filter(function(r) identical(r$name, "rules"),
+                registry_all_recs("policy", session = run$session))
+  if (!length(recs) || isTRUE(run$opts$safety$unsafe_no_permissions)) return(NULL)
+  ctx = run_ctx(run)
+  code = paste0("peter$", call$name, "(", deparse1(unlist(call$input$cmd)), ")")
+  lit = list(name = "r", input = list(code = code))
+  lit$risk = call_risk(lit, ctx, run)
+  out = ctx_with_source(ctx, recs[[1L]]$source,
+                        function() ext_policy_decide(recs[[1L]]$spec, lit, ctx))
+  if (is.null(out) || identical(out$decision, "allow")) return(NULL)
+  dec = if (identical(out$decision, "deny")) {
+    perm_result("deny", out$reason, call$input, lit$risk, out$rule)
+  } else {
+    # an ask rule asks every time, so the question offers no [a]lways rule
+    out$suggested_rule = NULL
+    perm_ask(call, run, out, lit$risk)
+  }
+  if (!identical(dec$decision, "allow")) dec
 }
 
 #' The id of the next nested call of an outer call: `<outer id>/<k>`, counted past the 20 records
@@ -628,7 +662,11 @@ perm_ask = function(call, run, out, risk) {
       return(perm_result("deny", "the user aborted the run", call$input, risk, "user",
                          how = "The run stops here."))
     }
-    return(perm_result("deny", ans$feedback %||% "the user declined", call$input, risk, "user"))
+    # a UI may say what to do instead (P21's idle-tick answer: repeat the call later)
+    how = ans[["how"]]
+    if (!rlang::is_string(how) || !nzchar(how)) how = NULL
+    return(perm_result("deny", ans$feedback %||% "the user declined", call$input, risk, "user",
+                       how = how))
   }
   if (identical(snap$noninteractive_ask, "deny")) {
     return(perm_result("deny", "no one can approve this action in this run", call$input, risk,
@@ -637,7 +675,7 @@ perm_ask = function(call, run, out, risk) {
   how = if (identical(tier, "ask_human")) {
     "This action always needs a person to approve it: run it interactively."
   } else {
-    "Allow it with mode = \"auto\", a permission rule (gptr_permissions()), or run interactively."
+    perm_blocked_how(run)
   }
   run$blocked = list(tool = call$name, risk = risk, how_to_allow = how)
   # the stored, unsignalled condition of the `blocked` status (04 section 6.1.2; P08 signals it)
@@ -656,6 +694,21 @@ perm_ask = function(call, run, out, risk) {
   }
   perm_result("deny", "approval is needed and no one can answer in this run", call$input, risk,
               how = "The run stops here.")
+}
+
+#' How to allow a call nobody can answer: where the run's mode came from (the gateway's
+#' `opts$mode_from`, while the run keeps that mode); knitting cannot ask even in a console
+#' @noRd
+perm_blocked_how = function(run) {
+  o = run$opts$mode_from
+  from = if (is.list(o) && identical(o$mode, run$mode)) {
+    paste0("Mode \"", o$mode, "\" comes from ", o$from, ". ")
+  }
+  paste0(from, if (is_knitting()) {
+    "Allow it with mode = \"auto\" or a permission rule (gptr_permissions()); knitting cannot ask."
+  } else {
+    "Allow it with mode = \"auto\", a permission rule (gptr_permissions()), or run interactively."
+  })
 }
 
 #' The question texts of an `ask` call's input (`questions`: a list of `list(id, question, ...)`)

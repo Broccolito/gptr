@@ -174,6 +174,8 @@ prices_df = function(x) {
   out
 }
 
+on_load(ext_service_set("prices.table", prices_df, provided_by = "P05"))
+
 #' Rates per million tokens, with documented defaults for unspecified cache rates
 #' @noRd
 price_rates = function(row) {

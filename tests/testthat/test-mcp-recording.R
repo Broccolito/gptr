@@ -88,6 +88,31 @@ test_that("SDK-dispatched successful R uses approved code and the existing secre
   expect_identical(sum(grepl("answer = 42", txt, fixed = TRUE)), 1L)
 })
 
+test_that("served gptr_return(<expression>) records the block's hidden value, which replays", {
+  root = local_project()
+  local_gptr_options(record = "auto", replay = "auto", mode = "auto")
+  local_mcp_record_probe()
+  code = "fit = lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))"
+  fake = local_fake_provider(list(fake_tool("record_probe", code = code), "Done."))
+  local_gptr_options(model = paste0(fake$id, "/", fake$models[[1L]]$id))
+  path = file.path(root, "sdk.R")
+  writeLines('res = peter("Fit mpg on wt", mode = "auto")', path)
+  gptr_source(path, replay = "record", envir = new.env(parent = globalenv()))
+  b = doc_find_blocks(readLines(path))
+  hidden = paste0(".gptr_value_", b$id)
+  expect_identical(b$header[[1L]]$value, hidden)
+  expect_true(paste(hidden, "= (coef(fit))") %in% doc_block_body(readLines(path), b))
+  # a later process: no live session, so the replay rebuilds it from its JSONL
+  old = mget(c("live", "replay_blocks"), envir = the)
+  withr::defer(list2env(old, envir = the))
+  the$live = new.env(parent = emptyenv())
+  the$replay_blocks = new.env(parent = emptyenv())
+  again = new.env(parent = globalenv())
+  gptr_source(path, replay = "replay", envir = again)
+  expect_equal(again$res$value, coef(lm(mpg ~ wt, mtcars)))
+  expect_length(fake_requests(fake), 2L)
+})
+
 test_that("failed, plan, non-recording and idle served R do not add executable history", {
   skip_on_cran()
   root = local_project()

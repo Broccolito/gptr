@@ -546,6 +546,25 @@ test_that("separate stderr is read on request and a failing job reads error", {
   expect_identical(j$status(), "error")
 })
 
+test_that("a finished or stopped job's seconds stop counting", {
+  skip_on_cran()
+  j = bridge_bg(r_cmd("invisible(0)"))
+  withr::defer(j$kill())
+  j$wait(timeout = 20)
+  k = bridge_bg(r_cmd("Sys.sleep(30)"))
+  withr::defer(k$kill())
+  k$kill()
+  seconds = function(job) {
+    tab = bridge_jobs()
+    footer = attr(job$read(), "footer")
+    c(tab$seconds[match(job$id, tab$id)], as.numeric(sub(".* (\\d+)s\\]$", "\\1", footer)))
+  }
+  before = c(seconds(j), seconds(k))
+  later = reactor_now() + 100
+  local_mocked_bindings(reactor_now = function() later)
+  expect_identical(c(seconds(j), seconds(k)), before)
+})
+
 test_that("bg jobs are in gptr_jobs(), write() needs stdin and kill = TRUE stops them", {
   skip_on_cran()
   j = bridge_bg(r_cmd("Sys.sleep(30)"))
@@ -728,11 +747,12 @@ test_that("a tool call named sh is refused before the permission check: no shell
   )
   fake = local_fake_provider(script)
   # manual mode without a human: a call that reached the permission check would stop the run
-  # (gptr.noninteractive_ask = "stop"), so finishing idle shows the hook blocked it first
+  # (gptr.noninteractive_ask = "stop"), so finishing idle shows it was refused first: sh is not
+  # declared to the model (D-248)
   s = peter("run it", model = fake, envir = new.env(), mode = "manual")
   res = tool_results(s, "sh")[[1L]]
   expect_true(isTRUE(res$is_error))
-  expect_match(msg_text(res), "is an R function, not a tool", fixed = TRUE)
+  expect_identical(msg_text(res), "Tool sh not found")
   expect_false(file.exists(marker))
   expect_identical(s$status, "idle")
 })

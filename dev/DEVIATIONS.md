@@ -434,6 +434,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (IC-74, D-025)", "a token budget counts the known tokens of a row with an unknown column (IC-74)",
   "budget_check() refuses an estimate that is not a nonnegative number". Evidence: progress/P06.md
   Task 5.
+- Amended by D-251 (sessions-10): a cost limit the call sets itself informs once that it is not
+  enforced when a request of unknown cost meets it (`gptr_message_budget_unpriced`); item 2 is
+  unchanged.
 
 ## D-026 - P12 check_adapter(): no normaliser condition escapes, http_json goldens skipped, classifier replay (2026-10-04)
 - Rule: `check_adapter()` (`R/provider-anthropic.R`, the `check.adapter` service behind
@@ -1452,6 +1455,7 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-prompt-compact.R: 3 blocks (8 expectations), incl. "compact_threshold keeps the
   contract 7.7 signature" and "compact_at comes from the settings service; a null setting disables
   the cap"; final PASS 18. Evidence: progress/P07.md Task 6.
+- Amended by D-250 (prompt-1): the formula's `max_output` is capped at half the window.
 
 ## D-068 - P15 recorded block content: character cuts, exact secret literals, emptied chunks, unknown usage (2026-10-04)
 - Rule: block content (`R/doc-blocks.R`); contract 7.15
@@ -1505,6 +1509,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   gptr.frozen and survive a restore (IC-71)"; FIX-3: test-session-store.R 3 blocks,
   test-session-object.R "a replay cut takes the frozen audience and budget cut of its own path
   (FIX-3)". Evidence: progress/P07.md Task 7; progress/fixes.md Task FIX-3.
+- Amended by D-250 (prompt-1): the refusal names `compact_at` when it sets the threshold and hints
+  `tools = "minimal"`.
 
 ## D-070 - P15 document formats: knitr chunks and labels, unterminated chunks, per-statement agent chunks, inert (2026-10-04)
 - Rule: `R/doc-formats.R`; the contract 10.2 row 18 `doc_format` functions and listed helpers keep
@@ -4368,6 +4374,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   key id is a secret name); `setup.R` clears the key-pair variables; the scripted wire of
   `replay_helpers.R` takes raw bodies; `fixtures/sse/bedrock-converse/` (tool_use, throttled).
   Evidence: progress/P26.md Task 11.
+- Amended by D-250 (thinking-1): Claude models declared adaptive get thinking in
+  `additionalModelRequestFields`.
 
 ## D-200 - P26 CLI usage is the increase of the CLIs' running totals (2026-10-18)
 - Rule: claude-cli's `total_cost_usd` is the CLI session's running total, also after `--resume`
@@ -5194,3 +5202,677 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: env-snapshot, env-describe, ckpt-objects, ckpt-rewind, perm-classify, gptr-capture,
   session-object (a ggplot2 guard), utils-options, subagent-team, copy-eval, arch-layers. Evidence:
   progress/fixes.md Task FIX-13.
+
+## D-248 - FIX-15 Cheat-sheet review: tools (2026-10-22)
+- Rule: a direct tool call resolves only when its name is among the tools the session offered the
+  model: the frozen array plus the `tool_add` declarations of every `tool_change` operator message
+  on the active path and in the queue (`prompt_tools_known()`), taken once per batch by
+  `run_tools()` and passed to `call_record(run, block, offered)`. Any other name (a registered tool
+  removed with `-name`, left out by a preset, disabled through `tools.disable`, deferred or not
+  `available()`) gets `Tool <name> not found` before hooks and the permission check, so an
+  undeclared `ask` no longer stops a non-interactive auto run. `dispatch_nested()` still resolves
+  `peter$` members in the registry under every preset; the MCP door already served declared tools.
+  A direct call of an undeclared bridge (`sh`, `script`, `bg`, `jobs`, `py`, `sql`, `knit`) now
+  reads `Tool <name> not found` before any hook; the S-4 hook text is reached only when a session
+  declares the bridge by value (`tools = "+sh"`).
+- Rule: with `gptr.noninteractive_ask = "deny"` a non-interactive mode block ends with the deny
+  suffix in every mode, manual included (`context_mode_body()` tests deny first): a manual run's
+  `ask` call is denied and the run goes on, so "questions asked with the ask tool, stop the run"
+  was false.
+- Rule: edit errors number edits from 1 (`edits[1]` is the first), as R and the schema gate do,
+  at the console, inside `r` and from the direct tool; Pi's wording counts from 0. Applies to the
+  not-found, empty-oldText, occurrences, overlap and must-be-a-string messages.
+- Rule: `edit_normalize_args()` reads a named list of non-lists as one edit and refuses an edit
+  without `oldText`/`old_text` or `newText`/`new_text`, naming both sets of fields ("edits[1] has
+  no oldText or newText (it has: old, new)"). P10 read a missing field as "", so at the console
+  `list(old =, new =)` said "oldText must not be empty" and an edit without newText deleted text.
+- Rule: `peter$help()` lists a member's schema arguments when they are among its formals (was:
+  equal to them), with an array's item fields, so `edit` and `find` now show theirs.
+- Rule: a fuzzy edit changes only its matched span. `edit_splice_fuzzy()` maps each span boundary
+  back to the original bytes (`fuzzy_offsets()`: the per-character normalisation aligned with the
+  line's own from both ends) and splices newText there, so the rest of a touched line keeps its
+  bytes (curly quotes, ligatures, U+00B5, special spaces, trailing spaces after the match, a
+  combining accent). Pi rewrites the touched lines from the fuzzy view; that stays as the fallback
+  when a boundary cannot be mapped (it lies between two combining accents on its line, or inside a
+  ligature), and then the reasons add "the touched lines were rewritten in normalised form". A
+  `gptr_patch` keeps the reasons (`reasons`, chr) and prints them bracketed between the message and
+  the diff when fuzzy, as the model reads them.
+- Rule: the `<r_session>` `out` fragment says "Use peter$out(), peter$help(), peter$search() and
+  peter$plot() only with record = false." only when a document is bound (`ctx$input$document`),
+  the freeze input that gives `r` its `record` argument; without one, `record` read as an argument
+  of those helpers (`peter$help("edit", record = FALSE)`: unused argument).
+- Rule: `read` and `peter$read()` count lines as `readLines()` does: a final newline ends the last
+  line (in-memory, UTF-16/32 and sparse-index paths), so a 3-line file written by `writeLines()`
+  has total 3, not Pi's 4 (`split("\n")`), and the notices, `lines_total`, the `total` attribute
+  and the window lose the phantom empty line; an empty file stays empty and "\n" alone is one
+  empty line. The read text of such a file no longer ends in "\n".
+- Rule: `peter$py()` refuses `RETICULATE_PYTHON=managed` (reticulate's request for a uv-managed
+  download) as it refuses an unconfigured Python, before `reticulate::import_main()`; P22's guard
+  let any non-empty value through. Both refusals now advise `reticulate::use_python("<path>")`
+  then `reticulate::py_config()`, not "activate a virtual environment", which in R reads as
+  `reticulate::use_virtualenv()`, a choice the guard does not see.
+- Contract-visible: 04 sections 4.4 call record (`tool` NULL when not offered), 7.6
+  `dispatch_tools()`, 9.3 suffix order, 5.10 `gptr_patch` (`reasons`, print), 7.10 `edit_file()`
+  (fuzzy splice), IC-48 (`record = false` sentence), 7.10 `read_file()` (line count); 03 section 7.3
+  (`out` without a document); P22 Task 5 S-4 refusal (an undeclared bridge is not found first), P22
+  Task 7 provisioning guard (`managed`).
+- Tests: test-agent-dispatch.R "a direct call to a tool the session did not offer ...", "an ask the
+  non-interactive auto preset did not offer ...", "a tool added to a continued session ..." and the
+  frozen-schema block;
+  test-bridge-lang.R, test-bridge-sh.R through-run refusals; test-prompt-context.R mode suffixes;
+  test-tool-edit.R "edit errors number edits from 1", "an edit without oldText or newText";
+  test-tool-namespace.R `peter$help("edit")`; test-tool-edit.R "a fuzzy match changes only its
+  span" and "gptr_patch prints the message"; test-tool-namespace.R "the out fragment names record =
+  false only when the r tool takes it"; test-tool-read.R "a final newline ends the last line";
+  test-bridge-lang.R "peter$py() refuses RETICULATE_PYTHON=managed".
+  Evidence: progress/fixes.md Task FIX-15 tools-1, tools-5, tools-6, tools-7, tools-8, tools-9,
+  tools-10, tools-12.
+
+## D-249 - P15 Cheat-sheet review of history documents (2026-10-22)
+- Rule: a document's deferred or pending sidecar is kept in the `.gptr/` of its project, else in
+  `R_user_dir("gptr", "cache")/pending/` (was `tempdir()/gptr`, which no other process sees and R
+  deletes at exit: a closed kernel's and a killed Rscript run's blocks were lost without a word).
+  Same name, mode and checks; `gptr_cache()` prune and clear never touch it (IC-51). The document's
+  lock is `locks/<sha1>` in that `.gptr/` or `pending/` (was this process's workspace root,
+  `tempdir()/gptr` outside a `.gptr/`, so two runs of one document shared its sidecar but not its
+  lock), and `gptr_cache("info")` lists `pending/` in a second `sidecar` row.
+- Rule: `gptr_doc(path, sync = TRUE)` informs a `notice`, "Wrote N block(s) into <doc>." or "No
+  pending blocks for <doc>.", and leaves a dead run's recovery to the sync, so the count includes
+  it.
+- Rule: a `gptr_doc()` binding is consent for its own document only; a call located in another
+  document (a sourced or `Rscript` script) records there or nowhere. When that document's consent
+  cannot be given, a call that could record (record not FALSE, not replay mode) informs a `notice`
+  once per document: "gptr did not record this call: it is in <doc>, but gptr_doc() bound <bound>.
+  ..." (was silent); without a binding it stays silent (IC-45).
+- Rule: a transcript's `# machine log:` names the session log only outside `tempdir()/gptr`, which R
+  deletes at exit; else, or without a log, it reads
+  `none kept (gptr_init() keeps session logs in .gptr/)` (was the dead absolute path, or `(none)`).
+- Rule: the `r` tool's `details$outputs` holds one `list(lines, n)` per recorded expression, its
+  first lines (the option, else the setting `doc$output_lines`) and their count (was one flat vector
+  cut per expression without a mark); the block cuts once and `#> ... (N more lines)` counts every
+  line not shown, so a dropped expression's output is dropped with it. A flat vector of an older
+  session still renders.
+- Rule: a block header writes `cost=` whenever the turn's cost is known, `cost=0` for a free route
+  (was only above 0), so `gptr_blocks()` lists `0` there and `NA` only when the cost is unknown or
+  not recorded (IC-74).
+- Rule: a replay adds no turn to a session whose active path holds the block's `gptr.doc_block`
+  entry, not undone (the session that recorded it, replayed in the same process: was one more turn
+  per block, so later turns, `turn=` and `gptr_fork(at =)` were off); it still records
+  `gptr.replay`, `seen` and the `value=` name, unless the session holds a value of that turn:
+  replayed into another environment of the recording process, it keeps the recorded value (was a
+  name bound only there: `$value` NULL, "`.gptr_value_<id>` ... is not bound") (IC-46).
+- Rule: a top-level `gptr_return(<expression>)` (one argument, unnamed or `x`, not a bare name;
+  called or piped, on any number of lines) is recorded as `.gptr_value_<block id> = (<expression>)`
+  with `value=.gptr_value_<block id>` when no other `gptr_return()` can run after it (one in a later
+  expression or in a function can), so every replay and a plain export recompute it (was
+  `value=<its label>` and the line dropped: replay said "not bound" and `$value` was NULL);
+  `gptr_return(<name>)` is unchanged; `value=` holds one name, never an expression's label, else is
+  omitted (11.5). Such a call inside another expression is kept and records no value; replaying its
+  block into a session that holds no value of its turn (the recording one holds it) informs a
+  `notice` once per block and process, "No recorded value for block <id> of <doc>: ..." (IC-46,
+  IC-48). R served over MCP to a CLI route records the designated name in its `gptr.mcp_r` entry
+  (`value`), as the `r` tool's `details$value`, so the same holds there.
+- Rule: a team or fan-out block records the code of each child that designated a value with
+  `gptr_return()` in its child overlay, as for a child with exports (was only with exports), and
+  `children=` entries are `<name>:<session id>[:<value>]`, the third field the child's `value=` name
+  (a bare name or `.gptr_value_<block id>`); replay designates it and the fan-out route binds each
+  replayed child's element as `.x` in its home, so `f$value` and `tm$x$value` replay in any process
+  (were NULL outside the recording one, without a word). An entry of two fields, as written before,
+  replays as before; a child name holding `:` or `,` still has no replayable entry (IC-47).
+- Rule: a session rebuilt from its JSONL for a replay keeps no value record of a turn after the
+  recorded one (a replay in the recording process advanced a team child and stored a value record
+  without its copy, which hid the child's value in every later process; IC-46).
+- Rule: a replayed session's footer reads `replayed` in place of its status until a request adds
+  usage, and `unknown tokens . unknown cost` while it holds no stored request, as a reconstruction
+  from the document (was the recorded run's footer, byte-identical to a live one, or a known zero
+  `0 tokens . $0.0000`; IC-74).
+- Rule: `gptr_export()` turns a top-level `gptr_doc()` whose string literal names the source into a
+  comment (raw R) or rebinds it to the destination (Peter format; alone on its lines, else refused);
+  other `gptr_doc()` calls are kept (was kept verbatim: the Peter script's calls recorded nowhere
+  under `Rscript`, console turns went into the source). A raw export refuses a session handle only
+  when read after its `peter()` statement and before ordinary code assigns the name (was any other
+  statement naming it), and a function naming any handle of the document wherever it is defined, as
+  it reads the name when called.
+- Rule: outside a `.gptr/` workspace the session store and the S2 cache are in `tempdir()` and end
+  with R, by design. A `gptr_resume()` store miss there adds "Without a .gptr/ workspace, sessions
+  last until R exits; gptr_init(\".\") keeps them."; a replayed session or team child whose `$text`
+  stays `NA` informs one `notice` per document and process, "No recorded answer for <doc>: replayed
+  answers ($text) are NA." (plus the `gptr_init()` hint outside a workspace). Both were silent
+  (IC-46).
+- Rule: `gptr_return()`'s once-per-session notice outside a run is silent in replay mode
+  (`replay = "replay"`, `GPTR_REPLAY=replay`), as P08 implements IC-48; a document sourced under
+  `"auto"` gets it (the text said "silent while a document is replayed").
+- Steering review: a `## Steer:` or `## Follow-up:` line is steering with or without the space after
+  the colon, and a blank text is written without it (was `## Steer: `, which an editor's trim made a
+  user-edited block that `gptr_export()` refused); the block id fills only gptr's own lines, the
+  hidden value name and the overlay and team homes (was every body line, so a steer or model code
+  holding the placeholder was recorded with the id; IC-49). The text of a steer, follow-up, decision
+  or agent line stays one line (U+0085, U+2028 and U+2029 also become spaces) and its control, bidi
+  and zero-width characters are written `<U+XXXX>` (`ui_escape()`, rule C1; were written raw, so
+  `source(echo = TRUE)` drew escape sequences; 11.5 body). A console transcript records a run of any
+  settled status, one that did not end `idle` with a last `## Run: <status>` line and no cached
+  answer (was only `idle` runs, P15 decision 5, so an aborted or failed run vanished with its code
+  and steers and the next turn began a new session; IC-49). A replay reconstructs a block's steers
+  and follow-ups in body order, between its runs of code (a steer as the live relay); a
+  reconstructed piped session gains each block's turn, and one rebuilt from its JSONL moves to the
+  end of each block's turn, at the block's `gptr.doc_block` entry, until a live run (was one merged
+  `r` call and no steer, and every piped turn after the first lost, a dead branch in the session
+  file, also in every process after a replay that stopped at an earlier block; IC-46). Each replay
+  of a block, also a second source in one process, sets its steer and follow-up texts on the session
+  as its notes: `gptr_steer()` or a pipe into the idle replayed session drops an equal text with one
+  notice, and a matching item already queued is taken back (was sent again: replay mode failed for
+  want of a record, auto mode made an extra model call and recorded the steer twice, and a second
+  source in one process found no notes); a live run clears them. A turn `gptr_step()` or
+  `gptr_wait()` starts from queued input under a binding says once that it is not recorded (IC-55).
+- Contract-visible: 04 sections 4.4 `r` details `outputs` and `value`, 5.1 `print` and `.d`
+  `replay_rows`, 6.4 `gptr_doc()` and `gptr_cache()`, 6.5 `gptr_resume()` and `gptr_steer()`, 6.6
+  `gptr_return()`, 7.6 replay functions, 7.15 `doc_block_lines()`, 11.5 `cost`, `value`, `children`,
+  body and transcript, 11.9, 15.3 IC-45, IC-46, IC-47, IC-48, IC-49, IC-51, IC-55; 03 sections 4.3,
+  5.1, 6.9.1, 6.9.3; `?gptr_doc`, `?gptr_cache`, `?gptr_blocks`, `?gptr_return`,
+  `?print.gptr_session`, `?gptr_export`, `?gptr_steer`; vignettes script-as-history,
+  teams-and-background.
+- Tests: test-doc-io: the user-cache sidecar, its lock and listing, the cross-process kernel and
+  killed-run sync, the live-run sync; test-doc-replay: the other-binding notice and its four silent
+  cases; test-doc-formats: the machine-log line with and without `.gptr/`; test-doc-blocks: recorded
+  `#>` cuts, the known-zero cost; test-tool-r: per-expression outputs; test-doc-replay: the listed
+  zero cost, the in-process replay, one into another environment; test-session-object: a held or
+  undone block; test-doc-blocks, test-doc-replay, test-doc-io, test-doc-export, test-mcp-recording:
+  a recorded `gptr_return(<expression>)`; test-doc-blocks, test-doc-replay, test-doc-io: each
+  `gptr_return()` shape replays its value or says once why not; test-doc-replay: fan-out and team
+  children's values in the recording process, an in-process replay and two simulated later
+  processes, a three-field `children=` entry; test-session-object: the replayed footer;
+  test-doc-export: the source's `gptr_doc()` line, an exported Peter script recording into itself,
+  handle position, a function naming a handle; test-session-store: the resume hint; test-doc-replay:
+  the no-answer notice in process, under `Rscript` and for fan-out children; test-doc-blocks: a
+  blank and a trimmed steer line, the block id only in gptr's lines, escaped comment lines;
+  test-doc-replay: an aborted or failed console run and its re-source, a steered chain's live
+  context rebuilt and reconstructed, steers and follow-ups between runs, recorded steers not sent
+  again; test-session-object: the seek along piped blocks; test-gptr-sdk: the unrecorded-turn
+  notice. Evidence: progress/fixes.md Task FIX-16 doc-1, doc-2, doc-8, doc-10, doc-11, replay-1,
+  replay-2, replay-2c to -2h, replay-3, replay-4b, replay-5, export-2, export-2b, store-1, doc-1b,
+  steer-doc-1 to -5, steer-doc-4b, steer-doc-5b.
+
+## D-250 - FIX-17 Cheat-sheet review: models (2026-10-22)
+- Rule (catalog-1): `catalog_prices_from()` turns each models.dev context tier into one `>Nk` row
+  and reads the legacy `cost.context_over_200k` only when no context tier is given (models.dev now
+  ships it as a copy of `tiers[[1]]`, 620 of 620 models); a repeated tier label is dropped. Formerly
+  a 200k tier gave two `>200k` rows, which `prices_df()` rejects (31 refreshed models failed to
+  resolve), and a 272k or 256k tier gained a `>200k` premium row (76 models). `prices_df()` stays
+  strict for declared prices. `catalog_snapshot()` stamps `converter = 2L` (`catalog_converter`); a
+  refreshed cache without it is ignored in favour of the snapshot and is refreshed without
+  `If-None-Match`, because models.dev answers 304 and kept the old rows. The shipped snapshot is not
+  checked; `schema_version` stays 1.
+- Rule (catalog-2): `model_match()` ends at an alias name that has no model (target NA, or a
+  provider that is not registered) after IC-19's provider step (a registered provider of that name
+  runs its first declared model) and before the fuzzy step; `model_resolve()` raises `unknown_model`
+  naming the alias, also with a thinking suffix. Formerly offline `"gemini"` (no Gemini Pro in the
+  seed) ran google/gemini-3.8-flash by substring. The shipped orchestration skill uses `"flash"`.
+- Rule (prompt-1): `model_output_cap(window, max_output)` = `min(max_output, window / 2)` when both
+  are known (models.dev often gives the whole window as max_output); `compact_threshold()` reserves
+  it, and `prompt_request_context()` and `request_fallback()` send it as `max_tokens`. Formerly
+  max_output = context gave a threshold of -8,000 (40 refreshed models refused, e.g. MiniMax-M3,
+  gpt-oss-120b) and `max_tokens` equal to the window. `prompt_floor_check()` names `compact_at`
+  (`arg = "compact_at"`) when the window is unknown or the threshold equals the cap alone, and both
+  refusals hint `tools = "minimal"`, not `preset =` or `context =
+  "names"`; formerly a 1,050,000-token model was "too small" for `compact_at = 5000`.
+- Rule (ollama-2): `run_target()` and `run_route()` take a live request's model from
+  `run_model_ready()`, which prepares a selected Ollama route (`model_prepare()` with the run's
+  safety record) unless a provider registered for the session only names it, after `replay_guard()`
+  (a router's fallback default had no earlier guard). Formerly System 2 never prepared, so evidence,
+  held in memory only, needed `gptr_models(refresh = TRUE)` in every R session, and a saved default
+  Ollama model failed in each new one.
+- Rule (catalog-3): `model_resolve()`'s unknown-model error for `<pid>/<id>`, where `<pid>` is a
+  models.dev route (`catalog_modelsdev_ids()`) with no catalog row, adds "The catalog lists no <pid>
+  models yet; gptr_models(refresh = TRUE) downloads them from models.dev." Formerly the seed-only
+  snapshot (no openrouter, groq, deepseek, mistral, together, xai, cerebras, fireworks, azure or
+  bedrock rows) gave a bare "Unknown model reference". A route with rows, or a provider the user
+  registered, keeps the plain message.
+- Rule (provider-2): a model record's `prices` (in `gptr_provider(models =)` and
+  `gptr_spec("model")`) is a data frame or a list of price records; `spec_model_metadata()`
+  normalises it with `prices_df()` through the new `prices.table` service (P05; L0 may not call L1,
+  IC-09, IC-33) and re-raises a bad table as `invalid_spec` naming `<prefix>prices`. Formerly only a
+  data frame passed (the list form works in `gptr_config(providers =)`), and a string price or
+  duplicate tiers passed registration and failed at the first call without context.
+- Rule (config-2): `gptr_config()` keeps a project write and then, when the project is not trusted
+  (a recorded "no" included), warns `untrusted_setting` (once per root and keys) naming each key
+  whose untrusted contribution (`settings_project_value()`) is not what trust would apply, with
+  `gptr_trust("<root>", trust = TRUE)` and `.scope = "session"` as the ways out. Tightening
+  (`mode = plan`, deny and ask rules) stays silent; a `permissions` write with allow rules is named
+  `permissions.allow`, the one list an untrusted project drops. Formerly the value was saved without
+  a word and, for a recorded "no", nothing ever mentioned trust.
+- Rule (config-3): after any write, `gptr_config()` checks `model`, `small_model` and `system1`
+  (less `emulate:`; a router name or `router:` passes) with `model_canonical(strict = TRUE)` and on
+  `unknown_model` warns `unknown_model_setting` with that message and the undo call; the value is
+  kept (a later `gptr_register()` or refresh can make it valid, section 6.1.3). Another `gptr_error`
+  (an invalid declared price table) is left to the call that uses the model: the check never fails a
+  saved write. Formerly a typo such as `model = opuss` saved at user scope was silent and failed
+  every later bare `peter()`, while the console's `/model` checks at once.
+- Rule (config-4): `inst/templates/settings.json`, which `gptr_init()` writes, is `{"version": 1}`.
+  It held `"mode": "manual"` and `"record": "ask"` (the defaults), which as a project layer beat a
+  user-level `mode = auto` or `record = "auto"` in every initialised project, since a tighten key
+  applies from any project. A trusted project's `mode` now applies as written unless it is `yolo`
+  (`settings_project_value()`); an untrusted project still only tightens it, and
+  `gptr_config(mode = yolo)` at project scope is `invalid_argument` naming `.scope = "user"` and
+  `"session"`. Formerly a trusted project's `mode = auto`, which `gptr_config(mode = auto)` writes
+  at the default project scope, and a project `yolo` were saved and silently ignored. The plan freed
+  every tighten key of a trusted project; `context`, `record` and plugin tighten settings still only
+  tighten, because a project `record = "auto"` would be write consent, which IC-45 (req-7) reserves
+  to the person, and `context` bounds what reaches providers. Projects made earlier keep their file;
+  NEWS says to delete the two keys.
+- Rule (thinking-1): `bedrock_build()` sends a Claude model (id containing `anthropic.claude`) whose
+  record declares `capabilities$adaptive_thinking` the adaptive fields of `anthropic_thinking()` in
+  `additionalModelRequestFields` (`thinking`, `output_config.effort`); every other model, an
+  undeclared Claude record included, gets no thinking field and, for a level other than `off`, a
+  `notice` once per model naming `capabilities = list(adaptive_thinking = TRUE, effort = TRUE)`. Why
+  no budget and no id inference: a record cannot say it thinks on a budget (`model_capabilities()`
+  fills undeclared flags with `FALSE`), Opus 4.8 refuses `enabled` with HTTP 400 and Claude 4.5 and
+  earlier have no adaptive mode, so any guess fails a call for asking more reasoning, while sending
+  nothing answers as before; an id rule would also go stale with each release. Formerly every level,
+  `:max` and `off` sent the same body (D-193 cut thinking out); the first round sent an undeclared
+  record a budget, which broke `versa-bedrock/us.anthropic.claude-opus-4-8` at `high`. Measured on
+  the Versa gateway: Opus 4.8 declared adaptive returns signed thinking; undeclared at `high`
+  answers without thinking.
+- Rule (thinking-3): `check_choice()` and `gateway_choice()` report a string that is not a choice
+  through `choice_abort()`: "`<arg>` must be one of ...; the string given is not one of them.", plus
+  "Did you mean "<choice>"?" for a choice equal to it but for case. The value is never quoted; a
+  non-string keeps `arg_abort()`'s class and length. Formerly `thinking = "ultra"` read "not a
+  character of length 1".
+- Rule (thinking-4): `model_clamp_thinking(levels, level, ref = NULL)` still gives the nearest level
+  the model has (upwards first, IC-74); given `ref` and a changed level it informs
+  `thinking_clamped` once per model and level. `run_target()`, `run_model_resolve()`,
+  `route_answer()` and `model_resolve()` pass the model's ref; `prompt_request_context()`'s estimate
+  does not. Formerly `opus:off` ran at `low` and `thinking = "max"` on a reasoning record without
+  `thinking_levels` (off..high, now documented in `?gptr_provider`) ran at `high` without a word.
+- Rule (capture-1): `ident_shadow_notice()` also informs `alias_shadowed` when the shadowed variable
+  holds a spec the argument accepts (`ident_spec_ok()`) whose `name` is not the identifier; the
+  identifier still wins and a function stays silent (packages export `claude`, `plan`, `write`).
+  Formerly `opus =
+  gptr_fake_provider(...)` then `model = opus` ran the alias's model without a word. The plan named
+  every accepted spec; comparing `name` keeps a provider registered under its variable's name
+  silent, as an equal character value is.
+- Rule (s1-1): `route_refuse_s1_args()` (was `route_refuse_s1_images()`, whose refusal still comes
+  first) runs in the `nested`, `continue` and `new` routes, and through `subagent_route_checks()` in
+  the `team` and `fanout` routes (P19, L4; a contract edge of the layering test); it refuses the
+  first of `choices`, `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain` as
+  `invalid_argument` naming it, before any request, and points to a decision model (`model = jev`,
+  which runs through a chat model after `gptr_config(system1 = "emulate:<ref>")`; the setting alone
+  moves no call to emulation). An explicit `threshold = 0.5` passes (no `missing()` tracking); a
+  call that names no model is "this call". The `classifier` route (order 10, before `team` and
+  `fanout`) refuses `agents =`, then `parallel =`, as `invalid_argument` naming it, since a decision
+  model answers in one call. Formerly they were validated and dropped: a chat model returned a
+  session, on which `sum()`, `[` and `gptr_prob()` failed, `parallel = 2,
+  choices =` ran two sub-agents, and a decision model ignored `agents =` and `parallel =`.
+- Rule (s1-2): `s1_abstain()`'s `uncertain = "stop"` condition adds `index`, `names` (`NULL` for
+  unnamed input), `confidence` (what the band tests: `abs(2 * p - 1)` for decisions, the stored
+  confidence otherwise) and `value` (every answer, since the abort runs before `s1_record()`);
+  `prob` and `min_confidence` stay. The message lists the first ten names, or positions where a name
+  is empty, and says that `$value` holds every answer and `uncertain = NA` keeps the others.
+  Formerly it carried only `prob` (P(yes) or the chosen option's probability) and no way to tell
+  which inputs were uncertain.
+- Rule (s1-4): the factor that `s1_run()` returns for factor `choices` or `.opts$output = "factor"`
+  (P13, INFRA-18) carries `attr(, "meta") = list(errors = <df>)` when elements failed; otherwise it
+  has only names and levels. Formerly every attribute was dropped after `s1_failures()` had warned
+  "see attr(x, "meta")$errors". The plan kept the whole `meta`, but `print.factor()` prints every
+  attribute other than levels and class (R 4.6): a two-element factor with `s1_meta()`'s fields
+  printed 63 lines instead of 3 (measured), on every call. Probabilities stay off, as planned:
+  `[<-.factor` keeps attributes, so they would go stale.
+- Contract-visible: 04 sections 11.9 (model catalog key), 11.10 (`converter` and the conversion
+  rule; an alias with no model); 03 section 6.11 and 04 sections 7.7 (threshold formula), 8.1
+  (`params$max_tokens`), 15 IC-71 (the refusal); 07 section 2.1 and the 04 `model_prepare()` row
+  (P06 prepares); the 04 `model_resolve()` row (the empty-route hint); 04 sections 7.0
+  (`prices.table`) and 10.2 rows 1 and 3 (`prices`), `?gptr_provider`; 04 `gptr_config()` and
+  section 2.2 warnings (`untrusted_setting`, `unknown_model_setting`); 04 `gptr_config()` project
+  scope, sections 10.2 row 24, 11.2 text and `mode` row, 11.16, 15 IC-53 item 1 and IC-78, 03
+  sections 5.9, 6.8.1 and 6.8.2, `?gptr_config` and the configuration vignette (a trusted project's
+  `mode`; the template); 04 section 15 IC-80 (thinking) and `?gptr_provider`'s bedrock-converse
+  example (`reasoning`, `capabilities`); 04 section 1.1 (a string that is not a choice); 04
+  sections 2.2 messages (`thinking_clamped`), 4.9 `thinking` row, 03 section 8.4 model references
+  and `?gptr_provider` (`thinking_levels`); 03 section 4.1.3 and 04 section 6.1.3 (`alias_shadowed`
+  for a spec); 03 section 4.1, 04 section 6.1.1 step 5 and `?peter` (System 1 arguments on a
+  conversational route; `agents` and `parallel` on a decision model); 04 section 2.2 `s1_uncertain`
+  row (its fields); 03 section 4.1.5, `?peter`, `?gptr_prob` and the system-one vignette (the factor
+  result).
+- Tests: test-catalog-models.R "each models.dev price tier is read once; ...", "a cache converted by
+  an older gptr is ignored and downloaded again in full", "an alias with no model in the catalog is
+  unknown, not a fuzzy match"; test-prompt-compact.R "the output reserve is at most half the window
+  (D-250)"; test-prompt-sections.R "the floor check blames compact_at when it sets the threshold
+  (D-250)", "a model whose max_output is its whole window runs and asks for half of it (D-250)";
+  test-catalog-models.R "a System 2 call prepares its selected Ollama model as System 1 does", "an
+  unknown id on a route with no catalog models says a refresh fills it (D-250)"; test-ext-specs.R
+  "model prices are a data frame or a list of price records, checked at registration";
+  test-aaa-state.R (40 services); test-gptr-config.R "gptr_config() warns when an untrusted project
+  will not apply what it saved (D-250)", "gptr_config() warns when a saved model setting names no
+  known model (D-250)", "a trusted project sets mode; context, record and untrusted modes only
+  tighten (D-250)", "gptr_config(mode = ) in a trusted project applies there; yolo is refused
+  (D-250)", "a gptr_init() project leaves mode and record to the user's settings (D-250)";
+  test-provider-bedrock.R "a Claude model declared adaptive gets the thinking level; others get none
+  (D-250)"; test-live-bedrock.R (opt-in) "thinking = 'high' on an adaptive Claude model is signed",
+  "a Claude record not declared adaptive answers at 'high'"; test-utils-conditions.R "a string that
+  is not one of the choices is reported as such, never quoted (D-250)"; test-agent-run.R "a thinking
+  level the model lacks is announced once per model and level (D-250)"; test-catalog-models.R "a
+  thinking suffix the model lacks is announced with the level used (D-250)"; test-gptr-capture.R "an
+  alias shadowed by a spec the argument accepts gets the message (D-250)"; test-gptr-gateway.R
+  "System 1 arguments are refused on a conversational route (D-250)"; test-subagent-team.R "teams
+  and fan-outs refuse System 1 arguments before any child starts (D-250)"; test-s1-route.R
+  "uncertain = \"stop\" names the uncertain inputs and carries every answer (D-250)", "a factor
+  answer keeps the call's meta, which its failure warning points to (D-250)", "a decision model
+  refuses agents = and parallel = before any request (D-250)". Evidence: progress/fixes.md Task
+  FIX-17.
+
+## D-251 - P08 Cheat-sheet review: sessions (2026-10-22)
+- Rule (tools-3): a name of a `peter()` call's `tools =` (`+`/`-` stripped) that names no tool of
+  the session is `gptr_error_invalid_argument` naming the closest preset or tool (`utils::adist()`,
+  case-insensitive, at most 2), when the prompt freezes (run options that carry the call, after
+  `session_start` registered extension and MCP tools; no request is sent) and at a continuation
+  (after the call's specs register). Was a `missing_tool` diagnostic, the name ignored. Names in
+  settings `tools.enable`/`tools.disable` and in an agent definition's allowlist keep that
+  diagnostic. Two presets in `tools =` are refused (the first won), at a continuation before its
+  model or mode switches. A bare name adds, as `+name`.
+- Rule (sessions-3): a continuation's `.opts$thinking` without `model =` switches the session's
+  level through `kernel_model_switch()` (clamped; a `model_change` only when it changes; a router
+  session keeps its model and takes the level), for this and later turns. Was validated and dropped.
+- Rule (gateway-1): before a call's run records anything, `gateway_guards()` refuses a model it
+  cannot reach: egress, replay, a decision-only model, a disabled provider and the preflight
+  (`provider_ready()`, also `provider_stream()`'s backstop; an Ollama model is prepared through
+  `model_prepare()`), a missing key (`provider_credential(register =
+  FALSE)`). A continuation guards its target before its model, level, mode or tools change, after
+  the call's extensions, plugins and rank-0 specs register (the checks read them: a `model =` spec,
+  a provider an extension registers). `gateway_checks()` holds every other refusal before a turn
+  starts too: a continuation's unknown tool name, two presets, `.opts$images` its model does not
+  take, `background = TRUE` without later, an unknown `skills =` preload and, last, a secret-looking
+  prompt the person declines to send (`"ask"`). A refusal there, or while the call registers (an
+  unknown plugin name), or an interrupt before the turn starts undoes the registrations
+  (`gateway_undo()`, `registry_session_undo()`) and the call's registry filters, which apply before
+  the preload check, so a refused call keeps none; a refused new call keeps the previous
+  `gptr_last()`. Was: those changed first, and key and provider refusals came at the first request,
+  after the turn and its prompt were recorded (resent with the next prompt), and a refused call kept
+  its registrations and filters; then (r3 to r4) a refusal while registering kept them, and the
+  images, preload and prompt refusals came after the switch and `gptr_last()`. A router's choice
+  keeps egress and replay only (`ready = FALSE`), and its request refuses the rest, as before (a
+  keyless choice: `gptr_error_no_key`, no request). So does building a session (`.run = FALSE`, a
+  `gptr_parallel()` member): `gptr_step()` and `gptr_wait()` check the rest before they start its
+  run, and a member that cannot reach its model ends `error` (kept by `on_error = "return"`). A
+  run's first request to its session's model prepares it as the guards do (`run_target()`;
+  `model_prepare()` discovers an Ollama model only without current evidence), so a plain call,
+  `gptr_step()`, `gptr_wait()` and a member each discover an Ollama model once, a member at its
+  first request and with the discovered record (was, once building stopped preparing: a member
+  refused for "no current discovery evidence"). A piped `.run = FALSE` call applies its model, mode
+  and tools at once; a `gptr_step()` or `gptr_wait()` that then refuses leaves them, with no turn. A
+  failure after a request (HTTP 4xx/5xx) keeps INFRA-04. A switch resolves the target as its session
+  sees it (`model_canonical(strict = TRUE, session =)` through `run_model_resolve()`), so a piped
+  `model =` provider spec and a later `.opts$thinking` on it switch (were
+  `gptr_error_unknown_model`).
+- Rule (sessions-4): a continuation without `envir =` of a session with no kept home whose
+  `home_label` is a function frame (R2) informs once per session (`gptr_message_home_not_kept`) when
+  `home_label(call$envir)` differs, naming both and `envir = new.env()`. Was silent. R2 and the
+  IC-40 precedence are unchanged.
+- Rule (sessions-5): a named context dot whose name (2+ characters) is a prefix of a `peter()`
+  formal, or the formal plus `s`, and whose value fits it (character, plain list, function or spec;
+  04 section 6.1) warns (`gptr_warning_partial_name`, naming each formal) from facts only, and stays
+  context. Was silent (`mo = "plan"`).
+- Rule (sessions-6): a failed reply with no content and no reported usage whose request was rejected
+  (HTTP status
+  >= 400) or never received (class `network` or `timeout_connect`) records
+  > `usage_new(input = 0, output = 0)`, not
+  estimated: cost 0 (NA for a model without prices), nothing toward token or cost budgets, still one
+  request toward `turns`. Was the whole prompt's estimate at the catalog price (a refused connection
+  to Opus: $0.0479 over 3 requests; a 401: $0.0080), which ended a run as `gptr_error_budget_*`
+  instead of retrying. A partial reply, idle and first-byte timeouts and a success without usage
+  keep the estimate; an overflow's `tokens` stays NA.
+- Rule (sessions-8): a `budget_check()` hit carries `estimate` (the next request's estimated input
+  tokens), and so do the `gptr.budget` entry, the `budget_exceeded` event and the condition. A token
+  hit with used < budget reads "the next request (~3.9k tokens) would exceed the tokens budget of
+  this call (9.0k; used 5.8k)", others "is reached (used X)", in the stop and the extend question
+  alike. Was "(9.0k) is reached (used 5.8k)", even "(500) is reached (used 0)"; the question named
+  no usage. After "Extend" the budgets are checked again (was: sent unchecked).
+- Rule (sessions-10): a call's own cost limit (`opts$budget$cost`, not the settings default) that
+  meets a request of unknown cost since its run started informs once
+  (`gptr_message_budget_unpriced`, fields `budget`, `model`; once per team or fan-out pool): "The
+  cost budget of this call ($0.0100) is not enforced: <provider/model> has no prices, so its cost is
+  unknown; tokens and turns limits still apply." D-025 item 2 stands (unknown counts nothing; no
+  fail closed). Was silent, the footer's "unknown cost" aside (Versa and Codex models,
+  `gptr_provider()` without prices).
+- Rule (sessions-11): a team or fan-out answers for itself once it has its own answer: `$text`
+  (print, format, as.character, the notebook repr) is its `last_text` when set, else the joined
+  reports or the named chr; `$value` is its own designated value when it has one, else the named
+  list of the children's values. Was by kind alone, so `team |> peter("Reconcile ...")` kept showing
+  the reports and child values. Rewinding resets `last_text` only.
+- Rule (team-2): a team's joined reports say `(ended with status <status>)` under the heading of a
+  member that did not end `idle`, as the `agent_reports` block does; until a team or fan-out has its
+  own answer, `print()` and the notebook repr show each child's report under `### <name> (<model>)`,
+  so a fan-out's too. A fan-out's `$text`, `format()` and `as.character()` stay the named chr, and
+  `knit_print` still joins its answers without names. Was: a failed member's section empty, and a
+  fan-out printed its answers one after another without names, leaving out a child without an
+  answer.
+- Rule (tools-2): a session frozen with the `readonly` preset keeps `read` and `r` outside plan
+  mode; only Execute in the plan menu declares `edit` and `write` (`plan_execute()`). Was: P11's
+  `agent_start` hook (`plan_on_agent_start()`, removed) declared them at every run outside plan
+  mode, so `tools = readonly` was told "New tools are available from now on: edit, write." from its
+  first request. `r` can still change files there.
+- Rule (sessions-15): plan mode's allowlist (IC-54) also admits a `file_write` row whose risk is its
+  path argument called directly (`cat("a\n")`, `writeLines()`, `dput()`, `write.table()` to the
+  console) and a lookup of a literal function (`do.call(rbind, ...)`, `get("x")`; the function is
+  checked as a call of its own), when the scan flags none of their calls. A path function used as a
+  value (`lapply(1, cat, file = "x")`), whose arguments the scan cannot see, stays refused. Was:
+  refused although `gptr_risk()` scores them 0 (GPT lost a turn to it).
+- Rule (sessions-17): a command whose program is a literal path to a program gptr knows (`/bin/rm`,
+  `./rm`, `C:\bin\rm.exe`; `.exe` stripped in any case, so `C:\bin\RM.EXE` reads as `RM`, and a bare
+  `RM.EXE` as `rm`) is read as that program too, all its rows beside the level-3 `process` row, so
+  deny and ask `sh:` (as written) and `category:` rules match it and `gptr_risk()` names its
+  categories (`/usr/bin/git push`: network); levels are unchanged. Was: only its level-4 rows, so
+  `r(sh:rm *)` and `r(category:file_delete)` missed `/bin/rm -rf build` in auto and yolo. An allow
+  rule must cover the path row as well, so `r(sh:/bin/rm -rf*)`, the former `[a]lways` rule, no
+  longer approves it, and such a call is offered no `[a]lways` rule.
+- Rule (sessions-18): `peter$bg()` is classified as `peter$sh()` is: a literal command's rows plus a
+  level-3 `process` row carrying the command text, so `sh:` rules match it and `[a]lways` offers
+  `r(sh:rm -rf*)`; a computed command is the `dynamic` level-3 row. Was one `peter$bg` row at level
+  3, which `r(sh:rm *)` never matched (the job ran in auto and yolo) and for which `[a]lways`
+  offered `r(sh:peter$bg*)`; `peter$bg('rm -rf ~')` is 4.
+- Rule (nested-1): a nested `peter$sh()` or `peter$bg()` call meets the `rules` policy with its
+  actual command, read as the literal call (`peter$sh("rm -rf build")`), whatever its level: a deny
+  rule refuses it, an ask rule asks through `perm_ask()` and offers no `[a]lways` rule (an answer
+  would have stored an allow `sh`); allow rules are not applied there, and
+  `gptr.unsafe_no_permissions` skips it. Was: re-checked only above the outer call's approved level
+  and then as tool `sh`, which no `r(sh:)` rule matches, so `cmd = "rm -rf build"; peter$sh(cmd)`
+  ran in auto and yolo under `r(sh:rm *)`.
+- Open (nested-1): a computed command run through base `system()` or `system2()`
+  (`cmd = paste("rm", "-rf",
+  "build"); system(cmd)`) is one `dynamic` level-3 row that no `sh:` rule matches, so it still runs
+  in auto and yolo under a deny `r(sh:rm *)`; only nested `peter$sh` and `peter$bg` calls are
+  re-checked. The gate is advisory; `?gptr_security` names the limit. No code change.
+- Rule (sessions-22): the `gptr.frozen` entry records `mode`, the session's mode at the freeze
+  (P07's and the fallback's), and a rebuild (`gptr_resume()`, console `/resume`, a replay cut) takes
+  the last mode its active path records, a `gptr.frozen` `mode` or a `gptr.mode_change` `to` that is
+  one of the five modes, else the `mode` setting. Was: the last `gptr.mode_change`, else the
+  resuming process's setting, so a session started in `auto` came back `manual` (a script stopped at
+  its first write) and one started in `plan` came back under a looser setting (`auto`: a write ran).
+  A file that records no mode (written before) behaves as before.
+- Contract-visible: 04 sections 6.1 `tools` and `.opts` rows, 6.1.2 (a refused call), 7.5
+  `provider_ready()`, 7.6 `session_set_model()`; `?peter` `tools`, `.opts`, `.run` and refusals,
+  `?gptr_wait`. 04 sections 2.2 messages, 5.1 `envir` accessor row, IC-40; `?peter` `envir`,
+  `?session-accessors`. 04 sections 2.2 warnings, 6.1 and 6.1.5; `?peter` dots. 04 section 4.3
+  `estimated` (message and row). 04 sections 4.6 `gptr.budget`, 7.6 `budget_check()`, 10.4
+  `budget_exceeded`, IC-66. 04 sections 2.2 messages, 6.1 `budget` row, IC-66; `?peter` `budget`. 04
+  sections 5.1 `text` and `value` rows, 6.5 `gptr_parallel()`, 03 section 4.1.6;
+  `?session-accessors`, `?gptr_parallel`, vignette teams-and-background. 04 sections 5.1 `text` row
+  and `print` method, 6.5 `gptr_map()`, 03 section 4.1.6; `?print.gptr_session`,
+  `?session-accessors`, `?gptr_parallel`, the same vignette. 03 section 6.8 (the execute menu). 04
+  IC-54 (the plan allowlist). `gptr_risk()`'s rows and categories of a program given by its path (no
+  spec text describes them). 04 section 9.4 `bg` risk cell. 03 section 6.8.4, 04 section 7.6
+  `dispatch_nested()`; `?gptr_security` (a computed `system()` command). 04 sections 4.6
+  `gptr.frozen`, 6.5 `gptr_resume()`; `?gptr_sessions`.
+- Tests: gptr-gateway "an unknown name in tools = is refused ...", "a continuation's .opts$thinking
+  applies ...", "a call refused before its run changes neither ...", "every refusal before a turn
+  starts undoes ...", "a call's filters notice comes with its first accepted call ...", "an
+  interrupt before a turn starts ...", "a router's choice without a key stops the run ...", "a built
+  session needs no key until a run starts it ...", "a call, gptr_step() and a parallel member each
+  discover an Ollama model once ...", "a continuation switches to a provider spec that only its
+  session knows ...", "a continuation of a session that kept no workspace ...", "a named dot that
+  abbreviates an argument ..."; prompt-sections "the tool array skips unavailable and missing tools
+  ..."; agent-run "a request rejected or never received costs nothing ...", "a reported usage keeps
+  its unknown counts ...", "an overflow condition carries the provider's prompt count ...", "an
+  extended token budget is checked again ..."; session-budget "a token budget the next request would
+  exceed says so ...", "a call's own cost limit says once that an unknown cost counts nothing ...",
+  "peter() with a cost limit on a model without prices ..."; subagent-team "NS-6: a team through
+  peter() ...", "a continued gptr_parallel() team or fan-out answers ...", "printing a team or
+  fan-out shows each child under its name ..."; perm-plan "a readonly session keeps read and r
+  outside plan mode ...", "plan mode runs console output such as cat() ..."; perm-classify "the
+  plan-mode allowlist admits only known read-only calls (IC-54)"; perm-rules "sh: and category:
+  rules see a program given by its path", "sh: rules read the command of a background job";
+  perm-classify "G5's 46 polyglot calls ..."; perm-gate "a deny rule stops a program given by its
+  path or in a background job ...", "deny and ask rules see the command a nested sh or bg call
+  computes ..."; session-store "a rebuilt session keeps the mode it ran with". Evidence:
+  progress/fixes.md Task FIX-18.
+
+## D-252 - FIX-19 Cheat-sheet review: orchestration (2026-10-22)
+- Rule (ws-1): the `<workspace>` block of an overlay home (a team member, fan-out child, nested
+  `peter()` from model code, `gptr_fork(envir = "overlay")`) lists what its code reads.
+  `env_view_snapshot()` takes the overlay's own rows, then each lower overlay's and the first other
+  environment's (the walk of `binding_env()`), a nearer binding shadowing a farther; `objects`
+  counts them all, and the first line is `Reads fall through to globalenv;
+  assignments stay here.` (`<environment>` for another base), which also says why `ls()` is empty
+  there. `<workspace_changes>` and the `agent_end` and `session_tree` baselines use the same view,
+  so inherited objects are never reported as added or removed. Formerly every member was told
+  `objects="0"` `(no objects)` while `summary(fit)` worked in it.
+- Rule (sessions-20): an overlay isolates bindings only; data.table `:=`/`set*()`, environment and
+  R6 field writes, `<<-` and `assign(envir =)` change the source's objects (`gptr_fork()` doc,
+  interactive-console vignette). The evaluator diffs `env_view_snapshot(sizes = FALSE)` (new column
+  `own`), so such a change is `modified`, an alias (`e$f = 1` binds the source's `e` in the overlay)
+  is not `added`, and a modified row whose old binding was not `own` and whose new binding is not
+  `own` or shares that object reads `(in the source workspace)`; a rebinding (`k = 5`) and an `rm()`
+  that un-shadows a source binding stay unmarked. Formerly `e` was added and nothing else.
+- Rule (guard-1): `eval_guard(exprs, envir = NULL)`; `eval_r()` passes its `envir`. `q` or `quit`
+  used as a value passes when, looked up from `envir` as R looks up a value (its parents in order),
+  it is bound to data: not a function, and not a promise or active binding (never forced). Calls
+  (`q()`, `base::q`, `do.call("q")`) and `q` passed directly as the function argument of `do.call()`
+  and of every base function that applies `match.fun()` to one (`sapply(x, q)`, `Negate(q)`,
+  `sweep(m, 1, s, q)`, which resolve to `base::q`; a test scans base) stay refused whatever is
+  bound; so do that argument as a string, `Vectorize("q")` (its `formals()` looks the name up) and
+  any string argument of P09's 18 indirect calls (`get("q")`). `.S3method("edit", ...)`,
+  `Vectorize(f, "de")`, `Vectorize(q)` and `Recall(q)` pass, as none looks a blocked function up; a
+  `q` that reaches such a function through `...` (`sapply(x, lapply, q)`) is not checked. Formerly
+  `summary(q)` on the user's quantile vector was refused as quitting R (finding 25). The plan named
+  `binding_env()`; it is an L3 function and not R's lookup.
+- Rule (team-1): a team, fan-out or `gptr_parallel()` team whose children did not all end idle takes
+  the first such child's status and stored condition, `$reason`
+  `"k of n sub-agents did not finish: a (blocked), ..."`, and the same status and reason in its
+  `agent_end`; `agents =` and `parallel =` re-signal that condition with the container as `$session`
+  when no child ended idle (`subagent_settle_container()`, `subagent_signal()`). `on_error` is
+  unchanged. Formerly the container stayed `idle` and silent while its `agent_end` said `error`. The
+  plan named `gateway_signal()`, an L6 function L4 may not call; every signalled status stores its
+  condition.
+- Rule (team-4): settling a container appends a `gptr.container_end` entry `{status}` after its last
+  message. At resume and in `gptr_sessions()` the last message or `gptr.container_end` decides: idle
+  when it is a final answer or an idle end, else `interrupted` (as a stored blocked chat); a later
+  synthesis turn decides by itself. A listed row with no answer naming the model takes it as
+  `rebuild_model()` does (`model_change`, `gptr.frozen`). Formerly every settled team or fan-out
+  listed and resumed `interrupted` with model NA, while the live object was idle.
+- Rule (bg-1): a waiting background session's resumed run opens with a steer from the user
+  (`api_user`, so before re-queued follow-ups): "I am at the console now. Repeat the call that could
+  not be approved (<summary>) with the same input; I will be asked to approve it.", or "I am at the
+  console now; ask again." for a question; a resume that cannot start restores the queue. Only the
+  sweep's `bg_resume()` starts it: `sdk_check()` starts nothing for a `waiting` session, so a
+  message piped in meanwhile waits for that run, and `gptr_step()` leaves the session waiting
+  (`gptr_wait()` continues it). A `ui` record's `permission()` denial may carry `how = chr(1)`, kept
+  by `ui_answer_norm()` for a denial only and used by `perm_ask()` as the denial text's last
+  sentence; the idle-tick wrapper's is "Nothing ran and nobody declined." (the pending text already
+  says to repeat the call). Formerly the run resumed on the stale "Permission denied ... Explain
+  what you need or choose another approach." and GPT ended without asking in 7 of 8 runs.
+- Rule (gate-hint): the `how_to_allow` (and message) of a call nobody can approve starts
+  `Mode "<m>" comes from
+  <where>.` while the run keeps the mode the gateway recorded in a top-level call's
+  `opts$mode_from`: "this call's mode argument", "the session this call continues", or the
+  `settings_layered("mode")` layer holding it ("the package default", "your user settings",
+  ".gptr/settings.json", "options(gptr.mode)", "this R session's settings"); while knitting it ends
+  "... or a permission rule (gptr_permissions()); knitting cannot ask." in place of ", or run
+  interactively.". The `ask_human` text and `gateway_signal()`'s fallback are unchanged. Formerly
+  the hint named no layer (a `gptr_init()` project's `manual` overrode a user `auto` unseen) and
+  told a knitting user to run interactively. The gateway records the origin because `perm_ask()`
+  (L2) may not call `settings_layered()` (L6).
+- Rule (tpl-1): the service `templates.sync` (P17, owned by `builtin:prompts`) is the
+  `session_start` hook's `plugins_sync()` then `template_sync()`; the console calls it at `/help`
+  and before it calls a command name unknown, then looks again. Formerly no template command
+  (project, user, `/review`, `/explain`) existed until a session had started, so `/check` as the
+  console's first input was "Unknown command", and a template saved later waited for the next
+  session start.
+- Rule (tpl-2): the trust question, or without a human the untrusted notice, covers every project
+  location gptr reads under trust. `trust_resources_present()` counts the trust-gated files,
+  `AGENTS.md`, `AGENTS.override.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.gptr/vignette.Rmd`, the
+  directories `.gptr/{skills,prompts,agents}`, `.agents/skills`, `.claude/{skills,agents}`,
+  `.codex/agents`, `.pi/agents`, and the relative `skills.paths` entries of the settings skill
+  discovery reads (no trust is resolved, so it cannot recurse). The question of `trust_resolve()`
+  and `gptr_init()` is `Trust this project (its settings, skills, prompt templates, agent files,
+  extensions and MCP servers)?`; `?gptr_trust` lists project skills and prompt templates. Formerly a
+  project whose only resource was `.gptr/prompts` (or `.claude/skills`, `.agents/skills`, a
+  non-`.gptr` agent folder, `AGENTS.override.md` or `CLAUDE.local.md`) got neither, and its
+  templates or skills were dropped unannounced. The plan's list lacked `.gptr/vignette.Rmd` (an
+  instruction file whose authority follows trust) and read `skills.paths` from the two files only.
+- Rule (sessions-23): reading `gptr_trust(path)` gives `NA` for a recorded `TRUE` whose fingerprint
+  no longer matches (`trust_holds()$record`), as the run treats it: undecided, asked again (IC-52).
+  A recorded `FALSE` stays `FALSE`; the write and its invisible previous value are unchanged.
+  Formerly the read said `TRUE` while the run printed the untrusted notice and dropped the changed
+  `SYSTEM.md` (finding 52).
+- Rule (ident-1): an identifier argument written as a binary `-` whose leaves are names or numbers
+  (`skills = high-performance-r`, `model = claude-opus-4-6`) is refused before any evaluation with
+  `gptr_error_invalid_identifier` "`high-performance-r` reads as subtraction; quote the name:
+  skills = "high-performance-r"." (`ident_hyphen_name()`); unary `+name`/`-name` is unchanged.
+  Formerly the alias mask evaluated it and base R's "object 'high' not found" escaped, or with
+  numbers bound to the pieces the error suggested the quoted name "high - performance - r" (finding
+  112).
+- Rule (mcp-trusted): the `trusted` column of `gptr_mcp()` is the server spec's `trusted` (section
+  11.7: a user `mcp.json` entry marked `"trusted": true`, whose `readOnlyHint` lowers tool risk);
+  project trust is status `untrusted`. Formerly the column was `TRUE` for every startable server,
+  opposite the spec's value (finding 105).
+- Rule (art-1): `peter$app(launch = NULL)`, both forms, launches when `gptr_has_human()`; when it
+  does not, the handle's `checks$messages` (and so the tool result) add
+  `not launched: nobody is at an interactive console, so
+  vNNN was saved without starting it; pass launch = TRUE ...`. Formerly the default was base
+  `interactive()`, deaf to `gptr.interactive`, and the bare `(stopped)` led models in Rscript to
+  build a second version (finding 56).
+- Rule (art-2): without `.gptr/` the `<environment>` line is
+  `Artifacts: <path_norm(tempdir()/gptr/artifacts)>
+  (temporary: deleted when R exits; cite this full path; gptr_init() keeps artifacts)`, and
+  `peter$app()` sends the `notice` "Artifact <id> is in a temporary workspace (<path>) that is
+  deleted when R exits; run gptr_init() to keep artifacts." once per process. Formerly the bare
+  temporary path led models to cite a relative `artifacts/<id>/app.R` that does not exist, and
+  nobody learnt the app would vanish at exit (finding 48).
+- Rule (reg-1): `gptr_register()` of a `first`-resolving kind adds the new record, then removes the
+  earlier process-level `user` records of that `(kind, name)` with a `replaced` diagnostic and the
+  `notice` "Replaced your earlier <kind> '<name>'."; a spec that fails validation leaves the old
+  one, the old handle returns `FALSE`, and `all` kinds (hooks, policies) keep both. Formerly the
+  first registration stayed active and the new one silently `overridden`, so a re-registered
+  provider kept sending to its old `base_url` and a re-registered tool kept its old `fun` (findings
+  38, 31).
+- Contract-visible: 03 section 4.1.3 and 04 section 6.1.3 (identifier table, ident-1), 03
+  sections 4.3 (fork), 5.1 (resume status), 6.2 (background asks), 6.10 (trust gates, tpl-2), 6.12
+  (also the guard), 6.17 (templates), 6.18 and 7.5 `<workspace>`; 04 section 4.6
+  (`gptr.container_end`), `gptr_fork(envir)`, `gptr_resume()`, `gptr_init()` and `gptr_trust()`
+  (tpl-2; its read, sessions-23), `gptr_register()` and section 10.1 ties (reg-1; also 03
+  section 4.3), sections 5.12 `gptr_mcp_servers` `trusted` (mcp-trusted), 9.4 `app` (art-1; also 03
+  section 4.2), 03 sections 5.7 (temporary root, art-2), 6.1.2 and `gptr_parallel()` (team-1), 7.0
+  and 7.17 `templates.sync` (tpl-1), 7.6 `opts$mode_from` and `perm_check()` (gate-hint), 7.9
+  `env_view_snapshot()` and `eval_guard()`, 6.5 `gptr_step()` and 7.21 (bg-1), 10.2 row 22 (`how`),
+  15.7, IC-52 (when the trust question is asked), IC-57; `?gptr-background`, `?gptr_trust`.
+- Tests: env-snapshot "an overlay's workspace lists the objects it reads through to"; subagent-team
+  "team members and fan-out children are shown the caller's objects"; copy-eval (an overlay of a
+  function frame); session-object "a fork's change report names the source objects its code changed
+  in place"; eval-guard "q bound to data where the code runs ...", "q bound to data is refused where
+  a base function looks it up ...", "the function-argument table names every base function ...",
+  "model code reads a q bound to data ..."; subagent-team "a team or fan-out takes a failed member's
+  status ...", injection-e2e "a worker's forwarded permission request ..."; session-store "a settled
+  team or fan-out lists and resumes idle ..."; agent-background "a resumed session is told the user
+  can now approve the call", "... whose ask tool was blocked is told to ask again", "a message piped
+  into a waiting session is delivered with the console note"; console-ui "a denial keeps the UI's
+  how ..."; agent-dispatch "a blocked call's hint names where its mode came from"; console-commands
+  "template commands exist before the first prompt ...", "a template command is the console's first
+  input (end to end)"; gptr-config "a project whose only resource is prompt templates gets the trust
+  notice", "a trusted prompts-only project registers its templates", "every project skill, agent and
+  instruction location counts ...", "a relative skills.paths directory counts, and the question
+  names skills", "a changed trust-gated file makes the project untrusted again"; gptr-capture "a
+  bare hyphenated name is refused with its quoted form"; mcp-config "gptr_mcp()'s trusted is the
+  spec's ..."; artifact-app "peter$app() launches by default only at the console ...", "an artifact
+  in a temporary workspace is announced once"; prompt-context "the Artifacts line says a workspace
+  without .gptr/ is temporary"; ext-registry "gptr_register() of the same kind and name again
+  replaces your earlier record". Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1,
+  guard-1b, team-1, team-4, bg-1, gate-hint, tpl-1, tpl-2, sessions-23, ident-1, mcp-trusted, art-1,
+  art-2, reg-1.

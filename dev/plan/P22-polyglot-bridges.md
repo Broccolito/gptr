@@ -1683,9 +1683,10 @@ Two guards protect the members:
   one of its members before P06's permission check and checkpoints run, so no one is asked to
   approve a shell tool that does not exist; the model reads
   `Tool execution was blocked: peter$sh() is an R function, not a tool: call it inside r code (there is no shell tool).`
-  As a second line of defence the `execute` refuses the same call: P06 binds the executing top-level
-  call record as `run$tool_call` (04 section 4.4 shape), and when that record names the bridge
-  itself, the call is refused with the same sentence.
+  (Since D-248, dispatch refuses an undeclared name first: the model reads `Tool sh not found`; the
+  hook covers a bridge declared by value.) As a second line of defence the `execute` refuses the
+  same call: P06 binds the executing top-level call record as `run$tool_call` (04 section 4.4
+  shape), and when that record names the bridge itself, the call is refused with the same sentence.
 - **Computed commands are re-checked at run time** (05 P22 acceptance 3; G5 design 5;
   03 section 6.8.4). `dispatch_nested()` runs a member without a second check when the outer `r`
   call's static analysis listed it at a level no higher than the level approved for the outer call;
@@ -2525,7 +2526,9 @@ hand-off may copy the object once on its next in-place edit (rule R9, G5 item 22
 Provisioning guard (G5 key finding and verification item 21): without an explicit configuration
 reticulate's discovery ends in a uv-managed download, so `peter$py()` refuses with
 `gptr_error_not_available` (`member = "py"`, `provided_by = "reticulate"`) unless Python already
-runs in this session or one of `RETICULATE_PYTHON`, `RETICULATE_PYTHON_ENV`, `VIRTUAL_ENV` is set.
+runs in this session or one of `RETICULATE_PYTHON`, `RETICULATE_PYTHON_ENV`, `VIRTUAL_ENV` is set;
+`RETICULATE_PYTHON=managed`, which asks reticulate for that download, is refused too, before
+`reticulate::import_main()` (D-248).
 
 The `gptr_py` record has exactly the fields of 04 section 5.10 (`name`, `output`, `repr`); the error
 text, the kind of the last value (`"Series 2"`), the `peter$out()` id and the last value itself (a
@@ -3778,11 +3781,12 @@ read in the dependency plans (P01 `utils-tokens.R`, `utils-text.R`; P04 `proc-sp
    adopted: 04 lists none of them.
 10. A direct `sh` tool call is blocked by the built-ins' `tool_call` hooks (a decision event P06
     emits before its permission check, so a human is never asked to approve a shell tool and no
-    checkpoint is taken); the model reads P06's `Tool execution was blocked: <reason>`. The
-    `execute` refusal behind it signals `gptr_error_not_available` (`member`,
-    `provided_by = "the r tool"`); 04 has no class for "this member is not a tool", and the model
-    sees only the message. The run-time re-check denial is `gptr_error_permission` with the
-    section 2.2 fields; P06's `dispatch_nested()` turns it into an error result and a
+    checkpoint is taken); the model reads P06's `Tool execution was blocked: <reason>` (since D-248,
+    dispatch refuses an undeclared name first: the model reads `Tool sh not found`; the hook covers
+    a bridge declared by value). The `execute` refusal behind it signals `gptr_error_not_available`
+    (`member`, `provided_by = "the r tool"`); 04 has no class for "this member is not a tool", and
+    the model sees only the message. The run-time re-check denial is `gptr_error_permission` with
+    the section 2.2 fields; P06's `dispatch_nested()` turns it into an error result and a
     `gptr_error_tool` in the model's code.
 11. `interpreter` specs without `args` get the default `function(path, args) c(path, args)` from the
     validator (04 lists `args` as a field without saying whether it is required).

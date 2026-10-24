@@ -157,11 +157,12 @@ test_that("the budget question of a sub-agent says who asks (D-188)", {
   s = test_session()
   for (agent in c("alpha", "main")) {
     expect_false(run_budget_extend(test_run(s, list(agent = agent)),
-                                   list(kind = "cost", budget = 1)))
+                                   list(kind = "cost", budget = 1, used = 1.5)))
   }
   expect_identical(st$log$prompt,
-                   c("sub-agent alpha: The cost budget of this call ($1.0000) is reached.",
-                     "The cost budget of this call ($1.0000) is reached."))
+                   c(paste("sub-agent alpha: The cost budget of this call ($1.0000) is reached",
+                           "(used $1.5000)."),
+                     "The cost budget of this call ($1.0000) is reached (used $1.5000)."))
 })
 
 test_that("a reached token budget reads as a token count, never 2e+06", {
@@ -169,8 +170,23 @@ test_that("a reached token budget reads as a token count, never 2e+06", {
   st = local_scripted_ui(list(2L))
   s = test_session()
   expect_false(run_budget_extend(test_run(s, list(agent = "main")),
-                                 list(kind = "tokens", budget = 2e6)))
-  expect_identical(st$log$prompt, "The tokens budget of this call (2.0M) is reached.")
+                                 list(kind = "tokens", budget = 2e6, used = 2e6, estimate = 10)))
+  expect_identical(st$log$prompt, "The tokens budget of this call (2.0M) is reached (used 2.0M).")
+})
+
+test_that("an extended token budget is checked again before the request is sent", {
+  skip_on_cran()
+  st = local_scripted_ui(list(1L, 2L))
+  local_without_builtin(c("tools", "r"))
+  fake = local_fake_provider(list("never"), name = "fb")
+  s = test_session(model = "fb/fb-1")
+  run_text(s, "go", list(budget = list(tokens = 10)))
+  expect_identical(s$status, "budget")
+  expect_length(fake_requests(fake), 0L)
+  lead = "^The next request \\(~[0-9.]+k? tokens\\) would exceed the tokens budget of this call "
+  expect_length(st$log$prompt, 2L)
+  expect_match(st$log$prompt[1L], paste0(lead, "\\(10; used 0\\)\\.$"))
+  expect_match(st$log$prompt[2L], paste0(lead, "\\(20; used 0\\)\\.$"))
 })
 
 # ---------------------------------------------------------------- report 02 section 5.3 (26 checks)
@@ -819,6 +835,20 @@ test_that("router and ctx$set_model() thinking levels are clamped to the model's
   run = test_run(s2)
   run$pending_model = list(ref = "fake/fake-1", thinking = "xhigh", reason = "plugin")
   expect_identical(run_target(run)$thinking, "high")
+})
+
+test_that("a thinking level the model lacks is announced once per model and level (D-250)", {
+  skip_on_cran()
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  withr::local_options(gptr.quiet = FALSE)
+  fake = local_fake_provider(list("a", "b", "c"))
+  ask = function(level) peter("x", model = "fake/fake-1", .opts = list(thinking = level))
+  expect_message(ask("max"), "fake/fake-1 has no thinking level \"max\"; using \"high\".",
+                 fixed = TRUE, class = "gptr_message_thinking_clamped")
+  expect_identical(fake_requests(fake)[[1L]]$params$thinking, "high")
+  expect_no_message(ask("max"), class = "gptr_message_thinking_clamped")
+  expect_no_message(ask("high"), class = "gptr_message_thinking_clamped")
+  expect_identical(fake_requests(fake)[[3L]]$params$thinking, "high")
 })
 
 test_that("the fallback freeze evaluates function parameters and available() (04 section 9.1)", {
@@ -1598,11 +1628,50 @@ test_that("a reported usage keeps its unknown counts; only an unreported one is 
   msgs = s$messages
   expect_identical(msgs[[2L]]$usage$input, 120)
   expect_true(is.na(msgs[[2L]]$usage$output))
-  expect_identical(u$estimated[2:3], c(TRUE, TRUE))
-  expect_true(all(u$input[2:3] > 0))
+  expect_identical(u$estimated[2:3], c(TRUE, FALSE))
+  expect_true(u$input[[2L]] > 0)
+  expect_identical(c(u$input[[3L]], u$output[[3L]]), c(0, 0))
   expect_true(isTRUE(msgs[[4L]]$usage$estimated))
-  expect_true(isTRUE(msgs[[6L]]$usage$estimated))
+  expect_false(isTRUE(msgs[[6L]]$usage$estimated))
   expect_identical(s$status, "error")
+})
+
+test_that("a request rejected or never received costs nothing; a broken one is estimated", {
+  skip_on_cran()
+  local_permissive()
+  local_fast_retry()
+  spec = gptr_fake_provider(c(list(fake_error("unauthorized", 401L)),
+                              rep(list(fake_error("overloaded", 529L)), 3L),
+                              rep(list(fake_error("died", 500L, after = 2L)), 3L)))
+  spec$models[[1L]]$prices[c("input", "output")] = list(4, 20)
+  off = gptr_register(spec)
+  withr::defer(off())
+  s = test_session()
+  run_text(s, "one")
+  expect_s3_class(session_data(s)$condition, "gptr_error_auth")
+  expect_identical(c(s$usage$input, s$usage$output, s$cost), c(0, 0, 0))
+  expect_false(s$usage$estimated)
+  s = test_session()
+  run_text(s, "two", list(budget = list(cost = 0.001)))
+  expect_s3_class(session_data(s)$condition, "gptr_error_overloaded")
+  expect_identical(nrow(s$usage), 3L)
+  expect_identical(c(sum(s$usage$input), s$cost), c(0, 0))
+  s = test_session()
+  run_text(s, "three")
+  expect_true(all(s$usage$estimated) && all(s$usage$input > 0))
+  expect_gt(s$cost, 0)
+  # a refused connection on the real HTTP transport (nothing listens on port 9)
+  withr::local_envvar(no_proxy = "127.0.0.1", NO_PROXY = "127.0.0.1")
+  local_gptr_options(max_attempts = 1L)
+  spec = mock_provider("stream", "http://127.0.0.1:9")
+  spec$models[[1L]]$prices[c("input", "output")] = list(4, 20)
+  off_mock = gptr_register(spec)
+  withr::defer(off_mock())
+  s = test_session(model = "mock/mock-1")
+  run_text(s, "four", list(budget = list(cost = 0.001)))
+  expect_s3_class(session_data(s)$condition, "gptr_error_network")
+  expect_identical(nrow(s$usage), 3L)
+  expect_identical(c(sum(s$usage$input), s$cost), c(0, 0))
 })
 
 test_that("an overflow condition carries the provider's prompt count, never gptr's estimate", {
@@ -1611,6 +1680,7 @@ test_that("an overflow condition carries the provider's prompt count, never gptr
   expect_identical(run_overflow_tokens(list(usage = usage_new(input = 5000, estimated = TRUE))),
                    NA_real_)
   expect_identical(run_overflow_tokens(list(usage = usage_as(NULL))), NA_real_)
+  expect_identical(run_overflow_tokens(list(usage = usage_new(input = 0, output = 0))), NA_real_)
   expect_identical(run_overflow_tokens(list()), NA_real_)
   local_without_services(c("compact.should", "compact.run"))
   local_permissive()
@@ -1620,7 +1690,7 @@ test_that("an overflow condition carries the provider's prompt count, never gptr
   cnd = session_data(s)$condition
   expect_s3_class(cnd, "gptr_error_context_overflow")
   expect_identical(cnd$tokens, NA_real_)
-  expect_true(isTRUE(s$messages[[2L]]$usage$estimated))
+  expect_identical(s$messages[[2L]]$usage$input, 0)
 })
 
 test_that("a decision-only model or a refused request preflight ends the run before any request", {

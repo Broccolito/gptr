@@ -111,14 +111,15 @@ the specification:
   `model`, `date`, `prompt`, `sha` ("first 8 hex of sha256 of the body lines as last written"),
   `call`, `tokens`, `cost`, `session`, `turn`, `value`, `fork` (`<parent session id>:<turn>`),
   `plan`, `status` (`undone`), `args`, `kind` (`team` or `fanout`), `children`
-  (`"<name>:<session id>,..."`, quoted); block ids from P01's `id_block()` (6 hex with a letter,
-  grown on collision, RNG-free).
+  (`"<name>:<session id>[:<value>],..."`, quoted); block ids from P01's `id_block()` (6 hex with a
+  letter, grown on collision, RNG-free).
 - Block body (04 section 11.5, IC-48, IC-49): "the code of each successful `r` call with
-  `record = TRUE`, verbatim except that top-level `gptr_return()` calls and calls of
-  `record = FALSE` members are dropped and top-level `<-` is rewritten to `=` where safe";
-  "`## Steer: <text>` and `## Follow-up: <text>` lines ... (excluded from `prompt` and `sha`)";
-  outputs "as `#> ` lines (at most `gptr.doc_output_lines` lines of 76 characters, then
-  `#> ... (N more
+  `record = TRUE`, verbatim except that top-level `gptr_return(<name>)` calls and calls of
+  `record = FALSE` members are dropped, a top-level `gptr_return(<expression>)` (argument unnamed or
+  `x`, called or piped, on any number of lines) becomes `.gptr_value_<block id> = (<expression>)`
+  and top-level `<-` is rewritten to `=` where safe"; "`## Steer: <text>` and `## Follow-up: <text>`
+  lines ... (excluded from `prompt` and `sha`)"; outputs "as `#> ` lines (at most
+  `gptr.doc_output_lines` lines of 76 characters, then `#> ... (N more
   lines)`), not in Rmd/qmd"; "`## Decision: <note>` lines"; bridge digests; artifact references
   (`#> [app] ...`, `#> [plot] <path>`); "a block whose code needed a secret gets
   `# gptr: block needs secrets that are not
@@ -303,14 +304,15 @@ the specification:
 
 **Interfaces:**
 - Consumes (P01, 04 section 7.1): `as_utf8(x)`, `hash_sha256(x)`, `` `%||%` ``.
-- Produces (04 sections 7.15, 11.5): `prompt_hash(template)` -> chr(1) 12 hex;
-  `args_hash(interp)` -> chr(1) 8 hex or `NULL` (`interp` is P08's character vector of `name=value`
-  pairs, or a named list of values); and the helpers every later task uses: the marker regexes
-  `doc_re_open`, `doc_re_close`, `doc_re_kv`, `doc_re_steer`, the body placeholder `doc_block_token`
-  (`"@@GPTR_BLOCK@@"`, replaced by the block id when the block is written), `doc_header_keys`,
-  `doc_one_line(x)`, `doc_str_literal(x)`, `doc_parse_kv(s)` -> named list of strings,
-  `doc_format_kv(x)` -> chr(1), `doc_find_blocks(lines)` -> df(`id`, `start`, `end`, `indent`,
-  `header` (list column)) with attribute `malformed`, `doc_block_body(lines, block)`,
+- Produces (04 sections 7.15, 11.5): `prompt_hash(template)` -> chr(1) 12 hex; `args_hash(interp)`
+  -> chr(1) 8 hex or `NULL` (`interp` is P08's character vector of `name=value` pairs, or a named
+  list of values); and the helpers every later task uses: the marker regexes `doc_re_open`,
+  `doc_re_close`, `doc_re_kv`, `doc_re_steer`, the body placeholder `doc_block_token`
+  (`"@@GPTR_BLOCK@@"`, replaced by the block id when the block is written, only in gptr's own lines,
+  the hidden value name and the block homes of overlays and teams: steer text and model code keep
+  it), `doc_header_keys`, `doc_one_line(x)`, `doc_str_literal(x)`, `doc_parse_kv(s)` -> named list
+  of strings, `doc_format_kv(x)` -> chr(1), `doc_find_blocks(lines)` -> df(`id`, `start`, `end`,
+  `indent`, `header` (list column)) with attribute `malformed`, `doc_block_body(lines, block)`,
   `doc_body_sha(body)` -> 8 hex (steer and follow-up lines excluded, IC-49),
   `doc_block_status(header, body, ph = NULL, ah = NULL)` -> `"undone"`, `"user-edited"`, `"stale"`
   or `"fresh"`, `doc_render_block(id, header = list(), body = character(), indent = "")`,
@@ -319,9 +321,9 @@ the specification:
 The grammar is report 14 section 3.1 and 04 section 11.5 (prototype `proto/gptrdoc.R` of report 14
 section 5.0: `parse_kv`, `format_kv`, `doc_find_blocks`, `doc_render_block`, `prompt_hash`), with
 two additions from the contract: the `args` key joins `prompt` in freshness (IC-45), and the body
-sha ignores `## Steer:`/`## Follow-up:` lines (IC-49). The report's verification log confirms the
-`prompt_hash()` values used in the test (item 32) and asks for radix sorting wherever keys are
-ordered (item 33), which `args_hash()` follows.
+sha ignores `## Steer:`/`## Follow-up:` lines, with or without the space after the colon (IC-49).
+The report's verification log confirms the `prompt_hash()` values used in the test (item 32) and
+asks for radix sorting wherever keys are ordered (item 33), which `args_hash()` follows.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1201,19 +1203,19 @@ git commit -m "feat(doc): find peter() calls by content and resolve the blocks t
 
 The body follows 04 section 11.5 and IC-47..IC-49. `doc_code_clean()` drops, at top-level-expression
 granularity (`getParseData()`/srcrefs of each recorded chunk), `gptr_return()`/`gptr::gptr_return()`
-and calls of `record =
-FALSE` members (the tool spec's `record`, else `out`, `plot`, `help`, `search`, `describe`), cutting
-only the dropped bytes when a line holds several expressions, and rewrites a `LEFT_ASSIGN` that is a
-top-level expression or a direct child of a `{` list to `=` (never inside call arguments; the
-superassignment, the right arrow and pipes stay; IC-48). The output of a dropped expression is
-dropped with it when the outputs are per expression. Entries are redacted at ingress (P06), so
-recorded code holds secret markers: a literal that is exactly `"[secret:NAME]"` becomes
-`Sys.getenv("NAME")` and anything that stays a marker flags the block (G6 section 5.6, P03).
-Plan-mode turns give one `## Plan: <path>` line (IC-48); steers and follow-ups delivered during the
-turn give `## Steer:`/`## Follow-up:` lines (IC-49); an overlay fork's body is wrapped
-`local({ ... }, envir = gptr_resume(block = "<id>")$envir)` and its header gets
+of a name and calls of `record = FALSE` members (the tool spec's `record`, else `out`, `plot`,
+`help`, `search`, `describe`), cutting only the dropped bytes when a line holds several expressions,
+and rewrites a `LEFT_ASSIGN` that is a top-level expression or a direct child of a `{` list to `=`
+(never inside call arguments; the superassignment, the right arrow and pipes stay; IC-48). The
+output of a dropped expression is dropped with it when the outputs are per expression. Entries are
+redacted at ingress (P06), so recorded code holds secret markers: a literal that is exactly
+`"[secret:NAME]"` becomes `Sys.getenv("NAME")` and anything that stays a marker flags the block (G6
+section 5.6, P03). Plan-mode turns give one `## Plan: <path>` line (IC-48); steers and follow-ups
+delivered during the turn give `## Steer:`/`## Follow-up:` lines (IC-49); an overlay fork's body is
+wrapped `local({ ... }, envir = gptr_resume(block = "<id>")$envir)` and its header gets
 `fork=<parent>:<turn>` (IC-46); team and fan-out sessions give one `## Agent` line per child in name
-order plus overlay code and export assignments for children with exports (IC-47).
+order plus overlay code for children with exports or a designated value (its name the third
+`children=` field) and export assignments for children with exports (IC-47).
 
 Two facts of the dependency plans shape the rest. P10's `r` tool flattens `details$outputs` into one
 character vector (`r_doc_outputs()`, 04 section 4.4 "`outputs` chr"), so the output of a dropped
@@ -5795,10 +5797,10 @@ The decision table is architecture section 6.9.3 (`live` = "ask afresh and regen
 only when both `prompt=` and `args=` match (IC-45). `peter()` never runs a recorded block: replay
 returns a session with zero requests and the document's own code runs next (report 14
 section 4.4.1). Team and fan-out replay builds one replayed child per `children=` entry from its S2
-text, each in a fresh overlay of the caller's environment (so
-`local({...}, envir = gptr_resume(block =, child =)$envir)` never writes the caller's frame), binds
-them with `session_replay_bind(block, child, child = name)`, then replays the team session itself
-and binds it to the block.
+text (its value designated by the entry's third field), each in a fresh overlay of the caller's
+environment (so `local({...}, envir = gptr_resume(block =, child =)$envir)` never writes the
+caller's frame), binds them with `session_replay_bind(block, child, child = name)`, then replays the
+team session itself and binds it to the block.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6277,7 +6279,7 @@ needed), skips an undone one with a notice, marks a stale or re-asked one for re
 block is skipped by `gptr_source()` or knitr), and otherwise passes with `call$doc` set only when
 the call may be recorded (consent exists or can be asked, and the mode is not `replay`). P08's
 `gateway_run()` hands `call$doc` to the run as `opts$doc`, P06 returns it in the `agent_end`
-payload, and the hook writes the block of a run that ended `idle`. `doc.edit` routes an `edit` of
+payload, and the hook writes the block of a settled run (decision 5). `doc.edit` routes an `edit` of
 the bound document through the registered edit tool (answering `NULL` while that tool runs, so it is
 not re-entered), refuses to change a block the user edited, and refreshes the date and sha of the
 blocks the agent changed (04 section 7.10: P15 consumes the edit; the documents section asks the
@@ -6753,8 +6755,8 @@ doc_route_run = function(call) {
   if (identical(decision, "replay")) return(doc_replay_call(call, site, mode))
   if (identical(decision, "skip")) {
     gptr_inform(paste0("Block ", site$block$id, " of ", doc_rel(site$path), " was undone by ",
-                       "/rewind; edit or delete the prompt, or run live to regenerate it."),
-                "notice")
+                       "/rewind; edit or delete the prompt, or run it with replay = \"record\" ",
+                       "to regenerate it."), "notice")
     doc_source_log(site$path, site$block$id, "skipped")
     assign("doc", NULL, envir = call)
     return(invisible(call$session))
@@ -9141,8 +9143,10 @@ testthat 3, knitr 1.51, jsonlite 2.0.0, cli 3.6.6):
    code wins). Under base `source()`/Rscript a stale or re-asked block downgrades to replay with the
    warning `replay_downgraded` in every mode, as 03 section 6.9.3 says; report 14's "In `record`
    mode this is an error" is not followed (`replay` mode still errors `stale_block`, IC-45).
-5. Only runs that end `idle` write a block; aborted, errored, blocked or budget-stopped runs write
-   nothing.
+5. Only runs that end `idle` write a block in a script document; aborted, errored, blocked or
+   budget-stopped runs write nothing there. A console transcript, the history of what happened,
+   records a run of any settled status; one that did not end `idle` gets a last `## Run: <status>`
+   line and caches no answer (IC-49).
 6. 04 section 7.10 lists P15 as a consumer of P10's `edit_file()`, but the layering test forbids an
    L4 call into another L4 area; `doc.edit` reaches the edit tool through
    `registry_get("tool", "edit")$execute()` and answers `NULL` while that tool runs (no re-entry).

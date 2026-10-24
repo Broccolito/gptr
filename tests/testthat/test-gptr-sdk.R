@@ -83,6 +83,22 @@ test_that("gptr_steer() queues a follow-up delivered when the agent would stop",
   expect_identical(s$text, "second")
 })
 
+test_that("a turn started from queued input says once that the bound document misses it", {
+  local_gw()
+  slot = "message:sdk_turn_unrecorded"
+  if (exists(slot, envir = the$once, inherits = FALSE)) rm(list = slot, envir = the$once)
+  local_gptr_options(quiet = FALSE, replay = "auto")
+  fake = local_fake_provider(list("one", "two", "three", "four", "five"))
+  s = peter("Summarise mtcars", model = fake, envir = new.env())
+  more = function() gptr_wait(gptr_steer(s, "And the median?", as = "follow_up"))
+  expect_no_message(more())
+  local_doc_binding(file.path(getwd(), "analysis.R"))
+  withr::with_options(list(gptr.replay = "replay"), expect_no_message(more()))
+  expect_message(more(), "not recorded in the bound document", class = "gptr_message_notice")
+  expect_no_message(more())
+  expect_length(fake_requests(fake), 5L)
+})
+
 test_that("gptr_steer() redacts with the context profile and queues an api_user item", {
   local_gw()
   fake = local_fake_provider(list("ok"))
@@ -157,6 +173,24 @@ test_that("gptr_return() outside a run returns its argument invisibly (IC-48)", 
   local_gptr_options(quiet = FALSE)
   withr::local_envvar(GPTR_REPLAY = "replay")
   expect_silent(gptr_return("quiet while replaying"))
+})
+
+test_that("gptr_return() outside a run gives its notice once per R session (IC-48)", {
+  slot = "message:gptr_return_outside_run"
+  had = isTRUE(the$once[[slot]])
+  withr::defer(if (had) assign(slot, TRUE, envir = the$once) else
+    if (exists(slot, envir = the$once, inherits = FALSE)) rm(list = slot, envir = the$once))
+  if (had) rm(list = slot, envir = the$once)
+  local_gptr_options(replay = "auto", quiet = TRUE)
+  expect_silent(gptr_return(1))
+  local_gptr_options(quiet = FALSE)
+  # silent in replay mode only: a document sourced under "auto" gets the notice (FIX-16)
+  withr::with_options(list(gptr.replay = "replay"), expect_no_message(gptr_return(1)))
+  f = withr::local_tempfile(fileext = ".R")
+  writeLines("gptr_return(1)", f)
+  expect_message(source(f, local = new.env()), "only designates a value",
+                 class = "gptr_message_notice")
+  expect_no_message(gptr_return(1))
 })
 
 test_that("gptr_return() designates the run's value from R code during a run", {

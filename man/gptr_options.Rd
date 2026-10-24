@@ -114,12 +114,15 @@ plots sent to the model.
 \itemize{
 \item \code{gptr.noninteractive_ask} (character, \code{"stop"}): what a permission question does when
 nobody can answer: \code{"stop"} ends the run with status \code{blocked} and a
-\code{gptr_error_permission} condition; \code{"deny"} returns a denial to the model.
+\code{gptr_error_permission} condition (\code{gptr_error_noninteractive} when the \code{ask} tool has no one
+to answer); \code{"deny"} returns a denial to the model.
 \item \code{gptr.critical_guard} (logical, \code{TRUE}): level-4 actions ask even in \code{auto} mode.
 \item \code{gptr.secret_guard} (logical, \code{TRUE}): reads of registered secrets ask even in \code{auto}
 mode.
 \item \code{gptr.protect_size} (bytes, \code{1e8}): overwriting a larger object is a level-3 action.
-\item \code{gptr.plan_handoff} (logical, \code{TRUE}): hand a plan from \code{plan} mode to the next call.
+\item \code{gptr.plan_handoff} (logical, \code{TRUE}): hand the plan a \code{plan} run proposes, once, to the next
+top-level \code{peter()} call from the same environment, within an hour and in another mode;
+another \code{peter()} call first, or a next call inside a loop or a run, discards it.
 \item \code{gptr.unsafe_no_permissions} (logical, \code{FALSE}): turns the permission gate off entirely;
 honored only when set outside a run, for sandboxed continuous integration.
 }

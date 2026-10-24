@@ -1046,7 +1046,8 @@ test_that("sub-agent lines need a child of a foreground root, verbosity 1+, no q
 test_that("a failed sub-agent line counts it and gives its reason's first line, cut (#36)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
-  local_project()
+  # made before the key is mocked away: the gateway checks it before a call changes anything
+  s = render_session()
   local_gptr_options(mode = "auto", verbose = 1L, quiet = FALSE)
   fake = local_fake_provider(list("never sent"))
   local_mocked_bindings(provider_credential = function(provider, register = TRUE) {
@@ -1062,7 +1063,6 @@ test_that("a failed sub-agent line counts it and gives its reason's first line, 
   expect_match(failed[[2L]], "^  sub-agent b failed \\(2/2\\): No credential found for")
   # without a reason, the status
   local_gptr_options(verbose = 0L)
-  s = render_session()
   rec = console_track("u0000test", s)
   withr::defer(console_drop("u0000test"))
   rec$child = list(label = "c", run = list(started = Sys.time()))

@@ -189,6 +189,24 @@ env_snapshot = function(envir, previous = NULL) {
   env_snapshot_rows(envir, previous, sizes = TRUE)
 }
 
+#' Snapshot of what code in `envir` reads: an overlay's own rows, then each lower overlay's and
+#' the first other environment's (binding_env()), a nearer binding shadowing a farther; column
+#' `own` is TRUE for a binding of `envir` itself (D-252)
+#' @noRd
+env_view_snapshot = function(envir, previous = NULL, sizes = TRUE) {
+  check_env(envir, "envir")
+  snap = env_snapshot_rows(envir, previous, sizes)
+  n = nrow(snap)
+  while (!is.null(attr(envir, "gptr_overlay", exact = TRUE))) {
+    envir = parent.env(envir)
+    snap = rbind(snap, env_snapshot_rows(envir, previous, sizes))
+  }
+  # Dropped first: `[.data.frame` left this frame referenced, pinning a function-frame home (R2)
+  envir = NULL
+  snap$own = seq_len(nrow(snap)) <= n
+  snap[!duplicated(snap$name), , drop = FALSE]
+}
+
 #' TRUE where two character vectors are equal, NA matching NA
 #' @noRd
 env_same = function(a, b) {
@@ -334,13 +352,14 @@ env_names_lines = function(snap, budget) {
   dsc_fit(paste(snap$name, collapse = ", "), budget)
 }
 
-#' `<workspace env=".." objects="n">`: one line per object, largest first (first message)
+#' `<workspace env=".." objects="n">`: one line per object, largest first (first message); an
+#' overlay's first line says where its reads fall through to (D-252)
 #' @noRd
 env_block_workspace = function(ctx, budget) {
   mode = env_context_mode(ctx)
   envir = env_home(ctx)
   if (identical(mode, "none") || is.null(envir)) return(NULL)
-  snap = env_snapshot(envir, env_memory(ctx)$snapshot)
+  snap = env_view_snapshot(envir, env_memory(ctx)$snapshot)
   env_remember(ctx, snap)
   lines = if (identical(mode, "names")) {
     env_names_lines(snap, budget)
@@ -348,6 +367,12 @@ env_block_workspace = function(ctx, budget) {
     workspace_lines(snap, budget)
   }
   if (!length(lines)) lines = "(no objects)"
+  base = envir
+  while (!is.null(attr(base, "gptr_overlay", exact = TRUE))) base = parent.env(base)
+  if (!identical(base, envir)) {
+    where = if (identical(base, globalenv())) "globalenv" else "<environment>"
+    lines = c(paste0("Reads fall through to ", where, "; assignments stay here."), lines)
+  }
   # P06's home_label is "<none>" for a session without a home (the run's environment is listed)
   label = if (is.null(ctx$session)) NULL else session_data(ctx$session)$home_label
   if (!is.character(label) || length(label) != 1L || is.na(label) || label == "<none>") {
@@ -365,7 +390,7 @@ env_block_changes = function(ctx, budget) {
   if (identical(env_context_mode(ctx), "none") || is.null(envir)) return(NULL)
   mem = env_memory(ctx)
   old = mem$snapshot
-  new = env_snapshot(envir, old)
+  new = env_view_snapshot(envir, old)
   ran = user_expr_log(since = mem$since)
   env_remember(ctx, new)
   d = if (is.null(old)) {
@@ -460,7 +485,7 @@ env_eval_service = function(code, envir, ...) {
 env_on_agent_end = function(event, ctx) {
   envir = env_home(ctx)
   old = env_memory(ctx)$snapshot
-  if (!is.null(envir) && !is.null(old)) env_remember(ctx, env_snapshot(envir, old))
+  if (!is.null(envir) && !is.null(old)) env_remember(ctx, env_view_snapshot(envir, old))
   NULL
 }
 
@@ -472,7 +497,7 @@ env_on_tree = function(event, ctx) {
   envir = env_home(ctx)
   mem = env_memory(ctx)
   if (!identical(event$restore, "workspace") && !is.null(envir) && !is.null(mem$snapshot)) {
-    mem$snapshot = env_snapshot(envir, mem$snapshot)
+    mem$snapshot = env_view_snapshot(envir, mem$snapshot)
   }
   NULL
 }

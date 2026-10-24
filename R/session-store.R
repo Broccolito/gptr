@@ -477,20 +477,32 @@ rebuild_model = function(entries) {
   model
 }
 
-#' The mode of a rebuilt session: the last gptr.mode_change of the given entries (the active
-#' path), else the `mode` setting
+#' The mode of a rebuilt session: the last mode the given entries (the active path) record, the
+#' `mode` of a gptr.frozen entry or the `to` of a gptr.mode_change, else (a file written before
+#' gptr.frozen recorded it) the `mode` setting (D-251)
 #' @noRd
 rebuild_mode = function(entries) {
-  e = path_custom(entries, "gptr.mode_change")
-  if (is.null(e)) setting_get("mode", default = "manual") else e$data$to
+  mode = NULL
+  for (e in entries) {
+    if (!identical(e$type, "custom") || !is.list(e$data)) next
+    m = if (identical(e$custom_type, "gptr.frozen")) e$data[["mode"]]
+    if (identical(e$custom_type, "gptr.mode_change")) m = e$data[["to"]]
+    if (rlang::is_string(m) && m %in% session_modes) mode = m
+  }
+  mode %||% setting_get("mode", default = "manual")
 }
 
-#' `idle` when the path ends with a final answer, else `interrupted`
+#' `idle` when the last message or team settlement (`gptr.container_end`, written after a team's
+#' or fan-out's last message) of the path is a final answer or idle, else `interrupted`
 #' @noRd
 rebuild_status = function(path) {
-  msgs = Filter(function(e) identical(e$type, "message"), path)
-  if (!length(msgs)) return("idle")
-  if (msg_final(msgs[[length(msgs)]]$message)) "idle" else "interrupted"
+  ends = Filter(function(e) {
+    identical(e$type, "message") || identical(e$custom_type, "gptr.container_end")
+  }, path)
+  if (!length(ends)) return("idle")
+  e = ends[[length(ends)]]
+  ok = if (is.null(e$message)) identical(e$data$status, "idle") else msg_final(e$message)
+  if (ok) "idle" else "interrupted"
 }
 
 #' The frozen prompt of a rebuilt session from the last gptr.frozen entry of the active path, or
@@ -706,23 +718,34 @@ session_file_summary = function(path) {
   model = NA_character_
   status = "idle"
   turns = NA_integer_
-  last_msg = NULL
-  for (line in rev(file_chunk_lines(path, from_end = TRUE))) {
+  last = NULL
+  tail = file_chunk_lines(path, from_end = TRUE)
+  for (line in rev(tail)) {
     obj = tryCatch(json_decode(line), error = function(e) NULL)
-    if (!is.list(obj) || !identical(obj$type, "message")) next
+    if (!is.list(obj)) next
+    if (is.null(last) && identical(obj$customType, "gptr.container_end")) last = obj
+    if (!identical(obj$type, "message")) next
     m = obj$message
-    if (is.null(last_msg)) last_msg = m
+    if (is.null(last)) last = obj
     if (is.na(model) && identical(m$role, "assistant")) model = paste0(m$provider, "/", m$model)
     if (identical(m$role, "user")) {
       turns = as.integer(obj$gptr$turn %||% NA_integer_)
       break
     }
   }
-  if (!is.null(last_msg)) {
-    calls = vapply(last_msg$content %||% list(), function(b) identical(b$type, "toolCall"), NA)
-    final = identical(last_msg$role, "assistant") && !any(calls) &&
-      !(last_msg$stopReason %||% "stop") %in% c("error", "aborted")
+  if (!is.null(last)) {
+    m = last$message
+    calls = vapply(m$content %||% list(), function(b) identical(b$type, "toolCall"), NA)
+    final = identical(m$role, "assistant") && !any(calls) &&
+      !(m$stopReason %||% "stop") %in% c("error", "aborted")
+    if (is.null(m)) final = identical(last$data$status, "idle")
     status = if (final) "idle" else "interrupted"
+  }
+  # no answer names the model (a team, a fan-out, a chat stopped before it): as at resume
+  if (is.na(model)) {
+    model = rebuild_model(lapply(c(head, tail), function(line) {
+      tryCatch(entry_from_json(json_decode(line)), error = function(e) NULL)
+    })) %||% NA_character_
   }
   created = (iso_ms(hdr$timestamp) %||% (1000 * as.numeric(file.mtime(path)))) / 1000
   data.frame(id = hdr$id, file = normalizePath(path, winslash = "/"),
@@ -760,13 +783,14 @@ file_chunk_lines = function(path, from_end = FALSE, n = 65536) {
 
 #' @description
 #' `gptr_resume()` returns the live object when one exists in this process; otherwise it rebuilds
-#' the session from its JSONL file (leaf = the last entry; status `idle` when the tail is a final
-#' answer, else `interrupted`) with home `envir`. A rebuilt fork always gets a fresh overlay of
-#' `envir`. A detached copy (from `saveRDS()`, a knitr cache or callr) is attached under the
-#' split-brain rules. `block =` returns the session that a document replay bound to that block.
-#' Resuming restores conversation state, not a complete analysis workspace, and does not
-#' rerun the R tool code. Make required objects available in `envir`; use document replay
-#' when the intention is to execute the recorded analysis again.
+#' the session from its JSONL file (leaf = the last entry; the mode it last ran with, or the `mode`
+#' setting for a file that records none; status `idle` when the tail is a final answer or, for a
+#' team or fan-out, an idle settlement, else `interrupted`) with home `envir`. A rebuilt fork
+#' always gets a fresh overlay of `envir`. A detached copy (from `saveRDS()`, a knitr cache or
+#' callr) is attached under the split-brain rules. `block =` returns the session that a document
+#' replay bound to that block. Resuming restores conversation state, not a complete analysis
+#' workspace, and does not rerun the R tool code. Make required objects available in `envir`; use
+#' document replay when the intention is to execute the recorded analysis again.
 #' @param x `NULL` (the most recently updated stored session), a session id, a file path, or a
 #'   detached `gptr_session`.
 #' @param envir The home of a rebuilt session.
@@ -808,15 +832,19 @@ gptr_resume = function(x = NULL, envir = parent.frame(), block = NULL, child = N
   store_rebuild(path, envir)
 }
 
-#' The file gptr_resume() rebuilds from
+#' The file gptr_resume() rebuilds from; a miss outside a `.gptr/` workspace says why the store is
+#' empty after a restart
 #' @noRd
 resume_path = function(x) {
+  hint = if (is.null(workspace_dir())) {
+    "Without a .gptr/ workspace, sessions last until R exits; gptr_init(\".\") keeps them."
+  }
   if (is.null(x)) {
     dir = sessions_dir()
     files = if (dir.exists(dir)) list.files(dir, pattern = "[.]jsonl$",
                                             full.names = TRUE) else character()
     if (!length(files)) {
-      gptr_abort("there is no stored session to resume", "invalid_argument", arg = "x",
+      gptr_abort(c("there is no stored session to resume", hint), "invalid_argument", arg = "x",
                  expected = "a stored session")
     }
     return(files[[which.max(file.mtime(files))]])
@@ -828,7 +856,7 @@ resume_path = function(x) {
   if (file.exists(x) && !dir.exists(x)) return(x)
   f = store_find(x)
   if (is.null(f)) {
-    gptr_abort(paste0("no stored session matches ", x), "invalid_argument", arg = "x",
+    gptr_abort(c(paste0("no stored session matches ", x), hint), "invalid_argument", arg = "x",
                expected = "a session id or a session file")
   }
   f

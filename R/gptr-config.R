@@ -416,12 +416,27 @@ trust_gated_paths = function(root) {
 }
 
 #' TRUE when the project holds anything the trust question is about (IC-52): trust-gated files,
-#' AGENTS.md, CLAUDE.md, .gptr/skills/ or .gptr/agents/
+#' an instruction file (AGENTS.md, AGENTS.override.md, CLAUDE.md, CLAUDE.local.md,
+#' .gptr/vignette.Rmd), or a skill, prompt-template or agent directory gptr reads (.gptr/skills,
+#' .gptr/prompts, .gptr/agents, .agents/skills, .claude/skills, .claude/agents, .codex/agents,
+#' .pi/agents, a relative `skills.paths` entry)
 #' @noRd
 trust_resources_present = function(root) {
-  length(trust_gated_paths(root)) > 0L ||
-    any(file.exists(file.path(root, c("AGENTS.md", "CLAUDE.md")))) ||
-    any(dir.exists(file.path(root, ".gptr", c("skills", "agents"))))
+  files = c("AGENTS.md", "AGENTS.override.md", "CLAUDE.md", "CLAUDE.local.md", ".gptr/vignette.Rmd")
+  dirs = c(".gptr/skills", ".gptr/prompts", ".gptr/agents", ".agents/skills", ".claude/skills",
+           ".claude/agents", ".codex/agents", ".pi/agents")
+  length(trust_gated_paths(root)) > 0L || any(file.exists(file.path(root, files))) ||
+    any(dir.exists(c(file.path(root, dirs), trust_skill_paths(root))))
+}
+
+#' The relative `skills.paths` entries skill discovery reads (skill_setting_paths()), joined to
+#' `root`. Reading a setting resolves no trust, so trust_resources_present() cannot recurse; a
+#' project settings file is itself trust-gated.
+#' @noRd
+trust_skill_paths = function(root) {
+  p = as.character(unlist(settings_layered("skills", "paths")$value, use.names = FALSE))
+  p = p[!is.na(p) & !is_abs_path(p) & p != "~" & !grepl("^~[/\\\\]", p)]
+  file.path(rep(root, length(p)), p)
 }
 
 #' sha256 of one gated file's bytes; a file that cannot be read (gptr cannot load it either)
@@ -583,13 +598,15 @@ trust_resolve = function(root) {
     if (isTRUE(res[["remember"]])) trust_store(root, decision, fp)
   } else if (gptr_can_prompt()) {
     what = if (is.null(since)) "" else paste0(" Changed since you last trusted it: ", since, ".")
-    decision = isTRUE(gptr_confirm(paste0("Trust this project (its settings, extensions and MCP ",
-                                          "servers)?", what)))
+    decision = isTRUE(gptr_confirm(paste0("Trust this project (its settings, skills, prompt ",
+                                          "templates, agent files, extensions and MCP servers)?",
+                                          what)))
     trust_store(root, decision, fp)
   } else {
     why = if (is.null(since)) "" else paste0(" (changed since you trusted it: ", since, ")")
     gptr_inform(paste0("Project resources in ", root, " were not loaded because the project is ",
-                       "not trusted", why, ". Use gptr_trust() to trust it."), "notice",
+                       "not trusted", why, ". Use gptr_trust(\".\", trust = TRUE) to trust it."),
+                "notice",
                 .once = paste0("trust:", key, ":", fp$fp))
     decision = FALSE
   }
@@ -601,16 +618,19 @@ trust_resolve = function(root) {
 #'
 #' Trust decides whether gptr applies or runs what a project directory contains: project
 #' settings beyond tightening, `.gptr/extensions/` and project plugins, project MCP servers,
-#' `SYSTEM.md` and `APPEND_SYSTEM.md`, project `.env` discovery, provider base-URL overrides, the
-#' tool and model fields of project agent files, and the authority of project instructions. The
+#' `SYSTEM.md` and `APPEND_SYSTEM.md`, project `.env` discovery, provider base-URL overrides,
+#' project skills (`.gptr/skills/`, `.agents/skills/`, `.claude/skills/` and relative
+#' `skills.paths` entries), prompt templates (`.gptr/prompts/`), the tool and model fields of
+#' project agent files, and the authority of project instructions. The
 #' decision is kept in `tools::R_user_dir("gptr", "config")/trust.json` with a fingerprint of the
 #' trust-gated files; when they change, the project counts as untrusted again until you confirm.
 #' Called from model code during a run, recording a decision is refused.
 #'
 #' @param path A directory inside the project; its project root is used.
 #' @param trust `NULL` to read the decision, `TRUE` or `FALSE` to record one.
-#' @return With `trust = NULL`, the recorded decision: `TRUE`, `FALSE` or `NA` (undecided).
-#'   Otherwise the previous decision, invisibly.
+#' @return With `trust = NULL`, the recorded decision: `TRUE`, `FALSE` or `NA` (undecided, also
+#'   when a trust-gated file changed since the project was trusted). Otherwise the previous
+#'   recorded decision, invisibly.
 #' @examples
 #' d = tempfile("proj")
 #' dir.create(d)
@@ -623,7 +643,8 @@ gptr_trust = function(path = ".", trust = NULL) {
   root = project_root(path)
   rec = trust_record(root)
   prev = if (is.null(rec)) NA else isTRUE(rec[["trusted"]])
-  if (is.null(trust)) return(prev)
+  # trust that lapsed with a changed gated file is asked again, like an undecided project
+  if (is.null(trust)) return(if (isTRUE(prev) && !trust_holds(root)$record) NA else prev)
   session_control_check("gptr_trust")
   trust_store(root, trust)
   invisible(prev)
@@ -662,14 +683,18 @@ settings_nest = function(path, value) {
   value
 }
 
-#' Combines a lower and a higher layer: objects merge recursively, anything else is replaced
+#' Combines a lower and a higher layer: objects merge recursively, anything else (an array
+#' included) is replaced, and a NULL in the higher layer removes the key
 #' @noRd
 settings_combine = function(lower, higher) {
-  if (is.list(lower) && !is.object(lower) && is.list(higher) && !is.object(higher) &&
-      !is.null(names(higher))) {
-    return(utils::modifyList(lower, higher))
+  obj = function(x) is.list(x) && !is.object(x) && !is.null(names(x))
+  if (!obj(lower) || !obj(higher)) return(higher)
+  for (k in names(higher)[nzchar(names(higher))]) {
+    v = higher[[k]]
+    lower[k] = list(if (k %in% names(lower)) settings_combine(lower[[k]], v) else v)
+    if (is.null(v)) lower[[k]] = NULL
   }
-  higher
+  lower
 }
 
 #' What one layer may contribute to a top-level key: in `providers`, `local_only` FALSE comes only
@@ -728,9 +753,10 @@ settings_perm_union = function(base, add, lists) {
   out
 }
 
-#' The value a project settings file contributes (IC-52): tighten-type keys only tighten;
-#' permissions add deny and ask rules (allow too when trusted); providers follow
-#' settings_project_providers(); other keys apply only in a trusted project
+#' The value a project settings file contributes (IC-52): tighten-type keys only tighten, except
+#' that a trusted project sets `mode` to anything but yolo (D-250); permissions add deny and ask
+#' rules (allow too when trusted); providers follow settings_project_providers(); other keys apply
+#' only in a trusted project
 #' @noRd
 settings_project_value = function(key, spec, current, new, trusted, root) {
   if (identical(key, "permissions")) {
@@ -741,6 +767,10 @@ settings_project_value = function(key, spec, current, new, trusted, root) {
     return(settings_project_providers(current, new, trusted, root))
   }
   tighten = spec$tighten
+  if (trusted && identical(key, "mode")) {
+    ok = is.character(new) && length(new) == 1L && new %in% setdiff(tighten, "yolo")
+    return(if (ok) new else current)
+  }
   if (!is.null(tighten)) {
     if (!is.character(new) || length(new) != 1L || !(new %in% tighten)) return(current)
     now = match(if (is.character(current)) current[1L] else NA, tighten)
@@ -1241,7 +1271,8 @@ settings_relaxed_ids = function(value) {
 }
 
 #' Checks a validated value before anything is written: `filters` in registry_filters_set()'s form
-#' (04 10.1), and no project `providers.<id>.local_only = FALSE` (IC-74, 07 section 5)
+#' (04 10.1), no project `mode = yolo` (IC-78, D-250) and no project
+#' `providers.<id>.local_only = FALSE` (IC-74, 07 section 5)
 #' @noRd
 settings_config_value = function(key, value, scope) {
   if (identical(key, "filters") && length(value) &&
@@ -1249,6 +1280,12 @@ settings_config_value = function(key, value, scope) {
     gptr_abort(paste0("Invalid filter; use -builtin:<name>, -plugin:<name> or -<kind>:<name>, ",
                       "and a leading + to undo one."), "invalid_argument", arg = "filters",
                expected = "filters of the form -builtin:<name>, -plugin:<name>, -<kind>:<name>")
+  }
+  if (identical(key, "mode") && identical(value, "yolo") && identical(scope, "project")) {
+    gptr_abort(c(paste0("A project cannot select mode yolo; only your user settings or this R ",
+                        "session can."),
+                 "Use gptr_config(mode = yolo, .scope = \"user\") or .scope = \"session\"."),
+               "invalid_argument", arg = ".scope", expected = "\"user\" or \"session\"")
   }
   ids = if (identical(key, "providers") && identical(scope, "project")) {
     settings_relaxed_ids(value)
@@ -1266,19 +1303,68 @@ settings_config_value = function(key, value, scope) {
   invisible(value)
 }
 
+#' Warns when keys just written to an untrusted project's file cannot apply there (IC-52): those
+#' whose untrusted contribution (settings_project_value()) is not what trust would apply. Trusted,
+#' `providers` applies as written, a `base_url` once confirmed (not asked here); of `permissions`
+#' only the allow rules are dropped.
+#' @noRd
+settings_untrusted_warn = function(patch) {
+  root = project_root()
+  if (isTRUE(trust_get(root))) return(invisible())
+  lost = character()
+  for (k in names(patch)) {
+    v = patch[[k]]
+    if (is.null(v)) next
+    if (identical(k, "permissions")) {
+      if (length(unlist(v[["allow"]]))) lost = c(lost, "permissions.allow")
+      next
+    }
+    sp = settings_spec(k)
+    full = if (identical(k, "providers")) v else settings_project_value(k, sp, NULL, v, TRUE, root)
+    if (!identical(settings_project_value(k, sp, NULL, v, FALSE, root), full)) lost = c(lost, k)
+  }
+  if (!length(lost)) return(invisible())
+  gptr_warn(paste0("Saved to ", settings_path("project"), " but not applied while this project ",
+                   "is not trusted: ", paste0("`", lost, "`", collapse = ", "), ". Trust it with ",
+                   "gptr_trust(", encodeString(root, quote = "\""), ", trust = TRUE), or for this ",
+                   "R session only pass .scope = \"session\"."),
+            "untrusted_setting", keys = lost, path = root,
+            .once = paste0("untrusted_setting:", path_key(root), ":", paste(lost, collapse = ",")))
+}
+
+#' Warns when a saved model setting names no model this session resolves; it is kept, since a
+#' provider registered later or a catalog refresh can make it valid (04 6.1.3). Routers and the
+#' `emulate:` prefix of `system1` are not models. Advisory: another error never fails the write.
+#' @noRd
+settings_model_warn = function(patch, scope) {
+  for (k in intersect(names(patch), c("model", "small_model", "system1"))) {
+    v = patch[[k]]
+    if (is.null(v)) next
+    ref = if (identical(k, "system1")) sub("^emulate:", "", v) else v
+    if (!is.null(registry_get("router", ref))) next
+    tryCatch(model_canonical(ref, strict = TRUE), gptr_error_unknown_model = function(e) {
+      gptr_warn(paste0("`", k, "` = ", encodeString(v, quote = "\""), " was saved to the ", scope,
+                       " settings, but gptr does not know that model in this session: ",
+                       conditionMessage(e), " Undo with gptr_config(", k, " = NULL, .scope = \"",
+                       scope, "\")."), "unknown_model_setting", key = k, ref = v)
+    }, gptr_error = function(e) NULL)
+  }
+}
+
 #' Show or change gptr's settings
 #'
 #' With no arguments, returns the effective settings with the layer each value came from:
 #' package defaults < user `settings.json` < project `.gptr/settings.json` (an untrusted project
-#' only tightens `mode`, `context`, `record`, permission rules and local-only inference) < the
-#' user-level project file < `options(gptr.*)` < this R session. With named arguments, sets
-#' those keys in one scope.
+#' only tightens `mode`, `context`, `record`, permission rules and local-only inference; a trusted
+#' one also sets `mode`, while `context` and `record` still only tighten) < the user-level project
+#' file < `options(gptr.*)` < this R session. With named arguments, sets those keys in one scope.
 #'
 #' `model`, `small_model`, `system1`, `mode` and `preset` take bare names (`mode = plan`); `NULL`
 #' removes a key from the scope. `egress` (the providers you allow automatic context to go to) is
-#' accepted only at user scope. Local-only Ollama inference (`providers = list(ollama =
-#' list(local_only = FALSE))`) can be turned off only at user or session scope; a project can only
-#' keep it on. Called from model code during a run, it is refused.
+#' accepted only at user scope. `mode = yolo` and turning off local-only Ollama inference
+#' (`providers = list(ollama = list(local_only = FALSE))`) are accepted only at user or session
+#' scope; a project can only keep local-only inference on. Called from model code during a run, it
+#' is refused.
 #'
 #' The `"session"` scope means this R process, not one conversation. User settings live at
 #' `tools::R_user_dir("gptr", "config")/settings.json`; project settings live in `.gptr/`.
@@ -1355,6 +1441,8 @@ gptr_config = function(..., .scope = NULL) {
       gateway_filters_sync()
     }
   }
+  if (identical(scope, "project")) settings_untrusted_warn(patch)
+  settings_model_warn(patch, scope)
   invisible(prev)
 }
 
@@ -1506,8 +1594,8 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
   if (gitignore) template_copy("gitignore", file.path(ws, ".gitignore"))
   init_rbuildignore(proj)
   if (gptr_can_prompt()) {
-    answer = isTRUE(gptr_confirm(paste0("Trust this project (its settings, extensions and MCP ",
-                                        "servers)?")))
+    answer = isTRUE(gptr_confirm(paste0("Trust this project (its settings, skills, prompt ",
+                                        "templates, agent files, extensions and MCP servers)?")))
     # `proj` itself: project_root() may return an IC-63 override, not the directory initialised
     trust_store(proj, answer)
   }
@@ -1559,9 +1647,12 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' The risk levels come from a static classifier ([gptr_risk()]). It is advisory and it is not a
 #' security boundary: R code can compute function names, call compiled code or load packages
 #' whose effects the classifier cannot see, and R has no sandbox for code that runs inside your
-#' session. In `auto` and `yolo` mode a model can delete or overwrite files and objects. Use them
-#' only in projects you can restore (version control, backups, [gptr_rewind()] for recent turns),
-#' and run untrusted prompts or untrusted projects in a disposable container or virtual machine.
+#' session. Deny and ask `sh:` rules see a command computed at run time only in a `peter$sh()` or
+#' `peter$bg()` call, so `cmd = paste("rm", "-rf", "build"); system(cmd)` runs in `auto` and
+#' `yolo` mode despite a deny rule `r(sh:rm *)`. In `auto` and `yolo` mode a model can delete or
+#' overwrite files and objects. Use them only in projects you can restore (version control,
+#' backups, [gptr_rewind()] for recent turns), and run untrusted prompts or untrusted projects in
+#' a disposable container or virtual machine.
 #'
 #' @section Sub-agents, workers and child processes:
 #' Inline sub-agents run in your session and see its objects. The worker backend runs a

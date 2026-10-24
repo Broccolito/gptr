@@ -554,7 +554,7 @@ Rules:
 
 | block state | `auto` | `replay` | `live` | `record` |
 |---|---|---|---|---|
-| undone (`status=undone`) | skip, zero tokens, one message "block undone by /rewind; edit or delete the prompt, or run live to regenerate" | skip | run, no write | regenerate in place (the block becomes live) |
+| undone (`status=undone`) | skip, zero tokens, one message "block undone by /rewind; edit or delete the prompt, or run it with `replay = "record"` to regenerate" | skip | run, no write | regenerate in place (the block becomes live) |
 
 ### 3.9 Model-facing text
 
