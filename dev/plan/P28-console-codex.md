@@ -445,7 +445,9 @@ Decisions:
 - The waiting row (`console_spinner()`) shows the agent's static block in place of its Braille
   frames (amended in Task 8), so none is left in `R/`; Task 17 replaces the row.
 - Codex parity: Codex's composer fill is 12% white on dark and 4% black on light. Index 237 is
-  its nearest cell on #1c1c1c.
+  its nearest cell on #1c1c1c. (Amended in the review of Tasks 22-27: where the probe gives the
+  background's colour the band is that fill's nearest cell, cube or grey ramp, and its words a grey
+  4.5:1 against it, so a tinted background gets a band of its tone; 254 and 237 stay for COLORFGBG.)
 
 Tests (`test-console-render.R`), RED first:
 - Exact bytes for each depth (16777216, 256, 16, 1) and each background (dark, light, NA).

@@ -165,14 +165,11 @@ console_style = function() {
   grey = if (deep) "#878787" else "dim"
   bg = console_background()
   known = deep && !is.na(bg)
+  cells = if (known) band_cells(bg)
   # never in RStudio's or a Windows console, TERM=dumb or Rscript
-  band = if (known && console_class() == "T") {
-    c(dark = "\033[48;5;237m", light = "\033[48;5;254m")[[bg]]
-  } else {
-    ""
-  }
-  # the grey of words on the band, a step darker (light) or lighter (dark), so they keep contrast
-  on_band = if (known) c(dark = "#a8a8a8", light = "#6c6c6c")[[bg]] else grey
+  band = if (known && console_class() == "T") paste0("\033[48;5;", cells$band, "m") else ""
+  # the grey of words on the band, so they keep contrast
+  on_band = if (known) cells$dim else grey
   c(glyphs, list(
     red = cli::make_ansi_style(red),
     blue = cli::make_ansi_style(blue),
@@ -182,6 +179,32 @@ console_style = function() {
     code = list(reserved = red, string = blue, number = blue, null = blue, call = "bold",
                 comment = grey)
   ))
+}
+
+#' The input band's xterm-256 cell and the grey of words on it (IC-82) for background `bg`: where
+#' the terminal gave its colour (attr "rgb", 0 to 1) Codex's fill, 4% black over a light
+#' background or 12% white over a dark one, as the nearest cell of the colour cube or the grey ramp,
+#' its words a grey 4.5:1 against it; else (COLORFGBG) cell 254 or 237, `#6c6c6c` or `#a8a8a8`
+#' @noRd
+band_cells = function(bg) {
+  rgb = attr(bg, "rgb")
+  if (is.null(rgb)) {
+    return(list(band = c(dark = 237L, light = 254L)[[bg]],
+                dim = c(dark = "#a8a8a8", light = "#6c6c6c")[[bg]]))
+  }
+  light = identical(c(bg), "light")
+  fill = 255 * if (light) 0.96 * rgb else rgb + 0.12 * (1 - rgb)
+  cube = c(0, 95, 135, 175, 215, 255)
+  ramp = 8 + 10 * 0:23
+  # cells 16 to 255 in order: the cube, blue fastest, then the grey ramp
+  cells = rbind(as.matrix(expand.grid(cube, cube, cube))[, 3:1], cbind(ramp, ramp, ramp))
+  k = which.min(colSums((t(cells) - fill)^2))
+  # WCAG luminance of the cell; the grey of that contrast ratio, darker or lighter
+  lin = function(v) ifelse(v <= 0.04045, v / 12.92, ((v + 0.055) / 1.055)^2.4)
+  y = sum(c(0.2126, 0.7152, 0.0722) * lin(cells[k, ] / 255))
+  yg = if (light) max(0, (y + 0.05) / 4.5 - 0.05) else min(1, 4.5 * (y + 0.05) - 0.05)
+  g = if (yg <= 0.0031308) 12.92 * yg else 1.055 * yg^(1 / 2.4) - 0.055
+  list(band = 15L + k, dim = grDevices::rgb(g, g, g))
 }
 
 #' The terminal's background, "dark", "light" or NA, in `the$background` (IC-82): a T REPL's
@@ -198,7 +221,8 @@ console_background = function() {
 
 #' The background a terminal's answer to `ESC ] 11 ; ?` in `x` names (IC-82): "dark" where the
 #' luminance of its `rgb:` colour (1 to 4 hex digits a component, ended by BEL or ST), weighed as
-#' Codex does (0.299 red, 0.587 green, 0.114 blue), is below 0.5, else "light"; NA without one
+#' Codex does (0.299 red, 0.587 green, 0.114 blue), is below 0.5, else "light", the colour (0 to 1)
+#' its attr "rgb" (band_cells()); NA without one
 #' @noRd
 background_reply = function(x) {
   hex = "([[:xdigit:]]{1,4})"
@@ -206,7 +230,7 @@ background_reply = function(x) {
                             x, perl = TRUE))[[1L]]
   if (!length(m)) return(NA_character_)
   v = strtoi(m[2:4], 16L) / (16^nchar(m[2:4]) - 1)
-  if (sum(c(0.299, 0.587, 0.114) * v) < 0.5) "dark" else "light"
+  structure(if (sum(c(0.299, 0.587, 0.114) * v) < 0.5) "dark" else "light", rgb = v)
 }
 
 #' Notice lines inside the console margin; a line that does not fit is word-wrapped at the

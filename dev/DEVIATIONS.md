@@ -4078,6 +4078,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     the last old `[gptr]` notice on the abort path. Contract-visible: none. Tests: test-console-abort-stream.R
     "abort labels a redactor tail received after a pause without printing it twice", "continuing a pause never
     adds an abort-tail label".
+  - Where the probe gives the background's colour, the input band is Codex's fill, 4% black over a light background
+    or 12% white over a dark one, in its nearest xterm-256 cell (cube or grey ramp), and its words a grey 4.5:1
+    against it (`band_cells()`; `background_reply()` keeps the colour as attr `rgb`). On Terminal.app's cream Novel
+    profile the fixed 254 drew a lighter, cooler strip at about 1.05:1; it is now 187 (#d7d7af). #1c1c1c still gives
+    237; white gives 255 (#eeeeee, Codex's #f5f5f5 being nearer it than 254). COLORFGBG keeps 254 and 237.
+    Contract-visible: 04 §15.10 IC-82. Tests: test-console-render.R "a probed background's band is Codex's fill in
+    its nearest cell (review)"; test-console-repl.R (the probe's answers and the pty band, 255 on white).
   - The background probe waits up to 1,500 ms for DA1 (`tty_query()`), which still ends it at once: an answer
     after 250 ms, over ssh or on a loaded machine, was typed at the first prompt (`peter> 11;rgb:ffff/ffff/ffff62;22chi`
     reached the model) and made the pty test of the band timing-dependent. The composer and the idle editor take a

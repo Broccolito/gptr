@@ -510,6 +510,32 @@ test_that("console_style() gives the logo accents by depth and the band by backg
   }
 })
 
+test_that("a probed background's band is Codex's fill in its nearest cell (review)", {
+  local_background(NULL)
+  local_mocked_bindings(console_class = function() "T")
+  withr::local_options(cli.num_colors = 256L)
+  band = function(reply) {
+    the$background = background_reply(reply)
+    st = console_style()
+    c(st$band, st$band_dim("x"))
+  }
+  # Terminal.app's Novel (cream): 4% black over it is a darker cream (#d7d7af), not the cooler grey
+  # 254, and its words a grey about 4.5:1 on it
+  expect_identical(band("\033]11;rgb:dfff/dba4/c3ff\a"),
+                   c("\033[48;5;187m", "\033[38;5;240mx\033[39m"))
+  # Solarized light and dark, whose nearest cells are greys; 12% white over #1c1c1c is 237 as before
+  expect_identical(band("\033]11;rgb:fd/f6/e3\a"), c("\033[48;5;254m", "\033[38;5;241mx\033[39m"))
+  expect_identical(band("\033]11;rgb:00/2b/36\a"), c("\033[48;5;237m", "\033[38;5;247mx\033[39m"))
+  expect_identical(band("\033]11;rgb:1c1c/1c1c/1c1c\a"),
+                   c("\033[48;5;237m", "\033[38;5;247mx\033[39m"))
+  expect_identical(band("\033]11;rgb:ffff/ffff/ffff\a"),
+                   c("\033[48;5;255m", "\033[38;5;242mx\033[39m"))
+  # COLORFGBG names no colour: the two cells and greys as before
+  the$background = "light"
+  expect_identical(c(console_style()$band, console_style()$band_dim("x")),
+                   c("\033[48;5;254m", "\033[38;5;242mx\033[39m"))
+})
+
 test_that("the background comes from COLORFGBG's last field, read once (D-245)", {
   local_background(NULL)
   fgbg = c("15;0", "0;15", "15;default;8", "0;7", "0;16", "default;default", "")

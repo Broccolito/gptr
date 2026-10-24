@@ -1036,18 +1036,20 @@ test_that("an interpolated prompt is shown once, by the gateway's notice, at ver
 
 test_that("a terminal's answer to OSC 11 names its background: BEL or ST, 2 or 4 digits (IC-82)", {
   da1 = "\033[?62;22c"
-  expect_identical(background_reply(paste0("\033]11;rgb:ffff/ffff/ffff\033\\", da1)), "light")
-  expect_identical(background_reply(paste0("\033]11;rgb:1c1c/1c1c/1c1c\a", da1)), "dark")
+  expect_identical(c(background_reply(paste0("\033]11;rgb:ffff/ffff/ffff\033\\", da1))), "light")
+  expect_identical(c(background_reply(paste0("\033]11;rgb:1c1c/1c1c/1c1c\a", da1))), "dark")
   # Solarized light and dark, two hex digits a component
-  expect_identical(background_reply("\033]11;rgb:fd/f6/e3\a"), "light")
-  expect_identical(background_reply("\033]11;rgb:00/2b/36\033\\"), "dark")
+  expect_identical(c(background_reply("\033]11;rgb:fd/f6/e3\a")), "light")
+  expect_identical(c(background_reply("\033]11;rgb:00/2b/36\033\\")), "dark")
+  # its colour, 0 to 1, for the band's cell (review of Tasks 22-27)
+  expect_equal(attr(background_reply("\033]11;rgb:fd/f6/e3\a"), "rgb"), c(253, 246, 227) / 255)
   # the luminance Codex weighs: a pure blue is dark, a pure yellow light
-  expect_identical(background_reply("\033]11;rgb:0000/0000/ffff\a"), "dark")
-  expect_identical(background_reply("\033]11;rgb:ffff/ffff/0000\a"), "light")
+  expect_identical(c(background_reply("\033]11;rgb:0000/0000/ffff\a")), "dark")
+  expect_identical(c(background_reply("\033]11;rgb:ffff/ffff/0000\a")), "light")
   # DA1 only (a detached tmux answers no OSC 11), nothing in 250 ms, or an answer cut short
-  expect_identical(background_reply(da1), NA_character_)
-  expect_identical(background_reply(""), NA_character_)
-  expect_identical(background_reply("\033]11;rgb:ffff/ff"), NA_character_)
+  expect_identical(c(background_reply(da1)), NA_character_)
+  expect_identical(c(background_reply("")), NA_character_)
+  expect_identical(c(background_reply("\033]11;rgb:ffff/ff")), NA_character_)
 })
 
 test_that("a T REPL asks the background once at its start; else COLORFGBG decides (IC-82)", {
@@ -1069,7 +1071,7 @@ test_that("a T REPL asks the background once at its start; else COLORFGBG decide
     rs = repl_state(NULL, new.env())
     rs$model = gptr_fake_provider(list("ok"))
     utils::capture.output(repl_main(rs))
-    console_background()
+    c(console_background())
   }
   # the terminal's answer wins over COLORFGBG
   expect_identical(run("T"), "dark")
@@ -1108,7 +1110,7 @@ test_that("keys typed before or during the probe are the reader's, never lost (I
   # a draft typed around the answers is edited at the prompt (console_idle())
   got = probe("hel\033]11;rgb:ffff/ffff/ffff\alo\033[?62;22c")
   expect_identical(got, list(typed = character(), draft = "hello"))
-  expect_identical(the$background, "light")
+  expect_identical(c(the$background), "light")
   # a line ended before the probe is the first prompt, the rest the draft; edit keys apply
   got = probe("summary(fuel)\nplox\177t it\033[?1;2c")
   expect_identical(got, list(typed = "summary(fuel)", draft = "plot it"))
@@ -1202,11 +1204,11 @@ test_that("a terminal answering the probe has its prompt on the band, reset afte
   ))
   expect_true(pty$wait("\033]11;?\033\\\033[c", timeout = 120))
   pty$send("\033]11;rgb:ffff/ffff/ffff\033\\\033[?62;22c")
-  expect_true(pty$wait("\033[48;5;254mpeter> \033[K"))
+  expect_true(pty$wait("\033[48;5;255mpeter> \033[K"))
   pty$send("hi\r")
   expect_true(pty$wait("\033[0m\033[K"))
   expect_true(pty$wait("GOT hi END"))
-  expect_true(pty$wait("\033[48;5;254mpeter> \033[K"))
+  expect_true(pty$wait("\033[48;5;255mpeter> \033[K"))
   # the answer was read by the probe, never typed or echoed
   expect_identical(pty$seen("rgb:"), 0L)
   pty$send("/exit\r")
@@ -1226,7 +1228,7 @@ test_that("a terminal answering the probe late still has the answer read by it (
   # over ssh or on a loaded machine: after the probe's first cap, 250 ms
   Sys.sleep(0.4)
   pty$send("\033]11;rgb:ffff/ffff/ffff\033\\\033[?62;22c")
-  expect_true(pty$wait("\033[48;5;254mpeter> \033[K"))
+  expect_true(pty$wait("\033[48;5;255mpeter> \033[K"))
   pty$send("hi\r")
   expect_true(pty$wait("GOT [hi] END"))
   expect_identical(pty$seen("rgb:"), 0L)
