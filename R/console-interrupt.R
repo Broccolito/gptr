@@ -171,9 +171,9 @@ console_ahead = function(rd, accept) {
 #' it and the keys. [s] and [f] read their text at the chevron of their own question, `?
 #' Steer` or `? Follow-up`, and queue it as Enter and Tab do (policy_enqueue()), their queue line,
 #' without the text it shows under, right under it, as under any question. [b] closes the
-#' answer's cut row, then says in one dim block the service's notices and that the run went to the
-#' background, then lists what the REPL held for after the run as kept
-#' (console_background_settle()), or in red, after the notices, why not.
+#' answer's cut row, then says in dim terms (console_terms()) that the run went to the background,
+#' the service's notice one of them, then lists what the REPL held for after the run as kept
+#' (console_background_settle()), or in red why not.
 #' It resumes the interrupted computation, the next block a blank row below the menu (where a tool
 #' runs, its call's block continues: its code's further output and its result line) and the live
 #' row with a T console's draft drawn again (console_asked()), or returns to let the policy's
@@ -248,29 +248,29 @@ policy_menu = function(cnd, pol) {
     }
     if (identical(key, "b")) {
       sym = console_style()
-      say = function(text, style = sym$dim) {
-        console_write(style(console_wrap(paste0("  ", text), ui_width())))
-      }
-      # the service's notices are dim rows of the menu's status, after the answer's cut row
-      said = character()
+      # the service's notice, P21's that background sessions are experimental (once a process),
+      # is a term of the menu's status row, after the answer's cut row
+      said = FALSE
       tryCatch({
         withCallingHandlers(ext_service_get("bg.register")(s), gptr_message = function(m) {
-          said <<- c(said, console_escape(text_lines(conditionMessage(m)), FALSE))
+          said <<- TRUE
           invokeRestart("muffleMessage")
         })
         tty_question(FALSE)
         console_render_pause()
         console_write("")
         # nothing runs it while the chat prompt waits (later runs only at R's own prompt)
-        say(c(said, paste0("in the background", sym$sep,
-                           "!!gptr::gptr_wait(gptr::gptr_last()) continues it here")))
+        where = "in the background"
+        if (said) where = paste0(where, " (experimental, ?\"gptr-background\")")
+        terms = c(where, "!!gptr::gptr_wait(gptr::gptr_last()) continues it here")
+        console_write(sym$dim(paste0("  ", console_terms(terms, ui_width() - 2L))))
         console_background_settle()
         console_write("")
         invokeRestart("resume")
       }, error = function(e) {
-        if (length(said)) say(said)
-        say(paste0("cannot run in the background", sym$sep,
-                   console_escape(conditionMessage(e), FALSE)), sym$red)
+        console_write(sym$red(console_wrap(paste0(
+          "  cannot run in the background", sym$sep, console_escape(conditionMessage(e), FALSE)
+        ), ui_width())))
       })
       next
     }

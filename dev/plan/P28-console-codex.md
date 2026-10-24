@@ -1730,6 +1730,7 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 67 | After an abort a dropped steer shows twice (final visual loop, round 2) | 1e28b21a |
 | 68 | In TERM=dumb a cursor key typed during a run lands in the steer (final visual loop, round 2) | a70d64b5 |
 | 69 | /compact's one-row result still runs into the next prompt (Task 62, found by its visual check) | 8644edd9 |
+| 70 | The pause menu's [b] notice mixes two voices and ends a row in the separator (final visual loop, round 3) | (this commit) |
 
 ## Out of scope
 

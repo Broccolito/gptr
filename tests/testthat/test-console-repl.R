@@ -1357,6 +1357,12 @@ test_that("a terminal: a run sent to the background shows again while the consol
   # the row says what holds at the chat prompt, where nothing runs the session
   expect_true(pty$wait("continues it here"))
   expect_true(pty$wait("peter[auto]> "))
+  # in the console's terms, the service's notice one of them: no row ends in the separator, no
+  # row is a sentence (visual round 3)
+  rows = trimws(term_rows(pty$all), "right")
+  expect_true("  in the background (experimental, ?\"gptr-background\")" %in% rows)
+  expect_false(any(endsWith(rows, if (utf8) " ·" else " -")))
+  expect_identical(pty$seen("Background sessions"), 0L)
   # waited for, the run is the console's again: its answer, the live row reading keys, its end
   pty$send("!!gptr::gptr_wait(gptr::gptr_last())\r")
   expect_true(pty$wait("w20abc"))

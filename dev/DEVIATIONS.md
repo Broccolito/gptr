@@ -4362,6 +4362,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   dropped: Up then a paste reached the agent as `<U+001B>[Ap1 first line`. Contract-visible: 04 §15.10 IC-76 (a
   follow-up is the next prompt). Tests: test-console-typing.R "a cursor key typed while a run works is no part of
   a line (visual round 2)".
+- Final visual loop, round 3 (2026-10-24): Task 70: the pause menu's [b] writes its status as dim terms
+  (`console_terms()`), `in the background (experimental, ?"gptr-background")` and `!!gptr::gptr_wait(gptr::
+  gptr_last()) continues it here`, the parenthesis in place of P21's notice, which the menu muffles: the notice's
+  two sentences sat above the row in their own voice, and at 60 columns the row ended in the separator.
+  Contract-visible: 04 §15.10 (the pause menu's [b]). Tests: test-console-interrupt.R "[b]ackground hands a
+  foreground run to bg.register (P21) and resumes"; test-console-repl.R "a terminal: a run sent to the
+  background shows again while the console waits for it".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,
