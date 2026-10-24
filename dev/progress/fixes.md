@@ -4445,3 +4445,16 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `LC_ALL=C` `^tool-edit$` PASS 196; `^(ext-check|eval-guard|tool-edit)$` PASS 605.
 - Deviations: none. Open: none.
 
+### ci91-2 - The q guard knows R-devel's Partial()
+- Red: job 120738934342 (ubuntu-latest devel) failed `test-eval-guard.R:182`: guard-1b's scan of
+  base found `Partial` (new in R-devel; it `match.fun()`s its `f`) missing from
+  `eval_guard_fun_arg`.
+- Cause: the table is written by hand and the test checks it against the running R's base, as
+  guard-1b meant it to; R-devel added a function after it was written. With `q` bound to data,
+  `Partial(q)('no')` would reach `base::q()`.
+- Fix: `Partial = "f"` in the table (an entry for a function this R lacks matches nothing, since
+  `eval_guard_match()` finds no definition); the q-form test adds `Partial(q)('no')` where base has
+  `Partial`.
+- Green: `^eval-guard$` on R 4.6.1 (no `Partial`) PASS; R-devel in hosted CI.
+- Deviations: none (D-252's guard-1 rule names the table, not its entries). Open: none.
+

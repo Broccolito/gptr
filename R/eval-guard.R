@@ -17,13 +17,14 @@ eval_guard_blocked = c(
 eval_guard_assign_ops = c("=", paste0("<", "-"), "<<-")
 
 #' The function argument of do.call() and of every base function that applies match.fun() to
-#' one, which looks a non-function value up by name: `q = 1; sapply("no", q)` calls base::q()
+#' one, which looks a non-function value up by name: `q = 1; sapply("no", q)` calls base::q().
+#' Partial() is new in R-devel; an entry for a function this R lacks matches nothing.
 #' @noRd
 eval_guard_fun_arg = c(
   do.call = "what", match.fun = "FUN", lapply = "FUN", sapply = "FUN", vapply = "FUN",
   mapply = "FUN", .mapply = "FUN", apply = "FUN", tapply = "FUN", eapply = "FUN", outer = "FUN",
   sweep = "FUN", Map = "f", Reduce = "f", Filter = "f", Find = "f", Position = "f", Negate = "f",
-  .S3method = "method"
+  Partial = "f", .S3method = "method"
 )
 
 #' Calls whose string arguments name functions

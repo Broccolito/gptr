@@ -150,6 +150,7 @@ test_that("q bound to data is refused where a base function looks it up as a fun
   forms = c("Negate(q)('no')", "base::Negate(f = q)", "sweep(m, 1, s, q)", "eapply(env, q)",
             ".mapply(q, list('no'), NULL)", ".S3method('print', 'foo', q)", "Negate('q')('no')",
             "Vectorize('q')('no')", ".S3method('print', 'foo', 'q')")
+  if (exists("Partial", baseenv(), inherits = FALSE)) forms = c(forms, "Partial(q)('no')")
   for (code in forms) expect_equal(eval_guard(ex(code), e)$blocked, "q", label = code)
   # Neither looks q up: Vectorize() of data returns it, Recall() passes the value on
   expect_null(eval_guard(ex("Vectorize(q); f = function(x) Recall(q)"), e)$reason)
