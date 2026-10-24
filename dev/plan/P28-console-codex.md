@@ -1713,7 +1713,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 51 | A run sent to the background does not move at the chat prompt, and its wait shows nothing (final visual loop, round 1) | 96b139b1 |
 | 52 | Answers to console questions sit off the input band (final visual loop, round 1) | d9ddfefa |
 | 53 | After [b] the status block sits right under the answer's tail (Task 47, found by its visual check) | 4c650e94 |
-| 54 | An answer typed as a question shows is sent as a steer (final visual loop, round 2) | (this commit) |
+| 54 | An answer typed as a question shows is sent as a steer (final visual loop, round 2) | 6e907411 |
+| 55 | A waited run is drawn in a weaker palette (final visual loop, round 2) | (this commit) |
 
 ## Out of scope
 

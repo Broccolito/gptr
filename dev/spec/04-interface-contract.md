@@ -5697,8 +5697,11 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     background · gptr_wait() brings it back`). A `gptr_wait()` in the console's `!`/`!!` code
     (repl_passthrough()'s `.gptr_console_wait`, `console_wait()`) makes the sessions it waits for the console's
     foreground while it lasts (`console_state()$waited`, `console_foreground()`), outside the code's evaluation
-    (its sink and options, `.gptr_eval_outside`) and with a terminal's keys read as during a prompt's call
-    (`console_reading()`): its rows, live row and status line show as a prompt's do, and Enter steers.
+    (its sink and options, `.gptr_eval_outside`), in the console's colours (`cli.num_colors =
+    console_colors()`, as the live row draws: the evaluation's writer puts its capture back, which says 1
+    colour; P28 Task 55, visual round 2: the delivered steer lost the band and the status line was faint) and
+    with a terminal's keys read as during a prompt's call (`console_reading()`): its rows, live row and status
+    line show as a prompt's do, and Enter steers.
   - A draft left at the end of a run stays until sent (Task 21; T class). The REPL reader's read
     (`rd$read(prompt)`) returns its held and `typed` lines first; then, while the composer holds a draft,
     `console_idle(rd, prompt)` edits it at the prompt: `\r`, the band (as the live row's), the prompt and the

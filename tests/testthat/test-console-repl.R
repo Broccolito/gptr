@@ -1313,7 +1313,9 @@ test_that("a terminal: a run sent to the background shows again while the consol
   skip_if_not_installed("later")
   pty = local_pty_r(c(
     "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
-    "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
+    "        gptr.history = FALSE, cli.width = 60L)",
+    # a dark background, no answer to the probe: the band shows, in the terminal's 256 colours
+    "Sys.setenv(COLORFGBG = '15;0')",
     "long = paste(c('BEGIN', sprintf('w%02dabc', 1:60), 'END'), collapse = ' ')",
     "fake = gptr_fake_provider(function(req) {",
     "  m = req$messages[[length(req$messages)]]",
@@ -1321,22 +1323,26 @@ test_that("a terminal: a run sent to the background shows again while the consol
     "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
     "})",
     "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
-  ), term = "xterm")
+  ))
+  person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
   expect_true(pty$wait("peter[auto]> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
   pty$send("\003")
-  expect_true(pty$wait("b background"))
+  expect_true(pty$wait("background"))
   pty$send("b\r")
   # the row says what holds at the chat prompt, where nothing runs the session
   expect_true(pty$wait("continues it here"))
   expect_true(pty$wait("peter[auto]> "))
   # waited for, the run is the console's again: its answer, the live row reading keys, its end
   pty$send("!!gptr::gptr_wait(gptr::gptr_last())\r")
-  expect_true(pty$wait("w50abc"))
+  expect_true(pty$wait("w20abc"))
   pty$send("use base R\r")
+  # in the console's palette, as before the wait: the steer on the band, the status line grey
+  # (visual round 2)
+  expect_true(pty$wait(paste0("\033[48;5;237m", person, " use base R")))
   expect_true(pty$wait("use base R END"))
-  expect_true(pty$wait("done"))
+  expect_true(pty$wait("\033[38;5;244mdone"))
   expect_true(pty$wait("peter[auto]> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))

@@ -859,8 +859,8 @@ console_reading = function(rs, body) {
 #' A wait of the console's R code (`!!gptr_wait(s)`, repl_passthrough()) on sessions `ss`, a run the
 #' pause menu's [b] sent to the background among them: while `pump()` waits they are the console's
 #' foreground (`console_state()$waited`, console_foreground()), so their rows, live row and status
-#' line show as a prompt's do, outside the code's evaluation (its `.gptr_eval_outside`), and a
-#' terminal reads keys as during a prompt's call, Enter steering
+#' line show as a prompt's do, in the console's colours, outside the code's evaluation (its
+#' `.gptr_eval_outside`), and a terminal reads keys as during a prompt's call, Enter steering
 #' @noRd
 console_wait = function(rs, ss, pump) {
   .gptr_repl = rs
@@ -873,6 +873,8 @@ console_wait = function(rs, ss, pump) {
   st$waited = c(old, vapply(ss, function(s) session_data(s)$id, ""))
   outside = console_eval_value(".gptr_eval_outside") %||% function(f) f()
   outside(function() {
+    # as the live row draws: the evaluation's capture, which its writer puts back, says 1 colour
+    rlang::local_options(cli.num_colors = console_colors())
     console_render_resume(Filter(Negate(is.null), lapply(ss, function(s) session_live(s)$run)))
     console_reading(rs, pump)
   })
