@@ -4303,6 +4303,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (`aborted`) keep one dim row. A failed run's block was the dim grey of `done`, and the reason's last words ran on
   into the terms (`... port 443 · fake-1 · 3 requests`). Contract-visible: 04 §15.10 run totals. Tests:
   test-console-repl.R "a failed run's reason is red, on rows of its own above the terms (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 59: the markdown renderer's `write(delta)` runs under
+  `suspendInterrupts()`: `process()` holds the rest of a delta in a local variable while it writes a row, so a
+  SIGINT (a D console's Ctrl-C) that unwound `write()` from a row's output dropped it, and after [a] `received
+  before the abort:` showed `would Eigh…` for `would be. Eight-cylinder`. Contract-visible: 04 §7.14's
+  `render_markdown_stream()` row. Tests: test-console-render.R "an interrupt while a row is written loses none of
+  its delta (visual round 2)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

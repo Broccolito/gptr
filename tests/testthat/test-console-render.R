@@ -210,6 +210,39 @@ test_that("other output goes between whole rows; the held row continues, nesting
                      "    - b\n"))
 })
 
+test_that("an interrupt while a row is written loses none of its delta (visual round 2)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  # a process started in the background (`&`, nohup) ignores SIGINT
+  sigint = tryCatch({
+    tools::pskill(Sys.getpid(), tools::SIGINT)
+    for (i in 1:1e5) NULL
+    FALSE
+  }, interrupt = function(e) TRUE)
+  skip_if_not(sigint, "SIGINT is ignored in this process")
+  withr::local_options(cli.num_colors = 1L, cli.dynamic = FALSE, gptr.verbose = 0L)
+  # SIGINT, as a D console's Ctrl-C, arrives while the first row is written, and R would take it at
+  # the loop's check; it comes at the next check after the delta instead (Sys.sleep())
+  first = TRUE
+  r = render_markdown_stream(width = 80L, before_output = function(x) {
+    if (!first) return()
+    first <<- FALSE
+    tools::pskill(Sys.getpid(), tools::SIGINT)
+    for (i in 1:1e5) NULL
+  })
+  hit = FALSE
+  out = written(function() {
+    tryCatch({
+      r$write("the means would be.\nEight-cylinder cars")
+      Sys.sleep(0.05)
+    }, interrupt = function(e) hit <<- TRUE)
+    r$write(" are heavier\n")
+    r$finish()
+  })
+  expect_true(hit)
+  expect_identical(out, "the means would be.\nEight-cylinder cars are heavier\n")
+})
+
 test_that("pipe tables are aligned on an interactive console and stay valid Markdown (D-186)", {
   skip_on_cran()
   withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L)

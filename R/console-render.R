@@ -77,7 +77,8 @@ console_notice = function(..., .error = FALSE) {
 
 #' Chunk-invariant markdown stream renderer (contract 7.14)
 #'
-#' Returns an environment with `write(delta)` and `finish(cut = FALSE)`, writing to stdout; a cut
+#' Returns an environment with `write(delta)`, which an interrupt waits for, and `finish(cut =
+#' FALSE)`, writing to stdout; a cut
 #' (an abort, an unusual end) writes all it received and ends a non-empty held row with a dim
 #' ellipsis.
 #' Styling (bold, italic within one token, inline code in the blue accent, link URLs, quotes,
@@ -395,13 +396,15 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     invisible()
   }
   r = new.env(parent = emptyenv())
-  r$write = function(delta) {
+  # an interrupt (a D console's Ctrl-C) waits for the delta's end: one landing inside it would drop
+  # the rest of the delta, which only this call holds
+  r$write = function(delta) suspendInterrupts({
     refresh_width()
     ingest(delta)
     flush(stdout())
     utils::flush.console()
     invisible()
-  }
+  })
   r$finish = function(cut = FALSE) {
     refresh_width()
     ingest("", final = TRUE)
