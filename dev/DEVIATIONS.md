@@ -4318,6 +4318,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   s` whole, as the started line keeps ` started` (Task 36), and its label is cut; a failed line is cut from its
   reason as before. At 60 columns `#1 done · 1 turn · 4…` lost its time. Contract-visible: 04 §15.10 IC-82. Tests:
   test-console-render.R "a sub-agent's started line cut to the width keeps its last word (Task 36)".
+- Final visual loop, round 2 (2026-10-24): Task 62: in the console margin a slash command's output of several
+  rows ends with a blank row before the next prompt (`console_command()`, once for every command), as a run's
+  status line does; `/help`, `/context` and `/compact` ran into the next `peter>` row. `/compact` and the automatic
+  notice say `<before> to <after> tokens`, and the progress notice `Compacting conversation…` with the console's
+  ellipsis. Contract-visible: 04 §10.2 kind 10, §15.10 run totals; 03 §6.11. Tests: test-console-commands.R "a
+  command's rows end with a blank row before the next prompt (visual round 2)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

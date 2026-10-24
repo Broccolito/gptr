@@ -238,8 +238,21 @@ test_that("in the console margin command output wraps inside it; listings fit it
   listing = withr::with_options(list(width = 56L, cli.width = 56L),
                                 utils::capture.output(print(gptr::gptr_sessions())))
   expect_identical(run_command(rs, "/resume")$out,
-                   ifelse(nzchar(listing), paste0("  ", listing), ""))
+                   c(ifelse(nzchar(listing), paste0("  ", listing), ""), ""))
   expect_equal(c(getOption("width"), getOption("cli.width")), c(60, 60))
+})
+
+test_that("a command's rows end with a blank row before the next prompt (visual round 2)", {
+  local_console_commands()
+  local_project()
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+  testthat::local_reproducible_output(width = 80)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  rs = repl_state(s, new.env())
+  # as after a run's status line; one row needs none
+  expect_identical(utils::tail(run_command(rs, "/context")$out, 2L) != "", c(TRUE, FALSE))
+  expect_length(run_command(rs, "/mode")$out, 1L)
 })
 
 test_that("/exit, /quit and /q end the REPL", {
@@ -444,7 +457,7 @@ test_that("/compact reports its saving and /context names the compaction request
   s = peter(s, "q2")
   rs = repl_state(s, new.env())
   out = run_command(rs, "/compact")$out
-  expect_match(out[[length(out)]], "^Conversation compacted: \\S+ -> \\S+ tokens\\.$")
+  expect_match(out[[length(out)]], "^Conversation compacted: \\S+ to \\S+ tokens\\.$")
   figure = function(out, pattern) {
     as.numeric(gsub("[^0-9]", "", grep(pattern, out, value = TRUE)))
   }

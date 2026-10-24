@@ -1551,8 +1551,8 @@ Decisions:
   space, so curl's two-line error stays on the line (it showed `<U+000A>`); other control characters stay escaped.
 - (Amended in the cheat-sheet review, console-4:) after `/compact` the last request is the compaction request:
   `/context` says so in its header, adds `  next request: about <n> tokens` (the compaction entry's
-  `tokens_after`) and measures the context left from that; `/compact` reports `Conversation compacted: <before> ->
-  <after> tokens.`. (Amended in the review of Tasks 22-27: the estimate is a ledger row, `  next request
+  `tokens_after`) and measures the context left from that; `/compact` reports `Conversation compacted: <before> to
+  <after> tokens.` (`->` until P28 Task 62). (Amended in the review of Tasks 22-27: the estimate is a ledger row, `  next request
   ~<n>`, its value in the column of the others, `~` marking it an estimate.)
 
 Tests (`test-console-render.R`, `test-console-repl.R`, `test-console-commands.R`), RED first:
@@ -1720,7 +1720,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 58 | In TERM=dumb a line being typed at Ctrl-C is lost (final visual loop, round 2) | 0e1a6296 |
 | 59 | After an abort the text received before it can lose characters (final visual loop, round 2) | 0c8c2473 |
 | 60 | Sub-agent rows split the result of the r call that started them (final visual loop, round 2) | 99c76f9b |
-| 61 | A sub-agent's end row cut loses its time (final visual loop, round 2) | (this commit) |
+| 61 | A sub-agent's end row cut loses its time (final visual loop, round 2) | 64a9f606 |
+| 62 | Slash-command output runs into the next prompt (final visual loop, round 2) | (this commit) |
 
 ## Out of scope
 

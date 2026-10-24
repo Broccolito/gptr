@@ -1802,7 +1802,7 @@ On a CLI route (a model of `type = "cli"`) neither rule triggers, nor the halved
 compacts its own conversation; `/compact` still runs, and the next turn starts a fresh CLI conversation from its
 checkpoint [D-203]. A compaction during a foreground run prints one dim line
 with its before and after token counts [D-202]; `/compact` reports the same counts
-(`Conversation compacted: 5.7k -> 3.2k tokens.`) [D-245].
+(`Conversation compacted: 5.7k to 3.2k tokens.`) [D-245].
 
 ### 6.12 Evaluator [12 §3-4]
 

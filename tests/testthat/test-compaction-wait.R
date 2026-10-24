@@ -793,7 +793,7 @@ test_that("manual compaction on an active session completes without an orphan co
   # Keep the abort active through admission and manual work, before expectation formatting.
   text = cmd_compact("", session_live(x$s)$ctx)
   manual_completed = reactor_now()
-  compacted = "^Conversation compacted: \\S+ -> \\S+ tokens\\.$"
+  compacted = "^Conversation compacted: \\S+ to \\S+ tokens\\.$"
   entries = cp_wait_entries(x$s)
   guard_released = FALSE
   if (admission_ready && admission_guard_released &&

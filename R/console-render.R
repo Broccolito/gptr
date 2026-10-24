@@ -1202,7 +1202,7 @@ console_on_compact = function(event, ctx) {
   console_pause_one(rec)
   console_gap(rec, "notice")
   console_write(console_style()$dim(paste0(
-    "  conversation compacted: ", format_count(e$tokens_before %||% NA_real_), " -> ",
+    "  conversation compacted: ", format_count(e$tokens_before %||% NA_real_), " to ",
     format_count(e$details$tokens_after %||% NA_real_), " tokens")))
   NULL
 }

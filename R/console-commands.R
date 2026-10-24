@@ -56,8 +56,9 @@ command_parse = function(text) {
 #' The line first passes the `input` event with source "repl" (contract 10.4): a hook may handle
 #' it or transform it (into another command, or a prompt sent through `send(text)`). A line that
 #' is still a command goes out on the `console:command` channel (P15 records it as a comment). A
-#' character result is printed escaped, `list(prompt =)` is sent, and an error is reported on
-#' stderr (the input counts as handled).
+#' character result is printed escaped, a blank row after it where it has several rows and lines
+#' keep the margin, as after a run's status line, `list(prompt =)` is sent, and an error is
+#' reported on stderr (the input counts as handled).
 #' @return Invisibly "unknown", "error", "prompt" or "done".
 #' @noRd
 console_command = function(text, session = NULL, send = NULL) {
@@ -98,7 +99,10 @@ console_command = function(text, session = NULL, send = NULL) {
     if (is.function(send)) send(out$prompt)
     return(invisible("prompt"))
   }
-  if (is.character(out)) console_out(out)
+  if (is.character(out)) {
+    console_out(out)
+    if (length(console_lines(out)) > 1L && nzchar(console_pad())) console_write("")
+  }
   invisible("done")
 }
 
@@ -315,7 +319,7 @@ cmd_compact = function(args, ctx) {
   e = utils::tail(compactions(), 1L)[[1L]]
   n = c(e$tokens_before %||% NA_real_, e$details$tokens_after %||% NA_real_)
   if (anyNA(n)) return("Conversation compacted.")
-  paste0("Conversation compacted: ", format_count(n[[1L]]), " -> ", format_count(n[[2L]]),
+  paste0("Conversation compacted: ", format_count(n[[1L]]), " to ", format_count(n[[2L]]),
          " tokens.")
 }
 

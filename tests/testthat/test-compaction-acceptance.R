@@ -258,7 +258,7 @@ test_that("manual compaction announces waiting before inference and respects qui
     invokeRestart("muffleMessage")
   })
   expect_identical(seen$notices, "Compacting conversation...\n")
-  expect_match(acknowledgement, "^Conversation compacted: \\S+ -> \\S+ tokens\\.$")
+  expect_match(acknowledgement, "^Conversation compacted: \\S+ to \\S+ tokens\\.$")
   local_gptr_options(verbose = 0L)
   expect_no_message(compact_run(x$s, "manual"))
   local_gptr_options(verbose = 1L, quiet = TRUE)
