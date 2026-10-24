@@ -4125,3 +4125,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   - Positron's banner says `ctrl-c, then s, to steer`, the live row's words, which show beside it; it said `ctrl-c,
     then s, steers`. Contract-visible: 03 §6.17. Tests: test-console-repl.R "in Positron the banner says typed text
     waits as R code (steering review)".
+- Live dogfood fixes (Task 28, 2026-10-23): Task 31: code served to a CLI route during a live run shows what it
+  prints, as the loop's `r` tool does: `mcp_serve_r()` tees for a depth-0 run with a human (a call without a run,
+  P18's server, stays silent). The CLI routes showed only `+ x3`, where the native routes showed the code's output
+  rows above it. Contract-visible: 04 §5 `eval_r()` row. Tests: test-mcp-server.R "code served in a live run shows
+  what it prints, as the r tool does (Task 31)".

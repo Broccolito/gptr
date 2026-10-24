@@ -280,7 +280,8 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
 #' Evaluate served R code in `env` through the eval.r service (the evaluator kind, IC-69).
 #' Mark the running tool on this call stack, as tool_execute_frame() does, so gptr_return()
 #' and nested calls belong to the session whose MCP token authorized this evaluation. During a
-#' run its plots are drawn as the loop's `r` tool draws them ("auto"), else offscreen (#42).
+#' run its plots are drawn and its printed output shown as the loop's `r` tool does ("auto", tee
+#' for a depth-0 run with a human; P28 Task 31), else offscreen and silent (#42).
 #' @noRd
 mcp_serve_r = function(input, env, run, session = NULL) {
   .gptr_tool_run = run
@@ -289,8 +290,9 @@ mcp_serve_r = function(input, env, run, session = NULL) {
   budget = as.integer(gptr_opt("r_output_tokens"))
   timeout = input$timeout %||% (if (gptr_has_human()) NULL else gptr_opt("r_timeout"))
   plots = if (is.null(run)) "capture" else "auto"
-  res = ext_service_get("eval.r")(input$code, env, timeout = timeout, plots = plots,
-                                  tee = FALSE, budget_tokens = budget, rng = run$opts$rng_state,
+  tee = !is.null(run) && gptr_has_human() && !isTRUE(run$depth > 0L)
+  res = ext_service_get("eval.r")(input$code, env, timeout = timeout, plots = plots, tee = tee,
+                                  budget_tokens = budget, rng = run$opts$rng_state,
                                   record = record)
   if (record && identical(res$status, "ok") && mcp_r_recording(run, session)) {
     session_append(session, list(type = "custom", custom_type = "gptr.mcp_r",

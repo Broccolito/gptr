@@ -191,6 +191,19 @@ test_that("the end of a served call that was refused says why it did not run (co
   expect_identical(end$refused, "denied by the rule r(fn:writeLines)")
 })
 
+test_that("code served in a live run shows what it prints, as the r tool does (Task 31)", {
+  shown = utils::capture.output(serve_in_run(function(event, ctx) {
+    withr::local_options(gptr.interactive = TRUE)
+    mcp_dispatch_local(r_call("cat('served output\\n')"), ctx$session)$result
+  }))
+  expect_length(grep("served output", shown, fixed = TRUE), 1L)
+  x = local_served_session()
+  withr::local_options(gptr.interactive = TRUE)
+  shown = utils::capture.output(invisible(mcp_dispatch_local(r_call("cat('no run\\n')"),
+                                                              x$session)))
+  expect_length(grep("no run", shown, fixed = TRUE), 0L)
+})
+
 test_that("a plot served in a live run is drawn on the person's device, without a run on none", {
   shown = new.env()
   shown$n = 0L

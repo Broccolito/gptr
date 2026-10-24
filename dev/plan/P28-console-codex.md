@@ -1681,7 +1681,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | Task | Title | Commit |
 |---|---|---|
 | 29 | A console started from a sourced script records none of its turns | 7fe1e0dc |
-| 30 | `/skill:` completes nothing before the first prompt | (this commit) |
+| 30 | `/skill:` completes nothing before the first prompt | 146028a1 |
+| 31 | Code served to a CLI route does not show what it prints | (this commit) |
 
 ## Out of scope
 
