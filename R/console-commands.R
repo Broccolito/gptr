@@ -31,7 +31,7 @@ console_commands = function() {
     gptr_command("mcp", cmd_mcp, "List the MCP servers"),
     gptr_command("permissions", cmd_permissions,
                  paste("Show or change the rules of this R session:",
-                       "/permissions [allow|ask|deny|remove <rule>]")),
+                       "/permissions [<verb> <rule>] (allow, ask, deny or remove)")),
     gptr_command("retry", cmd_retry, "Undo the last turn and send its prompt again")
   )
 }
@@ -56,9 +56,10 @@ command_parse = function(text) {
 #' The line first passes the `input` event with source "repl" (contract 10.4): a hook may handle
 #' it or transform it (into another command, or a prompt sent through `send(text)`). A line that
 #' is still a command goes out on the `console:command` channel (P15 records it as a comment). A
-#' character result is printed escaped, a blank row after it where it has several rows and lines
-#' keep the margin, as after a run's status line, `list(prompt =)` is sent, and an error is
-#' reported on stderr (the input counts as handled).
+#' character result is printed escaped (a `cli_ansi_string`, whose untrusted parts its handler
+#' escaped, with its styles), a blank row after it where it has several rows and lines keep the
+#' margin, as after a run's status line, `list(prompt =)` is sent, and an error is reported on
+#' stderr (the input counts as handled).
 #' @return Invisibly "unknown", "error", "prompt" or "done".
 #' @noRd
 console_command = function(text, session = NULL, send = NULL) {
@@ -100,8 +101,13 @@ console_command = function(text, session = NULL, send = NULL) {
     return(invisible("prompt"))
   }
   if (is.character(out)) {
-    console_out(out)
-    if (length(console_lines(out)) > 1L && nzchar(console_pad())) console_write("")
+    lines = if (inherits(out, "cli_ansi_string")) {
+      unlist(strsplit(out, "\n", fixed = TRUE))
+    } else {
+      console_lines(out)
+    }
+    console_notice(paste(lines, collapse = "\n"))
+    if (length(lines) > 1L && nzchar(console_pad())) console_write("")
   }
   invisible("done")
 }
@@ -123,32 +129,50 @@ cmd_doc_site = function(s) {
 }
 
 #' /help [command]: the commands, the input syntax and the keys, which follow the console as the
-#' banner's do (repl_banner()): Enter, Tab's follow-up and Up where a composer reads keys (class T),
-#' Tab's completion where the REPL completes (after `! /` in RStudio), and what a line typed while
-#' peter works does there; the descriptions in one column
+#' banner's do (repl_banner()): enter, tab's follow-up and up where a composer reads keys (class T),
+#' tab's completion where the REPL completes (after `! /` in RStudio), and what a line typed while
+#' peter works does there; in the banner's type, names bold and keys lower case, every description
+#' starting lower case, in one column, wrapped between a usage's, a key's and the last two words
 #' @noRd
 cmd_help = function(args, ctx) {
   s = ctx$session
   console_templates_sync()
+  # a description starts as the Input and Keys ones do; an acronym (MCP) stays
+  lower = function(x) sub("^([[:upper:]])(?=[[:lower:]])", "\\L\\1", x, perl = TRUE)
   if (nzchar(args)) {
     nm = sub("^/", "", args)
     spec = registry_get("command", nm, session = s)
     if (is.null(spec)) return(paste0("No command /", nm, "."))
-    return(paste0("/", nm, "  ", spec$description %||% ""))
+    return(paste0("/", nm, "  ", lower(spec$description %||% "")))
   }
   nms = sort(registry_names("command", session = s), method = "radix")
   desc = vapply(nms, function(nm) registry_get("command", nm, session = s)$description %||% "",
                 "", USE.NAMES = FALSE)
-  # the descriptions wrap under one column at the content width (D-225)
+  # styled rows (cli_ansi_string, console_command()): a spec's name and description escaped
+  nms = console_escape(nms, FALSE)
+  desc = console_escape(desc, FALSE)
+  # the descriptions wrap under one column at the content width (D-225), never inside a usage
+  # (`/mode [plan|...]`), a key and its word or the last two words (bound by U+00A0 while wrapping)
   width = cli::console_width() - 2L * nchar(console_pad())
-  dl = function(x, y) formatDL(paste0("  ", x), y, width = width, indent = 19L)
+  nbsp = "\u00a0"
+  bind = function(y) {
+    m = gregexpr("/\\S+ \\[[^]]*\\]| [[:alpha:]]+[.)]?$", y, perl = TRUE)
+    regmatches(y, m) = lapply(regmatches(y, m), function(u) gsub(" ", nbsp, u, fixed = TRUE))
+    y
+  }
+  dl = function(x, y) {
+    rows = formatDL(paste0("  ", x), bind(lower(y)), width = width, indent = 19L)
+    paste0("  ", cli::style_bold(x), substring(gsub(nbsp, " ", rows, fixed = TRUE), nchar(x) + 3L))
+  }
   keys = console_class() == "T"
   done = if (isTRUE(console_repl_find()$reader$complete)) {
     paste0("after ", if (front_end() == "rstudio") "! or /" else "@, !, !!, / or peter$",
            ", complete the word")
   }
   pause = paste0(if (console_menu_available()) {
-    "pause the answer: s steer, f follow-up, c continue, a abort, b background"
+    paste0("pause the answer: ", paste0(c("s", "f", "c", "a", "b"), nbsp,
+                                         c("steer", "follow-up", "continue", "abort", "background"),
+                                         collapse = ", "))
   } else {
     "stop the answer"
   }, "; twice at the prompt leaves")
@@ -161,7 +185,7 @@ cmd_help = function(args, ctx) {
   } else {
     "A line typed while peter works is the next prompt."
   }
-  c("Commands:", dl(paste0("/", nms), desc),
+  cli::ansi_string(c("Commands:", dl(paste0("/", nms), desc),
     "Input:",
     dl(c("text", "!code", "!!code", "```r ... ```", "\"\"\" ... \"\"\""),
        c("a prompt; @file adds a file, @object attaches an object",
@@ -170,8 +194,8 @@ cmd_help = function(args, ctx) {
          "a block of R code (like !)",
          "a multi-line prompt; a trailing \\ also continues a line")),
     "Keys:",
-    dl(c(if (keys) "Enter", if (keys || !is.null(done)) "Tab", if (keys) "Up",
-         console_interrupt_key()),
+    dl(c(if (keys) "enter", if (keys || !is.null(done)) "tab", if (keys) "up",
+         tolower(console_interrupt_key())),
        c(if (keys) {
          paste("send what you typed while peter works as a steer: the agent reads it at its next",
                "step")
@@ -181,7 +205,7 @@ cmd_help = function(args, ctx) {
        } else {
          done
        }, if (keys) "on an empty draft, take back the newest message not yet delivered", pause)),
-    typed)
+    typed))
 }
 
 #' /exit, /quit, /q

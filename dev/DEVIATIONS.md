@@ -4324,6 +4324,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   notice say `<before> to <after> tokens`, and the progress notice `Compacting conversation…` with the console's
   ellipsis. Contract-visible: 04 §10.2 kind 10, §15.10 run totals; 03 §6.11. Tests: test-console-commands.R "a
   command's rows end with a blank row before the next prompt (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 63: `/help` sets its names bold, its keys lower case as the
+  banner does (`enter`, `tab`, `up`, `ctrl-c`), every description starting lower case (an acronym stays), and
+  wraps a description never inside a usage (`/mode [plan|...]`), a key and its word (`s steer`) or the last two
+  words (U+00A0 while `formatDL()` wraps, spaces after); `/permissions`' usage is `[<verb> <rule>] (allow, ask,
+  deny or remove)`, which fits the column at 60. A handler may return a `cli_ansi_string`, escaping its untrusted
+  parts itself (`/help` the specs' names and descriptions), which prints with its styles. Contract-visible: 04
+  §10.2 kind 10. Tests: test-console-commands.R "/help lists the commands and the input syntax", "/help's keys
+  follow the console, as the banner does (review of Tasks 22-27)", "in the console margin command output wraps
+  inside it; listings fit its width".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,
