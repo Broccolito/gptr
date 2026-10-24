@@ -4351,6 +4351,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   reason left to R's error; a script blocked for approval wrote the same long reason in the not-run line, the
   progress line and the error. Contract-visible: 04 §15.10 run totals. Tests: test-console-render.R "at verbosity
   1 a run ending in a condition leaves its reason to it (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 67: a steer's queue line still held when its run ends is dropped
+  at `agent_end`, before the status line, as at its delivery: the kept list, the next prompt's echo or the next
+  run's delivery names it. After [a] TERM=dumb wrote the held `↳ steer · <text>` under `received before the
+  abort:`, two rows above `↳ kept in history ↑ · <text>`. Contract-visible: 04 §15.10 IC-82 (queue lines). Tests:
+  test-console-typing.R "a steer held during an answer that the abort drops shows once, kept (visual round 2)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

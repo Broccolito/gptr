@@ -6008,8 +6008,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     is written when any other block starts, so it never splits a sentence: between whole rows it still had,
     wherever the person happened to press Enter, and TERM=dumb and the IDE consoles keep the line after Task 18
     (visual review). A steer's line still held when the steer is delivered is not written, as its delivery says
-    the same (steering review: five steers typed while an answer streamed took ten rows in TERM=dumb); held
-    follow-up lines and a CLI route's steer are written. This replaces "ends partial lines" in IC-76 (the
+    the same (steering review: five steers typed while an answer streamed took ten rows in TERM=dumb), nor one still
+    held when the run ends, as the kept list (abort, error), the next prompt's echo (idle, max_turns) or the next
+    run's delivery names it (P28 Task 67, visual round 2: after [a] TERM=dumb showed `↳ steer · <text>` above `↳
+    kept in history ↑ · <text>`); held follow-up lines and a CLI route's steer are written. This replaces "ends partial lines" in IC-76 (the
     notices and their `console_render_pause()`) and IC-77 item 1. An abort still ends the stream (`console_render_pause()`, also when
     the pause menu's [b] sends the run to the background). The pause menu itself clears only the live row: the
     held row continues after it (visual review: the menu cut a sentence, `so part of this` / menu / `gap is ...`,

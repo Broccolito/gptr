@@ -1262,6 +1262,8 @@ console_on_agent_end = function(event, ctx) {
   if (v < 2L) return(NULL)
   if (!is.null(rec$think)) rec$think$finish()
   if (!is.null(rec$md)) rec$md$finish(cut = !identical(event$status, "idle"))
+  # a held steer's row gives way: the kept list, the next prompt's echo or its delivery names it
+  rec$queued = Filter(function(x) !x$drop, rec$queued)
   console_gap(rec, "status")
   console_render_custom(rec$session, rec$n0)
   # in rows ending at whole terms (console_terms()), at the content width; a status with its reason

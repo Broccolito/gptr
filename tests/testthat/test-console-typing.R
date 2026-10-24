@@ -540,6 +540,31 @@ test_that("an abort's status line says aborted once; the kept list follows it, t
   expect_false(any(grepl("the session is kept", rows, fixed = TRUE)))
 })
 
+test_that("a steer held during an answer that the abort drops shows once, kept (visual round 2)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.num_colors = 1L)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  words = paste(sprintf("word%02d", 1:40), collapse = " ")
+  fake = gptr_fake_provider(list(list(text = words, chunk = 8L, gap = 0.05)))
+  streaming = function() {
+    any(vapply(as.list(console_state()$active), function(r) identical(r$last, "text"), NA))
+  }
+  # typed while the answer streams, its queue line held for the answer's end; then the abort
+  step = 0L
+  local_typed(function() {
+    if (!streaming()) return(character())
+    step <<- step + 1L
+    if (step == 1L) return("steer the abort drops")
+    signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
+    character()
+  })
+  rows = sub(".*\r", "", typing_console(fake, c("go", "/exit"))$out)
+  expect_false(any(startsWith(rows, queue_line("steer", ""))))
+  expect_identical(sum(rows == kept_line("steer the abort drops", kept = FALSE)), 1L)
+})
+
 test_that("after an error the queued steer is kept in the history, not sent with the next prompt", {
   skip_on_cran()
   local_console_test()

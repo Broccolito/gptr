@@ -1726,7 +1726,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 63 | /help ignores the console's type rules (final visual loop, round 2) | 81a5579f |
 | 64 | Notices in the old `[gptr] …` form remain (final visual loop, round 2) | b2d22fb0 |
 | 65 | The approval's `?` view names the agent gptr, in plain type (final visual loop, round 2) | c5459a60 |
-| 66 | A script's blocked run states its reason three times (final visual loop, round 2) | (this commit) |
+| 66 | A script's blocked run states its reason three times (final visual loop, round 2) | 353e56aa |
+| 67 | After an abort a dropped steer shows twice (final visual loop, round 2) | (this commit) |
 
 ## Out of scope
 
