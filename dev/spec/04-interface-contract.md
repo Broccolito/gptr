@@ -5494,8 +5494,11 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     are the keys a T console's composer read in the same read as its Ctrl-C (`console_keys()` holds them in the
     reader's `after_interrupt`; steering review: they were dropped): `console_ask()` first takes from them
     (`console_ahead(rd, accept)`) the first whole line, its edit keys applied, that answers, echoed after the
-    chevron as readline leaves a line; the lines before it, or all the text when none answers, are kept in the
-    history (`console_keep()`), and the rest waits for [s]'s or [f]'s text question. What the menu leaves the
+    chevron as readline leaves a line; the lines before it, or the whole lines when none answers, are kept in the
+    history (`console_keep()`), and the rest waits for [s]'s or [f]'s text question. A line they begin without
+    ending begins the answer of the question that reads next: shown after its chevron, the read's text after it
+    (`s`, then Enter later, answers `s`; `use the med`, then `ian`, steers `use the median`; review of Tasks 22-27:
+    it was kept in the history and the read took only the rest, so `ian` was queued as the steer). What the menu leaves the
     composer reads once the menu resumes; after [a] it is the composer's draft at the next prompt
     (`console_send()`). A key or its word
     answers, as an approval reads `y` or `yes`, and an empty answer continues; anything else (a steer typed at

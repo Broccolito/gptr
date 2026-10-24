@@ -3687,6 +3687,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     from the menu's last row (`↳ steer`, then `Min. 1st Qu. ...`) and a blank row cut `done` off from it.
     Contract-visible: none. Tests: test-console-interrupt.R "the output of resumed code and its result stay one
     block below the menu (review)".
+  - A line the keys read with Ctrl-C begin without ending begins the answer of the question that reads next
+    (`console_ahead()` leaves it in `after_interrupt`, `console_ask()` shows it after the chevron and puts it before
+    the read's text): `s` then a later Enter answers `s`, and `use the med` then `ian` steers `use the median`. It
+    went to the history, so the read took only the rest and `ian` was queued as the steer. Contract-visible: 04
+    §15.10 IC-76. Tests: test-console-interrupt.R "keys read with Ctrl-C answer the pause menu and its text question
+    (steering review)", "a line begun with Ctrl-C begins the answer the question reads (review)".
   - The row above a question's chevron that names a T console's draft puts the person's text last, its head kept as
     a queue line keeps it, `↳ draft kept, back after your answer · and label the ax…` (`ui_draft_kept()`); it was
     `↳ draft kept · …bel the axes · back after your answer`. The pause menu writes it too, above its chevron and

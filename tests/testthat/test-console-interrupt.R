@@ -404,12 +404,29 @@ test_that("keys read with Ctrl-C answer the pause menu and its text question (st
   a = ahead("s\ruse the median\r")
   expect_identical(a[c("x", "rest")], list(x = "s", rest = "use the median\n"))
   expect_identical(ahead(a$rest, TRUE)$x, "use the median")
-  # the edit keys act; an unterminated key is kept, no answer; Enter alone continues
+  # the edit keys act; an unterminated line waits for the question's read; Enter alone continues
   expect_identical(ahead("x\177s\r")$x, "s")
-  expect_identical(ahead("s"), list(x = NULL, out = kept_line("s"), rest = ""))
+  expect_identical(ahead("s"), list(x = NULL, out = character(), rest = "s"))
+  expect_identical(ahead("foo\ruse the med\177d"),
+                   list(x = NULL, out = kept_line("foo"), rest = "use the med"))
   expect_identical(ahead("\r")$x, "")
   expect_identical(ahead(""), list(x = NULL, out = character(), rest = ""))
-  expect_identical(rl$kept, c("foo", "s"))
+  expect_identical(rl$kept, c("foo", "foo"))
+})
+
+test_that("a line begun with Ctrl-C begins the answer the question reads (review)", {
+  rl = local_readline(c("", "ian"))
+  rd = new.env(parent = emptyenv())
+  local_mocked_bindings(console_repl_find = function() list(reader = rd))
+  sym = console_style()
+  # Ctrl-C, then `s`, the Enter in a later read: the menu's answer is s, shown after the chevron
+  rd$after_interrupt = "s"
+  expect_identical(console_ask(c("", "s", "c")), "s")
+  # `use the med` read with the Ctrl-C and `ian` typed later steer `use the median`
+  rd$after_interrupt = "use the med"
+  expect_identical(console_ask(TRUE), "use the median")
+  expect_identical(rl$prompts, paste0(sym$person, c(" s", " use the med")))
+  expect_identical(rd$after_interrupt, "")
 })
 
 test_that("a line typed before the pause menu appeared never answers it (IC-75)", {

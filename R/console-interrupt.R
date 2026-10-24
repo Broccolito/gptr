@@ -103,16 +103,19 @@ console_repl_find = function() {
 
 #' Read one menu answer at the person's chevron at column 0, as a console question reads (D-243):
 #' from a `.stdin` REPL's connection, else readline_answer(); a Ctrl-C while waiting (no resume
-#' restart there) gives NA, and in a terminal ends the person's row, as ui_console_read() does.
-#' With `accept` (readline_answer()) a line typed before the chevron showed answers when it is one
-#' of them, and another such line is kept in the history (console_keep()), never sent to the agent;
-#' the keys a T console read with its Ctrl-C are such lines, read first (console_ahead())
+#' restart there) gives NA, and in a terminal ends the person's row, as ui_console_read() does. With
+#' `accept` (readline_answer()) a line typed before the chevron showed answers when it is one of
+#' them, and another such line is kept in the history (console_keep()), never sent to the agent; the
+#' keys a T console read with its Ctrl-C are such lines, read first (console_ahead()), and a line
+#' they begin without ending begins the answer: shown after the chevron, the read's text after it
 #' @noRd
 console_ask = function(accept = NULL) {
-  prompt = paste0(console_style()$person, " ")
   rs = console_repl_find()
   x = console_ahead(rs$reader, accept)
   if (!is.null(x)) return(x)
+  part = rs$reader$after_interrupt %||% ""
+  if (nzchar(part)) rs$reader$after_interrupt = ""
+  prompt = paste0(console_style()$person, " ", part)
   x = tryCatch({
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
       rs$reader$read(prompt, stream = "stdout")
@@ -122,14 +125,15 @@ console_ask = function(accept = NULL) {
     if (length(x) != 1L || is.na(x)) NA_character_ else as_utf8(x)
   }, interrupt = function(e) NA_character_)
   if (is.na(x) && console_class() %in% c("T", "D")) console_cat("\n")
-  x
+  if (is.na(x)) x else paste0(part, x)
 }
 
 #' The answer among the keys a T console's composer read with its Ctrl-C (`rd$after_interrupt`,
 #' console_keys()), or NULL: the first whole line, its edit keys applied (console_compose()), that
 #' is one of `accept` (trimmed, lower case; TRUE: any), echoed after the person's chevron as
-#' readline() leaves a line. The lines before it, or with no answer all the text, go to the console
-#' history (console_keep()), never to the agent; the text after it waits for the next question
+#' readline() leaves a line. The lines before it, or with no answer the whole lines, go to the
+#' console history (console_keep()), never to the agent; the text after it waits for the next
+#' question, and with no answer a line not ended begins this question's (console_ask())
 #' @noRd
 console_ahead = function(rd, accept) {
   x = rd$after_interrupt %||% ""
@@ -142,8 +146,8 @@ console_ahead = function(rd, accept) {
   typed = vapply(whole, function(line) edit(paste0(line, "\n")), "", USE.NAMES = FALSE)
   hit = if (isTRUE(accept)) seq_along(typed) else which(tolower(trimws(typed)) %in% accept)
   if (!length(hit)) {
-    rd$after_interrupt = ""
-    keep(c(typed, if (!is.null(part)) edit(part)))
+    rd$after_interrupt = if (!is.null(part)) edit(part) else ""
+    keep(typed)
     return(NULL)
   }
   n = hit[[1L]]
