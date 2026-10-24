@@ -23,7 +23,9 @@ gptr_condition = function(message, class, kind = "error", fields = list(), call 
   }
   structure(
     c(list(message = text, call = call), fields),
-    class = c(paste0(prefix, "_", class), prefix, kind, "condition")
+    # rlang_message: a console that takes every other message (RStudio's) leaves the display to gptr
+    class = c(paste0(prefix, "_", class), prefix, if (identical(kind, "message")) "rlang_message",
+              kind, "condition")
   )
 }
 

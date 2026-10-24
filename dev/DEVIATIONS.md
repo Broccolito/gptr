@@ -3785,6 +3785,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   Tests: test-console-typing.R "keys read on the polling beat are a paste; after a stall they are typed
   (review)".
 
+- Live dogfood fixes (Task 28, 2026-10-24): Task 39: a gptr message is also an `rlang_message`. RStudio 2026.09's
+  global message handler (`console_highlight_conditions`, default on) writes every other message to stderr in
+  its own box and muffles it, so gptr's display, which clears the live row and keeps the margin, never ran:
+  the stale row stayed above the boxed notice. Contract-visible: 04 §2 message classes. Tests:
+  test-console-message-stream.R "a console handler that takes every non-rlang message leaves gptr's display
+  alone".
+
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
   natural language; `!`, `/` and `@` show what they do. Amends D-183.

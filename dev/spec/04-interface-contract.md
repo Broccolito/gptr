@@ -191,7 +191,9 @@ gptr_inform(message, class, ..., .data = NULL, .once = NULL, .stream = NULL)
 Returns: `gptr_abort()` never returns; `gptr_warn()`/`gptr_inform()` return `invisible(NULL)`. `gptr_inform()`
 is a no-op when `getOption("gptr.quiet")` is `TRUE`. Warnings get class
 `c("gptr_warning_<cls>", "gptr_warning", "warning", "condition")`, messages
-`c("gptr_message_<cls>", "gptr_message", "message", "condition")`. Ordinary messages display on
+`c("gptr_message_<cls>", "gptr_message", "rlang_message", "message", "condition")`, so a console
+handler that takes every other message (RStudio's) leaves their display to gptr, as for cli's and
+rlang's (P28 Task 39). Ordinary messages display on
 stdout after calling handlers, with the standard `muffleMessage` restart; quiet, once keys,
 redaction and metadata remain intact. Actual failure notices may set `.stream = "stderr"`.
 A private stack-scoped protocol binding reserves stdout for JSONL events without changing
