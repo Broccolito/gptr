@@ -280,22 +280,20 @@ ui_permission_detail = function(request, asked = FALSE) {
   shown = if (asked && fits(utils::head(change, 12L), 12L)) min(12L, length(change)) else 0L
   rest = change[seq_along(change) > shown]
   who = ui_who(request)
-  out = c(console_wrap(paste0("  ", if (nzchar(who)) who else "gptr", " wants to use ",
-                              console_tool_name(request$tool %||% "a tool"),
-                              if (length(change)) paste0(" on ", c(lines, "")[[1L]]),
-                              # the level, unless the reason row names it
-                              if (!is.null(risk$level) && !grepl(paste("level", risk$level),
-                                                                 request$reason %||% "")) {
-                                paste0(" (level ", risk$level,
-                                       if (rlang::is_string(risk$label)) {
-                                         paste0(": ", ui_escape(risk$label))
-                                       }, ")")
-                              },
-                              if (identical(request$tier, "ask_human")) {
-                                ", which needs your decision"
-                              }), width),
+  # in the ask's type: who wants which tool bold, its reason and flags dim; the console's name
+  first = paste0("  ", if (nzchar(who)) who else "peter", " wants to use ",
+                 console_tool_name(request$tool %||% "a tool"),
+                 if (length(change)) paste0(" on ", c(lines, "")[[1L]]),
+                 # the level, unless the reason row names it
+                 if (!is.null(risk$level) && !grepl(paste("level", risk$level),
+                                                    request$reason %||% "")) {
+                   label = if (rlang::is_string(risk$label)) paste0(": ", ui_escape(risk$label))
+                   paste0(" (level ", risk$level, label, ")")
+                 },
+                 if (identical(request$tier, "ask_human")) ", which needs your decision")
+  out = c(cli::style_bold(console_wrap(first, width)),
           if (rlang::is_string(request$reason) && nzchar(request$reason)) {
-            console_wrap(paste0("  reason: ", ui_escape(request$reason)), width)
+            sym$dim(console_wrap(paste0("  reason: ", ui_escape(request$reason)), width))
           },
           if (length(rest)) {
             c(if (shown) sym$dim("    (continued)"),
@@ -312,7 +310,7 @@ ui_permission_detail = function(request, asked = FALSE) {
       console_hang(paste0("    ", flags[[k]], where[[k]]), width,
                    5L + nchar(paste0("[", fl$level[[k]], " ", fl$category[[k]], "]")))
     })
-    out = c(out, "  flagged calls:", unlist(rows))
+    out = c(out, sym$dim(c("  flagged calls:", unlist(rows))))
   }
   note = request$undo_note %||% ui_undo_note(request)
   if (rlang::is_string(note) && nzchar(note)) {
@@ -324,7 +322,7 @@ ui_permission_detail = function(request, asked = FALSE) {
   what = c("yes", if (can) {
     paste0(c("always in this session: ", "always in this project: "),
            ui_escape(request$suggested_rule))
-  }, "no (type n <what to do instead> to tell gptr)", "abort the run")
+  }, "no (type n <what to do instead> to tell peter)", "abort the run")
   keys = format(keys)
   c(out, console_hang(paste0("    ", cli::style_bold(keys), "  ", sym$dim(what)), width,
                       6L + nchar(keys[[1L]])))

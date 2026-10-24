@@ -4340,6 +4340,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   /exit` sat in ink between two prompt rows. Contract-visible: 04 §15.10 (the kept list). Tests:
   test-console-repl.R "Ctrl-C at the prompt prints a hint; twice in a row leaves", "background sessions that wait
   for approval are announced once (IC-57)"; test-console-interrupt.R, test-console-typing.R (their notices).
+- Final visual loop, round 2 (2026-10-24): Task 65: the approval's `?` view calls the agent peter, as the console
+  does (`peter wants to use r`, `n no (type n <what to do instead> to tell peter)`; a sub-agent keeps its name),
+  its first row bold as the ask's question, its `reason:` and `flagged calls:` rows and flags dim as the ask's
+  flag. The RStudio dialog shows the same text. Contract-visible: 04 §15.10 (the `?` view). Tests:
+  test-console-ui.R "a flag has one shape in the ask and in ?, in the console's words (visual round 1)" and the
+  tests naming its first row and keys.
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

@@ -627,7 +627,7 @@ Decisions:
   (`patch`, or carried in `edits`) as its own lines, `+` rows of a write's content, another tool's other fields
   as JSON, and nothing for any other shape. At most 12 rows in the ask, then `(+N more lines; ? shows more)`
   (`? shows all` would be false past 52 lines), and 40 in the `?` view, whose first row then names the
-  path (`gptr wants to use edit on R/io.R (level 2)`: the RStudio dialog, which shows only this view, would
+  path (`peter wants to use edit on R/io.R (level 2)`, `gptr` until Task 65: the RStudio dialog, which shows only this view, would
   otherwise not say which file). The rows are styled and cut as the result's diff, one helper,
   `console_diff_rows()`. Main showed the path alone: an edit's change only after `y`, a write's content never.
   (Amended in the review of Tasks 22-27: under the console's ask the `?` view leaves out the rows the ask showed
@@ -1724,7 +1724,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 61 | A sub-agent's end row cut loses its time (final visual loop, round 2) | 64a9f606 |
 | 62 | Slash-command output runs into the next prompt (final visual loop, round 2) | e0e328de |
 | 63 | /help ignores the console's type rules (final visual loop, round 2) | 81a5579f |
-| 64 | Notices in the old `[gptr] …` form remain (final visual loop, round 2) | (this commit) |
+| 64 | Notices in the old `[gptr] …` form remain (final visual loop, round 2) | b2d22fb0 |
+| 65 | The approval's `?` view names the agent gptr, in plain type (final visual loop, round 2) | (this commit) |
 
 ## Out of scope
 

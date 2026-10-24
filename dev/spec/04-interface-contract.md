@@ -5807,7 +5807,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     padded to one width so the words start in one column, its words dim; the interrupt key lower case as the
     banner and live row name it, `esc` in RStudio, R.app and Rgui: review of Tasks 22-27). Its code is at most 40 rows at column 4, as the call block shows them (`console_code_rows()`, no fence
     lines; visual review), or a path tool's change, at most 40 rows, with the path in the first row,
-    `gptr wants to use edit on R/io.R (level 2)` (cheat-sheet review: the RStudio dialog has no call line above it).
+    `peter wants to use edit on R/io.R (level 2)` (cheat-sheet review: the RStudio dialog has no call line above it;
+    the console's name, as `/help` and the live row call the agent, bold as the ask's question is, and its
+    `reason:` and `flagged calls:` rows and the flags dim as the ask writes them, the key `n` saying `to tell
+    peter`: P28 Task 65, visual round 2, which also changes the RStudio dialog's text).
     Under the console's ask (`asked`) it leaves out what shows whole just above: the code rows when the call line
     is this request's and showed its code whole (at most 20 lines), and the change rows the ask showed (its first
     12, none cut at the width), the rest from row 13 under a dim `    (continued)` (review of Tasks 22-27: the same

@@ -153,11 +153,17 @@ test_that("a flag has one shape in the ask and in ?, in the console's words (vis
   expect_false(any(grepl("[`<>]", c(ask, grep("object_write", detail, value = TRUE)))))
   # the reason row names the level, so the first row does not
   expect_identical(detail[1:2],
-                   c("  gptr wants to use r", "  reason: mode edits, risk level 2 (mutating)"))
+                   c("  peter wants to use r", "  reason: mode edits, risk level 2 (mutating)"))
   # inline code as the answer shows it
   withr::local_options(cli.num_colors = 256L)
   blue = sub("x.*$", "", console_style()$blue("x"))
   expect_match(ui_permission_lines(req)[[2L]], paste0(blue, "fuel"), fixed = TRUE)
+  # the ? view in the ask's type: who asks bold, the reason and the flags dim (visual round 2)
+  grey = sub("x.*$", "", console_style()$dim("x"))
+  styled = ui_permission_detail(req)
+  expect_true(startsWith(styled[[1L]], "\033[1m  peter wants to use r"))
+  expect_true(all(startsWith(styled[grepl("reason:|flagged calls:|object_write",
+                                          cli::ansi_strip(styled))], grey)))
 })
 
 test_that("the prompt's first line fits the console, keeping +N more lines (D-187)", {
@@ -195,7 +201,7 @@ test_that("a path tool's prompt shows the path relative to the project; no empty
            risk = list(level = 2L, categories = "write", paths = "R/io.R"))
   expect_identical(ui_permission_lines(w)[1L], "  | write  R/io.R")
   detail = ui_permission_detail(w)
-  expect_identical(detail[1:2], c("  gptr wants to use write (level 2)", "    R/io.R"))
+  expect_identical(detail[1:2], c("  peter wants to use write (level 2)", "    R/io.R"))
   # the level and its label where no reason row names the level
   expect_match(ui_permission_detail(modifyList(ui_request("x = 1"), list(reason = NULL)))[1L],
                "(level 1: local)", fixed = TRUE)
@@ -244,7 +250,7 @@ test_that("an edit or write approval shows the change before the answer (cheat-s
                                                "  ? Allow edit?", keys))
   # the ? view (also the RStudio dialog) names the path in its first row, then the change
   detail = ui_permission_detail(ed)
-  expect_identical(detail[1:3], c("  gptr wants to use edit on R/io.R (level 2)", "    -n = 10",
+  expect_identical(detail[1:3], c("  peter wants to use edit on R/io.R (level 2)", "    -n = 10",
                                   "    +n = 20"))
   expect_false("    R/io.R" %in% detail)
   # a write's content as + rows: 12 in the ask, then how many more, 40 in the ? view
@@ -399,7 +405,8 @@ test_that("the detail view's keys read as the question's; it skips a fence shown
   # the console's interrupt key as its banner and live row name it, the words in one column
   keys = c("    y       yes", "    a       always in this session: r(fn:write.csv)",
            "    p       always in this project: r(fn:write.csv)",
-           "    n       no (type n <what to do instead> to tell gptr)", "    ctrl-c  abort the run")
+           "    n       no (type n <what to do instead> to tell peter)",
+           "    ctrl-c  abort the run")
   expect_identical(utils::tail(ui_permission_detail(req), 5L), keys)
   # the console printed this call's line with its code: ? leaves the fence out
   req$tool_call_id = "t1"
@@ -420,7 +427,7 @@ test_that("the detail view's keys read as the question's; it skips a fence shown
                    "    \033[1mctrl-c\033[22m  \033[38;5;244mabort the run\033[39m")
   local_mocked_bindings(front_end = function() "rstudio")
   expect_identical(utils::tail(cli::ansi_strip(ui_permission_detail(req)), 2L),
-                   c("    n    no (type n <what to do instead> to tell gptr)",
+                   c("    n    no (type n <what to do instead> to tell peter)",
                      "    esc  abort the run"))
   skip_if_not_installed("rstudioapi")
   shown = NULL
@@ -915,7 +922,7 @@ test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-1
   expect_identical(q(c(req, agent = "'Sum\033...'")), "  ? sub-agent 'Sum<U+001B>...': allow r?")
   expect_identical(ui_permission_detail(c(req, agent = "alpha"))[1L],
                    "  sub-agent alpha wants to use r")
-  expect_match(ui_permission_detail(req)[1L], "^  gptr wants to use r")
+  expect_match(ui_permission_detail(req)[1L], "^  peter wants to use r")
   crit = ui_request("q('no')", tier = "ask_human")
   expect_identical(utils::tail(ui_permission_lines(crit), 3L)[1L],
                    paste0("    asks in every mode: ", crit$reason))
