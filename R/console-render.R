@@ -783,6 +783,29 @@ console_call_line = function(call, width, kind = "act") {
   c(paste0("  ", tone(head)), console_code_rows(lines, lang, 20L, width))
 }
 
+#' Rows wrapped to `width` display columns with their spaces kept (code, a diff): a row breaks at
+#' its last space that fits after its text begins past column `hang` (at most half the width), else
+#' at the width, and goes on `hang` columns in, its styles carried over
+#' @noRd
+console_hang = function(rows, width, hang) {
+  hang = min(hang, width %/% 2L)
+  pad = strrep(" ", hang)
+  unlist(lapply(rows, function(row) {
+    out = character()
+    repeat {
+      plain = strsplit(cli::ansi_strip(row), "", fixed = TRUE)[[1L]]
+      fit = sum(cumsum(nchar(plain, type = "width")) <= width)
+      if (fit >= length(plain)) return(c(out, row))
+      text = hang + match(TRUE, plain[-seq_len(hang)] != " ", nomatch = 0L)
+      sp = which(plain[seq_len(fit + 1L)] == " ")
+      sp = sp[sp > text]
+      cut = if (length(sp)) max(sp) else fit + 1L
+      out = c(out, cli::ansi_substr(row, 1L, cut - 1L))
+      row = paste0(pad, cli::ansi_substr(row, cut + (length(sp) > 0L), length(plain)))
+    }
+  }))
+}
+
 #' Diff rows at column 4 (D-245): at most `n` of the escaped `rows`, `+` rows blue, `-` rows red,
 #' others dim, with a `width` a row wider than it cut, never wrapped, so its code keeps its spaces;
 #' then a dim `(+N more lines<more>)`

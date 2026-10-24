@@ -250,44 +250,56 @@ ui_permission_lines = function(request) {
 #' the interrupt key as the banner names it (`ctrl-c`, `esc`). Under the console's ask (`asked`) it
 #' leaves out what shows whole above it: the code when the call block showed it (at most 20 rows
 #' that fit), the change rows the ask showed (its first 12 when none was cut), the rest under a dim
-#' `(continued)`; alone, as the RStudio dialog, it shows them all
+#' `(continued)`; alone, as the RStudio dialog, it shows them all. Every row is wrapped to the
+#' console under its own text: prose at column 2, a change row after its sign, code under its code,
+#' a flagged call under its call, a key's words under its words
 #' @noRd
 ui_permission_detail = function(request, asked = FALSE) {
   risk = request$risk
   sym = console_style()
+  width = ui_width()
   lines = ui_request_lines(request)
   change = ui_request_change(request)
-  fits = function(x, n) length(x) <= n && all(nchar(x, type = "width") + 4L <= ui_width())
+  fits = function(x, n) length(x) <= n && all(nchar(x, type = "width") + 4L <= width)
   code = !(asked && ui_call_shown(request) && is.character(request$input$code) && fits(lines, 20L))
   shown = if (asked && fits(utils::head(change, 12L), 12L)) min(12L, length(change)) else 0L
   rest = change[seq_along(change) > shown]
   who = ui_who(request)
-  out = c(paste0("  ", if (nzchar(who)) who else "gptr", " wants to use ",
-                 console_tool_name(request$tool %||% "a tool"),
-                 if (length(change)) paste0(" on ", c(lines, "")[[1L]]),
-                 if (!is.null(risk$level)) {
-                   paste0(" (level ", risk$level,
-                          if (rlang::is_string(risk$label)) paste0(": ", ui_escape(risk$label)),
-                          ")")
-                 },
-                 if (identical(request$tier, "ask_human")) ", which needs your decision"),
+  out = c(console_wrap(paste0("  ", if (nzchar(who)) who else "gptr", " wants to use ",
+                              console_tool_name(request$tool %||% "a tool"),
+                              if (length(change)) paste0(" on ", c(lines, "")[[1L]]),
+                              if (!is.null(risk$level)) {
+                                paste0(" (level ", risk$level,
+                                       if (rlang::is_string(risk$label)) {
+                                         paste0(": ", ui_escape(risk$label))
+                                       }, ")")
+                              },
+                              if (identical(request$tier, "ask_human")) {
+                                ", which needs your decision"
+                              }), width),
           if (rlang::is_string(request$reason) && nzchar(request$reason)) {
-            paste0("  reason: ", ui_escape(request$reason))
+            console_wrap(paste0("  reason: ", ui_escape(request$reason)), width)
           },
           if (length(rest)) {
-            c(if (shown) sym$dim("    (continued)"), console_diff_rows(rest, 40L - shown))
+            c(if (shown) sym$dim("    (continued)"),
+              console_hang(console_diff_rows(rest, 40L - shown), width, 5L))
           } else if (!length(change) && code) {
-            console_code_rows(lines, console_lang(request$tool), 40L)
+            console_hang(console_code_rows(lines, console_lang(request$tool), 40L), width, 6L)
           })
   fl = ui_flagged(risk)
   if (NROW(fl)) {
     where = ifelse(is.na(fl$path), "",
                    paste0("  path: ", ui_escape(fl$path), " (", fl$path_class, ")"))
-    out = c(out, "  flagged calls:",
-            paste0("    [", fl$level, "] ", fl$category, "  ", ui_escape(fl$call), where))
+    head = paste0("    [", fl$level, "] ", fl$category, "  ")
+    rows = lapply(seq_along(head), function(k) {
+      console_hang(paste0(head[[k]], ui_escape(fl$call[[k]]), where[[k]]), width, nchar(head[[k]]))
+    })
+    out = c(out, "  flagged calls:", unlist(rows))
   }
   note = request$undo_note %||% ui_undo_note(request)
-  if (rlang::is_string(note) && nzchar(note)) out = c(out, paste0("  ", ui_escape(note)))
+  if (rlang::is_string(note) && nzchar(note)) {
+    out = c(out, console_wrap(paste0("  ", ui_escape(note)), width))
+  }
   can = is.null(ui_no_rule(request))
   # the console's interrupt key as the banner and live row name it; the words in one column
   keys = c("y", if (can) c("a", "p"), "n", tolower(console_interrupt_key()))
@@ -295,7 +307,9 @@ ui_permission_detail = function(request, asked = FALSE) {
     paste0(c("always in this session: ", "always in this project: "),
            ui_escape(request$suggested_rule))
   }, "no (type n <what to do instead> to tell gptr)", "abort the run")
-  c(out, paste0("    ", cli::style_bold(format(keys)), "  ", sym$dim(what)))
+  keys = format(keys)
+  c(out, console_hang(paste0("    ", cli::style_bold(keys), "  ", sym$dim(what)), width,
+                      6L + nchar(keys[[1L]])))
 }
 
 #' The "cannot be undone" note of the checkpoint.note service (P16) for a request without one

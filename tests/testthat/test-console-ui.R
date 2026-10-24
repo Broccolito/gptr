@@ -178,6 +178,36 @@ test_that("a path tool's prompt shows the path relative to the project; no empty
   expect_match(ui_permission_detail(ui_request("x = 1"))[1L], "(level 1: local)", fixed = TRUE)
 })
 
+# A row of the ? view joined with the rows it goes on in, `hang` columns in (console_hang())
+unwrap = function(rows, at, hang) {
+  k = at
+  while (k < length(rows) && grepl(paste0("^ {", hang, "}[^ ]"), rows[[k + 1L]])) k = k + 1L
+  paste(c(rows[[at]], sub("^ +", "", rows[seq_len(k - at) + at])), collapse = " ")
+}
+
+test_that("the ? view wraps its rows to the console, each under its own text (visual round 1)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 60, crayon = FALSE, unicode = FALSE)
+  local_project()
+  long = "     xlab = \"weight (1000 lb)\", ylab = \"miles per gallon\")"
+  ed = list(tool = "edit", risk = list(level = 2L), input = list(path = "analysis.R", edits = list(
+    list(oldText = "plot(x)", newText = paste0("plot(mpg ~ wt, data = fuel,\n", long)))))
+  req = ui_request("write.csv(fuel, \"fuel.csv\", row.names = FALSE)")
+  for (detail in list(ui_permission_detail(ed), ui_permission_detail(req))) {
+    expect_true(all(nchar(detail) <= 60L))
+    expect_false(any(grepl("^[^ ]", detail)))
+  }
+  # a change row goes on after its sign, a flagged call under its call
+  detail = ui_permission_detail(ed)
+  at = grep("xlab", detail, fixed = TRUE)
+  expect_match(detail[at + 1L], "^     [^ ]")
+  expect_identical(unwrap(detail, at, 5L), paste0("    +", long))
+  detail = ui_permission_detail(req)
+  at = grep("write.csv(", detail, fixed = TRUE)[[2L]]
+  col = regexpr("write.csv(", detail[at], fixed = TRUE)
+  expect_identical(regexpr("[^ ]", detail[at + 1L]), col, ignore_attr = TRUE)
+})
+
 test_that("an edit or write approval shows the change before the answer (cheat-sheet review)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   keys = "    y yes - n no - ? more"
@@ -270,11 +300,11 @@ test_that("the console's ? view shows only the change rows its ask cut (review o
   expect_identical(out[at + 0:29], c("    (continued)", paste0("    +line ", 13:40),
                                      "    (+20 more lines)"))
   expect_identical(sum(out == "    +line 12"), 1L)
-  # a row the ask cut at the width is shown whole, so the whole change is
-  long = paste0("x = '", strrep("d", 90L), "'")
+  # a row the ask cut at the width is shown whole, wrapped, so the whole change is
+  long = paste0("x = '", paste(rep(strrep("d", 9L), 9L), collapse = " "), "'")
   out = ask(req("write", path = "a.R", content = paste0("a\n", long)))
   expect_identical(sum(out == "    +a"), 2L)
-  expect_true(paste0("    +", long) %in% out)
+  expect_identical(unwrap(out, max(grep("^    [+]x = ", out)), 5L), paste0("    +", long))
   # alone (the RStudio dialog) the ? view shows the whole change
   expect_identical(ui_permission_detail(ed)[2:3], c("    -n = 10", "    +n = 20"))
 })
@@ -356,11 +386,11 @@ test_that("the detail view's keys read as the question's; it skips a fence shown
   out = console_try(function() ui_console_permission(req), c("?", "y"))
   expect_false("    write.csv(df, 'out.csv')" %in% out$shown)
   expect_true(all(keys %in% out$shown))
-  # a code row the call block cut at the console's width is shown whole by ? (visual review)
-  long = paste0("write.csv(df, '", strrep("d", 90L), ".csv')")
+  # a code row the call block cut at the console's width is shown whole by ?, wrapped (visual)
+  long = paste0("write.csv(df, '", paste(rep(strrep("d", 9L), 9L), collapse = " "), ".csv')")
   wide = modifyList(req, list(input = list(code = long), summary = long))
-  out = console_try(function() ui_console_permission(wide), c("?", "y"))
-  expect_true(paste0("    ", long) %in% out$shown)
+  out = console_try(function() ui_console_permission(wide), c("?", "y"))$shown
+  expect_identical(unwrap(out, max(grep("^    write[.]csv", out)), 6L), paste0("    ", long))
   # the key bold and its words dim; the RStudio dialog gets the code and no SGR
   withr::local_options(cli.num_colors = 256L)
   expect_identical(utils::tail(ui_permission_detail(req), 1L),

@@ -5782,7 +5782,11 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     Under the console's ask (`asked`) it leaves out what shows whole just above: the code rows when the call line
     is this request's and showed its code whole (at most 20 lines), and the change rows the ask showed (its first
     12, none cut at the width), the rest from row 13 under a dim `    (continued)` (review of Tasks 22-27: the same
-    rows showed twice, nine rows apart); the RStudio dialog keeps them all and gets the text without SGR. An ask
+    rows showed twice, nine rows apart); the RStudio dialog keeps them all and gets the text without SGR. Every
+    row is wrapped to the console under its own text, never cut, as `?` promises more (P28 Task 46: at 60 columns
+    a long change row and a flagged call ran past the edge and continued at column 0): prose at column 2
+    (`console_wrap()`), the rest with its spaces kept (`console_hang()`), a change row after its sign (column 5),
+    code at column 6, a flagged call under its call, a key's words under its words. An ask
     that shows a call's change marks the console's record of the call (`asked`), and an allowed edit's result is
     then one dim row, `    edited analysis.R · +2 -1` (its diff's counts), in place of the same rows again.
   - An approval's `n <text>` (`no, <text>`, `No. <text>`) reaches the model as the person's instruction (cheat-sheet

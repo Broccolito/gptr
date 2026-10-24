@@ -3791,6 +3791,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the stale row stayed above the boxed notice. Contract-visible: 04 §2 message classes. Tests:
   test-console-message-stream.R "a console handler that takes every non-rlang message leaves gptr's display
   alone".
+- Final visual loop, round 1 (2026-10-24): Task 46: the approval's `?` view wraps every row to the console under
+  its own text and cuts none: prose at column 2, a change row after its sign, code at column 6, a flagged call
+  under its call, a key's words under its words (`console_hang()` keeps a row's spaces). At 60 columns a long
+  change row and a flagged call ran past the edge, and the terminal continued them at column 0. Contract-visible:
+  04 §15.10 IC-82 (the `?` view). Tests: test-console-ui.R "the ? view wraps its rows to the console, each under
+  its own text (visual round 1)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
