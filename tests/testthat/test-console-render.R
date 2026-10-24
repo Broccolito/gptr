@@ -1513,6 +1513,26 @@ test_that("the status line counts the run's requests and adds its sub-agents' co
                  "^gptr: done - 1 request - 110 tokens - \\$0\\.0010 - 100% context left\\s*$")
 })
 
+test_that("at verbosity 1 a run ending in a condition leaves its reason to it (visual round 2)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 1L, quiet = FALSE)
+  s = render_session()
+  ctx = session_live(s)$ctx
+  end = function(status, reason) {
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    console_on_agent_end(hook_event("agent_end", s, status = status, reason = reason, usage = NULL,
+                                    turns = 1L), ctx)
+  }
+  # R's error says why once, as the caller sees it (gateway_signal())
+  why = "The run stopped: `r` needs approval and no one can answer in this run."
+  terms = " - 0 requests - 0 tokens\\s*$"
+  expect_message(end("blocked", why), paste0("^gptr: blocked", terms))
+  expect_message(end("error", "provider failure: boom"), paste0("^gptr: error", terms))
+  # a run that ends in no condition keeps its reason
+  expect_message(end("aborted", "the user"), paste0("^gptr: aborted: the user", terms))
+})
+
 test_that("custom entries of a run are shown through renderer records (IC-69)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)

@@ -4346,6 +4346,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   flag. The RStudio dialog shows the same text. Contract-visible: 04 §15.10 (the `?` view). Tests:
   test-console-ui.R "a flag has one shape in the ask and in ?, in the console's words (visual round 1)" and the
   tests naming its first row and keys.
+- Final visual loop, round 2 (2026-10-24): Task 66: at verbosity 1 a run that ends in a condition its caller sees
+  (`error`, `blocked`, `budget`, `max_turns`, as `gateway_signal()` raises) writes `gptr: <status> · <terms>`, the
+  reason left to R's error; a script blocked for approval wrote the same long reason in the not-run line, the
+  progress line and the error. Contract-visible: 04 §15.10 run totals. Tests: test-console-render.R "at verbosity
+  1 a run ending in a condition leaves its reason to it (visual round 2)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

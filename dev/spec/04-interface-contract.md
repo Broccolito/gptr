@@ -5844,7 +5844,11 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     last request (its usage row's `model`; a built-in CLI's `default` as the full id the CLI gets, as `/status`
     names it, P28 Task 33), and `sub-agents <cost>` after the own cost. A term whose value is
     unknown (IC-74) is left out, as is a cost not above 0 (a free or local model): `aborted · 1 request` after
-    an abort that reported nothing. `format_cost()` keeps IC-74's form wherever a cost is shown.
+    an abort that reported nothing. `format_cost()` keeps IC-74's form wherever a cost is shown. At verbosity 1
+    the line is the progress notice `gptr: <terms>`; a run that ends in a condition its caller sees
+    (`gateway_signal()`: `error`, `blocked`, `budget`, `max_turns`) names its status alone there, its reason
+    left to the condition (P28 Task 66, visual round 2: a script blocked for approval stated the reason three
+    times, the terminal wrapping it mid-word).
     `console_context_left(u)` is the last request's `1 - (input + cache_read + cache_write_5m +
     cache_write_1h)` over `compact_threshold(window, max_output, gptr.r_output_tokens)` of `prompt_model()`'s
     record for its `provider/model`, where compaction starts (an unknown window gives `compact_at` alone), as a

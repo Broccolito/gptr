@@ -1248,6 +1248,10 @@ console_on_agent_end = function(event, ctx) {
   sym = console_style()
   v = verbosity()
   if (v == 1L) {
+    # a run the caller sees end in a condition (gateway_signal()) leaves its reason to that
+    if (event$status %in% c("error", "blocked", "budget", "max_turns")) {
+      terms[[1L]] = console_escape(event$status, FALSE)
+    }
     text = paste0("gptr: ", paste(terms, collapse = sym$sep))
     if (identical(event$status, "idle")) {
       console_progress(text)
