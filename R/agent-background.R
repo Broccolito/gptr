@@ -526,23 +526,21 @@ bg_park_session = function(s, run) {
   invisible(s)
 }
 
-#' Continue a waiting session inside a blocking gptr call: the run opens with a user message that
-#' says the user is at the console (a steer, so it comes before re-queued follow-ups), and the
-#' model repeats the denied (or blocked) call, which the gate asks the user about. A session that
-#' cannot continue keeps its queue as it was, is set to `aborted` and released (one diagnostic),
-#' never left waiting
+#' Continue a waiting session inside a blocking gptr call: the run's input is a user steer that
+#' says the user is at the console, so steers piped in meanwhile join it and queued follow-ups
+#' come when it would stop, and the model repeats the denied (or blocked) call, which the gate
+#' asks the user about. A session that cannot continue is set to `aborted` and released (one
+#' diagnostic), never left waiting
 #' @noRd
 bg_resume = function(s) {
   d = session_data(s)
-  q = d$queue
   live = session_live(s)
   ask = live$background$ask
-  run = tryCatch({
-    if (!is.null(ask)) session_enqueue(s, bg_resume_text(ask), as = "steer", source = "api_user")
-    run_start(s, NULL, opts = live$background$opts)
-  }, error = function(e) e)
+  input = if (!is.null(ask)) {
+    msg_user(redact(bg_resume_text(ask), "context"), source = "steer")
+  }
+  run = tryCatch(run_start(s, input, opts = live$background$opts), error = function(e) e)
   if (!inherits(run, "error")) return(invisible(run))
-  d$queue = q
   registry_diagnostic("builtin:background", "resume", class(run)[1L], conditionMessage(run))
   if (identical(d$status, "waiting")) {
     d$status = "aborted"

@@ -4804,16 +4804,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   an idle end, else `interrupted` (as a stored blocked chat); a later synthesis turn decides by itself. A listed row
   with no answer naming the model takes it as `rebuild_model()` does (`model_change`, `gptr.frozen`). Formerly
   every settled team or fan-out listed and resumed `interrupted` with model NA, while the live object was idle.
-- Rule (bg-1): a waiting background session's resumed run opens with a steer from the user (`api_user`, so before
-  re-queued follow-ups): "I am at the console now. Repeat the call that could not be approved (<summary>) with the
-  same input; I will be asked to approve it.", or "I am at the console now; ask again." for a question; a resume
-  that cannot start restores the queue. Only the sweep's `bg_resume()` starts it: `sdk_check()` starts nothing for a
-  `waiting` session, so a message piped in meanwhile waits for that run, and `gptr_step()` leaves the session
-  waiting (`gptr_wait()` continues it). A `ui` record's `permission()` denial may carry `how = chr(1)`, kept by
-  `ui_answer_norm()` for a denial only and used by `perm_ask()` as the denial text's last sentence; the idle-tick
-  wrapper's is "Nothing ran and nobody declined." (the pending text already says to repeat the call). Formerly the
-  run resumed on the stale "Permission denied ... Explain what you need or choose another approach." and GPT ended
-  without asking in 7 of 8 runs.
+- Rule (bg-1): a waiting background session's resumed run has a user steer as its input (`run_start()`'s, so steers
+  piped in meanwhile join it and queued follow-ups, re-queued ones among them, come when it would stop): "I am at
+  the console now. Repeat the call that could not be approved (<summary>) with the same input; I will be asked to
+  approve it.", or "I am at the console now; ask again." for a question. Only the sweep's `bg_resume()` starts it:
+  `sdk_check()` starts nothing for a `waiting` session, so a message piped in meanwhile waits for that run, and
+  `gptr_step()` leaves the session waiting (`gptr_wait()` continues it). A `ui` record's `permission()` denial may
+  carry `how = chr(1)`, kept by `ui_answer_norm()` for a denial only and used by `perm_ask()` as the denial text's
+  last sentence; the idle-tick wrapper's is "Nothing ran and nobody declined." (the pending text already says to
+  repeat the call). Formerly the run resumed on the stale "Permission denied ... Explain what you need or choose
+  another approach." and GPT ended without asking in 7 of 8 runs.
 - Rule (gate-hint): the `how_to_allow` (and message) of a call nobody can approve starts `Mode "<m>" comes from
   <where>.` while the run keeps the mode the gateway recorded in a top-level call's `opts$mode_from`: "this call's
   mode argument", "the session this call continues", or the `settings_layered("mode")` layer holding it ("the
@@ -4882,8 +4882,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   status ...", injection-e2e "a worker's forwarded permission request ..."; session-store "a settled team or fan-out
   lists and resumes idle ..."; agent-background "a resumed session is told the user can now approve the call", "...
   whose ask tool was blocked is told to ask again", "a message piped into a waiting session is delivered with the
-  console note"; console-ui "a denial keeps the UI's how ..."; agent-dispatch "a blocked call's hint names where its
-  mode came from"; console-commands "template commands exist before the first prompt ...", "a template command is
+  console note", "a follow-up queued while a session waits comes after its resumed turn"; console-ui "a denial
+  keeps the UI's how ..."; agent-dispatch "a blocked call's hint names where its mode came from"; console-commands
+  "template commands exist before the first prompt ...", "a template command is
   the console's first input (end to end)"; console-completion "/ completes the project's template commands before
   the first prompt (D-252)"; gptr-config "a project whose only resource is prompt templates gets the
   trust notice", "a trusted prompts-only project registers its templates", "every project skill, agent and

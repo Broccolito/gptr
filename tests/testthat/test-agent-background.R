@@ -490,6 +490,24 @@ test_that("a message piped into a waiting session is delivered with the console 
   expect_true(any(grepl("I am at the console now. Repeat the call", texts, fixed = TRUE)))
 })
 
+test_that("a follow-up queued while a session waits comes after its resumed turn", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  local_scripted_ui(answers = list())
+  local_gptr_options(background_tools = "idle", record = "off", verbose = 0L)
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "z = 3")), "done", "ok"))
+  s = peter("do it", model = fake, mode = "manual", envir = new.env(), background = TRUE)
+  expect_true(bg_pump_until(function() identical(s$status, "waiting")))
+  gptr_steer(s, "LATER QUESTION", as = "follow_up")
+  gptr_wait(s, timeout = 20)
+  texts = lapply(fake$log$requests[2:3], function(r) vapply(r$messages, msg_text, ""))
+  expect_match(texts[[1L]][[length(texts[[1L]])]], "I am at the console now. Repeat the call",
+               fixed = TRUE)
+  expect_false("LATER QUESTION" %in% texts[[1L]])
+  expect_identical(texts[[2L]][[length(texts[[2L]])]], "LATER QUESTION")
+})
+
 test_that("gptr_jobs(kill = TRUE) cancels a waiting background session", {
   skip_on_cran()
   skip_if_not_installed("later")
