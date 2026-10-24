@@ -4458,3 +4458,17 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^eval-guard$` on R 4.6.1 (no `Partial`) PASS; R-devel in hosted CI.
 - Deviations: none (D-252's guard-1 rule names the table, not its entries). Open: none.
 
+### ci91-3 - The D-085 test counts only its own session's shutdown
+- Red: job 120738934119 (ubuntu-latest release) failed `test-ext-check.R:539` ("a session finalized
+  during a check keeps its deferred shutdown (D-085)"): one deferred event was left. The test is
+  main's and unchanged; the release jobs of main's last nine green runs passed it, and locally it
+  passes.
+- Cause: the test, not D-085. `session_finalizer()` is the only caller of `ev_defer()`: every
+  session that gc collects queues its own `session_shutdown` in the registry current at that
+  moment. The asserted event had run (its command was gone, `seen$reasons == "gc"`), so the entry
+  left was another session's, left by an earlier test and collected after the check's drain. A
+  collection before the drain would have added a second `"gc"` to `seen$reasons` the same way.
+- Fix: the hook records only `s1`'s events (the queued payload names `s1`), and the test checks
+  that no deferred event for `s1` is left.
+- Green: `^ext-(check|events)$` PASS 455.
+- Deviations: none. Open: none.
