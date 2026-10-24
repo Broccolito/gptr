@@ -1729,7 +1729,7 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 66 | A script's blocked run states its reason three times (final visual loop, round 2) | 353e56aa |
 | 67 | After an abort a dropped steer shows twice (final visual loop, round 2) | 1e28b21a |
 | 68 | In TERM=dumb a cursor key typed during a run lands in the steer (final visual loop, round 2) | a70d64b5 |
-| 69 | /compact's one-row result still runs into the next prompt (Task 62, found by its visual check) | (this commit) |
+| 69 | /compact's one-row result still runs into the next prompt (Task 62, found by its visual check) | 8644edd9 |
 
 ## Out of scope
 
