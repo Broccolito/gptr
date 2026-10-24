@@ -3218,6 +3218,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   transcript got none of them; the REPL now marks its gateway calls `gptr_console` and P15's locator runs no
   finder for them (also an `Rscript` file and the editor's buffer). Contract-visible: 04 IC-49. Tests:
   test-console-repl.R "a console turn is recorded in the transcript also when a script started the console".
+- Live dogfood fixes (Task 28, 2026-10-23): Task 37: a message Up takes back writes `↳ taken back · <text>` where
+  its queue line shows, by that line's rule (while a T console's live row is up, a CLI route's steer). On
+  claude-cli and codex (S4) `↳ steer · s2: cylinders · after the CLI's answer` stayed in the scrollback above
+  the edited steer's line, though `cylinders` was withdrawn and never sent. Contract-visible: 04 §15.10 IC-76.
+  Tests: test-console-typing.R "a CLI route's steer taken back says so under its printed line (Task 37)".
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Rule (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

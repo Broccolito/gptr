@@ -326,7 +326,9 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
 
 #' The dim line at column 0 that shows a message queued for session `s` (D-242): the queued
 #' glyph, `steer` or `follow-up`, the separator and the text (ASCII `-> steer - <text>`), cut to
-#' three rows; a steer on a CLI route adds `after the CLI's answer`. A line whose text is on screen
+#' three rows; a steer on a CLI route adds `after the CLI's answer`. A message taken back (`taken`)
+#' says `taken back` in place of its kind where its queue line shows, so no line of a withdrawn
+#' steer reads as if it will be sent. A line whose text is on screen
 #' already, right above it, says `the$echoed` in its place: `not an answer` for a line a question
 #' read past (console_typed_ahead()), nothing for the pause menu's [s] and [f] text, which their
 #' question's title names (policy_menu()). Inside an evaluation it has the console's
@@ -337,7 +339,7 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
 #' (a CLI route's kept). Where a T console's composer reads keys, the live row shows the queue
 #' while it is up (D-243), so only a CLI route's steer prints its line then.
 #' @noRd
-console_queue_line = function(s, text, as) {
+console_queue_line = function(s, text, as, taken = FALSE) {
   steer = identical(as, "steer")
   on_cli = steer && identical(session_live(s)$run$model[["type"]], "cli")
   # the live row shows the queue, but not that a CLI route's steer waits for the CLI's answer
@@ -346,8 +348,9 @@ console_queue_line = function(s, text, as) {
   sym = console_style()
   text = the$echoed %||% text
   rows = sym$dim(console_person_rows(sym$queued, paste0(
-    if (steer) "steer" else "follow-up", if (nzchar(text)) paste0(sym$sep, text),
-    if (on_cli) paste0(sym$sep, "after the CLI's answer")
+    if (taken) "taken back" else if (steer) "steer" else "follow-up",
+    if (nzchar(text)) paste0(sym$sep, text),
+    if (on_cli && !taken) paste0(sym$sep, "after the CLI's answer")
   ), n = 3L))
   rec = Find(function(rec) identical(rec$session, s) && console_foreground(rec, tools = TRUE),
              as.list(console_state()$active))

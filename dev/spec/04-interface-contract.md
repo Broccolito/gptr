@@ -5526,7 +5526,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     past, the pause menu's [s] and [f]) prints one dim line at column 0, `↳ steer · <text>` or
     `↳ follow-up · <text>` (ASCII `-> steer - <text>`); on a CLI route (model type `"cli"`) a steer adds
     ` · after the CLI's answer`, and prints its line in a T console while the live row is up too (review of
-    Tasks 16-21). The text is escaped and wrapped inside the console width (width - 1), later rows
+    Tasks 16-21). Up's take-back writes `↳ taken back · <text>` (ASCII `-> taken back - <text>`) where the
+    message's queue line shows, by the same rule (P28 Task 37: a CLI route's withdrawn steer kept a line that
+    read as if it would be sent). The text is escaped and wrapped inside the console width (width - 1), later rows
     under the text, and cut to three rows, the last ending in `…`; inside an evaluation the line has the
     console's colours. It replaces the notices `[gptr] steering: ...` and `[gptr] follow-up queued: ...` above.
     A line a question read past (IC-75, `console_typed_ahead()`) is on screen already, after the question's

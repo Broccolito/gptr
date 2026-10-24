@@ -250,6 +250,27 @@ test_that("a T console's steer on a CLI route still says it waits for the CLI's 
                      "after the CLI's answer") %in% rows)
 })
 
+test_that("a CLI route's steer taken back says so under its printed line (Task 37)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE, cli.num_colors = 1L, cli.width = 80L)
+  local_mocked_bindings(front_end = function() "terminal")
+  f = local_fake_cli("claude", "toolstream")
+  local_keys(keys_once(c("use base R\r", "\033[A", "\025", "use dplyr\r"),
+                       function() length(fake_log(f, "turn")) == 1L))
+  res = typing_console(f$model, c("go", "/exit"))
+  local_cli_cleanup(res$s)
+  rows = term_rows(paste(res$out, collapse = "\n"))
+  cli = paste0(console_style()$sep, "after the CLI's answer")
+  lines = c(paste0(queue_line("steer", "use base R"), cli), queue_line("taken back", "use base R"),
+            paste0(queue_line("steer", "use dplyr"), cli))
+  at = match(lines, rows)
+  expect_false(anyNA(at) || is.unsorted(at))
+  ops = Filter(function(m) identical(m$role, "operator"), res$s$messages)
+  expect_identical(vapply(ops, msg_text, ""), relay("use dplyr"))
+})
+
 test_that("type_ahead = 'follow_up' sends the line as the next prompt, its own run (D-242)", {
   skip_on_cran()
   local_console_test()
