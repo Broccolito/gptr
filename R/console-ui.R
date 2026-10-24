@@ -350,9 +350,12 @@ ui_undo_note = function(request) {
 #' readline() leaves open then. A `secret` is read with the echo off where R reads its own terminal
 #' (tty_secret()); elsewhere the console shows it, which a dim row above the chevron says once in
 #' the session (IC-77). A T console's draft stays in its composer, for the live row after the
-#' answer; a dim row above the chevron says so (ui_draft_kept(), D-243)
+#' answer; a dim row above the chevron says so (ui_draft_kept(), D-243). A whole line that
+#' `accept(line)` takes, one of the question's answers, typed once its rows showed is its answer:
+#' read by the drain (echoed after the chevron, on the band) or, once the drain read what was typed
+#' before, by readline however soon
 #' @noRd
-ui_console_read = function(prompt, secret = FALSE) {
+ui_console_read = function(prompt, secret = FALSE, accept = NULL) {
   rd = console_repl_find()$reader
   hide = if (secret) tty_secret()
   # an answer on the input band as the prompts are; a secret off it, as typed without echo
@@ -360,13 +363,18 @@ ui_console_read = function(prompt, secret = FALSE) {
     band_read(p, gptr_readline)
   }
   repeat {
-    console_typed(drain = TRUE)
+    drained = console_typed(drain = TRUE, accept = accept)
+    if (rlang::is_string(drained)) {
+      console_write(console_band(paste0(prompt, console_escape(drained, FALSE))))
+      return(drained)
+    }
     ui_draft_kept()
     if (secret && is.null(hide) && once_first("visible", "secret")) {
       console_write(ui_hint(paste("This console shows the key as you type; gptr_env() loads keys",
                                   "from a file instead.")))
     }
-    ans = tryCatch(readline_answer(prompt, if (!secret) console_typed_ahead, read = read),
+    ans = tryCatch(readline_answer(prompt, if (!secret) console_typed_ahead,
+                                   if (isTRUE(drained)) accept, read),
                    interrupt = function(e) NA_character_)
     if (!rlang::is_string(ans)) {
       if (console_class() %in% c("T", "D")) console_cat("\n")
@@ -446,8 +454,12 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
     paste0("  ", unlist(lapply(seq_along(labels), choice))),
     paste0("  ", sym$dim(console_wrap(ui_escape(hint), width - 2L)))
   ))))
+  # a choice's numbers answer it however soon they are typed (ui_console_read())
+  numbers = function(x) {
+    grepl("^[0-9][0-9,[:space:]]*$", trimws(x)) && !anyNA(ui_parse_choice(x, labels, multiple))
+  }
   for (attempt in seq_len(5L)) {
-    ans = read(paste0(sym$person, " "))
+    ans = read(paste0(sym$person, " "), accept = numbers)
     if (is.na(ans)) return(NA_integer_)
     if (!nzchar(trimws(ans)) && length(default)) return(as.integer(default))
     idx = ui_parse_choice(ans, labels, multiple)
@@ -513,9 +525,14 @@ ui_console_permission = function(request, read = ui_console_read) {
   console_write(ui_permission_lines(request))
   if (length(ui_request_change(request))) ui_change_asked(request)
   sym = console_style()
+  # `no, use base R` too: punctuation right after the key is no part of the text
+  deny = "^no?[,.;:!]*(\\s|$)"
+  keys = c("y", "yes", if (can) c("a", "always", "p", "project"), "?")
+  # its answers answer it however soon they are typed (ui_console_read())
+  answers = function(x) tolower(trimws(x)) %in% keys || grepl(deny, tolower(trimws(x)))
   bad = 0L
   while (bad < 5L) {
-    a = trimws(read(paste0(sym$person, " ")))
+    a = trimws(read(paste0(sym$person, " "), accept = answers))
     if (is.na(a)) return(ui_answer("abort"))
     low = tolower(a)
     if (low %in% c("y", "yes")) return(ui_answer("allow"))
@@ -525,8 +542,7 @@ ui_console_permission = function(request, read = ui_console_read) {
                                    scope)))
       return(ui_answer("allow", scope))
     }
-    # `no, use base R` too: punctuation right after the key is no part of the text
-    if (grepl("^no?[,.;:!]*(\\s|$)", low)) {
+    if (grepl(deny, low)) {
       fb = trimws(sub("^no?[,.;:!]*", "", a, ignore.case = TRUE))
       return(ui_answer("deny", feedback = if (nzchar(fb)) fb))
     }

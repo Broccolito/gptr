@@ -771,7 +771,7 @@ test_that("a question drawn over the composer's draft says where it went (steeri
   rd$waiting = function() character()
   shown = character()
   local_mocked_bindings(console_repl_find = function() list(reader = rd),
-                        console_typed = function(drain = FALSE) FALSE,
+                        console_typed = function(...) FALSE,
                         console_write = function(lines) shown <<- c(shown, lines))
   read = function(draft) {
     rd$compose = list(draft = draft, t = 1)

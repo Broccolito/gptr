@@ -2304,7 +2304,7 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `tty_drain_mode()` | the modes to restore (`tty_modes()`; NULL when stty fails) after setting `stty -icanon min 0 time 0` on fd 0, the echo unchanged, so the partial line a canonical terminal holds can be read (mockable); the drain before a question restores them on exit (IC-76, D-243) | P28 |
 | `tty_query(query, ms = 1500)` | `chr(1)`: the terminal's answer to `query` (IC-82, P28 Task 25): `stty -icanon -echo min 0 time 0` on fd 0 (the saved modes restored on exit), `query` written to stdout, then fd 0 read until a DA1 reply (`ESC [ ? ... c`) arrives or `ms` milliseconds pass; `""` when stty fails (mockable); the T REPL's background probe (`repl_background()`) | P28 |
 | `tty_unreply(x)` | `chr`: `x` without OSC replies (`ESC ] ... BEL` or `ST`) and DA1's `ESC [ ? ... c`, so a terminal's late answer to the background probe is never typed text (IC-82; `repl_background()`, `console_compose()`) | P28 |
-| `readline_answer(prompt, keep = console_history_add, accept = NULL)`, `answer_stale(secs)`, `console_history_add(x)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer is stale (`answer_stale(the$readline_secs)`: under 0.1 s, so typed or pasted before the question), at most 100 reads, then the last answer; a stale line that is one of `accept` (trimmed, lower case; TRUE: any line) answers all the same (the pause menu's keys and its [s]/[f] text, typed just after Ctrl-C; review of Tasks 16-21); each line read past that is not blank goes to the upper layer's callback `keep(line)` (03 §2.2; NULL keeps nothing): `console_history_add()` (`utils::timestamp()` when `gptr.history` is on, TRUE when added; never fails; text of several lines that is not a `"""` block or a fence is added as a `"""` block, so Up then Enter sends it back as one input, D-243) by default, `console_typed_ahead()` for the console questions (IC-75 in §15.10); used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26, P28 |
+| `readline_answer(prompt, keep = console_history_add, accept = NULL)`, `answer_stale(secs)`, `console_history_add(x)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer is stale (`answer_stale(the$readline_secs)`: under 0.1 s, so typed or pasted before the question), at most 100 reads, then the last answer; a stale line that `accept(line)` takes answers all the same (the pause menu's keys and its [s]/[f] text, typed just after Ctrl-C, review of Tasks 16-21; a console question's answers, typed as it shows, P28 Task 54); each line read past that is not blank goes to the upper layer's callback `keep(line)` (03 §2.2; NULL keeps nothing): `console_history_add()` (`utils::timestamp()` when `gptr.history` is on, TRUE when added; never fails; text of several lines that is not a `"""` block or a fence is added as a `"""` block, so Up then Enter sends it back as one input, D-243) by default, `console_typed_ahead()` for the console questions (IC-75 in §15.10); used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26, P28 |
 | `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()`; reads with `readline_answer()` (IC-75) | P08, P15 |
 | `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; inherited `RSTUDIO=1`/`POSITRON=1` count only for an interactive R without a tty (an IDE's terminal tab is `terminal`, D-183); ark's `tools:positron` on the search path is `positron` (Positron's console, whose stdin is a tty; P28 visual review) | P07, P14, P15 |
 | `verbosity()` | `int(1)` 0-3 (§3.1 `gptr.verbose`) | P14, P06 |
@@ -5518,7 +5518,12 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     queue and kept lines sit under the question's rows, right above `› ` (visual review: drained before the rows,
     they split a call's code from the flagged rows of its ask):
     `tty_drain_mode()` (echo stays off), `console_typed_lines(rd, 0L)` until nothing is left, then
-    the saved modes (on exit). Complete lines are routed as before. Where a partial line was read, its row is
+    the saved modes (on exit). Complete lines are routed as before, but the first that is one of the
+    question's answers (`ui_console_read(prompt, accept = )`: an approval's `y`, `yes`, `a`, `p`, `?`, `n`,
+    `n <text>`; a choice's numbers), which `console_typed(drain = TRUE, accept)` returns (`typed_answer()`): typed
+    once the rows showed, it answers, echoed after `› ` on the band, and once the drain read fd 0
+    `readline_answer()` takes one however soon readline reads it (P28 Task 54, visual round 2: `y` typed 20 ms after `Allow r?`, 250 ms in TERM=dumb,
+    became `↳ steer · not an answer` and the question was asked again). Where a partial line was read, its row is
     first erased as the D live row is (`\r`, spaces to width - 1, `\r`): the question's rows turn the echo back on
     (`tty_question()`), and the terminal echoed the keys typed after that, so `reams↳ kept in history` was one
     row (review of Tasks 22-27). A trailing partial line (attr
@@ -5527,7 +5532,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     `gptr.history` off, `↳ not kept (gptr.history is off) · <line>`: the echo is off while a run streams, so the
     line quotes it. It is the person's held text, dim at column 0 and cut to three rows like a queue line
     (`console_keep()`; visual review: it was a full-ink `[gptr]` notice inside the tool block). The question's `readline()` therefore starts empty: typed-ahead text is never an
-    invalid answer, a denial (`no ...`) or an ask-tool answer. `gptr_confirm()` (L0, also asked during a
+    invalid answer or an ask-tool answer, nor a partial line a denial (`no ...`). `gptr_confirm()` (L0, also asked during a
     run, e.g. by `egress_check()` for a nested call's provider) is not drained, so this holds for the
     console questions only; its stale lines go to the history (IC-75).
   - Queued and delivered messages (Task 13). Queueing (`policy_enqueue()`: typed lines, a line a question reads

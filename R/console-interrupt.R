@@ -104,10 +104,11 @@ console_repl_find = function() {
 #' Read one menu answer at the person's chevron at column 0, as a console question reads (D-243):
 #' from a `.stdin` REPL's connection, else readline_answer(); a Ctrl-C while waiting (no resume
 #' restart there) gives NA, and in a terminal ends the person's row, as ui_console_read() does. With
-#' `accept` (readline_answer()) a line typed before the chevron showed answers when it is one of
-#' them, and another such line is kept in the history (console_keep()), never sent to the agent; the
-#' keys a T console read with its Ctrl-C are such lines, read first (console_ahead()), and a line
-#' they begin without ending begins the answer: shown after the chevron, the read's text after it
+#' `accept` (readline_answer()) a line typed before the chevron showed answers when
+#' `accept(line)` takes it, and another such line is kept in the history (console_keep()), never
+#' sent to the agent; the keys a T console read with its Ctrl-C are such lines, read first
+#' (console_ahead()), and a line they begin without ending begins the answer: shown after the
+#' chevron, the read's text after it
 #' @noRd
 console_ask = function(accept = NULL) {
   rs = console_repl_find()
@@ -131,7 +132,7 @@ console_ask = function(accept = NULL) {
 
 #' The answer among the keys a T console's composer read with its Ctrl-C (`rd$after_interrupt`,
 #' console_keys()), or NULL: the first whole line, its edit keys applied (console_compose()), that
-#' is one of `accept` (trimmed, lower case; TRUE: any), echoed after the person's chevron as
+#' `accept(line)` takes, echoed after the person's chevron as
 #' readline() leaves a line. The lines before it, or with no answer the whole lines, go to the
 #' console history (console_keep()), never to the agent; the text after it waits for the next
 #' question, and with no answer a line not ended begins this question's (console_ask())
@@ -145,7 +146,7 @@ console_ahead = function(rd, accept) {
   part = if (isTRUE(attr(lines, "partial"))) lines[[length(lines)]]
   whole = lines[seq_len(length(lines) - !is.null(part))]
   typed = vapply(whole, function(line) edit(paste0(line, "\n")), "", USE.NAMES = FALSE)
-  hit = if (isTRUE(accept)) seq_along(typed) else which(tolower(trimws(typed)) %in% accept)
+  hit = which(vapply(typed, function(x) isTRUE(accept(x)), NA))
   if (!length(hit)) {
     rd$after_interrupt = if (!is.null(part)) edit(part) else ""
     keep(typed)
@@ -216,7 +217,7 @@ policy_menu = function(cnd, pol) {
     invokeRestart("resume")
   }
   repeat {
-    typed = console_ask(c("", k, keys))
+    typed = console_ask(function(x) tolower(trimws(x)) %in% c("", k, keys))
     ans = tolower(trimws(typed))
     key = if (is.na(ans)) "a" else c("c", k, k)[match(ans, c("", k, keys))]
     if (identical(key, "c")) go()
@@ -226,7 +227,7 @@ policy_menu = function(cnd, pol) {
       console_write(paste0("  ", ui_question(c(s = "Steer", f = "Follow-up")[[key]],
                                              ui_width() - 2L)))
       ui_draft_kept()
-      text = console_ask(TRUE)
+      text = console_ask(function(x) TRUE)
       if (is.na(text)) return(invisible(NULL))
       enqueue = function() {
         the$echoed = ""

@@ -3827,6 +3827,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   session did not move for 25 s, and the wait ran it to its end with nothing on screen while a typed line was
   echoed raw. Contract-visible: 04 §7 `gptr_wait()`, §15.10 (the pause menu). Tests: test-console-repl.R "a
   terminal: a run sent to the background shows again while the console waits for it".
+- Final visual loop, round 2 (2026-10-24): Task 54: a console question passes its answers to its read
+  (`accept(line)`: an approval's keys and `n <text>`, a choice's numbers); the drain after its rows returns the
+  first whole line `accept` takes (`typed_answer()`), echoed after the chevron, and once the drain read fd 0
+  `readline_answer()` takes one however soon it is read (outside a run nothing was drained, so a line typed
+  before the question still never answers it). `accept` is a predicate for the pause menu too. `y` typed 20 ms after `Allow r?` (250
+  ms in TERM=dumb) became a steer and the question was asked again. Contract-visible: 04 §5 `readline_answer()`,
+  §15.10 IC-76. Tests: test-console-typing.R "a terminal: an answer typed as a question shows answers it, T and
+  D (visual round 2)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

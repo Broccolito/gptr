@@ -299,10 +299,10 @@ band_read = function(prompt, read) {
 #' (answer_stale()) was typed or pasted before the question was shown, so it is asked again; at
 #' most 100 reads, as readline() returns at once at the end of a pipe. Each line read past that is
 #' not blank goes to `keep(line)`: the console history, a console question's
-#' console_typed_ahead(), or nowhere for NULL (a secret) (IC-75, D-243). A line that is one of
-#' `accept` (trimmed, lower case; TRUE: any) answers even when read too soon, as a key typed just
-#' after the pause menu's Ctrl-C is meant for the menu. `read` reads a line: gptr_readline(), or a
-#' secret's read without echo (ui_console_read())
+#' console_typed_ahead(), or nowhere for NULL (a secret) (IC-75, D-243). A line that `accept(line)`
+#' takes, one of the question's answers, answers even when read too soon, as a key typed just after
+#' the pause menu's Ctrl-C or as the question showed is meant for it. `read` reads a line:
+#' gptr_readline(), or a secret's read without echo (ui_console_read())
 #' @noRd
 readline_answer = function(prompt, keep = console_history_add, accept = NULL,
                            read = gptr_readline) {
@@ -310,7 +310,7 @@ readline_answer = function(prompt, keep = console_history_add, accept = NULL,
     the$readline_secs = NULL
     x = read(prompt)
     if (i == 100L || !gptr_is_interactive() || !answer_stale(the$readline_secs)) break
-    if (rlang::is_string(x) && (isTRUE(accept) || tolower(trimws(x)) %in% accept)) break
+    if (rlang::is_string(x) && is.function(accept) && isTRUE(accept(x))) break
     if (is.function(keep) && rlang::is_string(x) && nzchar(trimws(x))) keep(x)
   }
   x

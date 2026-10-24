@@ -1601,6 +1601,42 @@ test_that("a terminal: a line arriving just as a question is drawn steers the ru
   expect_identical(pty$seen("Not an answer"), 0L)
 })
 
+test_that("a terminal: an answer typed as a question shows answers it, T and D (visual round 2)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  child = c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE)",
+    # once its rows show, the question first drains fd 0 and then starts readline
+    "for (f in c('ui_console_read', 'ui_draft_kept')) {",
+    "  trace(f, quote(Sys.sleep(2)), print = FALSE, where = asNamespace('gptr'))",
+    "}",
+    "fake = gptr_fake_provider(function(req) {",
+    "  if (req$n <= 2L) return(list(tool = 'r', input = list(code = paste0('zz = ', req$n))))",
+    "  paste0('REQ ', req$messages[[length(req$messages)]]$role, ' END')",
+    "})",
+    "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
+  )
+  for (term in c("xterm-256color", "dumb")) {
+    pty = local_pty_r(child, term = term)
+    expect_true(pty$wait("peter> ", timeout = 120))
+    pty$send("go\r")
+    # `y` arrives before the drain, then before readline starts: each time it is the answer
+    expect_true(pty$wait("Allow r?"))
+    pty$send("y\r")
+    expect_true(pty$wait("Allow r?"))
+    Sys.sleep(3)
+    pty$send("y\r")
+    expect_true(pty$wait("REQ tool_result END"))
+    expect_true(pty$wait("peter> "))
+    pty$send("/exit\r")
+    expect_true(pty$wait("CHILD DONE"))
+    # never queued (`↳ steer · y`, `↳ steer · not an answer`), so never delivered
+    steer = queue_line("steer", "", l10n_info()[["UTF-8"]])
+    expect_identical(c(pty$seen(steer), pty$seen("operator")), c(0L, 0L))
+  }
+})
+
 test_that("a macOS terminal: a block pasted at a question comes back as one prompt", {
   skip_on_cran()
   skip_if_not(is_macos(), "paste joining reads a macOS terminal")

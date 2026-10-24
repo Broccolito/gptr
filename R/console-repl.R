@@ -124,7 +124,8 @@ console_reader = function(stdin = FALSE, echo = stdin) {
   echo = isTRUE(echo)
   if (isTRUE(stdin)) {
     rd$con = console_stdin_open()
-    rd$read = function(prompt = "", stream = "stdout", secret = FALSE) {
+    # a question's `accept` (ui_console_read()) means nothing on a pipe
+    rd$read = function(prompt = "", stream = "stdout", secret = FALSE, ...) {
       if (is.null(rd$con)) return(NA_character_)
       stream = gptr_message_stream(stream)
       if (echo) gptr_message_write(prompt, stream)
@@ -669,21 +670,44 @@ console_call_release = function(rs) {
 #' outside a terminal REPL or while no session runs (the next prompt reads it). With `drain` (before
 #' a question) a D console reads fd 0 in tty_drain_mode(), so the partial line the question would
 #' take as its answer is read too; it goes to the console history, its echoed row erased first.
+#' With `accept` (a question's drain, after its rows) the first whole line that `accept(line)` takes
+#' (typed_answer()) is not routed but returned: typed once the question showed, it answers it.
+#' @return The reactor task's next interval, or FALSE to end; with `accept`, the answer it read,
+#'   else TRUE where it read fd 0, FALSE where it did not
 #' @noRd
-console_typed = function(drain = FALSE) {
+console_typed = function(drain = FALSE, accept = NULL) {
   rs = console_repl_find()
   rd = rs$reader
   if (is.null(rd) || !repl_terminal(rs)) return(FALSE)
   pol = policy_find()
   target = Find(function(t) !is.null(t$session), policy_targets(pol$runs))
-  if (is.null(target)) return(0.05)
+  if (is.null(target)) return(if (is.null(accept)) 0.05 else FALSE)
+  read = if (is.null(accept)) 0.05 else TRUE
+  s = target$session
   if (isTRUE(the$tty$keys)) {
-    console_keys(rd, target$session, console_typed_chars(rd, 0L))
-    return(0.05)
+    chars = console_typed_chars(rd, 0L)
+    ans = if (is.function(accept)) typed_answer(console_typed_split(chars), accept)
+    if (is.null(ans)) {
+      console_keys(rd, s, chars)
+      return(read)
+    }
+    # the lines around it, as typed
+    after = ans$after
+    if (length(ans$before)) console_keys(rd, s, paste0(ans$before, "\n", collapse = ""))
+    if (length(after)) {
+      console_keys(rd, s, paste0(paste(after, collapse = "\n"),
+                                 if (!isTRUE(attr(after, "partial"))) "\n"))
+    }
+    return(ans$answer)
   }
   modes = if (drain) tty_drain_mode()
   if (length(modes) == 1L) on.exit(tty_modes(modes), add = TRUE)
   lines = console_typed_lines(rd, 0L)
+  ans = if (is.function(accept)) typed_answer(lines, accept)
+  if (!is.null(ans)) {
+    console_typed_route(rd, s, ans$before)
+    lines = ans$after
+  }
   part = ""
   if (length(modes) == 1L && isTRUE(attr(lines, "partial"))) {
     part = lines[[length(lines)]]
@@ -692,8 +716,22 @@ console_typed = function(drain = FALSE) {
     # the D live row is, so what is written next stands alone
     console_cat(paste0("\r", strrep(" ", max(0L, cli::console_width() - 1L)), "\r"))
   }
-  console_typed_route(rd, target$session, lines, part)
-  0.05
+  console_typed_route(rd, s, lines, part)
+  ans$answer %||% read
+}
+
+#' The first whole line of `lines` (console_typed_split()) that `accept(line)` takes, its edit keys
+#' applied (console_line_text()): list(answer, before, after), the lines around it, `after` marked
+#' "partial" as `lines` is; NULL when none does
+#' @noRd
+typed_answer = function(lines, accept) {
+  part = isTRUE(attr(lines, "partial"))
+  text = vapply(lines, console_line_text, "", USE.NAMES = FALSE)
+  hit = Position(function(x) isTRUE(accept(x)), utils::head(text, length(text) - part))
+  if (is.na(hit)) return(NULL)
+  after = lines[-seq_len(hit)]
+  if (part) attr(after, "partial") = TRUE
+  list(answer = text[[hit]], before = lines[seq_len(hit - 1L)], after = after)
 }
 
 #' Route the lines typed for a run of session `s` (IC-76, D-242): /command and !code lines, and the
