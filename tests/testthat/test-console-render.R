@@ -534,6 +534,15 @@ test_that("a probed background's band is Codex's fill in its nearest cell (revie
   the$background = "light"
   expect_identical(c(console_style()$band, console_style()$band_dim("x")),
                    c("\033[48;5;254m", "\033[38;5;242mx\033[39m"))
+  # a truecolor terminal gets the fill itself, a darker shade of the same paper (Man Page, Novel),
+  # and its words a grey 4.5:1 against that fill (visual round 1)
+  withr::local_options(cli.num_colors = 16777216L)
+  expect_identical(band("\033]11;rgb:fe/f2/91\a"),
+                   c("\033[48;2;244;232;139m", "\033[38;2;103;103;103mx\033[39m"))
+  expect_identical(band("\033]11;rgb:1c1c/1c1c/1c1c\a"),
+                   c("\033[48;2;55;55;55m", "\033[38;2;160;160;160mx\033[39m"))
+  the$background = "light"
+  expect_identical(console_style()$band, "\033[48;5;254m")
 })
 
 test_that("on a saturated background the accents and the grey keep 3:1 against it (Task 41)", {

@@ -181,7 +181,7 @@ console_style = function() {
   }
   cells = if (known) band_cells(bg)
   # never in RStudio's or a Windows console, TERM=dumb or Rscript
-  band = if (known && console_class() == "T") paste0("\033[48;5;", cells$band, "m") else ""
+  band = if (known && console_class() == "T") paste0("\033[", cells$band, "m") else ""
   # the grey of words on the band, so they keep contrast
   on_band = if (known) cells$dim else grey
   c(glyphs, list(
@@ -195,25 +195,31 @@ console_style = function() {
   ))
 }
 
-#' The input band's xterm-256 cell and the grey of words on it (IC-82) for background `bg`: where
-#' the terminal gave its colour (attr "rgb", 0 to 1) Codex's fill, 4% black over a light
-#' background or 12% white over a dark one, as the nearest cell of the colour cube or the grey ramp,
-#' its words a grey 4.5:1 against it; else (COLORFGBG) cell 254 or 237, `#6c6c6c` or `#a8a8a8`
+#' The input band's background SGR parameters and the grey of words on it (IC-82) for background
+#' `bg`: where the terminal gave its colour (attr "rgb", 0 to 1) Codex's fill, 4% black over a light
+#' background or 12% white over a dark one, exact in truecolor, else as the nearest cell of the
+#' colour cube or the grey ramp, its words a grey 4.5:1 against it; else (COLORFGBG) cell 254 or
+#' 237, `#6c6c6c` or `#a8a8a8`
 #' @noRd
 band_cells = function(bg) {
   rgb = attr(bg, "rgb")
   if (is.null(rgb)) {
-    return(list(band = c(dark = 237L, light = 254L)[[bg]],
+    return(list(band = paste0("48;5;", c(dark = 237L, light = 254L)[[bg]]),
                 dim = c(dark = "#a8a8a8", light = "#6c6c6c")[[bg]]))
   }
   light = identical(c(bg), "light")
   fill = 255 * if (light) 0.96 * rgb else rgb + 0.12 * (1 - rgb)
+  if (cli::num_ansi_colors() >= 256^3) {
+    fill = round(fill)
+    return(list(band = paste0("48;2;", paste(fill, collapse = ";")),
+                dim = grey_against(luminance(fill / 255), 4.5, light)))
+  }
   cube = c(0, 95, 135, 175, 215, 255)
   ramp = 8 + 10 * 0:23
   # cells 16 to 255 in order: the cube, blue fastest, then the grey ramp
   cells = rbind(as.matrix(expand.grid(cube, cube, cube))[, 3:1], cbind(ramp, ramp, ramp))
   k = which.min(colSums((t(cells) - fill)^2))
-  list(band = 15L + k, dim = grey_against(luminance(cells[k, ] / 255), 4.5, light))
+  list(band = paste0("48;5;", 15L + k), dim = grey_against(luminance(cells[k, ] / 255), 4.5, light))
 }
 
 #' The WCAG relative luminance of a colour (components 0 to 1)

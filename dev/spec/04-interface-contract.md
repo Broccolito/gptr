@@ -5908,10 +5908,12 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     | `band`, light background | `\033[48;5;254m` | `""` | `""` |
 
     Below 256 colours cli maps both blues to grey `90`, so basic red and blue are named there. The band cells are
-    raw cells, not cli's mapping, which puts greys into the colour cube; truecolor gets the same cells. Those of the
-    table hold where `COLORFGBG` named the background; where the terminal answered the probe with its colour
+    raw cells, not cli's mapping, which puts greys into the colour cube. Those of the table hold where `COLORFGBG`
+    named the background, in truecolor too; where the terminal answered the probe with its colour
     (`background_reply()`'s attr `rgb`), the band is Codex's fill, 4% black over a light background or 12% white over
-    a dark one, as the nearest cell of the colour cube or the grey ramp, and `band_dim` a grey 4.5:1 against it
+    a dark one, exact in truecolor (`48;2;R;G;B`, P28 Task 45: the nearest cell turned Man Page's yellow paper
+    orange, 222, and Novel's cream khaki), else as the nearest cell of the colour cube or the grey ramp, and
+    `band_dim` a grey 4.5:1 against it
     (`band_cells()`; review of Tasks 22-27: on Terminal.app's cream Novel profile the fixed 254 was a lighter, cooler
     strip; it is now `187`, #d7d7af, its words `38;5;240`; #1c1c1c still gives 237, white 255). Where that colour
     leaves an accent under 3:1 against the background itself, the accent is the default colour in bold and `dim` a

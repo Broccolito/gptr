@@ -4225,6 +4225,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   status line cut the reason and the REPL repeated it in bold, glued to the next prompt. Contract-visible: 04
   §15.10 run totals. Tests: test-console-repl.R "a failed run says why once, whole, in its status line; the prompt
   keeps its gap".
+- Final visual loop, round 1 (2026-10-24): Task 45: in truecolor the input band of a probed background is Codex's
+  fill itself, `48;2;R;G;B`, with `band_dim` 4.5:1 against it; the nearest xterm-256 cell stays at 256 colours,
+  and cells 254 and 237 for `COLORFGBG`. On tinted Terminal.app profiles the cell changed the paper's hue (Man
+  Page: 222, an orange strip on yellow; Novel: 187, khaki), while the accents were already 24-bit. Contract-visible:
+  04 §15.10 IC-82. Tests: test-console-render.R "a probed background's band is Codex's fill in its nearest cell
+  (review)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,
