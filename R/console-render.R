@@ -398,13 +398,15 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
   r = new.env(parent = emptyenv())
   # an interrupt (a D console's Ctrl-C) waits for the delta's end: one landing inside it would drop
   # the rest of the delta, which only this call holds
-  r$write = function(delta) suspendInterrupts({
-    refresh_width()
-    ingest(delta)
-    flush(stdout())
-    utils::flush.console()
+  r$write = function(delta) {
+    suspendInterrupts({
+      refresh_width()
+      ingest(delta)
+      flush(stdout())
+      utils::flush.console()
+    })
     invisible()
-  })
+  }
   r$finish = function(cut = FALSE) {
     refresh_width()
     ingest("", final = TRUE)
