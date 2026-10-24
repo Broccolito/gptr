@@ -753,6 +753,14 @@ test_that("a sub-agent's started line cut to the width keeps its last word (Task
   out = utils::capture.output(peter("fan out", model = lead, envir = e))
   start = grep("sub-agent a ", out, value = TRUE, fixed = TRUE)[[1L]]
   expect_identical(start, "  # sub-agent a (a-provider-w... started")
+  # so does its done line, which cuts the label and keeps its turns and time (visual round 2)
+  withr::local_options(cli.width = 60L)
+  code = "res = peter('each', list(count_the_cars_in_fuel = 1), model = kid, parallel = 1)"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("fan out", model = lead, envir = e))
+  done = grep(" done ", grep("sub-agent count", out, value = TRUE, fixed = TRUE), value = TRUE)
+  expect_match(done, "^  # sub-agent count_the_cars.*\\.\\.\\. done \\(1/1\\) - 1 turn - [0-9]+ s$")
+  expect_lte(nchar(done), 60L)
 })
 
 test_that("a sub-agent's rows are the block of the r call that runs them (visual round 2)", {

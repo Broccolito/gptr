@@ -553,14 +553,15 @@ console_child_shown = function(run) {
 #' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188), after
 #' the agent's blue block in the console's colours, also from the agent's r code (D-245), whose
 #' call's block it then belongs to, cut to the console width (D-224) before its last words `keep`,
-#' which stay (Task 36: ` started`)
+#' which stay (Task 36: ` started`; a done line's outcome)
 #' @noRd
 console_child_line = function(rec, text, keep = "") {
   console_before_message(kind = if (is.null(run_current())) "notice" else "tool", tools = TRUE)
   old = options(cli.num_colors = console_colors())
   on.exit(options(old), add = TRUE)
   sym = console_style()
-  head = paste0("  ", sym$blue(sym$agent), " sub-agent ", rec$child$label, " ", text)
+  head = paste0("  ", sym$blue(sym$agent), " sub-agent ", rec$child$label, if (nzchar(text)) " ",
+                text)
   console_write(paste0(cli::ansi_strtrim(head, cli::console_width() - nchar(keep)), keep))
 }
 
@@ -1210,8 +1211,8 @@ console_on_compact = function(event, ctx) {
 #' forget the run; queued artifact lines (an interrupted tool) print last, then what the person
 #' queued and the run did not take (console_queue_left()), then the blank row before the prompt; a
 #' shown sub-agent, forgotten first so the live row no longer names it, says how it ended, `(k/N)`
-#' counting the settled children of its scheduled group (D-188), a failure with the first line of
-#' its reason, else its status (D-224)
+#' counting the settled children of its scheduled group (D-188): done, its turns and time whole,
+#' its label cut first, or a failure with the first line of its reason, else its status (D-224)
 #' @noRd
 console_on_agent_end = function(event, ctx) {
   on.exit(console_artifact_flush(), add = TRUE)
@@ -1229,13 +1230,14 @@ console_on_agent_end = function(event, ctx) {
     }
     n = event$turns %||% 0L
     sep = console_style()$sep
-    console_child_line(rec, if (identical(event$status, "idle")) {
-      paste0("done", k, sep, n, if (n == 1L) " turn" else " turns", sep,
-             sprintf("%.0f s", as.numeric(Sys.time()) - as.numeric(run$started)))
+    if (identical(event$status, "idle")) {
+      secs = as.numeric(Sys.time()) - as.numeric(run$started)
+      console_child_line(rec, "", paste0(" done", k, sep, n, if (n == 1L) " turn" else " turns",
+                                         sep, sprintf("%.0f s", secs)))
     } else {
       why = c(text_lines(event$reason), event$status, "?")[[1L]]
-      paste0("failed", k, ": ", console_escape(why, FALSE))
-    })
+      console_child_line(rec, paste0("failed", k, ": ", console_escape(why, FALSE)))
+    }
   }
   if (!console_foreground(rec)) return(NULL)
   # the rows charged to the session during the run by other sessions: its sub-agents' (IC-66)

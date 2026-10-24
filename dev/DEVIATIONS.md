@@ -4314,6 +4314,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   lines opened a notice block, so a blank row came before them and another between the call's printed value and
   its result line. Contract-visible: 04 §15.10 IC-82 (tool calls). Tests: test-console-render.R "a sub-agent's
   rows are the block of the r call that runs them (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 61: a sub-agent's done line keeps ` done (k/N) · <n> turn(s) · <s>
+  s` whole, as the started line keeps ` started` (Task 36), and its label is cut; a failed line is cut from its
+  reason as before. At 60 columns `#1 done · 1 turn · 4…` lost its time. Contract-visible: 04 §15.10 IC-82. Tests:
+  test-console-render.R "a sub-agent's started line cut to the width keeps its last word (Task 36)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

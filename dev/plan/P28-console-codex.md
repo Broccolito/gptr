@@ -1719,7 +1719,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 57 | A failed run's status block looks like a successful one (final visual loop, round 2) | 5a0b3f80 |
 | 58 | In TERM=dumb a line being typed at Ctrl-C is lost (final visual loop, round 2) | 0e1a6296 |
 | 59 | After an abort the text received before it can lose characters (final visual loop, round 2) | 0c8c2473 |
-| 60 | Sub-agent rows split the result of the r call that started them (final visual loop, round 2) | (this commit) |
+| 60 | Sub-agent rows split the result of the r call that started them (final visual loop, round 2) | 99c76f9b |
+| 61 | A sub-agent's end row cut loses its time (final visual loop, round 2) | (this commit) |
 
 ## Out of scope
 
