@@ -308,6 +308,16 @@ test_that("completion comes only after @, !, !!, / and peter$, in full words (IC
   expect_identical(console_complete("use @mtc"), character())
 })
 
+test_that("/skill: completes the project's skills before the first prompt (Task 30)", {
+  local_project(trust = TRUE, files = list(".gptr/skills/tidy-up/SKILL.md" = c(
+    "---", "name: tidy-up", "description: Tidy the data.", "---", "Tidy it.")))
+  rs = repl_state(NULL, new.env())
+  rs$reader = console_reader()
+  rs$reader$complete = TRUE
+  .gptr_repl = rs
+  expect_identical(console_complete("/skill:ti"), "/skill:tidy-up")
+})
+
 test_that("R's completion through the adapter gives the table's words as its token's (IC-81)", {
   .gptr_repl = local_completing_repl()
   # RStudio and Windows: utils guesses the token (`mo` after /, `a` after /)

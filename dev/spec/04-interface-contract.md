@@ -5673,7 +5673,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     - a word `@obj$...`: `.DollarNames(obj)`;
     - a word starting with `peter$`: peter's members (the `ns.names` service);
     - a first word starting with `/`: the registered commands (plugin commands among them) and
-      `/skill:<name>` for each skill;
+      `/skill:<name>` for each skill registered or listed by `gptr_skills()` (as `/skills` lists them, also
+      before the first prompt has registered any; P28 Task 30);
     - anything else, and a failure: `character(0)` (natural language, `$5`, a bare `$name`, `x$y`, `wow! x`).
   - The adapter: `console_completer(prev)` is R's `custom.completer`. It sets `fileName` to FALSE and `comps`
     to `character()` first (without `fileName` R's readline aborts the `readline()` call), then gives the

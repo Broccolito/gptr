@@ -3796,6 +3796,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     folder, sent as text`, beside `@ fuel (data.frame, 32 x 4)`; a missing name was echoed as typed, `@fit2`.
     Contract-visible: 03 §6.17. Tests: test-console-repl.R "@mentions: files become <file> blocks, bound names
     become objects", "a binary @file is announced, not inlined".
+- Live dogfood fixes (Task 28, 2026-10-23): Task 30: `/skill:` completes each skill `gptr_skills()` lists (as
+  `/skills` lists them) besides the registered ones. The registry holds skills only once a session has started,
+  so before the first prompt `/skill:` completed nothing. Contract-visible: 04 §15.10 IC-81. Tests:
+  test-console-completion.R "/skill: completes the project's skills before the first prompt (Task 30)".
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Rule (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three
