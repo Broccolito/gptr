@@ -4292,6 +4292,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   live row's draft were banded, against IC-82's one look for everything the person writes. Only T consoles
   change. Contract-visible: 04 §15.10 IC-82. Tests: test-console-ui.R "a T console's answers are read on the
   input band, as its prompts are (visual round 1)".
+- Final visual loop, round 2 (2026-10-24): Task 57: a run's status with its reason is on rows of its own, the
+  run's terms from the row below, and an error's rows are red, as a tool's error row; `done` and a bare status
+  (`aborted`) keep one dim row. A failed run's block was the dim grey of `done`, and the reason's last words ran on
+  into the terms (`... port 443 · fake-1 · 3 requests`). Contract-visible: 04 §15.10 run totals. Tests:
+  test-console-repl.R "a failed run's reason is red, on rows of its own above the terms (visual round 2)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

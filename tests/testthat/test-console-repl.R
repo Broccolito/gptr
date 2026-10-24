@@ -1053,6 +1053,27 @@ test_that("a failed run says why once, whole, in its status line; the prompt kee
   expect_identical(out[at - 1L], c("", ""))
 })
 
+test_that("a failed run's reason is red, on rows of its own above the terms (visual round 2)", {
+  skip_on_cran()
+  local_console_test()
+  local_utf8_glyphs()
+  local_gptr_options(verbose = 2L, mode = "auto")
+  withr::local_options(cli.dynamic = TRUE, cli.width = 80L, cli.num_colors = 256L)
+  fake = gptr_fake_provider(list(list(error = "provider failure: boom", status = 400L, after = 0L),
+                                 "ok"))
+  s = NULL
+  out = utils::capture.output(tryCatch(peter("hello", model = fake, envir = new.env()),
+                                       error = function(e) s <<- e$session))
+  red = "\033[38;5;167m"
+  grey = "\033[38;5;244m"
+  at = grep("error: provider failure: boom", out, fixed = TRUE)
+  expect_identical(out[[at]], paste0("  ", red, "error: provider failure: boom\033[39m"))
+  expect_true(startsWith(out[[at + 1L]], paste0("  ", grey, "fake-1 · 1 request")))
+  # a run that ended idle has its status and terms on one dim row
+  out = utils::capture.output(peter(s, "again"))
+  expect_true(any(startsWith(out, paste0("  ", grey, "done · fake-1 · "))))
+})
+
 test_that("approvals of a .stdin session are answered from the same stdin", {
   skip_on_cran()
   local_console_test()

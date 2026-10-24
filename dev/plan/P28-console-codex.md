@@ -1715,7 +1715,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 53 | After [b] the status block sits right under the answer's tail (Task 47, found by its visual check) | 4c650e94 |
 | 54 | An answer typed as a question shows is sent as a steer (final visual loop, round 2) | 6e907411 |
 | 55 | A waited run is drawn in a weaker palette (final visual loop, round 2) | 9e1c3551 |
-| 56 | What is typed while a waited run works is invisible (final visual loop, round 2) | (this commit) |
+| 56 | What is typed while a waited run works is invisible (final visual loop, round 2) | 792c372c |
+| 57 | A failed run's status block looks like a successful one (final visual loop, round 2) | (this commit) |
 
 ## Out of scope
 

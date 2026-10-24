@@ -5821,13 +5821,15 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     CLI route in a live run, and every other denial `Permission denied: <reason>. <how>` as before. Before, the
     text was `Permission denied: <text>. Explain what you need or choose another approach.`, which GPT, Claude and
     qwen read as the harness's refusal and did not carry out.
-  - Run totals (Task 26; amends item 6 and D-206): the status line is dim and written as a notice, at column 2
+  - Run totals (Task 26; amends item 6 and D-206): the status line is dim (an error's status and reason red, as
+    a tool's error row is: P28 Task 57, visual round 2, a failed run read like a done one) and written as a notice, at column 2
     in rows of whole terms at the content width (`console_terms()`: a row ends at a term and never at the
     separator, a term wider than a row is cut; review of Tasks 22-27: word wrapping broke `98% context` from
     `left` and left a row ending ` ·`; the banner's rows and the mention line too), `done · <model> · <n> requests · <tokens> tokens · <cost> · <k>%
     context left`, with `aborted: <reason>` or `error: <reason>` for `done` as before (the reason's line breaks one
-    space, cheat-sheet review: curl's two-line error showed `<U+000A>`; a status and reason wider than a row wrap
-    between words at column 2, the run's terms after them, and the REPL prints no `Error:` notice for a run whose
+    space, cheat-sheet review: curl's two-line error showed `<U+000A>`; a status with its reason is on rows of its
+    own, wrapped between words at column 2, the run's terms starting on the row below (P28 Task 57: `... port 443 ·
+    fake-1` read as part of the error), and the REPL prints no `Error:` notice for a run whose
     status line it showed, P28 Task 44: the reason showed twice, the first copy cut): the model of the run's
     last request (its usage row's `model`; a built-in CLI's `default` as the full id the CLI gets, as `/status`
     names it, P28 Task 33), and `sub-agents <cost>` after the own cost. A term whose value is
