@@ -546,15 +546,15 @@ console_child_shown = function(run) {
 
 #' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188), after
 #' the agent's blue block in the console's colours, also from the agent's r code (D-245), cut to
-#' the console width (D-224)
+#' the console width (D-224) before its last words `keep`, which stay (Task 36: ` started`)
 #' @noRd
-console_child_line = function(rec, text) {
+console_child_line = function(rec, text, keep = "") {
   console_before_message(tools = TRUE)
   old = options(cli.num_colors = console_colors())
   on.exit(options(old), add = TRUE)
   sym = console_style()
-  console_write(cli::ansi_strtrim(paste0("  ", sym$blue(sym$agent), " sub-agent ",
-                                         rec$child$label, " ", text), cli::console_width()))
+  head = paste0("  ", sym$blue(sym$agent), " sub-agent ", rec$child$label, " ", text)
+  console_write(paste0(cli::ansi_strtrim(head, cli::console_width() - nchar(keep)), keep))
 }
 
 #' Render this record on stdout now?
@@ -952,7 +952,7 @@ console_on_agent_start = function(event, ctx) {
   if (console_child_shown(run)) {
     rec$child = list(label = console_escape(agent_label(run), FALSE), run = run)
     model = live$adapter$worker_spec$model %||% session_data(s)$model
-    console_child_line(rec, paste0("(", console_escape(model, FALSE), ") started"))
+    console_child_line(rec, paste0("(", console_escape(model, FALSE), ")"), " started")
   }
   NULL
 }

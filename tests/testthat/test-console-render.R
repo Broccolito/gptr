@@ -669,6 +669,18 @@ test_that("tool calls are cursor strips tinted by kind (D-245)", {
   expect_identical(substr(kids[[2L]], 1L, nchar(done)), done)
 })
 
+test_that("a sub-agent's started line cut to the width keeps its last word (Task 36)", {
+  local_gptr_options(mode = "auto", verbose = 1L, quiet = FALSE)
+  withr::local_options(cli.num_colors = 1L, cli.unicode = FALSE, cli.width = 40L)
+  e = new.env()
+  e$kid = local_fake_provider(function(request) "ok", name = "a-provider-with-a-long-name")
+  code = "res = peter('each', list(a = 1), model = kid, parallel = 1)"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("fan out", model = lead, envir = e))
+  start = grep("sub-agent a ", out, value = TRUE, fixed = TRUE)[[1L]]
+  expect_identical(start, "  # sub-agent a (a-provider-w... started")
+})
+
 test_that("the ask tool's call line counts its questions in words (visual review)", {
   q = list(id = "fit", question = "Which fit?", options = list("lm", "loess"))
   expect_identical(console_preview(list(questions = list(q))), "1 question")

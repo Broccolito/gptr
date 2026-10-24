@@ -1693,7 +1693,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 32 | Under load an Enter typed during a run stays in the draft | 3dae3324 |
 | 33 | A CLI route's run status names its model `default` | 6b2ffd3c |
 | 34 | A key typed while an aborted run stops is echoed | 5831cb0b |
-| 35 | Up read with the Enter before it takes nothing back | (this commit) |
+| 35 | Up read with the Enter before it takes nothing back | fa3e1059 |
+| 36 | A sub-agent's start line loses `started` when cut | (this commit) |
 
 ## Out of scope
 

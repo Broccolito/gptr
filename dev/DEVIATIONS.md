@@ -4154,3 +4154,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   full id the CLI gets (`console_cli_default()`, which `/model` and `/status` also use): on claude-cli and codex
   it said `done · default · 2 requests`. Contract-visible: 04 §15.10 IC-77. Tests: test-console-render.R "the
   status line names the model a CLI's default runs, as /status does (Task 33)".
+- Live dogfood fixes (Task 28, 2026-10-23): Task 36: a sub-agent's start line is cut to the width before ` started`,
+  which stays (`console_child_line(rec, text, keep)`): with Bedrock's model id, `▌ sub-agent 'Use the r tool to run
+  m = mean...' #1 (versa-bedrock/us.anthropic.claude-opus-4-8) s…` at 100 columns, and at 80 the GPT and CLI lines
+  too. Contract-visible: 04 §15.10 IC-82. Tests: test-console-render.R "a sub-agent's started line cut to the width
+  keeps its last word (Task 36)".

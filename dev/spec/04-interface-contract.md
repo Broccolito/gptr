@@ -5812,7 +5812,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     |---|---|---|
     | read | `▎ read  R/plot.R` | the whole line dim; no result line unless it fails |
     | act | `▎ r  zz = 1`, or the name over at most 20 code rows at column 4, under the name with the results (no fence lines; a cut block ends with `# … +N more lines`; a row wider than the console is cut with `…`, and `?` then shows the code whole); an MCP call `▎ github/search_issues  {"q":"bug"}` | strip red, name bold, R code highlighted (also on the one line); an MCP call's arguments dim |
-    | agent | `▌ codex_agent`; a sub-agent's lines `▌ sub-agent a (haiku) started`, `▌ sub-agent a done (1/3) · 4 turns · 12 s` | block blue |
+    | agent | `▌ codex_agent`; a sub-agent's lines `▌ sub-agent a (haiku) started` (cut to the width before ` started`, which stays; P28 Task 36), `▌ sub-agent a done (1/3) · 4 turns · 12 s` | block blue |
 
     Tool blocks of consecutive requests group as those of one response: the live row between them is no block
     (`console_gap()`), so a tool block after a tool block takes no blank line (review of Tasks 8-15). Result
