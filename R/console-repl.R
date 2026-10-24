@@ -1084,7 +1084,7 @@ repl_main = function(rs) {
     if (isFALSE(line)) {
       rs$interrupts = rs$interrupts + 1L
       if (rs$interrupts >= 2L) break
-      # in the banner's words: `ctrl-c again leaves · /exit`, the keys bold
+      # in the banner's words, the keys bold
       sym = console_style()
       console_notice("\n", cli::style_bold(tolower(console_interrupt_key())),
                      sym$dim(paste0(" again leaves", sym$sep)), cli::style_bold("/exit"))
