@@ -282,8 +282,11 @@ Decisions:
     first.`; it said the text was still on the input line, false for text typed at the question.)
     The hint starts with the question, `Allow r? Type ...`, which may have scrolled away (amended in
     the visual review).
-    This fixes the mid-word hard wraps in pty runs B, E and F.
-  - `A pasted block is not an answer (kept in history).`
+    This fixes the mid-word hard wraps in pty runs B, E and F. (Amended in Task 71, visual round 3: one
+    dim row in the console's terms, `not an answer · kept in history ↑ · y, a, p, n, n <instead> or ?`; the
+    question's title is right above it.)
+  - `A pasted block is not an answer (kept in history).` (`a pasted block is not an answer · kept in history
+    ↑` from Task 71.)
 - No answer is ever guessed into a steer.
 
 Tests (`test-console-ui.R`, `test-console-typing.R`), RED first:
@@ -1176,8 +1179,9 @@ Decisions:
   the chevron; they were dropped, so under load Ctrl-C, `s` and Enter in one read lost the `s`, and the
   steer then typed at the menu was lost too. The lines before an answer, and text without one, are kept in the history; what the
   menu leaves the composer reads once it resumes, and after [a] it is the draft at the next prompt. Text
-  typed at the menu that is no key is kept in the history too, under `Not a key: '<text>' (kept in
-  history).` above the keys hint, and never sent.)
+  typed at the menu that is no key is kept in the history too, under `not a key · kept in history ↑ · s,
+  f, c, a or b` (`Not a key: '<text>' (kept in history).` above the keys hint until Task 71), and never
+  sent.)
 - [s] and [f] read their text at the same `› ` and queue it exactly as Enter and Tab do. (Amended in
   Task 20:) `policy_enqueue()` keeps the reader's `sent`, the kind queued last, which `console_keys()`
   kept, so Up takes back a menu message as a composer one; blank text queues nothing, without the
@@ -1730,7 +1734,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 67 | After an abort a dropped steer shows twice (final visual loop, round 2) | 1e28b21a |
 | 68 | In TERM=dumb a cursor key typed during a run lands in the steer (final visual loop, round 2) | a70d64b5 |
 | 69 | /compact's one-row result still runs into the next prompt (Task 62, found by its visual check) | 8644edd9 |
-| 70 | The pause menu's [b] notice mixes two voices and ends a row in the separator (final visual loop, round 3) | (this commit) |
+| 70 | The pause menu's [b] notice mixes two voices and ends a row in the separator (final visual loop, round 3) | f6cd98f5 |
+| 71 | The re-ask after an invalid answer repeats the question in sentence prose (final visual loop, round 3) | (this commit) |
 
 ## Out of scope
 

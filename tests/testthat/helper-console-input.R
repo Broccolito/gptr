@@ -97,6 +97,10 @@ local_console_stdin = function(lines, .env = parent.frame()) {
 # prompt, `>>` where the child's output, in this process's locale, is not UTF-8
 pty_asked = function() paste0("\n", if (l10n_info()[["UTF-8"]]) "\u203a" else ">>", " ")
 
+# The start of an approval's row for an invalid answer in a pty child (ui_reask()), which a queue
+# line's `not an answer` (a line typed before the question) never is
+pty_reask = function() paste0("not an answer", if (l10n_info()[["UTF-8"]]) " \u00b7 " else " - ")
+
 # The first row of the line that shows a queued message (D-242), in console_style()'s glyphs;
 # `utf8 = l10n_info()[["UTF-8"]]` gives a pty child's
 queue_line = function(kind, text, utf8 = cli::is_utf8_output()) {

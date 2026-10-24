@@ -167,22 +167,24 @@ test_that("the pause menu is a console question: its keys under it, read at the 
     paste0("    ", paste0(cli::style_bold(c("s", "f", "c", "a", "b")), sym$dim(what),
                           collapse = ""))
   ))
-  # an answer other than a key or its word is kept in the history, never sent, and a dim hint
-  # names it and the keys; the menu reads again: text meant as a steer never aborts
+  # an answer other than a key or its word is kept in the history, never sent, and one dim row in
+  # the console's terms says so and names the keys, bold; the menu reads again: text meant as a
+  # steer never aborts (visual round 3: two sentences that repeated the title)
   local_abort_log()
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
   kept = character()
   local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
                         .package = "utils")
   m = menu(c("add a legend", "continue"), mode = "repl")
-  expect_identical(m$out[-(1:3)], as.character(sym$dim(c(
-    "    Not a key: 'add a legend' (kept in history).", "    Paused. Type s, f, c or a."
-  ))))
+  row = m$out[-(1:3)]
+  expect_identical(cli::ansi_strip(row), "    not a key · kept in history ↑ · s, f, c or a")
+  expect_true(startsWith(row, paste0("    ", sub("x.*$", "", sym$dim("x")), "not a key")))
+  for (k in c("s", "f", "c", "a")) expect_match(row, cli::style_bold(k), fixed = TRUE)
   expect_length(m$prompts, 2L)
   expect_identical(kept, "add a legend")
   local_gptr_options(history = FALSE)
   m = menu(c("add a legend", "continue"), mode = "repl")
-  expect_identical(m$out[[4L]], as.character(sym$dim("    Not a key: 'add a legend'.")))
+  expect_identical(cli::ansi_strip(m$out[[4L]]), "    not a key · s, f, c or a")
   expect_identical(kept, "add a legend")
   withr::local_options(cli.num_colors = 1L)
   # the session's id only when more than one session is paused

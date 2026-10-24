@@ -5334,9 +5334,9 @@ totals line names the model and the context left.
    an `ask_human` request adds `     asks in every mode: <reason>`; a sub-agent's `ask` question
    starts `sub-agent <agent> asks: ` and its budget question `sub-agent <agent>: `.
 3. Invalid answers: `a`/`p` where nothing can be remembered (level 4, control, the `ask` tool, no
-   `suggested_rule`) say why; other text gives
-   `Not an answer: '<text>'` and the letters allowed (`?` shows the detail view and is not
-   counted); after 5, `No valid answer after 5 tries; refused.` and a denial with the reason (not
+   `suggested_rule`) say why; other text gives one row in the console's terms, `not an answer`,
+   `kept in history ↑` when kept, and the keys allowed (`?` shows the detail view and is not
+   counted); after 5, `no valid answer after 5 tries · refused` and a denial with the reason (not
    feedback, cheat-sheet review) `no valid answer was given at the approval prompt`.
 4. Progress: a child run (depth 1+) whose outermost run is in the foreground prints, at
    verbosity 1+ unless `gptr.quiet`, `  sub-agent <agent> started (<model>)` (the model the child
@@ -5503,15 +5503,17 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     is off), and a notice says `(kept in history)` only for a line that was added. In IDE consoles, which hold lines typed during a run until R reads, this is the
     only route by which such a line steers.
   - A paste after an answer goes to the history as one entry (not for a secret) with
-    `  A pasted block is not an answer (kept in history).`, and the question is asked again. Every history entry
+    `    a pasted block is not an answer · kept in history ↑`, and the question is asked again. Every history entry
     of several lines, the REPL's own inputs too, is added as a `"""` block (`console_history_add()`), so Up then
     Enter sends it back as one input.
-  - An invalid approval answer (IC-77 item 3) that is not empty goes to the history in an interactive session:
-    `  Not an answer: '<text, at most 40 characters>' (kept in history).` (no ` (kept in history)` when nothing
-    was kept), then the hint with the prompt's own letters,
-    `  Type y, a or n (n <text> says what to do instead), or ?.` (`y or n` where nothing can be remembered). An
-    empty answer gets the hint alone and still counts as one of the 5 tries. The approval's notices are
-    word-wrapped (`console_wrap()`) at the width of its rows, `cli::console_width()` less `console_pad()`.
+  - An invalid approval answer (IC-77 item 3) that is not empty goes to the history in an interactive session.
+    One dim row at column 4 says so in the console's terms (`ui_reask()`, in rows of whole terms at the width of
+    the approval's rows, `cli::console_width()` less `console_pad()`): `not an answer`, `kept in history ↑` only
+    for a line that was added, then the prompt's own keys bold, `y, a, p, n, n <instead> or ?` (`y, n, n
+    <instead> or ?` where nothing can be remembered); the question's title is right above it (P28 Task 71,
+    visual round 3: `Not an answer: '<text>' (kept in history).` and `Allow r? Type y, a, p or n (n <text> says
+    what to do instead), or ?.`, two sentences that repeated the title). An empty answer gets the same row and
+    still counts as one of the 5 tries.
 - IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21).
   - A question drains before it reads (Task 2). On a terminal REPL, while a run of the call has a session,
     `ui_console_read()` reads fd 0 with `console_typed(drain = TRUE)` just before its `readline_answer()`, so the
@@ -5687,8 +5689,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     answers, as an approval reads `y` or `yes`, and an empty answer continues; anything else (a steer typed at
     the chevron, `add a legend`, which the first-letter rule read as `a`) is kept in the history in an
     interactive R (`console_history_add()`, as an approval keeps a non-answer), never sent, and gets the dim
-    hints `    Not a key: '<its first 40 characters>' (kept in history).` (the parenthesis only when kept) and
-    `    Paused. Type s, f, c, a or b.` (at column 4, `ui_hint()`) and the menu reads again. [s] and [f] read
+    row `    not a key · kept in history ↑ · s, f, c, a or b` (`ui_reask()`: the keys bold, the kept term only
+    when kept; P28 Task 71, visual round 3: `Not a key: '...' (kept in history).` and `Paused. Type s, f, c, a or
+    b.` repeated the title) and the menu reads again. [s] and [f] read
     their text at the chevron of their own question, `  ? Steer` or `  ? Follow-up` (review of Tasks 16-21: a
     bare chevron read as the menu asking again), and queue it with `policy_enqueue()` as Enter and Tab do (source `pause_menu`), which keeps the reader's
     `sent`, so Up then takes back the menu's message as the composer's; blank text queues nothing and the run
@@ -5786,18 +5789,17 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     Questions drawn inside an evaluation take the console's
     colours (`console_colors()`), as sub-agent lines do.
   - A remembered answer adds one dim line, `    allowed <suggested_rule> for this session` (or `project`). `a` or
-    `p` where nothing can be remembered: `  a and p are not offered: <why>; answer y, n or ?.`; the invalid-answer
-    hint names the question and its keys, `  Allow r? Type y, a, p or n (n <text> says what to do instead), or ?.`
-    (`y or n` without a rule; a sub-agent's `sub-agent a: allow r?`), as the question may have scrolled away
-    (visual review: in RStudio and R.app a draft left on the input line turned `y` into an invalid answer).
+    `p` where nothing can be remembered: `    a and p are not offered: <why>`; an invalid answer gets the row of
+    IC-75 above, `not an answer · kept in history ↑ · y, a, p, n, n <instead> or ?` (visual review: in RStudio
+    and R.app a draft left on the input line turned `y` into an invalid answer).
     Every row a question writes when it asks again is dim at column 4, under its text as the keys row
-    (`ui_hint()`, review of Tasks 16-21): the approval's `Not an answer`, hint, `a and p are not offered` and
-    `No valid answer after 5 tries; refused.`, a choice's `Not an answer. Type a number[, or your own
-    answer].` (it was `  Please enter one of the numbers shown.` in ink) and in place of its fifth
-    `No valid answer after 5 tries; cancelled.` (cheat-sheet review), a paste's `A pasted block is not an
-    answer`, and the pause menu's `Paused. Type s, f, c, a or b.`; at column 2, under the `?`, they read as a
-    new item. In an IDE console (class L) an invalid approval answer of several words adds `A draft typed
-    during the run joins your answer; clear the line first.`: RStudio and R.app keep a draft typed while R was
+    (`ui_hint()`, review of Tasks 16-21), in the console's lower-case terms (`ui_reask()`, P28 Task 71, visual
+    round 3): the approval's `not an answer` row, `a and p are not offered` and `no valid answer after 5 tries ·
+    refused`, a choice's `not an answer · a number[ or your own answer]` (it was `  Please enter one of the
+    numbers shown.` in ink) and in place of its fifth `no valid answer after 5 tries · cancelled` (cheat-sheet
+    review), a paste's `a pasted block is not an answer`, and the pause menu's `not a key` row; at column 2,
+    under the `?`, they read as a new item. In an IDE console (class L) an invalid approval answer of several
+    words adds `a draft typed during the run joins your answer: clear the line first`: RStudio and R.app keep a draft typed while R was
     busy on their input line, so `y` became `and label the axesy` (review of Tasks 16-21). The reader gets one
     finished line and cannot tell such a draft from text typed at the question, so the row states the rule
     (steering review: it read `Text typed during the run is still on the input line; clear it first.`, false

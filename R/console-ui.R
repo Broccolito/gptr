@@ -197,6 +197,24 @@ ui_hint = function(text, width = ui_width()) {
   console_style()$dim(console_wrap(paste0("    ", text), width))
 }
 
+#' A question's row when an answer is no answer (D-243): dim at column 4, as its keys row, the
+#' console's lower-case `terms`, `kept in history <Up glyph>` where the console history `kept` the
+#' answer (as the kept list says, console_keep()), then the `keys` it takes, each bold, its words
+#' after a blank dim (`n <instead>`), `a, b or c`, in rows of whole terms (console_terms())
+#' @noRd
+ui_reask = function(terms, keys = character(), kept = FALSE, width = ui_width()) {
+  sym = console_style()
+  terms = sym$dim(c(terms, if (kept) paste("kept in history", sym$up)))
+  if (length(keys)) {
+    word = sub("^\\S+", "", keys)
+    k = paste0(cli::style_bold(sub(" .*$", "", keys)), ifelse(nzchar(word), sym$dim(word), ""))
+    n = length(k)
+    last = if (n > 1L) paste0(sym$dim(" or "), k[[n]])
+    terms = c(terms, paste0(paste(k[seq_len(n - (n > 1L))], collapse = sym$dim(", ")), last))
+  }
+  paste0("    ", console_terms(terms, width - 4L, sym$dim(sym$sep)))
+}
+
 #' The question of an approval (D-243): `Allow <tool>?`, or `<who>: allow <tool>?` for a sub-agent
 #' @noRd
 ui_permission_question = function(request) {
@@ -378,8 +396,7 @@ ui_console_read = function(prompt, secret = FALSE, accept = NULL) {
     more = if (!is.null(rd)) rd$waiting()
     if (!length(more)) return(ans)
     kept = !secret && console_history_add(paste(c(ans, more), collapse = "\n"))
-    console_write(ui_hint(paste0("A pasted block is not an answer", if (kept) " (kept in history)",
-                                 ".")))
+    console_write(ui_reask("a pasted block is not an answer", kept = kept))
   }
 }
 
@@ -475,10 +492,11 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
     }
     if (allow_other && nzchar(trimws(ans))) return(structure(NA_integer_, other = trimws(ans)))
     if (attempt == 5L) break
-    console_write(ui_hint(paste0("Not an answer. Type ", if (multiple) "numbers separated by commas"
-                                 else "a number", if (allow_other) ", or your own answer", ".")))
+    console_write(ui_reask(c("not an answer", paste0(
+      if (multiple) "numbers separated by commas" else "a number",
+      if (allow_other) " or your own answer"))))
   }
-  console_write(ui_hint("No valid answer after 5 tries; cancelled."))
+  console_write(ui_reask(c("no valid answer after 5 tries", "cancelled")))
   NA_integer_
 }
 
@@ -514,12 +532,11 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 #' chevron (D-243), `?` for the detail view; every console prompt first ends partial answer lines
 #' and clears the live row (D-186), in a T console once typing pauses, and draws it again when it
 #' returns (D-243); a remembered answer adds a dim line naming the rule; an
-#' invalid answer is quoted (kept in the console history in an interactive session) above a hint
-#' that names the question, which may have scrolled away, and its keys; an empty one gets the hint
-#' alone, both dim at column 4 (ui_hint()), and in an IDE console an answer of several words a row
-#' noting that a draft typed during the run joins an answer; five (`?` is none) end in a refusal
-#' whose reason says so (D-188, D-243); an ask that shows the call's change marks its record
-#' (ui_change_asked())
+#' invalid answer gets one dim row at column 4 in the console's terms (ui_reask()), `not an
+#' answer`, `kept in history` where an interactive session's history kept it, and the keys, and in
+#' an IDE console an answer of several words a row noting that a draft typed during the run joins
+#' an answer; five (`?` is none) end in a refusal whose reason says so (D-188, D-243); an ask that
+#' shows the call's change marks its record (ui_change_asked())
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())
@@ -557,23 +574,19 @@ ui_console_permission = function(request, read = ui_console_read) {
     }
     bad = bad + 1L
     if (low %in% c("a", "always", "p", "project")) {
-      msg = paste0("a and p are not offered: ", why, "; answer y, n or ?.")
-    } else {
-      kept = nzchar(a) && gptr_is_interactive() && console_history_add(a)
-      msg = c(if (nzchar(a)) {
-        paste0("Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'",
-               if (kept) " (kept in history)", ".")
-      }, paste0(ui_permission_question(request), " Type ", if (can) "y, a, p or n" else
-        "y or n", " (n <text> says what to do instead), or ?."),
+      console_write(ui_hint(paste0("a and p are not offered: ", why)))
+      next
+    }
+    kept = nzchar(a) && gptr_is_interactive() && console_history_add(a)
+    console_write(c(
+      ui_reask("not an answer", c("y", if (can) c("a", "p"), "n", "n <instead>", "?"), kept),
       # an IDE console keeps a draft typed during the run on its input line, before the answer;
       # the reader cannot tell it from text typed at the question, so the row states the rule
       if (grepl("\\s", trimws(a)) && console_class() == "L") {
-        "A draft typed during the run joins your answer; clear the line first."
-      })
-    }
-    console_write(ui_hint(msg))
+        ui_hint("a draft typed during the run joins your answer: clear the line first")
+      }))
   }
-  console_write(ui_hint("No valid answer after 5 tries; refused."))
+  console_write(ui_reask(c("no valid answer after 5 tries", "refused")))
   ui_answer("deny", reason = "no valid answer was given at the approval prompt")
 }
 

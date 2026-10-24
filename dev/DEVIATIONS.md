@@ -3852,6 +3852,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   a whole line that is a key answers. TERM=dumb lost the line at Ctrl-C (the kernel flushed it), and without the
   drain the menu read it as `and colour by gearc`. Contract-visible: 04 §5 `tty_call()`, §15.10 IC-76. Tests:
   test-console-typing.R "TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (visual round 2)".
+- Final visual loop, round 3 (2026-10-24): Task 71: every question's row for an answer that is no answer is in the
+  console's lower-case terms (`ui_reask()`, dim at column 4, rows of whole terms, the keys bold): `not a key ·
+  kept in history ↑ · s, f, c, a or b`, `not an answer · kept in history ↑ · y, a, p, n, n <instead> or ?`, `not
+  an answer · a number`, `a pasted block is not an answer`, `no valid answer after 5 tries · refused`; `a and p
+  are not offered: <why>` and an IDE console's draft row lose their capitals and full stops. The pause menu and
+  the approval wrote `Not a key: '<text>' (kept in history).` and `Paused. Type s, f, c, a or b.`, two sentences
+  that repeated the bold title right above them. Contract-visible: 04 §15.10 IC-75, IC-77 item 3, the pause
+  menu. Tests: test-console-ui.R "invalid answers are explained and kept; five end in a refusal the model is
+  told", "every question asks again in one style: dim rows at column 4 (review)"; test-console-interrupt.R
+  (the pause menu's keys).
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

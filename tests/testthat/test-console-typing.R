@@ -1364,7 +1364,7 @@ test_that("a terminal: keys read with Ctrl-C answer the pause menu (steering rev
   expect_true(pty$wait("peter[auto]> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(pty$seen("Paused. Type"), 0L)
+  expect_identical(pty$seen("not a key"), 0L)
 })
 
 test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (visual round 2)", {
@@ -1393,7 +1393,7 @@ test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (vi
   expect_true(pty$wait("and colour by gear"))
   pty$send("\025/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(pty$seen("Not a key"), 0L)
+  expect_identical(pty$seen("not a key"), 0L)
 })
 
 test_that("console_typed_split() marks a last line without a line end as partial", {
@@ -1506,7 +1506,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   expect_true(pty$wait("peter> use base R"))
   pty$send("\025/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(c(pty$seen("kept in history"), pty$seen("Not an answer"),
+  expect_identical(c(pty$seen("kept in history"), pty$seen(pty_reask()),
                      pty$seen("Permission denied"), pty$seen("(typed)")), c(0L, 0L, 0L, 0L))
 })
 
@@ -1636,7 +1636,7 @@ test_that("a terminal: a question waits a second after the last key; `yes` is no
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   # a sent draft leaves nothing to keep
-  expect_identical(c(pty$seen("Not an answer"), pty$seen("Permission denied"),
+  expect_identical(c(pty$seen(pty_reask()), pty$seen("Permission denied"),
                      pty$seen("draft kept")), c(0L, 0L, 0L))
 })
 
@@ -1669,7 +1669,7 @@ test_that("a terminal: a line arriving just as a question is drawn steers the ru
   expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(pty$seen("Not an answer"), 0L)
+  expect_identical(pty$seen(pty_reask()), 0L)
 })
 
 test_that("a terminal: an answer typed as a question shows answers it, T and D (visual round 2)", {
@@ -1728,7 +1728,7 @@ test_that("a macOS terminal: a block pasted at a question comes back as one prom
   expect_true(pty$wait("Allow r?"))
   pty$pending()
   pty$send("y\rpasted two\rpasted three\r")
-  expect_true(pty$wait("A pasted block is not an answer (kept in history)."))
+  expect_true(pty$wait("a pasted block is not an answer"))
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("n\r")
   expect_true(pty$wait("REQ tool_result: "))

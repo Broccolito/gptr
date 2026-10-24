@@ -167,13 +167,13 @@ console_ahead = function(rd, accept) {
 #' any question (ui_drain(): a D console's line SIGINT left is kept), a T console's draft said to
 #' be kept above the chevron (ui_draft_kept()). A key or its word
 #' answers, also one typed before the chevron showed or with the Ctrl-C (console_ahead()), an empty
-#' answer continues, anything else is kept in the history, never sent, under a dim hint that names
-#' it and the keys. [s] and [f] read their text at the chevron of their own question, `?
-#' Steer` or `? Follow-up`, and queue it as Enter and Tab do (policy_enqueue()), their queue line,
-#' without the text it shows under, right under it, as under any question. [b] closes the
-#' answer's cut row, then says in dim terms (console_terms()) that the run went to the background,
-#' the service's notice one of them, then lists what the REPL held for after the run as kept
-#' (console_background_settle()), or in red why not.
+#' answer continues, anything else is kept in the history, never sent, under a dim row that says
+#' so and names the keys (ui_reask()). [s] and [f] read their text at the chevron of their own
+#' question, `? Steer` or `? Follow-up`, and queue it as Enter and Tab do (policy_enqueue()), their
+#' queue line, without the text it shows under, right under it, as under any question. [b] closes
+#' the answer's cut row, then says in dim terms (console_terms()) that the run went to the
+#' background, the service's notice one of them, then lists what the REPL held for after the run as
+#' kept (console_background_settle()), or in red why not.
 #' It resumes the interrupted computation, the next block a blank row below the menu (where a tool
 #' runs, its call's block continues: its code's further output and its result line) and the live
 #' row with a T console's draft drawn again (console_asked()), or returns to let the policy's
@@ -276,11 +276,7 @@ policy_menu = function(cnd, pol) {
     }
     # text that is no key is kept, never sent, as an approval keeps it
     kept = gptr_is_interactive() && console_history_add(typed)
-    console_write(ui_hint(c(
-      paste0("Not a key: '", ui_escape(substr(trimws(typed), 1L, 40L)), "'",
-             if (kept) " (kept in history)", "."),
-      paste0("Paused. Type ", paste(k[-length(k)], collapse = ", "), " or ", k[[length(k)]], ".")
-    )))
+    console_write(ui_reask("not a key", k, kept))
   }
 }
 
