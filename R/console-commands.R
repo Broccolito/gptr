@@ -57,8 +57,8 @@ command_parse = function(text) {
 #' it or transform it (into another command, or a prompt sent through `send(text)`). A line that
 #' is still a command goes out on the `console:command` channel (P15 records it as a comment). A
 #' character result is printed escaped (a `cli_ansi_string`, whose untrusted parts its handler
-#' escaped, with its styles), a blank row after it where it has several rows and lines keep the
-#' margin, as after a run's status line, `list(prompt =)` is sent, and an error is reported on
+#' escaped, with its styles), a blank row after it where lines keep the margin, as after a run's
+#' status line, `list(prompt =)` is sent, and an error is reported on
 #' stderr (the input counts as handled).
 #' @return Invisibly "unknown", "error", "prompt" or "done".
 #' @noRd
@@ -107,7 +107,7 @@ console_command = function(text, session = NULL, send = NULL) {
       console_lines(out)
     }
     console_notice(paste(lines, collapse = "\n"))
-    if (length(lines) > 1L && nzchar(console_pad())) console_write("")
+    if (nzchar(console_pad())) console_write("")
   }
   invisible("done")
 }

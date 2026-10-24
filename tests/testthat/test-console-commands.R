@@ -238,8 +238,8 @@ test_that("in the console margin command output wraps inside it; listings fit it
   bold = withr::with_options(list(cli.num_colors = 256L), run_command(rs, "/help")$out)
   names = bold[grepl("^ {4}\\S", cli::ansi_strip(bold))]
   expect_true(length(names) > 20L && all(startsWith(names, "    \033[1m")))
-  expect_identical(run_command(rs, "/mode")$out, "  Mode: manual")
-  expect_match(run_command(rs, "/env")$out, "^  alpha: <integer>")
+  expect_identical(run_command(rs, "/mode")$out, c("  Mode: manual", ""))
+  expect_match(run_command(rs, "/env")$out[[1L]], "^  alpha: <integer>")
   # a listing is printed at the content width (60 - 4), not wrapped again
   listing = withr::with_options(list(width = 56L, cli.width = 56L),
                                 utils::capture.output(print(gptr::gptr_sessions())))
@@ -248,7 +248,7 @@ test_that("in the console margin command output wraps inside it; listings fit it
   expect_equal(c(getOption("width"), getOption("cli.width")), c(60, 60))
 })
 
-test_that("a command's rows end with a blank row before the next prompt (visual round 2)", {
+test_that("a command's output ends with a blank row before the next prompt (visual round 2)", {
   local_console_commands()
   local_project()
   s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
@@ -256,9 +256,9 @@ test_that("a command's rows end with a blank row before the next prompt (visual 
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
   rs = repl_state(s, new.env())
-  # as after a run's status line; one row needs none
+  # as after a run's status line, also after one row, as /compact's follows its progress notice
   expect_identical(utils::tail(run_command(rs, "/context")$out, 2L) != "", c(TRUE, FALSE))
-  expect_length(run_command(rs, "/mode")$out, 1L)
+  expect_identical(utils::tail(run_command(rs, "/mode")$out, 2L) != "", c(TRUE, FALSE))
 })
 
 test_that("/exit, /quit and /q end the REPL", {
