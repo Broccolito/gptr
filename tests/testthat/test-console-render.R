@@ -1265,6 +1265,20 @@ test_that("the status line names the model and the context left; unknown terms g
                    "done - fake-1 - 1 request - 1.1k tokens - $0.0100")
 })
 
+test_that("the status line names the model a CLI's default runs, as /status does (Task 33)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  off = gptr_register(pcli_fake_provider("claude"))
+  withr::defer(off())
+  local_mocked_bindings(pcli_default_model = function(api) paste0(api, "-id"))
+  usage = fake_usage("default", route = "plan-cli", cost = 0.01)
+  usage$provider = "fakeclaude"
+  expect_identical(status_line("idle", NULL, usage),
+                   "done - cli-claude-id - 1 request - 1.1k tokens - $0.0100")
+  usage$model = "claude-sonnet-5-5"
+  expect_identical(status_line("idle", NULL, usage),
+                   "done - claude-sonnet-5-5 - 1 request - 1.1k tokens - $0.0100")
+})
+
 test_that("a reason's line breaks fold into one space; other controls stay escaped (sessions-7)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   # curl's two-line error, as a network failure gives it

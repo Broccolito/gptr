@@ -4137,3 +4137,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   P18's server, stays silent). The CLI routes showed only `+ x3`, where the native routes showed the code's output
   rows above it. Contract-visible: 04 §5 `eval_r()` row. Tests: test-mcp-server.R "code served in a live run shows
   what it prints, as the r tool does (Task 31)".
+- Live dogfood fixes (Task 28, 2026-10-23): Task 33: the run status line names a built-in CLI's `default` as the
+  full id the CLI gets (`console_cli_default()`, which `/model` and `/status` also use): on claude-cli and codex
+  it said `done · default · 2 requests`. Contract-visible: 04 §15.10 IC-77. Tests: test-console-render.R "the
+  status line names the model a CLI's default runs, as /status does (Task 33)".

@@ -1528,7 +1528,8 @@ Decisions:
 - The mode stays in the prompt (`peter[auto]>`). Shift-Tab is not added; readline cannot bind it
   portably.
 - (Amended in Task 26:)
-  - The model is the last usage row's `model` (the id, without its provider). A cost is left out when its known
+  - The model is the last usage row's `model` (the id, without its provider; amended in Task 33: a built-in
+    CLI's `default` as the full id the CLI gets, as `/status` names it). A cost is left out when its known
     sum is not above 0, also with requests of unknown cost beside it; so are `sub-agents` terms.
   - The line is written as a notice (`console_notice()`): at column 2 and wrapped where the margin applies, at
     column 0 in the plain layout, where it had two fixed spaces.
@@ -1687,7 +1688,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 29 | A console started from a sourced script records none of its turns | 7fe1e0dc |
 | 30 | `/skill:` completes nothing before the first prompt | 146028a1 |
 | 31 | Code served to a CLI route does not show what it prints | 747e04d7 |
-| 32 | Under load an Enter typed during a run stays in the draft | (this commit) |
+| 32 | Under load an Enter typed during a run stays in the draft | 3dae3324 |
+| 33 | A CLI route's run status names its model `default` | (this commit) |
 
 ## Out of scope
 

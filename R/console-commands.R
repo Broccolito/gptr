@@ -175,16 +175,22 @@ cmd_exit = function(args, ctx) {
   NULL
 }
 
+#' The full id a built-in CLI gets for the reference `ref` to its `default` (contract 11.10), else
+#' NULL: another CLI adapter decides what its `default` runs
+#' @noRd
+console_cli_default = function(ref) {
+  m = model_canonical(ref)
+  if (!identical(m$type, "cli") || !endsWith(m$ref, "/default")) return(NULL)
+  api = registry_get("provider", sub("/.*$", "", m$ref))[["api"]]
+  if (isTRUE(api %in% c("cli-claude", "cli-codex"))) pcli_default_model(api)
+}
+
 #' A model reference as /model and /status show it: a built-in CLI's `default` with the full id
-#' the CLI gets (`claude-cli/default (claude-sonnet-5-5)`, contract 11.10); another CLI adapter
-#' decides what its `default` runs
+#' the CLI gets (`claude-cli/default (claude-sonnet-5-5)`)
 #' @noRd
 cmd_model_label = function(ref) {
-  m = model_canonical(ref)
-  if (!identical(m$type, "cli") || !endsWith(m$ref, "/default")) return(ref)
-  api = registry_get("provider", sub("/.*$", "", m$ref))[["api"]]
-  if (!isTRUE(api %in% c("cli-claude", "cli-codex"))) return(ref)
-  paste0(ref, " (", pcli_default_model(api), ")")
+  id = console_cli_default(ref)
+  if (is.null(id)) ref else paste0(ref, " (", id, ")")
 }
 
 #' `/model [ref]`: on a session from the next request; before the first prompt for that prompt,

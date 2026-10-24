@@ -875,7 +875,8 @@ console_tool_line = function(call, result = NULL, session = NULL, width = cli::c
 
 #' The terms of a run's end status line (IC-77, D-245), joined by the separator, in ASCII
 #' `done - fake-1 - 2 requests - 1.2k tokens - $0.0042 - 82% context left`, from the run's own
-#' requests (its usage rows): the last request's model, then `sub-agents $0.8500` when `kids` holds
+#' requests (its usage rows): the last request's model (a built-in CLI's `default` as the full id
+#' the CLI gets, console_cli_default()), then `sub-agents $0.8500` when `kids` holds
 #' the costs of its sub-agents' requests, then the context the last request left
 #' (console_context_left()); the status and reason when it did not end idle, the reason's line
 #' breaks one space (curl's errors take two lines). A term whose value is unknown (IC-74) is left
@@ -890,6 +891,10 @@ console_status_line = function(status, reason = NULL, usage = NULL, kids = NULL)
   cols = c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h")
   n = NROW(usage)
   model = if (n) usage$model[[n]]
+  if (identical(model, "default")) {
+    model = tryCatch(console_cli_default(paste0(usage$provider[[n]], "/default")),
+                     error = function(e) NULL) %||% model
+  }
   tokens = format_count(unlist(usage[intersect(cols, names(usage))]))
   cost = function(x) if (sum(x, na.rm = TRUE) > 0) format_cost(x)
   left = console_context_left(usage)

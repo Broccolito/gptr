@@ -5641,7 +5641,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     `left` and left a row ending ` ·`; the banner's rows and the mention line too), `done · <model> · <n> requests · <tokens> tokens · <cost> · <k>%
     context left`, with `aborted: <reason>` or `error: <reason>` for `done` as before (the reason's line breaks one
     space, cheat-sheet review: curl's two-line error showed `<U+000A>`): the model of the run's
-    last request (its usage row's `model`), and `sub-agents <cost>` after the own cost. A term whose value is
+    last request (its usage row's `model`; a built-in CLI's `default` as the full id the CLI gets, as `/status`
+    names it, P28 Task 33), and `sub-agents <cost>` after the own cost. A term whose value is
     unknown (IC-74) is left out, as is a cost not above 0 (a free or local model): `aborted · 1 request` after
     an abort that reported nothing. `format_cost()` keeps IC-74's form wherever a cost is shown.
     `console_context_left(u)` is the last request's `1 - (input + cache_read + cache_write_5m +
