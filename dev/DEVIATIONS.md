@@ -4218,6 +4218,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   blue were 1.3:1 to 1.6:1, the dim rows and inline code nearly invisible; the logo's colours stay wherever they
   pass. Contract-visible: 04 §15.10 IC-82. Tests: test-console-render.R "on a saturated background the accents
   and the grey keep 3:1 against it (Task 41)".
+- Final visual loop, round 1 (2026-10-24): Task 44: a run that ends in an error or at max_turns says why once,
+  in its status line, whose status and reason wrap between words at column 2; the REPL prints no `Error:` notice
+  for it (`console_state()$ended` names the session whose status line showed), and after any other error a blank
+  row keeps the gap before the prompt. The max_turns reason is `the run stopped after <n> turn(s)`. Before, the
+  status line cut the reason and the REPL repeated it in bold, glued to the next prompt. Contract-visible: 04
+  §15.10 run totals. Tests: test-console-repl.R "a failed run says why once, whole, in its status line; the prompt
+  keeps its gap".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

@@ -5800,7 +5800,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     separator, a term wider than a row is cut; review of Tasks 22-27: word wrapping broke `98% context` from
     `left` and left a row ending ` ·`; the banner's rows and the mention line too), `done · <model> · <n> requests · <tokens> tokens · <cost> · <k>%
     context left`, with `aborted: <reason>` or `error: <reason>` for `done` as before (the reason's line breaks one
-    space, cheat-sheet review: curl's two-line error showed `<U+000A>`): the model of the run's
+    space, cheat-sheet review: curl's two-line error showed `<U+000A>`; a status and reason wider than a row wrap
+    between words at column 2, the run's terms after them, and the REPL prints no `Error:` notice for a run whose
+    status line it showed, P28 Task 44: the reason showed twice, the first copy cut): the model of the run's
     last request (its usage row's `model`; a built-in CLI's `default` as the full id the CLI gets, as `/status`
     names it, P28 Task 33), and `sub-agents <cost>` after the own cost. A term whose value is
     unknown (IC-74) is left out, as is a cost not above 0 (a free or local model): `aborted · 1 request` after

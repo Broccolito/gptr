@@ -1564,7 +1564,8 @@ run_settle = function(run, reason) {
   if (!is.null(run$accounting_error)) status = "error"
   if (identical(status, "max_turns") && is.null(run$condition)) {
     run$condition = gptr_condition(
-      paste0("the run stopped after ", run$max_turns, " turns (max_turns)"), "max_turns", "error",
+      paste0("the run stopped after ", run$max_turns, if (identical(run$max_turns, 1L)) " turn" else
+               " turns"), "max_turns", "error",
       list(max_turns = run$max_turns, session = d$id))
   }
   if (identical(status, "error") && is.null(run$condition)) {

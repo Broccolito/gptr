@@ -901,8 +901,19 @@ repl_turn = function(rs, text) {
   if (length(men$said)) console_notice(mention_line(men$said))
   s = rs$session
   steer = !is.null(s) && session_data(s)$status %in% c("running", "waiting")
+  st = console_state()
+  st$ended = NULL
   res = console_send(rs, text, men)
-  if (identical(res$status, "error")) return(repl_error(res$error))
+  if (identical(res$status, "error")) {
+    # the run's status line said why; any other error keeps the gap before the prompt
+    e = res$error
+    if (inherits(e$session, "gptr_session") && identical(st$ended, session_data(e$session)$id)) {
+      return(invisible(NULL))
+    }
+    repl_error(e)
+    if (nzchar(console_pad())) console_cat("\n")
+    return(invisible(NULL))
+  }
   if (!identical(res$status, "ok")) return(invisible(NULL))
   if (steer) return(console_queue_line(s, text, "steer"))
   value = res$value

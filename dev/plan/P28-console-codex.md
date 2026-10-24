@@ -1701,7 +1701,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 40 | Under `R < file` the piped console reads end of input at once | 99bb3d6f |
 | 41 | On Terminal.app's Ocean and Grass profiles the dim rows and inline code nearly vanish | 0ab59e78 |
 | 42 | A retry notice prints a raw missing value (final visual loop, round 1) | eafd16f5 |
-| 43 | An interrupted call's row states its time twice (final visual loop, round 1) | (this commit) |
+| 43 | An interrupted call's row states its time twice (final visual loop, round 1) | 0d29db9c |
+| 44 | A failed run states its reason twice, the first copy cut (final visual loop, round 1) | (this commit) |
 
 ## Out of scope
 

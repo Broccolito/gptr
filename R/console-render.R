@@ -1228,9 +1228,14 @@ console_on_agent_end = function(event, ctx) {
   if (!is.null(rec$md)) rec$md$finish(cut = !identical(event$status, "idle"))
   console_gap(rec, "status")
   console_render_custom(rec$session, rec$n0)
-  # in rows ending at whole terms (console_terms()), at the content width
-  rows = console_terms(terms, max(20L, cli::console_width() - 2L * nchar(console_pad())))
+  # in rows ending at whole terms (console_terms()), at the content width; the status and its
+  # reason wrap between words, so the reason shows whole, once (repl_turn())
+  width = max(20L, cli::console_width() - 2L * nchar(console_pad()))
+  why = console_wrap(terms[[1L]], width)
+  rows = c(utils::head(why, -1L), console_terms(c(utils::tail(why, 1L), terms[-1L]), width))
   console_notice(paste(sym$dim(rows), collapse = "\n"))
+  st = console_state()
+  st$ended = session_data(rec$session)$id
   on.exit(console_gap(rec, "prompt"), add = TRUE)
   NULL
 }

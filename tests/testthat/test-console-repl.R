@@ -1022,6 +1022,37 @@ test_that("an error is printed on stderr and the REPL goes on", {
   expect_identical(res$text, "recovered")
 })
 
+test_that("a failed run says why once, whole, in its status line; the prompt keeps its gap", {
+  skip_on_cran()
+  local_console_test()
+  local_scripted_ui()
+  local_gptr_options(verbose = 2L, max_turns_console = 1L)
+  withr::local_options(cli.dynamic = TRUE, cli.width = 50L)
+  long = "provider failure: boom, and a reason long enough to wrap at fifty columns"
+  fake = gptr_fake_provider(list(list(error = long, status = 400L, after = 0L),
+                                 fake_tool("r", code = "zz = 1"), "ok"))
+  local_console_stdin(c("hello", "again", "after", "/exit"))
+  # stdout and stderr in the order they were written, as a terminal shows them
+  f = withr::local_tempfile()
+  con = file(f, "w")
+  sink(con)
+  sink(con, type = "message")
+  tryCatch(peter(.stdin = TRUE, model = fake, envir = new.env(), mode = "auto"), finally = {
+    sink(type = "message")
+    sink()
+    close(con)
+  })
+  out = readLines(f)
+  text = paste(trimws(out), collapse = " ")
+  expect_identical(lengths(gregexpr("boom", text, fixed = TRUE)), 1L)
+  expect_match(text, paste("error:", long), fixed = TRUE)
+  expect_identical(lengths(gregexpr("max_turns", text, fixed = TRUE)), 1L)
+  expect_match(text, "max_turns: the run stopped after 1 turn ", fixed = TRUE)
+  expect_true(all(cli::ansi_nchar(out, type = "width") <= 50L))
+  at = match(c("peter[auto]> again", "peter[auto]> after"), out)
+  expect_identical(out[at - 1L], c("", ""))
+})
+
 test_that("approvals of a .stdin session are answered from the same stdin", {
   skip_on_cran()
   local_console_test()

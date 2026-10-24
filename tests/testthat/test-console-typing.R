@@ -362,7 +362,7 @@ test_that("a steer a run at max_turns did not take is the next prompt, run 2's u
   err = utils::capture.output({
     res = typing_console(fake, c("go", "/exit"))
   }, type = "message")
-  expect_true(any(grepl("(max_turns)", err, fixed = TRUE)))
+  expect_true(any(grepl("the run stopped after 1 turn", err, fixed = TRUE)))
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
   roles = vapply(reqs[[2L]]$messages, function(m) m$role, "")
