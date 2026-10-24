@@ -1915,7 +1915,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   legacy (cached for 7 days), which works. A hung server forced modern now fails after the request
   timeout instead of 5 s.
 
-## Task FIX-15 - Cheat-sheet review: tools (2026-10-22, #PR)
+## Task FIX-15 - Cheat-sheet review: tools (2026-10-22, #77)
 
 ### tools-1 - Dispatch refuses a direct call to a tool the session did not offer
 - Red: FAIL 7 in `agent-dispatch` (PASS 221), mode auto with the fake provider: `write` under
@@ -2112,7 +2112,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: none (04 §12.1 does not define a broken script; the fix restores
   `run_retryable()`'s rule). Open: none.
 
-## Task FIX-16 - Cheat-sheet review: doc (2026-10-22, #PR)
+## Task FIX-16 - Cheat-sheet review: doc (2026-10-22, #77)
 
 ### paths-1 - Memoise the *.Rproj probe of project_root() by directory mtime
 - Findings 3, 36, 69, 83, 118, 159, 178; 60 and 157 (sessions-1, merged here).
@@ -2965,7 +2965,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `record = false`, so its block holds no code and its replays say nothing.
 - Deviations: D-249 (extended). Open: none.
 
-## Task FIX-17 - Cheat-sheet review: models (2026-10-22, #PR)
+## Task FIX-17 - Cheat-sheet review: models (2026-10-22, #77)
 
 ### catalog-1 - Convert each models.dev price tier once, and reconvert caches written by the old converter
 - Red: `^catalog-models$` FAIL 5, PASS 410: a 200k tier plus the legacy field gave `default, >200k, >200k`
@@ -3436,7 +3436,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Deviations: D-250 (s1-1 rule edited in place). The reviewer's smaller alternative (a team wording in
   `subagent_route_checks()`) is not used: it would leave the drop. Open: none.
 
-## Task FIX-18 - Cheat-sheet review: sessions (2026-10-22, #PR)
+## Task FIX-18 - Cheat-sheet review: sessions (2026-10-22, #77)
 
 ### tools-3 - Unknown names in tools = are refused, not silently ignored
 - Red: FAIL 11 in `^gptr-gateway$` (PASS 357; finding 8): `tools = extendd`, `"Extended"`, `"-wirte"`
@@ -3958,7 +3958,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   arch-layers|lint-rules)$` PASS 5369 SKIP 1. Lint clean; Rd regenerated.
 - Deviations: D-251 (extended). Open: none.
 
-## Task FIX-19 - Cheat-sheet review: orchestration (2026-10-22, #PR)
+## Task FIX-19 - Cheat-sheet review: orchestration (2026-10-22, #77)
 
 ### ws-1 - A team, fan-out or nested child's <workspace> block lists the caller objects it can read
 - Findings 123, 126, 156, 184, 199, 201. Red: `^(env-snapshot|subagent-team)$` FAIL 13 PASS 537:
