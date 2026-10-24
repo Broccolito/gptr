@@ -133,10 +133,31 @@ test_that("the one-line prompt shows the first line, +N more lines and the flagg
   detail = ui_permission_detail(req)
   expect_true(any(grepl("<U+001B>[2J clear", detail, fixed = TRUE)))
   expect_false(any(grepl("\u001b", detail, fixed = TRUE)))
-  expect_true(any(grepl("[3] file_delete", detail, fixed = TRUE)))
+  expect_true(any(grepl("[3 file_delete]", detail, fixed = TRUE)))
   w = list(tool = "write", input = list(path = "notes.md"), risk = list(level = 2L))
   expect_identical(ui_permission_lines(w), c("  | write  notes.md", "  ? Allow write?",
                                              "    y yes - n no - ? more"))
+})
+
+test_that("a flag has one shape in the ask and in ?, in the console's words (visual round 1)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  fl = data.frame(call = "modifies `fuel` <data.frame, 4.2 KB>", fn = NA_character_, level = 2L,
+                  category = "object_write", path = NA_character_, path_class = NA_character_)
+  req = list(tool = "r", input = list(code = "fuel$x = 1"), tier = "ask", session = "s1",
+             risk = list(level = 2L, label = "mutating", flagged = fl),
+             reason = "mode edits, risk level 2 (mutating)")
+  ask = grep("flagged", ui_permission_lines(req), value = TRUE)
+  detail = ui_permission_detail(req)
+  expect_identical(ask, "    flagged: [2 object_write] modifies fuel (data.frame, 4.2 KB)")
+  expect_true("    [2 object_write] modifies fuel (data.frame, 4.2 KB)" %in% detail)
+  expect_false(any(grepl("[`<>]", c(ask, grep("object_write", detail, value = TRUE)))))
+  # the reason row names the level, so the first row does not
+  expect_identical(detail[1:2],
+                   c("  gptr wants to use r", "  reason: mode edits, risk level 2 (mutating)"))
+  # inline code as the answer shows it
+  withr::local_options(cli.num_colors = 256L)
+  blue = sub("x.*$", "", console_style()$blue("x"))
+  expect_match(ui_permission_lines(req)[[2L]], paste0(blue, "fuel"), fixed = TRUE)
 })
 
 test_that("the prompt's first line fits the console, keeping +N more lines (D-187)", {
@@ -175,7 +196,9 @@ test_that("a path tool's prompt shows the path relative to the project; no empty
   expect_identical(ui_permission_lines(w)[1L], "  | write  R/io.R")
   detail = ui_permission_detail(w)
   expect_identical(detail[1:2], c("  gptr wants to use write (level 2)", "    R/io.R"))
-  expect_match(ui_permission_detail(ui_request("x = 1"))[1L], "(level 1: local)", fixed = TRUE)
+  # the level and its label where no reason row names the level
+  expect_match(ui_permission_detail(modifyList(ui_request("x = 1"), list(reason = NULL)))[1L],
+               "(level 1: local)", fixed = TRUE)
 })
 
 # A row of the ? view joined with the rows it goes on in, `hang` columns in (console_hang())
@@ -874,8 +897,8 @@ test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-1
   expect_identical(ui_permission_lines(c(req, agent = "alpha")),
                    c("  | r  x = 1", "  ? sub-agent alpha: allow r?", keys))
   expect_identical(q(c(req, agent = "'Sum\033...'")), "  ? sub-agent 'Sum<U+001B>...': allow r?")
-  expect_match(ui_permission_detail(c(req, agent = "alpha"))[1L],
-               "^  sub-agent alpha wants to use r \\(level")
+  expect_identical(ui_permission_detail(c(req, agent = "alpha"))[1L],
+                   "  sub-agent alpha wants to use r")
   expect_match(ui_permission_detail(req)[1L], "^  gptr wants to use r")
   crit = ui_request("q('no')", tier = "ask_human")
   expect_identical(utils::tail(ui_permission_lines(crit), 3L)[1L],

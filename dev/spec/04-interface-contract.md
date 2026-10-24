@@ -4736,6 +4736,10 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    call's first line, cut to the console width before `(+N more lines)` (an absolute path inside the project
    relative to it), then the flagged calls one per line, highest level first, each cut to the console width, at
    most 5, then `(+N more; ? shows all)`; `[a]`/`[p]` are offered only with a `suggested_rule` (D-187, D-222).
+   A flag has one shape in the ask and in the `?` view, `[<level> <category>] <call>` (`ui_flags()`), its
+   backticked names inline code as in an answer and an object's `<class, size>` the mention line's `(class,
+   size)` (P28 Task 49: the ask showed the Markdown and angle brackets and `?` another shape, `[2] file_write
+   <call>`); the `?` view's first row names no level where its reason row does.
 
 P24's `test-injection-e2e.R` adds an injected model trying each path above; every attempt ends in a human ask
 (interactive) or `blocked` in every mode but yolo, which runs gptr's own exports by design (IC-78).

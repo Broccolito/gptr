@@ -146,6 +146,21 @@ ui_flagged = function(risk) {
   fl[order(-fl$level), , drop = FALSE]
 }
 
+#' Flagged calls as the console writes them, the ask's and the ? view's alike (D-222, IC-82):
+#' `[<level> <category>] <call>`, escaped, its backticked names inline code as in an answer and an
+#' object's `<class, size>` the mention line's `(class, size)`
+#' @noRd
+ui_flags = function(fl) {
+  blue = console_style()$blue
+  call = sub(" <([^<>]*)>$", " (\\1)", ui_escape(fl$call))
+  call = vapply(strsplit(call, "`", fixed = TRUE), function(p) {
+    code = seq_along(p) %% 2L == 0L
+    p[code] = blue(p[code])
+    paste(p, collapse = "")
+  }, "")
+  paste0("[", fl$level, " ", fl$category, "] ", call)
+}
+
 #' Who asks (D-188): "sub-agent <label>" for a sub-agent's request, else ""
 #' @noRd
 ui_who = function(request) {
@@ -231,8 +246,8 @@ ui_permission_lines = function(request) {
     console_diff_rows(change, 12L, width, "; ? shows more"),
     if (n) {
       k = seq_len(min(n, 5L))
-      rows = paste0(c("    flagged: ", rep(strrep(" ", 13L), 4L))[k], "[", fl$level[k], " ",
-                    fl$category[k], "] ", ui_escape(fl$call[k]))
+      lead = c("    flagged: ", rep(strrep(" ", 13L), 4L))[k]
+      rows = paste0(lead, ui_flags(fl[k, , drop = FALSE]))
       sym$dim(console_cut(c(rows, if (n > 5L) {
         paste0(strrep(" ", 13L), "(+", n - 5L, " more; ? shows all)")
       }), width))
@@ -268,7 +283,9 @@ ui_permission_detail = function(request, asked = FALSE) {
   out = c(console_wrap(paste0("  ", if (nzchar(who)) who else "gptr", " wants to use ",
                               console_tool_name(request$tool %||% "a tool"),
                               if (length(change)) paste0(" on ", c(lines, "")[[1L]]),
-                              if (!is.null(risk$level)) {
+                              # the level, unless the reason row names it
+                              if (!is.null(risk$level) && !grepl(paste("level", risk$level),
+                                                                 request$reason %||% "")) {
                                 paste0(" (level ", risk$level,
                                        if (rlang::is_string(risk$label)) {
                                          paste0(": ", ui_escape(risk$label))
@@ -290,9 +307,10 @@ ui_permission_detail = function(request, asked = FALSE) {
   if (NROW(fl)) {
     where = ifelse(is.na(fl$path), "",
                    paste0("  path: ", ui_escape(fl$path), " (", fl$path_class, ")"))
-    head = paste0("    [", fl$level, "] ", fl$category, "  ")
-    rows = lapply(seq_along(head), function(k) {
-      console_hang(paste0(head[[k]], ui_escape(fl$call[[k]]), where[[k]]), width, nchar(head[[k]]))
+    flags = ui_flags(fl)
+    rows = lapply(seq_along(flags), function(k) {
+      console_hang(paste0("    ", flags[[k]], where[[k]]), width,
+                   5L + nchar(paste0("[", fl$level[[k]], " ", fl$category[[k]], "]")))
     })
     out = c(out, "  flagged calls:", unlist(rows))
   }

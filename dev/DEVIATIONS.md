@@ -3808,6 +3808,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   chevron and then again by readline (` l    ↳ draft kept ...` and `›  loess fit`, once under a stall). A D
   console without readline keeps the echo. Contract-visible: 04 §5 `tty_question()` row. Tests:
   test-console-typing.R "a terminal call's question reads in the saved modes from before its rows (review)".
+- Final visual loop, round 1 (2026-10-24): Task 49: an approval's flag has one shape in the ask and in `?`,
+  `[<level> <category>] <call>` (`ui_flags()`), its backticked names inline code and an object's `<class,
+  size>` written `(class, size)` as the mention line writes it; the `?` view's first row names no level where
+  the reason row does. The ask showed literal backticks and angle brackets, `?` wrote `[2] file_write  <call>`
+  and named the level twice. Contract-visible: 04 §15.4 IC-53 item 8. Tests: test-console-ui.R "a flag has one
+  shape in the ask and in ?, in the console's words (visual round 1)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
