@@ -323,12 +323,15 @@ cmd_env = function(args, ctx) {
 }
 
 #' `/compact [focus]`, under the interrupt policy (mode "repl": an abort returns NULL); it reports
-#' the token counts of the new compaction entry, as the automatic notice does (console_on_compact())
+#' the token counts of the new compaction entry, as the automatic notice does
+#' (console_compacted()), dim in the status line's terms
 #' @noRd
 cmd_compact = function(args, ctx) {
+  sym = console_style()
+  say = function(...) cli::ansi_string(sym$dim(paste(c(...), collapse = sym$sep)))
   s = ctx$session
-  if (is.null(s)) return("There is no conversation to compact yet.")
-  if (isTRUE(session_live(s)$compacting)) return("Compaction is already in progress.")
+  if (is.null(s)) return(say("nothing to compact yet"))
+  if (isTRUE(session_live(s)$compacting)) return(say("already compacting"))
   compact = ext_service_get("compact.run")
   compactions = function() {
     Filter(function(e) identical(e$type, "compaction"), session_data(s)$entries)
@@ -338,13 +341,9 @@ cmd_compact = function(args, ctx) {
     compact(s, "manual", if (nzchar(args)) args)
     length(compactions()) > before
   }, list(), mode = "repl")
-  if (identical(done, FALSE)) return("Compaction was cancelled.")
-  if (!isTRUE(done)) return("Compaction was interrupted.")
-  e = utils::tail(compactions(), 1L)[[1L]]
-  n = c(e$tokens_before %||% NA_real_, e$details$tokens_after %||% NA_real_)
-  if (anyNA(n)) return("Conversation compacted.")
-  paste0("Conversation compacted: ", format_count(n[[1L]]), " to ", format_count(n[[2L]]),
-         " tokens.")
+  if (identical(done, FALSE)) return(say("not compacted", "cancelled"))
+  if (!isTRUE(done)) return(say("interrupted"))
+  say(console_compacted(utils::tail(compactions(), 1L)[[1L]]))
 }
 
 #' /cost: the requests, input tokens and cost of the session and its children by agent, then

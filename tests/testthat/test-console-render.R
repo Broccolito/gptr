@@ -910,12 +910,12 @@ test_that("a compaction during a foreground run prints one dim notice with its c
                summary_tokens = 300, run = run)
   }
   expect_identical(render_events(s, list(hook_event("agent_start", s), done())),
-                   "  conversation compacted: 98.2k to 4.1k tokens")
+                   "  compacted - 98.2k to 4.1k tokens")
   # /compact outside a run reports itself
   expect_identical(render_events(s, list(done(NULL))), character())
   testthat::local_reproducible_output(width = 80, crayon = TRUE, unicode = FALSE)
   expect_identical(render_events(s, list(done())),
-                   "\033[2m  conversation compacted: 98.2k to 4.1k tokens\033[22m")
+                   "\033[2m  compacted - 98.2k to 4.1k tokens\033[22m")
 })
 
 test_that("a retry names its error's class, and no class when it has none (visual round 1)", {

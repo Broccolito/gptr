@@ -463,7 +463,7 @@ test_that("/compact reports its saving and /context names the compaction request
   s = peter(s, "q2")
   rs = repl_state(s, new.env())
   out = run_command(rs, "/compact")$out
-  expect_match(out[[length(out)]], "^Conversation compacted: \\S+ to \\S+ tokens\\.$")
+  expect_match(out[[length(out)]], "^compacted - \\S+ to \\S+ tokens$")
   figure = function(out, pattern) {
     as.numeric(gsub("[^0-9]", "", grep(pattern, out, value = TRUE)))
   }

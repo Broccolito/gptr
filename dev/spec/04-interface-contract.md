@@ -5866,9 +5866,12 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     <id> (the compaction request):`, adds the row `  next request       ~<n>` (the compaction entry's
     `tokens_after`, `~` an estimate) under the total, its value in the ledger's column (review of Tasks 22-27: it
     was the sentence `  next request: about <n> tokens` among the right-aligned values), and measures the context
-    left from that; `/compact` says `Conversation compacted: <before> to
-    <after> tokens.`, the counts of the automatic notice (`conversation compacted: <before> to <after> tokens`;
-    `to`, not `->`, and the progress notice `Compacting conversation…` with the console's ellipsis: P28 Task 62), `Conversation compacted.` where one is unknown
+    left from that; `/compact` says `compacted · <before> to <after> tokens`, dim in the status line's terms as
+    the automatic notice does (`console_compacted()`; `to`, not `->`, and the progress notice `compacting…` with
+    the console's ellipsis: P28 Task 62; P28 Task 73, visual round 3: `Compacting conversation…` and
+    `Conversation compacted: 5.6k to 4.1k tokens.` in plain ink, sentences among dim lower-case rows; its other
+    results `not compacted · cancelled`, `interrupted`, `already compacting`, `nothing to compact yet`, and
+    `compaction did not finish` after a failure), bare `compacted` where a count is unknown
     (cheat-sheet review, console-4: it said only that, and `/context` showed the compaction request unlabelled,
     larger than the request before it).
     `console_context_left()` -> `compact_threshold()` and `prompt_model()` are contract edges of the layering

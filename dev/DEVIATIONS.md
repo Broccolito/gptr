@@ -4386,6 +4386,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   started`, the done line `'count the cars in fuel'… done`, `#1` lost. Contract-visible: 04 §15.10 IC-82 (the
   agent row). Tests: test-console-render.R "a sub-agent's started line cut to the width keeps its last word
   (Task 36)", "a diff row wider than the console is cut, its spaces and sign kept (visual review)".
+- Final visual loop, round 3 (2026-10-24): Task 73: `/compact` and the automatic notice say `compacted ·
+  <before> to <after> tokens` (`console_compacted()`), bare `compacted` where a count is unknown, the progress
+  notice `compacting…`, all dim as the status line, and `/compact`'s other results are its terms too (`not
+  compacted · cancelled`, `interrupted`, `already compacting`, `nothing to compact yet`); it wrote `Compacting
+  conversation…` and `Conversation compacted: 5.6k to 4.1k tokens.` in ink. Contract-visible: 04 §15.10 (run
+  totals, `/compact`), 03 §6.11. Tests: test-compaction-acceptance.R, test-compaction-wait.R (their notices and
+  results), test-console-commands.R "/compact reports its saving and /context names the compaction request
+  (console-4)", test-console-render.R (the automatic notice).
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

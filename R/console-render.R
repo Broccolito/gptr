@@ -1215,10 +1215,18 @@ console_on_compact = function(event, ctx) {
            right = TRUE)
   console_pause_one(rec)
   console_gap(rec, "notice")
-  console_write(console_style()$dim(paste0(
-    "  conversation compacted: ", format_count(e$tokens_before %||% NA_real_), " to ",
-    format_count(e$details$tokens_after %||% NA_real_), " tokens")))
+  console_write(console_style()$dim(paste0("  ", console_compacted(e))))
   NULL
+}
+
+#' A compaction entry's result in the status line's terms (D-245): `compacted · <before> to <after>
+#' tokens`, or `compacted` where a count is unknown
+#' @noRd
+console_compacted = function(e) {
+  n = c(e$tokens_before %||% NA_real_, e$details$tokens_after %||% NA_real_)
+  if (anyNA(n)) return("compacted")
+  paste0("compacted", console_style()$sep, format_count(n[[1L]]), " to ", format_count(n[[2L]]),
+         " tokens")
 }
 
 #' agent_end: take the live row down, close the streams, show custom entries and the status line,

@@ -925,9 +925,13 @@ compact_run = function(s, reason, focus = NULL) {
   notice_state = new.env(parent = emptyenv())
   notice_state$completed = FALSE
   if (notice) {
-    gptr_inform(paste0("Compacting conversation", console_style()$ellipsis), "progress")
+    # dim, as the console's status line, in its words
+    sym = console_style()
+    gptr_inform(sym$dim(paste0("compacting", sym$ellipsis)), "progress")
     on.exit({
-      if (!isTRUE(notice_state$completed)) gptr_inform("Compaction did not finish.", "progress")
+      if (!isTRUE(notice_state$completed)) {
+        gptr_inform(sym$dim("compaction did not finish"), "progress")
+      }
     }, add = TRUE)
   }
   res = dec$result

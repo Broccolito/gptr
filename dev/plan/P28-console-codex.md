@@ -1556,8 +1556,9 @@ Decisions:
   space, so curl's two-line error stays on the line (it showed `<U+000A>`); other control characters stay escaped.
 - (Amended in the cheat-sheet review, console-4:) after `/compact` the last request is the compaction request:
   `/context` says so in its header, adds `  next request: about <n> tokens` (the compaction entry's
-  `tokens_after`) and measures the context left from that; `/compact` reports `Conversation compacted: <before> to
-  <after> tokens.` (`->` until P28 Task 62). (Amended in the review of Tasks 22-27: the estimate is a ledger row, `  next request
+  `tokens_after`) and measures the context left from that; `/compact` reports `compacted · <before> to
+  <after> tokens` (`->` until P28 Task 62; `Conversation compacted: <before> to <after> tokens.` until P28 Task
+  73). (Amended in the review of Tasks 22-27: the estimate is a ledger row, `  next request
   ~<n>`, its value in the column of the others, `~` marking it an estimate.)
 
 Tests (`test-console-render.R`, `test-console-repl.R`, `test-console-commands.R`), RED first:
@@ -1736,7 +1737,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 69 | /compact's one-row result still runs into the next prompt (Task 62, found by its visual check) | 8644edd9 |
 | 70 | The pause menu's [b] notice mixes two voices and ends a row in the separator (final visual loop, round 3) | f6cd98f5 |
 | 71 | The re-ask after an invalid answer repeats the question in sentence prose (final visual loop, round 3) | 623efc0c |
-| 72 | A sub-agent's start and done rows are cut in different places (final visual loop, round 3) | (this commit) |
+| 72 | A sub-agent's start and done rows are cut in different places (final visual loop, round 3) | ae96b604 |
+| 73 | /compact writes sentence prose among the console's dim terms (final visual loop, round 3) | (this commit) |
 
 ## Out of scope
 
