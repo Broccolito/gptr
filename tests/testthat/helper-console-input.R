@@ -117,7 +117,9 @@ kept_line = function(texts, kept = TRUE, utf8 = cli::is_utf8_output()) {
 # reads until `x` is shown and consumes the output through it, so the next wait() looks after it;
 # `pending()` reads for 0.5 s and returns what followed, its escapes and a CR at a row's start (a
 # question's prompt clears its row, tty_question()) dropped; `all` keeps
-# everything shown and `seen(x)` counts `x` in it. The child dies with the test.
+# everything shown and `seen(x)` counts `x` in it; `interrupt()` sends SIGINT, as a terminal's
+# Ctrl-C does where isig is on (the pty is not the child's controlling terminal, so `\003` is not).
+# The child dies with the test.
 local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = parent.frame()) {
   dir = withr::local_tempdir("gptr-pty-", .local_envir = .env)
   script = file.path(dir, "child.R")
@@ -148,6 +150,7 @@ local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = paren
     pty$out = paste0(pty$out, x)
   }
   pty$send = function(x) p$write_input(x)
+  pty$interrupt = function() p$interrupt()
   pty$wait = function(x, timeout = 30) {
     deadline = Sys.time() + timeout
     repeat {

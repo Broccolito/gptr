@@ -106,9 +106,10 @@ tty_modes = function(modes = "-g") {
 #' Set the terminal modes of a console call (IC-76, D-243), the saved ones (`stty -g`) kept: a T
 #' console's composer reads keys as typed, `-icanon -echo -iexten -isig min 1 time 0` (Ctrl-C is a
 #' key it reads, as a signal could be lost under load; opost stays on, and `min 1` keeps a tool
-#' that reads stdin waiting, never at an end of input); a D console only turns the echo off (`keys`
-#' FALSE). `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which also runs at q() (a
-#' finalizer, onexit); nothing is set when stty fails
+#' that reads stdin waiting, never at an end of input); a D console turns the echo off and keeps
+#' what is typed at SIGINT (`-echo noflsh`; `keys` FALSE), so the pause menu's drain keeps a line
+#' being typed (policy_menu()). `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which
+#' also runs at q() (a finalizer, onexit); nothing is set when stty fails
 #' @noRd
 tty_call = function(keys) {
   saved = tty_modes()
@@ -119,7 +120,7 @@ tty_call = function(keys) {
   tty$set = if (keys) {
     c("-icanon", "-echo", "-iexten", "-isig", "min", "1", "time", "0")
   } else {
-    "-echo"
+    c("-echo", "noflsh")
   }
   reg.finalizer(tty, tty_restore, onexit = TRUE)
   the$tty = tty

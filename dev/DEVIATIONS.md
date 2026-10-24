@@ -3846,6 +3846,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   row stayed `thinking 11s · ctrl-c pause` while keys were read, so a steer was typed blind. Contract-visible: 04
   §15.10 (the pause menu's [b]). Tests: test-console-repl.R "a terminal: a run sent to the background shows again
   while the console waits for it".
+- Final visual loop, round 2 (2026-10-24): Task 58: a D console's call sets `-echo noflsh`, so SIGINT leaves a
+  line being typed in the terminal, and the pause menu drains fd 0 after its rows as a question does
+  (`ui_drain()`, shared with `ui_console_read()`): the partial line is kept in the history above the chevron and
+  a whole line that is a key answers. TERM=dumb lost the line at Ctrl-C (the kernel flushed it), and without the
+  drain the menu read it as `and colour by gearc`. Contract-visible: 04 §5 `tty_call()`, §15.10 IC-76. Tests:
+  test-console-typing.R "TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (visual round 2)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

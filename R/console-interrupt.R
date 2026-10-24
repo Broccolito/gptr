@@ -163,8 +163,9 @@ console_ahead = function(rd, accept) {
 #' (D-243): after a blank row, `? Paused` (the session's id added when more than one is paused)
 #' and under its text the keys as an approval's (ui_keys()): `s steer`, `f follow-up`, `c continue`,
 #' `a abort` and, for a foreground call, `b background`, read at the person's chevron
-#' (console_ask()), in the saved modes from before its rows (tty_question()), a T console's draft
-#' said to be kept above the chevron as at any question (ui_draft_kept()). A key or its word
+#' (console_ask()), in the saved modes from before its rows (tty_question()), after a drain as at
+#' any question (ui_drain(): a D console's line SIGINT left is kept), a T console's draft said to
+#' be kept above the chevron (ui_draft_kept()). A key or its word
 #' answers, also one typed before the chevron showed or with the Ctrl-C (console_ahead()), an empty
 #' answer continues, anything else is kept in the history, never sent, under a dim hint that names
 #' it and the keys. [s] and [f] read their text at the chevron of their own question, `?
@@ -206,6 +207,11 @@ policy_menu = function(cnd, pol) {
   on.exit(tty_question(FALSE), add = TRUE)
   console_write(c("", paste0("  ", ui_question(title, ui_width() - 2L)),
                   ui_keys(k, keys, ui_width())))
+  # a key or its word answers, also one typed before the chevron showed
+  answers = function(x) tolower(trimws(x)) %in% c("", k, keys)
+  # what was typed as the pause key came, drained as at any question: a D console's line SIGINT
+  # left (tty_call()) is kept, and a key among it answers
+  ahead = ui_drain(paste0(console_style()$person, " "), answers)
   ui_draft_kept()
   go = function() {
     # resumed code's output (the evaluator's tee writes no block gap) and its result line are its
@@ -217,7 +223,8 @@ policy_menu = function(cnd, pol) {
     invokeRestart("resume")
   }
   repeat {
-    typed = console_ask(function(x) tolower(trimws(x)) %in% c("", k, keys))
+    typed = if (rlang::is_string(ahead)) ahead else console_ask(answers)
+    ahead = NULL
     ans = tolower(trimws(typed))
     key = if (is.na(ans)) "a" else c("c", k, k)[match(ans, c("", k, keys))]
     if (identical(key, "c")) go()

@@ -326,10 +326,14 @@ test_that("the pause menu's [f] in the REPL is the next prompt; a /, ! draft nev
   local_mocked_bindings(front_end = function() "terminal")
   e = new.env()
   fake = gptr_fake_provider(list(list(text = "first", delay = 0.6), "second"))
-  # Ctrl-C twice while the first answer streams: [s] `!zz = 5`, then [f] `then plot it`
+  # Ctrl-C twice while the first answer streams: [s] `!zz = 5`, then [f] `then plot it`; not while
+  # the menu drains fd 0
   pauses = 2L
+  menu = FALSE
   local_typed(function() {
-    if (pauses > 0L && length(fake_requests(fake)) == 1L) {
+    if (!menu && pauses > 0L && length(fake_requests(fake)) == 1L) {
+      menu <<- TRUE
+      on.exit(menu <<- FALSE)
       pauses <<- pauses - 1L
       withRestarts(signalCondition(structure(class = c("interrupt", "condition"),
                                              list(message = "", call = NULL))),
@@ -653,11 +657,12 @@ test_that("a T console's call reads keys in character mode; its modes return aft
   expect_true(any(startsWith(err, "Error: ")))
   expect_identical(tty$log, rep(c("-g", char_mode, "SAVED"), 2L))
   expect_null(the$tty)
-  # a D console (TERM=dumb, Emacs) reads whole lines with the echo off (D-221)
+  # a D console (TERM=dumb, Emacs) reads whole lines with the echo off (D-221), and SIGINT leaves a
+  # line being typed in place, for the pause menu to keep (visual round 2)
   local_live_console("D")
   tty$log = character()
   typing_console(fake, c("go", "/exit"))
-  expect_identical(tty$log, c("-g", "-echo", "SAVED"))
+  expect_identical(tty$log, c("-g", "-echo", "noflsh", "SAVED"))
   expect_null(the$tty)
 })
 
@@ -1326,6 +1331,35 @@ test_that("a terminal: keys read with Ctrl-C answer the pause menu (steering rev
   expect_identical(pty$seen("Paused. Type"), 0L)
 })
 
+test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (visual round 2)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = TRUE)",
+    "long = paste(c('BEGIN', sprintf('w%02d', 1:99), 'END'), collapse = ' ')",
+    "fake = gptr_fake_provider(function(req) list(text = long, chunk = 8L, gap = 0.1))",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
+  ), term = "dumb")
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("BEGIN"))
+  pty$send("and colour by gear")
+  Sys.sleep(0.5)
+  pty$interrupt()
+  expect_true(pty$wait("Paused"))
+  # above the menu's chevron, kept, so `a` alone answers; Up at the next prompt brings it back
+  expect_true(pty$wait(kept_line("and colour by gear", utf8 = l10n_info()[["UTF-8"]])))
+  pty$send("a\r")
+  expect_true(pty$wait("aborted"))
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("\033[A")
+  expect_true(pty$wait("and colour by gear"))
+  pty$send("\025/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(pty$seen("Not a key"), 0L)
+})
+
 test_that("console_typed_split() marks a last line without a line end as partial", {
   expect_identical(console_typed_split(""), character())
   expect_identical(console_typed_split("a\r\n\nb\r"), c("a", "", "b"))
@@ -1373,7 +1407,8 @@ test_that("a question drains fd 0 before it reads: lines steer, a partial line i
                      c(queue_line("steer", "steer me"), notice[[k]]))
     # the question reads in the saved modes from before its rows, the drain's restored before it
     # reads; the call's after it
-    expect_identical(tty$log, c("-g", "-echo", "SAVED", "-g", drain, "SAVED", "-echo", "SAVED"))
+    expect_identical(tty$log, c("-g", "-echo", "noflsh", "SAVED", "-g", drain, "SAVED", "-echo",
+                                "noflsh", "SAVED"))
   }
 })
 

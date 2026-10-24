@@ -363,11 +363,8 @@ ui_console_read = function(prompt, secret = FALSE, accept = NULL) {
     band_read(p, gptr_readline)
   }
   repeat {
-    drained = console_typed(drain = TRUE, accept = accept)
-    if (rlang::is_string(drained)) {
-      console_write(console_band(paste0(prompt, console_escape(drained, FALSE))))
-      return(drained)
-    }
+    drained = ui_drain(prompt, accept)
+    if (rlang::is_string(drained)) return(drained)
     ui_draft_kept()
     if (secret && is.null(hide) && once_first("visible", "secret")) {
       console_write(ui_hint(paste("This console shows the key as you type; gptr_env() loads keys",
@@ -386,6 +383,16 @@ ui_console_read = function(prompt, secret = FALSE, accept = NULL) {
     console_write(ui_hint(paste0("A pasted block is not an answer", if (kept) " (kept in history)",
                                  ".")))
   }
+}
+
+#' A question's drain (console_typed(drain = TRUE)), after its rows: what was typed for the run is
+#' routed, and the answer of a whole line `accept(line)` takes is returned, echoed after the chevron
+#' `prompt` on the band, as readline leaves a line; else TRUE where fd 0 was read, FALSE where not
+#' @noRd
+ui_drain = function(prompt, accept) {
+  got = console_typed(drain = TRUE, accept = accept)
+  if (rlang::is_string(got)) console_write(console_band(paste0(prompt, console_escape(got, FALSE))))
+  got
 }
 
 #' The dim row above a question's chevron where a T console's composer holds a draft (D-243), which
