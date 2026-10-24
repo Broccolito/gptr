@@ -5557,7 +5557,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     not `.stdin` or `jsonl`), `policy_enqueue()` holds a follow-up, and any text starting with `/` or `!` (the
     pause menu's [s] too), in the reader's `typed` lines after its queue line (`↳ follow-up · <text>`), not in
     the session's FIFO; `console_typed_route()` puts a batch's message after the held lines typed before its
-    first line. Held `/command` and `!code` lines show the same line, `↳ follow-up · <line>`, in the order typed,
+    first line, and drops a cursor key's escape sequence (CSI `ESC [ ... <final>`, SS3 `ESC O <c>`) from the
+    lines it routes, as the composer does, and a line that was only that (P28 Task 68, visual round 2: in
+    TERM=dumb Up then ` again` steered `<U+001B>[A again`). Held `/command` and `!code` lines show the same line, `↳ follow-up · <line>`, in the order typed,
     a `!code` line with the lines that continue it as one entry; it replaces `[gptr] after this answer: ...`, so
     everything waiting for the next prompt reads alike. After the run's status line the REPL reads them first,
     in order: each is echoed at its prompt

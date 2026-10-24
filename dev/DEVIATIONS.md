@@ -4356,6 +4356,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   run's delivery names it. After [a] TERM=dumb wrote the held `↳ steer · <text>` under `received before the
   abort:`, two rows above `↳ kept in history ↑ · <text>`. Contract-visible: 04 §15.10 IC-82 (queue lines). Tests:
   test-console-typing.R "a steer held during an answer that the abort drops shows once, kept (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 68: the lines a D console routes (`console_typed_route()`) lose a
+  cursor key's escape sequence (CSI, SS3), as the composer drops one (Task 16), and a line that was only that is
+  dropped: Up then a paste reached the agent as `<U+001B>[Ap1 first line`. Contract-visible: 04 §15.10 IC-76 (a
+  follow-up is the next prompt). Tests: test-console-typing.R "a cursor key typed while a run works is no part of
+  a line (visual round 2)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

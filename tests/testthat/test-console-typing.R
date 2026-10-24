@@ -473,6 +473,17 @@ test_that("/commands and !code typed during a run run after the answer; text sti
   expect_true(any(startsWith(res$out, "session   ")))
 })
 
+test_that("a cursor key typed while a run works is no part of a line (visual round 2)", {
+  skip_on_cran()
+  local_console_test()
+  fake = slow_first()
+  local_typed(typed_once(c("\033[Afoo", "\033OB"), function() length(fake_requests(fake)) == 1L))
+  typing_console(fake, c("go", "/exit"))
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  expect_identical(msg_text(last_message(reqs[[2L]])), relay("foo"))
+})
+
 test_that("lines typed in one batch (a paste) are one message", {
   skip_on_cran()
   local_console_test()

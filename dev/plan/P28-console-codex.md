@@ -1727,7 +1727,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 64 | Notices in the old `[gptr] …` form remain (final visual loop, round 2) | b2d22fb0 |
 | 65 | The approval's `?` view names the agent gptr, in plain type (final visual loop, round 2) | c5459a60 |
 | 66 | A script's blocked run states its reason three times (final visual loop, round 2) | 353e56aa |
-| 67 | After an abort a dropped steer shows twice (final visual loop, round 2) | (this commit) |
+| 67 | After an abort a dropped steer shows twice (final visual loop, round 2) | 1e28b21a |
+| 68 | In TERM=dumb a cursor key typed during a run lands in the steer (final visual loop, round 2) | (this commit) |
 
 ## Out of scope
 

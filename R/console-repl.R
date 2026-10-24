@@ -741,9 +741,14 @@ typed_answer = function(lines, accept) {
 #' queue line; the others become one message queued on `s` as the `type_ahead` setting says (a
 #' follow-up waits with the held lines, after those typed before its first line); a partial line
 #' `part` goes to the console history. Their lines go between the answer's whole rows, above the
-#' live row (D-245)
+#' live row (D-245). A cursor key's escape sequence (CSI, SS3) is dropped, as the composer drops it,
+#' and a line it alone made with it
 #' @noRd
 console_typed_route = function(rd, s, lines, part = "") {
+  esc = "\033(\\[[0-?]*[ -/]*[@-~]|O.)"
+  text = gsub(esc, "", lines, perl = TRUE)
+  lines = text[nzchar(text) | !nzchar(lines)]
+  part = gsub(esc, "", part, perl = TRUE)
   later = cont = logical(length(lines))
   for (i in seq_along(lines)) {
     cont[[i]] = typed_code_open(c(rd$typed, lines[later]))
