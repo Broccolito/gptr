@@ -5691,9 +5691,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     and the reader installs the adapter around its `readline()` (`peter>` and `... ` reads; not `+ `, which
     continues `!` code and keeps R's own completion), restoring the completer it found on exit. Questions, the
     pause menu and tool `readline()` calls keep the caller's completion, except in RStudio's console, which asks
-    also while R is busy, in the evaluation's frames (a line typed during a run is the next prompt), and at
-    questions: `repl_main()` installs the adapter there for the REPL's whole life, the caller's completer kept
-    (the reader's `caller`) for its `+ ` reads (review of Tasks 22-27). On R's own readline the `!` word break
+    also while R is busy, in the evaluation's frames (a line typed during a run is the next prompt):
+    `repl_main()` installs the adapter there for the REPL's whole life, the caller's completer kept (the
+    reader's `caller`) for its `+ ` reads (review of Tasks 22-27). A question's read there, in a frame identical
+    to base `readline()`, gets RStudio's `(No matches)` as before (D-183). On R's own readline the `!` word break
     of D-183 stays, and a caller-owned completer still keeps its words (no `!` break). gptr never writes
     RStudio's preferences; `?peter` names `insert_matching` and `console_code_completion`.
   - The composer (T): Tab on a trigger word calls the same completer (IC-76): the longest common prefix replaces

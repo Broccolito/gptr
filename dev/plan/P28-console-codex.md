@@ -1347,8 +1347,8 @@ Decisions:
 - (Amended in the review of Tasks 22-27:) RStudio also asks while a run works, in the evaluation's frames, and
   a line typed then is the next prompt, so with the completer only around the prompt reads its own popup opened on
   natural language and Enter or Tab took it (`then save the plot as plot_png()`). `repl_main()` installs the
-  completer there for the REPL's whole life, the caller's kept for `+ ` (`rd$caller`); questions and the pause
-  menu then get the token for none, so no `(No matches)` popup.
+  completer there for the REPL's whole life, the caller's kept for `+ ` (`rd$caller`). A question still shows
+  RStudio's `(No matches)` on Tab: RStudio completes nothing in a frame identical to base `readline()` (D-183).
 
 Tests (`test-console-completion.R`), RED first:
 - `.win32consoleCompletion()` (via `getFromNamespace`) on the trigger table.
