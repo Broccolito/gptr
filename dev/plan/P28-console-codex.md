@@ -1735,7 +1735,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 68 | In TERM=dumb a cursor key typed during a run lands in the steer (final visual loop, round 2) | a70d64b5 |
 | 69 | /compact's one-row result still runs into the next prompt (Task 62, found by its visual check) | 8644edd9 |
 | 70 | The pause menu's [b] notice mixes two voices and ends a row in the separator (final visual loop, round 3) | f6cd98f5 |
-| 71 | The re-ask after an invalid answer repeats the question in sentence prose (final visual loop, round 3) | (this commit) |
+| 71 | The re-ask after an invalid answer repeats the question in sentence prose (final visual loop, round 3) | 623efc0c |
+| 72 | A sub-agent's start and done rows are cut in different places (final visual loop, round 3) | (this commit) |
 
 ## Out of scope
 

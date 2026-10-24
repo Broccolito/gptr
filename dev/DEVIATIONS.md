@@ -4379,6 +4379,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   Contract-visible: 04 §15.10 (the pause menu's [b]). Tests: test-console-interrupt.R "[b]ackground hands a
   foreground run to bg.register (P21) and resumes"; test-console-repl.R "a terminal: a run sent to the
   background shows again while the console waits for it".
+- Final visual loop, round 3 (2026-10-24): Task 72: a sub-agent's started and done lines cut its label's name
+  first (`console_child_line()`), inside its quotes, so its run tag (` #1`), the started line's model and the
+  outcome stay whole and one sub-agent's two lines read as a pair; and a cut row never leaves a blank before its
+  ellipsis (`console_cut()`). At 60 columns the started line was `'count the cars in fuel' #1 (kid/kid-…
+  started`, the done line `'count the cars in fuel'… done`, `#1` lost. Contract-visible: 04 §15.10 IC-82 (the
+  agent row). Tests: test-console-render.R "a sub-agent's started line cut to the width keeps its last word
+  (Task 36)", "a diff row wider than the console is cut, its spaces and sign kept (visual review)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

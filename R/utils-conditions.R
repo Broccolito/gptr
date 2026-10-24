@@ -280,12 +280,17 @@ gptr_message_margin = function(text) {
   paste0(ifelse(nzchar(lines), pad, ""), lines, "\n", collapse = "")
 }
 
-#' Rows cut to `width` display columns, each cut one ending in `ellipsis`; one row at a time, as
-#' cli 3.6.6's ansi_strtrim() of a vector also shortens rows that fit when another is cut
+#' Rows cut to `width` display columns, each cut one ending in `ellipsis`, no blank before it; one
+#' row at a time, as cli 3.6.6's ansi_strtrim() of a vector also shortens rows that fit when
+#' another is cut
 #' @noRd
 console_cut = function(rows, width, ellipsis = console_style()$ellipsis) {
-  vapply(as.character(rows), function(r) as.character(cli::ansi_strtrim(r, width, ellipsis)), "",
-         USE.NAMES = FALSE)
+  vapply(as.character(rows), function(r) {
+    x = as.character(cli::ansi_strtrim(r, width, ellipsis))
+    if (cli::ansi_nchar(r, type = "width") <= width) return(x)
+    head = substr(x, 1L, nchar(x) - nchar(ellipsis))
+    paste0(sub(" +((\033\\[[0-9;]*m)*)$", "\\1", head, perl = TRUE), ellipsis)
+  }, "", USE.NAMES = FALSE)
 }
 
 #' Terms laid out in rows of at most `width` columns, joined by `sep` (D-245): a row ends at a whole

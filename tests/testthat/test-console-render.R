@@ -761,6 +761,19 @@ test_that("a sub-agent's started line cut to the width keeps its last word (Task
   done = grep(" done ", grep("sub-agent count", out, value = TRUE, fixed = TRUE), value = TRUE)
   expect_match(done, "^  # sub-agent count_the_cars.*\\.\\.\\. done \\(1/1\\) - 1 turn - [0-9]+ s$")
   expect_lte(nchar(done), 60L)
+  # a nested call's two rows cut its label alike, inside its quotes and with no blank before the
+  # ellipsis; its run tag, model and outcome stay whole (visual round 3)
+  e$kid = local_fake_provider(function(request) "ok", name = "kid")
+  code = "res = peter('count the cars in fuel', model = kid)"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("delegate", model = lead, envir = e))
+  rows = grep("sub-agent '", out, value = TRUE, fixed = TRUE)
+  expect_length(rows, 2L)
+  expect_match(rows[[1L]], "^  # sub-agent '[^']+\\.\\.\\.' #1 \\(kid/kid-1\\) started$")
+  expect_match(rows[[2L]], "^  # sub-agent '[^']+\\.\\.\\.' #1 done - 1 turn - [0-9]+ s$")
+  expect_identical(sub(" #1 .*$", "", rows[[1L]]), sub(" #1 .*$", "", rows[[2L]]))
+  expect_false(any(grepl(" ...", rows, fixed = TRUE)))
+  expect_true(all(nchar(rows) <= 60L))
 })
 
 test_that("a sub-agent's rows are the block of the r call that runs them (visual round 2)", {
@@ -792,8 +805,9 @@ test_that("a diff row wider than the console is cut, its spaces and sign kept (v
   row = "+     xlab = \"weight (1000 lb)\", ylab = \"miles per gallon\")"
   diff = msg_tool_result("c5", "edit", "ok", details = list(diff = c("@@ -1 +1,2 @@", " a", row)))
   out = console_tool_line(list(name = "edit"), diff, width = 40L)
+  # no blank before the ellipsis (visual round 3)
   expect_identical(out, c("    @@ -1 +1,2 @@", "     a",
-                          "    +     xlab = \"weight (1000 lb)\", ..."))
+                          "    +     xlab = \"weight (1000 lb)\",..."))
   # a row that fits keeps its last character beside one that is cut (cli 3.6.6's vectorised
   # ansi_strtrim() cut both)
   fits = paste0("+", strrep("a", 35L))

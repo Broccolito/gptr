@@ -553,16 +553,30 @@ console_child_shown = function(run) {
 #' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188), after
 #' the agent's blue block in the console's colours, also from the agent's r code (D-245), whose
 #' call's block it then belongs to, cut to the console width (D-224) before its last words `keep`,
-#' which stay (Task 36: ` started`; a done line's outcome)
+#' which stay (Task 36: ` started`; a done line's outcome): its label's name is cut first, inside
+#' its quotes, so its run tag (` #1`) and `text` stay too and one sub-agent's lines cut alike
 #' @noRd
 console_child_line = function(rec, text, keep = "") {
   console_before_message(kind = if (is.null(run_current())) "notice" else "tool", tools = TRUE)
   old = options(cli.num_colors = console_colors())
   on.exit(options(old), add = TRUE)
   sym = console_style()
-  head = paste0("  ", sym$blue(sym$agent), " sub-agent ", rec$child$label, if (nzchar(text)) " ",
-                text)
-  console_write(paste0(cli::ansi_strtrim(head, cli::console_width() - nchar(keep)), keep))
+  lead = paste0("  ", sym$blue(sym$agent), " sub-agent ")
+  label = rec$child$label
+  text = paste0(if (nzchar(text)) " ", text)
+  width = cli::console_width()
+  if (nzchar(keep)) {
+    at = regexpr(" #[0-9]+$", label)
+    tag = if (at > 0L) substring(label, at) else ""
+    name = if (at > 0L) substr(label, 1L, at - 1L) else label
+    room = width - cli::ansi_nchar(paste0(lead, tag, text, keep), type = "width")
+    q = if (grepl("^'.+'$", name)) "'" else ""
+    inner = substr(name, 1L + nchar(q), nchar(name) - nchar(q))
+    cut = console_cut(inner, max(1L + nchar(sym$ellipsis), room - 2L * nchar(q)))
+    label = paste0(q, cut, q, tag)
+  }
+  keep_w = cli::ansi_nchar(keep, type = "width")
+  console_write(paste0(console_cut(paste0(lead, label, text), width - keep_w), keep))
 }
 
 #' Render this record on stdout now?

@@ -257,7 +257,8 @@ test_that("tool code shows on the tool line when it fits, else under its name, c
   expect_identical(line(call("nrow(df)")), "  | r  nrow(df)")
   # the code rows at column 4, under the tool's name, with its results and keys: no fence lines;
   # a row wider than the console is cut, as a diff row is, never wrapped to column 0 (? shows it)
-  cut_long = paste0(substr(paste0("    ", long), 1L, 37L), "...")
+  # no blank before the ellipsis (visual round 3)
+  cut_long = paste0(sub(" +$", "", substr(paste0("    ", long), 1L, 37L)), "...")
   expect_identical(line(call(long)), c("  | r", cut_long))
   expect_identical(line(call(c(long, "y = x"))), c("  | r", cut_long, "    y = x"))
   expect_identical(line(call("x = 1\n```{r}\ny")), c("  | r", "    x = 1", "    ```{r}", "    y"))

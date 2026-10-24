@@ -621,7 +621,7 @@ test_that("one dim line under a sent prompt names what its @mentions resolved to
   expect_identical(said,
                    paste0("  \033[38;5;244m@ my_cars (data.frame, 32 x 11)\033[39m\n",
                           "  \033[38;5;244m@ fit2 not found, sent as text\033[39m\n",
-                          "  \033[38;5;244m@ fit2_with_a_long_name not found, …\033[39m\n"))
+                          "  \033[38;5;244m@ fit2_with_a_long_name not found,…\033[39m\n"))
   expect_identical(written(function() repl_turn(rs, "hello there")), "")
 })
 
