@@ -173,8 +173,9 @@ console_ahead = function(rd, accept) {
 #' It resumes the interrupted computation, the next block a blank row below the menu (where a tool
 #' runs, its call's block continues: its code's further output and its result line) and the live
 #' row with a T console's draft drawn again (console_asked()), or returns to let the policy's
-#' exiting handler abort. It clears the live row only: an answer's held row stays in its stream and
-#' continues after the menu, which goes between whole rows (D-245)
+#' exiting handler abort, in the call's modes again, so a key typed while the run stops is not
+#' echoed. It clears the live row only: an answer's held row stays in its stream and continues
+#' after the menu, which goes between whole rows (D-245)
 #' @noRd
 policy_menu = function(cnd, pol) {
   # nested policies drop their runs while the stack unwinds to the exiting handler
@@ -199,6 +200,7 @@ policy_menu = function(cnd, pol) {
   rlang::local_options(cli.num_colors = console_colors())
   title = paste(c("Paused", if (length(ids) > 1L) ids[[1L]]), collapse = " ")
   tty_question(TRUE)
+  on.exit(tty_question(FALSE), add = TRUE)
   console_write(c("", paste0("  ", ui_question(title, ui_width() - 2L)),
                   ui_keys(k, keys, ui_width())))
   ui_draft_kept()

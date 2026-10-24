@@ -1689,7 +1689,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 30 | `/skill:` completes nothing before the first prompt | 146028a1 |
 | 31 | Code served to a CLI route does not show what it prints | 747e04d7 |
 | 32 | Under load an Enter typed during a run stays in the draft | 3dae3324 |
-| 33 | A CLI route's run status names its model `default` | (this commit) |
+| 33 | A CLI route's run status names its model `default` | 6b2ffd3c |
+| 34 | A key typed while an aborted run stops is echoed | (this commit) |
 
 ## Out of scope
 

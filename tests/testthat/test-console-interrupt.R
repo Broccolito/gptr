@@ -192,6 +192,29 @@ test_that("the pause menu is a console question: its keys under it, read at the 
                    paste0("  ? Paused ", session_data(s)$id))
 })
 
+test_that("an abort at the pause menu takes the call's modes back before the run stops (Task 34)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  local_abort_log()
+  set = character()
+  local_mocked_bindings(tty_modes = function(modes = "-g") {
+    set <<- c(set, paste(modes, collapse = " "))
+    "SAVED"
+  })
+  old = the$tty
+  withr::defer(assign("tty", old, envir = the))
+  for (answer in c("a", NA)) {
+    the$tty = list2env(list(saved = "SAVED", set = "CALL"))
+    set = character()
+    local_menu_answers(answer)
+    notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "repl"))
+    # the menu read in the saved modes, then the call's again: keys typed while the run stops are
+    # not echoed
+    expect_identical(set, c("SAVED", "CALL"), info = answer)
+    expect_false(isTRUE(the$tty$asking), info = answer)
+  }
+})
+
 test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)

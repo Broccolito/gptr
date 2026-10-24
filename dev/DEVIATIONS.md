@@ -3726,6 +3726,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   Bedrock Opus 4.8 at load average 80-180). Contract-visible: 04 §15.10 IC-76. Tests: test-console-typing.R
   "keys read on the polling beat are a paste; after a stall they are typed (review)".
 
+- Live dogfood fixes (Task 28, 2026-10-23): Task 34: the pause menu takes the call's modes back on every exit
+  (`on.exit(tty_question(FALSE))`), its abort too. After `a` the run's stop ran in the menu's saved modes, echo on:
+  on codex, whose stop takes about a second, Up typed then showed `^[[A` on a row of its own above the status
+  line. Contract-visible: 04 §5 `tty_question()` row. Tests: test-console-interrupt.R "an abort at the pause menu
+  takes the call's modes back before the run stops (Task 34)".
+
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
   natural language; `!`, `/` and `@` show what they do. Amends D-183.
