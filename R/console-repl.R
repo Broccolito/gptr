@@ -235,13 +235,6 @@ repl_background = function(rd) {
   invisible(NULL)
 }
 
-#' Does R's own Unix readline read this console from a tty (terminal R, an IDE's terminal tab)?
-#' @noRd
-console_readline_tty = function() {
-  identical(.Platform$OS.type, "unix") && gptr_is_interactive() &&
-    isTRUE(capabilities("cledit")[["cledit"]]) && stdin_tty()
-}
-
 #' Does this REPL read a terminal, whose typed lines wait on fd 0 while an answer runs (IC-76)? A
 #' T or D console (console_class()), not a piped REPL. Not on Windows: processx cannot poll a
 #' console handle; not in Positron's console, whose own input holds what is typed

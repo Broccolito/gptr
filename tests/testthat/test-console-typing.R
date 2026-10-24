@@ -738,6 +738,12 @@ test_that("a terminal call's question reads in the saved modes from before its r
   # the saved modes come before the question's first row, the call's after its answer
   expect_lt(stty[[1L]], min(grep("Allow r?", out, fixed = TRUE)))
   expect_identical(stty[[2L]], length(out))
+  # where readline reads the tty it echoes what it reads, so the saved modes come without the
+  # echo: a key typed while the rows are written is not echoed before the chevron (visual round 1)
+  local_mocked_bindings(console_readline_tty = function() TRUE)
+  rl = local_readline("y")
+  out = utils::capture.output(ui_console_permission(req))
+  expect_identical(out[grep("^<stty", out)][[1L]], "<stty SAVED -echo >")
 })
 
 test_that("a T console's keys edit the draft on the live row; Enter steers (D-242, D-243)", {

@@ -159,15 +159,24 @@ tty_isig_off = function(tty) {
   invisible(NULL)
 }
 
+#' Does R's own Unix readline read this console from a tty (terminal R, an IDE's terminal tab)?
+#' @noRd
+console_readline_tty = function() {
+  identical(.Platform$OS.type, "unix") && gptr_is_interactive() &&
+    isTRUE(capabilities("cledit")[["cledit"]]) && stdin_tty()
+}
+
 #' A console question of a terminal call reads in the saved modes from before its rows are written
 #' (`on` TRUE) until it returns (FALSE), so readline starts as soon as the person sees the question,
-#' never after a slow stty (D-243); gptr_readline() then switches nothing
+#' never after a slow stty (D-243); gptr_readline() then switches nothing. Where readline reads the
+#' tty, which echoes what it reads, the echo stays off, so a key typed while the rows are written is
+#' not echoed before the chevron too
 #' @noRd
 tty_question = function(on) {
   tty = the$tty
   if (is.null(tty$saved) || identical(isTRUE(tty$asking), on)) return(invisible(NULL))
   tty$asking = on
-  tty_modes(if (on) tty$saved else tty$set)
+  tty_modes(if (on) c(tty$saved, if (console_readline_tty()) "-echo") else tty$set)
   invisible(NULL)
 }
 

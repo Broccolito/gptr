@@ -3802,6 +3802,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the notices come before the red row. The notices were written as the service gave them, so the answer's tail
   floated between two halves of the status block. Contract-visible: 04 §15.10 (the pause menu). Tests:
   test-console-interrupt.R "[b]ackground hands a foreground run to bg.register (P21) and resumes".
+- Final visual loop, round 1 (2026-10-24): Task 48: where readline reads the tty (`console_readline_tty()`, now
+  in L0 with `tty_question()`), a console question switches to the saved modes with `-echo`: readline echoes
+  what it reads, and a key typed while the question's rows were written was echoed by the terminal before the
+  chevron and then again by readline (` l    ↳ draft kept ...` and `›  loess fit`, once under a stall). A D
+  console without readline keeps the echo. Contract-visible: 04 §5 `tty_question()` row. Tests:
+  test-console-typing.R "a terminal call's question reads in the saved modes from before its rows (review)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
