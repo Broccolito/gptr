@@ -4499,6 +4499,9 @@ as `s_<6 hex of the session id> = peter("...")`, later REPL turns as `s_<hex> |>
 follow-ups delivered during a block's turn (pause menu, `gptr_steer()`, pipe into a running session, a line typed
 in a terminal console [IC-76]) are recorded
 inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`.
+A REPL turn is a console turn whatever started the console: a sourced script, an `Rscript` file or the editor's
+buffer holding the `peter()` statement that started it locates none of its turns (P28 Task 29: the REPL marks
+its gateway calls `gptr_console`, and `doc_locate()` runs no finder for them).
 P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one
 session.
 

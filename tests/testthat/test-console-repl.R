@@ -554,6 +554,29 @@ test_that("console_send() makes an ordinary gateway call and continues the sessi
   expect_null(rs$sending)
 })
 
+test_that("a console turn is recorded in the transcript also when a script started the console", {
+  skip_on_cran()
+  proj = local_project()
+  local_no_fd0()
+  local_console_blocks()
+  local_gptr_options(record = "auto", replay = "auto")
+  tr = file.path(proj, "session.R")
+  local_doc_binding(tr)
+  f = file.path(proj, "start.R")
+  writeLines("res = console_send(rs, \"count the rows\")", f)
+  rs = repl_state(NULL, new.env())
+  rs$model = gptr_fake_provider(list("32 rows", "still 32"))
+  for (keep in c(TRUE, FALSE)) {
+    e = new.env()
+    e$rs = rs
+    source(f, local = e, keep.source = keep)
+    expect_identical(e$res$status, "ok")
+  }
+  rec = readLines(tr)
+  expect_length(grep("^s_[0-9a-f]{6} = peter\\(\"count the rows\"\\)$", rec), 1L)
+  expect_length(grep("^s_[0-9a-f]{6} [|]> peter\\(\"count the rows\"\\)$", rec), 1L)
+})
+
 test_that("console_send() attaches @objects by name and @files as a block", {
   skip_on_cran()
   local_project(files = list("a.R" = "fit = lm(mpg ~ wt, data = mtcars)"))

@@ -608,7 +608,9 @@ console_abort_stray = function(s) {
 #' bound in the mask `rs$mask`, whose parent is the evaluation environment, so @objects reach
 #' the gateway as plain symbols (read by name, never forced, IC-41). The literal prompt gets
 #' `{identifier}` interpolation like a typed one; the gateway shows the interpolated text at
-#' verbosity 2 (03 section 4.1.4). `men`: the prompt's @mentions (repl_mentions()).
+#' verbosity 2 (03 section 4.1.4). `men`: the prompt's @mentions (repl_mentions()). The call
+#' carries the attribute `gptr_console`, so P15 records it as a console turn even when a sourced
+#' script or an editor holds the statement that started the console (IC-49).
 #' @noRd
 console_call = function(rs, text, men) {
   env = repl_eval_env(rs)
@@ -640,7 +642,7 @@ console_call = function(rs, text, men) {
     rs$opts$images = NULL
   }
   if (length(skills)) args$skills = skills
-  as.call(c(head, lapply(objs, as.name), args))
+  structure(as.call(c(head, lapply(objs, as.name), args)), gptr_console = TRUE)
 }
 
 #' Release the mask of a prompt call: bindings removed, parent reset to emptyenv() (R2)

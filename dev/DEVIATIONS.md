@@ -3172,6 +3172,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the next prompt. Contract-visible: 03 §6.17. Tests: test-console-commands.R "/help lists the commands and the
   input syntax", "/help's keys follow the console, as the banner does (review of Tasks 22-27)", "in the console
   margin command output wraps inside it; listings fit its width".
+- Live dogfood fixes (Task 28, 2026-10-23): Task 29: what the person typed, steers included, is recorded also when
+  a sourced script started the console. Its turns were located in that script, as calls nested in it, so a bound
+  transcript got none of them; the REPL now marks its gateway calls `gptr_console` and P15's locator runs no
+  finder for them (also an `Rscript` file and the editor's buffer). Contract-visible: 04 IC-49. Tests:
+  test-console-repl.R "a console turn is recorded in the transcript also when a script started the console".
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Rule (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

@@ -1674,6 +1674,14 @@ Files: `dev/dogfood/p28-console.R` (new), `dev/progress/P28.md`.
 
 Commit: `docs(progress): P28 live dogfood on claude-cli, codex and ollama`.
 
+### Tasks 29+: live dogfood fixes (2026-10-23)
+
+Task 28's live dogfood found these defects; each was fixed test first. Evidence in `dev/progress/P28.md`.
+
+| Task | Title | Commit |
+|---|---|---|
+| 29 | A console started from a sourced script records none of its turns | (this commit) |
+
 ## Out of scope
 
 - Mid-turn steering on the CLI routes (Claude Code stream-json input, Codex app-server steer).
