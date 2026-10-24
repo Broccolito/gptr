@@ -349,7 +349,7 @@ test_that("abort in mode repl aborts the runs and returns NULL", {
   })
   expect_null(res)
   expect_identical(aborted$aborted, "u0000run1")
-  expect_true(any(grepl("[gptr] aborted; the session is kept.", err, fixed = TRUE)))
+  expect_true("aborted - the session is kept" %in% err)
 })
 
 test_that("abort in mode call re-signals the interrupt so loops stop", {

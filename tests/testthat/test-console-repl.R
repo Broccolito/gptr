@@ -889,7 +889,8 @@ test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
     res = console_run(NULL, new.env())
   })
   expect_null(res)
-  i = grep("again to leave gptr", out, fixed = TRUE)
+  # in the banner's words, no [gptr] tag (visual round 2)
+  i = which(out == "ctrl-c again leaves - /exit")
   expect_length(i, 1L)
   # the notice ends the prompt line first, under the banner's blank line and its keys row
   expect_identical(out[c(i - 2L, i - 1L)], c("", ""))
@@ -1002,8 +1003,8 @@ test_that("background sessions that wait for approval are announced once (IC-57)
     repl_waiting_notice(rs)
     repl_waiting_notice(rs)
   })
-  expect_identical(out, paste("[gptr] 1 background session waits for approval;",
-                              "the next prompt or gptr_wait() asks."))
+  expect_identical(out, paste("1 background session waits for approval -",
+                              "the next prompt or gptr_wait() asks"))
   expect_identical(rs$waiting, 1L)
 })
 

@@ -502,7 +502,7 @@ test_that("an abort sends nothing queued: it goes to the history, listed once (D
     character()
   })
   res = typing_console(fake, c("go", "/exit"), envir = e)
-  expect_true(any(grepl("[gptr] aborted", res$out, fixed = TRUE)))
+  expect_true("aborted - the session is kept" %in% res$out)
   # the prompt, the steer the abort dropped from the queue, the held lines, then the next input
   expect_identical(res$kept, c("go", "use base R", "/status", "!x = 1", "/exit"))
   notice = kept_line(c("use base R", "/status", "!x = 1"))
@@ -537,7 +537,7 @@ test_that("an abort's status line says aborted once; the kept list follows it, t
   expect_length(status, 1L)
   # the person's text at column 0, dim, as the queue lines (visual review)
   expect_identical(rows[status + 1:2], c(kept_line("use base R"), ""))
-  expect_false(any(grepl("[gptr] aborted", rows, fixed = TRUE)))
+  expect_false(any(grepl("the session is kept", rows, fixed = TRUE)))
 })
 
 test_that("after an error the queued steer is kept in the history, not sent with the next prompt", {
@@ -678,7 +678,7 @@ test_that("a terminal call's modes return after an interrupt, also one while stt
     ""
   })
   res = typing_console(slow, c("go", "/exit"))
-  expect_true(any(grepl("[gptr] aborted", res$out, fixed = TRUE)))
+  expect_true("aborted - the session is kept" %in% res$out)
   expect_identical(tty$log, c("-g", char_mode, "SAVED"))
   expect_null(the$tty)
   tty$log = character()
@@ -692,7 +692,7 @@ test_that("a terminal call's modes return after an interrupt, also one while stt
   })
   fake = gptr_fake_provider(list("ok"))
   res = typing_console(fake, c("go", "/exit"))
-  expect_true(any(grepl("[gptr] interrupted", res$out, fixed = TRUE)))
+  expect_true("interrupted" %in% res$out)
   expect_identical(tty$log, c("-g", char_mode, "SAVED"))
   expect_null(the$tty)
 })
@@ -1518,7 +1518,7 @@ test_that("a terminal: a draft a run left continues at the prompt until sent (P2
   expect_true(pty$wait("peter[auto]> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(c(pty$seen("REQ "), pty$seen("again to leave")), c(2L, 0L))
+  expect_identical(c(pty$seen("REQ "), pty$seen("again leaves")), c(2L, 0L))
 })
 
 test_that("a terminal: keys typed as the idle editor hands over show after the prompt only", {

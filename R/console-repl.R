@@ -587,7 +587,8 @@ repl_passthrough = function(rs, text) {
     }
   }
   if (res$status %in% c("interrupt", "timeout")) {
-    console_notice("[gptr] ", res$status, .error = identical(res$status, "timeout"))
+    said = c(interrupt = "interrupted", timeout = "timed out")[[res$status]]
+    console_notice(console_style()$dim(said), .error = identical(res$status, "timeout"))
   }
   if (noted) rs$notes = utils::tail(c(rs$notes, repl_note(code, res)), 20L)
   data = list(code = code, output = as.character(unlist(res$outputs)), status = res$status,
@@ -932,13 +933,15 @@ repl_banner = function(rs) {
 }
 
 #' A notice when background sessions wait for approval; P21 asks at the next blocking call
-#' (IC-57). Said again only when their number changes.
+#' (IC-57), dim in the banner's words. Said again only when their number changes.
 #' @noRd
 repl_waiting_notice = function(rs) {
   n = sum(job_list("session")$status == "waiting")
   if (n > 0L && n != rs$waiting) {
-    console_notice("[gptr] ", n, if (n == 1L) " background session waits" else
-      " background sessions wait", " for approval; the next prompt or gptr_wait() asks.")
+    sym = console_style()
+    console_notice(sym$dim(paste0(n, if (n == 1L) " background session waits" else
+      " background sessions wait", " for approval", sym$sep,
+      "the next prompt or gptr_wait() asks")))
   }
   rs$waiting = n
   invisible(NULL)
@@ -1011,7 +1014,7 @@ repl_dispatch = function(rs, line) {
     }
   }, interrupt = function(e) {
     if (!is.null(rs$session)) console_abort_stray(rs$session)
-    console_notice("[gptr] interrupted")
+    console_notice(console_style()$dim("interrupted"))
   }, error = repl_error)
   invisible(NULL)
 }
@@ -1076,8 +1079,10 @@ repl_main = function(rs) {
     if (isFALSE(line)) {
       rs$interrupts = rs$interrupts + 1L
       if (rs$interrupts >= 2L) break
-      console_notice("\n[gptr] press ", console_interrupt_key(),
-                     " again to leave gptr, or type /exit")
+      # in the banner's words: `ctrl-c again leaves · /exit`, the keys bold
+      sym = console_style()
+      console_notice("\n", cli::style_bold(tolower(console_interrupt_key())),
+                     sym$dim(paste0(" again leaves", sym$sep)), cli::style_bold("/exit"))
       next
     }
     if (is.na(line)) break

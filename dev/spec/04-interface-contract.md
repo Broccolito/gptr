@@ -5580,8 +5580,12 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     (as above; with `gptr.history` off `↳ not kept (gptr.history is off) · ...`).
     These replace `[gptr] dropped typed lines: ...` and `[gptr] dropped queued messages: ...`. At verbosity 2 the
     list follows the run's status line, and the blank row before the prompt follows the list. `policy_abort()`
-    prints `[gptr] aborted; the session is kept.` only when no status line said `aborted` (verbosity 0, or no run
-    in the foreground). The composer's draft joins this list (Task 18). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
+    prints `aborted · the session is kept` (dim, in the banner's words; `[gptr] aborted; the session is kept.`
+    until P28 Task 64) only when no status line said `aborted` (verbosity 0, or no run in the foreground). So do
+    the REPL's other notices: `ctrl-c again leaves · /exit` at an idle Ctrl-C (the keys bold; `[gptr] press Ctrl-C
+    again to leave gptr, or type /exit`), `interrupted`, `timed out` for `!` code, `<n> background session(s)
+    wait(s) for approval · the next prompt or gptr_wait() asks`, and in red `the queued message could not be
+    delivered: <why>`, none tagged `[gptr]` (P28 Task 64, visual round 2). The composer's draft joins this list (Task 18). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
     layering test (12.2). The pause menu's [b] ends no run in the foreground, so it settles the REPL's held lines
     and the draft itself (`console_background_settle()`, steering review): one such list after its `running in
     the background` row and before the blank row, and an empty composer; queued steers stay for the run. A

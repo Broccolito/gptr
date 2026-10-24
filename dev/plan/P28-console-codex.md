@@ -835,8 +835,9 @@ Decisions:
   review), and added to the history in that
   order (`console_keep()`, which the partial-line notice also uses). Nothing is auto-sent after an
   abort. Follow-ups in the FIFO (outside the REPL) stay queued after an error.
-- The list follows the run's status line, then the blank row before the prompt; `[gptr] aborted; the
-  session is kept.` is printed only where no status line said `aborted` (amended in the review of
+- The list follows the run's status line, then the blank row before the prompt; `aborted · the
+  session is kept` (`[gptr] aborted; the session is kept.` until Task 64) is printed only where no status line
+  said `aborted` (amended in the review of
   Tasks 8-15: it repeated the status line, after the list).
 - The draft joins this list once the composer holds it (Task 20). Until then gptr holds no draft: a
   partial line stays in the terminal.
@@ -1722,7 +1723,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 60 | Sub-agent rows split the result of the r call that started them (final visual loop, round 2) | 99c76f9b |
 | 61 | A sub-agent's end row cut loses its time (final visual loop, round 2) | 64a9f606 |
 | 62 | Slash-command output runs into the next prompt (final visual loop, round 2) | e0e328de |
-| 63 | /help ignores the console's type rules (final visual loop, round 2) | (this commit) |
+| 63 | /help ignores the console's type rules (final visual loop, round 2) | 81a5579f |
+| 64 | Notices in the old `[gptr] …` form remain (final visual loop, round 2) | (this commit) |
 
 ## Out of scope
 

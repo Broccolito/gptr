@@ -413,8 +413,9 @@ policy_flush = function() {
   for (it in items) {
     tryCatch(session_enqueue(it$s, it$text, as = it$as, source = it$source),
              error = function(e) {
-               console_notice("[gptr] the queued message could not be delivered: ",
-                              console_escape(conditionMessage(e), FALSE), .error = TRUE)
+               console_notice(console_style()$red(paste0(
+                 "the queued message could not be delivered: ",
+                 console_escape(conditionMessage(e), FALSE))), .error = TRUE)
              })
   }
   invisible(NULL)
@@ -435,7 +436,10 @@ policy_abort = function(cnd, pol) {
     for (t in rev(targets)) if (policy_active(t$run)) run_abort(t$run, reason = "user")
   })
   console_render_pause()
-  if (!said) console_notice("[gptr] aborted; the session is kept.")
+  if (!said) {
+    sym = console_style()
+    console_notice(sym$dim(paste0("aborted", sym$sep, "the session is kept")))
+  }
   if (identical(pol$mode, "call")) policy_resignal(cnd)
   invisible(NULL)
 }

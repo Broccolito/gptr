@@ -4333,6 +4333,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   §10.2 kind 10. Tests: test-console-commands.R "/help lists the commands and the input syntax", "/help's keys
   follow the console, as the banner does (review of Tasks 22-27)", "in the console margin command output wraps
   inside it; listings fit its width".
+- Final visual loop, round 2 (2026-10-24): Task 64: the REPL's last `[gptr] ...` notices speak the banner's
+  words, dim at column 2, keys bold: `ctrl-c again leaves · /exit`, `interrupted`, `timed out`, `aborted · the
+  session is kept`, `<n> background session(s) wait(s) for approval · the next prompt or gptr_wait() asks`, and
+  the queued message's delivery error in red. At the idle prompt `[gptr] press Ctrl-C again to leave gptr, or type
+  /exit` sat in ink between two prompt rows. Contract-visible: 04 §15.10 (the kept list). Tests:
+  test-console-repl.R "Ctrl-C at the prompt prints a hint; twice in a row leaves", "background sessions that wait
+  for approval are announced once (IC-57)"; test-console-interrupt.R, test-console-typing.R (their notices).
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,
