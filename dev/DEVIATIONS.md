@@ -3840,6 +3840,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   capture back after the first row, and below 256 colours the delivered steer had no band and the status line
   was SGR 2, fainter than the grey before the wait. Contract-visible: 04 §15.10 (the pause menu's [b]). Tests:
   test-console-repl.R "a terminal: a run sent to the background shows again while the console waits for it".
+- Final visual loop, round 2 (2026-10-24): Task 56: while `console_wait()` waits the REPL counts as sending
+  (`rs$sending`), so `console_repl_prompt()` finds its reader: the live row shows the draft and the queue view,
+  `console_queued()` counts the held lines, and a follow-up waits for the next prompt, as in a prompt's call. The
+  row stayed `thinking 11s · ctrl-c pause` while keys were read, so a steer was typed blind. Contract-visible: 04
+  §15.10 (the pause menu's [b]). Tests: test-console-repl.R "a terminal: a run sent to the background shows again
+  while the console waits for it".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

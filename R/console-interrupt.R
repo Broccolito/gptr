@@ -293,8 +293,8 @@ console_background_settle = function() {
   console_keep(texts)
 }
 
-#' The REPL whose prompt runs, unless it is piped (`.stdin`, `jsonl`), or NULL: its reader's
-#' `typed` lines are the next prompts (D-242)
+#' The REPL whose prompt runs, or whose `!!gptr_wait()` waits (console_wait()), unless it is piped
+#' (`.stdin`, `jsonl`), or NULL: its reader's `typed` lines are the next prompts (D-242)
 #' @noRd
 console_repl_prompt = function() {
   rs = console_repl_find()

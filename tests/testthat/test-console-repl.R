@@ -1324,7 +1324,8 @@ test_that("a terminal: a run sent to the background shows again while the consol
     "})",
     "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
   ))
-  person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
+  utf8 = l10n_info()[["UTF-8"]]
+  person = if (utf8) "\u203a" else ">>"
   expect_true(pty$wait("peter[auto]> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
@@ -1337,7 +1338,11 @@ test_that("a terminal: a run sent to the background shows again while the consol
   # waited for, the run is the console's again: its answer, the live row reading keys, its end
   pty$send("!!gptr::gptr_wait(gptr::gptr_last())\r")
   expect_true(pty$wait("w20abc"))
-  pty$send("use base R\r")
+  # the live row shows the draft, then the steer queued (visual round 2)
+  pty$send("use base")
+  expect_true(pty$wait(paste0(person, " use base")))
+  pty$send(" R\r")
+  expect_true(pty$wait(queue_line("steer", "use base R", utf8)))
   # in the console's palette, as before the wait: the steer on the band, the status line grey
   # (visual round 2)
   expect_true(pty$wait(paste0("\033[48;5;237m", person, " use base R")))

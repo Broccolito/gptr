@@ -860,17 +860,22 @@ console_reading = function(rs, body) {
 #' pause menu's [b] sent to the background among them: while `pump()` waits they are the console's
 #' foreground (`console_state()$waited`, console_foreground()), so their rows, live row and status
 #' line show as a prompt's do, in the console's colours, outside the code's evaluation (its
-#' `.gptr_eval_outside`), and a terminal reads keys as during a prompt's call, Enter steering
+#' `.gptr_eval_outside`), and a terminal reads keys as during a prompt's call, Enter steering: the
+#' REPL counts as sending (`rs$sending`, console_repl_prompt()), so the live row shows the draft and
+#' the queue, and follow-ups wait for the next prompt
 #' @noRd
 console_wait = function(rs, ss, pump) {
   .gptr_repl = rs
   force(.gptr_repl)
   st = console_state()
   old = st$waited
+  sending = rs$sending
   on.exit({
     st$waited = old
+    rs$sending = sending
   }, add = TRUE)
   st$waited = c(old, vapply(ss, function(s) session_data(s)$id, ""))
+  rs$sending = sending %||% TRUE
   outside = console_eval_value(".gptr_eval_outside") %||% function(f) f()
   outside(function() {
     # as the live row draws: the evaluation's capture, which its writer puts back, says 1 colour
