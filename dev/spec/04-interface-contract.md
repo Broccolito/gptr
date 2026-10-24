@@ -5910,7 +5910,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     (`background_reply()`'s attr `rgb`), the band is Codex's fill, 4% black over a light background or 12% white over
     a dark one, as the nearest cell of the colour cube or the grey ramp, and `band_dim` a grey 4.5:1 against it
     (`band_cells()`; review of Tasks 22-27: on Terminal.app's cream Novel profile the fixed 254 was a lighter, cooler
-    strip; it is now `187`, #d7d7af, its words `38;5;240`; #1c1c1c still gives 237, white 255). `NO_COLOR`
+    strip; it is now `187`, #d7d7af, its words `38;5;240`; #1c1c1c still gives 237, white 255). Where that colour
+    leaves an accent under 3:1 against the background itself, the accent is the default colour in bold and `dim` a
+    grey 3:1 against it (`grey_against()`; P28 Task 41: on Terminal.app's Ocean and Grass `#878787` and `#557ea8`
+    were 1.3:1 to 1.6:1); the logo's colours stay wherever they pass, black, white and light greys among them. `NO_COLOR`
     keeps the glyphs and drops every SGR. In the margin the renderer reads the Markdown at every depth (inline code
     and emphasis lose their markers, bullets are `•`, headings lose `#`), so the text, and where it wraps, is that of
     a colour console; only the plain mode without colour keeps the markdown characters (visual review: NO_COLOR,

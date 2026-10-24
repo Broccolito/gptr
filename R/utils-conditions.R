@@ -144,7 +144,9 @@ console_colors = function() console_eval_value(".gptr_console_colors") %||% cli:
 #' one grey `dim` (halfway between the logo's ink and cream where 256 colours show, as consoles
 #' that ignore SGR 2 show it too; else SGR 2), the input band in a T console (console_class())
 #' where the background is known and 256 colours show it, with `band_dim` the grey of words on it
-#' (also where the band is drawn inside an evaluation), and the R code theme in those colours.
+#' (also where the band is drawn inside an evaluation), and the R code theme in those colours. Where
+#' the terminal gave its background's colour, an accent under 3:1 against it is the default colour
+#' in bold and the grey one 3:1 against it (IC-82).
 #' ASCII where the output is not
 #' UTF-8 and in Windows consoles outside Windows Terminal and RStudio (Rgui among them), whose
 #' fonts lack U+258E and U+21B3 (WGL4); there the person's chevron is doubled, `>>`, so an answer
@@ -167,6 +169,16 @@ console_style = function() {
   grey = if (deep) "#878787" else "dim"
   bg = console_background()
   known = deep && !is.na(bg)
+  rgb = if (known) attr(bg, "rgb")
+  if (!is.null(rgb)) {
+    # on a background they do not stand out from (Terminal.app's Ocean, Grass) an accent is the
+    # default colour in bold and the grey one 3:1 against it
+    y = luminance(rgb)
+    low = function(col) contrast(luminance(grDevices::col2rgb(col)[, 1L] / 255), y) < 3
+    if (low(red)) red = "bold"
+    if (low(blue)) blue = "bold"
+    if (low(grey)) grey = grey_against(y, 3, identical(c(bg), "light"))
+  }
   cells = if (known) band_cells(bg)
   # never in RStudio's or a Windows console, TERM=dumb or Rscript
   band = if (known && console_class() == "T") paste0("\033[48;5;", cells$band, "m") else ""
@@ -201,12 +213,27 @@ band_cells = function(bg) {
   # cells 16 to 255 in order: the cube, blue fastest, then the grey ramp
   cells = rbind(as.matrix(expand.grid(cube, cube, cube))[, 3:1], cbind(ramp, ramp, ramp))
   k = which.min(colSums((t(cells) - fill)^2))
-  # WCAG luminance of the cell; the grey of that contrast ratio, darker or lighter
-  lin = function(v) ifelse(v <= 0.04045, v / 12.92, ((v + 0.055) / 1.055)^2.4)
-  y = sum(c(0.2126, 0.7152, 0.0722) * lin(cells[k, ] / 255))
-  yg = if (light) max(0, (y + 0.05) / 4.5 - 0.05) else min(1, 4.5 * (y + 0.05) - 0.05)
-  g = if (yg <= 0.0031308) 12.92 * yg else 1.055 * yg^(1 / 2.4) - 0.055
-  list(band = 15L + k, dim = grDevices::rgb(g, g, g))
+  list(band = 15L + k, dim = grey_against(luminance(cells[k, ] / 255), 4.5, light))
+}
+
+#' The WCAG relative luminance of a colour (components 0 to 1)
+#' @noRd
+luminance = function(rgb) {
+  sum(c(0.2126, 0.7152, 0.0722) * ifelse(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055)^2.4))
+}
+
+#' The WCAG contrast ratio of two luminances
+#' @noRd
+contrast = function(y1, y2) (max(y1, y2) + 0.05) / (min(y1, y2) + 0.05)
+
+#' The grey of contrast `ratio` against luminance `y`: darker on a light colour, else lighter,
+#' rounded away from it
+#' @noRd
+grey_against = function(y, ratio, light) {
+  yg = if (light) max(0, (y + 0.05) / ratio - 0.05) else min(1, ratio * (y + 0.05) - 0.05)
+  g = 255 * if (yg <= 0.0031308) 12.92 * yg else 1.055 * yg^(1 / 2.4) - 0.055
+  g = if (light) floor(g) else ceiling(g)
+  grDevices::rgb(g, g, g, maxColorValue = 255)
 }
 
 #' The terminal's background, "dark", "light" or NA, in `the$background` (IC-82): a T REPL's

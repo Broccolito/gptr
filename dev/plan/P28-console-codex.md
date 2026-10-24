@@ -1698,7 +1698,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 37 | On a CLI route a taken-back steer's printed line stays in the scrollback | 5ee252d9 |
 | 38 | Keys typed during a CLI route's first probe wait without a cue (not changed) | 31872d53 |
 | 39 | In RStudio a notice during a run is boxed by RStudio and the live row stays | 1c6f9ae0 |
-| 40 | Under `R < file` the piped console reads end of input at once | (this commit) |
+| 40 | Under `R < file` the piped console reads end of input at once | 99bb3d6f |
+| 41 | On Terminal.app's Ocean and Grass profiles the dim rows and inline code nearly vanish | (this commit) |
 
 ## Out of scope
 

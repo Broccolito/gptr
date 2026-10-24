@@ -536,6 +536,38 @@ test_that("a probed background's band is Codex's fill in its nearest cell (revie
                    c("\033[48;5;254m", "\033[38;5;242mx\033[39m"))
 })
 
+test_that("on a saturated background the accents and the grey keep 3:1 against it (Task 41)", {
+  local_background(NULL)
+  local_mocked_bindings(console_class = function() "T")
+  withr::local_options(cli.num_colors = 16777216L)
+  # WCAG contrast of a truecolor foreground against background `bg` (0 to 255); bold: the default's
+  ratio = function(x, bg) {
+    if (startsWith(x, "\033[1m")) return(Inf)
+    fg = as.numeric(regmatches(x, regexec("38;2;([0-9]+);([0-9]+);([0-9]+)m", x))[[1L]][-1L])
+    lum = function(v) {
+      v = v / 255
+      sum(c(0.2126, 0.7152, 0.0722) * ifelse(v <= 0.04045, v / 12.92, ((v + 0.055) / 1.055)^2.4))
+    }
+    y = c(lum(fg), lum(bg))
+    (max(y) + 0.05) / (min(y) + 0.05)
+  }
+  # Terminal.app's Ocean and Grass; Basic's black and white keep the logo's colours
+  for (bg in list(c(43, 102, 201), c(19, 119, 61))) {
+    the$background = background_reply(sprintf("\033]11;rgb:%02x/%02x/%02x\a", bg[1], bg[2], bg[3]))
+    st = console_style()
+    for (x in c(st$red("x"), st$blue("x"), st$dim("x"))) {
+      expect_gte(ratio(x, bg), 3)
+    }
+  }
+  for (reply in c("\033]11;rgb:0000/0000/0000\a", "\033]11;rgb:ffff/ffff/ffff\a")) {
+    the$background = background_reply(reply)
+    st = console_style()
+    expect_identical(c(st$red("x"), st$blue("x"), st$dim("x")),
+                     c("\033[38;2;184;84;80mx\033[39m", "\033[38;2;85;126;168mx\033[39m",
+                       "\033[38;2;135;135;135mx\033[39m"))
+  }
+})
+
 test_that("the background comes from COLORFGBG's last field, read once (D-245)", {
   local_background(NULL)
   fgbg = c("15;0", "0;15", "15;default;8", "0;7", "0;16", "default;default", "")

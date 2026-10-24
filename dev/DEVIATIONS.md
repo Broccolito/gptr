@@ -4212,6 +4212,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   m = mean...' #1 (versa-bedrock/us.anthropic.claude-opus-4-8) s…` at 100 columns, and at 80 the GPT and CLI lines
   too. Contract-visible: 04 §15.10 IC-82. Tests: test-console-render.R "a sub-agent's started line cut to the width
   keeps its last word (Task 36)".
+- Live dogfood fixes (Task 28, 2026-10-24): Task 41: where the terminal gave its background's colour, an accent
+  under 3:1 against it is the default colour in bold and `dim` a grey 3:1 against it (`grey_against()`, which
+  `band_cells()` uses for its 4.5:1 grey too). On Terminal.app's Ocean and Grass profiles the fixed grey and code
+  blue were 1.3:1 to 1.6:1, the dim rows and inline code nearly invisible; the logo's colours stay wherever they
+  pass. Contract-visible: 04 §15.10 IC-82. Tests: test-console-render.R "on a saturated background the accents
+  and the grey keep 3:1 against it (Task 41)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,
