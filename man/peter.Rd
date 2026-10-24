@@ -243,11 +243,11 @@ background. \code{s} and \code{f} ask for the text and queue it as Enter and Tab
 call a follow-up is sent when the agent would otherwise stop. A key typed right after the pause
 key answers the menu. Continuing leaves the work as if it had not paused, and pressing the
 pause key again aborts. Abort keeps the partial session; what you queued and the draft go to
-the history, unsent. Background returns to the chat prompt while the run goes on: what was
+the history, unsent. Background returns to the chat prompt and keeps the run: what was
 queued for after the answer and the draft go to the history, unsent, as after an abort, and
-another prompt steers the running session. Use \code{!!gptr::gptr_wait(gptr::gptr_last())} there
-to wait for it. Returning to the prompt does not guarantee progress while the chat waits for
-input. Under Rscript, background runs advance only inside blocking gptr calls. Where an
+another prompt steers the running session. Nothing runs it while the chat waits for input: use
+\code{!!gptr::gptr_wait(gptr::gptr_last())} there to continue it, its answer then shown as a prompt's
+and Enter steering it. Under Rscript, background runs advance only inside blocking gptr calls. Where an
 interrupt cannot be resumed (Windows' Rgui, Jupyter) the key stops the answer instead.
 
 \verb{/exit}, two consecutive interrupts at the prompt or the end of piped input return the session

@@ -251,7 +251,9 @@ policy_menu = function(cnd, pol) {
         })
         tty_question(FALSE)
         console_render_pause()
-        say(c(said, paste0("running in the background", sym$sep, "gptr_wait() brings it back")))
+        # nothing runs it while the chat prompt waits (later runs only at R's own prompt)
+        say(c(said, paste0("in the background", sym$sep,
+                           "!!gptr::gptr_wait(gptr::gptr_last()) continues it here")))
         console_background_settle()
         console_write("")
         invokeRestart("resume")

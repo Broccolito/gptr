@@ -1158,9 +1158,10 @@ Decisions:
   `  ? Paused`, then under its text a keys row built as the approval's,
   `    s steer · f follow-up · c continue · a abort · b background` (keys bold, words dim, wrapping
   between the options); the session id only when more than one session is paused; no
-  `[gptr] continuing`; an invalid key gets a dim hint naming the keys; [b] says `running in the background ·
-  gptr_wait() brings it back` dim, then a blank row (amended in the review of Tasks 16-21: it kept the
-  `[gptr]` notice, on the prompt). (Amended in Task 20:) A key or its
+  `[gptr] continuing`; an invalid key gets a dim hint naming the keys; [b] says `in the background ·
+  !!gptr::gptr_wait(gptr::gptr_last()) continues it here` dim, then a blank row (amended in the review of Tasks
+  16-21: it kept the `[gptr]` notice, on the prompt; in Task 51: it said `running in the background ·
+  gptr_wait() brings it back`, while nothing runs it at the chat prompt). (Amended in Task 20:) A key or its
   word answers, as an approval reads `y` or `yes`, and an empty answer continues. Before, any text's first
   letter was its key, so a steer typed at the new chevron (`add a legend`) aborted the run. The keys row is
   `ui_keys()` in `console-ui.R`, which the approval uses too; its separator ends a row, never starts one.
@@ -1708,7 +1709,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 47 | After the pause menu's [b] the rows are grouped wrongly (final visual loop, round 1) | 2a33f46b |
 | 48 | Keys typed while a question's rows are drawn are echoed, then read again (final visual loop, round 1) | 35eaaaf7 |
 | 49 | An approval's flag rows read as policy internals, in two shapes (final visual loop, round 1) | 86c49fe0 |
-| 50 | A question's answer is not shown (Task 48, found by its visual check) | (this commit) |
+| 50 | A question's answer is not shown (Task 48, found by its visual check) | b356476c |
+| 51 | A run sent to the background does not move at the chat prompt, and its wait shows nothing (final visual loop, round 1) | (this commit) |
 
 ## Out of scope
 

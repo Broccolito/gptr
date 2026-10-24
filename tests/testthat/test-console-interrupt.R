@@ -544,7 +544,7 @@ test_that("[b]ackground hands a foreground run to bg.register (P21) and resumes"
   dim = console_style()$dim
   expect_identical(utils::tail(err, 4L), c(
     "  the answer's cut...", dim("  Background sessions are experimental."),
-    dim("  running in the background - gptr_wait() brings it back"), ""))
+    dim("  in the background - !!gptr::gptr_wait(gptr::gptr_last()) continues it here"), ""))
   expect_false(any(grepl("[gptr]", err, fixed = TRUE)))
   withr::local_options(cli.num_colors = 1L)
   local_menu_answers(c("b", "c"))
@@ -575,7 +575,7 @@ test_that("[b] keeps the REPL's held lines and draft in the history, not sent (s
   expect_identical(kept, c("summarise after", "a draft"))
   # listed once, after the menu's last row and before the blank row above the prompt
   expect_identical(utils::tail(err, 3L), c(
-    "  running in the background - gptr_wait() brings it back",
+    "  in the background - !!gptr::gptr_wait(gptr::gptr_last()) continues it here",
     kept_line(c("summarise after", "a draft")), ""))
   expect_identical(rd$typed, character())
   expect_null(rd$compose)

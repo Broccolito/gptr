@@ -1632,7 +1632,8 @@ gptr_wait(x, timeout = Inf)
 queued input, then pumps the reactor until every one has settled or `timeout` seconds passed. Returns
 `invisible(x)`. On timeout the sessions keep running (background) or are left `running` with their run
 suspended (foreground) and a `timeout` condition is **not** raised; the function returns and the statuses say
-`running`. Conditions: `invalid_argument`; terminal-status conditions only for a single session.
+`running`. Conditions: `invalid_argument`; terminal-status conditions only for a single session. Called from the
+console's `!` code it shows the sessions it waits for as the console's foreground (§15.10, P28 Task 51).
 
 ```r
 fake = gptr_fake_provider(list("a"))
@@ -5683,10 +5684,16 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     a blank row. Continuing writes no notice (`[gptr] continuing` and `[gptr] nothing queued; continuing` are
     gone) and draws the live row again with the draft (`console_asked()`); after [a] the draft joins the kept
     list (Task 18). [b] closes the answer with its cut row, then writes the background service's own notices
-    and `  running in the background · gptr_wait() brings it back` as one dim block and a blank row before the
-    prompt, or the notices and `  cannot run in the background · <why>` in red (review of Tasks 16-21:
-    `[gptr] running in the background; ...` in ink, on the prompt; P28 Task 47: the notices came first and the
-    cut row floated between them and the status row).
+    and `  in the background · !!gptr::gptr_wait(gptr::gptr_last()) continues it here` as one dim block and a
+    blank row before the prompt, or the notices and `  cannot run in the background · <why>` in red (review of
+    Tasks 16-21: `[gptr] running in the background; ...` in ink, on the prompt; P28 Task 47: the notices came
+    first and the cut row floated between them and the status row). Nothing runs a background session while the
+    chat prompt waits (`later` runs only at R's own prompt; P28 Task 51: the row said `running in the
+    background · gptr_wait() brings it back`). A `gptr_wait()` in the console's `!`/`!!` code
+    (repl_passthrough()'s `.gptr_console_wait`, `console_wait()`) makes the sessions it waits for the console's
+    foreground while it lasts (`console_state()$waited`, `console_foreground()`), outside the code's evaluation
+    (its sink and options, `.gptr_eval_outside`) and with a terminal's keys read as during a prompt's call
+    (`console_reading()`): its rows, live row and status line show as a prompt's do, and Enter steers.
   - A draft left at the end of a run stays until sent (Task 21; T class). The REPL reader's read
     (`rd$read(prompt)`) returns its held and `typed` lines first; then, while the composer holds a draft,
     `console_idle(rd, prompt)` edits it at the prompt: `\r`, the band (as the live row's), the prompt and the

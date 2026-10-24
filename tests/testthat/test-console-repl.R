@@ -1306,3 +1306,40 @@ test_that("a terminal answering the probe late still has the answer read by it (
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
 })
+
+test_that("a terminal: a run sent to the background shows again while the console waits for it", {
+  skip_on_cran()
+  skip_on_os("windows")
+  skip_if_not_installed("later")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
+    "long = paste(c('BEGIN', sprintf('w%02dabc', 1:60), 'END'), collapse = ' ')",
+    "fake = gptr_fake_provider(function(req) {",
+    "  m = req$messages[[length(req$messages)]]",
+    "  if (identical(m$role, 'user')) return(list(text = long, chunk = 8L, gap = 0.1))",
+    "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
+    "})",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
+  ), term = "xterm")
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("BEGIN"))
+  pty$send("\003")
+  expect_true(pty$wait("b background"))
+  pty$send("b\r")
+  # the row says what holds at the chat prompt, where nothing runs the session
+  expect_true(pty$wait("continues it here"))
+  expect_true(pty$wait("peter[auto]> "))
+  # waited for, the run is the console's again: its answer, the live row reading keys, its end
+  pty$send("!!gptr::gptr_wait(gptr::gptr_last())\r")
+  expect_true(pty$wait("w50abc"))
+  pty$send("use base R\r")
+  expect_true(pty$wait("use base R END"))
+  expect_true(pty$wait("done"))
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  # the steer was never echoed by the terminal, at column 0
+  expect_false(any(startsWith(term_rows(pty$all), "use base R")))
+})

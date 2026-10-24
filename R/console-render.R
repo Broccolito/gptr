@@ -522,14 +522,15 @@ console_drop = function(run_id) {
   invisible(NULL)
 }
 
-#' A foreground session: depth 0, live, not handed to P21's background pump; unless `tools`,
-#' never while a tool executes on the stack, whose events (nested calls: `details$nested`) are
-#' the model's, not the person's
+#' A foreground session: depth 0, live, not handed to P21's background pump, or one the console's
+#' R code waits for (console_wait()); unless `tools`, never while a tool executes on the stack,
+#' whose events (nested calls: `details$nested`) are the model's, not the person's
 #' @noRd
 console_foreground = function(rec, tools = FALSE) {
   live = session_live(rec$session)
-  !is.null(live) && is.null(live$background) &&
-    identical(session_data(rec$session)$depth, 0L) && (tools || is.null(run_current()))
+  d = session_data(rec$session)
+  !is.null(live) && (is.null(live$background) || d$id %in% console_state()$waited) &&
+    identical(d$depth, 0L) && (tools || is.null(run_current()))
 }
 
 #' Show a sub-agent's start and end (D-188): a child run (depth 1+) whose outermost run is in the

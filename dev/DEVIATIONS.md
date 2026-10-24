@@ -3502,10 +3502,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
     `/tmp/fit.rds` names no command and stays an answer, the reason visual review finding 36 was not taken.
     Contract-visible: 04 §15.10 IC-77. Tests: test-console-ui.R "a console command typed as a free-text answer
     waits for the next prompt (review)".
-  - The pause menu's [b] speaks as the menu does: `  running in the background · gptr_wait() brings it back` dim,
-    then a blank row before the prompt, the service's one-time experimental notice dim too, or `  cannot run in
-    the background · <why>` in red; it was `[gptr] running in the background; gptr_wait() brings it back` in ink,
-    right on the next prompt. Contract-visible: 04 §15.10 IC-76. Tests: test-console-interrupt.R "[b]ackground
+  - The pause menu's [b] speaks as the menu does: `  in the background · !!gptr::gptr_wait(gptr::gptr_last())
+    continues it here` dim (Task 51), then a blank row before the prompt, the service's one-time experimental
+    notice dim too, or `  cannot run in the background · <why>` in red; it was `[gptr] running in the background;
+    gptr_wait() brings it back` in ink, right on the next prompt. Contract-visible: 04 §15.10 IC-76. Tests: test-console-interrupt.R "[b]ackground
     hands a foreground run to bg.register (P21) and resumes", "a [b]ackground refusal is a notice and the menu
     asks again".
   - The live row counts a character outside ASCII as two columns only in a CJK locale (`LC_CTYPE` `ja`, `ko`,
@@ -3817,6 +3817,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the reason row does. The ask showed literal backticks and angle brackets, `?` wrote `[2] file_write  <call>`
   and named the level twice. Contract-visible: 04 §15.4 IC-53 item 8. Tests: test-console-ui.R "a flag has one
   shape in the ask and in ?, in the console's words (visual round 1)".
+- Final visual loop, round 1 (2026-10-24): Task 51: a `gptr_wait()` in the console's `!` code makes the sessions
+  it waits for the console's foreground while it lasts (`console_wait()`, `console_state()$waited`), outside the
+  code's evaluation (`.gptr_eval_outside`: its sink lifted, the options from before it) and with the keys read
+  as during a prompt's call (`console_reading()`, which `console_send()` uses too), so a run sent to the
+  background with [b] shows its rows, live row and status line and Enter steers it. [b]'s row says what holds
+  at the chat prompt, where nothing runs it: `in the background · !!gptr::gptr_wait(gptr::gptr_last())
+  continues it here`. Before, the row said `running in the background · gptr_wait() brings it back`, the
+  session did not move for 25 s, and the wait ran it to its end with nothing on screen while a typed line was
+  echoed raw. Contract-visible: 04 §7 `gptr_wait()`, §15.10 (the pause menu). Tests: test-console-repl.R "a
+  terminal: a run sent to the background shows again while the console waits for it".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

@@ -565,7 +565,8 @@ console_blocks = function() {
 #'
 #' The `input` event (source "passthrough") may handle or transform the code first. Errors are
 #' shown on stderr; `!code` leaves a note for the next prompt. The `console:direct` channel
-#' tells transcript writers (P15) what ran.
+#' tells transcript writers (P15) what ran. A gptr_wait() in the code waits through console_wait()
+#' (`.gptr_console_wait`).
 #' @noRd
 repl_passthrough = function(rs, text) {
   noted = !startsWith(text, "!!")
@@ -575,6 +576,9 @@ repl_passthrough = function(rs, text) {
   if (identical(ev$action, "handled")) return(invisible(NULL))
   code = ev$text
   if (!nzchar(trimws(code))) return(invisible(NULL))
+  # gptr_wait() in the code shows what it waits for as the console's foreground
+  .gptr_console_wait = function(ss, pump) console_wait(rs, ss, pump)
+  force(.gptr_console_wait)
   # the evaluator of the `evaluator` setting (04 section 7.0 service `eval.r`, IC-69); the
   # built-in eval_r() when builtin:workspace is filtered out
   evaluate = if (ext_service_has("eval.r")) ext_service_get("eval.r") else eval_r
@@ -774,19 +778,14 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
   force(.gptr_repl)
   force(.gptr_interrupt_barrier)
   on.exit(console_call_release(rs), add = TRUE)
-  task = if (repl_terminal(rs)) reactor_task(console_typed)
-  on.exit(if (!is.null(task)) reactor_cancel(task), add = TRUE)
-  # the terminal never echoes type-ahead into the answer; gptr_readline() echoes its reads
-  if (!is.null(task)) {
-    on.exit(tty_restore(), add = TRUE)
-    tty_call(console_class() == "T")
-  }
   cl = console_call(rs, text, men)
   rs$sending = cl
   before = gptr::gptr_last()
-  res = tryCatch(list(status = "ok", value = eval(cl, envir = rs$mask)),
-                 error = function(e) list(status = "error", error = e),
-                 interrupt = function(e) list(status = "interrupt"))
+  res = console_reading(rs, function() {
+    tryCatch(list(status = "ok", value = eval(cl, envir = rs$mask)),
+             error = function(e) list(status = "error", error = e),
+             interrupt = function(e) list(status = "interrupt"))
+  })
   # keys read with a Ctrl-C that no question took (after [a]) are typed at the next prompt
   rd = rs$reader
   if (nzchar(rd$after_interrupt %||% "")) {
@@ -807,6 +806,42 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
   if (!is.null(s)) rs$session = s
   if (identical(res$status, "interrupt") && !is.null(rs$session)) console_abort_stray(rs$session)
   res
+}
+
+#' `body()` while a terminal REPL's console_typed() task reads what is typed, in the call's modes
+#' (tty_call(): a T console's keys, a D console's lines without echo; IC-76, D-243): the terminal
+#' never echoes type-ahead into an answer, and gptr_readline() echoes its own reads
+#' @noRd
+console_reading = function(rs, body) {
+  task = if (repl_terminal(rs)) reactor_task(console_typed)
+  on.exit(if (!is.null(task)) reactor_cancel(task), add = TRUE)
+  if (!is.null(task)) {
+    on.exit(tty_restore(), add = TRUE)
+    tty_call(console_class() == "T")
+  }
+  body()
+}
+
+#' A wait of the console's R code (`!!gptr_wait(s)`, repl_passthrough()) on sessions `ss`, a run the
+#' pause menu's [b] sent to the background among them: while `pump()` waits they are the console's
+#' foreground (`console_state()$waited`, console_foreground()), so their rows, live row and status
+#' line show as a prompt's do, outside the code's evaluation (its `.gptr_eval_outside`), and a
+#' terminal reads keys as during a prompt's call, Enter steering
+#' @noRd
+console_wait = function(rs, ss, pump) {
+  .gptr_repl = rs
+  force(.gptr_repl)
+  st = console_state()
+  old = st$waited
+  on.exit({
+    st$waited = old
+  }, add = TRUE)
+  st$waited = c(old, vapply(ss, function(s) session_data(s)$id, ""))
+  outside = console_eval_value(".gptr_eval_outside") %||% function(f) f()
+  outside(function() {
+    console_render_resume(Filter(Negate(is.null), lapply(ss, function(s) session_live(s)$run)))
+    console_reading(rs, pump)
+  })
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -1244,11 +1279,11 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' call a follow-up is sent when the agent would otherwise stop. A key typed right after the pause
 #' key answers the menu. Continuing leaves the work as if it had not paused, and pressing the
 #' pause key again aborts. Abort keeps the partial session; what you queued and the draft go to
-#' the history, unsent. Background returns to the chat prompt while the run goes on: what was
+#' the history, unsent. Background returns to the chat prompt and keeps the run: what was
 #' queued for after the answer and the draft go to the history, unsent, as after an abort, and
-#' another prompt steers the running session. Use `!!gptr::gptr_wait(gptr::gptr_last())` there
-#' to wait for it. Returning to the prompt does not guarantee progress while the chat waits for
-#' input. Under Rscript, background runs advance only inside blocking gptr calls. Where an
+#' another prompt steers the running session. Nothing runs it while the chat waits for input: use
+#' `!!gptr::gptr_wait(gptr::gptr_last())` there to continue it, its answer then shown as a prompt's
+#' and Enter steering it. Under Rscript, background runs advance only inside blocking gptr calls. Where an
 #' interrupt cannot be resumed (Windows' Rgui, Jupyter) the key stops the answer instead.
 #'
 #' `/exit`, two consecutive interrupts at the prompt or the end of piped input return the session

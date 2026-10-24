@@ -111,7 +111,8 @@ gptr_message_write = function(text, stream, margin = FALSE, from = sys.nframe() 
 }
 
 #' What an evaluation on the stack holds about the console it started from (eval_one()'s
-#' `.gptr_console_pad` and `.gptr_console_colors`), or NULL outside one
+#' `.gptr_console_pad`, `.gptr_console_colors` and `.gptr_eval_outside`, repl_passthrough()'s
+#' `.gptr_console_wait`), or NULL outside one
 #' @noRd
 console_eval_value = function(name) {
   k = sys.nframe() - 1L

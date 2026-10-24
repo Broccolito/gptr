@@ -369,6 +369,20 @@ eval_one = function(st, expr, i, sref) {
     gptr_message_write(text, stream, margin, from = k - 1L)
   }
   force(.gptr_message_write)
+  # the console's own code waiting for a session (console_wait()) shows it as the console does:
+  # outside this capture (its sink lifted when on top) and in the options from before it
+  .gptr_eval_outside = function(f) {
+    eval_flush(st)
+    own = sink.number() == st$sink_n
+    if (own) sink()
+    opts = options(st$old_opts)
+    on.exit({
+      options(opts)
+      if (own) sink(st$con, split = st$split)
+    }, add = TRUE)
+    f()
+  }
+  force(.gptr_eval_outside)
   .gptr_console_pad = st$pad
   force(.gptr_console_pad)
   .gptr_console_colors = st$colors
