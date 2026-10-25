@@ -1017,6 +1017,7 @@ test_that("builtin:tools registers fragments, the plugins section, a search sour
 })
 
 test_that("the out fragment names record = false only when the r tool takes it (D-248)", {
+  skip_on_cran()
   rule = "peter$plot() only with record = false."
   r_props = function(frozen) {
     decls = jsonlite::fromJSON(frozen$tools_json, simplifyVector = FALSE)

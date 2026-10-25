@@ -230,7 +230,7 @@ test_that("hosted CI jobs are bounded and a crashed R CMD check cannot pass", {
     expect_false(is.null(jobs[[name]][["timeout-minutes"]]), label = name)
   }
   # rcmdcheck reported success when R CMD check aborted before writing a status line
-  for (name in c("R-CMD-check", "no-suggests", "c-locale", "cran-mode", "shards")) {
+  for (name in c("R-CMD-check", "no-suggests", "c-locale", "cran-mode", "shards", "cran")) {
     steps = jobs[[name]]$steps
     uses = vapply(steps, function(s) s$uses %||% "", "")
     runs = vapply(steps, function(s) s$run %||% "", "")

@@ -151,7 +151,7 @@ working directory restored. Plan-specific rules:
     Linux NOT_CRAN lanes.
   - The console test helpers mock the fd-0 reader, so a test never reads the developer's fd 0.
   - New test files follow D-240's CRAN list rule. `test-console-input.R` (pure) joins the list in
-    Task 16.
+    Task 16; CI-93's trim takes it off again.
 
 ## File Structure
 
@@ -924,8 +924,8 @@ Decisions:
 - No cursor movement: the draft is edited at its end, and Left, Right, Ctrl-A and Ctrl-E are
   dropped. Full editing is readline's, at the prompt.
 
-Tests (new `test-console-input.R`; it joins the CRAN list in `tests/testthat.R`), RED first: a
-table of byte strings with the expected draft and actions covers:
+Tests (new `test-console-input.R`; it joins the CRAN list in `tests/testthat.R` until CI-93), RED
+first: a table of byte strings with the expected draft and actions covers:
 - UTF-8 and wide characters;
 - held, completed and dropped escape sequences, at 0 and 60 ms;
 - the paste batch;
