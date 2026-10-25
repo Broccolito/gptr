@@ -841,6 +841,7 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   skip_on_cran()
   skip_on_os("windows")
   skip_if_not(identical(Sys.getenv("CI"), "true"), "INFRA-03 drives an interactive R on CI")
+  skip_if_sigint_ignored()
   ttft = local_mock_server("ttft", delay = 3, n = 4L, interval = 0.05)
   stream = local_mock_server("stream", n = 40L, interval = 0.25)
   dir = withr::local_tempdir("gptr-infra03-")

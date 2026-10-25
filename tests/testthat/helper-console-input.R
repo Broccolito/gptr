@@ -116,6 +116,17 @@ kept_line = function(texts, kept = TRUE, utf8 = cli::is_utf8_output()) {
   queue_line(kind, paste(texts, collapse = sym$sep), utf8)
 }
 
+# Skips a test that sends SIGINT where this process ignores it, as a background job (`&`, nohup) of
+# a shell without job control does: its children inherit that
+skip_if_sigint_ignored = function() {
+  sigint = tryCatch({
+    tools::pskill(Sys.getpid(), tools::SIGINT)
+    for (i in 1:1e5) NULL
+    FALSE
+  }, interrupt = function(e) TRUE)
+  testthat::skip_if_not(sigint, "SIGINT is ignored in this process")
+}
+
 # Terminal R in a pty (80x24, TERM `term`, echo on as in a terminal unless `echo` is FALSE) that
 # loads gptr and sources `child`, the child's code (its options too). `send(x)` types; `wait(x)`
 # reads until `x` is shown and consumes the output through it, so the next wait() looks after it;

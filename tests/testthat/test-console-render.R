@@ -213,13 +213,7 @@ test_that("other output goes between whole rows; the held row continues, nesting
 test_that("an interrupt while a row is written loses none of its delta (visual round 2)", {
   skip_on_cran()
   skip_on_os("windows")
-  # a process started in the background (`&`, nohup) ignores SIGINT
-  sigint = tryCatch({
-    tools::pskill(Sys.getpid(), tools::SIGINT)
-    for (i in 1:1e5) NULL
-    FALSE
-  }, interrupt = function(e) TRUE)
-  skip_if_not(sigint, "SIGINT is ignored in this process")
+  skip_if_sigint_ignored()
   withr::local_options(cli.num_colors = 1L, cli.dynamic = FALSE, gptr.verbose = 0L)
   # SIGINT, as a D console's Ctrl-C, arrives while the first row is written, and R would take it at
   # the loop's check; it comes at the next check after the delta instead (Sys.sleep())
