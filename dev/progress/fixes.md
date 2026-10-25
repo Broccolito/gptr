@@ -4830,3 +4830,18 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Open: found in passing (R27's evidence, doc-locate.R): a console transcript with a `{name}` prompt cannot replay
   without a model, as `doc_console_site()` sets `args_hash = NULL` and the block reads stale under
   `GPTR_REPLAY=replay`; to triage.
+
+## Task CI-96 - The macOS row has time for the whole suite (2026-10-25, #PR)
+- Red: main's R-CMD-check run 40203827918 at f8c48802 (PR #79 merged), job 121200423672
+  (macos-latest release), was cancelled at its 45-minute limit 42 minutes into R CMD check
+  ("The job has exceeded the maximum execution time of 45m0s"); every other job of the run passed.
+- Measured (macos-latest release, R-CMD-check.yaml, job start to end): the 19 finished jobs from
+  2026-10-21 to 2026-10-24 took 25-37 minutes; on 2026-10-25, after P28 (#78) added its pty console
+  tests, which macOS runs serially, the 7 finished jobs took 36.5-43.6 minutes and the one above
+  reached the limit at 45.3.
+- Fix: the macOS row of the matrix gets `minutes: 60`, a third over the slowest finished job; the
+  other rows keep 45 and Ubuntu R-devel 120. test-zzz.R's time-limit test (CI-19) pins it.
+- Tests: `^zzz$` FAIL 1 before the change (test-zzz.R:320), FAIL 0 PASS 149 after; lint clean.
+- Deviations: none. Open: the macOS row's time grows with the serial pty tests; running them in
+  two testthat workers, as the Linux rows do, would halve it but loads the runner the pty tests
+  time against.
