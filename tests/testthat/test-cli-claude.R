@@ -867,6 +867,7 @@ test_that("an init line with apiKeySource ANTHROPIC_API_KEY stops the turn: gptr
 
 test_that("billing and enclosing-agent variables never reach the claude child", {
   skip_on_cran()
+  local_vault()
   local_gptr_options(quiet = FALSE)
   f = local_fake_cli("claude", "text")
   withr::local_envvar(ANTHROPIC_API_KEY = "sk-ant-api03-p20fake-000000000000000000000",
