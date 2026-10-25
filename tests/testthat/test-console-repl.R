@@ -143,6 +143,17 @@ test_that("lines waiting after a typed line join it; Enter at '... ' sends one m
   expect_match(shown, "(pasted: Enter sends it as one message)", fixed = TRUE)
 })
 
+test_that("a trailing backslash continues a pasted line as it does a typed one", {
+  local_readline(c("first \\", ""))
+  local_waiting(list(c("second \\", "third")))
+  rd = console_reader(stdin = FALSE)
+  out = NULL
+  utils::capture.output({
+    out = repl_read_logical(rd, "peter> ")
+  })
+  expect_identical(out, "first \nsecond \nthird")
+})
+
 test_that("text typed at '... ' is appended: it ends a paste without a final newline", {
   local_readline(c("a", "c"))
   local_waiting(list("b"))

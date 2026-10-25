@@ -385,7 +385,8 @@ repl_read_logical = function(rd, prompt) {
     }
     out = paste0(bang, code)
   } else {
-    out = repl_paste_more(rd, line)
+    # a pasted line's trailing backslash continues it, as a typed one's does below
+    out = gsub("\\\n", "\n", repl_paste_more(rd, line), fixed = TRUE)
     while (endsWith(out, "\\")) {
       out = substr(out, 1L, nchar(out) - 1L)
       x = rd$read("... ")
