@@ -4553,6 +4553,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   provider-bedrock, s1-emulate, s1-ollama, tool-search); the Windows budget's calibration against
   win-builder once the new lane has run (a hosted runner is not win-builder, and its timed step
   includes the build); that BOM block's warning in CRAN mode under `LC_ALL=C` on macOS.
+- Windows evidence: corrected by CI-95 (run 40206216160), whose four blocks of 500 ms or more skip.
 
 ## Task FIX-20 - Console review fixes (2026-10-25, #80)
 Scope: the cheat sheet's console sections reviewed against P28's build (`516ec73c`, PR #78); each code finding
@@ -4868,3 +4869,39 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   needs a UTF-8 locale). Lint clean (3 files); `document()` changes nothing.
 - Deviations: none; IC-76's rule is unchanged, the reader now times a batch as it states. Open:
   none.
+
+## Task CI-95 - The security blocks of 500 ms or more on Windows skip on CRAN (2026-10-25, #PR)
+- Why: CI-93 put the 12 blocks its trim had skipped in the security files back on CRAN (8c0edb03),
+  judged by Windows timing runs 39555362618 and 39559882743 (2026-10-21), from before two of those
+  blocks changed or existed (perm-classify's plan-mode allowlist grew since; perm-rules' `sh:` block
+  came on 2026-10-23). Its verifier found that evidence weak for D-240's rule there, which skips
+  only blocks of 500 ms or more on Windows.
+- Evidence: run 40206216160 on claude/cran-timing-windows (811d465: main f8c48802 plus a workflow,
+  never merged, that times each block of the six security files in CRAN mode on windows-latest,
+  R-devel and R-release, two jobs each). In each job 160 blocks ran, 38 skipped, none failed. Four
+  take 500 ms or more in the mean of a version's two jobs (R-devel/R-release): perm-rules "sh: and
+  category: rules see a program given by its path" 1820/1755 ms, perm-plan "a readonly session
+  keeps read and r outside plan mode (D-251)" 1120/1040, perm-classify "the plan-mode allowlist
+  admits only known read-only calls (IC-54)" 625/595, perm-rules "rule_suggest() covers exactly the
+  flagged calls, never level 4 or control (7.11)" 535/510. The largest kept, auth-redact "a short
+  stream equals whole-text redaction (CRAN-sized)", takes 440/400.
+- Change (7cfd4252): the four start with `skip_on_cran()`. Three are of CI-93's 12; perm-plan's
+  block (02bead73, 2026-10-23) was never skipped. The other 156 security blocks that ran there stay
+  on CRAN.
+- Measured at the head (macOS, 16 cores, load 9-18; the CRAN list against the installed tarball from
+  a copy of tests/ with no source tree above it, `NOT_CRAN`, `CI` and `GITHUB_ACTIONS` unset, 3
+  alternating triples in UTF-8): before the trim (ecfad58c) 21.7-22.1 s (PASS 4146 SKIP 1550), main
+  (f8c48802) 14.2-14.4 s (PASS 2589 SKIP 896), the head 13.7-13.8 s (PASS 2501 SKIP 900), FAIL 0 in
+  each: 37% less than before the trim (main 35%), 0.5 s less than main. Under `LC_ALL=C` main 14.3 s
+  (PASS 2575 SKIP 900 WARN 1) and the head 13.4 s (PASS 2487 SKIP 904 WARN 1), the warning as on
+  main. covr over the CRAN list: lines 46.4% before the trim, 39.9% at main, 39.7% at the head;
+  functions 2,441, 2,195 and 2,185 of 4,138, the 10 that lose their last CRAN test in ext-registry,
+  gptr-capture, gptr-gateway, prompt-sections and session-object; R files reached 115 of 125 each
+  time, each keeping at least 26.7% of its CRAN-covered functions (`console-input.R`, 4 of 15, the
+  least), so CI-93's guard holds. Block skips in the 35 listed files: 841 to 845. The CRAN-mode
+  `R CMD check --as-cran` (cran-mode's variables, both manuals): Status OK in 136 s, with
+  `Running 'testthat.R' [13s/14s]` as at main, so cran-comments.md keeps its 14 s.
+- Tests: the six security files with `NOT_CRAN=true`, in UTF-8 and under `LC_ALL=C`: PASS 2142
+  SKIP 1 each; lint of the three touched files clean.
+- Deviations: D-240 (amended in place). Open: a block near 500 ms can cross it between runs:
+  `rule_suggest()`'s block took at most 480 ms in CI-93's runs and 510-535 ms here.
