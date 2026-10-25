@@ -1745,7 +1745,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 76 | The session record does not re-source or keep the order typed (final visual loop, round 3) | 3dbb94ba |
 | 77 | Tab Tab at the idle prompt leaves the list to readline, on the band and paged (final visual loop, round 3) | e8b9b565 |
 | 78 | After the pause menu's [a] the held row prints without its label (final visual loop, round 3) | e56ce15d |
-| 79 | A `!` block has three indents and runs into the next prompt (final visual loop, round 3) | (this commit) |
+| 79 | A `!` block has three indents and runs into the next prompt (final visual loop, round 3) | 9de0abae |
+| 80 | In TERM=dumb an approval that comes while a line is typed splits the line (final visual loop, round 3) | (this commit) |
 
 ## Out of scope
 

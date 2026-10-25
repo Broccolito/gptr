@@ -3871,6 +3871,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   menu. Tests: test-console-ui.R "invalid answers are explained and kept; five end in a refusal the model is
   told", "every question asks again in one style: dim rows at column 4 (review)"; test-console-interrupt.R
   (the pause menu's keys).
+- Final visual loop, round 3 (2026-10-24): Task 80: a D console's question waits for typing to pause as a T
+  console's does (Task 19): before its rows `console_ask_wait_lines()` reads fd 0 in the drain's mode until no
+  key has come for `ask_ready()`'s interval, routes a line ended meanwhile as typed during the run, and holds the
+  partial line in the reader (`rd$part`, `typed_join()`) for the drain after the rows, which keeps it. In
+  TERM=dumb an approval that came while `please make the plot simple, use a log scale` was typed kept `please
+  make the plot s` and took `imple, use a log scale` as an invalid answer. Contract-visible: 04 §15.10 IC-76
+  (a question waits for typing to pause). Tests: test-console-typing.R "a D console's question waits for typing
+  to pause; a line finished then steers", "a question drains fd 0 before it reads: lines steer, a partial line is
+  kept".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

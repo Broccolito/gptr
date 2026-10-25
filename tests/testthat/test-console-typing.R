@@ -1427,12 +1427,15 @@ test_that("a question drains fd 0 before it reads: lines steer, a partial line i
   local_gptr_options(interactive = TRUE)
   tty = local_stty()
   drain = c("-icanon", "min", "0", "time", "0")
+  typed = NULL
   local_mocked_bindings(
     repl_terminal = function(rs) TRUE, console_readline_tty = function() FALSE,
-    # the partial line is read only in the drain's mode
+    # the partial line is read only in the drain's mode, once
     console_typed_lines = function(rd, ...) {
       if (!identical(utils::tail(tty$log, 5L), drain)) return(character())
-      structure(c("steer me", "use base R"), partial = TRUE)
+      x = typed
+      typed <<- character()
+      x
     })
   # the notice quotes the line (typed with the echo off) and names the key (D-245 glyphs); with
   # gptr.history off it says the line was not kept
@@ -1440,6 +1443,7 @@ test_that("a question drains fd 0 before it reads: lines steer, a partial line i
   for (k in 1:2) {
     local_gptr_options(history = k == 1L)
     tty$log = character()
+    typed = structure(c("steer me", "use base R"), partial = TRUE)
     rl = local_readline(c("go", "y", "/exit"))
     e = new.env()
     fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2"), "after"))
@@ -1452,19 +1456,52 @@ test_that("a question drains fd 0 before it reads: lines steer, a partial line i
     reqs = fake_requests(fake)
     expect_length(reqs, 2L)
     expect_identical(msg_text(last_message(reqs[[2L]])), relay("steer me"))
-    # under the question and its keys, right above the chevron, never inside the call's block
-    # (visual review)
+    # the line ended as the question came due steers, its queue line above the question, which
+    # waited for typing to pause, as in T (visual round 3); the partial line is kept under the
+    # question and its keys, right above the chevron, never inside the call's block (visual review)
     at = grep("? Allow r?", out, fixed = TRUE)
-    # the row is erased before them, as the D live row is, so the partial line the terminal echoed
+    expect_true(queue_line("steer", "steer me") %in% out[seq_len(at - 1L)])
+    # the row is erased before it, as the D live row is, so the partial line the terminal echoed
     # once the question turned the echo back on stays off it (review of Tasks 22-27)
     row = term_rows(paste0("se R", out[at + 2L], "\n"))[[1L]]
-    expect_identical(c(trimws(row, "right"), out[at + 3L]),
-                     c(queue_line("steer", "steer me"), notice[[k]]))
-    # the question reads in the saved modes from before its rows, the drain's restored before it
-    # reads; the call's after it
-    expect_identical(tty$log, c("-g", "-echo", "noflsh", "SAVED", "-g", drain, "SAVED", "-echo",
-                                "noflsh", "SAVED"))
+    expect_identical(trimws(row, "right"), notice[[k]])
+    # the wait reads in the drain's mode; the question in the saved modes from before its rows, the
+    # drain's restored before it reads; the call's after it
+    expect_identical(tty$log, c("-g", "-echo", "noflsh", "-g", drain, "SAVED", "SAVED", "-g",
+                                drain, "SAVED", "-echo", "noflsh", "SAVED"))
   }
+})
+
+test_that("a D console's question waits for typing to pause; a line finished then steers", {
+  local_console_test()
+  local_gptr_options(interactive = TRUE)
+  tty = local_stty()
+  drain = c("-icanon", "min", "0", "time", "0")
+  # the approval comes while a line is typed: its head is on fd 0, its end and Enter follow
+  reads = list(structure("please make the plot s", partial = TRUE), "imple, use a log scale")
+  local_mocked_bindings(
+    repl_terminal = function(rs) TRUE, console_readline_tty = function() FALSE,
+    console_typed_lines = function(rd, ...) {
+      if (!identical(utils::tail(tty$log, 5L), drain) || !length(reads)) return(character())
+      x = reads[[1L]]
+      reads <<- reads[-1L]
+      x
+    })
+  rl = local_readline(c("go", "y", "/exit"))
+  e = new.env()
+  fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2"), "after"))
+  rs = repl_state(NULL, e)
+  rs$model = fake
+  rs$mode = "manual"
+  out = utils::capture.output(repl_main(rs))
+  # the whole line steers the run (visual round 3: its head was kept, its rest answered the
+  # approval), and nothing is kept
+  expect_identical(e$zz, 2)
+  reqs = fake_requests(fake)
+  expect_identical(msg_text(last_message(reqs[[2L]])),
+                   relay("please make the plot simple, use a log scale"))
+  expect_identical(rl$kept, character())
+  expect_false(any(grepl("kept in history", out, fixed = TRUE)))
 })
 
 test_that("a terminal: a question never takes the line typed ahead of it (P28 B, C, H)", {

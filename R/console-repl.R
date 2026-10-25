@@ -713,6 +713,7 @@ console_typed = function(drain = FALSE, accept = NULL) {
   modes = if (drain) tty_drain_mode()
   if (length(modes) == 1L) on.exit(tty_modes(modes), add = TRUE)
   lines = console_typed_lines(rd, 0L)
+  if (drain) lines = typed_join(rd, lines)
   ans = if (is.function(accept)) typed_answer(lines, accept)
   if (!is.null(ans)) {
     console_typed_route(rd, s, ans$before)
