@@ -1070,13 +1070,12 @@ repl_dispatch = function(rs, line) {
 #' Ctrl-C at the prompt prints a hint, twice in a row leaves; `/exit` and the end of piped input
 #' leave too. Under `.stdin = TRUE` the console is a person at a pipe (plan ambiguity 8): unset,
 #' `gptr.interactive` becomes TRUE and `gptr.ui` P11's console UI on the REPL's reader until the
-#' REPL ends. The session returned gets `session_shutdown` (reason "exit") unless the caller
-#' piped it in.
+#' REPL ends. The session returned is the caller's, as one piped in is: like any session it gets
+#' `session_shutdown` when collected or at unload (D-085), so a later turn finds its direct specs.
 #' @noRd
 repl_main = function(rs) {
   .gptr_repl = rs
   force(.gptr_repl)
-  piped = rs$session
   on.exit(repl_close(rs), add = TRUE)
   rs$reader = console_reader(rs$stdin)
   # completion only after the trigger characters (IC-81) where R's completion calls the custom
@@ -1139,14 +1138,7 @@ repl_main = function(rs) {
     rs$interrupts = 0L
     repl_dispatch(rs, line)
   }
-  s = rs$session
-  if (!is.null(s) && !identical(s, piped)) {
-    d = session_data(s)
-    ev_dispatch("session_shutdown", ev_new("session_shutdown", session = d$id, run = NULL,
-                                           agent = "main", turn = d$turns, reason = "exit"),
-                session = s)
-  }
-  invisible(s)
+  invisible(rs$session)
 }
 
 #' Choose and save a default before the first interactive chat; FALSE returns to R

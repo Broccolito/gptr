@@ -3606,7 +3606,7 @@ name and semantics follow Pi `1b347794`; `gptr` means gptr-specific. Handlers mu
 | `resources_discover` | pi | collect | `cwd`, `reason` | `list(skill_paths, prompt_paths, agent_paths)` (chr each) | P17 |
 | `session_start` | pi | collect (before the prompt freezes) | `reason` (`new`, `fork`, `resume`, `replay`, `child`) | `list(sections = named list (chr or NULL to remove), blocks = list of context blocks for the first message)` | P06 |
 | `session_before_fork` | pi | first decision | `source`, `at` | `list(cancel = TRUE, reason)` | P06 |
-| `session_shutdown` | pi | notify | `reason` (`exit`, `gc`, `unload`) | - | P06, P14 |
+| `session_shutdown` | pi | notify | `reason` (`gc`, `unload`; a session the console returns at `/exit` stays the caller's) | - | P06 |
 | `input` | pi | transform chain | `text`, `source` (`prompt`, `pipe`, `repl`, `passthrough`, `steer`; `steer` = pause-menu input or a line typed while a console answer runs, IC-76) | `list(action = "continue" \| "transform" \| "handled", text)` | P08, P14 |
 | `agent_start`, `agent_end` | pi | notify | `agent_end`: `status`, `reason`, `usage` (the run's rows), `doc` (site or NULL), `turns` | - | P06 |
 | `turn_start`, `turn_end` | pi | notify | `turn_end`: `message` (assistant), `results` (tool results) | - | P06 |

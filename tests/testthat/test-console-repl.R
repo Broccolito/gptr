@@ -894,6 +894,23 @@ test_that("the end of piped input leaves the REPL like /exit", {
   expect_identical(res$text, "ok")
 })
 
+test_that("a session the console created stays the caller's after /exit, with its specs", {
+  skip_on_cran()
+  local_console_test()
+  local_scripted_ui()
+  fake = gptr_fake_provider(list("first", "second"))
+  local_console_stdin(c("hello", "/exit"))
+  s = NULL
+  utils::capture.output({
+    s = peter(.stdin = TRUE, model = fake, tools = list(test_tool("exit_probe", function(ctx) 1)),
+              envir = new.env())
+  })
+  expect_false(is.null(registry_get("tool", "exit_probe", session = s$id)))
+  # nobody answers the egress question here: without its provider record the turn is refused
+  expect_no_error(peter(s, "again", envir = new.env()))
+  expect_identical(s$text, "second")
+})
+
 test_that("under R < file the piped console reads the lines after its call, echoed once (IC-59)", {
   skip_on_cran()
   dir = withr::local_tempdir()
