@@ -1659,6 +1659,10 @@ Decisions:
   - `model = "claude-cli"`;
   - `model = "codex"`;
   - a local Ollama model, `ollama/qwen3:1.7b` or another installed tool-calling model (IC-74).
+    (Amended in Task 28: `ollama/qwen3.8:27b`, the maintainer's choice of 2026-10-22.)
+  - (Amended in Task 28:) Versa GPT-5.6 Sol (`versa/gpt-5.6-sol-2026-07-09`) and Versa Bedrock Opus
+    4.8 (`versa-bedrock/us.anthropic.claude-opus-4-8`), registered by the setup file that
+    `GPTR_LIVE_SETUP` names, keys through `gptr_env()` only.
 - Scenarios, at most 4 short prompts each:
   - S1, steer while streaming: the live row shows `1 queued`; `›` appears at the boundary; the
     relay is in the request. Time from Enter to delivery. CLI routes deliver after the CLI's
@@ -1677,14 +1681,18 @@ Decisions:
     run C 30 times beside 2 x nproc busy processes; `Paused` appears within 1 s of every ^C, and `kept
     in history` within 1 s of a ^C at the idle editor. (Amended in the review of Tasks 16-21: it failed,
     6 of 19 runs at load average 40-57, so Task 18's fallback is in: `-isig` in character mode, the
-    composer reading byte 0x03, isig back on while in-process R code runs; S10 checks it.)
+    composer reading byte 0x03, isig back on while in-process R code runs; S10 checks it.) (Amended
+    in Task 28: on a slow fake route; as in run C the draft is typed while the answer streams, `c`
+    continues, and the second Ctrl-C comes at the idle prompt where the draft waits.)
   - S9, the maintainer's manual checks:
     - RStudio console: the popup appears only on triggers; editor completion works while peter
       waits; a stale line is routed at a question; there is no band.
     - Windows Terminal Rterm: plain prompt and Tab completion.
     - Terminal.app and iTerm2: the OSC 11 reply and the band.
 - Record in `dev/progress/P28.md`: transcripts, timings, REQ roles, and pass or fail per scenario
-  and route. Each defect becomes Task 29+ with a red test first.
+  and route. Each defect becomes Task 29+ with a red test first. (Amended in Task 28:) Also each
+  run's recording: `peter()` starts from a sourced script with `gptr_doc("session.R")` bound, and
+  the record parses, keeps each steer and replays with `GPTR_REPLAY=replay` and no model.
 
 Files: `dev/dogfood/p28-console.R` (new), `dev/progress/P28.md`.
 
@@ -1777,5 +1785,5 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | A5 | cross-plan checks and `python3 -I dev/ci/check-plans.py` | | pending |
 | A6 | `R CMD check --as-cran --no-manual` (0 errors, 0 warnings) | | pending |
 | A7 | hosted CI: the pty cases (B, C, D, G, H, I, Enter, Tab, Up, ask-after-idle, band, completion) on the ubuntu and macOS NOT_CRAN lanes; Windows lanes green with them skipped by OS guard | | pending |
-| A8 | live dogfood S1-S8 on claude-cli, codex and Ollama (Task 28) | | pending |
-| A9 | the maintainer's manual checks (S9): RStudio console, Windows Terminal Rterm, Terminal.app and iTerm2 band | | pending |
+| A8 | live dogfood S1-S8 on claude-cli, codex and Ollama (Task 28) | m5 at 9af422d6 (`dev/dogfood/p28-console.R`, terminal R in tmux 100x32): 487 of 490 checks on claude-cli, codex, `ollama/qwen3.8:27b`, Versa GPT-5.6 Sol and Bedrock Opus 4.8, every recording parsed and replayed without a model; the 3 (GPT S8-cols50, the answer ended before the steer's Enter) passed alone twice. S10: 30 of 30 beside 2 x 16 busy processes. m1-m4's defects: Tasks 29-38 | pass at 9af422d6 |
+| A9 | the maintainer's manual checks (S9): RStudio console, Windows Terminal Rterm, Terminal.app and iTerm2 band | S9 at 31872d53, by an agent on windows it opened and closed: Terminal.app Basic, Pro, Novel and Man Page answer OSC 11 and get a band fitted to the background; tmux at 60, 80 and 120 columns, 15 degraded modes, VS Code's terminal, Positron and the live scenario on claude-cli and codex as designed; `R < file` (Task 40), Ocean and Grass (Task 41) and RStudio's boxed notice, from earlier screenshots (Task 39), fixed. RStudio and R.app not launched: the capture harness is marked unsafe. Windows Terminal Rterm (no Windows machine) and iTerm2 (not installed) not available | partial: RStudio, R.app, Windows Terminal Rterm and iTerm2 open |
