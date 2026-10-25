@@ -412,7 +412,7 @@ bridge_knit_target = function(engine, code) {
   list(command = prog, args = args, via = "shell")
 }
 
-#' All display lines of a gptr_cmd (stdout, [stderr], status) without truncation
+#' All display lines of a gptr_cmd (stdout, `[stderr]`, status) without truncation
 #' @noRd
 bridge_cmd_lines = function(x) {
   err = clean_terminal(x$stderr)

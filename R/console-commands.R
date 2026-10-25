@@ -128,7 +128,7 @@ cmd_doc_site = function(s) {
   tryCatch(ext_service_get("doc.site")(s), error = function(e) NULL)
 }
 
-#' /help [command]: the commands, the input syntax and the keys, which follow the console as the
+#' `/help [command]`: the commands, the input syntax and the keys, which follow the console as the
 #' banner's do (repl_banner()): enter, tab's follow-up and up where a composer reads keys (class T),
 #' tab's completion where the REPL completes (after `! /` in RStudio), and what a line typed while
 #' peter works does there; in the banner's type, names bold and keys lower case, every description
@@ -265,7 +265,7 @@ cmd_model = function(args, ctx) {
   paste0("Model: ", args, " (used from the first prompt)")
 }
 
-#' /mode [mode]: on a session from the next turn; before the first prompt for that prompt
+#' `/mode [mode]`: on a session from the next turn; before the first prompt for that prompt
 #' @noRd
 cmd_mode = function(args, ctx) {
   rs = console_repl_find()
@@ -320,7 +320,7 @@ console_env_lines = function(env, pattern = "", n = 30L) {
   c(lines, if (length(nms) > n) paste0("(+ ", length(nms) - n, " more)"))
 }
 
-#' /env [pattern]
+#' `/env [pattern]`
 #' @noRd
 cmd_env = function(args, ctx) {
   rs = console_repl_find()

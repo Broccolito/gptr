@@ -697,7 +697,7 @@ console_pause_one = function(rec, cut = FALSE) {
   invisible(NULL)
 }
 
-#' End the partial lines of every tracked run, cut (an abort, the pause menu's [b]), and take the
+#' End the partial lines of every tracked run, cut (an abort, the pause menu's `[b]`), and take the
 #' live row down; the next block after it is separated like the first block after an input line
 #' @noRd
 console_render_pause = function() {

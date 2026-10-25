@@ -900,7 +900,7 @@ console_reading = function(rs, body) {
 }
 
 #' A wait of the console's R code (`!!gptr_wait(s)`, repl_passthrough()) on sessions `ss`, a run the
-#' pause menu's [b] sent to the background among them: while `pump()` waits they are the console's
+#' pause menu's `[b]` sent to the background among them: while `pump()` waits they are the console's
 #' foreground (`console_state()$waited`, console_foreground()), so their rows, live row and status
 #' line show as a prompt's do, in the console's colours, outside the code's evaluation (its
 #' `.gptr_eval_outside`), and a terminal reads keys as during a prompt's call, Enter steering: the
@@ -1007,7 +1007,7 @@ mention_line = function(said) {
 #' One prompt through console_send(), after the line naming what its @mentions resolved to
 #' (mention_line()); the answer is printed here when the renderer hooks did not stream it
 #' (verbosity < 2), any other value is printed. A prompt to a session that runs (in the
-#' background: after the pause menu's [b], or `background = TRUE`) steers it (route_continue()),
+#' background: after the pause menu's `[b]`, or `background = TRUE`) steers it (route_continue()),
 #' so its queue line says so, `<queued glyph> steer<sep><text>` (console_queue_line()), once sent
 #' @noRd
 repl_turn = function(rs, text) {

@@ -235,7 +235,7 @@ bridge_status_line = function(x) {
   character()
 }
 
-#' The budgeted view of a gptr_cmd: stdout head 40% + tail 60%, then "[stderr]" within
+#' The budgeted view of a gptr_cmd: stdout head 40% + tail 60%, then `[stderr]` within
 #' max(200, 25%) of the budget (head 20%), then the status line (04 5.10)
 #' @noRd
 bridge_cmd_view = function(x, max_tokens = NULL) {

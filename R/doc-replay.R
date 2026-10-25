@@ -900,7 +900,7 @@ doc_on_console_command = function(event, ctx) {
 
 #' Append console lines to the console transcript target (an .R transcript; the writer redacts
 #' them with the persist profile under write consent); always NULL (notify channels). While
-#' `session` runs in the background (the pause menu's [b]), whose block is written when the run
+#' `session` runs in the background (the pause menu's `[b]`), whose block is written when the run
 #' ends, they wait in its live handle until doc_on_agent_end() has written that block, so the
 #' record keeps the order typed
 #' @noRd

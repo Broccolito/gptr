@@ -168,9 +168,9 @@ console_ahead = function(rd, accept) {
 #' be kept above the chevron (ui_draft_kept()). A key or its word
 #' answers, also one typed before the chevron showed or with the Ctrl-C (console_ahead()), an empty
 #' answer continues, anything else is kept in the history, never sent, under a dim row that says
-#' so and names the keys (ui_reask()). [s] and [f] read their text at the chevron of their own
+#' so and names the keys (ui_reask()). `[s]` and `[f]` read their text at the chevron of their own
 #' question, `? Steer` or `? Follow-up`, and queue it as Enter and Tab do (policy_enqueue()), their
-#' queue line, without the text it shows under, right under it, as under any question. [b] closes
+#' queue line, without the text it shows under, right under it, as under any question. `[b]` closes
 #' the answer's cut row, then says in dim terms (console_terms()) that the run went to the
 #' background, the service's notice one of them, then lists what the REPL held for after the run as
 #' kept (console_background_settle()), or in red why not.
@@ -279,7 +279,7 @@ policy_menu = function(cnd, pol) {
   }
 }
 
-#' After [b] (policy_menu()) no run ends in the foreground, so the follow-ups, `/cmd` and `!code`
+#' After `[b]` (policy_menu()) no run ends in the foreground, so the follow-ups, `/cmd` and `!code`
 #' lines the REPL held for after it (the reader's `typed` lines) and a T console's draft would be
 #' the next prompts while the run goes on, a prompt a steer of it (route_continue()). As after an
 #' abort (console_queue_left()) they go to the console history, listed once (console_keep();
@@ -341,7 +341,7 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
 #' says `taken back` in place of its kind where its queue line shows, so no line of a withdrawn
 #' steer reads as if it will be sent. A line whose text is on screen
 #' already, right above it, says `the$echoed` in its place: `not an answer` for a line a question
-#' read past (console_typed_ahead()), nothing for the pause menu's [s] and [f] text, which their
+#' read past (console_typed_ahead()), nothing for the pause menu's `[s]` and `[f]` text, which their
 #' question's title names (policy_menu()). Inside an evaluation it has the console's
 #' colours. It is a block of the person's lines (console_gap()), except right under a question
 #' whose read routed it; while an answer of the session's foreground run streams, it waits in the
