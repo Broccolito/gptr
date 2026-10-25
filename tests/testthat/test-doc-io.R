@@ -1219,7 +1219,9 @@ test_that("transcript appends need consent and pass the document_write event", {
   }))
   expect_true(doc_transcript_append(t, c("# direct R (no model)", "x = 1")))
   off()
-  expect_identical(readLines(t), c("# /model opus", "# DIRECT R (NO MODEL)", "X = 1"))
+  # a new transcript opens with its preamble (visual round 3), which no hook rewrites
+  expect_identical(readLines(t), c(doc_transcript_preamble(t), "# /model opus",
+                                   "# DIRECT R (NO MODEL)", "X = 1"))
 })
 
 # ---- Task 11 adaptations (dev/DEVIATIONS.md D-117) -----------------------------------------------
@@ -1281,7 +1283,7 @@ test_that("transcript lines are appended only to an .R transcript", {
   }
   t = file.path(proj, ".gptr", "transcripts", "session.R")
   expect_true(doc_transcript_append(t, "# /model opus"))
-  expect_identical(readLines(t), "# /model opus")
+  expect_identical(readLines(t), c(doc_transcript_preamble(t), "# /model opus"))
 })
 
 test_that("transcript lines are written and shown to hooks redacted (IC-74)", {
@@ -1296,7 +1298,7 @@ test_that("transcript lines are written and shown to hooks redacted (IC-74)", {
   secret = "Authorization: Bearer FAKEtoken1234567890abcdef"
   expect_true(doc_transcript_append(t, c("# direct R (no model)", paste0("h = \"", secret, "\""))))
   off()
-  out = readLines(t, encoding = "UTF-8")
+  out = readLines(t, encoding = "UTF-8")[-(1:3)]
   expect_length(out, 2L)
   expect_identical(out[1], "# direct R (no model)")
   expect_false(any(grepl("FAKEtoken", out, fixed = TRUE)))

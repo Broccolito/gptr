@@ -1395,6 +1395,7 @@ doc_transcript_append = function(path, lines, session = NULL) {
   lines = ev$lines %||% lines
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   invisible(isTRUE(doc_rewrite(path, function(doc) {
-    list(lines = c(doc$lines, as.character(lines)), value = TRUE)
+    first = if (!length(doc$lines)) doc_transcript_preamble(path)
+    list(lines = c(first, doc$lines, as.character(lines)), value = TRUE)
   })))
 }

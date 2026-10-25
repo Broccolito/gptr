@@ -3223,6 +3223,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   claude-cli and codex (S4) `↳ steer · s2: cylinders · after the CLI's answer` stayed in the scrollback above
   the edited steer's line, though `cylinders` was withdrawn and never sent. Contract-visible: 04 §15.10 IC-76.
   Tests: test-console-typing.R "a CLI route's steer taken back says so under its printed line (Task 37)".
+- Final visual loop, round 3 (2026-10-24): Task 76: every transcript file opens with the replay note and
+  `library(gptr)` (`doc_transcript_preamble()`, also from `doc_transcript_append()`), whatever its first block;
+  while a session runs in the background its block is written when the run ends, so the console's direct R and
+  command lines for it wait in its live handle (`doc_console_append()`) until `doc_on_agent_end()` has written the
+  block. A record whose first block was `!x = 1` had no `library(gptr)` before `peter()`, so `source()` failed,
+  and after [b] the lines typed meanwhile, `/exit` among them, came before the run's block, or were the whole
+  record until the run ended at R's prompt. Contract-visible: 04 IC-49, §11.5 (the transcript row). Tests:
+  test-doc-replay.R "direct R lines and slash commands of the console enter the transcript", "what the console
+  records while its session runs in the background follows its block"; test-doc-io.R (the appends' preamble).
 
 ## D-243 - P28 the composer, the live row and questions (2026-10-21)
 - Rule (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for status, queue

@@ -911,9 +911,48 @@ test_that("direct R lines and slash commands of the console enter the transcript
                                      list(session = NULL)))
   doc_on_console_command(list(data = list(text = "  ")), list(session = NULL))
   doc_on_console_direct(list(data = list(code = "", output = character())), list(session = NULL))
-  expect_identical(readLines(file.path(proj, ".gptr", "transcripts", "t.R")),
-                   c("", "# direct R (no model)", "summary(fit)$r.squared", "#> [1] 0.7528",
-                     "# /model opus"))
+  t = file.path(proj, ".gptr", "transcripts", "t.R")
+  # the file opens as every transcript does, whatever its first block (visual round 3)
+  head = c("# source() this file to replay the recorded code without calling a model;",
+           "# gptr_source(\".gptr/transcripts/t.R\", replay = \"live\") re-asks the model.",
+           "library(gptr)")
+  expect_identical(readLines(t), c(head, "", "# direct R (no model)", "summary(fit)$r.squared",
+                                   "#> [1] 0.7528", "# /model opus"))
+  # a session's block after it adds no second copy, and its peter() call follows library(gptr)
+  s = doc_test_session(list(doc_test_turn("n = 1", prompt = "count")))
+  site = doc_console_site(session_id = session_data(s)$id, template = "count")
+  doc_on_agent_end(list(status = "idle", doc = site, turns = 1L), list(session = s))
+  tr = readLines(t)
+  expect_identical(sum(tr == "library(gptr)"), 1L)
+  expect_lt(match("library(gptr)", tr), grep(" = peter(\"count\")", tr, fixed = TRUE))
+})
+
+test_that("what the console records while its session runs in the background follows its block", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  doc_project_transcript(".gptr/transcripts/t.R")
+  t = file.path(proj, ".gptr", "transcripts", "t.R")
+  s = doc_test_session(list(doc_test_turn("n = 1", prompt = "go bg")))
+  # the pause menu's [b] sent the run to the background: its block is written when it ends
+  live = session_live(s)
+  live$background = list(run = "u0000run1")
+  live$run = list(id = "u0000run1")
+  doc_on_console_direct(list(data = list(code = "gptr::gptr_last()$status",
+                                         output = "[1] \"running\"", status = "ok")),
+                        list(session = s))
+  doc_on_console_command(list(data = list(text = "/exit")), list(session = s))
+  expect_false(file.exists(t))
+  live$run = NULL
+  site = doc_console_site(session_id = session_data(s)$id, template = "go bg")
+  doc_on_agent_end(list(status = "idle", doc = site, turns = 1L), list(session = s))
+  # in the order typed (visual round 3: the block came after them, or only at R's prompt)
+  tr = readLines(t)
+  at = c(grep(" = peter(\"go bg\")", tr, fixed = TRUE), match("gptr::gptr_last()$status", tr),
+         match("# /exit", tr))
+  expect_false(anyNA(at))
+  expect_identical(order(at), 1:3)
+  expect_lt(match("library(gptr)", tr), at[[1L]])
+  expect_null(live$held)
 })
 
 # ---- Task 13 adaptations (dev/DEVIATIONS.md D-122) ----------------------------------------------
@@ -1071,7 +1110,8 @@ test_that("a direct R line that failed or was interrupted is inert, so the trans
   # a payload without a status (an older front end) is a line that ran
   direct(list(code = "y_old = 3", output = character()))
   expect_identical(readLines(t),
-                   c("", "# direct R (no model; error)", "#~ summary(fti)",
+                   c(doc_transcript_preamble(t),
+                     "", "# direct R (no model; error)", "#~ summary(fti)",
                      "", "# direct R (no model; interrupt)", "#~ x_before = 1",
                      "#~ Sys.sleep(1e6)",
                      "", "# direct R (no model)", "x_after = 2", "x_after", "#> [1] 2",

@@ -3932,7 +3932,7 @@ statement's first line. Ownership: the run of blocks starting at the first non-b
 | `.Rmd` | a separate chunk `` ```{r gptr-<id>} `` directly after the owning chunk (fence and prefix copied), body with the markers, no `#>` lines |
 | `.qmd` | a chunk `` ```{r} `` whose first line is `#| label: gptr-<id>`, same body |
 | `.ipynb` | a code cell `{"cell_type": "code", "execution_count": null, "id": "gptr-<id>", "metadata": {"gptr": {"id", "model", "prompt", "date", "session", "turn", "value"}}, "outputs": [], "source": [...]}` after the calling cell; keys sorted; indentation copied from the file (Jupyter: 1 space); numbers kept as read (gptr writes no float of its own, so Jupyter's Python repr is preserved; D-158); only `source` and `metadata.gptr` change on rewrite; never written while the notebook is open: in Jupyter the block is shown as the cell output and kept pending until `gptr_doc(path, sync = TRUE)` (IC-50) |
-| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: a header comment (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, or `none kept (gptr_init() keeps session logs in .gptr/)` when the log is in `tempdir()/gptr`, which R deletes at exit; `# source() this file to replay ...`), `library(gptr)`, then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output; slash commands as comments (`# /model opus`) |
+| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: a header comment (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, or `none kept (gptr_init() keeps session logs in .gptr/)` when the log is in `tempdir()/gptr`, which R deletes at exit; `# source() this file to replay ...`), `library(gptr)` (at the top of every transcript, whatever its first block, IC-49), then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output; slash commands as comments (`# /model opus`) |
 
 **Undone blocks** (G7 §3.8): header `status=undone`, every body line prefixed `#~ `; Rmd/qmd chunks get
 `eval=FALSE` (`#| eval: false`); ipynb `metadata.gptr.status = "undone"` plus `#~ ` source lines. A top-level System 1
@@ -4623,6 +4623,12 @@ blank text is written `## Steer:` without the trailing space, and a line is stee
 A REPL turn is a console turn whatever started the console: a sourced script, an `Rscript` file or the editor's
 buffer holding the `peter()` statement that started it locates none of its turns (P28 Task 29: the REPL marks
 its gateway calls `gptr_console`, and `doc_locate()` runs no finder for them).
+Every transcript file opens with the replay note and `library(gptr)` (`doc_transcript_preamble()`), whatever its
+first block, a direct R line or a command too; while a session runs in the background (the pause menu's [b]),
+whose block is written when its run ends, the console's direct R and command lines for it wait in its live handle
+and follow that block, in the order typed (`doc_console_append()`, P28 Task 76, visual round 3: a record opened
+with `x = 1` had no `library(gptr)`, and `!gptr_last()$status` and `# /exit` came before the `peter("go bg")` they
+followed).
 A console transcript records every settled run; a run that ended `aborted`, `error`, `max_turns`, `blocked` or
 `budget` gets a last `## Run: <status>` line and caches no S2 answer (a script document records only `idle`
 runs). P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one

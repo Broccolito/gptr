@@ -767,6 +767,7 @@ doc_replay_service = function(call) {
 doc_on_agent_end = function(event, ctx) {
   site = event$doc
   s = ctx$session
+  on.exit(doc_console_held(s), add = TRUE)
   if (is.null(site) || is.null(site$path) || is.null(s)) return(NULL)
   status = event$status %||% "idle"
   if (!identical(status, "idle") && !isTRUE(site$console)) return(NULL)
@@ -898,14 +899,34 @@ doc_on_console_command = function(event, ctx) {
 }
 
 #' Append console lines to the console transcript target (an .R transcript; the writer redacts
-#' them with the persist profile under write consent); always NULL (notify channels)
+#' them with the persist profile under write consent); always NULL (notify channels). While
+#' `session` runs in the background (the pause menu's [b]), whose block is written when the run
+#' ends, they wait in its live handle until doc_on_agent_end() has written that block, so the
+#' record keeps the order typed
 #' @noRd
 doc_console_append = function(lines, session = NULL) {
+  live = if (inherits(session, "gptr_session")) session_live(session)
+  if (!is.null(live$background) && !is.null(live$run)) {
+    live$held = c(live$held, list(lines))
+    return(NULL)
+  }
   target = doc_transcript_target(ask = FALSE)
   if (!is.null(target) && identical(doc_format_of(target), "r")) {
     doc_transcript_append(target, lines, session = session)
   }
   NULL
+}
+
+#' The console lines held while session `s` ran in the background (doc_console_append()), appended
+#' after its block
+#' @noRd
+doc_console_held = function(s) {
+  live = if (inherits(s, "gptr_session")) session_live(s)
+  held = live$held
+  if (!length(held)) return(invisible(NULL))
+  live$held = NULL
+  for (lines in held) doc_console_append(lines, s)
+  invisible(NULL)
 }
 
 # ---- exports: gptr_doc(), gptr_blocks(), gptr_cache() (contract 6.4) ---------------------------
