@@ -448,7 +448,7 @@ cmd_status = function(args, ctx) {
     paste0("file      ", d$file %||% "(not written yet)"))
 }
 
-#' /clear: a new conversation that keeps the model and mode
+#' /clear: a new conversation that keeps the model, its thinking level and the mode
 #' @noRd
 cmd_clear = function(args, ctx) {
   rs = console_repl_find()
@@ -456,8 +456,11 @@ cmd_clear = function(args, ctx) {
   s = rs$session
   if (!is.null(s)) {
     # keep the console call's (or /model's) model: a spec registered for the old session only
-    # would not resolve from its model string in a new session
-    rs$model = rs$model %||% s$model
+    # would not resolve from its model string in a new session; else the session's, its level as
+    # the `:<level>` suffix (a router chooses its own)
+    d = session_data(s)
+    level = if (!is.null(d$thinking) && !startsWith(d$model, "router:")) paste0(":", d$thinking)
+    rs$model = rs$model %||% paste0(d$model, level)
     rs$mode = s$mode
   }
   rs$session = NULL

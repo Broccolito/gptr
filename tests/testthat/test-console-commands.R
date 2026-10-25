@@ -445,6 +445,18 @@ test_that("/clear starts a new conversation and keeps model and mode", {
   expect_identical(rs$notes, character())
 })
 
+test_that("/clear keeps the thinking level of the session it ends", {
+  local_console_commands()
+  local_project()
+  s = peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env(),
+            .opts = list(thinking = "high"))
+  expect_identical(session_data(s)$thinking, "high")
+  rs = repl_state(s, new.env())
+  run_command(rs, "/clear")
+  expect_identical(rs$model, paste0(s$model, ":high"))
+  expect_identical(model_canonical(rs$model)$thinking, "high")
+})
+
 test_that("/cost, /context, /fork and /resume work on a session that ran", {
   local_console_commands()
   local_project()
