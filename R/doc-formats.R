@@ -449,18 +449,18 @@ doc_console_statement = function(text, site) {
   if (first) paste0(var, " = peter(", args, ")") else paste0(var, " |> peter(", args, ")")
 }
 
-#' Header lines of a transcript session (contract 11.5 transcript row), once per session id; a new
-#' file's first lines are the preamble (doc_transcript_preamble())
+#' Header lines of a transcript session (contract 11.5 transcript row), once per session id, after
+#' a blank line; a new file's first lines are the preamble (doc_transcript_preamble()), as when
+#' doc_transcript_append() starts it
 #' @noRd
 doc_transcript_header = function(text, site) {
   id = site[["session_id"]] %||% "unknown"
   if (any(startsWith(text, paste0("# gptr session ", id, " ")))) return(character())
-  head = c(paste0("# gptr session ", id, " -- started ",
-                 with_calendar_preserved(format(Sys.time(), "%Y-%m-%d %H:%M:%S"))),
-           paste0("# machine log: ", site[["session_file"]] %||%
-                    "none kept (gptr_init() keeps session logs in .gptr/)"))
-  if (!length(text)) head = c(head, doc_transcript_preamble(site[["path"]]))
-  c(if (length(text)) "", head)
+  c(if (!length(text)) doc_transcript_preamble(site[["path"]]), "",
+    paste0("# gptr session ", id, " -- started ",
+           with_calendar_preserved(format(Sys.time(), "%Y-%m-%d %H:%M:%S"))),
+    paste0("# machine log: ", site[["session_file"]] %||%
+             "none kept (gptr_init() keeps session logs in .gptr/)"))
 }
 
 #' The lines that make the transcript at `path` re-source (IC-49): how to replay it, then
