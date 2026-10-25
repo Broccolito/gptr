@@ -203,11 +203,17 @@ jobs:
     name: ubuntu-latest (devel, NOT_CRAN=false)
     # R-devel installs every dependency from source (about 65 minutes on a cold cache)
     timeout-minutes: 120
+    # CRAN's timing thresholds; a NOTE fails, and so does a check over 480 s, under the 600 s at
+    # which CRAN's pretest flags a package (CI-93)
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       NOT_CRAN: false
       _R_CHECK_THINGS_IN_OTHER_DIRS_: true
       _R_CHECK_CRAN_INCOMING_: false
+      _R_CHECK_TEST_TIMING_CPU_TO_ELAPSED_THRESHOLD_: 2.5
+      _R_CHECK_EXAMPLE_TIMING_CPU_TO_ELAPSED_THRESHOLD_: 2.5
+      _R_CHECK_EXAMPLE_TIMING_THRESHOLD_: 5
+      _R_CHECK_LIMIT_CORES_: true
     steps:
       - uses: actions/checkout@v6
       - uses: r-lib/actions/setup-pandoc@v2
@@ -232,11 +238,19 @@ jobs:
           printf 'GPTR_TEST_ROOT_EVIDENCE=%s\nGPTR_TEST_ROOT_READER=%s\nGPTR_TEST_ROOT_PYTHON=%s\n' \
             "$gptr_root_evidence" "$GITHUB_WORKSPACE/dev/ci/test-root-teardown-readback.py" \
             /usr/bin/python3 >> "$GITHUB_ENV"
+      - name: Start the check's clock
+        run: echo "GPTR_CHECK_START=$(date +%s)" >> "$GITHUB_ENV"
       - uses: r-lib/actions/check-r-package@v2
         with:
           build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'
           args: 'c("--no-manual", "--as-cran")'
-          error-on: '"warning"'
+          error-on: '"note"'
+      - name: Fail if the check took over 480 s
+        if: always()
+        run: |
+          secs=$(( $(date +%s) - GPTR_CHECK_START ))
+          echo "R CMD check took $secs s (budget 480 s)"
+          test "$secs" -le 480
       - name: Observe exact Linux suite roots and check-child exit
         if: always() && runner.os == 'Linux'
         shell: bash
