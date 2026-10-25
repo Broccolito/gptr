@@ -2786,7 +2786,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Red: none (docs). The extended test passes before the change: with `gptr.replay = "replay"` the
   first call is silent, and a file holding `gptr_return(1)` sourced under `"auto"` gives the notice.
 - Cause: replay-4 copied IC-48's "silent while a document is replayed" into `?gptr_return` and 03
-  Section 4.3; the code is silent only when `replay_mode()` is `"replay"` (P08 adaptation 13), so a
+  section 4.3; the code is silent only when `replay_mode()` is `"replay"` (P08 adaptation 13), so a
   recorded `gptr_return()` that stays in the code (nested, or a pipe split over lines) prints it
   when the document is sourced under the default `"auto"`.
 - Fix: `?gptr_return`, 03 section 4.3, 04 section 6.6 and IC-48 say "silent in replay mode
@@ -3558,7 +3558,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Fix: `s1_call()` refuses `agents =` (`length(call$ids$agents)`), then `parallel =`, as
   `invalid_argument` naming it ("... a decision model answers in one call (an answer per input
   element); drop `agents =`."), before `s1_ready()`; with no model the refusal says "this call is
-  conversational". `?peter` (`agents`), 03 Section 4.1, 04 section 6.1.1 step 5 and the NEWS bullet
+  conversational". `?peter` (`agents`), 03 section 4.1, 04 section 6.1.1 step 5 and the NEWS bullet
   amended.
 - Green: `^s1-route$` PASS 321; s1-route, subagent-team, gptr-gateway, arch-layers, lint-rules, zzz,
   copy-s1 and s1-types PASS 1522; full suite (NOT_CRAN) FAIL 0, WARN 0, SKIP 66, PASS 35515. Lint
