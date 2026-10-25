@@ -1,6 +1,8 @@
 # R-CMD-check.yaml's Windows rows (release, oldrel-4), each split into four serial R CMD check
 # shards. The required contexts windows-latest (release) and windows-latest (oldrel-4) are gates
 # that pass only when the latest attempt of each of the four shards of their R version passed.
+# The cran job checks the whole package as CRAN does (CRAN's test list, both manuals, CRAN's
+# thresholds; a NOTE fails) and fails over the 600 s at which CRAN's pretest flags a check (CI-93).
 on:
   push:
     branches: [main]
@@ -188,3 +190,52 @@ jobs:
             echo "::error::These windows-latest (${{ matrix.r }}) shards did not pass:$missing"
             exit 1
           fi
+
+  cran:
+    runs-on: windows-latest
+    name: windows-latest (release, NOT_CRAN=false)
+    timeout-minutes: 45
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      NOT_CRAN: false
+      _R_CHECK_THINGS_IN_OTHER_DIRS_: true
+      _R_CHECK_CRAN_INCOMING_: false
+      _R_CHECK_TEST_TIMING_CPU_TO_ELAPSED_THRESHOLD_: 2.5
+      _R_CHECK_EXAMPLE_TIMING_CPU_TO_ELAPSED_THRESHOLD_: 2.5
+      _R_CHECK_EXAMPLE_TIMING_THRESHOLD_: 5
+      _R_CHECK_LIMIT_CORES_: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      # the PDF manual needs LaTeX, and the HTML manual's validation HTML Tidy
+      - uses: r-lib/actions/setup-tinytex@v2
+        env:
+          TINYTEX_INSTALLER: TinyTeX
+      - name: Install HTML Tidy
+        run: choco install html-tidy --no-progress -y
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+      - name: Start the check's clock
+        shell: bash
+        run: echo "GPTR_CHECK_START=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          artifact-name: windows-results-cran
+          build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'
+          args: 'c("--as-cran")'
+          error-on: '"note"'
+      - name: Fail if the check took over 600 s
+        if: always()
+        shell: bash
+        run: |
+          secs=$(( $(date +%s) - GPTR_CHECK_START ))
+          echo "R CMD check took $secs s (budget 600 s)"
+          test "$secs" -le 600
+      - name: Fail unless R CMD check wrote its status
+        shell: bash
+        run: grep '^Status:' check/gptr.Rcheck/00check.log
