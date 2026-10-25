@@ -320,8 +320,8 @@ bg_run_opts = function(run) {
 }
 
 #' Hold the session and record its live handle `list(ui, name, run, ask, waiting, opts)` (ids, its
-#' first prompt cut, the pending ask, flags and options only); the first registration also adds the job row, installs
-#' the UI wrappers and prints the notice
+#' first prompt cut, the pending ask, flags and options only); the first registration also adds the
+#' job row, installs the UI wrappers and prints the notice
 #' @noRd
 bg_track = function(s, run) {
   d = session_data(s)
