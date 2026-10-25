@@ -370,7 +370,8 @@ repl_read_logical = function(rd, prompt) {
       if (is.na(x) || grepl(paste0("^\\s*", m[[3L]], "`*\\s*$"), x)) break
       body = c(body, sub(paste0("^ {0,", nchar(m[[2L]]), "}"), "", x))
     }
-    out = if (grepl("^([rR]|\\{r\\b.*)?$", trimws(m[[4L]]), perl = TRUE)) {
+    # RStudio's insert_matching leaves a backtick after a typed ```r
+    out = if (grepl("^([rR]|\\{r\\b.*)?`*$", trimws(m[[4L]]), perl = TRUE)) {
       paste0("!", paste(body, collapse = "\n"))
     } else {
       paste(c(trimws(line), body, m[[3L]]), collapse = "\n")

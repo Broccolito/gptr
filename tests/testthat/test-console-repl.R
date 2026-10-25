@@ -81,6 +81,14 @@ test_that("a fence is R code only for an r, R, {r...} or empty info string (Comm
   expect_identical(repl_read_logical(rd, "peter> "), "```python\nprint({x})\n```")
 })
 
+test_that("a fence typed in RStudio, whose insert_matching adds a backtick, is still R code", {
+  rd = stdin_reader(c("```r`", "x = 1", "````", "```R`", "y = 2", "```", "```python`", "z",
+                      "```"))
+  expect_identical(repl_read_logical(rd, "peter> "), "!x = 1")
+  expect_identical(repl_read_logical(rd, "peter> "), "!y = 2")
+  expect_identical(repl_read_logical(rd, "peter> "), "```python`\nz\n```")
+})
+
 test_that("a trailing backslash continues a line; end of input ends every block", {
   rd = stdin_reader(c("first part \\", "second part"))
   expect_identical(repl_read_logical(rd, "peter> "), "first part \nsecond part")
