@@ -1028,6 +1028,60 @@ test_that("keys read on the polling beat are a paste; after a stall they are typ
   })
 })
 
+test_that("a batch is timed by its last key read, not the reader's wait after it (CI-94)", {
+  # the real reader, which local_console_test() replaces
+  typed_chars = console_typed_chars
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$reader = console_reader()
+  rs$sending = quote(peter())
+  # fd 0 gets each key at its time; a poll waits up to its `ms` on the clock for the next one
+  clock = 0
+  fd0 = new.env()
+  local_mocked_bindings(reactor_now = function() clock, console_typed_chars = typed_chars)
+  local_mocked_bindings(
+    conn_create_fd = function(fd, close = TRUE) fd,
+    conn_is_incomplete = function(con) TRUE,
+    poll = function(processes, ms) {
+      if (length(fd0$at) && fd0$at[[1L]] <= clock + ms / 1000) {
+        clock <<- max(clock, fd0$at[[1L]])
+        return(list("ready"))
+      }
+      clock <<- clock + ms / 1000
+      list("timeout")
+    },
+    conn_read_chars = function(con, n = -1) {
+      x = fd0$keys[[1L]]
+      fd0$at = fd0$at[-1L]
+      fd0$keys = fd0$keys[-1L]
+      x
+    },
+    .package = "processx"
+  )
+  tick = function(t) {
+    clock <<- t
+    chars = console_typed_chars(rs$reader, 0L)
+    .gptr_repl = rs
+    console_keys(rs$reader, s, chars)
+  }
+  steers = function() vapply(session_data(s)$queue$steer, function(it) it$text, "")
+  utils::capture.output({
+    tick(0)
+    # a paste of four keys on the beat stays one draft
+    fd0$at = 0.04
+    fd0$keys = "a\rbc"
+    tick(0.05)
+    expect_identical(rs$reader$compose$draft, "a\nbc")
+    # keys typed 40 ms apart, the reader taking them as they come, are typed
+    fd0$at = 0.14 + c(0, 0.04, 0.08)
+    fd0$keys = c("\r", "d", "e")
+    tick(0.15)
+    expect_identical(steers(), "a\nbc")
+    expect_identical(rs$reader$compose$draft, "de")
+  })
+})
+
 test_that("a draft a run left waits for the follow-ups, then continues at the prompt (D-243)", {
   skip_on_cran()
   local_console_test()
@@ -1080,6 +1134,7 @@ test_that("the fd-0 reader returns complete lines, survives Ctrl-D and a /dev/nu
   child = file.path(dir, "child.R")
   writeLines(c(
     "as_utf8 = enc2utf8",
+    paste("reactor_now =", paste(deparse(reactor_now), collapse = "\n")),
     paste("console_typed_chars =", paste(deparse(console_typed_chars), collapse = "\n")),
     paste("console_typed_lines =", paste(deparse(console_typed_lines), collapse = "\n")),
     paste("console_typed_split =", paste(deparse(console_typed_split), collapse = "\n")),
