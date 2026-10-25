@@ -167,7 +167,7 @@ commands available in the current session, including any supplied by plugins or 
 | `/mode [plan|manual|edits|auto|yolo]` | Show the mode or switch it from the next turn. |
 | `/plan` | Switch to plan mode for read-only exploration and a proposed plan. |
 | `/tools` | List direct tools and `peter$` members. |
-| `/env [pattern]` | Describe workspace objects whose names contain the pattern. |
+| `/env [text]` | Describe workspace objects whose names contain the text. |
 | `/compact [focus]` | Compact the conversation now, optionally emphasizing a topic; may make a model request. |
 | `/cost` | Show this session's tokens and cost. |
 | `/context` | Show the token ledger of the last request. |

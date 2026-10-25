@@ -383,6 +383,20 @@ test_that("/status, /tools and /env describe the console", {
                    paste0("session   ", s$id, "  (idle, 1 turn)"))
 })
 
+test_that("/env and the banner in a fork list what the fork reads, a nearer binding shadowing", {
+  local_console_commands()
+  home = list2env(list(alpha = 1L, shared = "home"))
+  ov = overlay_new(home, "s1")
+  ov$beta = 2L
+  rs = repl_state(NULL, ov)
+  expect_identical(sub(":.*", "", run_command(rs, "/env")$out), c("alpha", "beta", "shared"))
+  expect_match(run_command(rs, "/env alp")$out, "^alpha: <integer>")
+  ov$shared = c("fork", "fork")
+  expect_match(run_command(rs, "/env shared")$out, "^shared: <character> length 2")
+  expect_identical(run_command(rs, "/env zz")$out, "(no objects)")
+  expect_identical(utils::capture.output(repl_banner(rs))[[2L]], "objects: alpha, beta, shared")
+})
+
 test_that("in the margin a label keeps a value wider than the row on its row", {
   local_console_commands()
   s = idle_session()

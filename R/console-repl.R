@@ -950,7 +950,7 @@ repl_banner = function(rs) {
   key = function(k, words) paste0(cli::style_bold(k), sym$dim(words))
   esc = tolower(console_interrupt_key())
   ws = if (is.null(workspace_dir())) "no .gptr/" else ".gptr/ found"
-  nms = sort(ls(repl_eval_env(rs)), method = "radix")
+  nms = console_env_names(repl_eval_env(rs))
   more = if (length(nms) > 6L) paste0(" (+ ", length(nms) - 6L, " more)")
   after = if (front_end() == "rstudio") "! /" else "@ ! /"
   # rows of whole terms (console_terms()), at the content width

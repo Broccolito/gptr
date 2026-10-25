@@ -17,7 +17,8 @@ console_commands = function() {
                  "Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]"),
     gptr_command("plan", cmd_plan, "Switch to plan mode (read-only exploration, then a plan)"),
     gptr_command("tools", cmd_tools, "List the direct tools and the peter$ members"),
-    gptr_command("env", cmd_env, "List objects of the console environment: /env [pattern]"),
+    gptr_command("env", cmd_env,
+                 "List the objects, or those whose names contain text: /env [text]"),
     gptr_command("compact", cmd_compact, "Compact the conversation now: /compact [focus]"),
     gptr_command("cost", cmd_cost, "Tokens and cost of this session"),
     gptr_command("context", cmd_context, "Token ledger of the last request"),
@@ -311,19 +312,33 @@ cmd_tools = function(args, ctx) {
     paste0("peter$ members: ", if (length(members)) paste(members, collapse = ", ") else "(none)"))
 }
 
-#' The first `n` objects of `env` whose names contain `pattern`, described without forcing
-#' promises (/env)
+#' The names code in `env` reads, sorted: a fork overlay's, then each lower overlay's and the first
+#' other environment's (/env, the banner)
 #' @noRd
-console_env_lines = function(env, pattern = "", n = 30L) {
-  nms = sort(ls(env), method = "radix")
-  nms = nms[grepl(pattern, nms, fixed = TRUE)]
+console_env_names = function(env) {
+  nms = ls(env)
+  while (!is.null(attr(env, "gptr_overlay", exact = TRUE))) {
+    env = parent.env(env)
+    nms = c(nms, ls(env))
+  }
+  sort(unique(nms), method = "radix")
+}
+
+#' The first `n` objects `env` reads whose names contain `text`, each described where it is bound,
+#' without forcing promises (/env)
+#' @noRd
+console_env_lines = function(env, text = "", n = 30L) {
+  nms = console_env_names(env)
+  nms = nms[grepl(text, nms, fixed = TRUE)]
   lines = vapply(utils::head(nms, n), function(nm) {
-    describe_binding(nm, env, budget = 40L)[[1L]]
+    e = env
+    while (!exists(nm, envir = e, inherits = FALSE)) e = parent.env(e)
+    describe_binding(nm, e, budget = 40L)[[1L]]
   }, "", USE.NAMES = FALSE)
   c(lines, if (length(nms) > n) paste0("(+ ", length(nms) - n, " more)"))
 }
 
-#' `/env [pattern]`
+#' `/env [text]`
 #' @noRd
 cmd_env = function(args, ctx) {
   rs = console_repl_find()
