@@ -1,4 +1,18 @@
-## Current checkpoint — P27 Windows coverage (PR #51), 2026-10-19
+## Current checkpoint — P28, CI-92/93, FIX-20 and the dev docs (PRs #78-#81), 2026-10-25
+
+`main` takes PRs #78-#81 in this order, each up to date with `main` and its 14 required checks green
+before it merges; plan [P28](plan/P28-console-codex.md) and its [log](progress/P28.md), CI-92,
+CI-93 and FIX-20 in [fixes](progress/fixes.md), decisions D-242..D-245 and D-253 and the D-240
+amendment in `DEVIATIONS.md`.
+
+| Status | Result |
+|---|---|
+| Merged | #78: P28, the Codex-style `peter()` console (Tasks 1-92), `b90a0040`. #79: CI-92, INFRA-03's driver answers the pause menu at its chevron; CI-93, the check fits CRAN's 600 s budget (the cran-mode lane fails on a NOTE or over 480 s, the new `windows-latest (release, NOT_CRAN=false)` job checks the package as CRAN does and fails on a NOTE or over 600 s, the CRAN test list goes from 66 files to 35). #80: FIX-20, the console review fixes (33 of 34 findings fixed, R29 in part; D-253). #81: the dev docs (one format for `dev/*.md`, the `dev/README.md` inventory and CI table, `AGENTS.md` as an exact copy of `CLAUDE.md`, the cheat sheet `07d70c6a`). Before them, #52-#77 (CI-74..CI-91, FIX-13..FIX-19). FIX-20's R22 also closes FIX-13's note that `/exit` released the console session's undo images (`gptr_rewind(s)` after `/exit` restores no object on `b90a0040`, restores it on `f04c3309`). |
+| Verified | #78: all 22 check runs green on `ecfad58c`. #79: INFRA-03 30 of 30 runs PASS 145 and 10 of 10 at load 254-465; with P28 merged 5 of 5 PASS 151 (UTF-8) and 3 of 3 PASS 136 SKIP 1 (`LC_ALL=C`); the CRAN list 12.3-12.9 s from 21.2-23.1 s; `R CMD check --as-cran --no-manual` in CRAN mode Status OK in 139 s. #80 at `e8f2728f`: console neighbours FAIL 0 SKIP 2 PASS 8796, `LC_ALL=C` FAIL 0 SKIP 29 PASS 8618, INFRA-03 run in both. #81: both letter pages of the sheet fit (column slack [5, 3, 15, 0] and [11, 10, 2, 0] px, no text wider than its column); `dev/release/tests` (pkgdown) PASS 17 in UTF-8 and `LC_ALL=C`; `check-files.R pkgdown` 0 problems; the four plan checks pass. |
+| Open | Found, not fixed: base `system()` with a command computed at run time escapes `sh:` rules (advisory gate, FIX-18); a new piped turn equal to a steer recorded in an earlier replayed block is skipped on replay (IC-55, FIX-16); a background job's end time is its first status look (FIX-15); bg-1 and plan-execute not exercised live; `gptr_source(replay = "replay")` keeps srcrefs, so replayed ggplot scale calls carry the document's text, and `gptr_export()` refuses console transcripts (FIX-13); `tests/testthat/setup.R` blanks a fixed list of keys, so a host secret can enter the test vault (CI-87); the writer's startup branch checks the ready file before liveness (CI-88); Windows setup's pak download sometimes times out (60 s; `R_DEFAULT_INTERNET_TIMEOUT` if it recurs); no CRAN test reaches 10 R files (CI-93); a live re-ask does not resend an `@file`'s head (FIX-20 R27); a `!code` line using an undone turn's object stays live in the transcript (FIX-20 R29). The other Open notes of CI-93 and FIX-20 are in their records. |
+| Remaining | On a fresh worktree at the final `main`: `R CMD check --as-cran` 0 errors, 0 warnings, 0 notes and the three workflows green; then only `main` is left. The CRAN submission and P25's live steps are the maintainer's. |
+
+## Historical checkpoint — P27 Windows coverage (PR #51), 2026-10-19
 
 Branch `claude/windows-coverage-p27` (draft PR #51 into `main`, merged from `main` at `74de8c6` and
 `d9a7840`), code head `406befb`; plan [P27](plan/P27-windows-coverage.md), fixes CI-25..CI-73 in
