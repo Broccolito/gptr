@@ -1108,16 +1108,20 @@ repl_main = function(rs) {
   if (!repl_setup(rs)) return(invisible(NULL))
   if (!rs$stdin && console_class() == "T") repl_background(rs$reader)
   repl_banner(rs)
+  # gptr's warnings show at once through the console's writer, the live row cleared: R would hold
+  # them until the REPL returns (warn = 0), and an IDE's handler (RStudio's, warn = 1) would box
+  # them beside a stale row; warn = 2 and warn < 0 keep R's way
+  warned = function(w) {
+    warn = getOption("warn", 0)
+    if (warn >= 2 || warn < 0) return(invisible())
+    console_notice("Warning: ", console_escape(conditionMessage(w)))
+    invokeRestart("muffleWarning")
+  }
   repeat {
     if (rs$exit) break
     repl_waiting_notice(rs)
-    # a readline-limit warning would wait for the REPL to return (warn = 0): shown at once
-    line = tryCatch(withCallingHandlers(
-      repl_read_logical(rs$reader, repl_prompt(rs)),
-      gptr_warning_readline_limit = function(w) {
-        console_notice("Warning: ", conditionMessage(w))
-        invokeRestart("muffleWarning")
-      }), interrupt = function(e) FALSE)
+    line = tryCatch(withCallingHandlers(repl_read_logical(rs$reader, repl_prompt(rs)),
+                                        gptr_warning = warned), interrupt = function(e) FALSE)
     if (isFALSE(line)) {
       rs$interrupts = rs$interrupts + 1L
       if (rs$interrupts >= 2L) break
@@ -1129,7 +1133,7 @@ repl_main = function(rs) {
     }
     if (is.na(line)) break
     rs$interrupts = 0L
-    repl_dispatch(rs, line)
+    withCallingHandlers(repl_dispatch(rs, line), gptr_warning = warned)
   }
   s = rs$session
   if (!is.null(s) && !identical(s, piped)) {

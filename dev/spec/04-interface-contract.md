@@ -202,7 +202,11 @@ once and drains only its synchronous display bytes; console controls do not ente
 Console controls (prompts, the pause menu, the console renderer) reach the console whatever
 `tee` is: the evaluator lifts its own capture sink while one is written, never a user's (IC-77).
 Ordinary `cat()` and printed objects remain captured. Base warning semantics, including
-`options(warn = 2)`, are unchanged.
+`options(warn = 2)`, are unchanged. The console REPL (`repl_main()`) shows a gptr warning signalled while it
+reads a prompt or runs a line at once, as `Warning: <text>` (escaped) through the console's writer, which clears
+and redraws the live row, and muffles it: R would hold it for its top level, which the console reaches only at
+`/exit`, and an IDE's handler would show it beside a stale row (RStudio's box). Under `warn >= 2` or `warn < 0`
+the REPL leaves it to R (P28 Task 92).
 
 Also in P01: `redactor_set(fun)` [internal] (`aaa-state.R`; P03 installs `redact`; it replaces the earlier
 `condition_redactor_set()`, IC-34),

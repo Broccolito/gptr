@@ -3886,6 +3886,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   sub-agent running it was `? Paused sdc8df9bda4`, a session id shown nowhere else; [s] and [f] act on the
   console's own session, which the live row and the sub-agent rows name. Contract-visible: 04 §15.10 (the pause
   menu). Tests: test-console-interrupt.R (the menu's title).
+- S9 in RStudio (2026-10-25): Task 92: the console REPL shows a gptr warning signalled while it reads a prompt or
+  runs a line at once, `Warning: <text>` escaped, through the console's writer (the live row cleared and
+  redrawn), and muffles it; `warn >= 2` and `warn < 0` keep R's semantics. Only the readline-limit warning had
+  that: any other waited for `/exit` (warn = 0) or was boxed by RStudio beside a stale live row (warn = 1), as
+  Task 39's messages were. Contract-visible: 04 §2. Tests: test-console-message-stream.R "a gptr warning during a
+  run is a console notice, never an IDE's box (S9)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

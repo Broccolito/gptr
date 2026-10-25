@@ -1777,7 +1777,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 88 | A test leaves a fake key in the vault and a later gateway test sends it to Anthropic (Windows shard 1) | b505cfe4 |
 | 89 | Console tests that force UTF-8 glyphs fail in a C locale (PR #78 CI, LC_ALL=C) | b9f98545 |
 | 90 | RStudio's editor completion while peter waits puts backticks around `$` and `::` completions (S9) | e106409d |
-| 91 | In RStudio's console Tab on plain text ending in a word such as `3:` rewrites it in backticks (S9) | (this commit) |
+| 91 | In RStudio's console Tab on plain text ending in a word such as `3:` rewrites it in backticks (S9) | e05faf56 |
+| 92 | A gptr warning during a run is boxed by RStudio beside a stale live row, or held until `/exit` (S9) | (this commit) |
 
 ## Out of scope
 
