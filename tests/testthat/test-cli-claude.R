@@ -801,11 +801,12 @@ test_that("a sub-agent asking in a served r call ends the streamed line, not the
   local_cli_cleanup(s)
   # the served call's tool line (D-192) ends the streamed line, its held word too, before the
   # prompts
-  asks = grep("^  sub-agent [ab] > r  gptr_mcp_serve", out)
+  asks = grep("^  \\? sub-agent [ab]: allow r\\?", out)
   expect_length(asks, 2L)
-  expect_identical(match("Fanning out HELDWORD", out) + 1L, match("  * r", out))
-  expect_true(all(asks > match("  * r", out)))
-  expect_true(any(grepl("^  sub-agent [ab] done ", out)))
+  expect_identical(sum(out == "  | r  gptr_mcp_serve(tools = 'r')"), 2L)
+  expect_identical(match("Fanning out HELDWORD", out) + 1L, match("  | r", out))
+  expect_true(all(asks > match("  | r", out)))
+  expect_true(any(grepl("^  # sub-agent [ab] done ", out)))
   text = fake_log(f, "mcp")[[1]]$text
   expect_match(text, "child done", fixed = TRUE)
   for (bit in c("HELDWORD", "flagged", "sub-agent", "every mode")) {
@@ -824,7 +825,7 @@ test_that("a claude-cli r call shows its tool line and result line at the consol
               mode = "auto")
   })
   local_cli_cleanup(s)
-  call = match("  * r  answer = mean(big_vector) * 2; answer", out)
+  call = match("  | r  answer = mean(big_vector) * 2; answer", out)
   result = grep("^    error: object 'big_vector' not found", out)
   answer = grep("^The tool said:", out)
   expect_false(is.na(call))
@@ -847,7 +848,7 @@ test_that("the answer after a served call streams as its deltas arrive, printed 
   })
   s = peter("Compute, then answer", model = f$model, envir = new.env(), mode = "auto")
   local_cli_cleanup(s)
-  # the fixture sends its three deltas 0.4 s apart: printed whole, they would appear at once
+  # the fixture sends its three rows 0.4 s apart: printed whole, they would appear at once
   first = match(TRUE, grepl("Streamed", seen$text, fixed = TRUE))
   last = match(TRUE, grepl("third.", seen$text, fixed = TRUE))
   expect_false(is.na(first) || is.na(last))
@@ -866,6 +867,7 @@ test_that("an init line with apiKeySource ANTHROPIC_API_KEY stops the turn: gptr
 
 test_that("billing and enclosing-agent variables never reach the claude child", {
   skip_on_cran()
+  local_vault()
   local_gptr_options(quiet = FALSE)
   f = local_fake_cli("claude", "text")
   withr::local_envvar(ANTHROPIC_API_KEY = "sk-ant-api03-p20fake-000000000000000000000",

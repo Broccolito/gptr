@@ -127,6 +127,8 @@ test_that("throw, warn-as-error, time limit and interrupt give paired events (IN
     texts = stats::setNames(vapply(tr, msg_text, ""), ord[seq_len(k)])
     expect_match(texts[["spin"]],
                  "^Interrupted after [0-9.]+ s; side effects may have occurred[.]$")
+    # the console shows the time the text states, once
+    expect_true(isTRUE(tr[[k]]$details$interrupted))
     if ("throw" %in% names(texts)) expect_match(texts[["throw"]], "boom", fixed = TRUE)
     if ("warn2" %in% names(texts)) expect_match(texts[["warn2"]], "warned", fixed = TRUE)
     if ("slowloop" %in% names(texts)) expect_match(texts[["slowloop"]], "time limit|elapsed")
@@ -485,6 +487,29 @@ test_that("gptr.noninteractive_ask = \"deny\" returns a denial the model sees", 
   expect_match(perm_denial_text(dec), "no one can approve", fixed = TRUE)
 })
 
+test_that("the end of a refused call says why it did not run; an error's does not (console-3)", {
+  local_permission_rules()
+  gptr_permissions(deny = "r(fn:writeLines)")
+  ev = local_events("tool_execution_end")
+  fake = gptr_fake_provider(list(fake_tool("r", code = "writeLines('hi', 'out.txt')"),
+                                 fake_tool("r", code = "stop('boom')"), "done"))
+  s = peter("write", model = fake, envir = new.env(), mode = "auto")
+  ends = ev(s)
+  expect_true(ends[[1L]]$is_error)
+  expect_match(ends[[1L]]$refused, "r\\(fn:writeLines\\)")
+  expect_true(ends[[2L]]$is_error)
+  expect_null(ends[[2L]]$refused)
+  expect_identical(msg_text(tool_results(s)[[1L]]),
+                   paste0("Permission denied: denied by the rule r(fn:writeLines). Explain what ",
+                          "you need or choose another approach."))
+  local_permissive()
+  local_tool("echo", function(input, ctx) "ran")
+  local_hook("tool_call", function(event, ctx) list(decision = "block", reason = "held"))
+  s = test_session()
+  dispatch(s, list(tc("echo")))
+  expect_identical(ev(s)[[1L]]$refused, "blocked by a hook: held")
+})
+
 test_that("the UI answers asks when the run's snapshot can prompt", {
   local_gptr_options(interactive = TRUE)
   ui = new.env()
@@ -513,6 +538,47 @@ test_that("the UI answers asks when the run's snapshot can prompt", {
   ui$answer = list(decision = "abort")
   perm_check(a_call(), run)
   expect_true(run$abort_after_call)
+})
+
+test_that("a denial with the person's text tells the model it is theirs (cheat-sheet review)", {
+  local_gptr_options(interactive = TRUE)
+  ui = new.env()
+  local_service("ui.get", function(session = NULL) {
+    list(has_ui = function() TRUE, permission = function(request) ui$answer)
+  })
+  local_policy("mode", function(call, ctx) list(decision = "ask", reason = "level 2"))
+  local_tool("w", function(input, ctx) "written")
+  told = function(answer) {
+    ui$answer = answer
+    msg_text(dispatch(test_session(), list(tc("w")))$msgs[[1L]])
+  }
+  ui$answer = list(decision = "deny", feedback = "use the other file")
+  expect_identical(perm_check(a_call(), test_run(test_session()))$reason, "use the other file")
+  expect_identical(told(ui$answer),
+                   paste0("The user declined this call and said: \"use the other file\". This is ",
+                          "the user's own instruction: do that instead; any call it needs is ",
+                          "approved separately."))
+  expect_match(told(ui_answer("deny")), "^Permission denied: the user declined\\. ")
+  # a denial gptr writes itself is a reason, never the person's words
+  expect_match(told(ui_answer("deny", reason = "no valid answer was given at the approval prompt")),
+               "^Permission denied: no valid answer was given at the approval prompt\\. ")
+})
+
+test_that("the model reads n <text> as the person's; the next call is asked (cheat-sheet review)", {
+  skip_on_cran()
+  local_project()
+  ui = local_scripted_ui(list(list(decision = "deny", feedback = "run k2 = 7 instead"), "y"))
+  ev = local_events("tool_execution_end")
+  fake = local_fake_provider(list(fake_tool("r", code = "k2 = 100"),
+                                  fake_tool("r", code = "k2 = 7"), "7"))
+  e = new.env()
+  s = peter("Set k2.", model = fake, envir = e, mode = "manual")
+  expect_match(msg_text(fake_requests(fake)[[2L]]$last_results[[1L]]),
+               "^The user declined this call and said: \"run k2 = 7 instead\"\\. ")
+  # its end says the person's text is why it did not run (review of Tasks 22-27)
+  expect_identical(ev(s)[[1L]]$refused, "the user said: run k2 = 7 instead")
+  expect_identical(ui$log$method, c("permission", "permission"))
+  expect_identical(e$k2, 7)
 })
 
 test_that("an option changed by model code mid-run does not change the run's gate (IC-53)", {
@@ -689,6 +755,28 @@ test_that("the request record names the asking agent; a nested call by its promp
   }
   expect_identical(ui$agents, c("main", "alpha", "'Summarise topic 3 of the long...'"))
   expect_identical(seen$agents, c("main", "alpha", "nested"))
+})
+
+test_that("the request record carries the call id; a nested member call its own", {
+  local_gptr_options(interactive = TRUE)
+  ui = new.env()
+  local_service("ui.get", function(session = NULL) {
+    list(has_ui = function() TRUE, permission = function(request) {
+      ui$ids = c(ui$ids, request$tool_call_id)
+      list(decision = if (identical(request$tool, "outer")) "allow" else "deny")
+    })
+  })
+  seen = new.env()
+  local_hook("permission_request", function(event, ctx) {
+    seen$ids = c(seen$ids, event$tool_call_id)
+    NULL
+  })
+  local_policy("mode", function(call, ctx) list(decision = "ask", reason = "level 2"))
+  local_tool("inner", function(input, ctx) "x")
+  local_tool("outer", function(input, ctx) dispatch_nested("inner", json_obj(), ctx))
+  dispatch(test_session(), list(tc("outer")))
+  expect_identical(ui$ids, c("c_outer", "c_outer/1"))
+  expect_identical(seen$ids, ui$ids)
 })
 
 test_that("a UI answer that is not a list is not an approval", {

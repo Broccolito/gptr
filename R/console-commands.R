@@ -31,7 +31,7 @@ console_commands = function() {
     gptr_command("mcp", cmd_mcp, "List the MCP servers"),
     gptr_command("permissions", cmd_permissions,
                  paste("Show or change the rules of this R session:",
-                       "/permissions [allow|ask|deny|remove <rule>]")),
+                       "/permissions [<verb> <rule>] (allow, ask, deny or remove)")),
     gptr_command("retry", cmd_retry, "Undo the last turn and send its prompt again")
   )
 }
@@ -56,7 +56,9 @@ command_parse = function(text) {
 #' The line first passes the `input` event with source "repl" (contract 10.4): a hook may handle
 #' it or transform it (into another command, or a prompt sent through `send(text)`). A line that
 #' is still a command goes out on the `console:command` channel (P15 records it as a comment). A
-#' character result is printed escaped, `list(prompt =)` is sent, and an error is reported on
+#' character result is printed escaped (a `cli_ansi_string`, whose untrusted parts its handler
+#' escaped, with its styles), a blank row after it where lines keep the margin, as after a run's
+#' status line, `list(prompt =)` is sent, and an error is reported on
 #' stderr (the input counts as handled).
 #' @return Invisibly "unknown", "error", "prompt" or "done".
 #' @noRd
@@ -98,7 +100,15 @@ console_command = function(text, session = NULL, send = NULL) {
     if (is.function(send)) send(out$prompt)
     return(invisible("prompt"))
   }
-  if (is.character(out)) console_out(out)
+  if (is.character(out)) {
+    lines = if (inherits(out, "cli_ansi_string")) {
+      unlist(strsplit(out, "\n", fixed = TRUE))
+    } else {
+      console_lines(out)
+    }
+    console_notice(paste(lines, collapse = "\n"))
+    if (nzchar(console_pad())) console_write("")
+  }
   invisible("done")
 }
 
@@ -118,57 +128,119 @@ cmd_doc_site = function(s) {
   tryCatch(ext_service_get("doc.site")(s), error = function(e) NULL)
 }
 
+#' `/help [command]`: the commands, the input syntax and the keys, which follow the console as the
+#' banner's do (repl_banner()): enter, tab's follow-up and up where a composer reads keys (class T),
+#' tab's completion where the REPL completes (after `! /` in RStudio), and what a line typed while
+#' peter works does there; in the banner's type, names bold and keys lower case, every description
+#' starting lower case, in one column, wrapped between a usage's, a key's and the last two words
 #' @noRd
 cmd_help = function(args, ctx) {
   s = ctx$session
   console_templates_sync()
+  # a description starts as the Input and Keys ones do; an acronym (MCP) stays
+  lower = function(x) sub("^([[:upper:]])(?=[[:lower:]])", "\\L\\1", x, perl = TRUE)
   if (nzchar(args)) {
     nm = sub("^/", "", args)
     spec = registry_get("command", nm, session = s)
     if (is.null(spec)) return(paste0("No command /", nm, "."))
-    return(paste0("/", nm, "  ", spec$description %||% ""))
+    return(paste0("/", nm, "  ", lower(spec$description %||% "")))
   }
   nms = sort(registry_names("command", session = s), method = "radix")
   desc = vapply(nms, function(nm) registry_get("command", nm, session = s)$description %||% "",
                 "", USE.NAMES = FALSE)
-  # the descriptions wrap under their column at the content width (D-225)
+  # styled rows (cli_ansi_string, console_command()): a spec's name and description escaped
+  nms = console_escape(nms, FALSE)
+  desc = console_escape(desc, FALSE)
+  # the descriptions wrap under one column at the content width (D-225), never inside a usage
+  # (`/mode [plan|...]`), a key and its word or the last two words (bound by U+00A0 while wrapping)
   width = cli::console_width() - 2L * nchar(console_pad())
-  c("Commands:", formatDL(paste0("  /", nms), desc, width = width, indent = 17L),
+  nbsp = "\u00a0"
+  bind = function(y) {
+    m = gregexpr("/\\S+ \\[[^]]*\\]| [[:alpha:]]+[.)]?$", y, perl = TRUE)
+    regmatches(y, m) = lapply(regmatches(y, m), function(u) gsub(" ", nbsp, u, fixed = TRUE))
+    y
+  }
+  dl = function(x, y) {
+    rows = formatDL(paste0("  ", x), bind(lower(y)), width = width, indent = 19L)
+    paste0("  ", cli::style_bold(x), substring(gsub(nbsp, " ", rows, fixed = TRUE), nchar(x) + 3L))
+  }
+  keys = console_class() == "T"
+  done = if (isTRUE(console_repl_find()$reader$complete)) {
+    paste0("after ", if (front_end() == "rstudio") "! or /" else "@, !, !!, / or peter$",
+           ", complete the word")
+  }
+  pause = paste0(if (console_menu_available()) {
+    paste0("pause the answer: ", paste0(c("s", "f", "c", "a", "b"), nbsp,
+                                         c("steer", "follow-up", "continue", "abort", "background"),
+                                         collapse = ", "))
+  } else {
+    "stop the answer"
+  }, "; twice at the prompt leaves")
+  typed = if (keys) {
+    "In other consoles a line typed while peter works is the next prompt."
+  } else if (console_menu_available() && front_end() == "positron") {
+    "Text typed while peter works waits as R code; ctrl-c, then s, to steer."
+  } else if (console_class() == "D") {
+    "A line typed while peter works is queued as type_ahead says: a steer, unless follow_up."
+  } else {
+    "A line typed while peter works is the next prompt."
+  }
+  cli::ansi_string(c("Commands:", dl(paste0("/", nms), desc),
     "Input:",
-    formatDL(c("  text", "  !code", "  !!code", "  ```r ... ```", "  \"\"\" ... \"\"\""),
-             c("a prompt; @file adds a file, @object attaches an object",
-               "run R code here; the code and its output go with the next prompt",
-               "run R code here; omit the code/output note for the next prompt",
-               "a block of R code (like !)",
-               "a multi-line prompt; a trailing \\ also continues a line"),
-             width = width, indent = 19L),
-    paste0("Keys: ", console_interrupt_key(), " pauses a running answer in supported terminals ",
-           "(steer, follow-up, continue, abort; background when available); ",
-           "twice at the prompt leaves. Other front ends may abort without a pause menu. ",
-           "In a terminal (not Windows) a line typed while an answer runs steers it (setting ",
-           "type_ahead; on the CLI routes after the CLI's response); /commands and !code typed ",
-           "then run after the answer. Other consoles keep typed lines for the next prompt."))
+    dl(c("text", "!code", "!!code", "```r ... ```", "\"\"\" ... \"\"\""),
+       c("a prompt; @file adds a file, @object attaches an object",
+         "run R code here; the code and its output go with the next prompt",
+         "run R code here; omit the code/output note for the next prompt",
+         "a block of R code (like !)",
+         "a multi-line prompt; a trailing \\ also continues a line")),
+    "Keys:",
+    dl(c(if (keys) "enter", if (keys || !is.null(done)) "tab", if (keys) "up",
+         tolower(console_interrupt_key())),
+       c(if (keys) {
+         paste("send what you typed while peter works as a steer: the agent reads it at its next",
+               "step")
+       }, if (keys) {
+         paste(c(paste("send it as a follow-up instead: the next prompt, once the answer ends",
+                       "(type_ahead swaps the two)"), done), collapse = "; ")
+       } else {
+         done
+       }, if (keys) "on an empty draft, take back the newest message not yet delivered", pause)),
+    typed))
 }
 
-#' /exit, /quit, /q
+#' /exit, /quit, /q: with background sessions still running it says so, dim in the banner's words,
+#' as their end is noticed at R's prompt (bg_release())
 #' @noRd
 cmd_exit = function(args, ctx) {
   rs = console_repl_find()
   if (is.null(rs)) return("/exit works inside the gptr console.")
   rs$exit = TRUE
-  NULL
+  n = sum(job_list("session")$status == "running")
+  if (!n) return(NULL)
+  sym = console_style()
+  cli::ansi_string(sym$dim(if (n == 1L) {
+    paste0("1 background session still runs", sym$sep, "gptr_wait(gptr_last()) shows it")
+  } else {
+    paste0(n, " background sessions still run", sym$sep, "gptr_jobs() lists them")
+  }))
+}
+
+#' The full id a built-in CLI gets for the reference `ref` to its `default` (contract 11.10), else
+#' NULL: another CLI adapter decides what its `default` runs
+#' @noRd
+console_cli_default = function(ref) {
+  m = model_canonical(ref)
+  if (!identical(m$type, "cli") || !endsWith(m$ref, "/default")) return(NULL)
+  api = registry_get("provider", sub("/.*$", "", m$ref))[["api"]]
+  if (isTRUE(api %in% c("cli-claude", "cli-codex"))) pcli_default_model(api)
 }
 
 #' A model reference as /model and /status show it: a built-in CLI's `default` with the full id
-#' the CLI gets (`claude-cli/default (claude-sonnet-5-5)`, contract 11.10); another CLI adapter
-#' decides what its `default` runs
+#' the CLI gets (`claude-cli/default (claude-sonnet-5-5)`)
 #' @noRd
 cmd_model_label = function(ref) {
-  m = model_canonical(ref)
-  if (!identical(m$type, "cli") || !endsWith(m$ref, "/default")) return(ref)
-  api = registry_get("provider", sub("/.*$", "", m$ref))[["api"]]
-  if (!isTRUE(api %in% c("cli-claude", "cli-codex"))) return(ref)
-  paste0(ref, " (", pcli_default_model(api), ")")
+  id = console_cli_default(ref)
+  if (is.null(id)) ref else paste0(ref, " (", id, ")")
 }
 
 #' `/model [ref]`: on a session from the next request; before the first prompt for that prompt,
@@ -193,7 +265,7 @@ cmd_model = function(args, ctx) {
   paste0("Model: ", args, " (used from the first prompt)")
 }
 
-#' /mode [mode]: on a session from the next turn; before the first prompt for that prompt
+#' `/mode [mode]`: on a session from the next turn; before the first prompt for that prompt
 #' @noRd
 cmd_mode = function(args, ctx) {
   rs = console_repl_find()
@@ -237,7 +309,7 @@ cmd_tools = function(args, ctx) {
 }
 
 #' The first `n` objects of `env` whose names contain `pattern`, described without forcing
-#' promises (/env and the console banner)
+#' promises (/env)
 #' @noRd
 console_env_lines = function(env, pattern = "", n = 30L) {
   nms = sort(ls(env), method = "radix")
@@ -248,7 +320,7 @@ console_env_lines = function(env, pattern = "", n = 30L) {
   c(lines, if (length(nms) > n) paste0("(+ ", length(nms) - n, " more)"))
 }
 
-#' /env [pattern]
+#' `/env [pattern]`
 #' @noRd
 cmd_env = function(args, ctx) {
   rs = console_repl_find()
@@ -258,26 +330,28 @@ cmd_env = function(args, ctx) {
   if (length(lines)) lines else "(no objects)"
 }
 
-#' `/compact [focus]`, under the interrupt policy (mode "repl": an abort returns NULL)
+#' `/compact [focus]`, under the interrupt policy (mode "repl": an abort returns NULL); it reports
+#' the token counts of the new compaction entry, as the automatic notice does
+#' (console_compacted()), dim in the status line's terms
 #' @noRd
 cmd_compact = function(args, ctx) {
+  sym = console_style()
+  say = function(...) cli::ansi_string(sym$dim(paste(c(...), collapse = sym$sep)))
   s = ctx$session
-  if (is.null(s)) return("There is no conversation to compact yet.")
-  if (isTRUE(session_live(s)$compacting)) return("Compaction is already in progress.")
+  if (is.null(s)) return(say("nothing to compact yet"))
+  if (isTRUE(session_live(s)$compacting)) return(say("already compacting"))
   compact = ext_service_get("compact.run")
-  count = function() {
-    sum(vapply(session_data(s)$entries, function(e) identical(e$type, "compaction"), NA))
+  compactions = function() {
+    Filter(function(e) identical(e$type, "compaction"), session_data(s)$entries)
   }
-  before = count()
+  before = length(compactions())
   done = with_interrupt_policy(function() {
     compact(s, "manual", if (nzchar(args)) args)
-    count() > before
+    length(compactions()) > before
   }, list(), mode = "repl")
-  if (isTRUE(done)) "Conversation compacted." else if (identical(done, FALSE)) {
-    "Compaction was cancelled."
-  } else {
-    "Compaction was interrupted."
-  }
+  if (identical(done, FALSE)) return(say("not compacted", "cancelled"))
+  if (!isTRUE(done)) return(say("interrupted"))
+  say(console_compacted(utils::tail(compactions(), 1L)[[1L]]))
 }
 
 #' /cost: the requests, input tokens and cost of the session and its children by agent, then
@@ -294,21 +368,38 @@ cmd_cost = function(args, ctx) {
   }, ""), paste0("Total: ", format_usage(u)))
 }
 
-#' /context: the token ledger of the last request; on a CLI route (`plan-cli`) also what the CLI
-#' reported for its turn, since it keeps its own transcript
+#' /context: the token ledger of the last request and the context it left, as the run's status line
+#' says it (console_context_left()); on a CLI route (`plan-cli`) instead what the CLI reported for
+#' its turn, since it keeps its own transcript. After /compact the last request is the compaction
+#' request (its `gptr.compaction_usage` record), which says so and adds the estimate of the next
+#' request, the compaction entry's `tokens_after`, as a ledger row marked `~`, from which the
+#' context left is then measured
 #' @noRd
 cmd_context = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("No session yet.")
   led = gptr::gptr_usage(s, detail = TRUE)
   if (!nrow(led)) return("No request yet.")
-  last = led[led$request_id == led$request_id[[nrow(led)]], , drop = FALSE]
+  id = led$request_id[[nrow(led)]]
+  last = led[led$request_id == id, , drop = FALSE]
   u = session_data(s)$usage
-  u = u[match(last$request_id[[1L]], u$request_id), , drop = FALSE]
-  c(paste0("Last request ", last$request_id[[1L]], ":"),
-    sprintf("  %-14s %9s%s", last$component, format(round(last$tokens), big.mark = ","),
+  u = u[match(id, u$request_id), , drop = FALSE]
+  entries = session_data(s)$entries
+  at = Position(function(e) {
+    identical(e$custom_type, "gptr.compaction_usage") && identical(e$data$row$request_id, id)
+  }, entries)
+  after = if (!is.na(at)) {
+    Find(function(e) identical(e$type, "compaction"), entries[-seq_len(at)])$details$tokens_after
+  }
+  if (anyNA(after)) after = NULL
+  left = console_context_left(u, after)
+  fmt = function(n) format(round(n), big.mark = ",")
+  c(paste0("Last request ", id, if (!is.na(at)) " (the compaction request)", ":"),
+    sprintf("  %-14s %9s%s", last$component, fmt(last$tokens),
             ifelse(is.na(last$cached), "  (cache unknown)", ifelse(last$cached, "  (cached)", ""))),
-    sprintf("  %-14s %9s", "total", format(round(sum(last$tokens)), big.mark = ",")),
+    sprintf("  %-14s %9s", "total", fmt(sum(last$tokens))),
+    if (!is.null(after)) sprintf("  %-14s %9s", "next request", paste0("~", fmt(after))),
+    if (!is.na(left)) sprintf("  %-14s %9s", "context left", paste0(left, "%")),
     if (identical(u$route, "plan-cli")) {
       paste0("  The CLI keeps its own transcript; its last turn reported ",
              format_count(c(u$input, u$cache_read, u$cache_write_5m, u$cache_write_1h)),

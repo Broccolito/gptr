@@ -4211,6 +4211,37 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   list-indented fences per split, tool fences and info string, error line), -render (4-mode
   invariance incl. a list-indented fence, streaming redraw, TAB line, broken line; 7 oracles incl.
   margin screen model), -ui (prompt fit, `?` fence). Evidence: progress/P26.md Task 5.
+- Cheat-sheet review (2026-10-23, P28 console-2; amends the approval's one line): a request whose
+  input has a `path` and no `code` shows the change it asks for under the call line, from its input
+  alone (the file is never read): at most 12 rows at column 4 in the result diff's style
+  (`console_diff_rows()`, which the result's diff now uses too), `-` rows of each edit's old text,
+  `+` rows of its new text and of a write's content, `@@` between edits, a patch envelope as its own
+  lines, another tool's other fields as JSON, then `(+N more lines; ? shows more)`. `?` shows at
+  most 40 such rows and names the path in its first row
+  (`gptr wants to use edit on R/io.R (level 2)`), which the RStudio dialog needs. Before, an edit's
+  change showed only after `y` and a write's content never. Contract-visible: 04 section 15.10 IC-77
+  and the `builtin_ui` row, 03 section 6.8.3. Tests: test-console-ui.R "an edit or write approval
+  shows the change before the answer (cheat-sheet review)", "an edit's ask shows its change; a
+  denied edit leaves the file (cheat-sheet review)".
+- Review fixes of Tasks 22-27 (2026-10-23):
+  - An edit given as Pi's top-level `oldText` and `newText`, which the edit tool takes, shows its
+    change too (`ui_request_change()` reads the input itself when it has no `edits`); it showed the
+    call line alone. Contract-visible: 04 section 15.10 IC-77. Tests: test-console-ui.R "an edit or
+    write approval shows the change before the answer (cheat-sheet review)".
+  - The change shows once. The console's `?` view (`ui_permission_detail(asked = TRUE)`) leaves out
+    the change rows its ask showed whole (the first 12) and shows the rest under a dim
+    `(continued)`; an allowed edit whose ask showed its change (`ui_change_asked()` marks its
+    record) sums its result up in one row, `edited fit.R · +1`, where the result printed the diff
+    the ask had shown eight rows above. The RStudio dialog keeps the whole change. Contract-visible:
+    04 section 15.10 IC-77. Tests: test-console-ui.R "the console's ? view shows only the change
+    rows its ask cut (review of Tasks 22-27)", "an allowed edit whose change the ask showed sums it
+    up once (review of Tasks 22-27)".
+  - The `?` view's keys are padded to one width, so their words start in one column, and its
+    interrupt key is the console's own in lower case (`ctrl-c`, `esc` in RStudio), as the banner and
+    live row name it; it said `Ctrl-C
+    abort the run` in every console. Contract-visible: 04 section 15.10 IC-77. Tests:
+    test-console-ui.R "the detail view's keys read as the question's; it skips a fence shown above
+    (D-243)".
 
 ## D-188 - P26 Prompts reach the person and name the asker; fan-out status; nested overlays (2026-10-16)
 - Rule (IC-77; 03 sections 5.8, 6.8.3, 6.13, 6.17, 7.3; 04 sections 2 conditions, 6.1 `envir`, 7.9,
@@ -5043,14 +5074,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   hosted jobs have time for the whole suite (CI-19)".
 
 ## D-240 - Tests: CRAN runs a fixed list of fast tests (2026-10-20)
-- Rule: with `NOT_CRAN` not `"true"`, `tests/testthat.R` runs only a fixed list of 65 test files:
-  the `perm-*`, `auth-redact` and `auth-secrets` files and those keeping more than five running
-  blocks under the block rule. In those files a `test_that()` block starts with `skip_on_cran()`
-  when it took 25 ms or more in a local CRAN-mode run or 50 ms or more on GitHub's windows-latest
-  (R-devel or R-release), except the file's fastest block; in the security files only blocks of 500
-  ms or more on Windows skip. GitHub Actions runs the whole suite. win-builder needed 13 to 29
-  minutes for the CRAN-mode tests before this rule and 3.3 with the block rule alone, which left the
-  whole check at CRAN's 10-minute budget, because skipped blocks and sourced files still cost time.
+- Rule: with `NOT_CRAN` not `"true"`, `tests/testthat.R` runs only a fixed list of 65 test files (66
+  since P28 Task 16 added the pure `console-input`): the `perm-*`, `auth-redact` and `auth-secrets`
+  files and those keeping more than five running blocks under the block rule. In those files a
+  `test_that()` block starts with `skip_on_cran()` when it took 25 ms or more in a local CRAN-mode
+  run or 50 ms or more on GitHub's windows-latest (R-devel or R-release), except the file's fastest
+  block; in the security files only blocks of 500 ms or more on Windows skip. GitHub Actions runs
+  the whole suite. win-builder needed 13 to 29 minutes for the CRAN-mode tests before this rule and
+  3.3 with the block rule alone, which left the whole check at CRAN's 10-minute budget, because
+  skipped blocks and sourced files still cost time.
 - Tests: tests/testthat.R (the list); 1,183 block skips in the listed files.
 
 ## D-241 - P04 the Windows stdin writer retries a refused chunk read until the delivery deadline (2026-10-21)
@@ -5079,6 +5111,1700 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   not read again once the mailbox fails validation", "... once the parent or target is gone", the
   cold writer step controls); test-proc-writer-runtime.R (the decoded step and chunk size, the fixed
   causes, the bootstrap size). Evidence: progress/fixes.md Task CI-75.
+
+## D-242 - P28 steering: a steer reaches the next step boundary, a follow-up is the next prompt (2026-10-21)
+- Rule: a message typed while the agent works is queued as one of two kinds, chosen per message. In
+  a terminal console `type_ahead` (`"steer"`, the default, or `"follow_up"`; D-185) decides what
+  Enter sends and Tab sends the other kind; in RStudio, Positron and Windows consoles and under
+  TERM=dumb or ESS the setting alone decides. A draft starting with `/` or `!` is always a
+  follow-up.
+- Steer: held only until the first step boundary after it was sent: the response in flight ends
+  without a tool call, or the last tool call of that response returns. Every steer queued before a
+  boundary is delivered there, in order, each as the operator relay
+  `The user sent this message while you were working: <text>` on the agent's very next request; if
+  the agent was about to stop, the loop makes one more request (after_turn polls steers). A steer
+  never interrupts a request or a tool and never waits for the run to end. The console reads typed
+  input at `turn_end`, before the loop polls steers; keys typed during an in-process `r` tool wait
+  in the terminal buffer and are read when it returns.
+- Follow-up: held until the whole run ends, then sent as the next prompt after the run's status
+  line, as its own run; it never joins the running run.
+- No call is skipped: the response's remaining calls still run, because a provider needs a result
+  for every call of a response and Codex 0.157.1 and Pi's current loop finish them (skipping would
+  show the agent failures it did not cause). In manual mode each remaining call is still asked;
+  `n <text>` denies it with that text, and Ctrl-C [a] stops everything.
+- Shown while queued: the live row's `n queued` and, with an empty draft, the newest message as
+  `↳ steer · <text>` (`follow-up` for the other kind); consoles without a live row print one
+  `↳ <kind> · <text>` line. Shown at delivery: a steer as the person's line `› <text>` at the
+  boundary, before the next request's output; a follow-up as `peter> <text>` at the next prompt.
+- Edit and withdraw: Up on an empty draft takes back the newest undelivered message of either kind
+  into the composer; Ctrl-U discards it. Nothing is lost: a steer the run could not take (it ended
+  first or hit `max_turns`) is the next prompt; after an abort or an error the queued text and the
+  draft are listed once and added to the console history, never sent.
+- CLI routes (claude-cli, codex): the boundary is the end of the CLI's answer, often the whole run,
+  so a steer behaves like an in-run follow-up and its queue line adds ` · after the CLI's answer`.
+  Mid-turn delivery (Claude Code's stream-json input, Codex's app-server steer) is a later plan.
+  RStudio, Positron and Windows consoles read nothing while busy: a line typed during a run steers
+  only if a question reads it, else it is the next prompt.
+- Amends D-185 and D-205 (their wording) and replaces IC-76's "follow-up ... is sent when the agent
+  would stop" and any text that treats steering as end-of-run delivery.
+- Contract-visible: IC-76 and IC-55 through 04 section 15.10; 03 section 6.2.
+- Task 4: `run_take(run, "steer")` takes the whole steer FIFO, each item its own message; follow-ups
+  are still taken one at a time. This replaces P06's adaptation of report 02's oracles L11-L13
+  ("gptr has no 'all' mode"): steers now arrive as in Pi's `all` mode, and `loop.json` and their
+  tests say so. Tests: test-agent-run.R "every steer queued during a tool call reaches the next
+  request, in order (D-242)", "a steer sent during a final answer adds one request to the same run
+  (D-242)", "a steer sent during the first of two calls waits for both results; no call is skipped";
+  test-provider-transform.R "two relays after the tool results serialise in each native adapter
+  (D-242)"; test-agent-loop.R L11-L13.
+- Task 5: `queue_update` names its item (`op` `add`, `take` or `withdraw`, `which`, the redacted
+  `text`, `source`) besides the counts, one event per item; `session_unqueue(s, which)` takes back
+  the newest user item for the console's Up and Task 15's leftovers. Tests: test-session-object.R
+  "queue_update names the item it adds ...", "session_unqueue() takes back the newest user item and
+  emits withdraw (D-242)", "session_unqueue() returns NULL on an empty queue and emits nothing", "a
+  replayed block's notes take back queued items with one withdraw each (D-242)"; test-agent-run.R
+  "queue_update names each item the run takes, after it left the queue (D-242)".
+- Task 7: `builtin_console` hooks `turn_end`, which after_turn emits just before it polls steers;
+  the hook runs `console_typed()`, which queues through `policy_enqueue()` (and that flushes), so a
+  line typed before a step boundary (also during an in-process tool, when R reads nothing) reaches
+  it without the 0.1 s typing task ticking first. `console_typed()` now checks `repl_terminal()`
+  itself, so outside a terminal REPL it reads nothing. Contract-visible: 04 section 7.14. Tests:
+  test-console-typing.R "a line typed during a tool reaches the request right after its result
+  (D-242)". Review fix: the hook's own `policy_flush()` was dropped; it did nothing, as items held
+  while a tool ran are flushed at its `tool_execution_end`.
+- Task 13: queueing prints one dim line at column 0 in every class for now, `↳ steer · <text>` or
+  `↳ follow-up · <text>` (ASCII `-> steer - <text>`; a CLI route's steer adds
+  ` · after the CLI's answer`), escaped, wrapped with later rows under the text and cut to three
+  rows ending in `…`, in place of the notices `[gptr] steering: ...` and
+  `[gptr] follow-up queued: ...`; the pause menu's [s] and [f] print the same line.
+  `builtin_console` hooks `queue_update`: a user's item that a foreground run takes is the person's
+  line `› <text>` at column 0, whole, on the band where it is known (`console_style()$band`; Task 25
+  adds the probe), at the boundary and before the next request's output, a block of its own. A
+  follow-up the run still takes (until Task 14) shows the same way. Contract-visible: 04
+  sections 7.14 and 15.10 (IC-76); 03 section 6.17. Tests: test-console-typing.R "a delivered steer
+  is the person's line at its boundary, before the next text (D-242)", "the person's line is on the
+  band; a queue line is dim and cut to one row (D-245)", the CLI, follow-up and question-order cases
+  and both pty cases; test-console-interrupt.R "steer and follow-up queue the text with source
+  pause_menu (IC-55)".
+- Task 14: in the REPL a follow-up is the next prompt. While a prompt of a REPL that is not piped
+  runs, `policy_enqueue()` holds a follow-up (a typed line under `type_ahead = "follow_up"`, a line
+  a question reads past, the pause menu's [f]), and any text starting with `/` or `!` (the pause
+  menu's [s] too, as D-242 says a `/` or `!` draft is never a steer), in the reader's `typed` lines
+  with the held `/command` and `!code` lines, in the order typed; after the run's status line the
+  REPL sends each as its own run, echoed at its prompt. Outside it (`peter("...")` paused with
+  Ctrl-C, `.stdin`, `jsonl`) a follow-up keeps the session's FIFO. Task 13's person's line for a
+  follow-up the run takes now shows only there. Contract-visible: 04 section 15.10 (IC-76); 03
+  sections 6.2 and 6.17. Tests: test-console-typing.R "type_ahead = 'follow_up' sends the line as
+  the next prompt, its own run (D-242)", "follow-ups wait with the /commands and !code typed around
+  them, in order (D-242)", "the pause menu's [f] in the REPL is the next prompt; a /, ! draft never
+  steers".
+- Task 15: nothing queued is lost. At the end of a foreground run the console's `agent_end` hook
+  (`console_queue_left()`) settles what the person queued and the run did not take: after status
+  `idle` or `max_turns` the user steers still queued (`session_unqueue()`) or held while a tool ran
+  are the next prompts of the REPL whose prompt runs, after its held lines (elsewhere they stay
+  queued for the session's next run); after any other end (an abort, an error, a block, the budget)
+  nothing is sent, and the user items the abort dropped, the steers still queued, the items held and
+  the REPL's held lines go to the console history, listed once as
+  `[gptr] kept in history (↑): '<a>', '<b>'`, replacing `[gptr] dropped typed lines` and
+  `[gptr] dropped queued
+  messages`. Follow-ups still in the session's FIFO (outside the REPL) stay queued after an error.
+  The draft joins the list once the composer holds it (Task 20). The console's `session_unqueue()`
+  call is a contract edge of the layering test. Contract-visible: 04 section 15.10 (IC-76); 03
+  sections 6.2 (also: the pause menu writes to stdout) and 6.17. Tests: test-console-typing.R "a
+  steer a run at max_turns did not take is the next prompt, run 2's user message", "an abort sends
+  nothing queued: it goes to the history, listed once (D-242)", "after an error the queued steer is
+  kept in the history, not sent with the next prompt", "Ctrl-C at an approval prompt aborts the run
+  and keeps the held lines in the history"; test-console-interrupt.R "a steer typed in a tool and
+  then aborted is kept in the history, never sent later".
+- Review fixes of Tasks 8-15 (2026-10-21):
+  - A held `/command` or `!code` line shows as a follow-up, `↳ follow-up · <line>`, in the order
+    typed (a `!code` line with the lines that continue it as one entry), in place of
+    `[gptr] after this answer: '<line>'`. Typed, it had kept the old notice while the same line from
+    the pause menu, and a typed follow-up, showed the queue line, though all wait in the same list
+    for the next prompt. Contract-visible: 04 section 15.10 IC-75 and IC-76, 03 section 6.17. Tests:
+    test-console-typing.R "/commands and !code typed during a run run after the answer; text still
+    steers", "follow-ups wait with the /commands and !code typed around them, in order (D-242)", "a
+    held !code line keeps the lines that complete it, also from a later batch", "Ctrl-C at an
+    approval prompt aborts the run and keeps the held lines in the history"; test-console-ui.R
+    "during a run a !code or /command line typed before a question waits for the prompt".
+  - Task 15's settling applies in an interactive R only. `console_queue_left()` ran at the end of
+    every foreground run, also under Rscript: after an error it took an `api_user` steer
+    (`gptr_steer()` from a timer) off the queue and printed `[gptr] kept in history (↑): ...`,
+    though `utils::timestamp()` does nothing there, so the steer was lost while the notice said it
+    was kept, and an abort listed its dropped items the same way. Now it returns at once outside an
+    interactive R (`gptr_is_interactive()`), and the queue stays as the run left it, for the
+    session's next run. Contract-visible: 04 section 15.10 IC-76, 03 section 6.2. Tests:
+    test-console-interrupt.R "outside an interactive R a steer the run did not take stays queued,
+    unlisted (D-242)"; the Task 15 tests now run in a mocked interactive R.
+  - After an abort the status line says `aborted` once: `policy_abort()`'s
+    `[gptr] aborted; the session is kept.` is printed only where no status line said it (verbosity
+    0, or no run in the foreground), and the kept list follows the status line, before the blank row
+    that precedes the prompt (the run's `agent_end` writes that gap last). Before, the kept list sat
+    between the status line and the notice, directly over the prompt. Contract-visible: 04
+    section 15.10 IC-76. Tests: test-console-typing.R "an abort's status line says aborted once; the
+    kept list follows it, then a blank row".
+- Steering review fixes (2026-10-22):
+  - A steer sent before a deferred prompt runs joins it. `peter(.run = FALSE)` queues its prompt as
+    a follow-up, and `run_initial_input()` took the steers first, so `gptr_steer(s, "...")` then
+    `gptr_wait(s)` opened the run with the bare steer (in the audit's live run the model asked what
+    it should round) and the prompt came second, as its own request; the record skipped the turn's
+    first user message, the steer, and wrote the prompt as `## Follow-up:`. A deferred prompt has no
+    step boundary before it, so the steer belongs after it. The older queue head now opens a run
+    started without input, by the items' `t`; the steers go first when one is older (a leftover
+    steer) or the follow-up has no `t`. The steer joins the first request at the loop's start poll,
+    and the record writes it as `## Steer:`; `doc_turn_body()` is unchanged. Contract-visible: 04
+    section 15.10 IC-55. Tests: test-gptr-sdk.R "a steer sent before a deferred prompt runs joins
+    it, recorded (steering review)", "a deferred prompt run alone records no follow-up line
+    (steering review)"; test-agent-run.R "a steer older than every follow-up still opens a run
+    without input (steering review)".
+  - A pause the code continues from is not reported to the model as an interrupt.
+    `eval_on_interrupt()`, the evaluator's innermost calling handler, pushed the `interrupt` event
+    before the pause menu answered, so after s, f, c or b the `r` call ran to its end and the person
+    saw its normal result while the model read
+    `[interrupted by the user after N s; side effects may have occurred]` before the steer relay (an
+    invitation to rerun finished code), and the session JSONL kept it. The handler now flushes and
+    notes the time only; the event and `interrupted_after` are written where the interrupt ends the
+    evaluation, `eval_interrupted()` outside a run. In a run an abort unwinds past the result, and
+    `tool_interrupted()` writes the call's `Interrupted after N s; side effects may have occurred.`
+    as before. Contract-visible: 04 section 5.8 (`interrupted_after`). Tests: test-eval-core.R "a
+    resumed interrupt is not reported; one that ends the code is (steering review)";
+    test-console-interrupt.R "an r call the pause menu resumed returns its output, then the steer
+    (steering review)".
+  - The pause menu's [b] keeps what the REPL held in the history, and a prompt to the background run
+    says it steers. [b] ends no run in the foreground, so `console_queue_left()` never settled the
+    REPL's held lines: after it the reader sent each held follow-up as a new prompt, which
+    `route_continue()` turned into a silent steer of the running session (a Tab follow-up joined the
+    run, which a follow-up never does), and every later prompt did the same with no line.
+    `console_background_settle()` now lists the held lines and the draft once as kept in the
+    history, as an abort does, after the `running in the background` row; and `repl_turn()` writes
+    `↳ steer · <text>` once such a prompt is sent. No `/wait` command: `gptr_wait()` brings the run
+    back. Contract-visible: 04 section 15.10 IC-76. Tests: test-console-interrupt.R "[b] keeps the
+    REPL's held lines and draft in the history, not sent (steering review)"; test-console-repl.R "a
+    prompt to a session that runs, in the background, says it steers (steering review)".
+  - The queue refuses a blank steer. `gptr_steer(s, "   ")`, a pipe of whitespace into a running
+    session and `ctx$send()` queued it (`check_string()` takes whitespace), so the model read
+    `The user sent this message
+    while you were working: ` and the record wrote `## Steer: `; the console already refused it. Now
+    `session_enqueue()` refuses blank text unless the item carries attachments (the gateway's
+    deferred prompt and `bg_park_session()`'s re-queue keep them). Contract-visible: 04
+    section 15.10 IC-55. Tests: test-session-object.R "session_enqueue() refuses blank text unless
+    it has attachments (steering review)"; test-gptr-sdk.R "a blank steer is refused by gptr_steer()
+    and by a pipe into a running session".
+- Task 27 (documentation): `?peter` (the console table, the two kinds and their keys, the CLI-route
+  and IDE console limits, `insert_matching`, `stty sane`), `/help`'s keys, the interactive-console
+  vignette, the README, the NEWS console bullets and the configuration vignette's `type_ahead` row
+  say D-242..D-245 as built; these four entries are final. Tests: test-console-commands.R "/help
+  lists the commands and the input syntax".
+- Review fixes of Tasks 22-27 (2026-10-23): `/help`'s keys follow the console as the banner's do:
+  Enter, Tab's follow-up and Up only where a composer reads keys (class T), Tab's completion only
+  where the REPL completes (`! or /` in RStudio), and its last line says what a line typed while
+  peter works does there (the next prompt; queued as `type_ahead` says under TERM=dumb; Positron the
+  banner's line); the commands, input and keys lists share one description column. RStudio's `/help`
+  promised Up and `@` completion, Positron's that a typed line is the next prompt. Contract-visible:
+  03 section 6.17. Tests: test-console-commands.R "/help lists the commands and the input syntax",
+  "/help's keys follow the console, as the banner does (review of Tasks 22-27)", "in the console
+  margin command output wraps inside it; listings fit its width".
+- Live dogfood fixes (Task 28, 2026-10-23): Task 29: what the person typed, steers included, is
+  recorded also when a sourced script started the console. Its turns were located in that script, as
+  calls nested in it, so a bound transcript got none of them; the REPL now marks its gateway calls
+  `gptr_console` and P15's locator runs no finder for them (also an `Rscript` file and the editor's
+  buffer). Contract-visible: 04 IC-49. Tests: test-console-repl.R "a console turn is recorded in the
+  transcript also when a script started the console".
+- Live dogfood fixes (Task 28, 2026-10-23): Task 37: a message Up takes back writes
+  `↳ taken back · <text>` where its queue line shows, by that line's rule (while a T console's live
+  row is up, a CLI route's steer). On claude-cli and codex (S4)
+  `↳ steer · s2: cylinders · after the CLI's answer` stayed in the scrollback above the edited
+  steer's line, though `cylinders` was withdrawn and never sent. Contract-visible: 04 section 15.10
+  IC-76. Tests: test-console-typing.R "a CLI route's steer taken back says so under its printed line
+  (Task 37)".
+- Final visual loop, round 3 (2026-10-24): Task 76: every transcript file opens with the replay note
+  and `library(gptr)` (`doc_transcript_preamble()`, also from `doc_transcript_append()`), whatever
+  its first block; while a session runs in the background its block is written when the run ends, so
+  the console's direct R and command lines for it wait in its live handle (`doc_console_append()`)
+  until `doc_on_agent_end()` has written the block. A record whose first block was `!x = 1` had no
+  `library(gptr)` before `peter()`, so `source()` failed, and after [b] the lines typed meanwhile,
+  `/exit` among them, came before the run's block, or were the whole record until the run ended at
+  R's prompt. Contract-visible: 04 IC-49, section 11.5 (the transcript row). Tests:
+  test-doc-replay.R "direct R lines and slash commands of the console enter the transcript", "what
+  the console records while its session runs in the background follows its block"; test-doc-io.R
+  (the appends' preamble).
+
+## D-243 - P28 the composer, the live row and questions (2026-10-21)
+- Rule (P28 Tasks 2, 3, 12, 16-21): character mode in ANSI terminals, one live bottom row for
+  status, queue and the draft; a question drains typed-ahead input, waits for typing to pause and
+  keeps the draft; stale lines are queued and invalid answers kept; approvals ask under the call
+  they gate. Amends D-184, D-188 and D-222's layout; D-221 stays for terminals without ANSI.
+- Tests so far (Task 2): test-console-typing.R "console_typed_split() marks a last line without a
+  line end as partial", "a question drains fd 0 first: lines steer, a partial line is kept in the
+  history", "a terminal: a question never takes the line typed ahead of it (P28 B, C, H)".
+- Task 3: a stale line is queued during a run, else kept in the history; a paste and an invalid
+  approval answer are kept in the history. `readline_answer()` is in L0, so the console passes the
+  routing as a `keep` callback (`console_typed_ahead()`, 03 section 2.2); `console_history_add()`
+  moved to `utils-options.R`; a secret keeps nothing. Tests: test-console-ui.R "lines typed or
+  pasted before the approval prompt never answer it (IC-75)", "during a run a line typed before the
+  approval prompt is queued, then it asks again", "a block pasted at the approval prompt never
+  answers it nor steers (IC-75)", "invalid answers are explained and kept; five end in a refusal the
+  model is told", "a long invalid answer's notice wraps inside the width (P28 B, E, F)";
+  test-console-typing.R "a terminal: a line arriving just as a question is drawn steers the run (P28
+  D)".
+- Task 6: the permission request record carries `tool_call_id` (a nested member call its own
+  `<outer id>/<k>`), so Task 12 attaches an approval to the call line the console printed; matching
+  on name and input fails for parallel, nested and sub-agent calls. Contract-visible: 04
+  section 7.11. Tests: test-agent-dispatch.R "the request record carries the call id; a nested
+  member call its own".
+- Task 12: approvals ask under the call they gate. The console keeps the session and call ids of the
+  last call line it printed, and an approval prints the call line (`▎ r  x = 1`, strip red, name
+  bold) only when they are not its own: the audit's duplicated call (`● r  zz = 1`, then `r  zz = 1`
+  above the question) is gone, while a background ask, a nested member call in `r` code and a
+  sub-agent's call still show what they gate. The question replaces
+  `allow? [y]es / [a]lways / [n]o / [?]`:
+  `? Allow r?  y yes · a always (session) · p always (project) · n no · ? more` (`?` blue, keys
+  bold, words dim; `p` is now shown; it wraps between options, a key never apart from its words),
+  and a sub-agent's ask reads `? sub-agent a: allow r?` (the call line no longer carries
+  `sub-agent a > `). Every console question reads its answer after `› ` (ASCII `> `) at column 0;
+  choices and inputs take the same frame (`? <title>` bold, details dim, `    1  dplyr` with the
+  number bold, a dim `Choose a number, ...` hint replacing `Choose (...): `; an input's dim
+  `Enter = <default>` replacing `[default]: `), so the OAuth inputs drop their trailing `: `. A
+  remembered answer adds `    allowed <rule> for this session` (or `project`), dim: the plan's
+  `allowed r for this session` would have read as every `r` call being allowed, while only the
+  suggested rule is (plan amended). `a` or `p` with no rule says `a and p are not offered: <why>`,
+  and the invalid-answer hint names `y, a, p or n`. A question and the tool block it is asked in are
+  one block, so no blank line separates a call, its ask and its result lines; questions drawn inside
+  an evaluation take the console's colours, as Task 11's sub-agent lines do. Contract-visible: 04
+  section 15.10 IC-77, 03 sections 6.8.3, 6.17 and NS-1 (section 10.1). Tests: test-console-ui.R "an
+  approval asks under the call it gates; a call not shown is printed (D-243)", "the question line
+  names the keys, a and p only with a rule, and wraps (D-243)", "questions share one frame: ? and
+  the title, numbered choices, a dim hint, the chevron", "a remembered answer adds one dim line
+  naming the rule and its scope (D-243)".
+- Review fixes of Tasks 2-7 (2026-10-21):
+  - A console history entry of several lines that is not a `"""` block or a fence is added as a
+    `"""` block (`console_history_add()`), so Up then Enter sends a block pasted at a question, or
+    at the prompt, back as one input; before, each of its lines was its own prompt. Tests:
+    test-console-repl.R "a history entry of several lines is a """ block, so Up then Enter sends one
+    prompt"; test-console-typing.R "a macOS terminal: a block pasted at a question comes back as one
+    prompt".
+  - The partial line a question's drain keeps is quoted, as every queue notice quotes its text, and
+    no position is promised: `[gptr] kept in history (↑): '<line>'`, Task 15's form. The arrow is
+    `Up` where the output is not UTF-8, never cli's `^`, which reads as Ctrl
+    (`console_symbols()$up`, Task 8's table). Tests: test-console-typing.R "a question drains fd 0
+    first: lines steer, a partial line is kept in the history", "a terminal: a question never takes
+    the line typed ahead of it (P28 B, C, H)".
+  - `gptr.history` decides every console history add, as it does for the REPL's own inputs:
+    `console_history_add()` returns TRUE only when it added (the drained partial line, a line a
+    question reads past, a pasted block, an invalid approval answer, the prompt `/undo` takes back).
+    A notice says `(kept in history)` only then; the drained line is otherwise quoted as
+    `[gptr] not kept (gptr.history is off): '<line>'`, so the person can retype it. Tasks 2 and 3
+    had added these lines whatever the option said. Tests: test-console-repl.R "gptr.history decides
+    whether console_history_add() adds; it never fails (D-243)"; test-console-ui.R "with
+    gptr.history off nothing is kept and no notice says it was (D-243)"; test-console-typing.R "a
+    question drains fd 0 first: lines steer, a partial line is kept in the history".
+  - An invalid approval answer is quoted on one row and the hint follows on its own, with the
+    prompt's letters and the feedback form:
+    `Type y, a or n (n <text> says what to do instead), or ?.` (`y or n` without a rule). Task 3 had
+    named a `p` the prompt never shows and dropped the feedback form, the one hint that feedback can
+    be given. An empty answer, the usual end of a collision after the drain, gets the hint alone,
+    not `Not an answer: ''`, and still counts toward the 5 tries. The notices wrap at the approval
+    rows' width (inside the console margin, D-186). Tests: test-console-ui.R "invalid answers are
+    explained and kept; five end in a refusal the model is told", "a long invalid answer's notice
+    wraps inside the approval's width (P28 B, E, F)".
+  - A line a question reads past during a run is routed as `console_typed()` routes typed lines,
+    through the one function both now call (`console_typed_route()`): a `/command` or `!code` line,
+    or one continuing held code, waits in the reader for the next prompt
+    (`[gptr] after this answer: '<line>'`) and is never a steer, as D-242 says of a draft starting
+    with `/` or `!`. Task 3 queued it as a steer, so in IDE consoles, and in a terminal between the
+    drain and the question's `readline()`, `/exit` or `!rm(x)` went to the agent as an instruction.
+    Tests: test-console-ui.R "during a run a !code or /command line typed before a question waits
+    for the prompt".
+- Review fixes of Tasks 8-15 (2026-10-21):
+  - The approval's keys are a row of their own under the question's text: `  ? Allow edit?`, then
+    `    y yes · a always (session) · p always (project) · n no · ? more` (68 columns whatever the
+    tool or who asks). On the question's row they took 80 columns for `edit` and wrapped at 80
+    columns for every tool name of 4 characters or more and every sub-agent ask, leaving a dangling
+    ` ·` and a bold `? more` under the blue `?`, which read as a second question. Contract-visible:
+    04 section 15.10 IC-77, 03 section 6.8.3 and NS-1 (section 10.1). Tests: test-console-ui.R "the
+    keys are a row under the question, a and p only with a rule (D-243)".
+  - Every part of a console question word-wraps under its own text at the approval rows' width
+    (`ui_width()`): the title's later rows at column 4, a choice's under its label, details at
+    column 4, the hint at column 2. Task 12 wrote the title and the choices whole, so the terminal
+    broke an agent's question (usually longer than a row) mid-word at column 80 and went on at
+    column 0. Contract-visible: 04 section 15.10 IC-77, 03 section 6.8.3. Tests: test-console-ui.R
+    "a long title, choice, detail or hint wraps under its own text (D-243)".
+  - The rest of the approval block takes the same style: the flagged rows and `asks in every mode:`
+    are dim at column 4 (they were ink at column 5, later flagged rows at column 14), and the `?`
+    detail view lists the keys as the question does, `    y  yes` with the key bold and its words
+    dim, in place of `  [y] yes`, a second notation for the same keys. It leaves out its code fence
+    when the call line just above showed the code whole (the fence repeated, unhighlighted, what was
+    highlighted above); the RStudio dialog keeps it, its text stripped of SGR. Contract-visible: 04
+    section 15.10 IC-77, 03 sections 6.8.3 and 6.17. Tests: test-console-ui.R "the detail view's
+    keys read as the question's; it skips a fence shown above (D-243)", "flagged calls fit one per
+    line, highest level first, at most 5 (#33)".
+  - An approval names the tool as the console's call line does: one helper, `console_tool_name()`,
+    gives an MCP tool as `server/tool` in the call line, the question and the detail view, and an
+    MCP call's arguments are dim there too. The approval had its own copy of the call line, from the
+    raw name, so gptr's MCP client tools read `▎ github/create_issue  {...}` when the call started
+    and `▎ mcp__github__create_issue  {...}` and `? Allow mcp__github__create_issue?` when it was
+    asked. Contract-visible: 04 section 15.10 IC-77. Tests: test-console-ui.R "the keys are a row
+    under the question, a and p only with a rule (D-243)".
+- Visual review fixes (2026-10-21; screenshots of 0ee69a0 in Terminal.app, tmux, VS Code, RStudio,
+  Positron, R.app and the degraded modes):
+  - A question's hint (`Choose a number, ...`, an input's `Enter = <default>`) is at column 4 under
+    the title's text, with the details, choices and the approval's keys: at column 2, under the `?`,
+    it read as a new item. Contract-visible: 04 section 15.10 IC-77. Tests: test-console-ui.R
+    "questions share one frame: ? and the title, numbered choices, a dim hint, the chevron", "a long
+    title, choice, detail or hint wraps under its own text (D-243)".
+  - Positron's console is an L console with the pause menu: under ark `.Platform$GUI` is `X11` and
+    stdin is a tty, so `front_end()` said `vscode` and the console got the terminal class (an fd-0
+    typing task, stty on ark's tty, terminal hints), while what the person typed during a run piled
+    up in Positron's own input and ran as R code after `peter()` returned. `front_end()` now knows
+    ark by its `tools:positron` environment, `repl_terminal()` is FALSE there, the pause menu is
+    offered (it resumes there) and the key named is Ctrl-C, which reaches R. Contract-visible: 04
+    section 5 (`front_end()`) and IC-76's scope; `?peter` and the interactive-console vignette.
+    Tests: test-utils-options.R "an IDE's terminal tab is a terminal: inherited IDE variables count
+    only without a tty"; test-console-interrupt.R "Positron's console is no terminal REPL and offers
+    the pause menu (visual review)"; test-console-render.R "the interrupt key follows the front
+    end".
+  - The invalid-answer hint of an approval names the question,
+    `  Allow r? Type y, a, p or n (...), or ?.` (`ui_permission_question()`, shared with the
+    question row): in RStudio and R.app a draft left on the input line when the approval appeared
+    turned `y` into `and label the axesy`, and after a few notices the question had scrolled away.
+    Two parts of that finding are not taken: a guess that an answer ending in a key after other text
+    is a leftover draft (`okay`, `maybe` end in `y` too; the notice already quotes the line), and
+    empty answers leaving the 5 tries (they bound a question that reads nothing but empty lines).
+    Contract-visible: 04 section 15.10 IC-77. Tests: test-console-ui.R "invalid answers are
+    explained and kept; five end in a refusal the model is told", "a long invalid answer's notice
+    wraps inside the approval's width (P28 B, E, F)".
+  - A console question drains fd 0 just before it reads (`ui_console_read()`), after its rows:
+    drained before them (`console_before_message(kind = "prompt")`), the queue lines and the kept
+    line sat between a call's code and the flagged rows of its ask, splitting the block Task 12 made
+    one. They now sit under the question and its keys, right above `› `. Task 19 adds its T-class
+    wait before the rows. Contract-visible: 04 section 15.10 IC-76, 03 section 6.17. Tests:
+    test-console-typing.R "a question drains fd 0 before it reads: lines steer, a partial line is
+    kept", "a line typed during a tool steers when the next call's question follows it", the pty
+    case B.
+  - A line a question reads past (IC-75; in RStudio and R.app every line typed during a run) is
+    shown once: the console echoes it after the question's chevron, and its queue line says
+    `↳ steer · not an answer` (the kind, and that it was not taken as the answer) instead of
+    repeating it; it shows again as the person's line when it is delivered. RStudio showed it three
+    times, the first directly under `? Allow r?`, where it read as the answer. Re-printing the
+    question under the queue line (the same finding's other proposal) is not taken: it would double
+    the question's rows for every such line, and the question stays two rows above.
+    Contract-visible: 04 section 15.10 IC-76. Tests: test-console-ui.R "during a run a line typed
+    before the approval prompt is queued, then it asks again", "during a run a !code or /command
+    line typed before a question waits for the prompt".
+- Task 16: the composer's key machine, pure (`console_compose()` and `console_trigger()` in the new
+  `console-input.R`; Tasks 18-21 feed it the keys). A read batch sends at most one message, so it
+  returns one action, not a list. A newline in a batch ends what DEL, Ctrl-U and Ctrl-W reach, so
+  keys typed after Enter within one 50 ms poll never edit the sent text; Tab and Up act only as a
+  batch of their own (elsewhere Tab is text and Up is dropped), and a blank message is not sent. The
+  trigger rule is `console_trigger()`, which Task 22's completer reuses, so Tab on a trigger word
+  without a match (`@zz`, `/status`) does nothing and never queues it. Contract-visible: 04
+  section 15.10 IC-76, 03 section 3.2. Tests: test-console-input.R (on D-240's CRAN list) "printable
+  text is added at the draft's end; DEL, BS, Ctrl-U and Ctrl-W edit it", "a key is one character:
+  UTF-8 and wide characters", "cursor keys and other sequences are dropped up to their final byte",
+  "an escape sequence cut short is held for 50 ms, then dropped", "Up on an empty draft takes back;
+  only as a batch of its own", "Enter sends the draft; a batch holding newlines is one message (the
+  paste rule)", "/ and ! drafts are follow-ups, whatever the key", "Tab completes a trigger word and
+  never queues it; other drafts go as the other kind".
+- Task 17: one live row replaces the waiting row (`console_spinner()` and its
+  `thinking (Ns, Ctrl-C to steer or
+  stop)`; D-186's waiting row). `console_live()` (in `console-input.R`) draws
+  `▌ <state> <elapsed>[ · n queued][ ·
+  question waiting]` at column 0 under the transcript's last row, the block blue and the words dim,
+  ending `· ctrl-c pauses` where the pause menu is offered and `· esc stops` in RStudio, R.app and
+  Rgui; Task 18's composer adds the draft or the keys. It stays from a run's first request to its
+  end, through the answer's rows: every console write clears it and redraws it after a whole line
+  (`gptr_message_write()`, which holds it in `the$live_row`). The state word follows the run
+  (thinking, the running tool's name, `sub-agent a`), the time is the run's, and `n queued` counts
+  the person's messages waiting. The row is no block, so `console_gap()` lost its waiting kind: a
+  block writes the blank it owes on the cleared row, and tool blocks of consecutive requests still
+  group. Where `\033[K` does not end the line (R.app, Rgui, TERM=dumb, and Positron, whose console
+  erases by writing spaces) the row is padded, and the first write ends it until the run next waits,
+  so its spaces trail only the row that replaces it; RStudio erases with `\033[K` (visual review:
+  about 57 trailing spaces on each RStudio row that replaced the waiting row; none now). Positron
+  was first given `\033[K` too, and its transcript then had 32 rows ending in spaces (7 before).
+  Questions and launched processes clear it (`console_before_message()`); notices, queue lines and
+  sub-agent lines no longer hide it. `console_class()` decides T, D, L and P by capability, and
+  `repl_terminal()` is a T or D console's REPL: radian, which owns its tty, is L there (the plan's
+  class table), so typed lines are no longer read from fd 0 under radian; they are radian's next
+  input. Not interactive (P) draws no row. Contract-visible: 04 sections 7.14 and 15.10 IC-82, 03
+  sections 2.2 rule 5 and 6.17. Tests: test-console-input.R "the live row says what the run does,
+  its queue and the person's draft (D-243)", "the live row's block is the agent's blue, its words
+  dim and the draft ink (D-243)", "the live row is drawn with \r and erased to the line end, or
+  padded (D-243)", "a console write clears the live row and redraws it after its whole lines
+  (D-243)", "console_class() decides the console's class by capability (D-243)"; test-console-wait.R
+  "the live row replaces the old waiting text, at column 0 (D-243)", "the live row is drawn at once
+  and stays under the rows of an answer (D-243)", "where the live row is padded, the first whole row
+  ends it until the next wait (D-245)", "Rscript and other non-interactive R draw no live row (class
+  P)"; test-console-spinner-gui.R and test-console-spinner-width.R (the live row's bytes per front
+  end and width).
+- Task 18: in a T console the person types while the agent works. A prompt call sets character mode
+  (`tty_call()`: `stty -icanon -echo -iexten min 1 time 0`, isig and opost on), restored on return,
+  error and interrupt and, by a finalizer, at `q()`; questions read with the saved modes. Every 0.05
+  s the keys go to the composer (`console_keys()`), whose draft is on the live row: Enter queues it
+  as `type_ahead` says, Tab as the other kind, and Up on an empty draft takes back the newest
+  message waiting. Across the two kinds the newest is of the kind the composer sent last, as the
+  reader's lines, where follow-ups wait, keep no send time: the message just sent is always the one
+  taken, and only a further Up after a mixed sequence may take an older message first. While the row
+  shows, no `↳` queue line is printed (the row is the queue view), so a CLI route's
+  ` · after the CLI's answer` shows only where the row is not up. A question's drain gives what
+  waits to the composer: a partial line typed before an approval stays the draft, where Task 2 kept
+  it in the history. A draft left when the REPL returns to its prompt goes to the history, listed
+  after the status line (Task 21 continues it at the prompt), and after an abort it joins the kept
+  list, which the plan had left to Task 20. D consoles keep D-221 (`-echo`, whole lines).
+  Contract-visible: 04 sections 7.1 (`tty_call()`, `tty_restore()`, `gptr_readline()`), 11.2
+  (`type_ahead`) and 15.10 IC-76, 03 section 6.17. Tests: test-console-typing.R "a T console's call
+  reads keys in character mode; its modes return after it (D-243)", "a terminal call's modes return
+  after an interrupt, also one while stty sets them", "no character mode under radian, which owns
+  its tty (D-243)", "a question during a terminal call reads with the saved modes, then the call's",
+  "a T console's keys edit the draft on the live row; Enter steers (D-242, D-243)", "Tab sends a
+  follow-up, the next prompt; Up takes it back and Ctrl-U discards it", "Up takes back the newest
+  message the person queued, of either kind (D-242)", "a draft left as the REPL returns to its
+  prompt is kept in the history (D-243)", and the pty cases "a terminal: the draft shows on the live
+  row as text streams; Enter steers (D-243)", "a terminal: Tab queues a follow-up, a second run; Up
+  takes back, Ctrl-U discards".
+- Task 19: in a T console a question waits for typing to pause. Before its rows
+  (`console_before_message(kind =
+  "prompt")`), `console_ask_wait()` drains fd 0 into the composer and, while the last key the
+  composer read is under a second old (`ask_ready()`), keeps reading every 0.05 s, the live row
+  saying `question waiting`; Enter, Tab and Up keep working. The question is then drawn and read
+  with the saved modes, and when it returns (`console_asked()`) the row comes back with the draft
+  unchanged, so the draft shows while the approved call runs (it came back only at the next
+  request). At 41452c3, `yes` typed key by key as an approval came due had the approval drawn after
+  `ye`: the `s` went to the composer, and the Enter meant to queue `yes` answered the approval with
+  an empty line (`Allow r? Type y, a, p or n ...`), so `yes` was never sent. A key counts from when
+  the composer read it, so keys read late (after an in-process tool) can hold a question back up to
+  a second. The row is drawn again when the question returns, not after each read: a question that
+  asks again (an invalid answer, a paste) would draw and clear it between its rows and its chevron.
+  D keeps Task 2's drain after the rows; `gptr_confirm()` and the pause menu (Task 20) do not wait.
+  Contract-visible: 04 section 15.10 IC-76, IC-77 and IC-82, 03 section 6.17. Tests:
+  test-console-input.R "a question is asked once no key came for a second (D-243)";
+  test-console-typing.R "a terminal: a question waits a second after the last key; `yes` is no
+  answer (D-243)" and the pty case B (the draft on the live row again while the approved call runs).
+- Task 20: the pause menu is a console question in every console that offers it: `? Paused` and
+  under its text an approval's keys row,
+  `s steer · f follow-up · c continue · a abort · b background`, read at `› ` at column 0 (visual
+  review: `[gptr] paused <id>: [s]teer, ...` read at `  ? `, `[b]ackground` wrapped alone, `steer> `
+  and `follow-up> `, `[gptr] continuing`). The session id shows only when more than one session is
+  paused. A key or its word answers and Enter alone continues. Before, any text's first letter was
+  its key, so a steer typed at the new chevron, `add a legend`, aborted the run; it now gets a dim
+  hint naming the keys. [s] and [f] read at the same chevron and queue as Enter and Tab do:
+  `policy_enqueue()` now keeps the reader's `sent` (it was `console_keys()`'s), and blank text
+  queues nothing, silently; the queue line sits right under the menu's chevron, as under an approval
+  (the visual check showed it a blank row below, a block apart from the answer it confirms). The
+  keys row is `ui_keys()`, which the approval uses too; its separator ends a row, so it never starts
+  one. After [c], [s] or [f] the live row and a T console's draft are drawn again at once
+  (`console_asked()`). Since Task 18 the composer already kept the draft through the menu (the
+  plan's "today it is lost" was 0ee69a0's). Contract-visible: 04 sections 7.14 and 15.10 IC-76, 03
+  section 6.2. Tests: test-console-interrupt.R "the pause menu is a console question: its keys under
+  it, read at the chevron (D-243)", "in the console margin the menu's rows are an approval's, its
+  prompt at column 0" and the menu's other cases; test-console-typing.R "a terminal: a draft
+  survives Ctrl-C and the pause menu (P28 G, D-243)".
+- Task 21: a T console's draft a run left (idle or at max_turns) stays in the composer until sent.
+  It waits through the follow-ups' runs on the live row; then the reader's prompt read edits it at
+  the prompt (`console_idle()`): the prompt and the draft's tail as one row, on the band as the live
+  row, in character mode, drawn again after every key. Enter returns the line, echoed as a follow-up
+  is, so the transcript keeps the whole line; `/`, `!`, fences and continuation reads go on through
+  readline. An emptied draft hands over to readline at the same prompt; Ctrl-C keeps the draft in
+  the history (`↳ kept in history ↑ · <draft>`) and hands over, and it is not the first of the two
+  Ctrl-Cs that leave. Up and Ctrl-D do nothing, nor does Tab off a trigger word. This replaces
+  Task 18's history entry for a draft left at the prompt; after an abort or an error the draft still
+  joins the kept list. Until Task 25 bands readline's prompt, only the editor's row has the band
+  (where `COLORFGBG` gives the background). Contract-visible: 04 section 15.10 IC-76, 03
+  section 6.17. Tests: test-console-input.R "a draft a run left is edited at the prompt; Enter
+  returns it as readline would", "an emptied draft hands over to readline at the same prompt; Ctrl-C
+  keeps it first"; test-console-typing.R "a draft a run left waits for the follow-ups, then
+  continues at the prompt (D-243)", "a terminal: a draft a run left continues at the prompt until
+  sent (P28 I, D-243)" and the pty cases B, C and H.
+- Review fixes of Tasks 16-21 (2026-10-22):
+  - R.app draws no live row (`console_live_start()`): written as a run's first output, a row
+    starting with `\r` gave the whole transcript the input's colour there (blue since Task 17), and
+    R.app's `\r` erases a line printed just before it. Contract-visible: 04 section 15.10 IC-82, 03
+    section 6.17. Tests: test-console-wait.R "R.app draws no live row: a carriage return there
+    restyles what follows (review)".
+  - In a T console Ctrl-C is a key the composer reads (`tty_call()` adds `-isig`): `console_keys()`
+    interrupts after the keys before it (`rlang::interrupt()`, so the pause menu resumes as from
+    SIGINT) and the idle editor keeps the draft. A SIGINT was lost under load (6 of 19 runs at load
+    average 40-57, during a streamed answer and at the idle editor; the plan had deferred the
+    fallback to Task 28 until it failed). isig is on while in-process R code runs (`tty_isig_on()`
+    in `eval_open()`), so Ctrl-C interrupts the code; questions read with the saved modes.
+    Contract-visible: 04 section 7.1. Tests: test-console-typing.R "Ctrl-C is a key the composer
+    reads: it pauses after the keys before it (review)", "in-process R code runs with isig on, so
+    Ctrl-C interrupts it (review)"; test-console-input.R "an emptied draft hands over to readline at
+    the same prompt; Ctrl-C keeps it first"; the pty cases G and I.
+  - A console question's read that Ctrl-C or an end of input ends (`ui_console_read()`, the pause
+    menu's `console_ask()`) first ends the person's row in a T or D console, which readline leaves
+    open: the live row drawn on exit wrote over `› and colour`, and TERM=dumb glued the refusal to
+    it. IDE consoles end the line themselves. Contract-visible: 04 section 15.10 IC-76. Tests:
+    test-console-ui.R "a terminal's question read that Ctrl-C or an end of input ends ends its line
+    (review)"; test-console-interrupt.R "Ctrl-C at the pause menu's chevron ends the terminal's line
+    (review)".
+  - The pause menu takes a key typed before its chevron showed (`console_ask(accept)`,
+    `readline_answer()`'s `accept`): under load the stty that readline waits for came after the
+    person's `s`, which IC-75's stale rule then queued as a steer for the agent, and the menu read
+    `use the median` as an invalid key. Text read too soon that is no key is kept in the history,
+    never sent; [s] and [f] take their text whenever it was typed. Every console question switches
+    to the saved modes before its rows (`tty_question()`), so readline starts as soon as the
+    question shows. Contract-visible: 04 sections 7.1 and 15.10 IC-76. Tests:
+    test-console-interrupt.R "a key typed before the menu's chevron showed answers it; other text is
+    kept (review)"; test-console-typing.R "a terminal call's question reads in the saved modes from
+    before its rows (review)".
+  - A free-text answer to a choice or an input whose first word names a console command (`/exit`,
+    `/help mode`; `ui_console_command()`) waits for the next prompt as a line typed during the run
+    does, and the question reads again: `/exit` typed at the ask tool's question went to the model
+    as the answer. A path such as `/tmp/fit.rds` names no command and stays an answer, the reason
+    visual review finding 36 was not taken. Contract-visible: 04 section 15.10 IC-77. Tests:
+    test-console-ui.R "a console command typed as a free-text answer waits for the next prompt
+    (review)".
+  - The pause menu's [b] speaks as the menu does:
+    `  in the background · !!gptr::gptr_wait(gptr::gptr_last())
+    continues it here` dim (Task 51), then a blank row before the prompt, the service's one-time
+    experimental notice dim too, or `  cannot run in the background · <why>` in red; it was
+    `[gptr] running in the background;
+    gptr_wait() brings it back` in ink, right on the next prompt. Contract-visible: 04 section 15.10
+    IC-76. Tests: test-console-interrupt.R "[b]ackground hands a foreground run to bg.register (P21)
+    and resumes", "a [b]ackground refusal is a notice and the menu asks again".
+  - The live row counts a character outside ASCII as two columns only in a CJK locale (`LC_CTYPE`
+    `ja`, `ko`, `zh`), whose terminals draw East Asian ambiguous widths wide (`live_fit()`);
+    elsewhere R's widths. Counting the style table's own glyphs two cut rows that fitted: at 60
+    columns `▌ thinking 25s   enter steer · tab
+    follow-up · ctrl-c pause` (59 columns) became `ctrl-c…`. Contract-visible: 04 section 15.10
+    IC-82. Tests: test-console-input.R "the live row says what the run does, its queue and the
+    person's draft (D-243)", "in a CJK locale every character outside ASCII counts two columns
+    (D-243)".
+  - A question asks again in one style: every re-ask row is dim at column 4, under the question's
+    text as its keys row (`ui_hint()`): the approval's `Not an answer`, hint,
+    `a and p are not offered` and 5-tries rows (ink at column 2, under the `?`, louder than the
+    question), a choice's `Not an answer. Type a number[, or your own
+    answer].` (`Please enter one of the numbers shown.` in ink), a paste's notice and the pause
+    menu's hint (dim at column 2). Contract-visible: 04 section 15.10 IC-76 and IC-77. Tests:
+    test-console-ui.R "every question asks again in one style: dim rows at column 4 (review)" and
+    the re-ask expectations; test-console-interrupt.R's menu block.
+  - The live row's key hint has one grammar, the key and its verb as the composer's keys read
+    (`enter steer ·
+    tab follow-up · ctrl-c pause`): without a composer `· ctrl-c pause` or `· esc stop` (it was
+    `pauses`, `stops`), so TERM=dumb, RStudio, Positron and the terminals read as one design.
+    Contract-visible: 04 section 15.10 IC-82, 03 section 6.17. Tests: the live-row rows of
+    test-console-input.R, test-console-wait.R, test-console-notice.R, test-console-render.R and
+    test-console-spinner-*.R.
+  - The pause menu's [s] and [f] read their text under their own title, `  ? Steer` or
+    `  ? Follow-up`, so every chevron hangs under a `?` title (after `› s` a bare `›` looked like
+    the menu asking again after an invalid key), and the queue line leaves the text out, `↳ steer`,
+    as the text is on the row above (it showed three times within 15 rows). `the$echoed` now holds
+    the text such a line shows in place of the person's. Contract-visible: 04 section 15.10 IC-76.
+    Tests: test-console-interrupt.R "steer and follow-up queue the text with source pause_menu
+    (IC-55)", "in the console margin the menu's rows are an approval's, its prompt at column 0";
+    test-console-typing.R "pause-menu text passes the input event with source steer".
+  - The live row's collapse drops whole terms before it cuts text: the hint's terms from the right
+    (`ctrl-c pause`, `tab follow-up`, `enter steer`; the queue view's `↑ edit`), then
+    `question waiting`, then `<n> queued`; only then is the queued message cut, keeping its head,
+    down to the block and the time. Cutting characters ended a whole message in `…`
+    (`↳ follow-up · then save the plot as plot.png…` at 80 columns, where only ` · ↑ edit` was
+    dropped) and cut keys from their verbs (`ctrl-c…`). Contract-visible: 04 section 15.10 IC-82.
+    Tests: test-console-input.R "the live row says what the run does, its queue and the person's
+    draft (D-243)".
+  - In an IDE console (class L) an invalid approval answer of several words adds
+    `A draft typed during the run
+    joins your answer; clear the line first.`: RStudio keeps a draft typed while R was busy on its
+    input line, so the person's `y` became `and label the axesy`, and the hint named the question
+    but not the cause. The row states the rule (steering review: it said the text was still on the
+    input line, false for text typed at the question; the reader cannot tell the two apart, and an
+    answer ending in a key, as `okay` does, is no sign of a draft). Such an answer still counts as
+    one of the 5 tries, as visual review Fix 11 kept: not counting it would let a question run
+    forever. The cure names no key: Esc at RStudio's readline interrupts R. Contract-visible: 04
+    section 15.10 IC-77. Tests: test-console-ui.R "in an IDE console an answer of several words
+    names the draft left on the input line", "an IDE console's draft row is a rule, not a claim
+    about this answer (steering review)".
+  - A CLI route's steer prints its queue line, ` · after the CLI's answer`, in a T console while the
+    live row is up too: the row is the queue view there, so the plan's caveat was never shown and a
+    terminal user was not told the steer waits for the CLI's whole answer. Contract-visible: 04
+    section 15.10 IC-76. Tests: test-console-typing.R "a T console's steer on a CLI route still says
+    it waits for the CLI's answer (review)".
+  - In Positron's console the live row says `· ctrl-c steer`: Positron holds what is typed while
+    peter works (steers, drafts and follow-ups stayed as pending input through the approval, the
+    question and peter's own prompts, never delivered) and clears it at Ctrl-C, so the menu's s and
+    f are the only way to steer there; ?peter no longer says Positron keeps typed lines for the next
+    input. Contract-visible: 04 section 15.10 IC-82, `?peter`. Tests: test-console-wait.R "an IDE
+    console's row says what its key does and where typed lines go".
+  - The idle editor's row escapes the draft as the live row does (`live_text()`, rule C1): a pasted
+    bidi override or zero-width character was written raw at the prompt while the live row showed
+    `<U+202E>`. Tests: test-console-input.R "a draft a run left is edited at the prompt; Enter
+    returns it as readline would".
+  - The live row is drawn in the console's colours (`console_colors()`), also from inside an
+    evaluation, whose options say 1 colour: a redraw caused by a notice or a sub-agent line from the
+    agent's `r` code wrote the block and the words in full ink. Tests: test-console-input.R "the
+    live row keeps the console's colours when drawn inside an evaluation (review)".
+  - With a draft on the live row the status is padded to the widest it was this run (`status_w`,
+    kept by `console_live()`), so the person's text moves right at most a few times a run and never
+    back; it jumped 7 columns left when `thinking 17s` became `r 15s` and back 0.3 s later.
+    Contract-visible: 04 section 15.10 IC-82. Tests: test-console-input.R "the draft keeps its
+    column as the status changes; the status only widens (review)".
+  - While the `r` tool evaluates in this process the live row has no clock and, with an empty draft,
+    says `▌ r ·
+    keys show when r returns`: the reactor cannot tick or read keys then, so the row read `r 0s`
+    through a 6 s call and showed none of the keys typed, which invited typing twice.
+    Contract-visible: 04 section 15.10 IC-82. Tests: test-console-input.R "while R code runs in this
+    process the row has no clock and says keys wait (review)"; test-console-wait.R "the live row
+    replaces the old waiting text, at column 0 (D-243)".
+  - The idle editor's kept draft line, at Ctrl-C or an end of input, is followed by a blank row, so
+    the prompt keeps the blank row above it it has after every run (it sat right under
+    `↳ kept in history ↑ · ...`). Contract-visible: 04 section 15.10 IC-76. Tests:
+    test-console-input.R "an emptied draft hands over to readline at the same prompt; Ctrl-C keeps
+    it first"; the pty case I.
+  - At the idle editor a cursor key (Left, Right, Home, End, Ctrl-A, Ctrl-E) hands the draft to
+    readline as Ctrl-C does: kept in the history (`↳ kept in history ↑ · <draft>`) and recalled with
+    Up and readline's full editing. The editor dropped them silently, so three Lefts then `X` gave
+    `...gearX`. A cursor index drawn with carriage returns stays out of scope (Out of scope: cursor
+    movement inside the composer). Contract- visible: 04 section 15.10 IC-76. Tests:
+    test-console-input.R "an emptied draft hands over to readline at the same prompt; Ctrl-C keeps
+    it first".
+  - A Tab or Up that ends a key batch without a newline acts as the key after the batch's text
+    (`console_compose()`): keys typed during an in-process tool are read as one batch when it
+    returns, so `then
+    plot` and Tab became a literal tab in the draft, and Ctrl-U then Up lost the Up. A Tab inside
+    text stays text; at the idle editor a Tab off a trigger word still does nothing.
+    Contract-visible: 04 section 15.10 IC-76. Tests: test-console-input.R "Up on an empty draft
+    takes back; as a batch of its own or its end (review)", "Tab completes a trigger word and never
+    queues it; other drafts go as the other kind", "a draft a run left is edited at the prompt;
+    Enter returns it as readline would".
+- Steering review fixes (2026-10-22):
+  - RStudio and R.app offer the pause menu (`console_menu_available()`: `rstudio`, and
+    `.Platform$GUI` AQUA): abort-only there, a steer typed during a run could only be the next
+    prompt, and RStudio hides an entered line at its next output. Resuming works in both (plain-R
+    probes; the whole menu flow in a new RStudio 2026.09 and a new R.app instance). A line entered
+    during a run is still the next prompt unless a question reads it, one line one prompt; RStudio's
+    live row says so, `▌ thinking 12s · esc pause · typed lines run next` (`typed` in
+    `console_live_state()`, the first term the collapse drops), and the banner says
+    `Esc pauses an answer`. In RStudio an Esc first closes RStudio's own completion list, if open,
+    then clears a line being typed, and only then pauses, so the menu reads at an empty input line.
+    Windows' Rgui stays abort-only. Contract-visible: 03 section 6.2, 04 sections 7.14
+    (`with_interrupt_policy()`) and 15.10 IC-82. Tests: test-console-interrupt.R "RStudio's console
+    offers the pause menu; its s steers the run (steering review)", "the policy is abort-only where
+    resuming is unverified (Rgui, Jupyter), not in R.app"; test-console-input.R "the live row says
+    what the run does, its queue and the person's draft (D-243)"; test-console-repl.R "the banner
+    names the console's key; no pause is promised where none is (review)"; test-console-wait.R "an
+    IDE console's row says what its key does and where typed lines go".
+  - Positron's live row reads `▌ thinking 2s · ctrl-c, then s, to steer` (was `· ctrl-c steer`), and
+    where the menu is offered the console's banner adds
+    `Text typed while peter works waits as R code; Ctrl-C, then s,
+    steers.`: Positron's console holds what is typed while peter works as R code, cleared at Ctrl-C
+    or run after `peter()` returns (a parse error), so it never reaches the agent, and the old term
+    let the person take their text for sent. gptr reads nothing of Positron's input (no parser, no
+    poller); a one-shot `peter("...")` has no banner, so the row is the cue there. The term goes
+    whole below about 40 columns, as every term does. Contract-visible: 04 section 15.10 IC-82.
+    Tests: test-console-input.R "the live row says what the run does, its queue and the person's
+    draft (D-243)", "Positron's row says Ctrl-C, then s, steers there (steering review)";
+    test-console-repl.R "in Positron the banner says typed text waits as R code (steering review)";
+    test-console-wait.R "an IDE console's row says what its key does and where typed lines go".
+  - A question waits three seconds after the last key while the composer holds a draft, a second
+    otherwise (`ask_ready(last_key, now, draft)`), and one drawn over a draft writes a dim row above
+    its chevron, `↳ draft kept · <the draft's tail> · back after your answer`. With a half-typed
+    draft and a pause of a second the question cleared the live row, the only place the draft
+    showed, and the rest of the sentence became its answer (an ask got `loess fit`; an approval read
+    ` no more than 5 bins` as a denial). Enter or Ctrl-U empties the draft, so a sent or cleared
+    draft asks after a second. D and L consoles are unchanged. Contract-visible: 04 section 15.10
+    IC-76 and IC-77. Tests: test-console-input.R "a question is asked once no key came for a second
+    (D-243)"; test-console-ui.R "a question drawn over the composer's draft says where it went
+    (steering review)"; test-console-typing.R "a terminal: a question waits a second after the last
+    key; `yes` is no answer (D-243)", "a terminal: a question never takes the line typed ahead of it
+    (P28 B, C, H)".
+  - A batch read on the polling beat that holds newlines and ends in text is a paste and stays one
+    draft (`console_compose(..., paste)`; leading blank lines dropped), which Enter sends as one
+    message, as at the idle prompt: during a run a paste without a final newline was split, its head
+    delivered alone as a steer (two model requests for one message) and its last line kept as the
+    draft. No person types a newline and more inside one 50 ms read, so `console_keys()` passes TRUE
+    when the reader read at most 0.2 s before (`rd$polled`, empty reads included); the idle editor
+    always; the background probe never. A run's first read and keys piled up during an in-process
+    tool keep the old rule, so `do X`, Enter, `then Y` typed during a tool still sends `do X`.
+    Bracketed paste was rejected: new terminal state for every mode switch and question.
+    Contract-visible: 04 section 15.10 IC-76. Tests: test-console-input.R "a batch read on the
+    polling beat that ends in text is a paste: one draft (review)"; test-console-typing.R "keys read
+    on the polling beat are a paste; after a stall they are typed (review)", "a terminal: a paste
+    during a run is one draft; Enter sends it as one steer (review)"; test-console-repl.R "a macOS
+    terminal: a paste is one turn, a fence echoes once, Ctrl-D never hangs".
+  - The keys a T console's composer reads in the same read as its Ctrl-C answer the pause menu and
+    then its text question (`rd$after_interrupt`, `console_ahead()`, read first by `console_ask()`;
+    the answer echoed at the chevron): they were dropped, so under load Ctrl-C, `s` and Enter in one
+    read lost the `s`, and the steer then typed at the menu was lost as well. Lines before an
+    answer, and text without one, are kept in the history; what the menu leaves the composer reads
+    once it resumes (so it is typed after the menu, never behind keys typed later), and after [a] it
+    is the draft at the next prompt (`console_send()`), so a stale tail never answers a later menu.
+    Text typed at the menu that is no key is kept in the history in an interactive R, as an approval
+    keeps a non-answer, under `Not a key: '<text>' (kept in history).` above the keys hint, and is
+    never sent: free text at the menu stays no steer (Task 20's rule; reversing it is the
+    maintainer's call). An unterminated key read with the Ctrl-C is kept, no answer: readline cannot
+    be pre-filled. Contract-visible: 04 section 15.10 IC-76. Tests: test-console-typing.R "Ctrl-C is
+    a key the composer reads: it pauses after the keys before it (review)", "keys read with Ctrl-C
+    that no question took wait at the prompt (steering review)", "a terminal: keys read with Ctrl-C
+    answer the pause menu (steering review)"; test-console-interrupt.R "keys read with Ctrl-C answer
+    the pause menu and its text question (steering review)", "the pause menu is a console question:
+    its keys under it, read at the chevron (D-243)".
+  - While the `r` tool evaluates in this process the live row says `keys wait` with a draft too, a
+    status word after `r` and before the queue (`▌ r · keys wait · 1 queued   › p1 third line`);
+    only an empty draft had a cue (`keys show when r returns`), so the row with a draft, kept from
+    before the call or over a question, stayed the same while further keys did not show, which
+    invited typing them again. The cue goes whole before the draft's tail is cut, and the frozen row
+    is still drawn once. Contract-visible: 04 section 15.10 IC-82. Tests: test-console-input.R
+    "while R code runs in this process the row has no clock and says keys wait (review)", "a leading
+    ! takes the chevron's place; / and ! drafts say when they run (D-244)".
+  - During a sub-agent the live row ticks and shows the queue view: the sub-agent is a `peter()`
+    call in the parent's `r` code, whose run reads and draws the keys, yet the row took the parent's
+    frozen `r` call and said `keys show when sub-agent '…' #1 returns` (the label twice), without a
+    clock, the queued message hidden. `console_live_state()` reads frozen from the sub-agents while
+    one shows (`console_kids()`), the row's task draws while one shows, a sub-agent's `r` call
+    freezes its own record and draws the row once, and the cue names the tool,
+    `keys show when r returns`. A tool start only freezes (an `r` call), so a call nested in `r`
+    code, now seen at its start, does not unfreeze its record. Contract-visible: 04 section 15.10
+    IC-82. Tests: test-console-input.R "during a sub-agent the row ticks and shows the queue; keys
+    wait in its r call"; test-console-typing.R "a terminal: during a sub-agent the row ticks and
+    steers; its r call waits (review)".
+  - Keys typed as the idle editor hands over to readline are not echoed before its prompt (the open
+    finding of the review of Tasks 16-21: `/expeter[edits]> /exit`). The editor restored the saved
+    modes, echo on, before readline took the terminal. Where R's readline reads the tty,
+    `console_idle()` now leaves the call's modes (`rd$handed`) and the reader restores them as its
+    last step before `gptr_readline()`, the prompt starting with `\001\r\033[K\002`, which erases a
+    key echoed in the moment left. Echo is not left off for readline: both readline libraries read
+    the ECHO flag when they start and would then draw nothing typed. Contract-visible: 04
+    section 15.10 IC-76. Tests: test-console-input.R "a hand-over keeps the editor's modes until
+    readline is called, which erases the row"; test-console-typing.R "a terminal: keys typed as the
+    idle editor hands over show after the prompt only".
+  - A secret question reads without echo where R reads its own terminal (cheat-sheet review findings
+    50 and 59, unit auth-2): `ui_console_read()` took `secret` and ignored it, so outside RStudio
+    `gptr_login()`'s key entry, the MCP bearer-token prompt and the client-id prompt showed the key
+    as typed, left in the scrollback, though `?gptr_login` and the sheet promise masked entry. In a
+    T or D console `tty_secret()` gives the modes to come back to (a console call's saved ones, else
+    `stty -g`) and `gptr_readline(hide = )` sets `-echo` as the last mode before readline, after its
+    own restore, and restores the modes first on exit, an interrupt too; GNU readline and libedit
+    read the ECHO flag when they start and then draw nothing typed, so the newline of Enter is
+    written after the answer. Where R reads no terminal or stty fails (R.app, Windows, IRkernel,
+    radian; RStudio, and Positron with rstudioapi installed, ask in their own dialog,
+    `rstudioapi::askForPassword()`, as before), one dim row above the chevron says once in the
+    session `This console shows the key as you type; gptr_env() loads keys from a
+    file instead.` R's history never held a `readline()` answer. Contract-visible: 04 section 15.10
+    IC-77. Tests: test-console-ui.R "a terminal reads a secret with its echo off, then restores it
+    (cheat-sheet review)", "a console that shows a secret as typed says so once (cheat-sheet
+    review)", "a terminal: gptr_login() reads a key without showing it (cheat-sheet review)".
+- Cheat-sheet review (2026-10-23, console-1): the first-use setup menu adds
+  `4  Cancel and return to R`, its default, so its hint reads
+  `Choose a number; Enter = Cancel and return to R` and Enter cancels at once; before, it had no
+  default, and Enter or `0` asked again, five times under `Not an answer. Type a
+  number.`, and then cancelled. A choice's fifth invalid answer writes
+  `No valid answer after 5 tries;
+  cancelled.` in place of one more `Not an answer`, as an approval's refusal does. Contract-visible:
+  04 sections 6.1.1 (setup) and 15.10 IC-77. Tests: test-console-setup.R "the console menu offers
+  Cancel, and Enter chooses it (cheat-sheet review)", "a call with a prompt resolves its model and
+  never shows the setup menu"; test-console-ui.R "a choice ends after five invalid answers, saying
+  it is cancelled (cheat-sheet review)".
+- Cheat-sheet review (2026-10-23, sessions-16): an approval's `n <text>` reaches the model as the
+  person's instruction,
+  `The user declined this call and said: "<text>". This is the user's own instruction: do that
+  instead; any call it needs is approved separately.`; before,
+  `Permission denied: <text>. Explain what you need or
+  choose another approach.`, which GPT, Claude and qwen read as the harness's refusal (13 of 13 runs
+  did not do it). An answer's `feedback` is only what the person typed; the UI's own denials (a
+  failing dialog, five invalid answers, a scripted UI out of answers, a parked background ask) are
+  its new `reason`, a worker's parent relays its gate's denial as `reason`, so a policy is never
+  quoted as the user. Every other denial reads as before. Also on a call served to a CLI route in a
+  live run, which asks the person too (the unit had excluded it as getting no reply).
+  Contract-visible: 04 sections 9.2, 10.2 row 22, 11.11, 15.10 IC-77; 03 section 6.8.3. Tests:
+  test-agent-dispatch.R "a denial with the person's text tells the model it is theirs (cheat-sheet
+  review)", "the model reads n <text> as the person's; the next call is asked (cheat-sheet review)";
+  test-subagent-worker.R (both relay tests); test-mcp-server.R "a served call the person denies with
+  text says it is theirs (cheat-sheet review)".
+- Review fixes of Tasks 22-27 (2026-10-23):
+  - A D console's drain at a question erases the row before what it writes when it read a partial
+    line, as the D live row does: the question's rows turned the echo back on, and the terminal had
+    echoed the keys typed after that at column 0, so the kept line read
+    `reams↳ kept in history ↑ · s2 while the answer streams`. Contract-visible: 04 section 15.10
+    (the drain, Task 2). Tests: test-console-typing.R "a question drains fd 0 before it reads: lines
+    steer, a partial line is kept".
+  - A secret read in Emacs' comint (M-x shell, ESS: `INSIDE_EMACS` names it) is no hidden read
+    (`tty_secret()` gives NULL), so the dim row says once that this console shows the key as typed:
+    comint's buffer shows the text and keeps it in its input ring whatever the tty's echo, while
+    gptr set `-echo` there and said nothing. Contract-visible: 04 section 15.10 IC-77. Tests:
+    test-console-ui.R "a console that shows a secret as typed says so once (cheat-sheet review)".
+  - The width the live row pads its status to (`status_w`) counts the lasting words only, not
+    `keys wait` or `question waiting`, which go when `r` returns or the question is asked: one row
+    with both kept every later draft of the run 20 columns from its status
+    (`▌ thinking 27s                       › then save ...`). Contract-visible: 04 section 15.10
+    IC-82. Tests: test-console-input.R "the draft keeps its column as the status changes; the status
+    only widens (review)", "a leading ! takes the chevron's place; / and ! drafts say when they run
+    (D-244)".
+  - Code the pause menu resumed during an `r` call keeps its block: where a tool is on the stack
+    (`run_current()`; an approved call's last block is its ask, so the block's kind cannot tell),
+    its further output (the evaluator's tee, which writes no block gap) sits one blank row below the
+    menu and its `done · 4.8 s` joins it, where the output ran on from the menu's last row
+    (`↳ steer`, then `Min. 1st Qu. ...`) and a blank row cut `done` off. Contract-visible: none.
+    Tests: test-console-interrupt.R "the output of resumed code and its result stay one block below
+    the menu (review)".
+  - A line the keys read with Ctrl-C begin without ending begins the answer of the question that
+    reads next (`console_ahead()` leaves it in `after_interrupt`, `console_ask()` shows it after the
+    chevron and puts it before the read's text): `s` then a later Enter answers `s`, and
+    `use the med` then `ian` steers `use the median`. It went to the history, so the read took only
+    the rest and `ian` was queued as the steer. Contract-visible: 04 section 15.10 IC-76. Tests:
+    test-console-interrupt.R "keys read with Ctrl-C answer the pause menu and its text question
+    (steering review)", "a line begun with Ctrl-C begins the answer the question reads (review)".
+  - The row above a question's chevron that names a T console's draft puts the person's text last,
+    its head kept as a queue line keeps it,
+    `↳ draft kept, back after your answer · and label the ax…` (`ui_draft_kept()`); it was
+    `↳ draft kept · …bel the axes · back after your answer`. The pause menu writes it too, above its
+    chevron and above its `? Steer` or `? Follow-up` text's: the menu hid the draft without a word,
+    and a person who retyped it had it queued twice. Contract-visible: 04 section 15.10 IC-76.
+    Tests: test-console-ui.R "a question drawn over the composer's draft says where it went
+    (steering review)"; test-console-interrupt.R "the pause menu and its text question say a T
+    console's draft is kept (review)"; test-console-typing.R (the pty case's rows).
+  - On a narrow live row a sub-agent's label gives way to its number first, `sub-agent #1 4s`
+    (`short` in `console_live_state()`), before the person's queued text is cut or the hint dropped,
+    and a bare clock is not padded to the run's widest status: at 60 columns the row read `▌ 4s`
+    padded beside a draft, cut `↳ steer ·
+    s1…`, or lost `keys show when r returns` in the sub-agent's own `r` call. Contract-visible: 04
+    section 15.10 IC-82. Tests: test-console-input.R "a sub-agent's long label gives way to its
+    number before the person's text (review)", "during a sub-agent the row ticks and shows the
+    queue; keys wait in its r call".
+  - The live row's freeze is the `r` call's (`rec$frozen` holds its id): a nested call's end no
+    longer clears it while the code runs, and a question waiting shows the clock and the keys, since
+    it reads them; the approval of the `r` call comes after its start event, so the row said
+    `keys wait` while Enter, Tab and Up worked. Contract-visible: 04 section 15.10 IC-82. Tests:
+    test-console-input.R "while R code runs in this process the row has no clock and says keys wait
+    (review)", "the r call's own end unfreezes the row, not a nested call's (review)".
+
+- Live dogfood fixes (Task 28, 2026-10-23): Task 32: a batch on the polling beat is a paste only
+  when it holds more keys than a person types since the reader's last read, one in 30 ms plus one.
+  The steering review's premise, that no person types a newline and more inside one read, failed
+  under load: reads came late, two keys each, and `steer six: red car`, Enter, `draft six` stayed
+  one two-line draft (S6 on claude-cli, codex and Bedrock Opus 4.8 at load average 80-180).
+  Contract-visible: 04 section 15.10 IC-76. Tests: test-console-typing.R "keys read on the polling
+  beat are a paste; after a stall they are typed (review)".
+
+- Live dogfood fixes (Task 28, 2026-10-23): Task 34: the pause menu takes the call's modes back on
+  every exit (`on.exit(tty_question(FALSE))`), its abort too. After `a` the run's stop ran in the
+  menu's saved modes, echo on: on codex, whose stop takes about a second, Up typed then showed
+  `^[[A` on a row of its own above the status line. Contract-visible: 04 section 5 `tty_question()`
+  row. Tests: test-console-interrupt.R "an abort at the pause menu takes the call's modes back
+  before the run stops (Task 34)".
+
+- Live dogfood fixes (Task 28, 2026-10-23): Task 35: a Tab or Up that ends a read right after a
+  newline is a key of its own, after the message the newline sent (`console_keys()`);
+  console_compose() acts once a batch, so it dropped such an Up. In S4 on Versa GPT-5.6, Bedrock
+  Opus 4.8 and codex, `s2: cylinders`, Enter and Up 40 ms apart shared a read: Up took nothing back
+  and the edit became a third steer. Contract-visible: 04 section 15.10 IC-76. Tests:
+  test-console-typing.R "keys read on the polling beat are a paste; after a stall they are typed
+  (review)".
+
+- Live dogfood fixes (Task 28, 2026-10-24): Task 39: a gptr message is also an `rlang_message`.
+  RStudio 2026.09's global message handler (`console_highlight_conditions`, default on) writes every
+  other message to stderr in its own box and muffles it, so gptr's display, which clears the live
+  row and keeps the margin, never ran: the stale row stayed above the boxed notice.
+  Contract-visible: 04 section 2 message classes. Tests: test-console-message-stream.R "a console
+  handler that takes every non-rlang message leaves gptr's display alone".
+- Final visual loop, round 1 (2026-10-24): Task 46: the approval's `?` view wraps every row to the
+  console under its own text and cuts none: prose at column 2, a change row after its sign, code at
+  column 6, a flagged call under its call, a key's words under its words (`console_hang()` keeps a
+  row's spaces). At 60 columns a long change row and a flagged call ran past the edge, and the
+  terminal continued them at column 0. Contract-visible: 04 section 15.10 IC-82 (the `?` view).
+  Tests: test-console-ui.R "the ? view wraps its rows to the console, each under its own text
+  (visual round 1)".
+- Final visual loop, round 1 (2026-10-24): Tasks 47 and 53: after the pause menu's [b] the answer's
+  cut row comes first, then a blank row and the background service's notices with the background row
+  as one dim block; on a refusal the notices come before the red row. The notices were written as
+  the service gave them, so the answer's tail floated between two halves of the status block.
+  Contract-visible: 04 section 15.10 (the pause menu). Tests: test-console-interrupt.R "[b]ackground
+  hands a foreground run to bg.register (P21) and resumes".
+- Final visual loop, round 1 (2026-10-24): Tasks 48 and 50: where readline reads the tty
+  (`console_readline_tty()`, now in L0 with `tty_question()`), a console question switches to the
+  saved modes with `-echo`, and `gptr_readline()` turns the echo on as readline starts, its prompt
+  opening with `\r\033[K`: a key typed while the question's rows were written was echoed by the
+  terminal before the chevron and then again by readline (` l    ↳ draft kept ...` and
+  `›  loess fit`, once under a stall); with the echo off as it started, readline showed no answer
+  (Task 48's own visual check). A D console without readline keeps the echo. Contract-visible: 04
+  section 5 `tty_question()` row. Tests: test-console-typing.R "a terminal call's question reads in
+  the saved modes from before its rows (review)", "a question during a terminal call reads with the
+  saved modes, then the call's".
+- Final visual loop, round 1 (2026-10-24): Task 49: an approval's flag has one shape in the ask and
+  in `?`, `[<level> <category>] <call>` (`ui_flags()`), its backticked names inline code and an
+  object's `<class,
+  size>` written `(class, size)` as the mention line writes it; the `?` view's first row names no
+  level where the reason row does. The ask showed literal backticks and angle brackets, `?` wrote
+  `[2] file_write  <call>` and named the level twice. Contract-visible: 04 section 15.4 IC-53
+  item 8. Tests: test-console-ui.R "a flag has one shape in the ask and in ?, in the console's words
+  (visual round 1)".
+- Final visual loop, round 1 (2026-10-24): Task 51: a `gptr_wait()` in the console's `!` code makes
+  the sessions it waits for the console's foreground while it lasts (`console_wait()`,
+  `console_state()$waited`), outside the code's evaluation (`.gptr_eval_outside`: its sink lifted,
+  the options from before it) and with the keys read as during a prompt's call (`console_reading()`,
+  which `console_send()` uses too), so a run sent to the background with [b] shows its rows, live
+  row and status line and Enter steers it. [b]'s row says what holds at the chat prompt, where
+  nothing runs it: `in the background · !!gptr::gptr_wait(gptr::gptr_last())
+  continues it here`. Before, the row said `running in the background · gptr_wait() brings it back`,
+  the session did not move for 25 s, and the wait ran it to its end with nothing on screen while a
+  typed line was echoed raw. Contract-visible: 04 sections 7 `gptr_wait()`, 15.10 (the pause menu).
+  Tests: test-console-repl.R "a terminal: a run sent to the background shows again while the console
+  waits for it".
+- Final visual loop, round 2 (2026-10-24): Task 54: a console question passes its answers to its
+  read (`accept(line)`: an approval's keys and `n <text>`, a choice's numbers); the drain after its
+  rows returns the first whole line `accept` takes (`typed_answer()`), echoed after the chevron, and
+  once the drain read fd 0 `readline_answer()` takes one however soon it is read (outside a run
+  nothing was drained, so a line typed before the question still never answers it). `accept` is a
+  predicate for the pause menu too. `y` typed 20 ms after `Allow r?` (250 ms in TERM=dumb) became a
+  steer and the question was asked again. Contract-visible: 04 sections 5 `readline_answer()`, 15.10
+  IC-76. Tests: test-console-typing.R "a terminal: an answer typed as a question shows answers it, T
+  and D (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 55: `console_wait()` writes in the console's colours
+  (`cli.num_colors = console_colors()`, as the live row and `console_keep()` do): the evaluation's
+  writer puts its capture back after the first row, and below 256 colours the delivered steer had no
+  band and the status line was SGR 2, fainter than the grey before the wait. Contract-visible: 04
+  section 15.10 (the pause menu's [b]). Tests: test-console-repl.R "a terminal: a run sent to the
+  background shows again while the console waits for it".
+- Final visual loop, round 2 (2026-10-24): Task 56: while `console_wait()` waits the REPL counts as
+  sending (`rs$sending`), so `console_repl_prompt()` finds its reader: the live row shows the draft
+  and the queue view, `console_queued()` counts the held lines, and a follow-up waits for the next
+  prompt, as in a prompt's call. The row stayed `thinking 11s · ctrl-c pause` while keys were read,
+  so a steer was typed blind. Contract-visible: 04 section 15.10 (the pause menu's [b]). Tests:
+  test-console-repl.R "a terminal: a run sent to the background shows again while the console waits
+  for it".
+- Final visual loop, round 2 (2026-10-24): Task 58: a D console's call sets `-echo noflsh`, so
+  SIGINT leaves a line being typed in the terminal, and the pause menu drains fd 0 after its rows as
+  a question does (`ui_drain()`, shared with `ui_console_read()`): the partial line is kept in the
+  history above the chevron and a whole line that is a key answers. TERM=dumb lost the line at
+  Ctrl-C (the kernel flushed it), and without the drain the menu read it as `and colour by gearc`.
+  Contract-visible: 04 sections 5 `tty_call()`, 15.10 IC-76. Tests: test-console-typing.R
+  "TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (visual round 2)".
+- Final visual loop, round 3 (2026-10-24): Task 71: every question's row for an answer that is no
+  answer is in the console's lower-case terms (`ui_reask()`, dim at column 4, rows of whole terms,
+  the keys bold): `not a key ·
+  kept in history ↑ · s, f, c, a or b`,
+  `not an answer · kept in history ↑ · y, a, p, n, n <instead> or ?`, `not
+  an answer · a number`, `a pasted block is not an answer`,
+  `no valid answer after 5 tries · refused`; `a and p
+  are not offered: <why>` and an IDE console's draft row lose their capitals and full stops. The
+  pause menu and the approval wrote `Not a key: '<text>' (kept in history).` and
+  `Paused. Type s, f, c, a or b.`, two sentences that repeated the bold title right above them.
+  Contract-visible: 04 section 15.10 IC-75, IC-77 item 3, the pause menu. Tests: test-console-ui.R
+  "invalid answers are explained and kept; five end in a refusal the model is told", "every question
+  asks again in one style: dim rows at column 4 (review)"; test-console-interrupt.R (the pause
+  menu's keys).
+- Final visual loop, round 3 (2026-10-24): Task 80: a D console's question waits for typing to pause
+  as a T console's does (Task 19): before its rows `console_ask_wait_lines()` reads fd 0 in the
+  drain's mode until no key has come for `ask_ready()`'s interval, routes a line ended meanwhile as
+  typed during the run, and holds the partial line in the reader (`rd$part`, `typed_join()`) for the
+  drain after the rows, which keeps it; the drain's mode turns the terminal's editing off, so DEL,
+  Ctrl-H, Ctrl-W and Ctrl-U act as it would (`tty_line_edit()`, Task 83: a Ctrl-U typed in the wait
+  was kept as `<U+0015>`). In TERM=dumb an approval that came while
+  `please make the plot simple, use a log scale` was typed kept `please
+  make the plot s` and took `imple, use a log scale` as an invalid answer. Contract-visible: 04
+  section 15.10 IC-76 (a question waits for typing to pause). Tests: test-console-typing.R "a D
+  console's question waits for typing to pause; a line finished then steers", "a question drains fd
+  0 before it reads: lines steer, a partial line is kept", "lines read in the drain's mode get the
+  terminal's edits (Task 80's visual check)".
+- Final visual loop, round 3 (2026-10-24): Task 81: the pause menu's title is `? Paused` always:
+  with a sub-agent running it was `? Paused sdc8df9bda4`, a session id shown nowhere else; [s] and
+  [f] act on the console's own session, which the live row and the sub-agent rows name.
+  Contract-visible: 04 section 15.10 (the pause menu). Tests: test-console-interrupt.R (the menu's
+  title).
+- S9 in RStudio (2026-10-25): Task 92: the console REPL shows a gptr warning signalled while it
+  reads a prompt or runs a line at once, `Warning: <text>` escaped, through the console's writer
+  (the live row cleared and redrawn), and muffles it; `warn >= 2` and `warn < 0` keep R's semantics.
+  Only the readline-limit warning had that: any other waited for `/exit` (warn = 0) or was boxed by
+  RStudio beside a stale live row (warn = 1), as Task 39's messages were. Contract-visible: 04
+  section 2. Tests: test-console-message-stream.R "a gptr warning during a run is a console notice,
+  never an IDE's box (S9)".
+
+## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
+- Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members,
+  never on natural language; `!`, `/` and `@` show what they do. Amends D-183.
+- Task 22: in terminal R (R's own Unix readline on a tty, `R_COMPLETION` not FALSE) Tab completes
+  only after the trigger characters. `console_complete(line, end)` (new `console-complete.R`) gives
+  full words: R's own completion of the code on a `!` line, objects then files and directories after
+  `@`, members after `@obj$` and `peter$`, commands and `/skill:<name>` for a first word starting
+  with `/`, else nothing. The REPL's reader installs `console_completer()` as `custom.completer`
+  around its `peter>` and `... ` reads only, so questions, the pause menu and tool `readline()`
+  calls keep R's completion, and `+ ` (continuing `!` code) keeps R's own; a caller's completer is
+  kept and completes the `!` lines. The composer's Tab calls the same completer: during a run
+  several candidates replace the live row's status words until the next key, without widening the
+  padded status (the draft moves only while they show), and at the idle editor they are listed on a
+  dim row at column 2 above the prompt's row, as readline lists them at its prompt.
+  `console_object_visible()` became `console_objects()`, which @mentions and the completer share.
+  Visible now: `summarise the da` + Tab stays as typed (R completed `da` to `dat`); `@mtc` completes
+  `@mtcars_copy`; `/re` + Tab-Tab lists `/redo /resume /retry /review /rewind`, not R's
+  `/read.csv ... /rep`. The plan installed the completer around every continuation read; `+ ` is
+  left out, since the line there is R code. Contract-visible: 04 section 15.10 IC-81, IC-76; 03
+  sections 3.2 and 6.17. Tests: test-console-completion.R "completion comes only after @, !, !!, /
+  and peter$, in full words (IC-81)", "R's completion through the adapter gives the table's words as
+  its token's (IC-81)", "the adapter sets fileName first, so a failure completes nothing (IC-81)",
+  "a caller-owned completer completes ! lines; the triggers stay gptr's (IC-81)", "the reader
+  completes around its prompt reads, not at + and not unflagged (IC-81)", "a terminal: Tab completes
+  after @, / and ! and never natural language (IC-81)"; test-console-typing.R "Tab completes a
+  trigger word; several show on the live row until a key (IC-81)"; test-console-input.R "a draft at
+  the prompt completes a trigger word; several are listed above (IC-81)", "the draft keeps its
+  column as the status changes; the status only widens (review)".
+- Task 23: RStudio's console and Windows' Rgui and Rterm complete only after the trigger characters
+  too. `console_completes()` decides where: R's own Unix readline on a tty, RStudio's console,
+  Windows' Rgui and Rterm (utils' `.win32consoleCompletion()` calls the custom completer); not
+  Positron's console, radian or R.app. RStudio sends its editor's requests through the same handler
+  while `peter>` waits; its frame binds `isConsole`, and from the editor (FALSE) the adapter gives
+  R's own completion. From the console it gives only the candidates that are syntactic names, and
+  the token itself for none. The plan said an empty result shows no popup, but RStudio 2026.09 then
+  shows its own completions (`.rs.getCustomRCompletions()` fails on an empty result:
+  `subscript out of bounds`), and it inserts a candidate that is not a syntactic name in backticks
+  (`use @fu` + Tab gave ``use `@fuel` ``), so @ words, `peter$` members, `/skill:` names and `x$y`
+  complete nothing there. Visible now: in RStudio's console `summarise the da` + Tab and the
+  automatic popup show nothing (were `data`, `date`, ...), `/mo` lists `mode model`, `!summ`
+  completes `!summary`, `@fu` shows nothing (was RStudio's `(No matches)`). gptr writes no RStudio
+  preference; `?peter` names `insert_matching` and `console_code_completion`. Contract-visible: 04
+  section 15.10 IC-81, 03 section 6.17, `?peter`. Tests: test-console-completion.R "Windows' console
+  completion completes only the triggers (IC-81)", "RStudio's console completes only the triggers;
+  its editor gets R's (IC-81)", "unsupported input modes and IDE consoles keep completion options
+  unchanged" (rewritten: IDE consoles get the scoped completer).
+- Task 24: `!`, `/` and `@` show what they do. On a T console's live row a draft starting with `/`
+  or `!` (a follow-up whatever the key) follows the hint `runs after this answer`, and a leading `!`
+  takes the chevron's place, bold red
+  (`▌ thinking 6s   runs after this answer   ! summary(fuel$mpg)`), as Codex's shell mode; the hint
+  shows where it fits beside the status at its widest this run, so it neither widens the padded
+  status nor comes and goes with the status words. At the prompt's editor the `!` after the prompt
+  is bold red, with no hint, as nothing runs (the plan named the idle composer for both). After a
+  prompt is sent, in every class, one dim line under it names what its mentions resolved to
+  (`repl_mentions()`'s `said`):
+  `@ fuel (data.frame, 32 x 4) · @ notes.md (6 lines) · @fit2 not found, sent as text`,
+  `(first 40 lines)` or `(binary, 3 bytes)` for a file, `is a folder` for a directory, none without
+  a mention. It wraps between its terms where it does not fit (the plan said one line; its own
+  example is 99 columns, and a cut at 80 hid `not
+  found`). A mention is now a word starting with `@`, as for completion: `x@tbl` attached `tbl`, and
+  an e-mail address would have been reported `not found`. Contract-visible: 04 section 15.10 IC-76
+  and IC-82, 03 section 6.17. Tests: test-console-input.R "a leading ! takes the chevron's place; /
+  and ! drafts say when they run (D-244)", "the draft keeps its column as the status changes; the
+  status only widens (review)", "a draft a run left is edited at the prompt; Enter returns it as
+  readline would"; test-console-repl.R "@mentions: files become <file> blocks, bound names become
+  objects", "a binary @file is announced, not inlined", "a long @file is marked truncated even when
+  the first cut line is blank", "one dim line under a sent prompt names what its @mentions resolved
+  to (D-244)"; test-console-typing.R "Tab completes a trigger word; several show on the live row
+  until a key (IC-81)".
+- Task 26 (its visual check): Positron's console gets no completer. Its ark has a tty stdin, so
+  `console_completes()` took it for R's own readline on a tty, and the new banner offered
+  `tab completes after @ ! /` there, where Positron's own completion never calls gptr's;
+  `console_completes()` now asks `front_end()` first. Contract-visible: none (04 section 15.10 IC-81
+  already excludes Positron). Tests: test-console-completion.R "unsupported input modes and IDE
+  consoles keep completion options unchanged" (a Positron with a tty stdin).
+- Review fixes of Tasks 22-27 (2026-10-23):
+  - RStudio's console has the completer for the REPL's whole life (`repl_main()`, the caller's kept
+    as the reader's `caller` for `+ `): RStudio also asks while a run works, in the evaluation's
+    frames, so its popup opened on natural language typed for the next prompt and Enter or Tab took
+    it (`then save the plot as
+    plot_png()`). Contract-visible: 04 section 15.10 IC-81. Tests: test-console-completion.R
+    "RStudio's console has the triggers for the REPL's whole life, a run's too (IC-81)", "the reader
+    completes around its prompt reads, not at + and not unflagged (IC-81)".
+  - The mention line writes every term as `@ <name> ...`: `@ fit2 not found, sent as text` and
+    `@ data is a
+    folder, sent as text`, beside `@ fuel (data.frame, 32 x 4)`; a missing name was echoed as typed,
+    `@fit2`. Contract-visible: 03 section 6.17. Tests: test-console-repl.R "@mentions: files become
+    <file> blocks, bound names become objects", "a binary @file is announced, not inlined".
+- Live dogfood fixes (Task 28, 2026-10-23): Task 30: `/skill:` completes each skill `gptr_skills()`
+  lists (as `/skills` lists them) besides the registered ones. The registry holds skills only once a
+  session has started, so before the first prompt `/skill:` completed nothing. Contract-visible: 04
+  section 15.10 IC-81. Tests: test-console-completion.R "/skill: completes the project's skills
+  before the first prompt (Task 30)".
+- Final visual loop, round 3 (2026-10-24): Task 77: R's Unix readline gets one completion from the
+  console's completer, the candidates' common head (`console_completer(prev, prompt)`), so it never
+  lists; where the head adds nothing the candidates are one dim row at column 2, as the composer
+  lists them, written with the prompt and the line again (`completion_list()`), and readline gets
+  none. A bare `/` completes the commands and `/skill:` once, skill names only after `/skill:`.
+  Readline's list was printed in the input band (Terminal.app then filled every scrolled row with
+  it) and the 48 words of `/` stopped at `--More--`, which took the next keys (`/me about summ`).
+  Contract-visible: 04 section 15.10 IC-81. Tests: test-console-completion.R "completion comes only
+  after @, !, !!, / and peter$, in full words (IC-81)", "R's readline gets one completion; several
+  adding nothing are listed (visual round 3)", "a terminal: Tab completes after @, / and ! and never
+  natural language (IC-81)".
+- S9 in RStudio (2026-10-25): Task 90: for RStudio's editor (`isConsole` FALSE) the console's
+  completer fails unless the caller owns one, so RStudio's own engine answers, as without peter. R's
+  completion, which it gave there, inserted whole words in backticks (`` `fuel$mpg` ``,
+  `` `stats::sd` ``) and replaced the engine's labels, `()` and argument tips. Contract-visible: 03
+  section 6.17, 04 section 15.10 IC-81. Tests: test-console-completion.R "RStudio's console
+  completes only the triggers; its editor gets RStudio's own (IC-81)".
+- S9 in RStudio (2026-10-25): Task 91: where RStudio's console gets no candidate and the token holds
+  a character other than letters, digits, `.` and `_`, the console's completer fails, so RStudio's
+  own completion answers, as without peter. The token itself, which it gave, came back in backticks
+  over the text on Tab (``the ratio is
+  `3:` ``, ``/`skill:` ``, ``see `stats::` ``). A reserved word still gets the token: under
+  `make.names()` `write a
+  function` went to RStudio's engine, whose popup took Enter. Contract-visible: 03 section 6.17, 04
+  section 15.10 IC-81. Tests: test-console-completion.R "RStudio's console completes only the
+  triggers; its editor gets RStudio's own (IC-81)".
+
+## D-245 - P28 the console output vocabulary (2026-10-21)
+- Rule (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input
+  band, three tool kinds, R-only highlighting, whole transcript rows and a status line with the
+  model and the context left. Amends D-186, D-187 and D-206.
+- Task 8: one style table, `console_style()`, replaces `console_symbols()`. It holds the logo's
+  cursor glyphs (`›` the person, `▎` a tool call, `▌` the agent, `↳` a queued message, `↑` the Up
+  key, the bullets, ` · ` and `…`), ASCII where the output is not UTF-8 and in Windows consoles
+  outside Windows Terminal and RStudio (U+258E and U+21B3 are not in WGL4); the logo red `#b85450`
+  and the darker blue `#557ea8` at 256 colours or more, cli's red and blue below; dim; and the input
+  band (`48;5;237` dark, `48;5;254` light) where 256 colours show it and `COLORFGBG` gives the
+  background (`the$background`, read once). Visible now: a tool call starts with `▎` (ASCII `|`),
+  not U+25CF (`*`); the waiting row shows a static `▌` (ASCII `#`), not Braille frames (`- \ | /`);
+  the ASCII separator is ` - `, not ` | `, since `|` is now the ASCII strip. Contract-visible: 04
+  section 15.10 IC-82, 03 sections 2.2 rule 5 and 6.17. Tests: test-console-render.R
+  "console_style() holds the logo's cursor glyphs, ASCII where they may not show (D-245)",
+  "console_style() gives the logo accents by depth and the band by background (D-245)", "the
+  background comes from COLORFGBG's last field, read once (D-245)", "NO_COLOR keeps the glyphs and
+  drops every SGR (D-245)", "no U+25CF dot and no Braille spinner anywhere in R/ (D-245)".
+- Task 9: R code is highlighted in the logo palette. The style table gains the R code theme
+  (`code`): reserved words red; strings, numbers and constants blue; calls bold; comments dim;
+  operators and brackets in ink. `console_code()` highlights R in answer fences and tool calls above
+  1 colour with `cli::code_highlight(code, getOption("cli.code_theme") %||% console_style()$code)`,
+  so a user's theme wins. `code_light()`, the Solarized highlighter of other languages and of R
+  lines that do not parse, is deleted; those are shown as written. Visible now: at 256 colours
+  `function` is `38;5;167` and strings `38;5;67`, not cli's default theme (Solarized Dark in a
+  terminal, the editor theme in RStudio); operators and brackets are no longer coloured; python,
+  json and other fences show their body in ink between dim fences. The plan named a separate
+  `gptr_code_theme()`; cli takes a theme as colour names, so it would have repeated the depth rule
+  and the two hex values (plan amended). Contract-visible: 04 section 15.10 IC-82, 03 section 6.17.
+  Tests: test-console-render.R "R code is highlighted in the logo palette and other code is plain
+  (D-245)".
+- Task 10: the transcript is written in whole rows. `render_markdown_stream()` holds the partial row
+  and writes each row whole, at its line end or at its wrap (width - 4 in the margin), as Codex's
+  newline-gated stream does; `reset_line()` and `finish()` end the held row, so other output still
+  follows the text before it. A fenced line is written once, whole and highlighted, at its line end:
+  the margin's streaming of a fenced line's characters and the `\r` redraw of one that fit a row are
+  gone (amends D-187), and a fenced line broken by other output is written once, after that output,
+  not half before it and whole after. One mode everywhere. Visible now: the waiting row stays until
+  the answer's first whole row, not its first word or style, and an answer appears row by row. The
+  claude-cli fixture of the #31 streaming test sends its three deltas as three rows.
+  Contract-visible: 04 section 7.14, 03 section 6.17. Tests: test-console-render.R "the transcript
+  is written in whole rows, each at its line end or its wrap (D-245)", "a row ended by other output
+  is written then and continues at the margin, nesting kept", "a fenced line is written once, whole
+  and highlighted, at its line end (D-245)", "a fenced line broken by other output is written once,
+  after it (D-245)", "the spinner runs as a reactor task until the first rendered row (D-245)";
+  test-console-wait.R "the first whole row ends the waiting row, not a style or a partial row
+  (D-245)".
+- Task 11: tool calls are cursor strips by kind. `console_tool_kind(name, spec)` gives `read` for a
+  tool annotated read-only (`read_only`, which a trusted MCP server's `readOnlyHint` becomes),
+  `agent` for Codex's collab call (`codex_agent`; gptr's own sub-agents are `peter()` calls in `r`),
+  else `act`. A read is one dim line (`▎ read  R/plot.R`) with no result line unless it fails; an
+  act has a red strip and its name bold, an MCP call shown as `server/tool` with its arguments dim;
+  an agent call has the blue block. Result lines are dim, the elapsed time after the separator
+  (`+ fit · 1.2 s`, `done · 3.0 s`, from a second as before, not ` (1.2 s)`), errors in the logo
+  red, an edit's diff `+` blue and `-` red with its file headers dim (amends 6e7e859, where a
+  successful removal was plain and `+++ b/` green). A sub-agent's lines read
+  `▌ sub-agent a (haiku) started` and `▌ sub-agent a done (1/3) · 4 turns · 12 s`, the block blue
+  (the model moves before `started`). They are drawn inside the agent's `r` evaluation, whose
+  options say 1 colour, so the evaluation now holds the console's colours (`.gptr_console_colors`,
+  read by `console_colors()`) beside its margin, and the line is styled in them. The plan named a
+  CLI route's Read, Grep, Glob, LS, Bash, Edit and Write; none reaches the console (the claude CLI
+  runs with `--tools ""` and calls gptr's own tools over MCP, whose annotations decide; Codex
+  reports shells, file changes, web searches and MCP calls, all act, and its collab call), so the
+  kinds read only the annotation and `codex_agent` (plan amended). Contract-visible: 04
+  section 15.10 IC-82, 03 section 6.17. Tests: test-console-render.R "tool calls are cursor strips
+  tinted by kind (D-245)"; test-console-message-stream.R "an edit's diff is red and blue while a
+  failed edit says error: (D-245)".
+- Review fixes of Tasks 8-15 (2026-10-21):
+  - A line typed while an answer streams no longer cuts the answer. Its routing
+    (`console_typed_route()`) paused the rendering, which wrote the held row as a short row, ended
+    the Markdown block and, on resume, started a new waiting row at 0 s inside the answer. Nothing
+    of the held row is on screen since Task 10, so the queue line now goes between whole rows and
+    only the waiting row is cleared (keeping its clock); `reset_line()` is gone, so a notice or a
+    question no longer ends the held row either: it continues after them. Contract-visible: 04
+    sections 7.14 and 15.10 IC-82, 03 sections 6.8.3 and 6.17. Tests: test-console-typing.R "a line
+    queued while an answer streams goes between its whole rows (D-245)"; test-console-render.R
+    "other output goes between whole rows; the held row continues, nesting kept (D-245)", "the
+    console UI prompts between whole rows; the held row waits (D-186, D-245)".
+  - The console has one grey, the style table's `dim` (SGR 2): the status line, the CLI thinking
+    line, the verbosity-3 request and `(thinking)` lines, the retry and compaction lines and the
+    paste notice used cli's `col_grey()` (SGR 90), which most terminals draw differently from the
+    dim results, read calls, fences and queue lines. The REPL's own echo of an interpolated prompt,
+    `> how many rows: 32` (a hard-coded ASCII `>`), is deleted: the gateway's
+    `Interpolated prompt: ...` notice already shows it at verbosity 2. Contract-visible: 04 Sections
+    2.2 (the `interpolated` class), 15.10 IC-82, 03 section 4.1.4. Tests: test-console-render.R "the
+    console's one grey is the style table's dim (D-245)" and the compaction and thinking-line cases;
+    test-console-repl.R "an interpolated prompt is shown once, by the gateway's notice, at verbosity
+    2".
+  - Inline code in an answer takes the blue accent (`38;5;67` at 256 colours, `34` at 16, none at
+    1), from the style table: it was cli's cyan (`36`), the one accent outside the logo palette left
+    in the transcript. Contract-visible: 04 section 15.10 IC-82, 03 section 6.17. Tests:
+    test-console-render.R "inline code in an answer takes the blue accent, not cli's cyan (D-245)".
+  - Tool rows of consecutive requests group as those of one response. The waiting row between
+    requests opened with a blank line after a tool block, so a run of read calls was grouped or
+    spaced by whether the model sent them in one response, which the person cannot see.
+    `console_gap()` now gives a waiting row after a tool block no blank and keeps the tool block
+    open: another tool block follows it directly, any other block opens with the blank it owes,
+    written on the cleared row (an LF after a cleared row, one blank as before). Contract-visible:
+    04 section 15.10 IC-82, 03 section 6.17. Tests: test-console-render.R "a foreground run
+    separates text, tool and status blocks once (D-186, D-245)".
+  - An edit's diff leaves out its file headers (`--- a/`, `+++ b/`): the call line `▎ edit  notes.R`
+    names the file, and the headers took 2 of the 12 rows; hunk headers stay dim. Contract-visible:
+    04 section 15.10 IC-82, 03 section 6.17. Tests: test-console-render.R "tool calls are cursor
+    strips tinted by kind (D-245)".
+- Visual review fixes (2026-10-21; screenshots of 0ee69a0 in Terminal.app, tmux, VS Code, RStudio,
+  Positron, R.app and the degraded modes):
+  - The one grey is a colour where 256 colours show: `#878787`, halfway between the logo's ink and
+    cream (cli's cell 244), else SGR 2. RStudio maps SGR 2 to `brightness(0.75)`, which leaves black
+    text black, and Positron draws it in full ink, so the approval's key words, hints, fences, queue
+    lines, read calls and the status line were as loud as the answer there. Link URLs, quote marks,
+    rules, fence lines and R comments take the same grey. Contract-visible: 04 section 15.10 IC-82.
+    Tests: test-console-render.R "console_style() gives the logo accents by depth and the band by
+    background (D-245)" and the renderer's styling cases; the 256-colour cases of test-console-ui.R
+    and test-console-typing.R.
+  - A call's code sits under its name at column 4, with its result rows and the approval's keys, and
+    its fence lines are gone: the strip at column 2, the name at 4, the fence and code at 2 and the
+    results at 4 gave one block several left edges, the fence repeated the tool name (`▎ r`
+    over ```` ```r ````), and the dim backticks read as stray marks. A one-line r call is
+    highlighted as the same code in a block is. The `?` detail view and the approval's own call line
+    follow (`console_code_rows()`, `console_lang()`). Answer fences stay Markdown (D-187).
+    Contract-visible: 04 section 15.10 IC-77 and IC-82, 03 section 6.17. Tests:
+    test-console-fences.R "tool code shows on the tool line when it fits, else under its name, never
+    cut", "R code in a call block is highlighted at any length; other code is plain (D-245)";
+    test-console-ui.R "the detail view shows at most 40 code rows at column 4, as the call block
+    (D-187)".
+  - Highlighted R has no help links: in RStudio `cli::code_highlight()` turned every call (`lm`,
+    `plot`, `write.csv`, `c`) into a help hyperlink with a dotted underline, outside the palette and
+    unlike every other console; `console_code()` sets `cli.hyperlink_help = FALSE` around it.
+    Contract-visible: 04 section 15.10 IC-82. Tests: test-console-render.R "highlighted R has no
+    help links, as RStudio would add (visual review)".
+  - A diff row wider than the console is cut with `…`, never wrapped: the word wrap collapsed runs
+    of spaces, so at 60 columns `+     xlab = "weight (1000 lb)", ylab = "miles per gallon")` showed
+    as `+ xlab = ...` with `gallon")` on a row of its own, blue but without its `+`.
+    Contract-visible: 04 section 15.10 IC-82, 03 section 6.17. Tests: test-console-render.R "a diff
+    row wider than the console is cut, its spaces and sign kept (visual review)".
+  - The person's ASCII chevron is doubled, `>>`: with `>` an answer (`> y`) and a delivered steer
+    read as R's own prompt and an evaluated line. Continuation rows take its width
+    (`console_person_rows()`). Contract-visible: 04 section 15.10 IC-76, IC-77 and IC-82, 03
+    section 6.8.3. Tests: test-console-render.R "console_style() holds the logo's cursor glyphs,
+    ASCII where they may not show (D-245)" and the ASCII prompt cases of test-console-ui.R,
+    test-console-repl.R and test-console-typing.R.
+  - An answer's prose wraps at 100 columns at most (`render_markdown_stream()`), however wide the
+    console: in a maximised VS Code panel (131 columns) it ran to 127 characters a row, far wider
+    than the code and tool blocks around it. Code rows are not wrapped by the stream, and a table
+    wider than 100 columns prints verbatim as one too wide for the console does. Contract-visible:
+    04 section 7.14, 03 section 6.17. Tests: test-console-render.R "prose wraps at 100 columns at
+    most, however wide the console (visual review)".
+  - In the console margin the renderer reads the Markdown at every colour depth: without colour
+    (NO_COLOR, TERM=dumb, R.app) inline code kept its backticks, emphasis its stars, headings their
+    `#` and bullets were `-` in a UTF-8 console, so paragraphs wrapped at other words and the text
+    differed from every colour console, although only colour capability differs between them. Now
+    only the SGR differs; the plain mode without colour (pipes, knitr, Rscript) keeps the markdown
+    characters. Contract-visible: 04 section 15.10 IC-82, 03 section 6.17. Tests:
+    test-console-render.R "a console shows the same text at any colour depth; only SGR differs
+    (visual review)", "blank lines collapse and nested lists keep their indentation (D-186)".
+  - Text gptr keeps in the history instead of sending is listed as the person's held text, dim at
+    column 0 like a queue line, `↳ kept in history ↑ · and label the axes`
+    (`↳ not kept (gptr.history is off) · ...`), cut to three rows:
+    `[gptr] kept in history (↑): 'and label the axes'` was the one full-ink, bracketed line inside
+    the tool block it was printed in, and read as part of the approval. Contract-visible: 04
+    section 15.10 IC-76. Tests: test-console-typing.R "an abort sends nothing queued: it goes to the
+    history, listed once (D-242)", "an abort's status line says aborted once; the kept list follows
+    it, then a blank row" and the drain cases; test-console-interrupt.R "a steer typed in a tool and
+    then aborted is kept in the history, never sent later".
+  - A queue line never splits an answer: while the answer's text block is open it waits in the run's
+    record and is written, as a block of the person's lines, when any other block starts (the
+    waiting row, a tool call, the delivered message, the status line). Between whole rows it had
+    still cut a sentence (`Heavier cars should` / `↳ steer · ...` / `use more fuel`) at a row that
+    depended on when Enter was pressed, and written during the waiting row it stuck to the answer
+    that followed. Task 18 moves it to the live row only in T class, so D and L consoles keep this.
+    Contract-visible: 04 section 15.10 IC-82. Tests: test-console-typing.R "a line queued while an
+    answer streams waits for its block to end (visual review)", "a queue line is a block of its own:
+    a blank row before the text after it", "a terminal: typed text shows when queued and delivered,
+    never in the answer (D-242)".
+  - The pause menu stops only the waiting rows: `policy_menu()` called `console_render_pause()`,
+    which ended the answer's held row as a short row, so the sentence was cut at the menu
+    (`so part of this` / menu / `gap is the
+    weight effect ...` as a new paragraph) at a word that depended on timing, the main difference
+    between otherwise identical transcripts. The held row now continues after the menu, which goes
+    between whole rows; an abort, and the menu's [b], still end the stream. Contract-visible: 04
+    section 15.10 IC-82. Tests: test-console-interrupt.R "the pause menu leaves the answer's held
+    row to continue after it (visual review)".
+  - A cut answer is marked: an answer that ends aborted, failed or truncated (its `stop_reason`, at
+    `message_end`, where `run_abort()` ends it), the pause menu's [b], `console_render_pause()` and
+    a run that ends other than idle finish the stream with `cut`, which writes all it received and
+    ends the row with a dim `…`. An abort had flushed the held row as it was,
+    `...cars are also the heaviest, so par`, which read as a garbled answer. (The first version
+    dropped the word still held, to end at a whole word; that hid received text, the redactor's tail
+    after an abort among it, and missed RStudio's abort, which `message_end` ends first.)
+    Contract-visible: 04 section 7.14 (`render_markdown_stream()`'s row). Tests:
+    test-console-render.R "a cut answer keeps what it received, the cut marked (visual review)", "a
+    prompt or pause in a tool's evaluation ends partial lines on the console (D-188)";
+    test-console-abort-stream.R "abort labels a redactor tail received after a pause without
+    printing it twice"; test-stream-order.R "cancelling a streamed answer displays the complete safe
+    partial tail", "cancellation flushes a held synthetic secret safely and only once".
+  - What R code prints in the console margin (the `r` tool, `!code`) is shown as result rows: at
+    column 4, escaped, dim and cut to the console width. The capture's sink was split, so
+    `head(fuel)` rows, `tapply()` values and `[1] "      33 fuel.csv"` sat at column 0, the person's
+    column, in ink (one tool block had rows at columns 0, 2 and 4), and the last read as R echoing
+    the `› y` above it; R's width-100 output also wrapped hard to column 0. Now the sink is not
+    split there and `eval_flush()` shows each new line through the writer below the evaluation. The
+    cost: output shows per top-level expression (or before a notice), not per `cat()`; the model
+    still gets all of it. Without the margin (Rscript, knitr) the split sink stays.
+    Contract-visible: 04 section 15.10 IC-82, 03 section 6.17. Tests: test-console-message-stream.R
+    "in the console margin what R code prints is dim rows at column 4, cut (visual review)";
+    test-console-notice.R and test-console-process-launch.R (the r tool's output row).
+  - A call's code row wider than the console is cut with `…`, as a diff row is, and `?` then shows
+    the code whole: at column 4 a 57-character row overflowed a 60-column console and the terminal
+    wrapped its end to column 0 (found re-capturing the fixes above). Contract-visible: 04
+    section 15.10 IC-82, 03 section 6.17. Tests: test-console-fences.R "tool code shows on the tool
+    line when it fits, else under its name, cut to the width"; test-console-ui.R "the detail view's
+    keys read as the question's; it skips a fence shown above (D-243)".
+  - A blank line of printed output is an empty row: `eval_echo()` styled every row, so at 256
+    colours an empty line carried an empty grey SGR pair. Tests: test-console-message-stream.R "in
+    the console margin what R code prints is dim rows at column 4, cut (visual review)".
+  - The style table (`console_style()`, `console_background()`) is in `utils-conditions.R` (L0),
+    beside `console_colors()` and `console_pad()`: the evaluator's display of printed output
+    (`eval_echo()`, `eval-core.R`, L4) calls it, and from `console-render.R` (L5) that was a
+    layering violation the layering test caught. Contract- visible: 03 section 3.2 (the file's row).
+    Tests: test-arch-layers.R.
+  - Rows are cut one at a time (`console_cut()`, L0): cli 3.6.6's `ansi_strtrim()` of a vector keeps
+    shortening every row while any is too wide, so beside one cut row a row that fitted lost its
+    last characters with no ellipsis (a call's code row lost its trailing `,` at 60 columns). The
+    person's rows, code and diff rows, result rows, the flagged rows and printed output use it.
+    Tests: test-console-render.R "a diff row wider than the console is cut, its spaces and sign kept
+    (visual review)".
+- Review fixes of Tasks 16-21 (2026-10-22):
+  - The banner names what the console's key does: `Esc stops an answer` where the pause menu is not
+    offered (RStudio, R.app, Rgui), `Ctrl-C pauses an answer` where it is; the live row said
+    `esc stops` under a banner promising a pause, and in R.app the `c` meant for the promised menu
+    became a prompt. Task 26 rewrites the banner. Tests: test-console-repl.R "the banner names the
+    console's key; no pause is promised where none is (review)".
+  - On the input band the live row's words take a band grey (`console_style()$band_dim`): `#6c6c6c`
+    (256 colours `38;5;242`) on the light band and `#a8a8a8` (`38;5;247`) on the dark one, about
+    4:1, where the one grey `#878787` was about 2.8:1 and 3.2:1. The transcript keeps its grey.
+    Contract-visible: 04 section 15.10 IC-82. Tests: test-console-input.R "on the input band the
+    live row's words take the band's grey (review)".
+- Task 25: a shaded input band where the background is known. A T REPL asks the terminal once, at
+  its start: `ESC ] 11 ; ?` with DA1 after it as the sentinel, fd 0 read until DA1's reply or 250 ms
+  in `stty -icanon -echo
+  min 0 time 0` (`tty_query()`), the answer's colour dark below a luminance of 0.5, weighed as Codex
+  weighs it (`background_reply()`); without an answer `COLORFGBG` decides as before. It is not asked
+  below 256 colours (`NO_COLOR` too) or for TERM=linux. On the band readline reads at
+  `\001<band>\002peter> \001\033[K\002` (and at `... ` and `+ `), and `\033[0m\033[K` follows every
+  read, also at Ctrl-C; the lines the reader echoes after the prompt (a follow-up, the prompt
+  editor's line) are on the band row by row (`console_band()`), as the live row and delivered steers
+  were. The band is now a T console's only: `console_style()` asks `console_class()`, so where
+  `COLORFGBG` is set a delivered steer is no longer shaded in RStudio's, Positron's or a Windows
+  console, at TERM=dumb or in Rscript, and `console_live()` lost its class argument. Keys typed
+  before or during the probe, which it reads with the replies (the plan said nothing of them), are
+  the REPL reader's, read as the composer reads them: the lines they end are its next prompts, the
+  rest a draft at the prompt's editor. Contract-visible: 04 sections 7.1, 7.14, 15.10 IC-76 and
+  IC-82; 03 section 6.17. Tests: test-console-repl.R "a terminal's answer to OSC 11 names its
+  background: BEL or ST, 2 or 4 digits (IC-82)", "a T REPL asks the background once at its start;
+  else COLORFGBG decides (IC-82)", "keys typed before or during the probe are the reader's, never
+  lost (IC-82)", "on the input band readline reads after the band's prompt, reset after (IC-82)",
+  "no band for an unknown background, 16 colours, NO_COLOR, RStudio or Windows (IC-82)", "a terminal
+  answering the probe has its prompt on the band, reset after reads (IC-82)"; test-console-render.R
+  "console_style() gives the logo accents by depth and the band by background (D-245)";
+  test-console-input.R "a draft a run left is edited at the prompt; Enter returns it as readline
+  would".
+- Steering review fixes (2026-10-22):
+  - A queue line still held for the answer's text block when its steer is delivered is not written:
+    the delivery (`› <text>`) says the same. This amends the queue-line bullet above: a held line
+    shows only while its message still waits. In TERM=dumb five steers typed while an answer
+    streamed took ten rows, each queue line right above its delivery and never on screen before. The
+    held entries carry `drop` (a steer not on a CLI route); `console_on_queue_update()` drops them
+    all at the first steer it delivers, as the loop takes every queued steer at once. Follow-up
+    lines and a CLI route's steer stay, and a held steer's line still shows when a tool block starts
+    before the boundary. Below verbosity 2 no delivery is drawn, and the line stays.
+    Contract-visible: 04 section 15.10 IC-82. Tests: test-console-typing.R "a line queued while an
+    answer streams waits for its block to end (visual review)", "a held follow-up line stays; a held
+    steer's shows before a tool (steering review)".
+- Task 26: the run's status line names the model and the context left, and the banner is three dim
+  lines. The line reads `done · fake-1 · 7 requests · 19.8k tokens · 98% context left`: the model of
+  the run's last request (its usage row's `model`), then `console_context_left()`, the last
+  request's prompt tokens against `compact_threshold()` of its model, where compaction starts (none
+  on a CLI route, D-202), which `/context` adds under its total. A term whose value is unknown, and
+  a cost not above 0, is left out (`$0.0000`, `unknown tokens` and `unknown cost` were noise);
+  `format_cost()` is unchanged. Written as a notice, it wraps in the margin and sits at column 0
+  where there is none (it had two fixed spaces). The banner:
+  `gptr 1.0.0 · <model> · <mode> · .gptr/ found`, `objects: ` and up to six names (`/env` describes
+  them), `/help lists commands · tab completes after @ ! / · ctrl-c twice leaves` with the keys
+  bold, Positron's line in the same form, then a blank line; the tab only where the REPL completes,
+  after `! /` in RStudio's console. The plan's fallback to the model's window is never reached, as
+  `compact_threshold()` is finite wherever the window is known. The console calls
+  `compact_threshold()` and `prompt_model()` as two contract edges. Contract-visible: 04
+  section 15.10 IC-77 and the `compact_threshold()` row; 03 sections 6.17 and 10.1. Tests:
+  test-console-render.R "the status line names the model and the context left; unknown terms go
+  (IC-77)", "console_context_left() measures the last request against compact_threshold() (IC-77)";
+  test-console-repl.R "the banner: dim lines at column 2 with the keys bold, then a blank line
+  (NS-1)", "the banner names the console's key and promises nothing it lacks (review, Task 26)";
+  test-console-commands.R "/cost, /context, /fork and /resume work on a session that ran".
+- Cheat-sheet review (2026-10-23, sessions-7): a status line's reason has its line breaks, with the
+  blanks around them, as one space, so curl's two-line error
+  (`network error: Could not resolve host [h]:` / `Failed to connect ...`) stays on the line, where
+  it showed `<U+000A>`; other control characters stay escaped. Contract-visible: 04 section 15.10
+  IC-77. Tests: test-console-render.R "a reason's line breaks fold into one space; other controls
+  stay escaped (sessions-7)".
+- Cheat-sheet review (2026-10-23, console-3; a fifth backend change): at verbosity 1 (Rscript,
+  knitr, Jupyter) a call refused before it ran reads
+  `gptr: r not run: denied by the rule r(fn:writeLines)`, where it read `gptr: r
+  failed` as if it had run. The end event of such a call (a `tool_call` hook's block, a permission
+  denial, the run's abort; also a call served to a CLI route) carries `refused`, why; `is_error`,
+  the transcript and the model's text are unchanged. A multi-line call's progress line ends
+  `  (+N more lines)`, the approval's grammar (`console_more_lines()`). Contract-visible: 04
+  section 10.4 `tool_execution_end` row. Tests: test-console-jupyter-progress.R "a refused call was
+  not run; a multi-line call counts its other lines (console-3)"; test-console-render.R "verbosity 1
+  says a refused call was not run and counts its code lines (console-3)"; test-agent-dispatch.R "the
+  end of a refused call says why it did not run; an error's does not (console-3)"; test-mcp-server.R
+  "the end of a served call that was refused says why it did not run (console-3)".
+- Cheat-sheet review (2026-10-23, console-4): `/compact` reports its saving,
+  `Conversation compacted: 5.7k -> 3.2k
+  tokens.` (the automatic notice's counts; `Conversation compacted.` where one is unknown), where it
+  said only that. Right after it `/context` shows the compaction request, the whole conversation
+  plus the instruction, so it now says `Last request <id> (the compaction request):` and adds
+  `  next request: about 3,180 tokens` (the entry's `tokens_after`), from which the context left is
+  measured; it showed that request unlabelled, larger than the one before it. Contract-visible: 04
+  section 15.10 IC-77; 03 sections 6.11 and 6.17. Tests: test-console-commands.R "/compact reports
+  its saving and /context names the compaction request (console-4)".
+- Review fixes of Tasks 22-27 (2026-10-23):
+  - A refused call's result is one dim row at column 4, `not run · you declined`,
+    `not run · you said: <text>` (cut to the width), `not run · denied by the rule r(fn:writeLines)`
+    or `not run · blocked by a hook: <why>` (its end's `refused`, `the user` read as `you`), not a
+    red `error:` of two or three rows worded for the model; red stays for calls that ran and failed.
+    A denial with the person's text ends with `refused` `the
+    user said: <text>` (`perm_refused()`, also for a served call), so verbosity 1 no longer prints
+    the bare text as a reason. Contract-visible: 04 section 10.4 (`tool_execution_end`) and the
+    `mcp_serve_exec()` edges. Tests: test-console-render.R "a refused call's result is one dim row
+    that says it was not run (review)"; test-agent-dispatch.R "the model reads n <text> as the
+    person's; the next call is asked (cheat-sheet review)".
+  - After an abort, the text that arrived before it continues under a dim
+    `received before the abort:` at the margin, one block with it, in the console's words; it was
+    `[gptr] final received text:` at column 0 in ink, the last old `[gptr]` notice on the abort
+    path. Contract-visible: none. Tests: test-console-abort-stream.R "abort labels a redactor tail
+    received after a pause without printing it twice", "continuing a pause never adds an abort-tail
+    label".
+  - Where the probe gives the background's colour, the input band is Codex's fill, 4% black over a
+    light background or 12% white over a dark one, in its nearest xterm-256 cell (cube or grey
+    ramp), and its words a grey 4.5:1 against it (`band_cells()`; `background_reply()` keeps the
+    colour as attr `rgb`). On Terminal.app's cream Novel profile the fixed 254 drew a lighter,
+    cooler strip at about 1.05:1; it is now 187 (#d7d7af). #1c1c1c still gives 237; white gives 255
+    (#eeeeee, Codex's #f5f5f5 being nearer it than 254). COLORFGBG keeps 254 and 237.
+    Contract-visible: 04 section 15.10 IC-82. Tests: test-console-render.R "a probed background's
+    band is Codex's fill in its nearest cell (review)"; test-console-repl.R (the probe's answers and
+    the pty band, 255 on white).
+  - The background probe waits up to 1,500 ms for DA1 (`tty_query()`), which still ends it at once:
+    an answer after 250 ms, over ssh or on a loaded machine, was typed at the first prompt
+    (`peter> 11;rgb:ffff/ffff/ffff62;22chi` reached the model) and made the pty test of the band
+    timing-dependent. The composer and the idle editor take a later answer out of what they read
+    (`tty_unreply()`, which `repl_background()` shares). Contract-visible: 04 sections 7.1
+    (`tty_query()`) and 15.10 IC-82. Tests: test-console-repl.R "a terminal answering the probe late
+    still has the answer read by it (review)"; test-console-input.R "cursor keys and other sequences
+    are dropped up to their final byte".
+  - Keys typed before or during the background probe are read line by line (`console_line_text()`,
+    which `console_ahead()` shares): each ended line is a next prompt of its own, the rest the
+    draft. The composer's paste rule made them one message, so `hello` and `/exit` reached the model
+    together and `/exit` never ran. The probe asks after the first-use setup (`repl_main()`), whose
+    menu reads typed lines first, as before the probe. Contract-visible: 04 section 15.10 IC-82.
+    Tests: test-console-repl.R "keys typed before or during the probe are the reader's, never lost
+    (IC-82)".
+  - The status line, the banner's rows, the mention line and a question's key rows wrap between
+    whole terms (`console_terms()`, which the mention line's loop became): a row ends at a term and
+    the next starts with the next one, never after a separator; a term wider than a row is cut. Word
+    wrapping split `98% context left` from `left` whenever a dated API model id made the line wider
+    than 80 columns, and left rows ending ` ·` at 60. `console_status_line()` returns the terms.
+    Contract-visible: 04 section 15.10 IC-77 (run totals and the keys row). Tests:
+    test-console-render.R "the status line wraps between whole terms, never after a separator
+    (review)"; test-console-repl.R "the banner names the console's key and promises nothing it lacks
+    (review, Task 26)"; test-console-ui.R "the keys are a row under the question, a and p only with
+    a rule (D-243)"; test-console-interrupt.R (the pause menu's keys).
+  - `/context` after `/compact` writes the next request's estimate as a ledger row,
+    `  next request       ~3,848`, its value in the column of `total` and `context left`, `~`
+    marking an estimate; it was the sentence `  next
+    request: about 3,848 tokens` among them.
+    Contract-visible: 04 section 15.10 IC-77, 03 section 6.17. Tests: test-console-commands.R
+    "/compact reports its saving and /context names the compaction request (console-4)".
+  - Positron's banner says `ctrl-c, then s, to steer`, the live row's words, which show beside it;
+    it said `ctrl-c,
+    then s, steers`. Contract-visible: 03 section 6.17. Tests: test-console-repl.R "in Positron the
+    banner says typed text waits as R code (steering review)".
+- Live dogfood fixes (Task 28, 2026-10-23): Task 31: code served to a CLI route during a live run
+  shows what it prints, as the loop's `r` tool does: `mcp_serve_r()` tees for a depth-0 run with a
+  human (a call without a run, P18's server, stays silent). The CLI routes showed only `+ x3`, where
+  the native routes showed the code's output rows above it. Contract-visible: 04 section 5
+  `eval_r()` row. Tests: test-mcp-server.R "code served in a live run shows what it prints, as the r
+  tool does (Task 31)".
+- Live dogfood fixes (Task 28, 2026-10-23): Task 33: the run status line names a built-in CLI's
+  `default` as the full id the CLI gets (`console_cli_default()`, which `/model` and `/status` also
+  use): on claude-cli and codex it said `done · default · 2 requests`. Contract-visible: 04
+  section 15.10 IC-77. Tests: test-console-render.R "the status line names the model a CLI's default
+  runs, as /status does (Task 33)".
+- Live dogfood fixes (Task 28, 2026-10-23): Task 36: a sub-agent's start line is cut to the width
+  before ` started`, which stays (`console_child_line(rec, text, keep)`): with Bedrock's model id,
+  `▌ sub-agent 'Use the r tool to run
+  m = mean...' #1 (versa-bedrock/us.anthropic.claude-opus-4-8) s…` at 100 columns, and at 80 the GPT
+  and CLI lines too. Contract-visible: 04 section 15.10 IC-82. Tests: test-console-render.R "a
+  sub-agent's started line cut to the width keeps its last word (Task 36)".
+- Live dogfood fixes (Task 28, 2026-10-24): Task 41: where the terminal gave its background's
+  colour, an accent under 3:1 against it is the default colour in bold and `dim` a grey 3:1 against
+  it (`grey_against()`, which `band_cells()` uses for its 4.5:1 grey too). On Terminal.app's Ocean
+  and Grass profiles the fixed grey and code blue were 1.3:1 to 1.6:1, the dim rows and inline code
+  nearly invisible; the logo's colours stay wherever they pass. Contract-visible: 04 section 15.10
+  IC-82. Tests: test-console-render.R "on a saturated background the accents and the grey keep 3:1
+  against it (Task 41)".
+- Final visual loop, round 1 (2026-10-24): Task 44: a run that ends in an error or at max_turns says
+  why once, in its status line, whose status and reason wrap between words at column 2; the REPL
+  prints no `Error:` notice for it (`console_state()$ended` names the session whose status line
+  showed), and after any other error a blank row keeps the gap before the prompt. The max_turns
+  reason is `the run stopped after <n> turn(s)`. Before, the status line cut the reason and the REPL
+  repeated it in bold, glued to the next prompt. Contract-visible: 04 section 15.10 run totals.
+  Tests: test-console-repl.R "a failed run says why once, whole, in its status line; the prompt
+  keeps its gap".
+- Final visual loop, round 1 (2026-10-24): Task 45: in truecolor the input band of a probed
+  background is Codex's fill itself, `48;2;R;G;B`, with `band_dim` 4.5:1 against it; the nearest
+  xterm-256 cell stays at 256 colours, and cells 254 and 237 for `COLORFGBG`. On tinted Terminal.app
+  profiles the cell changed the paper's hue (Man Page: 222, an orange strip on yellow; Novel: 187,
+  khaki), while the accents were already 24-bit. Contract-visible: 04 section 15.10 IC-82. Tests:
+  test-console-render.R "a probed background's band is Codex's fill in its nearest cell (review)".
+- Final visual loop, round 1 (2026-10-24): Task 52: a console question's answer is read on the input
+  band, as the REPL's prompts are (`band_read()`, shared by the REPL reader, `console_ask()` and
+  `ui_console_read()`; a secret is read off it): `› y`, `› 1` and `› c` were plain while a delivered
+  steer, `peter[edits]> ...` and the live row's draft were banded, against IC-82's one look for
+  everything the person writes. Only T consoles change. Contract-visible: 04 section 15.10 IC-82.
+  Tests: test-console-ui.R "a T console's answers are read on the input band, as its prompts are
+  (visual round 1)".
+- Final visual loop, round 2 (2026-10-24): Task 57: a run's status with its reason is on rows of its
+  own, the run's terms from the row below, and an error's rows are red, as a tool's error row;
+  `done` and a bare status (`aborted`) keep one dim row. A failed run's block was the dim grey of
+  `done`, and the reason's last words ran on into the terms (`... port 443 · fake-1 · 3 requests`).
+  Contract-visible: 04 section 15.10 run totals. Tests: test-console-repl.R "a failed run's reason
+  is red, on rows of its own above the terms (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 59: the markdown renderer's `write(delta)` runs
+  under `suspendInterrupts()`: `process()` holds the rest of a delta in a local variable while it
+  writes a row, so a SIGINT (a D console's Ctrl-C) that unwound `write()` from a row's output
+  dropped it, and after [a] `received
+  before the abort:` showed `would Eigh…` for `would be. Eight-cylinder`. Contract-visible: 04
+  section 7.14's `render_markdown_stream()` row. Tests: test-console-render.R "an interrupt while a
+  row is written loses none of its delta (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 60: a sub-agent's started and done lines are rows of
+  the block of the `r` call that runs them (`console_child_line()` opens a `tool` block while a tool
+  runs on the stack): the lines opened a notice block, so a blank row came before them and another
+  between the call's printed value and its result line. Contract-visible: 04 section 15.10 IC-82
+  (tool calls). Tests: test-console-render.R "a sub-agent's rows are the block of the r call that
+  runs them (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 61: a sub-agent's done line keeps
+  ` done (k/N) · <n> turn(s) · <s>
+  s` whole, as the started line keeps ` started` (Task 36), and its label is cut; a failed line is
+  cut from its reason as before. At 60 columns `#1 done · 1 turn · 4…` lost its time.
+  Contract-visible: 04 section 15.10 IC-82. Tests: test-console-render.R "a sub-agent's started line
+  cut to the width keeps its last word (Task 36)".
+- Final visual loop, round 2 (2026-10-24): Tasks 62 and 69: in the console margin a slash command's
+  output ends with a blank row before the next prompt (`console_command()`, once for every command),
+  as a run's status line does; `/help`, `/context` and `/compact` ran into the next `peter>` row,
+  and with the blank row only after output of several rows `/compact`'s one-row result, under its
+  progress notice, still did (Task 69). `/compact` and the automatic notice say
+  `<before> to <after> tokens`, and the progress notice `Compacting conversation…` with the
+  console's ellipsis. Contract-visible: 04 sections 10.2 kind 10, 15.10 run totals; 03 section 6.11.
+  Tests: test-console-commands.R "a command's output ends with a blank row before the next prompt
+  (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 63: `/help` sets its names bold, its keys lower case
+  as the banner does (`enter`, `tab`, `up`, `ctrl-c`), every description starting lower case (an
+  acronym stays), and wraps a description never inside a usage (`/mode [plan|...]`), a key and its
+  word (`s steer`) or the last two words (U+00A0 while `formatDL()` wraps, spaces after);
+  `/permissions`' usage is `[<verb> <rule>] (allow, ask,
+  deny or remove)`, which fits the column at 60. A handler may return a `cli_ansi_string`, escaping
+  its untrusted parts itself (`/help` the specs' names and descriptions), which prints with its
+  styles. Contract-visible: 04 section 10.2 kind 10. Tests: test-console-commands.R "/help lists the
+  commands and the input syntax", "/help's keys follow the console, as the banner does (review of
+  Tasks 22-27)", "in the console margin command output wraps inside it; listings fit its width".
+- Final visual loop, round 2 (2026-10-24): Task 64: the REPL's last `[gptr] ...` notices speak the
+  banner's words, dim at column 2, keys bold: `ctrl-c again leaves · /exit`, `interrupted`,
+  `timed out`, `aborted · the
+  session is kept`,
+  `<n> background session(s) wait(s) for approval · the next prompt or gptr_wait() asks`, and the
+  queued message's delivery error in red. At the idle prompt
+  `[gptr] press Ctrl-C again to leave gptr, or type
+  /exit` sat in ink between two prompt rows. Contract-visible: 04 section 15.10 (the kept list).
+  Tests: test-console-repl.R "Ctrl-C at the prompt prints a hint; twice in a row leaves",
+  "background sessions that wait for approval are announced once (IC-57)"; test-console-interrupt.R,
+  test-console-typing.R (their notices).
+- Final visual loop, round 2 (2026-10-24): Task 65: the approval's `?` view calls the agent peter,
+  as the console does (`peter wants to use r`, `n no (type n <what to do instead> to tell peter)`; a
+  sub-agent keeps its name), its first row bold as the ask's question, its `reason:` and
+  `flagged calls:` rows and flags dim as the ask's flag. The RStudio dialog shows the same text.
+  Contract-visible: 04 section 15.10 (the `?` view). Tests: test-console-ui.R "a flag has one shape
+  in the ask and in ?, in the console's words (visual round 1)" and the tests naming its first row
+  and keys.
+- Final visual loop, round 2 (2026-10-24): Task 66: at verbosity 1 a run that ends in a condition
+  its caller sees (`error`, `blocked`, `budget`, `max_turns`, as `gateway_signal()` raises) writes
+  `gptr: <status> · <terms>`, the reason left to R's error; a script blocked for approval wrote the
+  same long reason in the not-run line, the progress line and the error. Contract-visible: 04
+  section 15.10 run totals. Tests: test-console-render.R "at verbosity 1 a run ending in a condition
+  leaves its reason to it (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 67: a steer's queue line still held when its run
+  ends is dropped at `agent_end`, before the status line, as at its delivery: the kept list, the
+  next prompt's echo or the next run's delivery names it. After [a] TERM=dumb wrote the held
+  `↳ steer · <text>` under `received before the
+  abort:`, two rows above `↳ kept in history ↑ · <text>`. Contract-visible: 04 section 15.10 IC-82
+  (queue lines). Tests: test-console-typing.R "a steer held during an answer that the abort drops
+  shows once, kept (visual round 2)".
+- Final visual loop, round 2 (2026-10-24): Task 68: the lines a D console routes
+  (`console_typed_route()`) lose a cursor key's escape sequence (CSI, SS3), as the composer drops
+  one (Task 16), and a line that was only that is dropped: Up then a paste reached the agent as
+  `<U+001B>[Ap1 first line`. Contract-visible: 04 section 15.10 IC-76 (a follow-up is the next
+  prompt). Tests: test-console-typing.R "a cursor key typed while a run works is no part of a line
+  (visual round 2)".
+- Final visual loop, round 3 (2026-10-24): Task 70: the pause menu's [b] writes its status as dim
+  terms (`console_terms()`), `in the background (experimental, ?"gptr-background")` and
+  `!!gptr::gptr_wait(gptr::
+  gptr_last()) continues it here`, the parenthesis in place of P21's notice, which the menu muffles:
+  the notice's two sentences sat above the row in their own voice, and at 60 columns the row ended
+  in the separator. Contract-visible: 04 section 15.10 (the pause menu's [b]). Tests:
+  test-console-interrupt.R "[b]ackground hands a foreground run to bg.register (P21) and resumes";
+  test-console-repl.R "a terminal: a run sent to the background shows again while the console waits
+  for it".
+- Final visual loop, round 3 (2026-10-24): Task 72: a sub-agent's started and done lines cut its
+  label's name first (`console_child_line()`), inside its quotes, so its run tag (` #1`), the
+  started line's model and the outcome stay whole and one sub-agent's two lines read as a pair; and
+  a cut row never leaves a blank before its ellipsis (`console_cut()`). At 60 columns the started
+  line was `'count the cars in fuel' #1 (kid/kid-…
+  started`, the done line `'count the cars in fuel'… done`, `#1` lost. Contract-visible: 04
+  section 15.10 IC-82 (the agent row). Tests: test-console-render.R "a sub-agent's started line cut
+  to the width keeps its last word (Task 36)", "a diff row wider than the console is cut, its spaces
+  and sign kept (visual review)".
+- Final visual loop, round 3 (2026-10-24): Task 73: `/compact` and the automatic notice say
+  `compacted ·
+  <before> to <after> tokens` (`console_compacted()`), bare `compacted` where a count is unknown,
+  the progress notice `compacting…`, all dim as the status line, and `/compact`'s other results are
+  its terms too (`not
+  compacted · cancelled`, `interrupted`, `already compacting`, `nothing to compact yet`); it wrote
+  `Compacting
+  conversation…` and `Conversation compacted: 5.6k to 4.1k tokens.` in ink. Contract-visible: 04
+  section 15.10 (run totals, `/compact`), 03 section 6.11. Tests: test-compaction-acceptance.R,
+  test-compaction-wait.R (their notices and results), test-console-commands.R "/compact reports its
+  saving and /context names the compaction request (console-4)", test-console-render.R (the
+  automatic notice).
+- Final visual loop, round 3 (2026-10-24): Task 74: a queue line joins its message's lines with a
+  blank and is one row cut with the ellipsis, as the live row's queue view (`console_person_rows()`
+  joins the lines of every held line, the kept list's too, which keeps its three rows); the delivery
+  still shows the text whole. A pasted steer held in TERM=dumb was `↳ steer · first pasted line`,
+  then `  second pasted line` at column 2, under the glyph. Contract-visible: 04 section 15.10 IC-76
+  (queued messages). Tests: test-console-typing.R "a steer of two lines held in D is one queue row,
+  delivered whole (visual round 3)", "the person's line is on the band; a queue line is dim and cut
+  to one row (D-245)".
+- Final visual loop, round 3 (2026-10-24): Task 75: `eval_r()` records and muffles every warning
+  and, teed, shows it as it comes, `Warning: <text>`, at column 4 among the output in the console
+  margin (`eval_echo()`), else on stderr: R deferred it to its top level, which the console reaches
+  only after `/exit` (`Warning message: In
+  eval(expr, st$envir) : a warning`, naming the evaluator), and a run only when it ends.
+  Contract-visible: 04 sections 7.9 `eval_r()`, 15.10 IC-82 (what the code prints); 03 section 6.17.
+  Tests: test-console-repl.R "a !code warning shows before the next prompt, none left for R's top
+  level".
+- Final visual loop, round 3 (2026-10-24): Task 78: the text a record held at the pause menu
+  continues under `received
+  before the abort:` also when the abort's cut writes it (`console_abort_held()`, from
+  `console_on_message_end()` and `console_render_pause()` where the renderer still holds text,
+  `md$holds()`), once a record; the label came only with a delta after the menu, so a held row the
+  redactor had passed printed under `› a` alone, as if the model answered after the abort. [b] keeps
+  its bare cut row. Contract-visible: none. Tests: test-console-abort-stream.R "an abort's cut row
+  is labelled once though no delta follows the menu (visual round 3)".
+- Final visual loop, round 3 (2026-10-24): Task 79: in the console margin a `!` block follows one
+  rule: R's message is a row of the output at column 4 (`eval_on_message()` echoes and muffles it,
+  gptr's own notices excepted), the error is red there, `Error: <text>`, and a block that showed
+  anything ends with a blank row, as a command's output does (`repl_passthrough()`). The message was
+  at column 0 in R's stderr, the output at 4, the error at 2, and the next prompt came right under
+  it. Contract-visible: 04 sections 7.9 `eval_r()`, 15.10 IC-82; 03 section 6.17. Tests:
+  test-console-repl.R "a !code block's rows share one margin and end with a blank row (visual
+  round 3)".
+- Final visual loop, round 3 (2026-10-24): Task 82: `/exit` while a background session runs says so
+  in the banner's words, dim (`1 background session still runs · gptr_wait(gptr_last()) shows it`),
+  and a background session's end noticed at R's prompt starts on a row of its own, dim, named by its
+  first prompt (`background session 'go bg'
+  done`, else its status and reason): it was
+  `Background session sae8b90edfe finished with status idle.` on the `>` row, 20 s after an `/exit`
+  that said nothing. Contract-visible: 04 section 15.10 (the pause menu's [b]). Tests:
+  test-console-commands.R "/exit, /quit and /q end the REPL"; test-agent-background.R "gptr_cancel()
+  aborts a background session and releases its job".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets
@@ -5767,17 +7493,18 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   synthesis turn decides by itself. A listed row with no answer naming the model takes it as
   `rebuild_model()` does (`model_change`, `gptr.frozen`). Formerly every settled team or fan-out
   listed and resumed `interrupted` with model NA, while the live object was idle.
-- Rule (bg-1): a waiting background session's resumed run opens with a steer from the user
-  (`api_user`, so before re-queued follow-ups): "I am at the console now. Repeat the call that could
-  not be approved (<summary>) with the same input; I will be asked to approve it.", or "I am at the
-  console now; ask again." for a question; a resume that cannot start restores the queue. Only the
-  sweep's `bg_resume()` starts it: `sdk_check()` starts nothing for a `waiting` session, so a
-  message piped in meanwhile waits for that run, and `gptr_step()` leaves the session waiting
-  (`gptr_wait()` continues it). A `ui` record's `permission()` denial may carry `how = chr(1)`, kept
-  by `ui_answer_norm()` for a denial only and used by `perm_ask()` as the denial text's last
-  sentence; the idle-tick wrapper's is "Nothing ran and nobody declined." (the pending text already
-  says to repeat the call). Formerly the run resumed on the stale "Permission denied ... Explain
-  what you need or choose another approach." and GPT ended without asking in 7 of 8 runs.
+- Rule (bg-1): a waiting background session's resumed run has a user steer as its input
+  (`run_start()`'s, so steers piped in meanwhile join it and queued follow-ups, re-queued ones among
+  them, come when it would stop): "I am at the console now. Repeat the call that could not be
+  approved (<summary>) with the same input; I will be asked to approve it.", or "I am at the console
+  now; ask again." for a question. Only the sweep's `bg_resume()` starts it: `sdk_check()` starts
+  nothing for a `waiting` session, so a message piped in meanwhile waits for that run, and
+  `gptr_step()` leaves the session waiting (`gptr_wait()` continues it). A `ui` record's
+  `permission()` denial may carry `how = chr(1)`, kept by `ui_answer_norm()` for a denial only and
+  used by `perm_ask()` as the denial text's last sentence; the idle-tick wrapper's is "Nothing ran
+  and nobody declined." (the pending text already says to repeat the call). Formerly the run resumed
+  on the stale "Permission denied ... Explain what you need or choose another approach." and GPT
+  ended without asking in 7 of 8 runs.
 - Rule (gate-hint): the `how_to_allow` (and message) of a call nobody can approve starts
   `Mode "<m>" comes from
   <where>.` while the run keeps the mode the gateway recorded in a top-level call's
@@ -5790,11 +7517,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   told a knitting user to run interactively. The gateway records the origin because `perm_ask()`
   (L2) may not call `settings_layered()` (L6).
 - Rule (tpl-1): the service `templates.sync` (P17, owned by `builtin:prompts`) is the
-  `session_start` hook's `plugins_sync()` then `template_sync()`; the console calls it at `/help`
-  and before it calls a command name unknown, then looks again. Formerly no template command
-  (project, user, `/review`, `/explain`) existed until a session had started, so `/check` as the
-  console's first input was "Unknown command", and a template saved later waited for the next
-  session start.
+  `session_start` hook's `plugins_sync()` then `template_sync()`; the console calls it at `/help`,
+  at a `/` completion and before it calls a command name unknown, then looks again. Formerly no
+  template command (project, user, `/review`, `/explain`) existed until a session had started, so
+  `/check` as the console's first input was "Unknown command", and a template saved later waited for
+  the next session start.
 - Rule (tpl-2): the trust question, or without a human the untrusted notice, covers every project
   location gptr reads under trust. `trust_resources_present()` counts the trust-gated files,
   `AGENTS.md`, `AGENTS.override.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.gptr/vignette.Rmd`, the
@@ -5862,16 +7589,18 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   status ...", injection-e2e "a worker's forwarded permission request ..."; session-store "a settled
   team or fan-out lists and resumes idle ..."; agent-background "a resumed session is told the user
   can now approve the call", "... whose ask tool was blocked is told to ask again", "a message piped
-  into a waiting session is delivered with the console note"; console-ui "a denial keeps the UI's
-  how ..."; agent-dispatch "a blocked call's hint names where its mode came from"; console-commands
-  "template commands exist before the first prompt ...", "a template command is the console's first
-  input (end to end)"; gptr-config "a project whose only resource is prompt templates gets the trust
-  notice", "a trusted prompts-only project registers its templates", "every project skill, agent and
-  instruction location counts ...", "a relative skills.paths directory counts, and the question
-  names skills", "a changed trust-gated file makes the project untrusted again"; gptr-capture "a
-  bare hyphenated name is refused with its quoted form"; mcp-config "gptr_mcp()'s trusted is the
-  spec's ..."; artifact-app "peter$app() launches by default only at the console ...", "an artifact
-  in a temporary workspace is announced once"; prompt-context "the Artifacts line says a workspace
+  into a waiting session is delivered with the console note", "a follow-up queued while a session
+  waits comes after its resumed turn"; console-ui "a denial keeps the UI's how ..."; agent-dispatch
+  "a blocked call's hint names where its mode came from"; console-commands "template commands exist
+  before the first prompt ...", "a template command is the console's first input (end to end)";
+  console-completion "/ completes the project's template commands before the first prompt (D-252)";
+  gptr-config "a project whose only resource is prompt templates gets the trust notice", "a trusted
+  prompts-only project registers its templates", "every project skill, agent and instruction
+  location counts ...", "a relative skills.paths directory counts, and the question names skills",
+  "a changed trust-gated file makes the project untrusted again"; gptr-capture "a bare hyphenated
+  name is refused with its quoted form"; mcp-config "gptr_mcp()'s trusted is the spec's ...";
+  artifact-app "peter$app() launches by default only at the console ...", "an artifact in a
+  temporary workspace is announced once"; prompt-context "the Artifacts line says a workspace
   without .gptr/ is temporary"; ext-registry "gptr_register() of the same kind and name again
   replaces your earlier record". Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1,
   guard-1b, team-1, team-4, bg-1, gate-hint, tpl-1, tpl-2, sessions-23, ident-1, mcp-trusted, art-1,

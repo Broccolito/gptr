@@ -49,9 +49,10 @@
 #'
 #' A new interactive console without an explicit or configured model first offers CLI selection
 #' or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;
-#' cancellation or manual setup returns without starting a session. Existing sessions, explicit
-#' or configured models and `.stdin = TRUE` skip setup. CLI-reported login is not proof of online
-#' access or subscription billing. See `vignette("interactive-console", package = "gptr")`.
+#' cancellation (choose Cancel or press Enter) or manual setup returns without starting a session.
+#' Existing sessions, explicit or configured models and `.stdin = TRUE` skip setup. CLI-reported
+#' login is not proof of online access or subscription billing. See
+#' `vignette("interactive-console", package = "gptr")`.
 #'
 #' The name honors Peter Cathcart Wason, whose research with Jonathan Evans distinguished
 #' processes underlying reasoning and introspection, and Peter Naur of the Backus-Naur form,

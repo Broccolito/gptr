@@ -72,6 +72,54 @@ notices = function(expr) {
   c(out, err)
 }
 
+test_that("Positron's console is no terminal REPL and offers the pause menu (visual review)", {
+  local_mocked_bindings(gptr_is_interactive = function() TRUE, stdin_tty = function() TRUE,
+                        is_windows = function() FALSE, gptr_can_prompt = function() TRUE,
+                        front_end = function() "positron")
+  # what the person types there goes to Positron's own input, never to R's fd 0
+  expect_false(repl_terminal(repl_state(NULL, new.env())))
+  expect_true(console_menu_available())
+  local_mocked_bindings(front_end = function() "terminal")
+  expect_true(repl_terminal(repl_state(NULL, new.env())))
+})
+
+test_that("RStudio's console offers the pause menu; its s steers the run (steering review)", {
+  local_project()
+  local_gptr_options(unsafe_no_permissions = TRUE, verbose = 2L)
+  utf8 = l10n_info()[["UTF-8"]]
+  withr::local_options(cli.unicode = utf8, cli.num_colors = 1L)
+  person = if (utf8) "\u203a" else ">>"
+  off = gptr_register(gptr_tool("slow", "Test tool slow", execute = function(input, ctx) {
+    fake_interrupt()
+    "slow done"
+  }))
+  withr::defer(off())
+  fake = local_fake_provider(list(fake_tool("slow"), "ack", "done"))
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  log = local_menu_answers(c("s", "use mpg"))
+  local_mocked_bindings(front_end = function() "rstudio")
+  expect_true(console_menu_available())
+  enqueue = session_enqueue
+  sources = character()
+  local_mocked_bindings(session_enqueue = function(s, text, ..., source = "api_user") {
+    sources <<- c(sources, source)
+    enqueue(s, text, ..., source = source)
+  })
+  run = local_tracked(run_start(s, msg_user("go")), s)
+  out = notices(with_interrupt_policy(function() run_wait(run), list(run), mode = "repl"))
+  # one steer, from the menu; the tool resumed and the run went on to its end
+  expect_identical(sources, "pause_menu")
+  expect_identical(log$prompts, rep(paste0(person, " "), 2L))
+  expect_identical(run$status, "idle")
+  msgs = fake_requests(fake)[[2L]]$messages
+  expect_identical(msg_text(msgs[[length(msgs)]]),
+                   "The user sent this message while you were working: use mpg")
+  # delivered as the person's line at the boundary, right before the next request's output
+  shown = which(out == paste(person, "use mpg"))
+  expect_length(shown, 1L)
+  expect_identical(out[shown + 1L], "ack")
+})
+
 test_that("continue resumes the interrupted computation", {
   log = local_menu_answers("c")
   res = NULL
@@ -82,8 +130,91 @@ test_that("continue resumes the interrupted computation", {
     }, list(), mode = "call")
   })
   expect_identical(res, "finished")
-  expect_true(any(grepl("[gptr] paused: [c]ontinue, [a]bort", err, fixed = TRUE)))
-  expect_true(any(grepl("[gptr] continuing", err, fixed = TRUE)))
+  # without a session only continue and abort; no notice says it continues
+  expect_identical(err, c("", "  ? Paused", "    c continue - a abort"))
+})
+
+test_that("the pause menu is a console question: its keys under it, read at the chevron (D-243)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  menu = function(answers = "c", runs = list(run), mode = "call") {
+    log = local_menu_answers(answers)
+    out = notices(with_interrupt_policy(function() fake_interrupt(), runs, mode = mode))
+    list(out = out, prompts = log$prompts)
+  }
+  # a blank row, `? Paused` and under its text the keys as an approval's, read at the person's
+  # chevron at column 0
+  keys = "    s steer - f follow-up - c continue - a abort - b background"
+  m = menu()
+  expect_identical(m$out, c("", "  ? Paused", keys))
+  expect_identical(m$prompts, ">> ")
+  testthat::local_reproducible_output(width = 80, unicode = TRUE)
+  m = menu()
+  expect_identical(m$out[[3L]], gsub(" - ", " \u00b7 ", keys, fixed = TRUE))
+  expect_identical(m$prompts, "\u203a ")
+  # at 60 columns the keys wrap between the options, a row never ending in the separator
+  testthat::local_reproducible_output(width = 60, unicode = FALSE)
+  expect_identical(menu()$out[-1L], c("  ? Paused",
+                                      "    s steer - f follow-up - c continue - a abort",
+                                      "    b background"))
+  # at 256 colours ? is blue, the title and the keys bold, what they do dim
+  testthat::local_reproducible_output(width = 80, unicode = TRUE)
+  withr::local_options(cli.num_colors = 256L)
+  sym = console_style()
+  what = c(paste0(" ", c("steer", "follow-up", "continue", "abort"), " \u00b7 "), " background")
+  expect_identical(menu()$out[2:3], c(
+    paste0("  ", sym$blue("?"), " ", cli::style_bold("Paused")),
+    paste0("    ", paste0(cli::style_bold(c("s", "f", "c", "a", "b")), sym$dim(what),
+                          collapse = ""))
+  ))
+  # an answer other than a key or its word is kept in the history, never sent, and one dim row in
+  # the console's terms says so and names the keys, bold; the menu reads again: text meant as a
+  # steer never aborts (visual round 3: two sentences that repeated the title)
+  local_abort_log()
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  kept = character()
+  local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
+                        .package = "utils")
+  m = menu(c("add a legend", "continue"), mode = "repl")
+  row = m$out[-(1:3)]
+  expect_identical(cli::ansi_strip(row), "    not a key · kept in history ↑ · s, f, c or a")
+  expect_true(startsWith(row, paste0("    ", sub("x.*$", "", sym$dim("x")), "not a key")))
+  for (k in c("s", "f", "c", "a")) expect_match(row, cli::style_bold(k), fixed = TRUE)
+  expect_length(m$prompts, 2L)
+  expect_identical(kept, "add a legend")
+  local_gptr_options(history = FALSE)
+  m = menu(c("add a legend", "continue"), mode = "repl")
+  expect_identical(cli::ansi_strip(m$out[[4L]]), "    not a key · s, f, c or a")
+  expect_identical(kept, "add a legend")
+  withr::local_options(cli.num_colors = 1L)
+  # one title when more than one session is paused too, never a session id the person has not
+  # seen (visual round 3)
+  s2 = policy_session()
+  run2 = local_tracked(stand_in_run("u0000run2"), s2)
+  expect_identical(menu(runs = list(run, run2))$out[[2L]], "  ? Paused")
+})
+
+test_that("an abort at the pause menu takes the call's modes back before the run stops (Task 34)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  local_abort_log()
+  set = character()
+  local_mocked_bindings(tty_modes = function(modes = "-g") {
+    set <<- c(set, paste(modes, collapse = " "))
+    "SAVED"
+  })
+  old = the$tty
+  withr::defer(assign("tty", old, envir = the))
+  for (answer in c("a", NA)) {
+    the$tty = list2env(list(saved = "SAVED", set = "CALL"))
+    set = character()
+    local_menu_answers(answer)
+    notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "repl"))
+    # the menu read in the saved modes, then the call's again: keys typed while the run stops are
+    # not echoed
+    expect_identical(set, c("SAVED", "CALL"), info = answer)
+    expect_false(isTRUE(the$tty$asking), info = answer)
+  }
 })
 
 test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
@@ -104,21 +235,94 @@ test_that("steer and follow-up queue the text with source pause_menu (IC-55)", {
   expect_identical(q$steer[[1L]]$source, "pause_menu")
   texts = vapply(q$follow_up, function(i) i$text, "")
   expect_true("then plot it" %in% texts)
-  expect_true(any(grepl("[s]teer, [f]ollow-up, [c]ontinue, [a]bort", err, fixed = TRUE)))
-  expect_identical(log$prompts, c("? ", "steer> ", "? ", "follow-up> "))
+  expect_true(any(grepl("s steer - f follow-up - c continue - a abort", err, fixed = TRUE)))
+  # [s] and [f] read their text at the chevron of their own question, whose queue line leaves the
+  # text out, as it shows right above it (review)
+  expect_identical(log$prompts, rep(">> ", 4L))
+  sym = console_style()
+  steer = which(err == "  ? Steer")
+  follow = which(err == "  ? Follow-up")
+  expect_length(c(steer, follow), 2L)
+  expect_identical(err[steer + 1L], paste0(sym$queued, " steer"))
+  expect_identical(err[follow + 1L], paste0(sym$queued, " follow-up"))
+  expect_false(any(grepl("use only mpg", err, fixed = TRUE)))
+  expect_false(any(grepl("[gptr] steering", err, fixed = TRUE) |
+                     grepl("follow-up queued", err, fixed = TRUE)))
 })
 
-test_that("in the console margin the menu's prompts keep it, as its notices do (D-186)", {
+test_that("the pause menu leaves the answer's held row to continue after it (visual review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  rec = console_record(list(run = run$id))
+  local_menu_answers("c")
+  out = notices({
+    rec$md = render_markdown_stream(80L)
+    rec$md$write("The heaviest cars, so part of this")
+    with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call")
+    rec$md$write(" gap is the weight effect.\n")
+    rec$md$finish()
+  })
+  # the sentence is whole, one row after the menu, never cut at the menu
+  row = "The heaviest cars, so part of this gap is the weight effect."
+  expect_identical(utils::tail(out, 1L), row)
+  expect_true(which(out == "  ? Paused") < length(out))
+})
+
+test_that("in the console margin the menu's rows are an approval's, its prompt at column 0", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
   log = local_menu_answers(c("s", "use only mpg"))
   err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
-  # the notice starts on a line of its own (a terminal may have echoed ^C)
-  expect_identical(err[[1L]], "")
-  expect_true(startsWith(err[[2L]], "  [gptr] paused"))
-  expect_identical(log$prompts, c("  ? ", "  steer> "))
+  # the menu starts on a line of its own (a terminal may have echoed ^C); its [s] asks for the text
+  # under a title, and the queue line is right under that, as under any question
+  expect_identical(err, c("", "  ? Paused",
+                          "    s steer - f follow-up - c continue - a abort - b background",
+                          "  ? Steer", "-> steer"))
+  expect_identical(log$prompts, c(">> ", ">> "))
+})
+
+test_that("the pause menu and its text question say a T console's draft is kept (review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  log = local_menu_answers(c("s", "use only mpg"))
+  rd = new.env(parent = emptyenv())
+  rd$compose = list(draft = "and colour by gear")
+  local_mocked_bindings(console_repl_find = function() list(reader = rd))
+  tty = the$tty
+  the$tty = list(keys = TRUE)
+  withr::defer(assign("tty", tty, envir = the))
+  err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  kept = "    -> draft kept, back after your answer - and colour by gear"
+  expect_identical(err[2:6], c("  ? Paused",
+                               "    s steer - f follow-up - c continue - a abort - b background",
+                               kept, "  ? Steer", kept))
+})
+
+test_that("the output of resumed code and its result stay one block below the menu (review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  rec = console_record(list(run = run$id))
+  # an r call the person approved: its ask was the record's last block
+  rec$last = "prompt"
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  local_menu_answers("c")
+  out = notices({
+    # the menu opens inside the call's evaluation, a tool on the stack
+    with_interrupt_policy(function() {
+      .gptr_tool_run = run
+      fake_interrupt()
+    }, list(run), mode = "call")
+    # the evaluator's tee writes the rest of the code's output with no block gap, then the result
+    cat("    Min. 1st Qu.\n")
+    console_gap(rec, "tool")
+    cat("    done\n")
+  })
+  expect_identical(utils::tail(out, 4L), c(
+    "    s steer - f follow-up - c continue - a abort - b background", "", "    Min. 1st Qu.",
+    "    done"))
 })
 
 test_that("pause-menu text passes the input event with source steer", {
@@ -147,7 +351,7 @@ test_that("abort in mode repl aborts the runs and returns NULL", {
   })
   expect_null(res)
   expect_identical(aborted$aborted, "u0000run1")
-  expect_true(any(grepl("[gptr] aborted; the session is kept.", err, fixed = TRUE)))
+  expect_true("aborted - the session is kept" %in% err)
 })
 
 test_that("abort in mode call re-signals the interrupt so loops stop", {
@@ -184,19 +388,91 @@ test_that("a second Ctrl-C while the menu waits aborts", {
   expect_identical(aborted$aborted, "u0000run1")
 })
 
+test_that("Ctrl-C at the pause menu's chevron ends the terminal's line (review)", {
+  local_readline(character())
+  local_live_console("T")
+  out = written(function() expect_identical(console_ask(), NA_character_))
+  expect_identical(out, "\n")
+})
+
+test_that("a key typed before the menu's chevron showed answers it; other text is kept (review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  local_menu_answers(character())
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  local_gptr_options(history = TRUE)
+  # every line read too soon (a slow stty under load): a text that is no key is kept, never sent to
+  # the agent; `s` answers; the steer's text is taken whenever it was typed
+  rl = local_readline(c("use the median", "s", "and log it"), secs = 0.01)
+  err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  expect_identical(rl$kept, "use the median")
+  expect_true(kept_line("use the median") %in% err)
+  q = session_data(s)$queue$steer
+  expect_identical(vapply(q, function(i) i$text, ""), "and log it")
+})
+
+test_that("keys read with Ctrl-C answer the pause menu and its text question (steering review)", {
+  rl = local_readline(character())
+  keys = c("", "s", "f", "c", "a", "steer", "follow-up", "continue", "abort")
+  acc = function(x) tolower(trimws(x)) %in% keys
+  # the keys a T console's composer read after Ctrl-C (console_keys())
+  ahead = function(tail, accept = acc) {
+    rd = new.env(parent = emptyenv())
+    rd$after_interrupt = tail
+    x = NULL
+    out = utils::capture.output({
+      x = console_ahead(rd, accept)
+    })
+    list(x = x, out = out, rest = rd$after_interrupt)
+  }
+  sym = console_style()
+  # an answer is echoed at the person's chevron, as readline leaves it
+  expect_identical(ahead("s\r"), list(x = "s", out = paste0(sym$person, " s"), rest = ""))
+  # a line that is no key is kept in the history, never sent; the key after it answers
+  expect_identical(ahead("foo\rs\r"),
+                   list(x = "s", out = c(kept_line("foo"), paste0(sym$person, " s")), rest = ""))
+  # the lines after the answer wait for the next question; [s]'s text question takes any line
+  a = ahead("s\ruse the median\r")
+  expect_identical(a[c("x", "rest")], list(x = "s", rest = "use the median\n"))
+  expect_identical(ahead(a$rest, function(x) TRUE)$x, "use the median")
+  # the edit keys act; an unterminated line waits for the question's read; Enter alone continues
+  expect_identical(ahead("x\177s\r")$x, "s")
+  expect_identical(ahead("s"), list(x = NULL, out = character(), rest = "s"))
+  expect_identical(ahead("foo\ruse the med\177d"),
+                   list(x = NULL, out = kept_line("foo"), rest = "use the med"))
+  expect_identical(ahead("\r")$x, "")
+  expect_identical(ahead(""), list(x = NULL, out = character(), rest = ""))
+  expect_identical(rl$kept, c("foo", "foo"))
+})
+
+test_that("a line begun with Ctrl-C begins the answer the question reads (review)", {
+  rl = local_readline(c("", "ian"))
+  rd = new.env(parent = emptyenv())
+  local_mocked_bindings(console_repl_find = function() list(reader = rd))
+  sym = console_style()
+  # Ctrl-C, then `s`, the Enter in a later read: the menu's answer is s, shown after the chevron
+  rd$after_interrupt = "s"
+  expect_identical(console_ask(function(x) x %in% c("", "s", "c")), "s")
+  # `use the med` read with the Ctrl-C and `ian` typed later steer `use the median`
+  rd$after_interrupt = "use the med"
+  expect_identical(console_ask(function(x) TRUE), "use the median")
+  expect_identical(rl$prompts, paste0(sym$person, c(" s", " use the med")))
+  expect_identical(rd$after_interrupt, "")
+})
+
 test_that("a line typed before the pause menu appeared never answers it (IC-75)", {
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
   rl = local_readline(c("a", "c"), secs = c(0.01, 1))
-  expect_identical(console_ask("[c]ontinue, [a]bort: "), "c")
+  expect_identical(console_ask(), "c")
   expect_identical(rl$i, 2L)
 })
 
-test_that("the policy is abort-only where resuming is unverified (RStudio, Rgui, Jupyter)", {
+test_that("the policy is abort-only where resuming is unverified (Rgui, Jupyter), not in R.app", {
   s = policy_session()
   run = local_tracked(stand_in_run(), s)
   aborted = local_abort_log()
   log = local_menu_answers("c")
-  for (fe in c("rstudio", "rgui", "jupyter")) {
+  for (fe in c("rgui", "jupyter")) {
     local_mocked_bindings(front_end = function() fe)
     run$status = "streaming"
     res = "not set"
@@ -206,7 +482,10 @@ test_that("the policy is abort-only where resuming is unverified (RStudio, Rgui,
     expect_null(res)
   }
   expect_identical(log$prompts, character())
-  expect_identical(aborted$aborted, rep("u0000run1", 3L))
+  expect_identical(aborted$aborted, rep("u0000run1", 2L))
+  # R.app is front end rgui too; resuming there is verified (steering review)
+  local_mocked_bindings(front_end = function() "rgui", platform_gui = function() "AQUA")
+  expect_true(console_menu_available())
 })
 
 test_that("nested policies show one menu and the inner runs join the outer one", {
@@ -227,7 +506,7 @@ test_that("nested policies show one menu and the inner runs join the outer one",
   })
   expect_null(res)
   expect_identical(box$seen, c("u0000run1", "u0000run2"))
-  expect_identical(log$prompts, "? ")
+  expect_identical(log$prompts, ">> ")
   expect_setequal(aborted$aborted, c("u0000run1", "u0000run2"))
 })
 
@@ -253,10 +532,70 @@ test_that("[b]ackground hands a foreground run to bg.register (P21) and resumes"
   })
   expect_identical(res, "kept running")
   expect_identical(got$session, s)
-  expect_true(any(grepl("[b]ackground", err, fixed = TRUE)))
+  expect_true(any(grepl("b background", err, fixed = TRUE)))
+  # dim rows in the menu's words, the service's notice one of their terms (visual round 3), and
+  # the blank row before the prompt
+  ext_service_set("bg.register", function(session) {
+    gptr_inform(c("Background sessions are experimental.",
+                  "See help(\"gptr-background\") for the consoles where they are supported."),
+                "notice")
+    invisible(session)
+  }, provided_by = "test")
+  local_menu_answers("b")
+  local_gptr_options(quiet = FALSE)
+  withr::local_options(cli.num_colors = 256L)
+  # the answer's cut row closes it right after the menu, then the status rows as one block of
+  # their own
+  local_mocked_bindings(console_render_pause = function() console_write("  the answer's cut..."))
+  err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  dim = console_style()$dim
+  expect_identical(utils::tail(err, 5L), c(
+    "  the answer's cut...", "", dim("  in the background (experimental, ?\"gptr-background\")"),
+    dim("  !!gptr::gptr_wait(gptr::gptr_last()) continues it here"), ""))
+  expect_false(any(grepl("Background sessions", err, fixed = TRUE)))
+  expect_false(any(grepl("[gptr]", err, fixed = TRUE)))
+  withr::local_options(cli.num_colors = 1L)
   local_menu_answers(c("b", "c"))
   err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "repl"))
-  expect_false(any(grepl("[b]ackground", err, fixed = TRUE)))
+  expect_false(any(grepl("b background", err, fixed = TRUE)))
+})
+
+test_that("[b] keeps the REPL's held lines and draft in the history, not sent (steering review)", {
+  s = policy_session()
+  run = local_tracked(stand_in_run(), s)
+  old = the$services
+  withr::defer({
+    the$services = old
+  })
+  ext_service_set("bg.register", function(session) invisible(session), provided_by = "test")
+  rd = new.env(parent = emptyenv())
+  rd$typed = "summarise after"
+  rd$compose = list(draft = "a draft")
+  rs = new.env(parent = emptyenv())
+  rs$reader = rd
+  local_mocked_bindings(console_repl_prompt = function() rs)
+  local_gptr_options(history = TRUE)
+  kept = character()
+  local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
+                        .package = "utils")
+  local_menu_answers("b")
+  err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  expect_identical(kept, c("summarise after", "a draft"))
+  # listed once, after the menu's last row and before the blank row above the prompt
+  expect_identical(utils::tail(err, 3L), c(
+    "  in the background - !!gptr::gptr_wait(gptr::gptr_last()) continues it here",
+    kept_line(c("summarise after", "a draft")), ""))
+  expect_identical(rd$typed, character())
+  expect_null(rd$compose)
+  # nothing reaches the session: its queue holds the deferred prompt only
+  q = session_data(s)$queue
+  expect_identical(vapply(c(q$steer, q$follow_up), function(it) it$text, ""), "hello")
+  # with nothing held there is no list
+  rd$compose = list(draft = "")
+  local_menu_answers("b")
+  err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+  expect_false(any(grepl("kept in history", err, fixed = TRUE)))
+  expect_identical(kept, c("summarise after", "a draft"))
 })
 
 test_that("a steer typed while a tool runs is queued once no tool is on the stack", {
@@ -291,9 +630,33 @@ test_that("a steer typed while a tool runs reaches the request after the tool re
   expect_match(json_encode(msgs[[length(msgs)]]), "use mpg", fixed = TRUE)
 })
 
-test_that("a steer typed in a tool and then aborted is listed as dropped, never sent later", {
+test_that("an r call the pause menu resumed returns its output, then the steer (steering review)", {
   local_project()
   local_gptr_options(unsafe_no_permissions = TRUE)
+  code = paste0("invisible(withRestarts(signalCondition(structure(class = c('interrupt', ",
+                "'condition'), list())), resume = function() NULL))\n1 + 1")
+  fake = local_fake_provider(list(fake_tool("r", code = code), "ack", "done"))
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  local_menu_answers(c("s", "use mpg"))
+  run = local_tracked(run_start(s, msg_user("go")), s)
+  notices(with_interrupt_policy(function() run_wait(run), list(run), mode = "call"))
+  msgs = fake_requests(fake)[[2L]]$messages
+  n = length(msgs)
+  # the code ran to its end, so the model reads its output, never an interrupt, then the relay
+  expect_identical(msgs[[n - 1L]]$role, "tool_result")
+  expect_match(json_encode(msgs[[n - 1L]]), "[1] 2", fixed = TRUE)
+  expect_no_match(json_encode(msgs[[n - 1L]]), "interrupted", fixed = TRUE)
+  expect_identical(msgs[[n]]$role, "operator")
+  expect_match(json_encode(msgs[[n]]), "use mpg", fixed = TRUE)
+})
+
+test_that("a steer typed in a tool and then aborted is kept in the history, never sent later", {
+  local_project()
+  local_gptr_options(unsafe_no_permissions = TRUE, history = TRUE)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  kept = character()
+  local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
+                        .package = "utils")
   off = gptr_register(gptr_tool("slow", "Test tool slow", execute = function(input, ctx) {
     fake_interrupt()
     fake_interrupt()
@@ -309,10 +672,30 @@ test_that("a steer typed in a tool and then aborted is listed as dropped, never 
     run_wait(run_start(s, msg_user("an unrelated prompt")))
   })
   expect_identical(run$status, "aborted")
-  expect_true(any(grepl("[gptr] dropped queued messages: 'use mpg'", err, fixed = TRUE)))
+  expect_identical(kept, "use mpg")
+  expect_identical(sum(grepl(kept_line("use mpg"), err, fixed = TRUE)), 1L)
   expect_length(session_data(s)$queue$steer, 0L)
   reqs = fake_requests(fake)
   expect_no_match(json_encode(reqs[[length(reqs)]]$messages), "use mpg", fixed = TRUE)
+})
+
+test_that("outside an interactive R a steer the run did not take stays queued, unlisted (D-242)", {
+  local_project()
+  local_gptr_options(history = TRUE)
+  kept = character()
+  local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),
+                        .package = "utils")
+  fake = local_fake_provider(list(list(error = "bad request", status = 400L, delay = 0.3)))
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  run = local_tracked(run_start(s, msg_user("go")), s)
+  reactor_timer(at = reactor_now() + 0.1, fn = function() gptr_steer(s, "please also check units"))
+  err = notices(run_wait(run))
+  expect_identical(run$status, "error")
+  # Rscript, knitr and API users have no history: the steer waits for the session's next run
+  expect_identical(vapply(session_data(s)$queue$steer, function(it) it$text, ""),
+                   "please also check units")
+  expect_identical(kept, character())
+  expect_false(any(grepl("kept in history", err, fixed = TRUE)))
 })
 
 test_that("a steer typed in a tool that pumps the reactor reaches the next request", {
@@ -362,9 +745,9 @@ test_that("a [b]ackground refusal is a notice and the menu asks again", {
     }, list(run), mode = "call")
   })
   expect_identical(res, "kept running")
-  expect_true(any(grepl("[gptr] cannot run in the background: Background sessions need",
-                        err, fixed = TRUE)))
-  expect_identical(log$prompts, c("? ", "? "))
+  expect_true(any(startsWith(err, "  cannot run in the background - Background sessions need")))
+  expect_false(any(grepl("[gptr]", err, fixed = TRUE)))
+  expect_identical(log$prompts, c(">> ", ">> "))
 })
 
 test_that("the policy is the console.interrupt_policy service of builtin:console", {
@@ -458,6 +841,7 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   skip_on_cran()
   skip_on_os("windows")
   skip_if_not(identical(Sys.getenv("CI"), "true"), "INFRA-03 drives an interactive R on CI")
+  skip_if_sigint_ignored()
   ttft = local_mock_server("ttft", delay = 3, n = 4L, interval = 0.05)
   stream = local_mock_server("stream", n = 40L, interval = 0.25)
   dir = withr::local_tempdir("gptr-infra03-")
@@ -491,7 +875,7 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   while (!nrow(ttft$log()) && Sys.time() < deadline) Sys.sleep(0.05)
   expect_identical(nrow(ttft$log()), 1L)
   p$interrupt()
-  expect_true(drv$wait_for("paused"))
+  expect_true(drv$wait_for("Paused"))
   drv$send("c")
   expect_true(drv$wait_for("STATUS-TTFT idle"))
   expect_true(drv$has("tok04"))
@@ -501,9 +885,10 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   expect_true(drv$wait_for("Sys.sleep(3)"))
   Sys.sleep(0.5)
   p$interrupt()
-  expect_true(drv$wait_for("paused"))
+  expect_true(drv$wait_for("Paused"))
+  expect_true(drv$wait_for(pty_asked()))
   drv$send("s")
-  expect_true(drv$wait_for("steer>"))
+  expect_true(drv$wait_for(pty_asked()))
   drv$send("use base R only")
   expect_true(drv$wait_for("STEER-AFTER-TOOL TRUE"))
 
@@ -511,7 +896,7 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   drv$send("step_abort()")
   expect_true(drv$wait_for("tok03"))
   p$interrupt()
-  expect_true(drv$wait_for("paused"))
+  expect_true(drv$wait_for("Paused"))
   drv$send("a")
   expect_true(drv$wait_for("ABORT-DONE TRUE"))
   expect_true(drv$has("STOP aborted"))

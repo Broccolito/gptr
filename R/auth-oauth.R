@@ -513,7 +513,7 @@ oauth_redirect_setup = function(port = NULL, path = "/callback", state = NULL) {
     return(list(redirect_uri = uri, close = function() invisible(NULL),
                 wait = function(timeout = 300) {
                   oauth_ui()$input(paste0("After signing in, paste the full address of the ",
-                                          "page your browser opened: "))
+                                          "page your browser opened"))
                 }))
   }
   app = list(call = function(req) {
@@ -620,7 +620,7 @@ oauth_key_exchange = function(id, flow, client) {
 #' or a no-echo read)
 #' @noRd
 oauth_ask = function(what) {
-  v = oauth_ui()$input(paste0(what, ": "), secret = TRUE)
+  v = oauth_ui()$input(what, secret = TRUE)
   if (!rlang::is_string(v) || !nzchar(trimws(v))) {
     gptr_abort("Nothing was entered.", "invalid_argument", arg = "input",
                expected = "a non-empty value")

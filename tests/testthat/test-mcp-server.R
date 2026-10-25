@@ -179,6 +179,31 @@ test_that("a call served in a live run is reported as a tool call of the run (D-
   expect_identical(failed$details$error, "no answer")
 })
 
+test_that("the end of a served call that was refused says why it did not run (console-3)", {
+  local_permission_rules()
+  gptr_permissions(deny = "r(fn:writeLines)")
+  seen = serve_in_run(function(event, ctx) {
+    mcp_dispatch_local(r_call("writeLines('x', 'y.txt')", id = 6L), ctx$session)$result
+  })
+  expect_true(seen$out$isError)
+  end = Filter(function(e) identical(e$tool_call_id, "mcp_6"), seen$events)[[2L]]
+  expect_true(end$is_error)
+  expect_identical(end$refused, "denied by the rule r(fn:writeLines)")
+})
+
+test_that("code served in a live run shows what it prints, as the r tool does (Task 31)", {
+  shown = utils::capture.output(serve_in_run(function(event, ctx) {
+    withr::local_options(gptr.interactive = TRUE)
+    mcp_dispatch_local(r_call("cat('served output\\n')"), ctx$session)$result
+  }))
+  expect_length(grep("served output", shown, fixed = TRUE), 1L)
+  x = local_served_session()
+  withr::local_options(gptr.interactive = TRUE)
+  shown = utils::capture.output(invisible(mcp_dispatch_local(r_call("cat('no run\\n')"),
+                                                              x$session)))
+  expect_length(grep("no run", shown, fixed = TRUE), 0L)
+})
+
 test_that("a plot served in a live run is drawn on the person's device, without a run on none", {
   shown = new.env()
   shown$n = 0L
@@ -386,6 +411,22 @@ test_that("inside a running session the claude route gates through perm_check on
   results = fake_requests(fake)
   expect_identical(results[[2L]]$last_results[[1L]]$content[[1L]]$text, "true")
   expect_identical(results[[3L]]$last_results[[1L]]$content[[1L]]$text, "false")
+})
+
+test_that("a served call the person denies with text says it is theirs (cheat-sheet review)", {
+  probe = gptr_tool("probe", "Calls the MCP dispatcher the way the claude adapter does.",
+                    parameters = list(type = "object",
+                                      properties = list(code = list(type = "string"))),
+                    execute = function(input, ctx) {
+                      mcp_dispatch_local(r_call(input$code), ctx$session)$result$content[[1L]]$text
+                    })
+  off = gptr_register(probe)
+  withr::defer(off())
+  local_scripted_ui(list("y", list(decision = "deny", feedback = "use base R")))
+  fake = local_fake_provider(list(fake_tool("probe", code = "b = 2"), "done"), name = "probefake")
+  peter("Use the probe", model = fake, envir = new.env(), mode = "manual")
+  expect_match(fake_requests(fake)[[2L]]$last_results[[1L]]$content[[1L]]$text,
+               "^The user declined this call and said: \"use base R\"\\. ")
 })
 
 test_that("inside a running plan-mode session served r calls run in the run's scratch overlay", {

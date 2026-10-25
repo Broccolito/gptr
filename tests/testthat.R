@@ -39,16 +39,17 @@ if (.Platform$OS.type == "windows" && identical(Sys.getenv("NOT_CRAN"), "true"))
   cran = c(
     "aaa-state", "agent-loop", "agent-run", "auth-dotenv", "auth-redact", "auth-secrets",
     "bridge-sh", "ckpt-objects", "ckpt-rewind", "cli-claude", "cli-codex", "cli-common",
-    "console-render", "console-repl", "console-ui", "env-describe", "env-history", "env-probe",
-    "env-snapshot", "eval-core", "eval-format", "eval-guard", "ext-api", "ext-builtins",
-    "ext-check", "ext-events", "ext-load", "ext-plugins", "ext-registry", "ext-specs",
-    "gptr-capture", "gptr-config", "http-reactor", "http-retry", "http-sse", "json-schema",
-    "mcp-client", "perm-classify", "perm-gate", "perm-plan", "perm-rules", "proc-spawn",
-    "proc-supervise", "proc-writer-runtime", "prompt-compact", "prompt-sections", "prompt-text",
-    "provider-anthropic", "provider-fake", "provider-google", "provider-openai-completions",
-    "provider-openai-responses", "provider-transform", "s1-client", "s1-route",
-    "subagent-backends", "subagent-worker", "tool-edit", "tool-namespace", "tool-read",
-    "utils-conditions", "utils-hash", "utils-options", "utils-paths", "zzz"
+    "console-input", "console-render", "console-repl", "console-ui", "env-describe",
+    "env-history", "env-probe", "env-snapshot", "eval-core", "eval-format", "eval-guard",
+    "ext-api", "ext-builtins", "ext-check", "ext-events", "ext-load", "ext-plugins",
+    "ext-registry", "ext-specs", "gptr-capture", "gptr-config", "http-reactor", "http-retry",
+    "http-sse", "json-schema", "mcp-client", "perm-classify", "perm-gate", "perm-plan",
+    "perm-rules", "proc-spawn", "proc-supervise", "proc-writer-runtime", "prompt-compact",
+    "prompt-sections", "prompt-text", "provider-anthropic", "provider-fake", "provider-google",
+    "provider-openai-completions", "provider-openai-responses", "provider-transform",
+    "s1-client", "s1-route", "subagent-backends", "subagent-worker", "tool-edit",
+    "tool-namespace", "tool-read", "utils-conditions", "utils-hash", "utils-options",
+    "utils-paths", "zzz"
   )
   test_check("gptr", filter = paste0("^(", paste(cran, collapse = "|"), ")$"))
 } else {

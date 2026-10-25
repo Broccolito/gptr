@@ -12,6 +12,7 @@ launch_record = function(.env = parent.frame()) {
     console_drop(run$id)
     live$run = NULL
   }, envir = .env)
+  local_live_console(.env = .env)
   list(s = s, live = live, run = run, rec = console_record(list(run = run$id)))
 }
 
@@ -77,16 +78,16 @@ test_that("failed launch retains the existing spawn error and parent environment
   expect_identical(Sys.getenv(), parent_env)
 })
 
-test_that("a foreground launch closes the thinking row before stderr and resumes animation", {
+test_that("a foreground launch clears the live row before stderr; its task draws it again", {
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
   local_mocked_bindings(front_end = function() "rstudio")
   w = launch_record()
   utils::capture.output(launch_request(w))
-  sp = w$rec$spinner
-  task = w$rec$task
-  start = sp$t0
+  sp = the$live_row
+  task = sp$task
+  start = w$rec$t0
   observed = new.env(parent = emptyenv())
   launch_capture(function(bytes) {
     err = utils::capture.output({
@@ -98,15 +99,15 @@ test_that("a foreground launch closes the thinking row before stderr and resumes
         17L
       }, list(w$run))
     }, type = "message")
-    expect_identical(observed$before_stderr, paste0("\r", strrep(" ", 39L), "\r"))
+    # RStudio honours \033[K (visual review)
+    expect_identical(observed$before_stderr, "\r\033[K")
     expect_false(observed$shown)
     expect_identical(err, "SYNTHETIC-NATIVE-DIAGNOSTIC")
     expect_identical(observed$value, 17L)
-    expect_identical(w$rec$spinner, sp)
-    expect_identical(w$rec$task, task)
-    expect_identical(sp$t0, start)
+    expect_identical(the$live_row, sp)
+    expect_identical(sp$task, task)
+    expect_identical(w$rec$t0, start)
     expect_true(w$rec$request_pending)
-    sp$last = 0
     invisible(get(task, envir = reactor_get()$tasks)$fn())
     expect_true(sp$shown)
     expect_match(rawToChar(rawConnectionValue(bytes)), "thinking", fixed = TRUE)
@@ -131,12 +132,12 @@ test_that("launch observation preserves genuine stderr and the original conditio
     }, type = "message")
     expect_identical(err, "SYNTHETIC-GENUINE-STDERR")
     expect_identical(observed$error, original)
-    expect_false(w$rec$spinner$shown)
+    expect_false(the$live_row$shown)
     expect_identical(rawToChar(rawConnectionValue(bytes)), paste0("\r", strrep(" ", 39L), "\r"))
   })
 })
 
-test_that("a launch boundary ends the waiting row without a line feed, in R GUIs too (D-186)", {
+test_that("a launch boundary clears the live row without a line feed, in R GUIs too (D-186)", {
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -167,12 +168,12 @@ test_that("nested and background launches do not inject foreground display bytes
   }
   expect_identical(utils::capture.output(invisible(with_interrupt_policy(nested, list(w$run)))),
     character())
-  expect_true(w$rec$spinner$shown)
+  expect_true(the$live_row$shown)
   w$live$background = list(id = "b-launch")
   expect_identical(utils::capture.output(invisible(with_interrupt_policy(function() {
     signalCondition(launch_condition())
   }, list(w$run)))), character())
-  expect_true(w$rec$spinner$shown)
+  expect_true(the$live_row$shown)
 })
 
 test_that("real R-tool launch observation leaves captured text and warnings intact", {
@@ -188,17 +189,20 @@ test_that("real R-tool launch observation leaves captured text and warnings inta
     input = list(code = paste0('cat("tool output\\n"); launch(); ',
       'warn("tool warning", "notice")')))
   out = utils::capture.output({
-    expect_warning({
+    expect_no_warning({
       result = with_interrupt_policy(function() {
         tool_execute_frame(w$run, call, w$live$ctx)
       }, list(w$run))
-    }, class = "gptr_warning_notice")
+    })
   })
-  expect_identical(out, "tool output")
+  # printed output is a result row at column 4 in the margin (visual review), on the console's
+  # cleared live row, and the warning one too (visual round 3)
+  expect_identical(out, c(paste0("\r", strrep(" ", 39L), "\r    tool output"),
+                          "    Warning: tool warning"))
   expect_false(result$is_error)
   expect_identical(result$details$warnings, "tool warning")
   expect_false(grepl("[\r\033]", tool_result_text(result)))
-  expect_true(w$rec$spinner$shown)
+  expect_false(the$live_row$shown)
 })
 
 test_that("nested policies clear once and inactive policies emit no boundary output", {
@@ -227,16 +231,16 @@ test_that("nested policies clear once and inactive policies emit no boundary out
   }, list(w$run)))), character())
 })
 
-test_that("bare command lookup closes the thinking row before its native diagnostic", {
+test_that("bare command lookup clears the live row before its native diagnostic", {
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
   local_mocked_bindings(front_end = function() "rstudio")
   w = launch_record()
   utils::capture.output(launch_request(w))
-  sp = w$rec$spinner
-  task = w$rec$task
-  start = sp$t0
+  sp = the$live_row
+  task = sp$task
+  start = w$rec$t0
   parent_env = Sys.getenv()
   path = rscript_path()
   p = new.env(parent = emptyenv())
@@ -268,14 +272,14 @@ test_that("bare command lookup closes the thinking row before its native diagnos
     }, type = "message")
     expect_identical(observed$order, c("boundary", "lookup", "constructor", "owned"))
     expect_identical(observed$command, "gptr-synthetic-bare")
-    expect_identical(observed$before_stderr, paste0("\r", strrep(" ", 39L), "\r"))
+    expect_identical(observed$before_stderr, "\r\033[K")
     expect_false(observed$shown)
     expect_identical(err, "SYNTHETIC-LOOKUP-DIAGNOSTIC")
     expect_identical(observed$value, p)
     expect_identical(observed$child, p)
-    expect_identical(w$rec$spinner, sp)
-    expect_identical(w$rec$task, task)
-    expect_identical(sp$t0, start)
+    expect_identical(the$live_row, sp)
+    expect_identical(sp$task, task)
+    expect_identical(w$rec$t0, start)
     expect_true(w$rec$request_pending)
     expect_identical(Sys.getenv(), parent_env)
   })

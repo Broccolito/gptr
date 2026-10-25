@@ -189,7 +189,12 @@ gptr_wait = function(x, timeout = Inf) {
     if (!is.null(r)) runs = c(runs, list(r))
   }
   until = sdk_until_settled(ss)
-  if (!until()) sdk_pump(runs, until = until, timeout = timeout)
+  if (!until()) {
+    pump = function() sdk_pump(runs, until = until, timeout = timeout)
+    # the console's R code (`!!gptr_wait(s)`) shows what it waits for (console_wait())
+    wait = console_eval_value(".gptr_console_wait")
+    if (is.function(wait)) wait(ss, pump) else pump()
+  }
   if (inherits(x, "gptr_session") && length(runs) && isTRUE(runs[[1L]]$settled)) {
     gateway_signal(x, runs[[1L]])
   }

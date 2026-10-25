@@ -249,23 +249,23 @@ test_that("a Codex shell step shows its command without the shell's -lc wrapper"
     console_tool_line(list(id = ev$tool_call_id, name = ev$tool_name, input = ev$input))
   }
   expect_identical(shell("i1", "/bin/zsh -lc 'wc -l mtcars_by_cyl.csv'"),
-                   "  \u25cf codex_shell  wc -l mtcars_by_cyl.csv")
-  expect_identical(shell("i2", "/bin/sh -lc ls"), "  \u25cf codex_shell  ls")
+                   "  \u258e codex_shell  wc -l mtcars_by_cyl.csv")
+  expect_identical(shell("i2", "/bin/sh -lc ls"), "  \u258e codex_shell  ls")
   expect_identical(shell("i6", "/bin/zsh -lc 'rg -n \"foo\" R/'"),
-                   "  \u25cf codex_shell  rg -n \"foo\" R/")
+                   "  \u258e codex_shell  rg -n \"foo\" R/")
   # a double-quoted script keeps its wrapper
   expect_identical(shell("i3", "/bin/bash -lc \"echo 'hi'\""),
-                   "  \u25cf codex_shell  /bin/bash -lc \"echo 'hi'\"")
+                   "  \u258e codex_shell  /bin/bash -lc \"echo 'hi'\"")
   expect_identical(shell("i7", "/bin/zsh -lc \"rg -n foo\\\\( R/\""),
-                   "  \u25cf codex_shell  /bin/zsh -lc \"rg -n foo\\\\( R/\"")
+                   "  \u258e codex_shell  /bin/zsh -lc \"rg -n foo\\\\( R/\"")
   expect_identical(shell("i8", "/bin/zsh -lc \"ls -la\""),
-                   "  \u25cf codex_shell  /bin/zsh -lc \"ls -la\"")
+                   "  \u258e codex_shell  /bin/zsh -lc \"ls -la\"")
   # a command of several lines stays one JSON line, so no line is hidden
   expect_identical(shell("i4", "/bin/zsh -lc \"python - <<'PY'\nprint(1)\nPY\""),
-                   paste0("  \u25cf codex_shell  ",
+                   paste0("  \u258e codex_shell  ",
                           "{\"command\":\"/bin/zsh -lc \\\"python - <<'PY'\\nprint(1)\\nPY\\\"\"}"))
   expect_identical(shell("i5", "/bin/zsh -lc 'set -e\nmake check'"),
-                   "  \u25cf codex_shell  {\"command\":\"set -e\\nmake check\"}")
+                   "  \u258e codex_shell  {\"command\":\"set -e\\nmake check\"}")
 })
 
 test_that("Codex reports other servers' MCP calls, not gptr's own; reasoning is thinking", {
@@ -1083,8 +1083,8 @@ test_that("a codex turn shows its reasoning and tool steps at the console as the
   e = new.env()
   out = utils::capture.output(peter("How many files are there?", model = f$model, envir = e,
                                     mode = "auto"))
-  at = match(c("  Listing the files", "  * codex_shell  ls",
-               "  * r  n_files = 1L", "There is one file."), out)
+  at = match(c("  Listing the files", "  | codex_shell  ls",
+               "  | r  n_files = 1L", "There is one file."), out)
   expect_false(anyNA(at))
   expect_false(is.unsorted(at))
   expect_false(any(grepl("directory listing", out, fixed = TRUE)))
@@ -1117,7 +1117,7 @@ test_that("a Codex message shows whole once it completes, a blank line from the 
   # the last word is on screen before Codex's next event, not held until it
   expect_lt(which(grepl("files.", seen$log, fixed = TRUE))[[1L]],
             match("<item.started>", seen$log))
-  at = match("  * codex_shell  ls", out)
+  at = match("  | codex_shell  ls", out)
   expect_identical(out[at + 1:4], c("", "  There is one file.", "", "  It is a.txt."))
   expect_identical(s$text, "I will list the files.\nThere is one file.\nIt is a.txt.")
 })

@@ -448,7 +448,8 @@ doc_console_statement = function(text, site) {
   if (first) paste0(var, " = peter(", args, ")") else paste0(var, " |> peter(", args, ")")
 }
 
-#' Header lines of a transcript session (contract 11.5 transcript row), once per session id
+#' Header lines of a transcript session (contract 11.5 transcript row), once per session id; a new
+#' file's first lines are the preamble (doc_transcript_preamble())
 #' @noRd
 doc_transcript_header = function(text, site) {
   id = site[["session_id"]] %||% "unknown"
@@ -457,12 +458,18 @@ doc_transcript_header = function(text, site) {
                  with_calendar_preserved(format(Sys.time(), "%Y-%m-%d %H:%M:%S"))),
            paste0("# machine log: ", site[["session_file"]] %||%
                     "none kept (gptr_init() keeps session logs in .gptr/)"))
-  if (!length(text)) {
-    head = c(head, "# source() this file to replay the recorded code without calling a model;",
-             paste0("# gptr_source(", doc_str_literal(doc_rel(site[["path"]])),
-                    ", replay = \"live\") re-asks the model."), "library(gptr)")
-  }
+  if (!length(text)) head = c(head, doc_transcript_preamble(site[["path"]]))
   c(if (length(text)) "", head)
+}
+
+#' The lines that make the transcript at `path` re-source (IC-49): how to replay it, then
+#' `library(gptr)`, which every transcript has before its first block, whichever that is
+#' @noRd
+doc_transcript_preamble = function(path) {
+  c("# source() this file to replay the recorded code without calling a model;",
+    paste0("# gptr_source(", doc_str_literal(doc_rel(path)),
+           ", replay = \"live\") re-asks the model."),
+    "library(gptr)")
 }
 
 #' The transcript format's upsert(): replace by id, else append the header, statement and block

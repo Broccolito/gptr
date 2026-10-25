@@ -437,6 +437,16 @@ test_that("local_gptr_options() prefixes names and restores them", {
   expect_true(getOption("gptr.quiet"))
 })
 
+test_that("local_gw() starts a test without a key an earlier test left in the vault", {
+  local_vault()
+  secret_register("sk-ant-api03-gwleak-000000000000000000", "ANTHROPIC_API_KEY",
+                  source = "environment")
+  local({
+    local_gw()
+    expect_error(provider_credential(provider_get("anthropic")), class = "gptr_error_no_key")
+  })
+})
+
 mock_handle = function(body, headers, timeout) {
   h = curl::new_handle()
   curl::handle_setopt(h, post = TRUE, postfields = body, followlocation = 0L, timeout = timeout,

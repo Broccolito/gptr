@@ -128,15 +128,55 @@ test_that("commands pass the input event (source repl): recorded, handled or tra
   expect_identical(got$recorded, c("/mode auto", "/mode plan", "/model opus"))
 })
 
+# /help's text in console class `cls` of front end `fe`, its reader completing or not
+help_text = function(cls = "T", fe = "terminal", complete = TRUE) {
+  local_mocked_bindings(console_class = function() cls, front_end = function() fe)
+  rs = repl_state(NULL, new.env())
+  rs$reader = list(complete = complete)
+  run_command(rs, "/help")$out
+}
+
 test_that("/help lists the commands and the input syntax", {
   local_console_commands()
-  out = run_command(repl_state(NULL, new.env()), "/help")$out
+  local_gptr_options(interactive = TRUE)
+  out = help_text()
   expect_true(any(grepl("^  /mode", out)))
   expect_true(any(grepl("!!code", out, fixed = TRUE)))
-  # the reader of typed lines needs a pollable terminal (repl_terminal(), IC-76)
-  expect_true(any(grepl("In a terminal (not Windows) a line typed", out, fixed = TRUE)))
+  # the keys of the composer, the two kinds of queued message and the trigger characters (D-242,
+  # D-244)
+  text = paste(trimws(out), collapse = " ")
+  for (word in c("enter", "tab", "up", "steer", "follow-up", "@, !, !!, / or peter$")) {
+    expect_true(grepl(word, text, fixed = TRUE), info = word)
+  }
+  # the descriptions of commands, input and keys start in one column (review of Tasks 22-27)
+  rows = out[grepl("^  \\S", out)]
+  expect_true(all(grepl("^  .{17}\\S", rows) & !grepl("^  .{16}\\S\\S", rows)))
   expect_identical(run_command(repl_state(NULL, new.env()), "/help mode")$out,
-                   "/mode  Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]")
+                   "/mode  show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]")
+})
+
+test_that("/help's keys follow the console, as the banner does (review of Tasks 22-27)", {
+  local_console_commands()
+  local_gptr_options(interactive = TRUE)
+  words = function(...) gsub("\\s+", " ", paste(help_text(...), collapse = " "))
+  # RStudio: no composer (enter, up), its triggers ! and /, a typed line the next prompt
+  rstudio = words("L", "rstudio")
+  expect_false(any(grepl("^  (enter|up) ", help_text("L", "rstudio"))))
+  for (w in c("@, !, !!", "In other consoles")) {
+    expect_false(grepl(w, rstudio, fixed = TRUE), info = w)
+  }
+  for (w in c("tab after ! or /, complete the word", "esc pause the answer",
+              "A line typed while peter works is the next prompt.")) {
+    expect_true(grepl(w, rstudio, fixed = TRUE), info = w)
+  }
+  # Positron: no completion, and typed text waits as R code, as its banner says
+  positron = words("L", "positron", complete = FALSE)
+  expect_false(any(grepl("^  tab ", help_text("L", "positron", complete = FALSE))))
+  expect_true(grepl("Text typed while peter works waits as R code; ctrl-c, then s, to steer.",
+                    positron, fixed = TRUE))
+  # TERM=dumb: each line is queued as type_ahead says
+  expect_true(grepl("A line typed while peter works is queued as type_ahead says",
+                    words("D", complete = FALSE), fixed = TRUE))
 })
 
 test_that("template commands exist before the first prompt, and a template saved later too", {
@@ -192,24 +232,53 @@ test_that("in the console margin command output wraps inside it; listings fit it
   expect_identical(words(out), words(cmd_help("", list())))
   # a description wraps under its own column, so no row looks like another command
   cmds = out[seq(2L, match("  Input:", out) - 1L)]
-  expect_true(all(grepl("^.{16} {3}\\S", cmds)))
-  expect_identical(run_command(rs, "/mode")$out, "  Mode: manual")
-  expect_match(run_command(rs, "/env")$out, "^  alpha: <integer>")
+  expect_true(all(grepl("^.{18} {3}\\S", cmds)))
+  # never inside a usage or between a key and its word, and names bold (visual round 2)
+  expect_false(any(grepl(" [sfcab]$|\\[[^]]*$", out)))
+  bold = withr::with_options(list(cli.num_colors = 256L), run_command(rs, "/help")$out)
+  names = bold[grepl("^ {4}\\S", cli::ansi_strip(bold))]
+  expect_true(length(names) > 20L && all(startsWith(names, "    \033[1m")))
+  expect_identical(run_command(rs, "/mode")$out, c("  Mode: manual", ""))
+  expect_match(run_command(rs, "/env")$out[[1L]], "^  alpha: <integer>")
   # a listing is printed at the content width (60 - 4), not wrapped again
   listing = withr::with_options(list(width = 56L, cli.width = 56L),
                                 utils::capture.output(print(gptr::gptr_sessions())))
   expect_identical(run_command(rs, "/resume")$out,
-                   ifelse(nzchar(listing), paste0("  ", listing), ""))
+                   c(ifelse(nzchar(listing), paste0("  ", listing), ""), ""))
   expect_equal(c(getOption("width"), getOption("cli.width")), c(60, 60))
+})
+
+test_that("a command's output ends with a blank row before the next prompt (visual round 2)", {
+  local_console_commands()
+  local_project()
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+  testthat::local_reproducible_output(width = 80)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  rs = repl_state(s, new.env())
+  # as after a run's status line, also after one row, as /compact's follows its progress notice
+  expect_identical(utils::tail(run_command(rs, "/context")$out, 2L) != "", c(TRUE, FALSE))
+  expect_identical(utils::tail(run_command(rs, "/mode")$out, 2L) != "", c(TRUE, FALSE))
 })
 
 test_that("/exit, /quit and /q end the REPL", {
   local_console_commands()
   for (cmd in c("/exit", "/quit", "/q")) {
     rs = repl_state(NULL, new.env())
-    run_command(rs, cmd)
+    expect_identical(run_command(rs, cmd)$out, character())
     expect_true(rs$exit)
   }
+  # a background session still running is named, in the banner's words (visual round 3: R's
+  # prompt got its end notice 20 s later, unannounced)
+  running = c("running", "idle")
+  local_mocked_bindings(job_list = function(kind = NULL) data.frame(status = running))
+  rs = repl_state(NULL, new.env())
+  expect_identical(run_command(rs, "/exit")$out,
+                   "1 background session still runs - gptr_wait(gptr_last()) shows it")
+  expect_true(rs$exit)
+  running = c("running", "running")
+  expect_identical(run_command(rs, "/exit")$out,
+                   "2 background sessions still run - gptr_jobs() lists them")
 })
 
 test_that("/model and /mode before the first prompt set the first prompt's arguments", {
@@ -347,7 +416,12 @@ test_that("/cost, /context, /fork and /resume work on a session that ran", {
   expect_match(cost[[length(cost)]], "^Total: 1 request, ")
   ctx_out = run_command(rs, "/context")$out
   expect_match(ctx_out[[1L]], "^Last request q[0-9a-f]+:$")
-  expect_match(ctx_out[[length(ctx_out)]], "^  total ")
+  expect_match(ctx_out[[length(ctx_out) - 1L]], "^  total ")
+  # the context left, as the run's status line says it (IC-77)
+  left = console_context_left(session_data(s)$usage)
+  expect_true(left > 90)
+  expect_identical(ctx_out[[length(ctx_out)]],
+                   sprintf("  %-14s %9s", "context left", paste0(left, "%")))
   # an unknown cache read is shown as unknown (IC-74)
   d = session_data(s)
   d$ledger$cached = NA
@@ -389,6 +463,34 @@ test_that("/context on a CLI route says the CLI keeps its own transcript (#38)",
   expect_identical(out[[length(out)]], paste0("  The CLI keeps its own transcript; its last ",
                                               "turn reported 12 input tokens over all its ",
                                               "model calls."))
+})
+
+test_that("/compact reports its saving and /context names the compaction request (console-4)", {
+  local_console_commands()
+  local_project()
+  long = strrep("mpg falls with wt. ", 300)
+  s = peter("q1", model = gptr_fake_provider(list(long, long, "## Goal\nx\n## Progress\ny", "ok")),
+            envir = new.env())
+  s = peter(s, "q2")
+  rs = repl_state(s, new.env())
+  out = run_command(rs, "/compact")$out
+  expect_match(out[[length(out)]], "^compacted - \\S+ to \\S+ tokens$")
+  figure = function(out, pattern) {
+    as.numeric(gsub("[^0-9]", "", grep(pattern, out, value = TRUE)))
+  }
+  ctx_out = run_command(rs, "/context")$out
+  # the estimate is a ledger row, `~` its value in the column of the others (review of Tasks 22-27)
+  expect_match(ctx_out[[1L]], "^Last request q[0-9a-f]+ \\(the compaction request\\):$")
+  compaction_total = figure(ctx_out, "^  total ")
+  expect_match(ctx_out, "^  next request +~[0-9,]+$", all = FALSE)
+  expect_identical(unique(nchar(grep("^  (total|next request|context left) ", ctx_out,
+                                     value = TRUE))), 26L)
+  expect_lt(figure(ctx_out, "^  next request "), compaction_total)
+  s = peter(s, "q3")
+  ctx_out = run_command(rs, "/context")$out
+  expect_match(ctx_out[[1L]], "^Last request q[0-9a-f]+:$")
+  expect_false(any(grepl("next request", ctx_out, fixed = TRUE)))
+  expect_lt(figure(ctx_out, "^  total "), compaction_total)
 })
 
 test_that("commands of later plans answer when their plan is absent", {

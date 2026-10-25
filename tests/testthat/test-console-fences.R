@@ -3,7 +3,7 @@ fence_test_format = function(colours = 256L, width = 80L, .env = parent.frame())
   withr::local_options(cli.num_colors = colours, cli.width = width, cli.dynamic = FALSE,
     .local_envir = .env)
   testthat::local_mocked_bindings(is_utf8_output = function() FALSE,
-    code_highlight = function(code) code, .package = "cli", .env = .env)
+    code_highlight = function(code, ...) code, .package = "cli", .env = .env)
 }
 
 fence_capture = function(chunks, colours = 256L, width = 80L) {
@@ -109,7 +109,7 @@ test_that("ordinary inline backticks do not open a fence", {
   }
 })
 
-test_that("spinner clearing does not consume closing fences or tool transitions", {
+test_that("clearing the live row does not consume closing fences or tool transitions", {
   fence_test_format()
   fixture = fence_test_session()
   s = fixture$session
@@ -117,13 +117,16 @@ test_that("spinner clearing does not consume closing fences or tool transitions"
   before = serialize(session_data(s), NULL)
   count = new.env(parent = emptyenv())
   count$cleared = 0L
+  withr::defer(assign("live_row", NULL, envir = the))
   out = cli::ansi_strip(utils::capture.output({
     console_on_agent_start(fence_event("agent_start", s), ctx)
-    rec = console_record(list(run = "u0000f00d"))
-    rec$spinner = list(clear = function() {
+    # a padded live row, shown at this sink: the first write clears it and it stays off
+    the$live_row = list2env(list(shown = TRUE, sinks = sink.number(), erase = FALSE, on = TRUE))
+    the$live_row$clear = function(write) {
       count$cleared = count$cleared + 1L
-      cat("spinner-cleared\n")
-    })
+      the$live_row$shown = FALSE
+      write("row-cleared\n")
+    }
     console_on_message_update(fence_event("message_update", s, index = 1L,
       kind = "text", delta = "``"), ctx)
     expect_identical(count$cleared, 0L)
@@ -142,12 +145,12 @@ test_that("spinner clearing does not consume closing fences or tool transitions"
       message = msg_assistant("ignored", api = "fake", provider = "fake", model = "fake-1")), ctx)
     invisible(NULL)
   }))
-  expect_identical(out, c("spinner-cleared", "```r", "value", "  ```", "Heading",
-    "  * r  1 + 1", "    + value", "After"))
+  expect_identical(out, c("row-cleared", "```r", "value", "  ```", "Heading",
+    "  | r  1 + 1", "    + value", "After"))
   expect_identical(count$cleared, 1L)
+  expect_false(the$live_row$on)
   expect_identical(length(fixture$fake$log$requests), 0L)
   expect_identical(serialize(session_data(s), NULL), before)
-  expect_null(console_record(list(run = "u0000f00d"))$spinner)
 })
 
 test_that("a new text block does not inherit an earlier unfinished code fence", {
@@ -201,7 +204,7 @@ test_that("a real fake-provider text stream closes its fence before later prose"
     s = peter("show literal text only", model = fake, envir = work)
   }))
   expect_identical(head(out, 6L), c("lead", "```r", "value", "  ```", "Heading", "- item"))
-  expect_match(tail(out, 1L), "^  done \\| 1 request \\| ")
+  expect_match(tail(out, 1L), "^done - fake-1 - 1 request - ")
   expect_identical(s$text, text)
   expect_identical(s$status, "idle")
   expect_identical(length(fake$log$requests), 1L)
@@ -246,29 +249,43 @@ test_that("a fence indented under a list item closes and shows its body unindent
   }
 })
 
-test_that("tool code shows on the tool line when it fits, else as a fence never cut", {
+test_that("tool code shows on the tool line when it fits, else under its name, cut to the width", {
   fence_test_format(width = 40L)
   line = function(x) cli::ansi_strip(console_tool_line(x, width = 40L))
   call = function(code) list(id = "c1", name = "r", input = list(code = code))
   long = paste0("x = c(", paste(seq_len(40L), collapse = ", "), ")")
-  expect_identical(line(call("nrow(df)")), "  * r  nrow(df)")
-  expect_identical(line(call(long)), c("  * r", "```r", long, "```"))
-  expect_identical(line(call(c(long, "y = x"))),
-                   c("  * r", "```r", long, "y = x", "```"))
-  expect_identical(line(call("x = 1\n```{r}\ny")),
-                   c("  * r", "````r", "x = 1", "```{r}", "y", "````"))
-  # a cut fence says so inside the fence, where a copied block keeps it as an R comment
+  expect_identical(line(call("nrow(df)")), "  | r  nrow(df)")
+  # the code rows at column 4, under the tool's name, with its results and keys: no fence lines;
+  # a row wider than the console is cut, as a diff row is, never wrapped to column 0 (? shows it)
+  # no blank before the ellipsis (visual round 3)
+  cut_long = paste0(sub(" +$", "", substr(paste0("    ", long), 1L, 37L)), "...")
+  expect_identical(line(call(long)), c("  | r", cut_long))
+  expect_identical(line(call(c(long, "y = x"))), c("  | r", cut_long, "    y = x"))
+  expect_identical(line(call("x = 1\n```{r}\ny")), c("  | r", "    x = 1", "    ```{r}", "    y"))
+  # a cut block says so in a last row that a copied block keeps as an R comment
   many = sprintf("x%d = %d", 1:25, 1:25)
   cut = line(call(many))
-  expect_identical(cut, c("  * r", "```r", many[1:20], "# ... +5 more lines", "```"))
-  expect_length(parse(text = cut[3:23]), 20L)
+  expect_identical(cut, c("  | r", paste0("    ", c(many[1:20], "# ... +5 more lines"))))
+  expect_length(parse(text = cut[-1L]), 20L)
   path = list(id = "c2", name = "write", input = list(path = strrep("a/", 30L)))
   expect_lte(nchar(line(path), type = "width"), 40L)
-  # the info string says r only for the r tool and its MCP form
   py = list(id = "c3", name = "py", input = list(code = "a = 1\nb = 2"))
-  expect_identical(line(py), c("  * py", "```", "a = 1", "b = 2", "```"))
-  mcp = list(id = "c4", name = "mcp__gptr__r", input = list(code = "a = 1\nb = 2"))
-  expect_identical(line(mcp)[2L], "```r")
+  expect_identical(line(py), c("  | py", "    a = 1", "    b = 2"))
+})
+
+test_that("R code in a call block is highlighted at any length; other code is plain (D-245)", {
+  withr::local_options(cli.num_colors = 256L, cli.width = 80L, cli.dynamic = FALSE)
+  local_mocked_bindings(is_utf8_output = function() FALSE, .package = "cli")
+  one = "  \033[38;5;167m|\033[39m \033[1mr\033[22m  x = \033[38;5;67m1\033[39m"
+  for (name in c("r", "mcp__gptr__r")) {
+    shown = console_tool_line(list(id = "c1", name = name, input = list(code = "x = 1")))
+    expect_identical(sub("gptr/r", "r", shown), one, info = name)
+    shown = console_tool_line(list(id = "c1", name = name, input = list(code = "x = 1\ny = 'a'")))
+    expect_identical(shown[-1L], c("    x = \033[38;5;67m1\033[39m",
+                                   "    y = \033[38;5;67m'a'\033[39m"), info = name)
+  }
+  py = console_tool_line(list(id = "c3", name = "py", input = list(code = "a = 1\nb = 2")))
+  expect_identical(py[-1L], c("    a = 1", "    b = 2"))
 })
 
 test_that("an r error result shows the error, not the first output line", {

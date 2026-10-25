@@ -47,7 +47,7 @@ test_that("IRkernel normal tool and successful completion progress is stdout", {
   rec = jupyter_progress_session()
   captured = jupyter_progress_capture(jupyter_progress_normal(rec))
   expect_identical(captured$output, c("gptr: thinking", "gptr: r  dim(dat)",
-                                     "gptr: done | 1 request | 15 tokens | unknown cost"))
+                                     "gptr: done - 1 request - 15 tokens - 100% context left"))
   expect_identical(captured$messages, character())
   expect_null(console_record(list(run = "ujupyter-progress")))
 })
@@ -77,9 +77,24 @@ test_that("IRkernel tool failure and abnormal completion remain stderr messages"
       reason = "synthetic failure", turns = 1L, usage = NULL), NULL)
   })
   expect_identical(captured$output, character())
-  expect_identical(captured$messages, c("gptr: r failed\n",
-    "gptr: error: synthetic failure | 0 requests | 0 tokens | $0.0000\n"))
+  # the error the call raises says why (visual round 2)
+  expect_identical(captured$messages,
+                   c("gptr: r failed\n", "gptr: error - 0 requests - 0 tokens\n"))
   expect_null(console_record(list(run = "ujupyter-progress")))
+})
+
+test_that("a refused call was not run; a multi-line call counts its other lines (console-3)", {
+  rec = jupyter_progress_session()
+  captured = jupyter_progress_capture({
+    console_on_tool_end(jupyter_progress_event("tool_execution_end", rec, tool_call_id = "c1",
+      tool_name = "r", is_error = TRUE, refused = "denied by the rule r(fn:writeLines)"), NULL)
+    console_on_tool_start(jupyter_progress_event("tool_execution_start", rec,
+      tool_call_id = "c2", tool_name = "r",
+      input = list(code = "cat('== check ==\\n')\nstr(mtcars)\nwriteLines('hi', 'out.txt')")),
+      NULL)
+  })
+  expect_identical(captured$output, "gptr: r  cat('== check ==\\n')  (+2 more lines)")
+  expect_identical(captured$messages, "gptr: r not run: denied by the rule r(fn:writeLines)\n")
 })
 
 test_that("nonkernel and knitr progress keeps its existing stderr route", {
@@ -89,7 +104,7 @@ test_that("nonkernel and knitr progress keeps its existing stderr route", {
     captured = jupyter_progress_capture(jupyter_progress_normal(rec))
     expect_identical(captured$output, character())
     expect_identical(captured$messages, c("gptr: thinking\n", "gptr: r  dim(dat)\n",
-      "gptr: done | 1 request | 15 tokens | unknown cost\n"))
+      "gptr: done - 1 request - 15 tokens - 100% context left\n"))
     expect_null(console_record(list(run = "ujupyter-progress")))
   }
 })

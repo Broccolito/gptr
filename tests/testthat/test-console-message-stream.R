@@ -18,6 +18,66 @@ test_that("informational conditions display as ordinary stdout without losing ha
                    character())
 })
 
+test_that("a console handler that takes every non-rlang message leaves gptr's display alone", {
+  local_gptr_options(quiet = FALSE)
+  # RStudio 2026.09's global message handler (onMessageImpl)
+  ide = function(cnd) {
+    if (!inherits(cnd, "rlang_message")) {
+      cat(conditionMessage(cnd), file = stderr())
+      invokeRestart("muffleMessage")
+    }
+  }
+  out = utils::capture.output({
+    err = utils::capture.output(withCallingHandlers(gptr_inform("a notice", "notice"),
+                                                    message = ide), type = "message")
+  })
+  expect_identical(out, "a notice")
+  expect_identical(err, character())
+  expect_s3_class(tryCatch(gptr_inform("x", "notice"), message = identity), "gptr_message_notice")
+})
+
+test_that("a gptr warning during a run is a console notice, never an IDE's box (S9)", {
+  local_console_test()
+  local_scripted_ui()
+  msg = "a gptr warning during the run"
+  hook = function(gptr) {
+    gptr$on("agent_start", function(event, ctx) {
+      gptr_warn(msg, "probe")
+      NULL
+    })
+  }
+  # RStudio 2026.09's global warning handler (onWarningImpl) writes every warning it sees to stderr
+  # in its box and muffles it; `ide` is what such a handler took from one run of peter()
+  run = function(warn) {
+    withr::local_options(warn = warn)
+    local_console_stdin(c("hello", "/exit"))
+    ide = character()
+    out = utils::capture.output(withCallingHandlers(
+      invisible(peter(.stdin = TRUE, model = gptr_fake_provider(list("ok")), envir = new.env(),
+                      extensions = hook)),
+      warning = function(w) {
+        ide <<- c(ide, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      }))
+    list(ide = ide, out = out)
+  }
+  for (warn in 0:1) {
+    res = run(warn)
+    expect_identical(res$ide, character())
+    expect_true(any(grepl(paste0("Warning: ", msg), res$out, fixed = TRUE)))
+  }
+  # base warning semantics stay: warn = 2 escalates and warn < 0 ignores, so the handler leaves both
+  for (warn in c(-1, 2)) {
+    res = run(warn)
+    expect_identical(res$ide, msg)
+    expect_false(any(grepl("Warning: ", res$out, fixed = TRUE)))
+  }
+  msg = "a path with an escape \033[31m in it"
+  res = run(1)
+  expect_true(any(grepl("<U+001B>[31m", res$out, fixed = TRUE)))
+  expect_false(any(grepl("\033", res$out, fixed = TRUE)))
+})
+
 test_that("verbatim stdout display stays out of the native error stream", {
   out = utils::capture.output({
     err = utils::capture.output(msg_verbatim(c("normal response", "literal {x}")),
@@ -37,12 +97,11 @@ test_that("actual failure notices have an explicit stderr route", {
   expect_identical(err, "synthetic failure")
 })
 
-test_that("successful edit removals stay plain while actual tool errors are marked", {
+test_that("an edit's diff is red and blue while a failed edit says error: (D-245)", {
   withr::local_options(cli.num_colors = 256L)
   result = list(is_error = FALSE, details = list(diff = c("-old", "+new")))
-  lines = console_result_lines(list(name = "edit"), result)
-  expect_identical(lines[[1L]], "    -old")
-  expect_identical(cli::ansi_strip(lines[[2L]]), "    +new")
+  lines = console_result_lines(list(name = "edit"), result, 80L)
+  expect_identical(lines, c("\033[38;5;167m    -old\033[39m", "\033[38;5;67m    +new\033[39m"))
   result$is_error = TRUE
   result$content = list(block_text("failed"))
   expect_match(cli::ansi_strip(console_result_lines(list(name = "edit"), result, 80L)),
@@ -93,6 +152,33 @@ test_that("teed R messages display once and retain one message event", {
   expect_identical(hidden, character())
   expect_identical(vapply(Filter(function(e) e$type == "message", result$events),
                           function(e) e$text, ""), "hidden\n")
+})
+
+test_that("in the console margin what R code prints is dim rows at column 4, cut (visual review)", {
+  home = new.env()
+  local_mocked_bindings(console_pad = function() "  ")
+  withr::local_options(cli.width = 40L, cli.num_colors = 1L, cli.unicode = FALSE)
+  long = paste(rep("word", 12L), collapse = " ")
+  res = NULL
+  out = utils::capture.output({
+    res = eval_r(paste0('cat("a\\n\\nb\\033\\n"); print("', long, '"); x = 1'), home,
+                 plots = "none", tee = TRUE)
+  })
+  # escaped, at column 4 under the call like its result rows, never at the person's column 0
+  row = paste0("    [1] \"", long, "\"")
+  expect_identical(out, c("    a", "", "    b<U+001B>", paste0(substr(row, 1L, 35L), "...")))
+  # the result keeps all of it, as printed
+  text = paste(vapply(Filter(function(e) e$type == "output", res$events), function(e) e$text, ""),
+               collapse = "")
+  expect_identical(text, paste0("a\n\nb\033\n[1] \"", long, "\"\n"))
+  expect_identical(sink.number(), 0L)
+  # dim where colours show; without the margin the output is teed as R prints it
+  withr::local_options(cli.num_colors = 256L)
+  echo = function() utils::capture.output(invisible(eval_r('cat("a\\n\\nb\\n")', home, tee = TRUE)))
+  # a blank line is an empty row, with no SGR
+  expect_identical(echo(), c("\033[38;5;244m    a\033[39m", "", "\033[38;5;244m    b\033[39m"))
+  local_mocked_bindings(console_pad = function() "")
+  expect_identical(echo(), c("a", "", "b"))
 })
 
 test_that("console controls stay out of R-tool results while normal prints remain", {

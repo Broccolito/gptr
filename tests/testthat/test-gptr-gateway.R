@@ -894,9 +894,9 @@ test_that("peter() from model code writes to an overlay and shows its prompt as 
   expect_identical(e$e2$cm, 1)
   expect_identical(e$team$a$envir$cm, 1)
   expect_true(e$in_frame)
-  expect_true("  sub-agent 'Summarise alpha topic number o...' #1 started (sub/sub-1)" %in% out)
-  expect_true(any(grepl("^  sub-agent 'Summarise beta' #2 done . 1 turn . [0-9]+ s$", out)))
-  expect_true(any(grepl("^  sub-agent a done \\([12]/2\\)", out)))
+  expect_true("  # sub-agent 'Summarise alpha topic number o...' #1 (sub/sub-1) started" %in% out)
+  expect_true(any(grepl("^  # sub-agent 'Summarise beta' #2 done . 1 turn . [0-9]+ s$", out)))
+  expect_true(any(grepl("^  # sub-agent a done \\([12]/2\\)", out)))
 })
 
 test_that("a router model is stored as router:<name> and picks each request's model (IC-69)", {

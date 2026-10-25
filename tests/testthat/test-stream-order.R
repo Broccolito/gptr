@@ -135,7 +135,8 @@ test_that("cancelling a streamed answer displays the complete safe partial tail"
     stream_order_block(run, 1L, "Hello world", end = FALSE)
     run_abort(run, "user")
   })
-  expect_identical(out[[1L]], "Hello world")
+  # all of it, the aborted answer's end marked (P28 visual review)
+  expect_identical(out[[1L]], "Hello world...")
   expect_identical(stream_order_text(updates(run$shell)), "Hello world")
   last = utils::tail(run$shell$messages, 1L)[[1L]]
   expect_identical(msg_text(last), "Hello world")
@@ -158,7 +159,7 @@ test_that("cancellation flushes a held synthetic secret safely and only once", {
     run_abort(run, "user")
   })
   want = "Before [secret:STREAM_CANCEL_TOKEN]"
-  expect_identical(out[[1L]], want)
+  expect_identical(out[[1L]], paste0(want, "..."))
   expect_identical(stream_order_text(updates(run$shell)), want)
   expect_false(any(grepl(secret, out, fixed = TRUE)))
 })

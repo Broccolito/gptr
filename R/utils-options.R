@@ -80,6 +80,20 @@ stdin_tty = function() {
   isatty(stdin())
 }
 
+#' The console's class, decided by capability (P28, D-243): "P" outside an interactive R; "L" where
+#' R does not read a terminal of its own (RStudio, Positron, whose ark has a tty stdin, Windows,
+#' R.app, radian, which owns the tty); "T" a terminal whose output is a dynamic ANSI tty; else "D"
+#' (TERM=dumb, Emacs, ESS)
+#' @noRd
+console_class = function() {
+  if (!gptr_is_interactive()) return("P")
+  if (is_windows() || !stdin_tty() || front_end() == "positron" ||
+        nzchar(Sys.getenv("RADIAN_VERSION"))) {
+    return("L")
+  }
+  if (cli::is_ansi_tty() && cli::is_dynamic_tty()) "T" else "D"
+}
+
 #' Mockable: the modes of the terminal R reads (`stty -g`), or set `modes` (such as "-echo"); NULL
 #' when stty fails (IC-76)
 #' @noRd
@@ -89,13 +103,156 @@ tty_modes = function(modes = "-g") {
   if (is.null(attr(out, "status"))) out
 }
 
+#' Set the terminal modes of a console call (IC-76, D-243), the saved ones (`stty -g`) kept: a T
+#' console's composer reads keys as typed, `-icanon -echo -iexten -isig min 1 time 0` (Ctrl-C is a
+#' key it reads, as a signal could be lost under load; opost stays on, and `min 1` keeps a tool
+#' that reads stdin waiting, never at an end of input); a D console turns the echo off and keeps
+#' what is typed at SIGINT (`-echo noflsh`; `keys` FALSE), so the pause menu's drain keeps a line
+#' being typed (policy_menu()). `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which
+#' also runs at q() (a finalizer, onexit); nothing is set when stty fails
+#' @noRd
+tty_call = function(keys) {
+  saved = tty_modes()
+  if (length(saved) != 1L) return(invisible(NULL))
+  tty = new.env(parent = emptyenv())
+  tty$saved = saved
+  tty$keys = keys
+  tty$set = if (keys) {
+    c("-icanon", "-echo", "-iexten", "-isig", "min", "1", "time", "0")
+  } else {
+    c("-echo", "noflsh")
+  }
+  reg.finalizer(tty, tty_restore, onexit = TRUE)
+  the$tty = tty
+  tty_modes(tty$set)
+  invisible(tty)
+}
+
+#' Restore the modes a console call saved (tty_call()), once
+#' @noRd
+tty_restore = function(tty = the$tty) {
+  if (identical(the$tty, tty)) the$tty = NULL
+  saved = tty$saved
+  if (is.null(saved)) return(invisible(NULL))
+  tty$saved = NULL
+  tty_modes(saved)
+  invisible(NULL)
+}
+
+#' Turn isig on while R code is evaluated during a T console's call, so Ctrl-C interrupts the code
+#' (the composer reads Ctrl-C as a key otherwise, D-243): the call's `tty` to hand back to
+#' tty_isig_off(), or NULL where isig was on
+#' @noRd
+tty_isig_on = function() {
+  tty = the$tty
+  if (!"-isig" %in% tty$set) return(NULL)
+  tty$set = tty$set[tty$set != "-isig"]
+  tty_modes("isig")
+  tty
+}
+
+#' Turn isig off again after tty_isig_on() (`tty` NULL: nothing to do)
+#' @noRd
+tty_isig_off = function(tty) {
+  if (is.null(tty)) return(invisible(NULL))
+  tty$set = c(tty$set, "-isig")
+  if (!is.null(tty$saved)) tty_modes("-isig")
+  invisible(NULL)
+}
+
+#' Does R's own Unix readline read this console from a tty (terminal R, an IDE's terminal tab)?
+#' @noRd
+console_readline_tty = function() {
+  identical(.Platform$OS.type, "unix") && gptr_is_interactive() &&
+    isTRUE(capabilities("cledit")[["cledit"]]) && stdin_tty()
+}
+
+#' A console question of a terminal call reads in the saved modes from before its rows are written
+#' (`on` TRUE) until it returns (FALSE), so readline starts as soon as the person sees the question,
+#' never after a slow stty (D-243); gptr_readline() then switches nothing. Where readline reads the
+#' tty the echo stays off (`tty$quiet`) until gptr_readline() starts it, so a key typed while the
+#' rows are written is not echoed before the chevron and again by readline
+#' @noRd
+tty_question = function(on) {
+  tty = the$tty
+  if (is.null(tty$saved) || identical(isTRUE(tty$asking), on)) return(invisible(NULL))
+  tty$asking = on
+  tty$quiet = on && console_readline_tty()
+  tty_modes(if (on) c(tty$saved, if (tty$quiet) "-echo") else tty$set)
+  invisible(NULL)
+}
+
+#' The modes a secret's read restores after reading with the echo off (gptr_readline()), where R
+#' reads a terminal of its own (T, D): a console call's saved ones (tty_call()), in which its
+#' questions read, else the terminal's (`stty -g`); NULL where stty fails or R reads no terminal
+#' (R.app, Windows, IRkernel, radian; RStudio and Positron, which ask in their own dialog where
+#' rstudioapi is installed, ui_console_input()), whose console shows what is typed, as does the
+#' comint mode of Emacs (M-x shell, ESS: `INSIDE_EMACS` names it), whose buffer shows and keeps it
+#' whatever the tty's echo
+#' @noRd
+tty_secret = function() {
+  if (!console_class() %in% c("T", "D") ||
+        grepl("comint", Sys.getenv("INSIDE_EMACS"), fixed = TRUE)) {
+    return(NULL)
+  }
+  modes = the$tty$saved %||% tty_modes()
+  if (length(modes) == 1L) modes
+}
+
+#' Mockable: let fd 0 be read as typed (`stty -icanon min 0 time 0`, the echo unchanged), so the
+#' partial line the terminal holds can be read; returns the modes to restore (`tty_modes()`), NULL
+#' when stty fails (IC-76)
+#' @noRd
+tty_drain_mode = function() {
+  modes = tty_modes()
+  if (length(modes) == 1L) tty_modes(c("-icanon", "min", "0", "time", "0"))
+  modes
+}
+
+#' Mockable: the terminal's answer to `query` (IC-82): with fd 0 in `stty -icanon -echo min 0 time
+#' 0`, `query` is written to stdout, then fd 0 is read until a DA1 reply (`ESC [ ? ... c`) arrives,
+#' at most `ms` milliseconds (a terminal answers in milliseconds; over ssh or on a loaded machine
+#' later than 250), and the modes are restored. What was read, "" when stty fails
+#' @noRd
+tty_query = function(query, ms = 1500) {
+  modes = tty_modes()
+  if (length(modes) != 1L) return("")
+  on.exit(tty_modes(modes), add = TRUE)
+  tty_modes(c("-icanon", "-echo", "min", "0", "time", "0"))
+  cat(query)
+  flush(stdout())
+  end = proc.time()[["elapsed"]] + ms / 1000
+  got = ""
+  tryCatch({
+    fd = processx::conn_create_fd(0L, close = FALSE)
+    while (!grepl("\033\\[\\?[0-9;]*c", got)) {
+      left = ceiling((end - proc.time()[["elapsed"]]) * 1000)
+      if (left <= 0 || !identical(processx::poll(list(fd), left)[[1L]], "ready")) break
+      x = processx::conn_read_chars(fd)
+      if (!nzchar(x)) break
+      got = paste0(got, x)
+    }
+  }, error = function(e) NULL)
+  got
+}
+
+#' Text without the terminal's answers to tty_query(), an OSC reply (`ESC ] ... BEL` or `ST`) and
+#' DA1's `ESC [ ? ... c`, so a reply that comes late is never typed text (IC-82)
+#' @noRd
+tty_unreply = function(x) {
+  gsub("\033\\][^\a\033]*(\a|\033\\\\)?|\033\\[\\?[0-9;]*c", "", x, perl = TRUE)
+}
+
 #' Mockable wrapper of readline(); the answer is normalised to UTF-8 (IC-62). The REPL passes its
 #' own copy of readline() as `read` (console_reader()). The seconds it waited go to
 #' `the$readline_secs` (readline_answer()); readline() keeps only 255 bytes of a prompt, so one
 #' over 200 bytes, or in the console margin (D-186) one wider than its content row, is printed
-#' whole (word-wrapped in the margin) and read after "> " (in the margin too) (IC-75)
+#' whole (word-wrapped in the margin) and read after "> " (in the margin too) (IC-75). With `hide`
+#' (a secret's tty_secret()) it reads with the echo off, the last mode set before the read, and
+#' restores `hide` first on exit, also after an interrupt; GNU readline and libedit then draw
+#' nothing typed, nor the Enter, whose newline follows the answer (IC-77)
 #' @noRd
-gptr_readline = function(prompt = "", read = readline) {
+gptr_readline = function(prompt = "", read = readline, hide = NULL) {
   pad = console_pad()
   text = trimws(prompt, "left")
   if (nchar(prompt, type = "bytes") > 200L || (nzchar(pad) &&
@@ -103,29 +260,79 @@ gptr_readline = function(prompt = "", read = readline) {
     gptr_message_write(paste0(text, "\n"), "stdout", margin = TRUE)
     prompt = paste0(pad, "> ")
   }
-  # readline() shows what is typed only while the terminal echoes, which a console call turned off
-  if (!is.null(the$tty_modes)) {
-    tty_modes(the$tty_modes)
-    on.exit(tty_modes("-echo"), add = TRUE)
+  # readline() edits and echoes in the modes a console call saved (tty_call()); the call's after,
+  # unless a console question already reads in them (tty_question())
+  tty = the$tty
+  if (!is.null(tty$saved) && !isTRUE(tty$asking)) {
+    tty_modes(tty$saved)
+    on.exit(tty_modes(tty$set), add = TRUE)
+  } else if (isTRUE(tty$quiet)) {
+    # readline shows what it reads only where the echo is on as it starts; its prompt erases a key
+    # the terminal echoed in that moment (tty_question())
+    tty$quiet = FALSE
+    tty_modes(tty$saved)
+    prompt = paste0("\001\r\033[K\002", prompt)
+  }
+  if (!is.null(hide)) {
+    on.exit(tty_modes(hide), add = TRUE, after = FALSE)
+    tty_modes("-echo")
   }
   start = proc.time()[["elapsed"]]
   x = as_utf8(read(prompt))
   the$readline_secs = proc.time()[["elapsed"]] - start
+  if (!is.null(hide)) gptr_message_write("\n", gptr_message_stream("stdout"))
   x
 }
 
-#' The answer to a question: in an interactive session a line readline() returns within 0.1 s
-#' was typed or pasted before the question was shown, so it is asked again; at most 100 times,
-#' as readline() returns at once at the end of a pipe (IC-75)
+#' `read(prompt)` on the input band (IC-82) where console_style() gives one (a T console), so every
+#' line the person writes has one look: readline counts only the prompt's text (\001 \002) and
+#' \033[K shades the row to its end; after the read the attributes are reset and the band erased
+#' from the row below, which the line's end gave it
 #' @noRd
-readline_answer = function(prompt) {
+band_read = function(prompt, read) {
+  band = console_style()$band
+  if (!nzchar(band)) return(read(prompt))
+  on.exit(gptr_message_write("\033[0m\033[K", gptr_message_stream("stdout")), add = TRUE)
+  read(paste0("\001", band, "\002", prompt, "\001\033[K\002"))
+}
+
+#' The answer to a question: in an interactive session a line readline() returns too soon
+#' (answer_stale()) was typed or pasted before the question was shown, so it is asked again; at
+#' most 100 reads, as readline() returns at once at the end of a pipe. Each line read past that is
+#' not blank goes to `keep(line)`: the console history, a console question's
+#' console_typed_ahead(), or nowhere for NULL (a secret) (IC-75, D-243). A line that `accept(line)`
+#' takes, one of the question's answers, answers even when read too soon, as a key typed just after
+#' the pause menu's Ctrl-C or as the question showed is meant for it. `read` reads a line:
+#' gptr_readline(), or a secret's read without echo (ui_console_read())
+#' @noRd
+readline_answer = function(prompt, keep = console_history_add, accept = NULL,
+                           read = gptr_readline) {
   for (i in seq_len(100L)) {
     the$readline_secs = NULL
-    x = gptr_readline(prompt)
-    if (!gptr_is_interactive() || !isTRUE(the$readline_secs < 0.1)) break
+    x = read(prompt)
+    if (i == 100L || !gptr_is_interactive() || !answer_stale(the$readline_secs)) break
+    if (rlang::is_string(x) && is.function(accept) && isTRUE(accept(x))) break
+    if (is.function(keep) && rlang::is_string(x) && nzchar(trimws(x))) keep(x)
   }
   x
 }
+
+#' Add a line to the console history when `gptr.history` is on (report 18: utils::timestamp();
+#' never fails); TRUE when it was added. Text of several lines that is not a `"""` block or a fence
+#' is added as a `"""` block, so Up then Enter sends it back as the one input it was (D-243)
+#' @noRd
+console_history_add = function(x) {
+  if (!isTRUE(gptr_opt("history"))) return(FALSE)
+  if (grepl("\n", x, fixed = TRUE) && !grepl('^\\s*("""|```)', x)) x = paste0('"""\n', x, '\n"""')
+  tryCatch({
+    utils::timestamp(stamp = x, prefix = "", suffix = "", quiet = TRUE)
+    TRUE
+  }, error = function(e) FALSE)
+}
+
+#' Did readline() return a line too soon (under 0.1 s) for it to answer the question shown? (IC-75)
+#' @noRd
+answer_stale = function(secs) isTRUE(secs < 0.1)
 
 #' @noRd
 is_knitting = function() {
@@ -184,7 +391,8 @@ platform_gui = function() {
 #' `POSITRON`, `TERM_PROGRAM`) are inherited by every child process started from the IDE, so they
 #' count only in an interactive session; a non-interactive child (an Rscript started from the
 #' IDE's terminal, an Rscript worker) is "rscript", and R reading a tty (the IDE's terminal tab)
-#' is "terminal" ("vscode" with `TERM_PROGRAM=vscode`).
+#' is "terminal" ("vscode" with `TERM_PROGRAM=vscode`). Positron's console runs R in ark, whose
+#' stdin is a tty too; ark attaches `tools:positron`.
 #' @noRd
 front_end = function() {
   env = function(name) Sys.getenv(name, unset = "")
@@ -198,7 +406,8 @@ front_end = function() {
   gui = platform_gui()
   human = gptr_is_interactive()
   ide = human && !stdin_tty()
-  if (identical(gui, "Positron") || (ide && identical(env("POSITRON"), "1"))) {
+  if (identical(gui, "Positron") || "tools:positron" %in% search() ||
+      (ide && identical(env("POSITRON"), "1"))) {
     return("positron")
   }
   if (identical(gui, "RStudio") || (ide && identical(env("RSTUDIO"), "1"))) return("rstudio")

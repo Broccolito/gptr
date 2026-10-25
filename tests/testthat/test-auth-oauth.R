@@ -237,6 +237,8 @@ test_that("a server without OAuth metadata gets masked token entry", {
   ui = local_scripted_ui(list("manual-token-123"))
   gptr_login("mcp:plain")
   expect_identical(ui$log$method, "input")
+  # the console's input adds the prompt's end: one colon, never `: : ` (cheat-sheet review)
+  expect_identical(ui$log$prompt, "Bearer token for MCP server plain")
   rec = auth_store_get("mcp:plain")
   expect_identical(rec$type, "api_key")
   expect_identical(rec$resource, paste0(mock$base, "/plain"))
@@ -258,8 +260,9 @@ test_that("protected-resource metadata naming another resource is refused (RFC 9
 test_that("key entry stores an API key; gptr_logout() removes it; no person means no login", {
   local_user_dirs()
   key = paste0("sk-or-v1-", "testkeyabcdefghijklmnopqrstuv")
-  local_scripted_ui(list(key))
+  ui = local_scripted_ui(list(key))
   gptr_login("openrouter", method = "key")
+  expect_identical(ui$log$prompt, "API key for openrouter")
   rec = auth_store_get("openrouter")
   expect_identical(rec$type, "api_key")
   expect_false(grepl("testkeyabcdef", redact(key), fixed = TRUE))
@@ -300,6 +303,8 @@ test_that("without httpuv and later the redirect is pasted, iss included", {
   expect_identical(cb$redirect_uri, "http://127.0.0.1:50111/callback")
   expect_identical(cb$wait(), "http://127.0.0.1:1/x")
   expect_identical(ui$log$method, "input")
+  expect_identical(ui$log$prompt,
+                   "After signing in, paste the full address of the page your browser opened")
   expect_error(oauth_parse_redirect("code=abc", cb$redirect_uri, NULL, "https://or.example"),
                "full address", class = "gptr_error_untrusted")
 })
