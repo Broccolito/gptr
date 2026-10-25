@@ -1215,9 +1215,10 @@ Returns `invisible(<absolute path of .gptr>)`. Creates `.gptr/`, `settings.json`
 `inst/templates/settings.json`), `skills/`, `agents/`, `prompts/` (never overwrites existing files; idempotent).
 In a package source (a `DESCRIPTION` with `Package:`) whose `.Rbuildignore` lacks `^\.gptr$` it **offers** the line
 (interactive `gptr_confirm()`; otherwise one `notice` message naming the line); it never writes it silently
-[13 §2.3]. With a human present it then asks a separate question `Trust this project (its settings, skills, prompt
-templates, agent files, extensions and MCP servers)? [y/N]` and records the answer with `gptr_trust()`; without a
-human nothing is trusted. Conditions: `noninteractive`, `workspace`, `invalid_argument`. Emits nothing.
+[13 §2.3]. With a human present, unless the project's trust already holds (`trust_holds()`), it then asks a separate
+question `Trust this project (its settings, skills, prompt templates, agent files, extensions and MCP servers)? [y/N]`
+and records the answer with `gptr_trust()`; without a human nothing is trusted. Conditions: `noninteractive`,
+`workspace`, `invalid_argument`. Emits nothing.
 
 ```r
 d = tempfile("proj"); dir.create(d)
