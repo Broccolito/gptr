@@ -235,7 +235,7 @@ bridge_status_line = function(x) {
   character()
 }
 
-#' The budgeted view of a gptr_cmd: stdout head 40% + tail 60%, then "[stderr]" within
+#' The budgeted view of a gptr_cmd: stdout head 40% + tail 60%, then `[stderr]` within
 #' max(200, 25%) of the budget (head 20%), then the status line (04 5.10)
 #' @noRd
 bridge_cmd_view = function(x, max_tokens = NULL) {
@@ -526,13 +526,19 @@ print.gptr_bridge_text = function(x, ...) {
   invisible(x)
 }
 
-#' Status of a job: running, done, error (non-zero exit) or stopped (after kill(), IC-60)
+#' Status of a job: running, done, error (non-zero exit) or stopped (after kill(), IC-60); the
+#' first look that sees the job ended stops its clock (`.ended`)
 #' @noRd
 bridge_job_status = function(job) {
   if (isTRUE(job$.proc$is_alive())) return("running")
+  job$.ended = job$.ended %||% reactor_now()
   if (job$.stop_requested) return("stopped")
   if (identical(job$.proc$get_exit_status(), 0L)) "done" else "error"
 }
+
+#' Seconds a job ran: to its end once a status look has seen it ended, else to now
+#' @noRd
+bridge_job_seconds = function(job) round((job$.ended %||% reactor_now()) - job$.started)
 
 #' New bytes of a job's output file since the last read; while the job runs only through the
 #' last newline, so a partial last line waits
@@ -565,8 +571,7 @@ bridge_job_read = function(job, stream = "stdout", n = NULL) {
   job$.pos[[stream]] = job$.pos[[stream]] + length(bytes)
   lines = clean_terminal(raw_to_utf8(bytes))
   if (!is.null(n)) lines = utils::tail(lines, n)
-  bridge_text(lines, paste0("[", job$id, " ", status, ", ",
-                            round(reactor_now() - job$.started), "s]"))
+  bridge_text(lines, paste0("[", job$id, " ", status, ", ", bridge_job_seconds(job), "s]"))
 }
 
 #' Wait for the exit, for `until` (a regular expression) in a new complete line of stdout, or for
@@ -575,7 +580,7 @@ bridge_job_read = function(job, stream = "stdout", n = NULL) {
 bridge_job_wait = function(job, timeout = Inf, until = NULL) {
   check_string(until, "until", null = TRUE)
   settled = function() {
-    if (!isTRUE(job$.proc$is_alive())) return(TRUE)
+    if (bridge_job_status(job) != "running") return(TRUE)
     !is.null(until) &&
       any(grepl(until, clean_terminal(raw_to_utf8(bridge_job_bytes(job, "stdout", TRUE))),
                 perl = TRUE))
@@ -688,12 +693,11 @@ bridge_jobs = function(kill = FALSE) {
   check_flag(kill, "kill")
   jobs = bridge_state$jobs
   if (kill) for (job in jobs) job$kill()
-  now = reactor_now()
   tab = data.frame(id = vapply(jobs, function(j) j$id, ""),
                    name = vapply(jobs, function(j) j$name, ""),
                    pid = vapply(jobs, function(j) j$pid, 1L),
                    status = vapply(jobs, function(j) j$status(), ""),
-                   seconds = vapply(jobs, function(j) round(now - j$.started), 1),
+                   seconds = vapply(jobs, bridge_job_seconds, 1),
                    cmd = vapply(jobs, function(j) j$cmd, ""),
                    row.names = NULL)
   if (kill) invisible(tab) else tab

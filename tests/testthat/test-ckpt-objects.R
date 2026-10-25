@@ -115,6 +115,34 @@ test_that("the unshared-bytes walk visits a classed list's components, not its l
   expect_gt(ckpt_unshared_bytes(st, r$key, e, "tm"), 800)
 })
 
+test_that("an image counts what the current value does not share, its S7 class copy too (D-247)", {
+  # object.size() counts an S7 object's class object in full (a themed ggplot2 4.x plot: 16 MB);
+  # here the class copy holds 800 KB that only this object holds
+  e = new.env()
+  e$plt = structure(1L, class = c("pkg::plot", "S7_object"),
+                    S7_class = structure(function() NULL, pad = numeric(1e5)), data = numeric(1e5))
+  st = ckpt_obj_store()
+  p = ckpt_capture(st, e, "plt")
+  agent_eval("attr(plt, 'labels') = 'mpg'", e)
+  r = ckpt_settle(st, e, p, frag = "f1")
+  expect_lt(ckpt_unshared_bytes(st, r$key, e, "plt"), 1000)
+  agent_eval("plt = 2L", e)
+  expect_lt(abs(ckpt_unshared_bytes(st, r$key, e, "plt") - 1.6e6), 2000)
+})
+
+test_that("an image counts the strings the current value shares once, not again (D-247)", {
+  # a vcfR @fix-style edit: main counted every string of the image (1.4 MB here)
+  e = new.env()
+  e$m = matrix(sprintf("id%06d", 1:2e4), ncol = 2)
+  st = ckpt_obj_store()
+  p = ckpt_capture(st, e, "m")
+  agent_eval("m[1, 1] = 'x'", e)
+  r = ckpt_settle(st, e, p, frag = "f1")
+  held = ckpt_unshared_bytes(st, r$key, e, "m")
+  expect_gt(held, 160048)
+  expect_lt(held, 161000)
+})
+
 test_that("defusing a data frame image leaves the user's data frame intact", {
   e = new.env()
   e$df = data.frame(a = 1:3, b = c("x", "y", "z"))

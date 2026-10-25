@@ -404,6 +404,30 @@ test_that("a stopped worker ends its open request as aborted, never error (IC-60
   expect_identical(c(ev$reason, ev$message$stop_reason, ev$error$class), rep("aborted", 3L))
 })
 
+test_that("a worker's exit ends its abort guard before the guard polls again", {
+  skip_on_cran()
+  st = stub_worker_state()
+  st$home = new.env()
+  st$spec = list(name = "w", depth = 1L, settings = list(project_root = getwd()))
+  local_mocked_bindings(proc_rscript = function(...) {
+    processx::process$new(rscript_path(), c("--vanilla", "-e", "0"), stdout = "|",
+                          stderr = "|")
+  })
+  r = reactor_get()
+  before = ls(r$tasks)
+  worker_spawn(st)
+  guard = setdiff(ls(r$tasks), before)
+  expect_length(guard, 1L)
+  # a peter() call can return right after the exit, before the 0.1 s guard polls again
+  on_exit = worker_on_exit
+  local_mocked_bindings(worker_on_exit = function(st, status) {
+    on_exit(st, status)
+    st$guarded = exists(guard, envir = r$tasks, inherits = FALSE)
+  })
+  expect_true(reactor_pump(until = function() isTRUE(st$exited), timeout = 30))
+  expect_false(st$guarded)
+})
+
 test_that("the user's abort of a forwarded request aborts the proxy run", {
   skip_on_cran()
   local_team_fake(list("never"))
@@ -764,6 +788,32 @@ test_that(
   expect_true(x$result$wd_unchanged)
   expect_true(x$result$globals_unchanged)
   expect_true(x$result$seed_unchanged)
+})
+
+# The worker can go before ps stops listing its killed parent: each reads as running once, then
+# as gone, on a virtual clock
+test_that("the Windows witness reads its killed parent once ps no longer lists it (IC-60)", {
+  skip_on_cran()
+  steps = as.list(body(wpd_child_case))
+  text = vapply(steps, function(e) paste(deparse(e), collapse = " "), "")
+  at = seq(which(startsWith(text, "killed_at = ")), which(startsWith(text, "parent_dead = ")))
+  reads = c(worker = 0L, parent = 0L)
+  local_mocked_bindings(proc_handle_alive = function(handle) {
+    reads[[handle]] <<- reads[[handle]] + 1L
+    reads[[handle]] == 1L
+  })
+  local_mocked_bindings(ps_kill = function(p) invisible(NULL), .package = "ps")
+  clock = 0
+  e = new.env()
+  e$fun = function(name) {
+    if (name == "reactor_now") function() clock else get(name, asNamespace("gptr"))
+  }
+  e$Sys.sleep = function(s) clock <<- clock + s
+  e$worker_handle = "worker"
+  e$parent_handle = "parent"
+  for (step in steps[at]) eval(step, e)
+  expect_true(e$before_cleanup)
+  expect_true(e$parent_dead)
 })
 
 

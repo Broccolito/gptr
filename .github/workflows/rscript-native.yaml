@@ -126,9 +126,12 @@ jobs:
           (evidence / 'python-admission.json').write_text(json.dumps(witness, indent=2),
                                                          encoding='utf-8')
           PY
+      - uses: ./.github/actions/system-libraries
+        if: runner.os == 'Linux'
       - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05
         env:
           GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+          PKG_SYSREQS: 'false'
         with:
           dependencies: 'c("Imports", "LinkingTo")'
           extra-packages: any::pkgload any::testthat any::withr any::shiny any::httpuv any::later any::chromote any::openssl any::lintr any::reticulate any::knitr

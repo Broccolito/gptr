@@ -492,6 +492,50 @@ test_that("!code errors are shown on stderr and noted", {
   expect_match(rs$notes, "boom", fixed = TRUE)
 })
 
+test_that("a !code warning shows before the next prompt, none left for R's top level", {
+  skip_on_cran()
+  local_console_test()
+  local_scripted_ui()
+  # R shows a deferred warning only when the console returns, naming gptr's call (visual round 3)
+  local_console_stdin(c("!warning('a warning'); x = 1", "/exit"))
+  err = NULL
+  expect_no_warning({
+    err = utils::capture.output(invisible(utils::capture.output(
+      peter(.stdin = TRUE, model = gptr_fake_provider(list("ok")), envir = new.env())
+    )), type = "message")
+  })
+  expect_true("Warning: a warning" %in% err)
+  # in the console margin at column 4, dim, in order with the code's output
+  local_mocked_bindings(console_pad = function() "  ")
+  rs = repl_state(NULL, new.env())
+  out = NULL
+  expect_no_warning({
+    out = utils::capture.output(repl_passthrough(rs, "!print(1); warning('w')"))
+  })
+  expect_identical(out[1:2], c("    [1] 1", "    Warning: w"))
+})
+
+test_that("a !code block's rows share one margin and end with a blank row (visual round 3)", {
+  skip_on_cran()
+  local_project()
+  local_mocked_bindings(console_pad = function() "  ")
+  withr::local_options(cli.num_colors = 1L)
+  rs = repl_state(NULL, new.env())
+  code = paste0("!x = 1:3; message('a message'); cat('cat line\\n'); print(x); ",
+                "warning('a warning'); stop('boom')")
+  err = NULL
+  out = utils::capture.output({
+    err = utils::capture.output(repl_passthrough(rs, code), type = "message")
+  })
+  # R's message, the output, the warning and the error at column 4, as a tool's result rows; then
+  # the blank row a command's output ends with
+  expect_identical(out, c("    a message", "    cat line", "    [1] 1 2 3",
+                          "    Warning: a warning", ""))
+  expect_identical(err, "    Error: boom")
+  # nothing printed, no blank row
+  expect_identical(utils::capture.output(repl_passthrough(rs, "!y = 2")), character())
+})
+
 test_that("the input event (source passthrough) can handle or transform !code", {
   skip_on_cran()
   local_project()
@@ -597,7 +641,7 @@ test_that("console_send() attaches @objects by name and @files as a block", {
 
 test_that("one dim line under a sent prompt names what its @mentions resolved to (D-244)", {
   skip_on_cran()
-  local_utf8_glyphs()
+  withr::local_options(cli.unicode = TRUE)
   local_console_test()
   local_scripted_ui()
   e = new.env(parent = globalenv())
@@ -621,13 +665,13 @@ test_that("one dim line under a sent prompt names what its @mentions resolved to
   expect_identical(said,
                    paste0("  \033[38;5;244m@ my_cars (data.frame, 32 x 11)\033[39m\n",
                           "  \033[38;5;244m@ fit2 not found, sent as text\033[39m\n",
-                          "  \033[38;5;244m@ fit2_with_a_long_name not found, …\033[39m\n"))
+                          "  \033[38;5;244m@ fit2_with_a_long_name not found,…\033[39m\n"))
   expect_identical(written(function() repl_turn(rs, "hello there")), "")
 })
 
 test_that("a prompt to a session that runs, in the background, says it steers (steering review)", {
   local_console_test()
-  local_utf8_glyphs()
+  withr::local_options(cli.unicode = TRUE)
   s = peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
   rs = repl_state(s, new.env())
   sent = list(status = "ok", value = s)
@@ -750,7 +794,7 @@ test_that("the stdin UI answers selections and approvals from the reader", {
   expect_identical(a1$decision, "allow")
   expect_identical(a2, list(decision = "deny", remember = NULL, feedback = "use base R",
                             reason = NULL))
-  expect_true(any(grepl("Not an answer: 'maybe'", out, fixed = TRUE)))
+  expect_true(any(startsWith(out, "    not an answer - ")))
   expect_s3_class(ui, "gptr_ui")
 })
 
@@ -832,6 +876,23 @@ test_that("the end of piped input leaves the REPL like /exit", {
   expect_identical(res$text, "ok")
 })
 
+test_that("under R < file the piped console reads the lines after its call, echoed once (IC-59)", {
+  skip_on_cran()
+  dir = withr::local_tempdir()
+  f = file.path(dir, "in.R")
+  line = "cat(\"RAN\", \"AS R\\n\")"
+  writeLines(c(paste0(tracemem_loader(), "; peter(model = gptr_fake_provider(list(\"PONG\")), ",
+                      ".stdin = TRUE)"), line, "/exit"), f)
+  libs = paste(.libPaths(), collapse = .Platform$path.sep)
+  # an absolute path, so R CMD check's dummy `R` on PATH is never used (IC-60); R echoes its input
+  res = processx::run(file.path(R.home("bin"), "R"), c("--vanilla", "--quiet"), stdin = f,
+                      wd = dir, error_on_status = FALSE, timeout = 60,
+                      env = c("current", R_LIBS = libs))
+  expect_match(res$stdout, "PONG", fixed = TRUE)
+  expect_no_match(res$stdout, "RAN AS R", fixed = TRUE)
+  expect_identical(lengths(regmatches(res$stdout, gregexpr(line, res$stdout, fixed = TRUE))), 1L)
+})
+
 test_that("in IRkernel peter() without a prompt starts the console on gptr_readline() (acc. 7)", {
   skip_on_cran()
   local_console_test()
@@ -872,7 +933,8 @@ test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
     res = console_run(NULL, new.env())
   })
   expect_null(res)
-  i = grep("again to leave gptr", out, fixed = TRUE)
+  # in the banner's words, no [gptr] tag (visual round 2)
+  i = which(out == "ctrl-c again leaves - /exit")
   expect_length(i, 1L)
   # the notice ends the prompt line first, under the banner's blank line and its keys row
   expect_identical(out[c(i - 2L, i - 1L)], c("", ""))
@@ -985,8 +1047,8 @@ test_that("background sessions that wait for approval are announced once (IC-57)
     repl_waiting_notice(rs)
     repl_waiting_notice(rs)
   })
-  expect_identical(out, paste("[gptr] 1 background session waits for approval;",
-                              "the next prompt or gptr_wait() asks."))
+  expect_identical(out, paste("1 background session waits for approval -",
+                              "the next prompt or gptr_wait() asks"))
   expect_identical(rs$waiting, 1L)
 })
 
@@ -1003,6 +1065,58 @@ test_that("an error is printed on stderr and the REPL goes on", {
   })), type = "message")
   expect_true(any(startsWith(err, "Error: ")))
   expect_identical(res$text, "recovered")
+})
+
+test_that("a failed run says why once, whole, in its status line; the prompt keeps its gap", {
+  skip_on_cran()
+  local_console_test()
+  local_scripted_ui()
+  local_gptr_options(verbose = 2L, max_turns_console = 1L)
+  withr::local_options(cli.dynamic = TRUE, cli.width = 50L)
+  long = "provider failure: boom, and a reason long enough to wrap at fifty columns"
+  fake = gptr_fake_provider(list(list(error = long, status = 400L, after = 0L),
+                                 fake_tool("r", code = "zz = 1"), "ok"))
+  local_console_stdin(c("hello", "again", "after", "/exit"))
+  # stdout and stderr in the order they were written, as a terminal shows them
+  f = withr::local_tempfile()
+  con = file(f, "w")
+  sink(con)
+  sink(con, type = "message")
+  tryCatch(peter(.stdin = TRUE, model = fake, envir = new.env(), mode = "auto"), finally = {
+    sink(type = "message")
+    sink()
+    close(con)
+  })
+  out = readLines(f)
+  text = paste(trimws(out), collapse = " ")
+  expect_identical(lengths(gregexpr("boom", text, fixed = TRUE)), 1L)
+  expect_match(text, paste("error:", long), fixed = TRUE)
+  expect_identical(lengths(gregexpr("max_turns", text, fixed = TRUE)), 1L)
+  expect_match(text, "max_turns: the run stopped after 1 turn ", fixed = TRUE)
+  expect_true(all(cli::ansi_nchar(out, type = "width") <= 50L))
+  at = match(c("peter[auto]> again", "peter[auto]> after"), out)
+  expect_identical(out[at - 1L], c("", ""))
+})
+
+test_that("a failed run's reason is red, on rows of its own above the terms (visual round 2)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L, mode = "auto")
+  withr::local_options(cli.unicode = TRUE, cli.dynamic = TRUE, cli.width = 80L,
+                       cli.num_colors = 256L)
+  fake = gptr_fake_provider(list(list(error = "provider failure: boom", status = 400L, after = 0L),
+                                 "ok"))
+  s = NULL
+  out = utils::capture.output(tryCatch(peter("hello", model = fake, envir = new.env()),
+                                       error = function(e) s <<- e$session))
+  red = "\033[38;5;167m"
+  grey = "\033[38;5;244m"
+  at = grep("error: provider failure: boom", out, fixed = TRUE)
+  expect_identical(out[[at]], paste0("  ", red, "error: provider failure: boom\033[39m"))
+  expect_true(startsWith(out[[at + 1L]], paste0("  ", grey, "fake-1 · 1 request")))
+  # a run that ended idle has its status and terms on one dim row
+  out = utils::capture.output(peter(s, "again"))
+  expect_true(any(startsWith(out, paste0("  ", grey, "done · fake-1 · "))))
 })
 
 test_that("approvals of a .stdin session are answered from the same stdin", {
@@ -1257,4 +1371,58 @@ test_that("a terminal answering the probe late still has the answer read by it (
   expect_identical(pty$seen("rgb:"), 0L)
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
+})
+
+test_that("a terminal: a run sent to the background shows again while the console waits for it", {
+  skip_on_cran()
+  skip_on_os("windows")
+  skip_if_not_installed("later")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.width = 60L)",
+    # a dark background, no answer to the probe: the band shows, in the terminal's 256 colours
+    "Sys.setenv(COLORFGBG = '15;0')",
+    "long = paste(c('BEGIN', sprintf('w%02dabc', 1:60), 'END'), collapse = ' ')",
+    "fake = gptr_fake_provider(function(req) {",
+    "  m = req$messages[[length(req$messages)]]",
+    "  if (identical(m$role, 'user')) return(list(text = long, chunk = 8L, gap = 0.1))",
+    "  paste0('REQ ', m$role, ': ', gsub('\\n', ' ', gptr:::msg_text(m)), ' END')",
+    "})",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
+  ))
+  utf8 = l10n_info()[["UTF-8"]]
+  person = if (utf8) "\u203a" else ">>"
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("BEGIN"))
+  pty$send("\003")
+  expect_true(pty$wait("background"))
+  pty$send("b\r")
+  # the row says what holds at the chat prompt, where nothing runs the session
+  expect_true(pty$wait("continues it here"))
+  expect_true(pty$wait("peter[auto]> "))
+  # in the console's terms, the service's notice one of them: no row ends in the separator, no
+  # row is a sentence (visual round 3)
+  rows = trimws(term_rows(pty$all), "right")
+  expect_true("  in the background (experimental, ?\"gptr-background\")" %in% rows)
+  expect_false(any(endsWith(rows, if (utf8) " ·" else " -")))
+  expect_identical(pty$seen("Background sessions"), 0L)
+  # waited for, the run is the console's again: its answer, the live row reading keys, its end
+  pty$send("!!gptr::gptr_wait(gptr::gptr_last())\r")
+  expect_true(pty$wait("w20abc"))
+  # the live row shows the draft, then the steer queued (visual round 2)
+  pty$send("use base")
+  expect_true(pty$wait(paste0(person, " use base")))
+  pty$send(" R\r")
+  expect_true(pty$wait(queue_line("steer", "use base R", utf8)))
+  # in the console's palette, as before the wait: the steer on the band, the status line grey
+  # (visual round 2)
+  expect_true(pty$wait(paste0("\033[48;5;237m", person, " use base R")))
+  expect_true(pty$wait("use base R END"))
+  expect_true(pty$wait("\033[38;5;244mdone"))
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  # the steer was never echoed by the terminal, at column 0
+  expect_false(any(startsWith(term_rows(pty$all), "use base R")))
 })

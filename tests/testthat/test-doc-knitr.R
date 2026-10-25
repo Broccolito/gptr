@@ -224,6 +224,21 @@ test_that("the code of a live turn gets a fence longer than any backtick line it
                    paste0("Done.\n\n````r\n", code, "\n````"))
 })
 
+test_that("a live turn's gptr_return(<expression>) knits with its block id, or as written", {
+  skip_if_not_installed("knitr")
+  code = "fit = lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))"
+  s = doc_test_session(list(doc_test_turn(code, value = "coef(fit)")))
+  d = session_data(s)
+  d$last_text = "Fitted."
+  expect_identical(as.character(knit_print.gptr_session(s)),
+                   paste0("Fitted.\n\n```r\n", code, "\n```"))
+  session_append(s, list(type = "custom", custom_type = "gptr.doc_block",
+                         data = list(doc = "report.Rmd", block = "c5b47c", action = "insert")))
+  expect_identical(as.character(knit_print.gptr_session(s)),
+                   paste0("Fitted.\n\n```r\nfit = lm(mpg ~ wt, mtcars)\n",
+                          ".gptr_value_c5b47c = (coef(fit))\n```"))
+})
+
 test_that("knitr's generic dispatches to the lazily registered methods", {
   skip_if_not_installed("knitr")
   s = doc_test_session(list(doc_test_turn("n = 1")))
@@ -245,16 +260,20 @@ test_that("knitr records an agent chunk through peter() and replays it on the ne
   local_gptr_options(record = "auto", replay = "auto", model = "fake/fake-1", mode = "auto",
                      unsafe_no_permissions = TRUE)
   fake = local_fake_provider(list(
-    fake_tool("r", code = "n = nchar(\"count letters in this prompt\")"), fake_text("Counted.")))
+    fake_tool("r", code = "n = nchar(\"count letters in this prompt\")\ngptr_return(n * 2)"),
+    fake_text("Counted.")))
   rmd = file.path(root, "report.Rmd")
   file.copy(fixture, rmd)
   out = file.path(root, "report.md")
   knitr::knit(rmd, output = out, envir = new.env(parent = globalenv()), quiet = TRUE)
   expect_length(fake_requests(fake), 2L)
-  expect_match(doc_rmd_chunks(readLines(rmd))$label[3], "^gptr-[0-9a-f]{6}$")
+  label = doc_rmd_chunks(readLines(rmd))$label[3]
+  expect_match(label, "^gptr-[0-9a-f]{6}$")
   md = readLines(out)
   expect_true(any(grepl("Counted.", md, fixed = TRUE)))
   expect_true("n = nchar(\"count letters in this prompt\")" %in% md)
+  # the first render shows the recorded gptr_return() with the block's id (FIX-16)
+  expect_true(paste0(".gptr_value_", sub("^gptr-", "", label), " = (n * 2)") %in% md)
   md5 = tools::md5sum(rmd)
   e = new.env(parent = globalenv())
   knitr::knit(rmd, output = out, envir = e, quiet = TRUE)

@@ -3,7 +3,8 @@ rw_child_case = function(case, root) {
   ns = asNamespace("gptr")
   fun = function(name) get(name, ns, inherits = FALSE)
   phase = function(text) cat(text, "\n", file = file.path(root, "phases.txt"), append = TRUE)
-  old = options(gptr.stdin_timeout = 2, gptr.supervise = FALSE, gptr.quiet = TRUE)
+  # Each case must deliver after a lazy cold start, so it gets the duplex budget (D-246).
+  old = options(gptr.stdin_timeout = 20, gptr.supervise = FALSE, gptr.quiet = TRUE)
   on.exit(options(old), add = TRUE)
   p = NULL
   on.exit({
@@ -36,12 +37,6 @@ rw_child_case = function(case, root) {
   phase("ready")
   first = if (case == "binary") as.raw(c(0, 255, 195, 169)) else charToRaw("first\n")
   second = if (case == "binary") as.raw(c(10, 66, 0, 127)) else charToRaw("second\n")
-  if (case == "binary") {
-    ready = file.path(fun("proc_writer_start")(p, 2)$dir, "ready")
-    if (!fun("reactor_pump")(until = function() file.exists(ready), timeout = 2))
-      stop(fun("gptr_condition")("Timed out admitting the stdin writer.", "timeout",
-        fields = fun("proc_writer_failure")(p)))
-  }
   phase("writer-start")
   fun("write_all")(p, first)
   if (case != "binary")

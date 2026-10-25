@@ -533,9 +533,11 @@ worker_on_exit = function(st, status) {
   worker_cleanup(st)
 }
 
-#' Remove the worker's job row and temporary files only after its tree has settled
+#' End the worker's abort guard at once, so no reactor task outlives the worker; remove its job
+#' row and temporary files only after its tree has settled
 #' @noRd
 worker_cleanup = function(st) {
+  if (!is.null(st$guard)) reactor_cancel(st$guard)
   if (isTRUE(st$cleaned)) return(invisible(TRUE))
   settled = tryCatch(isTRUE(kill_all(st$p, grace = 0)),
                     error = function(e) FALSE, interrupt = function(e) FALSE)
@@ -604,8 +606,7 @@ worker_spawn = function(st) {
   st$job = id_new("w", 8L)
   job_add("worker", st$job, name = w$name, pid = st$p$get_pid(),
           stop = function() worker_kill(st))
-  reactor_task(function() {
-    if (isTRUE(st$exited)) return(FALSE)
+  st$guard = reactor_task(function() {
     if (!isTRUE(st$opts$signal$aborted)) return(0.1)
     worker_kill(st)
     FALSE

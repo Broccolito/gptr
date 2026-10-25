@@ -452,10 +452,15 @@ pcli_codex_warn = function(changed, earlier = FALSE) {
   invisible(changed)
 }
 
-#' End an exec through `end()`, its terminal event: the control files of a workspace-write exec
-#' are checked first and reported after the event, also when `end()` fails (IC-54, IC-65; D-106)
+#' End an exec through `end()`, its terminal event: its relay ends first, so no reactor task
+#' outlives the turn, and the control files of a workspace-write exec are checked first and
+#' reported after the event, also when `end()` fails (IC-54, IC-65; D-106)
 #' @noRd
 pcli_codex_end = function(s, end) {
+  if (!is.null(s$relay)) {
+    reactor_cancel(s$relay)
+    unlink(s$state$codex_relay, recursive = TRUE)
+  }
   changed = pcli_codex_check(s$state)
   tryCatch(end(), finally = pcli_codex_warn(changed))
 }
@@ -545,13 +550,13 @@ pcli_codex_timeout = function(s) {
 
 #' The session side of the exec's stdio relay (IC-79): a reactor task of the run that answers each
 #' request the relay leaves in the mailbox `dir` (`req`) through pcli_mcp() with `resp`, an empty
-#' line for a notification. Once the turn is over it removes the mailbox, which ends the relay,
-#' and itself.
+#' line for a notification. pcli_codex_end() ends it with the exec; a turn P05 let go of ends at
+#' its next poll. Either removes the mailbox, which ends the relay.
 #' @noRd
 pcli_codex_relay = function(s, dir) {
   req = file.path(dir, "req")
-  reactor_task(function() {
-    if (s$done || !pcli_turn_current(s)) {
+  s$relay = reactor_task(function() {
+    if (!pcli_turn_current(s)) {
       unlink(dir, recursive = TRUE)
       return(FALSE)
     }

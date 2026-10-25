@@ -28,16 +28,18 @@ invisibly after \code{open}, \code{stop} or \code{version}.
 }
 \description{
 Artifacts are Shiny apps the agent builds from objects in your session. It writes
-\verb{.gptr/artifacts/<id>/app.R} and launches it with \code{peter$app("<id>", data = c("obj"))}, which
-snapshots the named objects into an immutable version directory (\verb{v001/}, \verb{v002/}, ...) and
-serves it from a supervised background R process on \verb{127.0.0.1}, so the console stays free.
+\verb{.gptr/artifacts/<id>/app.R} and calls \code{peter$app("<id>", data = c("obj"))}, which snapshots
+the named objects into an immutable version directory (\verb{v001/}, \verb{v002/}, ...) and, when a
+person is at the console or with \code{launch = TRUE}, serves it from a supervised background R
+process on \verb{127.0.0.1}, so the console stays free.
 \code{gptr_artifacts()} lists the artifacts of the workspace (\verb{.gptr/}, else a temporary
 directory) and manages their processes.
 }
 \details{
 The built-in \code{kind = "html"} uses a working \code{page.html} and a Shiny serving wrapper.
-Both built-in kinds need Shiny to launch. \code{peter$app(..., launch = FALSE)} creates a version
-without launching it; startup and browser checks therefore remain unperformed. Browser
+Both built-in kinds need Shiny to launch. \code{peter$app(..., launch = FALSE)}, or the default in
+a script, knitr or tests (its messages say how to start it), creates a version without
+launching it; startup and browser checks therefore remain unperformed. Browser
 session checks and screenshots additionally need chromote and Chrome. A check value of
 \code{NA} means it was skipped. Separate processes organize execution but are not OS sandboxes.
 }
@@ -53,8 +55,9 @@ out of git.
 
 \section{Options}{
 
-\code{gptr.artifact_max_bytes} (default \code{5e8}): the largest total \code{object.size()} of the objects
-one version may snapshot; above it \code{peter$app()} signals \code{gptr_error_artifact_too_large}.
+\code{gptr.artifact_max_bytes} (default \code{5e8}): the largest total size of the objects one version
+may snapshot (each part counted once, as in the workspace); above it \code{peter$app()} signals
+\code{gptr_error_artifact_too_large}.
 }
 
 \examples{

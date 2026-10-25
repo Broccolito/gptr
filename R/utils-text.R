@@ -10,6 +10,14 @@ text_lines = function(text) {
   strsplit(paste(x, collapse = "\n"), "\n", fixed = TRUE)[[1L]]
 }
 
+#' deparse() of code gptr did not build, with the `backtick` base R's default would compute.
+#' That default calls mode(), which deparses a call's head with the same default: R recursion
+#' once per head of a chain such as f(1)(1)...(1), up to the C stack or expressions limit (CI-82).
+#' @noRd
+deparse_code = function(expr, ...) {
+  deparse(expr, backtick = is.call(expr) || is.expression(expr) || is.function(expr), ...)
+}
+
 #' Who a run is to the person (D-188): "main", a sub-agent's name, or for a nested peter() call
 #' the first line of its prompt, quoted and cut to 30 characters, then ` #k`, its place among the
 #' children of the parent run, so loop iterations differ (D-224)
@@ -226,6 +234,15 @@ ui_escape = function(x) {
     out[bad] = sprintf("<U+%04X>", cp[bad])
     paste(out, collapse = "")
   }, character(1), USE.NAMES = FALSE)
+}
+
+#' Collapse text to one comment-safe line: line breaks become spaces, and the control, bidi and
+#' zero-width characters that `source(echo = TRUE)` would draw are escaped as the console does.
+#' The document writer's normalisation (P15), here so a replay can match a steer against it (IC-46).
+#' @noRd
+doc_one_line = function(x) {
+  x = as_utf8(paste(as.character(x), collapse = " "))
+  ui_escape(trimws(gsub("[\r\n\t\u0085\u2028\u2029]+", " ", x)))
 }
 
 #' Clean terminal output: drop ANSI/OSC sequences, keep the last frame of \r progress lines,

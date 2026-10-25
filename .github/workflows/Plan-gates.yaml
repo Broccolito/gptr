@@ -86,26 +86,8 @@ jobs:
           r-version: release
           Ncpus: 1
           use-public-rspm: true
-      # The indexer loads R namespaces; these plan checks never launch a browser.
-      # Keep the complete R dependency profile and install its non-browser sysreqs
-      # directly, avoiding pak's unrelated Chromium/Launchpad provisioning.
-      - name: Install the plan-check system libraries
-        shell: bash
+      - uses: ./.github/actions/system-libraries
         timeout-minutes: 7
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          packages=(
-            libcurl4-openssl-dev libssl-dev xz-utils cmake make libuv1-dev zlib1g-dev
-            libsecret-1-dev pandoc libmagick++-dev gsfonts libpng-dev libfreetype-dev
-            libjpeg-dev libtiff-dev libwebp-dev libicu-dev libfontconfig1-dev
-            libfribidi-dev libharfbuzz-dev python3 libxml2-dev
-            libgit2-dev libprotobuf-dev libprotoc-dev protobuf-compiler
-          )
-          sudo apt-get install -y "${packages[@]}"
-          for package in "${packages[@]}"; do
-            [[ "$(dpkg-query -W -f='${Status}' "$package")" == 'install ok installed' ]]
-          done
       - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
         timeout-minutes: 7
         env:

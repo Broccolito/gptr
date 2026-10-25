@@ -77,8 +77,9 @@ test_that("IRkernel tool failure and abnormal completion remain stderr messages"
       reason = "synthetic failure", turns = 1L, usage = NULL), NULL)
   })
   expect_identical(captured$output, character())
-  expect_identical(captured$messages, c("gptr: r failed\n",
-    "gptr: error: synthetic failure - 0 requests - 0 tokens\n"))
+  # the error the call raises says why (visual round 2)
+  expect_identical(captured$messages,
+                   c("gptr: r failed\n", "gptr: error - 0 requests - 0 tokens\n"))
   expect_null(console_record(list(run = "ujupyter-progress")))
 })
 

@@ -927,7 +927,7 @@ test_that("builtin:artifacts registers the types, the member, the section and th
   expect_null(fmls$title)
   expect_identical(fmls$kind, "shiny")
   expect_true(fmls$check)
-  expect_identical(fmls$launch, quote(interactive()))
+  expect_null(fmls$launch)
   expect_identical(app$risk(list(id = "x"), NULL)$level, 3L)
   sec = registry_get("prompt_section", "artifacts")
   expect_identical(sec$tier, "T0")
@@ -1066,6 +1066,66 @@ test_that("the tool form returns the handle's lines and attaches the screenshot 
   expect_identical(attach_twice(), c(TRUE, FALSE))
   expect_length(gptr_r_call$images, 1L)
   expect_identical(gptr_r_call$dropped, 1L)
+})
+
+test_that("peter$app() launches by default only at the console, and says why it did not", {
+  local_project()
+  local_gptr_options(interactive = FALSE)
+  e = new.env()
+  e$markers = data.frame(gene = "CD14")
+  write_working("x", ok_app)
+  run = function(...) {
+    artifact_member_execute(list(id = "x", data = list("markers"), check = FALSE, ...),
+                            list(session = NULL, envir = e))
+  }
+  res = run()
+  expect_identical(res$value$status, "stopped")
+  expect_null(artifact_proc_get("x"))
+  expect_match(res$content[[1]]$text, "not launched: .*v001 .*launch = TRUE")
+  expect_length(artifact_meta_read("x")$versions, 1L)
+  # testthat's match expectations evaluate their object twice: each call runs first
+  h = peter$app("x", check = FALSE)
+  expect_match(format(h), "not launched: .*v002 ", all = FALSE)
+  text = run(launch = FALSE)$content[[1]]$text
+  expect_no_match(text, "not launched")
+  local_gptr_options(interactive = TRUE)
+  seen = new.env()
+  local_mocked_bindings(artifact_start = function(id, version, type, ctx = NULL,
+                                                  session_check = FALSE) {
+    seen$version = version
+    artifact_handle(id)
+  })
+  text = run()$content[[1]]$text
+  expect_no_match(text, "not launched")
+  expect_identical(seen$version, 4L)
+})
+
+test_that("an artifact in a temporary workspace is announced once", {
+  root = local_project(gptr = FALSE)
+  withr::local_options(gptr.quiet = FALSE)
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  notices = function(expr) {
+    seen = character()
+    withCallingHandlers(expr, gptr_message_notice = function(m) {
+      seen <<- c(seen, conditionMessage(m))
+      invokeRestart("muffleMessage")
+    })
+    seen
+  }
+  id = "temp-workspace-notice"
+  # taken before .gptr/ exists, when it is the temporary workspace's copy
+  tmp = artifact_dir(id)
+  withr::defer(unlink(tmp, recursive = TRUE))
+  write_working(id, ok_app)
+  first = notices(peter$app(id, check = FALSE, launch = FALSE))
+  expect_length(first, 1L)
+  expect_match(first, paste0("(", path_norm(artifact_dir(id)), ")"), fixed = TRUE)
+  expect_match(first, "deleted when R exits; run gptr_init() to keep artifacts.", fixed = TRUE)
+  expect_length(notices(peter$app(id, check = FALSE, launch = FALSE)), 0L)
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  dir.create(file.path(root, ".gptr"))
+  write_working(id, ok_app)
+  expect_length(notices(peter$app(id, check = FALSE, launch = FALSE)), 0L)
 })
 
 test_that("peter$app() launches through the ladder and keeps .Random.seed (IC-61)", {

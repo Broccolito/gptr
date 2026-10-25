@@ -23,7 +23,9 @@ gptr_condition = function(message, class, kind = "error", fields = list(), call 
   }
   structure(
     c(list(message = text, call = call), fields),
-    class = c(paste0(prefix, "_", class), prefix, kind, "condition")
+    # rlang_message: a console that takes every other message (RStudio's) leaves the display to gptr
+    class = c(paste0(prefix, "_", class), prefix, if (identical(kind, "message")) "rlang_message",
+              kind, "condition")
   )
 }
 
@@ -109,7 +111,8 @@ gptr_message_write = function(text, stream, margin = FALSE, from = sys.nframe() 
 }
 
 #' What an evaluation on the stack holds about the console it started from (eval_one()'s
-#' `.gptr_console_pad` and `.gptr_console_colors`), or NULL outside one
+#' `.gptr_console_pad`, `.gptr_console_colors` and `.gptr_eval_outside`, repl_passthrough()'s
+#' `.gptr_console_wait`), or NULL outside one
 #' @noRd
 console_eval_value = function(name) {
   k = sys.nframe() - 1L
@@ -142,7 +145,9 @@ console_colors = function() console_eval_value(".gptr_console_colors") %||% cli:
 #' one grey `dim` (halfway between the logo's ink and cream where 256 colours show, as consoles
 #' that ignore SGR 2 show it too; else SGR 2), the input band in a T console (console_class())
 #' where the background is known and 256 colours show it, with `band_dim` the grey of words on it
-#' (also where the band is drawn inside an evaluation), and the R code theme in those colours.
+#' (also where the band is drawn inside an evaluation), and the R code theme in those colours. Where
+#' the terminal gave its background's colour, an accent under 3:1 against it is the default colour
+#' in bold and the grey one 3:1 against it (IC-82).
 #' ASCII where the output is not
 #' UTF-8 and in Windows consoles outside Windows Terminal and RStudio (Rgui among them), whose
 #' fonts lack U+258E and U+21B3 (WGL4); there the person's chevron is doubled, `>>`, so an answer
@@ -165,9 +170,19 @@ console_style = function() {
   grey = if (deep) "#878787" else "dim"
   bg = console_background()
   known = deep && !is.na(bg)
+  rgb = if (known) attr(bg, "rgb")
+  if (!is.null(rgb)) {
+    # on a background they do not stand out from (Terminal.app's Ocean, Grass) an accent is the
+    # default colour in bold and the grey one 3:1 against it
+    y = luminance(rgb)
+    low = function(col) contrast(luminance(grDevices::col2rgb(col)[, 1L] / 255), y) < 3
+    if (low(red)) red = "bold"
+    if (low(blue)) blue = "bold"
+    if (low(grey)) grey = grey_against(y, 3, identical(c(bg), "light"))
+  }
   cells = if (known) band_cells(bg)
   # never in RStudio's or a Windows console, TERM=dumb or Rscript
-  band = if (known && console_class() == "T") paste0("\033[48;5;", cells$band, "m") else ""
+  band = if (known && console_class() == "T") paste0("\033[", cells$band, "m") else ""
   # the grey of words on the band, so they keep contrast
   on_band = if (known) cells$dim else grey
   c(glyphs, list(
@@ -181,30 +196,51 @@ console_style = function() {
   ))
 }
 
-#' The input band's xterm-256 cell and the grey of words on it (IC-82) for background `bg`: where
-#' the terminal gave its colour (attr "rgb", 0 to 1) Codex's fill, 4% black over a light
-#' background or 12% white over a dark one, as the nearest cell of the colour cube or the grey ramp,
-#' its words a grey 4.5:1 against it; else (COLORFGBG) cell 254 or 237, `#6c6c6c` or `#a8a8a8`
+#' The input band's background SGR parameters and the grey of words on it (IC-82) for background
+#' `bg`: where the terminal gave its colour (attr "rgb", 0 to 1) Codex's fill, 4% black over a light
+#' background or 12% white over a dark one, exact in truecolor, else as the nearest cell of the
+#' colour cube or the grey ramp, its words a grey 4.5:1 against it; else (COLORFGBG) cell 254 or
+#' 237, `#6c6c6c` or `#a8a8a8`
 #' @noRd
 band_cells = function(bg) {
   rgb = attr(bg, "rgb")
   if (is.null(rgb)) {
-    return(list(band = c(dark = 237L, light = 254L)[[bg]],
+    return(list(band = paste0("48;5;", c(dark = 237L, light = 254L)[[bg]]),
                 dim = c(dark = "#a8a8a8", light = "#6c6c6c")[[bg]]))
   }
   light = identical(c(bg), "light")
   fill = 255 * if (light) 0.96 * rgb else rgb + 0.12 * (1 - rgb)
+  if (cli::num_ansi_colors() >= 256^3) {
+    fill = round(fill)
+    return(list(band = paste0("48;2;", paste(fill, collapse = ";")),
+                dim = grey_against(luminance(fill / 255), 4.5, light)))
+  }
   cube = c(0, 95, 135, 175, 215, 255)
   ramp = 8 + 10 * 0:23
   # cells 16 to 255 in order: the cube, blue fastest, then the grey ramp
   cells = rbind(as.matrix(expand.grid(cube, cube, cube))[, 3:1], cbind(ramp, ramp, ramp))
   k = which.min(colSums((t(cells) - fill)^2))
-  # WCAG luminance of the cell; the grey of that contrast ratio, darker or lighter
-  lin = function(v) ifelse(v <= 0.04045, v / 12.92, ((v + 0.055) / 1.055)^2.4)
-  y = sum(c(0.2126, 0.7152, 0.0722) * lin(cells[k, ] / 255))
-  yg = if (light) max(0, (y + 0.05) / 4.5 - 0.05) else min(1, 4.5 * (y + 0.05) - 0.05)
-  g = if (yg <= 0.0031308) 12.92 * yg else 1.055 * yg^(1 / 2.4) - 0.055
-  list(band = 15L + k, dim = grDevices::rgb(g, g, g))
+  list(band = paste0("48;5;", 15L + k), dim = grey_against(luminance(cells[k, ] / 255), 4.5, light))
+}
+
+#' The WCAG relative luminance of a colour (components 0 to 1)
+#' @noRd
+luminance = function(rgb) {
+  sum(c(0.2126, 0.7152, 0.0722) * ifelse(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055)^2.4))
+}
+
+#' The WCAG contrast ratio of two luminances
+#' @noRd
+contrast = function(y1, y2) (max(y1, y2) + 0.05) / (min(y1, y2) + 0.05)
+
+#' The grey of contrast `ratio` against luminance `y`: darker on a light colour, else lighter,
+#' rounded away from it
+#' @noRd
+grey_against = function(y, ratio, light) {
+  yg = if (light) max(0, (y + 0.05) / ratio - 0.05) else min(1, ratio * (y + 0.05) - 0.05)
+  g = 255 * if (yg <= 0.0031308) 12.92 * yg else 1.055 * yg^(1 / 2.4) - 0.055
+  g = if (light) floor(g) else ceiling(g)
+  grDevices::rgb(g, g, g, maxColorValue = 255)
 }
 
 #' The terminal's background, "dark", "light" or NA, in `the$background` (IC-82): a T REPL's
@@ -244,12 +280,17 @@ gptr_message_margin = function(text) {
   paste0(ifelse(nzchar(lines), pad, ""), lines, "\n", collapse = "")
 }
 
-#' Rows cut to `width` display columns, each cut one ending in `ellipsis`; one row at a time, as
-#' cli 3.6.6's ansi_strtrim() of a vector also shortens rows that fit when another is cut
+#' Rows cut to `width` display columns, each cut one ending in `ellipsis`, no blank before it; one
+#' row at a time, as cli 3.6.6's ansi_strtrim() of a vector also shortens rows that fit when
+#' another is cut
 #' @noRd
 console_cut = function(rows, width, ellipsis = console_style()$ellipsis) {
-  vapply(as.character(rows), function(r) as.character(cli::ansi_strtrim(r, width, ellipsis)), "",
-         USE.NAMES = FALSE)
+  vapply(as.character(rows), function(r) {
+    x = as.character(cli::ansi_strtrim(r, width, ellipsis))
+    if (cli::ansi_nchar(r, type = "width") <= width) return(x)
+    head = substr(x, 1L, nchar(x) - nchar(ellipsis))
+    paste0(sub(" +((\033\\[[0-9;]*m)*)$", "\\1", head, perl = TRUE), ellipsis)
+  }, "", USE.NAMES = FALSE)
 }
 
 #' Terms laid out in rows of at most `width` columns, joined by `sep` (D-245): a row ends at a whole
@@ -387,9 +428,28 @@ check_number = function(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE
 #' @noRd
 check_choice = function(x, choices, arg) {
   if (identical(x, choices)) return(invisible(choices[[1L]]))
-  ok = rlang::is_string(x) && x %in% choices
-  if (!ok) arg_abort(x, arg, paste0("one of ", paste0("\"", choices, "\"", collapse = ", ")))
+  if (!rlang::is_string(x) || !x %in% choices) choice_abort(x, choices, arg)
   invisible(x)
+}
+
+#' A bad choice: a string is said not to be one (with a choice that matches it but for case),
+#' anything else is described by class and length; the value itself is never quoted
+#' @noRd
+choice_abort = function(x, choices, arg) {
+  expected = if (length(choices)) {
+    paste0("one of ", paste0("\"", choices, "\"", collapse = ", "))
+  } else {
+    "a registered name (none is registered)"
+  }
+  if (!rlang::is_string(x)) arg_abort(x, arg, expected)
+  hint = choices[tolower(choices) == tolower(x)]
+  gptr_abort(
+    paste0("`", arg, "` must be ", expected, "; the string given is not one of them.",
+           if (length(hint)) paste0(" Did you mean \"", hint[[1L]], "\"?")),
+    "invalid_argument",
+    arg = arg,
+    expected = expected
+  )
 }
 
 #' @noRd

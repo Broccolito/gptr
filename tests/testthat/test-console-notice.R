@@ -217,16 +217,18 @@ test_that("real R-tool capture contains no live row bytes or altered warnings", 
       'warn("tool warning", "notice")')))
   out = utils::capture.output({
     err = utils::capture.output({
-      expect_warning({
+      expect_no_warning({
         result = with_interrupt_policy(function() {
           tool_execute_frame(w$run, call, w$live$ctx)
         }, list(w$run))
-      }, class = "gptr_warning_notice")
+      })
     }, type = "message")
   })
   # the notice keeps the margin of the console the evaluation started from (D-186), the printed
-  # output is a result row at column 4 (visual review); the console's live row is cleared first
-  expect_identical(out, c(paste0("\r", strrep(" ", 79L), "\r    tool output"), "  tool notice"))
+  # output is a result row at column 4 (visual review), the warning one too, never left for R's
+  # top level (visual round 3); the console's live row is cleared first
+  expect_identical(out, c(paste0("\r", strrep(" ", 79L), "\r    tool output"), "  tool notice",
+                          "    Warning: tool warning"))
   expect_identical(err, character())
   expect_false(result$is_error)
   expect_identical(result$details$warnings, "tool warning")

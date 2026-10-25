@@ -1,0 +1,24 @@
+name: Ubuntu system libraries
+description: >-
+  Install the Ubuntu libraries of gptr's R dependencies before setup-r-dependencies runs with
+  PKG_SYSREQS 'false': pak would also install chromium from a Launchpad PPA, and chromote uses
+  the runner's Google Chrome
+runs:
+  using: composite
+  steps:
+    - name: Install the R dependencies' system libraries
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        packages=(
+          libcurl4-openssl-dev libssl-dev xz-utils cmake make libuv1-dev zlib1g-dev
+          libsecret-1-dev pandoc libmagick++-dev gsfonts libpng-dev libfreetype-dev
+          libjpeg-dev libtiff-dev libwebp-dev libicu-dev libfontconfig1-dev
+          libfribidi-dev libharfbuzz-dev python3 libxml2-dev
+          libgit2-dev libprotobuf-dev libprotoc-dev protobuf-compiler
+        )
+        sudo apt-get install -y "${packages[@]}"
+        for package in "${packages[@]}"; do
+          [[ "$(dpkg-query -W -f='${Status}' "$package")" == 'install ok installed' ]]
+        done

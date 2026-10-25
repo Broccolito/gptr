@@ -524,19 +524,22 @@ test_that("a session finalized during a check keeps its deferred shutdown (D-085
   reg = local_registry()
   seen = new.env(parent = emptyenv())
   seen$reasons = character()
+  # only s1's events count: a session an earlier test left for gc defers its own shutdown
+  # whenever a collection runs (session_finalizer(), the only caller of ev_defer())
   hook_add("session_shutdown", function(event, ctx) {
-    seen$reasons = c(seen$reasons, event$reason)
+    if (identical(event$session, "s1")) seen$reasons = c(seen$reasons, event$reason)
     NULL
   })
   registry_add(gptr_command("mine", function(args, ctx) "x"), "session", 0L, session = "s1")
   gptr_check(function(gptr) {
     # what session_finalizer() does when a collection runs inside the scratch registry
-    ev_defer("session_shutdown", list(reason = "gc"), session = "s1")
+    ev_defer("session_shutdown", list(reason = "gc", session = "s1"), session = "s1")
     gptr$register(gptr_command("probe", function(args, ctx) NULL))
   })
   expect_null(registry_get("command", "mine", session = "s1"))
   expect_identical(seen$reasons, "gc")
-  expect_length(ls(reg$deferred), 0L)
+  left = Filter(function(k) identical(reg$deferred[[k]]$session, "s1"), ls(reg$deferred))
+  expect_length(left, 0L)
 })
 
 test_that("the identifier scan knows arrow assignments and for-loop variables (IC-42)", {

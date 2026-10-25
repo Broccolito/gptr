@@ -18,6 +18,24 @@ test_that("informational conditions display as ordinary stdout without losing ha
                    character())
 })
 
+test_that("a console handler that takes every non-rlang message leaves gptr's display alone", {
+  local_gptr_options(quiet = FALSE)
+  # RStudio 2026.09's global message handler (onMessageImpl)
+  ide = function(cnd) {
+    if (!inherits(cnd, "rlang_message")) {
+      cat(conditionMessage(cnd), file = stderr())
+      invokeRestart("muffleMessage")
+    }
+  }
+  out = utils::capture.output({
+    err = utils::capture.output(withCallingHandlers(gptr_inform("a notice", "notice"),
+                                                    message = ide), type = "message")
+  })
+  expect_identical(out, "a notice")
+  expect_identical(err, character())
+  expect_s3_class(tryCatch(gptr_inform("x", "notice"), message = identity), "gptr_message_notice")
+})
+
 test_that("verbatim stdout display stays out of the native error stream", {
   out = utils::capture.output({
     err = utils::capture.output(msg_verbatim(c("normal response", "literal {x}")),

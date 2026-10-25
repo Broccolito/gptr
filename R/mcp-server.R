@@ -291,13 +291,16 @@ mcp_serve_r = function(input, env, run, session = NULL) {
   timeout = input$timeout %||% (if (gptr_has_human()) NULL else gptr_opt("r_timeout"))
   plots = if (is.null(run)) "capture" else "auto"
   tee = !is.null(run) && gptr_has_human() && !isTRUE(run$depth > 0L)
+  n_values = if (is.null(session)) 0L else length(session_data(session)$values)
   res = ext_service_get("eval.r")(input$code, env, timeout = timeout, plots = plots, tee = tee,
                                   budget_tokens = budget, rng = run$opts$rng_state,
                                   record = record)
   if (record && identical(res$status, "ok") && mcp_r_recording(run, session)) {
-    session_append(session, list(type = "custom", custom_type = "gptr.mcp_r",
-      data = list(code = input$code, record = TRUE, status = res$status,
-                  outputs = r_doc_outputs(res))))
+    data = list(code = input$code, record = TRUE, status = res$status,
+                outputs = r_doc_outputs(res))
+    # what gptr_return() designated, as the r tool's details$value (doc_turn_r())
+    data$value = r_new_value_name(session, n_values)
+    session_append(session, list(type = "custom", custom_type = "gptr.mcp_r", data = data))
   }
   out = format_eval_result(res, budget)
   err = Filter(function(e) identical(e$type, "error"), res$events %||% list())
@@ -628,7 +631,7 @@ gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = paren
   st$handle
 }
 
-#' Print a server handle (never the token)
+#' Print a server handle (never the token), with the mode of its dedicated session while it runs
 #'
 #' @param x A `gptr_mcp_handle`.
 #' @param ... Ignored.
@@ -636,9 +639,15 @@ gptr_mcp_serve = function(tools = c("r", "read", "edit", "write"), envir = paren
 #' @export
 #' @noRd
 print.gptr_mcp_handle = function(x, ...) {
+  s = if (identical(the$mcp_server$handle, x)) the$mcp_server$user$session
+  mode = if (!is.null(s)) {
+    paste0("mode: ", session_data(s)$mode, "; calls that need approval are refused (set the ",
+           "mode, then restart the server to change it)")
+  }
   msg_verbatim(c(paste0("<gptr MCP server> ", x$url),
-                 paste0("token: in the environment variable ", x$token_env,
-                        " of the client, as $config shows"),
+                 paste0("token: inside the $config snippets, printed redacted (as.character() ",
+                        "gives the text; $config$codex passes it as ", x$token_env, ")"),
+                 mode,
                  paste0("config: ", paste(names(x$config), collapse = ", ")),
                  "stop: $stop() or gptr_mcp_serve(stop = TRUE)"))
   invisible(x)

@@ -145,37 +145,76 @@ test_that("/help lists the commands and the input syntax", {
   # the keys of the composer, the two kinds of queued message and the trigger characters (D-242,
   # D-244)
   text = paste(trimws(out), collapse = " ")
-  for (word in c("Enter", "Tab", "Up", "steer", "follow-up", "@, !, !!, / or peter$")) {
+  for (word in c("enter", "tab", "up", "steer", "follow-up", "@, !, !!, / or peter$")) {
     expect_true(grepl(word, text, fixed = TRUE), info = word)
   }
   # the descriptions of commands, input and keys start in one column (review of Tasks 22-27)
   rows = out[grepl("^  \\S", out)]
   expect_true(all(grepl("^  .{17}\\S", rows) & !grepl("^  .{16}\\S\\S", rows)))
   expect_identical(run_command(repl_state(NULL, new.env()), "/help mode")$out,
-                   "/mode  Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]")
+                   "/mode  show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]")
 })
 
 test_that("/help's keys follow the console, as the banner does (review of Tasks 22-27)", {
   local_console_commands()
   local_gptr_options(interactive = TRUE)
   words = function(...) gsub("\\s+", " ", paste(help_text(...), collapse = " "))
-  # RStudio: no composer (Enter, Up), its triggers ! and /, a typed line the next prompt
+  # RStudio: no composer (enter, up), its triggers ! and /, a typed line the next prompt
   rstudio = words("L", "rstudio")
-  for (w in c("Enter", "Up", "@, !, !!", "In other consoles")) {
+  expect_false(any(grepl("^  (enter|up) ", help_text("L", "rstudio"))))
+  for (w in c("@, !, !!", "In other consoles")) {
     expect_false(grepl(w, rstudio, fixed = TRUE), info = w)
   }
-  for (w in c("Tab after ! or /, complete the word", "Esc pause the answer",
+  for (w in c("tab after ! or /, complete the word", "esc pause the answer",
               "A line typed while peter works is the next prompt.")) {
     expect_true(grepl(w, rstudio, fixed = TRUE), info = w)
   }
   # Positron: no completion, and typed text waits as R code, as its banner says
   positron = words("L", "positron", complete = FALSE)
-  expect_false(grepl("Tab", positron, fixed = TRUE))
+  expect_false(any(grepl("^  tab ", help_text("L", "positron", complete = FALSE))))
   expect_true(grepl("Text typed while peter works waits as R code; ctrl-c, then s, to steer.",
                     positron, fixed = TRUE))
   # TERM=dumb: each line is queued as type_ahead says
   expect_true(grepl("A line typed while peter works is queued as type_ahead says",
                     words("D", complete = FALSE), fixed = TRUE))
+})
+
+test_that("template commands exist before the first prompt, and a template saved later too", {
+  local_console_commands()
+  withr::defer(res_prune("prompts:", character()))
+  p = local_project(list(".gptr/prompts/check.md" = "Check $1."), trust = TRUE)
+  res_prune("prompts:", character())
+  rs = repl_state(NULL, new.env())
+  sent = new.env(parent = emptyenv())
+  send = function(text) sent$text = text
+  expect_identical(run_command(rs, "/check mtcars", send)$res, "prompt")
+  expect_identical(sent$text, "Check mtcars.")
+  res_prune("prompts:", character())
+  listed = sub("^  /([^ ]+) .*", "\\1", cmd_help("", ctx_new(NULL)))
+  expect_true(all(c("check", "review", "explain") %in% listed))
+  writeLines("Later $1.", file.path(p, ".gptr", "prompts", "later.md"))
+  expect_identical(run_command(rs, "/later z", send)$res, "prompt")
+  expect_identical(sent$text, "Later z.")
+})
+
+test_that("a template command is the console's first input (end to end)", {
+  skip_on_cran()
+  local_console_test()
+  withr::defer(res_prune("prompts:", character()))
+  root = getOption("gptr.project_root")
+  dir.create(file.path(root, ".gptr", "prompts"))
+  writeLines("Check $1.", file.path(root, ".gptr", "prompts", "check.md"))
+  gptr_trust(root, trust = TRUE)
+  res_prune("prompts:", character())
+  fake = gptr_fake_provider(list("checked"))
+  local_console_stdin(c("/check mtcars", "/exit"))
+  res = NULL
+  err = utils::capture.output(invisible(utils::capture.output({
+    res = peter(.stdin = TRUE, model = fake, envir = new.env())
+  })), type = "message")
+  expect_false(any(grepl("Unknown command", err, fixed = TRUE)))
+  expect_true(grepl("Check mtcars.", fake$log$requests[[1L]]$last_user, fixed = TRUE))
+  expect_identical(res$text, "checked")
 })
 
 test_that("in the console margin command output wraps inside it; listings fit its width", {
@@ -194,23 +233,52 @@ test_that("in the console margin command output wraps inside it; listings fit it
   # a description wraps under its own column, so no row looks like another command
   cmds = out[seq(2L, match("  Input:", out) - 1L)]
   expect_true(all(grepl("^.{18} {3}\\S", cmds)))
-  expect_identical(run_command(rs, "/mode")$out, "  Mode: manual")
-  expect_match(run_command(rs, "/env")$out, "^  alpha: <integer>")
+  # never inside a usage or between a key and its word, and names bold (visual round 2)
+  expect_false(any(grepl(" [sfcab]$|\\[[^]]*$", out)))
+  bold = withr::with_options(list(cli.num_colors = 256L), run_command(rs, "/help")$out)
+  names = bold[grepl("^ {4}\\S", cli::ansi_strip(bold))]
+  expect_true(length(names) > 20L && all(startsWith(names, "    \033[1m")))
+  expect_identical(run_command(rs, "/mode")$out, c("  Mode: manual", ""))
+  expect_match(run_command(rs, "/env")$out[[1L]], "^  alpha: <integer>")
   # a listing is printed at the content width (60 - 4), not wrapped again
   listing = withr::with_options(list(width = 56L, cli.width = 56L),
                                 utils::capture.output(print(gptr::gptr_sessions())))
   expect_identical(run_command(rs, "/resume")$out,
-                   ifelse(nzchar(listing), paste0("  ", listing), ""))
+                   c(ifelse(nzchar(listing), paste0("  ", listing), ""), ""))
   expect_equal(c(getOption("width"), getOption("cli.width")), c(60, 60))
+})
+
+test_that("a command's output ends with a blank row before the next prompt (visual round 2)", {
+  local_console_commands()
+  local_project()
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+  testthat::local_reproducible_output(width = 80)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  rs = repl_state(s, new.env())
+  # as after a run's status line, also after one row, as /compact's follows its progress notice
+  expect_identical(utils::tail(run_command(rs, "/context")$out, 2L) != "", c(TRUE, FALSE))
+  expect_identical(utils::tail(run_command(rs, "/mode")$out, 2L) != "", c(TRUE, FALSE))
 })
 
 test_that("/exit, /quit and /q end the REPL", {
   local_console_commands()
   for (cmd in c("/exit", "/quit", "/q")) {
     rs = repl_state(NULL, new.env())
-    run_command(rs, cmd)
+    expect_identical(run_command(rs, cmd)$out, character())
     expect_true(rs$exit)
   }
+  # a background session still running is named, in the banner's words (visual round 3: R's
+  # prompt got its end notice 20 s later, unannounced)
+  running = c("running", "idle")
+  local_mocked_bindings(job_list = function(kind = NULL) data.frame(status = running))
+  rs = repl_state(NULL, new.env())
+  expect_identical(run_command(rs, "/exit")$out,
+                   "1 background session still runs - gptr_wait(gptr_last()) shows it")
+  expect_true(rs$exit)
+  running = c("running", "running")
+  expect_identical(run_command(rs, "/exit")$out,
+                   "2 background sessions still run - gptr_jobs() lists them")
 })
 
 test_that("/model and /mode before the first prompt set the first prompt's arguments", {
@@ -309,6 +377,25 @@ test_that("/status, /tools and /env describe the console", {
                    paste0("session   ", s$id, "  (idle, 1 turn)"))
 })
 
+test_that("/doc and /status name a gptr_doc() binding before the first prompt", {
+  local_console_commands()
+  root = local_project()
+  old = the$doc_binding
+  withr::defer(assign("doc_binding", old, envir = the))
+  the$doc_binding = NULL
+  expect_null(cmd_doc_site(NULL))
+  rs = repl_state(NULL, new.env())
+  expect_identical(run_command(rs, "/doc")$out, "No document is bound.")
+  expect_true("document  (none)" %in% run_command(rs, "/status")$out)
+  log = file.path(root, "log.R")
+  gptr_doc(log)
+  expect_identical(cmd_doc_site(NULL), list(path = log, format = "r"))
+  expect_identical(run_command(rs, "/doc")$out, paste0("Document: ", log, " (r)"))
+  status = run_command(rs, "/status")$out
+  expect_match(status[[1L]], "session   (none yet", fixed = TRUE)
+  expect_true(paste0("document  ", log) %in% status)
+})
+
 test_that("/clear starts a new conversation and keeps model and mode", {
   local_console_commands()
   s = idle_session()
@@ -387,7 +474,7 @@ test_that("/compact reports its saving and /context names the compaction request
   s = peter(s, "q2")
   rs = repl_state(s, new.env())
   out = run_command(rs, "/compact")$out
-  expect_match(out[[length(out)]], "^Conversation compacted: \\S+ -> \\S+ tokens\\.$")
+  expect_match(out[[length(out)]], "^compacted - \\S+ to \\S+ tokens$")
   figure = function(out, pattern) {
     as.numeric(gsub("[^0-9]", "", grep(pattern, out, value = TRUE)))
   }

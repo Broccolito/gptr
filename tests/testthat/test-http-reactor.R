@@ -595,17 +595,26 @@ infra01_on_time = function(d) {
   all(d$latency < 0.35) && all(d$latency > -0.05) && all(d$gaps < 0.35)
 }
 
-# Six streams on the mock's clock (D-016, D-063). Each stream runs on the schedule its response
-# head starts (`heads`, the mock's write log) and should end its `scheduled` length later; gptr
-# then delivers the end of the body (`ended`, at the callback) a `latency` after the mock wrote
-# its last piece (`lasts`). The wall runs from the first head to the last scheduled end plus its
-# latency, so the mock's own lateness in writing a last piece is netted out, as for the gaps, and
-# gptr's delivery is not: at most 1.10 times the slowest stream's 9 * 0.25 s, the plan's bound.
-# Serialised streams start their heads late. A latency below -0.05 s means mismatched writes.
-infra01_six = function(heads, lasts, ended, scheduled) {
+# Six streams on the mock's clock (D-016, D-063). Each stream starts when its request came (`came`,
+# the request log) and should end its `scheduled` length later; gptr then delivers the end of the
+# body (`ended`, at the callback) a `latency` after the mock wrote its last piece (`lasts`). The
+# wall runs from the first request to the last scheduled end plus its latency, so the mock's own
+# lateness in writing a head or a last piece is netted out, as for the gaps, and gptr's delivery
+# is not: at most 1.10 times the slowest stream's 9 * 0.25 s, the plan's bound. `gc`, the seconds
+# R spent collecting garbage while gptr delivered each end (`infra01_gc()`), is netted out of that
+# end: a collection stops every R callback while the mock keeps writing (CI-89). Serialised streams
+# send their requests late. A latency below -0.05 s means mismatched writes.
+infra01_six = function(came, lasts, ended, scheduled, gc = 0) {
   latency = ended - lasts
-  list(wall = max(heads + scheduled + latency) - min(heads), latency = latency,
-       mock_late = lasts - heads - scheduled)
+  list(wall = max(came + scheduled + latency - gc) - min(came), latency = latency,
+       mock_late = lasts - came - scheduled)
+}
+
+# R's collection total (`gcs`, gc.time()) at the first pump iteration (`at`, wall clock) at or after
+# each end reached the callback minus that at the last iteration before the mock wrote it: a
+# collection outside that window cannot have delayed the end (CI-89).
+infra01_gc = function(at, gcs, lasts, ended) {
+  gcs[findInterval(ended, at, left.open = TRUE) + 1L] - gcs[findInterval(lasts, at)]
 }
 
 infra01_six_on_time = function(six) six$wall <= 1.10 * 9 * 0.25 && all(six$latency > -0.05)
@@ -627,22 +636,36 @@ test_that("INFRA-01 measurements catch late, stalled, batched and serialised del
   expect_false(infra01_on_time(infra01_delivery(rep(max(written) + 0.01, 12), written)))
   expect_false(infra01_on_time(infra01_delivery(written[-12] + 0.003, written[-1])))
   n = c(4, 4, 4, 9, 9, 9)
-  heads = 100 + c(0, 0.004, 0.008, 0.002, 0.006, 0.01)
-  due = heads + 0.25 * n
-  expect_true(infra01_six_on_time(infra01_six(heads, due, due + 0.005, 0.25 * n)))
+  came = 100 + c(0, 0.004, 0.008, 0.002, 0.006, 0.01)
+  due = came + 0.25 * n
+  expect_true(infra01_six_on_time(infra01_six(came, due, due + 0.005, 0.25 * n)))
   # the mock writing the last pieces up to 0.24 s late is its own lateness (hosted macOS, CI-4)
   late_mock = due + c(0, 0.046, 0.058, 0.152, 0.186, 0.236)
-  expect_true(infra01_six_on_time(infra01_six(heads, late_mock, late_mock + 0.005, 0.25 * n)))
+  expect_true(infra01_six_on_time(infra01_six(came, late_mock, late_mock + 0.005, 0.25 * n)))
   # gptr's delivery stretched to a delta every 0.375 s (CI-1 review round 1), or each end
   # delivered 0.25 s after the mock wrote it
-  expect_false(infra01_six_on_time(infra01_six(heads, due, heads + 0.375 * n, 0.25 * n)))
-  expect_false(infra01_six_on_time(infra01_six(heads, due, due + 0.25, 0.25 * n)))
-  # serialised streams, and ends matched to the wrong streams
+  expect_false(infra01_six_on_time(infra01_six(came, due, came + 0.375 * n, 0.25 * n)))
+  expect_false(infra01_six_on_time(infra01_six(came, due, due + 0.25, 0.25 * n)))
+  # the long ends held back 0.4 s while R collected garbage for 0.4 s, and while R collected only
+  # as the short ends were delivered (CI-89)
+  long_late = due + rep(c(0.005, 0.4), each = 3L)
+  long_gc = rep(c(0, 0.4), each = 3L)
+  expect_true(infra01_six_on_time(infra01_six(came, due, long_late, 0.25 * n, long_gc)))
+  expect_false(infra01_six_on_time(infra01_six(came, due, long_late, 0.25 * n, rev(long_gc))))
+  # an end counts the collections between the pump iterations around its write and its delivery:
+  # 0.3 s collected before the first end's write counts nothing, 0.4 s around the second's counts
+  at = 100 + c(0, 0.1, 0.5, 2.3, 2.7, 2.8)
+  gcs = c(0, 0, 0.3, 0.3, 0.7, 0.7)
+  expect_equal(infra01_gc(at, gcs, c(101, 102.35), c(101.01, 102.75)), c(0, 0.4))
+  # serialised streams, with or without a collection, and ends matched to the wrong streams
   serial = 100 + cumsum(c(0, 1, 1, 1, 2.25, 2.25))
   expect_false(infra01_six_on_time(
     infra01_six(serial, serial + 0.25 * n, serial + 0.25 * n + 0.005, 0.25 * n)
   ))
-  expect_false(infra01_six_on_time(infra01_six(heads, due, rev(due) + 0.005, 0.25 * n)))
+  expect_false(infra01_six_on_time(
+    infra01_six(serial, serial + 0.25 * n, serial + 0.25 * n + 0.005, 0.25 * n, gc = 0.4)
+  ))
+  expect_false(infra01_six_on_time(infra01_six(came, due, rev(due) + 0.005, 0.25 * n)))
 })
 
 test_that("INFRA-01: deltas reach the callback as the mock writes them", {
@@ -664,6 +687,32 @@ test_that("INFRA-01: deltas reach the callback as the mock writes them", {
   ))
 })
 
+test_that("INFRA-01: a request that comes while the mock works is logged at its last wait", {
+  gate = tempfile("gptr-mock-gate-")
+  withr::defer(unlink(gate))
+  # the first request holds the mock in its plan until the gate exists; the second comes meanwhile,
+  # and the third after the mock has waited again
+  srv = local_mock_server("systemone", answers = eval(bquote(function(body) {
+    while (!file.exists(.(gate))) Sys.sleep(0.01)
+    list()
+  })))
+  spec = mock_spec(srv, url = paste0(srv$url, "/systemone"), body = "{}")
+  first = start_transfer(spec)
+  expect_true(reactor_pump(until = function() nrow(srv$log()) == 1L, timeout = 30))
+  second = start_transfer(spec)
+  reactor_pump(timeout = 0.5)
+  released = as.numeric(Sys.time())
+  writeLines("", gate)
+  expect_true(reactor_pump(until = function() first$done && second$done, timeout = 30))
+  reactor_pump(timeout = 0.3)
+  third = start_transfer(spec)
+  expect_true(reactor_pump(until = function() third$done, timeout = 30))
+  came = srv$log()$came
+  expect_length(came, 3L)
+  expect_lt(came[[2L]], released)
+  expect_gt(came[[3L]], released)
+})
+
 test_that("INFRA-01: six streams of 1.00-2.25 s finish within 10% of the slowest", {
   short = local_mock_server("stream", n = 4L, interval = 0.25, log_writes = TRUE)
   long = local_mock_server("stream", n = 9L, interval = 0.25, log_writes = TRUE)
@@ -671,8 +720,16 @@ test_that("INFRA-01: six streams of 1.00-2.25 s finish within 10% of the slowest
   # a body of its own names each stream's request in its mock's log
   bodies = sprintf(paste0("{\"model\":\"mock-1\",\"stream\":true,\"messages\":[],",
                           "\"metadata\":{\"user_id\":\"stream-%d\"}}"), 1:6)
+  # each pump iteration notes the time and R's garbage collection total, which R keeps only while
+  # asked to (off by default and again at the end)
+  withr::defer(gc.time(FALSE))
+  pump = new.env()
   sts = lapply(1:6, function(i) start_transfer(mock_spec(srvs[[i]], body = bodies[[i]])))
-  all_done = function() all(vapply(sts, function(s) s$done, NA))
+  all_done = function() {
+    pump$at = c(pump$at, as.numeric(Sys.time()))
+    pump$gc = c(pump$gc, gc.time(TRUE)[[3L]])
+    all(vapply(sts, function(s) s$done, NA))
+  }
   expect_true(reactor_pump(until = all_done, timeout = 30))
   expect_true(all(vapply(sts, function(s) is.null(s$fail), NA)))
   ended = vapply(sts, function(s) s$wall_end, 0)
@@ -685,16 +742,17 @@ test_that("INFRA-01: six streams of 1.00-2.25 s finish within 10% of the slowest
   })
   heads = vapply(writes, function(w) c(w$time[w$event == "head"], NA)[[1L]], 0)
   lasts = vapply(writes, function(w) if (nrow(w)) max(w$time) else NA_real_, 0)
-  read_at = vapply(1:6, function(i) as.numeric(logs[[i]]$time[ids[[i]]]), 0)
+  came = vapply(1:6, function(i) logs[[i]]$came[ids[[i]]], 0)
   expect_false(anyNA(c(heads, lasts)))
-  six = infra01_six(heads, lasts, ended, 0.25 * rep(c(4, 9), each = 3L))
+  gc = infra01_gc(pump$at, pump$gc, lasts, ended)
+  six = infra01_six(came, lasts, ended, 0.25 * rep(c(4, 9), each = 3L), gc)
   expect_true(infra01_six_on_time(six), label = sprintf(paste(
-    "wall %.3f s from the first head written (heads at %s s and ends at %s s from it; each head",
-    "written %s s after the mock read its request; the mock's own lateness in writing the last",
-    "pieces %s s; gptr's delivery of the ends %s s)"
-  ), six$wall, toString(round(heads - min(heads), 3)), toString(round(ended - min(heads), 3)),
-  toString(round(heads - read_at, 3)), toString(round(six$mock_late, 3)),
-  toString(round(six$latency, 3))))
+    "wall %.3f s from the first request (requests at %s s and ends at %s s from it; each head",
+    "written %s s after its request; the mock's own lateness in writing the last pieces %s s;",
+    "gptr's delivery of the ends %s s, R's garbage collection during it %s s)"
+  ), six$wall, toString(round(came - min(came), 3)), toString(round(ended - min(came), 3)),
+  toString(round(heads - came, 3)), toString(round(six$mock_late, 3)),
+  toString(round(six$latency, 3)), toString(round(gc, 3))))
 })
 
 test_that("one pump drives an HTTP stream and a child process together", {

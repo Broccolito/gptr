@@ -39,9 +39,14 @@ cp_wait_fixture = function(script, budget = NULL, should = TRUE, .env = parent.f
 # Every timed finite wait runs under it, so a stalled synchronous step cannot fail its bound.
 cp_wait_clock = function(.env = parent.frame()) {
   r = reactor_get()
+  # a task an earlier test left is named by the start of its body
+  left = vapply(ls(r$tasks), function(id) {
+    strtrim(paste(trimws(deparse(body(r$tasks[[id]]$fn))), collapse = " "), 70L)
+  }, "")
+  if (length(left)) stop("an earlier test left reactor tasks: ", paste(left, collapse = "; "))
   stopifnot(!length(ls(r$transfers)), !length(ls(r$procs)), !length(ls(r$stdin)),
-            !length(ls(r$runs)), !length(ls(r$timers)), !length(ls(r$tasks)),
-            !length(r$queue), !length(r$fifo), identical(r$depth, 0L))
+            !length(ls(r$runs)), !length(ls(r$timers)), !length(r$queue), !length(r$fifo),
+            identical(r$depth, 0L))
   clock = new.env(parent = emptyenv())
   clock$now = reactor_now()
   original_io = reactor_io
@@ -788,7 +793,7 @@ test_that("manual compaction on an active session completes without an orphan co
   # Keep the abort active through admission and manual work, before expectation formatting.
   text = cmd_compact("", session_live(x$s)$ctx)
   manual_completed = reactor_now()
-  compacted = "^Conversation compacted: \\S+ -> \\S+ tokens\\.$"
+  compacted = "^compacted - \\S+ to \\S+ tokens$"
   entries = cp_wait_entries(x$s)
   guard_released = FALSE
   if (admission_ready && admission_guard_released &&
@@ -890,7 +895,7 @@ test_that("a manual command cannot replace a yielded automatic checkpoint", {
   if (identical(short$value, x$s) && short$elapsed < 0.2 && admitted$started &&
       all(admitted$elapsed < 0.2) && all(admitted$values) && admitted$retained &&
       initial_retained && command_retained && direct_retained &&
-      identical(text, "Compaction is already in progress.") && identical(direct, x$s) &&
+      identical(as.character(text), "already compacting") && identical(direct, x$s) &&
       manual_completed < x$guard_at) {
     guard_released = identical(reactor_cancel(x$guard), 1L)
   }
@@ -910,7 +915,7 @@ test_that("a manual command cannot replace a yielded automatic checkpoint", {
   expect_true(initial_retained, info = diagnostic)
   expect_true(command_retained, info = diagnostic)
   expect_true(direct_retained, info = diagnostic)
-  expect_identical(text, "Compaction is already in progress.", info = diagnostic)
+  expect_identical(as.character(text), "already compacting", info = diagnostic)
   expect_identical(direct, x$s)
   expect_true(guard_released, info = diagnostic)
   expect_identical(x$run$compact_pending, pending)

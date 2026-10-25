@@ -103,7 +103,9 @@ gptr_doc(FALSE)
 A missing block makes a model request, and the executed code is recorded below the call.
  The header identifies the block, model, date and prompt hash; the body hash identifies
 its recorded code. `## Decision:` retains a model-supplied note, and `#>` retains bounded
-output. A note is a model explanation, not proof that the code is correct.
+output. A note is a model explanation, not proof that the code is correct. `## Steer:` and
+`## Follow-up:` lines keep what was sent while the call ran. A replayed session's history
+includes them, and a `gptr_steer()` or pipe statement that sends one again is not sent twice.
 
 The document must be writable, and recording needs consent. `gptr_doc(path)` supplies that
 consent explicitly; `record = "off"` prevents automatic recording into discovered documents.
@@ -111,8 +113,27 @@ To opt out for one call, including a call in a bound document, pass
 `.opts = list(record = FALSE)`. Pass it to each call in a pipe chain that should not record.
 `record = TRUE` in `.opts` keeps the usual consent checks; it does not supply consent.
 Without a binding, source discovery can find a call in a document. At an interactive console,
-agreeing to transcript recording creates a script under `.gptr/transcripts/`; an explicit
-`gptr_doc(path, format = "transcript")` selects an R transcript target.
+agreeing to transcript recording creates a script under `.gptr/transcripts/`; binding an `.R`
+file with `gptr_doc()` makes that file the transcript (`format = "transcript"` only labels the
+binding). A transcript holds what passes through gptr: each `peter()` call typed at the console
+and each prompt of the `peter()` console as `s_<id> = peter("prompt", <context names>)` with its
+block, the console's `!`, `!!` and fenced R lines under `# direct R (no model)`, and slash
+commands as comments. A run that was aborted or stopped early (an error, `max_turns`, a blocked
+call or the budget) is recorded too, with a last `## Run: <status>` line, and the next prompt
+continues its session. Other code typed at R's own `>` prompt is not recorded, so a transcript
+whose turns use objects made there fails on replay; create such inputs with `!code` in the
+`peter()` console.
+
+Recording also needs the agent's code to run. In the default `manual` mode, code that changes
+objects, such as storing `top` above, waits for approval. Nobody can approve under `Rscript`,
+or in `rmarkdown::render()` even from the console, so the run stops with
+`gptr_error_permission` and no block is written. For such a run, set auto mode for this R
+session first, pass `mode = auto` to the call, or add `gptr_permissions()` rules. Replaying a
+fresh block needs no approval.
+
+```{r, eval = FALSE}
+gptr_config(mode = auto, .scope = "session")
+```
 
 Main-session recorded code runs as ordinary document code on replay. Keep its input objects
 in the document's evaluation environment, using `peter()`'s default caller environment. An
@@ -142,7 +163,7 @@ R Markdown, Quarto and Jupyter formats; pending writes can be recovered before l
 |---|---|
 | `"auto"` | Replay fresh blocks; run missing or stale calls through the selected model. |
 | `"replay"` | Never call a model; a missing or stale record signals `gptr_error_not_recorded`. |
-| `"live"` | Ask the model again and rewrite recorded blocks when writing is allowed. |
+| `"live"` | Ask the model again and rewrite recorded blocks when writing is allowed, under `gptr_source()`, knitr or Quarto, an IDE or Jupyter; under base `source()` or Rscript a recorded block replays with a warning. An undone block runs without being rewritten, and `"record"` regenerates it. |
 | `"record"` | Regenerate stale blocks; fresh blocks replay. |
 
 A call's `replay =` argument wins over process options, the `GPTR_REPLAY` environment variable
@@ -172,7 +193,8 @@ apply them with `gptr_doc(path, sync = TRUE)`.
 ## R Markdown, Quarto and Jupyter
 
 In `.Rmd` and `.qmd`, a recorded block becomes a chunk labeled `gptr-<id>` after its calling
-chunk. Bind the report, run it with its normal renderer, then inspect the recorded blocks:
+chunk. A binding belongs to the R process that made it. `rmarkdown::render()` knits in the
+calling R session, so a binding made there covers the report:
 
 ```{r, eval = FALSE}
 gptr_doc("analysis.Rmd")
@@ -181,17 +203,31 @@ gptr_blocks("analysis.Rmd")
 gptr_doc(FALSE)
 ```
 
-Use `quarto render analysis.qmd` for `.qmd`; `gptr_source()` is not a renderer for either
-format. Arrange the document's setup to load gptr, prepare its input data and select a model
-or replay mode. Plain R chunks still execute when the report is rendered.
+`quarto render`, `quarto::quarto_render()` and RStudio's Knit and Render buttons run the
+document in another R process, which a binding made at the console does not reach: nothing is
+recorded and nothing is said. Bind such a document in its own setup chunk, then render it as
+usual:
+
+```{r, eval = FALSE}
+# The setup chunk of analysis.qmd:
+library(gptr)
+gptr_doc("analysis.qmd")
+```
+
+`gptr_source()` is not a renderer for either format. Arrange the document's setup to load
+gptr, prepare its input data and select a model or replay mode. Knitting cannot ask for
+approval, so allow the agent's code as described for `Rscript` above. Plain R chunks still
+execute when the report is rendered.
 
 For Jupyter, bind the saved `.ipynb` path in the R kernel. Blocks become agent cells. Writes
-are queued while the notebook is open to avoid competing with the notebook editor; after
-closing it, apply the pending blocks:
+are queued while the notebook is open to avoid competing with the notebook editor. The queue
+is kept in the project's `.gptr/` or, outside one, in `tools::R_user_dir("gptr", "cache")`, so
+after closing the notebook any R session can apply it and report how many blocks it wrote:
 
 ```{r, eval = FALSE}
 gptr_doc("analysis.ipynb")
 # Run the notebook's `peter()` calls in its R kernel, then save and close the notebook.
+# In another R session:
 gptr_doc("analysis.ipynb", sync = TRUE)
 gptr_blocks("analysis.ipynb")
 gptr_doc(FALSE)
@@ -257,13 +293,22 @@ follow each operand of this separate-line pipeline. Other layouts keep feedback 
 complete statement. Notes and output are comments, not assertions that the analysis is correct.
 Each block keeps at most twelve output lines and eighty characters per output line.
 
-Export requires fresh completed records and no pending sidecar. It refuses computed or nested
-prompts, mixed `peter()`/ordinary pipelines, shared-line statements, interpolated-input hashes,
-missing or edited blocks and secret-marked records. Raw export also refuses later ordinary code
-that depends on a removed session handle, such as `session$value`; put needed results in
-ordinary R objects, or retain the `format = "peter"` output. Earlier unrecorded console input is
-not reconstructed. Preserved user code can still require gptr or other packages, read or write
-files, or call the network. Export is a source transformation, not verified replay.
+Export requires fresh completed records and no pending sidecar. Each argument of an exported
+`peter()` call must be a quoted string, a number, `TRUE`, `FALSE` or `NULL` (not `NA` or a
+negative number). Any other argument is refused as a "mixed or non-literal Peter expression":
+a data object, as in `peter("Fit mpg on wt.", mtcars)`, a bare name such as `mode = auto` or
+`model = opus`, a call such as `.opts = list(max_turns = 4)`, or the session that a later
+`session |> peter("...")` statement continues, since R reads it as `peter(session, "...")`. A
+pipeline written as one statement, such as the first `session` above, is admitted. Write the
+value itself, as in `mode = "auto"`; editing an argument this way keeps its block fresh, so the
+block needs no new recording. Export also refuses computed or nested prompts, prompts that
+interpolate `{name}` values ("interpolated inputs need review"), mixed `peter()`/ordinary
+pipelines, shared-line statements, missing, stale or edited blocks and secret-marked records. A
+raw export refuses later ordinary code that reads a session handle, such as `session$value`
+or `session$text`, and a function that names one, wherever it is defined; put needed results in
+ordinary R objects, or retain the `format = "peter"` output. Earlier unrecorded console input is not
+reconstructed. Preserved user code can still require gptr or other packages, read or write files, or
+call the network. Export is a source transformation, not verified replay.
 
 ## Asking Peter to summarize a completed workflow
 

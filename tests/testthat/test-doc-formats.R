@@ -114,14 +114,26 @@ test_that("undone blocks become inert in R, Rmd and qmd and can be revived", {
 })
 
 test_that("console transcripts record the first prompt as an assignment and later ones as pipes", {
+  proj = local_project()
+  log = file.path(proj, ".gptr", "transcripts", "gptr-session-20260929-183000.R")
   site = list(console = TRUE, session_id = "sab12cd3456", template = "fit mpg on weight",
-              session_file = ".gptr/sessions/20260929T183000_sab12cd3456.jsonl")
+              session_file = ".gptr/sessions/20260929T183000_sab12cd3456.jsonl", path = log)
   block = doc_render_block("a1b2c3", list(model = "m", prompt = prompt_hash("fit mpg on weight")),
                            "fit = lm(mpg ~ wt, data = mtcars)")
   t1 = doc_transcript_upsert(character(), site, block, "a1b2c3")
   expect_match(t1[1], "^# gptr session sab12cd3456 -- started ")
   expect_identical(t1[2], "# machine log: .gptr/sessions/20260929T183000_sab12cd3456.jsonl")
-  expect_identical(t1[5], "library(gptr)")
+  # only gptr_source() regenerates: under source() the option replays with a warning; the
+  # transcript is named from the project root, where the console runs (FIX-16)
+  expect_identical(t1[3:5], c(
+    "# source() this file to replay the recorded code without calling a model;",
+    paste0("# gptr_source(\".gptr/transcripts/gptr-session-20260929-183000.R\", replay = ",
+           "\"live\") re-asks the model."), "library(gptr)"))
+  outside = utils::modifyList(site, list(path = file.path(withr::local_tempdir(), "log.R")))
+  expect_true(paste0("# gptr_source(", doc_str_literal(path_norm(outside$path)),
+                     ", replay = \"live\") re-asks the model.") %in%
+                doc_transcript_upsert(character(), outside, block, "a1b2c3"))
+  expect_false(any(grepl("options(gptr.replay", t1, fixed = TRUE)))
   expect_identical(t1[6:7], c("", "s_ab12cd = peter(\"fit mpg on weight\")"))
   site2 = utils::modifyList(site, list(template = "add \"predictions\"\nnow",
                                        context_labels = "mtcars"))
@@ -136,6 +148,28 @@ test_that("console transcripts record the first prompt as an assignment and late
   expect_identical(rmd[1:6], c("# Notes", "", "```{r}", "s_ab12cd = peter(\"fit mpg on weight\")",
                                "```", ""))
   expect_identical(rmd[7], "```{r gptr-a1b2c3}")
+})
+
+test_that("a transcript names the machine log only when it outlives R (.gptr/)", {
+  console_turn = function(proj) {
+    t = file.path(proj, "log.R")
+    local_doc_binding(t, "transcript")
+    s = doc_test_session(list(doc_test_turn("n = nrow(mtcars)")))
+    site = doc_console_site(session_id = session_data(s)$id, template = "count rows")
+    doc_on_agent_end(list(status = "idle", doc = site, turns = 1L), list(session = s))
+    list(file = session_data(s)$file, text = readLines(t))
+  }
+  # without .gptr/ the log is in tempdir()/gptr, which R deletes at exit
+  x = console_turn(local_project(gptr = FALSE))
+  expect_true(path_inside(x$file, file.path(tempdir(), "gptr")))
+  expect_identical(x$text[2],
+                   "# machine log: none kept (gptr_init() keeps session logs in .gptr/)")
+  for (tmp in unique(c(tempdir(), path_norm(tempdir())))) {
+    expect_false(any(grepl(tmp, x$text, fixed = TRUE)))
+  }
+  # a .gptr/ project under tempdir() keeps its relative path
+  x = console_turn(local_project())
+  expect_identical(x$text[2], paste0("# machine log: .gptr/sessions/", basename(x$file)))
 })
 
 # ---- adaptations (dev/DEVIATIONS.md D-070) ------------------------------------------------------
@@ -809,7 +843,10 @@ test_that("an open notebook and the running script are never written; inert mark
   expect_identical(doc_sidecar_read(nb)$upserts[[1]]$block_id, "7f3a21")
   expect_false(doc_set_inert(nb, "7f3a21"))
   withr::local_options(jupyter.in_kernel = FALSE)
-  expect_identical(doc_sync(nb), 1L)
+  expect_message({
+    n = doc_sync(nb)
+  }, "Wrote 1 block(s) into x.ipynb.", fixed = TRUE, class = "gptr_message_notice")
+  expect_identical(n, 1L)
   cell = nb_parse(readLines(nb, encoding = "UTF-8"))$cells[[4]]
   expect_identical(nb_cell_meta(cell)$status, "undone")
   expect_identical(nb_cell_lines(cell), "#~ a = 1")

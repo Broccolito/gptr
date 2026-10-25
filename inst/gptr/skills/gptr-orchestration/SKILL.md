@@ -29,7 +29,7 @@ place (no copy) and its own objects stay in its own environment.
 reviews = peter("Review analysis.R for statistical errors.",
                agents = list(stats = agent(model = "opus", skills = "statistics"),
                              code = agent(model = "codex"),
-                             biology = agent(model = "gemini")))
+                             biology = agent(model = "flash")))
 reviews$stats$text                  # one member
 reviews$text                        # every report under a "### <name> (<model>)" heading
 fixes = reviews |> peter("Reconcile these into one list of fixes")
@@ -57,7 +57,7 @@ processed.
 
 ```r
 both = gptr_parallel(plan = peter("Plan the analysis", model = "opus"),
-                     lit = peter("Summarise the literature on X", model = "gemini"))
+                     lit = peter("Summarise the literature on X", model = "flash"))
 ```
 
 ## Typed decisions in control flow

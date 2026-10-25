@@ -276,6 +276,24 @@ test_that("model specs are keyed provider/id", {
   expect_error(gptr_spec("model", "corp/a", id = "b"), class = "gptr_error_invalid_spec")
 })
 
+test_that("model prices are a data frame or a list of price records, checked at registration", {
+  local_registry()
+  priced = function(prices) {
+    gptr_provider("p1", "openai-completions", base_url = "https://x.invalid/v1",
+                  models = list(list(id = "m", prices = prices)))$models[[1]]$prices
+  }
+  df = priced(data.frame(input = 5, output = 25))
+  expect_identical(priced(list(list(input = 5, output = 25))), df)
+  expect_identical(df$input, 5)
+  expect_identical(gptr_spec("model", "corp/x", prices = list(list(input = 1, output = 2)))$prices,
+                   prices_df(list(list(input = 1, output = 2))))
+  for (bad in list(data.frame(input = "five", output = 25),
+                   data.frame(input = c(5, 6), output = c(25, 26)))) {
+    err = expect_error(priced(bad), class = "gptr_error_invalid_spec")
+    expect_identical(err$field, "models[[1]].prices")
+  }
+})
+
 test_that("hook specs accept catalogued events and plugin channels only", {
   local_registry()
   expect_equal(gptr_spec("hook", "tool_result", event = "tool_result",

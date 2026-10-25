@@ -14,6 +14,7 @@ arch_layer_table = function() {
     "utils-paths.R", "L0", "P01",
     "utils-text.R", "L0", "P01",
     "utils-tokens.R", "L0", "P01",
+    "utils-size.R", "L0", "P09",
     "json-encode.R", "L0", "P01",
     "json-partial.R", "L0", "P01",
     "json-schema.R", "L0", "P01",
@@ -165,15 +166,16 @@ arch_kernel_sdk = function() {
 # the full id behind a CLI's `default` with P20's pcli_default_model() (section 11.10, D-226), the
 # console takes back the person's queued steers with session_unqueue() (section 7.6, D-242), and its
 # run status and /context measure the context left against P07's compact_threshold() of
-# prompt_model()'s record (IC-77, D-245)
+# prompt_model()'s record (IC-77, D-245); P19's team and fan-out routes refuse the System 1
+# arguments with P08's route_refuse_s1_args() (section 6.1.1 step 5, D-250)
 arch_contract_edges = function() {
   data.frame(
     caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp",
-                    "console", "console", "console", "console", "console"),
+                    "console", "console", "console", "console", "console", "subagent"),
     callee = c("code_targets", "session_new", "session_new", "tool_call_hook", "tool_run",
                "tool_execute_frame", "checkpoint_before", "checkpoint_after", "perm_denial_text",
                "perm_refused", "model_canonical", "pcli_default_model", "session_unqueue",
-               "compact_threshold", "prompt_model")
+               "compact_threshold", "prompt_model", "route_refuse_s1_args")
   )
 }
 

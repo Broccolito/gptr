@@ -36,19 +36,23 @@ console_write = function(lines) {
 }
 
 #' The person's rows at column 0 (D-242): `glyph`, a space and the escaped `text`, wrapped inside
-#' the console width with the later rows under the text; for a finite `n`, cut to `n` rows of
-#' that width, the cut marked with an ellipsis
+#' the console width with the later rows under the text; for a finite `n` (a held line), its lines
+#' joined by a blank, as the live row shows them, and cut to `n` rows of that width, the cut marked
+#' with an ellipsis
 #' @noRd
 console_person_rows = function(glyph, text, n = Inf) {
   lead = paste0(glyph, " ")
   width = max(20L, cli::console_width() - 1L - nchar(lead))
-  rows = console_wrap(console_lines(text), width)
+  lines = console_lines(text)
+  if (is.finite(n)) lines = paste(lines, collapse = " ")
+  rows = console_wrap(lines, width)
   if (is.finite(n)) {
     ell = console_style()$ellipsis
     more = length(rows) > n
     rows = console_cut(utils::head(rows, n), width, ell)
     if (more) {
-      rows[[n]] = paste0(cli::ansi_strtrim(rows[[n]], width - nchar(ell), ellipsis = ""), ell)
+      cut = cli::ansi_strtrim(rows[[n]], width - nchar(ell), ellipsis = "")
+      rows[[n]] = paste0(sub(" +$", "", cut), ell)
     }
   }
   paste0(ifelse(seq_along(rows) == 1L, lead, strrep(" ", nchar(lead))), rows)
@@ -77,7 +81,8 @@ console_notice = function(..., .error = FALSE) {
 
 #' Chunk-invariant markdown stream renderer (contract 7.14)
 #'
-#' Returns an environment with `write(delta)` and `finish(cut = FALSE)`, writing to stdout; a cut
+#' Returns an environment with `write(delta)`, which an interrupt waits for, and `finish(cut =
+#' FALSE)`, writing to stdout; a cut
 #' (an abort, an unusual end) writes all it received and ends a non-empty held row with a dim
 #' ellipsis.
 #' Styling (bold, italic within one token, inline code in the blue accent, link URLs, quotes,
@@ -395,13 +400,19 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     invisible()
   }
   r = new.env(parent = emptyenv())
+  # an interrupt (a D console's Ctrl-C) waits for the delta's end: one landing inside it would drop
+  # the rest of the delta, which only this call holds
   r$write = function(delta) {
-    refresh_width()
-    ingest(delta)
-    flush(stdout())
-    utils::flush.console()
+    suspendInterrupts({
+      refresh_width()
+      ingest(delta)
+      flush(stdout())
+      utils::flush.console()
+    })
     invisible()
   }
+  # text received and not yet written: a held row, a word, a table
+  r$holds = function() nzchar(st$row) || grepl("\\S", st$buf) || length(st$table) > 0L
   r$finish = function(cut = FALSE) {
     refresh_width()
     ingest("", final = TRUE)
@@ -522,14 +533,15 @@ console_drop = function(run_id) {
   invisible(NULL)
 }
 
-#' A foreground session: depth 0, live, not handed to P21's background pump; unless `tools`,
-#' never while a tool executes on the stack, whose events (nested calls: `details$nested`) are
-#' the model's, not the person's
+#' A foreground session: depth 0, live, not handed to P21's background pump, or one the console's
+#' R code waits for (console_wait()); unless `tools`, never while a tool executes on the stack,
+#' whose events (nested calls: `details$nested`) are the model's, not the person's
 #' @noRd
 console_foreground = function(rec, tools = FALSE) {
   live = session_live(rec$session)
-  !is.null(live) && is.null(live$background) &&
-    identical(session_data(rec$session)$depth, 0L) && (tools || is.null(run_current()))
+  d = session_data(rec$session)
+  !is.null(live) && (is.null(live$background) || d$id %in% console_state()$waited) &&
+    identical(d$depth, 0L) && (tools || is.null(run_current()))
 }
 
 #' Show a sub-agent's start and end (D-188): a child run (depth 1+) whose outermost run is in the
@@ -545,16 +557,32 @@ console_child_shown = function(run) {
 }
 
 #' One line about a sub-agent, on a finished line, two columns in as its prompts (D-188), after
-#' the agent's blue block in the console's colours, also from the agent's r code (D-245), cut to
-#' the console width (D-224) before its last words `keep`, which stay (Task 36: ` started`)
+#' the agent's blue block in the console's colours, also from the agent's r code (D-245), whose
+#' call's block it then belongs to, cut to the console width (D-224) before its last words `keep`,
+#' which stay (Task 36: ` started`; a done line's outcome): its label's name is cut first, inside
+#' its quotes, so its run tag (` #1`) and `text` stay too and one sub-agent's lines cut alike
 #' @noRd
 console_child_line = function(rec, text, keep = "") {
-  console_before_message(tools = TRUE)
+  console_before_message(kind = if (is.null(run_current())) "notice" else "tool", tools = TRUE)
   old = options(cli.num_colors = console_colors())
   on.exit(options(old), add = TRUE)
   sym = console_style()
-  head = paste0("  ", sym$blue(sym$agent), " sub-agent ", rec$child$label, " ", text)
-  console_write(paste0(cli::ansi_strtrim(head, cli::console_width() - nchar(keep)), keep))
+  lead = paste0("  ", sym$blue(sym$agent), " sub-agent ")
+  label = rec$child$label
+  text = paste0(if (nzchar(text)) " ", text)
+  width = cli::console_width()
+  if (nzchar(keep)) {
+    at = regexpr(" #[0-9]+$", label)
+    tag = if (at > 0L) substring(label, at) else ""
+    name = if (at > 0L) substr(label, 1L, at - 1L) else label
+    room = width - cli::ansi_nchar(paste0(lead, tag, text, keep), type = "width")
+    q = if (grepl("^'.+'$", name)) "'" else ""
+    inner = substr(name, 1L + nchar(q), nchar(name) - nchar(q))
+    cut = console_cut(inner, max(1L + nchar(sym$ellipsis), room - 2L * nchar(q)))
+    label = paste0(q, cut, q, tag)
+  }
+  keep_w = cli::ansi_nchar(keep, type = "width")
+  console_write(paste0(console_cut(paste0(lead, label, text), width - keep_w), keep))
 }
 
 #' Render this record on stdout now?
@@ -669,7 +697,7 @@ console_pause_one = function(rec, cut = FALSE) {
   invisible(NULL)
 }
 
-#' End the partial lines of every tracked run, cut (an abort, the pause menu's [b]), and take the
+#' End the partial lines of every tracked run, cut (an abort, the pause menu's `[b]`), and take the
 #' live row down; the next block after it is separated like the first block after an input line
 #' @noRd
 console_render_pause = function() {
@@ -677,9 +705,28 @@ console_render_pause = function() {
   active = console_state()$active
   for (id in ls(active, all.names = TRUE)) {
     rec = get(id, envir = active)
+    if (!is.null(rec$md) && rec$md$holds()) {
+      console_abort_held(rec, isTRUE(session_live(rec$session)$run$signal$aborted))
+    }
     console_pause_one(rec, cut = TRUE)
     rec$paused = TRUE
     rec$last = NULL
+  }
+  invisible(NULL)
+}
+
+#' The text a record held at the pause menu (`rec$paused`) that is written after it: once, where the
+#' run was `aborted`, it continues under a dim `received before the abort:` notice, one block with
+#' it, so it never reads as the model answering after the abort; a delta that arrives after the
+#' menu (console_on_message_update()) or the cut that ends the answer (console_on_message_end(),
+#' console_render_pause()) writes it
+#' @noRd
+console_abort_held = function(rec, aborted) {
+  if (!isTRUE(rec$paused)) return(invisible(NULL))
+  rec$paused = FALSE
+  if (aborted) {
+    console_gap(rec, "text")
+    console_notice(console_style()$dim("received before the abort:"))
   }
   invisible(NULL)
 }
@@ -783,6 +830,29 @@ console_call_line = function(call, width, kind = "act") {
   c(paste0("  ", tone(head)), console_code_rows(lines, lang, 20L, width))
 }
 
+#' Rows wrapped to `width` display columns with their spaces kept (code, a diff): a row breaks at
+#' its last space that fits after its text begins past column `hang` (at most half the width), else
+#' at the width, and goes on `hang` columns in, its styles carried over
+#' @noRd
+console_hang = function(rows, width, hang) {
+  hang = min(hang, width %/% 2L)
+  pad = strrep(" ", hang)
+  unlist(lapply(rows, function(row) {
+    out = character()
+    repeat {
+      plain = strsplit(cli::ansi_strip(row), "", fixed = TRUE)[[1L]]
+      fit = sum(cumsum(nchar(plain, type = "width")) <= width)
+      if (fit >= length(plain)) return(c(out, row))
+      text = hang + match(TRUE, plain[-seq_len(hang)] != " ", nomatch = 0L)
+      sp = which(plain[seq_len(fit + 1L)] == " ")
+      sp = sp[sp > text]
+      cut = if (length(sp)) max(sp) else fit + 1L
+      out = c(out, cli::ansi_substr(row, 1L, cut - 1L))
+      row = paste0(pad, cli::ansi_substr(row, cut + (length(sp) > 0L), length(plain)))
+    }
+  }))
+}
+
 #' Diff rows at column 4 (D-245): at most `n` of the escaped `rows`, `+` rows blue, `-` rows red,
 #' others dim, with a `width` a row wider than it cut, never wrapped, so its code keeps its spaces;
 #' then a dim `(+N more lines<more>)`
@@ -830,7 +900,7 @@ console_result_lines = function(call, result, width, kind = "act") {
   if (isTRUE(result$is_error)) {
     err = console_escape(text_lines(d$error %||% console_msg_text(result)), FALSE)
     if (!length(err)) err = "failed"
-    err[[1L]] = paste0("error: ", err[[1L]], secs)
+    err[[1L]] = paste0("error: ", err[[1L]], if (!isTRUE(d$interrupted)) secs)
     rows = console_wrap(paste0(pad, err), width)
     more = if (length(rows) > 6L) paste0(pad, sym$ellipsis)
     return(c(sym$red(c(utils::head(rows, 6L), more)), if (length(changes)) sym$dim(changes)))
@@ -988,14 +1058,8 @@ console_on_message_update = function(event, ctx) {
   think = identical(kind, "thinking") &&
     (verbosity() >= 3L || identical(session_live(rec$session)$run$model[["type"]], "cli"))
   visible = identical(kind, "text") || think
-  if (visible && isTRUE(rec$paused) && any(nzchar(delta))) {
-    rec$paused = FALSE
-    live = session_live(rec$session)
-    if (isTRUE(live$run$signal$aborted)) {
-      # what arrived before the abort continues under a dim label, one block with it
-      console_gap(rec, "text")
-      console_notice(console_style()$dim("received before the abort:"))
-    }
+  if (visible && any(nzchar(delta))) {
+    console_abort_held(rec, isTRUE(session_live(rec$session)$run$signal$aborted))
   }
   if (identical(kind, "text")) {
     if (!is.null(rec$think)) rec$think$finish()
@@ -1057,7 +1121,9 @@ console_on_message_end = function(event, ctx) {
     if (is.null(rec$md)) {
       console_print_text(console_msg_text(msg), console_stream_output(rec))
     } else {
-      rec$md$finish(cut = isTRUE(msg$stop_reason %in% c("aborted", "error", "length")))
+      aborted = identical(msg$stop_reason, "aborted")
+      if (rec$md$holds()) console_abort_held(rec, aborted)
+      rec$md$finish(cut = aborted || isTRUE(msg$stop_reason %in% c("error", "length")))
     }
     rec$think = NULL
     rec$md = NULL
@@ -1145,16 +1211,18 @@ console_on_tool_end = function(event, ctx) {
   NULL
 }
 
-#' retry_start: say that a request is retried
+#' retry_start: say that a request is retried, and the class of its error where it has one
 #' @noRd
 console_on_retry = function(event, ctx) {
   rec = console_record(event)
   if (is.null(rec) || !console_render_on(rec)) return(NULL)
   console_pause_one(rec)
   console_gap(rec, "notice")
-  console_write(console_style()$dim(sprintf("  retrying in %.1f s (%s)",
-                                            as.numeric(event$delay %||% 0),
-                                            console_escape(event$class %||% "error", FALSE))))
+  # err_class() gives NA for an error of no known class, a retry its text chose
+  cls = event$class
+  why = if (rlang::is_string(cls) && !is.na(cls)) paste0(" (", console_escape(cls, FALSE), ")")
+  console_write(console_style()$dim(sprintf("  retrying in %.1f s%s",
+                                            as.numeric(event$delay %||% 0), why %||% "")))
   NULL
 }
 
@@ -1168,18 +1236,26 @@ console_on_compact = function(event, ctx) {
            right = TRUE)
   console_pause_one(rec)
   console_gap(rec, "notice")
-  console_write(console_style()$dim(paste0(
-    "  conversation compacted: ", format_count(e$tokens_before %||% NA_real_), " -> ",
-    format_count(e$details$tokens_after %||% NA_real_), " tokens")))
+  console_write(console_style()$dim(paste0("  ", console_compacted(e))))
   NULL
+}
+
+#' A compaction entry's result in the status line's terms (D-245): `compacted`, the separator and
+#' `<before> to <after> tokens`, or `compacted` alone where a count is unknown
+#' @noRd
+console_compacted = function(e) {
+  n = c(e$tokens_before %||% NA_real_, e$details$tokens_after %||% NA_real_)
+  if (anyNA(n)) return("compacted")
+  paste0("compacted", console_style()$sep, format_count(n[[1L]]), " to ", format_count(n[[2L]]),
+         " tokens")
 }
 
 #' agent_end: take the live row down, close the streams, show custom entries and the status line,
 #' forget the run; queued artifact lines (an interrupted tool) print last, then what the person
 #' queued and the run did not take (console_queue_left()), then the blank row before the prompt; a
 #' shown sub-agent, forgotten first so the live row no longer names it, says how it ended, `(k/N)`
-#' counting the settled children of its scheduled group (D-188), a failure with the first line of
-#' its reason, else its status (D-224)
+#' counting the settled children of its scheduled group (D-188): done, its turns and time whole,
+#' its label cut first, or a failure with the first line of its reason, else its status (D-224)
 #' @noRd
 console_on_agent_end = function(event, ctx) {
   on.exit(console_artifact_flush(), add = TRUE)
@@ -1197,13 +1273,14 @@ console_on_agent_end = function(event, ctx) {
     }
     n = event$turns %||% 0L
     sep = console_style()$sep
-    console_child_line(rec, if (identical(event$status, "idle")) {
-      paste0("done", k, sep, n, if (n == 1L) " turn" else " turns", sep,
-             sprintf("%.0f s", as.numeric(Sys.time()) - as.numeric(run$started)))
+    if (identical(event$status, "idle")) {
+      secs = as.numeric(Sys.time()) - as.numeric(run$started)
+      console_child_line(rec, "", paste0(" done", k, sep, n, if (n == 1L) " turn" else " turns",
+                                         sep, sprintf("%.0f s", secs)))
     } else {
       why = c(text_lines(event$reason), event$status, "?")[[1L]]
-      paste0("failed", k, ": ", console_escape(why, FALSE))
-    })
+      console_child_line(rec, paste0("failed", k, ": ", console_escape(why, FALSE)))
+    }
   }
   if (!console_foreground(rec)) return(NULL)
   # the rows charged to the session during the run by other sessions: its sub-agents' (IC-66)
@@ -1214,6 +1291,10 @@ console_on_agent_end = function(event, ctx) {
   sym = console_style()
   v = verbosity()
   if (v == 1L) {
+    # a run the caller sees end in a condition (gateway_signal()) leaves its reason to that
+    if (event$status %in% c("error", "blocked", "budget", "max_turns")) {
+      terms[[1L]] = console_escape(event$status, FALSE)
+    }
     text = paste0("gptr: ", paste(terms, collapse = sym$sep))
     if (identical(event$status, "idle")) {
       console_progress(text)
@@ -1224,11 +1305,23 @@ console_on_agent_end = function(event, ctx) {
   if (v < 2L) return(NULL)
   if (!is.null(rec$think)) rec$think$finish()
   if (!is.null(rec$md)) rec$md$finish(cut = !identical(event$status, "idle"))
+  # a held steer's row gives way: the kept list, the next prompt's echo or its delivery names it
+  rec$queued = Filter(function(x) !x$drop, rec$queued)
   console_gap(rec, "status")
   console_render_custom(rec$session, rec$n0)
-  # in rows ending at whole terms (console_terms()), at the content width
-  rows = console_terms(terms, max(20L, cli::console_width() - 2L * nchar(console_pad())))
-  console_notice(paste(sym$dim(rows), collapse = "\n"))
+  # in rows ending at whole terms (console_terms()), at the content width; a status with its reason
+  # wraps between words on rows of its own, so the reason shows whole, once (repl_turn()), an
+  # error's red as a tool's error row is, and the terms start below it
+  width = max(20L, cli::console_width() - 2L * nchar(console_pad()))
+  rows = if (terms[[1L]] %in% c("done", event$status)) {
+    sym$dim(console_terms(terms, width))
+  } else {
+    tone = if (identical(event$status, "error")) sym$red else sym$dim
+    c(tone(console_wrap(terms[[1L]], width)), sym$dim(console_terms(terms[-1L], width)))
+  }
+  console_notice(paste(rows, collapse = "\n"))
+  st = console_state()
+  st$ended = session_data(rec$session)$id
   on.exit(console_gap(rec, "prompt"), add = TRUE)
   NULL
 }

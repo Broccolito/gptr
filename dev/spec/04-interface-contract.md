@@ -106,7 +106,9 @@ Every exported function validates its arguments on entry with the internal check
 (P01) and signals `gptr_error_invalid_argument` with fields `arg` (the argument name) and `expected` (a short
 phrase), never including the argument's value (it may be large or secret; only `class(x)[1]` and `length(x)` may
 appear). Checkers never use `match.arg()` (copy-safety rule R3); `check_choice()` does exact matching and accepts
-the first element of the default vector when the argument is missing.
+the first element of the default vector when the argument is missing. A string that is not one of the choices is
+reported as such ("the string given is not one of them"), with "Did you mean" and the choice it equals but for
+case (D-250).
 
 ```r
 check_string(x, arg, null = FALSE, empty = FALSE)          # chr(1), not NA
@@ -189,7 +191,9 @@ gptr_inform(message, class, ..., .data = NULL, .once = NULL, .stream = NULL)
 Returns: `gptr_abort()` never returns; `gptr_warn()`/`gptr_inform()` return `invisible(NULL)`. `gptr_inform()`
 is a no-op when `getOption("gptr.quiet")` is `TRUE`. Warnings get class
 `c("gptr_warning_<cls>", "gptr_warning", "warning", "condition")`, messages
-`c("gptr_message_<cls>", "gptr_message", "message", "condition")`. Ordinary messages display on
+`c("gptr_message_<cls>", "gptr_message", "rlang_message", "message", "condition")`, so a console
+handler that takes every other message (RStudio's) leaves their display to gptr, as for cli's and
+rlang's (P28 Task 39). Ordinary messages display on
 stdout after calling handlers, with the standard `muffleMessage` restart; quiet, once keys,
 redaction and metadata remain intact. Actual failure notices may set `.stream = "stderr"`.
 A private stack-scoped protocol binding reserves stdout for JSONL events without changing
@@ -259,7 +263,7 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `doc_write` | - | `path`, `reason` | P15 | a document write failed or was blocked and the caller asked for strictness |
 | `s1` | - | `status`, `error_type`, `request_id`, `model` | P13 | System 1 failure, parent of the next rows |
 | `s1_auth`, `s1_validation`, `s1_rate_limit`, `s1_overloaded`, `s1_connection`, `s1_response` | `s1` | as `s1` | P13 | classified as in 04 §4.12 (scalar calls; vectorised calls give `NA` + one warning) |
-| `s1_uncertain` | `s1` | `prob`, `min_confidence` | P13 | `uncertain = "stop"` inside the uncertain band |
+| `s1_uncertain` | `s1` | `index`, `names` (`NULL` for unnamed input), `confidence`, `prob`, `min_confidence`, `value` (every answer) | P13 | `uncertain = "stop"` inside the uncertain band; the message names the first ten inputs |
 | `s1_labels` | `s1` | `labels` | P13 | a choice label `if()` would read as logical |
 | `mcp` | - | `server` | P18 | parent of MCP errors |
 | `mcp_auth_required` | `mcp` | `server`, `login` | P18 | OAuth needed; names `gptr_login("mcp:<name>")` |
@@ -276,19 +280,26 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `internal` | - | `detail` | any | a broken invariant (a bug) |
 
 Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `deprecated` (P02), `two_prompts` (P08;
-two unnamed string literals), `replay_downgraded` (P15; live/stale regeneration downgraded under `source()`),
+two unnamed string literals), `partial_name` (P08; a named context dot abbreviates a `peter()` argument its value
+fits, D-251), `replay_downgraded` (P15; live/stale regeneration downgraded under `source()`),
 `doc_conflict` (P15; md5 conflict after three attempts), `s1_errors` (P13; failed elements in a vectorised call;
 field `errors`),
 `readline_limit` (P14), `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only
 when `options(gptr.check_prefix = "warn")`), `secret_late` (P03; a newly registered secret already occurs in live
-session entries; field `counts`).
+session entries; field `counts`), `untrusted_setting` (P08; `gptr_config()` saved keys an untrusted project does
+not apply; fields `keys`, `path`; D-250), `unknown_model_setting` (P08; `gptr_config()` saved a model setting
+that does not resolve; fields `key`, `ref`; D-250).
 
 Messages (`gptr_message_<name>`): `alias_shadowed` (P08), `plan_handoff` (P11), `egress_ack` (P08, IC-71), `s1_split` (P13; once per
 session when a data frame is split into several states, naming `I(x)`),
 `billing_env` (P03/P20; names of removed billing variables), `notice`
 (one-time notices: experimental routes, Codex overhead, uncalibrated emulation), `value_rebound` (P06),
+`home_not_kept` (P08; once per session, IC-40), `budget_unpriced` (P06; once per call whose own cost
+limit meets a request of unknown cost, IC-66, D-251),
 `progress` (P14, verbosity 1), `interpolated` (P08, echo of the interpolated prompt at verbosity >= 2; the console
-adds no echo of its own, P28).
+adds no echo of its own, P28),
+`thinking_clamped` (P05/P06; a requested thinking level the model lacks was replaced by the nearest it has;
+once per model and level; D-250).
 
 Transport, adapter and System 1 failures are condition **objects** created (not signalled) by P04, P12 and P13
 with the classes above; they travel in `error` events and in the run. The gateway (P08) signals the stored object
@@ -320,7 +331,7 @@ its roxygen `?gptr_options` section (P25 assembles the page).
 | `gptr.replay` | `chr(1) \| NULL` | settings (`"auto"`) | P08 (resolution), P15 | `"auto"`, `"replay"`, `"live"`, `"record"`; overridden by the call's `replay =` |
 | `gptr.record` | `chr(1) \| NULL` | settings (`"ask"`) | P15 | `"auto"`, `"ask"`, `"off"`: may gptr write into documents (write consent, IC-45) |
 | `gptr.interpolate` | `lgl(1)` | `TRUE` | P08 | `{identifier}` prompt interpolation (§6.1.4) |
-| `gptr.value_copy_max` | `num(1)` | `1048576` | P06 | bytes; designated values below this are deep-copied |
+| `gptr.value_copy_max` | `num(1)` | `2097152` | P06 | bytes; designated values below this are deep-copied (D-247) |
 | `gptr.values_max_bytes` | `num(1)` | `67108864` | P06 | bytes of held value copies and boxes per session |
 | `gptr.max_turns` | `int(1)` | `50L` | P06 | turns per programmatic run |
 | `gptr.max_turns_console` | `int(1)` | `200L` | P14 | turns per console prompt |
@@ -508,7 +519,7 @@ Per assistant message (`msg$usage`):
 | `images` | num(1) | `gptr.images` (estimated image tokens in the input) |
 | `total` | num(1) | `totalTokens` = input + output + cache_read + cache_write_5m + cache_write_1h |
 | `cost` | list(input, output, cache_read, cache_write, total) num(1) each, USD | `cost` |
-| `estimated` | lgl(1) | `gptr.estimated`: TRUE when the provider reported nothing and the estimator filled the row |
+| `estimated` | lgl(1) | `gptr.estimated`: TRUE when the provider reported nothing and the estimator filled the row; a failed reply without content whose request was rejected (HTTP status >= 400) or never received (`network`, `timeout_connect`) records known zeros instead, FALSE (D-251) |
 
 `usage_new(...)` (P05) builds it with zeros for missing fields.
 
@@ -526,7 +537,7 @@ Per request (one row of `.d$usage`, a `data.frame`; §5.5 of `03`):
 | `stop_reason` | chr | as in §4.2 |
 | `started` | POSIXct | request start |
 | `seconds` | num | wall time |
-| `estimated` | lgl | provider reported nothing |
+| `estimated` | lgl | provider reported nothing (a request no provider billed has zeros, FALSE; D-251) |
 | `multiplier` | num | EWMA estimator multiplier in force (§12.5 of `03`) |
 
 The token ledger (`gptr_usage(s, detail = TRUE)`) adds, per request, one row per component with columns
@@ -542,7 +553,7 @@ list(id = chr(1),            # the tool_call block id
      name = chr(1),          # tool name as the model wrote it
      input = named list,     # parsed arguments (after validation and coercion: the validated input)
      raw = chr(1) | NULL,    # raw argument JSON
-     tool = <spec:tool> | NULL,   # NULL when unknown
+     tool = <spec:tool> | NULL,   # NULL when unknown or not offered to the model (D-248)
      nested = lgl(1),        # a peter$ call made inside an r evaluation
      parent_id = chr(1) | NULL,   # the outer r call's id for nested calls
      outer_level = int(1) | NULL, # risk level approved for the outer call
@@ -570,12 +581,12 @@ and produce `gptr_tool_result` objects (§5.7) that `tool_result_message(result,
 | `elapsed` | num(1) | seconds |
 | `out_id` | chr(1)\|NULL | `peter$out()` id when truncated |
 | `spill` | chr(1)\|NULL | spill file path when truncated |
-| `outputs` | chr | printed-output lines of each successful recorded expression group, for `#>` comments (at most `gptr.doc_output_lines` per group, 76 characters each) |
+| `outputs` | list | printed output of each successful recorded top-level expression, for `#>` comments: `list(lines, n)`, its first non-empty lines (at most `gptr.doc_output_lines`, else the setting `doc$output_lines`; 76 characters each) and the count of all of them |
 | `nested` | list | at most 20 `list(tool, summary, is_error, level)` |
 | `bridge` | chr | `#>` digests of bridge calls (`#> sh git status --porcelain: exit 0, 6 lines`) |
 | `artifacts` | chr | paths of artifacts written (`.gptr/artifacts/<id>/app.R`) |
 | `checkpoint` | chr(1)\|NULL | id of the `gptr.checkpoint` entry |
-| `value` | chr(1)\|NULL | name designated through `gptr_return()` during this call (the value itself is held by the session per §5.1) |
+| `value` | chr(1)\|NULL | name designated through `gptr_return()` during this call, for an expression its one-line label (the value itself is held by the session per §5.1) |
 
 `details` of `read`: `path`, `offset`, `limit`, `lines_total`, `truncated`, `image` (lgl), `encoding`, `eol`.
 Of `edit`: `path`, `n_edits`, `fuzzy` (lgl), `diff` (chr, the full unified diff), `document` (lgl: the path is a
@@ -625,7 +636,7 @@ has `type`, `id` (8 hex), `parentId` (id or `null` for the first entry), `timest
 
 | Name | Written by | `data` |
 |---|---|---|
-| `gptr.frozen` | P07 | `{preset, t0, t1, toolsJson, toolNames, sections: [{name, tier, hash, tokens}], model}`; first entry of every session, so resume reproduces the byte-exact prefix |
+| `gptr.frozen` | P07 | `{preset, t0, t1, toolsJson, toolNames, sections: [{name, tier, hash, tokens}], model, mode}`; first entry of every session, so resume reproduces the byte-exact prefix; `mode` is the session's mode at the freeze, the mode a rebuild starts from (D-251) |
 | `gptr.mode_change` | P06 | `{from, to, source}` |
 | `gptr.value` | P06 | `{turn, mode: "name"\|"copy"\|"box", name, address, class, bytes}` (never the value) |
 | `gptr.doc_block` | P15 | `{doc, format, block, action: "insert"\|"replace"\|"stale-regenerate"\|"undone", prompt, sha, lines: [from, to], backend: "file"\|"deferred"\|"rstudio"\|"positron"\|"vscode"\|"transcript"}` |
@@ -634,6 +645,7 @@ has `type`, `id` (8 hex), `parentId` (id or `null` for the first entry), `timest
 | `gptr.checkpoint` | P16 | G7 §3.1 shape (object names, addresses, sizes, classes, capture mode; file paths, hashes, modes; state names; artifact `current` before/after); never values |
 | `gptr.rewind` | P16 | `{from, to, keep, restore, report: [chr]}`; parented at the target, becomes the leaf |
 | `gptr.subagent` | P19 | `{child, backend, model, agent, status, file, usage: {...}}` |
+| `gptr.container_end` | P19 | `{status}`: a team, fan-out or `gptr_parallel()` team settled; written after its last message, it decides the stored status as a final answer does (D-252) |
 | `gptr.artifact` | P23 | `{id, version, url, status, checks}` |
 | `gptr.plan` | P11 | `{path, text_hash, status: "pending"\|"used"\|"superseded"}` |
 | `gptr.cache_break` | P07 | `{provider, model, firstDiff, entry, culprit}` |
@@ -642,7 +654,7 @@ has `type`, `id` (8 hex), `parentId` (id or `null` for the first entry), `timest
 | `gptr.image_elision` | P06 | `{images: [ids]}`: older images projected as omitted (IC-67) |
 | `gptr.scrub` | P03 | `{date, secrets, count}`: `gptr_scrub()` rewrote this file (IC-70) |
 | `gptr.ext` | P02 | `{plugin, state}`: a plugin's JSON-able per-session state (`ctx$state()` persistence) |
-| `gptr.budget` | P06 | `{kind, budget, used}` when a budget stops a run |
+| `gptr.budget` | P06 | `{kind, budget, used, estimate}` when a budget stops a run (`estimate`: the next request's estimated input tokens) |
 
 ### 4.7 Session header line
 
@@ -692,7 +704,7 @@ UTF-8 first (§6.6 of `03`).
 | `context`, `max_output` | num(1)\|NA | tokens |
 | `reasoning` | lgl(1) | supports thinking |
 | `thinking_levels` | chr | levels the model accepts (subset of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) |
-| `thinking` | chr(1)\|NULL | the clamped level requested with `:level` or `.opts$thinking` |
+| `thinking` | chr(1)\|NULL | the clamped level requested with `:level` or `.opts$thinking`: a level the model lacks becomes the nearest it has (upwards first), with a `thinking_clamped` message once per model and level (D-250) |
 | `input` | chr | `text`, `image`, `pdf` |
 | `tool_call`, `structured_output` | lgl(1) | |
 | `prices` | df(`from` Date, `tier` chr, `input`, `output`, `cache_read`, `cache_write_5m`, `cache_write_1h` USD per million) | dated price tiers |
@@ -755,6 +767,7 @@ returns the identical object (`identical(s |> peter("x"), s)`).
 | `home_label` | chr(1) | `"globalenv"`, `"overlay of s…"`, `"<environment>"`, `"frame of f()"` |
 | `plan` | chr(1)\|NULL | pending plan text (plan mode) |
 | `replayed` | lgl(1) | a replayed session |
+| `replay_rows` | int(1)\|NULL | its usage rows when a block was last replayed into it (the footer's `replayed`) |
 | `block` | chr(1)\|NULL | replayed block id |
 | `snapshot` | df\|NULL | last workspace snapshot (names, addresses, fingerprints; no values) |
 | `ext` | named list | per-plugin JSON-able state |
@@ -774,8 +787,8 @@ the valid names):
 
 | Name | Returns |
 |---|---|
-| `text` | chr(1): last final assistant text; `NA_character_` before the first turn; team sessions: the joined `### <name> (<model>)` reports; fan-out: the named chr of child texts |
-| `value` | the latest designated value by turn (§5.1 of `03` value policy); `NULL` when none; name-held values are resolved with `get0(name, home, inherits = FALSE)` (a message `value_rebound` if the address changed); team/fan-out: named list of child values |
+| `text` | chr(1): last final assistant text; `NA_character_` before the first turn; until a continuation gives a team or fan-out its own answer (D-251): team sessions the joined `### <name> (<model>)` reports (a member that did not end `idle` says `(ended with status <status>)` under its heading), fan-out the named chr of child texts |
+| `value` | the latest designated value by turn (§5.1 of `03` value policy); `NULL` when none; name-held values are resolved with `get0(name, home, inherits = FALSE)` (a message `value_rebound` if the address changed); team/fan-out without a value of its own (D-251): named list of child values |
 | `values` | df `turn`, `mode`, `name`, `class`, `bytes` |
 | `usage` | a `gptr_usage` df (§5.12) of this session and its children |
 | `cost` | num(1) USD |
@@ -783,7 +796,7 @@ the valid names):
 | `messages` | list of messages on the active branch (R shape, unprojected) |
 | `model`, `mode`, `status`, `reason`, `id`, `kind`, `file` | chr(1) |
 | `turns` | int(1) |
-| `envir` | the kept home environment, or `NULL` |
+| `envir` | the kept home environment, or `NULL` (a session started in a function frame [R2], a detached copy) |
 | `children` | named list of child sessions |
 | `ext` | named list of plugin state |
 | `plan` | chr(1) or `NULL` |
@@ -796,7 +809,7 @@ the valid names):
 
 | Method | Behaviour |
 |---|---|
-| `print(x, ...)` | the last answer through `msg_verbatim()` (rendered markdown when the console renderer is available), then a dim footer `status . model . turns . tokens . cost . id`; returns `invisible(x)`; never touches user objects |
+| `print(x, ...)` | the last answer through `msg_verbatim()` (rendered markdown when the console renderer is available), then a dim footer `status . model . turns . tokens . cost . id` (a replayed session's status reads `replayed` until a request adds usage, and its tokens and cost read unknown while it holds no stored request; IC-46, IC-74); a team or fan-out without its own answer shows each child's report under `### <name> (<model>)`, as a team's `$text` joins them (D-251; also the notebook repr); returns `invisible(x)`; never touches user objects |
 | `format(x, ...)`, `as.character(x, ...)` | `$text` |
 | `summary(object, ...)` | complete `gptr_session_summary` table with a detached character-only metadata snapshot; no model request |
 | `print.gptr_session_summary(x, n = 8L, ...)` | recent messages, omitted count and session metadata at current console width; safe display copy; `n = Inf` shows all rows |
@@ -945,7 +958,7 @@ contain no value.
 | Class | Owner | Shape | `print` |
 |---|---|---|---|
 | `gptr_lines` | P10 | chr (file lines) + attributes `path`, `offset`, `limit`, `total`, `truncated`, `encoding` | Pi's read format, within `gptr.helper_output_tokens` |
-| `gptr_patch` | P10 | list(path, message, diff (chr), n_edits, fuzzy (lgl)) | the message; the diff only when `fuzzy` |
+| `gptr_patch` | P10 | list(path, message, diff (chr), n_edits, fuzzy (lgl), reasons (chr, D-248)) | the message; only when `fuzzy`, the bracketed reasons and the diff (D-248) |
 | `gptr_matches` | P10 | `c("gptr_matches", "data.frame")`: `file`, `line` (int), `text`; attr `truncated`, `limit` | `file:line: text` lines within 1,500 tokens, then a notice |
 | `gptr_files` | P10 | `c("gptr_files", "data.frame")`: `path`, `size` (num), `mtime` (POSIXct), `type` (`file`, `dir`, `link`) | paths within 1,500 tokens |
 | `gptr_cmd` | P22 | list(cmd (chr), status (int), ok (lgl), stdout (chr(1)), stderr (chr(1)), elapsed, timed_out (lgl), id (out id)) | head 40% / tail 60% within `max_tokens`, stderr at most 25% with 200/100-token floors [G5 fact-check]; `format`/`as.character` give stdout |
@@ -976,7 +989,7 @@ All are `c("gptr_<name>", "gptr_listing", "data.frame")`, built by `new_listing(
 | `gptr_sessions` | P06 | `id`, `file`, `created`, `updated`, `turns`, `model`, `status`, `title` (first prompt, 60 chars), `live` (lgl) |
 | `gptr_models` | P05 | `ref`, `provider`, `name`, `context`, `max_output`, `input_price`, `output_price`, `reasoning`, `aliases`, `status` |
 | `gptr_providers` | P05 | `id`, `type`, `api`, `credential` (`"NAME #fp"` or `NA`), `source`, `status`, `default_model`, `egress` (`ack`/`needed`), `version` (CLIs); optional `login` when `check_login = TRUE` |
-| `gptr_mcp_servers` | P18 | `name`, `source` (`gptr:user`, `gptr:project`, `claude-code:user`, ...), `transport`, `era`, `status`, `tools`, `exposure`, `tokens`, `trusted` |
+| `gptr_mcp_servers` | P18 | `name`, `source` (`gptr:user`, `gptr:project`, `claude-code:user`, ...), `transport`, `era`, `status`, `tools`, `exposure`, `tokens`, `trusted` (the spec's: annotations trusted by the user file, §11.7; project trust is status `untrusted`) |
 | `gptr_skills` | P17 | `name`, `description`, `source`, `path`, `tokens`, `visible` |
 | `gptr_agents` | P17 | `name`, `description`, `model`, `backend`, `source`, `path` |
 | `gptr_plugins` | P17 | `name`, `version`, `api`, `kind` (`package`, `directory`, `claude-plugin`), `enabled`, `state`, `provides`, `tokens`, `path` |
@@ -1023,7 +1036,10 @@ peter = function(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 ```
 
 `peter` carries class `c("gptr_gateway", "function")` (§5.3). All formals follow `...`, so they match only by
-exact name.
+exact name. A named context dot whose name (two characters or more) is a prefix of a formal or that formal plus
+`s`, and whose value fits it (character: `model`, `mode`, `skills`, `plugins`, `extensions`, `tools`, `prompt`,
+`replay`; a plain list: `.opts`, `budget`, `agents`; a function or spec: `model`, `extensions`, `tools`), stays
+context and signals the warning `partial_name` naming each such formal (D-251).
 
 | Argument | Type / default | Meaning and validation |
 |---|---|---|
@@ -1031,7 +1047,7 @@ exact name.
 | `model` | identifier, `<spec:provider>`, `<spec:router>` or `NULL` | resolved by §6.1.3; `NULL` = settings default (§8.4 of `03`); from model code (a call, team or fan-out started inside a run) `NULL` = the running session's model, and a child gets that session's own spec of its model's provider or router (D-210) |
 | `mode` | identifier or `NULL` | one of `plan`, `manual`, `edits`, `auto`, `yolo` (IC-78); a continuation may only keep or change it explicitly; children only tighten |
 | `skills`, `plugins`, `extensions` | identifiers (`c(a, b)`) or `NULL` | names resolved by §6.1.3 (normalised, IC-42); `extensions` also accepts `function(gptr)` factories (loaded with `ext_load(rank = 0L, session = <id>)`, visible to this session only, IC-69) and file paths; plugins and named extensions are enabled for the session through P17's `plugin.enable` service (`gptr_error_not_available` before P17); skills are preloaded as `<skill_content>` through `skill.body` |
-| `tools` | chr, identifiers, `<spec:tool>` list, or `NULL` | tool names; `"+grep"`/`"-write"` modifiers; a preset name (`"minimal"`, `"standard"`, `"readonly"`, `"extended"`); tool specs are registered at rank 0 for this session |
+| `tools` | chr, identifiers, `<spec:tool>` list, or `NULL` | tool names (a bare name adds, as `"+name"`); `"+grep"`/`"-write"` modifiers; one preset name (`"minimal"`, `"standard"`, `"readonly"`, `"extended"`; two are `gptr_error_invalid_argument`, before a continuation switches anything); tool specs are registered at rank 0 for this session; a name (`+`/`-` stripped) that names no tool of the session when its prompt freezes, or at a continuation, is `gptr_error_invalid_argument` with the closest preset or tool (D-251), while names in settings `tools.enable`/`tools.disable` stay a `missing_tool` diagnostic |
 | `agents` | named list or `NULL` | evaluated in a mask where `agent` is `gptr_agent`; names must be unique syntactic names that are not accessor names (IC-71) |
 | `parallel` | `int(1)` >= 1 or `NULL` | fan out one list-like context object over at most `parallel` concurrent children; with `.opts$context = "none"` (which would drop each child's element) `gptr_error_invalid_argument` before any child starts (D-212) |
 | `choices` | chr (>= 2, unique, no logical-looking labels) or factor or `NULL` | System 1 choice question |
@@ -1042,11 +1058,11 @@ exact name.
 | `prompt` | `chr(1)` or `NULL` | explicit prompt; wins over positional selection |
 | `envir` | `env` | where `r` evaluates and objects persist (D-04); a magrittr mask is replaced by its parent [12 §2.B4]; for a continuation an explicit `envir` (tested with `missing(envir)`) beats the session's kept home, which beats the caller frame (IC-40); a new call made inside a run without `envir` evaluates in `overlay_new(<caller>, <running session id>)`, so it reads the caller's objects and keeps its own in `res$envir`, unless the caller is a function frame [R2] (IC-77) |
 | `background` | `lgl(1)` | [experimental] return the running session at once (needs later; P21) |
-| `budget` | `list(tokens =, cost =, turns =)` or `NULL` | per-call limits; each element `num(1)` or `NULL` |
+| `budget` | `list(tokens =, cost =, turns =)` or `NULL` | per-call limits; each element `num(1)` or `NULL`; `turns` counts model requests (retries and children's included, as `run_used()` does), not the prompt turns of `s$turns`; `cost` counts priced requests only, and a request of unknown cost (a model without prices) makes the call inform once that its cost limit is not enforced (`budget_unpriced`, IC-66, D-251) |
 | `replay` | `chr(1)` or `NULL` | `"auto"`, `"replay"`, `"live"`, `"record"` (document replay mode, P15) |
-| `.opts` | named list | rare switches: `thinking` (chr(1)), `max_turns` (int(1)), `context` (`"summary"`, `"names"`, `"none"`), `record` (lgl(1)), `interpolate` (lgl(1)), `timeout` (num(1), seconds for `r`), `output` (`"factor"`), `system` (chr(1) replacing `preamble`/`tools`/`rules`, or a named list overriding sections, `NULL` elements remove), `preset` (a registered `preset` name), `returns` (a JSON Schema list: structured final answer, INFRA-25), `max_active` (int(1)), `backend` (a registered `backend` name or `"auto"`), `frontend` (a registered `frontend` name), `images` (list of image paths, `ggplot` or `recordedplot` objects, IC-44), `seed` (int(1): reproducible sub-agent RNG streams, IC-61), and entries named by a plugin namespace (validated by that plugin's `setting` specs, IC-44); other unknown names signal `gptr_error_invalid_argument` |
+| `.opts` | named list | rare switches: `thinking` (chr(1); on a continuation without `model =` it switches the session's level for this and later turns, as `model = "<ref>:<level>"` does, D-251), `max_turns` (int(1): this call's model requests), `context` (`"summary"`, `"names"`, `"none"`), `record` (lgl(1)), `interpolate` (lgl(1)), `timeout` (num(1), seconds for `r`), `output` (`"factor"`), `system` (chr(1) replacing `preamble`/`tools`/`rules`, or a named list overriding sections, `NULL` elements remove), `preset` (a registered `preset` name), `returns` (a JSON Schema list: structured final answer, INFRA-25), `max_active` (int(1)), `backend` (a registered `backend` name or `"auto"`), `frontend` (a registered `frontend` name), `images` (list of image paths, `ggplot` or `recordedplot` objects, IC-44), `seed` (int(1): reproducible sub-agent RNG streams, IC-61), and entries named by a plugin namespace (validated by that plugin's `setting` specs, IC-44); other unknown names signal `gptr_error_invalid_argument` |
 | `.run` | `lgl(1)` | `FALSE`: build the session with the prompt queued and return it (SDK) |
-| `.stdin` | `lgl(1)` | drive the console from piped standard input [18 §4.2] |
+| `.stdin` | `lgl(1)` | drive the console from piped standard input [18 §4.2]; where R reads its own commands from it (`R < file`: not interactive, no `-f`, `--file=` or `-e`), through R's console connection `stdin()`, whose buffer holds the lines after the call (P28 Task 40) |
 
 #### 6.1.1 Dispatch
 
@@ -1081,7 +1097,14 @@ exact name.
    `console` route signals `gptr_error_not_available`. Every call made while `run_current()` is non-NULL inherits
    the running mode (only tightened) and filters whatever route handles it (IC-53). Top-level team and fan-out
    statements own one document block (IC-47); in replay mode their children pass `replay_guard()`, so
-   `GPTR_REPLAY=replay` still proves that a script makes no model calls.
+   `GPTR_REPLAY=replay` still proves that a script makes no model calls. The `team`, `fanout`, `nested`,
+   `continue` and `new` routes refuse the System 1 arguments before anything starts: `.opts$system1_images`,
+   then the first of `choices`, `levels`, a `threshold` other than 0.5, `min_confidence` and `uncertain`, as
+   `gptr_error_invalid_argument` naming it, since a conversation would ignore them; a decision model serves
+   them, and `model = jev` runs through a chat model after `gptr_config(system1 = "emulate:<ref>")`, which
+   alone moves no call to emulation (IC-74, D-250). P19's call of P08's `route_refuse_s1_args()` is a
+   contract edge of the layering test (12.2). The `classifier` route, which matches first, refuses `agents`,
+   then `parallel`, as `gptr_error_invalid_argument` naming it: a decision model answers in one call.
 
    The console's first-use setup runs before its banner or chat input only for a new interactive
    console without an explicit or effective configured model. It offers the expected Codex and
@@ -1105,10 +1128,29 @@ exact name.
   and `background = TRUE` return it invisibly.
 - System 1 returns a typed vector (§5.2), visibly.
 - Terminal statuses of a programmatic run: `idle` returns normally; `error` signals `gptr_error_provider`;
-  `blocked` signals `gptr_error_permission`; `budget` signals `gptr_error_budget_<kind>`; `max_turns` signals
+  `blocked` signals `gptr_error_permission` (`gptr_error_noninteractive` when the `ask` tool has no one
+  to answer, `03` §6.8.5); `budget` signals `gptr_error_budget_<kind>`; `max_turns` signals
   `gptr_error_max_turns`. Each condition carries the session as `cnd$session`, and the session is also
-  `gptr_last()`. An interrupt (Ctrl-C abort) persists the partial turn and re-signals R's `interrupt` condition so
-  loops stop [15 §4.7].
+  `gptr_last()`. A team or fan-out (`agents =`, `parallel =`) and a `gptr_parallel()` team take the status and
+  stored condition of their first child that did not end `idle`, with `$reason`
+  `"<k> of <n> sub-agents did not finish: <name> (<status>), ..."`; `agents =` and `parallel =` signal that
+  condition, with the container as `cnd$session`, only when no child ended `idle` (D-252). An interrupt (Ctrl-C
+  abort) persists the partial turn and re-signals R's `interrupt` condition so loops stop [15 §4.7].
+- A call refused before its run starts, because its model cannot be reached (egress §3.1, the replay guard, a
+  decision-only model, a disabled provider, the preflight with an Ollama model prepared first, a missing key),
+  records nothing: no turn, no model, level, mode or tool change on a piped session, and `gptr_last()` stays as it
+  was; its condition carries no session (D-251). So does a call refused for its arguments: a continuation's unknown
+  tool name, an unknown plugin or `skills =` name, two presets, `.opts$images` its model does not take,
+  `background = TRUE` without later, or a secret-looking prompt the person declines to send. A piped call's
+  `extensions`, `plugins` and rank-0 specs (`model =`, `tools =`) register first, since the checks read them, and
+  are removed again when it is refused, also while it registers, or interrupted before its turn starts; a call's
+  registry filters (`plugins = "-x"`) stay on the R session only once it is accepted. Building a session (`.run = FALSE`, a `gptr_parallel()` member) checks
+  egress and replay only: `gptr_step()` and `gptr_wait()` check the rest before they start its run, and a member
+  that cannot reach its model ends `error` (`on_error`). A run's first request to its session's model prepares it
+  as the checks do (`model_prepare()` discovers an Ollama model only without current evidence), so a plain call,
+  `gptr_step()`, `gptr_wait()` and a member each discover an Ollama model once, a member at its first request. A
+  piped `.run = FALSE` call applies its model, mode and tools at once; a `gptr_step()` or `gptr_wait()` that then
+  refuses leaves them, with no turn.
 
 #### 6.1.3 Identifier resolution (D-07, `resolve_identifier()`, P08)
 
@@ -1116,11 +1158,12 @@ exact name.
 |---|---|
 | `NULL` | the settings default |
 | string literal | itself |
-| symbol that is a **known identifier** (catalog alias, registered provider/model/router id, mode, preset, skill, plugin, extension, agent name; `identifier_known()`; skill, plugin, extension and agent names compare after `name_norm()` = lower case with `_` and `.` mapped to `-`, IC-42) | its canonical name; a once-per-session `alias_shadowed` message when a *character* variable of that name holds a different value ("used the alias; write !!sonnet"); an ambiguous normalised match is `gptr_error_invalid_identifier` listing the candidates |
+| symbol that is a **known identifier** (catalog alias, registered provider/model/router id, mode, preset, skill, plugin, extension, agent name; `identifier_known()`; skill, plugin, extension and agent names compare after `name_norm()` = lower case with `_` and `.` mapped to `-`, IC-42) | its canonical name; a once-per-session `alias_shadowed` message when a *character* variable of that name holds a different value, or a spec the argument accepts (a provider or router for `model`, a tool for `tools`, an agent for `agents`) has a different `name` (D-250) ("used the alias; write !!sonnet"); an ambiguous normalised match is `gptr_error_invalid_identifier` listing the candidates |
 | `!!x`, `I(x)` | the value of `x` (must be character or a spec) |
 | other symbol bound where the call's promise is evaluated | the formal's promise is forced in a leaf: character -> its value; `<spec:provider>`, `<spec:router>`, `<spec:tool>`, `<spec:agent>` -> registered at rank 0; any other class -> `gptr_error_invalid_identifier` ("`mice` is a data.frame, not a model name") |
 | unknown unbound symbol | the literal name, validated later (`gptr_error_unknown_model` with `adist()` suggestions) |
 | `c(a, "b")`, `+name`, `-name` | element-wise |
+| a binary `-` of names and numbers (`high-performance-r`, `claude-opus-4-6`) | `gptr_error_invalid_identifier`, never evaluated: "`high-performance-r` reads as subtraction; quote the name: skills = "high-performance-r"." |
 | other calls (`if (hard) opus else haiku`) | evaluated in an alias mask (known identifiers bound to their names; parent = the caller); the mask's parent is reset to `emptyenv()` afterwards |
 
 A symbol that looks like a decimal model version (`gpt5.1`) is echoed once; documents always record quoted
@@ -1139,11 +1182,11 @@ disables it. The call record keeps `template` (written to documents, hashed for 
 
 Conditions: `invalid_argument`, `invalid_identifier`, `noninteractive`, `not_available`, `unknown_model`,
 `no_key`, `egress`, `permission`, `provider` (and subclasses), `budget_*`, `max_turns`, `not_recorded`,
-`stale_block`, `missing_package` (background without later), the System 1 errors of §2.2; warning `two_prompts`.
-Side effects: creates or continues sessions; appends to their JSONL store (workspace or `tempdir()`); may
-evaluate model-written R code in `envir` (gated); may write the bound document (P15); may start processes (CLI
-providers, MCP servers, workers) that end with the run or the session. Emits: `route`, `model_select`,
-`session_start` (new sessions), `input`, then the run's events (§10.4).
+`stale_block`, `missing_package` (background without later), the System 1 errors of §2.2; warnings `two_prompts`,
+`partial_name`. Side effects: creates or continues sessions; appends to their JSONL store (workspace or
+`tempdir()`); may evaluate model-written R code in `envir` (gated); may write the bound document (P15); may start
+processes (CLI providers, MCP servers, workers) that end with the run or the session. Emits: `route`,
+`model_select`, `session_start` (new sessions), `input`, then the run's events (§10.4).
 Copy-safety: [R1][R2][R3] (the gateway is the principal entry point of the tracemem suite, `test-copy-gateway.R`).
 
 ```r
@@ -1172,9 +1215,9 @@ Returns `invisible(<absolute path of .gptr>)`. Creates `.gptr/`, `settings.json`
 `inst/templates/settings.json`), `skills/`, `agents/`, `prompts/` (never overwrites existing files; idempotent).
 In a package source (a `DESCRIPTION` with `Package:`) whose `.Rbuildignore` lacks `^\.gptr$` it **offers** the line
 (interactive `gptr_confirm()`; otherwise one `notice` message naming the line); it never writes it silently
-[13 §2.3]. With a human present it then asks a separate question `Trust this project (its settings, extensions and
-MCP servers)? [y/N]` and records the answer with `gptr_trust()`; without a human nothing is trusted. Conditions:
-`noninteractive`, `workspace`, `invalid_argument`. Emits nothing.
+[13 §2.3]. With a human present it then asks a separate question `Trust this project (its settings, skills, prompt
+templates, agent files, extensions and MCP servers)? [y/N]` and records the answer with `gptr_trust()`; without a
+human nothing is trusted. Conditions: `noninteractive`, `workspace`, `invalid_argument`. Emits nothing.
 
 ```r
 d = tempfile("proj"); dir.create(d)
@@ -1196,10 +1239,18 @@ list). Keys are the registered `setting` specs (core keys of §11.2 plus plugin 
 `gptr_error_invalid_argument`. `model`, `small_model`, `system1`, `mode`, `preset` take bare identifiers
 (§6.1.3); a `NULL` value removes the key from the scope. Scopes: `"session"` = this R process; `"project"` =
 `.gptr/settings.json` (needs a workspace, `gptr_error_workspace` otherwise; values that would loosen a `tighten`
-setting are stored but never applied, and other keys apply only in a trusted project, §11.2); `"user"` =
+setting are stored but never applied, a trusted project's `mode` excepted, and other keys apply only in a
+trusted project, §11.2; `mode = yolo` there is `gptr_error_invalid_argument`, D-250); `"user"` =
 `R_user_dir("gptr", "config")/settings.json`. `egress` is accepted only at user scope. Files are written
 atomically with top-level keys merged. Conditions: `invalid_argument`, `workspace`,
-`invalid_identifier`. Emits nothing.
+`invalid_identifier`; after a write to an untrusted project, warning `untrusted_setting` (fields `keys`,
+`path`; once per root and keys) naming the keys its file holds but untrusted cannot apply (those whose
+§11.2 project contribution differs from a trusted one, and `permissions.allow` for permission rules, whose deny
+and ask rules apply untrusted; D-250); and warning `unknown_model_setting` (fields `key`,
+`ref`; D-250) for a saved `model`, `small_model` or `system1` (less `emulate:`) that is not a router and that
+`model_resolve()` reports as `unknown_model` in this session, quoting that message and the undo call; the value
+is kept, since a later registration or catalog refresh can make it valid (§6.1.3), and another resolution error is
+left to the call that uses the model. Emits nothing.
 
 ```r
 old = gptr_config(mode = plan)
@@ -1243,10 +1294,12 @@ gptr_trust(path = ".", trust = NULL)
 ```
 
 `trust = NULL` returns the recorded decision for `project_root(path)` visibly: `TRUE`, `FALSE` or `NA`
-(undecided). `TRUE`/`FALSE` records it in `R_user_dir("gptr", "config")/trust.json` keyed by the normalised
-project path and returns the previous decision invisibly. Trust gates (§6.10 of `03`): project settings beyond
-tightening, `.gptr/extensions/` and project plugin code, project MCP servers, `SYSTEM.md`/`APPEND_SYSTEM.md`,
-project `.env` auto-discovery, provider base-URL overrides, tool and model fields of project agent files.
+(undecided; also a recorded `TRUE` whose fingerprint no longer matches, which is asked again, IC-52, D-252).
+`TRUE`/`FALSE` records it in `R_user_dir("gptr", "config")/trust.json` keyed by the normalised project path and
+returns the previous decision invisibly. Trust gates (§6.10 of `03`): project settings beyond tightening,
+`.gptr/extensions/` and project plugin code, project MCP servers, `SYSTEM.md`/`APPEND_SYSTEM.md`,
+project `.env` auto-discovery, provider base-URL overrides, project skills and prompt templates (D-252), tool and
+model fields of project agent files.
 The record includes the trust fingerprint of the trust-gated files (IC-52). Conditions: `invalid_argument`. Side
 effects: writes `trust.json` (atomic, under a short file lock). Emits nothing (`project_trust` is the first-decision
 event raised when untrusted resources are first used, IC-71). Called from model code during a run it is a
@@ -1456,11 +1509,15 @@ if (interactive()) {
 gptr_doc(path = NULL, format = NULL, sync = FALSE)
 ```
 
-`path = NULL`: returns the current binding `list(path, format)` or `NULL`, visibly. A path binds every `peter()`
-call of this R process (console and script) to that document, which is explicit consent to write it (IC-45);
-`FALSE` unbinds. `sync = TRUE` applies the pending blocks recorded for that document (a Jupyter notebook that was
-open while recording, or unapplied deferred-write sidecars) through the format's writer (IC-50, IC-51). `format`: `"r"`, `"rmd"`,
-`"qmd"`, `"ipynb"`, `"transcript"`; `NULL` = from the extension. Returns the previous binding invisibly.
+`path = NULL`: returns the current binding `list(path, format)` or `NULL`, visibly. A path binds that document to
+this R process, which is explicit consent to write it (IC-45): calls located in it record below themselves, and
+calls located in no document (console, `Rscript -e`, stdin) are appended to it unless it is a notebook (IC-49). A
+call located in another document needs that document's consent; when it cannot be asked, the call is not recorded
+and a `notice` names both documents, once per document (D-249). `FALSE` unbinds. `sync = TRUE` applies the pending
+blocks recorded for that document (a Jupyter notebook that was open while recording, or unapplied deferred-write
+sidecars) through the format's writer (IC-50, IC-51) and informs a `notice`: "Wrote N block(s) into <doc>." or "No
+pending blocks for <doc>." (D-249). `format`: `"r"`, `"rmd"`, `"qmd"`, `"ipynb"`, `"transcript"`; `NULL` = from the
+extension. Returns the previous binding invisibly.
 Conditions: `invalid_argument`.
 
 The binding lives in `the$doc_binding` for this R process; nothing is written until a block is recorded.
@@ -1514,7 +1571,8 @@ gptr_cache(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tm
 ```
 
 `info` returns a `gptr_cache_info` data frame (including unapplied document sidecars, which are never pruned
-automatically, IC-51); `prune` removes S2 entries of deleted blocks, S1 entries unused for
+automatically, IC-51: one row for the workspace root's, one for those of documents outside any `.gptr/` in
+`R_user_dir("gptr", "cache")/pending/`); `prune` removes S2 entries of deleted blocks, S1 entries unused for
 90 days (mtime touched on hit), `cache/tmp` files older than `gptr.spill_days`, the refreshed catalog cache beyond
 the newest, checkpoint blobs per G7 retention; `clear` removes the kind entirely. `prune`/`clear` return the number
 of files removed invisibly. Works on the workspace root (or `tempdir()/gptr`) and `R_user_dir("gptr", "cache")`.
@@ -1553,9 +1611,9 @@ gptr_step(s, turns = 1L)
 
 `s`: `<session>`; `turns`: `int(1)` >= 1 or `Inf`. If `s` is idle with queued input (`.run = FALSE`, a queued
 follow-up or steer), starts a run; then pumps the reactor until `turns` `turn_end` events of `s` have occurred or
-the run settles. A running (background) session is advanced the same way. Returns `invisible(s)`. Conditions:
-`invalid_argument`; the §6.1.2 terminal-status conditions when the run settles in that status. Emits the run's
-events.
+the run settles. A running (background) session is advanced the same way; a `waiting` one is left as it is
+(`gptr_wait()` continues it, §7.21, D-252). Returns `invisible(s)`. Conditions: `invalid_argument`; the §6.1.2
+terminal-status conditions when the run settles in that status. Emits the run's events.
 
 ```r
 s = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")), .run = FALSE,
@@ -1574,7 +1632,8 @@ gptr_wait(x, timeout = Inf)
 queued input, then pumps the reactor until every one has settled or `timeout` seconds passed. Returns
 `invisible(x)`. On timeout the sessions keep running (background) or are left `running` with their run
 suspended (foreground) and a `timeout` condition is **not** raised; the function returns and the statuses say
-`running`. Conditions: `invalid_argument`; terminal-status conditions only for a single session.
+`running`. Conditions: `invalid_argument`; terminal-status conditions only for a single session. Called from the
+console's `!` code it shows the sessions it waits for as the console's foreground (§15.10, P28 Task 51).
 
 ```r
 fake = gptr_fake_provider(list("a"))
@@ -1594,7 +1653,9 @@ The one enqueue function behind the pipe into a running session, the pause menu 
 `text`: `chr(1)` (redacted with the `context` profile at ingress). Appends `list(text, blocks = list(), source,
 t)` to the session's `steer` or `follow_up` FIFO and returns `invisible(s)` at once. Steers are delivered only
 after a complete tool-result message as an operator relay; follow-ups when the agent would otherwise stop; on an
-idle session the item is taken at the next run start. Emits `queue_update`.
+idle session the item is taken at the next run start. Emits `queue_update`. The queue lives in the R process;
+items still queued when it ends are not saved. On an idle replayed session a text equal to one of the steer or
+follow-up notes its replayed blocks recorded is not queued (IC-55).
 
 ```r
 s = peter("Summarise mtcars", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
@@ -1628,7 +1689,7 @@ gptr_fork(s, at = NULL, envir = c("overlay", "shared"))
 |---|---|---|
 | `s` | `<session>` | the source |
 | `at` | `NULL`, `int(1)` >= 0, or `chr(1)` entry id | cut: `NULL` = the last closed boundary (a running source is cut there); `k` = end of turn `k`; `0` = empty conversation; an entry id = that entry |
-| `envir` | `"overlay"` or `"shared"` | `overlay`: the fork evaluates in `new.env(parent = <source home>)` (zero-copy reads, isolated writes); `shared`: the same home |
+| `envir` | `"overlay"` or `"shared"` | `overlay`: the fork evaluates in `new.env(parent = <source home>)` (zero-copy reads; assignments stay in the overlay, while in-place edits of reference objects, data.table `:=` and `<<-` change the source's objects; D-252); `shared`: the same home |
 
 Returns a new idle `<session>` with a new id whose transcript is the source path up to the cut (entry ids kept and
 re-chained); its JSONL file is written lazily at its first own message with `parentSession` and `gptr.forkOf`;
@@ -1683,14 +1744,15 @@ gptr_parallel(..., .list = NULL, max_active = NULL, on_error = c("return", "stop
 an unstarted session, or a session created with `.run = FALSE`; `.list` is a named list of such sessions. All run
 concurrently on one reactor (at most `max_active`, default `gptr.subagents.max_active`, IC-71). Returns a **team session**
 (`kind = "team"`, children named by the argument names; `$text` joins the reports under `### <name> (<model>)`,
-`$value` is the named list of child values). `on_error = "stop"` signals the first child's condition after all
-children settled; `"return"` leaves failed children with status `error`.
+`$value` is the named list of child values, until a continuation gives the team its own, §5.1). `on_error = "stop"` signals the first child's condition after all
+children settled; `"return"` leaves failed children with their status, and the team takes the first one's
+(§6.1.2).
 
 `gptr_map()` is **internal** (IC-36; S-1 keeps one gateway): the function behind `parallel =`, one inline (or
 `backend`) child per element of `.x` (a list, atomic vector or data frame rows), each receiving the prompt and its
 element alone, for every backend: bound in the child's overlay as `.x`, a named list of one (`list(A = <element>)`),
 and attached as `.x[["A"]]` (D-212); it returns a **fan-out session** (`kind = "fanout"`;
-`$text` a named chr, `[[i]]`/`$name` child sessions). Users write `peter("Summarise this", cohorts, parallel = 4)`.
+`$text` a named chr, printed under `### <name> (<model>)` headings (D-251), `[[i]]`/`$name` child sessions). Users write `peter("Summarise this", cohorts, parallel = 4)`.
 Copy-safety: [R1][R3] (an inline or cli child does not copy the element; the bound list is removed and defused when
 the child settles, as checkpoint images are [R6]; `test-copy-subagent.R`; after a worker fan-out the caller's next edit
 still copies it once, D-212).
@@ -1715,14 +1777,18 @@ gptr_last()
 in that store. Reads only the header and last lines of each file.
 
 `gptr_resume()`: `x` = `NULL` (the most recently updated stored session), a session id, a file path, or a detached
-`<session>` (from `saveRDS()`/knitr cache/callr). Returns the live object if one exists in this process;
-otherwise rebuilds the session from its JSONL (leaf = last entry; status `idle` when the tail is a final answer,
-else `interrupted`) with home `envir`; a rebuilt **fork** always gets a fresh `new.env(parent = envir)` overlay
-(IC-46). A file from another machine or tracked by git is rebuilt with a freshly frozen prompt and its user turns
+`<session>` (from `saveRDS()`/knitr cache/callr). Returns the live object if one exists in this process; otherwise
+rebuilds the session from its JSONL (leaf = last entry; mode = the last one its active path records, a `gptr.frozen`
+`mode` or a `gptr.mode_change` `to`, else the `mode` setting (D-251); status `idle` when the tail is a final answer
+or, for a team or fan-out, a `gptr.container_end` with status `idle`, else `interrupted`; D-252) with home `envir`;
+a rebuilt **fork** always gets a fresh `new.env(parent = envir)` overlay (IC-46). A file from another machine or
+tracked by git is rebuilt with a freshly frozen prompt and its user turns
 marked `imported` (IC-52). A detached copy follows the split-brain rules of §5.1 of `03` (`gptr_error_split_brain`).
 `block = "<id>"` (and `child = "<name>"` for team blocks) returns the session that replay bound to that document
-block in this process, or signals `gptr_error_replay_unbound`; it never falls back to `envir` (IC-46). Conditions:
-`invalid_argument`, `split_brain`, `busy`, `replay_unbound`.
+block in this process, or signals `gptr_error_replay_unbound`; it never falls back to `envir` (IC-46). Without a
+workspace the store lasts until R exits: a store miss (`x = NULL` with no stored session, or an id no stored file
+matches) then adds the line "Without a .gptr/ workspace, sessions last until R exits; gptr_init(\".\") keeps them."
+to its `invalid_argument` error. Conditions: `invalid_argument`, `split_brain`, `busy`, `replay_unbound`.
 
 `gptr_last()`: the most recently active session of this process, held **strongly** (IC-71), including one whose
 call was interrupted before assignment, or `NULL`.
@@ -1804,9 +1870,10 @@ gptr_return(x)
 
 Called by model-written (or user) R code during a run to designate the run's result. Captures `substitute(x)`
 and forces `x` in a leaf; the session stores it under the §5.1 value policy of `03` (symbol bound in a kept home and
-below `gptr.value_copy_max`: deep copy; larger: name + address; anonymous or bound in a function-frame home: boxed),
-capped by `gptr.values_max_bytes`, and appends a `gptr.value` entry. Returns `invisible(NULL)`. Outside a run it
-returns `invisible(x)` and does nothing else (a once-per-session `notice`, silent while a document is replayed), so
+below `gptr.value_copy_max` by `env_snap_size()`: deep copy, unless `duplicate()` returns the value itself or the
+copy holds as much of its own; otherwise name + address; anonymous or bound in a function-frame home: boxed;
+D-247), capped by `gptr.values_max_bytes`, and appends a `gptr.value` entry. Returns `invisible(NULL)`. Outside a run
+it returns `invisible(x)` and does nothing else (a once-per-session `notice`, silent in replay mode), so
 recorded code that still contains the call re-sources cleanly (IC-48). Copy-safety: [R1][leaf] (`test-copy-tools.R`
 rows for the three cases).
 
@@ -1859,7 +1926,7 @@ gptr_risk(code, envir = NULL, root = NULL)
 
 The advisory static classifier (not a security boundary). `code`: chr (R code) or a call/expression; `envir`:
 optional environment the code would run in (enables overwrite-size detection of bound names by `env_snapshot()`'s
-size rule, D-189: a plain assignment evaluated in `envir` is looked up there only; a `<<-`, `assign()` or replacement
+size rule, D-247: a plain assignment evaluated in `envir` is looked up there only; a `<<-`, `assign()` or replacement
 target, or one inside `local()`, `with()` or `within()`, also in the enclosing environments up to the global one,
 D-213; read-only lookups, never forcing promises); `root`: project root (default `project_root()`). Never evaluates
 `code`. Returns a `gptr_risk` (§5.11). Commands passed to `peter$sh()` are classified with the command table,
@@ -1959,8 +2026,12 @@ gptr_register(spec)
 
 Registers a spec at top level (rank 3, source `user`, process lifetime) after validation by its kind. Returns an
 unregister function invisibly. Inside a factory the verb is `gptr$register(spec)` (§10.5); per session it is
-`peter(..., tools = list(spec))` (rank 0). Conditions: `invalid_spec`, `unknown_kind`. Emits nothing (records are
-visible to the next session freeze; already frozen sessions are unchanged).
+`peter(..., tools = list(spec))` (rank 0). Conditions: `invalid_spec`, `unknown_kind`. Records are visible to the
+next session freeze; already frozen sessions are unchanged. Registering a `first`-resolving kind and name again
+replaces the earlier process-level `user` record: the new record is added first (a spec that fails validation
+leaves the old one), then the old one is removed with a `replaced` diagnostic and one `gptr_message_notice`
+"Replaced your earlier <kind> '<name>'.", and the earlier unregister function returns `FALSE`; `all` kinds keep
+both. Emits nothing else.
 
 ```r
 off = gptr_register(gptr_command("hello", function(args, ctx) "hi"))
@@ -2196,10 +2267,12 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `agent_def.get` | P17 | `gptr_agent()` (P02) | `function(name, file = NULL) <spec:agent>` |
 | `skill.catalog`, `skill.body` | P17 | `skills =` preloads (P08/P07), `peter$search()` (P10) | `function(session, budget) chr(1)`; `function(name) list(text, dir)` |
 | `plugin.enable` | P17 | `peter(plugins =, extensions =)` (P08) | `function(name, rank, session = NULL) invisible(lgl(1))` |
+| `templates.sync` | P17 | the console's `/help`, its `/` completion (P28) and a command name not registered (P14), so templates work before a session starts and one saved since is found (D-252) | `function() invisible(NULL)`: what `builtin:prompts`' `session_start` hook does (settings plugins enabled, templates and their commands synced) |
 | `mcp.catalog` | P18 | `peter$search()` (P10) | `function(session, budget) chr(1) or NULL` |
 | `mcp.dispatch_local` | P18 | `cli-claude`, `cli-codex` (P20) | `function(message, session) list` (JSON-RPC response) |
 | `bg.register` | P21 | `peter(background = TRUE)` (P08), the pause menu (P14) | `function(session) invisible(session)` |
 | `check.adapter` | P12 | `gptr_check()` (P02) | `function(adapter, fixtures = NULL) <gptr_check>` |
+| `prices.table` | P05 | provider and model spec validation (P02) | `prices_df()`: `function(x) df` (§4.9 `prices`), `gptr_error_invalid_argument` for a bad table; fallback: the value unchecked until the model is resolved (D-250) |
 | `trust.get` | P08 | P03 (`.env` discovery), P07 (SYSTEM.md, instruction authority), P17, P18 (IC-33) | `function(path = getwd()) lgl(1)`; fallback `FALSE` |
 | `identifier.resolve` | P08 | `gptr_agent()` capture (P02), agent files (P17) | `function(expr, arg, envir) chr or spec`; fallback: literal names |
 | `secret.lookup` | P03 | `ctx$secret()` (P02) | `function(name, ctx = NULL) <handle> or NULL`; fallback `NULL` |
@@ -2227,11 +2300,11 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
 | `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with the modes a console call saved (`the$tty$saved`, `tty_call()`), then sets the call's again (IC-76) | P11, P14, P26 |
-| `tty_call(keys)`, `tty_restore(tty = the$tty)`, `tty_question(on)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten -isig min 1 time 0` for a T console's composer (`keys`; Ctrl-C is a key it reads, `console_keys()` interrupting with `rlang::interrupt()` and the idle editor keeping the draft, as a SIGINT could be lost under load; opost stays on, `min 1` keeps a tool reading stdin waiting, never at an end of input; `tty_isig_on()` and `tty_isig_off()` turn isig on while `eval_open()`'s R code runs, so Ctrl-C interrupts it) or `-echo` for a D console; `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails; `tty_question(TRUE)` switches to the saved modes before a console question's rows are written (`console_before_message(kind = "prompt")`, the pause menu) and `tty_question(FALSE)` back when it returns (`console_asked()`; the pause menu on every exit, its abort too, so a key typed while the run stops is not echoed, P28 Task 34), so readline starts as soon as the question shows, and `gptr_readline()` switches only outside such a question (review of Tasks 16-21) | P28 |
+| `tty_call(keys)`, `tty_restore(tty = the$tty)`, `tty_question(on)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten -isig min 1 time 0` for a T console's composer (`keys`; Ctrl-C is a key it reads, `console_keys()` interrupting with `rlang::interrupt()` and the idle editor keeping the draft, as a SIGINT could be lost under load; opost stays on, `min 1` keeps a tool reading stdin waiting, never at an end of input; `tty_isig_on()` and `tty_isig_off()` turn isig on while `eval_open()`'s R code runs, so Ctrl-C interrupts it) or `-echo noflsh` for a D console (SIGINT leaves the line being typed for the pause menu's drain, P28 Task 58); `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails; `tty_question(TRUE)` switches to the saved modes before a console question's rows are written (`console_before_message(kind = "prompt")`, the pause menu), with `-echo` where readline reads the tty (`console_readline_tty()`, `tty$quiet`) until `gptr_readline()` turns the echo on as readline starts (readline shows what it reads only then) and begins its prompt with `\r\033[K`, which erases a key the terminal echoed in that moment, so a key typed while the rows are written is not echoed before the chevron and again by readline (P28 Tasks 48, 50) and `tty_question(FALSE)` back when it returns (`console_asked()`; the pause menu on every exit, its abort too, so a key typed while the run stops is not echoed, P28 Task 34), so readline starts as soon as the question shows, and `gptr_readline()` switches only outside such a question (review of Tasks 16-21) | P28 |
 | `tty_drain_mode()` | the modes to restore (`tty_modes()`; NULL when stty fails) after setting `stty -icanon min 0 time 0` on fd 0, the echo unchanged, so the partial line a canonical terminal holds can be read (mockable); the drain before a question restores them on exit (IC-76, D-243) | P28 |
 | `tty_query(query, ms = 1500)` | `chr(1)`: the terminal's answer to `query` (IC-82, P28 Task 25): `stty -icanon -echo min 0 time 0` on fd 0 (the saved modes restored on exit), `query` written to stdout, then fd 0 read until a DA1 reply (`ESC [ ? ... c`) arrives or `ms` milliseconds pass; `""` when stty fails (mockable); the T REPL's background probe (`repl_background()`) | P28 |
 | `tty_unreply(x)` | `chr`: `x` without OSC replies (`ESC ] ... BEL` or `ST`) and DA1's `ESC [ ? ... c`, so a terminal's late answer to the background probe is never typed text (IC-82; `repl_background()`, `console_compose()`) | P28 |
-| `readline_answer(prompt, keep = console_history_add, accept = NULL)`, `answer_stale(secs)`, `console_history_add(x)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer is stale (`answer_stale(the$readline_secs)`: under 0.1 s, so typed or pasted before the question), at most 100 reads, then the last answer; a stale line that is one of `accept` (trimmed, lower case; TRUE: any line) answers all the same (the pause menu's keys and its [s]/[f] text, typed just after Ctrl-C; review of Tasks 16-21); each line read past that is not blank goes to the upper layer's callback `keep(line)` (03 §2.2; NULL keeps nothing): `console_history_add()` (`utils::timestamp()` when `gptr.history` is on, TRUE when added; never fails; text of several lines that is not a `"""` block or a fence is added as a `"""` block, so Up then Enter sends it back as one input, D-243) by default, `console_typed_ahead()` for the console questions (IC-75 in §15.10); used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26, P28 |
+| `readline_answer(prompt, keep = console_history_add, accept = NULL)`, `answer_stale(secs)`, `console_history_add(x)` | `chr(1)`: `gptr_readline(prompt)`, read again while an interactive answer is stale (`answer_stale(the$readline_secs)`: under 0.1 s, so typed or pasted before the question), at most 100 reads, then the last answer; a stale line that `accept(line)` takes answers all the same (the pause menu's keys and its [s]/[f] text, typed just after Ctrl-C, review of Tasks 16-21; a console question's answers, typed as it shows, P28 Task 54); each line read past that is not blank goes to the upper layer's callback `keep(line)` (03 §2.2; NULL keeps nothing): `console_history_add()` (`utils::timestamp()` when `gptr.history` is on, TRUE when added; never fails; text of several lines that is not a `"""` block or a fence is added as a `"""` block, so Up then Enter sends it back as one input, D-243) by default, `console_typed_ahead()` for the console questions (IC-75 in §15.10); used by every console question, never by the REPL prompt (IC-75) | P11, P14, P26, P28 |
 | `gptr_confirm(question, default = FALSE)` | `lgl(1)`: `y`/`yes` (case-insensitive) is `TRUE`; empty input gives `default`; when `gptr_can_prompt()` is `FALSE` returns `default` without asking; never `askYesNo()`; reads with `readline_answer()` (IC-75) | P08, P15 |
 | `front_end()` | `chr(1)`: `rstudio`, `positron`, `vscode`, `jupyter`, `knitr`, `quarto`, `rscript`, `terminal`, `rgui`, `unknown`; inherited `RSTUDIO=1`/`POSITRON=1` count only for an interactive R without a tty (an IDE's terminal tab is `terminal`, D-183); ark's `tools:positron` on the search path is `positron` (Positron's console, whose stdin is a tty; P28 visual review) | P07, P14, P15 |
 | `verbosity()` | `int(1)` 0-3 (§3.1 `gptr.verbose`) | P14, P06 |
@@ -2493,14 +2566,15 @@ reactor_pump(until = function() done, slice_ms = 100L)
 | `handoff_transform(messages, target)` | `provider-transform.R` | same model: keeps signatures and opaque blocks; otherwise thinking becomes text (or is dropped when `target` lacks reasoning replay), opaque blocks dropped, tool ids normalised to the target api's rules (Mistral 9 chars, etc.) | P06, P20 |
 | `provider_get(id)` | `provider-registry.R` | `<spec:provider>` or `NULL` | P05, P08, P13, P20 |
 | `adapter_get(api)` | `provider-registry.R` | `<spec:adapter>` or `gptr_error_not_available` | P06, P13, P20 |
-| `provider_credential(provider)` | `provider-registry.R` | a handle bound to the provider's configured origin, resolved in the order explicit > vault > credential store > keyring > environment table (§8 of `03`); `NULL` for providers without auth; `gptr_error_no_key` otherwise | P05, P13 |
+| `provider_credential(provider)` | `provider-registry.R` | a handle bound to the provider's configured origin, resolved in the order explicit > vault > credential store > keyring > environment table (§8 of `03`); `NULL` for providers without auth; `gptr_error_no_key` otherwise | P05, P08, P13 |
+| `provider_ready(model, provider, safety = NULL, prepare = FALSE)` | `provider-registry.R` | a disabled provider is `gptr_error_not_available`, then `provider_preflight()`; `prepare = TRUE` goes through `model_prepare()` for an Ollama route; the gateway's check before a call changes anything (D-251) | P05, P08 |
 | `provider_stream(model, context, opts, emit, done, run = NULL)` | `provider-registry.R` | starts one model request on the reactor through the model's adapter (§8.1); returns the transfer/task id; calls `emit(ev)` for every INFRA-02 event and `done(msg)` exactly once with the final assistant message; never throws after it returns (INFRA-02) | P06, P07 (compaction), P13 (emulation) |
 | `builtin_providers(gptr)` | `provider-registry.R` | registers the provider records of §8.1-8.2 of `03` as data; P05 also declares `builtin:fake` (IC-08) | P02 load |
 | `usage_new(...)`, `usage_cost(usage, model, when = Sys.Date())`, `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)` | `provider-usage.R` | §4.3 records; cost from the dated price tier in force on `when`; TTL-split cache writes (1 h at 2x input, 5 min at 1.25x) | P06, P12, P13, P20 |
 | `usage_log_append(row)`, `usage_log()` | `provider-usage.R` | the process System 1 accounting log (append-only) | P13, P06 |
 | `catalog_get()` | `catalog-models.R` | the merged catalog (§11.10) | P05, P07 |
-| `model_resolve(ref, strict = TRUE)` | `catalog-models.R` | a model record (§4.9) for `provider/id[:thinking]`, an alias (dynamic by family and release date), or a provider-less id; `strict = TRUE` signals `gptr_error_unknown_model` with `adist()` suggestions (only the named provider's references after a known `provider/`); local providers accept unknown ids | P06, P08, P13, P17, P19 |
-| `model_prepare(ref, safety = NULL)` | `catalog-models.R` | explicit selected-model preparation: discovers missing/stale Ollama evidence, then resolves and preflights; no discovery during replay (IC-74; `07-local-ollama.md` section 2.1) | P08, P13 |
+| `model_resolve(ref, strict = TRUE)` | `catalog-models.R` | a model record (§4.9) for `provider/id[:thinking]`, an alias (dynamic by family and release date), or a provider-less id; `strict = TRUE` signals `gptr_error_unknown_model` with `adist()` suggestions (only the named provider's references after a known `provider/`; a models.dev route with no catalog model yet adds that `gptr_models(refresh = TRUE)` downloads them, D-250); local providers accept unknown ids | P06, P08, P13, P17, P19 |
+| `model_prepare(ref, safety = NULL)` | `catalog-models.R` | explicit selected-model preparation: discovers missing/stale Ollama evidence, then resolves and preflights; no discovery during replay (IC-74; `07-local-ollama.md` section 2.1) | P06, P08, P13 |
 | `provider_preflight(model, provider, safety = NULL)` | `catalog-models.R` | pure no-I/O check before payload/state/image serialization and credential lookup; private discovery evidence binds endpoint/path/model/server/lifecycle; missing protected safety means local-only TRUE (IC-74; `07-local-ollama.md` section 2.1) | P05, P08, P13 |
 | `catalog_aliases()` | `catalog-models.R` | chr of alias names (for `identifier_known()`) | P08 |
 | `model_default(role = c("chat", "small", "system1"))` | `catalog-models.R` | `chr(1)` ref from settings, else the first available route (§8.4 of `03`), else `NULL` | P08, P07, P13 |
@@ -2529,7 +2603,7 @@ row = usage_row(msg, session = s$id, agent = "main", parent_id = NA_character_, 
 | `session_home(s)` | the kept home or `NULL` | P09, P16, P19 |
 | `session_append(s, entry)` | appends an entry (R shape) to `.d$entries` and the store (`persist` redaction at ingress, inside `suspendInterrupts()`), moves the leaf, returns the entry id invisibly | all plans that write entries |
 | `session_record_initial_model(s)` | on an empty session, resolves its already-selected model (including session-only specs; routers remain deferred), refuses decision-only models, and records one typed initial `model_change`; no request, prompt freeze or `model_select` event | P19 |
-| `session_set_model(s, ref, reason = "user")` | resolves `ref`, appends `model_change`, emits `model_select` | P08, P14 |
+| `session_set_model(s, ref, reason = "user")` | resolves `ref` (session-only specs included), appends `model_change`, emits `model_select` | P08, P14 |
 | `session_set_mode(s, mode, source = "user")` | appends `gptr.mode_change`; the next user message (idle) or an operator message after the current tool results (running) carries the new `<mode>` block | P08, P11, P14 |
 | `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())` | the queue behind `gptr_steer()`; `source` in `pipe`, `pause_menu`, `repl`, `api_user`, `extension`, `agent`; only user sources become operator relays; a call from model code of the same session tree is refused (IC-55) | P08, P14, P19 |
 | `session_unqueue(s, which = "steer")` | removes and returns the newest `which` item from a user source (`pipe`, `pause_menu`, `repl`, `api_user`), or `NULL`; extension and agent items stay; emits `queue_update` op `withdraw` (D-242) | P28 |
@@ -2550,15 +2624,16 @@ overlay `new.env(parent = home)`), `store_heartbeat(store)` (touches the lock ev
 timer). There is no `store_close()`: the lock is released when the session is collected or the package unloads
 (D-154). Consumers: P06, P15 (replay), P16.
 
-**Replay functions** (`session-object.R`, IC-46): `session_replay_apply(s, block, header, text = NULL)` (advances
-the piped session in place: `gptr.replay` entry, `seen`, `turns`, the `value=` name, `last_text`; returns `s`),
+**Replay functions** (`session-object.R`, IC-46): `session_replay_apply(s, block, header, text = NULL, doc = NULL)`
+(advances the piped session in place: `gptr.replay` entry, `seen`, `turns`, the `value=` name, `last_text`; a
+rebuilt session moves to the block's turn, a reconstructed one gains it from `doc`; returns `s`),
 `session_replay_new(block, header, envir, doc)` (the live session with the header's id, else a `replayed` session
 adopting the recorded id, from the JSONL or reconstructed from the document with `history_source =
 "reconstructed"`),
 `session_replay_bind(block, s, child = NULL)` and `replay_lookup(block, child = NULL)` (the `the$replay_blocks`
 table behind `gptr_resume(block =)`). Consumers: P15, P19.
 
-**`session-budget.R`**: `budget_check(s, estimate = 0)` -> `NULL` or `list(kind, budget, used)`;
+**`session-budget.R`**: `budget_check(s, estimate = 0)` -> `NULL` or `list(kind, budget, used, estimate)`;
 `ledger_add(s, request_id, components)`; `gptr_usage()` (§6.5).
 
 **`agent-run.R`**
@@ -2578,7 +2653,9 @@ Run options (`opts`): `max_turns` (int), `budget` (list), `doc` (document site f
 (lgl: a human can answer), `depth` (int), `parent_run` (run id), `agent` (label), `background` (lgl),
 `rng_state` (environment holding the child's `c(10407L, <6 seeds>)` L'Ecuyer vector for `rng_swap()`, IC-61),
 `preset`, `tools` (chr modifiers), `call` (the `gptr_call`, released at settlement), `safety` (the option
-snapshot of IC-53), `root` (the root session id for budgets, IC-66).
+snapshot of IC-53), `root` (the root session id for budgets, IC-66), `mode_from` (a top-level call's
+`list(mode, from)`: its `mode =`, the session it continues or the settings layer holding the mode, for the
+blocked hint of `perm_check()`).
 
 `gptr_run` fields (read-only for other plans): `id`, `session` (id), `status` (`queued`, `requesting`,
 `streaming`, `tools`, `boundary`, then a terminal status), `turn`, `mode`, `model` (record), `depth`,
@@ -2588,10 +2665,10 @@ snapshot of IC-53), `root` (the root session id for budgets, IC-66).
 
 | Function | Contract | Consumers |
 |---|---|---|
-| `dispatch_tools(run, calls)` | executes a turn's tool calls in source order; for each: lookup (unknown -> error result `Tool <name> not found`), `tool_validate()`, `tool_call` hooks, `perm_check()`, checkpointers' `before`, execute (sequential tools through `reactor_enqueue_tool()`; concurrent ones as reactor work), checkpointers' `after`, `tool_result` hooks; never throws; a `length`/`refusal` stop fails every call unrun; returns `list(results = list(<gptr_tool_result>), terminate = lgl(1))` | P06 |
-| `dispatch_nested(name, input, ctx)` | the nested entry for `peter$...` calls made while an `r` evaluation runs: if the outer code's static analysis listed this function at a level no higher than the level approved for the outer call and `call_risk()` of the actual input is no higher either (IC-78), runs without a second prompt; otherwise `perm_check()`; records into the outer result's `details$nested` (at most 20); returns the tool result's `value` (or signals the tool's error as an R error of class `gptr_error_tool` inside the model's code) | P10, P18, P22, P23 |
+| `dispatch_tools(run, calls)` | executes a turn's tool calls in source order; for each: lookup (unknown, or not in the tools the session offered the model, the frozen array and every `tool_change` addition -> error result `Tool <name> not found`; D-248), `tool_validate()`, `tool_call` hooks, `perm_check()`, checkpointers' `before`, execute (sequential tools through `reactor_enqueue_tool()`; concurrent ones as reactor work), checkpointers' `after`, `tool_result` hooks; never throws; a `length`/`refusal` stop fails every call unrun; returns `list(results = list(<gptr_tool_result>), terminate = lgl(1))` | P06 |
+| `dispatch_nested(name, input, ctx)` | the nested entry for `peter$...` calls made while an `r` evaluation runs: if the outer code's static analysis listed this function at a level no higher than the level approved for the outer call and `call_risk()` of the actual input is no higher either (IC-78), runs without a second prompt; otherwise `perm_check()`; the command of a `sh` or `bg` call meets the deny and ask rules first, whatever its level, as the literal call would, an ask offering no `[a]lways` rule (D-251); records into the outer result's `details$nested` (at most 20); returns the tool result's `value` (or signals the tool's error as an R error of class `gptr_error_tool` inside the model's code) | P10, P18, P22, P23 |
 | `tool_validate(tool, input)` | `schema_validate()` of the tool's `parameters`; `{"INVALID_JSON": raw}` when the final strict parse failed | P06, P18 |
-| `perm_check(call, run)` (IC-04, IC-53) | `list(decision = "allow" \| "deny" \| "ask" \| "ask_human" \| "modify", reason = chr(1), input = named list, risk = <gptr_risk> \| NULL, rule = chr(1) \| NULL)`: every `policy` spec's `check(call, ctx)` (deny > ask_human > ask > modify > allow; a throwing policy denies; **no active `mode` policy = ask**, fail closed, unless the run's snapshot has `gptr.unsafe_no_permissions`); a `modify` is re-classified and re-checked once (a second modify denies); an `ask` goes to `permission_request` hooks (first decision; error = deny), then to `ui$permission()` when `gptr_can_prompt()` holds in the run's snapshot; an `ask_human` skips the hooks; without anyone to prompt: `gptr.noninteractive_ask = "stop"` stops the run with status `blocked` (the gateway raises `gptr_error_permission` with `action` and `how_to_allow`), `"deny"` returns a denial the model sees | P06, P20 (through the injected `opts$gate`, IC-33), P18 (server calls) |
+| `perm_check(call, run)` (IC-04, IC-53) | `list(decision = "allow" \| "deny" \| "ask" \| "ask_human" \| "modify", reason = chr(1), input = named list, risk = <gptr_risk> \| NULL, rule = chr(1) \| NULL)`: every `policy` spec's `check(call, ctx)` (deny > ask_human > ask > modify > allow; a throwing policy denies; **no active `mode` policy = ask**, fail closed, unless the run's snapshot has `gptr.unsafe_no_permissions`); a `modify` is re-classified and re-checked once (a second modify denies); an `ask` goes to `permission_request` hooks (first decision; error = deny), then to `ui$permission()` when `gptr_can_prompt()` holds in the run's snapshot; an `ask_human` skips the hooks; without anyone to prompt: `gptr.noninteractive_ask = "stop"` stops the run with status `blocked` (the gateway raises `gptr_error_permission` with `action` and `how_to_allow`, which names where the run's mode came from, `opts$mode_from`, and while knitting says knitting cannot ask instead of "run interactively"), `"deny"` returns a denial the model sees | P06, P20 (through the injected `opts$gate`, IC-33), P18 (server calls) |
 | `tool_result_message(result, call)` | the `tool_result` message of §4.4 | P06, P20 (through the injected `opts$tool_result`, IC-33) |
 
 Example calls:
@@ -2617,7 +2694,7 @@ session_enqueue(s, "use TPM", as = "steer", source = "pipe")
 | `context_turn_blocks(s, input)` | `prompt-context.R` | the leading blocks of a later user message (`placement = "turn"` or `"both"` specs: `workspace_changes`, `attached`, mode changes, skill activations); only non-empty blocks; a block whose text hash equals the last one emitted under the same name in this session is skipped (IC-38) | P06 (through the §7.0 services) |
 | `request_build(s, target, extra = NULL)` | `prompt-cache.R` | `list(context, view, tokens_est, components)`: `context` is the adapter context of §8.1 for `target` (a model record): `system`, `tools_json`, `tools`, `messages` (`project_messages()` + the `extra` tail, e.g. the compaction request), `cache_plan` (the `cache_policy` spec's plan for the api), `params`, ids; `view` is the element summary for the prefix guard; `tokens_est` and `components` feed the budget check and the ledger | P06 (through the §7.0 services) |
 | `prefix_guard(s, target, view)` | `prompt-cache.R` | compares with the previous request to the same (provider, model); on a break emits `cache_break`, appends `gptr.cache_break` and acts per `gptr.check_prefix`; resets on `session_tree` | P06 (through the §7.0 services) |
-| `compact_threshold(window, max_output, r_cap = 4000)` | `prompt-compact.R` | `min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, max_output + 2 * r_cap), gptr.compact_at)` | P07 (behind `compact.should`), P28 (`console_context_left()`, IC-77) |
+| `compact_threshold(window, max_output, r_cap = 4000)` | `prompt-compact.R` | `min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, mo + 2 * r_cap), gptr.compact_at)` with `mo = min(max_output, window / 2)` (`model_output_cap()`; models.dev often gives the whole window as `max_output`) [D-250] | P07 (behind `compact.should`), P28 (`console_context_left()`, IC-77) |
 | `compact_should(s, tokens, idle_s)` | `prompt-compact.R` | `lgl(1)`: threshold or cold rule (the `compact.should` service); the checkpoint compactor's rules never trigger for a CLI model (`type = "cli"`), which compacts its own conversation [D-202] | P06 (through the service) |
 | `extract_state(entries)` | `prompt-compact.R` | harness state for the checkpoint (user messages incl. steering, objects with creating code, decisions, files, skills, plan) | P07, P16 |
 | `builtin_prompt(gptr)`, `builtin_context(gptr)`, `builtin_compaction(gptr)` | | register P07's sections (`preamble`, `tools`, the closing lines of `rules`, the core of `r_session`, `r_performance`, `modes`, `context`, `addendum`; IC-68), the four `preset` records, the gap `cache_policy`, the default `estimator`, the context blocks `project_instructions` (rendered `trusted="false"` in an untrusted project, IC-52), `environment`, `mode`, `plan`, and the checkpoint `compactor` (with the post-compaction floor check, IC-71) | P02 load |
@@ -2661,7 +2738,7 @@ Functions (P08):
 | `route_pass()` | the sentinel a route's `run()` returns to continue routing | P13, P14, P15, P19 |
 | `gateway_defer(expr_fun)` | evaluates `expr_fun()` with deferral on: every `peter()` call made meanwhile behaves as `.run = FALSE` and returns its unstarted session | P19 (`gptr_parallel()` forces its `...` promises inside it) |
 | `gateway_run(call, s = NULL)` | the default System 2 runner used by the `continue`/`new` routes and by other routes: creates the session when `s` is `NULL` (`session_new()` with the resolved model, mode and home; a router model is stored as `router:<name>`, IC-69; without `model =` inside a run, the running session's model; inside a run the model is resolved as the running session sees it and that session's own spec of it is registered for the child, D-210), chooses the evaluation environment by the IC-40 precedence and checks that context symbols are visible there, applies model/mode changes and `session_add_tools()` for `tools =`/`plugins =`/`extensions =` on a continuation, tightens the mode to the running one when `run_current()` is non-NULL (IC-53), runs `egress_check()`, calls `replay_guard()`, builds the input (first message or turn blocks, the prompt, `skills =` preloads, the pending plan once), then `session_run()`/`run_start()`/queue per `.run` and `background`; writes nothing to documents itself | P13 (escalation), P14, P15, P19 |
-| `dot_facts(x)` [leaf] | `list(class, is_session, is_chr1, length, dim, bytes, text)` (`text` = a `paste0()` copy of character values up to 64 KiB, else `NULL`) | P08 |
+| `dot_facts(x)` [leaf] | `list(class, is_session, is_chr1, length, dim, bytes, text)` (`bytes` by `env_snapshot()`'s size rule, D-247; `text` = a `paste0()` copy of character values up to 64 KiB, else `NULL`) | P08 |
 | `resolve_identifier(expr, arg, envir)` (service `identifier.resolve`) | §6.1.3; returns chr or a spec | P08, P17 (`agents` mask); P02 stores raw expressions and never calls it (IC-34) |
 | `identifier_known(name, arg)` | `lgl(1)`: catalog aliases, registered provider/model/router ids, modes, presets, skill/plugin/extension/agent names (by `arg`) | P08 |
 | `interpolate_prompt(template, envir)` [leaf per value] | §6.1.4 | P08 |
@@ -2689,15 +2766,16 @@ v = call_value(call, 1L)
 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
-| `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))` | `eval-core.R` | the built-in `evaluator` record `r` (IC-69); parses with `srcfilecopy("<gptr>", code)` under `keep.parse.data = FALSE` (restored), so functions the code defines keep their source lines but no parse table (D-189); `eval_guard()`; evaluates top-level expressions one by one in `envir` with sink capture (cleaned up in `suspendInterrupts()`), calling handlers created in a frame that does not hold `envir` [R2][R3], per-expression `setTimeLimit(elapsed = timeout, transient = TRUE)` (`timeout = NULL`: none with a human present, else `gptr.r_timeout`), symbols printed with `print(<sym>)` in `envir` and every `withVisible()` result cleared in place (`res[1L] = list(NULL)`) before the frame returns [R8, IC-67], plots captured (on `pdf(NULL)` with the display list enabled when no device is open and no human sees one; the prior device restored) and replayed to PNG, at most `max_images` attached (the rest kept in the session's out store), interruptions recorded with `on.exit()`, the agent's L'Ecuyer state swapped in and out by `rng_swap()` (IC-61); text written through `gptr_message_write()` (console controls, the console renderer) reaches the console whatever `tee` is and is never captured (IC-77); the `r` tool, and P18's served `r` during a live run (a CLI route's call; P28 Task 31), tee only for a depth-0 run; stops at the first error; returns a `gptr_eval_result` (§5.8); never keeps the value | P10 (`r`), P14 (`!expr`), P18 (server `r`) |
+| `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))` | `eval-core.R` | the built-in `evaluator` record `r` (IC-69); parses with `srcfilecopy("<gptr>", code)` under `keep.parse.data = FALSE` (restored), so functions the code defines keep their source lines but no parse table (D-189); `eval_guard()`; evaluates top-level expressions one by one in `envir` with sink capture (cleaned up in `suspendInterrupts()`), calling handlers created in a frame that does not hold `envir` [R2][R3], per-expression `setTimeLimit(elapsed = timeout, transient = TRUE)` (`timeout = NULL`: none with a human present, else `gptr.r_timeout`), symbols printed with `print(<sym>)` in `envir` and every `withVisible()` result cleared in place (`res[1L] = list(NULL)`) before the frame returns [R8, IC-67], plots captured (on `pdf(NULL)` with the display list enabled when no device is open and no human sees one; the prior device restored) and replayed to PNG, at most `max_images` attached (the rest kept in the session's out store), interruptions recorded with `on.exit()`, the agent's L'Ecuyer state swapped in and out by `rng_swap()` (IC-61); text written through `gptr_message_write()` (console controls, the console renderer) reaches the console whatever `tee` is and is never captured (IC-77); the `r` tool, and P18's served `r` during a live run (a CLI route's call; P28 Task 31), tee only for a depth-0 run; a warning is recorded and muffled and, teed, shows as it comes, `Warning: <text>` (at column 4 with the output where the console margin applies, else on stderr), so none waits for R's top level, which a console or a run reaches only when it ends, naming the evaluator's own call (P28 Task 75); in the console margin an R message is a row of the output too, muffled (gptr's own notices show themselves; P28 Task 79); stops at the first error; returns a `gptr_eval_result` (§5.8); never keeps the value | P10 (`r`), P14 (`!expr`), P18 (server `r`) |
 | `rng_swap(state, expr)` [leaf] | `eval-core.R` | saves `.Random.seed` of the global environment (or its absence), assigns the agent's `c(10407L, <6 seeds>)`, evaluates, stores the advanced vector back in `state`, restores or removes the user's; with `with_seed_preserved()` the only code that assigns `.Random.seed` (IC-61) | P09, P19 |
 | `format_eval_result(res, budget_tokens)` | `eval-format.R` | `list(text = chr(1), images = list, truncated = lgl(1), out_id, spill)`: output, messages, warnings, error + trimmed traceback, `[plot N attached]`, state-change lines (`~ pbmc <Seurat> modified`, `+ markers <data.frame 4,211 x 7>`), a status line, head 40% / tail 60% truncation with the `peter$out(<id>)` notice; halves the budget when the session's context exceeds half the compaction threshold (never on a CLI route, D-202) | P10 |
-| `eval_guard(exprs)` | `eval-guard.R` | `list(blocked = chr, reason = chr(1) \| NULL)` for `q`, `quit`, `readline`, `menu`, `browser`, ... [12 §3.6]; the symbols `q` and `quit` are flagged in any position (a value, a `FUN` argument, `match.fun`, `get`, `do.call`, `base::`; IC-67); a literal `[secret:` marker is blocked with the `Sys.getenv()` hint | P09, P18 |
+| `eval_guard(exprs, envir = NULL)` | `eval-guard.R` | `list(blocked = chr, reason = chr(1) \| NULL)` for `q`, `quit`, `readline`, `menu`, `browser`, ... [12 §3.6]; the symbols `q` and `quit` are flagged in any position (a value, a `FUN` argument, `match.fun`, `get`, `do.call`, `base::`; IC-67), a value unless the code assigns it or, looked up from `envir` as R looks up a value, it is bound to data (not a function, promise or active binding; `eval_r()` passes its `envir`, D-252); a literal `[secret:` marker is blocked with the `Sys.getenv()` hint | P09, P18 |
 | `gptr_shim(exprs, envir)` | `eval-guard.R` | rewrites calls headed by `peter`, `gptr_return` to `gptr::` when the symbol `peter` is not visible from `envir`, without binding anything; the recorded code keeps the original text | P09 |
 | `plot_png(recorded, width = gptr.plot_width, height = gptr.plot_height, res = gptr.plot_res)` | `eval-plots.R` | an image block (ragg when installed, else `grDevices::png()`) | P09, P10 (`peter$plot()`) |
-| `env_snapshot(envir, previous = NULL)` [R4] | `env-snapshot.R` | df `name`, `kind` (`value`, `promise`, `active`), `address`, `class`, `bytes` (address-keyed `object.size()` cache; `NA` for environments, functions, external pointers, compact sequences and S7 objects, whose class objects `object.size()` counts in full; D-189), `shape`, `fp` (`fingerprint()`); never forces promises or calls active bindings; `.Random.seed` and `.Last.value` excluded | P09, P16 |
+| `env_snapshot(envir, previous = NULL)` [R4] | `env-snapshot.R` | df `name`, `kind` (`value`, `promise`, `active`), `address`, `class`, `bytes` (`env_snap_size(x, envir)`, reused while address, class, shape and `fp` hold; `NA` only for promises, active bindings and missing arguments; D-247), `shape`, `fp` (`fingerprint()`); never forces promises or calls active bindings; `.Random.seed` and `.Last.value` excluded | P09, P16 |
+| `env_view_snapshot(envir, previous = NULL, sizes = TRUE)` [R2][R4] | `env-snapshot.R` | the `env_snapshot()` rows of what code in `envir` reads, plus lgl `own` (bound in `envir` itself): for an overlay (attribute `gptr_overlay`) its own rows, then each lower overlay's and the first non-overlay environment's (the walk of `binding_env()`), a nearer binding shadowing a farther; the `<workspace>` and `<workspace_changes>` blocks and their baselines use it, and the evaluator's object diff (`sizes = FALSE`) marks a modified row whose old binding was not `own` and whose new binding is not `own` or shares that object `(in the source workspace)` (D-252) | P09 |
 | `env_diff(old, new, assigned = character())` | `env-snapshot.R` | `list(added, modified, removed)` (chr each): address, kind or fingerprint changed, or a static assignment target | P09, P16 |
-| `workspace_lines(snapshot, budget = 600L)` | `env-snapshot.R` | chr: at most 12 lines `name  class  shape  size`, largest first (a value of unknown size other than a function or environment ranks at the median known size, ties by name; D-189), then `(+ n smaller objects: use ls())` | P09 (block), P14 (banner) |
+| `workspace_lines(snapshot, budget = 600L)` | `env-snapshot.R` | chr: at most 12 lines `name  class  shape  size`, largest first, ties by name (promises and active bindings last; D-247), then `(+ n smaller objects: use ls())` | P09 (block), P14 (banner) |
 | `changes_lines(diff, snapshot, user_ran, budget = 300L)` | `env-snapshot.R` | chr lines `+ name class shape size`, `~ name`, `- name`, `user ran: <expr>` | P09, P16 |
 | `describe_binding(name, envir, budget = 150L)` [R4] | `env-describe.R` | `gptr_describe()` of a binding looked up in a leaf, never forcing promises (`<promise>`/`<active>`), errors caught (default method) | P09, P14 (`@object`), P13 (state labels) |
 | `user_expr_log(since = NULL, n = 20L)` | `env-history.R` | chr of top-level expressions the user evaluated since `since` (task callback registered while a session with a kept home is live), deparsed and cut to 120 characters | P09 |
@@ -2725,9 +2803,9 @@ describe_binding("fit", e, budget = 80L)
 | `member_closure(spec)` | `tool-namespace.R` | a `gptr_member` function: formals from the schema (required properties first, optional ones default `NULL`), body that validates, calls `dispatch_nested()` when a run is executing on the stack and the spec's `fun`/`execute` directly otherwise (user calls are the user's actions) | P10, P18 |
 | `ns_catalog(session, kinds = c("plugin"), budget = 1500L)` | `tool-namespace.R` | chr(1) body of the `plugins` section: one `peter$<ns>$<name>(<sig>)  # <first sentence>` line per plugin member, least-recently-used descriptions trimmed first | P10 (its `plugins` section) |
 | `bm25_index(docs)`, `bm25_search(index, words, limit = 8L)` | `tool-namespace.R` | the search behind `peter$search()`; `docs` = df(`id`, `text`) | P10, P18 |
-| `read_file(path, offset = NULL, limit = NULL, budget_tokens = gptr.read_max_tokens)` | `tool-read.R` | `list(text = chr(1), image = <block> \| NULL, details = list)` (Pi read semantics [01 §3.2], line numbers off, images by magic bytes, encodings, 16 MiB raw index / streaming index / cached sparse index above 20 MB) | P10 |
+| `read_file(path, offset = NULL, limit = NULL, budget_tokens = gptr.read_max_tokens)` | `tool-read.R` | `list(text = chr(1), image = <block> \| NULL, details = list)` (Pi read semantics [01 §3.2], except that a final newline ends the last line, as `readLines()` counts (D-248), line numbers off, images by magic bytes, encodings, 16 MiB raw index / streaming index / cached sparse index above 20 MB) | P10 |
 | `write_file(path, content)` | `tool-write.R` | atomic; keeps the existing EOL, BOM and encoding of an existing file; creates parent directories; `list(bytes, created, details)` | P10, P23 |
-| `edit_file(path, edits, replace_all = FALSE)` | `tool-edit.R` | Pi's multi-edit semantics (each `oldText` matched against the original, unique, non-overlapping), fuzzy fallback (whitespace, quotes, NFKC with stringi), a pasted `*** Begin Patch` envelope applied through `patch_apply()`; `list(message, diff = chr, fuzzy = lgl(1), details)`; the result text carries the diff (at most 400 tokens) only when something deviated from the literal request | P10, P15 (document edits routed back after block bookkeeping) |
+| `edit_file(path, edits, replace_all = FALSE)` | `tool-edit.R` | Pi's multi-edit semantics (each `oldText` matched against the original, unique, non-overlapping), fuzzy fallback (whitespace, quotes, NFKC with stringi) that splices newText into the original bytes of the matched span and rewrites the touched lines from the fuzzy view only when a span boundary cannot be mapped back (D-248), a pasted `*** Begin Patch` envelope applied through `patch_apply()`; `list(message, diff = chr, fuzzy = lgl(1), details)`; the result text carries the diff (at most 400 tokens) only when something deviated from the literal request | P10, P15 (document edits routed back after block bookkeeping) |
 | `patch_apply(envelope, root = project_root())` | `tool-edit.R` | applies a Codex-style patch (`*** Add File`, `*** Update File`, `*** Delete File`, `@@` hunks); `list(files, message, details)` | P10 |
 | `diff_lines(old, new, context = 3L, max_tokens = 400L)` | `tool-diff.R` | chr unified diff (prefix/suffix trim, patience anchors, Myers capped at D = 256) | P10, P15, P16 |
 | `walk_files(root = ".", type = c("file", "dir", "any"), gitignore = TRUE, hidden = FALSE, max = Inf, prune = NULL)` | `tool-walk.R` | df `path` (relative to `root`), `size`, `mtime`, `type`; pruned walker (skips `.git`, `node_modules`, `renv`, `.venv`, `__pycache__`), gitignore engine | P10, P16 |
@@ -2831,7 +2909,7 @@ res = s1_request(model_resolve("jev"), states, q, list())
 | `builtin_console(gptr)` | `console-repl.R` | registers the `frontend` `console`, the route `console` (order 30), the renderer hooks (process-wide notify hooks on `message_update`, `message_end`, `tool_execution_start`, `tool_execution_end`, `agent_end` that render only for the foreground session when `verbosity() >= 2`, a hook on `artifact_start` printing `artifact  <id>  ->  <url>   (running in background)` (NS-8), a hook on `turn_end`, emitted just before the loop polls steers, that runs `console_typed()` (a terminal REPL reads what was typed and queues it), so a line sent before a step boundary reaches it (D-242), a hook on `queue_update` that prints a user's message the run takes as the person's line `› <text>` at that boundary (D-242), tool `render` functions and `renderer` records, IC-69, IC-71), the service `console.interrupt_policy`, and the command specs of §6.17 of `03` | P02 load |
 | `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s`; first-use setup per §6.1.1 before its banner/input; returns the session invisibly on `/exit`, or `NULL` when setup returns before starting it | P08 (route) |
 | `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu, a console question (`? Paused` and the keys `s steer`, `f follow-up`, `c continue`, `a abort`, `b background` for foreground calls when P21 is loaded, read at `› `; IC-76 in §15.10), writes to stdout through the console writer and resumes through the `resume` restart; a second Ctrl-C aborts; `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Windows' Rgui, Jupyter; `console_menu_available()` offers the menu in terminal R, the consoles of Positron and RStudio and R.app, D-243) | P06, P08 |
-| `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)` and `finish(cut = FALSE)`; chunk-invariant; writes whole rows only, each at its line end or its wrap (prose wraps at 100 columns at most [D-245]; `finish()` ends the held partial row, `finish(cut = TRUE)` (an aborted, failed or truncated answer, the pause menu's [b], an unusual end) writes all it received and ends the held row with a dim `…` [D-245]; other output goes between whole rows and the held row continues after it; a fenced line is written once, at its line end) [D-245]; untrusted text never used as a format string | P14 |
+| `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)` and `finish(cut = FALSE)`; chunk-invariant; `write()` runs under `suspendInterrupts()`, so an interrupt (a D console's Ctrl-C) comes after the delta, none of which is lost (P28 Task 59: ` be.` vanished from `would be. Eight-cylinder` after [a]); writes whole rows only, each at its line end or its wrap (prose wraps at 100 columns at most [D-245]; `finish()` ends the held partial row, `finish(cut = TRUE)` (an aborted, failed or truncated answer, the pause menu's [b], an unusual end) writes all it received and ends the held row with a dim `…` [D-245]; other output goes between whole rows and the held row continues after it; a fenced line is written once, at its line end) [D-245]; untrusted text never used as a format string | P14 |
 | `console_live()`, `console_live_row(state, width)` | `console-input.R` | the live row (IC-82 in §15.10), on the input band where `console_style()` gives one (a T console's; Task 25): an environment with `draw(state)` and `clear()`, held in `the$live_row` while a foreground run works, so `gptr_message_write()` clears it before every console write and redraws it after; `console_live_row()` is its text, fitted to width - 1 | P28 |
 | `builtin_jsonl(gptr)`, `jsonl_sink(session, con)` | `console-jsonl.R` | the `frontend` `jsonl`: subscribes to the session's events and writes one redacted JSON object per line in the §4.5 JSON form (event names verbatim) | P19 (worker children), P24 |
 
@@ -2850,7 +2928,7 @@ policy(function() session_run(s, msg_user("go"), list()), list(), mode = "call")
 | `builtin_documents(gptr)` | `doc-formats.R` | registers `doc_format` specs `r`, `rmd`, `qmd`, `ipynb`, `transcript`; the route `document` (order 50); the `documents` prompt section (IC-68); an `agent_end` hook that renders and writes the block when `run$opts$doc` is set; a `session_tree` hook that makes undone blocks inert; the services `doc.site`, `doc.edit`, `doc.s1_block` and `doc.replay` (owned by `builtin:documents`, so filtering it removes them, IC-34, IC-47) | P02 load |
 | `doc_locate(call)` | `doc-locate.R` | a site `list(kind = "srcref" \| "source_frame" \| "knitr" \| "quarto" \| "jupyter" \| "rscript" \| "ide" \| "console", path, format, stmt = int(2) \| NULL, expr = call \| NULL, occurrence = int(1), ordinal = int(1), backend = chr(1), top_level = lgl(1), in_block = chr(1) \| NULL (the agent block whose body holds the statement, IC-47), ide_id = chr(1) \| NULL, defer = lgl(1))` using the precedence of §6.9.3 of `03`; `source()` frames are read inside `tryCatch` only when `gptr.doc_source_frames` is `TRUE`; paths compared with `path_key()` | P15 |
 | `doc_decide(site, prompt_hash, args_hash, mode)` | `doc-replay.R` | `"replay"`, `"run"`, `"regenerate"`, `"skip"` (undone), or signals `not_recorded`/`stale_block` per the table of 14 §4.4.2 plus the undone row of G7 §3.8; a block is fresh only when both hashes match (IC-45); block-nested calls replay from S2 (IC-47) | P15 |
-| `doc_block_lines(session, turn, site, call_ordinal)` | `doc-blocks.R` | chr lines of a block in the §11.5 grammar for the site's format (code of successful `record = TRUE` `r` calls from `details$code` minus top-level `gptr_return()` calls and calls of `record = FALSE` members, with top-level `<-` rewritten to `=` where safe; `#>` outputs from `details$outputs`; `## Decision:`, `## Steer:` and `## Follow-up:` lines; bridge digests; artifact paths; redacted with `code_for_history()` and `persist`; IC-48, IC-49); team and fan-out blocks per IC-47; plan-mode turns give one `## Plan:` line | P15 |
+| `doc_block_lines(session, turn, site, call_ordinal)` | `doc-blocks.R` | chr lines of a block in the §11.5 grammar for the site's format (code of successful `record = TRUE` `r` calls from `details$code` minus top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members, with top-level `gptr_return(<expression>)` rewritten to `.gptr_value_<block id> = (<expression>)` and top-level `<-` to `=` where safe; `#>` outputs from `details$outputs`; `## Decision:`, `## Steer:` and `## Follow-up:` lines; bridge digests; artifact paths; redacted with `code_for_history()` and `persist`; IC-48, IC-49); team and fan-out blocks per IC-47; plan-mode turns give one `## Plan:` line | P15 |
 | `doc_upsert(site, block_lines, block_id = NULL)` | `doc-blocks.R` | checks write consent (IC-45; otherwise nothing is written), then idempotent insert/replace of the owned block through the site's backend, passing the `document_write` event (fail closed, patchable) first; md5 conflict check with re-locate and retry (3 times, then warning `doc_conflict`); deferred under Rscript through the sidecar of IC-51; never writes an open notebook (IC-50); returns `list(action, block_id, lines, backend)` and appends `gptr.doc_block`; caches child texts in S2 (IC-47) | P15, P16 |
 | `prompt_hash(template)`, `args_hash(interp)` | `doc-blocks.R` | 12 hex of sha256 of the normalised template (trimws, CRLF -> LF, whitespace around newlines removed); 8 hex of sha256 of the sorted interpolated `name=value` pairs, `NULL` without interpolation (IC-45) | P15 |
 | `s2_get(key)`, `s2_put(key, record)` | `doc-replay.R` | the S2 answer cache (§11.9) | P15 |
@@ -2883,7 +2961,7 @@ ckpt_predict("pbmc = FindClusters(pbmc, resolution = 0.8); unlink('tmp.csv')")
 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
-| `builtin_skills(gptr)`, `builtin_prompts(gptr)`, `builtin_agents(gptr)` | `skill-discover.R`, `skill-templates.R`, `subagent-defs.R` | register discovered `skill`, `prompt_template`, `agent` specs (declarative, rank by location), one `command` spec per template, the `skills` section (T1, order 820) and the services `skill.catalog`, `skill.body`, `agent_def.get`, `plugin.enable` | P02 load |
+| `builtin_skills(gptr)`, `builtin_prompts(gptr)`, `builtin_agents(gptr)` | `skill-discover.R`, `skill-templates.R`, `subagent-defs.R` | register discovered `skill`, `prompt_template`, `agent` specs (declarative, rank by location), one `command` spec per template, the `skills` section (T1, order 820) and the services `skill.catalog`, `skill.body`, `agent_def.get`, `plugin.enable`, `templates.sync` | P02 load |
 | `skill_discover(scope = "all")` | `skill-discover.R` | df of skills from the roots of 16 §4.8 (`.gptr/skills`, `.agents/skills`, `.claude/skills` of trusted projects; user directories under `user_home()`; attached packages' `inst/gptr/skills` and `inst/skills`; plugin `skills/`), bounded walk; untrusted project skills are listed but never catalogued (IC-52); names compared with `name_norm()` (IC-42) | P17 |
 | `skill_parse(path)` | `skill-discover.R` | `<spec:skill>` from `SKILL.md` frontmatter (lenient yaml: `name`, `description` <= 1,024 characters, `disable-model-invocation`, `allowed-tools`; string keys keep their source text against YAML 1.1 coercion, IC-71) or `NULL` + diagnostic; the catalog shows `[skill:<name>/SKILL.md]` pseudo-paths that `read` resolves (IC-68) | P17 |
 | `template_expand(text, args)` | `skill-templates.R` | Pi's template grammar (`$ARGUMENTS`, `$ARGUMENTS[N]`, `$N`, `${@:N}`) [05 §3.7] | P17 (the `command` specs `builtin:prompts` registers for templates, so the console only dispatches commands) |
@@ -2963,7 +3041,7 @@ pcli_version(path)
 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
-| `bg_register(s)` (service `bg.register`) | `agent-background.R` | requires later (`gptr_error_missing_package`); marks the run background, adds a `session` job, ensures the `later` pump (50 ms timer calling `reactor_pump(slice_ms = 0)`, a no-op while the reactor is on the stack, IC-57); R tools of background runs run at idle ticks (`gptr.background_tools = "idle"`) or wait for `gptr_wait()`; an ask moves the run to `waiting` and is shown at the next blocking gptr call; a tool that changed bindings at an idle tick prints one notice | P08, P14 (`[b]ackground`) |
+| `bg_register(s)` (service `bg.register`) | `agent-background.R` | requires later (`gptr_error_missing_package`); marks the run background, adds a `session` job, ensures the `later` pump (50 ms timer calling `reactor_pump(slice_ms = 0)`, a no-op while the reactor is on the stack, IC-57); R tools of background runs run at idle ticks (`gptr.background_tools = "idle"`) or wait for `gptr_wait()`; an ask moves the run to `waiting` and is shown at the next blocking gptr call, whose resumed run (always started by the sweep's `bg_resume()`, also when a message was piped in meanwhile) has a user steer as its input, which steers piped in meanwhile join and queued follow-ups follow when it would stop: "I am at the console now. Repeat the call that could not be approved (<summary>) with the same input; I will be asked to approve it.", or "I am at the console now; ask again." for a question (D-252); a tool that changed bindings at an idle tick prints one notice | P08, P14 (`[b]ackground`) |
 
 Example calls:
 
@@ -3023,7 +3101,7 @@ only caller of adapters for System 2 requests; `s1_request()` (P13) is the only 
 | `tools` | list of `<spec:tool>` | the same direct tools as specs (array order) |
 | `messages` | list of `<msg>` | projected and handed off for this target (§7.5) |
 | `cache_plan` | list(`anchors` = chr element ids (`"t0"`, `"project"`), `tail_ttl` = `"5m"` \| `"1h"`, `key` = chr(1) prompt-cache key) | from the `cache_policy` spec for the api |
-| `params` | list(`max_tokens` int(1), `thinking` chr(1)\|NULL, `effort` chr(1)\|NULL, `tool_choice` `"auto"` \| `"none"` \| list, `returns` JSON Schema\|NULL, `temperature` num(1)\|NULL) | |
+| `params` | list(`max_tokens` int(1), `thinking` chr(1)\|NULL, `effort` chr(1)\|NULL, `tool_choice` `"auto"` \| `"none"` \| list, `returns` JSON Schema\|NULL, `temperature` num(1)\|NULL) | `max_tokens` is the target's `max_output`, at most half its window, else 8192 [D-250] |
 | `session_id`, `request_id` | chr(1) | |
 
 **Options** passed to every adapter function (`opts`):
@@ -3272,7 +3350,8 @@ tokens only when the fuzzy fallback, EOL or encoding normalisation changed what 
 <reason>. <how to proceed>`, and one that carries the person's text (`n <text>`, IC-77 in §15.10): `The user declined
 this call and said: "<text>". This is the user's own instruction: do that instead; any call it needs is approved
 separately.`; hook block: `Tool execution was blocked: <reason>`; interrupted tool: `Interrupted after
-<s> s; side effects may have occurred.`; a `length`/`refusal` stop: `Tool call not executed: the response stopped
+<s> s; side effects may have occurred.` (`details$interrupted` TRUE, so the console's row states the time once;
+P28 Task 43); a `length`/`refusal` stop: `Tool call not executed: the response stopped
 (<reason>) before the call was complete.`
 
 ### 9.3 The system prompt
@@ -3368,10 +3447,11 @@ peter$<ns>$<name>(<arg>: <type>, <arg>?: <type>)  # <first sentence of the descr
 
 Mode blocks and the first-message formats are verbatim in §7.4 of `03`; the non-interactive suffix appended inside
 the mode block is exactly `No one can answer questions or approvals in this run, so actions that need approval
-stop the run. State your assumptions instead of asking.` (with `gptr.noninteractive_ask = "deny"` the second
-clause reads `so actions that need approval are refused.`); in `manual` mode, where `ask` stays declared (IC-68),
-it is `No one can answer questions or approvals in this run: actions that need approval, and questions asked with
-the ask tool, stop the run. Ask only when no reasonable assumption lets you continue.`
+stop the run. State your assumptions instead of asking.` (with `gptr.noninteractive_ask = "deny"`, in every mode,
+the second clause reads `so actions that need approval are refused.`, D-248); otherwise in `manual` mode, where
+`ask` stays declared (IC-68), it is `No one can answer questions or approvals in this run: actions that need
+approval, and questions asked with the ask tool, stop the run. Ask only when no reasonable assumption lets you
+continue.`
 
 ### 9.4 The `peter$` namespace members [stable]
 
@@ -3396,12 +3476,12 @@ the remaining `r` budget when called inside `r`.
 | `out` | P10 (only owner, IC-36) | `peter$out(id, stream = c("stdout", "stderr"), lines = NULL)` | chr (the stored full text from the session store, the process store or the spill file, or `lines` of it); `record = FALSE` | 0 |
 | `sh` | P22 | `peter$sh(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE, check = FALSE, max_tokens = NULL)` (`cmd` chr: length > 1 = argv without a shell; length 1 = a command line through `shell_resolve()` when it has shell syntax) | `gptr_cmd` | command classifier (G5 levels); computed commands 3 |
 | `script` | P22 | `peter$script(path, args = character(), interpreter = NULL, ...)` | `gptr_cmd` | 3 |
-| `bg` | P22 | `peter$bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)` | `gptr_job` (added to the job table) | 3 |
+| `bg` | P22 | `peter$bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)` | `gptr_job` (added to the job table) | 3, or the command classifier's level when higher (D-251); computed commands 3 |
 | `jobs` | P22 | `peter$jobs(kill = FALSE)` | df of `bg` jobs | 0 (kill: 3) |
 | `py` | P22 | `peter$py(code, name = NULL, max_rows = 10L)` | `gptr_py`; reticulate (Suggests) | Python classifier |
 | `sql` | P22 | `peter$sql(query, name = NULL, con = NULL, n = 10L)` | data frame (all rows; prints dims + `n` rows); `name` = a data frame registered in an in-memory duckdb under its expression label (`name = mtcars` -> table `mtcars`) or a named list of data frames (one copy on the next edit of each, R9); without `name`, `con` or the DBI connection found by name in the evaluation environment | SQL classifier (select 0, drop 3) |
 | `knit` | P22 | `peter$knit(engine, code)` | chr: output of a knitr engine; `bash`, `sh`, `zsh`, `powershell`, `cmd` run through `peter$sh()` with the `helper` environment and a timeout (IC-67) | 3 (shell engines: the command classifier) |
-| `app` | P23 | `peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = interactive())` (`kind`: a registered `artifact_type`, IC-69; ids that are Windows reserved names are refused, IC-63) | `gptr_artifact`; the `r` result gets its URL, checks and screenshot image | 3 |
+| `app` | P23 | `peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = NULL)` (`kind`: a registered `artifact_type`, IC-69; ids that are Windows reserved names are refused, IC-63; `launch = NULL` launches when `gptr_has_human()`, else the handle's `checks$messages` say why not and how to start it) | `gptr_artifact`; the `r` result gets its URL, checks and screenshot image | 3 |
 | `mcp` | P18 | `peter$mcp$<server>$<tool>(...)` | R values (`structuredContent` simplified, else text); `isError` -> `gptr_error_mcp_tool` in R | server annotations: `readOnlyHint` 0 (trusted servers), `destructiveHint = FALSE` 2, none 3 |
 
 `peter$<ns>$<name>(...)` reaches plugin members (§9.1 `namespace`).
@@ -3421,7 +3501,8 @@ the remaining `r` budget when called inside `r`.
 | plugins (packages, directories, `.claude-plugin` bundles) | 5 | `plugin:<name>` | the process; removed when the package unloads |
 | built-ins (`builtin_<name>()` factories) | 6 | `builtin:<name>` | the process |
 
-Same `(kind, name)`: the lowest rank wins; ties: the first registered, with a `collision` diagnostic.
+Same `(kind, name)`: the lowest rank wins; ties: the first registered, with a `collision` diagnostic when the
+sources differ. `gptr_register()` never leaves a `user` tie: it replaces the earlier `user` record (§9).
 `all`-resolving kinds keep every record, ordered by the kind's order field when it has one, else by rank then
 registration. A lower-rank record shadows **only** the record with the same `(kind, name)`; a whole built-in is
 disabled only by an explicit `-builtin:<name>` filter (Pi merges per tool, `agent-session.ts:3478-3481`; IC-69).
@@ -3444,16 +3525,16 @@ also has `kind`, `name` and `api_version` (the extension API version it was writ
 
 | # | Kind | Resolve / order | Fields (type) | Contract and failure rule | Defined by |
 |---|---|---|---|---|---|
-| 1 | `provider` | first | `id` (= name, `^[a-z0-9][a-z0-9-]*$`), `api` chr(1), `base_url` chr(1)\|NULL, `auth` (chr of environment-variable names, or `function()` returning a handle or `NULL`, or `NULL` for none), `models` list of model records\|NULL, `compat` named list, `type` (`chat`, `classifier`, `cli`), `headers` named list of non-secret strings, `discover` `function()` -> df\|NULL, `status` `function()` -> named list\|NULL (reads cached data only unless `check = TRUE`), `aliases` chr, `local` lgl(1) (loopback server: unknown model ids allowed, no egress acknowledgement), `offline` lgl(1) (no remote model is called: exempt from `replay_guard()`; the fake provider and the mock-server and fake-CLI test providers, IC-45), `rate` `list(requests_per_s, tokens_per_s)`\|NULL (static limits feeding the token bucket, IC-64) | data; `auth` is evaluated per request (INFRA-22); `discover` runs only on request | P02 |
+| 1 | `provider` | first | `id` (= name, `^[a-z0-9][a-z0-9-]*$`), `api` chr(1), `base_url` chr(1)\|NULL, `auth` (chr of environment-variable names, or `function()` returning a handle or `NULL`, or `NULL` for none), `models` list of model records\|NULL (a record's `prices` is a data frame or a list of price records, checked and normalised to the §4.9 df by the `prices.table` service, D-250), `compat` named list, `type` (`chat`, `classifier`, `cli`), `headers` named list of non-secret strings, `discover` `function()` -> df\|NULL, `status` `function()` -> named list\|NULL (reads cached data only unless `check = TRUE`), `aliases` chr, `local` lgl(1) (loopback server: unknown model ids allowed, no egress acknowledgement), `offline` lgl(1) (no remote model is called: exempt from `replay_guard()`; the fake provider and the mock-server and fake-CLI test providers, IC-45), `rate` `list(requests_per_s, tokens_per_s)`\|NULL (static limits feeding the token bucket, IC-64) | data; `auth` is evaluated per request (INFRA-22); `discover` runs only on request | P02 |
 | 2 | `adapter` | first (name = `api`) | `api`, `transport`, `build`, `parse`, `stream`, `classify`, `capabilities` (§8.1) | never throws after `start` (§8.1); a thrown error becomes `stop_reason = "error"` | P02 |
-| 3 | `model` | first (name = `provider/id`) | the §4.9 record fields | data | P02 |
+| 3 | `model` | first (name = `provider/id`) | the §4.9 record fields (`prices` as for `provider`) | data | P02 |
 | 4 | `router` | first | `route` `function(request, ctx)` -> chr(1) model ref or `list(model, thinking = NULL, state = NULL)`; `description`; `timeout` num(1) (default 2 s) | usable as `model = <name>`; called by P06 before every request and at compaction (IC-69); `request` = `list(prompt, messages (projected, read-only), state, previous, reason = "turn" \| "compaction" \| "direct", session)`; a timeout, an error or a non-registered result falls back to the default model with a diagnostic and a `route` event; System 1 through `ctx$decide()`; each switch appends `model_change` and a `gptr.router` state entry | P02 |
 | 5 | `tool` | first (name, or `<namespace>/<name>`) | §9.1 | §9.1; failures become error results | P02 |
 | 6 | `interpreter` | first | `ext` chr, `programs` chr (candidates, first found wins), `args` `function(path, args)` -> chr, `windows_only` lgl(1) | used by `peter$script()` | P22 (through `kind`) |
 | 7 | `mcp_server` | first | §11.7 fields | data; connection errors are classed conditions at first use | P02 |
 | 8 | `skill` | first | `description` chr(1) (<= 1,024 chars), `path` (SKILL.md), `dir`, `source`, `disable_model_invocation` lgl(1), `allowed_tools` chr, `tokens` num(1) | untrusted text; invalid frontmatter -> skipped with a diagnostic | P02 |
 | 9 | `prompt_template` | first | `text` chr(1), `description`, `argument_hint`, `source` | Pi template grammar; `/name args` | P02 |
-| 10 | `command` | first (name without `/`) | `handler` `function(args, ctx)`, `description`, `complete` `function(prefix, ctx)` -> chr\|NULL | `args` is the raw string after the command; the handler returns `NULL`, a chr (printed verbatim) or `list(prompt = chr(1))` (sent as a prompt); an error is reported and the input counts as handled | P02 |
+| 10 | `command` | first (name without `/`) | `handler` `function(args, ctx)`, `description`, `complete` `function(prefix, ctx)` -> chr\|NULL | `args` is the raw string after the command; the handler returns `NULL`, a chr (printed verbatim, its control characters escaped; a `cli_ansi_string`, whose untrusted parts the handler escaped, with its styles, as `/help` sets names bold, P28 Task 63; in the console margin a blank row after it, as after a run's status line, P28 Tasks 62 and 69) or `list(prompt = chr(1))` (sent as a prompt); an error is reported and the input counts as handled | P02 |
 | 11 | `hook` | all (rank) | `event` chr(1), `handler` `function(event, ctx)`, `matcher` (NULL, a tool-name glob, or `function(event)` -> lgl) | §10.4 returns; errors per §10.7 | P02 |
 | 12 | `policy` | all / `order` (int, default 500) | `check` `function(call, ctx)` -> `NULL` or `list(decision = "allow" \| "deny" \| "ask" \| "modify", reason = chr(1), input = named list)`; `description`; `order` | combined deny > ask > modify > allow; a throwing policy denies; must return within 10 ms | P02 |
 | 13 | `context_block` | all / `order` (int, default 650) | `provide` `function(ctx, budget)` -> `NULL`, chr(1) or `list(text, attrs)`; `placement` (`first`, `turn`, `both`; IC-38); `authority` (`data`, `operator`: rank >= 3 only, IC-52); `budget` int(1); `order` | `ctx$input` gives `list(call, turn, prompt, placement, last_hash, opts)`; a turn block equal to its last emitted text is skipped; must not force promises or do I/O on user objects [R4]; output truncated to `budget`; an error omits the block with a diagnostic | P02 |
@@ -3465,9 +3546,9 @@ also has `kind`, `name` and `api_version` (the extension API version it was writ
 | 19 | `artifact_type` [experimental] | first | `build` `function(id, dir, data, ctx)`; `check` `function(dir, ctx)` -> `list(ok, messages)`; `launch` `function(version_dir, ctx)` -> `list(url, pid, stop)`; `stop` `function(handle)` | failures become tool results with the stage and a log tail | P02 |
 | 20 | `backend` | first | `start` `function(spec, ctx)` -> handle `list(session, fds = function() int, poll = function() NULL, cancel = function() NULL)`; `poll`, `cancel`; `capabilities` (`parallel` = `io`/`cpu`, `live_objects` lgl, `ask` = `queue`/`forward`/`none`) | never blocks the reactor > 50 ms; cancel kills the process tree; errors give the child status `error` | P02 |
 | 21 | `agent` | first | the `gptr_agent()` fields (§6.8) | data; invalid files skipped with a diagnostic | P02 |
-| 22 | `ui` | first (selected by `gptr.ui`/settings) | `has_ui` `function()` -> lgl(1); `select(title, choices, default = NULL, details = NULL, multiple = FALSE, allow_other = FALSE)` -> int (NA = cancelled; `attr(, "other")` = free text); `input(prompt, default = "", secret = FALSE)` -> chr(1)\|NA; `questions(qs)` -> `list(answers = named list, cancelled = lgl(1))`; `notify(text, level = "info")`; `permission(request)` -> `list(decision = "allow" \| "deny" \| "abort", remember = NULL \| "session" \| "project", feedback = chr(1) \| NULL, reason = chr(1) \| NULL)` (`feedback` only text the person typed; `reason` a denial the UI writes itself) | a failing dialog is not an approval; `permission` defaults to one built from `select` | P02 |
+| 22 | `ui` | first (selected by `gptr.ui`/settings) | `has_ui` `function()` -> lgl(1); `select(title, choices, default = NULL, details = NULL, multiple = FALSE, allow_other = FALSE)` -> int (NA = cancelled; `attr(, "other")` = free text); `input(prompt, default = "", secret = FALSE)` -> chr(1)\|NA; `questions(qs)` -> `list(answers = named list, cancelled = lgl(1))`; `notify(text, level = "info")`; `permission(request)` -> `list(decision = "allow" \| "deny" \| "abort", remember = NULL \| "session" \| "project", feedback = chr(1) \| NULL, reason = chr(1) \| NULL)` (`feedback` only text the person typed; `reason` a denial the UI writes itself), and a denial may add `how = chr(1)`, the denial text's last sentence in place of "Explain what you need or choose another approach." (D-252) | a failing dialog is not an approval; `permission` defaults to one built from `select` | P02 |
 | 23 | `frontend` [experimental] | first | `run` `function(session, ...)` -> session | owns the loop it runs | P02 |
-| 24 | `setting` | first (name = dotted key, e.g. `subagents.max_depth`) | `default`, `description`, `scope` (`both`, `user`), `validate` `function(value)` -> value (or `gptr_error_invalid_argument`), `tighten` (NULL or chr: the ordered values from strictest to loosest) | values through `gptr_config()`; a project layer may only move a `tighten` setting towards the strict end | P02 |
+| 24 | `setting` | first (name = dotted key, e.g. `subagents.max_depth`) | `default`, `description`, `scope` (`both`, `user`), `validate` `function(value)` -> value (or `gptr_error_invalid_argument`), `tighten` (NULL or chr: the ordered values from strictest to loosest) | values through `gptr_config()`; a project layer may only move a `tighten` setting towards the strict end (a trusted project's core `mode` excepted, D-250) | P02 |
 | 25 | `secret_source` | all | `resolve` `function(name, ctx)` -> chr(1)\|NULL (registered with `secret_register()` at once); `list` `function(ctx)` -> chr; `store`, `forget` (optional) | never logs values | P02 |
 | 26 | `redaction_rule` | all | `pattern` chr(1) (PCRE), `anchor` chr, `marker` chr(1) (the id inside `[secret:<id>]`), `profiles` chr | combined into one alternation; must not match its own marker | P02 |
 | 27 | `env_alias` | all (name = canonical) | `aliases` chr | used by `gptr_env()` and ambient discovery | P02 |
@@ -3546,7 +3627,7 @@ name and semantics follow Pi `1b347794`; `gptr` means gptr-specific. Handlers mu
 | `route`, `model_select` | gptr, pi | notify | `route`, `router`, `model`, `reason`; `from`, `to`, `reason` | - | P08, P06 (router switches, IC-69) |
 | `subagent_start`, `subagent_end` | gptr | notify | `child`, `agent`, `backend`, `model`; end: `status`, `usage` | - | P19 |
 | `artifact_start`, `artifact_stop` | gptr | notify | `id`, `url`, `version`; stop: `reason` | - | P23 |
-| `usage`, `budget_near`, `budget_exceeded` | gptr | notify | `row`; `kind`, `budget`, `used` | - | P06 |
+| `usage`, `budget_near`, `budget_exceeded` | gptr | notify | `row`; `kind`, `budget`, `used`; exceeded: `estimate` | - | P06 |
 | `cache_break` | gptr | notify | `provider`, `model`, `first_diff`, `entry`, `culprit` | - | P07 |
 | `bridge_call` | gptr | notify | `bridge`, `id`, `cmd` (redacted), `level`, `status`, `seconds`, `bytes_out`, `bytes_err`, `spill`, `digest` | - | P22 |
 | `checkpoint` | gptr | notify | `tool_call_id`, `objects`, `files`, `restorable` (counts) | - | P16 |
@@ -3721,10 +3802,10 @@ Layers, lowest to highest: package defaults < user `settings.json` < project `.g
 user-level project file `projects/<hash>.json` (IC-52) < `options(gptr.*)` < `gptr_config(.scope = "session")` <
 call arguments. An **untrusted** project contributes only changes that tighten `tighten`-type settings (a stricter
 `mode`, added `permissions.deny`/`permissions.ask` rules, a stricter `context`, `record = "off"`); a **trusted**
-project contributes every key, but `tighten`-type settings still only tighten and project `permissions.allow`
-rules never loosen `plan` or pre-approve level 4. A legacy `.gptr/settings.local.json` contributes only
-deny/ask additions and only in a trusted project. `egress` is read only from the user file. Safety options are
-snapshotted per run (IC-53).
+project contributes every key, but `tighten`-type settings other than `mode` still only tighten (its `mode`
+applies unless it is `yolo`, D-250) and project `permissions.allow` rules never loosen `plan` or pre-approve
+level 4. A legacy `.gptr/settings.local.json` contributes only deny/ask additions and only in a trusted project.
+`egress` is read only from the user file. Safety options are snapshotted per run (IC-53).
 
 | Key | Type | Default | Tighten order (strict -> loose) | Owner |
 |---|---|---|---|---|
@@ -3732,7 +3813,7 @@ snapshotted per run (IC-53).
 | `model` | chr\|null | `null` (first available route, §8.4 of `03`) | | P08 |
 | `small_model` | chr\|null | `null` (the catalog's small sibling of `model`) | | P08 |
 | `system1` | chr\|null | `null` (= `typesafe/jev-latest` when a key is found); `"emulate:<ref>"` opts into emulation | | P13 |
-| `mode` | chr | `"manual"` | `plan`, `manual`, `edits`, `auto`, `yolo` (project files only tighten) | P08/P11 |
+| `mode` | chr | `"manual"` | `plan`, `manual`, `edits`, `auto`, `yolo` (an untrusted project file only tightens; no project file sets `yolo`, D-250) | P08/P11 |
 | `preset` | chr | `"standard"` | | P07 |
 | `tools` | `{enable: [chr], disable: [chr], presets: {<model glob>: <preset>}}` | `{}` | | P07 |
 | `permissions` | `{allow: [rule], ask: [rule], deny: [rule]}` | `{}` | deny/ask additions tighten | P11 |
@@ -3810,30 +3891,34 @@ Values containing spaces are double-quoted with R escapes. Header keys, in this 
 | `sha` | recommended | first 8 hex of sha256 of the body lines as last written (user-edit detection) |
 | `call` | when > 1 | ordinal of the `peter()` call within the statement (pipelines) |
 | `tokens` | optional | `<input>/<output>` of the turn |
-| `cost` | optional | USD, plain number |
+| `cost` | optional | USD, plain number; written whenever the turn's cost is known (`0` for a free route), omitted when unknown (IC-74) |
 | `session` | recommended | session id |
 | `turn` | recommended | turn number in the session |
-| `value` | optional | the name designated with `gptr_return()` (replay binds `$value` to it) |
+| `value` | optional | the name designated with `gptr_return()` (replay binds `$value` to it): a bare name as written, `.gptr_value_<block id>` for an expression the body assigns, else omitted (one name, never an expression) |
 | `fork` | forks | `<parent session id>:<turn>` |
 | `plan` | when used | id of the session whose pending plan was consumed |
 | `status` | undone blocks | `undone` |
 | `args` | when the prompt was interpolated | 8 hex of sha256 of the sorted interpolated `name=value` pairs; part of freshness (IC-45) |
 | `kind` | team and fan-out blocks | `team` or `fanout` (IC-47) |
-| `children` | team and fan-out blocks | `"<name>:<session id>,..."` (quoted) |
+| `children` | team and fan-out blocks | `"<name>:<session id>[:<value>],..."` (quoted); `<value>` is the child's `value=` name, written when it designated one (IC-47) |
 
 **Body**, in emission order: the code of each successful `r` call with `record = TRUE`, verbatim except that
-top-level `gptr_return()` calls and calls of `record = FALSE` members are dropped and top-level `<-` is rewritten to
-`=` where safe (IC-48); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
-(excluded from `prompt` and `sha`, IC-49); after each such call that printed something, its output as `#> ` lines (at most `gptr.doc_output_lines` lines of 76 characters,
-then `#> ... (N more lines)`), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
+top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members are dropped, a top-level
+`gptr_return(<expression>)` (argument unnamed or `x`, called or piped, on any number of lines) becomes
+`.gptr_value_<block id> = (<expression>)` and top-level
+`<-` is rewritten to `=` where safe (IC-48); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
+(excluded from `prompt` and `sha`, IC-49); after each such call that printed something, its output as `#> ` lines (at most `gptr.doc_output_lines` lines, else the setting `doc$output_lines`, of 76
+characters, then `#> ... (N more lines)` counting every line not shown), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
 (`#> sh git status --porcelain: exit 0, 6 lines`); artifact references (`#> [app] .gptr/artifacts/<id>/app.R`,
 `#> [plot] <path>`); a block whose code needed a secret gets `# gptr: block needs secrets that are not recorded`.
 Code passes `code_for_history()` (literal secrets -> `Sys.getenv("NAME")`). Failed executions and plan-mode code
 are not recorded (a plan-mode turn gives one `## Plan: <plans path>` line). Overlay-fork turns are wrapped
 `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)` (IC-46). Team and fan-out blocks hold one
-`## Agent <name> (<model>): <first line>` line per child and, for children with exports, the child's code wrapped
-`local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` plus one
-`<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per export (IC-47). Indentation copies the owning
+`## Agent <name> (<model>): <first line>` line per child and, for children with exports or a designated value, the
+child's code wrapped `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` plus one
+`<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per export (IC-47). The text of a
+`## Steer:`, `## Follow-up:`, `## Decision:` or `## Agent` line is one line: line breaks (also U+0085, U+2028, U+2029)
+become spaces and control, bidi and zero-width characters are written `<U+XXXX>`, as the console shows them. Indentation copies the owning
 statement's first line. Ownership: the run of blocks starting at the first non-blank line after the statement
 (blank lines between blocks allowed); the k-th call owns the block whose `prompt=` matches, else the one with
 `call=k` (then stale). Only top-level calls own blocks (not inside `function`, `\(x)`, `for`, `while`, `repeat`,
@@ -3847,7 +3932,7 @@ statement's first line. Ownership: the run of blocks starting at the first non-b
 | `.Rmd` | a separate chunk `` ```{r gptr-<id>} `` directly after the owning chunk (fence and prefix copied), body with the markers, no `#>` lines |
 | `.qmd` | a chunk `` ```{r} `` whose first line is `#| label: gptr-<id>`, same body |
 | `.ipynb` | a code cell `{"cell_type": "code", "execution_count": null, "id": "gptr-<id>", "metadata": {"gptr": {"id", "model", "prompt", "date", "session", "turn", "value"}}, "outputs": [], "source": [...]}` after the calling cell; keys sorted; indentation copied from the file (Jupyter: 1 space); numbers kept as read (gptr writes no float of its own, so Jupyter's Python repr is preserved; D-158); only `source` and `metadata.gptr` change on rewrite; never written while the notebook is open: in Jupyter the block is shown as the cell output and kept pending until `gptr_doc(path, sync = TRUE)` (IC-50) |
-| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: a header comment (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, `# source() this file to replay ...`), `library(gptr)`, then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output; slash commands as comments (`# /model opus`) |
+| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: a header comment (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, or `none kept (gptr_init() keeps session logs in .gptr/)` when the log is in `tempdir()/gptr`, which R deletes at exit; `# source() this file to replay ...`), `library(gptr)` (at the top of every transcript, whatever its first block, IC-49), then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output; slash commands as comments (`# /model opus`) |
 
 **Undone blocks** (G7 §3.8): header `status=undone`, every body line prefixed `#~ `; Rmd/qmd chunks get
 `eval=FALSE` (`#| eval: false`); ipynb `metadata.gptr.status = "undone"` plus `#~ ` source lines. A top-level System 1
@@ -3917,8 +4002,8 @@ under `egress` (§11.2).
 | System 1 (P13) | memory (`the$s1_cache`) before a workspace; then `<root>/cache/s1/<2hex>/<sha256>.json` | `hash_sha256(canonical_json(list(schema = 2L, salt, endpoint, model, question, type, criteria, input)))` per element (`salt` from `cache/s1/salt`; `input` = the state; alias models keyed by the alias string) | `{"key", "model" (physical), "alias", "question_sha256", "input_hash" (salted), "answer", "prob", "probabilities", "confidence", "date", "usage": {"input_tokens", "output_tokens"}}`; never the input or the question text (IC-70); mtime touched on hit |
 | System 2 answers (P15) | `<root>/cache/s2/<2hex>/<sha256>.json` | `hash_sha256(canonical_json(list(schema = 2L, doc = <path relative to root>, block = <id>, part = <"" \| child name \| "n<ordinal>">, prompt = <prompt hash>, args = <args hash or "">)))` (IC-45, IC-47) | `{"block", "doc", "part", "prompt", "model", "answer" (redacted final text), "usage", "cost", "session", "turn", "date"}` |
 | Spill files (P01) | `<root>/cache/tmp/gptr-output-<id>.txt` | the out id | redacted full text |
-| Deferred document writes (P15) | `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.rds` | document path | `list(doc, base_md5, upserts = list(list(block_id, lines, site)), session, pid, time)` (IC-51); never pruned automatically |
-| Model catalog (P05) | `R_user_dir("gptr", "cache")/models.json`, `models.etag` | ETag | the refreshed catalog (§11.10 shape) |
+| Deferred document writes (P15) | `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json` (`<root>` the document's project `.gptr/`; outside one `R_user_dir("gptr", "cache")/pending/`, D-249) | document path | `list(doc, base_md5, upserts = list(list(block_id, lines, site)), session, pid, time)` (IC-51); never pruned automatically |
+| Model catalog (P05) | `R_user_dir("gptr", "cache")/models.json`, `models.etag` | ETag (sent only for a cache of the current `converter`) | the refreshed catalog (§11.10 shape) |
 | MCP tool lists (P18) | `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json` | `hash_sha256(canonical_json(command + args, or URL origin + path))` | `{"tools", "fetched_at", "ttl_ms", "cache_scope"}` (not stored when `cacheScope` is `private` and credentials are not the user's own) |
 | MCP era (P18) | `R_user_dir("gptr", "cache")/mcp-era/<hash>.json` | as above | `{"era": "modern" \| "legacy", "version", "date"}`, 7-day expiry |
 | Serialised entries (P06/P07) | memory (`live$memo`) | `<entry id>\|<api>\|<same model>\|<caps hash>` | the entry's JSON text for that api |
@@ -3927,7 +4012,7 @@ under `egress` (§11.2).
 ### 11.10 `inst/extdata/models.json.gz` (P05)
 
 ```json
-{"schema_version": 1, "generated": "2026-09-29", "source": "models.dev (MIT) + gptr overrides",
+{"schema_version": 1, "converter": 2, "generated": "2026-09-29", "source": "models.dev (MIT) + gptr overrides",
  "providers": {"anthropic": {"api": "anthropic-messages", "base_url": "https://api.anthropic.com",
                              "env": ["ANTHROPIC_API_KEY"], "compat": {}, "local": false}},
  "models": [{"provider": "anthropic", "id": "claude-sonnet-5-5", "name": "Claude Sonnet 5.5",
@@ -3949,10 +4034,16 @@ under `egress` (§11.2).
              "codex": {"ref": "codex/default"}}}
 ```
 
-(Values shown are illustrative except the structure.) A family alias resolves to the newest `active` model of the
-family by `release_date`; `claude-cli/default` and `codex/default` resolve through the CLI provider's `status()` to
-a full id before any invocation (CLI invocations always receive full ids). Merge order: snapshot < cache <
-overrides < user config `providers.*.models` < live discovery of local servers.
+(Values shown are illustrative except the structure.) `converter` versions the models.dev price conversion: a
+context tier `size` becomes a `>Nk` row, the legacy `context_over_200k` (a copy of the first tier) is read only
+when no context tier is given, and a repeated tier label is dropped. A refreshed cache of another `converter` is
+ignored (the snapshot is used) and the next refresh downloads it in full (D-250). A family alias resolves to the
+newest `active` model of the family by `release_date`; an alias with no such model, or whose provider is not
+registered, is `gptr_error_unknown_model` unless a registered provider of that name runs its first declared
+model (IC-19), and never reaches the fuzzy step (D-250);
+`claude-cli/default` and `codex/default` resolve through the CLI provider's `status()` to a full id before any
+invocation (CLI invocations always receive full ids). Merge order: snapshot < cache < overrides < user config
+`providers.*.models` < live discovery of local servers.
 
 ### 11.11 Worker protocol (P19; 15 §3.6)
 
@@ -4026,7 +4117,7 @@ additive `risk_rule` records (§10.2 row 33; the highest level wins on duplicate
 `inst/templates/vignette.Rmd`: an R Markdown document with a YAML header (`title: "Project instructions"`,
 `output: html_document`), a first line `@AGENTS.md` comment hint (as an HTML comment), and sections "Data",
 "Conventions", "Do not" with placeholder bullets; it contains no executable chunks. `inst/templates/settings.json`:
-`{"version": 1, "mode": "manual", "record": "ask"}`.
+`{"version": 1}` (no `mode` or `record`, so the user's settings apply; D-250).
 
 
 ---
@@ -4381,7 +4472,9 @@ every element and run `parallel`/`max_active` at a time (P19 acceptance: 20 elem
 earlier `envir`, or a fork overlay) > the caller frame (`parent.frame()`). Context symbols of the call are read
 from the call's frame; when a symbol label is not visible from the run's evaluation environment with the same
 object address, the gateway fails fast with `gptr_error_invalid_argument` naming the object and suggesting
-`envir =` or a named value. P08 test: `f = function(s, d) s |> peter("filter d", d)`.
+`envir =` or a named value. P08 test: `f = function(s, d) s |> peter("filter d", d)`. A session without a
+kept home whose first call ran in a function frame [R2] gives a once-per-session `home_not_kept` message when
+a continuation without `envir =` evaluates in an environment with another label (`home_label()`, D-251).
 
 **IC-41 Capture without forcing symbol dots.** (req-4) For a dot whose expression in `sys.call()` is a plain
 symbol (top level, data-first pipe, continuation with context), the gateway computes the facts with a leaf
@@ -4419,9 +4512,10 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 - `document` (order 50) matches a **top-level** call located in a document (any `doc_locate()` site with a
   path) that **contains a block owned by this call**. Replay needs no write consent. Without a block it sets
   `call$doc` when write consent exists and passes.
-- **Write consent** is checked only in `doc_upsert()`: `gptr_doc(path)` in this process (binds that document for
-  every `peter()` call of the process, console or script), `options(gptr.record = "auto")`, user-scope setting
-  `record = "auto"`, or an interactive yes (remembered per document in the user-level project file, IC-52).
+- **Write consent** is checked only in `doc_upsert()`: `gptr_doc(path)` in this process (consent for that
+  document, which also receives console calls; never for another one, D-249), `options(gptr.record = "auto")`,
+  user-scope setting `record = "auto"`, or an interactive yes (remembered per document in the user-level project
+  file, IC-52).
   `record` is a tighten-type setting, so a project can only turn it off; the earlier "trusted `record = auto`"
   wording is deleted.
 - **Freshness** also covers interpolated values: header key `args=<8 hex>` = the first 8 hex of sha256 of the
@@ -4438,16 +4532,34 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 
 - **Piped session**: when `call$session` is non-NULL, `session_replay_apply(s, block, header)` (P06) advances
   that **same object**: appends `gptr.replay`, adds the block id to `.d$seen` (a block already in `seen` adds no
-  turn), increments `turns`, sets the value by name from `value=` under the value policy, sets `last_text` from
-  the S2 cache when present, and returns `s`. So `identical(chain_result, first_result)` holds for a replayed
-  pipe chain.
+  turn), increments `turns` unless the active path holds the block's `gptr.doc_block` entry, not undone (the
+  session that recorded it, also as `session_replay_new()` finds it live), sets the value by name from `value=` under
+  the value policy unless the session holds a value of that turn (the recording session replayed into another
+  environment of the process keeps its own), sets `last_text` from the S2 cache when present, and returns `s`. So `identical(chain_result, first_result)` holds for a replayed
+  pipe chain. A session rebuilt from its JSONL first moves to the end of the block's turn, at the block's last
+  `gptr.doc_block` entry not undone (else at its recorded turn along the path it was rebuilt with), so each piped
+  block brings its turn back, also after an earlier replay that stopped sooner, and a live call continues from the
+  last one; a live run ends this. A reconstructed session first gains the block's turn from `doc`, reconstructed as
+  below.
 - **No piped session**: `session_replay_new(block, header, envir)` returns a live session holding the header's
   `session=` id if one exists in this process; otherwise a `replayed` session that adopts the recorded id when
-  no live session holds it. Its transcript comes from the session JSONL truncated at the recorded turn when the
-  file exists, else it is **reconstructed** from the document (the template as the user message, the recorded
-  code as the assistant's `r` call, the `#>` lines as its result, the S2 answer text if cached) with
-  `.d$history_source = "reconstructed"`. A later live continuation of a reconstructed session prints a one-time notice
-  that the history is reconstructed.
+  no live session holds it. Its transcript comes from the session JSONL truncated at the recorded turn (no value
+  record of a later turn kept) when the file exists, else it is **reconstructed** from the document (the template
+  as the user message, then in body order each run of recorded code as an assistant `r` call with its `#>` lines as
+  the result, each `## Steer:` line as the operator relay a live steer arrives as, each `## Follow-up:` line as a
+  user message after a placeholder answer, then the S2 answer text if cached) with `.d$history_source =
+  "reconstructed"`. A steer or follow-up read from a document reaches the model with the user's authority, as the
+  template does. A later live continuation of a reconstructed session prints a one-time notice that the history is
+  reconstructed.
+- **No answer**: a replayed session, or a replayed team or fan-out child, whose `$text` stays `NA` (no S2 answer,
+  live session or session file holds it; outside a workspace the S2 cache and session files are in `tempdir()`)
+  informs one `notice` per document and process: "No recorded answer for <doc>: replayed answers ($text) are NA.", plus,
+  without a workspace, " gptr_init(\".\") keeps answers in .gptr/ for later R sessions."
+- **No value**: a replayed block whose header has no `value=` while its recorded code still calls `gptr_return()`
+  (of an expression inside another expression, which IC-48 does not record), replayed into a session that holds no
+  value of its turn (the live session that recorded it holds one), informs one `notice` per block and process:
+  "No recorded value for block <id> of <doc>: a document records gptr_return() only as a top-level call, so
+  $value is not replayed."
 - **Fork blocks** (`fork=` header): the replay result is bound to the block id with `session_replay_bind(block,
   s)` in a process table `the$replay_blocks` (gptr-created sessions only, never user frames; replaced on
   re-source). Recorded fork turns are wrapped `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`;
@@ -4460,15 +4572,18 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 **IC-47 Recording teams, fan-outs and block-nested calls.** (req-6)
 
 - A top-level team or fan-out statement owns **one block**: header `kind=team|fanout`,
-  `children="<name>:<session id>,..."`, `session=<team id>`, `turn`; body per child in name order:
-  `## Agent <name> (<model>): <first line of its report>`; for a child with exports, its recorded code wrapped
-  `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` followed by one
-  `<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per exported name. Child texts
+  `children="<name>:<session id>[:<value>],..."` (the third field is the name the child designated with
+  `gptr_return()`, as a block's `value=`), `session=<team id>`, `turn`; body per child in name order:
+  `## Agent <name> (<model>): <first line of its report>`; for a child with exports or a designated value, its
+  recorded code wrapped `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` followed by
+  one `<export> = gptr_resume(block = "<id>", child = "<name>")$envir$<export>` line per exported name. Child texts
   are cached in S2 under `(doc, block, "<name>")`. Replay returns a team or fan-out session of replayed children
-  with zero requests; the "team and fan-out calls own no document block" note is deleted. Because the `team` and
-  `fanout` routes (15, 16) run before `document` (50), they first call the `doc.replay` service (P15; absent
-  before P15, then they run live) and return its replayed session when the statement's block is fresh, and they
-  pass their session to P15's writer through `run$opts$doc` like any other top-level call.
+  with zero requests, each child's value designated by the third field (an entry of two fields designates none)
+  and, for a fan-out, each child's element bound as `.x` in its home as for a live child, so the recorded code
+  that follows rebinds the value; the "team and fan-out calls own no document block" note is deleted. Because the
+  `team` and `fanout` routes (15, 16) run before `document` (50), they first call the `doc.replay` service (P15;
+  absent before P15, then they run live) and return its replayed session when the statement's block is fresh, and
+  they pass their session to P15's writer through `run$opts$doc` like any other top-level call.
 - **Block-nested calls**: a `peter()` statement located directly inside an agent block's body (`site$in_block`)
   is replayed from S2 under `(doc, block, "n<ordinal>")` in `auto` and `replay` (zero requests; a miss under
   `replay` errors `not_recorded`) and runs live only in `live`. When a block is written, the final texts of the
@@ -4480,12 +4595,17 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 
 **IC-48 What recorded code contains.** (req-1, req-26, req-28)
 
-- `gptr_return(x)` outside a run returns `invisible(x)` with a once-per-session `notice`, suppressed while a
-  document is being replayed; `gptr_error_not_in_run` is removed.
+- `gptr_return(x)` outside a run returns `invisible(x)` with a once-per-session `notice`, suppressed in replay
+  mode (`replay = "replay"`, `GPTR_REPLAY=replay`); `gptr_error_not_in_run` is removed.
 - `doc_block_lines()` drops, at top-level-expression granularity (`getParseData()` of each recorded code chunk),
-  calls to `gptr_return()`/`gptr::gptr_return()` and to members whose spec has `record = FALSE`; a chunk that
-  becomes empty is omitted; the value stays in `value=`. `record = FALSE` is set for `out`, `plot`, `help`,
-  `search`, `describe`; the `<r_session>` text tells the model to use them only with `record = false`.
+  calls to `gptr_return()`/`gptr::gptr_return()` of a name (or with another named argument or none) and to members
+  whose spec has `record = FALSE`; a chunk that becomes empty is omitted; the value stays in `value=`. A call with
+  one expression, unnamed or `x` (called or piped, on any number of lines), becomes `.gptr_value_<block id> =
+  (<expression>)`, and `value=.gptr_value_<block id>` when no other `gptr_return()` left in the code can run after
+  it (one in a later top-level expression or inside a function can), so replay recomputes it. Such a call inside
+  another expression is kept as written and records no value (IC-46 says so on replay). `record = FALSE` is set
+  for `out`, `plot`, `help`, `search`, `describe`; with a document bound (when `r` has `record`), the `<r_session>`
+  text tells the model to use them only with `record = false` (D-248).
 - Plan-mode runs never record code (`record` forced `FALSE`); their block holds one `## Plan: <plans path>`
   comment.
 - S-9 best effort: `doc_block_lines()` rewrites `<-` to `=` for `LEFT_ASSIGN` tokens whose assignment is a
@@ -4498,11 +4618,20 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
 as `s_<6 hex of the session id> = peter("...")`, later REPL turns as `s_<hex> |> peter("...")`. Steers and
 follow-ups delivered during a block's turn (pause menu, `gptr_steer()`, pipe into a running session, a line typed
 in a terminal console [IC-76]) are recorded
-inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`.
+inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`; a
+blank text is written `## Steer:` without the trailing space, and a line is steering with or without it.
 A REPL turn is a console turn whatever started the console: a sourced script, an `Rscript` file or the editor's
 buffer holding the `peter()` statement that started it locates none of its turns (P28 Task 29: the REPL marks
 its gateway calls `gptr_console`, and `doc_locate()` runs no finder for them).
-P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one
+Every transcript file opens with the replay note and `library(gptr)` (`doc_transcript_preamble()`), whatever its
+first block, a direct R line or a command too; while a session runs in the background (the pause menu's [b]),
+whose block is written when its run ends, the console's direct R and command lines for it wait in its live handle
+and follow that block, in the order typed (`doc_console_append()`, P28 Task 76, visual round 3: a record opened
+with `x = 1` had no `library(gptr)`, and `!gptr_last()$status` and `# /exit` came before the `peter("go bg")` they
+followed).
+A console transcript records every settled run; a run that ended `aborted`, `error`, `max_turns`, `blocked` or
+`budget` gets a last `## Run: <status>` line and caches no S2 answer (a script document records only `idle`
+runs). P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one
 session.
 
 **IC-50 Jupyter documents.** (req-11) With `front_end() == "jupyter"` gptr never writes the open notebook: the
@@ -4520,7 +4649,10 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
   instead of overwriting. Sidecars are never pruned automatically; `gptr_cache("info")` lists them. Under a
   document lock held by another live pid (array jobs) nothing is recorded and a notice is printed.
 - New sidecars use a versioned, closed plain-data JSON record at
-  `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json`. Required scalar/array/null fields,
+  `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json`, `<root>` being the `.gptr/` of the document's
+  project; a document outside one keeps it in `R_user_dir("gptr", "cache")/pending/`, never in a `tempdir()`, so
+  another process finds it after the writer exits or is killed (D-249). The document's lock is `locks/<sha1>` in
+  the same `.gptr/` or `pending/`, so every process recording the document takes the same one. Required scalar/array/null fields,
   nested anchors and notebook block metadata are validated before recovery. Modern records have
   a fixed 16 MiB byte limit: readers reject oversize/missing/directory inputs and read at most
   that limit plus one byte even if the file grows; writers reject oversize encoded records
@@ -4554,10 +4686,14 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
   `.R`, `.Rmd`, `.qmd` or `.ipynb`, and not be a `control` or protected path.
 - Instruction authority follows trust. In an untrusted project, project instructions render as
   `<project_instructions trusted="false">` and the frozen `<context>` section says such blocks are information,
-  not commands; the first interactive session in an untrusted project that has `AGENTS.md`, `CLAUDE.md` or
-  `.gptr` skills/agents asks the trust question once. Non-interactive + untrusted + mode `auto` or `edits`:
-  project instructions, project skills and project agents are omitted with a notice. Only skills from user
-  directories, installed packages and trusted projects enter the T1 catalog. Project-file updates are no longer
+  not commands; the first interactive session in an untrusted project that has trust-gated files, an instruction
+  file (`AGENTS.md`, `AGENTS.override.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.gptr/vignette.Rmd`) or a skill,
+  prompt-template or agent directory gptr reads (`.gptr/{skills,prompts,agents}`, `.agents/skills`,
+  `.claude/{skills,agents}`, `.codex/agents`, `.pi/agents`, a relative `skills.paths` entry) asks the trust
+  question once; without a human such a project gets the untrusted notice (D-252). Non-interactive + untrusted +
+  mode `auto` or `edits`: project instructions, project skills and project agents are omitted with a notice.
+  Only skills from user directories, installed packages and trusted projects enter the T1 catalog.
+  Project-file updates are no longer
   operator messages but user-role `project_instructions_update` context blocks; `context_block` `authority = "operator"` is allowed only for records of rank >= 3.
 - `trust.json` records a `fingerprint` (sha256 over the sorted paths and contents of the trust-gated files:
   `.gptr/settings.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `APPEND_SYSTEM.md`, `agents/`, an
@@ -4575,9 +4711,9 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    human). `builtin:permissions`, `builtin:plan` and the `critical_guard` and `secret_guard` policies cannot be
    disabled by filters from any source; filters that would remove `policy` or `hook` records are refused inside a
    run. The only escape is `options(gptr.unsafe_no_permissions = TRUE)` set outside a run (documented for
-   sandboxed CI). The `yolo` mode (IC-78) is a partial opt-out that only the person selects: project settings,
-   nested calls and children only tighten, and from model code in another mode `gptr_config(mode =)` and
-   `options(gptr.mode)` are control actions.
+   sandboxed CI). The `yolo` mode (IC-78) is a partial opt-out that only the person selects: no project file sets
+   it (D-250), nested calls and children only tighten, and from model code in another mode
+   `gptr_config(mode =)` and `options(gptr.mode)` are control actions.
 2. `run_start()` snapshots `gptr.ui`, `gptr.interactive`, `gptr.critical_guard`, `gptr.secret_guard`,
    `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode` and `gptr.unsafe_no_permissions`; the run's gate
    reads only the snapshot.
@@ -4607,6 +4743,10 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    call's first line, cut to the console width before `(+N more lines)` (an absolute path inside the project
    relative to it), then the flagged calls one per line, highest level first, each cut to the console width, at
    most 5, then `(+N more; ? shows all)`; `[a]`/`[p]` are offered only with a `suggested_rule` (D-187, D-222).
+   A flag has one shape in the ask and in the `?` view, `[<level> <category>] <call>` (`ui_flags()`), its
+   backticked names inline code as in an answer and an object's `<class, size>` the mention line's `(class,
+   size)` (P28 Task 49: the ask showed the Markdown and angle brackets and `?` another shape, `[2] file_write
+   <call>`); the `?` view's first row names no level where its reason row does.
 
 P24's `test-injection-e2e.R` adds an injected model trying each path above; every attempt ends in a human ask
 (interactive) or `blocked` in every mode but yolo, which runs gptr's own exports by design (IC-78).
@@ -4620,8 +4760,11 @@ P24's `test-injection-e2e.R` adds an injected model trying each path above; ever
   httr2 and curl) is at least level 2 (delete verbs 3). User and plugin `risk_rule` rows (IC-69) may lower
   levels explicitly.
 - Plan mode evaluates an `r` call only when every call in it resolves to an allowlisted read-only function
-  (level-0 `read` rows, base/stats/utils getters and summaries, describers, gptr read members); otherwise the
-  call is denied with "not known to be read-only in plan mode".
+  (level-0 `read` rows, base/stats/utils getters and summaries, describers, gptr read members), to a `file_write`
+  row whose risk is its path argument called directly (`cat()`, `writeLines()` or `dput()` to the console), or to
+  a lookup of a literal function (`do.call(rbind, ...)`, whose function is checked as a call of its own), the
+  last two only when the scan flags none of their calls; otherwise the call is denied with "not known to be
+  read-only in plan mode" (D-251).
 - `path_class()` gains `control` (level 4, `ask_human`, never pre-approved by rules): `.gptr/settings*.json`,
   `.gptr/mcp.json`, `.gptr/extensions/`, `.gptr/plugins/`, `.gptr/SYSTEM.md`, `.gptr/APPEND_SYSTEM.md`,
   `.gptr/agents/`, all of `R_user_dir("gptr", "config")`, `.git/hooks/`, `.git/config`, `.Rprofile` anywhere,
@@ -4639,6 +4782,14 @@ working: <text>`. `extension` items are user-role data `Extension <name> sent th
 <text>`; `agent` items are delivered as `<agent_report from="<name>">...</agent_report>` user-role data, never
 as steers. `ctx$send()` and `gptr_steer()` called from model-evaluated code of the same session tree are refused
 with `gptr_error_permission`. Test: a child agent's text never appears in an operator message.
+Each replay of a block (IC-46), also a second source of its script in one process, sets the texts of the
+block's `## Steer:` and `## Follow-up:` lines on the session as its notes, and takes back a queued `api_user` or
+`pipe` item equal to one (a `queue_update` `withdraw` each). While the session is idle, `gptr_steer()` and a pipe into it drop a text equal to a note
+(as `doc_one_line()` writes it, either kind; the note is consumed) with one `notice`, "A steer this script sends
+is already recorded in the replayed block; it was not sent again.", so a replayed script does not send its
+recorded steers twice; a live run clears the notes. A run that `gptr_step()` or `gptr_wait()` starts from queued
+input has no document site: under a `gptr_doc()` binding, outside replay mode, it informs one `notice` that its
+turn is not recorded.
 P28 amends this item in §15.10 (D-242): a step boundary delivers every queued steer, each as its own message.
 
 **IC-56 Pending-plan hand-off.** (safe-19) The plan is handed only to the **next** `peter()` call of the same R
@@ -4659,7 +4810,8 @@ step list before its first action.
 - The background pump is a no-op while the reactor is on the stack (depth > 0).
 - Asks raised outside a blocking gptr call (background runs, `gptr_mcp_serve()` at an idle console) never
   prompt from a `later` callback: a background run moves to status `waiting` (a notice; `gptr_jobs()` shows it)
-  and the ask is shown at the next `gptr_wait()`, `peter()` or console turn; a served request that needs approval
+  and the ask is shown at the next `gptr_wait()`, `peter()` or console turn, whose resumed run opens with a user
+  message saying that the user is at the console (D-252); a served request that needs approval
   is denied with how to allow it and a console notice. Non-interactively both are `blocked`/denied.
 - A background R tool that changed bindings in the user's environment at an idle tick prints one notice.
 - P04/P19 acceptance: an inline agent calls System 1 while a sibling has a queued tool; the sibling's tool starts
@@ -4678,7 +4830,7 @@ CLI child evaluates in the fork overlay and a plan-mode parent gates in plan mod
   writes and flushes inside `suspendInterrupts()`, per entry or per batch at a turn boundary. No R connection
   outlives a gptr call; the live record keeps the path and the lock only. The same rule holds for the wire log,
   the JSONL frontend (it writes to a connection its caller owns) and the `.stdin` REPL connection (closed on
-  `/exit` and by `on.exit()`). R allows 125 user connections, and `--as-cran` examples fail with "connections left
+  `/exit` and by `on.exit()`; R's console connection, read under `R < file`, stays open). R allows 125 user connections, and `--as-cran` examples fail with "connections left
   open" (both reproduced).
 - **Torn-line recovery**: opening an existing file for a resume reads its last byte; when it is not LF, gptr
   appends `"\n"` and a `gptr.recovered` custom entry naming the torn byte range before any new entry.
@@ -4855,6 +5007,12 @@ document are exact.
 **IC-66 Budgets.** (safe-11) Settings default `budget = {cost: 5, tokens: 2000000, turns: null}` per top-level
 call (per prompt at the console); `budget_near` at 80%; reaching it asks to extend by the same amount
 (`ask_human`) interactively and stops with status `budget` otherwise; `null` set explicitly disables a limit.
+The token limit counts the next request's estimated input: when that, not the usage, crosses it, the question and
+the stop say so ("the next request (~3.9k tokens) would exceed the tokens budget of this call (9.0k; used 5.8k)";
+D-251), and an extended budget is checked again before the request is sent.
+A request of unknown cost (a model without prices) counts nothing toward a cost limit (D-025), so a cost
+limit the call sets itself informs once that it is not enforced (`gptr_message_budget_unpriced`, fields
+`budget`, `model`; a team or fan-out says it once; the settings default says nothing; D-251).
 Budgets are hierarchical: every request's check walks to the root session and charges the root, and children
 start with `min(<their share>, <root remaining>)`. Caps: `gptr.max_nested_calls` (20 `peter()` calls per `r`
 evaluation; a team or fan-out counts as one) and `gptr.s1_max_elements` (10,000 elements per System 1 call; error
@@ -4877,7 +5035,8 @@ calls and suggests `GPTR_REPLAY=replay`.
   recorded by an appended `gptr.image_elision` entry (one stated cache break). P09 acceptance: a 50-plot loop
   attaches 3 images.
 - `eval_guard()` flags the `q` and `quit` symbols in any position (as a value, a `FUN` argument, inside
-  `match.fun`, `get`, `do.call`, `base::`) as level 4 [12 fact-check].
+  `match.fun`, `get`, `do.call`, `base::`) as level 4 [12 fact-check]; a value passes when the code assigns it
+  or the evaluation environment binds it to data (D-252).
 - No shipped prompt text or skill recommends `str()` (it leaves a sticky reference: every `str()` of a large
   object makes the next edit copy; re-verified); the texts recommend `peter$describe(x)`, `dim()`, `head()`. A P07
   test fails when any shipped section or skill mentions `str(`; the high-performance-r skill states the cost.
@@ -5003,7 +5162,7 @@ calls and suggests `GPTR_REPLAY=replay`.
 | OAuth | refuse AS metadata without `code_challenge_methods_supported` or without S256; validate `iss` (RFC 9207) when advertised; own callback reader keeping `iss`; state and redirect checks; negative mock cases in P18 [16 §4 item 8, fact-check] | fid-17 |
 | frontmatter | scalars of the string keys (`name`, `description`, `version`, `model`, `tools`, `argument-hint`) keep their source text (YAML 1.1 turns `yes`/`on`/`1.0` into logicals and numbers; verified) | fid-19 |
 | describers | methods for classes of packages outside Suggests (Matrix, SeuratObject, SingleCellExperiment, arrow, ggplot2) use only base generics, `methods::slot()`/`slotNames()`, `attr()`, `dim()`, guarded by `isNamespaceLoaded()`; never `pkg::fun()` | cran-21 |
-| compaction floor | at freeze the post-compaction floor (static prefix + project instructions + re-injection budgets + 634) is compared with the threshold; if it is not below it, skill and project re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `preset = "minimal"` or `context = "names"`; an unknown window still checks a finite `compact_at` floor and reports an insufficient cap as `arg = "compact_at"`; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the window, or 20% of the finite effective cap for an unknown window with finite measured current and post-checkpoint counts compared on the same current estimator-multiplier basis (missing multiplier defaults to 1; invalid multiplier/counts provide no growth evidence); a `plan-cli` reply's usage (a turn's sum over the CLI's model calls) anchors no projection and updates no multiplier, and a CLI model triggers neither rule [D-202] | safe-20 |
+| compaction floor | at freeze the post-compaction floor (static prefix + project instructions + re-injection budgets + 634) is compared with the threshold; if it is not below it, skill and project re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `tools = "minimal"` (`context = "names"` does not lower the floor) [D-250]; an unknown window still checks a finite `compact_at` floor, and an insufficient cap (an unknown window, or a threshold equal to the cap alone) is reported as `arg = "compact_at"` [D-250]; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the window, or 20% of the finite effective cap for an unknown window with finite measured current and post-checkpoint counts compared on the same current estimator-multiplier basis (missing multiplier defaults to 1; invalid multiplier/counts provide no growth evidence); a `plan-cli` reply's usage (a turn's sum over the CLI's model calls) anchors no projection and updates no multiplier, and a CLI model triggers neither rule [D-202] | safe-20 |
 | concurrent writers | read-modify-write of `auth.json`, settings, trust, MCP and user-level project files (and the OAuth refresh) under one short `mkdir` lock (`<file>.lock/`, pid + creation time, 50 x 100 ms retries); a lock is stale when `pid_alive()` is `FALSE` or it is older than 30 s, never when it has vanished (the taker retries); checkpoint blob GC prunes only blobs unreferenced by every session file of the project and older than `gptr.checkpoint_days`, and skips while another live pid holds a session lock in the project | safe-17 |
 | artifact access | each launch gets a 128-bit token (`openssl::rand_bytes(16)`, else `/dev/urandom` on Unix; on Windows without openssl no token and a notice); the wrapper app rejects sessions whose URL lacks `gptr_token=<hex>`; the handle's URL carries it; static checks flag reads of `secret_file` paths at level 3 | safe-22 |
 | knobs | one knob per limit: options `gptr.subagents.max_depth`, `.max_active`, `.max_workers`, `.max_cli`, `.max_tasks` mirror the settings keys; `gptr.max_active` is HTTP transfers only; `gptr_parallel(max_active = NULL)` defaults to `gptr.subagents.max_active` | cons-20 |
@@ -5181,9 +5340,9 @@ totals line names the model and the context left.
    an `ask_human` request adds `     asks in every mode: <reason>`; a sub-agent's `ask` question
    starts `sub-agent <agent> asks: ` and its budget question `sub-agent <agent>: `.
 3. Invalid answers: `a`/`p` where nothing can be remembered (level 4, control, the `ask` tool, no
-   `suggested_rule`) say why; other text gives
-   `Not an answer: '<text>'` and the letters allowed (`?` shows the detail view and is not
-   counted); after 5, `No valid answer after 5 tries; refused.` and a denial with the reason (not
+   `suggested_rule`) say why; other text gives one row in the console's terms, `not an answer`,
+   `kept in history ↑` when kept, and the keys allowed (`?` shows the detail view and is not
+   counted); after 5, `no valid answer after 5 tries · refused` and a denial with the reason (not
    feedback, cheat-sheet review) `no valid answer was given at the approval prompt`.
 4. Progress: a child run (depth 1+) whose outermost run is in the foreground prints, at
    verbosity 1+ unless `gptr.quiet`, `  sub-agent <agent> started (<model>)` (the model the child
@@ -5209,8 +5368,9 @@ totals line names the model and the context left.
 
 - `session_modes` is `plan < manual < edits < auto < yolo`; every literal mode list uses it (the L1 CLI adapters
   name `"yolo"` explicitly). `peter(mode =)`, `/mode`, user and session settings, `options(gptr.mode)` and agent
-  specs accept it; project settings, nested calls and children only tighten (IC-52, IC-53 item 4). A project
-  value is compared with the default when the user's value is not a valid mode.
+  specs accept it; no project file sets it (an untrusted one only tightens the mode, D-250), nested calls and
+  children only tighten (IC-52, IC-53 item 4). A project value is compared with the default when the user's
+  value is not a valid mode.
 - Gate: the `mode` policy allows every call; `critical_guard` takes the level of the flagged rows that are not
   `control`, except `options(gptr.*)`, which could switch the guard off, and asks a person at level 4 while the
   guard is on; `secret_guard` asks only for secret-to-network flows; `protect_size` is skipped as in auto; deny
@@ -5286,6 +5446,14 @@ totals line names the model and the context left.
   instruction (IC-71) joins the last user message. With no tools to send, past tool calls and results are text
   (Converse refuses `toolUse` and `toolResult` blocks without `toolConfig`). No tool choice and no cache points
   are sent (capabilities `forced_tool_choice = FALSE`, `cache = "none"`).
+- Thinking (D-250): a model whose id contains `anthropic.claude` and whose record declares
+  `capabilities$adaptive_thinking` gets the adaptive fields of `anthropic_thinking()` (report 07 section 2.6) in
+  `additionalModelRequestFields`: `thinking` `adaptive` (none for `off`) and, with `effort`,
+  `output_config.effort`. Any other model, an undeclared Claude record included, is sent no thinking field and
+  `maxTokens` as asked; a level other than `off` gives a `notice` once per model naming
+  `capabilities = list(adaptive_thinking = TRUE, effort = TRUE)`. No budget is sent: a record cannot say it
+  thinks on a budget (undeclared capabilities are `FALSE`), and Opus 4.8 refuses `enabled` with HTTP 400. Converse
+  reports no reasoning tokens, so `usage$reasoning` keeps the legacy zero of an absent field (IC-74).
 - Signing: with a credential, `build()` returns `sign` (04 section 8.1): AWS Signature Version 4 for service
   `bedrock` and the provider record's `compat$region` (required), signed headers `host`, `x-amz-content-sha256`
   (the body's SHA-256), `x-amz-date` and, with a session token, `x-amz-security-token`; the canonical URI is the
@@ -5341,40 +5509,50 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     is off), and a notice says `(kept in history)` only for a line that was added. In IDE consoles, which hold lines typed during a run until R reads, this is the
     only route by which such a line steers.
   - A paste after an answer goes to the history as one entry (not for a secret) with
-    `  A pasted block is not an answer (kept in history).`, and the question is asked again. Every history entry
+    `    a pasted block is not an answer · kept in history ↑`, and the question is asked again. Every history entry
     of several lines, the REPL's own inputs too, is added as a `"""` block (`console_history_add()`), so Up then
     Enter sends it back as one input.
-  - An invalid approval answer (IC-77 item 3) that is not empty goes to the history in an interactive session:
-    `  Not an answer: '<text, at most 40 characters>' (kept in history).` (no ` (kept in history)` when nothing
-    was kept), then the hint with the prompt's own letters,
-    `  Type y, a or n (n <text> says what to do instead), or ?.` (`y or n` where nothing can be remembered). An
-    empty answer gets the hint alone and still counts as one of the 5 tries. The approval's notices are
-    word-wrapped (`console_wrap()`) at the width of its rows, `cli::console_width()` less `console_pad()`.
+  - An invalid approval answer (IC-77 item 3) that is not empty goes to the history in an interactive session.
+    One dim row at column 4 says so in the console's terms (`ui_reask()`, in rows of whole terms at the width of
+    the approval's rows, `cli::console_width()` less `console_pad()`): `not an answer`, `kept in history ↑` only
+    for a line that was added, then the prompt's own keys bold, `y, a, p, n, n <instead> or ?` (`y, n, n
+    <instead> or ?` where nothing can be remembered); the question's title is right above it (P28 Task 71,
+    visual round 3: `Not an answer: '<text>' (kept in history).` and `Allow r? Type y, a, p or n (n <text> says
+    what to do instead), or ?.`, two sentences that repeated the title). An empty answer gets the same row and
+    still counts as one of the 5 tries.
 - IC-76 amended (D-242, D-243; P28 Tasks 2, 13-16, 18-21).
   - A question drains before it reads (Task 2). On a terminal REPL, while a run of the call has a session,
     `ui_console_read()` reads fd 0 with `console_typed(drain = TRUE)` just before its `readline_answer()`, so the
     queue and kept lines sit under the question's rows, right above `› ` (visual review: drained before the rows,
     they split a call's code from the flagged rows of its ask):
     `tty_drain_mode()` (echo stays off), `console_typed_lines(rd, 0L)` until nothing is left, then
-    the saved modes (on exit). Complete lines are routed as before. Where a partial line was read, its row is
+    the saved modes (on exit). Complete lines are routed as before, but the first that is one of the
+    question's answers (`ui_console_read(prompt, accept = )`: an approval's `y`, `yes`, `a`, `p`, `?`, `n`,
+    `n <text>`; a choice's numbers), which `console_typed(drain = TRUE, accept)` returns (`typed_answer()`): typed
+    once the rows showed, it answers, echoed after `› ` on the band, and once the drain read fd 0
+    `readline_answer()` takes one however soon readline reads it (P28 Task 54, visual round 2: `y` typed 20 ms after `Allow r?`, 250 ms in TERM=dumb,
+    became `↳ steer · not an answer` and the question was asked again). Where a partial line was read, its row is
     first erased as the D live row is (`\r`, spaces to width - 1, `\r`): the question's rows turn the echo back on
     (`tty_question()`), and the terminal echoed the keys typed after that, so `reams↳ kept in history` was one
     row (review of Tasks 22-27). A trailing partial line (attr
     `partial` of `console_typed_split()`) that is not blank goes to `console_history_add()` with
     `↳ kept in history ↑ · <line>` (`-> kept in history Up - <line>` where the output is not UTF-8), or, with
     `gptr.history` off, `↳ not kept (gptr.history is off) · <line>`: the echo is off while a run streams, so the
-    line quotes it. It is the person's held text, dim at column 0 and cut to three rows like a queue line
-    (`console_keep()`; visual review: it was a full-ink `[gptr]` notice inside the tool block). The question's `readline()` therefore starts empty: typed-ahead text is never an
-    invalid answer, a denial (`no ...`) or an ask-tool answer. `gptr_confirm()` (L0, also asked during a
+    line quotes it. It is the person's held text, dim at column 0, its lines joined by a blank and cut to three
+    rows (`console_keep()`; visual review: it was a full-ink `[gptr]` notice inside the tool block). The question's `readline()` therefore starts empty: typed-ahead text is never an
+    invalid answer or an ask-tool answer, nor a partial line a denial (`no ...`). `gptr_confirm()` (L0, also asked during a
     run, e.g. by `egress_check()` for a nested call's provider) is not drained, so this holds for the
     console questions only; its stale lines go to the history (IC-75).
   - Queued and delivered messages (Task 13). Queueing (`policy_enqueue()`: typed lines, a line a question reads
     past, the pause menu's [s] and [f]) prints one dim line at column 0, `↳ steer · <text>` or
     `↳ follow-up · <text>` (ASCII `-> steer - <text>`); on a CLI route (model type `"cli"`) a steer adds
     ` · after the CLI's answer`, and prints its line in a T console while the live row is up too (review of
-    Tasks 16-21). The text is escaped and wrapped inside the console width (width - 1), later rows
-    under the text, and cut to three rows, the last ending in `…`; inside an evaluation the line has the
-    console's colours. It replaces the notices `[gptr] steering: ...` and `[gptr] follow-up queued: ...` above.
+    Tasks 16-21). Up's take-back writes `↳ taken back · <text>` (ASCII `-> taken back - <text>`) where the
+    message's queue line shows, by the same rule (P28 Task 37: a CLI route's withdrawn steer kept a line that
+    read as if it would be sent). The text is escaped, its lines joined by a blank, and cut to one row of the
+    console width (width - 1) ending in `…`, as the live row's queue view (P28 Task 74, visual round 3: three
+    rows, a multi-line message's later lines at column 2 under the glyph, not under its text); inside an
+    evaluation the line has the console's colours. It replaces the notices `[gptr] steering: ...` and `[gptr] follow-up queued: ...` above.
     A line a question read past (IC-75, `console_typed_ahead()`) is on screen already, after the question's
     chevron, so its queue line says `↳ steer · not an answer` (`follow-up` for its kind) in place of the text:
     RStudio and R.app showed such a line three times (visual review).
@@ -5388,7 +5566,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     not `.stdin` or `jsonl`), `policy_enqueue()` holds a follow-up, and any text starting with `/` or `!` (the
     pause menu's [s] too), in the reader's `typed` lines after its queue line (`↳ follow-up · <text>`), not in
     the session's FIFO; `console_typed_route()` puts a batch's message after the held lines typed before its
-    first line. Held `/command` and `!code` lines show the same line, `↳ follow-up · <line>`, in the order typed,
+    first line, and drops a cursor key's escape sequence (CSI `ESC [ ... <final>`, SS3 `ESC O <c>`) from the
+    lines it routes, as the composer does, and a line that was only that (P28 Task 68, visual round 2: in
+    TERM=dumb Up then ` again` steered `<U+001B>[A again`). Held `/command` and `!code` lines show the same line, `↳ follow-up · <line>`, in the order typed,
     a `!code` line with the lines that continue it as one entry; it replaces `[gptr] after this answer: ...`, so
     everything waiting for the next prompt reads alike. After the run's status line the REPL reads them first,
     in order: each is echoed at its prompt
@@ -5411,8 +5591,12 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     (as above; with `gptr.history` off `↳ not kept (gptr.history is off) · ...`).
     These replace `[gptr] dropped typed lines: ...` and `[gptr] dropped queued messages: ...`. At verbosity 2 the
     list follows the run's status line, and the blank row before the prompt follows the list. `policy_abort()`
-    prints `[gptr] aborted; the session is kept.` only when no status line said `aborted` (verbosity 0, or no run
-    in the foreground). The composer's draft joins this list (Task 18). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
+    prints `aborted · the session is kept` (dim, in the banner's words; `[gptr] aborted; the session is kept.`
+    until P28 Task 64) only when no status line said `aborted` (verbosity 0, or no run in the foreground). So do
+    the REPL's other notices: `ctrl-c again leaves · /exit` at an idle Ctrl-C (the keys bold; `[gptr] press Ctrl-C
+    again to leave gptr, or type /exit`), `interrupted`, `timed out` for `!` code, `<n> background session(s)
+    wait(s) for approval · the next prompt or gptr_wait() asks`, and in red `the queued message could not be
+    delivered: <why>`, none tagged `[gptr]` (P28 Task 64, visual round 2). The composer's draft joins this list (Task 18). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
     layering test (12.2). The pause menu's [b] ends no run in the foreground, so it settles the REPL's held lines
     and the draft itself (`console_background_settle()`, steering review): one such list after its `running in
     the background` row and before the blank row, and an empty composer; queued steers stay for the run. A
@@ -5450,7 +5634,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
   - Typing while the agent works (Task 18; T class). A T console's prompt call puts the terminal in character
     mode (`tty_call()`, §7.1: `-icanon -echo -iexten min 1 time 0`, the saved modes back on return, error,
     interrupt and, by a finalizer, `q()`; only a kill or a crash leaves `stty sane` to the person); a D console
-    keeps `-echo` and its lines (D-221), and radian, an L console, gets neither. `gptr_readline()` reads with the
+    keeps `-echo noflsh` and its lines (D-221; P28 Task 58), and radian, an L console, gets neither. `gptr_readline()` reads with the
     saved modes and sets the call's again after. `console_typed()` runs every 0.05 s; in T it reads fd 0
     (`console_typed_chars()`, the text `console_typed_lines()` splits into lines) into the composer,
     `console_keys(rd, session, chars)`, whose state is the REPL reader's `compose` (`rd$compose$draft` the
@@ -5481,15 +5665,25 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     (`console_asked()`, on exit of `ui_console_permission()`, `ui_console_select()` and `ui_console_input()`)
     the row is drawn again with the draft unchanged, so it shows while the call the question gated runs. A
     sub-agent's question waits the same way, one at a time; what is typed goes to the session of the console
-    call (the parent). D keeps the drain after the rows (Task 2); `gptr_confirm()` and the pause menu do not
-    wait. A question's read that Ctrl-C or an end of input ends (`ui_console_read()`, `console_ask()`) first
+    call (the parent). A D console's call waits the same way (`console_ask_wait_lines()`, P28 Task 80, visual
+    round 3: an approval that came while a line was typed kept its head in the history and took its rest as an
+    answer): it reads fd 0 in the drain's mode until no key has come for `ask_ready()`'s interval (1 s, 3 s with
+    a partial line), the terminal's edits applied as it would (DEL and Ctrl-H, Ctrl-W, Ctrl-U: `tty_line_edit()`,
+    also in the drain; P28 Task 83: a Ctrl-U typed in the wait was kept as `<U+0015>`), a line ended meanwhile
+    routed as typed during the run (`console_typed_route()`), its queue
+    line above the question, and the partial line held in the reader (`rd$part`), which the drain after the rows
+    (Task 2) continues and keeps; `gptr_confirm()` and the pause menu do not wait. A question's read that Ctrl-C or an end of input ends (`ui_console_read()`, `console_ask()`) first
     ends the person's row in a terminal (T, D), which readline leaves open, so the row stays as typed and what
     follows starts below it (review of Tasks 16-21: the redrawn live row wrote over `› and colour`, and
     TERM=dumb glued the refusal to it).
   - A draft survives Ctrl-C and the pause menu (Task 20). SIGINT flushes what the terminal holds unread, never
-    the composer's draft. The pause menu (`policy_menu()`, wherever `console_menu_available()`) is a console
-    question in every class: after a blank row, `  ? Paused` (`? Paused <session id>` only when the call's runs
-    belong to more than one session) and under its text the keys row of an approval (`ui_keys()`, shared with
+    the composer's draft; a D console's call keeps it too (`noflsh`), and the menu drains fd 0 after its rows as
+    a question does (`ui_drain()`): a line being typed is kept, `↳ kept in history ↑ · <line>`, never the menu's
+    answer, and a key among the whole lines answers (P28 Task 58, visual round 2: TERM=dumb lost `and colour by
+    gear` at Ctrl-C, and with `noflsh` alone the menu read `and colour by gearc`). The pause menu (`policy_menu()`, wherever `console_menu_available()`) is a console
+    question in every class: after a blank row, `  ? Paused` (one title: [s] and [f] act on the console's own
+    session, which the live row and the sub-agent rows name; P28 Task 81, visual round 3: `? Paused <session id>`
+    when the call's runs belonged to more than one session, a raw id seen nowhere else) and under its text the keys row of an approval (`ui_keys()`, shared with
     IC-77's question: keys bold, words dim, the separator ending a row, so it wraps only between options),
     `    s steer · f follow-up · c continue · a abort · b background` (ASCII separator ` - `; [s] and [f] only
     with a session, [b] for a foreground call when P21 is loaded). It reads at the person's chevron at column 0
@@ -5509,8 +5703,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     answers, as an approval reads `y` or `yes`, and an empty answer continues; anything else (a steer typed at
     the chevron, `add a legend`, which the first-letter rule read as `a`) is kept in the history in an
     interactive R (`console_history_add()`, as an approval keeps a non-answer), never sent, and gets the dim
-    hints `    Not a key: '<its first 40 characters>' (kept in history).` (the parenthesis only when kept) and
-    `    Paused. Type s, f, c, a or b.` (at column 4, `ui_hint()`) and the menu reads again. [s] and [f] read
+    row `    not a key · kept in history ↑ · s, f, c, a or b` (`ui_reask()`: the keys bold, the kept term only
+    when kept; P28 Task 71, visual round 3: `Not a key: '...' (kept in history).` and `Paused. Type s, f, c, a or
+    b.` repeated the title) and the menu reads again. [s] and [f] read
     their text at the chevron of their own question, `  ? Steer` or `  ? Follow-up` (review of Tasks 16-21: a
     bare chevron read as the menu asking again), and queue it with `policy_enqueue()` as Enter and Tab do (source `pause_menu`), which keeps the reader's
     `sent`, so Up then takes back the menu's message as the composer's; blank text queues nothing and the run
@@ -5519,10 +5714,30 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     `↳ follow-up`; `the$echoed`); when it resumes it is `notice`, so the next block opens with
     a blank row. Continuing writes no notice (`[gptr] continuing` and `[gptr] nothing queued; continuing` are
     gone) and draws the live row again with the draft (`console_asked()`); after [a] the draft joins the kept
-    list (Task 18). [b] writes `  running in the background · gptr_wait() brings it back` as a dim row and a
-    blank row before the prompt, the background service's own notices as dim rows too, or `  cannot run in
-    the background · <why>` in red (review of Tasks 16-21: `[gptr] running in the background; ...` in ink, on
-    the prompt).
+    list (Task 18). [b] closes the answer with its cut row, then, after a blank row, writes the terms `in the
+    background (experimental, ?"gptr-background")` and `!!gptr::gptr_wait(gptr::gptr_last()) continues it here`
+    dim at column 2 (`console_terms()`, so a row ends at a whole term), the parenthesis in place of the background
+    service's notice, which the menu muffles (P21 gives it once a process), and a blank row before the prompt (P28
+    Task 53: the block sat right under the answer's tail; P28 Task 70, visual round 3: the service's two sentences
+    in its own voice, and at 60 columns a row ending in the separator), or `  cannot run in the background ·
+    <why>` in red (review of
+    Tasks 16-21: `[gptr] running in the background; ...` in ink, on the prompt; P28 Task 47: the notices came
+    first and the cut row floated between them and the status row). Nothing runs a background session while the
+    chat prompt waits (`later` runs only at R's own prompt; P28 Task 51: the row said `running in the
+    background · gptr_wait() brings it back`). `/exit` while one runs says so, dim, `1 background session still
+    runs · gptr_wait(gptr_last()) shows it` (`<n> background sessions still run · gptr_jobs() lists them`), and
+    its end, noticed at R's prompt, is a row of its own in the console's words, `background session '<its first
+    prompt>' done` or its status and reason, dim (`bg_release()`; P28 Task 82, visual round 3: `>   Background
+    session sae8b90edfe finished with status idle.` on R's prompt row, unannounced). A `gptr_wait()` in the console's `!`/`!!` code
+    (repl_passthrough()'s `.gptr_console_wait`, `console_wait()`) makes the sessions it waits for the console's
+    foreground while it lasts (`console_state()$waited`, `console_foreground()`), outside the code's evaluation
+    (its sink and options, `.gptr_eval_outside`), in the console's colours (`cli.num_colors =
+    console_colors()`, as the live row draws: the evaluation's writer puts its capture back, which says 1
+    colour; P28 Task 55, visual round 2: the delivered steer lost the band and the status line was faint) and
+    with a terminal's keys read as during a prompt's call (`console_reading()`, the REPL counting as sending,
+    `rs$sending`, so `console_repl_prompt()` finds its reader: P28 Task 56, visual round 2: the live row showed
+    no draft and no queue, and a steer was typed blind): its rows, live row and status line show as a prompt's
+    do, Enter steers and Tab's follow-up waits for the next prompt.
   - A draft left at the end of a run stays until sent (Task 21; T class). The REPL reader's read
     (`rd$read(prompt)`) returns its held and `typed` lines first; then, while the composer holds a draft,
     `console_idle(rd, prompt)` edits it at the prompt: `\r`, the band (as the live row's), the prompt and the
@@ -5592,18 +5807,17 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     Questions drawn inside an evaluation take the console's
     colours (`console_colors()`), as sub-agent lines do.
   - A remembered answer adds one dim line, `    allowed <suggested_rule> for this session` (or `project`). `a` or
-    `p` where nothing can be remembered: `  a and p are not offered: <why>; answer y, n or ?.`; the invalid-answer
-    hint names the question and its keys, `  Allow r? Type y, a, p or n (n <text> says what to do instead), or ?.`
-    (`y or n` without a rule; a sub-agent's `sub-agent a: allow r?`), as the question may have scrolled away
-    (visual review: in RStudio and R.app a draft left on the input line turned `y` into an invalid answer).
+    `p` where nothing can be remembered: `    a and p are not offered: <why>`; an invalid answer gets the row of
+    IC-75 above, `not an answer · kept in history ↑ · y, a, p, n, n <instead> or ?` (visual review: in RStudio
+    and R.app a draft left on the input line turned `y` into an invalid answer).
     Every row a question writes when it asks again is dim at column 4, under its text as the keys row
-    (`ui_hint()`, review of Tasks 16-21): the approval's `Not an answer`, hint, `a and p are not offered` and
-    `No valid answer after 5 tries; refused.`, a choice's `Not an answer. Type a number[, or your own
-    answer].` (it was `  Please enter one of the numbers shown.` in ink) and in place of its fifth
-    `No valid answer after 5 tries; cancelled.` (cheat-sheet review), a paste's `A pasted block is not an
-    answer`, and the pause menu's `Paused. Type s, f, c, a or b.`; at column 2, under the `?`, they read as a
-    new item. In an IDE console (class L) an invalid approval answer of several words adds `A draft typed
-    during the run joins your answer; clear the line first.`: RStudio and R.app keep a draft typed while R was
+    (`ui_hint()`, review of Tasks 16-21), in the console's lower-case terms (`ui_reask()`, P28 Task 71, visual
+    round 3): the approval's `not an answer` row, `a and p are not offered` and `no valid answer after 5 tries ·
+    refused`, a choice's `not an answer · a number[ or your own answer]` (it was `  Please enter one of the
+    numbers shown.` in ink) and in place of its fifth `no valid answer after 5 tries · cancelled` (cheat-sheet
+    review), a paste's `a pasted block is not an answer`, and the pause menu's `not a key` row; at column 2,
+    under the `?`, they read as a new item. In an IDE console (class L) an invalid approval answer of several
+    words adds `a draft typed during the run joins your answer: clear the line first`: RStudio and R.app keep a draft typed while R was
     busy on their input line, so `y` became `and label the axesy` (review of Tasks 16-21). The reader gets one
     finished line and cannot tell such a draft from text typed at the question, so the row states the rule
     (steering review: it read `Text typed during the run is still on the input line; clear it first.`, false
@@ -5619,11 +5833,18 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     padded to one width so the words start in one column, its words dim; the interrupt key lower case as the
     banner and live row name it, `esc` in RStudio, R.app and Rgui: review of Tasks 22-27). Its code is at most 40 rows at column 4, as the call block shows them (`console_code_rows()`, no fence
     lines; visual review), or a path tool's change, at most 40 rows, with the path in the first row,
-    `gptr wants to use edit on R/io.R (level 2)` (cheat-sheet review: the RStudio dialog has no call line above it).
+    `peter wants to use edit on R/io.R (level 2)` (cheat-sheet review: the RStudio dialog has no call line above it;
+    the console's name, as `/help` and the live row call the agent, bold as the ask's question is, and its
+    `reason:` and `flagged calls:` rows and the flags dim as the ask writes them, the key `n` saying `to tell
+    peter`: P28 Task 65, visual round 2, which also changes the RStudio dialog's text).
     Under the console's ask (`asked`) it leaves out what shows whole just above: the code rows when the call line
     is this request's and showed its code whole (at most 20 lines), and the change rows the ask showed (its first
     12, none cut at the width), the rest from row 13 under a dim `    (continued)` (review of Tasks 22-27: the same
-    rows showed twice, nine rows apart); the RStudio dialog keeps them all and gets the text without SGR. An ask
+    rows showed twice, nine rows apart); the RStudio dialog keeps them all and gets the text without SGR. Every
+    row is wrapped to the console under its own text, never cut, as `?` promises more (P28 Task 46: at 60 columns
+    a long change row and a flagged call ran past the edge and continued at column 0): prose at column 2
+    (`console_wrap()`), the rest with its spaces kept (`console_hang()`), a change row after its sign (column 5),
+    code at column 6, a flagged call under its call, a key's words under its words. An ask
     that shows a call's change marks the console's record of the call (`asked`), and an allowed edit's result is
     then one dim row, `    edited analysis.R · +2 -1` (its diff's counts), in place of the same rows again.
   - An approval's `n <text>` (`no, <text>`, `No. <text>`) reaches the model as the person's instruction (cheat-sheet
@@ -5636,16 +5857,24 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     CLI route in a live run, and every other denial `Permission denied: <reason>. <how>` as before. Before, the
     text was `Permission denied: <text>. Explain what you need or choose another approach.`, which GPT, Claude and
     qwen read as the harness's refusal and did not carry out.
-  - Run totals (Task 26; amends item 6 and D-206): the status line is dim and written as a notice, at column 2
+  - Run totals (Task 26; amends item 6 and D-206): the status line is dim (an error's status and reason red, as
+    a tool's error row is: P28 Task 57, visual round 2, a failed run read like a done one) and written as a notice, at column 2
     in rows of whole terms at the content width (`console_terms()`: a row ends at a term and never at the
     separator, a term wider than a row is cut; review of Tasks 22-27: word wrapping broke `98% context` from
     `left` and left a row ending ` ·`; the banner's rows and the mention line too), `done · <model> · <n> requests · <tokens> tokens · <cost> · <k>%
     context left`, with `aborted: <reason>` or `error: <reason>` for `done` as before (the reason's line breaks one
-    space, cheat-sheet review: curl's two-line error showed `<U+000A>`): the model of the run's
+    space, cheat-sheet review: curl's two-line error showed `<U+000A>`; a status with its reason is on rows of its
+    own, wrapped between words at column 2, the run's terms starting on the row below (P28 Task 57: `... port 443 ·
+    fake-1` read as part of the error), and the REPL prints no `Error:` notice for a run whose
+    status line it showed, P28 Task 44: the reason showed twice, the first copy cut): the model of the run's
     last request (its usage row's `model`; a built-in CLI's `default` as the full id the CLI gets, as `/status`
     names it, P28 Task 33), and `sub-agents <cost>` after the own cost. A term whose value is
     unknown (IC-74) is left out, as is a cost not above 0 (a free or local model): `aborted · 1 request` after
-    an abort that reported nothing. `format_cost()` keeps IC-74's form wherever a cost is shown.
+    an abort that reported nothing. `format_cost()` keeps IC-74's form wherever a cost is shown. At verbosity 1
+    the line is the progress notice `gptr: <terms>`; a run that ends in a condition its caller sees
+    (`gateway_signal()`: `error`, `blocked`, `budget`, `max_turns`) names its status alone there, its reason
+    left to the condition (P28 Task 66, visual round 2: a script blocked for approval stated the reason three
+    times, the terminal wrapping it mid-word).
     `console_context_left(u)` is the last request's `1 - (input + cache_read + cache_write_5m +
     cache_write_1h)` over `compact_threshold(window, max_output, gptr.r_output_tokens)` of `prompt_model()`'s
     record for its `provider/model`, where compaction starts (an unknown window gives `compact_at` alone), as a
@@ -5655,8 +5884,12 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     <id> (the compaction request):`, adds the row `  next request       ~<n>` (the compaction entry's
     `tokens_after`, `~` an estimate) under the total, its value in the ledger's column (review of Tasks 22-27: it
     was the sentence `  next request: about <n> tokens` among the right-aligned values), and measures the context
-    left from that; `/compact` says `Conversation compacted: <before> ->
-    <after> tokens.`, the counts of the automatic notice, `Conversation compacted.` where one is unknown
+    left from that; `/compact` says `compacted · <before> to <after> tokens`, dim in the status line's terms as
+    the automatic notice does (`console_compacted()`; `to`, not `->`, and the progress notice `compacting…` with
+    the console's ellipsis: P28 Task 62; P28 Task 73, visual round 3: `Compacting conversation…` and
+    `Conversation compacted: 5.6k to 4.1k tokens.` in plain ink, sentences among dim lower-case rows; its other
+    results `not compacted · cancelled`, `interrupted`, `already compacting`, `nothing to compact yet`, and
+    `compaction did not finish` after a failure), bare `compacted` where a count is unknown
     (cheat-sheet review, console-4: it said only that, and `/context` showed the compaction request unlabelled,
     larger than the request before it).
     `console_context_left()` -> `compact_threshold()` and `prompt_model()` are contract edges of the layering
@@ -5675,15 +5908,24 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       the word does; `a@b.com` gives nothing;
     - a word `@obj$...`: `.DollarNames(obj)`;
     - a word starting with `peter$`: peter's members (the `ns.names` service);
-    - a first word starting with `/`: the registered commands (plugin commands among them) and
-      `/skill:<name>` for each skill registered or listed by `gptr_skills()` (as `/skills` lists them, also
-      before the first prompt has registered any; P28 Task 30);
+    - a first word starting with `/`: the registered commands (plugin and template commands among them,
+      registered first as `/help` does, D-252) and `/skill:` once where a skill is registered or listed by
+      `gptr_skills()` (as `/skills` lists them, also before the first prompt has registered any; P28 Task 30);
+      a word starting with `/skill:` gives `/skill:<name>` for each (P28 Task 77, visual round 3: a bare `/`
+      gave 48 words, 19 of them skills, 25 rows of readline's list);
     - anything else, and a failure: `character(0)` (natural language, `$5`, a bare `$name`, `x$y`, `wow! x`).
   - The adapter: `console_completer(prev)` is R's `custom.completer`. It sets `fileName` to FALSE and `comps`
     to `character()` first (without `fileName` R's readline aborts the `readline()` call), then gives the
     completions of the line before the cursor as completions of R's token (`completion_shift()`: readline's
     word, or utils' guess in RStudio and Windows; the longer one's extra head is cut or added), with `prev`,
-    the caller's completer (NULL when none), as the custom one meanwhile, so a `!` line calls it.
+    the caller's completer (NULL when none), as the custom one meanwhile, so a `!` line calls it. R's Unix
+    readline (`console_completer(prev, prompt)`, the reader's prompt passed where `console_readline_tty()`) gets
+    one completion, the candidates' common head, so readline never lists them: its list was printed in the
+    input band (the prompt leaves the band's background on for the line) and a long one stopped at `--More--`,
+    which took the next keys (P28 Task 77, visual round 3). Where the head adds nothing, `completion_list()`
+    writes them as the composer does, after `\033[0m` and a line end, one dim row at column 2 cut with the
+    ellipsis (`live_candidates()`), then the prompt on the band and the whole line again, backspaces to the
+    cursor, and readline gets none, as its next Tab would list what it got.
   - RStudio (Task 23) asks through its `get_completions` request, whose frame binds `isConsole`
     (`dynGet()`). From its editor (FALSE), which shares the request while `peter>` waits, the adapter gives R's
     own completion (or the caller's). From its console (TRUE) it gives only the candidates that are syntactic
@@ -5747,12 +5989,17 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     | `band`, light background | `\033[48;5;254m` | `""` | `""` |
 
     Below 256 colours cli maps both blues to grey `90`, so basic red and blue are named there. The band cells are
-    raw cells, not cli's mapping, which puts greys into the colour cube; truecolor gets the same cells. Those of the
-    table hold where `COLORFGBG` named the background; where the terminal answered the probe with its colour
+    raw cells, not cli's mapping, which puts greys into the colour cube. Those of the table hold where `COLORFGBG`
+    named the background, in truecolor too; where the terminal answered the probe with its colour
     (`background_reply()`'s attr `rgb`), the band is Codex's fill, 4% black over a light background or 12% white over
-    a dark one, as the nearest cell of the colour cube or the grey ramp, and `band_dim` a grey 4.5:1 against it
+    a dark one, exact in truecolor (`48;2;R;G;B`, P28 Task 45: the nearest cell turned Man Page's yellow paper
+    orange, 222, and Novel's cream khaki), else as the nearest cell of the colour cube or the grey ramp, and
+    `band_dim` a grey 4.5:1 against it
     (`band_cells()`; review of Tasks 22-27: on Terminal.app's cream Novel profile the fixed 254 was a lighter, cooler
-    strip; it is now `187`, #d7d7af, its words `38;5;240`; #1c1c1c still gives 237, white 255). `NO_COLOR`
+    strip; it is now `187`, #d7d7af, its words `38;5;240`; #1c1c1c still gives 237, white 255). Where that colour
+    leaves an accent under 3:1 against the background itself, the accent is the default colour in bold and `dim` a
+    grey 3:1 against it (`grey_against()`; P28 Task 41: on Terminal.app's Ocean and Grass `#878787` and `#557ea8`
+    were 1.3:1 to 1.6:1); the logo's colours stay wherever they pass, black, white and light greys among them. `NO_COLOR`
     keeps the glyphs and drops every SGR. In the margin the renderer reads the Markdown at every depth (inline code
     and emphasis lose their markers, bullets are `•`, headings lose `#`), so the text, and where it wraps, is that of
     a colour console; only the plain mode without colour keeps the markdown characters (visual review: NO_COLOR,
@@ -5779,6 +6026,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     an end of input, `\033[0m\033[K` resets the attributes and erases the band the line's end gave the row below.
     The live row, the idle editor's row, delivered steers and the lines the reader echoes after the prompt (a
     follow-up, the editor's line, each row) are on the same band (`console_band()`: band, row, `\033[K\033[0m`),
+    and a console question's answer is read at the person's chevron on it as the prompt is (`band_read()`: an
+    approval's, the pause menu's, an ask's; not a secret; P28 Task 52: `› y` was plain under a banded steer),
     so everything the person wrote has one look. A wrapped input's second row is shaded only under its text.
   - R code (Task 9): R in answer fences and in tool calls is highlighted by `console_code()` above 1 colour only,
     with `cli::code_highlight(code, getOption("cli.code_theme") %||% console_style()$code)`, so a user's
@@ -5797,8 +6046,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     is written when any other block starts, so it never splits a sentence: between whole rows it still had,
     wherever the person happened to press Enter, and TERM=dumb and the IDE consoles keep the line after Task 18
     (visual review). A steer's line still held when the steer is delivered is not written, as its delivery says
-    the same (steering review: five steers typed while an answer streamed took ten rows in TERM=dumb); held
-    follow-up lines and a CLI route's steer are written. This replaces "ends partial lines" in IC-76 (the
+    the same (steering review: five steers typed while an answer streamed took ten rows in TERM=dumb), nor one still
+    held when the run ends, as the kept list (abort, error), the next prompt's echo (idle, max_turns) or the next
+    run's delivery names it (P28 Task 67, visual round 2: after [a] TERM=dumb showed `↳ steer · <text>` above `↳
+    kept in history ↑ · <text>`); held follow-up lines and a CLI route's steer are written. This replaces "ends partial lines" in IC-76 (the
     notices and their `console_render_pause()`) and IC-77 item 1. An abort still ends the stream (`console_render_pause()`, also when
     the pause menu's [b] sends the run to the background). The pause menu itself clears only the live row: the
     held row continues after it (visual review: the menu cut a sentence, `so part of this` / menu / `gap is ...`,
@@ -5812,7 +6063,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     |---|---|---|
     | read | `▎ read  R/plot.R` | the whole line dim; no result line unless it fails |
     | act | `▎ r  zz = 1`, or the name over at most 20 code rows at column 4, under the name with the results (no fence lines; a cut block ends with `# … +N more lines`; a row wider than the console is cut with `…`, and `?` then shows the code whole); an MCP call `▎ github/search_issues  {"q":"bug"}` | strip red, name bold, R code highlighted (also on the one line); an MCP call's arguments dim |
-    | agent | `▌ codex_agent`; a sub-agent's lines `▌ sub-agent a (haiku) started` (cut to the width before ` started`, which stays; P28 Task 36), `▌ sub-agent a done (1/3) · 4 turns · 12 s` | block blue |
+    | agent | `▌ codex_agent`; a sub-agent's lines `▌ sub-agent a (haiku) started` (cut to the width before ` started`, which stays; P28 Task 36), `▌ sub-agent a done (1/3) · 4 turns · 12 s` (cut before ` done`, its turns and time staying; P28 Task 61); the label's name is cut first, inside its quotes, its run tag and model staying, so a nested call's two lines cut alike, `▌ sub-agent 'count the cars i…' #1 (kid/kid-1) started` and `… #1 done · 1 turn · 4 s` (P28 Task 72, visual round 3: the started line cut its model, the done line its tag) | block blue |
 
     Tool blocks of consecutive requests group as those of one response: the live row between them is no block
     (`console_gap()`), so a tool block after a tool block takes no blank line (review of Tasks 8-15). Result
@@ -5820,14 +6071,21 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     the call took a second or more). So is what the code prints (`eval_r()` with `tee` where the margin applies:
     the capture's sink is not split; `eval_flush()` shows each new line at column 4, escaped, dim in the console's
     colours and cut to its width, through the writer below the evaluation, per top-level expression or before a
-    notice; the result keeps all of it). Without the margin (Rscript, knitr) the sink is split as before (visual
+    notice, and a warning as `Warning: <text>` in its place among them (P28 Task 75, visual round 3: it waited
+    for R's top level, after `/exit`), and an R message (P28 Task 79: R wrote it at column 0); the result keeps
+    all of it). A `!code` block's error is red at column 4 too, `Error: <text>` (`repl_passthrough()`), and a
+    block that showed anything ends with a blank row, as a command's output does (P28 Task 79, visual round 3:
+    three indents in one block, and the next prompt right under it). Without the margin (Rscript, knitr) the sink is split as before (visual
     review: `head(fuel)` rows and `[1] "      33 fuel.csv"` sat at column 0 in ink, under `› y`, where they read as
     R echoing the person's line). An error is red, at most 6 rows. An edit's diff has `+` lines blue and `-` lines red (removals were
     plain before), at most 12; its file headers (`--- a/`, `+++ b/`) are left out, as the call line names the file,
     and its other lines (hunk headers) are dim; a diff row wider than the console is cut with `…`, never wrapped,
     so its code keeps its spaces and every row its sign (visual review). A tool's `render()`
     (IC-69) still wins. At 256 colours the act strip is `38;5;167` and the block `38;5;67`; `NO_COLOR` keeps the
-    glyphs; ASCII shows `|` and `#`. A sub-agent's lines are drawn inside the agent's `r` evaluation, whose options
+    glyphs; ASCII shows `|` and `#`. A sub-agent's lines are drawn inside the agent's `r` evaluation, and are rows
+    of that call's block (`console_before_message(kind = "tool")` while a tool runs on the stack; a top-level team
+    or fan-out's open a notice block): no blank row splits the call's code, the sub-agent's rows, what the code
+    prints and its result line (P28 Task 60, visual round 2). The evaluation's options
     say 1 colour, so they take the colours of the console it started from: `eval_one()` holds
     `.gptr_console_colors` beside `.gptr_console_pad`, and `console_colors()` reads it (else
     `cli::num_ansi_colors()`), as `console_pad()` reads the margin.

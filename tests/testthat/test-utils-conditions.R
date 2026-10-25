@@ -120,6 +120,27 @@ test_that("checkers signal invalid_argument with arg and expected, never the val
   expect_error(check_class(1, "foo", "x"), class = invalid)
 })
 
+test_that("a string that is not one of the choices is reported as such, never quoted (D-250)", {
+  skip_on_cran()
+  levels = c("off", "high")
+  cnd = tryCatch(check_choice("ultra", levels, "thinking"), error = identity)
+  expect_s3_class(cnd, "gptr_error_invalid_argument")
+  expect_identical(cnd$expected, "one of \"off\", \"high\"")
+  expect_match(conditionMessage(cnd), "the string given is not one of them.", fixed = TRUE)
+  expect_false(grepl("character of length 1", conditionMessage(cnd), fixed = TRUE))
+  expect_false(grepl("Did you mean", conditionMessage(cnd), fixed = TRUE))
+  expect_error(check_choice("HIGH", levels, "thinking"), "Did you mean \"high\"?", fixed = TRUE)
+  cnd = tryCatch(check_choice("sk-ant-api03-SECRETVALUE", levels, "x"), error = identity)
+  expect_false(grepl("SECRETVALUE", conditionMessage(cnd), fixed = TRUE))
+  expect_error(check_choice(c("off", "x"), levels, "x"), "not a character of length 2",
+               fixed = TRUE)
+  local_fake_provider(list("x"))
+  expect_error(peter("q", model = "fake/fake-1", .opts = list(thinking = "ultra")),
+               paste0("`.opts$thinking` must be one of \"off\", \"minimal\", \"low\", \"medium\", ",
+                      "\"high\", \"xhigh\", \"max\"; the string given is not one of them."),
+               fixed = TRUE, class = "gptr_error_invalid_argument")
+})
+
 test_that("integer arguments reject overflow and the reserved NA representation", {
   expect_identical(check_number(.Machine$integer.max, "count", int = TRUE),
                    .Machine$integer.max)

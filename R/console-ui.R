@@ -50,14 +50,17 @@ ui_wrap = function(ui) {
 }
 
 #' A permission answer (contract section 10.2 row 22): `feedback` only what the person typed,
-#' `reason` a denial the UI writes itself
+#' `reason` a denial the UI writes itself; `how`, what the model should do instead of the call,
+#' only when given (D-252)
 #' @noRd
-ui_answer = function(decision, remember = NULL, feedback = NULL, reason = NULL) {
-  list(decision = decision, remember = remember, feedback = feedback, reason = reason)
+ui_answer = function(decision, remember = NULL, feedback = NULL, reason = NULL, how = NULL) {
+  out = list(decision = decision, remember = remember, feedback = feedback, reason = reason)
+  if (!is.null(how)) out$how = how
+  out
 }
 
 #' Normalise a permission answer: anything unusable is a denial (a failing dialog is not an
-#' approval); `remember` only for an approval that may become a rule
+#' approval); `remember` only for an approval that may become a rule, `how` only for a denial
 #' @noRd
 ui_answer_norm = function(ans, request) {
   if (!is.list(ans) || !isTRUE(ans[["decision"]] %in% c("allow", "deny", "abort"))) {
@@ -67,7 +70,9 @@ ui_answer_norm = function(ans, request) {
   keep = identical(ans[["decision"]], "allow") && isTRUE(rem %in% c("session", "project")) &&
     is.null(ui_no_rule(request))
   text = function(x) if (rlang::is_string(x) && nzchar(x)) x
-  ui_answer(ans[["decision"]], if (keep) rem, text(ans[["feedback"]]), text(ans[["reason"]]))
+  how = if (identical(ans[["decision"]], "deny")) text(ans[["how"]])
+  ui_answer(ans[["decision"]], if (keep) rem, text(ans[["feedback"]]), text(ans[["reason"]]),
+            how)
 }
 
 #' Why an approval of this request cannot become a rule (IC-77 item 3), else NULL: never for
@@ -141,6 +146,21 @@ ui_flagged = function(risk) {
   fl[order(-fl$level), , drop = FALSE]
 }
 
+#' Flagged calls as the console writes them, the ask's and the ? view's alike (D-222, IC-82):
+#' `[<level> <category>] <call>`, escaped, its backticked names inline code as in an answer and an
+#' object's `<class, size>` the mention line's `(class, size)`
+#' @noRd
+ui_flags = function(fl) {
+  blue = console_style()$blue
+  call = sub(" <([^<>]*)>$", " (\\1)", ui_escape(fl$call))
+  call = vapply(strsplit(call, "`", fixed = TRUE), function(p) {
+    code = seq_along(p) %% 2L == 0L
+    p[code] = blue(p[code])
+    paste(p, collapse = "")
+  }, "")
+  paste0("[", fl$level, " ", fl$category, "] ", call)
+}
+
 #' Who asks (D-188): "sub-agent <label>" for a sub-agent's request, else ""
 #' @noRd
 ui_who = function(request) {
@@ -175,6 +195,24 @@ ui_keys = function(keys, what, width) {
 #' @noRd
 ui_hint = function(text, width = ui_width()) {
   console_style()$dim(console_wrap(paste0("    ", text), width))
+}
+
+#' A question's row when an answer is no answer (D-243): dim at column 4, as its keys row, the
+#' console's lower-case `terms`, `kept in history <Up glyph>` where the console history `kept` the
+#' answer (as the kept list says, console_keep()), then the `keys` it takes, each bold, its words
+#' after a blank dim (`n <instead>`), `a, b or c`, in rows of whole terms (console_terms())
+#' @noRd
+ui_reask = function(terms, keys = character(), kept = FALSE, width = ui_width()) {
+  sym = console_style()
+  terms = sym$dim(c(terms, if (kept) paste("kept in history", sym$up)))
+  if (length(keys)) {
+    word = sub("^\\S+", "", keys)
+    k = paste0(cli::style_bold(sub(" .*$", "", keys)), ifelse(nzchar(word), sym$dim(word), ""))
+    n = length(k)
+    last = if (n > 1L) paste0(sym$dim(" or "), k[[n]])
+    terms = c(terms, paste0(paste(k[seq_len(n - (n > 1L))], collapse = sym$dim(", ")), last))
+  }
+  paste0("    ", console_terms(terms, width - 4L, sym$dim(sym$sep)))
 }
 
 #' The question of an approval (D-243): `Allow <tool>?`, or `<who>: allow <tool>?` for a sub-agent
@@ -226,8 +264,8 @@ ui_permission_lines = function(request) {
     console_diff_rows(change, 12L, width, "; ? shows more"),
     if (n) {
       k = seq_len(min(n, 5L))
-      rows = paste0(c("    flagged: ", rep(strrep(" ", 13L), 4L))[k], "[", fl$level[k], " ",
-                    fl$category[k], "] ", ui_escape(fl$call[k]))
+      lead = c("    flagged: ", rep(strrep(" ", 13L), 4L))[k]
+      rows = paste0(lead, ui_flags(fl[k, , drop = FALSE]))
       sym$dim(console_cut(c(rows, if (n > 5L) {
         paste0(strrep(" ", 13L), "(+", n - 5L, " more; ? shows all)")
       }), width))
@@ -245,52 +283,67 @@ ui_permission_lines = function(request) {
 #' the interrupt key as the banner names it (`ctrl-c`, `esc`). Under the console's ask (`asked`) it
 #' leaves out what shows whole above it: the code when the call block showed it (at most 20 rows
 #' that fit), the change rows the ask showed (its first 12 when none was cut), the rest under a dim
-#' `(continued)`; alone, as the RStudio dialog, it shows them all
+#' `(continued)`; alone, as the RStudio dialog, it shows them all. Every row is wrapped to the
+#' console under its own text: prose at column 2, a change row after its sign, code under its code,
+#' a flagged call under its call, a key's words under its words
 #' @noRd
 ui_permission_detail = function(request, asked = FALSE) {
   risk = request$risk
   sym = console_style()
+  width = ui_width()
   lines = ui_request_lines(request)
   change = ui_request_change(request)
-  fits = function(x, n) length(x) <= n && all(nchar(x, type = "width") + 4L <= ui_width())
+  fits = function(x, n) length(x) <= n && all(nchar(x, type = "width") + 4L <= width)
   code = !(asked && ui_call_shown(request) && is.character(request$input$code) && fits(lines, 20L))
   shown = if (asked && fits(utils::head(change, 12L), 12L)) min(12L, length(change)) else 0L
   rest = change[seq_along(change) > shown]
   who = ui_who(request)
-  out = c(paste0("  ", if (nzchar(who)) who else "gptr", " wants to use ",
+  # in the ask's type: who wants which tool bold, its reason and flags dim; the console's name
+  first = paste0("  ", if (nzchar(who)) who else "peter", " wants to use ",
                  console_tool_name(request$tool %||% "a tool"),
                  if (length(change)) paste0(" on ", c(lines, "")[[1L]]),
-                 if (!is.null(risk$level)) {
-                   paste0(" (level ", risk$level,
-                          if (rlang::is_string(risk$label)) paste0(": ", ui_escape(risk$label)),
-                          ")")
+                 # the level, unless the reason row names it
+                 if (!is.null(risk$level) && !grepl(paste("level", risk$level),
+                                                    request$reason %||% "")) {
+                   label = if (rlang::is_string(risk$label)) paste0(": ", ui_escape(risk$label))
+                   paste0(" (level ", risk$level, label, ")")
                  },
-                 if (identical(request$tier, "ask_human")) ", which needs your decision"),
+                 if (identical(request$tier, "ask_human")) ", which needs your decision")
+  out = c(cli::style_bold(console_wrap(first, width)),
           if (rlang::is_string(request$reason) && nzchar(request$reason)) {
-            paste0("  reason: ", ui_escape(request$reason))
+            sym$dim(console_wrap(paste0("  reason: ", ui_escape(request$reason)), width))
           },
           if (length(rest)) {
-            c(if (shown) sym$dim("    (continued)"), console_diff_rows(rest, 40L - shown))
+            c(if (shown) sym$dim("    (continued)"),
+              console_hang(console_diff_rows(rest, 40L - shown), width, 5L))
           } else if (!length(change) && code) {
-            console_code_rows(lines, console_lang(request$tool), 40L)
+            console_hang(console_code_rows(lines, console_lang(request$tool), 40L), width, 6L)
           })
   fl = ui_flagged(risk)
   if (NROW(fl)) {
     where = ifelse(is.na(fl$path), "",
                    paste0("  path: ", ui_escape(fl$path), " (", fl$path_class, ")"))
-    out = c(out, "  flagged calls:",
-            paste0("    [", fl$level, "] ", fl$category, "  ", ui_escape(fl$call), where))
+    flags = ui_flags(fl)
+    rows = lapply(seq_along(flags), function(k) {
+      console_hang(paste0("    ", flags[[k]], where[[k]]), width,
+                   5L + nchar(paste0("[", fl$level[[k]], " ", fl$category[[k]], "]")))
+    })
+    out = c(out, sym$dim(c("  flagged calls:", unlist(rows))))
   }
   note = request$undo_note %||% ui_undo_note(request)
-  if (rlang::is_string(note) && nzchar(note)) out = c(out, paste0("  ", ui_escape(note)))
+  if (rlang::is_string(note) && nzchar(note)) {
+    out = c(out, console_wrap(paste0("  ", ui_escape(note)), width))
+  }
   can = is.null(ui_no_rule(request))
   # the console's interrupt key as the banner and live row name it; the words in one column
   keys = c("y", if (can) c("a", "p"), "n", tolower(console_interrupt_key()))
   what = c("yes", if (can) {
     paste0(c("always in this session: ", "always in this project: "),
            ui_escape(request$suggested_rule))
-  }, "no (type n <what to do instead> to tell gptr)", "abort the run")
-  c(out, paste0("    ", cli::style_bold(format(keys)), "  ", sym$dim(what)))
+  }, "no (type n <what to do instead> to tell peter)", "abort the run")
+  keys = format(keys)
+  c(out, console_hang(paste0("    ", cli::style_bold(keys), "  ", sym$dim(what)), width,
+                      6L + nchar(keys[[1L]])))
 }
 
 #' The "cannot be undone" note of the checkpoint.note service (P16) for a request without one
@@ -313,20 +366,28 @@ ui_undo_note = function(request) {
 #' readline() leaves open then. A `secret` is read with the echo off where R reads its own terminal
 #' (tty_secret()); elsewhere the console shows it, which a dim row above the chevron says once in
 #' the session (IC-77). A T console's draft stays in its composer, for the live row after the
-#' answer; a dim row above the chevron says so (ui_draft_kept(), D-243)
+#' answer; a dim row above the chevron says so (ui_draft_kept(), D-243). A whole line that
+#' `accept(line)` takes, one of the question's answers, typed once its rows showed is its answer:
+#' read by the drain (echoed after the chevron, on the band) or, once the drain read what was typed
+#' before, by readline however soon
 #' @noRd
-ui_console_read = function(prompt, secret = FALSE) {
+ui_console_read = function(prompt, secret = FALSE, accept = NULL) {
   rd = console_repl_find()$reader
   hide = if (secret) tty_secret()
-  read = if (is.null(hide)) gptr_readline else function(p) gptr_readline(p, hide = hide)
+  # an answer on the input band as the prompts are; a secret off it, as typed without echo
+  read = if (secret) function(p) gptr_readline(p, hide = hide) else function(p) {
+    band_read(p, gptr_readline)
+  }
   repeat {
-    console_typed(drain = TRUE)
+    drained = ui_drain(prompt, accept)
+    if (rlang::is_string(drained)) return(drained)
     ui_draft_kept()
     if (secret && is.null(hide) && once_first("visible", "secret")) {
       console_write(ui_hint(paste("This console shows the key as you type; gptr_env() loads keys",
                                   "from a file instead.")))
     }
-    ans = tryCatch(readline_answer(prompt, if (!secret) console_typed_ahead, read = read),
+    ans = tryCatch(readline_answer(prompt, if (!secret) console_typed_ahead,
+                                   if (isTRUE(drained)) accept, read),
                    interrupt = function(e) NA_character_)
     if (!rlang::is_string(ans)) {
       if (console_class() %in% c("T", "D")) console_cat("\n")
@@ -335,9 +396,18 @@ ui_console_read = function(prompt, secret = FALSE) {
     more = if (!is.null(rd)) rd$waiting()
     if (!length(more)) return(ans)
     kept = !secret && console_history_add(paste(c(ans, more), collapse = "\n"))
-    console_write(ui_hint(paste0("A pasted block is not an answer", if (kept) " (kept in history)",
-                                 ".")))
+    console_write(ui_reask("a pasted block is not an answer", kept = kept))
   }
+}
+
+#' A question's drain (console_typed(drain = TRUE)), after its rows: what was typed for the run is
+#' routed, and the answer of a whole line `accept(line)` takes is returned, echoed after the chevron
+#' `prompt` on the band, as readline leaves a line; else TRUE where fd 0 was read, FALSE where not
+#' @noRd
+ui_drain = function(prompt, accept) {
+  got = console_typed(drain = TRUE, accept = accept)
+  if (rlang::is_string(got)) console_write(console_band(paste0(prompt, console_escape(got, FALSE))))
+  got
 }
 
 #' The dim row above a question's chevron where a T console's composer holds a draft (D-243), which
@@ -406,8 +476,12 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
     paste0("  ", unlist(lapply(seq_along(labels), choice))),
     paste0("  ", sym$dim(console_wrap(ui_escape(hint), width - 2L)))
   ))))
+  # a choice's numbers answer it however soon they are typed (ui_console_read())
+  numbers = function(x) {
+    grepl("^[0-9][0-9,[:space:]]*$", trimws(x)) && !anyNA(ui_parse_choice(x, labels, multiple))
+  }
   for (attempt in seq_len(5L)) {
-    ans = read(paste0(sym$person, " "))
+    ans = read(paste0(sym$person, " "), accept = numbers)
     if (is.na(ans)) return(NA_integer_)
     if (!nzchar(trimws(ans)) && length(default)) return(as.integer(default))
     idx = ui_parse_choice(ans, labels, multiple)
@@ -418,10 +492,11 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
     }
     if (allow_other && nzchar(trimws(ans))) return(structure(NA_integer_, other = trimws(ans)))
     if (attempt == 5L) break
-    console_write(ui_hint(paste0("Not an answer. Type ", if (multiple) "numbers separated by commas"
-                                 else "a number", if (allow_other) ", or your own answer", ".")))
+    console_write(ui_reask(c("not an answer", paste0(
+      if (multiple) "numbers separated by commas" else "a number",
+      if (allow_other) " or your own answer"))))
   }
-  console_write(ui_hint("No valid answer after 5 tries; cancelled."))
+  console_write(ui_reask(c("no valid answer after 5 tries", "cancelled")))
   NA_integer_
 }
 
@@ -457,12 +532,11 @@ ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_cons
 #' chevron (D-243), `?` for the detail view; every console prompt first ends partial answer lines
 #' and clears the live row (D-186), in a T console once typing pauses, and draws it again when it
 #' returns (D-243); a remembered answer adds a dim line naming the rule; an
-#' invalid answer is quoted (kept in the console history in an interactive session) above a hint
-#' that names the question, which may have scrolled away, and its keys; an empty one gets the hint
-#' alone, both dim at column 4 (ui_hint()), and in an IDE console an answer of several words a row
-#' noting that a draft typed during the run joins an answer; five (`?` is none) end in a refusal
-#' whose reason says so (D-188, D-243); an ask that shows the call's change marks its record
-#' (ui_change_asked())
+#' invalid answer gets one dim row at column 4 in the console's terms (ui_reask()), `not an
+#' answer`, `kept in history` where an interactive session's history kept it, and the keys, and in
+#' an IDE console an answer of several words a row noting that a draft typed during the run joins
+#' an answer; five (`?` is none) end in a refusal whose reason says so (D-188, D-243); an ask that
+#' shows the call's change marks its record (ui_change_asked())
 #' @noRd
 ui_console_permission = function(request, read = ui_console_read) {
   rlang::local_options(cli.num_colors = console_colors())
@@ -473,9 +547,14 @@ ui_console_permission = function(request, read = ui_console_read) {
   console_write(ui_permission_lines(request))
   if (length(ui_request_change(request))) ui_change_asked(request)
   sym = console_style()
+  # `no, use base R` too: punctuation right after the key is no part of the text
+  deny = "^no?[,.;:!]*(\\s|$)"
+  keys = c("y", "yes", if (can) c("a", "always", "p", "project"), "?")
+  # its answers answer it however soon they are typed (ui_console_read())
+  answers = function(x) tolower(trimws(x)) %in% keys || grepl(deny, tolower(trimws(x)))
   bad = 0L
   while (bad < 5L) {
-    a = trimws(read(paste0(sym$person, " ")))
+    a = trimws(read(paste0(sym$person, " "), accept = answers))
     if (is.na(a)) return(ui_answer("abort"))
     low = tolower(a)
     if (low %in% c("y", "yes")) return(ui_answer("allow"))
@@ -485,8 +564,7 @@ ui_console_permission = function(request, read = ui_console_read) {
                                    scope)))
       return(ui_answer("allow", scope))
     }
-    # `no, use base R` too: punctuation right after the key is no part of the text
-    if (grepl("^no?[,.;:!]*(\\s|$)", low)) {
+    if (grepl(deny, low)) {
       fb = trimws(sub("^no?[,.;:!]*", "", a, ignore.case = TRUE))
       return(ui_answer("deny", feedback = if (nzchar(fb)) fb))
     }
@@ -496,23 +574,19 @@ ui_console_permission = function(request, read = ui_console_read) {
     }
     bad = bad + 1L
     if (low %in% c("a", "always", "p", "project")) {
-      msg = paste0("a and p are not offered: ", why, "; answer y, n or ?.")
-    } else {
-      kept = nzchar(a) && gptr_is_interactive() && console_history_add(a)
-      msg = c(if (nzchar(a)) {
-        paste0("Not an answer: '", ui_escape(substr(a, 1L, 40L)), "'",
-               if (kept) " (kept in history)", ".")
-      }, paste0(ui_permission_question(request), " Type ", if (can) "y, a, p or n" else
-        "y or n", " (n <text> says what to do instead), or ?."),
+      console_write(ui_hint(paste0("a and p are not offered: ", why)))
+      next
+    }
+    kept = nzchar(a) && gptr_is_interactive() && console_history_add(a)
+    console_write(c(
+      ui_reask("not an answer", c("y", if (can) c("a", "p"), "n", "n <instead>", "?"), kept),
       # an IDE console keeps a draft typed during the run on its input line, before the answer;
       # the reader cannot tell it from text typed at the question, so the row states the rule
       if (grepl("\\s", trimws(a)) && console_class() == "L") {
-        "A draft typed during the run joins your answer; clear the line first."
-      })
-    }
-    console_write(ui_hint(msg))
+        ui_hint("a draft typed during the run joins your answer: clear the line first")
+      }))
   }
-  console_write(ui_hint("No valid answer after 5 tries; refused."))
+  console_write(ui_reask(c("no valid answer after 5 tries", "refused")))
   ui_answer("deny", reason = "no valid answer was given at the approval prompt")
 }
 

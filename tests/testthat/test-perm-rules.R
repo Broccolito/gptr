@@ -128,6 +128,41 @@ test_that("rules read every code-argument row; dynamic or mixed code gets no rul
   }
 })
 
+test_that("sh: and category: rules see a program given by its path", {
+  root = local_project()
+  for (code in c("peter$sh('/bin/rm -rf build')", "peter$sh(c('/bin/rm', '-rf', 'build'))",
+                 "system('/bin/rm -rf build')", "system2('/bin/rm', c('-rf', 'build'))",
+                 "peter$sh('/usr/bin/env rm -rf build')", "peter$sh('command /bin/rm -rf build')",
+                 "peter$sh('./rm -rf build')",
+                 "system2('C:\\\\bin\\\\rm.exe', c('-rf', 'build'))")) {
+    call = r_call(code)
+    for (rule in c("r(sh:rm *)", "r(category:file_delete)")) {
+      expect_identical(rule_match(list(deny = rule), call)$deny, rule, label = code)
+    }
+    expect_identical(rule_match(list(allow = "r(sh:rm *)"), call)$allow, character(), label = code)
+    expect_identical(call$risk$level, 3L, label = code)
+  }
+  # a Windows name in another case is that program too; an sh: glob matches it as written
+  call = r_call("system2('C:\\\\bin\\\\RM.EXE', c('-rf', 'build'))")
+  for (rule in c("r(sh:RM *)", "r(category:file_delete)")) {
+    expect_identical(rule_match(list(deny = rule), call)$deny, rule)
+  }
+})
+
+test_that("sh: rules read the command of a background job", {
+  root = local_project()
+  for (code in c("peter$bg('rm -rf build')", "peter$bg(c('rm', '-rf', 'build'))")) {
+    m = rule_match(list(deny = "r(sh:rm *)", ask = "r(sh:rm *)"), r_call(code))
+    expect_identical(c(m$deny, m$ask), rep("r(sh:rm *)", 2L), label = code)
+  }
+  m = rule_match(list(allow = "r(sh:python3 -m*)"),
+                 r_call("peter$bg('python3 -m http.server 8000')"))
+  expect_identical(m$allow, "r(sh:python3 -m*)")
+  expect_identical(rule_suggest(r_call("peter$bg('rm -rf build')")), "r(sh:rm -rf*)")
+  m = rule_match(list(allow = "r(sh:rm -rf*)"), r_call("peter$bg('curl https://x.org')"))
+  expect_identical(m$allow, character())
+})
+
 test_that("gptr_permissions() adds, lists and removes session rules (6.2)", {
   root = local_project()
   local_permission_rules()

@@ -10,7 +10,7 @@ gptr_option_defaults = list(
   quiet = FALSE, interactive = NULL, project_root = NULL, unsafe_no_permissions = FALSE,
   verbose = NULL, ui = NULL, model = NULL, mode = NULL, preset = NULL, system1 = NULL,
   small_model = NULL, replay = NULL, record = NULL, interpolate = TRUE,
-  value_copy_max = 1048576, values_max_bytes = 67108864, max_turns = 50L,
+  value_copy_max = 2097152, values_max_bytes = 67108864, max_turns = 50L,
   max_turns_console = 200L, max_active = 8L, subagents.max_active = 8L,
   subagents.max_cli = 4L, subagents.max_workers = NULL, subagents.max_tasks = 8L,
   subagents.max_depth = 1L, max_nested_calls = 20L, connect_timeout = 20,
@@ -106,9 +106,10 @@ tty_modes = function(modes = "-g") {
 #' Set the terminal modes of a console call (IC-76, D-243), the saved ones (`stty -g`) kept: a T
 #' console's composer reads keys as typed, `-icanon -echo -iexten -isig min 1 time 0` (Ctrl-C is a
 #' key it reads, as a signal could be lost under load; opost stays on, and `min 1` keeps a tool
-#' that reads stdin waiting, never at an end of input); a D console only turns the echo off (`keys`
-#' FALSE). `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which also runs at q() (a
-#' finalizer, onexit); nothing is set when stty fails
+#' that reads stdin waiting, never at an end of input); a D console turns the echo off and keeps
+#' what is typed at SIGINT (`-echo noflsh`; `keys` FALSE), so the pause menu's drain keeps a line
+#' being typed (policy_menu()). `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which
+#' also runs at q() (a finalizer, onexit); nothing is set when stty fails
 #' @noRd
 tty_call = function(keys) {
   saved = tty_modes()
@@ -119,7 +120,7 @@ tty_call = function(keys) {
   tty$set = if (keys) {
     c("-icanon", "-echo", "-iexten", "-isig", "min", "1", "time", "0")
   } else {
-    "-echo"
+    c("-echo", "noflsh")
   }
   reg.finalizer(tty, tty_restore, onexit = TRUE)
   the$tty = tty
@@ -159,15 +160,25 @@ tty_isig_off = function(tty) {
   invisible(NULL)
 }
 
+#' Does R's own Unix readline read this console from a tty (terminal R, an IDE's terminal tab)?
+#' @noRd
+console_readline_tty = function() {
+  identical(.Platform$OS.type, "unix") && gptr_is_interactive() &&
+    isTRUE(capabilities("cledit")[["cledit"]]) && stdin_tty()
+}
+
 #' A console question of a terminal call reads in the saved modes from before its rows are written
 #' (`on` TRUE) until it returns (FALSE), so readline starts as soon as the person sees the question,
-#' never after a slow stty (D-243); gptr_readline() then switches nothing
+#' never after a slow stty (D-243); gptr_readline() then switches nothing. Where readline reads the
+#' tty the echo stays off (`tty$quiet`) until gptr_readline() starts it, so a key typed while the
+#' rows are written is not echoed before the chevron and again by readline
 #' @noRd
 tty_question = function(on) {
   tty = the$tty
   if (is.null(tty$saved) || identical(isTRUE(tty$asking), on)) return(invisible(NULL))
   tty$asking = on
-  tty_modes(if (on) tty$saved else tty$set)
+  tty$quiet = on && console_readline_tty()
+  tty_modes(if (on) c(tty$saved, if (tty$quiet) "-echo") else tty$set)
   invisible(NULL)
 }
 
@@ -255,6 +266,12 @@ gptr_readline = function(prompt = "", read = readline, hide = NULL) {
   if (!is.null(tty$saved) && !isTRUE(tty$asking)) {
     tty_modes(tty$saved)
     on.exit(tty_modes(tty$set), add = TRUE)
+  } else if (isTRUE(tty$quiet)) {
+    # readline shows what it reads only where the echo is on as it starts; its prompt erases a key
+    # the terminal echoed in that moment (tty_question())
+    tty$quiet = FALSE
+    tty_modes(tty$saved)
+    prompt = paste0("\001\r\033[K\002", prompt)
   }
   if (!is.null(hide)) {
     on.exit(tty_modes(hide), add = TRUE, after = FALSE)
@@ -267,14 +284,26 @@ gptr_readline = function(prompt = "", read = readline, hide = NULL) {
   x
 }
 
+#' `read(prompt)` on the input band (IC-82) where console_style() gives one (a T console), so every
+#' line the person writes has one look: readline counts only the prompt's text (\001 \002) and
+#' \033[K shades the row to its end; after the read the attributes are reset and the band erased
+#' from the row below, which the line's end gave it
+#' @noRd
+band_read = function(prompt, read) {
+  band = console_style()$band
+  if (!nzchar(band)) return(read(prompt))
+  on.exit(gptr_message_write("\033[0m\033[K", gptr_message_stream("stdout")), add = TRUE)
+  read(paste0("\001", band, "\002", prompt, "\001\033[K\002"))
+}
+
 #' The answer to a question: in an interactive session a line readline() returns too soon
 #' (answer_stale()) was typed or pasted before the question was shown, so it is asked again; at
 #' most 100 reads, as readline() returns at once at the end of a pipe. Each line read past that is
 #' not blank goes to `keep(line)`: the console history, a console question's
-#' console_typed_ahead(), or nowhere for NULL (a secret) (IC-75, D-243). A line that is one of
-#' `accept` (trimmed, lower case; TRUE: any) answers even when read too soon, as a key typed just
-#' after the pause menu's Ctrl-C is meant for the menu. `read` reads a line: gptr_readline(), or a
-#' secret's read without echo (ui_console_read())
+#' console_typed_ahead(), or nowhere for NULL (a secret) (IC-75, D-243). A line that `accept(line)`
+#' takes, one of the question's answers, answers even when read too soon, as a key typed just after
+#' the pause menu's Ctrl-C or as the question showed is meant for it. `read` reads a line:
+#' gptr_readline(), or a secret's read without echo (ui_console_read())
 #' @noRd
 readline_answer = function(prompt, keep = console_history_add, accept = NULL,
                            read = gptr_readline) {
@@ -282,7 +311,7 @@ readline_answer = function(prompt, keep = console_history_add, accept = NULL,
     the$readline_secs = NULL
     x = read(prompt)
     if (i == 100L || !gptr_is_interactive() || !answer_stale(the$readline_secs)) break
-    if (rlang::is_string(x) && (isTRUE(accept) || tolower(trimws(x)) %in% accept)) break
+    if (rlang::is_string(x) && is.function(accept) && isTRUE(accept(x))) break
     if (is.function(keep) && rlang::is_string(x) && nzchar(trimws(x))) keep(x)
   }
   x
@@ -485,7 +514,7 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.max_turns` (integer, `50`): turns per programmatic run.
 #' - `gptr.max_turns_console` (integer, `200`): turns per console prompt.
 #' - `gptr.max_nested_calls` (integer, `20`): [peter()] calls per evaluation of model code.
-#' - `gptr.value_copy_max` (bytes, `1048576`): designated result values below this size are
+#' - `gptr.value_copy_max` (bytes, `2097152`): designated result values below this size are
 #'   copied; larger ones are kept by name.
 #' - `gptr.values_max_bytes` (bytes, `67108864`): value copies held per session.
 #' - `gptr.background_tools` (character, `"idle"`): `"idle"` or `"wait"` for experimental
@@ -532,12 +561,15 @@ s3_register = function(generic, class, method = NULL) {
 #' @section Permissions:
 #' - `gptr.noninteractive_ask` (character, `"stop"`): what a permission question does when
 #'   nobody can answer: `"stop"` ends the run with status `blocked` and a
-#'   `gptr_error_permission` condition; `"deny"` returns a denial to the model.
+#'   `gptr_error_permission` condition (`gptr_error_noninteractive` when the `ask` tool has no one
+#'   to answer); `"deny"` returns a denial to the model.
 #' - `gptr.critical_guard` (logical, `TRUE`): level-4 actions ask even in `auto` mode.
 #' - `gptr.secret_guard` (logical, `TRUE`): reads of registered secrets ask even in `auto`
 #'   mode.
 #' - `gptr.protect_size` (bytes, `1e8`): overwriting a larger object is a level-3 action.
-#' - `gptr.plan_handoff` (logical, `TRUE`): hand a plan from `plan` mode to the next call.
+#' - `gptr.plan_handoff` (logical, `TRUE`): hand the plan a `plan` run proposes, once, to the next
+#'   top-level `peter()` call from the same environment, within an hour and in another mode;
+#'   another `peter()` call first, or a next call inside a loop or a run, discards it.
 #' - `gptr.unsafe_no_permissions` (logical, `FALSE`): turns the permission gate off entirely;
 #'   honored only when set outside a run, for sandboxed continuous integration.
 #'

@@ -282,8 +282,11 @@ Decisions:
     first.`; it said the text was still on the input line, false for text typed at the question.)
     The hint starts with the question, `Allow r? Type ...`, which may have scrolled away (amended in
     the visual review).
-    This fixes the mid-word hard wraps in pty runs B, E and F.
-  - `A pasted block is not an answer (kept in history).`
+    This fixes the mid-word hard wraps in pty runs B, E and F. (Amended in Task 71, visual round 3: one
+    dim row in the console's terms, `not an answer · kept in history ↑ · y, a, p, n, n <instead> or ?`; the
+    question's title is right above it.)
+  - `A pasted block is not an answer (kept in history).` (`a pasted block is not an answer · kept in history
+    ↑` from Task 71.)
 - No answer is ever guessed into a steer.
 
 Tests (`test-console-ui.R`, `test-console-typing.R`), RED first:
@@ -627,7 +630,7 @@ Decisions:
   (`patch`, or carried in `edits`) as its own lines, `+` rows of a write's content, another tool's other fields
   as JSON, and nothing for any other shape. At most 12 rows in the ask, then `(+N more lines; ? shows more)`
   (`? shows all` would be false past 52 lines), and 40 in the `?` view, whose first row then names the
-  path (`gptr wants to use edit on R/io.R (level 2)`: the RStudio dialog, which shows only this view, would
+  path (`peter wants to use edit on R/io.R (level 2)`, `gptr` until Task 65: the RStudio dialog, which shows only this view, would
   otherwise not say which file). The rows are styled and cut as the result's diff, one helper,
   `console_diff_rows()`. Main showed the path alone: an edit's change only after `y`, a write's content never.
   (Amended in the review of Tasks 22-27: under the console's ask the `?` view leaves out the rows the ask showed
@@ -743,7 +746,8 @@ Decisions:
 - In every class for now, queueing prints one dim line at column 0:
   - `↳ steer · <text>` or `↳ follow-up · <text>`; ASCII `-> steer - <text>`;
   - on CLI routes, a steer adds ` · after the CLI's answer`;
-  - the text is escaped and cut to three rows ending in `…`;
+  - the text is escaped and cut to three rows ending in `…` (one row, its lines joined by a blank, from Task
+    74, visual round 3);
   - inside an evaluation (the pause menu during `r` code) it has the console's colours.
 - Both lines come from `console_person_rows()`: the glyph, then the text wrapped at the console
   width less one, later rows under the text. The queue line's cut also trims a row wider than that
@@ -835,8 +839,9 @@ Decisions:
   review), and added to the history in that
   order (`console_keep()`, which the partial-line notice also uses). Nothing is auto-sent after an
   abort. Follow-ups in the FIFO (outside the REPL) stay queued after an error.
-- The list follows the run's status line, then the blank row before the prompt; `[gptr] aborted; the
-  session is kept.` is printed only where no status line said `aborted` (amended in the review of
+- The list follows the run's status line, then the blank row before the prompt; `aborted · the
+  session is kept` (`[gptr] aborted; the session is kept.` until Task 64) is printed only where no status line
+  said `aborted` (amended in the review of
   Tasks 8-15: it repeated the status line, after the list).
 - The draft joins this list once the composer holds it (Task 20). Until then gptr holds no draft: a
   partial line stays in the terminal.
@@ -1157,10 +1162,12 @@ Decisions:
   control outside the console's vocabulary, `[gptr] paused sf1a5079fab: [s]teer, ...` read at `  ? `):
   `  ? Paused`, then under its text a keys row built as the approval's,
   `    s steer · f follow-up · c continue · a abort · b background` (keys bold, words dim, wrapping
-  between the options); the session id only when more than one session is paused; no
-  `[gptr] continuing`; an invalid key gets a dim hint naming the keys; [b] says `running in the background ·
-  gptr_wait() brings it back` dim, then a blank row (amended in the review of Tasks 16-21: it kept the
-  `[gptr]` notice, on the prompt). (Amended in Task 20:) A key or its
+  between the options); the session id only when more than one session is paused (one title, `? Paused`,
+  from Task 81, visual round 3); no
+  `[gptr] continuing`; an invalid key gets a dim hint naming the keys; [b] says `in the background ·
+  !!gptr::gptr_wait(gptr::gptr_last()) continues it here` dim, then a blank row (amended in the review of Tasks
+  16-21: it kept the `[gptr]` notice, on the prompt; in Task 51: it said `running in the background ·
+  gptr_wait() brings it back`, while nothing runs it at the chat prompt). (Amended in Task 20:) A key or its
   word answers, as an approval reads `y` or `yes`, and an empty answer continues. Before, any text's first
   letter was its key, so a steer typed at the new chevron (`add a legend`) aborted the run. The keys row is
   `ui_keys()` in `console-ui.R`, which the approval uses too; its separator ends a row, never starts one.
@@ -1174,8 +1181,9 @@ Decisions:
   the chevron; they were dropped, so under load Ctrl-C, `s` and Enter in one read lost the `s`, and the
   steer then typed at the menu was lost too. The lines before an answer, and text without one, are kept in the history; what the
   menu leaves the composer reads once it resumes, and after [a] it is the draft at the next prompt. Text
-  typed at the menu that is no key is kept in the history too, under `Not a key: '<text>' (kept in
-  history).` above the keys hint, and never sent.)
+  typed at the menu that is no key is kept in the history too, under `not a key · kept in history ↑ · s,
+  f, c, a or b` (`Not a key: '<text>' (kept in history).` above the keys hint until Task 71), and never
+  sent.)
 - [s] and [f] read their text at the same `› ` and queue it exactly as Enter and Tab do. (Amended in
   Task 20:) `policy_enqueue()` keeps the reader's `sent`, the kind queued last, which `console_keys()`
   kept, so Up takes back a menu message as a composer one; blank text queues nothing, without the
@@ -1550,8 +1558,9 @@ Decisions:
   space, so curl's two-line error stays on the line (it showed `<U+000A>`); other control characters stay escaped.
 - (Amended in the cheat-sheet review, console-4:) after `/compact` the last request is the compaction request:
   `/context` says so in its header, adds `  next request: about <n> tokens` (the compaction entry's
-  `tokens_after`) and measures the context left from that; `/compact` reports `Conversation compacted: <before> ->
-  <after> tokens.`. (Amended in the review of Tasks 22-27: the estimate is a ledger row, `  next request
+  `tokens_after`) and measures the context left from that; `/compact` reports `compacted · <before> to
+  <after> tokens` (`->` until P28 Task 62; `Conversation compacted: <before> to <after> tokens.` until P28 Task
+  73). (Amended in the review of Tasks 22-27: the estimate is a ledger row, `  next request
   ~<n>`, its value in the column of the others, `~` marking it an estimate.)
 
 Tests (`test-console-render.R`, `test-console-repl.R`, `test-console-commands.R`), RED first:
@@ -1650,6 +1659,10 @@ Decisions:
   - `model = "claude-cli"`;
   - `model = "codex"`;
   - a local Ollama model, `ollama/qwen3:1.7b` or another installed tool-calling model (IC-74).
+    (Amended in Task 28: `ollama/qwen3.8:27b`, the maintainer's choice of 2026-10-22.)
+  - (Amended in Task 28:) Versa GPT-5.6 Sol (`versa/gpt-5.6-sol-2026-07-09`) and Versa Bedrock Opus
+    4.8 (`versa-bedrock/us.anthropic.claude-opus-4-8`), registered by the setup file that
+    `GPTR_LIVE_SETUP` names, keys through `gptr_env()` only.
 - Scenarios, at most 4 short prompts each:
   - S1, steer while streaming: the live row shows `1 queued`; `›` appears at the boundary; the
     relay is in the request. Time from Enter to delivery. CLI routes deliver after the CLI's
@@ -1668,14 +1681,18 @@ Decisions:
     run C 30 times beside 2 x nproc busy processes; `Paused` appears within 1 s of every ^C, and `kept
     in history` within 1 s of a ^C at the idle editor. (Amended in the review of Tasks 16-21: it failed,
     6 of 19 runs at load average 40-57, so Task 18's fallback is in: `-isig` in character mode, the
-    composer reading byte 0x03, isig back on while in-process R code runs; S10 checks it.)
+    composer reading byte 0x03, isig back on while in-process R code runs; S10 checks it.) (Amended
+    in Task 28: on a slow fake route; as in run C the draft is typed while the answer streams, `c`
+    continues, and the second Ctrl-C comes at the idle prompt where the draft waits.)
   - S9, the maintainer's manual checks:
     - RStudio console: the popup appears only on triggers; editor completion works while peter
       waits; a stale line is routed at a question; there is no band.
     - Windows Terminal Rterm: plain prompt and Tab completion.
     - Terminal.app and iTerm2: the OSC 11 reply and the band.
 - Record in `dev/progress/P28.md`: transcripts, timings, REQ roles, and pass or fail per scenario
-  and route. Each defect becomes Task 29+ with a red test first.
+  and route. Each defect becomes Task 29+ with a red test first. (Amended in Task 28:) Also each
+  run's recording: `peter()` starts from a sourced script with `gptr_doc("session.R")` bound, and
+  the record parses, keeps each steer and replays with `GPTR_REPLAY=replay` and no model.
 
 Files: `dev/dogfood/p28-console.R` (new), `dev/progress/P28.md`.
 
@@ -1694,7 +1711,57 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 33 | A CLI route's run status names its model `default` | 6b2ffd3c |
 | 34 | A key typed while an aborted run stops is echoed | 5831cb0b |
 | 35 | Up read with the Enter before it takes nothing back | fa3e1059 |
-| 36 | A sub-agent's start line loses `started` when cut | (this commit) |
+| 36 | A sub-agent's start line loses `started` when cut | d88014eb |
+| 37 | On a CLI route a taken-back steer's printed line stays in the scrollback | 5ee252d9 |
+| 38 | Keys typed during a CLI route's first probe wait without a cue (not changed) | 31872d53 |
+| 39 | In RStudio a notice during a run is boxed by RStudio and the live row stays | 1c6f9ae0 |
+| 40 | Under `R < file` the piped console reads end of input at once | 99bb3d6f |
+| 41 | On Terminal.app's Ocean and Grass profiles the dim rows and inline code nearly vanish | 0ab59e78 |
+| 42 | A retry notice prints a raw missing value (final visual loop, round 1) | eafd16f5 |
+| 43 | An interrupted call's row states its time twice (final visual loop, round 1) | 0d29db9c |
+| 44 | A failed run states its reason twice, the first copy cut (final visual loop, round 1) | 82b480ce |
+| 45 | On a tinted background the input band changes hue (final visual loop, round 1) | 045cee58 |
+| 46 | The approval's `?` view runs past a narrow console (final visual loop, round 1) | ac06d73e |
+| 47 | After the pause menu's [b] the rows are grouped wrongly (final visual loop, round 1) | 2a33f46b |
+| 48 | Keys typed while a question's rows are drawn are echoed, then read again (final visual loop, round 1) | 35eaaaf7 |
+| 49 | An approval's flag rows read as policy internals, in two shapes (final visual loop, round 1) | 86c49fe0 |
+| 50 | A question's answer is not shown (Task 48, found by its visual check) | b356476c |
+| 51 | A run sent to the background does not move at the chat prompt, and its wait shows nothing (final visual loop, round 1) | 96b139b1 |
+| 52 | Answers to console questions sit off the input band (final visual loop, round 1) | d9ddfefa |
+| 53 | After [b] the status block sits right under the answer's tail (Task 47, found by its visual check) | 4c650e94 |
+| 54 | An answer typed as a question shows is sent as a steer (final visual loop, round 2) | 6e907411 |
+| 55 | A waited run is drawn in a weaker palette (final visual loop, round 2) | 9e1c3551 |
+| 56 | What is typed while a waited run works is invisible (final visual loop, round 2) | 792c372c |
+| 57 | A failed run's status block looks like a successful one (final visual loop, round 2) | 5a0b3f80 |
+| 58 | In TERM=dumb a line being typed at Ctrl-C is lost (final visual loop, round 2) | 0e1a6296 |
+| 59 | After an abort the text received before it can lose characters (final visual loop, round 2) | 0c8c2473 |
+| 60 | Sub-agent rows split the result of the r call that started them (final visual loop, round 2) | 99c76f9b |
+| 61 | A sub-agent's end row cut loses its time (final visual loop, round 2) | 64a9f606 |
+| 62 | Slash-command output runs into the next prompt (final visual loop, round 2) | e0e328de |
+| 63 | /help ignores the console's type rules (final visual loop, round 2) | 81a5579f |
+| 64 | Notices in the old `[gptr] …` form remain (final visual loop, round 2) | b2d22fb0 |
+| 65 | The approval's `?` view names the agent gptr, in plain type (final visual loop, round 2) | c5459a60 |
+| 66 | A script's blocked run states its reason three times (final visual loop, round 2) | 353e56aa |
+| 67 | After an abort a dropped steer shows twice (final visual loop, round 2) | 1e28b21a |
+| 68 | In TERM=dumb a cursor key typed during a run lands in the steer (final visual loop, round 2) | a70d64b5 |
+| 69 | /compact's one-row result still runs into the next prompt (Task 62, found by its visual check) | 8644edd9 |
+| 70 | The pause menu's [b] notice mixes two voices and ends a row in the separator (final visual loop, round 3) | f6cd98f5 |
+| 71 | The re-ask after an invalid answer repeats the question in sentence prose (final visual loop, round 3) | 623efc0c |
+| 72 | A sub-agent's start and done rows are cut in different places (final visual loop, round 3) | ae96b604 |
+| 73 | /compact writes sentence prose among the console's dim terms (final visual loop, round 3) | 9bb544f9 |
+| 74 | A queued message of several lines puts its later lines under the glyph (final visual loop, round 3) | 0669455e |
+| 75 | A warning from the person's `!` code waits for R's top level (final visual loop, round 3) | 88c2c325 |
+| 76 | The session record does not re-source or keep the order typed (final visual loop, round 3) | 3dbb94ba |
+| 77 | Tab Tab at the idle prompt leaves the list to readline, on the band and paged (final visual loop, round 3) | e8b9b565 |
+| 78 | After the pause menu's [a] the held row prints without its label (final visual loop, round 3) | e56ce15d |
+| 79 | A `!` block has three indents and runs into the next prompt (final visual loop, round 3) | 9de0abae |
+| 80 | In TERM=dumb an approval that comes while a line is typed splits the line (final visual loop, round 3) | e5afc436 |
+| 81 | With a sub-agent running the pause menu's title is a raw session id (final visual loop, round 3) | df4876b6 |
+| 82 | `/exit` while a [b] run works leaves without a word, and its end lands on R's prompt row (final visual loop, round 3) | 82f7bd59 |
+| 83 | A D console's wait reads the terminal's edit keys as text (Task 80, found by its visual check) | 937b9c9d |
+| 84 | `document` reads the console's bracketed keys as links (pre-PR check) | c2dd176b |
+| 85 | INFRA-03 fails six expectations in a background job, taken for a timing flake (pre-PR check) | 6777610e |
+| 86 | Console tests assume Unicode glyphs where a Windows console draws ASCII (win-builder) | (this commit) |
 
 ## Out of scope
 
@@ -1714,12 +1781,12 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 
 | Row | Command | Actual | Status |
 |---|---|---|---|
-| A1 | `isolated-check.R test 'console-'` | | pending |
-| A2 | `isolated-check.R test 'agent-\|session-object\|provider-transform'` | | pending |
-| A3 | full `devtools::test()` | | pending |
-| A4 | `isolated-check.R lint` (whole package) | | pending |
-| A5 | cross-plan checks and `python3 -I dev/ci/check-plans.py` | | pending |
-| A6 | `R CMD check --as-cran --no-manual` (0 errors, 0 warnings) | | pending |
+| A1 | `isolated-check.R test 'console-'` | 6777610e, NOT_CRAN=true: FAIL 0, WARN 0, SKIP 2, PASS 3386; INFRA-03 with CI=true passes | pass |
+| A2 | `isolated-check.R test 'agent-\|session-object\|provider-transform'` | 6777610e: FAIL 0, WARN 0, SKIP 1, PASS 3028 | pass |
+| A3 | full `devtools::test()` | 6777610e in five parts, NOT_CRAN=true: FAIL 0 (9852, 3386, 10043, 7579, 7305 passes); test-proc-rscript-native.R failed once on a ps access_denied during a memory sample (load 7.5) and passed alone | pass |
+| A4 | `isolated-check.R lint` (whole package) | 6777610e: no lints | pass |
+| A5 | cross-plan checks and `python3 -I dev/ci/check-plans.py` | 6777610e: all four plan checks passed | pass |
+| A6 | `R CMD check --as-cran --no-manual` (0 errors, 0 warnings) | 6777610e: 0 errors, 0 warnings, 0 notes (a first run failed test-proc-windows-backpressure.R at load 120-320, a cold writer over its 2 s start); in CRAN's own mode (NOT_CRAN unset, CRAN's timing thresholds) Status OK in 244 s | pass |
 | A7 | hosted CI: the pty cases (B, C, D, G, H, I, Enter, Tab, Up, ask-after-idle, band, completion) on the ubuntu and macOS NOT_CRAN lanes; Windows lanes green with them skipped by OS guard | | pending |
-| A8 | live dogfood S1-S8 on claude-cli, codex and Ollama (Task 28) | | pending |
-| A9 | the maintainer's manual checks (S9): RStudio console, Windows Terminal Rterm, Terminal.app and iTerm2 band | | pending |
+| A8 | live dogfood S1-S8 on claude-cli, codex and Ollama (Task 28) | m5 at 9af422d6 (`dev/dogfood/p28-console.R`, terminal R in tmux 100x32): 487 of 490 checks on claude-cli, codex, `ollama/qwen3.8:27b`, Versa GPT-5.6 Sol and Bedrock Opus 4.8, every recording parsed and replayed without a model; the 3 (GPT S8-cols50, the answer ended before the steer's Enter) passed alone twice. S10: 30 of 30 beside 2 x 16 busy processes. m1-m4's defects: Tasks 29-38 | pass at 9af422d6 |
+| A9 | the maintainer's manual checks (S9): RStudio console, Windows Terminal Rterm, Terminal.app and iTerm2 band | S9 at 31872d53, by an agent on windows it opened and closed: Terminal.app Basic, Pro, Novel and Man Page answer OSC 11 and get a band fitted to the background; tmux at 60, 80 and 120 columns, 15 degraded modes, VS Code's terminal, Positron and the live scenario on claude-cli and codex as designed; `R < file` (Task 40), Ocean and Grass (Task 41) and RStudio's boxed notice, from earlier screenshots (Task 39), fixed. RStudio and R.app not launched: the capture harness is marked unsafe. Windows Terminal Rterm (no Windows machine) and iTerm2 (not installed) not available | partial: RStudio, R.app, Windows Terminal Rterm and iTerm2 open |

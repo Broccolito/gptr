@@ -17,6 +17,31 @@ test_that("snapshots of globalenv and of a function frame leave the object in pl
     "f = function(d) { force(d); s = env_snapshot(environment()); invisible(NULL) }; f(big)",
     label = "snapshot of a function frame"
   )
+  expect_no_copy(
+    paste("big = runif(5e6)", ns_get("env_view_snapshot"), sep = "; "),
+    paste("f = function(d) { force(d); ov = new.env(parent = environment());",
+          "attr(ov, 'gptr_overlay') = 'overlay of x'; s = env_view_snapshot(ov);",
+          "parent.env(ov) = globalenv(); invisible(NULL) }; f(big)"),
+    label = "view snapshot of an overlay of a function frame, then released (D-252)"
+  )
+})
+
+test_that("sizing leaves list elements, environment bindings and long lists in place (D-247)", {
+  size = ns_get("env_snap_size")
+  expect_no_copy(paste("L = list(a = runif(1e6), b = list(c = runif(10)))", size, sep = "; "),
+                 "invisible(env_snap_size(L))", "L$a[1] = 0", "L$a",
+                 label = "a list element after env_snap_size()")
+  expect_no_copy(paste("e = new.env(); e$v = runif(1e6)", size, sep = "; "),
+                 "invisible(env_snap_size(e))", "e$v[1] = 0", "e$v",
+                 label = "an environment binding after env_snap_size()")
+  expect_no_copy(paste("L = lapply(1:1e5, function(i) runif(3)); L[[9e4]] = runif(1e6)", size,
+                       sep = "; "),
+                 "invisible(env_snap_size(L))", "L[[9e4]][1] = 0", "L[[9e4]]",
+                 label = "an item of a long list the walk sampled past")
+  expect_no_copy(paste("pre = lapply(1:1e5, function(i) runif(3)); L = pre",
+                       "L[[9e4]] = runif(1e6)", size, sep = "; "),
+                 "invisible(env_snap_size(pre, shared = L))", "L[[9e4]][1] = 0", "L[[9e4]]",
+                 label = "the current value after a checkpoint image is sized against it")
 })
 
 test_that("a function-frame home with an unsupplied argument and empty dots stays in place", {

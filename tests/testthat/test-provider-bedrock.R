@@ -347,6 +347,43 @@ test_that("signed reasoning is replayed only to the model that produced it", {
   expect_identical(body$messages[[2L]]$content, list(list(text = "Done.")))
 })
 
+test_that("a Claude model declared adaptive gets the thinking level; others get none (D-250)", {
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
+  body_of = function(model, thinking, max_tokens = 32000L) {
+    params = list(max_tokens = max_tokens, thinking = thinking, temperature = 0.2)
+    ctx = ctx_fixture(list(msg_user("q", timestamp = 1)), params = params)
+    json_decode(bedrock_build(model, ctx, list(base_url = "https://h.test"))$body)
+  }
+  today = c("inferenceConfig", "system", "toolConfig", "messages")
+  opus = test_model(api, id = "us.anthropic.claude-opus-4-8")
+  body = body_of(opus, "high")
+  expect_identical(body$additionalModelRequestFields,
+                   list(thinking = list(type = "adaptive", display = "omitted"),
+                        output_config = list(effort = "high")))
+  expect_identical(body$inferenceConfig, list(maxTokens = 32000L))
+  expect_identical(names(body_of(opus, "off")), today)
+  expect_identical(names(body_of(test_model(api, id = opus$id, reasoning = FALSE), "high")), today)
+  # a registered Claude record that does not declare how it thinks (Opus 4.8 refuses a budget
+  # with HTTP 400; Claude 4.5 and earlier think only on one): no thinking, said once per model
+  spec = gptr_provider("gw", api = api, base_url = "https://h.test", auth = "AWS_SECRET_ACCESS_KEY",
+                       compat = list(region = "us-west-2"),
+                       models = list(list(id = opus$id, tool_call = TRUE, reasoning = TRUE,
+                                         max_output = 32000)))
+  plain = model_resolve(spec)
+  withr::local_options(gptr.quiet = FALSE)
+  expect_message(expect_identical(names(body_of(plain, "high")), today),
+                 "capabilities = list(adaptive_thinking = TRUE, effort = TRUE)", fixed = TRUE,
+                 class = "gptr_message_notice")
+  expect_no_message(expect_identical(names(body_of(plain, "max")), today))
+  expect_no_message(expect_identical(names(body_of(plain, NULL)), today))
+  # another Converse model gets no thinking field either
+  nova = test_model(api, id = "amazon.nova-pro-v1:0")
+  expect_message(expect_identical(names(body_of(nova, "high")), today), "not sent",
+                 class = "gptr_message_notice")
+  expect_no_message(body_of(nova, "high"))
+  expect_no_message(body_of(nova, "off"))
+})
+
 test_that("`returns =` adds the schema instruction to the last user message", {
   turn = msg_assistant(list(block_tool_call("toolu_1", "read", list(path = "a.R"))),
                        api = api, provider = "fixture", model = "fixture-1")

@@ -7,6 +7,7 @@ test_that("gptr_opt() returns the option or its documented default", {
   expect_identical(gptr_opt("noninteractive_ask"), "stop")
   expect_identical(gptr_opt("subagents.max_depth"), 1L)
   expect_identical(gptr_opt("compact_at"), 200000)
+  expect_identical(gptr_opt("value_copy_max"), 2097152)
   expect_null(gptr_opt("model"))
   expect_null(gptr_opt("not_a_documented_option"))
   withr::local_options(gptr.out_keep = 5L)

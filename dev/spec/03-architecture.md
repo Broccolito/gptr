@@ -299,7 +299,7 @@ Final areas, in layer order:
 `doc`, `artifact` (L4); `console` (L5); `gptr` (L6); plus `zzz.R`. `cli` means the subscription-CLI
 providers, never the cli package.
 
-### 3.2 `R/` files (124 files after the Rscript launcher amendment, P26's Bedrock adapter and P28's composer and completer)
+### 3.2 `R/` files (125 files after the Rscript launcher amendment, P26's Bedrock adapter, D-247's `utils-size.R` and P28's composer and completer)
 
 Every file has exactly one owning plan (`05-plan-decomposition.md`). "Builtin" names the factory the file
 declares, if any.
@@ -314,6 +314,7 @@ declares, if any.
 | `utils-paths.R` | L0 | project root (with the `gptr.project_root` override), `gptr_user_dir(which)` = `tools::R_user_dir("gptr", which)`, `user_home()`, `app_config_dir()` [IC-63], `path_key()`, `rscript_path()` [IC-60], workspace root (`.gptr` or `tempdir()/gptr`), atomic write (temp + `file.rename` with retries and an in-place fallback), the leaf `save_rds()`/`serialize_leaf()` wrappers that always pass `ascii = FALSE` (R7), path classes (incl. `control`, `instructions` [IC-54]), Windows reserved names | - | P01 |
 | `utils-text.R` | L0 | head 40% / tail 60% truncation to a token budget, spill files, the `out(id)` store (per session, last 20 results each [IC-71]), ANSI/OSC and carriage-return cleanup, 400-char line caps | - | P01 |
 | `utils-tokens.R` | L0 | class-aware estimator `est_tokens(x, class)` (G2 constants), image-token formulas, per-session EWMA multiplier | - | P01 |
+| `utils-size.R` | L0 | `env_snap_size(x, home, shared)`, the one size rule (each part and string once; code, top-level environments, the home and running frames 0; long lists and environments sampled) and `env_compact_seq()` [D-247] | - | P09 |
 | `json-encode.R` | L0 | `json_encode()`, once-serialised entries (`json_verbatim`), bodies assembled by concatenation | - | P01 |
 | `json-partial.R` | L0 | incremental partial-JSON scanner for streamed tool arguments (throttled previews) | - | P01 |
 | `json-schema.R` | L0 | argument validation and explicit coercion (INFRA-09); one-line R-signature rendering of schemas | - | P01 |
@@ -541,8 +542,10 @@ labelled by their expression, named ones by name). `model`, `mode`, `skills`, `p
 (`"minimal"`, `"standard"`, `"readonly"`, `"extended"`) or `gptr_tool()` specs (rank 0). `agents`: named list
 of agent definitions (`agent()` is bound to `gptr_agent()` inside it). `parallel = n`: fan a list/vector/data
 frame context out over `n` concurrent sub-agents. `choices`, `levels`, `threshold`, `min_confidence`,
-`uncertain`: System 1 answer shape and abstention (§4.1.5). `envir`: where code runs and objects persist
-(D-04). `background = TRUE`: experimental, returns the running session at once (needs `later`). `budget =
+`uncertain`: System 1 answer shape and abstention (§4.1.5); a conversational model refuses them (a `threshold`
+other than 0.5 included) rather than ignore them; a decision model refuses `agents` and `parallel` (D-250).
+`envir`: where code runs and objects persist (D-04).
+`background = TRUE`: experimental, returns the running session at once (needs `later`). `budget =
 list(tokens =, cost =, turns =)`. `replay`: document replay mode (`"auto"`, `"replay"`, `"live"`, `"record"`).
 `.opts`: rare switches: `thinking`, `max_turns`, `context` (`"summary"`, `"names"`, `"none"`), `record`,
 `interpolate`, `timeout`, `output = "factor"`, `system` (string replaces preamble/tools/rules; named list
@@ -624,12 +627,13 @@ Capture is base R (§6.4 R3; G3 t2b verified including forwarded dots). Resoluti
 |---|---|
 | `NULL` | the default from settings |
 | string literal (`"opus"`) | itself |
-| symbol that is a **known identifier** (catalog alias, registered provider/model/router, mode, preset, skill, plugin, extension, agent; skill, plugin, extension and agent names compared after mapping `_` and `.` to `-` and lower-casing, so `skills = single_cell` finds `single-cell` [IC-42]) | the name: **the known identifier wins over a same-named variable**, as `library(pkg)` does, so packages exporting `claude`, `codex` or `plan` cannot hijack it [12 §2.D1, 10 Q4]; a once-per-session notice when a character variable of that name holds a different value ("used the alias; write !!sonnet") |
+| symbol that is a **known identifier** (catalog alias, registered provider/model/router, mode, preset, skill, plugin, extension, agent; skill, plugin, extension and agent names compared after mapping `_` and `.` to `-` and lower-casing, so `skills = single_cell` finds `single-cell` [IC-42]) | the name: **the known identifier wins over a same-named variable**, as `library(pkg)` does, so packages exporting `claude`, `codex` or `plan` cannot hijack it [12 §2.D1, 10 Q4]; a once-per-session notice when a character variable of that name holds a different value, or a spec of the kind the argument accepts has a different name (D-250) ("used the alias; write !!sonnet") |
 | `!!x` | the value of `x` (explicit escape for a shadowed alias) |
 | `I(x)` | the value of `x` |
 | other symbol, bound where the call's promise is evaluated | the formal's promise is forced in a leaf: a character value is used; a spec object (`gptr_fake_provider()`, `gptr_tool()`, `gptr_agent()`) is registered at rank 0; any other class is a classed error naming the class ("`mice` is a data.frame, not a model name") |
 | unknown unbound symbol | the literal name, validated later with `adist()` suggestions [09] |
 | `c(a, "b")`, `+name`, `-name` | element-wise |
+| a binary `-` of names and numbers (`high-performance-r`) | a classed error naming the quoted form, never evaluated (D-252) |
 | other calls (`if (hard) opus else haiku`) | evaluated in an alias mask (known names bound to strings, parent = the caller); the mask's parent is reset to `emptyenv()` after evaluation (§6.4 R3) |
 
 Model references containing a decimal typed as a symbol (`gpt5.1`) are echoed once; documents always receive
@@ -655,7 +659,8 @@ message naming `I(x)` when it splits a data frame into several states [IC-71]). 
 `as_state(s)`: its last answer (at most 2,000 characters) plus value facts; no turn is added and a
 `gptr.decision` custom entry is appended [G3 (12)]. Question type: `choices` -> choice, `levels` -> score,
 else a boolean (wire name `noul`, never the public `bool` [04a]). Results: `gptr_decision` (logical),
-`gptr_choice` (classed character; a factor only when `choices` is a factor or `.opts$output = "factor"`),
+`gptr_choice` (classed character; a factor only when `choices` is a factor or `.opts$output = "factor"`, a
+plain factor without probabilities whose `meta` attribute holds only `errors`, when elements failed [D-250]),
 `gptr_score` (double), probabilities as attributes (§5.6). Choice labels that `if()` would read as logical
 (`"TRUE"`, `"T"`, `"false"`) are rejected at request time [04 verification]. `threshold` (0.5) turns P(yes)
 into TRUE/FALSE; abstention is **off by default**. `min_confidence` defines an uncertain band; `uncertain`
@@ -671,9 +676,11 @@ accessor are rejected. `backend = "auto"` everywhere: inline, except `cli` for C
 `codex`) [15 verifier resolved]. `parallel = n` runs one inline child per element, `n` at a time (every element is
 queued; the 8-task cap applies only to fan-outs started by model code [IC-39]), each given its element alone as `.x`
 (`list(A = cohorts[["A"]])`, attached as `.x[["A"]]`, no copy; `.opts$context = "none"` is refused) [D-212]. Team and fan-out sessions are sessions (`kind = "team"`/`"fanout"`): `$text` joins the children's
-reports under `### <name> (<model>)` headings, `$value` is the named list of child values, `$<name>` and
+reports under `### <name> (<model>)` headings (a fan-out's is their named chr, printed so; a child that did not end
+`idle` says `(ended with status <status>)`) [D-251], `$value` is the named list of child values, `$<name>` and
 `[[` return child sessions, and piping the team continues it with the reports attached as a user-role
-`<agent_reports>` block (sub-agent output is data) [P-A §6.12, P-C §5.1].
+`<agent_reports>` block (sub-agent output is data) [P-A §6.12, P-C §5.1]; from then on `$text` and
+`$value` are the team's own answer and value, once it has them [D-251].
 
 ### 4.2 The gateway namespace `peter$...`
 
@@ -700,7 +707,7 @@ evaluation without binding anything in the user's environment; recorded code kee
 | `py` | `peter$py(code, name = NULL, max_rows = 10L)` | `gptr_py` (`$value` converts to R); reticulate (Suggests) |
 | `sql` | `peter$sql(query, name = NULL, con = NULL, n = 10L)` | data frame (all rows); prints dims + `n` rows; duckdb registration of named frames, else the DBI connection in scope |
 | `knit` | `peter$knit(engine, code)` | output of a knitr engine; the shell engines run through `peter$sh()` [IC-67] |
-| `app` | `peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = interactive())` | `gptr_artifact`; URL, checks, screenshot image for the model; `kind` is any registered `artifact_type` |
+| `app` | `peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = NULL)` | `gptr_artifact`; URL, checks, screenshot image for the model; `kind` is any registered `artifact_type`; `launch = NULL` launches when `gptr_has_human()`, else the handle's messages say why not and how to start it |
 | `help` | `peter$help(name, package = NULL, budget = 800L)` | tool schema (`"<server>/<tool>"`, member names) or R help text via `tools::Rd2txt`, budgeted; `record = FALSE` |
 | `search` | `peter$search(words, limit = 8L)` | BM25 over members, plugin and MCP tools, skills and `search_source` records; `record = FALSE` |
 | `describe` | `peter$describe(x, budget = 150L)` | same as `gptr_describe()`; `record = FALSE` |
@@ -774,8 +781,9 @@ gptr_cache(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tm
 gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)
 ```
 
-`gptr_doc()` binds every `peter()` call of the process to a document (explicit consent to write it), shows the
-binding, or (`sync = TRUE`) applies pending blocks of a notebook that was open while recording [IC-45, IC-50].
+`gptr_doc()` binds a document to the process (explicit consent to write it: its own calls and console calls record
+there, a call in another document needs that document's consent, D-249), shows the binding, or (`sync = TRUE`)
+applies pending blocks of a notebook that was open while recording [IC-45, IC-50].
 `gptr_source()` regenerates stale or live blocks without executing the old block, which base `source()`
 cannot do [14 §4.4.2]. `gptr_blocks()` lists blocks (id, prompt hash, fresh/stale/user-edited/undone, model,
 date, tokens, cost). `gptr_artifacts()` without `id` is a data frame; with `id` it returns a `gptr_artifact`
@@ -803,8 +811,9 @@ gptr_checkpoints(s, all = FALSE)
 
 `gptr_steer()` is the one enqueue function behind the pipe, the pause menu and `ctx$send()`. `gptr_fork()`
 creates a new session whose store file copies the path to `at` (default: the last closed boundary) and whose
-workspace is an overlay `new.env(parent = s$envir)` by default: reads are zero-copy, writes stay in the fork,
-and nothing live (listeners, queues, connections, processes, locks, usage) is shared (INFRA-14) [G3 (6),
+workspace is an overlay `new.env(parent = s$envir)` by default: reads are zero-copy, assignments stay in the
+fork (in-place edits of reference objects, data.table `:=` and `<<-` reach the source's objects; D-252), and
+nothing live (listeners, queues, connections, processes, locks, usage) is shared (INFRA-14) [G3 (6),
 P-B §4.2]. `gptr_rewind()` is G7's branch-in-place on the same object (§6.16). `gptr_usage(detail = TRUE)`
 returns the per-request token ledger. `gptr_parallel()` returns a team session; fan-outs come from
 `peter(prompt, x, parallel = n)` (the former `gptr_map()` is internal: one gateway, S-1 [IC-36]).
@@ -823,7 +832,9 @@ gptr_preimage(x, name, ctx, ...)
 ```
 
 `gptr_return()` designates the run's result under the value policy of §5.1; outside a run it returns
-`invisible(x)` and does nothing else, so recorded code re-sources cleanly [IC-48].
+`invisible(x)` and designates nothing; the first such call in an R session prints a one-line notice
+(silent in replay mode, `replay = "replay"` or `GPTR_REPLAY=replay`, with `options(gptr.quiet = TRUE)` or
+`suppressMessages()`) [IC-48].
 `gptr_describe()` is the S3 generic for compact descriptions (methods from any package through delayed
 `S3method(gptr::gptr_describe, cls)`). `gptr_risk()` is the advisory static classifier; it never evaluates and
 is documented as not a security boundary. `gptr_prompt()` shows a session's frozen system blocks, tool array
@@ -844,11 +855,12 @@ gptr_spec(kind, name, ...)
 ```
 
 `gptr_api()` returns `list(version = package_version("1.0"), features = <character>)`. `gptr_register()`
-registers at process lifetime (rank "user") and returns an unregister function invisibly; session scope is
-`peter(..., tools = list(spec))` (rank 0); inside a factory the verb is `gptr$register(spec)`. `gptr_registry()`
-lists records with kind, name, source, rank, state (lazy, active, overridden, disabled) and an estimated
-`tokens` column. `gptr_fake_provider()` returns a provider spec usable directly as `model = <spec>` or through
-`gptr_register()`; every manual example uses it.
+registers at process lifetime (rank "user") and returns an unregister function invisibly; registering the same
+kind and name again replaces the earlier `user` record with a notice (all-resolving kinds keep both). Session
+scope is `peter(..., tools = list(spec))` (rank 0); inside a factory the verb is `gptr$register(spec)`.
+`gptr_registry()` lists records with kind, name, source, rank, state (lazy, active, overridden, disabled) and an
+estimated `tokens` column. `gptr_fake_provider()` returns a provider spec usable directly as `model = <spec>` or
+through `gptr_register()`; every manual example uses it.
 
 **Spec constructors** (11; the other kinds use `gptr_spec(kind, name, ...)`; contracts in §11.1)
 
@@ -945,7 +957,8 @@ reactor holds a running session strongly until it settles.
 **Accessors** (`$.gptr_session`, `[[`, `.DollarNames`): `text`, `value`, `values`, `usage`, `cost`,
 `history` (data frame: turn, role, preview, tools, tokens), `messages`, `model`, `mode`, `status`, `id`,
 `turns`, `kind`, `envir` (the kept home or `NULL`), `ext`, and child names for teams (`reviews$stats`).
-`print()` shows the last answer and a dim footer `status . model . turns . tokens . cost . id`;
+`print()` shows the last answer and a dim footer `status . model . turns . tokens . cost . id` (status `replayed`
+until a replayed session makes a request; unknown usage while it holds no stored one);
 `format()`/`as.character()` return the text; `summary()` and `str()` never touch user objects; `knit_print`
 is registered lazily. `$<-` and `[[<-` are refused with `gptr_error_readonly`: state changes go through verbs
 (G3 t1).
@@ -954,8 +967,8 @@ is registered lazily. `$<-` and `[[<-` are refused with `gptr_error_readonly`: s
 
 | Case | Held as | `$value` |
 |---|---|---|
-| symbol bound in a kept home, object below `gptr.value_copy_max` (1 MiB) | deep copy (faithful history) | the copy |
-| symbol bound in a kept home, larger | **name + address** (no reference) | `get0(name, home, inherits = FALSE)`, a live view; a message if the name was re-bound |
+| symbol bound in a kept home, size (`env_snap_size()`) below `gptr.value_copy_max` (2 MiB) and `object.size()` below `gptr.values_max_bytes` [D-247] | deep copy (faithful history), kept when it is a new object holding below `gptr.value_copy_max` of its own | the copy |
+| symbol bound in a kept home, otherwise (larger; an environment, R6 object or external pointer, which `duplicate()` returns as is; a copy that outgrows the limit, as of a compact sequence or repeated elements) [D-247] | **name + address** (no reference) | `get0(name, home, inherits = FALSE)`, a live view; a message if the name was re-bound |
 | anonymous expression, or symbol in a function-frame home that will vanish | boxed value | the box |
 
 Held copies and boxes are capped by `gptr.values_max_bytes` (64 MiB; oldest released first, the latest always
@@ -973,8 +986,8 @@ never starts a nested run and never forks.
 `saveRDS()`, knitr caches and callr produce detached copies. Continuing a copy: a live original in the same
 process -> `gptr_error_split_brain`; another live process holding the pid lock -> split brain; otherwise the
 copy continues from its own leaf and the file gains a sibling branch. `gptr_resume(x = NULL | id | path)`
-returns the live object or rebuilds from JSONL (status `idle` if the tail is a final answer, else
-`interrupted`).
+returns the live object or rebuilds from JSONL (status `idle` if the tail is a final answer or, for a team or
+fan-out, an idle `gptr.container_end`, else `interrupted`).
 
 ### 5.2 Transcript entries, messages and content blocks (INFRA-07)
 
@@ -1105,9 +1118,11 @@ bare vector for foreign values), `c`, `rep`, `format` (`TRUE (p=0.93)`), `print`
 ```
 
 `<root>` is `.gptr` in a consented workspace (so NS-8's `.gptr/artifacts/marker-explorer/app.R` is literal),
-else `tempdir()/gptr`. Handle `gptr_artifact`: `list(id, title, version, url, path, status, checks, screenshot,
-session)`. Data snapshots use a leaf `saveRDS(compress = FALSE)` wrapper, capped by `gptr.artifact_max_bytes`
-(500 MB) (§6.4 R7).
+else `tempdir()/gptr`, which R deletes at exit: then the `<environment>` line is `Artifacts: <that path,
+normalised> (temporary: deleted when R exits; cite this full path; gptr_init() keeps artifacts)`, and the first
+`peter$app()` of the process sends a `notice` naming the artifact's path and `gptr_init()`. Handle
+`gptr_artifact`: `list(id, title, version, url, path, status, checks, screenshot, session)`. Data snapshots use a
+leaf `saveRDS(compress = FALSE)` wrapper, capped by `gptr.artifact_max_bytes` (500 MB) (§6.4 R7).
 
 ### 5.8 Sub-agent handles
 
@@ -1125,10 +1140,11 @@ in `res$envir`; an explicit `envir =` shares, and a function-frame caller is unc
 
 Layers, lowest to highest: package defaults < user `R_user_dir("gptr", "config")/settings.json` < project
 `.gptr/settings.json` (an untrusted project contributes only tightening of `mode`, `permissions`, `context` and
-`record`; a trusted one every key, with tighten-type keys still only tightening; `egress` is read from the user
-file only) < the user-level project file `R_user_dir("gptr", "config")/projects/<hash>.json` (remembered
-permission answers, transcript target, record consent; never in the project tree [IC-52]) < `options(gptr.*)` <
-`gptr_config(.scope = "session")` < call arguments. Safety options are snapshotted per run [IC-53]. Keys: `model`, `small_model`, `system1`, `mode`,
+`record`; a trusted one every key, with tighten-type keys other than `mode` still only tightening and never
+`mode = yolo` [D-250]; `egress` is read from the user file only) < the user-level project file
+`R_user_dir("gptr", "config")/projects/<hash>.json` (remembered permission answers, transcript target, record
+consent; never in the project tree [IC-52]) < `options(gptr.*)` < `gptr_config(.scope = "session")` < call
+arguments. Safety options are snapshotted per run [IC-53]. Keys: `model`, `small_model`, `system1`, `mode`,
 `preset`, `tools{enable, disable}`, `permissions{allow, ask, deny}`, `context`, `record`, `replay`,
 `transcript`, `plugins`, `filters`, `skills{paths}`, `mcp{exposure}`, `subagents{max_depth, max_active,
 max_workers, max_cli, max_tasks}`, `output_tokens`, `plot{width, height, res}`, `budget{tokens, cost}` (default 2e6
@@ -1262,7 +1278,8 @@ prompt; programmatic calls re-signal the interrupt. While the menu waits streams
 `later` callbacks pump the reactor while the console is idle (timer polling every 50 ms; the pump is a no-op while
 the reactor is already on the stack [IC-57]; no `later_fd`, which LIKELY cannot watch processx pipes on Windows,
 inferred from its documentation and untested [15 verifier]). An ask raised by a background run never prompts from
-a callback: the session moves to status `waiting` and the question is shown at the next blocking gptr call. A SIGINT inside a later callback reaches the same
+a callback: the session moves to status `waiting` and the question is shown at the next blocking gptr call, whose
+resumed run opens with a user message saying that the user is at the console (D-252). A SIGINT inside a later callback reaches the same
 calling handler, so the pause menu works [G3 p6]. Piping into the running session steers it; `gptr_wait()`,
 `gptr_cancel()` and `gptr_jobs()` operate on it. R tools of background runs execute at idle ticks (the console
 is busy for their duration; `options(gptr.background_tools = "wait")` defers them to `gptr_wait()`). Under
@@ -1311,7 +1328,7 @@ frame makes the user's next in-place edit copy the whole object. Rules:
 | R1 | Never hold a user object in a list, closure, attribute or environment gptr keeps. Designated values follow the value policy of §5.1 (large bound objects by name). | judge check `session_holds_value` -> COPY, `session_holds_name` -> in place |
 | R2 | Never hold a user function frame beyond the active run, and never in a list, closure, attribute or weak reference (key or value). The home frame lives only in an environment binding of the run environment, reset to `NULL` at settlement before the run is dropped. Keep address strings, not frames (e.g. the pending-plan key). | [final/frame_hold_check.R]: weakref key COPY, list-then-drop COPY, address string and reset binding in place; G3 p2 and fact-check adv4/adv5 |
 | R3 | Gateway capture is base R: no rlang quosures in any frame that sees user frames; a plain-symbol dot is read by name through a `get0()` leaf and its promise is never forced (a forced promise keeps the value referenced by the gateway frame for the whole run, so an in-run edit copies [IC-41]); other dots reach only leaf functions through `...elt(i)` in `while` loops; no closures, `tryCatch`, `withCallingHandlers` or `match.arg` in a frame that holds `...` or the home; never assign to a formal (use new locals); helpers force their arguments on entry; adapters are called through `do.call()` with forced values; frames walked with `sys.frame(k)`, never `sys.frames()`; alias masks get `parent.env<-` `emptyenv()` after use. | [final/capture_check.R]: `enquos` COPY, `...elt` leaf in place; G3 p5b, p5i, p5n, p5o |
-| R4 | Introspection through leaf functions returning primitives only (class, dim, length, typeof, address, `object.size()` cached by address; no size for environments, functions, external pointers, compact sequences and S7 objects, which it overstates [D-189]); gptr never calls `str()` on user objects (sticky [12 §2.C]) and no shipped prompt or skill tells the model to (a P07 test checks the texts [IC-67]); describers follow the same discipline. | 12 §2.C, §3.9; `str(big)` re-verified to copy on the next edit |
+| R4 | Introspection through leaf functions returning primitives only (class, dim, length, typeof, address, `env_snap_size()` reused while address, class, shape and fingerprint hold: the memory reached, each part and string once [D-247]); gptr never calls `str()` on user objects (sticky [12 §2.C]) and no shipped prompt or skill tells the model to (a P07 test checks the texts [IC-67]); describers follow the same discipline. | 12 §2.C, §3.9; `str(big)` re-verified to copy on the next edit |
 | R5 | No binding locks anywhere (`lockBinding()`/`unlockBinding()` makes the next edit copy). | judge `lock` case, PB-E1, P-A exp |
 | R6 | No `mget()` or list snapshots of user objects. Checkpoint pre-images are bindings in a private environment released with `rm()`; list and S4 pre-images are defused before dropping; a finalizer does the same for dropped sessions. | G7 §1.1 (c03) |
 | R7 | Every `serialize()`/`saveRDS()` of user data passes `ascii = FALSE` explicitly (the default path leaves a sticky reference) through one leaf wrapper. | G7 §1.5 |
@@ -1464,8 +1481,8 @@ computes or a loop that assigns the name makes it computed [D-211]. The classifi
 not a security boundary; in-process R cannot be sandboxed [18 §2.5].
 
 `yolo` [IC-78] is the loosest mode (plan < manual < edits < auto < yolo): only the person selects it (`peter(mode =)`,
-`/mode`, user or session settings, `options(gptr.mode)` outside a run); project settings, nested calls and
-children only tighten. A delete keeps the category `file_delete` and a control target shows in its
+`/mode`, user or session settings, `options(gptr.mode)` outside a run); no project file sets it [D-250], nested
+calls and children only tighten. A delete keeps the category `file_delete` and a control target shows in its
 `path_class`, so the control check still sees it; the edit tool's `*** Delete File:` takes the level an
 `unlink()` of the same path has when that is 4, with the category `file_delete`, so in yolo a control path
 written by the same patch does not hide it. Entering yolo (a session, `/mode`, a console start) shows a
@@ -1489,11 +1506,11 @@ start, so model code cannot change them mid-run. A `modify` is re-classified and
 `rules` (grammar `tool(spec)`, e.g. `write(results/**)`, `r(fn:write.csv)`, `r(level<=1)`, `r(sh:git
 status*)`, `r(sql:select)`), `critical_guard`, `secret_guard`, `protect_size`. Allow rules never loosen plan
 and never pre-approve level 4; only `r(secret:NAME)` rules pre-approve the secret guard; project settings may
-only tighten; no filter from any source disables `builtin:permissions`, `builtin:plan` or the two guards, and
-inside a run filters that remove policies or hooks are refused [G1 §3.6; IC-53]. Every call made while a run is
-active inherits the running mode (only tightened) whatever its route, and the parent re-classifies every
-permission request forwarded by a worker (the worker backend is not an isolation boundary). `modify` changes the
-arguments the tool sees and is recorded.
+only tighten, a trusted project's `mode` excepted [D-250]; no filter from any source disables
+`builtin:permissions`, `builtin:plan` or the two guards, and inside a run filters that remove policies or hooks
+are refused [G1 §3.6; IC-53]. Every call made while a run is active inherits the running mode (only tightened)
+whatever its route, and the parent re-classifies every permission request forwarded by a worker (the worker
+backend is not an isolation boundary). `modify` changes the arguments the tool sees and is recorded.
 
 #### 6.8.3 The prompt
 
@@ -1535,7 +1552,10 @@ refusal whose reason (not the person's text) tells the model that no valid answe
 A `peter$...` call made while an `r` evaluation runs enters `dispatch_nested()`: if the static analysis of the
 outer code listed the same function at a level no higher than the level the user approved for the outer call,
 and the member's own classification of its actual input (`call_risk()`: a patch's Delete File, a command computed
-at run time) is no higher either, it runs without a second prompt; otherwise it passes the gate [IC-78]. Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
+at run time) is no higher either, it runs without a second prompt; otherwise it passes the gate [IC-78].
+The command of a `peter$sh()` or `peter$bg()` call meets the deny and ask rules first, whatever its level,
+as the literal call would; allow rules are not applied there, and an ask offers no `[a]lways` rule [D-251].
+Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
 
 #### 6.8.5 Non-interactive runs and plan mode (NS-12)
 
@@ -1554,7 +1574,9 @@ a reference, R2) within the same R process and one hour receives it once as a `<
 "using the plan from session <id>" and the plan's step list printed before the first action, and its block header
 records `plan=<id>`; only a top-level call (not nested, not in a run, not in a loop body) may consume it, and any
 other `peter()` call in between discards it [IC-56]. Interactively the plan run ends
-with "Execute: [a]uto / [e]dits / [m]anual / [k]eep planning", which continues the same session.
+with "Execute: [a]uto / [e]dits / [m]anual / [k]eep planning", which continues the same session. Choosing
+to execute is what declares `edit` and `write` for a session frozen with the `readonly` preset; one that is
+not executed keeps `read` and `r` in every mode (D-251).
 `options(gptr.plan_handoff = FALSE)` disables the hand-off [P-C §9.4].
 
 ### 6.9 Persistence
@@ -1586,12 +1608,14 @@ tools::R_user_dir("gptr", "config")    settings.json, auth.json (0600), trust.js
                                        mcp.json, egress acks, projects/<hash>.json (per-project remembered answers,
                                        transcript target, record consent [IC-52])
 tools::R_user_dir("gptr", "cache")     refreshed model catalog (ETag), MCP tool and era caches, procs/ (tree
-                                       markers for the orphan sweep), pruned by gptr_cache("prune")
+                                       markers for the orphan sweep), pruned by gptr_cache("prune"); pending/
+                                       (sidecars of documents outside a `.gptr/` project, never pruned [IC-51])
 tempdir()/gptr/                        sessions, artifacts, caches, checkpoints and plans without a workspace
 ```
 
 Without a workspace nothing is written outside `tempdir()` except user-level settings the user sets
-explicitly; the System 1 cache stays in memory [13 §2.4]. Tests redirect `R_USER_*_DIR` [13 C-44].
+explicitly and the pending blocks of documents the user bound (`pending/` above); the System 1 cache stays in
+memory [13 §2.4]. Tests redirect `R_USER_*_DIR` [13 C-44].
 
 #### 6.9.2 Session store (INFRA-13) [02 §4.6, G3]
 
@@ -1626,15 +1650,16 @@ Header keys: `model`, `date`, `prompt` (12-hex hash of the prompt *template*), `
 interpolated values, so a parameterised report never replays another parameter's block [IC-45]), optional `sha`
 (body hash for user-edit detection), `call` (k-th call of a pipeline), `tokens`, `cost`, `session`, `turn`,
 `value` (the designated name), `fork=<parent>:<turn>`, `plan=<id>`, `kind`/`children` (team and fan-out blocks
-[IC-47]), `status=undone`. The body holds successful `record = TRUE` code (top-level `gptr_return()` calls and
-calls of `record = FALSE` members such as `peter$out()` dropped, top-level `<-` rewritten to `=` where safe
+[IC-47]), `status=undone`. The body holds successful `record = TRUE` code (top-level `gptr_return(<name>)` calls
+and calls of `record = FALSE` members such as `peter$out()` dropped, a top-level `gptr_return(<expression>)`
+rewritten to `.gptr_value_<block id> = (<expression>)`, which `value` names, top-level `<-` rewritten to `=` where safe
 [IC-48]), `#>` outputs (12 lines max), `## Decision:` notes, `## Steer:`/`## Follow-up:` lines for steering during
 the turn [IC-49], bridge digests (`#> sh git status --porcelain: exit 0, 6 lines`) and artifact paths. Overlay-fork
 turns replay inside `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)`, which finds the fork that
 replay created for that block and never falls back to the caller's frame, so they never clobber the workspace
 [IC-46]. A top-level team or fan-out statement owns one block with a line per child and, for children with
-exports, their code in child overlays plus one assignment per export [IC-47]. Rmd/qmd get a
-separate chunk labelled `gptr-<id>` after the owning chunk, without `#>` lines; ipynb gets a cell with id
+exports or a designated value (`children=<name>:<session id>:<value>`), their code in child overlays plus one
+assignment per export [IC-47]. Rmd/qmd get a separate chunk labelled `gptr-<id>` after the owning chunk, without `#>` lines; ipynb gets a cell with id
 `gptr-<id>` and `metadata.gptr`, written by gptr's own serializer (Python float repr, byte-identical round trip
 [14 fact-check]) and never while the notebook is open (in Jupyter the block is shown as the cell output and kept
 pending until `gptr_doc(path, sync = TRUE)` [IC-50]). A top-level System 1 call gets a one-line block
@@ -1701,8 +1726,9 @@ model or remote override from egress acknowledgement.
   untrusted again until the user confirms the listed changes [IC-52]. A `.gptr/` that arrives by clone or copy is
   untrusted until the user confirms. Trust gates: project settings beyond tightening, project extensions and
   plugin code, project MCP servers (they run commands), `SYSTEM.md` and `APPEND_SYSTEM.md`, project `.env`
-  auto-discovery, provider base-URL overrides, the tool and model fields of project agent files, and the
-  **authority of project instructions** [IC-52]. Context files (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`)
+  auto-discovery, provider base-URL overrides, project skills and prompt templates, the tool and model fields of
+  project agent files, and the **authority of project instructions** [IC-52].
+  Context files (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`)
   are read as user-role data [16 §7.1(3), 14 §4.8]; in an untrusted project they render as
   `<project_instructions trusted="false">`, which the frozen `<context>` section tells the model to treat as
   information, not commands; non-interactive runs in `auto` or `edits` mode in an untrusted project omit project
@@ -1758,8 +1784,9 @@ byte prefix emits `cache_break` naming the first differing element and the culpr
 on `session_tree` (rewind) [G4 §4.3.5, G7].
 
 **Compaction** (`compactor` spec, replaceable) [G4 §4.4, G2]:
-`threshold = min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, max_output +
-2 * r_cap), gptr.compact_at = 200000)`, plus the cold rule (idle beyond the tail TTL and context >= 100k:
+`threshold = min(window - min(max(30000, 0.10 * window), 0.25 * window), window - max(16384, mo + 2 * r_cap),
+gptr.compact_at = 200000)` with `mo = min(max_output, window / 2)`, the output reserve also sent as `max_tokens`
+[D-250], plus the cold rule (idle beyond the tail TTL and context >= 100k:
 compact first). Checks run between tool rounds, before a new prompt and after an overflow error (one
 compact-and-retry, INFRA-26). The checkpoint request is sent in-conversation (a cache read; `max_tokens =
 2048`; a tool-calling reply is rejected) with G4's verbatim `<compaction_request>` prompt; the compaction
@@ -1775,7 +1802,7 @@ On a CLI route (a model of `type = "cli"`) neither rule triggers, nor the halved
 compacts its own conversation; `/compact` still runs, and the next turn starts a fresh CLI conversation from its
 checkpoint [D-203]. A compaction during a foreground run prints one dim line
 with its before and after token counts [D-202]; `/compact` reports the same counts
-(`Conversation compacted: 5.7k -> 3.2k tokens.`) [D-245].
+(`compacted · 5.7k to 3.2k tokens`, dim as the status line) [D-245].
 
 ### 6.12 Evaluator [12 §3-4]
 
@@ -1792,7 +1819,8 @@ format_eval_result(res, budget_tokens)
 Hand-rolled, not `evaluate` (sink breakage, sticky references, options leak [12 §2.A2]): parse with
 `srcfilecopy()`; static guard (`q()`, `quit()`, `readline()`, `menu()`, `browser()` and friends return an error
 result without evaluation; `q` and `quit` are flagged in any position, as a value, a `FUN` argument or inside
-`match.fun`, `get`, `do.call` [12 fact-check; IC-67]); `sink()` capture cleaned up in `suspendInterrupts()`; per-expression
+`match.fun`, `get`, `do.call` [12 fact-check; IC-67], a value unless the code assigns it or `envir` binds it to
+data [D-252]); `sink()` capture cleaned up in `suspendInterrupts()`; per-expression
 `setTimeLimit(elapsed, transient = TRUE)` reset to `Inf` (no timeout when a human is present, the pause menu
 instead; `gptr.r_timeout = 3600` otherwise) [J-cran graft]; messages and warnings through calling handlers
 created in a frame that does not hold the home (§6.4 R2-R3); errors with a trimmed, redacted traceback;
@@ -1805,7 +1833,8 @@ stored and listed for `peter$plot(k)`, image tokens count against the output bud
 projected as omitted when a request would exceed the provider's image limits [IC-67]; `peter$plot()` sends a
 larger view;
 state diff from snapshots before and after plus static assignment targets (replacement functions, `assign()`,
-`:=`, `set*()`, `<<-`); checkpoint hooks around mutating evaluations (§6.16); `rng_swap()` swaps a per-agent
+`:=`, `set*()`, `<<-`), of `env_view_snapshot()` for an overlay, where a modified object that was below the overlay
+(and still is, or is shared by its new binding) reads `~ dt <data.table> modified (in the source workspace)` (D-252); checkpoint hooks around mutating evaluations (§6.16); `rng_swap()` swaps a per-agent
 L'Ecuyer stream in for inline sub-agents and restores the user's `.Random.seed` [IC-61]. The evaluator is the
 built-in record `r` of the `evaluator` kind, so a plugin can supply a remote or sandboxed one [IC-69]. Model text: output, messages, warnings, error and traceback, "[plot N
 attached]", state-change lines (`~ pbmc <Seurat> modified`, `+ markers <data.frame 4,211 x 7>`), a status
@@ -2065,7 +2094,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   `gptr_message_write()`: inside an `r` evaluation it reaches the console, never the tool result,
   whatever `tee` is; in the margin what the evaluated code prints (the `r` tool, `!code`) is not teed as R
   prints it but shown as result rows, at column 4, escaped, dim and cut to the console width, per top-level
-  expression or before a notice (`eval_echo()`; the result keeps all of it) [D-245]; prompts first clear the live row, also while a tool
+  expression or before a notice, a warning as `Warning: <text>` and an R message when they come (`eval_echo()`;
+  the result keeps all of it) [D-245]; prompts first clear the live row, also while a tool
   executes, and every other write clears and redraws it, at the sink it was drawn at (a capture in the agent's code is left alone). Children never render;
   a foreground root shows one line per sub-agent start and end at verbosity 1+ unless quiet
   (`  ▌ sub-agent a (kid/kid-1) started`, `  ▌ sub-agent a done (1/2) · 2 turns · 12 s` or
@@ -2084,8 +2114,10 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   left [D-245]),
   `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
-  templates as `/<name> args`. Commands are recorded as comments in transcripts. Their output, like a
-  prompt over 200 bytes or wider than a content row, is word-wrapped in the console margin; the listings
+  templates as `/<name> args`, registered when a session starts and by the console (the `templates.sync`
+  service) before `/help`, a `/` completion and a call of a name unknown, so a template works as the first input
+  and a template saved since is found (D-252). Commands are recorded as comments in transcripts. Their output,
+  like a prompt over 200 bytes or wider than a content row, is word-wrapped in the console margin; the listings
   they print are formatted at width - 4 (`print_lines()`), so they are not wrapped again, and `/help` wraps
   each description under one column (`formatDL()`); its keys follow the console as the banner's do: Enter (a
   steer), Tab (a follow-up) and Up (take one back) where a composer reads keys, Tab's completion after `@`, `!`,
@@ -2120,7 +2152,7 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 | 11 allow/deny/ask/modify hooks, modes, fail closed | §6.8, `perm-gate.R`, `ext-events.R` | 18's mode x risk matrix; `modify` visible in the transcript; denial with reason; throwing policy denies (`test-perm-gate.R`; P11) |
 | 12 own loop with steering after tool results, `max_turns`, stepwise | `agent-loop.R`, §6.2 | report 02's 24 loop checks; a steer enqueued during a tool is on the wire after the tool-result message; `max_turns = 3` stops with `gptr_error_max_turns` status (`test-agent-loop.R`; P06) |
 | 13 append-only JSONL tree, RNG-free ids, crash-safe | §6.9.2 `session-store.R` | SIGKILL mid-stream then resume: file parses, last complete message present, nothing duplicated; SIGKILL mid-append, resume, three appends: all present and the tree connected; no connection left open; `.Random.seed` identical over 1,000 appends; fork replays to the source path's context (`test-session-store.R`; P06) |
-| 14 session semantics for `\|>`; fork shares nothing | §5.1, `session-object.R` | `s2 = gptr_fork(s)`: a listener on `s2` never fires for `s`; different leaves; overlay writes do not reach `s$envir` (`test-session-object.R`; P06) |
+| 14 session semantics for `\|>`; fork shares nothing | §5.1, `session-object.R` | `s2 = gptr_fork(s)`: a listener on `s2` never fires for `s`; different leaves; overlay assignments do not reach `s$envir` (`test-session-object.R`; P06) |
 | 15 no package-global run state | §2.2 rule 5 | two concurrent sessions with the same model: each usage equals its own requests; tool context correct in interleaved tools (`test-agent-run.R`; P06) |
 | 16 one reactor for streams and children; background serviced by later | §6.1, §6.2, §6.13 | 15's `p10_mixed` shape: 2 inline + 2 worker interleave within about the slowest agent's wall time and tools never overlap (`test-subagent-backends.R`; P19); the CLI leg (a fake CLI joining them) in `test-cli-codex.R` (P20) [IC-36]; background run progresses at an idle console (`test-agent-background.R`, manual/CI-only; P21) |
 | 17 providers as data + closed adapter set, versioned interface | `provider-registry.R`, `gptr_provider()`, `gptr_adapter()` | Ollama added by data only; the fake provider and a plugin adapter pass `gptr_check()` (`test-provider-registry.R`; P05) |
@@ -2196,7 +2228,8 @@ array order (read: line 1; r: five lines 2-6; edit: lines 7-10; write: line 11) 
 so the `readonly` preset has no edit or write lines; `<r_session>` is P07's core with fragments (`parent =
 "r_session"`) from `builtin:tools` (helpers, `out`), `builtin:bridges` (shell), `builtin:lang` (languages) and
 `builtin:subagents`; `<documents>`, `<artifacts>` and `<system1>` are registered by P15, P23 and P13. Disabling a
-built-in removes its lines. The text below is the composition with every built-in loaded.
+built-in removes its lines. The text below is the composition with every built-in loaded and a document bound;
+without a document, `out` ends after "for the rest." (`r` then has no `record` argument; D-248).
 
 ```text
 You are Peter, an expert R programmer and data analyst working inside the user's live R session. The objects in memory are your workspace: inspect them, compute on them and create new ones with the r tool; everything you create stays in the session for the user. You also read, edit and write files, and your code is recorded in the user's script or notebook.
@@ -2379,7 +2412,11 @@ anchor. The compaction request and checkpoint block are G4 §3.6's verbatim text
 - `<workspace>`: one line per object from `env_snapshot()` (name, class, shape, size), largest first (an unknown
   size other than a function's or environment's ranks at the median), at most 12 lines and 600 tokens; sizes from
   an address-keyed `object.size()` cache; never forces promises or active bindings (reported as
-  `<promise>`/`<active>`).
+  `<promise>`/`<active>`). An overlay home (a team member, fan-out child, nested call or fork overlay) lists what
+  its code reads (`env_view_snapshot()`: its own bindings, then those of each overlay below it and of the first
+  other environment, a nearer binding shadowing), `objects` counts them, and the first line is `Reads fall
+  through to globalenv; assignments stay here.` (`<environment>` for another base); `<workspace_changes>` diffs
+  the same view (D-252).
 - `<attached>`: `gptr_describe(x, budget = 150)` per context object (at most 300): level-based methods return
   successively richer descriptions and the harness picks the richest that fits `est_tokens(, "describe")`
   [G2 (c)]. Built-in methods: default, data.frame (column types and 3 rows), matrix, list (nested names), Date,
@@ -2387,7 +2424,7 @@ anchor. The compaction request and checkpoint block are G4 §3.6's verbatim text
   datasets, DBI connections (tables), Seurat (cells, features, assays, reductions, meta.data columns),
   SingleCellExperiment (methods for classes of packages outside Suggests use only base generics, `slot()`,
   `attr()` and `dim()` guarded by `isNamespaceLoaded()`, never `pkg::fun()` [IC-71]); ALTREP compact sequences are
-  reported without materialising and without a size [D-189].
+  reported without materialising, at the size of their state [D-247].
   Packages add methods with delayed `S3method(gptr::gptr_describe, cls)`.
 - `<r_env>`: installed fast packages by category, packages that are installed but not loadable, and missing
   recommended packages, probed without loading [19 §3.2].
@@ -2532,7 +2569,8 @@ after a known `provider/`) [09 §4]. A registered provider named
 alone means its first declared model in every resolver (`claude-cli`, `codex`, `codex-cli`), alias names normalise
 like ids (`claude-code` is `claude_code`), `/model` checks a reference before the first prompt, and `/model` and `/status` show a built-in CLI's `default` with
 the full id it runs (`claude-cli/default (claude-sonnet-5-5)`) [IC-19, IC-79]. Thinking levels are clamped
-to the model's map. The default chat model is taken from the first available route: an Anthropic key ->
+to the model's map, and a changed level is announced once per model and level (D-250). The default chat model
+is taken from the first available route: an Anthropic key ->
 `anthropic/claude-sonnet-5-5` (the north-star banner; $2/$10 vs $4/$20 for Opus 5.5); OpenAI ->
 `openai/gpt-6-sol`; Gemini -> `google/gemini-3.8-flash`; otherwise a detected CLI. `small_model` serves
 compaction, emulation and cheap sub-agents. CLI invocations always receive full ids (CLI aliases lag the

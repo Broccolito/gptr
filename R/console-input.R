@@ -116,7 +116,8 @@ console_trigger = function(line) {
 #' Apply one read batch `chars` of a T console (IC-76, D-243) to the composer of the REPL reader
 #' `rd` (`rd$compose`, console_compose()) for session `s`: a message is queued as its kind says
 #' (policy_enqueue(): a steer for the next step boundary, a follow-up in `rd$typed` for the next
-#' prompt) and Up takes back the newest one (console_newest()); Tab on a trigger word completes it
+#' prompt) and Up takes back the newest one (console_newest()), saying so where its queue line was
+#' printed (console_queue_line()); Tab on a trigger word completes it
 #' (console_complete()), and several candidates are kept as `rd$compose$candidates`, which the live
 #' row shows until the next key; the live row is drawn again where it shows. A batch read at most
 #' 0.2 s after the reader's last read (`rd$polled`, an empty read too) is on the polling beat, and
@@ -155,7 +156,9 @@ console_keys = function(rd, s, chars) {
     if (identical(act$type, "send")) {
       policy_enqueue(s, act$text, act$kind, source = "repl")
     } else if (identical(act$type, "take_back")) {
-      rd$compose$draft = console_newest(s, rd, take = TRUE)$text %||% ""
+      it = console_newest(s, rd, take = TRUE)
+      rd$compose$draft = it$text %||% ""
+      if (!is.null(it)) console_queue_line(s, it$text, it$kind, taken = TRUE)
     } else if (identical(act$type, "complete")) {
       rd$compose$candidates = act$candidates
     }
@@ -254,11 +257,15 @@ ask_ready = function(last_key, now, draft = "") {
 #' Before a console question in a T console (D-243): what waits on fd 0 goes to the composer
 #' (console_typed()), and until the question may be asked (ask_ready()) the keys are read every
 #' 0.05 s, the live row saying `question waiting` (`rec$question` of its record), so Enter and Tab
-#' still queue
+#' still queue. A D console's call (line modes, `the$tty$keys` FALSE) waits the same way, reading
+#' fd 0 as typed (tty_drain_mode()), the terminal's edits applied (tty_line_edit()): a line ended
+#' meanwhile is routed (console_typed_route()), and the partial line waits in the reader (`rd$part`)
+#' for the question's drain, which keeps it
 #' @noRd
 console_ask_wait = function() {
   rd = console_repl_find()$reader
-  if (!isTRUE(the$tty$keys) || is.null(rd)) return(invisible(NULL))
+  if (is.null(rd) || is.null(the$tty$saved)) return(invisible(NULL))
+  if (!isTRUE(the$tty$keys)) return(console_ask_wait_lines(rd))
   row = the$live_row
   on.exit(if (!is.null(row)) row$rec$question = NULL, add = TRUE)
   repeat {
@@ -271,6 +278,41 @@ console_ask_wait = function() {
     Sys.sleep(0.05)
   }
   invisible(NULL)
+}
+
+#' console_ask_wait() of a D console's call, for a run of the policy on the stack
+#' @noRd
+console_ask_wait_lines = function(rd) {
+  target = Find(function(t) !is.null(t$session), policy_targets(policy_find()$runs))
+  if (is.null(target)) return(invisible(NULL))
+  modes = tty_drain_mode()
+  if (length(modes) == 1L) on.exit(tty_modes(modes), add = TRUE)
+  last = NULL
+  repeat {
+    lines = console_typed_lines(rd, 50L)
+    if (length(lines)) last = reactor_now()
+    lines = tty_line_edit(typed_join(rd, lines))
+    if (isTRUE(attr(lines, "partial"))) {
+      rd$part = lines[[length(lines)]]
+      lines = lines[-length(lines)]
+    }
+    if (length(lines)) console_typed_route(rd, target$session, lines)
+    if (ask_ready(last, reactor_now(), rd$part %||% "")) break
+  }
+  invisible(NULL)
+}
+
+#' `lines` read from fd 0 after the partial line a D console's wait held (`rd$part`,
+#' console_ask_wait_lines()), which the first of them continues; `rd$part` is emptied
+#' @noRd
+typed_join = function(rd, lines) {
+  part = rd$part %||% ""
+  if (!nzchar(part)) return(lines)
+  rd$part = ""
+  partial = isTRUE(attr(lines, "partial")) || !length(lines)
+  lines = c(paste0(part, c(lines, "")[[1L]]), lines[-1L])
+  if (partial) attr(lines, "partial") = TRUE
+  lines
 }
 
 #' After a console question in a terminal call (D-243): the call's modes again (tty_question()),

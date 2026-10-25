@@ -30,7 +30,15 @@ gptr_provider(
 
 \item{auth}{Character vector of environment-variable names, a function, or \code{NULL}.}
 
-\item{models}{List of model records (each with at least \code{id}).}
+\item{models}{List of model records (each with at least \code{id}). A reasoning model
+(\code{reasoning = TRUE}) lists the levels it accepts in \code{thinking_levels}, a subset of \code{"off"},
+\code{"minimal"}, \code{"low"}, \code{"medium"}, \code{"high"}, \code{"xhigh"} and \code{"max"}; without it \code{"off"} to
+\code{"high"} is assumed. A requested level the model lacks becomes the nearest one it has, with a
+message. A record's \code{prices} is a data frame or a list of price records: \code{input} and
+\code{output} in USD per million tokens, optional \code{cache_read}, \code{cache_write_5m},
+\code{cache_write_1h}, \code{from} (a \code{"YYYY-MM-DD"} date) and \code{tier} (\code{"default"}, or \code{">Nk"} for
+prompts above N thousand tokens, such as \code{">200k"}); it is checked here, and without it the
+cost is unknown.}
 
 \item{compat}{Named list of compatibility switches for the adapter (for
 \code{api = "bedrock-converse"}, \code{region}: the AWS region requests are signed for).}
@@ -65,8 +73,14 @@ gptr_provider("corp", api = "openai-completions", base_url = "https://llm.corp.e
               auth = "CORP_LLM_KEY", models = list(list(id = "corp-large", context = 128000)))
 # Amazon Bedrock's Converse API through a SigV4 gateway (region and endpoint are record data):
 # the IAM key pair is read from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (and
-# AWS_SESSION_TOKEN when set); gptr_env(aliases = ...) maps other names onto them.
+# AWS_SESSION_TOKEN when set); gptr_env(aliases = ...) maps other names onto them. Thinking
+# levels are sent only to a Claude model whose `capabilities` declare adaptive thinking with
+# an effort (Claude 4.6 and later); other models get no thinking, with a message. The
+# bedrock-converse adapter does not request prompt caching, so each request sends the full
+# prompt at the uncached rate.
 gptr_provider("gateway", api = "bedrock-converse", base_url = "https://ai.corp.example/awsai",
               auth = "AWS_SECRET_ACCESS_KEY", compat = list(region = "us-west-2"),
-              models = list(list(id = "us.anthropic.claude-opus-4-8", tool_call = TRUE)))
+              models = list(list(id = "us.anthropic.claude-opus-4-8", tool_call = TRUE,
+                                 reasoning = TRUE,
+                                 capabilities = list(adaptive_thinking = TRUE, effort = TRUE))))
 }

@@ -631,6 +631,33 @@ test_that("project plugin code and resources are ignored until gptr_trust()", {
   expect_false(is.null(registry_get("skill", "local-skill", session = sid)))
 })
 
+test_that("gptr_plugins lists a plugin's usable entry before an earlier untrusted one", {
+  skip_on_cran()
+  files = list()
+  files[["lab/plugin.json"]] = '{"name": "stale-lab"}'
+  files[["lab/skills/stale-units/SKILL.md"]] =
+    "---\nname: stale-units\ndescription: Report units.\n---\nBody"
+  proj = local_project(trust = FALSE, files = files)
+  lab = file.path(proj, "lab")
+  withr::defer(plugin_forget(lab))
+  expect_false(plugin_enable(lab, 0L, session = "s00000000d1"))
+  gptr_trust(proj, TRUE)
+  expect_true(plugin_enable(lab, 0L, session = "s00000000d2"))
+  pl = gptr_plugins()
+  pl = pl[pl$name == "stale-lab", , drop = FALSE]
+  expect_identical(list(pl$enabled, pl$state), list(TRUE, "active"))
+})
+
+test_that("the untrusted-plugin notice names the call that trusts the project", {
+  local_gptr_options(quiet = FALSE)
+  files = list()
+  files[[".gptr/plugins/quietplug/plugin.json"]] = '{"name": "quietplug"}'
+  proj = local_project(trust = FALSE, files = files)
+  withr::defer(plugin_forget(file.path(proj, ".gptr", "plugins", "quietplug")))
+  expect_message(plugin_enable("quietplug", 0L, session = "s00000000e1"),
+                 "gptr_trust(\".\", trust = TRUE)", fixed = TRUE)
+})
+
 test_that("an unmet API requirement disables the plugin with a diagnostic", {
   skip_on_cran()
   d = withr::local_tempdir()
@@ -714,6 +741,47 @@ test_that("a plugin passed with plugins = is invisible to the next peter() call 
   expect_match(reqs[[1]]$system$t1, "scoped-skill", fixed = TRUE)
   expect_false(grepl("scoped-skill", reqs[[2]]$system$t1, fixed = TRUE))
   expect_null(registry_get("skill", "scoped-skill", session = s2$id))
+})
+
+test_that("gptr_skills() and gptr_agents() list a live session's peter(plugins =) plugin", {
+  skip_on_cran()
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "listed-plug"}')
+  write_file(file.path(d, "skills", "listed-skill", "SKILL.md"),
+             c("---", "name: listed-skill", "description: Listed.", "---", "x"))
+  write_file(file.path(d, "agents", "listed-agent.md"),
+             c("---", "name: listed-agent", "description: Listed.", "---", "x"))
+  withr::defer(plugin_forget(d))
+  expect_false("listed-skill" %in% gptr_skills()$name)
+  s = peter("hello", plugins = d, model = local_fake_provider(list("ok")), envir = new.env())
+  sk = gptr_skills()
+  expect_identical(sk$source[sk$name == "listed-skill"], "plugin:listed-plug")
+  expect_true("listed-agent" %in% gptr_agents()$name)
+  plugins_session_end(s)
+  expect_false("listed-skill" %in% gptr_skills()$name)
+  expect_false("listed-agent" %in% gptr_agents()$name)
+})
+
+test_that("gptr_skills() lists settings plugins before any session, running none of their code", {
+  skip_on_cran()
+  d = withr::local_tempdir()
+  mark = file.path(d, "ran")
+  write_file(file.path(d, "plugin.json"), '{"name": "unsynced-plug"}')
+  write_file(file.path(d, "extensions", "m.R"),
+             c(paste0("cat(\"x\", file = ", deparse(mark), ")"), "function(gptr) NULL"))
+  write_file(file.path(d, "skills", "unsynced-skill", "SKILL.md"),
+             c("---", "name: unsynced-skill", "description: From the settings.", "---", "x"))
+  files = list()
+  files[["lab/plugin.json"]] = '{"name": "lab-plug"}'
+  files[["lab/skills/lab-skill/SKILL.md"]] = "---\nname: lab-skill\ndescription: Lab.\n---\nx"
+  p = local_project(files = files)
+  local_gptr_options(plugins = c(d, file.path(p, "lab")))
+  sk = gptr_skills()
+  expect_identical(sk$source[sk$name == "unsynced-skill"], "plugin:unsynced-plug")
+  expect_true(sk$visible[sk$name == "unsynced-skill"])
+  # a plugin inside an untrusted project is not enabled, so it is not listed either
+  expect_false("lab-skill" %in% sk$name)
+  expect_false(file.exists(mark))
 })
 
 test_that("after gptr_reload() declarative records are rebuilt once and code is not rerun", {

@@ -176,7 +176,7 @@ test_that("blank lines collapse and nested lists keep their indentation (D-186)"
   expect_identical(render_chunks(text), c("  T", "", "  - a", "    - b", "      - c",
                                           "  1. x", "     - y", "", "  end"))
   skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "symbols need a UTF-8 locale")
-  local_utf8_glyphs()
+  withr::local_options(cli.unicode = TRUE)
   # the same rows at every colour depth: without colour too the Markdown is read (visual review)
   for (colours in c(1L, 256L)) {
     withr::local_options(cli.num_colors = colours)
@@ -208,6 +208,33 @@ test_that("other output goes between whole rows; the held row continues, nesting
                                       "- b")),
                    c("", "(note)\n", "  keeps streaming slowly on.\n  - a\n", "(note)\n", "",
                      "    - b\n"))
+})
+
+test_that("an interrupt while a row is written loses none of its delta (visual round 2)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  skip_if_sigint_ignored()
+  withr::local_options(cli.num_colors = 1L, cli.dynamic = FALSE, gptr.verbose = 0L)
+  # SIGINT, as a D console's Ctrl-C, arrives while the first row is written, and R would take it at
+  # the loop's check; it comes at the next check after the delta instead (Sys.sleep())
+  first = TRUE
+  r = render_markdown_stream(width = 80L, before_output = function(x) {
+    if (!first) return()
+    first <<- FALSE
+    tools::pskill(Sys.getpid(), tools::SIGINT)
+    for (i in 1:1e5) NULL
+  })
+  hit = FALSE
+  out = written(function() {
+    tryCatch({
+      r$write("the means would be.\nEight-cylinder cars")
+      Sys.sleep(0.05)
+    }, interrupt = function(e) hit <<- TRUE)
+    r$write(" are heavier\n")
+    r$finish()
+  })
+  expect_true(hit)
+  expect_identical(out, "the means would be.\nEight-cylinder cars are heavier\n")
 })
 
 test_that("pipe tables are aligned on an interactive console and stay valid Markdown (D-186)", {
@@ -534,6 +561,47 @@ test_that("a probed background's band is Codex's fill in its nearest cell (revie
   the$background = "light"
   expect_identical(c(console_style()$band, console_style()$band_dim("x")),
                    c("\033[48;5;254m", "\033[38;5;242mx\033[39m"))
+  # a truecolor terminal gets the fill itself, a darker shade of the same paper (Man Page, Novel),
+  # and its words a grey 4.5:1 against that fill (visual round 1)
+  withr::local_options(cli.num_colors = 16777216L)
+  expect_identical(band("\033]11;rgb:fe/f2/91\a"),
+                   c("\033[48;2;244;232;139m", "\033[38;2;103;103;103mx\033[39m"))
+  expect_identical(band("\033]11;rgb:1c1c/1c1c/1c1c\a"),
+                   c("\033[48;2;55;55;55m", "\033[38;2;160;160;160mx\033[39m"))
+  the$background = "light"
+  expect_identical(console_style()$band, "\033[48;5;254m")
+})
+
+test_that("on a saturated background the accents and the grey keep 3:1 against it (Task 41)", {
+  local_background(NULL)
+  local_mocked_bindings(console_class = function() "T")
+  withr::local_options(cli.num_colors = 16777216L)
+  # WCAG contrast of a truecolor foreground against background `bg` (0 to 255); bold: the default's
+  ratio = function(x, bg) {
+    if (startsWith(x, "\033[1m")) return(Inf)
+    fg = as.numeric(regmatches(x, regexec("38;2;([0-9]+);([0-9]+);([0-9]+)m", x))[[1L]][-1L])
+    lum = function(v) {
+      v = v / 255
+      sum(c(0.2126, 0.7152, 0.0722) * ifelse(v <= 0.04045, v / 12.92, ((v + 0.055) / 1.055)^2.4))
+    }
+    y = c(lum(fg), lum(bg))
+    (max(y) + 0.05) / (min(y) + 0.05)
+  }
+  # Terminal.app's Ocean and Grass; Basic's black and white keep the logo's colours
+  for (bg in list(c(43, 102, 201), c(19, 119, 61))) {
+    the$background = background_reply(sprintf("\033]11;rgb:%02x/%02x/%02x\a", bg[1], bg[2], bg[3]))
+    st = console_style()
+    for (x in c(st$red("x"), st$blue("x"), st$dim("x"))) {
+      expect_gte(ratio(x, bg), 3)
+    }
+  }
+  for (reply in c("\033]11;rgb:0000/0000/0000\a", "\033]11;rgb:ffff/ffff/ffff\a")) {
+    the$background = background_reply(reply)
+    st = console_style()
+    expect_identical(c(st$red("x"), st$blue("x"), st$dim("x")),
+                     c("\033[38;2;184;84;80mx\033[39m", "\033[38;2;85;126;168mx\033[39m",
+                       "\033[38;2;135;135;135mx\033[39m"))
+  }
 })
 
 test_that("the background comes from COLORFGBG's last field, read once (D-245)", {
@@ -555,7 +623,6 @@ test_that("NO_COLOR keeps the glyphs and drops every SGR (D-245)", {
   withr::local_options(cli.num_colors = NULL, crayon.enabled = NULL, cli.default_num_colors = 256L,
                        cli.unicode = TRUE)
   withr::local_envvar(NO_COLOR = NA, R_CLI_NUM_COLORS = NA)
-  local_mocked_bindings(is_windows = function() FALSE)
   st = console_style()
   expect_identical(c(st$red("x"), st$band), c("\033[38;5;167mx\033[39m", "\033[48;5;237m"))
   withr::local_envvar(NO_COLOR = "1")
@@ -599,7 +666,6 @@ test_that("the console's one grey is the style table's dim (D-245)", {
 test_that("tool calls are cursor strips tinted by kind (D-245)", {
   skip_on_cran()
   local_project()
-  local_mocked_bindings(is_windows = function() FALSE)
   spec = function(name) tryCatch(registry_get("tool", name), error = function(e) NULL)
   kinds = c(read = "read", grep = "read", ls = "read", ask = "read", r = "act", edit = "act",
             write = "act", codex_shell = "act", mcp__github__search_issues = "act",
@@ -679,6 +745,45 @@ test_that("a sub-agent's started line cut to the width keeps its last word (Task
   out = utils::capture.output(peter("fan out", model = lead, envir = e))
   start = grep("sub-agent a ", out, value = TRUE, fixed = TRUE)[[1L]]
   expect_identical(start, "  # sub-agent a (a-provider-w... started")
+  # so does its done line, which cuts the label and keeps its turns and time (visual round 2)
+  withr::local_options(cli.width = 60L)
+  code = "res = peter('each', list(count_the_cars_in_fuel = 1), model = kid, parallel = 1)"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("fan out", model = lead, envir = e))
+  done = grep(" done ", grep("sub-agent count", out, value = TRUE, fixed = TRUE), value = TRUE)
+  expect_match(done, "^  # sub-agent count_the_cars.*\\.\\.\\. done \\(1/1\\) - 1 turn - [0-9]+ s$")
+  expect_lte(nchar(done), 60L)
+  # a nested call's two rows cut its label alike, inside its quotes and with no blank before the
+  # ellipsis; its run tag, model and outcome stay whole (visual round 3)
+  e$kid = local_fake_provider(function(request) "ok", name = "kid")
+  code = "res = peter('count the cars in fuel', model = kid)"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("delegate", model = lead, envir = e))
+  rows = grep("sub-agent '", out, value = TRUE, fixed = TRUE)
+  expect_length(rows, 2L)
+  expect_match(rows[[1L]], "^  # sub-agent '[^']+\\.\\.\\.' #1 \\(kid/kid-1\\) started$")
+  expect_match(rows[[2L]], "^  # sub-agent '[^']+\\.\\.\\.' #1 done - 1 turn - [0-9]+ s$")
+  expect_identical(sub(" #1 .*$", "", rows[[1L]]), sub(" #1 .*$", "", rows[[2L]]))
+  expect_false(any(grepl(" ...", rows, fixed = TRUE)))
+  expect_true(all(nchar(rows) <= 60L))
+})
+
+test_that("a sub-agent's rows are the block of the r call that runs them (visual round 2)", {
+  skip_on_cran()
+  # a person watches, so the call's printed value shows
+  local_gptr_options(mode = "auto", verbose = 2L, quiet = FALSE, interactive = TRUE)
+  withr::local_options(cli.num_colors = 1L, cli.unicode = FALSE, cli.width = 80L,
+                       cli.dynamic = TRUE)
+  e = new.env()
+  e$kid = local_fake_provider(function(request) "ok", name = "kid")
+  code = "res = peter('each', list(a = 1), model = kid, parallel = 1); 'sub-agent done'"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("fan out", model = lead, envir = e))
+  # the call's rows, the sub-agent's, the printed value and the end row: no blank row among them
+  rows = out[seq(grep("| r", out, fixed = TRUE)[[1L]], grep("+ res", out, fixed = TRUE)[[1L]])]
+  expect_true(any(grepl("sub-agent a done", rows, fixed = TRUE)))
+  expect_true(any(grepl("[1] \"sub-agent done\"", rows, fixed = TRUE)))
+  expect_false(any(rows == ""))
 })
 
 test_that("the ask tool's call line counts its questions in words (visual review)", {
@@ -692,8 +797,9 @@ test_that("a diff row wider than the console is cut, its spaces and sign kept (v
   row = "+     xlab = \"weight (1000 lb)\", ylab = \"miles per gallon\")"
   diff = msg_tool_result("c5", "edit", "ok", details = list(diff = c("@@ -1 +1,2 @@", " a", row)))
   out = console_tool_line(list(name = "edit"), diff, width = 40L)
+  # no blank before the ellipsis (visual round 3)
   expect_identical(out, c("    @@ -1 +1,2 @@", "     a",
-                          "    +     xlab = \"weight (1000 lb)\", ..."))
+                          "    +     xlab = \"weight (1000 lb)\",..."))
   # a row that fits keeps its last character beside one that is cut (cli 3.6.6's vectorised
   # ansi_strtrim() cut both)
   fits = paste0("+", strrep("a", 35L))
@@ -796,12 +902,24 @@ test_that("a compaction during a foreground run prints one dim notice with its c
                summary_tokens = 300, run = run)
   }
   expect_identical(render_events(s, list(hook_event("agent_start", s), done())),
-                   "  conversation compacted: 98.2k -> 4.1k tokens")
+                   "  compacted - 98.2k to 4.1k tokens")
   # /compact outside a run reports itself
   expect_identical(render_events(s, list(done(NULL))), character())
   testthat::local_reproducible_output(width = 80, crayon = TRUE, unicode = FALSE)
   expect_identical(render_events(s, list(done())),
-                   "\033[2m  conversation compacted: 98.2k -> 4.1k tokens\033[22m")
+                   "\033[2m  compacted - 98.2k to 4.1k tokens\033[22m")
+})
+
+test_that("a retry names its error's class, and no class when it has none (visual round 1)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  retry = function(class) hook_event("retry_start", s, attempt = 1L, delay = 2, class = class)
+  expect_identical(render_events(s, list(hook_event("agent_start", s), retry("rate_limit"),
+                                         retry(NA_character_))),
+                   c("  retrying in 2.0 s (rate_limit)", "  retrying in 2.0 s"))
 })
 
 test_that("an answer without deltas is printed whole at message_end", {
@@ -888,6 +1006,15 @@ test_that("an error result shows the lines of its message", {
                input = list(code = "z + 1")),
     hook_event("message_end", s, role = "tool_result", message = bad)))
   expect_identical(out[-1L], c("    error: Error: object 'z' not found", "    In: z + 1"))
+})
+
+test_that("an interrupted call's error row states its time once (visual round 1)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  r = list(id = "c1", name = "r", input = list(code = "Sys.sleep(9)"))
+  cut = c(msg_tool_result("c1", "r", "Interrupted after 2.8 s; side effects may have occurred.",
+                          is_error = TRUE, details = list(interrupted = TRUE)), list(elapsed = 2.8))
+  expect_identical(console_tool_line(r, cut),
+                   "    error: Interrupted after 2.8 s; side effects may have occurred.")
 })
 
 test_that("result lines keep a failed call's objects, project paths and whole errors (#35)", {
@@ -1305,7 +1432,6 @@ test_that("a reason's line breaks fold into one space; other controls stay escap
 
 test_that("the status line wraps between whole terms, never after a separator (review)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
-  local_utf8_glyphs()
   # a dated API model id at 80 columns, its content 76 wide, and at 60
   terms = c("done", "claude-sonnet-4-5-20250929-1", "7 requests", "19.8k tokens",
             "98% context left")
@@ -1390,6 +1516,26 @@ test_that("the status line counts the run's requests and adds its sub-agents' co
   console_on_agent_start(hook_event("agent_start", s), ctx)
   expect_message(end(own[1L, ]),
                  "^gptr: done - 1 request - 110 tokens - \\$0\\.0010 - 100% context left\\s*$")
+})
+
+test_that("at verbosity 1 a run ending in a condition leaves its reason to it (visual round 2)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 1L, quiet = FALSE)
+  s = render_session()
+  ctx = session_live(s)$ctx
+  end = function(status, reason) {
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    console_on_agent_end(hook_event("agent_end", s, status = status, reason = reason, usage = NULL,
+                                    turns = 1L), ctx)
+  }
+  # R's error says why once, as the caller sees it (gateway_signal())
+  why = "The run stopped: `r` needs approval and no one can answer in this run."
+  terms = " - 0 requests - 0 tokens\\s*$"
+  expect_message(end("blocked", why), paste0("^gptr: blocked", terms))
+  expect_message(end("error", "provider failure: boom"), paste0("^gptr: error", terms))
+  # a run that ends in no condition keeps its reason
+  expect_message(end("aborted", "the user"), paste0("^gptr: aborted: the user", terms))
 })
 
 test_that("custom entries of a run are shown through renderer records (IC-69)", {
@@ -1558,7 +1704,8 @@ test_that("sub-agent lines need a child of a foreground root, verbosity 1+, no q
 test_that("a failed sub-agent line counts it and gives its reason's first line, cut (#36)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
-  local_project()
+  # made before the key is mocked away: the gateway checks it before a call changes anything
+  s = render_session()
   local_gptr_options(mode = "auto", verbose = 1L, quiet = FALSE)
   fake = local_fake_provider(list("never sent"))
   local_mocked_bindings(provider_credential = function(provider, register = TRUE) {
@@ -1574,7 +1721,6 @@ test_that("a failed sub-agent line counts it and gives its reason's first line, 
   expect_match(failed[[2L]], "^  # sub-agent b failed \\(2/2\\): No credential found for")
   # without a reason, the status
   local_gptr_options(verbose = 0L)
-  s = render_session()
   rec = console_track("u0000test", s)
   withr::defer(console_drop("u0000test"))
   rec$child = list(label = "c", run = list(started = Sys.time()))

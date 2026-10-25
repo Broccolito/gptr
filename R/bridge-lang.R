@@ -240,7 +240,7 @@ bridge_py_source = c(
 )
 
 #' reticulate's __main__ with the helper; refuses a Python that reticulate would have to provision
-#' (its discovery ends in a uv-managed download; G5 item 21)
+#' (its discovery ends in a uv-managed download, as RETICULATE_PYTHON=managed asks; G5 item 21)
 #' @noRd
 bridge_py_main = function() {
   with_seed_preserved({
@@ -279,11 +279,16 @@ bridge_py_main = function() {
                  "not_available", member = "py", provided_by = "reticulate")
     }
     vars = c("RETICULATE_PYTHON", "RETICULATE_PYTHON_ENV", "VIRTUAL_ENV")
-    if (!initialized && !any(nzchar(Sys.getenv(vars)))) {
-      gptr_abort(c("Python is not configured for peter$py().",
-                   paste("Set RETICULATE_PYTHON (or RETICULATE_PYTHON_ENV), activate a virtual",
-                         "environment, or initialise Python yourself (reticulate::py_config());",
-                         "gptr never lets reticulate download a managed Python.")),
+    managed = identical(Sys.getenv("RETICULATE_PYTHON"), "managed")
+    if (!initialized && (managed || !any(nzchar(Sys.getenv(vars))))) {
+      what = if (managed) "RETICULATE_PYTHON=managed asks reticulate to download a Python" else
+        "Python is not configured"
+      gptr_abort(c(paste0(what, " for peter$py()."),
+                   paste("Set RETICULATE_PYTHON to a Python executable (or start R from an",
+                         "activated virtual environment), or run",
+                         "reticulate::use_python(\"<path>\") and then reticulate::py_config()",
+                         "before the first call; gptr never lets reticulate download a managed",
+                         "Python.")),
                  "not_available", member = "py", provided_by = "reticulate")
     }
     main = reticulate::import_main(convert = FALSE)
@@ -407,7 +412,7 @@ bridge_knit_target = function(engine, code) {
   list(command = prog, args = args, via = "shell")
 }
 
-#' All display lines of a gptr_cmd (stdout, [stderr], status) without truncation
+#' All display lines of a gptr_cmd (stdout, `[stderr]`, status) without truncation
 #' @noRd
 bridge_cmd_lines = function(x) {
   err = clean_terminal(x$stderr)

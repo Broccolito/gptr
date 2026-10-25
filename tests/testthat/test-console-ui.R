@@ -55,7 +55,6 @@ test_that("a console select outside a run opens its own block in the margin (D-1
 test_that("questions share one frame: ? and the title, numbered choices, a dim hint, the chevron", {
   # every row under the title is at column 4, under its text (visual review: the hint was at 2)
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
-  local_utf8_glyphs()
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
   prompts = character()
@@ -133,10 +132,37 @@ test_that("the one-line prompt shows the first line, +N more lines and the flagg
   detail = ui_permission_detail(req)
   expect_true(any(grepl("<U+001B>[2J clear", detail, fixed = TRUE)))
   expect_false(any(grepl("\u001b", detail, fixed = TRUE)))
-  expect_true(any(grepl("[3] file_delete", detail, fixed = TRUE)))
+  expect_true(any(grepl("[3 file_delete]", detail, fixed = TRUE)))
   w = list(tool = "write", input = list(path = "notes.md"), risk = list(level = 2L))
   expect_identical(ui_permission_lines(w), c("  | write  notes.md", "  ? Allow write?",
                                              "    y yes - n no - ? more"))
+})
+
+test_that("a flag has one shape in the ask and in ?, in the console's words (visual round 1)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  fl = data.frame(call = "modifies `fuel` <data.frame, 4.2 KB>", fn = NA_character_, level = 2L,
+                  category = "object_write", path = NA_character_, path_class = NA_character_)
+  req = list(tool = "r", input = list(code = "fuel$x = 1"), tier = "ask", session = "s1",
+             risk = list(level = 2L, label = "mutating", flagged = fl),
+             reason = "mode edits, risk level 2 (mutating)")
+  ask = grep("flagged", ui_permission_lines(req), value = TRUE)
+  detail = ui_permission_detail(req)
+  expect_identical(ask, "    flagged: [2 object_write] modifies fuel (data.frame, 4.2 KB)")
+  expect_true("    [2 object_write] modifies fuel (data.frame, 4.2 KB)" %in% detail)
+  expect_false(any(grepl("[`<>]", c(ask, grep("object_write", detail, value = TRUE)))))
+  # the reason row names the level, so the first row does not
+  expect_identical(detail[1:2],
+                   c("  peter wants to use r", "  reason: mode edits, risk level 2 (mutating)"))
+  # inline code as the answer shows it
+  withr::local_options(cli.num_colors = 256L)
+  blue = sub("x.*$", "", console_style()$blue("x"))
+  expect_match(ui_permission_lines(req)[[2L]], paste0(blue, "fuel"), fixed = TRUE)
+  # the ? view in the ask's type: who asks bold, the reason and the flags dim (visual round 2)
+  grey = sub("x.*$", "", console_style()$dim("x"))
+  styled = ui_permission_detail(req)
+  expect_true(startsWith(styled[[1L]], "\033[1m  peter wants to use r"))
+  expect_true(all(startsWith(styled[grepl("reason:|flagged calls:|object_write",
+                                          cli::ansi_strip(styled))], grey)))
 })
 
 test_that("the prompt's first line fits the console, keeping +N more lines (D-187)", {
@@ -174,8 +200,40 @@ test_that("a path tool's prompt shows the path relative to the project; no empty
            risk = list(level = 2L, categories = "write", paths = "R/io.R"))
   expect_identical(ui_permission_lines(w)[1L], "  | write  R/io.R")
   detail = ui_permission_detail(w)
-  expect_identical(detail[1:2], c("  gptr wants to use write (level 2)", "    R/io.R"))
-  expect_match(ui_permission_detail(ui_request("x = 1"))[1L], "(level 1: local)", fixed = TRUE)
+  expect_identical(detail[1:2], c("  peter wants to use write (level 2)", "    R/io.R"))
+  # the level and its label where no reason row names the level
+  expect_match(ui_permission_detail(modifyList(ui_request("x = 1"), list(reason = NULL)))[1L],
+               "(level 1: local)", fixed = TRUE)
+})
+
+# A row of the ? view joined with the rows it goes on in, `hang` columns in (console_hang())
+unwrap = function(rows, at, hang) {
+  k = at
+  while (k < length(rows) && grepl(paste0("^ {", hang, "}[^ ]"), rows[[k + 1L]])) k = k + 1L
+  paste(c(rows[[at]], sub("^ +", "", rows[seq_len(k - at) + at])), collapse = " ")
+}
+
+test_that("the ? view wraps its rows to the console, each under its own text (visual round 1)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 60, crayon = FALSE, unicode = FALSE)
+  local_project()
+  long = "     xlab = \"weight (1000 lb)\", ylab = \"miles per gallon\")"
+  ed = list(tool = "edit", risk = list(level = 2L), input = list(path = "analysis.R", edits = list(
+    list(oldText = "plot(x)", newText = paste0("plot(mpg ~ wt, data = fuel,\n", long)))))
+  req = ui_request("write.csv(fuel, \"fuel.csv\", row.names = FALSE)")
+  for (detail in list(ui_permission_detail(ed), ui_permission_detail(req))) {
+    expect_true(all(nchar(detail) <= 60L))
+    expect_false(any(grepl("^[^ ]", detail)))
+  }
+  # a change row goes on after its sign, a flagged call under its call
+  detail = ui_permission_detail(ed)
+  at = grep("xlab", detail, fixed = TRUE)
+  expect_match(detail[at + 1L], "^     [^ ]")
+  expect_identical(unwrap(detail, at, 5L), paste0("    +", long))
+  detail = ui_permission_detail(req)
+  at = grep("write.csv(", detail, fixed = TRUE)[[2L]]
+  col = regexpr("write.csv(", detail[at], fixed = TRUE)
+  expect_identical(regexpr("[^ ]", detail[at + 1L]), col, ignore_attr = TRUE)
 })
 
 test_that("an edit or write approval shows the change before the answer (cheat-sheet review)", {
@@ -191,7 +249,7 @@ test_that("an edit or write approval shows the change before the answer (cheat-s
                                                "  ? Allow edit?", keys))
   # the ? view (also the RStudio dialog) names the path in its first row, then the change
   detail = ui_permission_detail(ed)
-  expect_identical(detail[1:3], c("  gptr wants to use edit on R/io.R (level 2)", "    -n = 10",
+  expect_identical(detail[1:3], c("  peter wants to use edit on R/io.R (level 2)", "    -n = 10",
                                   "    +n = 20"))
   expect_false("    R/io.R" %in% detail)
   # a write's content as + rows: 12 in the ask, then how many more, 40 in the ? view
@@ -270,11 +328,11 @@ test_that("the console's ? view shows only the change rows its ask cut (review o
   expect_identical(out[at + 0:29], c("    (continued)", paste0("    +line ", 13:40),
                                      "    (+20 more lines)"))
   expect_identical(sum(out == "    +line 12"), 1L)
-  # a row the ask cut at the width is shown whole, so the whole change is
-  long = paste0("x = '", strrep("d", 90L), "'")
+  # a row the ask cut at the width is shown whole, wrapped, so the whole change is
+  long = paste0("x = '", paste(rep(strrep("d", 9L), 9L), collapse = " "), "'")
   out = ask(req("write", path = "a.R", content = paste0("a\n", long)))
   expect_identical(sum(out == "    +a"), 2L)
-  expect_true(paste0("    +", long) %in% out)
+  expect_identical(unwrap(out, max(grep("^    [+]x = ", out)), 5L), paste0("    +", long))
   # alone (the RStudio dialog) the ? view shows the whole change
   expect_identical(ui_permission_detail(ed)[2:3], c("    -n = 10", "    +n = 20"))
 })
@@ -312,9 +370,18 @@ test_that("a and p are offered only with a suggested rule; a and p say why not (
   out = console_try(function() ui_console_permission(req), c("?", "a", "p", "y"))
   expect_identical(out$result, ui_answer("allow"))
   expect_false(any(grepl("[a] always", out$shown, fixed = TRUE)))
-  expect_identical(sum(out$shown == paste0("    a and p are not offered: no rule covers these ",
-                                           "calls; answer y, n or ?.")), 2L)
+  expect_identical(sum(out$shown == "    a and p are not offered: no rule covers these calls"), 2L)
   expect_null(ui_answer_norm(list(decision = "allow", remember = "session"), req)$remember)
+})
+
+test_that("a denial keeps the UI's how; other answers drop it (D-252)", {
+  req = ui_request("x = 2")
+  expect_identical(ui_answer_norm(list(decision = "deny", how = "Repeat it later."), req),
+                   list(decision = "deny", remember = NULL, feedback = NULL, reason = NULL,
+                        how = "Repeat it later."))
+  expect_false("how" %in% names(ui_answer_norm(list(decision = "allow", how = "x"), req)))
+  expect_false("how" %in% names(ui_answer_norm(list(decision = "deny", how = ""), req)))
+  expect_false("how" %in% names(ui_answer_norm(list(decision = "deny", how = 1), req)))
 })
 
 test_that("the detail view shows at most 40 code rows at column 4, as the call block (D-187)", {
@@ -336,7 +403,8 @@ test_that("the detail view's keys read as the question's; it skips a fence shown
   # the console's interrupt key as its banner and live row name it, the words in one column
   keys = c("    y       yes", "    a       always in this session: r(fn:write.csv)",
            "    p       always in this project: r(fn:write.csv)",
-           "    n       no (type n <what to do instead> to tell gptr)", "    ctrl-c  abort the run")
+           "    n       no (type n <what to do instead> to tell peter)",
+           "    ctrl-c  abort the run")
   expect_identical(utils::tail(ui_permission_detail(req), 5L), keys)
   # the console printed this call's line with its code: ? leaves the fence out
   req$tool_call_id = "t1"
@@ -346,18 +414,18 @@ test_that("the detail view's keys read as the question's; it skips a fence shown
   out = console_try(function() ui_console_permission(req), c("?", "y"))
   expect_false("    write.csv(df, 'out.csv')" %in% out$shown)
   expect_true(all(keys %in% out$shown))
-  # a code row the call block cut at the console's width is shown whole by ? (visual review)
-  long = paste0("write.csv(df, '", strrep("d", 90L), ".csv')")
+  # a code row the call block cut at the console's width is shown whole by ?, wrapped (visual)
+  long = paste0("write.csv(df, '", paste(rep(strrep("d", 9L), 9L), collapse = " "), ".csv')")
   wide = modifyList(req, list(input = list(code = long), summary = long))
-  out = console_try(function() ui_console_permission(wide), c("?", "y"))
-  expect_true(paste0("    ", long) %in% out$shown)
+  out = console_try(function() ui_console_permission(wide), c("?", "y"))$shown
+  expect_identical(unwrap(out, max(grep("^    write[.]csv", out)), 6L), paste0("    ", long))
   # the key bold and its words dim; the RStudio dialog gets the code and no SGR
   withr::local_options(cli.num_colors = 256L)
   expect_identical(utils::tail(ui_permission_detail(req), 1L),
                    "    \033[1mctrl-c\033[22m  \033[38;5;244mabort the run\033[39m")
   local_mocked_bindings(front_end = function() "rstudio")
   expect_identical(utils::tail(cli::ansi_strip(ui_permission_detail(req)), 2L),
-                   c("    n    no (type n <what to do instead> to tell gptr)",
+                   c("    n    no (type n <what to do instead> to tell peter)",
                      "    esc  abort the run"))
   skip_if_not_installed("rstudioapi")
   shown = NULL
@@ -429,7 +497,6 @@ test_that("an approval takes `no, <text>` and `No. <text>` as n <text> (steering
 test_that("the keys are a row under the question, a and p only with a rule (D-243)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
-  local_utf8_glyphs()
   root = local_project()
   req = ui_request("x = 1", rule = "r(level<=1)")
   q = function(r) utils::tail(ui_permission_lines(r), 2L)
@@ -530,6 +597,22 @@ test_that("lines typed or pasted before the approval prompt never answer it (IC-
   rl = local_readline(c("sk-typed-ahead", "sk-answer"), secs = c(0.001, 1.5))
   utils::capture.output(expect_identical(ui_console_read("Key: ", secret = TRUE), "sk-answer"))
   expect_identical(rl$kept, character())
+})
+
+test_that("a T console's answers are read on the input band, as its prompts are (visual round 1)", {
+  local_console_test()
+  local_mocked_bindings(console_class = function() "T", console_background = function() "dark")
+  withr::local_options(cli.num_colors = 256L, cli.unicode = TRUE)
+  rl = local_readline(c("y", "sk-answer"))
+  out = written(function() {
+    ui_console_permission(ui_request("zz = 1"))
+    ui_console_read("Key: ", secret = TRUE)
+  })
+  # readline counts only the chevron (\001 \002); after the read the band is erased below it
+  expect_identical(rl$prompts[[1L]], paste0("\001\033[48;5;237m\002", "\u203a ", "\001\033[K\002"))
+  expect_match(out, "\033[0m\033[K", fixed = TRUE)
+  # a secret is read off the band, as typed with the echo off
+  expect_identical(rl$prompts[[2L]], "Key: ")
 })
 
 test_that("a console command typed as a free-text answer waits for the next prompt (review)", {
@@ -684,15 +767,14 @@ test_that("a terminal: gptr_login() reads a key without showing it (cheat-sheet 
 
 test_that("a question drawn over the composer's draft says where it went (steering review)", {
   local_console_test()
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L, width = 80L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, width = 80L)
   withr::defer(assign("tty", NULL, envir = the))
   local_readline(rep("y", 4L))
   rd = new.env(parent = emptyenv())
   rd$waiting = function() character()
   shown = character()
   local_mocked_bindings(console_repl_find = function() list(reader = rd),
-                        console_typed = function(drain = FALSE) FALSE,
+                        console_typed = function(...) FALSE,
                         console_write = function(lines) shown <<- c(shown, lines))
   read = function(draft) {
     rd$compose = list(draft = draft, t = 1)
@@ -742,7 +824,7 @@ test_that("during a run a line typed before the approval prompt is queued, then 
   last = reqs[[2L]]$messages[[length(reqs[[2L]]$messages)]]
   expect_identical(msg_text(last),
                    "The user sent this message while you were working: use base R")
-  expect_false(any(grepl("Not an answer", out, fixed = TRUE)))
+  expect_false(any(grepl("^ *not an answer", out)))
   # the console echoed the line at the question, so its queue line does not repeat it: it says the
   # line was queued, not taken as the answer (visual review)
   expect_true(queue_line("steer", "not an answer") %in% out)
@@ -813,9 +895,9 @@ test_that("a block pasted at the approval prompt never answers it nor steers (IC
   out = utils::capture.output(repl_main(rs))
   expect_null(e$zz)
   expect_identical(sum(fd0$prompts == ">> "), 2L)
-  expect_identical(sum(out == "    A pasted block is not an answer (kept in history)."), 1L)
+  expect_identical(sum(out == "    a pasted block is not an answer - kept in history Up"), 1L)
   expect_identical(kept, '"""\ny\npasted line two\npasted line three\n"""')
-  expect_false(any(grepl("Not an answer", out, fixed = TRUE)))
+  expect_false(any(grepl("^ *not an answer", out)))
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
   texts = vapply(reqs[[2L]]$messages, msg_text, "")
@@ -834,9 +916,9 @@ test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-1
   expect_identical(ui_permission_lines(c(req, agent = "alpha")),
                    c("  | r  x = 1", "  ? sub-agent alpha: allow r?", keys))
   expect_identical(q(c(req, agent = "'Sum\033...'")), "  ? sub-agent 'Sum<U+001B>...': allow r?")
-  expect_match(ui_permission_detail(c(req, agent = "alpha"))[1L],
-               "^  sub-agent alpha wants to use r \\(level")
-  expect_match(ui_permission_detail(req)[1L], "^  gptr wants to use r")
+  expect_identical(ui_permission_detail(c(req, agent = "alpha"))[1L],
+                   "  sub-agent alpha wants to use r")
+  expect_match(ui_permission_detail(req)[1L], "^  peter wants to use r")
   crit = ui_request("q('no')", tier = "ask_human")
   expect_identical(utils::tail(ui_permission_lines(crit), 3L)[1L],
                    paste0("    asks in every mode: ", crit$reason))
@@ -885,31 +967,27 @@ test_that("invalid answers are explained and kept; five end in a refusal the mod
   out = console_try(function() ui_console_permission(req), rep("zz", 5L))
   expect_identical(out$result, list(decision = "deny", remember = NULL, feedback = NULL,
                                     reason = "no valid answer was given at the approval prompt"))
-  # the hint names the question, as it may have scrolled away (visual review), the prompt's own
-  # letters and how to deny with feedback
-  hint = "    Allow r? Type y, a, p or n (n <text> says what to do instead), or ?."
-  expect_identical(c(sum(out$shown == "    Not an answer: 'zz' (kept in history)."),
-                     sum(out$shown == hint)), c(5L, 5L))
+  # one row in the console's terms: no answer, kept, and the prompt's own keys, n with feedback
+  # too; the question's title is right above it (visual round 3: two sentences repeated it)
+  row = "    not an answer - kept in history Up - y, a, p, n, n <instead> or ?"
+  expect_identical(sum(out$shown == row), 5L)
+  expect_identical(sum(grepl("Allow r?", out$shown, fixed = TRUE)), 1L)
   expect_identical(out$kept, rep("zz", 5L))
-  expect_identical(utils::tail(out$shown, 1L), "    No valid answer after 5 tries; refused.")
+  expect_identical(utils::tail(out$shown, 1L), "    no valid answer after 5 tries - refused")
   # asking for details is not an invalid answer
   out = console_try(function() ui_console_permission(req), c("?", "?", "zz", "?", "zz", "?", "y"))
   expect_identical(out$result$decision, "allow")
   out = console_try(function() ui_console_permission(crit), c("maybe \033", "", "n"))
-  expect_true("    Not an answer: 'maybe <U+001B>' (kept in history)." %in% out$shown)
-  # an empty answer only gets the hint, and is not kept
-  expect_false(any(grepl("Not an answer: ''", out$shown, fixed = TRUE)))
-  hint = "    Allow r? Type y or n (n <text> says what to do instead), or ?."
-  expect_identical(sum(out$shown == hint), 2L)
+  # an empty answer is not kept; without a rule the keys are y and n
+  keys = "y, n, n <instead> or ?"
+  expect_identical(c(sum(out$shown == paste0("    not an answer - ", keys)),
+                     sum(out$shown == paste0("    not an answer - kept in history Up - ", keys))),
+                   c(1L, 1L))
   expect_identical(out$kept, "maybe \033")
-  sub = console_try(function() ui_console_permission(modifyList(req, list(agent = "a"))),
-                    c("zz", "y"))
-  expect_match(paste(sub$shown, collapse = " "), "    sub-agent a: allow r? Type y, a, p or n (n",
-               fixed = TRUE)
   # nothing is kept where there is no console history (a piped .stdin session)
   local_mocked_bindings(gptr_is_interactive = function() FALSE)
   out = console_try(function() ui_console_permission(req), c("zz", "y"))
-  expect_true("    Not an answer: 'zz'." %in% out$shown)
+  expect_true("    not an answer - y, a, p, n, n <instead> or ?" %in% out$shown)
   expect_identical(out$kept, character())
 })
 
@@ -917,15 +995,19 @@ test_that("every question asks again in one style: dim rows at column 4 (review)
   root = local_project()
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
   withr::local_options(cli.num_colors = 256L)
-  dim = console_style()$dim
+  plain = function(x) cli::ansi_strip(x)
   out = console_try(function() ui_console_select("Pick", c("a", "b")), c("x", "1"))
-  expect_true(dim("    Not an answer. Type a number.") %in% out$shown)
+  expect_true("    not an answer - a number" %in% plain(out$shown))
   pick = function() ui_console_select("Pick", c("a", "b"), multiple = TRUE, allow_other = TRUE)
   out = console_try(pick, c("", "1"))
-  expect_true(dim("    Not an answer. Type numbers separated by commas, or your own answer.") %in%
-                out$shown)
+  expect_true("    not an answer - numbers separated by commas or your own answer" %in%
+                plain(out$shown))
   out = console_try(function() ui_console_permission(ui_request("zz = 1")), c("zz", "y"))
-  expect_true(dim("    Not an answer: 'zz' (kept in history).") %in% out$shown)
+  row = grep("not an answer", out$shown, value = TRUE, fixed = TRUE)
+  expect_identical(plain(row), "    not an answer - kept in history Up - y, n, n <instead> or ?")
+  # dim, the keys bold as the keys row sets them
+  expect_true(startsWith(row, paste0("    ", sub("x.*$", "", console_style()$dim("x")))))
+  expect_match(row, cli::style_bold("y"), fixed = TRUE)
 })
 
 test_that("a choice ends after five invalid answers, saying it is cancelled (cheat-sheet review)", {
@@ -934,14 +1016,16 @@ test_that("a choice ends after five invalid answers, saying it is cancelled (che
   out = console_try(function() ui_console_select("Pick", c("a", "b")), rep("x", 5L))
   expect_identical(out$result, NA_integer_)
   expect_identical(out$asked, 5L)
-  expect_true(utils::tail(out$shown, 1L) == dim("    No valid answer after 5 tries; cancelled."))
-  expect_identical(sum(out$shown == dim("    Not an answer. Type a number.")), 4L)
+  shown = cli::ansi_strip(out$shown)
+  expect_identical(utils::tail(shown, 1L), "    no valid answer after 5 tries - cancelled")
+  expect_true(startsWith(utils::tail(out$shown, 1L), paste0("    ", sub("x.*$", "", dim("x")))))
+  expect_identical(sum(shown == "    not an answer - a number"), 4L)
 })
 
 test_that("in an IDE console an answer of several words names the draft left on the input line", {
   root = local_project()
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
-  cause = "    A draft typed during the run joins your answer; clear the line first."
+  cause = "    a draft typed during the run joins your answer: clear the line first"
   local_live_console("L")
   out = console_try(function() ui_console_permission(ui_request("zz = 1")),
                     c("and label the axesy", "zz", "y"))
@@ -971,15 +1055,15 @@ test_that("with gptr.history off nothing is kept and no notice says it was (D-24
   local_mocked_bindings(gptr_is_interactive = function() TRUE)
   local_gptr_options(history = FALSE)
   out = console_try(function() ui_console_permission(ui_request("zz = 1")), c("zz", "y"))
-  expect_true("    Not an answer: 'zz'." %in% out$shown)
+  expect_true("    not an answer - y, n, n <instead> or ?" %in% out$shown)
   rd = list(waiting = function() "b")
   local_mocked_bindings(console_repl_find = function() list(reader = rd))
   out2 = console_try(function() ui_console_read("Q: "), "a")
-  expect_identical(out2$shown, "    A pasted block is not an answer.")
+  expect_identical(out2$shown, "    a pasted block is not an answer")
   expect_identical(c(out$kept, out2$kept), character())
 })
 
-test_that("a long invalid answer's notice wraps inside the approval's width (P28 B, E, F)", {
+test_that("an invalid answer's row wraps between terms inside the approval's width (P28 B, E, F)", {
   testthat::local_reproducible_output(width = 60)
   root = local_project()
   # in the console margin (D-186) the approval's rows end two columns before the edge
@@ -987,11 +1071,9 @@ test_that("a long invalid answer's notice wraps inside the approval's width (P28
   a = "please use base R graphics for this plot"
   req = ui_request("zz = 1", rule = "r(level<=1)")
   out = console_try(function() ui_console_permission(req), c(a, "y"))
-  rows = out$shown[seq(grep("Not an answer", out$shown, fixed = TRUE), length.out = 4L)]
-  expect_identical(rows, c("    Not an answer: 'please use base R graphics for this",
-                           "    plot' (kept in history).",
-                           "    Allow r? Type y, a, p or n (n <text> says what to do",
-                           "    instead), or ?."))
+  rows = out$shown[seq(grep("not an answer", out$shown, fixed = TRUE), length.out = 2L)]
+  expect_identical(rows, c("    not an answer - kept in history Up",
+                           "    y, a, p, n, n <instead> or ?"))
   expect_lte(max(nchar(out$shown)), 58L)
   expect_identical(out$kept, a)
 })

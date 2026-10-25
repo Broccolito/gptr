@@ -14,19 +14,28 @@ gptr_doc(path = NULL, format = NULL, sync = FALSE)
 \code{"rmd"}, \code{"qmd"} or \code{"ipynb"}; \code{"transcript"} records console turns into an \code{.R} file as
 one steered session.}
 
-\item{sync}{\code{TRUE} applies the pending blocks of the document now.}
+\item{sync}{\code{TRUE} applies the pending blocks of the document now and reports how many it
+wrote.}
 }
 \value{
 With \code{path = NULL}, the binding \code{list(path, format)} or \code{NULL}, visibly. Otherwise the
 previous binding, invisibly.
 }
 \description{
-\code{gptr_doc(path)} binds every \code{peter()} call of this R process, at the console and in scripts,
-to a history document, and is your explicit consent that gptr writes agent blocks into it.
+\code{gptr_doc(path)} binds a history document to this R process and is your explicit consent that
+gptr writes agent blocks into it. Calls written in that document (run with \code{source()},
+\code{\link[=gptr_source]{gptr_source()}}, \code{Rscript}, knitr or Jupyter) get their blocks below them. Calls in no
+document (the console, \code{Rscript -e}, standard input) are appended to it, except to a notebook,
+as \verb{s_<id> = peter("prompt", <context names>)} (later turns of that session as
+\verb{s_<id> |> peter(...)}): your variable name and the other arguments are not recorded. A call in
+another document is recorded only into that document, with its own consent; a run that cannot
+ask for it records nothing and says so once per document.
 Nothing is written until a block is recorded. \code{gptr_doc(FALSE)} removes the binding and
 \code{gptr_doc()} shows it. \code{sync = TRUE} writes the blocks that were recorded while the document
-could not be written: a Jupyter notebook that was open, or the deferred writes of an \code{Rscript}
-run that was killed.
+could not be written, and says how many: a Jupyter notebook that was open (run it from another
+R session after closing the notebook), or the deferred writes of an \code{Rscript} run that was
+killed. Such blocks wait in the \verb{.gptr/} of the document's project, else in
+\code{tools::R_user_dir("gptr", "cache")}, so any R process of the same user can apply them.
 }
 \details{
 Eligible top-level calls and pipe chains own document blocks; calls nested inside loops

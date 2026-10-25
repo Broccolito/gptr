@@ -104,10 +104,11 @@ console_repl_find = function() {
 #' Read one menu answer at the person's chevron at column 0, as a console question reads (D-243):
 #' from a `.stdin` REPL's connection, else readline_answer(); a Ctrl-C while waiting (no resume
 #' restart there) gives NA, and in a terminal ends the person's row, as ui_console_read() does. With
-#' `accept` (readline_answer()) a line typed before the chevron showed answers when it is one of
-#' them, and another such line is kept in the history (console_keep()), never sent to the agent; the
-#' keys a T console read with its Ctrl-C are such lines, read first (console_ahead()), and a line
-#' they begin without ending begins the answer: shown after the chevron, the read's text after it
+#' `accept` (readline_answer()) a line typed before the chevron showed answers when
+#' `accept(line)` takes it, and another such line is kept in the history (console_keep()), never
+#' sent to the agent; the keys a T console read with its Ctrl-C are such lines, read first
+#' (console_ahead()), and a line they begin without ending begins the answer: shown after the
+#' chevron, the read's text after it
 #' @noRd
 console_ask = function(accept = NULL) {
   rs = console_repl_find()
@@ -120,7 +121,8 @@ console_ask = function(accept = NULL) {
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
       rs$reader$read(prompt, stream = "stdout")
     } else {
-      readline_answer(prompt, if (is.null(accept)) console_typed_ahead else console_keep, accept)
+      readline_answer(prompt, if (is.null(accept)) console_typed_ahead else console_keep, accept,
+                      read = function(p) band_read(p, gptr_readline))
     }
     if (length(x) != 1L || is.na(x)) NA_character_ else as_utf8(x)
   }, interrupt = function(e) NA_character_)
@@ -130,7 +132,7 @@ console_ask = function(accept = NULL) {
 
 #' The answer among the keys a T console's composer read with its Ctrl-C (`rd$after_interrupt`,
 #' console_keys()), or NULL: the first whole line, its edit keys applied (console_compose()), that
-#' is one of `accept` (trimmed, lower case; TRUE: any), echoed after the person's chevron as
+#' `accept(line)` takes, echoed after the person's chevron as
 #' readline() leaves a line. The lines before it, or with no answer the whole lines, go to the
 #' console history (console_keep()), never to the agent; the text after it waits for the next
 #' question, and with no answer a line not ended begins this question's (console_ask())
@@ -144,7 +146,7 @@ console_ahead = function(rd, accept) {
   part = if (isTRUE(attr(lines, "partial"))) lines[[length(lines)]]
   whole = lines[seq_len(length(lines) - !is.null(part))]
   typed = vapply(whole, function(line) edit(paste0(line, "\n")), "", USE.NAMES = FALSE)
-  hit = if (isTRUE(accept)) seq_along(typed) else which(tolower(trimws(typed)) %in% accept)
+  hit = which(vapply(typed, function(x) isTRUE(accept(x)), NA))
   if (!length(hit)) {
     rd$after_interrupt = if (!is.null(part)) edit(part) else ""
     keep(typed)
@@ -158,18 +160,20 @@ console_ahead = function(rd, accept) {
 }
 
 #' The pause menu (calling handler for `interrupt`), a console question wherever it is offered
-#' (D-243): after a blank row, `? Paused` (the session's id added when more than one is paused)
-#' and under its text the keys as an approval's (ui_keys()): `s steer`, `f follow-up`, `c continue`,
-#' `a abort` and, for a foreground call, `b background`, read at the person's chevron
-#' (console_ask()), in the saved modes from before its rows (tty_question()), a T console's draft
-#' said to be kept above the chevron as at any question (ui_draft_kept()). A key or its word
+#' (D-243): after a blank row, `? Paused` and under its text the keys as an approval's (ui_keys()):
+#' `s steer`, `f follow-up`, `c continue`, `a abort` and, for a foreground call, `b background`,
+#' read at the person's chevron
+#' (console_ask()), in the saved modes from before its rows (tty_question()), after a drain as at
+#' any question (ui_drain(): a D console's line SIGINT left is kept), a T console's draft said to
+#' be kept above the chevron (ui_draft_kept()). A key or its word
 #' answers, also one typed before the chevron showed or with the Ctrl-C (console_ahead()), an empty
-#' answer continues, anything else is kept in the history, never sent, under a dim hint that names
-#' it and the keys. [s] and [f] read their text at the chevron of their own question, `?
-#' Steer` or `? Follow-up`, and queue it as Enter and Tab do (policy_enqueue()), their queue line,
-#' without the text it shows under, right under it, as under any question. [b] says
-#' in dim rows that the run went to the background (with the service's notices), then lists what
-#' the REPL held for after the run as kept (console_background_settle()), or in red why not.
+#' answer continues, anything else is kept in the history, never sent, under a dim row that says
+#' so and names the keys (ui_reask()). `[s]` and `[f]` read their text at the chevron of their own
+#' question, `? Steer` or `? Follow-up`, and queue it as Enter and Tab do (policy_enqueue()), their
+#' queue line, without the text it shows under, right under it, as under any question. `[b]` closes
+#' the answer's cut row, then says in dim terms (console_terms()) that the run went to the
+#' background, the service's notice one of them, then lists what the REPL held for after the run as
+#' kept (console_background_settle()), or in red why not.
 #' It resumes the interrupted computation, the next block a blank row below the menu (where a tool
 #' runs, its call's block continues: its code's further output and its result line) and the live
 #' row with a T console's draft drawn again (console_asked()), or returns to let the policy's
@@ -196,13 +200,17 @@ policy_menu = function(cnd, pol) {
   keys = c(if (!is.null(s)) c(s = "steer", f = "follow-up"), c = "continue", a = "abort",
            if (bg) c(b = "background"))
   k = names(keys)
-  ids = unique(vapply(targets, function(t) session_data(t$session)$id, ""))
   rlang::local_options(cli.num_colors = console_colors())
-  title = paste(c("Paused", if (length(ids) > 1L) ids[[1L]]), collapse = " ")
   tty_question(TRUE)
   on.exit(tty_question(FALSE), add = TRUE)
-  console_write(c("", paste0("  ", ui_question(title, ui_width() - 2L)),
+  # one title: [s] and [f] act on the console's own session, which the rows above name
+  console_write(c("", paste0("  ", ui_question("Paused", ui_width() - 2L)),
                   ui_keys(k, keys, ui_width())))
+  # a key or its word answers, also one typed before the chevron showed
+  answers = function(x) tolower(trimws(x)) %in% c("", k, keys)
+  # what was typed as the pause key came, drained as at any question: a D console's line SIGINT
+  # left (tty_call()) is kept, and a key among it answers
+  ahead = ui_drain(paste0(console_style()$person, " "), answers)
   ui_draft_kept()
   go = function() {
     # resumed code's output (the evaluator's tee writes no block gap) and its result line are its
@@ -214,7 +222,8 @@ policy_menu = function(cnd, pol) {
     invokeRestart("resume")
   }
   repeat {
-    typed = console_ask(c("", k, keys))
+    typed = if (rlang::is_string(ahead)) ahead else console_ask(answers)
+    ahead = NULL
     ans = tolower(trimws(typed))
     key = if (is.na(ans)) "a" else c("c", k, k)[match(ans, c("", k, keys))]
     if (identical(key, "c")) go()
@@ -224,7 +233,7 @@ policy_menu = function(cnd, pol) {
       console_write(paste0("  ", ui_question(c(s = "Steer", f = "Follow-up")[[key]],
                                              ui_width() - 2L)))
       ui_draft_kept()
-      text = console_ask(TRUE)
+      text = console_ask(function(x) TRUE)
       if (is.na(text)) return(invisible(NULL))
       enqueue = function() {
         the$echoed = ""
@@ -238,38 +247,39 @@ policy_menu = function(cnd, pol) {
     }
     if (identical(key, "b")) {
       sym = console_style()
-      say = function(text, style = sym$dim) {
-        console_write(style(console_wrap(paste0("  ", text), ui_width())))
-      }
+      # the service's notice, P21's that background sessions are experimental (once a process),
+      # is a term of the menu's status row, after the answer's cut row
+      said = FALSE
       tryCatch({
-        # the service's notices are the menu's dim rows
         withCallingHandlers(ext_service_get("bg.register")(s), gptr_message = function(m) {
-          say(console_escape(text_lines(conditionMessage(m)), FALSE))
+          said <<- TRUE
           invokeRestart("muffleMessage")
         })
         tty_question(FALSE)
         console_render_pause()
-        say(paste0("running in the background", sym$sep, "gptr_wait() brings it back"))
+        console_write("")
+        # nothing runs it while the chat prompt waits (later runs only at R's own prompt)
+        where = "in the background"
+        if (said) where = paste0(where, " (experimental, ?\"gptr-background\")")
+        terms = c(where, "!!gptr::gptr_wait(gptr::gptr_last()) continues it here")
+        console_write(sym$dim(paste0("  ", console_terms(terms, ui_width() - 2L))))
         console_background_settle()
         console_write("")
         invokeRestart("resume")
       }, error = function(e) {
-        say(paste0("cannot run in the background", sym$sep,
-                   console_escape(conditionMessage(e), FALSE)), sym$red)
+        console_write(sym$red(console_wrap(paste0(
+          "  cannot run in the background", sym$sep, console_escape(conditionMessage(e), FALSE)
+        ), ui_width())))
       })
       next
     }
     # text that is no key is kept, never sent, as an approval keeps it
     kept = gptr_is_interactive() && console_history_add(typed)
-    console_write(ui_hint(c(
-      paste0("Not a key: '", ui_escape(substr(trimws(typed), 1L, 40L)), "'",
-             if (kept) " (kept in history)", "."),
-      paste0("Paused. Type ", paste(k[-length(k)], collapse = ", "), " or ", k[[length(k)]], ".")
-    )))
+    console_write(ui_reask("not a key", k, kept))
   }
 }
 
-#' After [b] (policy_menu()) no run ends in the foreground, so the follow-ups, `/cmd` and `!code`
+#' After `[b]` (policy_menu()) no run ends in the foreground, so the follow-ups, `/cmd` and `!code`
 #' lines the REPL held for after it (the reader's `typed` lines) and a T console's draft would be
 #' the next prompts while the run goes on, a prompt a steer of it (route_continue()). As after an
 #' abort (console_queue_left()) they go to the console history, listed once (console_keep();
@@ -285,8 +295,8 @@ console_background_settle = function() {
   console_keep(texts)
 }
 
-#' The REPL whose prompt runs, unless it is piped (`.stdin`, `jsonl`), or NULL: its reader's
-#' `typed` lines are the next prompts (D-242)
+#' The REPL whose prompt runs, or whose `!!gptr_wait()` waits (console_wait()), unless it is piped
+#' (`.stdin`, `jsonl`), or NULL: its reader's `typed` lines are the next prompts (D-242)
 #' @noRd
 console_repl_prompt = function() {
   rs = console_repl_find()
@@ -325,10 +335,13 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
 }
 
 #' The dim line at column 0 that shows a message queued for session `s` (D-242): the queued
-#' glyph, `steer` or `follow-up`, the separator and the text (ASCII `-> steer - <text>`), cut to
-#' three rows; a steer on a CLI route adds `after the CLI's answer`. A line whose text is on screen
+#' glyph, `steer` or `follow-up`, the separator and the text (ASCII `-> steer - <text>`), its lines
+#' joined, on one row as the live row's queue view; a steer on a CLI route adds `after the CLI's
+#' answer`. A message taken back (`taken`)
+#' says `taken back` in place of its kind where its queue line shows, so no line of a withdrawn
+#' steer reads as if it will be sent. A line whose text is on screen
 #' already, right above it, says `the$echoed` in its place: `not an answer` for a line a question
-#' read past (console_typed_ahead()), nothing for the pause menu's [s] and [f] text, which their
+#' read past (console_typed_ahead()), nothing for the pause menu's `[s]` and `[f]` text, which their
 #' question's title names (policy_menu()). Inside an evaluation it has the console's
 #' colours. It is a block of the person's lines (console_gap()), except right under a question
 #' whose read routed it; while an answer of the session's foreground run streams, it waits in the
@@ -337,7 +350,7 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
 #' (a CLI route's kept). Where a T console's composer reads keys, the live row shows the queue
 #' while it is up (D-243), so only a CLI route's steer prints its line then.
 #' @noRd
-console_queue_line = function(s, text, as) {
+console_queue_line = function(s, text, as, taken = FALSE) {
   steer = identical(as, "steer")
   on_cli = steer && identical(session_live(s)$run$model[["type"]], "cli")
   # the live row shows the queue, but not that a CLI route's steer waits for the CLI's answer
@@ -346,9 +359,10 @@ console_queue_line = function(s, text, as) {
   sym = console_style()
   text = the$echoed %||% text
   rows = sym$dim(console_person_rows(sym$queued, paste0(
-    if (steer) "steer" else "follow-up", if (nzchar(text)) paste0(sym$sep, text),
-    if (on_cli) paste0(sym$sep, "after the CLI's answer")
-  ), n = 3L))
+    if (taken) "taken back" else if (steer) "steer" else "follow-up",
+    if (nzchar(text)) paste0(sym$sep, text),
+    if (on_cli && !taken) paste0(sym$sep, "after the CLI's answer")
+  ), n = 1L))
   rec = Find(function(rec) identical(rec$session, s) && console_foreground(rec, tools = TRUE),
              as.list(console_state()$active))
   if (!is.null(rec$md) && identical(rec$last, "text")) {
@@ -395,8 +409,9 @@ policy_flush = function() {
   for (it in items) {
     tryCatch(session_enqueue(it$s, it$text, as = it$as, source = it$source),
              error = function(e) {
-               console_notice("[gptr] the queued message could not be delivered: ",
-                              console_escape(conditionMessage(e), FALSE), .error = TRUE)
+               console_notice(console_style()$red(paste0(
+                 "the queued message could not be delivered: ",
+                 console_escape(conditionMessage(e), FALSE))), .error = TRUE)
              })
   }
   invisible(NULL)
@@ -417,7 +432,10 @@ policy_abort = function(cnd, pol) {
     for (t in rev(targets)) if (policy_active(t$run)) run_abort(t$run, reason = "user")
   })
   console_render_pause()
-  if (!said) console_notice("[gptr] aborted; the session is kept.")
+  if (!said) {
+    sym = console_style()
+    console_notice(sym$dim(paste0("aborted", sym$sep, "the session is kept")))
+  }
   if (identical(pol$mode, "call")) policy_resignal(cnd)
   invisible(NULL)
 }

@@ -372,8 +372,9 @@ test_that("gptr_cancel() aborts a background session and releases its job", {
   gptr_cancel(s)
   expect_identical(s$status, "aborted")
   local_gptr_options(quiet = FALSE)
+  # on a row of its own at R's prompt, in the console's words, named by its prompt (visual round 3)
   expect_message(expect_true(bg_pump_until(function() !bg_has(s$id))),
-                 "finished with status aborted", class = "gptr_message_notice")
+                 "^\nbackground session 'long task' aborted", class = "gptr_message_notice")
   expect_false(s$id %in% gptr_jobs()$id)
 })
 
@@ -431,6 +432,83 @@ test_that("an ask at an idle tick parks the run as waiting until a blocking pump
   expect_true(bg_pump_until(function() !bg_has(s$id)))
 })
 
+# park a manual-mode background session whose fake model never repeats `call`, then resume it
+bg_resume_requests = function(call) {
+  local_scripted_ui(answers = list())
+  local_gptr_options(background_tools = "idle", record = "off", verbose = 0L)
+  fake = gptr_fake_provider(list(call, "done"))
+  s = peter("do it", model = fake, mode = "manual", envir = new.env(), background = TRUE)
+  expect_true(bg_pump_until(function() identical(s$status, "waiting")))
+  reactor_pump(until = function() !(s$status %in% c("running", "waiting")), slice_ms = 50L,
+               timeout = 20)
+  expect_identical(s$status, "idle")
+  expect_length(session_data(s)$queue$steer, 0L)
+  fake$log$requests[[2L]]$messages
+}
+
+test_that("a resumed session is told the user can now approve the call (finding 191)", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  msgs = bg_resume_requests(list(tool = "r", input = list(code = "z = 3")))
+  last = msgs[[length(msgs)]]
+  expect_identical(last$role, "user")
+  expect_match(msg_text(last), paste0("I am at the console now. Repeat the call that could not be ",
+                                      "approved (r: z = 3) with the same input"), fixed = TRUE)
+  roles = vapply(msgs, function(m) m$role, "")
+  denial = msg_text(msgs[[max(which(roles == "tool_result"))]])
+  expect_match(denial, "and the user will be asked. Nothing ran and nobody declined.", fixed = TRUE)
+  expect_false(grepl("choose another approach", denial, fixed = TRUE))
+})
+
+test_that("a resumed session whose ask tool was blocked is told to ask again (finding 191)", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  qs = list(list(id = "q1", question = "Which file?"))
+  msgs = bg_resume_requests(list(tool = "ask", input = list(questions = qs)))
+  last = msgs[[length(msgs)]]
+  expect_identical(last$role, "user")
+  expect_identical(msg_text(last), "I am at the console now; ask again.")
+})
+
+test_that("a message piped into a waiting session is delivered with the console note", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  local_scripted_ui(answers = list())
+  local_gptr_options(background_tools = "idle", record = "off", verbose = 0L)
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "z = 3")), "done"))
+  s = peter("do it", model = fake, mode = "manual", envir = new.env(), background = TRUE)
+  expect_true(bg_pump_until(function() identical(s$status, "waiting")))
+  s |> peter("also say hi")
+  gptr_step(s)
+  expect_identical(s$status, "waiting")
+  gptr_wait(s, timeout = 20)
+  expect_identical(s$status, "idle")
+  texts = vapply(fake$log$requests[[2L]]$messages, msg_text, "")
+  expect_true(any(grepl("also say hi", texts, fixed = TRUE)))
+  expect_true(any(grepl("I am at the console now. Repeat the call", texts, fixed = TRUE)))
+})
+
+test_that("a follow-up queued while a session waits comes after its resumed turn", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  local_scripted_ui(answers = list())
+  local_gptr_options(background_tools = "idle", record = "off", verbose = 0L)
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "z = 3")), "done", "ok"))
+  s = peter("do it", model = fake, mode = "manual", envir = new.env(), background = TRUE)
+  expect_true(bg_pump_until(function() identical(s$status, "waiting")))
+  gptr_steer(s, "LATER QUESTION", as = "follow_up")
+  gptr_wait(s, timeout = 20)
+  texts = lapply(fake$log$requests[2:3], function(r) vapply(r$messages, msg_text, ""))
+  expect_match(texts[[1L]][[length(texts[[1L]])]], "I am at the console now. Repeat the call",
+               fixed = TRUE)
+  expect_false("LATER QUESTION" %in% texts[[1L]])
+  expect_identical(texts[[2L]][[length(texts[[2L]])]], "LATER QUESTION")
+})
+
 test_that("gptr_jobs(kill = TRUE) cancels a waiting background session", {
   skip_on_cran()
   skip_if_not_installed("later")
@@ -473,9 +551,11 @@ test_that("a waiting session that cannot continue is aborted and released", {
                          opts = list(background = TRUE))
   d = session_data(s)
   d$status = "waiting"
+  local_mocked_bindings(run_start = function(...) stop("the model is no longer available"))
   expect_null(bg_resume(s))
   expect_identical(s$status, "aborted")
-  expect_match(s$reason, "could not continue after waiting", fixed = TRUE)
+  expect_match(s$reason, "could not continue after waiting: the model", fixed = TRUE)
+  expect_length(session_data(s)$queue$steer, 0L)
   expect_false(bg_has(s$id))
   expect_null(session_live(s)$background)
 })

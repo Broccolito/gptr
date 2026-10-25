@@ -31,7 +31,7 @@ console_commands = function() {
     gptr_command("mcp", cmd_mcp, "List the MCP servers"),
     gptr_command("permissions", cmd_permissions,
                  paste("Show or change the rules of this R session:",
-                       "/permissions [allow|ask|deny|remove <rule>]")),
+                       "/permissions [<verb> <rule>] (allow, ask, deny or remove)")),
     gptr_command("retry", cmd_retry, "Undo the last turn and send its prompt again")
   )
 }
@@ -56,7 +56,9 @@ command_parse = function(text) {
 #' The line first passes the `input` event with source "repl" (contract 10.4): a hook may handle
 #' it or transform it (into another command, or a prompt sent through `send(text)`). A line that
 #' is still a command goes out on the `console:command` channel (P15 records it as a comment). A
-#' character result is printed escaped, `list(prompt =)` is sent, and an error is reported on
+#' character result is printed escaped (a `cli_ansi_string`, whose untrusted parts its handler
+#' escaped, with its styles), a blank row after it where lines keep the margin, as after a run's
+#' status line, `list(prompt =)` is sent, and an error is reported on
 #' stderr (the input counts as handled).
 #' @return Invisibly "unknown", "error", "prompt" or "done".
 #' @noRd
@@ -72,6 +74,10 @@ console_command = function(text, session = NULL, send = NULL) {
     return(invisible("prompt"))
   }
   ev_dispatch("console:command", list(data = list(text = text)), session = session)
+  if (is.null(registry_get("command", cmd$full, session = session)) &&
+      is.null(registry_get("command", cmd$name, session = session))) {
+    console_templates_sync()
+  }
   spec = registry_get("command", cmd$full, session = session)
   args = cmd$rest
   if (is.null(spec)) {
@@ -94,43 +100,79 @@ console_command = function(text, session = NULL, send = NULL) {
     if (is.function(send)) send(out$prompt)
     return(invisible("prompt"))
   }
-  if (is.character(out)) console_out(out)
+  if (is.character(out)) {
+    lines = if (inherits(out, "cli_ansi_string")) {
+      unlist(strsplit(out, "\n", fixed = TRUE))
+    } else {
+      console_lines(out)
+    }
+    console_notice(paste(lines, collapse = "\n"))
+    if (nzchar(console_pad())) console_write("")
+  }
   invisible("done")
 }
 
-#' The bound history document of `s` (the `doc.site` service, P15), or NULL
+#' Register the prompt templates now (the `templates.sync` service, P17): a session registers
+#' them when it starts, which in the console is after the first prompt (D-252)
+#' @noRd
+console_templates_sync = function() {
+  if (ext_service_has("templates.sync")) ext_service_get("templates.sync")()
+  invisible(NULL)
+}
+
+#' The bound history document of `s`, or the gptr_doc() binding before the console's first
+#' prompt when `s` is NULL (the `doc.site` service, P15), or NULL
 #' @noRd
 cmd_doc_site = function(s) {
-  if (is.null(s) || !ext_service_has("doc.site")) return(NULL)
+  if (!ext_service_has("doc.site")) return(NULL)
   tryCatch(ext_service_get("doc.site")(s), error = function(e) NULL)
 }
 
-#' /help [command]: the commands, the input syntax and the keys, which follow the console as the
-#' banner's do (repl_banner()): Enter, Tab's follow-up and Up where a composer reads keys (class T),
-#' Tab's completion where the REPL completes (after `! /` in RStudio), and what a line typed while
-#' peter works does there; the descriptions in one column
+#' `/help [command]`: the commands, the input syntax and the keys, which follow the console as the
+#' banner's do (repl_banner()): enter, tab's follow-up and up where a composer reads keys (class T),
+#' tab's completion where the REPL completes (after `! /` in RStudio), and what a line typed while
+#' peter works does there; in the banner's type, names bold and keys lower case, every description
+#' starting lower case, in one column, wrapped between a usage's, a key's and the last two words
 #' @noRd
 cmd_help = function(args, ctx) {
   s = ctx$session
+  console_templates_sync()
+  # a description starts as the Input and Keys ones do; an acronym (MCP) stays
+  lower = function(x) sub("^([[:upper:]])(?=[[:lower:]])", "\\L\\1", x, perl = TRUE)
   if (nzchar(args)) {
     nm = sub("^/", "", args)
     spec = registry_get("command", nm, session = s)
     if (is.null(spec)) return(paste0("No command /", nm, "."))
-    return(paste0("/", nm, "  ", spec$description %||% ""))
+    return(paste0("/", nm, "  ", lower(spec$description %||% "")))
   }
   nms = sort(registry_names("command", session = s), method = "radix")
   desc = vapply(nms, function(nm) registry_get("command", nm, session = s)$description %||% "",
                 "", USE.NAMES = FALSE)
-  # the descriptions wrap under one column at the content width (D-225)
+  # styled rows (cli_ansi_string, console_command()): a spec's name and description escaped
+  nms = console_escape(nms, FALSE)
+  desc = console_escape(desc, FALSE)
+  # the descriptions wrap under one column at the content width (D-225), never inside a usage
+  # (`/mode [plan|...]`), a key and its word or the last two words (bound by U+00A0 while wrapping)
   width = cli::console_width() - 2L * nchar(console_pad())
-  dl = function(x, y) formatDL(paste0("  ", x), y, width = width, indent = 19L)
+  nbsp = "\u00a0"
+  bind = function(y) {
+    m = gregexpr("/\\S+ \\[[^]]*\\]| [[:alpha:]]+[.)]?$", y, perl = TRUE)
+    regmatches(y, m) = lapply(regmatches(y, m), function(u) gsub(" ", nbsp, u, fixed = TRUE))
+    y
+  }
+  dl = function(x, y) {
+    rows = formatDL(paste0("  ", x), bind(lower(y)), width = width, indent = 19L)
+    paste0("  ", cli::style_bold(x), substring(gsub(nbsp, " ", rows, fixed = TRUE), nchar(x) + 3L))
+  }
   keys = console_class() == "T"
   done = if (isTRUE(console_repl_find()$reader$complete)) {
     paste0("after ", if (front_end() == "rstudio") "! or /" else "@, !, !!, / or peter$",
            ", complete the word")
   }
   pause = paste0(if (console_menu_available()) {
-    "pause the answer: s steer, f follow-up, c continue, a abort, b background"
+    paste0("pause the answer: ", paste0(c("s", "f", "c", "a", "b"), nbsp,
+                                         c("steer", "follow-up", "continue", "abort", "background"),
+                                         collapse = ", "))
   } else {
     "stop the answer"
   }, "; twice at the prompt leaves")
@@ -143,7 +185,7 @@ cmd_help = function(args, ctx) {
   } else {
     "A line typed while peter works is the next prompt."
   }
-  c("Commands:", dl(paste0("/", nms), desc),
+  cli::ansi_string(c("Commands:", dl(paste0("/", nms), desc),
     "Input:",
     dl(c("text", "!code", "!!code", "```r ... ```", "\"\"\" ... \"\"\""),
        c("a prompt; @file adds a file, @object attaches an object",
@@ -152,8 +194,8 @@ cmd_help = function(args, ctx) {
          "a block of R code (like !)",
          "a multi-line prompt; a trailing \\ also continues a line")),
     "Keys:",
-    dl(c(if (keys) "Enter", if (keys || !is.null(done)) "Tab", if (keys) "Up",
-         console_interrupt_key()),
+    dl(c(if (keys) "enter", if (keys || !is.null(done)) "tab", if (keys) "up",
+         tolower(console_interrupt_key())),
        c(if (keys) {
          paste("send what you typed while peter works as a steer: the agent reads it at its next",
                "step")
@@ -163,16 +205,24 @@ cmd_help = function(args, ctx) {
        } else {
          done
        }, if (keys) "on an empty draft, take back the newest message not yet delivered", pause)),
-    typed)
+    typed))
 }
 
-#' /exit, /quit, /q
+#' /exit, /quit, /q: with background sessions still running it says so, dim in the banner's words,
+#' as their end is noticed at R's prompt (bg_release())
 #' @noRd
 cmd_exit = function(args, ctx) {
   rs = console_repl_find()
   if (is.null(rs)) return("/exit works inside the gptr console.")
   rs$exit = TRUE
-  NULL
+  n = sum(job_list("session")$status == "running")
+  if (!n) return(NULL)
+  sym = console_style()
+  cli::ansi_string(sym$dim(if (n == 1L) {
+    paste0("1 background session still runs", sym$sep, "gptr_wait(gptr_last()) shows it")
+  } else {
+    paste0(n, " background sessions still run", sym$sep, "gptr_jobs() lists them")
+  }))
 }
 
 #' The full id a built-in CLI gets for the reference `ref` to its `default` (contract 11.10), else
@@ -215,7 +265,7 @@ cmd_model = function(args, ctx) {
   paste0("Model: ", args, " (used from the first prompt)")
 }
 
-#' /mode [mode]: on a session from the next turn; before the first prompt for that prompt
+#' `/mode [mode]`: on a session from the next turn; before the first prompt for that prompt
 #' @noRd
 cmd_mode = function(args, ctx) {
   rs = console_repl_find()
@@ -270,7 +320,7 @@ console_env_lines = function(env, pattern = "", n = 30L) {
   c(lines, if (length(nms) > n) paste0("(+ ", length(nms) - n, " more)"))
 }
 
-#' /env [pattern]
+#' `/env [pattern]`
 #' @noRd
 cmd_env = function(args, ctx) {
   rs = console_repl_find()
@@ -281,12 +331,15 @@ cmd_env = function(args, ctx) {
 }
 
 #' `/compact [focus]`, under the interrupt policy (mode "repl": an abort returns NULL); it reports
-#' the token counts of the new compaction entry, as the automatic notice does (console_on_compact())
+#' the token counts of the new compaction entry, as the automatic notice does
+#' (console_compacted()), dim in the status line's terms
 #' @noRd
 cmd_compact = function(args, ctx) {
+  sym = console_style()
+  say = function(...) cli::ansi_string(sym$dim(paste(c(...), collapse = sym$sep)))
   s = ctx$session
-  if (is.null(s)) return("There is no conversation to compact yet.")
-  if (isTRUE(session_live(s)$compacting)) return("Compaction is already in progress.")
+  if (is.null(s)) return(say("nothing to compact yet"))
+  if (isTRUE(session_live(s)$compacting)) return(say("already compacting"))
   compact = ext_service_get("compact.run")
   compactions = function() {
     Filter(function(e) identical(e$type, "compaction"), session_data(s)$entries)
@@ -296,13 +349,9 @@ cmd_compact = function(args, ctx) {
     compact(s, "manual", if (nzchar(args)) args)
     length(compactions()) > before
   }, list(), mode = "repl")
-  if (identical(done, FALSE)) return("Compaction was cancelled.")
-  if (!isTRUE(done)) return("Compaction was interrupted.")
-  e = utils::tail(compactions(), 1L)[[1L]]
-  n = c(e$tokens_before %||% NA_real_, e$details$tokens_after %||% NA_real_)
-  if (anyNA(n)) return("Conversation compacted.")
-  paste0("Conversation compacted: ", format_count(n[[1L]]), " -> ", format_count(n[[2L]]),
-         " tokens.")
+  if (identical(done, FALSE)) return(say("not compacted", "cancelled"))
+  if (!isTRUE(done)) return(say("interrupted"))
+  say(console_compacted(utils::tail(compactions(), 1L)[[1L]]))
 }
 
 #' /cost: the requests, input tokens and cost of the session and its children by agent, then
@@ -366,7 +415,8 @@ cmd_status = function(args, ctx) {
     return(c("session   (none yet: the first prompt starts one)",
              paste0("model     ",
                     cmd_model_label(if (!is.null(rs)) repl_model(rs) else "the default model")),
-             paste0("mode      ", if (!is.null(rs)) repl_mode(rs) else "manual")))
+             paste0("mode      ", if (!is.null(rs)) repl_mode(rs) else "manual"),
+             paste0("document  ", cmd_doc_site(NULL)$path %||% "(none)")))
   }
   d = session_data(s)
   c(paste0("session   ", d$id, "  (", d$status, ", ", d$turns,

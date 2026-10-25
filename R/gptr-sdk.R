@@ -17,13 +17,15 @@ sdk_queued = function(s) {
 }
 
 #' Checks before starting a session's queued input: list(run) when running, NULL when nothing is
-#' queued, else list(cur, safety). A root run's safety record is taken once, here (07 section 5),
-#' and the guards run under it; a refusal leaves the pending call in place and starts nothing.
+#' queued or the session is waiting, else list(cur, safety). A root run's safety record is taken
+#' once, here (07 section 5), and the guards run under it; a refusal leaves the pending call in
+#' place and starts nothing.
 #' @noRd
 sdk_check = function(s) {
   run = sdk_run_of(s)
   if (!is.null(run)) return(list(run = run))
-  if (!sdk_queued(s)) return(NULL)
+  # a waiting session continues only through the background sweep, which adds the console note
+  if (identical(session_data(s)$status, "waiting") || !sdk_queued(s)) return(NULL)
   cur = run_current()
   safety = gateway_run_safety(cur)
   pending = get0(session_data(s)$id, envir = gateway_state()$pending, inherits = FALSE)
@@ -43,6 +45,12 @@ sdk_launch = function(s, chk, envir = NULL) {
   opts = gateway_pending_take(session_data(s)$id)
   if (is.null(opts)) {
     opts = list()
+    # no peter() statement started this turn, so it has no document site to record into
+    if (!is.null(the$doc_binding$path) && !identical(replay_mode(), "replay")) {
+      gptr_inform(paste0("This turn starts from queued input, so it is not recorded in the bound ",
+                         "document. Continue the session with `session |> peter(\"...\")` to ",
+                         "record it."), "notice", .once = "sdk_turn_unrecorded")
+    }
     if (is.null(session_home(s)) && is.environment(envir)) {
       call = call_new(envir = unmask_env(envir), args = list(run = TRUE))
       call_hold(call, s)
@@ -103,7 +111,8 @@ sdk_sessions = function(x, arg = "x") {
 #'
 #' Starts the queued input of an idle session (built with `.run = FALSE`, or given a follow-up
 #' with [gptr_steer()]) and pumps it until `turns` model turns have ended or the run settles. A
-#' running session is advanced the same way.
+#' running session is advanced the same way; a waiting background session is left as it is
+#' ([gptr_wait()] continues it, see [gptr-background]).
 #'
 #' `.run = FALSE` builds a session without making its model request; [gptr_step()] or
 #' [gptr_wait()] starts it. Supply an explicit workspace with `envir =` when results must
@@ -138,9 +147,9 @@ gptr_step = function(s, turns = 1L) {
 #' Wait for sessions to settle
 #'
 #' Starts idle sessions that have queued input, then pumps until no session is running or
-#' waiting, or `timeout` seconds have passed. Every session's egress and replay checks pass before
-#' any is started, so a refusal starts none. On timeout the sessions keep their `running` status
-#' and no condition is raised.
+#' waiting, or `timeout` seconds have passed. Every session's checks (egress, replay, its model's
+#' provider and key) pass before any is started, so a refusal starts none. On timeout the sessions
+#' keep their `running` status and no condition is raised.
 #'
 #' `timeout` limits reactor polling; it does not interrupt R code. Request preparation
 #' and synchronous callbacks finish their current step before the deadline is checked
@@ -180,7 +189,12 @@ gptr_wait = function(x, timeout = Inf) {
     if (!is.null(r)) runs = c(runs, list(r))
   }
   until = sdk_until_settled(ss)
-  if (!until()) sdk_pump(runs, until = until, timeout = timeout)
+  if (!until()) {
+    pump = function() sdk_pump(runs, until = until, timeout = timeout)
+    # the console's R code (`!!gptr_wait(s)`) shows what it waits for (console_wait())
+    wait = console_eval_value(".gptr_console_wait")
+    if (is.function(wait)) wait(ss, pump) else pump()
+  }
   if (inherits(x, "gptr_session") && length(runs) && isTRUE(runs[[1L]]$settled)) {
     gateway_signal(x, runs[[1L]])
   }
@@ -192,7 +206,9 @@ gptr_wait = function(x, timeout = Inf) {
 #' The one enqueue function behind the pipe into a running session, the pause menu and
 #' `ctx$send()`. A steer reaches the model after the current tool results, as "The user sent this
 #' message while you were working: ..."; a follow-up when the agent would otherwise stop. On an
-#' idle session the item is taken when the next run starts.
+#' idle session the item is taken when the next run starts. The queue lives in the R process;
+#' items still queued when it ends are not saved. In a script replayed from its document, a steer
+#' the replayed block already recorded is not sent again.
 #'
 #' @param s A session.
 #' @param text The message (secrets are redacted before it is queued).
@@ -208,7 +224,9 @@ gptr_steer = function(s, text, as = c("steer", "follow_up")) {
   check_string(text, "text")
   kind = check_choice(as, c("steer", "follow_up"), "as")
   session_control_check("gptr_steer", s)
-  session_enqueue(s, redact(as_utf8(text), "context"), as = kind, source = "api_user")
+  if (!replay_note_take(s, text)) {
+    session_enqueue(s, redact(as_utf8(text), "context"), as = kind, source = "api_user")
+  }
   invisible(s)
 }
 
@@ -282,12 +300,19 @@ sdk_off = function(id) {
 #' Designate the result of an agent run
 #'
 #' Called by R code the agent runs (or by you inside a tool) to designate the run's result, which
-#' the session then returns as `$value`. Objects bound in the session's workspace are kept by name
-#' when large (no copy), copied when small; other values are boxed. Outside a run it returns its
-#' argument invisibly and does nothing else, so recorded code that still contains the call runs
-#' cleanly.
+#' the session then returns as `$value`: the newest value designated in any turn, so a turn that
+#' designates nothing keeps it (`$values` lists them by turn; `gptr_return(NULL)` clears it).
+#' Objects bound in the session's workspace are kept by name when large (no copy), copied when
+#' small; other values are boxed. Outside a run it returns its argument invisibly and designates
+#' nothing; the first such call in an R session prints a one-line notice (silent in replay mode,
+#' `replay = "replay"` or `GPTR_REPLAY=replay`, with `options(gptr.quiet = TRUE)` or
+#' `suppressMessages()`).
 #'
-#' @param x The value; a bare name is recorded by name.
+#' @param x The value. A history document records a bare name by name, and any other argument of a
+#'   top-level call (also piped or over several lines) as an assignment to a hidden name in the
+#'   block, which replay reads. Inside another expression (a branch, braces, an assignment or a
+#'   function) such a value is not recorded, nor an earlier one it may replace, and replaying its
+#'   block in a later R session says so once.
 #' @return `NULL` invisibly during a run; `x` invisibly outside a run.
 #' @examples
 #' y = gptr_return(1:3)

@@ -155,7 +155,7 @@ ns_formals_text = function(fun, dots = TRUE) {
   if (!dots) f = f[names(f) != "..."]
   parts = vapply(seq_along(f), function(i) {
     if (identical(f[[i]], quote(expr = ))) return(names(f)[i])
-    paste0(names(f)[i], " = ", paste(deparse(f[[i]], width.cutoff = 500L), collapse = " "))
+    paste0(names(f)[i], " = ", paste(deparse_code(f[[i]], width.cutoff = 500L), collapse = " "))
   }, "")
   paste0("(", paste(parts, collapse = ", "), ")")
 }
@@ -257,7 +257,7 @@ ns_collect_input = function(frame, arg_names, gate_only = FALSE) {
       input[[nm]] = if (is.atomic(expr) && length(expr) == 1L) {
         expr
       } else {
-        substr(paste(deparse(expr, width.cutoff = 60L), collapse = " "), 1L, 80L)
+        substr(paste(deparse_code(expr, width.cutoff = 60L), collapse = " "), 1L, 80L)
       }
       next
     }
@@ -299,7 +299,8 @@ edit_route_document = function(path, edits, session = NULL) {
 ns_routed_patch = function(path, res) {
   if (inherits(res$value, "gptr_patch")) return(res$value)
   d = res$details %||% list()
-  new_gptr_patch(path, format(res), d$diff %||% character(), d$n_edits %||% 1L, d$fuzzy)
+  new_gptr_patch(path, format(res), d$diff %||% character(), d$n_edits %||% 1L, d$fuzzy,
+                 d$reasons %||% character())
 }
 
 #' `peter$edit(path, edits, replace_all = FALSE)`: a `gptr_patch`; an edit the document backend
@@ -314,7 +315,7 @@ member_edit = function(path, edits, replace_all = FALSE) {
     return(ns_routed_patch(path, routed))
   }
   ed = edit_file(path, edits, replace_all = replace_all)
-  new_gptr_patch(path, ed$message, ed$diff, ed$details$n_edits, ed$fuzzy)
+  new_gptr_patch(path, ed$message, ed$diff, ed$details$n_edits, ed$fuzzy, ed$details$reasons)
 }
 
 #' Behaviour of built-in members: `write` and `plot` return invisibly
@@ -929,14 +930,14 @@ member_search = function(words, limit = 8L) {
 }
 
 #' Help lines of a tool spec: signature, description and its schema arguments
-#' Arguments are listed when the schema's properties are `fun`'s formals (read through args()).
+#' Arguments are listed when the schema's properties are among `fun`'s formals (read through
+#' args()); an array lists its items' fields.
 #' @noRd
 ns_tool_help = function(spec) {
   params = if (is.list(spec$parameters)) spec$parameters else ns_formals_schema(spec$fun)
   props = params$properties %||% list()
   req = as.character(unlist(params$required %||% list()))
-  same = !is.function(spec$fun) ||
-    setequal(names(props), setdiff(names(ns_fun_formals(spec$fun)), "..."))
+  same = !is.function(spec$fun) || all(names(props) %in% names(ns_fun_formals(spec$fun)))
   args = if (same && length(props)) {
     vapply(names(props), function(p) {
       pr = props[[p]]
@@ -944,7 +945,10 @@ ns_tool_help = function(spec) {
       paste0("  ", p, " (", paste(unlist(type), collapse = "|"),
              if (p %in% req) ", required" else "", ")",
              if (is.character(pr$description)) paste0(": ", pr$description) else "",
-             if (!is.null(pr$enum)) paste0(" [", paste(unlist(pr$enum), collapse = ", "), "]"))
+             if (!is.null(pr$enum)) paste0(" [", paste(unlist(pr$enum), collapse = ", "), "]"),
+             if (is.list(pr$items) && length(names(pr$items$properties))) {
+               paste0(" [items: ", paste(names(pr$items$properties), collapse = ", "), "]")
+             })
     }, "", USE.NAMES = FALSE)
   }
   c(member_signature(spec), "", spec$description %||% "",
@@ -1245,7 +1249,8 @@ tool_edit_execute = function(input, ctx) {
     return(routed)
   }
   ed = edit_file(input$path, edits, replace_all = isTRUE(input$replace_all %||% input$replaceAll))
-  value = new_gptr_patch(input$path, ed$message, ed$diff, ed$details$n_edits, ed$fuzzy)
+  value = new_gptr_patch(input$path, ed$message, ed$diff, ed$details$n_edits, ed$fuzzy,
+                         ed$details$reasons)
   gptr_tool_result(edit_result_text(ed), details = ed$details, value = value)
 }
 
@@ -1521,10 +1526,13 @@ r_session_helpers_text = paste(
   "peter$find(pattern, path, sort), peter$ls(path), peter$describe(x). peter$search(\"words\") and",
   "peter$help(name) find more."
 )
-r_session_out_text = paste(
-  "- Long output is cut to its head and tail; the notice names peter$out(id) for the rest. Use",
-  "peter$out(), peter$help(), peter$search() and peter$plot() only with record = false."
-)
+# The record = false sentence only with a document bound, when `r` has `record` (r_schema())
+r_session_out_text = function(ctx) {
+  out = "- Long output is cut to its head and tail; the notice names peter$out(id) for the rest."
+  if (is.null(ctx$input$document)) return(out)
+  paste(out, "Use peter$out(), peter$help(), peter$search() and peter$plot() only with",
+        "record = false.")
+}
 
 # Member-only capabilities: descriptions and schemas
 tool_help_description = paste(

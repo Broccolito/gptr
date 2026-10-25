@@ -54,6 +54,48 @@ test_that("offset and limit follow Pi (1-indexed; remaining-lines notice)", {
                fixed = TRUE)
 })
 
+test_that("a final newline ends the last line, as readLines() counts (D-248)", {
+  skip_on_cran()
+  td = withr::local_tempdir()
+  three = file.path(td, "three.txt")
+  writeLines(c("a", "b", "c"), three)
+  expect_identical(read_file(three)$details$lines_total, 3L)
+  v = read_lines_value(three)
+  expect_identical(as.character(v), c("a", "b", "c"))
+  expect_identical(attr(v, "total"), 3L)
+  expect_identical(read_file(three, limit = 2)$text,
+                   "a\nb\n\n[1 more lines in file. Use offset=3 to continue.]")
+  expect_error(read_file(three, offset = 4), "Offset 4 is beyond end of file (3 lines total)",
+               fixed = TRUE)
+  long = file.path(td, "long.txt")
+  writeLines(sprintf("line %d", 1:3000), long)
+  expect_match(read_file(long, offset = 2990, limit = 5)$text,
+               "line 2994\n\n[6 more lines in file. Use offset=2995 to continue.]", fixed = TRUE)
+  writeLines(sprintf("line %d", 1:2500), long)
+  expect_match(read_file(long)$text,
+               "[Showing lines 1-2000 of 2500. Use offset=2001 to continue.]", fixed = TRUE)
+  done = file.path(td, "done.txt")
+  writeLines("done", done)
+  expect_identical(read_file(done, limit = 1)$text, "done")
+  nl = put_file(td, "nl.txt", "\n")
+  v = read_lines_value(nl)
+  expect_identical(as.character(v), "")
+  expect_identical(attr(v, "total"), 1L)
+  crlf = put_file(td, "crlf.txt", "a\r\nb\r\nc\r\n")
+  expect_identical(read_file(crlf)$details$lines_total, 3L)
+  u16 = c(as.raw(c(0xff, 0xfe)), iconv("a\nb\nc\n", "UTF-8", "UTF-16LE", toRaw = TRUE)[[1L]])
+  r = read_file(put_file(td, "u16.txt", u16))
+  expect_identical(r$details$lines_total, 3L)
+  expect_identical(as.character(r$value), c("a", "b", "c"))
+  for (f in c(three, crlf, done, nl)) {
+    small = read_text_window(f, 1L, NULL)
+    big = read_text_window(f, 1L, NULL, big = 0, every = 2L)
+    expect_identical(big$total, small$total, label = basename(f))
+    expect_identical(big$lines, small$lines, label = basename(f))
+  }
+  expect_identical(read_text_window(long, 1L, 5L, big = 0, every = 2L)$total, 2500L)
+})
+
 test_that("images are recognised by magic bytes, not by extension", {
   skip_on_cran()
   td = withr::local_tempdir()
@@ -112,10 +154,10 @@ test_that("CP1252, UTF-16 and BOM files are decoded; the CR of CRLF is not shown
   u16 = c(as.raw(c(0xff, 0xfe)), iconv("h\u00e9llo\n", "UTF-8", "UTF-16LE", toRaw = TRUE)[[1]])
   r = read_file(put_file(td, "utf16.txt", u16))
   expect_identical(charToRaw(sub("\n\n\\[Decoded from UTF-16LE\\]$", "", r$text)),
-                   charToRaw("h\u00e9llo\n"))
+                   charToRaw("h\u00e9llo"))
   expect_identical(r$details$encoding, "UTF-16LE")
   r = read_file(put_file(td, "bom.txt", c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw("a\r\nb\r\n"))))
-  expect_identical(r$text, "a\nb\n")
+  expect_identical(r$text, "a\nb")
   expect_identical(r$details$eol, "\r\n")
   o = read_file(put_file(td, "stray.txt", c(charToRaw("caf\u00e9 ok "), as.raw(0xff),
                                        charToRaw(" end\n"))))$text
@@ -149,15 +191,15 @@ test_that("the streaming index gives the same windows as the in-memory reader", 
   f = put_file(td, "idx.txt",
                 paste0(paste(sprintf("row %d caf\u00e9", 1:1000), collapse = "\n"), "\n"))
   small = read_text_window(f, 1L, NULL)
-  expect_identical(small$total, 1001L)
-  for (off in c(1L, 7L, 8L, 500L, 995L, 1001L)) {
+  expect_identical(small$total, 1000L)
+  for (off in c(1L, 7L, 8L, 500L, 995L, 1000L)) {
     big = read_text_window(f, off, 10L, big = 10, every = 7L)
-    expect_identical(big$lines, utils::head(small$lines[off:1001], 10))
-    expect_identical(big$total, 1001L)
+    expect_identical(big$lines, utils::head(small$lines[off:1000], 10))
+    expect_identical(big$total, 1000L)
   }
   idx = read_line_index(f, size = 3e7, every = 7L)
   expect_identical(read_line_index(f, size = 3e7, every = 7L), idx)
-  expect_identical(idx$total, 1001L)
+  expect_identical(idx$total, 1000L)
 })
 
 test_that("skill:<name>/<path> resolves inside the skill directory only (IC-68)", {
@@ -217,7 +259,7 @@ test_that("a file that starts with BM is an image only with a plausible DIB head
   txt = "BMI notes: body mass index is weight / height^2 in metric units.\n"
   expect_true(is.na(detect_image_mime(charToRaw(txt))))
   r = read_file(put_file(td, "bmi.md", txt))
-  expect_identical(r$text, txt)
+  expect_identical(paste0(r$text, "\n"), txt)
   expect_null(r$image)
   core = raw(32)
   core[1:2] = charToRaw("BM")
@@ -338,8 +380,7 @@ test_that("the streaming reader keeps at most cap bytes of a window and measures
   w = read_text_window(f, 2L, 10L, big = 10, every = 7L, cap = 100)
   expect_identical(w$lines, strrep("z", 100))
   expect_identical(w$first_bytes, 1000)
-  expect_identical(read_text_window(f, 3L, 10L, big = 10, every = 7L, cap = 100)$lines,
-                   c("end", ""))
+  expect_identical(read_text_window(f, 3L, 10L, big = 10, every = 7L, cap = 100)$lines, "end")
 })
 
 test_that("a giant line in a file above 16 MiB is reported like the in-memory reader does", {
@@ -353,19 +394,19 @@ test_that("a giant line in a file above 16 MiB is reported like the in-memory re
   writeBin(charToRaw("\nend\n"), con)
   close(con)
   expect_identical(read_file(p, budget_tokens = 1e6)$text,
-                   "short\n\n[Showing lines 1-1 of 4 (50.0KB limit). Use offset=2 to continue.]")
+                   "short\n\n[Showing lines 1-1 of 3 (50.0KB limit). Use offset=2 to continue.]")
   o = read_file(p, offset = 2, budget_tokens = 1e6)$text
   expect_identical(nchar(strsplit(o, "\n")[[1]][1]), 51200L)
   expect_match(o, "[Line 2 is 17.0MB, exceeds the 50.0KB limit; showing its first 50.0KB.",
                fixed = TRUE)
-  expect_identical(read_file(p, offset = 3)$text, "end\n")
+  expect_identical(read_file(p, offset = 3)$text, "end")
 })
 
 test_that("the sparse index of a non-ASCII path is built and cached in any locale", {
   td = withr::local_tempdir()
   withr::defer(rm(list = ls(read_index_cache), envir = read_index_cache))
   f = resolve_tool_path(put_file(td, "caf\u00e9/x.txt", "a\nb\n"))
-  expect_identical(read_line_index(f, size = 3e7, every = 7L)$total, 3L)
+  expect_identical(read_line_index(f, size = 3e7, every = 7L)$total, 2L)
   expect_identical(read_index_cache$key[[1L]], f)
 })
 

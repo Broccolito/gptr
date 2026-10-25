@@ -107,18 +107,18 @@ test_that("a delivered steer is the person's line at its boundary, before the ne
                          function() length(fake_requests(fake)) == 1L))
   res = typing_console(fake, c("go", "/exit"))
   sym = console_style()
-  queued = which(res$out == queue_line("steer", "use base R"))
+  queued = which(res$out == queue_line("steer", "use base R and log2"))
   shown = which(res$out == paste0(sym$person, " use base R"))
   expect_length(queued, 1L)
   expect_length(shown, 1L)
-  # a message of two lines: the later rows under the text, at column 0 as the person's
-  expect_identical(res$out[c(queued, shown) + 1L],
-                   paste0(strrep(" ", nchar(c(sym$queued, sym$person)) + 1L), "and log2"))
+  # a message of two lines: one queue row, its lines joined (visual round 3); the delivery's later
+  # rows under the text, at column 0 as the person's
+  expect_identical(res$out[shown + 1L], paste0(strrep(" ", nchar(sym$person) + 1L), "and log2"))
   expect_true(all(c(queued, which(res$out == "first")) < shown) &&
                 shown < which(res$out == "second"))
 })
 
-test_that("the person's line is on the band; a queue line is dim and cut to three rows (D-245)", {
+test_that("the person's line is on the band; a queue line is dim and cut to one row (D-245)", {
   skip_on_cran()
   local_console_test()
   local_gptr_options(verbose = 2L)
@@ -138,10 +138,11 @@ test_that("the person's line is on the band; a queue line is dim and cut to thre
   plain = cli::ansi_strip(res$out)
   q = which(startsWith(plain, queue_line("steer", "use")))
   expect_length(q, 1L)
-  queued = res$out[q + 0:2]
-  expect_true(all(startsWith(queued, "\033[38;5;244m")))
-  expect_false(startsWith(res$out[[q + 3L]], "\033[38;5;244m"))
-  expect_true(endsWith(cli::ansi_strip(queued[[3L]]), sym$ellipsis))
+  # one row, as the live row's queue view (visual round 3: three)
+  queued = res$out[[q]]
+  expect_true(startsWith(queued, "\033[38;5;244m"))
+  expect_false(startsWith(res$out[[q + 1L]], "\033[38;5;244m"))
+  expect_true(endsWith(cli::ansi_strip(queued), sym$ellipsis))
   # the delivered message whole, every row on the band, the later rows under the text
   shown = res$out[startsWith(res$out, "\033[48;5;237m")]
   expect_gt(length(shown), 3L)
@@ -151,6 +152,26 @@ test_that("the person's line is on the band; a queue line is dim and cut to thre
   expect_identical(lead, c(paste0(sym$person, " "), rep(strrep(" ", k), length(shown) - 1L)))
   expect_identical(paste(substring(cli::ansi_strip(shown), k + 1L), collapse = " "), long)
   expect_true(all(cli::ansi_nchar(c(queued, shown), type = "width") <= 39L))
+})
+
+test_that("a steer of two lines held in D is one queue row, delivered whole (visual round 3)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  local_live_console("D")
+  withr::local_options(cli.num_colors = 1L, cli.width = 80L)
+  fake = slow_first()
+  local_typed(typed_once(c("first pasted line", "second pasted line"),
+                         function() length(fake_requests(fake)) == 1L))
+  res = typing_console(fake, c("go", "/exit"))
+  # the message's lines joined by a blank on one row, never a row under the queued glyph
+  q = which(startsWith(res$out, queue_line("steer", "")))
+  expect_identical(res$out[q], queue_line("steer", "first pasted line second pasted line"))
+  expect_identical(sum(trimws(res$out) == "second pasted line"), 1L)
+  # its delivery shows the text whole, its second line under its first
+  person = console_style()$person
+  d = match(paste(person, "first pasted line"), res$out)
+  expect_identical(res$out[d + 1L], paste0(strrep(" ", nchar(person) + 1L), "second pasted line"))
 })
 
 test_that("a line queued while an answer streams waits for its block to end (visual review)", {
@@ -250,6 +271,27 @@ test_that("a T console's steer on a CLI route still says it waits for the CLI's 
                      "after the CLI's answer") %in% rows)
 })
 
+test_that("a CLI route's steer taken back says so under its printed line (Task 37)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE, cli.num_colors = 1L, cli.width = 80L)
+  local_mocked_bindings(front_end = function() "terminal")
+  f = local_fake_cli("claude", "toolstream")
+  local_keys(keys_once(c("use base R\r", "\033[A", "\025", "use dplyr\r"),
+                       function() length(fake_log(f, "turn")) == 1L))
+  res = typing_console(f$model, c("go", "/exit"))
+  local_cli_cleanup(res$s)
+  rows = term_rows(paste(res$out, collapse = "\n"))
+  cli = paste0(console_style()$sep, "after the CLI's answer")
+  lines = c(paste0(queue_line("steer", "use base R"), cli), queue_line("taken back", "use base R"),
+            paste0(queue_line("steer", "use dplyr"), cli))
+  at = match(lines, rows)
+  expect_false(anyNA(at) || is.unsorted(at))
+  ops = Filter(function(m) identical(m$role, "operator"), res$s$messages)
+  expect_identical(vapply(ops, msg_text, ""), relay("use dplyr"))
+})
+
 test_that("type_ahead = 'follow_up' sends the line as the next prompt, its own run (D-242)", {
   skip_on_cran()
   local_console_test()
@@ -305,10 +347,14 @@ test_that("the pause menu's [f] in the REPL is the next prompt; a /, ! draft nev
   local_mocked_bindings(front_end = function() "terminal")
   e = new.env()
   fake = gptr_fake_provider(list(list(text = "first", delay = 0.6), "second"))
-  # Ctrl-C twice while the first answer streams: [s] `!zz = 5`, then [f] `then plot it`
+  # Ctrl-C twice while the first answer streams: [s] `!zz = 5`, then [f] `then plot it`; not while
+  # the menu drains fd 0
   pauses = 2L
+  menu = FALSE
   local_typed(function() {
-    if (pauses > 0L && length(fake_requests(fake)) == 1L) {
+    if (!menu && pauses > 0L && length(fake_requests(fake)) == 1L) {
+      menu <<- TRUE
+      on.exit(menu <<- FALSE)
       pauses <<- pauses - 1L
       withRestarts(signalCondition(structure(class = c("interrupt", "condition"),
                                              list(message = "", call = NULL))),
@@ -341,7 +387,7 @@ test_that("a steer a run at max_turns did not take is the next prompt, run 2's u
   err = utils::capture.output({
     res = typing_console(fake, c("go", "/exit"))
   }, type = "message")
-  expect_true(any(grepl("(max_turns)", err, fixed = TRUE)))
+  expect_true(any(grepl("the run stopped after 1 turn", err, fixed = TRUE)))
   reqs = fake_requests(fake)
   expect_length(reqs, 2L)
   roles = vapply(reqs[[2L]]$messages, function(m) m$role, "")
@@ -448,6 +494,17 @@ test_that("/commands and !code typed during a run run after the answer; text sti
   expect_true(any(startsWith(res$out, "session   ")))
 })
 
+test_that("a cursor key typed while a run works is no part of a line (visual round 2)", {
+  skip_on_cran()
+  local_console_test()
+  fake = slow_first()
+  local_typed(typed_once(c("\033[Afoo", "\033OB"), function() length(fake_requests(fake)) == 1L))
+  typing_console(fake, c("go", "/exit"))
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  expect_identical(msg_text(last_message(reqs[[2L]])), relay("foo"))
+})
+
 test_that("lines typed in one batch (a paste) are one message", {
   skip_on_cran()
   local_console_test()
@@ -477,7 +534,7 @@ test_that("an abort sends nothing queued: it goes to the history, listed once (D
     character()
   })
   res = typing_console(fake, c("go", "/exit"), envir = e)
-  expect_true(any(grepl("[gptr] aborted", res$out, fixed = TRUE)))
+  expect_true("aborted - the session is kept" %in% res$out)
   # the prompt, the steer the abort dropped from the queue, the held lines, then the next input
   expect_identical(res$kept, c("go", "use base R", "/status", "!x = 1", "/exit"))
   notice = kept_line(c("use base R", "/status", "!x = 1"))
@@ -512,7 +569,32 @@ test_that("an abort's status line says aborted once; the kept list follows it, t
   expect_length(status, 1L)
   # the person's text at column 0, dim, as the queue lines (visual review)
   expect_identical(rows[status + 1:2], c(kept_line("use base R"), ""))
-  expect_false(any(grepl("[gptr] aborted", rows, fixed = TRUE)))
+  expect_false(any(grepl("the session is kept", rows, fixed = TRUE)))
+})
+
+test_that("a steer held during an answer that the abort drops shows once, kept (visual round 2)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE, cli.num_colors = 1L)
+  local_mocked_bindings(gptr_is_interactive = function() TRUE)
+  words = paste(sprintf("word%02d", 1:40), collapse = " ")
+  fake = gptr_fake_provider(list(list(text = words, chunk = 8L, gap = 0.05)))
+  streaming = function() {
+    any(vapply(as.list(console_state()$active), function(r) identical(r$last, "text"), NA))
+  }
+  # typed while the answer streams, its queue line held for the answer's end; then the abort
+  step = 0L
+  local_typed(function() {
+    if (!streaming()) return(character())
+    step <<- step + 1L
+    if (step == 1L) return("steer the abort drops")
+    signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
+    character()
+  })
+  rows = sub(".*\r", "", typing_console(fake, c("go", "/exit"))$out)
+  expect_false(any(startsWith(rows, queue_line("steer", ""))))
+  expect_identical(sum(rows == kept_line("steer the abort drops", kept = FALSE)), 1L)
 })
 
 test_that("after an error the queued steer is kept in the history, not sent with the next prompt", {
@@ -583,10 +665,8 @@ test_that("a held !code line keeps the lines that complete it, also from a later
   expect_identical(msg_text(last_message(reqs[[2L]])), relay("and steer"))
   expect_identical(e$f(1), 2)
   expect_identical(e$g, 2)
-  # a held !code line and the lines that continue it are one entry, its later rows under the text
-  q = match(queue_line("follow-up", "!f = function(x) {"), res$out)
-  expect_identical(res$out[q + 1L],
-                   paste0(strrep(" ", nchar(console_style()$queued) + 1L), "  x + 1"))
+  # a held !code line and the lines that continue it are one entry, on one row (visual round 3)
+  expect_true(queue_line("follow-up", "!f = function(x) {   x + 1") %in% res$out)
 })
 
 test_that("no fd-0 reads outside a terminal REPL (.stdin, jsonl, peter() with a prompt)", {
@@ -632,11 +712,12 @@ test_that("a T console's call reads keys in character mode; its modes return aft
   expect_true(any(startsWith(err, "Error: ")))
   expect_identical(tty$log, rep(c("-g", char_mode, "SAVED"), 2L))
   expect_null(the$tty)
-  # a D console (TERM=dumb, Emacs) reads whole lines with the echo off (D-221)
+  # a D console (TERM=dumb, Emacs) reads whole lines with the echo off (D-221), and SIGINT leaves a
+  # line being typed in place, for the pause menu to keep (visual round 2)
   local_live_console("D")
   tty$log = character()
   typing_console(fake, c("go", "/exit"))
-  expect_identical(tty$log, c("-g", "-echo", "SAVED"))
+  expect_identical(tty$log, c("-g", "-echo", "noflsh", "SAVED"))
   expect_null(the$tty)
 })
 
@@ -652,7 +733,7 @@ test_that("a terminal call's modes return after an interrupt, also one while stt
     ""
   })
   res = typing_console(slow, c("go", "/exit"))
-  expect_true(any(grepl("[gptr] aborted", res$out, fixed = TRUE)))
+  expect_true("aborted - the session is kept" %in% res$out)
   expect_identical(tty$log, c("-g", char_mode, "SAVED"))
   expect_null(the$tty)
   tty$log = character()
@@ -666,7 +747,7 @@ test_that("a terminal call's modes return after an interrupt, also one while stt
   })
   fake = gptr_fake_provider(list("ok"))
   res = typing_console(fake, c("go", "/exit"))
-  expect_true(any(grepl("[gptr] interrupted", res$out, fixed = TRUE)))
+  expect_true("interrupted" %in% res$out)
   expect_identical(tty$log, c("-g", char_mode, "SAVED"))
   expect_null(the$tty)
 })
@@ -696,6 +777,17 @@ test_that("a question during a terminal call reads with the saved modes, then th
   tty$log = character()
   expect_identical(gptr_readline("peter> ", read), "y")
   expect_identical(tty$log, "read peter> ")
+  # a question that readline reads kept the echo off from its rows on (tty_question()): the echo
+  # comes back as readline starts, which echoes what it reads, and its prompt erases a key the
+  # terminal echoed in that moment; once (visual check of Task 48: the answers were not shown)
+  local_mocked_bindings(console_readline_tty = function() TRUE)
+  the$tty = list2env(list(saved = "SAVED", set = char_mode))
+  tty$log = character()
+  tty_question(TRUE)
+  expect_identical(c(gptr_readline("\u203a ", read), gptr_readline("\u203a ", read)), c("y", "y"))
+  tty_question(FALSE)
+  expect_identical(tty$log, c("SAVED", "-echo", "SAVED", paste0("read \001\r\033[K\002", "\u203a "),
+                              "read \u203a ", char_mode))
 })
 
 test_that("a terminal call's question reads in the saved modes from before its rows (review)", {
@@ -717,6 +809,12 @@ test_that("a terminal call's question reads in the saved modes from before its r
   # the saved modes come before the question's first row, the call's after its answer
   expect_lt(stty[[1L]], min(grep("Allow r?", out, fixed = TRUE)))
   expect_identical(stty[[2L]], length(out))
+  # where readline reads the tty it echoes what it reads, so the saved modes come without the
+  # echo: a key typed while the rows are written is not echoed before the chevron (visual round 1)
+  local_mocked_bindings(console_readline_tty = function() TRUE)
+  rl = local_readline("y")
+  out = utils::capture.output(ui_console_permission(req))
+  expect_identical(out[grep("^<stty", out)][[1L]], "<stty SAVED -echo >")
 })
 
 test_that("a T console's keys edit the draft on the live row; Enter steers (D-242, D-243)", {
@@ -1285,7 +1383,42 @@ test_that("a terminal: keys read with Ctrl-C answer the pause menu (steering rev
   expect_true(pty$wait("peter[auto]> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(pty$seen("Paused. Type"), 0L)
+  expect_identical(pty$seen("not a key"), 0L)
+})
+
+test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (visual round 2)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = TRUE)",
+    "long = paste(c('BEGIN', sprintf('w%02d', 1:99), 'END'), collapse = ' ')",
+    "fake = gptr_fake_provider(function(req) list(text = long, chunk = 8L, gap = 0.1))",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
+  ), term = "dumb")
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("BEGIN"))
+  pty$send("and colour by gear")
+  Sys.sleep(0.5)
+  pty$interrupt()
+  expect_true(pty$wait("Paused"))
+  # above the menu's chevron, kept, so `a` alone answers; Up at the next prompt brings it back
+  expect_true(pty$wait(kept_line("and colour by gear", utf8 = l10n_info()[["UTF-8"]])))
+  pty$send("a\r")
+  expect_true(pty$wait("aborted"))
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("\033[A")
+  expect_true(pty$wait("and colour by gear"))
+  pty$send("\025/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(pty$seen("not a key"), 0L)
+})
+
+test_that("lines read in the drain's mode get the terminal's edits (Task 80's visual check)", {
+  x = structure(c("ab\177c", "ab\bc", "f1 a follow-up\t\025", "one two \027three"), partial = TRUE)
+  expect_identical(tty_line_edit(x), structure(c("ac", "ac", "", "one three"), partial = TRUE))
+  expect_identical(tty_line_edit(character()), character())
 })
 
 test_that("console_typed_split() marks a last line without a line end as partial", {
@@ -1300,12 +1433,15 @@ test_that("a question drains fd 0 before it reads: lines steer, a partial line i
   local_gptr_options(interactive = TRUE)
   tty = local_stty()
   drain = c("-icanon", "min", "0", "time", "0")
+  typed = NULL
   local_mocked_bindings(
     repl_terminal = function(rs) TRUE, console_readline_tty = function() FALSE,
-    # the partial line is read only in the drain's mode
+    # the partial line is read only in the drain's mode, once
     console_typed_lines = function(rd, ...) {
       if (!identical(utils::tail(tty$log, 5L), drain)) return(character())
-      structure(c("steer me", "use base R"), partial = TRUE)
+      x = typed
+      typed <<- character()
+      x
     })
   # the notice quotes the line (typed with the echo off) and names the key (D-245 glyphs); with
   # gptr.history off it says the line was not kept
@@ -1313,6 +1449,7 @@ test_that("a question drains fd 0 before it reads: lines steer, a partial line i
   for (k in 1:2) {
     local_gptr_options(history = k == 1L)
     tty$log = character()
+    typed = structure(c("steer me", "use base R"), partial = TRUE)
     rl = local_readline(c("go", "y", "/exit"))
     e = new.env()
     fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2"), "after"))
@@ -1325,18 +1462,54 @@ test_that("a question drains fd 0 before it reads: lines steer, a partial line i
     reqs = fake_requests(fake)
     expect_length(reqs, 2L)
     expect_identical(msg_text(last_message(reqs[[2L]])), relay("steer me"))
-    # under the question and its keys, right above the chevron, never inside the call's block
-    # (visual review)
+    # the line ended as the question came due steers, its queue line above the question, which
+    # waited for typing to pause, as in T (visual round 3); the partial line is kept under the
+    # question and its keys, right above the chevron, never inside the call's block (visual review)
     at = grep("? Allow r?", out, fixed = TRUE)
-    # the row is erased before them, as the D live row is, so the partial line the terminal echoed
+    expect_true(queue_line("steer", "steer me") %in% out[seq_len(at - 1L)])
+    # the row is erased before it, as the D live row is, so the partial line the terminal echoed
     # once the question turned the echo back on stays off it (review of Tasks 22-27)
     row = term_rows(paste0("se R", out[at + 2L], "\n"))[[1L]]
-    expect_identical(c(trimws(row, "right"), out[at + 3L]),
-                     c(queue_line("steer", "steer me"), notice[[k]]))
-    # the question reads in the saved modes from before its rows, the drain's restored before it
-    # reads; the call's after it
-    expect_identical(tty$log, c("-g", "-echo", "SAVED", "-g", drain, "SAVED", "-echo", "SAVED"))
+    expect_identical(trimws(row, "right"), notice[[k]])
+    # the wait reads in the drain's mode; the question in the saved modes from before its rows, the
+    # drain's restored before it reads; the call's after it
+    expect_identical(tty$log, c("-g", "-echo", "noflsh", "-g", drain, "SAVED", "SAVED", "-g",
+                                drain, "SAVED", "-echo", "noflsh", "SAVED"))
   }
+})
+
+test_that("a D console's question waits for typing to pause; a line finished then steers", {
+  local_console_test()
+  local_gptr_options(interactive = TRUE)
+  tty = local_stty()
+  drain = c("-icanon", "min", "0", "time", "0")
+  # the approval comes while a line is typed: its head is on fd 0, its end and Enter follow, its
+  # edit keys read as typed (the drain's mode turns the terminal's editing off)
+  reads = list(structure("please make the plot sx\177", partial = TRUE), "imple, use a log scale",
+               structure("a draft\025", partial = TRUE))
+  local_mocked_bindings(
+    repl_terminal = function(rs) TRUE, console_readline_tty = function() FALSE,
+    console_typed_lines = function(rd, ...) {
+      if (!identical(utils::tail(tty$log, 5L), drain) || !length(reads)) return(character())
+      x = reads[[1L]]
+      reads <<- reads[-1L]
+      x
+    })
+  rl = local_readline(c("go", "y", "/exit"))
+  e = new.env()
+  fake = gptr_fake_provider(list(fake_tool("r", code = "zz = 2"), "after"))
+  rs = repl_state(NULL, e)
+  rs$model = fake
+  rs$mode = "manual"
+  out = utils::capture.output(repl_main(rs))
+  # the whole line steers the run (visual round 3: its head was kept, its rest answered the
+  # approval), and nothing is kept
+  expect_identical(e$zz, 2)
+  reqs = fake_requests(fake)
+  expect_identical(msg_text(last_message(reqs[[2L]])),
+                   relay("please make the plot simple, use a log scale"))
+  expect_identical(rl$kept, character())
+  expect_false(any(grepl("kept in history", out, fixed = TRUE)))
 })
 
 test_that("a terminal: a question never takes the line typed ahead of it (P28 B, C, H)", {
@@ -1397,7 +1570,7 @@ test_that("a terminal: a question never takes the line typed ahead of it (P28 B,
   expect_true(pty$wait("peter> use base R"))
   pty$send("\025/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(c(pty$seen("kept in history"), pty$seen("Not an answer"),
+  expect_identical(c(pty$seen("kept in history"), pty$seen(pty_reask()),
                      pty$seen("Permission denied"), pty$seen("(typed)")), c(0L, 0L, 0L, 0L))
 })
 
@@ -1445,7 +1618,7 @@ test_that("a terminal: a draft a run left continues at the prompt until sent (P2
   expect_true(pty$wait("peter[auto]> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(c(pty$seen("REQ "), pty$seen("again to leave")), c(2L, 0L))
+  expect_identical(c(pty$seen("REQ "), pty$seen("again leaves")), c(2L, 0L))
 })
 
 test_that("a terminal: keys typed as the idle editor hands over show after the prompt only", {
@@ -1527,7 +1700,7 @@ test_that("a terminal: a question waits a second after the last key; `yes` is no
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
   # a sent draft leaves nothing to keep
-  expect_identical(c(pty$seen("Not an answer"), pty$seen("Permission denied"),
+  expect_identical(c(pty$seen(pty_reask()), pty$seen("Permission denied"),
                      pty$seen("draft kept")), c(0L, 0L, 0L))
 })
 
@@ -1560,7 +1733,43 @@ test_that("a terminal: a line arriving just as a question is drawn steers the ru
   expect_true(pty$wait("peter> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
-  expect_identical(pty$seen("Not an answer"), 0L)
+  expect_identical(pty$seen(pty_reask()), 0L)
+})
+
+test_that("a terminal: an answer typed as a question shows answers it, T and D (visual round 2)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  child = c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE)",
+    # once its rows show, the question first drains fd 0 and then starts readline
+    "for (f in c('ui_console_read', 'ui_draft_kept')) {",
+    "  trace(f, quote(Sys.sleep(2)), print = FALSE, where = asNamespace('gptr'))",
+    "}",
+    "fake = gptr_fake_provider(function(req) {",
+    "  if (req$n <= 2L) return(list(tool = 'r', input = list(code = paste0('zz = ', req$n))))",
+    "  paste0('REQ ', req$messages[[length(req$messages)]]$role, ' END')",
+    "})",
+    "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
+  )
+  for (term in c("xterm-256color", "dumb")) {
+    pty = local_pty_r(child, term = term)
+    expect_true(pty$wait("peter> ", timeout = 120))
+    pty$send("go\r")
+    # `y` arrives before the drain, then before readline starts: each time it is the answer
+    expect_true(pty$wait("Allow r?"))
+    pty$send("y\r")
+    expect_true(pty$wait("Allow r?"))
+    Sys.sleep(3)
+    pty$send("y\r")
+    expect_true(pty$wait("REQ tool_result END"))
+    expect_true(pty$wait("peter> "))
+    pty$send("/exit\r")
+    expect_true(pty$wait("CHILD DONE"))
+    # never queued (`↳ steer · y`, `↳ steer · not an answer`), so never delivered
+    steer = queue_line("steer", "", l10n_info()[["UTF-8"]])
+    expect_identical(c(pty$seen(steer), pty$seen("operator")), c(0L, 0L))
+  }
 })
 
 test_that("a macOS terminal: a block pasted at a question comes back as one prompt", {
@@ -1583,7 +1792,7 @@ test_that("a macOS terminal: a block pasted at a question comes back as one prom
   expect_true(pty$wait("Allow r?"))
   pty$pending()
   pty$send("y\rpasted two\rpasted three\r")
-  expect_true(pty$wait("A pasted block is not an answer (kept in history)."))
+  expect_true(pty$wait("a pasted block is not an answer"))
   expect_true(endsWith(pty$pending(), pty_asked()))
   pty$send("n\r")
   expect_true(pty$wait("REQ tool_result: "))

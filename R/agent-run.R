@@ -387,7 +387,7 @@ freeze_fallback = function(s) {
                                  list(preset = d$preset, t0 = "", t1 = "",
                                       toolsJson = fr$tools_json,
                                       toolNames = I(fr$tool_names), sections = list(),
-                                      model = d$model)))
+                                      model = d$model, mode = d$mode)))
   invisible(fr)
 }
 
@@ -445,22 +445,41 @@ input_insert_blocks = function(input, blocks) {
 
 #' The model record of the next request: a pending `ctx$set_model()` switch first, then the router
 #' (`router.call`, IC-69) for `router:` models, else the session's model
-#' A decision-only model is refused before any request is built (IC-74, D-017).
+#' A decision-only model is refused before any request is built (IC-74, D-017). The run's first
+#' request to the session's model prepares it, as the gateway's checks do (model_prepare()
+#' discovers an Ollama model only without current evidence, D-251).
 #' @noRd
 run_target = function(run) {
   d = session_data(run$shell)
   run_apply_pending_model(run)
   if (startsWith(d$model, "router:")) return(run_route(run, "turn"))
   if (is.null(run$model) || !identical(run$model_key, d$model)) {
-    rec = run_model_resolve(d$model, d$id)
+    rec = run_model_ready(run, d$model)
     stream_chat_model(rec)
+    if (catalog_ollama_route(rec, NULL)) rec = model_prepare(rec$ref, run$opts$safety)
     run$model = rec
     run$model_key = d$model
   }
   if (!is.null(d$thinking)) {
-    run$model$thinking = model_clamp_thinking(run$model$thinking_levels, d$thinking)
+    run$model$thinking = model_clamp_thinking(run$model$thinking_levels, d$thinking, run$model$ref)
   }
   run$model
+}
+
+#' The model record of `ref` for the run's next request: a selected Ollama model is prepared
+#' (discovered when its evidence is missing or stale, then resolved again; 07 section 2), as System
+#' 1 does; a provider registered for the session only is left to provider_stream()'s preflight
+#' @noRd
+run_model_ready = function(run, ref) {
+  sid = session_data(run$shell)$id
+  rec = run_model_resolve(ref, sid)
+  if (!catalog_ollama_route(rec, provider_get(rec$provider)) ||
+      !is.null(registry_model_spec(ref, sid))) {
+    return(rec)
+  }
+  # nothing replay-guards a router's fallback default before this; discovery never replays
+  replay_guard(rec, mode = replay_mode(run[["opts"]][["call"]][["args"]][["replay"]]))
+  model_prepare(ref, safety = stream_safety(NULL, run))
 }
 
 #' Resolve a model reference for a session: P05's catalog, else a provider spec registered for
@@ -482,7 +501,7 @@ run_model_resolve = function(ref, sid) {
       if (level %in% catalog_thinking_levels) {
         rec = session_model_resolve(pr, substr(mid, 1L, pos - 1L))
         if (!is.null(rec)) {
-          rec$thinking = model_clamp_thinking(rec$thinking_levels, level)
+          rec$thinking = model_clamp_thinking(rec$thinking_levels, level, rec$ref)
           return(rec)
         }
       }
@@ -514,7 +533,7 @@ run_route = function(run, reason = "turn") {
   ans = if (inherits(res, "error")) {
     list(why = paste0("failed: ", conditionMessage(res)))
   } else {
-    route_answer(res, d$id)
+    route_answer(res, run)
   }
   path = entries_path(d)
   state = NULL
@@ -522,7 +541,7 @@ run_route = function(run, reason = "turn") {
   if (is.null(rec)) {
     registry_diagnostic("session", "router", "router_fallback",
                         paste0("router ", router, " ", ans$why, "; using the default model"))
-    rec = route_default(router, d)
+    rec = route_default(router, run)
     state = path_custom(path, "gptr.router")$data$state
   } else if (is.list(res)) {
     state = res[["state"]]
@@ -546,12 +565,12 @@ run_route = function(run, reason = "turn") {
 #' The model record of a router's answer (`list(model, thinking, state)` or a model reference),
 #' as `list(rec)`, or `list(why)` when the answer is unusable
 #' @noRd
-route_answer = function(res, sid) {
+route_answer = function(res, run) {
   ref = if (is.list(res)) res[["model"]] else res
   if (!rlang::is_string(ref) || !nzchar(ref)) {
     return(list(why = "gave no model"))
   }
-  rec = tryCatch(run_model_resolve(ref, sid), error = function(e) e)
+  rec = tryCatch(run_model_ready(run, ref), error = function(e) e)
   if (inherits(rec, "error")) {
     return(list(why = paste0("chose a model that does not resolve (", ref, "): ",
                              conditionMessage(rec))))
@@ -562,20 +581,20 @@ route_answer = function(res, sid) {
   }
   th = if (is.list(res)) res[["thinking"]] else NULL
   if (rlang::is_string(th)) {
-    rec$thinking = model_clamp_thinking(rec$thinking_levels, th)
+    rec$thinking = model_clamp_thinking(rec$thinking_levels, th, rec$ref)
   }
   list(rec = rec)
 }
 
 #' The default chat model a router falls back to (a decision-only default is refused)
 #' @noRd
-route_default = function(router, d) {
+route_default = function(router, run) {
   ref = model_default("chat")
   if (is.null(ref)) {
     gptr_abort(paste0("router ", router, " gave no model and no default model is configured"),
-               "unknown_model", ref = d$model, suggestions = character())
+               "unknown_model", ref = session_data(run$shell)$model, suggestions = character())
   }
-  rec = run_model_resolve(ref, d$id)
+  rec = run_model_ready(run, ref)
   stream_chat_model(rec)
   rec
 }
@@ -616,7 +635,7 @@ request_fallback = function(run, target) {
   msgs = images_elide(s, msgs, target)
   tools = lapply(fr$tool_names %||% character(), function(n) tool_lookup(n, d$id))
   tools = Filter(Negate(is.null), tools)
-  max_out = suppressWarnings(as.numeric(target$max_output %||% NA))
+  max_out = model_output_cap(target[["context"]], target[["max_output"]])
   context = list(system = list(t0 = fr$t0 %||% "", t1 = fr$t1 %||% ""),
                  tools_json = json_verbatim(fr$tools_json %||% "[]"), tools = tools,
                  messages = msgs,
@@ -1103,7 +1122,10 @@ run_request = function(run, check_compact = TRUE) {
   if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
   req = run_build(run, target)
   hit = budget_check(s, req$tokens_est)
-  if (!is.null(hit) && !run_budget_extend(run, hit)) return(run_stop_budget(run, hit))
+  while (!is.null(hit)) {
+    if (!run_budget_extend(run, hit)) return(run_stop_budget(run, hit))
+    hit = budget_check(s, req$tokens_est)
+  }
   if (ext_service_has("prefix.guard")) {
     # gptr.check_prefix = "error" (04 section 3.1) ends the run; other failures are diagnostics
     tryCatch(ext_service_get("prefix.guard")(s, target, req$view), error = function(e) {
@@ -1210,16 +1232,20 @@ run_on_done = function(run, msg) {
 }
 
 #' Account, append and hand the response to the loop (or to recovery when it failed)
-#' Reported usage is kept as reported, unknown counts NA (IC-74); only a reply with no count at all
-#' is estimated (`estimated = TRUE`, 04 section 4.3).
+#' Reported usage is kept as reported, unknown counts NA (IC-74); a reply with no count at all is
+#' estimated (`estimated = TRUE`, 04 section 4.3), unless no provider bills it (D-251).
 #' @noRd
 run_response = function(run, msg) {
   s = run$shell
   d = session_data(s)
   run_flush_deltas(run)
   if (!run_usage_reported(msg[["usage"]])) {
-    msg$usage = usage_new(input = run$tokens_est %||% 0,
-                          output = est_tokens(msg_text(msg), "prose"), estimated = TRUE)
+    msg$usage = if (run_unbilled(run, msg)) {
+      usage_new(input = 0, output = 0)
+    } else {
+      usage_new(input = run$tokens_est %||% 0, output = est_tokens(msg_text(msg), "prose"),
+                estimated = TRUE)
+    }
   }
   row = usage_row(msg, session = d$id, agent = run$opts$agent %||% "main",
                   parent_id = d$parent_id %||% NA_character_, started = run$request_started,
@@ -1258,6 +1284,16 @@ run_usage_reported = function(usage) {
   counts = vapply(c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h"),
                   function(f) as.numeric(u[[f]]), 1)
   any(!is.na(counts) & counts > 0)
+}
+
+#' Did no provider bill a failed reply? It has no content, and its request was rejected (an HTTP
+#' status of 400 or more) or never received (a network error or connect timeout) (D-251)
+#' @noRd
+run_unbilled = function(run, msg) {
+  if (!identical(msg[["stop_reason"]], "error") || length(msg[["content"]])) return(FALSE)
+  st = err_status(run$last_error)
+  if (!is.na(st)) return(st >= 400L)
+  err_class(run$last_error) %in% c("network", "timeout_connect")
 }
 
 #' Recovery of a failed request: one compact-and-retry on overflow, at most two agent-level
@@ -1302,11 +1338,11 @@ run_overflow_stop = function(run, msg) {
 }
 
 #' The prompt tokens the provider reported for an overflowing request, else NA: gptr's own
-#' estimate (`estimated = TRUE`) is not the provider's count (IC-74)
+#' estimate (`estimated = TRUE`) and the zeros of an unbilled request are not its count (IC-74)
 #' @noRd
 run_overflow_tokens = function(msg) {
   u = msg[["usage"]]
-  if (!is.list(u) || isTRUE(u[["estimated"]])) return(NA_real_)
+  if (!is.list(u) || isTRUE(u[["estimated"]]) || !run_usage_reported(u)) return(NA_real_)
   overflow_count(u, "input")
 }
 
@@ -1411,6 +1447,19 @@ run_budget_amount = function(kind, x) {
   switch(kind, tokens = format_count(x), cost = format_cost(x), format(x))
 }
 
+#' Why a budget stops the run: the next request's estimate when it, not the usage, crosses a token
+#' budget; else the budget reached
+#' @noRd
+run_budget_reason = function(hit) {
+  amt = function(x) run_budget_amount(hit$kind, x)
+  if (identical(hit$kind, "tokens") && hit$used < hit$budget) {
+    return(paste0("the next request (~", amt(hit$estimate), " tokens) would exceed the tokens ",
+                  "budget of this call (", amt(hit$budget), "; used ", amt(hit$used), ")"))
+  }
+  paste0("the ", hit$kind, " budget of this call (", amt(hit$budget), ") is reached (used ",
+         amt(hit$used), ")")
+}
+
 #' Ask to extend a reached budget by the same amount (ask_human: the run's UI only)
 #' @noRd
 run_budget_extend = function(run, hit) {
@@ -1418,9 +1467,9 @@ run_budget_extend = function(run, hit) {
   ui = run_ui(run)
   if (is.null(ui) || !isTRUE(tryCatch(ui$has_ui(), error = function(e) FALSE))) return(FALSE)
   who = agent_label(run)
-  title = paste0(if (!identical(who, "main")) paste0("sub-agent ", who, ": "), "The ", hit$kind,
-                 " budget of this call (", run_budget_amount(hit$kind, hit$budget),
-                 ") is reached.")
+  reason = run_budget_reason(hit)
+  title = paste0(if (!identical(who, "main")) paste0("sub-agent ", who, ": "),
+                 toupper(substr(reason, 1L, 1L)), substring(reason, 2L), ".")
   ans = tryCatch(ui$select(title, c("Extend it by the same amount", "Stop the run"), default = 2L),
                  error = function(e) NA_integer_)
   if (!identical(suppressWarnings(as.integer(ans)), 1L)) return(FALSE)
@@ -1440,14 +1489,11 @@ run_budget_extend = function(run, hit) {
 run_stop_budget = function(run, hit) {
   s = run$shell
   d = session_data(s)
-  session_append(s, entry_custom("gptr.budget", list(kind = hit$kind, budget = hit$budget,
-                                                     used = hit$used)))
-  run_emit(run, "budget_exceeded", kind = hit$kind, budget = hit$budget, used = hit$used)
-  run$condition = gptr_condition(
-    paste0("the ", hit$kind, " budget of this call (", run_budget_amount(hit$kind, hit$budget),
-           ") is reached (used ", run_budget_amount(hit$kind, hit$used), ")"),
-    c(paste0("budget_", hit$kind), "budget"), "error",
-    list(kind = hit$kind, budget = hit$budget, used = hit$used, session = d$id))
+  session_append(s, entry_custom("gptr.budget", hit))
+  run_emit(run, "budget_exceeded", kind = hit$kind, budget = hit$budget, used = hit$used,
+           estimate = hit$estimate)
+  run$condition = gptr_condition(run_budget_reason(hit), c(paste0("budget_", hit$kind), "budget"),
+                                 "error", c(hit, list(session = d$id)))
   run_settle(run, "budget")
 }
 
@@ -1458,7 +1504,9 @@ run_stop_budget = function(run, hit) {
 #' settlement cancel a job that has not started
 #' @noRd
 run_tools = function(run, act) {
-  calls = lapply(act$calls, function(b) call_record(run, b))
+  # what the model was offered: the frozen array and every tool_change addition (D-248)
+  offered = names(prompt_tools_known(run$shell, run_data(run)$frozen)$decls)
+  calls = lapply(act$calls, function(b) call_record(run, b, offered))
   run$status = "tools"
   run$busy = TRUE
   job = function() {
@@ -1516,7 +1564,8 @@ run_settle = function(run, reason) {
   if (!is.null(run$accounting_error)) status = "error"
   if (identical(status, "max_turns") && is.null(run$condition)) {
     run$condition = gptr_condition(
-      paste0("the run stopped after ", run$max_turns, " turns (max_turns)"), "max_turns", "error",
+      paste0("the run stopped after ", run$max_turns, if (identical(run$max_turns, 1L)) " turn" else
+               " turns"), "max_turns", "error",
       list(max_turns = run$max_turns, session = d$id))
   }
   if (identical(status, "error") && is.null(run$condition)) {
@@ -1780,7 +1829,7 @@ ctx_kernel = function() {
       if (is.null(run) || isTRUE(run$settled)) {
         kernel_model_switch(s, ref, thinking, reason)
       } else {
-        kernel_model_ref(ref, thinking)
+        kernel_model_ref(ref, thinking, session_data(s)$id)
         run$pending_model = list(ref = ref, thinking = thinking, reason = reason)
       }
       invisible(NULL)
@@ -1901,8 +1950,8 @@ ctx_state_restorable = function(prior) {
 #' Pure resolution (IC-74) that refuses what session_set_model() refuses (D-017); the level
 #' travels as a `:<level>` suffix, except for a router, which chooses its own.
 #' @noRd
-kernel_model_ref = function(ref, thinking = NULL) {
-  m = model_canonical(ref, strict = TRUE)
+kernel_model_ref = function(ref, thinking = NULL, session = NULL) {
+  m = model_canonical(ref, strict = TRUE, session = session)
   stream_chat_model(m)
   if (is.null(thinking) || startsWith(m$ref, "router:")) return(ref)
   paste0(m$ref, ":", thinking)
@@ -1911,7 +1960,7 @@ kernel_model_ref = function(ref, thinking = NULL) {
 #' Switch a session's model (and thinking level) now: one `model_change` entry and `model_select`
 #' @noRd
 kernel_model_switch = function(s, ref, thinking = NULL, reason = "plugin") {
-  target = kernel_model_ref(ref, thinking)
+  target = kernel_model_ref(ref, thinking, session_data(s)$id)
   session_set_model(s, target, reason)
   if (!is.null(thinking) && startsWith(target, "router:")) {
     d = session_data(s)

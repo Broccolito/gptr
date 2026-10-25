@@ -703,8 +703,8 @@ gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversatio
 #' abandoned branches): `turn`; `id`, the last entry of the turn (pass it as `to` to
 #' `gptr_rewind()`); `time`, when the prompt was sent (local time); `prompt` (its first 60
 #' characters); `objects` and `files`, `"changed/restorable"` counts; `held_mb` and `disk_mb`,
-#' megabytes of object pre-images held in memory and on disk; and `branch` (`"active"` or
-#' `"abandoned"`).
+#' megabytes (2^20 bytes) of object pre-images held in memory and on disk; and `branch`
+#' (`"active"` or `"abandoned"`).
 #' @param all Also list the turns of abandoned branches.
 #' @rdname gptr_rewind
 #' @order 2
@@ -762,7 +762,7 @@ ckpt_turn_counts = function(cps, ck) {
   }
   index = if (is.null(ck)) ckpt_index_empty() else ck$obj$index
   img = index[index$frag %in% ckpt_chr(lapply(frags, function(f) f$objects$id)), , drop = FALSE]
-  mb = function(where) round(sum(img$bytes[img$where == where], na.rm = TRUE) / 1e6, 3)
+  mb = function(where) round(sum(img$bytes[img$where == where], na.rm = TRUE) / 2^20, 3)
   list(objects = count("objects"), files = count("files"), held_mb = mb("memory"),
        disk_mb = mb("disk"))
 }

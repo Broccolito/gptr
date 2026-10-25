@@ -293,6 +293,9 @@ test_that("completion comes only after @, !, !!, / and peter$, in full words (IC
   got = lapply(names(cases), console_complete)
   names(got) = names(cases)
   expect_identical(got, cases)
+  # a bare / gives the commands and /skill: once; skill names only after /skill: (visual round 3)
+  expect_identical(console_complete("/"), c("/help", "/mode", "/model", "/plug:run", "/skill:"))
+  expect_identical(console_complete("/s"), "/skill:")
   # objects first, then files and directories; dot names only when typed
   expect_identical(console_complete("@"),
                    c("@mtcars_copy", "@my_long_object_name", "@analysis_notes.R", "@data/"))
@@ -318,6 +321,17 @@ test_that("/skill: completes the project's skills before the first prompt (Task 
   expect_identical(console_complete("/skill:ti"), "/skill:tidy-up")
 })
 
+test_that("/ completes the project's template commands before the first prompt (D-252)", {
+  withr::defer(res_prune("prompts:", character()))
+  local_project(list(".gptr/prompts/check.md" = "Check $1."), trust = TRUE)
+  res_prune("prompts:", character())
+  rs = repl_state(NULL, new.env())
+  rs$reader = console_reader()
+  rs$reader$complete = TRUE
+  .gptr_repl = rs
+  expect_identical(console_complete("/ch"), c("/check", "/checkpoints"))
+})
+
 test_that("R's completion through the adapter gives the table's words as its token's (IC-81)", {
   .gptr_repl = local_completing_repl()
   # RStudio and Windows: utils guesses the token (`mo` after /, `a` after /)
@@ -332,6 +346,25 @@ test_that("R's completion through the adapter gives the table's words as its tok
   expect_identical(host_complete("@data/a", "@data/a"), "@data/a.csv")
   expect_identical(host_complete("summarise the da", "da"), character())
   expect_true("summary" %in% host_complete("!summ", "summ"))
+})
+
+test_that("R's readline gets one completion; several adding nothing are listed (visual round 3)", {
+  .gptr_repl = local_completing_repl()
+  withr::local_options(cli.num_colors = 1L, cli.width = 80L)
+  f = console_completer(NULL, "peter> ")
+  # the common head: readline completes it and lists nothing, so it never pages
+  got = NULL
+  out = utils::capture.output({
+    got = host_complete("/mo", "/mo", f)
+  })
+  expect_identical(got, "/mode")
+  expect_identical(out, character())
+  # where it adds nothing, one row at column 2, then the prompt and the line, the cursor at its end,
+  # and none for readline, whose next Tab would list it below the prompt
+  out = written(function() expect_identical(host_complete("/mode", "/mode", f), character()))
+  expect_identical(out, "\033[0m\r\n  /mode  /model\033[K\r\npeter> /mode")
+  # RStudio's and Windows' consoles list in their own way (no prompt)
+  expect_identical(host_complete("/mode", "/mode"), c("/mode", "/model"))
 })
 
 test_that("Windows' console completion completes only the triggers (IC-81)", {
@@ -508,14 +541,23 @@ test_that("a terminal: Tab completes after @, / and ! and never natural language
   pty$send("\r")
   expect_true(pty$wait("GOT[use @mtcars_copy]"))
   expect_true(pty$wait("peter> "))
-  # a second Tab lists the commands, never R's rep or readline
+  # a Tab that adds nothing lists the commands, never R's rep: one row at column 2, as the composer
+  # lists them, then the prompt and the line again; readline lists nothing, so it never pages
+  # (visual round 3: its list paged at `--More--` and took the next keys)
   pty$send("/re\t")
   Sys.sleep(0.5)
-  pty$send("\t")
+  listed = pty$pending()
+  expect_match(listed, "[\r\n]+  /redo  /resume  /retry  .*/rewind[^\r\n]*[\r\n]+peter> /re")
+  expect_no_match(listed, "/rep", fixed = TRUE)
+  # a bare / lists the commands and /skill: once, on one row cut with the ellipsis
+  pty$send("\025/\t")
   Sys.sleep(0.5)
   listed = pty$pending()
-  expect_match(listed, "/redo +/resume +/retry .*/rewind")
-  expect_no_match(listed, "/rep", fixed = TRUE)
+  ell = if (l10n_info()[["UTF-8"]]) "\u2026" else "..."
+  row = utils::tail(grep("^  /", strsplit(listed, "[\r\n]+")[[1L]], value = TRUE), 1L)
+  expect_false(startsWith(row, "  /redo"))
+  expect_true(endsWith(row, ell))
+  expect_no_match(listed, "--More--", fixed = TRUE)
   # /mo completes /mode, a command
   pty$send("\025/mo\t")
   Sys.sleep(0.5)

@@ -30,13 +30,6 @@ local_no_fd0 = function(.env = parent.frame()) {
                                   tty_query = function(query, ...) "", .env = .env)
 }
 
-# The style table's UTF-8 glyphs (D-245): cli's unicode output, and no Windows console, where
-# console_style() gives ASCII outside Windows Terminal and RStudio
-local_utf8_glyphs = function(.env = parent.frame()) {
-  withr::local_options(cli.unicode = TRUE, .local_envir = .env)
-  testthat::local_mocked_bindings(is_windows = function() FALSE, .env = .env)
-}
-
 # A console test: a temporary project, no history, no document recording questions, no fd 0
 local_console_test = function(.env = parent.frame()) {
   local_project(.env = .env)
@@ -97,6 +90,10 @@ local_console_stdin = function(lines, .env = parent.frame()) {
 # prompt, `>>` where the child's output, in this process's locale, is not UTF-8
 pty_asked = function() paste0("\n", if (l10n_info()[["UTF-8"]]) "\u203a" else ">>", " ")
 
+# The start of an approval's row for an invalid answer in a pty child (ui_reask()), which a queue
+# line's `not an answer` (a line typed before the question) never is
+pty_reask = function() paste0("not an answer", if (l10n_info()[["UTF-8"]]) " \u00b7 " else " - ")
+
 # The first row of the line that shows a queued message (D-242), in console_style()'s glyphs;
 # `utf8 = l10n_info()[["UTF-8"]]` gives a pty child's
 queue_line = function(kind, text, utf8 = cli::is_utf8_output()) {
@@ -112,11 +109,25 @@ kept_line = function(texts, kept = TRUE, utf8 = cli::is_utf8_output()) {
   queue_line(kind, paste(texts, collapse = sym$sep), utf8)
 }
 
+# Skips a test that sends SIGINT where this process ignores it, as a background job (`&`, nohup) of
+# a shell without job control does: its children inherit that
+skip_if_sigint_ignored = function() {
+  sigint = tryCatch({
+    tools::pskill(Sys.getpid(), tools::SIGINT)
+    for (i in 1:1e5) NULL
+    FALSE
+  }, interrupt = function(e) TRUE)
+  testthat::skip_if_not(sigint, "SIGINT is ignored in this process")
+}
+
 # Terminal R in a pty (80x24, TERM `term`, echo on as in a terminal unless `echo` is FALSE) that
 # loads gptr and sources `child`, the child's code (its options too). `send(x)` types; `wait(x)`
 # reads until `x` is shown and consumes the output through it, so the next wait() looks after it;
-# `pending()` reads for 0.5 s and returns what followed, its escapes dropped; `all` keeps
-# everything shown and `seen(x)` counts `x` in it. The child dies with the test.
+# `pending()` reads for 0.5 s and returns what followed, its escapes and a CR at a row's start (a
+# question's prompt clears its row, tty_question()) dropped; `all` keeps
+# everything shown and `seen(x)` counts `x` in it; `interrupt()` sends SIGINT, as a terminal's
+# Ctrl-C does where isig is on (the pty is not the child's controlling terminal, so `\003` is not).
+# The child dies with the test.
 local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = parent.frame()) {
   dir = withr::local_tempdir("gptr-pty-", .local_envir = .env)
   script = file.path(dir, "child.R")
@@ -147,6 +158,7 @@ local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = paren
     pty$out = paste0(pty$out, x)
   }
   pty$send = function(x) p$write_input(x)
+  pty$interrupt = function() p$interrupt()
   pty$wait = function(x, timeout = 30) {
     deadline = Sys.time() + timeout
     repeat {
@@ -162,7 +174,7 @@ local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = paren
   pty$pending = function() {
     deadline = Sys.time() + 0.5
     while (Sys.time() < deadline) read(50L)
-    gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$out)
+    gsub("\n\r", "\n", gsub("\033\\[[0-9;?]*[A-Za-z]", "", pty$out), fixed = TRUE)
   }
   pty$seen = function(x) sum(gregexpr(x, pty$all, fixed = TRUE, useBytes = TRUE)[[1L]] > 0L)
   pty$wait("> ")

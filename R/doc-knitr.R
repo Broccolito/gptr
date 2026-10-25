@@ -37,15 +37,21 @@ doc_history_knit_print = function(x, ...) {
 }
 
 #' Recorded code of a session's last turn when it ran live (replayed sessions, teams and
-#' fan-outs show none: their code is in the agent chunk)
+#' fan-outs show none: their code is in the agent chunk), with the id of the turn's newest block
+#' filled in (doc_fill_id())
 #' @noRd
 doc_knit_code = function(s) {
   d = session_data(s)
   if (isTRUE(d$replayed) || d$kind %in% c("team", "fanout", "replayed")) return(character())
   n = as.integer(d$turns %||% 0L)
   if (!n) return(character())
-  tb = doc_turn_body(doc_turn_entries(s, n), with_out = FALSE)
-  tb$body[!grepl("^#", tb$body)]
+  ents = doc_turn_entries(s, n)
+  id = NULL
+  for (e in ents) {
+    if (identical(e$custom_type, "gptr.doc_block")) id = e$data$block %||% id
+  }
+  body = doc_fill_id(doc_turn_body(ents, with_out = FALSE)$body, id)
+  body[!grepl("^#", body)]
 }
 
 #' Skip the chunk with this label for the rest of the knit: a label hook (chaining any existing

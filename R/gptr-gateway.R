@@ -24,15 +24,28 @@
 #' unnamed string literal, else the first unnamed length-1 character value), and context objects
 #' (unnamed ones are labeled by their expression, named ones by name). Conversational context
 #' bindings refer to objects where they live; descriptions are budgeted separately from
-#' in-memory R computation. Every other argument is matched by its exact name only.
+#' in-memory R computation. Every other argument is matched by its exact name only: a named
+#' object whose name abbreviates one and whose value fits it, such as `mo = "plan"`, stays context
+#' and warns (`gptr_warning_partial_name`).
 #'
 #' A literal prompt gets `{name}` interpolation from `envir` (atomic vectors of 1 to 50 values;
 #' `{{` and `}}` are literal braces); `.opts = list(interpolate = FALSE)` switches it off.
 #'
 #' Terminal statuses become conditions carrying the session as `$session`: `error` signals
-#' `gptr_error_provider`, `blocked` `gptr_error_permission`, `budget` `gptr_error_budget_<kind>`
-#' and `max_turns` `gptr_error_max_turns`. `peter()` with no prompt opens the console when someone
-#' can answer, and signals `gptr_error_noninteractive` otherwise.
+#' `gptr_error_provider`, `blocked` `gptr_error_permission` (`gptr_error_noninteractive` when the
+#' `ask` tool has no one to answer), `budget` `gptr_error_budget_<kind>` and `max_turns`
+#' `gptr_error_max_turns`. A team (`agents =`) or fan-out (`parallel =`) takes the
+#' status of its first member that did not end idle, with `$reason` naming each such member; when
+#' no member ended idle it signals that member's condition with the team as `$session`. A call
+#' whose model cannot be reached (no egress acknowledgement, replay mode, a disabled provider, a
+#' missing key) is refused before its run: no turn, no model or mode switch, no new
+#' [gptr_last()] and no `$session`. So is a call with an unknown plugin or `skills =` name,
+#' `.opts$images` its model does not take, or a secret-looking prompt you decline to send. A piped
+#' call loads its `extensions`, `plugins` and specs first, since they can define that model, and
+#' unloads them again when it is refused or interrupted before its turn starts; registry filters
+#' (`plugins = "-x"`) stay on the R session only once a call is accepted. `peter()` with no
+#' prompt opens the console when someone can answer, and signals `gptr_error_noninteractive`
+#' otherwise.
 #'
 #' A new interactive console without an explicit or configured model first offers CLI selection
 #' or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;
@@ -49,9 +62,9 @@
 #'
 #' @section Sessions and results:
 #' A pipe such as `session |> peter("Explain the result.")` adds work to the same session
-#' and kept workspace. Use [gptr_fork()] to branch explicitly. The final answer is
-#' `session$text`; `session$value` is the R value selected by [gptr_return()] during a tool
-#' call. Agent-created objects remain in `envir`.
+#' and kept workspace. Use [gptr_fork()] to branch explicitly. The last turn's answer is
+#' `session$text`; `session$value` is the newest R value selected by [gptr_return()] in any turn,
+#' so a turn that selects none keeps it. Agent-created objects remain in `envir`.
 #'
 #' @usage
 #' peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
@@ -66,27 +79,59 @@
 #'   such as [gptr_fake_provider()], or `NULL` for the configured default. A call made by the
 #'   agent's own R code, and a team or fan-out it starts, uses the running session's model instead.
 #' @param mode One of `plan`, `manual`, `edits`, `auto`, `yolo`; `NULL` for the configured default.
+#'   The plan a `plan` run proposes goes once, as a `<plan>` block, to the next top-level
+#'   `peter()` call from the same environment, within an hour and in another mode, whatever that
+#'   call asks: a script runs the plan with `peter("Go ahead.", mode = auto)`. Another `peter()`
+#'   call first, or a next call inside a loop or a run, discards it;
+#'   `options(gptr.plan_handoff = FALSE)` turns the hand-off off.
 #' @param skills,plugins,extensions Names (bare or quoted) of skills to preload, plugins and
 #'   extensions to enable for this session; `extensions` also takes `function(gptr)` factories and
 #'   file paths.
-#' @param tools Tool names, `"+name"`/`"-name"` modifiers, a preset name, or [gptr_tool()] specs.
+#' @param tools Tool names, `"+name"`/`"-name"` modifiers, one preset name, or [gptr_tool()] specs.
+#'   A bare tool name adds the tool, like `"+name"`; to narrow the set, choose a preset such as
+#'   `readonly` or remove tools with `"-name"`. A name that is neither a tool nor a preset is
+#'   refused.
 #' @param agents A named list of agent definitions for a team (`agent()` means [gptr_agent()]).
+#'   A decision model refuses it and `parallel`: it answers in one call.
 #' @param parallel Fan one list-like context object out over this many concurrent sub-agents.
 #'   Each child gets its element alone as `.x`, a named list of one attached as `.x[["A"]]`;
 #'   `.opts = list(context = "none")`, which would drop it, is refused. A child that succeeds
 #'   keeps only the values it returned with [gptr_return()], so they must be self-contained.
-#' @param choices,levels,threshold,min_confidence,uncertain System 1 answer shape and abstention.
+#' @param choices,levels,threshold System 1 answer shape, for a decision model (`jev`,
+#'   `"ollama/clef-flash"`; after `gptr_config(system1 = "emulate:<ref>")`, `model = jev` runs it
+#'   through a chat model). A conversational model refuses them, `min_confidence` and `uncertain`
+#'   (`threshold` only when it is not 0.5) rather than ignore them. `choices` given as a factor, or
+#'   `.opts = list(output = "factor")`, return a plain factor with those levels and no
+#'   probabilities or confidence.
+#' @param min_confidence A number from 0 to 1. An answer whose confidence is below it is
+#'   uncertain, as is an unknown confidence unless it is 0. A decision's confidence is
+#'   `abs(2 * p - 1)`, so 0.8 keeps only P(yes) at most 0.1 or at least 0.9. For choices and
+#'   scores it is the engine's own scale, so a value tuned on Jev abstains differently on Clef
+#'   (see [gptr_prob()]).
+#' @param uncertain What an uncertain answer becomes: `NA` (the default), `TRUE` or `FALSE` (yes/no
+#'   only), `function(state, answer)` returning one replacement of the answer's type, or `"stop"`
+#'   for a `gptr_error_s1_uncertain` error. It has no effect without `min_confidence`.
 #' @param prompt An explicit prompt; wins over positional selection.
 #' @param envir Where the agent evaluates R code and creates objects. A call made by the agent's
 #'   own R code without `envir` evaluates in a new environment whose parent is the caller's,
-#'   `res$envir`: it reads the caller's objects and keeps the ones it creates there.
+#'   `res$envir`: it reads the caller's objects and keeps the ones it creates there. A function
+#'   frame (the default inside a function, or `environment()`) serves only that call, so the
+#'   session keeps no workspace for later turns; pass `envir = new.env()` to keep one.
 #' @param background Experimental: return the running session at once (needs later).
-#' @param budget `list(tokens =, cost =, turns =)` limits for this call.
+#' @param budget `list(tokens =, cost =, turns =)` limits for this call. `turns` counts model
+#'   requests, retries and sub-agents' requests included; `session$turns` counts prompts instead.
+#'   `cost` counts priced requests only: a model without prices (such as Codex, or a
+#'   [gptr_provider()] without `prices`) has an unknown cost that counts nothing, so the call says
+#'   once that its cost limit is not enforced; the `tokens` and `turns` limits still apply.
 #' @param replay Document replay mode: `"auto"`, `"replay"`, `"live"` or `"record"`.
 #' @param .opts Rare switches such as `thinking`, `max_turns`, `context`, `returns`, `images`,
-#'   `preset`, and entries named by a plugin namespace.
+#'   `preset`, and entries named by a plugin namespace. `thinking` applies to this call and to the
+#'   session's later turns; `max_turns` caps this call's model requests.
 #' @param .run `FALSE` builds the session with the prompt queued and returns it (see
-#'   [gptr_step()]).
+#'   [gptr_step()]). Building checks egress and replay only; [gptr_step()] and [gptr_wait()] check
+#'   the model's provider and key before they start the run. A piped `.run = FALSE` call applies
+#'   its model, mode and tools at once; a [gptr_step()] or [gptr_wait()] that then refuses leaves
+#'   them, with no turn.
 #' @param .stdin Drive the console from piped standard input.
 #' @return A `gptr_session` for agent work (invisibly when its answer was streamed to the
 #'   console), or a typed System 1 vector for classifier models.
@@ -149,6 +194,7 @@ peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugin
   }
   p_arg = check_string(prompt, "prompt", null = TRUE)
   sel = select_prompt(nms, facts, kinds, !is.null(p_arg))
+  warn_partial_names(nms, facts, sel$context)
   args = gateway_args(parallel, choices, levels, threshold, min_confidence, uncertain, background,
                       budget, replay, .opts, .run, .stdin)
   args$run = isTRUE(args$run) && !gateway_deferring()
@@ -456,28 +502,33 @@ gateway_provider = function(s, pid = gateway_provider_id(session_data(s)$model))
   registry_get("provider", pid, session = session_data(s)$id) %||% provider_get(pid)
 }
 
-#' The model record of a session's model, or NULL; the whole id is tried first (IC-74 colons)
+#' The model record of a session's model (or of `ref`, as the session sees it), or NULL; the whole
+#' id is tried first (IC-74 colons)
 #' @noRd
-gateway_model_record = function(s) {
-  d = session_data(s)
-  pr = gateway_provider(s)
-  id = sub("^[^/]*/", "", d$model)
+gateway_model_record = function(s, ref = session_data(s)$model) {
+  pr = gateway_provider(s, gateway_provider_id(ref))
+  id = sub("^[^/]*/", "", ref)
   if (!is.null(pr)) {
     for (m in pr$models) if (identical(m$id, id)) return(m)
   }
-  if (startsWith(d$model, "router:")) return(NULL)
-  model_resolve(d$model, strict = FALSE)
+  if (startsWith(ref, "router:")) return(NULL)
+  model_resolve(ref, strict = FALSE)
 }
 
-#' The preset asked for by the call (`.opts$preset`, or a preset name among `tools =`)
+#' The preset asked for by the call (`.opts$preset`, or the one preset name among `tools =`)
 #' @noRd
 gateway_preset = function(call) {
   p = call$args$opts$preset
   if (!is.null(p)) return(p)
   t = call$ids$tools
   if (is.character(t)) {
-    hit = t[t %in% unique(c(gateway_presets(), registry_names("preset")))]
-    if (length(hit)) return(hit[1L])
+    hit = unique(t[t %in% unique(c(gateway_presets(), registry_names("preset")))])
+    if (length(hit) > 1L) {
+      gptr_abort(paste0("`tools =` names more than one preset (", paste(hit, collapse = ", "),
+                        "); choose one."), "invalid_argument", arg = "tools",
+                 expected = "tool names, \"+name\"/\"-name\" or one preset")
+    }
+    if (length(hit)) return(hit)
   }
   NULL
 }
@@ -522,11 +573,20 @@ gateway_register_spec = function(spec, sid) {
   invisible(ids[[key]])
 }
 
-#' Applies a call's registry filters (`plugins = "-builtin:x"`, `"+builtin:x"` to undo), merged
-#' into the session settings key `filters` (P02 has no per-session filter scope); refused from
-#' model code unless approved (IC-53 items 3-4)
+#' The names a call gives `plugins =`; those starting with "+" or "-" are registry filters
 #' @noRd
-gateway_filters_apply = function(filters) {
+gateway_plugin_names = function(call) {
+  as.character(unlist(Filter(is.character, gateway_list(call$ids$plugins))))
+}
+
+#' Applies a call's registry filters (`plugins = "-builtin:x"`, `"+builtin:x"` to undo), merged
+#' into the session settings key `filters` (P02 has no per-session filter scope), once the call
+#' passed its model checks (D-251); refused from model code unless approved (IC-53 items 3-4).
+#' Returns the function that announces them, called once the call passed its other checks too.
+#' @noRd
+gateway_filters_apply = function(call) {
+  filters = grep("^[+-]", gateway_plugin_names(call), value = TRUE)
+  if (!length(filters)) return(function() invisible(NULL))
   session_control_check("gptr_config")
   cur = as.character(unlist(settings_read("session")$filters))
   for (f in filters) {
@@ -535,15 +595,16 @@ gateway_filters_apply = function(filters) {
   }
   settings_write("session", list(filters = cur))
   registry_filters_set(cur, scope = "session")
-  gptr_inform(paste0("The filters ", paste(filters, collapse = ", "), " apply to every later ",
-                     "peter() call of this R session; remove them with ",
-                     "gptr_config(filters = NULL, .scope = \"session\")."), "notice",
-              .once = paste0("call_filters:", paste(cur, collapse = ",")))
-  invisible(cur)
+  function() {
+    gptr_inform(paste0("The filters ", paste(filters, collapse = ", "), " apply to every later ",
+                       "peter() call of this R session; remove them with ",
+                       "gptr_config(filters = NULL, .scope = \"session\")."), "notice",
+                .once = paste0("call_filters:", paste(cur, collapse = ",")))
+  }
 }
 
-#' Registers the call's specs at rank 0 for the session, loads its extensions, applies its
-#' registry filters and enables named plugins (IC-69; contract 10.1)
+#' Registers the call's specs at rank 0 for the session, loads its extensions and enables named
+#' plugins (IC-69; contract 10.1); gateway_undo() undoes it for a refused call (D-251)
 #' @noRd
 gateway_register = function(call, s) {
   id = session_data(s)$id
@@ -565,15 +626,35 @@ gateway_register = function(call, s) {
       }
     }
   }
-  pl = as.character(unlist(Filter(is.character, gateway_list(call$ids$plugins))))
-  filters = pl[grepl("^[+-]", pl)]
-  if (length(filters)) gateway_filters_apply(filters)
-  enable = setdiff(pl, filters)
+  enable = grep("^[+-]", gateway_plugin_names(call), value = TRUE, invert = TRUE)
   if (length(enable)) {
     f = ext_service_get("plugin.enable")
     for (p in enable) f(p, rank = 0L, session = id)
   }
-  invisible(specs)
+  invisible(s)
+}
+
+#' What a call may change before its checks pass: the registrations of a continued session `s`
+#' (a refused new session is dropped with its own) and the R session's registry filters; returns a
+#' function that puts them back (a refused call, D-251)
+#' @noRd
+gateway_undo = function(s = NULL) {
+  filters = settings_read("session")$filters
+  id = if (!is.null(s)) session_data(s)$id
+  st = gateway_state()
+  ids = if (!is.null(id)) get0(id, envir = st$specs, inherits = FALSE) %||% character()
+  before = if (!is.null(id)) registry_session_mark(id)
+  function() {
+    if (!is.null(id)) {
+      registry_session_undo(before, registry_session_mark(id))
+      assign(id, ids, envir = st$specs)
+    }
+    if (!identical(settings_read("session")$filters, filters)) {
+      settings_write("session", list(filters = filters))
+      registry_filters_set(as.character(unlist(filters)), scope = "session")
+    }
+    invisible(NULL)
+  }
 }
 
 #' Creates the session of a new call: resolved model and mode, the evaluation environment as home;
@@ -607,27 +688,74 @@ gateway_new_session = function(call, cur) {
 }
 
 #' The IC-40 precedence for a continuation's evaluation environment: an explicit `envir =` (kept
-#' in `call$envir`) > the session's kept home > the caller frame (already in `call$envir`)
+#' in `call$envir`) > the session's kept home > the caller frame (already in `call$envir`); a
+#' session that started in a function frame (never kept, R2) says so once when a turn runs elsewhere
 #' @noRd
 gateway_continue_envir = function(call, s) {
-  if (!isTRUE(call$args$envir_given)) {
-    home = session_home(s)
-    if (!is.null(home)) call$envir = home
+  if (isTRUE(call$args$envir_given)) return(invisible(call))
+  home = session_home(s)
+  if (!is.null(home)) {
+    call$envir = home
+    return(invisible(call))
+  }
+  d = session_data(s)
+  here = home_label(call$envir)
+  if (startsWith(d$home_label %||% "", "frame of ") && !identical(here, d$home_label)) {
+    gptr_inform(c(paste0("Session ", d$id, " started in the ", d$home_label, ", which it does not ",
+                         "keep, so this turn evaluates in its caller's environment (", here,
+                         ") and cannot see the objects earlier turns created."),
+                  "Start a session with envir = new.env() to keep a workspace for later turns."),
+                "home_not_kept", .once = paste0("home_not_kept:", d$id))
   }
   invisible(call)
 }
 
-#' Applies a continuation's changes: model, an explicit `mode =` (tightened inside a run) and tools
-#' through session.add_tools (IC-69). An inherited mode is never written to the session (IC-53
-#' item 4).
+#' Every refusal of a call, after it registered (the checks read its registrations) and before it
+#' changes anything (D-251): a continuation's unknown tool name, two presets and model `ref`; under
+#' `safety` a model the call cannot reach (gateway_guards()); its images on the model it runs,
+#' `background = TRUE` without later; then its registry filters apply, an unknown or untrusted
+#' `skills =` preload is refused (builtin:workspace renders the `<skill_content>` blocks, IC-38)
+#' and, last, the prompt's secrets are redacted or asked about; only then are the filters
+#' announced. Returns list(ref, prompt, images).
 #' @noRd
-gateway_continue_session = function(call, s, cur) {
+gateway_checks = function(call, s, first, safety) {
   d = session_data(s)
-  before = registry_names("tool", session = d$id)
-  gateway_register(call, s)
+  ref = d$model
+  m = NULL
+  if (!first) {
+    prompt_tools_check(gateway_tool_mods(call$ids$tools), d$id)
+    gateway_preset(call) # for its refusal only
+    if (!is.null(call$ids$model)) {
+      ref = gateway_model_ref(call$ids$model, call$args$opts$thinking, d$id)
+    }
+    m = list(provider = gateway_provider_id(ref), ref = ref)
+  }
+  gateway_guards(call, s, safety, m, ready = isTRUE(call$args$run))
+  images = gateway_image_blocks(call$args$opts$images, gateway_model_record(s, ref))
+  if (isTRUE(call$args$run) && isTRUE(call$args$background) &&
+      !requireNamespace("later", quietly = TRUE)) {
+    gptr_abort("background = TRUE needs the later package.", "missing_package",
+               package = "later", feature = "background sessions")
+  }
+  announce = gateway_filters_apply(call)
+  for (nm in as.character(unlist(call$ids$skills))) ext_service_get("skill.body")(nm)
+  prompt = gateway_prompt_secrets(call$prompt)
+  announce()
+  list(ref = ref, prompt = prompt, images = images)
+}
+
+#' Applies a checked continuation's changes: model `ref`, or `.opts$thinking` alone, an explicit
+#' `mode =` (tightened inside a run) and the tools the call adds through session.add_tools
+#' (`before`: the session's tool names before it registered; IC-69). An inherited mode is never
+#' written to the session (IC-53 item 4).
+#' @noRd
+gateway_continue_session = function(call, s, cur, ref, before) {
+  d = session_data(s)
+  th = call$args$opts$thinking
   if (!is.null(call$ids$model)) {
-    ref = gateway_model_ref(call$ids$model, call$args$opts$thinking, session = d$id)
     if (!identical(ref, d$model)) session_set_model(s, ref, reason = "user")
+  } else if (!is.null(th)) {
+    kernel_model_switch(s, d$model, th, reason = "user")
   }
   mode = if (isTRUE(call$args$mode_given)) call$ids$mode else NULL
   if (!is.null(mode) && !is.null(cur)) mode = run_mode_tighter(mode, cur$mode)
@@ -677,20 +805,31 @@ gateway_check_visible = function(call) {
 }
 
 #' Egress acknowledgment (unless the context of `call` is "none") under `safety` and the replay
-#' guard under `call`'s `replay =` (contract 3.1, IC-45), on the session's own record of the
-#' provider: of the session's model, or of `m`, a router's choice (a router session's own model is
-#' checked per request by router_call(); IC-29, IC-74; D-099, D-114); the question names the model
-#' when model code asks
+#' guard under `call`'s `replay =` (contract 3.1, IC-45), then, when `ready` (a run starts now: a
+#' built session is checked by sdk_check(), a gptr_parallel() member by its request), the model's
+#' readiness (decision-only model, disabled provider, preflight with an Ollama model prepared,
+#' key), so a refused run records nothing (D-251); on the session's own record of the provider: of
+#' the session's model, or of `m` (`provider`, `ref`): a continuation's new model or a router's
+#' choice (a router session's own model is checked per request by router_call(), without
+#' readiness: the request checks it; IC-29, IC-74; D-099, D-114); the question names the model when
+#' model code asks
 #' @noRd
-gateway_guards = function(call, s, safety, m = NULL) {
+gateway_guards = function(call, s, safety, m = NULL, ready = TRUE) {
   d = session_data(s)
-  if (is.null(m) && startsWith(d$model, "router:")) return(invisible(TRUE))
-  pid = m$provider %||% gateway_provider_id(d$model)
-  pr = gateway_provider(s, pid)
+  ref = m$ref %||% d$model
+  if (startsWith(ref, "router:")) return(invisible(TRUE))
+  pid = m$provider %||% gateway_provider_id(ref)
+  pr = provider_effective(gateway_provider(s, pid))
   if (!identical(context_mode(call$args$opts), "none")) {
-    egress_check(pid, pr, safety, asker = m$ref %||% d$model)
+    egress_check(pid, pr, safety, asker = ref)
   }
-  replay_guard(pr %||% m %||% d$model, mode = replay_mode(call$args$replay))
+  replay_guard(pr %||% m %||% ref, mode = replay_mode(call$args$replay))
+  if (!ready) return(invisible(TRUE))
+  rec = run_model_resolve(ref, d$id)
+  stream_chat_model(rec)
+  provider_ready(rec, pr, safety, prepare = TRUE)
+  provider_credential(pr, register = FALSE)
+  invisible(TRUE)
 }
 
 #' Base64 without line breaks
@@ -712,11 +851,10 @@ gateway_render_png = function(x, file) {
   invisible(file)
 }
 
-#' Image blocks for `.opts$images` (IC-44); the model must accept images
+#' Image blocks for `.opts$images` (IC-44); the model record `m` must accept images
 #' @noRd
-gateway_image_blocks = function(images, s) {
+gateway_image_blocks = function(images, m) {
   if (!length(images)) return(list())
-  m = gateway_model_record(s)
   if (!is.null(m) && !is.null(m$input) && !"image" %in% m$input) {
     gptr_abort("`.opts$images` needs a model that accepts images.", "invalid_argument",
                arg = ".opts$images", expected = "a vision-capable model")
@@ -769,11 +907,12 @@ gateway_prompt_secrets = function(prompt) {
   red
 }
 
-#' The input of a turn: the `input` event, context blocks, skill preloads, the prompt (redacted
-#' before hooks see it) and images; NULL when an `input` hook handled it
+#' The input of a turn: the `input` event, context blocks (skill preloads among them), the prompt
+#' and images `checked` by gateway_checks() (the prompt redacted before hooks see it); NULL when an
+#' `input` hook handled it
 #' @noRd
-gateway_input = function(call, s, first, nested) {
-  prompt = gateway_prompt_secrets(call$prompt)
+gateway_input = function(call, s, first, nested, checked) {
+  prompt = checked$prompt
   src = if (first) "prompt" else "pipe"
   ev = ev_dispatch("input", ev_new("input", text = prompt, source = src), session = s)
   if (is.list(ev)) {
@@ -785,13 +924,10 @@ gateway_input = function(call, s, first, nested) {
   inp = list(call = call, turn = as.integer(session_data(s)$turns %||% 0L) + 1L, prompt = prompt,
              placement = if (first) "first" else "turn", last_hash = NULL,
              opts = call$args$opts %||% list())
-  # an unknown or untrusted `skills =` preload stops the call; builtin:workspace renders the
-  # <skill_content> blocks (IC-38)
-  for (nm in as.character(unlist(call$ids$skills))) ext_service_get("skill.body")(nm)
   # P07's context.first / context.turn services (none when P07 is filtered out)
   svc = if (first) "context.first" else "context.turn"
   ctx = if (ext_service_has(svc)) ext_service_get(svc)(s, inp) %||% list() else list()
-  images = gateway_image_blocks(call$args$opts$images, s)
+  images = checked$images
   list(prompt = prompt, blocks = c(ctx, images),
        content = c(ctx, list(block_text(prompt)), images),
        source = if (nested) "parent" else if (first) "prompt" else "pipe")
@@ -809,8 +945,29 @@ gateway_run_opts = function(call, s, cur) {
                agent = if (is.null(cur)) "main" else "nested",
                background = isTRUE(call$args$background), preset = gateway_preset(call),
                tools = gateway_tool_mods(call$ids$tools), call = call,
-               root = if (is.null(cur)) d$id else (cur$opts$root %||% cur$session))
+               root = if (is.null(cur)) d$id else (cur$opts$root %||% cur$session),
+               mode_from = if (is.null(cur)) gateway_mode_from(call, d$mode))
   ropts[!vapply(ropts, is.null, NA)]
+}
+
+#' Where a top-level call's mode comes from, for the hint of a call nobody can approve
+#' (perm_ask()): `list(mode, from)` naming the call's `mode =`, the session it continues or the
+#' settings layer that holds the mode
+#' @noRd
+gateway_mode_from = function(call, mode) {
+  from = if (isTRUE(call$args$mode_given)) {
+    "this call's mode argument"
+  } else if (!is.null(call$session)) {
+    "the session this call continues"
+  } else {
+    st = settings_layered("mode")
+    if (identical(st$value, mode)) {
+      c(default = "the package default", user = "your user settings",
+        project = ".gptr/settings.json", option = "options(gptr.mode)",
+        session = "this R session's settings")[[st$source]]
+    }
+  }
+  if (!is.null(from)) list(mode = mode, from = from)
 }
 
 #' The protected safety record of a root run (IC-53 item 2; IC-74, 07 section 5): the option
@@ -926,16 +1083,25 @@ gateway_run = function(call, s = NULL) {
   }
   # settings-file `filters` reach the registry before the session is built (04 10.1)
   if (is.null(cur)) gateway_filters_sync()
-  if (first) {
-    s = gateway_new_session(call, cur)
-  } else {
-    gateway_continue_session(call, s, cur)
-  }
-  if (is.null(cur)) last_set(s)
   # egress is judged under the record the run freezes (a nested run inherits that of `cur`)
   safety = gateway_run_safety(cur)
-  gateway_guards(call, s, safety %||% egress_safety())
-  input = gateway_input(call, s, first, nested)
+  # a call registers, is checked, then changes its session: a refusal or an interrupt undoes what
+  # it registered or filtered, and a root session keeps the previous gptr_last() (session_new()
+  # set it; D-251)
+  last = gptr_last()
+  undo = gateway_undo(s)
+  tools = if (!first) registry_names("tool", session = session_data(s)$id)
+  checked = NULL
+  tryCatch({
+    if (first) s = gateway_new_session(call, cur) else gateway_register(call, s)
+    checked = gateway_checks(call, s, first, safety %||% egress_safety())
+  }, finally = if (is.null(checked)) {
+    undo()
+    last_set(last)
+  })
+  if (!first) gateway_continue_session(call, s, cur, checked$ref, tools)
+  if (is.null(cur)) last_set(s)
+  input = gateway_input(call, s, first, nested, checked)
   if (is.null(input)) return(invisible(s))
   ropts = gateway_run_opts(call, s, cur)
   msg = msg_user(input$content, source = input$source)
@@ -947,10 +1113,6 @@ gateway_run = function(call, s = NULL) {
     return(invisible(s))
   }
   if (isTRUE(call$args$background)) {
-    if (!requireNamespace("later", quietly = TRUE)) {
-      gptr_abort("background = TRUE needs the later package.", "missing_package",
-                 package = "later", feature = "background sessions")
-    }
     register = ext_service_get("bg.register")
     call_hold(call, s)
     gateway_run_start(s, msg, ropts, cur, safety)
@@ -1085,13 +1247,15 @@ gateway_signal = function(s, run = NULL) {
 #' @noRd
 route_continue = function(call) {
   route_needs_subagents(call)
-  route_refuse_s1_images(call)
+  route_refuse_s1_args(call)
   s = call$session
   if (session_data(s)$status %in% c("running", "waiting")) {
     session_control_check("gptr_steer", s)
     session_enqueue(s, gateway_prompt_secrets(call$prompt), as = "steer", source = "pipe")
     return(invisible(s))
   }
+  # a replayed script pipes a steer its replayed block recorded: it is not a new turn
+  if (replay_note_take(s, call$prompt)) return(invisible(s))
   gateway_run(call, s)
 }
 
@@ -1110,17 +1274,33 @@ route_needs_subagents = function(call) {
   invisible(TRUE)
 }
 
-#' Refuses `.opts$system1_images` in the conversational routes, which would drop them silently
-#' (IC-74, 07 section 4)
+#' Refuses the System 1 arguments in the conversational routes and P19's team and fan-out, which
+#' would drop them silently (IC-74, 07 section 4; D-250): `.opts$system1_images`, `choices`,
+#' `levels`, `min_confidence`, `uncertain`, and a `threshold` other than its default 0.5
 #' @noRd
-route_refuse_s1_images = function(call) {
-  if (!length(call$args$opts$system1_images)) return(invisible(TRUE))
-  gptr_abort(c(paste0("`.opts$system1_images` holds the images of System 1 decisions; this call ",
-                      "starts a conversation, which would not send them."),
-               paste0("Use a decision model (a classifier) for them, or attach images to a ",
-                      "conversation with .opts = list(images = ...).")),
-             "invalid_argument", arg = ".opts$system1_images",
-             expected = "a decision (classifier) model, or .opts$images")
+route_refuse_s1_args = function(call) {
+  a = call$args
+  if (length(a$opts$system1_images)) {
+    gptr_abort(c(paste0("`.opts$system1_images` holds the images of System 1 decisions; this ",
+                        "call starts a conversation, which would not send them."),
+                 paste0("Use a decision model (a classifier) for them, or attach images to a ",
+                        "conversation with .opts = list(images = ...).")),
+               "invalid_argument", arg = ".opts$system1_images",
+               expected = "a decision (classifier) model, or .opts$images")
+  }
+  given = c(choices = !is.null(a$choices), levels = !is.null(a$levels),
+            threshold = !is.null(a$threshold) && !identical(a$threshold, 0.5),
+            min_confidence = !is.null(a$min_confidence), uncertain = !is.null(a$uncertain))
+  if (!any(given)) return(invisible(TRUE))
+  arg = names(given)[given][1L]
+  label = gateway_model_label(call$ids$model)
+  who = if (is.na(label)) "this call" else paste("model", label)
+  gptr_abort(c(paste0("`", arg, "` shapes a System 1 decision; ", who, " is conversational, so ",
+                      "peter() would start a conversation and ignore it."),
+               paste0("Use a decision model (model = jev or \"ollama/clef-flash\"; after ",
+                      "gptr_config(system1 = \"emulate:<ref>\"), model = jev runs it through a ",
+                      "chat model), or drop the argument.")),
+             "invalid_argument", arg = arg, expected = "a decision (classifier) model")
 }
 
 #' TRUE unless the call's model is a classifier, left to P13's `classifier` route (IC-74)
@@ -1141,7 +1321,7 @@ gateway_routes = function() {
               },
               run = function(call) {
                 route_needs_subagents(call)
-                route_refuse_s1_images(call)
+                route_refuse_s1_args(call)
                 gateway_run(call, NULL)
               }),
     gptr_spec("route", "continue", order = 60,
@@ -1155,7 +1335,7 @@ gateway_routes = function() {
               match = function(call) !is.null(call$prompt) && route_conversational(call),
               run = function(call) {
                 route_needs_subagents(call)
-                route_refuse_s1_images(call)
+                route_refuse_s1_args(call)
                 gateway_run(call, NULL)
               }))
 }
@@ -1232,14 +1412,14 @@ router_invoke = function(spec, request, ctx) {
   NULL
 }
 
-#' gateway_guards() for router choice `m` under the call and safety record of the run driving
-#' session `s`, which run_current() does not find between turns (an empty record, failing
-#' closed, for a run without one; outside a run, egress_safety())
+#' gateway_guards() egress and replay for router choice `m` under the call and safety record of
+#' the run driving session `s`, which run_current() does not find between turns (an empty record,
+#' failing closed, for a run without one; outside a run, egress_safety())
 #' @noRd
 router_guards = function(m, s) {
   run = session_live(s)$run
   safety = if (is.null(run)) egress_safety() else run$opts$safety %||% list()
-  gateway_guards(run$opts$call, s, safety, m)
+  gateway_guards(run$opts$call, s, safety, m, ready = FALSE)
 }
 
 #' Falls back to the default model after a router failure, with a diagnostic; the router's last

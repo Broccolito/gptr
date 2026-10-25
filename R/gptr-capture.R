@@ -15,7 +15,7 @@ dot_facts = function(x) {
        is_chr1 = chr && n == 1L && !is.na(x) && (!is.object(x) || inherits(x, c("glue", "AsIs"))),
        length = n,
        dim = dim(x),
-       bytes = as.numeric(utils::object.size(x)),
+       bytes = env_snap_size(x),
        text = if (chr && n <= 65536L && sum(nchar(x, type = "bytes"), na.rm = TRUE) <= 65536L) {
          as_utf8(paste0(x))
        } else {
@@ -104,7 +104,7 @@ dot_labels = function(exprs, nms) {
     } else if (sym && nzchar(as.character(exprs[[i]]))) {
       as.character(exprs[[i]])
     } else if (!sym && (is.language(exprs[[i]]) || dot_is_literal(exprs[[i]]))) {
-      d = paste(deparse(exprs[[i]], width.cutoff = 60L, nlines = 1L), collapse = "")
+      d = paste(deparse_code(exprs[[i]], width.cutoff = 60L, nlines = 1L), collapse = "")
       if (nchar(d) > 60L) paste0(substr(d, 1L, 57L), "...") else d
     } else {
       paste0("..", i)
@@ -139,6 +139,32 @@ select_prompt = function(nms, facts, kinds, have_prompt) {
   list(target = target, prompt = prompt,
        literal = !is.na(prompt) && identical(kinds[prompt], "literal"),
        context = context, two = !have_prompt && length(lits) >= 2L)
+}
+
+#' Warns for each named dot of `idx` whose name is a prefix of a peter() argument its value fits,
+#' or that argument plus "s"; reads facts only. One-letter names (`a`, `p`), common context names,
+#' are skipped.
+#' @noRd
+warn_partial_names = function(nms, facts, idx) {
+  for (j in idx[nchar(nms[idx]) >= 2L]) {
+    cl = facts[[j]]$class
+    fits = if ("character" %in% cl) {
+      c("model", "mode", "skills", "plugins", "extensions", "tools", "prompt", "replay")
+    } else if (identical(cl, "list")) {
+      c(".opts", "budget", "agents")
+    } else if (any(c("function", "gptr_spec") %in% cl)) {
+      c("model", "extensions", "tools")
+    } else {
+      character()
+    }
+    hit = fits[startsWith(fits, nms[j]) | nms[j] == paste0(fits, "s")]
+    if (length(hit)) {
+      gptr_warn(c(paste0("`", nms[j], " =` is attached as a context object, not read as ",
+                         paste0("`", hit, " =`", collapse = " or "), "."),
+                  "Name the argument in full, or rename the object if it is context."),
+                "partial_name")
+    }
+  }
 }
 
 #' Context items of the call record (contract 7.8): label, kind, name (symbols), slot (values and
@@ -262,14 +288,7 @@ gateway_opts_names = function() {
 #' first element (match.arg())
 #' @noRd
 gateway_choice = function(x, choices, arg) {
-  if (!is.character(x) || length(x) != 1L || is.na(x) || !x %in% choices) {
-    expected = if (length(choices)) {
-      paste0("one of ", paste0("\"", choices, "\"", collapse = ", "))
-    } else {
-      "a registered name (none is registered)"
-    }
-    arg_abort(x, arg, expected)
-  }
+  if (!rlang::is_string(x) || !x %in% choices) choice_abort(x, choices, arg)
   x
 }
 
@@ -614,7 +633,9 @@ ident_noun = function(arg) {
 
 #' One-line deparse of an identifier expression
 #' @noRd
-ident_label = function(expr) paste(deparse(expr, width.cutoff = 60L, nlines = 1L), collapse = "")
+ident_label = function(expr) {
+  paste(deparse_code(expr, width.cutoff = 60L, nlines = 1L), collapse = "")
+}
 
 #' Checks character identifiers (a mode is exactly one of the four, contract 6.1). Messages never
 #' repeat the value (contract 1.1)
@@ -681,11 +702,13 @@ ident_combine = function(parts) {
 }
 
 #' The once-per-session `alias_shadowed` message: a known identifier won over a character variable
-#' of the same name holding a different value
+#' of the same name holding a different value, or a spec the argument accepts with a different name
 #' @noRd
 ident_shadow_notice = function(nm, hit, arg, envir) {
   if (!exists(nm, envir = envir, inherits = TRUE)) return(invisible(NULL))
   v = get0(nm, envir = envir, inherits = TRUE)
+  # only a gptr user makes a spec, so unlike a package's function it is worth naming
+  if (inherits(v, "gptr_spec") && ident_spec_ok(v, arg)) v = v$name
   if (is.character(v) && !identical(as.character(v), hit)) {
     gptr_inform(paste0("`", nm, "` was read as the ", ident_noun(arg), " \"", hit, "\", not as ",
                        "your variable of the same name; write !!", nm, " to use the variable."),
@@ -891,9 +914,26 @@ resolve_identifier = function(expr, arg, envir) {
       }
       return(ident_whole(paste0(as.character(head), inner), arg))
     }
+    nm = if (identical(head, as.name("-"))) ident_hyphen_name(expr)
+    if (!is.null(nm)) {
+      gptr_abort(paste0("`", nm, "` reads as subtraction; quote the name: ", arg, " = \"", nm,
+                        "\"."), c("invalid_identifier", "invalid_argument"), arg = arg,
+                 .data = list(class = "call"))
+    }
     return(ident_mask(expr, arg, envir))
   }
   ident_accept(expr, arg, ident_label(expr))
+}
+
+#' The name a bare hyphenated identifier spells (`high-performance-r` parses as subtraction): its
+#' symbol and number leaves joined by `-`, else NULL
+#' @noRd
+ident_hyphen_name = function(expr) {
+  if (is.symbol(expr) || (is.numeric(expr) && length(expr) == 1L)) return(as.character(expr))
+  if (!is.call(expr) || !identical(expr[[1L]], as.name("-")) || length(expr) != 3L) return(NULL)
+  l = ident_hyphen_name(expr[[2L]])
+  r = ident_hyphen_name(expr[[3L]])
+  if (!is.null(l) && !is.null(r)) paste0(l, "-", r)
 }
 
 #' TRUE when the gateway must force the formal's promise (evaluated in its own environment, G3

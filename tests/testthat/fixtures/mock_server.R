@@ -438,8 +438,8 @@ respond = function(cl, req, body) {
   cl$req_id = srv$next_id
   second = identical(cl$origin, "second")
   log_line(list(
-    kind = "request", id = srv$next_id, time = now(), method = req$method, path = path,
-    headers = log_headers(req$names, req$values, redact = !second),
+    kind = "request", id = srv$next_id, time = now(), came = srv$idle, method = req$method,
+    path = path, headers = log_headers(req$names, req$values, redact = !second),
     body = if (known) body else ""
   ))
   res = if (!known) {
@@ -536,6 +536,7 @@ file.rename(ready_tmp, cfg$ready)
 parent = tryCatch(ps::ps_handle(cfg$parent_pid), error = function(e) NULL)
 started = now()
 last_check = started
+srv$idle = started
 
 repeat {
   t = now()
@@ -552,7 +553,14 @@ repeat {
   }, numeric(1))
   wait = max(0, min(c(0.25, dues - t)))
   cons = c(servers, lapply(srv$clients, `[[`, "con"))
-  ready = socketSelect(cons, write = FALSE, timeout = wait)
+  # `srv$idle` ends each wait. A request is stamped with the end of the wait that saw it or, if it
+  # came while the mock worked (seen by a select that returns at once), of the last wait before
+  # it: never later than its arrival plus the select's wake-up (INFRA-01)
+  ready = socketSelect(cons, write = FALSE, timeout = 0)
+  if (!any(ready)) {
+    ready = socketSelect(cons, write = FALSE, timeout = wait)
+    srv$idle = now()
+  }
   for (i in seq_along(servers)) {
     if (ready[[i]]) {
       srv$next_client = srv$next_client + 1L

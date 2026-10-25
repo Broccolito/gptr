@@ -280,6 +280,27 @@ test_that("without a piped session the replayed session is reconstructed from th
   expect_identical(s$value, 32L)
 })
 
+test_that("a reconstruction keeps its block's steers and follow-ups in body order (IC-46)", {
+  local_project()
+  steers = c("## Steer: use base R", "## Follow-up: and plot it", "## Steer: in blue")
+  site = doc_replay_fixture(header = list(session = "s5e6f7a8b9c"),
+                            body = c(steers[1], "n = nrow(mtcars)", "#> [1] 32", steers[2],
+                                     "plot(mtcars$mpg)", steers[3], "## Run: aborted"))
+  s = doc_replay_call(doc_test_call(), site)
+  msgs = path_messages(entries_path(session_data(s)))
+  expect_identical(vapply(msgs, function(m) m$role, ""),
+                   c("user", "operator", "assistant", "tool_result", "assistant", "user",
+                     "assistant", "tool_result", "operator", "assistant"))
+  expect_identical(msgs[[2]]$origin_text, "use base R")
+  expect_identical(msgs[[3]]$content[[1]]$arguments$code, "n = nrow(mtcars)")
+  expect_identical(msg_text(msgs[[4]]), "[1] 32")
+  expect_identical(c(msgs[[6]]$source, msg_text(msgs[[6]])), c("follow_up", "and plot it"))
+  expect_identical(msgs[[7]]$content[[1]]$arguments$code, "plot(mtcars$mpg)")
+  # the recorder writes the reconstructed steers back as the same lines
+  lines = doc_block_lines(s, 1L, site, 1L)
+  expect_identical(grep(doc_re_steer, lines, value = TRUE), steers)
+})
+
 test_that("a fork block is bound to its id for gptr_resume(block =)", {
   local_project()
   local_replay_table()
@@ -559,6 +580,20 @@ test_that("children entries without a name or a session id are skipped", {
   expect_identical(session_data(team)$last_text, "### stats (fake/fake-1)\n")
 })
 
+test_that("a children= entry's third field names the value the child designated", {
+  local_project()
+  local_replay_table()
+  site = doc_replay_fixture(prompt = "Review", header = list(
+    kind = "team", session = "s6666666666",
+    children = "code:s1212121212:res,stats:s3434343434,odd:s5656565656:a:b"))
+  doc_replay_team(doc_test_call(prompt = "Review"), site, "replay")
+  code = gptr_resume(block = "abc123", child = "code")
+  assign("res", 41, envir = code$envir)
+  expect_identical(code$value, 41)
+  expect_null(gptr_resume(block = "abc123", child = "stats")$value)
+  expect_error(gptr_resume(block = "abc123", child = "odd"), class = "gptr_error_replay_unbound")
+})
+
 # ---- Task 13: the document route, the doc.* services and the hooks (IC-45..IC-49) -------------
 
 # An environment whose peter() builds the call record as P08 does and runs only the document
@@ -683,6 +718,41 @@ test_that("console turns become one steered session in the transcript (IC-49)", 
   expect_true(paste0("s_", hex, " = peter(\"fit\")") %in% tr)
   expect_true(paste0("s_", hex, " |> peter(\"predict\")") %in% tr)
   expect_identical(sum(grepl("^# >>> gptr:", tr)), 2L)
+})
+
+test_that("a console transcript records a run that ended aborted, at max_turns or with an error", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  relay = list(type = "custom_message", message = msg_operator(
+    "steer_relay", "The user sent this message while you were working: use base graphics",
+    origin_text = "use base graphics"))
+  for (status in c("aborted", "error", "max_turns", "blocked", "budget")) {
+    rel = paste0(".gptr/transcripts/", status, ".R")
+    doc_project_transcript(rel)
+    t1 = doc_test_turn("fit = lm(mpg ~ wt, data = mtcars)", prompt = "fit", answer = "Partly")
+    t1[[4L]]$message$stop_reason = "aborted"
+    s = doc_test_session(list(c(t1[1:3], list(relay), t1[4]),
+                              doc_test_turn("p = predict(fit)", prompt = "predict")))
+    for (k in 1:2) {
+      site = doc_console_site(session_id = session_data(s)$id, template = c("fit", "predict")[k])
+      doc_on_agent_end(list(status = c(status, "idle")[k], doc = site, turns = k),
+                       list(session = s))
+    }
+    tr = readLines(file.path(proj, rel))
+    hex = substr(sub("^s", "", session_data(s)$id), 1, 6)
+    for (line in c(paste0("s_", hex, " = peter(\"fit\")"), "fit = lm(mpg ~ wt, data = mtcars)",
+                   "## Steer: use base graphics", paste0("## Run: ", status),
+                   paste0("s_", hex, " |> peter(\"predict\")"), "p = predict(fit)")) {
+      expect_true(line %in% tr, label = paste(status, line))
+    }
+    expect_identical(gptr_blocks(file.path(proj, rel))$status, c("fresh", "fresh"))
+    # the partial answer of a run that did not end idle is not cached as the block's answer
+    b = doc_find_blocks(tr)
+    cached = vapply(seq_len(nrow(b)), function(k) {
+      !is.null(s2_get(s2_key(rel, b$id[k], "", b$header[[k]]$prompt, "")))
+    }, NA)
+    expect_identical(cached, c(FALSE, TRUE))
+  }
 })
 
 test_that("doc.site answers the session's run site, else the gptr_doc() binding", {
@@ -841,9 +911,48 @@ test_that("direct R lines and slash commands of the console enter the transcript
                                      list(session = NULL)))
   doc_on_console_command(list(data = list(text = "  ")), list(session = NULL))
   doc_on_console_direct(list(data = list(code = "", output = character())), list(session = NULL))
-  expect_identical(readLines(file.path(proj, ".gptr", "transcripts", "t.R")),
-                   c("", "# direct R (no model)", "summary(fit)$r.squared", "#> [1] 0.7528",
-                     "# /model opus"))
+  t = file.path(proj, ".gptr", "transcripts", "t.R")
+  # the file opens as every transcript does, whatever its first block (visual round 3)
+  head = c("# source() this file to replay the recorded code without calling a model;",
+           "# gptr_source(\".gptr/transcripts/t.R\", replay = \"live\") re-asks the model.",
+           "library(gptr)")
+  expect_identical(readLines(t), c(head, "", "# direct R (no model)", "summary(fit)$r.squared",
+                                   "#> [1] 0.7528", "# /model opus"))
+  # a session's block after it adds no second copy, and its peter() call follows library(gptr)
+  s = doc_test_session(list(doc_test_turn("n = 1", prompt = "count")))
+  site = doc_console_site(session_id = session_data(s)$id, template = "count")
+  doc_on_agent_end(list(status = "idle", doc = site, turns = 1L), list(session = s))
+  tr = readLines(t)
+  expect_identical(sum(tr == "library(gptr)"), 1L)
+  expect_lt(match("library(gptr)", tr), grep(" = peter(\"count\")", tr, fixed = TRUE))
+})
+
+test_that("what the console records while its session runs in the background follows its block", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  doc_project_transcript(".gptr/transcripts/t.R")
+  t = file.path(proj, ".gptr", "transcripts", "t.R")
+  s = doc_test_session(list(doc_test_turn("n = 1", prompt = "go bg")))
+  # the pause menu's [b] sent the run to the background: its block is written when it ends
+  live = session_live(s)
+  live$background = list(run = "u0000run1")
+  live$run = list(id = "u0000run1")
+  doc_on_console_direct(list(data = list(code = "gptr::gptr_last()$status",
+                                         output = "[1] \"running\"", status = "ok")),
+                        list(session = s))
+  doc_on_console_command(list(data = list(text = "/exit")), list(session = s))
+  expect_false(file.exists(t))
+  live$run = NULL
+  site = doc_console_site(session_id = session_data(s)$id, template = "go bg")
+  doc_on_agent_end(list(status = "idle", doc = site, turns = 1L), list(session = s))
+  # in the order typed (visual round 3: the block came after them, or only at R's prompt)
+  tr = readLines(t)
+  at = c(grep(" = peter(\"go bg\")", tr, fixed = TRUE), match("gptr::gptr_last()$status", tr),
+         match("# /exit", tr))
+  expect_false(anyNA(at))
+  expect_identical(order(at), 1:3)
+  expect_lt(match("library(gptr)", tr), at[[1L]])
+  expect_null(live$held)
 })
 
 # ---- Task 13 adaptations (dev/DEVIATIONS.md D-122) ----------------------------------------------
@@ -1001,7 +1110,8 @@ test_that("a direct R line that failed or was interrupted is inert, so the trans
   # a payload without a status (an older front end) is a line that ran
   direct(list(code = "y_old = 3", output = character()))
   expect_identical(readLines(t),
-                   c("", "# direct R (no model; error)", "#~ summary(fti)",
+                   c(doc_transcript_preamble(t),
+                     "", "# direct R (no model; error)", "#~ summary(fti)",
                      "", "# direct R (no model; interrupt)", "#~ x_before = 1",
                      "#~ Sys.sleep(1e6)",
                      "", "# direct R (no model)", "x_after = 2", "x_after", "#> [1] 2",
@@ -1066,8 +1176,11 @@ test_that("an undone team block gives the undone notice and is logged as skipped
   withr::defer(doc_source_pop(depth))
   for (mode in c("auto", "replay")) {
     local_gptr_options(replay = mode)
-    expect_message(source(f, local = e, keep.source = TRUE), "undone by /rewind",
-                   class = "gptr_message_notice")
+    cnd = expect_message(source(f, local = e, keep.source = TRUE), "undone by /rewind",
+                         class = "gptr_message_notice")
+    # it names the mode that regenerates the block: "live" runs it without a write
+    expect_match(conditionMessage(cnd), "replay = \"record\"", fixed = TRUE)
+    expect_no_match(conditionMessage(cnd), "run live", fixed = TRUE)
     # zero requests: the team is not run live, and nothing is recorded for it
     expect_s3_class(e$reviews, "gptr_session")
     expect_identical(doc_state()$sources[[depth]]$log[["abc123"]], "skipped")
@@ -1495,12 +1608,13 @@ test_that("gptr_cache() lists, prunes and clears, and never removes sidecars", {
   info = gptr_cache()
   expect_s3_class(info, "gptr_cache_info")
   expect_named(info, c("kind", "entries", "bytes", "oldest", "path"))
-  expect_identical(info$kind, c("s1", "s2", "tmp", "sidecar"))
-  expect_identical(info$entries, c(0L, 2L, 2L, 1L))
+  # the second sidecar row lists those of documents outside any .gptr/ (FIX-16)
+  expect_identical(info$kind, c("s1", "s2", "tmp", "sidecar", "sidecar"))
+  expect_identical(info$entries, c(0L, 2L, 2L, 1L, 0L))
   expect_identical(gptr_cache("prune", "s2"), 1L)
   expect_identical(gptr_cache("prune", "tmp"), 1L)
   expect_identical(gptr_cache("clear", "tmp"), 1L)
-  expect_identical(gptr_cache()$entries, c(0L, 1L, 0L, 1L))
+  expect_identical(gptr_cache()$entries, c(0L, 1L, 0L, 1L, 0L))
   expect_identical(gptr_cache("clear"), 1L)
   expect_true(file.exists(doc_sidecar_path(f)))
   expect_error(gptr_cache("purge"), class = "gptr_error_invalid_argument")
@@ -1596,9 +1710,9 @@ test_that("gptr_cache(\"prune\") keeps answers it cannot check and reads spill_d
   writeLines("not json", junk)
   expect_identical(gptr_cache("prune", "s2"), 2L)
   info = gptr_cache()
-  expect_identical(info$entries, c(0L, 1L, 0L, 0L))
+  expect_identical(info$entries, c(0L, 1L, 0L, 0L, 0L))
   expect_s3_class(info$oldest, "POSIXct")
-  expect_identical(is.na(info$oldest), c(TRUE, FALSE, TRUE, TRUE))
+  expect_identical(is.na(info$oldest), c(TRUE, FALSE, TRUE, TRUE, TRUE))
   old = file.path(proj, ".gptr", "cache", "tmp", "gptr-output-o333333.txt")
   writeLines("old", old)
   Sys.setFileTime(old, Sys.time() - 30 * 86400)
@@ -1658,15 +1772,15 @@ test_that("gptr_cache(\"prune\") keeps the answers of queued blocks (IC-50, IC-5
   }
   queue("b.R", "cccccc")
   queue("new.R", "dddddd")
-  expect_identical(gptr_cache()$entries, c(0L, 5L, 0L, 1L))
+  expect_identical(gptr_cache()$entries, c(0L, 5L, 0L, 1L, 0L))
   expect_identical(gptr_cache("prune", "s2"), 1L)
-  expect_identical(gptr_cache()$entries, c(0L, 4L, 0L, 1L))
+  expect_identical(gptr_cache()$entries, c(0L, 4L, 0L, 1L, 0L))
   expect_true(file.exists(doc_sidecar_path(f)))
   # once nothing queues them and no document holds them, their answers are pruned
   unlink(doc_sidecar_path(f))
   st$docs = old
   expect_identical(gptr_cache("prune", "s2"), 4L)
-  expect_identical(gptr_cache()$entries, c(0L, 0L, 0L, 0L))
+  expect_identical(gptr_cache()$entries, c(0L, 0L, 0L, 0L, 0L))
 })
 
 # ---- Task 15: gptr_source() (contract 6.4; report 14 section 4.4.2) -----------------------------
@@ -1864,32 +1978,11 @@ test_that("gptr_source() skips a regenerated block's old code below a #line comm
 
 # ---- end to end through peter() and the fake provider (05 P15 acceptance 2-6) --------------------
 
-# A temporary project where peter() records with the fake provider: replies are scripted, the
-# model is fake/fake-1, mode auto (no human is asked), recording consent by option, replay auto.
-# gptr.unsafe_no_permissions keeps the scripted r calls running when no mode policy is loaded
-# (P11 is an M2 plan, but not a dependency of P15; IC-53 documents the switch for sandboxed runs)
-local_doc_e2e = function(script, record = "auto", .env = parent.frame()) {
-  root = local_project(.env = .env)
-  local_gptr_options(record = record, replay = "auto", model = "fake/fake-1", mode = "auto",
-                     unsafe_no_permissions = TRUE, .env = .env)
-  fake = local_fake_provider(script, .env = .env)
-  old = the$doc_binding
-  withr::defer(assign("doc_binding", old, envir = the), envir = .env)
-  the$doc_binding = NULL
-  list(root = root, fake = fake)
-}
-
 # A peter() call built at run time, as the console and Jupyter evaluate it: the call carries no
 # srcref and its prompt is not a literal of this test file, so the locator cannot mistake the
 # test file for the document
 doc_e2e_call = function(..., prompt) {
   as.call(c(list(as.name("peter")), list(...), list(prompt)))
-}
-
-# Source a document into a fresh environment (whose parent finds gptr) and return it
-doc_e2e_source = function(path, envir = new.env(parent = globalenv()), keep_source = TRUE) {
-  source(path, local = envir, keep.source = keep_source)
-  envir
 }
 
 test_that("per-call record FALSE does not ask for or remember a console transcript", {
@@ -1949,6 +2042,64 @@ test_that("per-call record TRUE does not grant recording consent under persisten
   expect_identical(nrow(gptr_blocks(f)), 0L)
 })
 
+test_that("a script call gptr_doc() cannot record, as it bound another document, says so once", {
+  x = local_doc_e2e(rep(list(fake_tool("r", code = "x = 1"), fake_text("x is one.")), 4L),
+                     record = NULL)
+  local_gptr_options(interactive = FALSE, quiet = FALSE)
+  out = file.path(x$root, "out.R")
+  fk = file.path(x$root, "fk.R")
+  job = file.path(x$root, "job.R")
+  writeLines('s = peter("Compute x.")', fk)
+  writeLines('s = peter("Compute y.")', job)
+  local_doc_binding(out)
+  said = function(f) paste0("it is in ", basename(f), ", but gptr_doc\\(\\) bound out.R")
+  e = NULL
+  msgs = testthat::capture_messages({
+    e = doc_e2e_source(fk)
+  })
+  expect_identical(e$x, 1)
+  expect_length(grep(said(fk), msgs), 1L)
+  expect_length(grep(said(fk), testthat::capture_messages(doc_e2e_source(fk))), 0L)
+  # run from a subdirectory, the suggested gptr_doc() path is the one it resolves there (FIX-16)
+  sub = file.path(x$root, "analysis")
+  dir.create(sub)
+  drv = file.path(sub, "driver.R")
+  writeLines('s = peter("Compute x.")', drv)
+  msgs = withr::with_dir(sub, testthat::capture_messages(doc_e2e_source(drv)))
+  expect_length(grep("it is in analysis/driver.R, but", msgs, fixed = TRUE), 1L)
+  expect_length(grep("run gptr_doc(\"driver.R\") to record", msgs, fixed = TRUE), 1L)
+  # under Rscript the call is sited in the script the process runs
+  testthat::local_mocked_bindings(doc_command_args = function() c("R", paste0("--file=", job)))
+  msgs = testthat::capture_messages(eval(doc_e2e_call(prompt = "Compute y."),
+                                         new.env(parent = globalenv())))
+  expect_length(grep(said(job), msgs), 1L)
+  expect_length(fake_requests(x$fake), 8L)
+  expect_false(file.exists(out))
+  expect_identical(readLines(fk), 's = peter("Compute x.")')
+  expect_identical(readLines(job), 's = peter("Compute y.")')
+})
+
+test_that("no such notice without a binding, for the bound script, record FALSE or replay", {
+  x = local_doc_e2e(rep(list(fake_tool("r", code = "x = 1"), fake_text("x is one.")), 4L),
+                     record = NULL)
+  local_gptr_options(interactive = FALSE, quiet = FALSE)
+  run = function(name, code = 's = peter("Compute x.")') {
+    f = file.path(x$root, name)
+    writeLines(code, f)
+    expect_length(grep("bound", testthat::capture_messages(doc_e2e_source(f))), 0L)
+    f
+  }
+  run("none.R")
+  local_doc_binding(file.path(x$root, "out.R"))
+  run("off.R", 's = peter("Compute x.", .opts = list(record = FALSE))')
+  withr::with_options(list(gptr.replay = "replay"), run("replay.R"))
+  self = file.path(x$root, "self.R")
+  local_doc_binding(self)
+  run("self.R")
+  expect_identical(nrow(gptr_blocks(self)), 1L)
+  expect_length(fake_requests(x$fake), 8L)
+})
+
 test_that("per-call record FALSE suppresses a System 1 document summary", {
   root = local_project()
   local_gptr_options(record = "auto", replay = "auto", interactive = FALSE)
@@ -1967,6 +2118,36 @@ test_that("per-call record FALSE suppresses a System 1 document summary", {
   e2 = doc_e2e_source(f)
   expect_true(unname(as.logical(e2$decision)))
   expect_identical(nrow(gptr_blocks(f)), 1L)
+})
+
+test_that("replaying a document into the session that recorded it adds no turn", {
+  x = local_doc_e2e(list(fake_tool("r", code = "x = 1"), fake_text("Made x."),
+                         fake_tool("r", code = "x = x + 1"), fake_text("Added one."),
+                         fake_tool("r", code = "x = x * 10"), fake_text("Times ten.")))
+  f = file.path(x$root, "analysis.R")
+  writeLines(c("s = peter(\"make x\")", "p = s |> peter(\"add one\")"), f)
+  rec = new.env(parent = globalenv())
+  gptr_source(f, replay = "record", envir = rec)
+  expect_identical(rec$s$turns, 2L)
+  rep = new.env(parent = globalenv())
+  out = gptr_source(f, replay = "replay", envir = rep)
+  expect_identical(out$action, c("replayed", "replayed"))
+  expect_identical(rep$s, rec$s)
+  expect_identical(rep$s$turns, 2L)
+  expect_length(fake_requests(x$fake), 4L)
+  rec$s |> peter("times ten", .opts = list(record = FALSE))
+  expect_identical(rec$s$turns, 3L)
+  sm = summary(rec$s)
+  expect_identical(as.integer(sm$turn[sm$role == "user"]), 1:3)
+})
+
+test_that("a block lists a known zero cost as 0, as the session reports it (IC-74)", {
+  x = local_doc_e2e(list(fake_tool("r", code = "n = 1"), fake_text("done")))
+  f = file.path(x$root, "analysis.R")
+  writeLines("s = peter(\"Set n\")", f)
+  e = doc_e2e_source(f)
+  expect_identical(e$s$cost, 0)
+  expect_identical(gptr_blocks(f)$cost, e$s$cost)
 })
 
 test_that("a recorded block replays under source() with zero model calls (acceptance 2)", {
@@ -2000,6 +2181,77 @@ test_that("a recorded block replays under source() with zero model calls (accept
   expect_identical(length(fake_requests(x$fake)), 2L)
 })
 
+test_that("a replay that restores no answer says so once per document (FIX-16)", {
+  x = local_doc_e2e(list(fake_tool("r", code = "n = 1"), fake_text("n is one.")))
+  unlink(file.path(x$root, ".gptr"), recursive = TRUE)
+  old = mget(c("live", "replay_blocks"), envir = the)
+  withr::defer(list2env(old, envir = the))
+  local_gptr_options(quiet = FALSE)
+  f = file.path(x$root, "analysis.R")
+  writeLines("s = peter(\"Set n\")", f)
+  rec = doc_e2e_source(f)
+  b = doc_find_blocks(readLines(f))
+  s2 = s2_path(s2_key("analysis.R", b$id, "", b$header[[1L]]$prompt, ""))
+  expect_true(file.exists(s2))
+  # a later R process: no live session and, without .gptr/, no session file (tempdir() is gone)
+  later = function(file = FALSE) {
+    the$live = new.env(parent = emptyenv())
+    the$replay_blocks = new.env(parent = emptyenv())
+    if (!file) unlink(store_find(rec$s$id))
+  }
+  notes = character()
+  replay = function() {
+    e = new.env(parent = globalenv())
+    withCallingHandlers(gptr_source(f, replay = "replay", envir = e),
+                        gptr_message_notice = function(m) {
+                          notes <<- c(notes, conditionMessage(m))
+                          invokeRestart("muffleMessage")
+                        })
+    e$s$text
+  }
+  later()
+  expect_identical(replay(), "n is one.")
+  # without the S2 answer, the session file that replay wrote still holds it
+  unlink(s2)
+  later(file = TRUE)
+  expect_identical(replay(), "n is one.")
+  later()
+  expect_identical(c(replay(), replay()), c(NA_character_, NA_character_))
+  notes = grep("No recorded answer", notes, value = TRUE, fixed = TRUE)
+  expect_length(notes, 1L)
+  expect_match(notes, paste0("No recorded answer for analysis.R: replayed answers ($text) are ",
+                             "NA. gptr_init(\".\") keeps answers in .gptr/ for later R sessions."),
+               fixed = TRUE)
+  expect_length(fake_requests(x$fake), 2L)
+})
+
+test_that("an Rscript replay without .gptr/ says why $text is NA and exits 0 (FIX-16)", {
+  skip_on_cran()
+  root = local_project(gptr = FALSE)
+  f = file.path(root, "job.R")
+  writeLines(c(tracemem_loader(),
+               paste("options(gptr.model = \"fake/fake-1\", gptr.mode = \"auto\",",
+                     "gptr.record = \"auto\", gptr.unsafe_no_permissions = TRUE)"),
+               paste0("fake = gptr_fake_provider(list(list(tool = 'r', ",
+                      "input = list(code = 'n = 1')), 'n is one.'))"),
+               "invisible(gptr_register(fake))", "s = peter('Set n')",
+               "cat('TEXT', s$text, '\\n')"), f)
+  run = function(replay) {
+    processx::run(rscript_path(), c("--vanilla", f), wd = root, error_on_status = FALSE,
+                  env = c("current", GPTR_PROJECT_ROOT = root, GPTR_REPLAY = replay,
+                          R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep)),
+                  timeout = 300)
+  }
+  first = run("auto")
+  expect_identical(first$status, 0L)
+  expect_match(first$stdout, "TEXT n is one.", fixed = TRUE)
+  expect_length(doc_find_blocks(readLines(f))$id, 1L)
+  again = run("replay")
+  expect_identical(again$status, 0L)
+  expect_match(again$stdout, "TEXT NA", fixed = TRUE)
+  expect_match(paste(again$stdout, again$stderr), "No recorded answer for job.R", fixed = TRUE)
+})
+
 test_that("a stale prompt regenerates through gptr_source(replay = \"record\") (acceptance 2)", {
   skip_on_cran()
   x = local_doc_e2e(list(fake_tool("r", code = "old_ran = TRUE"), fake_text("old"),
@@ -2019,6 +2271,31 @@ test_that("a stale prompt regenerates through gptr_source(replay = \"record\") (
   expect_identical(out$id, id)
   expect_identical(out$action, "regenerated")
   expect_identical(doc_block_body(readLines(f), doc_find_blocks(readLines(f))), "new_ran = TRUE")
+})
+
+test_that("an undone block runs under replay = \"live\" and regenerates under \"record\"", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "x = 1"), fake_text("one"),
+                         fake_tool("r", code = "x = 2"), fake_text("two"),
+                         fake_tool("r", code = "x = 3"), fake_text("three")), record = NULL)
+  local_gptr_options(interactive = FALSE)
+  f = file.path(x$root, "analysis.R")
+  writeLines("res = peter(\"Set x\")", f)
+  local_doc_binding(f)
+  e = new.env(parent = globalenv())
+  expect_identical(gptr_source(f, envir = e)$action, "ran")
+  expect_true(doc_set_inert(f, doc_find_blocks(readLines(f))$id))
+  undone = readLines(f)
+  out = gptr_source(f, replay = "live", envir = e)
+  expect_identical(e$x, 2)
+  expect_identical(out$status, "undone")
+  expect_identical(readLines(f), undone)
+  out = gptr_source(f, replay = "record", envir = e)
+  expect_identical(e$x, 3)
+  expect_identical(out$action, "regenerated")
+  expect_identical(out$status, "fresh")
+  expect_identical(doc_block_body(readLines(f), doc_find_blocks(readLines(f))), "x = 3")
+  expect_length(fake_requests(x$fake), 6L)
 })
 
 test_that("GPTR_REPLAY=replay blocks a real model called in a loop (acceptance 3)", {
@@ -2052,6 +2329,194 @@ test_that("value= replays by name and no document gets a $value line (acceptance
   e = doc_e2e_source(f)
   expect_identical(e$res$value, c("CD3E", "MS4A1"))
   expect_length(fake_requests(x$fake), 2L)
+})
+
+test_that("gptr_return(<expression>) is recorded so a replay restores $value (acceptance 4)", {
+  code = "fit = lm(mpg ~ wt, mtcars)\ngptr_return(coef(fit))"
+  x = local_doc_e2e(list(fake_tool("r", code = code), fake_text("done")))
+  f = file.path(x$root, "analysis.R")
+  writeLines("s = peter(\"Fit mpg on wt\")", f)
+  e = new.env(parent = globalenv())
+  gptr_source(f, envir = e)
+  txt = readLines(f)
+  b = doc_find_blocks(txt)
+  hidden = paste0(".gptr_value_", b$id)
+  expect_identical(b$header[[1L]]$value, hidden)
+  body = doc_block_body(txt, b)
+  expect_identical(body[!startsWith(body, "#>")],
+                   c("fit = lm(mpg ~ wt, mtcars)", paste(hidden, "= (coef(fit))")))
+  want = coef(lm(mpg ~ wt, mtcars))
+  expect_equal(e$s$value, want)
+  # into another environment, first: the recording session keeps its held value (FIX-16)
+  e3 = new.env(parent = globalenv())
+  gptr_source(f, replay = "replay", envir = e3)
+  expect_identical(e3$s, e$s)
+  withr::with_options(list(gptr.quiet = FALSE),
+                      expect_no_message(e3$s$value, message = "not bound"))
+  expect_equal(e3$s$value, want)
+  out = gptr_source(f, replay = "replay", envir = e)
+  expect_identical(out$action, "replayed")
+  withr::with_options(list(gptr.quiet = FALSE),
+                      expect_no_message(e$s$value, message = "not bound"))
+  expect_equal(e$s$value, want)
+  expect_length(fake_requests(x$fake), 2L)
+})
+
+test_that("each gptr_return() shape replays its value in a later process, or says once why not", {
+  want = coef(lm(mpg ~ wt, mtcars))
+  fit = "fit = lm(mpg ~ wt, mtcars)\n"
+  replays = c(paste0(fit, "gptr_return(coef(fit))"), paste0(fit, "b = coef(fit)\ngptr_return(b)"),
+              paste0(fit, "coef(fit) |>\n  gptr_return()"),
+              "mtcars |>\n  lm(mpg ~ wt, data = _) |> # fit\n  coef() |>\n  gptr_return()",
+              paste0(fit, "gptr_return(\n  coef(fit)\n)"),
+              paste0(fit, "gptr_return(x = coef(fit))"),
+              paste0(fit, "`my fit` = coef(fit)\ngptr_return(`my fit`)"),
+              paste0(fit, "b = coef(fit)\nif (TRUE) gptr_return(b)"),
+              paste0(fit, "if (FALSE) gptr_return(1)\ngptr_return(coef(fit))"))
+  # the last one designated 1 after the coefficients: replay must not give them
+  lost = c(paste0(fit, "if (TRUE) gptr_return(coef(fit))"),
+           paste0(fit, "y = gptr_return(coef(fit))"), paste0(fit, "{\n  gptr_return(coef(fit))\n}"),
+           paste0(fit, "gptr_return(coef(fit))\nif (TRUE) gptr_return(1)"))
+  for (code in c(replays, lost)) {
+    local({
+      x = local_doc_e2e(list(fake_tool("r", code = code), fake_text("done")))
+      old = mget(c("live", "replay_blocks"), envir = the)
+      withr::defer(list2env(old, envir = the))
+      f = file.path(x$root, "analysis.R")
+      writeLines("s = peter(\"Fit mpg on wt\")", f)
+      gptr_source(f, envir = new.env(parent = globalenv()))
+      id = doc_find_blocks(readLines(f))$id
+      the$live = new.env(parent = emptyenv())
+      the$replay_blocks = new.env(parent = emptyenv())
+      e = new.env(parent = globalenv())
+      said = withr::with_options(list(gptr.quiet = FALSE), testthat::capture_messages({
+        for (i in 1:2) gptr_source(f, replay = "replay", envir = e)
+        value = e$s$value
+      }))
+      if (code %in% replays) {
+        expect_equal(value, want, info = code)
+        expect_identical(said, character(), info = code)
+      } else {
+        expect_null(value)
+        expect_identical(said, paste0("No recorded value for block ", id, " of analysis.R: a ",
+                                      "document records gptr_return() only as a top-level call, ",
+                                      "so $value is not replayed.\n"), info = code)
+      }
+      expect_length(fake_requests(x$fake), 2L)
+    })
+  }
+})
+
+test_that("a nested gptr_return() re-sourced in the recording process keeps its value, silently", {
+  x = local_doc_e2e(list(fake_tool("r", code = "if (TRUE) gptr_return(2)"), fake_text("done")))
+  f = file.path(x$root, "analysis.R")
+  writeLines("s = peter(\"Designate 2\")", f)
+  gptr_source(f, envir = new.env(parent = globalenv()))
+  e = new.env(parent = globalenv())
+  said = withr::with_options(list(gptr.quiet = FALSE), testthat::capture_messages({
+    gptr_source(f, replay = "replay", envir = e)
+    value = e$s$value
+  }))
+  expect_identical(value, 2)
+  expect_identical(said, character())
+})
+
+# Record the team or fan-out statement `stmt` into analysis.R through gptr_source(), with fake
+# sub-agents that each run `code` and then answer "Done."; then replay it in this process (its
+# live sessions), as a later process that keeps the session store, and as one that has neither
+# the store nor the S2 answers. `read(env)` is read right after each run, while its sessions are
+# live: its value and the messages reading it gave. Returns the recorded lines and block, the
+# number of requests after recording and after the replays, the document after them, and per run
+# (`record`, `same`, `store`, `bare`) the value, the messages, the run's own messages and the
+# environment.
+doc_kids_e2e = function(stmt, code, read, .env = parent.frame()) {
+  x = local_doc_e2e(function(request) {
+    if (length(request$last_results)) "Done." else fake_tool("r", code = code)
+  }, .env = .env)
+  old = mget(c("live", "replay_blocks"), envir = the)
+  withr::defer(list2env(old, envir = the), envir = .env)
+  f = file.path(x$root, "analysis.R")
+  writeLines(stmt, f)
+  out = list(values = list(), notes = list(), said = list(), envs = list())
+  for (run in c("record", "same", "store", "bare")) {
+    if (run %in% c("store", "bare")) {
+      the$live = new.env(parent = emptyenv())
+      the$replay_blocks = new.env(parent = emptyenv())
+    }
+    if (identical(run, "bare")) {
+      unlink(file.path(x$root, ".gptr", c("sessions", file.path("cache", "s2"))), recursive = TRUE)
+    }
+    e = new.env(parent = globalenv())
+    out$said[[run]] = withr::with_options(list(gptr.quiet = FALSE), testthat::capture_messages(
+      gptr_source(f, replay = if (identical(run, "record")) "auto" else "replay", envir = e)))
+    if (identical(run, "record")) {
+      out$txt = readLines(f)
+      out$recorded = length(fake_requests(x$fake))
+    }
+    out$notes[[run]] = withr::with_options(list(gptr.quiet = FALSE),
+                                           testthat::capture_messages(read(e)))
+    out$values[[run]] = read(e)
+    out$envs[[run]] = e
+  }
+  out$block = doc_find_blocks(out$txt)
+  out$requests = length(fake_requests(x$fake))
+  out$file = readLines(f)
+  out
+}
+
+test_that("a fan-out block records each child's code and value, so replay restores $value", {
+  skip_on_cran()
+  r = doc_kids_e2e("f = peter(\"Average .x\", list(a = c(1, 2, 3), b = c(10, 20)), parallel = 1)",
+                   "m = mean(.x[[1]])\ngptr_return(m)", function(e) e$f$value)
+  sid = "s[0-9a-f]{10}"
+  expect_match(r$block$header[[1L]]$children, paste0("^a:", sid, ":m,b:", sid, ":m$"))
+  body = doc_block_body(r$txt, r$block)
+  for (nm in c("a", "b")) {
+    expect_true(any(body == paste0("}, envir = gptr_resume(block = \"", r$block$id,
+                                   "\", child = \"", nm, "\")$envir)")))
+  }
+  expect_true(any(body == "  m = mean(.x[[1]])"))
+  for (run in names(r$values)) {
+    expect_identical(r$values[[run]], list(a = 2, b = 15), info = run)
+    expect_identical(r$notes[[run]], character(), info = run)
+  }
+  # only the bare run lost the children's answers; one notice for the document (FIX-16)
+  expect_identical(grep("No recorded answer", unlist(r$said), value = TRUE),
+                   c(bare = paste("No recorded answer for analysis.R: replayed answers ($text)",
+                                  "are NA.\n")))
+  expect_identical(r$requests, r$recorded)
+  expect_identical(r$file, r$txt)
+})
+
+test_that("a fan-out child's gptr_return(<expression>) replays through the block's hidden name", {
+  skip_on_cran()
+  r = doc_kids_e2e("f = peter(\"Average .x\", list(a = c(1, 2, 3), b = c(10, 20)), parallel = 1)",
+                   "gptr_return(mean(.x[[1]]))", function(e) e$f$value)
+  hidden = paste0(".gptr_value_", r$block$id)
+  expect_match(r$block$header[[1L]]$children, paste0(":", hidden, ",b:"), fixed = TRUE)
+  expect_true(any(doc_block_body(r$txt, r$block) == paste0("  ", hidden, " = (mean(.x[[1]]))")))
+  for (run in names(r$values)) {
+    expect_identical(r$values[[run]], list(a = 2, b = 15), info = run)
+  }
+  expect_identical(r$requests, r$recorded)
+})
+
+test_that("a team child's gptr_return() value replays, with and without exports", {
+  skip_on_cran()
+  for (agent in c("agent(model = \"fake/fake-1\")",
+                  "agent(model = \"fake/fake-1\", export = \"n\")")) {
+    local({
+      r = doc_kids_e2e(paste0("tm = peter(\"Count the rows\", agents = list(x = ", agent, "))"),
+                       "n = nrow(mtcars)\ngptr_return(n)",
+                       function(e) list(x = e$tm$x$value, team = e$tm$value))
+      expect_match(r$block$header[[1L]]$children, "^x:s[0-9a-f]{10}:n$")
+      for (run in names(r$values)) {
+        expect_identical(r$values[[run]], list(x = 32L, team = list(x = 32L)), info = run)
+      }
+      if (grepl("export", agent, fixed = TRUE)) expect_identical(r$envs$bare$n, 32L)
+      expect_identical(r$requests, r$recorded)
+    })
+  }
 })
 
 test_that("documents are written only with consent; a project cannot grant it (acceptance 5)", {
@@ -2188,6 +2653,145 @@ test_that("a replayed pipe chain is one session; a clone continues from its docu
   expect_true("step one" %in% texts)
 })
 
+test_that("a replayed session keeps the recorded steers and every replayed turn (IC-46, IC-49)", {
+  skip_on_cran()
+  steers = c("1" = "use base R only", "2" = "print two decimals", "4" = "call the result w")
+  replies = list(fake_tool("r", code = "x = 1"), fake_tool("r", code = "y = x + 1"),
+                 fake_text("First answer."), fake_tool("r", code = "w = y * 2"),
+                 fake_text("Second answer."))
+  x = local_doc_e2e(function(request) {
+    k = as.character(request$n)
+    if (k %in% names(steers)) gptr_steer(gptr_last(), steers[[k]])
+    if (request$n <= length(replies)) replies[[request$n]] else fake_text("Live.")
+  })
+  f = file.path(x$root, "steered.R")
+  writeLines(c("s = peter(\"Compute x and y.\")", "s |> peter(\"Now compute w.\")"), f)
+  doc_e2e_source(f)
+  expect_identical(grep("^## Steer:", readLines(f), value = TRUE), paste("## Steer:", steers))
+  needles = c("Compute x and y.", steers[1:2], "First answer.", "Now compute w.", steers[3],
+              "Second answer.", "Third call.")
+  live = function(e, n) {
+    e$s |> peter("Third call.", .opts = list(context = "none"))
+    msgs = fake_requests(x$fake)[[n]]$messages
+    at = vapply(needles, function(p) grep(p, vapply(msgs, msg_text, ""), fixed = TRUE)[1L], 0L)
+    expect_false(anyNA(at))
+    expect_false(is.unsorted(at))
+    msgs
+  }
+  # the session file is kept: each piped block moves the rebuilt session to the end of its turn
+  last_set(NULL)
+  invisible(gc())
+  e = doc_e2e_source(f)
+  expect_identical(session_data(e$s)$history_source, "store")
+  expect_length(fake_requests(x$fake), 5L)
+  expect_length(live(e, 6L), 14L)
+  d = session_data(e$s)
+  on_path = vapply(entries_path(d), function(en) en$id, "")
+  said = Filter(function(en) en$type %in% c("message", "custom_message"), d$entries)
+  expect_true(all(vapply(said, function(en) en$id, "") %in% on_path))
+  # a clone without .gptr/sessions reconstructs both turns from the document
+  clone = withr::local_tempdir("gptr-clone-")
+  file.copy(f, file.path(clone, "steered.R"))
+  dir.create(file.path(clone, ".gptr"))
+  file.copy(file.path(x$root, ".gptr", "cache"), file.path(clone, ".gptr"), recursive = TRUE)
+  withr::local_dir(clone)
+  local_gptr_options(project_root = path_norm(clone))
+  last_set(NULL)
+  rm(e, d, said)
+  invisible(gc())
+  e = doc_e2e_source(file.path(clone, "steered.R"))
+  expect_identical(session_data(e$s)$history_source, "reconstructed")
+  expect_length(fake_requests(x$fake), 6L)
+  msgs = live(e, 7L)
+  expect_length(msgs, 14L)
+  expect_identical(vapply(msgs[c(4, 7, 12)], function(m) m$origin_text, ""), unname(steers))
+})
+
+# Record `lines` as a script, then source it again three times in this process, in auto and replay
+# mode, as one does interactively: each time no request, the file unchanged, the queue empty
+doc_steer_replay = function(x, lines, note) {
+  f = file.path(x$root, "steer.R")
+  writeLines(lines, f)
+  doc_e2e_source(f)
+  recorded = readLines(f)
+  expect_true(note %in% recorded)
+  n = length(fake_requests(x$fake))
+  for (mode in c("auto", "replay", "auto")) {
+    local_gptr_options(replay = mode)
+    e = doc_e2e_source(f)
+    expect_length(fake_requests(x$fake), n)
+    expect_identical(readLines(f), recorded)
+    expect_identical(session_data(e$s)$queue, list(steer = list(), follow_up = list()))
+  }
+}
+
+doc_bg_script = list(fake_tool("r", code = "a = 1"), fake_tool("r", code = "e = a + 100"),
+                     fake_text("Done."))
+
+test_that("replaying a script does not send a follow-up its block recorded again", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "k = 42"), fake_text("Stored k."),
+                         fake_tool("r", code = "k2 = k * 2"), fake_text("Stored k2.")))
+  doc_steer_replay(x, c("s = peter(\"Store k = 42.\", .run = FALSE)",
+                        "gptr_steer(s, \"Then double it into k2.\", as = \"follow_up\")",
+                        "gptr_wait(s)"), "## Follow-up: Then double it into k2.")
+})
+
+# The background script whose steer statement is `steer`
+doc_bg_lines = function(steer) {
+  c("s = peter(\"Store a = 1.\", background = TRUE)", steer, "gptr_wait(s)")
+}
+
+test_that("replaying a background script does not send its gptr_steer() again", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  x = local_doc_e2e(doc_bg_script)
+  doc_steer_replay(x, doc_bg_lines("gptr_steer(s, \"Also store e = a + 100.\")"),
+                   "## Steer: Also store e = a + 100.")
+})
+
+test_that("replaying a background script does not send its pipe steer again", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  x = local_doc_e2e(doc_bg_script)
+  doc_steer_replay(x, doc_bg_lines("s |> peter(\"Also store e = a + 100.\")"),
+                   "## Steer: Also store e = a + 100.")
+})
+
+test_that("a steer left over from one run stays recorded once in the block that took it", {
+  skip_on_cran()
+  x = local_doc_e2e(function(request) {
+    if (request$n %% 2L == 1L) fake_tool("r", code = paste0("x", request$n, " = 1")) else "ok"
+  })
+  f = file.path(x$root, "left.R")
+  writeLines(c("s = peter(\"Store x1.\")", "gptr_steer(s, \"left over after run 1\")",
+               "s |> peter(\"Store x3.\")"), f)
+  doc_e2e_source(f)
+  expect_identical(sum(readLines(f) == "## Steer: left over after run 1"), 1L)
+  writeLines(c(readLines(f), "s |> peter(\"Store x5.\")"), f)
+  n = length(fake_requests(x$fake))
+  e = doc_e2e_source(f)
+  expect_length(fake_requests(x$fake), n + 2L)
+  expect_identical(sum(readLines(f) == "## Steer: left over after run 1"), 1L)
+  expect_identical(session_data(e$s)$queue, list(steer = list(), follow_up = list()))
+})
+
+test_that("a replayed script still sends a steer that its blocks did not record", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  x = local_doc_e2e(doc_bg_script)
+  f = file.path(x$root, "new.R")
+  writeLines(doc_bg_lines("gptr_steer(s, \"Also store e = a + 100.\")"), f)
+  doc_e2e_source(f)
+  n = length(fake_requests(x$fake))
+  txt = readLines(f)
+  txt[txt == "gptr_steer(s, \"Also store e = a + 100.\")"] = "gptr_steer(s, \"Also store g.\")"
+  writeLines(txt, f)
+  local_gptr_options(replay = "replay")
+  doc_e2e_source(f)
+  expect_gt(length(fake_requests(x$fake)), n)
+})
+
 test_that("two values of an interpolated {gene} never replay each other's block (IC-45)", {
   skip_on_cran()
   skip_if_not_installed("knitr")
@@ -2243,6 +2847,50 @@ test_that("a two-turn console session with a menu steer re-sources as one sessio
   s2 = get(paste0("s_", hex), envir = e2)
   expect_identical(length(session_data(s2)$seen), 2L)
   expect_true(is.numeric(e2$p))
+  expect_length(fake_requests(x$fake), 4L)
+})
+
+test_that("a console transcript recorded after an errored run re-sources (IC-49)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "x_err = 21"), fake_error("bad request", 400L),
+                         fake_tool("r", code = "y = x_err * 2"), fake_text("Doubled.")))
+  testthat::local_mocked_bindings(doc_command_args = function() "R")
+  t = file.path(x$root, ".gptr", "transcripts", "console.R")
+  dir.create(dirname(t), recursive = TRUE)
+  gptr_doc(t, format = "transcript")
+  e = new.env(parent = globalenv())
+  expect_error(eval(doc_e2e_call(prompt = paste("set", "x_err")), e), class = "gptr_error")
+  e$s = gptr_last()
+  eval(doc_e2e_call(as.name("s"), prompt = paste("double", "it")), e)
+  expect_true("## Run: error" %in% readLines(t))
+  e2 = new.env(parent = globalenv())
+  e2$library = function(...) invisible(NULL)
+  local_gptr_options(replay = "replay")
+  gptr_doc(FALSE)
+  suppressMessages(doc_e2e_source(t, e2))
+  expect_identical(c(e2$x_err, e2$y), c(21, 42))
+  expect_length(fake_requests(x$fake), 4L)
+})
+
+test_that("a transcript's header names the driver that re-asks the model", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "x = 1"), fake_text("one"),
+                         fake_tool("r", code = "x = 2"), fake_text("two")))
+  testthat::local_mocked_bindings(doc_command_args = function() "R")
+  t = file.path(x$root, "log.R")
+  gptr_doc(t, format = "transcript")
+  eval(doc_e2e_call(prompt = paste("set", "x")), new.env(parent = globalenv()))
+  expect_true("# gptr_source(\"log.R\", replay = \"live\") re-asks the model." %in% readLines(t))
+  e = new.env(parent = globalenv())
+  e$library = function(...) invisible(NULL)
+  withr::with_options(list(gptr.replay = "live"), {
+    expect_warning(doc_e2e_source(t, e), class = "gptr_warning_replay_downgraded")
+  })
+  expect_identical(e$x, 1)
+  expect_length(fake_requests(x$fake), 2L)
+  out = gptr_source(t, replay = "live", envir = e)
+  expect_identical(out$action, "regenerated")
+  expect_identical(e$x, 2)
   expect_length(fake_requests(x$fake), 4L)
 })
 
