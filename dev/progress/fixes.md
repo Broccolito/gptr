@@ -4553,6 +4553,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   provider-bedrock, s1-emulate, s1-ollama, tool-search); the Windows budget's calibration against
   win-builder once the new lane has run (a hosted runner is not win-builder, and its timed step
   includes the build); that BOM block's warning in CRAN mode under `LC_ALL=C` on macOS.
+- Windows evidence: corrected by CI-95 (run 40206216160), whose four blocks of 500 ms or more skip.
 
 ## Task FIX-20 - Console review fixes (2026-10-25, #80)
 Scope: the cheat sheet's console sections reviewed against P28's build (`516ec73c`, PR #78); each code finding
@@ -4830,3 +4831,92 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Open: found in passing (R27's evidence, doc-locate.R): a console transcript with a `{name}` prompt cannot replay
   without a model, as `doc_console_site()` sets `args_hash = NULL` and the block reads stale under
   `GPTR_REPLAY=replay`; to triage.
+
+## Task CI-94 - A paste on the polling beat is timed by its last key's read (2026-10-25, #81)
+- Red: R-CMD-check run 40194786942 (PR #79 at df37cabe), job 121173185576 (macos-latest release)
+  failed "a terminal: a paste during a run is one draft; Enter sends it as one steer (review)"
+  (`test-console-typing.R:1219`, 1220, 1223 and 1227): no `› a b c` draft, `queued` seen 6 times,
+  no `REQ 1 [a/b/c]`, two requests.
+- Rate: in the 6 R-CMD-check runs that held the block (since 58874963), macos-latest (release)
+  failed it in 3 of 5 finished jobs (121172988616, push to main at b90a0040; 121173185576;
+  121181176010, PR at a61d1119), always these four lines; it passed in runs 40180028016 and
+  40190321933, the latter on a tree identical to the first failure's. Ubuntu lanes: 0 of 27.
+- Cause (the product): `console_keys()` timed a batch when `console_typed_chars()` returned, 50 ms
+  after its last chunk, since the reader waits that long for more keys. A batch read on the beat
+  measured 0.102-0.111 s, its last key's read 0.052-0.058 s, so the count term (more than
+  `1 + gap / 0.03` keys) took every paste of four keys or fewer as typed, its head sent at once
+  as a steer, and the test's five-key paste once the beat ran about 15 ms late. Traced at
+  origin/main (fd-0 chunks, the gap both ways, each send): the five keys always came in one read;
+  20 ms injected before each read failed the block 3 of 3 with CI's four lines (gap 0.137-0.139 s,
+  steer `a\nb`, draft `c`); the four-key paste `a\rbc` split 3 of 3 with nothing injected.
+- Fix: (1) 6820374d, test: the pty block pastes `one\rtwo\rthree`, more keys than a person types
+  in 0.2 s, so only the beat's bound decides. (2) 12d7d590: the reader records its last chunk's
+  time (`rd$read_at`) and the rule measures to it. A unit test drives the real reader on a fake
+  fd and clock: a four-key paste on the beat stays one draft; keys typed 40 ms apart, read as they
+  come, stay typed (Task 32). The fd-0 reader test's child, a deparsed copy of the reader, defines
+  `reactor_now()` too.
+- Green: the unit block FAIL 2 on main at 5ee45a04 (steer `a`, draft `bc`), PASS 3 after; a reader
+  timed by its first chunk fails its typed half. Traced with the fix: the five-key paste stays one
+  draft with 20-50 ms injected (gap 0.073-0.108 s) and splits from 60 ms (0.122 s); thirteen keys
+  hold at 100 ms (0.163 s) and at 140 ms in 1 of 2 (0.194 s; the other read 0.204 s, past the
+  bound); keys typed 30 and 40 ms apart stay typed (steer `red car`, draft `draft`). At 12d7d590
+  (`CI=true` `NOT_CRAN=true`, SIGINT at its default) the block PASS 9 in 30 of 30 runs (load
+  5.5-8.9, 16 cores), 10 of 10 under 32 busy loops (load 30-281) and 3 of 3 under `LC_ALL=C`.
+  Neighbours
+  (`^(console-|gptr-config|agent-run|agent-loop|agent-dispatch|session-object|arch-layers)`), which
+  before the child's `reactor_now()` failed the fd-0 reader test (FAIL 4): `[ FAIL 0 | WARN 0 | SKIP
+  0 | PASS 5817 ]` in UTF-8, `[ FAIL 0 | WARN 0 | SKIP 27 | PASS 5639 ]` under `LC_ALL=C` (each skip
+  needs a UTF-8 locale). Lint clean (3 files); `document()` changes nothing.
+- Deviations: none; IC-76's rule is unchanged, the reader now times a batch as it states. Open:
+  none.
+
+## Task CI-95 - The security blocks of 500 ms or more on Windows skip on CRAN (2026-10-25, #81)
+- Why: CI-93 put the 12 blocks its trim had skipped in the security files back on CRAN (8c0edb03),
+  judged by Windows timing runs 39555362618 and 39559882743 (2026-10-21), from before two of those
+  blocks changed or existed (perm-classify's plan-mode allowlist grew since; perm-rules' `sh:` block
+  came on 2026-10-23). Its verifier found that evidence weak for D-240's rule there, which skips
+  only blocks of 500 ms or more on Windows.
+- Evidence: run 40206216160 on claude/cran-timing-windows (811d465: main f8c48802 plus a workflow,
+  never merged, that times each block of the six security files in CRAN mode on windows-latest,
+  R-devel and R-release, two jobs each). In each job 160 blocks ran, 38 skipped, none failed. Four
+  take 500 ms or more in the mean of a version's two jobs (R-devel/R-release): perm-rules "sh: and
+  category: rules see a program given by its path" 1820/1755 ms, perm-plan "a readonly session
+  keeps read and r outside plan mode (D-251)" 1120/1040, perm-classify "the plan-mode allowlist
+  admits only known read-only calls (IC-54)" 625/595, perm-rules "rule_suggest() covers exactly the
+  flagged calls, never level 4 or control (7.11)" 535/510. The largest kept, auth-redact "a short
+  stream equals whole-text redaction (CRAN-sized)", takes 440/400.
+- Change (7cfd4252): the four start with `skip_on_cran()`. Three are of CI-93's 12; perm-plan's
+  block (02bead73, 2026-10-23) was never skipped. The other 156 security blocks that ran there stay
+  on CRAN.
+- Measured at the head (macOS, 16 cores, load 9-18; the CRAN list against the installed tarball from
+  a copy of tests/ with no source tree above it, `NOT_CRAN`, `CI` and `GITHUB_ACTIONS` unset, 3
+  alternating triples in UTF-8): before the trim (ecfad58c) 21.7-22.1 s (PASS 4146 SKIP 1550), main
+  (f8c48802) 14.2-14.4 s (PASS 2589 SKIP 896), the head 13.7-13.8 s (PASS 2501 SKIP 900), FAIL 0 in
+  each: 37% less than before the trim (main 35%), 0.5 s less than main. Under `LC_ALL=C` main 14.3 s
+  (PASS 2575 SKIP 900 WARN 1) and the head 13.4 s (PASS 2487 SKIP 904 WARN 1), the warning as on
+  main. covr over the CRAN list: lines 46.4% before the trim, 39.9% at main, 39.7% at the head;
+  functions 2,441, 2,195 and 2,185 of 4,138, the 10 that lose their last CRAN test in ext-registry,
+  gptr-capture, gptr-gateway, prompt-sections and session-object; R files reached 115 of 125 each
+  time, each keeping at least 26.7% of its CRAN-covered functions (`console-input.R`, 4 of 15, the
+  least), so CI-93's guard holds. Block skips in the 35 listed files: 841 to 845. The CRAN-mode
+  `R CMD check --as-cran` (cran-mode's variables, both manuals): Status OK in 136 s, with
+  `Running 'testthat.R' [13s/14s]` as at main, so cran-comments.md keeps its 14 s.
+- Tests: the six security files with `NOT_CRAN=true`, in UTF-8 and under `LC_ALL=C`: PASS 2142
+  SKIP 1 each; lint of the three touched files clean.
+- Deviations: D-240 (amended in place). Open: a block near 500 ms can cross it between runs:
+  `rule_suggest()`'s block took at most 480 ms in CI-93's runs and 510-535 ms here.
+
+## Task CI-96 - The macOS row has time for the whole suite (2026-10-25, #81)
+- Red: main's R-CMD-check run 40203827918 at f8c48802 (PR #79 merged), job 121200423672
+  (macos-latest release), was cancelled at its 45-minute limit 42 minutes into R CMD check
+  ("The job has exceeded the maximum execution time of 45m0s"); every other job of the run passed.
+- Measured (macos-latest release, R-CMD-check.yaml, job start to end): the 19 finished jobs from
+  2026-10-21 to 2026-10-24 took 25-37 minutes; on 2026-10-25, after P28 (#78) added its pty console
+  tests, which macOS runs serially, the 7 finished jobs took 36.5-43.6 minutes and the one above
+  reached the limit at 45.3.
+- Fix: the macOS row of the matrix gets `minutes: 60`, a third over the slowest finished job; the
+  other rows keep 45 and Ubuntu R-devel 120. test-zzz.R's time-limit test (CI-19) pins it.
+- Tests: `^zzz$` FAIL 1 before the change (test-zzz.R:320), FAIL 0 PASS 149 after; lint clean.
+- Deviations: none. Open: the macOS row's time grows with the serial pty tests; running them in
+  two testthat workers, as the Linux rows do, would halve it but loads the runner the pty tests
+  time against.
