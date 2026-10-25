@@ -492,6 +492,32 @@ test_that("a long @file is marked truncated even when the first cut line is blan
   expect_identical(repl_mentions("see @long.R", new.env())$said, "@ long.R (first 40 lines)")
 })
 
+test_that("the @files of a prompt share the user_files budget, and the line under it says so", {
+  skip_on_cran()
+  rows = function(w) vapply(1:40, function(i) substr(paste0(i, strrep("x", w)), 1L, w), "")
+  local_project(files = list("a.R" = rows(84), "b.R" = rows(84), "c.R" = rows(84),
+                             "wide.md" = rows(312)))
+  local_no_fd0()
+  local_console_blocks()
+  men = repl_mentions("compare @a.R, @b.R and @c.R", new.env())
+  expect_identical(men$said[[1L]], "@ a.R (40 lines)")
+  expect_match(men$said[[2L]], "^@ b.R [(]first [0-9]+ lines[)]$")
+  expect_identical(men$said[[3L]], "@ c.R (not attached, over the size limit)")
+  expect_match(men$files[[2L]], "<file path=\"b.R\" truncated=\"true\">", fixed = TRUE)
+  expect_identical(men$files[[3L]], "<file path=\"c.R\" omitted=\"true\"/>")
+  expect_lte(est_tokens(men$files, "code"), 2000)
+  # the request holds what the line said
+  fake = gptr_fake_provider(list("ok"))
+  rs = repl_state(NULL, new.env())
+  rs$model = fake
+  console_send(rs, "compare @a.R, @b.R and @c.R", men)
+  expect_match(last_user_blocks(fake_requests(fake)[[1L]])[["user_files"]],
+               paste(men$files, collapse = "\n"), fixed = TRUE)
+  men = repl_mentions("see @wide.md", new.env())
+  expect_match(men$said, "^@ wide.md [(]first [0-9]+ lines[)]$")
+  expect_match(men$files, "<file path=\"wide.md\" truncated=\"true\">", fixed = TRUE)
+})
+
 test_that("!code runs in the REPL environment and leaves a note; !!code does not", {
   skip_on_cran()
   local_project()

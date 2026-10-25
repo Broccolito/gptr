@@ -413,24 +413,35 @@ attr_escape = function(x) {
   gsub("\"", "&quot;", gsub("&", "&amp;", x, fixed = TRUE), fixed = TRUE)
 }
 
-#' The <file> block of an @file mention: the first 40 lines of a text file (redacted with the
-#' `context` profile), or a one-line note for a binary file (report 18 section 4.3); attr "said"
-#' names what it holds (`2 lines`, `first 40 lines`, `binary, 3 bytes`)
+#' The tokens the @files of one prompt share: the `user_files` block's budget
 #' @noRd
-repl_file_block = function(path, shown, max_lines = 40L) {
+console_files_budget = 2000L
+
+#' The <file> block of an @file mention: the first 40 lines of a text file (redacted with the
+#' `context` profile) that fit `room` tokens, marked truncated when cut, or a one-line note for a
+#' binary file (report 18 section 4.3) or one without room; attr "said" names what it holds
+#' (`2 lines`, `first 40 lines`, `binary, 3 bytes`, `not attached, over the size limit`)
+#' @noRd
+repl_file_block = function(path, shown, max_lines = 40L, room = Inf) {
+  file = paste0("<file path=\"", attr_escape(shown), "\"")
   head_raw = readBin(path, "raw", n = 8192L)
   if (any(head_raw == as.raw(0L))) {
     bytes = format(file.size(path), scientific = FALSE)
-    return(structure(paste0("<file path=\"", attr_escape(shown), "\" binary=\"true\" bytes=\"",
-                            bytes, "\"/>"), said = paste0("binary, ", bytes, " bytes")))
+    return(structure(paste0(file, " binary=\"true\" bytes=\"", bytes, "\"/>"),
+                     said = paste0("binary, ", bytes, " bytes")))
   }
   x = readLines(path, n = max_lines + 1L, warn = FALSE, encoding = "UTF-8")
   more = length(x) > max_lines
-  n = min(length(x), max_lines)
   x = redact(clean_terminal(utils::head(x, max_lines)), profile = "context")
-  structure(paste0("<file path=\"", attr_escape(shown), "\"", if (more) " truncated=\"true\"",
-                   ">\n", paste(x, collapse = "\n"), "\n</file>"),
-            said = paste0(if (more) "first ", n, if (n == 1L) " line" else " lines"))
+  tag = function(cut) paste0(file, if (cut) " truncated=\"true\"", ">")
+  n = lines_fit(x, room, "code", function(m) c(tag(more || m > 0L), "</file>"))
+  if (!n && length(x)) {
+    return(structure(paste0(file, " omitted=\"true\"/>"),
+                     said = "not attached, over the size limit"))
+  }
+  cut = more || n < length(x)
+  structure(paste0(tag(cut), "\n", paste(x[seq_len(n)], collapse = "\n"), "\n</file>"),
+            said = paste0(if (cut) "first ", n, if (n == 1L) " line" else " lines"))
 }
 
 #' The objects an @mention names: those bound in `env` and its parents up to the global
@@ -450,10 +461,11 @@ console_objects = function(env, all = TRUE) {
 
 #' Resolve @mentions, words starting with @ (readline's word breaks before it, as for completion,
 #' so an e-mail address stays text): files (relative to the working directory or the project root,
-#' or absolute/home paths) become <file> blocks; syntactic names bound in `env` become context
-#' objects passed by name. `said` names what each mention resolved to, in order (D-244): `@ notes.md
-#' (2 lines)`, `@ fit (lm)` or `@ tbl (data.frame, 32 x 11)` (its class and dimensions), or
-#' `@ fit2 not found, sent as text` (`is a folder` for a directory), each `@ ` and the name
+#' or absolute/home paths) become <file> blocks, in order within the `user_files` budget;
+#' syntactic names bound in `env` become context objects passed by name. `said` names what each
+#' mention resolved to, in order (D-244): `@ notes.md (2 lines)`, `@ fit (lm)` or `@ tbl
+#' (data.frame, 32 x 11)` (its class and dimensions), or `@ fit2 not found, sent as text` (`is a
+#' folder` for a directory), each `@ ` and the name
 #' @noRd
 repl_mentions = function(text, env) {
   pattern = "(?<![^\\s\"'\\\\`><=%;,|&{()}!])@(\"[^\"]+\"|[A-Za-z0-9_./~-]*[A-Za-z0-9_/~-])"
@@ -468,7 +480,9 @@ repl_mentions = function(text, env) {
     hit = cand[dir %in% FALSE]
     if (length(hit)) {
       shown = path_rel(hit[[1L]])
-      block = repl_file_block(hit[[1L]], shown)
+      # the line feed that joins the blocks counts too
+      block = repl_file_block(hit[[1L]], shown,
+                              room = console_files_budget - est_tokens(c(files, ""), "code"))
       files = c(files, block)
       said = c(said, paste0("@ ", shown, " (", attr(block, "said"), ")"))
     } else if (identical(make.names(nm), nm) && nm %in% console_objects(env)) {
@@ -531,26 +545,6 @@ console_notes_text = function(notes, budget = 300L) {
   paste(c(header, keep), collapse = "\n")
 }
 
-#' Text of the `user_files` block: the <file> blocks that fit `budget` tokens, in order
-#' @noRd
-console_files_text = function(files, budget = 2000L) {
-  files = as.character(files)
-  if (!length(files)) return(NULL)
-  keep = character()
-  for (f in files) {
-    if (est_tokens(paste(c(keep, f), collapse = "\n"), "code") > budget) break
-    keep = c(keep, f)
-  }
-  if (!length(keep)) {
-    lines = strsplit(files[[1L]], "\n", fixed = TRUE)[[1L]]
-    while (length(lines) > 2L && est_tokens(paste(lines, collapse = "\n"), "code") > budget) {
-      lines = lines[-(length(lines) - 1L)]
-    }
-    keep = paste(lines, collapse = "\n")
-  }
-  paste(keep, collapse = "\n")
-}
-
 #' The REPL whose prompt call is being assembled, when `ctx` renders that call's context
 #' @noRd
 repl_sending = function(ctx) {
@@ -569,12 +563,13 @@ console_notes_provide = function(ctx, budget) {
   text
 }
 
-#' provide() of the `user_files` context block: the files mentioned in the prompt (taken once)
+#' provide() of the `user_files` context block: the <file> blocks of the prompt's @files, which
+#' repl_mentions() fit to the block's budget (taken once)
 #' @noRd
 console_files_provide = function(ctx, budget) {
   rs = repl_sending(ctx)
   if (is.null(rs) || !length(rs$files)) return(NULL)
-  text = console_files_text(rs$files, budget)
+  text = paste(rs$files, collapse = "\n")
   rs$files = character()
   text
 }
@@ -586,7 +581,7 @@ console_blocks = function() {
     gptr_context_block("user_ran", console_notes_provide, placement = "both",
                        authority = "data", budget = 300L, order = 550L),
     gptr_context_block("user_files", console_files_provide, placement = "both",
-                       authority = "data", budget = 2000L, order = 560L)
+                       authority = "data", budget = console_files_budget, order = 560L)
   )
 }
 
@@ -1289,7 +1284,8 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' Each input is one of:
 #'
 #' * a prompt, sent as `session |> peter("...")` with `{name}` interpolation; `@file` adds
-#'   the head of a file (at most 40 lines) and `@object` attaches an object by name;
+#'   the head of a file (at most 40 lines; the files of one prompt share about 2,000 tokens)
+#'   and `@object` attaches an object by name;
 #' * `!code`: R code run in the session's environment; the code and its output go with the next
 #'   prompt (at most 300 estimated tokens). `!!code` omits that note. Both execute your own R
 #'   immediately, without the model's permission gate or a model request. Workspace changes

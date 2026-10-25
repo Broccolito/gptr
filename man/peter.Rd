@@ -163,7 +163,8 @@ returns to R. Piped input skips this setup.
 Each input is one of:
 \itemize{
 \item a prompt, sent as \code{session |> peter("...")} with \code{{name}} interpolation; \verb{@file} adds
-the head of a file (at most 40 lines) and \verb{@object} attaches an object by name;
+the head of a file (at most 40 lines; the files of one prompt share about 2,000 tokens)
+and \verb{@object} attaches an object by name;
 \item \code{!code}: R code run in the session's environment; the code and its output go with the next
 prompt (at most 300 estimated tokens). \code{!!code} omits that note. Both execute your own R
 immediately, without the model's permission gate or a model request. Workspace changes
