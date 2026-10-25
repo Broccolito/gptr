@@ -4830,3 +4830,41 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Open: found in passing (R27's evidence, doc-locate.R): a console transcript with a `{name}` prompt cannot replay
   without a model, as `doc_console_site()` sets `args_hash = NULL` and the block reads stale under
   `GPTR_REPLAY=replay`; to triage.
+
+## Task CI-94 - A paste on the polling beat is timed by its last key's read (2026-10-25)
+- Red: R-CMD-check run 40194786942 (PR #79 at df37cabe), job 121173185576 (macos-latest release)
+  failed "a terminal: a paste during a run is one draft; Enter sends it as one steer (review)"
+  (`test-console-typing.R:1219`, 1220, 1223 and 1227): no `› a b c` draft, `queued` seen 6 times,
+  no `REQ 1 [a/b/c]`, two requests.
+- Rate: in the 6 R-CMD-check runs that held the block (since 58874963), macos-latest (release)
+  failed it in 3 of 5 finished jobs (121172988616, push to main at b90a0040; 121173185576;
+  121181176010, PR at a61d1119), always these four lines; it passed in runs 40180028016 and
+  40190321933, the latter on a tree identical to the first failure's. Ubuntu lanes: 0 of 27.
+- Cause (the product): `console_keys()` timed a batch when `console_typed_chars()` returned, 50 ms
+  after its last chunk, since the reader waits that long for more keys. A batch read on the beat
+  measured 0.102-0.111 s, its last key's read 0.052-0.058 s, so the count term (more than
+  `1 + gap / 0.03` keys) took every paste of four keys or fewer as typed, its head sent at once
+  as a steer, and the test's five-key paste once the beat ran about 15 ms late. Traced at
+  origin/main (fd-0 chunks, the gap both ways, each send): the five keys always came in one read;
+  20 ms injected before each read failed the block 3 of 3 with CI's four lines (gap 0.137-0.139 s,
+  steer `a\nb`, draft `c`); the four-key paste `a\rbc` split 3 of 3 with nothing injected.
+- Fix: (1) 6820374d, test: the pty block pastes `one\rtwo\rthree`, more keys than a person types
+  in 0.2 s, so only the beat's bound decides. (2) 12d7d590: the reader records its last chunk's
+  time (`rd$read_at`) and the rule measures to it. A unit test drives the real reader on a fake
+  fd and clock: a four-key paste on the beat stays one draft; keys typed 40 ms apart, read as they
+  come, stay typed (Task 32). The fd-0 reader test's child, a deparsed copy of the reader, defines
+  `reactor_now()` too.
+- Green: the unit block FAIL 2 on main at 5ee45a04 (steer `a`, draft `bc`), PASS 3 after; a reader
+  timed by its first chunk fails its typed half. Traced with the fix: the five-key paste stays one
+  draft with 20-50 ms injected (gap 0.073-0.108 s) and splits from 60 ms (0.122 s); thirteen keys
+  hold at 100 ms (0.163 s) and at 140 ms in 1 of 2 (0.194 s; the other read 0.204 s, past the
+  bound); keys typed 30 and 40 ms apart stay typed (steer `red car`, draft `draft`). At 12d7d590
+  (`CI=true` `NOT_CRAN=true`, SIGINT at its default) the block PASS 9 in 30 of 30 runs (load
+  5.5-8.9, 16 cores), 10 of 10 under 32 busy loops (load 30-281) and 3 of 3 under `LC_ALL=C`.
+  Neighbours
+  (`^(console-|gptr-config|agent-run|agent-loop|agent-dispatch|session-object|arch-layers)`), which
+  before the child's `reactor_now()` failed the fd-0 reader test (FAIL 4): `[ FAIL 0 | WARN 0 | SKIP
+  0 | PASS 5817 ]` in UTF-8, `[ FAIL 0 | WARN 0 | SKIP 27 | PASS 5639 ]` under `LC_ALL=C` (each skip
+  needs a UTF-8 locale). Lint clean (3 files); `document()` changes nothing.
+- Deviations: none; IC-76's rule is unchanged, the reader now times a batch as it states. Open:
+  none.
