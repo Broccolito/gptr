@@ -401,13 +401,13 @@ rstudio_complete = function(line, isConsole) { # nolint: object_name_linter.
   u(".retrieveCompletions")()
 }
 
-test_that("RStudio's console completes only the triggers; its editor gets R's (IC-81)", {
+test_that("RStudio's console completes only the triggers; its editor gets RStudio's own (IC-81)", {
   .gptr_repl = local_completing_repl()
   old = utils::rc.options(custom.completer = console_completer(NULL))
   withr::defer(utils::rc.options(old))
   # the console: only syntactic names, as RStudio inserts any other in backticks; none is the
-  # token itself, as RStudio shows its own completions for an empty result
-  # (.rs.getCustomRCompletions() fails on it) and none for the token alone
+  # token itself where it holds only letters, digits, . and _, as RStudio shows its own completions
+  # for an empty result (.rs.getCustomRCompletions() fails on it) and none for the token alone
   expect_identical(rstudio_complete("summarise the da", TRUE), "da")
   expect_identical(rstudio_complete("hello /mo", TRUE), "mo")
   expect_identical(rstudio_complete("/mo", TRUE), c("mode", "model"))
@@ -415,14 +415,19 @@ test_that("RStudio's console completes only the triggers; its editor gets R's (I
   summ = rstudio_complete("!summ", TRUE)
   expect_true("summary" %in% summ)
   expect_true(all(make.names(summ) == summ))
-  # `@mtcars_copy`, `peter$read`, `skill:tidy-data` and `mtcars$mpg` would be inserted in backticks
-  expect_identical(rstudio_complete("use @mtc", TRUE), "@mtc")
-  expect_identical(rstudio_complete("ask peter$rea", TRUE), "peter$rea")
-  expect_identical(rstudio_complete("/skill:t", TRUE), "skill:t")
-  expect_identical(rstudio_complete("!mtcars$m", TRUE), "mtcars$m")
-  # the editor, which RStudio asks through the same request while peter> waits: R's completion
-  expect_true("summary" %in% rstudio_complete("x = summ", FALSE))
-  expect_true("data.frame" %in% rstudio_complete("summarise the da", FALSE))
+  # `@mtcars_copy`, `peter$read`, `skill:tidy-data` and `mtcars$mpg` would be inserted in backticks,
+  # and so would a token with another character (`3:`, `note:`): the request fails, so RStudio's own
+  # completion answers, as without peter
+  for (line in c("the ratio is 3:", "note:", "/skill:", "see stats::", "use @mtc", "ask peter$rea",
+                 "!mtcars$m")) {
+    expect_error(rstudio_complete(line, TRUE), "RStudio's own completion", info = line)
+  }
+  # a reserved word is no syntactic name, but RStudio shows nothing for it alone
+  expect_identical(rstudio_complete("write a function", TRUE), "function")
+  # the editor, which RStudio asks through the same request while peter> waits: the request fails,
+  # so RStudio's own engine answers (R's whole `fuel$mpg` or `stats::sd` would go in backticks)
+  expect_error(rstudio_complete("x = fuel$", FALSE), "RStudio's own completion")
+  expect_error(rstudio_complete("x = summ", FALSE), "RStudio's own completion")
   # with the caller's completer, the caller's
   caller = function(env) env$comps = paste0(env$token, "_caller")
   utils::rc.options(custom.completer = console_completer(caller))

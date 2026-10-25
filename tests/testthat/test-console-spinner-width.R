@@ -51,8 +51,8 @@ test_that("a console too narrow for the block and the time gets an empty row", {
 })
 
 test_that("the live row's fit counts display columns of styled and wide characters", {
-  withr::local_options(cli.dynamic = TRUE, cli.unicode = TRUE, cli.num_colors = 8L,
-                       cli.width = 20L)
+  testthat::local_reproducible_output(unicode = TRUE)
+  withr::local_options(cli.dynamic = TRUE, cli.num_colors = 8L, cli.width = 20L)
   local_mocked_bindings(front_end = function() "rgui")
   out = live_draw(list(secs = 0, draft = "读取 数据"))
   expect_false(grepl("\n", out[[1L]], fixed = TRUE))

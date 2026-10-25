@@ -202,7 +202,11 @@ once and drains only its synchronous display bytes; console controls do not ente
 Console controls (prompts, the pause menu, the console renderer) reach the console whatever
 `tee` is: the evaluator lifts its own capture sink while one is written, never a user's (IC-77).
 Ordinary `cat()` and printed objects remain captured. Base warning semantics, including
-`options(warn = 2)`, are unchanged.
+`options(warn = 2)`, are unchanged. The console REPL (`repl_main()`) shows a gptr warning signalled while it
+reads a prompt or runs a line at once, as `Warning: <text>` (escaped) through the console's writer, which clears
+and redraws the live row, and muffles it: R would hold it for its top level, which the console reaches only at
+`/exit`, and an IDE's handler would show it beside a stale row (RStudio's box). Under `warn >= 2` or `warn < 0`
+the REPL leaves it to R (P28 Task 92).
 
 Also in P01: `redactor_set(fun)` [internal] (`aaa-state.R`; P03 installs `redact`; it replaces the earlier
 `condition_redactor_set()`, IC-34),
@@ -5931,12 +5935,17 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     ellipsis (`live_candidates()`), then the prompt on the band and the whole line again, backspaces to the
     cursor, and readline gets none, as its next Tab would list what it got.
   - RStudio (Task 23) asks through its `get_completions` request, whose frame binds `isConsole`
-    (`dynGet()`). From its editor (FALSE), which shares the request while `peter>` waits, the adapter gives R's
-    own completion (or the caller's). From its console (TRUE) it gives only the candidates that are syntactic
-    names, since RStudio inserts any other in backticks (`@mtcars_copy`, `peter$read`, `skill:tidy-data`,
-    `mtcars$mpg`), and for none the token itself: RStudio 2026.09 shows its own completions for an empty
-    result (`.rs.getCustomRCompletions()` fails on it) and no popup for the token alone, on Tab or the
-    automatic one. So its console completes the commands after `/` and R code after `!`.
+    (`dynGet()`). From its editor (FALSE), which shares the request while `peter>` waits, the adapter gives the
+    caller's completion or fails, so RStudio's own engine answers, as without peter (R's own completion gives
+    whole words such as `fuel$mpg` and `stats::sd`, which RStudio inserts in backticks; P28 Task 90). From its
+    console (TRUE) it gives only the candidates that are syntactic names, since RStudio inserts any other in
+    backticks (`@mtcars_copy`, `peter$read`, `skill:tidy-data`, `mtcars$mpg`), and for none the token itself
+    where it holds just letters, digits, `.` and `_`, a reserved word too: RStudio 2026.09 shows its own
+    completions for an empty result (`.rs.getCustomRCompletions()` fails on it) and no popup for such a token
+    alone, on Tab or the automatic one. A token with any other character (`3:`, `note:`, `skill:t`, `stats::`,
+    `mtcars$m`) RStudio would insert in backticks over the text, so there the adapter fails and RStudio's own
+    completion answers, as without peter, with its `(No matches)` tip where it has none (P28 Task 91). So its
+    console completes the commands after `/` and R code after `!`.
   - Scope: where R's completion calls the custom completer (`console_completes()`): R's own Unix readline on a
     tty (`console_readline_tty()`), RStudio's console and Windows' Rgui and Rterm (utils'
     `.win32consoleCompletion()`, Task 23); not under `.stdin`, not with `R_COMPLETION=FALSE`, and not in
