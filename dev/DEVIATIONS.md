@@ -4453,6 +4453,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   error at 2, and the next prompt came right under it. Contract-visible: 04 §7.9 `eval_r()`, §15.10 IC-82; 03
   §6.17. Tests: test-console-repl.R "a !code block's rows share one margin and end with a blank row (visual round
   3)".
+- Final visual loop, round 3 (2026-10-24): Task 82: `/exit` while a background session runs says so in the banner's
+  words, dim (`1 background session still runs · gptr_wait(gptr_last()) shows it`), and a background session's end
+  noticed at R's prompt starts on a row of its own, dim, named by its first prompt (`background session 'go bg'
+  done`, else its status and reason): it was `Background session sae8b90edfe finished with status idle.` on the `>`
+  row, 20 s after an `/exit` that said nothing. Contract-visible: 04 §15.10 (the pause menu's [b]). Tests:
+  test-console-commands.R "/exit, /quit and /q end the REPL"; test-agent-background.R "gptr_cancel() aborts a
+  background session and releases its job".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

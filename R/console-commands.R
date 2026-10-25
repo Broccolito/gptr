@@ -208,13 +208,21 @@ cmd_help = function(args, ctx) {
     typed))
 }
 
-#' /exit, /quit, /q
+#' /exit, /quit, /q: with background sessions still running it says so, dim in the banner's words,
+#' as their end is noticed at R's prompt (bg_release())
 #' @noRd
 cmd_exit = function(args, ctx) {
   rs = console_repl_find()
   if (is.null(rs)) return("/exit works inside the gptr console.")
   rs$exit = TRUE
-  NULL
+  n = sum(job_list("session")$status == "running")
+  if (!n) return(NULL)
+  sym = console_style()
+  cli::ansi_string(sym$dim(if (n == 1L) {
+    paste0("1 background session still runs", sym$sep, "gptr_wait(gptr_last()) shows it")
+  } else {
+    paste0(n, " background sessions still run", sym$sep, "gptr_jobs() lists them")
+  }))
 }
 
 #' The full id a built-in CLI gets for the reference `ref` to its `default` (contract 11.10), else

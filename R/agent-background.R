@@ -319,8 +319,8 @@ bg_run_opts = function(run) {
   o
 }
 
-#' Hold the session and record its live handle `list(ui, run, ask, waiting, opts)` (ids, the
-#' pending ask, flags and options only); the first registration also adds the job row, installs
+#' Hold the session and record its live handle `list(ui, name, run, ask, waiting, opts)` (ids, its
+#' first prompt cut, the pending ask, flags and options only); the first registration also adds the job row, installs
 #' the UI wrappers and prints the notice
 #' @noRd
 bg_track = function(s, run) {
@@ -329,9 +329,10 @@ bg_track = function(s, run) {
   bg = live$background
   if (!bg_has(d$id)) {
     assign(d$id, s, envir = bg_state()$sessions)
-    bg = list(ui = bg_install_ui(d$id))
     first = Filter(function(m) identical(m$role, "user"), path_messages(entries_path(d)))
-    bg_job_add(d$id, bg_cut(if (length(first)) msg_text(first[[1L]]), 40L))
+    name = bg_cut(if (length(first)) msg_text(first[[1L]]), 40L)
+    bg = list(ui = bg_install_ui(d$id), name = name)
+    bg_job_add(d$id, name)
     gptr_inform(c("Background sessions are experimental.",
                   "See help(\"gptr-background\") for the consoles where they are supported."),
                 "notice", .once = "background_experimental")
@@ -369,12 +370,15 @@ bg_stop = function(id) {
 }
 
 #' Forget a background session: UI wrappers, live handle, job row, strong reference; with
-#' `notice`, tell the idle console how it settled
+#' `notice`, tell the idle console how it settled, on a row of its own after R's prompt, dim in the
+#' console's words, the session named by its first prompt: `background session '<prompt>' done`, or
+#' its status and reason
 #' @noRd
 bg_release = function(id, notice = FALSE) {
   s = bg_get(id)
   if (is.null(s)) return(invisible(FALSE))
   live = session_live(s)
+  name = live$background$name
   if (!is.null(live)) {
     for (rid in live$background$ui) registry_remove(rid)
     live$background = NULL
@@ -383,9 +387,11 @@ bg_release = function(id, notice = FALSE) {
   rm(list = id, envir = bg_state()$sessions)
   if (notice) {
     d = session_data(s)
-    why = if (length(d$reason) && nzchar(d$reason)) paste0(": ", bg_cut(d$reason, 120L))
-    gptr_inform(paste0("Background session ", id, " finished with status ", d$status, why, "."),
-                "notice")
+    sym = console_style()
+    why = if (length(d$reason) && nzchar(d$reason)) paste0(sym$sep, bg_cut(d$reason, 120L))
+    said = paste0("background session", if (nzchar(name %||% "")) paste0(" '", name, "'"), " ",
+                  if (identical(d$status, "idle")) "done" else d$status, why)
+    gptr_inform(paste0("\n", sym$dim(said)), "notice")
   }
   invisible(TRUE)
 }

@@ -372,8 +372,9 @@ test_that("gptr_cancel() aborts a background session and releases its job", {
   gptr_cancel(s)
   expect_identical(s$status, "aborted")
   local_gptr_options(quiet = FALSE)
+  # on a row of its own at R's prompt, in the console's words, named by its prompt (visual round 3)
   expect_message(expect_true(bg_pump_until(function() !bg_has(s$id))),
-                 "finished with status aborted", class = "gptr_message_notice")
+                 "^\nbackground session 'long task' aborted", class = "gptr_message_notice")
   expect_false(s$id %in% gptr_jobs()$id)
 })
 

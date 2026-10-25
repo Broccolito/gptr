@@ -265,9 +265,20 @@ test_that("/exit, /quit and /q end the REPL", {
   local_console_commands()
   for (cmd in c("/exit", "/quit", "/q")) {
     rs = repl_state(NULL, new.env())
-    run_command(rs, cmd)
+    expect_identical(run_command(rs, cmd)$out, character())
     expect_true(rs$exit)
   }
+  # a background session still running is named, in the banner's words (visual round 3: R's
+  # prompt got its end notice 20 s later, unannounced)
+  running = c("running", "idle")
+  local_mocked_bindings(job_list = function(kind = NULL) data.frame(status = running))
+  rs = repl_state(NULL, new.env())
+  expect_identical(run_command(rs, "/exit")$out,
+                   "1 background session still runs - gptr_wait(gptr_last()) shows it")
+  expect_true(rs$exit)
+  running = c("running", "running")
+  expect_identical(run_command(rs, "/exit")$out,
+                   "2 background sessions still run - gptr_jobs() lists them")
 })
 
 test_that("/model and /mode before the first prompt set the first prompt's arguments", {

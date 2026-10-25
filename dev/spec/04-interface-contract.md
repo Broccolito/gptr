@@ -5722,7 +5722,11 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     Tasks 16-21: `[gptr] running in the background; ...` in ink, on the prompt; P28 Task 47: the notices came
     first and the cut row floated between them and the status row). Nothing runs a background session while the
     chat prompt waits (`later` runs only at R's own prompt; P28 Task 51: the row said `running in the
-    background · gptr_wait() brings it back`). A `gptr_wait()` in the console's `!`/`!!` code
+    background · gptr_wait() brings it back`). `/exit` while one runs says so, dim, `1 background session still
+    runs · gptr_wait(gptr_last()) shows it` (`<n> background sessions still run · gptr_jobs() lists them`), and
+    its end, noticed at R's prompt, is a row of its own in the console's words, `background session '<its first
+    prompt>' done` or its status and reason, dim (`bg_release()`; P28 Task 82, visual round 3: `>   Background
+    session sae8b90edfe finished with status idle.` on R's prompt row, unannounced). A `gptr_wait()` in the console's `!`/`!!` code
     (repl_passthrough()'s `.gptr_console_wait`, `console_wait()`) makes the sessions it waits for the console's
     foreground while it lasts (`console_state()$waited`, `console_foreground()`), outside the code's evaluation
     (its sink and options, `.gptr_eval_outside`), in the console's colours (`cli.num_colors =
