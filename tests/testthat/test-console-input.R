@@ -328,7 +328,8 @@ test_that("the r call's own end unfreezes the row, not a nested call's (review)"
 })
 
 test_that("during a sub-agent the row ticks and shows the queue; keys wait in its r call", {
-  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.dynamic = TRUE)
+  testthat::local_reproducible_output(unicode = TRUE)
+  withr::local_options(cli.dynamic = TRUE)
   local_live_console()
   newest = NULL
   local_mocked_bindings(console_queued = function(s) as.integer(!is.null(newest)),
@@ -432,7 +433,7 @@ test_that("the draft keeps its column as the status changes; the status only wid
 })
 
 test_that("a leading ! takes the chevron's place; / and ! drafts say when they run (D-244)", {
-  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
+  testthat::local_reproducible_output(unicode = TRUE)
   states = list(
     bang = list(what = "thinking", secs = 6, draft = "!summary(fuel$mpg)"),
     twice = list(what = "thinking", secs = 6, draft = "!!x = 1"),
@@ -487,7 +488,8 @@ test_that("in a CJK locale every character outside ASCII counts two columns (D-2
 })
 
 test_that("the live row's block is the agent's blue, its words dim and the draft ink (D-243)", {
-  withr::local_options(cli.unicode = TRUE, cli.num_colors = 256L)
+  testthat::local_reproducible_output(unicode = TRUE)
+  withr::local_options(cli.num_colors = 256L)
   expect_identical(c(console_live_row(live_states$question, 80L)), paste0(
     "\033[38;5;67m▌\033[39m \033[38;5;244medit 11s · question waiting\033[39m",
     "   › and plot the residu"))
@@ -497,7 +499,8 @@ test_that("the live row's block is the agent's blue, its words dim and the draft
 })
 
 test_that("the live row is drawn with \\r and erased to the line end, or padded (D-243)", {
-  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.width = 40L)
+  testthat::local_reproducible_output(unicode = TRUE)
+  withr::local_options(cli.width = 40L)
   state = live_states$menu
   row = "▌ r 1m 05s · ctrl-c pause"
   draws = function(cls) {
@@ -545,7 +548,8 @@ test_that("on the input band the live row's words take the band's grey (review)"
 })
 
 test_that("the live row keeps the console's colours when drawn inside an evaluation (review)", {
-  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.width = 40L, cli.ansi = TRUE)
+  testthat::local_reproducible_output(unicode = TRUE)
+  withr::local_options(cli.width = 40L, cli.ansi = TRUE)
   local_mocked_bindings(front_end = function() "terminal", console_background = function() NA)
   state = live_states$menu
   coloured = withr::with_options(list(cli.num_colors = 256L), console_live_row(state, 40L))
@@ -559,7 +563,8 @@ test_that("the live row keeps the console's colours when drawn inside an evaluat
 })
 
 test_that("a console write clears the live row and redraws it after its whole lines (D-243)", {
-  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.width = 40L, cli.ansi = TRUE)
+  testthat::local_reproducible_output(unicode = TRUE)
+  withr::local_options(cli.width = 40L, cli.ansi = TRUE)
   local_mocked_bindings(front_end = function() "terminal",
                         console_live_state = function(rec) live_states$menu)
   row = "\r▌ r 1m 05s · ctrl-c pause\033[K"
@@ -667,7 +672,7 @@ ctrl_c = function() {
 }
 
 test_that("a draft a run left is edited at the prompt; Enter returns it as readline would", {
-  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.width = 80L)
+  testthat::local_reproducible_output(unicode = TRUE)
   # Up, Ctrl-D and Tab on plain text do nothing; the row is drawn again after every key
   r = idle_read("and label", list(" it", "\033[A", "\004", "\t", "x\177 the axes", "\r"))
   expect_identical(r$x, "and label it the axes")
@@ -725,7 +730,7 @@ test_that("a draft at the prompt completes a trigger word; several are listed ab
 })
 
 test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C keeps it first", {
-  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.width = 80L)
+  testthat::local_reproducible_output(unicode = TRUE)
   r = idle_read("ab", list("\177", "\025"), "/exit")
   expect_identical(r$x, "/exit")
   expect_identical(r$rows, "")

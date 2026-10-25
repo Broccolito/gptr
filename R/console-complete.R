@@ -87,13 +87,16 @@ console_complete = function(line, end = nchar(line)) {
 #' or utils' guess in RStudio and Windows), with the caller's completer `prev` (NULL when none) as
 #' the custom one meanwhile, so R's completion of a ! line calls it. RStudio asks with `isConsole`
 #' in its request's frame: its editor (FALSE), which shares the request while the prompt waits,
-#' gets R's own completion (or the caller's); its console only the candidates that are syntactic
-#' names, as RStudio inserts any other in backticks, and for none the token itself, as RStudio
-#' shows its own completions for an empty result and none for the token alone. R's Unix readline,
-#' reading at `prompt`, gets one completion, the candidates' common head, so it never lists them
-#' (its list printed in the input band and paged a long one); where that adds nothing they are
-#' listed as the composer lists them, one dim row at column 2 above the prompt's row, written again
-#' with the line (completion_list()), and readline gets none
+#' gets the caller's completion or an error, on which RStudio's own engine answers (R's would give
+#' whole words such as `fuel$mpg`, which RStudio inserts in backticks); its console only the
+#' candidates that are syntactic names, as RStudio inserts any other in backticks, and for none the
+#' token itself where it holds only letters, digits, . and _ (RStudio shows its own completions for
+#' an empty result and none for such a token alone), else an error, on which RStudio's own engine
+#' answers (it would insert the token in backticks: `3:`, `note:`). R's Unix readline, reading at
+#' `prompt`, gets one completion, the candidates' common head, so it never lists them (its list
+#' printed in the input band and paged a long one); where that adds nothing they are listed as the
+#' composer lists them, one dim row at column 2 above the prompt's row, written again with the line
+#' (completion_list()), and readline gets none
 #' @noRd
 console_completer = function(prev, prompt = NULL) {
   function(env) {
@@ -104,7 +107,8 @@ console_completer = function(prev, prompt = NULL) {
     old = utils::rc.options(custom.completer = prev)
     on.exit(utils::rc.options(old), add = TRUE)
     console = dynGet("isConsole", ifnotfound = NA)
-    if (isFALSE(console)) return(utils::getFromNamespace(".completeToken", "utils")())
+    if (isFALSE(console) && !is.function(prev)) stop("RStudio's own completion")
+    if (isFALSE(console)) return(prev(env))
     word = console_trigger(line) %||% ""
     full = console_complete(line)
     if (!is.null(prompt) && length(full) > 1L) {
@@ -118,6 +122,7 @@ console_completer = function(prev, prompt = NULL) {
     comps = completion_shift(full, word, token)
     if (isTRUE(console)) {
       comps = comps[make.names(comps) == comps]
+      if (!length(comps) && grepl("[^[:alnum:]._]", token)) stop("RStudio's own completion")
       if (!length(comps)) comps = token
     }
     env$comps = comps

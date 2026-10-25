@@ -3890,6 +3890,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   sub-agent running it was `? Paused sdc8df9bda4`, a session id shown nowhere else; [s] and [f] act on the
   console's own session, which the live row and the sub-agent rows name. Contract-visible: 04 §15.10 (the pause
   menu). Tests: test-console-interrupt.R (the menu's title).
+- S9 in RStudio (2026-10-25): Task 92: the console REPL shows a gptr warning signalled while it reads a prompt or
+  runs a line at once, `Warning: <text>` escaped, through the console's writer (the live row cleared and
+  redrawn), and muffles it; `warn >= 2` and `warn < 0` keep R's semantics. Only the readline-limit warning had
+  that: any other waited for `/exit` (warn = 0) or was boxed by RStudio beside a stale live row (warn = 1), as
+  Task 39's messages were. Contract-visible: 04 §2. Tests: test-console-message-stream.R "a gptr warning during a
+  run is a console notice, never an IDE's box (S9)".
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on
@@ -3981,6 +3987,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (`/me about summ`). Contract-visible: 04 §15.10 IC-81. Tests: test-console-completion.R "completion comes only
   after @, !, !!, / and peter$, in full words (IC-81)", "R's readline gets one completion; several adding
   nothing are listed (visual round 3)", "a terminal: Tab completes after @, / and ! and never natural language
+  (IC-81)".
+- S9 in RStudio (2026-10-25): Task 90: for RStudio's editor (`isConsole` FALSE) the console's completer fails
+  unless the caller owns one, so RStudio's own engine answers, as without peter. R's completion, which it gave
+  there, inserted whole words in backticks (`` `fuel$mpg` ``, `` `stats::sd` ``) and replaced the engine's
+  labels, `()` and argument tips. Contract-visible: 03 §6.17, 04 §15.10 IC-81. Tests: test-console-completion.R
+  "RStudio's console completes only the triggers; its editor gets RStudio's own (IC-81)".
+- S9 in RStudio (2026-10-25): Task 91: where RStudio's console gets no candidate and the token holds a character
+  other than letters, digits, `.` and `_`, the console's completer fails, so RStudio's own completion answers, as
+  without peter. The token itself, which it gave, came back in backticks over the text on Tab (``the ratio is
+  `3:` ``, ``/`skill:` ``, ``see `stats::` ``). A reserved word still gets the token: under `make.names()` `write a
+  function` went to RStudio's engine, whose popup took Enter. Contract-visible: 03 §6.17, 04 §15.10 IC-81. Tests:
+  test-console-completion.R "RStudio's console completes only the triggers; its editor gets RStudio's own
   (IC-81)".
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)

@@ -36,6 +36,48 @@ test_that("a console handler that takes every non-rlang message leaves gptr's di
   expect_s3_class(tryCatch(gptr_inform("x", "notice"), message = identity), "gptr_message_notice")
 })
 
+test_that("a gptr warning during a run is a console notice, never an IDE's box (S9)", {
+  local_console_test()
+  local_scripted_ui()
+  msg = "a gptr warning during the run"
+  hook = function(gptr) {
+    gptr$on("agent_start", function(event, ctx) {
+      gptr_warn(msg, "probe")
+      NULL
+    })
+  }
+  # RStudio 2026.09's global warning handler (onWarningImpl) writes every warning it sees to stderr
+  # in its box and muffles it; `ide` is what such a handler took from one run of peter()
+  run = function(warn) {
+    withr::local_options(warn = warn)
+    local_console_stdin(c("hello", "/exit"))
+    ide = character()
+    out = utils::capture.output(withCallingHandlers(
+      invisible(peter(.stdin = TRUE, model = gptr_fake_provider(list("ok")), envir = new.env(),
+                      extensions = hook)),
+      warning = function(w) {
+        ide <<- c(ide, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      }))
+    list(ide = ide, out = out)
+  }
+  for (warn in 0:1) {
+    res = run(warn)
+    expect_identical(res$ide, character())
+    expect_true(any(grepl(paste0("Warning: ", msg), res$out, fixed = TRUE)))
+  }
+  # base warning semantics stay: warn = 2 escalates and warn < 0 ignores, so the handler leaves both
+  for (warn in c(-1, 2)) {
+    res = run(warn)
+    expect_identical(res$ide, msg)
+    expect_false(any(grepl("Warning: ", res$out, fixed = TRUE)))
+  }
+  msg = "a path with an escape \033[31m in it"
+  res = run(1)
+  expect_true(any(grepl("<U+001B>[31m", res$out, fixed = TRUE)))
+  expect_false(any(grepl("\033", res$out, fixed = TRUE)))
+})
+
 test_that("verbatim stdout display stays out of the native error stream", {
   out = utils::capture.output({
     err = utils::capture.output(msg_verbatim(c("normal response", "literal {x}")),

@@ -711,7 +711,8 @@ test_that("tool calls are cursor strips tinted by kind (D-245)", {
   sgr = function(on, off) function(x) paste0("\033[", on, "m", x, "\033[", off, "m")
   at256 = list(red = sgr("38;5;167", 39), blue = sgr("38;5;67", 39), dim = sgr("38;5;244", 39),
                bold = sgr(1, 22))
-  withr::local_options(cli.unicode = TRUE, cli.num_colors = 256L)
+  testthat::local_reproducible_output(unicode = TRUE)
+  withr::local_options(cli.num_colors = 256L)
   expect_identical(shown(), do.call(want, c(list("\u258e", "\u258c", " \u00b7 "), at256)))
   withr::local_options(cli.unicode = FALSE)
   expect_identical(shown(), do.call(want, c(list("|", "#", " - "), at256)))

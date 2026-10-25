@@ -85,11 +85,12 @@ local_gptr_options = function(..., .env = parent.frame()) {
   withr::local_options(stats::setNames(opts, nms), .local_envir = .env)
 }
 
-# local_project() with a private user config directory; the process settings layer is restored
-# when the test ends
+# local_project() with a private user config directory and an empty vault, so no earlier test's
+# key reaches a provider; the process settings layer is restored when the test ends
 local_gw = function(workspace = TRUE, .env = parent.frame()) {
   cfg = withr::local_tempdir("gptr-config-", .local_envir = .env)
   withr::local_envvar(R_USER_CONFIG_DIR = cfg, .local_envir = .env)
+  local_vault(.env)
   old = the$settings_session
   withr::defer({
     the$settings_session = old
