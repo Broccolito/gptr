@@ -151,11 +151,14 @@ local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = paren
   pty = new.env(parent = emptyenv())
   pty$all = ""
   pty$out = ""
+  # GNU readline 8.1 and later wrap each prompt in bracketed-paste toggles (CSI ?2004h and l),
+  # which change nothing shown, so they are dropped, also when a read splits one
+  toggles = function(s) gsub("\033\\[\\?2004[hl]", "", s, perl = TRUE)
   read = function(ms) {
     p$poll_io(ms)
     x = p$read_output()
-    pty$all = paste0(pty$all, x)
-    pty$out = paste0(pty$out, x)
+    pty$all = toggles(paste0(pty$all, x))
+    pty$out = toggles(paste0(pty$out, x))
   }
   pty$send = function(x) p$write_input(x)
   pty$interrupt = function() p$interrupt()

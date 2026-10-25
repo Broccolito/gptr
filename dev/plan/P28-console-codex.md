@@ -1761,7 +1761,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 83 | A D console's wait reads the terminal's edit keys as text (Task 80, found by its visual check) | 937b9c9d |
 | 84 | `document` reads the console's bracketed keys as links (pre-PR check) | c2dd176b |
 | 85 | INFRA-03 fails six expectations in a background job, taken for a timing flake (pre-PR check) | 6777610e |
-| 86 | Console tests assume Unicode glyphs where a Windows console draws ASCII (win-builder) | (this commit) |
+| 86 | Console tests assume Unicode glyphs where a Windows console draws ASCII (win-builder) | ccaa2a06 |
+| 87 | A pty test fails on Linux: GNU readline wraps each prompt in bracketed-paste toggles (PR #78 CI) | (this commit) |
 
 ## Out of scope
 
