@@ -278,6 +278,33 @@ console_typed_split = function(txt) {
   lines
 }
 
+#' `lines` read from fd 0 in the drain's mode (tty_drain_mode()), in which the terminal no longer
+#' edits a line, with its edits applied as it would: DEL and Ctrl-H erase the character before,
+#' Ctrl-W the word before, Ctrl-U the line so far
+#' @noRd
+tty_line_edit = function(lines) {
+  out = vapply(lines, function(x) {
+    kept = character()
+    for (ch in strsplit(x, "", fixed = TRUE)[[1L]]) {
+      if (ch %in% c("\177", "\b")) {
+        kept = utils::head(kept, -1L)
+      } else if (ch == "\025") {
+        kept = character()
+      } else if (ch == "\027") {
+        k = length(kept)
+        while (k && kept[[k]] == " ") k = k - 1L
+        while (k && kept[[k]] != " ") k = k - 1L
+        kept = kept[seq_len(k)]
+      } else {
+        kept = c(kept, ch)
+      }
+    }
+    paste(kept, collapse = "")
+  }, "", USE.NAMES = FALSE)
+  attributes(out) = attributes(lines)
+  out
+}
+
 #' Lines held or waiting after an input line (a paste) join it, then one more line is read at
 #' "... ": Enter sends, typed text is appended (it ends a paste whose last line had no newline).
 #' After a line at the readline limit the waiting lines are dropped with it.
@@ -713,7 +740,7 @@ console_typed = function(drain = FALSE, accept = NULL) {
   modes = if (drain) tty_drain_mode()
   if (length(modes) == 1L) on.exit(tty_modes(modes), add = TRUE)
   lines = console_typed_lines(rd, 0L)
-  if (drain) lines = typed_join(rd, lines)
+  if (drain) lines = tty_line_edit(typed_join(rd, lines))
   ans = if (is.function(accept)) typed_answer(lines, accept)
   if (!is.null(ans)) {
     console_typed_route(rd, s, ans$before)

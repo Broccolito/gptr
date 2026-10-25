@@ -1749,7 +1749,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 79 | A `!` block has three indents and runs into the next prompt (final visual loop, round 3) | 9de0abae |
 | 80 | In TERM=dumb an approval that comes while a line is typed splits the line (final visual loop, round 3) | e5afc436 |
 | 81 | With a sub-agent running the pause menu's title is a raw session id (final visual loop, round 3) | df4876b6 |
-| 82 | `/exit` while a [b] run works leaves without a word, and its end lands on R's prompt row (final visual loop, round 3) | (this commit) |
+| 82 | `/exit` while a [b] run works leaves without a word, and its end lands on R's prompt row (final visual loop, round 3) | 82f7bd59 |
+| 83 | A D console's wait reads the terminal's edit keys as text (Task 80, found by its visual check) | (this commit) |
 
 ## Out of scope
 

@@ -1415,6 +1415,12 @@ test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (vi
   expect_identical(pty$seen("not a key"), 0L)
 })
 
+test_that("lines read in the drain's mode get the terminal's edits (Task 80's visual check)", {
+  x = structure(c("ab\177c", "ab\bc", "f1 a follow-up\t\025", "one two \027three"), partial = TRUE)
+  expect_identical(tty_line_edit(x), structure(c("ac", "ac", "", "one three"), partial = TRUE))
+  expect_identical(tty_line_edit(character()), character())
+})
+
 test_that("console_typed_split() marks a last line without a line end as partial", {
   expect_identical(console_typed_split(""), character())
   expect_identical(console_typed_split("a\r\n\nb\r"), c("a", "", "b"))
@@ -1477,8 +1483,10 @@ test_that("a D console's question waits for typing to pause; a line finished the
   local_gptr_options(interactive = TRUE)
   tty = local_stty()
   drain = c("-icanon", "min", "0", "time", "0")
-  # the approval comes while a line is typed: its head is on fd 0, its end and Enter follow
-  reads = list(structure("please make the plot s", partial = TRUE), "imple, use a log scale")
+  # the approval comes while a line is typed: its head is on fd 0, its end and Enter follow, its
+  # edit keys read as typed (the drain's mode turns the terminal's editing off)
+  reads = list(structure("please make the plot sx\177", partial = TRUE), "imple, use a log scale",
+               structure("a draft\025", partial = TRUE))
   local_mocked_bindings(
     repl_terminal = function(rs) TRUE, console_readline_tty = function() FALSE,
     console_typed_lines = function(rd, ...) {

@@ -3874,12 +3874,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Final visual loop, round 3 (2026-10-24): Task 80: a D console's question waits for typing to pause as a T
   console's does (Task 19): before its rows `console_ask_wait_lines()` reads fd 0 in the drain's mode until no
   key has come for `ask_ready()`'s interval, routes a line ended meanwhile as typed during the run, and holds the
-  partial line in the reader (`rd$part`, `typed_join()`) for the drain after the rows, which keeps it. In
+  partial line in the reader (`rd$part`, `typed_join()`) for the drain after the rows, which keeps it; the
+  drain's mode turns the terminal's editing off, so DEL, Ctrl-H, Ctrl-W and Ctrl-U act as it would
+  (`tty_line_edit()`, Task 83: a Ctrl-U typed in the wait was kept as `<U+0015>`). In
   TERM=dumb an approval that came while `please make the plot simple, use a log scale` was typed kept `please
   make the plot s` and took `imple, use a log scale` as an invalid answer. Contract-visible: 04 §15.10 IC-76
   (a question waits for typing to pause). Tests: test-console-typing.R "a D console's question waits for typing
   to pause; a line finished then steers", "a question drains fd 0 before it reads: lines steer, a partial line is
-  kept".
+  kept", "lines read in the drain's mode get the terminal's edits (Task 80's visual check)".
 - Final visual loop, round 3 (2026-10-24): Task 81: the pause menu's title is `? Paused` always: with a
   sub-agent running it was `? Paused sdc8df9bda4`, a session id shown nowhere else; [s] and [f] act on the
   console's own session, which the live row and the sub-agent rows name. Contract-visible: 04 §15.10 (the pause

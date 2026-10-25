@@ -258,8 +258,9 @@ ask_ready = function(last_key, now, draft = "") {
 #' (console_typed()), and until the question may be asked (ask_ready()) the keys are read every
 #' 0.05 s, the live row saying `question waiting` (`rec$question` of its record), so Enter and Tab
 #' still queue. A D console's call (line modes, `the$tty$keys` FALSE) waits the same way, reading
-#' fd 0 as typed (tty_drain_mode()): a line ended meanwhile is routed (console_typed_route()), and
-#' the partial line waits in the reader (`rd$part`) for the question's drain, which keeps it
+#' fd 0 as typed (tty_drain_mode()), the terminal's edits applied (tty_line_edit()): a line ended
+#' meanwhile is routed (console_typed_route()), and the partial line waits in the reader (`rd$part`)
+#' for the question's drain, which keeps it
 #' @noRd
 console_ask_wait = function() {
   rd = console_repl_find()$reader
@@ -290,7 +291,7 @@ console_ask_wait_lines = function(rd) {
   repeat {
     lines = console_typed_lines(rd, 50L)
     if (length(lines)) last = reactor_now()
-    lines = typed_join(rd, lines)
+    lines = tty_line_edit(typed_join(rd, lines))
     if (isTRUE(attr(lines, "partial"))) {
       rd$part = lines[[length(lines)]]
       lines = lines[-length(lines)]

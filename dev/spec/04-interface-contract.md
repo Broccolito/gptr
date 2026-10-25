@@ -5668,7 +5668,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     call (the parent). A D console's call waits the same way (`console_ask_wait_lines()`, P28 Task 80, visual
     round 3: an approval that came while a line was typed kept its head in the history and took its rest as an
     answer): it reads fd 0 in the drain's mode until no key has come for `ask_ready()`'s interval (1 s, 3 s with
-    a partial line), a line ended meanwhile routed as typed during the run (`console_typed_route()`), its queue
+    a partial line), the terminal's edits applied as it would (DEL and Ctrl-H, Ctrl-W, Ctrl-U: `tty_line_edit()`,
+    also in the drain; P28 Task 83: a Ctrl-U typed in the wait was kept as `<U+0015>`), a line ended meanwhile
+    routed as typed during the run (`console_typed_route()`), its queue
     line above the question, and the partial line held in the reader (`rd$part`), which the drain after the rows
     (Task 2) continues and keeps; `gptr_confirm()` and the pause menu do not wait. A question's read that Ctrl-C or an end of input ends (`ui_console_read()`, `console_ask()`) first
     ends the person's row in a terminal (T, D), which readline leaves open, so the row stays as typed and what
