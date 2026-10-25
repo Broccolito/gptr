@@ -23,8 +23,8 @@ input), historical (a dated record, kept as written), code (a script or helper) 
 | Path | Holds | Status |
 |---|---|---|
 | `README.md` | This index. | current |
-| `PROGRESS.md` | Implementation status: the current checkpoint (P27, 2026-10-19), status table, milestone ledger M0-M5, resume log, execution and recording rules, delivery boundary. | current |
-| `HANDOFF.md` | Working handoff: checkpoints newest first, from P27 Windows coverage (PR #51, 2026-10-19) back to 2026-10-11, then an undated summary. | current |
+| `PROGRESS.md` | Implementation status: the current checkpoint (PRs #78-#81, 2026-10-25), status table, milestone ledger M0-M5, resume log, execution and recording rules, delivery boundary. | current |
+| `HANDOFF.md` | Working handoff: checkpoints newest first, from PRs #78-#81 (2026-10-25) back to 2026-10-11, then an undated summary. | current |
 | `DEVIATIONS.md` | Decision and deviation log from D-001 on, in id order. D-194 to D-199 and D-217 to D-219 are unused. | current |
 | `TESTING_PLAN.md` | Validation ledger: live, native and Windows gate results per checkpoint, the rules for recording a case, and the P26 live dogfood matrix (2026-10-17). `.github/workflows/Plan-gates.yaml` and `ci/check-plans.py` name it, so do not move or rename it. | current |
 | `TEST_FIRST_USE.md` | How to test the first-use provider picker with isolated settings. | reference |
@@ -32,7 +32,7 @@ input), historical (a dated record, kept as written), code (a script or helper) 
 | `style.R` | `gptr_style()`: `styler::tidyverse_style()` that keeps `=` assignment and the native pipe. | code |
 | `PAUSED_HANDOFF_2026-10-15.md`, `RESUME_PROMPT_2026-10-15.md`, `PAUSED_STATE_2026-10-15.json` | The 2026-10-15 pause set: handoff, resume prompt and machine-readable state. | stale |
 
-### Plan (`plan/`, 29 files)
+### Plan (`plan/`, 30 files)
 
 Implementation plans, one per subsystem, in writing-plans format (test-driven tasks with complete
 code).
@@ -44,6 +44,7 @@ code).
 | `P01`..`P25` | `P01-foundation.md` to `P25-release.md`, in milestones M0-M5. All are implemented except `P25`, whose CRAN submission and live steps are maintainer-owned. | historical; `P25` current |
 | `P26-console-agent-fixes.md` | Fixes for the interactive defects in issues #10-#20, then Tasks 12-37 (2026-10-16). Complete per `progress/P26.md`; some maintainer checks stay open. | historical |
 | `P27-windows-coverage.md` | Proof that every Windows function runs on hosted Windows CI (2026-10-19). Merged in PR #51. | historical |
+| `P28-console-codex.md` | The Codex-style `peter()` console: steering, the composer and live row, trigger-only completion, the output vocabulary (D-242..D-245; 2026-10-21, Tasks 1-92). Merged in PR #78. | historical |
 
 ### Spec (`spec/`, 11 files)
 
@@ -56,19 +57,19 @@ Requirements and design.
 | `02-north-star-examples.md` | Target user experience: the north-star examples the architecture must enable. | reference |
 | `03-architecture.md` | The definitive architecture. Read first. | current |
 | `04-interface-contract.md` | The definitive interface contract; section 15 (IC-32..IC-73) and IC-74 win over earlier sections. Read first. | current |
-| `05-plan-decomposition.md` | Maps plans P01-P27 to milestones, dependencies and R-file counts. | current |
+| `05-plan-decomposition.md` | Maps plans P01-P28 to milestones, dependencies and R-file counts. | current |
 | `06-review-resolution.md` | The 2026-09-30 adversarial review: verdicts on 144 issues, mapped to IC decisions. | historical |
 | `07-local-ollama.md` | Accepted 2026-10-03 amendment IC-74: Ollama chat and Clef/Clef Flash decision models. | current |
 | `proposals/` | The three competing architectures the design was synthesised from (P-A, P-B, P-C). | stale |
 
-### Progress (`progress/`, 51 files)
+### Progress (`progress/`, 52 files)
 
 Task evidence written during implementation: what ran, what passed, and the commit.
 
 | Path | Holds | Status |
 |---|---|---|
-| `P01.md`..`P26.md` | One log per plan: task evidence and plan acceptance. P27 is recorded in `HANDOFF.md` and `PROGRESS.md`. | historical |
-| `fixes.md` | Follow-up fixes made outside plan tasks: FIX-1..FIX-14, PERF-1 and PERF-2, then the hosted-CI rounds from CI-15 on. | current |
+| `P01.md`..`P26.md`, `P28.md` | One log per plan: task evidence and plan acceptance. P27 is recorded in `HANDOFF.md` and `PROGRESS.md`. | historical |
+| `fixes.md` | Follow-up fixes made outside plan tasks: FIX-1..FIX-20, PERF-1 and PERF-2, and the hosted-CI rounds from CI-15 on. | current |
 | `infra.md` | Hosted CI, tooling and Linux portability: rounds CI-1 to CI-20. | historical |
 | `simplicity-plan.md`, `simplicity.md` | The D-135 simplicity pass and `peter()` rename: the execution plan, then one section per package. | historical |
 | `rename-inventory.md`, `rename/rename.py` | The D-135 rename survey and the mechanical rename script. | historical |
@@ -104,13 +105,13 @@ Scripts and offline controls that the workflows in `.github/workflows/` run.
 | `windows-rss/`, `windows-startup/`, `windows-token/`, `bp-disk-observer/` | Windows probes and controllers and a disk observer, used by `windows-by-file.yaml`. `windows-startup/` and `windows-token/` are default-off diagnostics; `windows-token/held-packet/` is a held proposal, not executed. | code |
 | `orchestration/` | Workflow scripts for subagent runs (`plan-tasks.workflow.js`, `simplicity-review.workflow.js`) and `wfsum.py`, which summarises a run result. | code |
 
-The workflows in `.github/workflows/` (2026-10-22). The ruleset of `main` requires 14 checks, each
+The workflows in `.github/workflows/` (2026-10-25). The ruleset of `main` requires 14 checks, each
 up to date with `main`: every job of `R-CMD-check.yaml` and the two gates of `Windows-check.yaml`.
 
 | Workflow | Runs on | Jobs | Required checks |
 |---|---|---|---|
-| `R-CMD-check.yaml` | push to `main`, pull request | `macos-latest (release)`; `ubuntu-latest` with R `devel`, `release`, `oldrel-1` and `oldrel-4`; `ubuntu-latest (release, no Suggests)`, `ubuntu-latest (release, LC_ALL=C)`, `ubuntu-latest (devel, NOT_CRAN=false)`, `copy-safety (release)`, `copy-safety (devel)`, `connections left open`, `token benchmark` | all 12 jobs |
-| `Windows-check.yaml` | push to `main`, pull request | `windows-latest (<r>, shard <n>/4)`: `R CMD check --as-cran` with R `release` and `oldrel-4`, each in four serial shards (D-239) | the gates `windows-latest (release)` and `windows-latest (oldrel-4)`, which pass only when the latest attempt of each of their four shards passed |
+| `R-CMD-check.yaml` | push to `main`, pull request | `macos-latest (release)`; `ubuntu-latest` with R `devel`, `release`, `oldrel-1` and `oldrel-4`; `ubuntu-latest (release, no Suggests)`, `ubuntu-latest (release, LC_ALL=C)`, `ubuntu-latest (devel, NOT_CRAN=false)` (CRAN's timing thresholds; fails on a NOTE or when its check passes 480 s, CI-93), `copy-safety (release)`, `copy-safety (devel)`, `connections left open`, `token benchmark` | all 12 jobs |
+| `Windows-check.yaml` | push to `main`, pull request | `windows-latest (<r>, shard <n>/4)`: `R CMD check --as-cran` with R `release` and `oldrel-4`, each in four serial shards (D-239); `windows-latest (release, NOT_CRAN=false)`: the whole package as CRAN checks it (CRAN's test list, both manuals, CRAN's thresholds), failing on a NOTE or when its check passes 600 s (CI-93) | the gates `windows-latest (release)` and `windows-latest (oldrel-4)`, which pass only when the latest attempt of each of their four shards passed; the CRAN-mode job is not required |
 | `pkgdown.yaml` | push to `main` or `codex/skipped-platform-tests`, manual | build, validate and publish the pkgdown site | none |
 | `Plan-gates.yaml` | manual (`source_sha`); push to `codex/skipped-platform-tests` that changes `TESTING_PLAN.md` or this workflow | the four plan checks, serially | none |
 | `Exact-tarball.yaml` | manual (`source_sha`) | one source tarball, checked on Windows (release, devel), macOS (release) and Ubuntu (release, devel); optional dependency profiles | none |
@@ -147,6 +148,12 @@ Benchmark suites, development only. `bench/README.md` gives every command and ga
 | `shiny-html/`, `polyglot/`, `cache-sim/`, `perf/` | Shiny vs HTML/JS token ladder, polyglot tasks, cache economics and performance suites (P24). | code |
 | `common.R`, `tests/` | Shared helpers and development tests for the suites. | code |
 
+### Dogfood (`dogfood/`, 1 file)
+
+| Path | Holds | Status |
+|---|---|---|
+| `p28-console.R` | P28 Task 28's live dogfood of the console in terminal R under tmux: for a route and a scenario (or all), each moment's screen, the console events and a replay of the recording (`GPTR_LIVE_TESTS=true`). | code |
+
 ### Upstream (`upstream/`, 13 files)
 
 | Path | Holds | Status |
@@ -179,7 +186,7 @@ Nothing below is moved or deleted; archiving is the maintainer's decision.
    pass. Then came a cross-plan consolidation pass (machine index, five consistency checkers,
    per-plan fixes) and a final gate. Final state of that pass: 25 plans, 307 tasks, 0 error-level
    cross-plan findings, 0 parse errors, 0 lints. The tools are in
-   `research/assets/consolidation-tools/`; re-run them after editing a plan. P26 and P27 were
+   `research/assets/consolidation-tools/`; re-run them after editing a plan. P26 to P28 were
    written after that pass.
 
 ## Local models amendment
