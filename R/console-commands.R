@@ -57,9 +57,9 @@ command_parse = function(text) {
 #' it or transform it (into another command, or a prompt sent through `send(text)`). A line that
 #' is still a command goes out on the `console:command` channel (P15 records it as a comment). A
 #' character result is printed escaped (a `cli_ansi_string`, whose untrusted parts its handler
-#' escaped, with its styles), a blank row after it where lines keep the margin, as after a run's
-#' status line, `list(prompt =)` is sent, and an error is reported on
-#' stderr (the input counts as handled).
+#' escaped, with its styles), `list(prompt =)` is sent, and an error is reported on stderr (the
+#' input counts as handled); where lines keep the margin a blank row follows what is printed, as
+#' after a run's status line.
 #' @return Invisibly "unknown", "error", "prompt" or "done".
 #' @noRd
 console_command = function(text, session = NULL, send = NULL) {
@@ -84,15 +84,19 @@ console_command = function(text, session = NULL, send = NULL) {
     spec = registry_get("command", cmd$name, session = session)
     args = cmd$args
   }
+  say = function(...) {
+    console_notice(...)
+    if (nzchar(console_pad())) console_write("")
+  }
   if (is.null(spec)) {
-    console_notice("Unknown command /", console_escape(cmd$full, FALSE),
-                   ". Type /help for the list.", .error = TRUE)
+    say("Unknown command /", console_escape(cmd$full, FALSE), ". Type /help for the list.",
+        .error = TRUE)
     return(invisible("unknown"))
   }
   ctx = (if (!is.null(session)) session_live(session)$ctx) %||% ctx_new(session)
   out = tryCatch(spec$handler(args, ctx), error = function(e) {
-    console_notice("Error in /", console_escape(spec$name, FALSE), ": ",
-                   console_escape(conditionMessage(e), FALSE), .error = TRUE)
+    say("Error in /", console_escape(spec$name, FALSE), ": ",
+        console_escape(conditionMessage(e), FALSE), .error = TRUE)
     e
   })
   if (inherits(out, "error")) return(invisible("error"))
@@ -106,8 +110,7 @@ console_command = function(text, session = NULL, send = NULL) {
     } else {
       console_lines(out)
     }
-    console_notice(paste(lines, collapse = "\n"))
-    if (nzchar(console_pad())) console_write("")
+    say(paste(lines, collapse = "\n"))
   }
   invisible("done")
 }

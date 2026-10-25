@@ -71,6 +71,12 @@ test_that("unknown commands and failing handlers are reported; the input counts 
   r = run_command(rs, "/boom")
   expect_identical(r$res, "error")
   expect_true(any(grepl("Error in /boom: kaput", r$err, fixed = TRUE)))
+  # in the margin the notice ends with a blank row, as a command's output does
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  for (cmd in c("/nope", "/boom")) {
+    expect_identical(run_command(rs, cmd)$out, "", info = cmd)
+  }
 })
 
 test_that("a command's text is printed escaped and a list(prompt =) is sent", {
