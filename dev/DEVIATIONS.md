@@ -4426,6 +4426,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   eval(expr, st$envir) : a warning`, naming the evaluator), and a run only when it ends. Contract-visible: 04 §7.9
   `eval_r()`, §15.10 IC-82 (what the code prints); 03 §6.17. Tests: test-console-repl.R "a !code warning shows
   before the next prompt, none left for R's top level".
+- Final visual loop, round 3 (2026-10-24): Task 78: the text a record held at the pause menu continues under `received
+  before the abort:` also when the abort's cut writes it (`console_abort_held()`, from `console_on_message_end()`
+  and `console_render_pause()` where the renderer still holds text, `md$holds()`), once a record; the label came
+  only with a delta after the menu, so a held row the redactor had passed printed under `› a` alone, as if the
+  model answered after the abort. [b] keeps its bare cut row. Contract-visible: none. Tests:
+  test-console-abort-stream.R "an abort's cut row is labelled once though no delta follows the menu (visual round
+  3)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

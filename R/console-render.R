@@ -411,6 +411,8 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     })
     invisible()
   }
+  # text received and not yet written: a held row, a word, a table
+  r$holds = function() nzchar(st$row) || grepl("\\S", st$buf) || length(st$table) > 0L
   r$finish = function(cut = FALSE) {
     refresh_width()
     ingest("", final = TRUE)
@@ -703,9 +705,28 @@ console_render_pause = function() {
   active = console_state()$active
   for (id in ls(active, all.names = TRUE)) {
     rec = get(id, envir = active)
+    if (!is.null(rec$md) && rec$md$holds()) {
+      console_abort_held(rec, isTRUE(session_live(rec$session)$run$signal$aborted))
+    }
     console_pause_one(rec, cut = TRUE)
     rec$paused = TRUE
     rec$last = NULL
+  }
+  invisible(NULL)
+}
+
+#' The text a record held at the pause menu (`rec$paused`) that is written after it: once, where the
+#' run was `aborted`, it continues under a dim `received before the abort:` notice, one block with
+#' it, so it never reads as the model answering after the abort; a delta that arrives after the
+#' menu (console_on_message_update()) or the cut that ends the answer (console_on_message_end(),
+#' console_render_pause()) writes it
+#' @noRd
+console_abort_held = function(rec, aborted) {
+  if (!isTRUE(rec$paused)) return(invisible(NULL))
+  rec$paused = FALSE
+  if (aborted) {
+    console_gap(rec, "text")
+    console_notice(console_style()$dim("received before the abort:"))
   }
   invisible(NULL)
 }
@@ -1037,14 +1058,8 @@ console_on_message_update = function(event, ctx) {
   think = identical(kind, "thinking") &&
     (verbosity() >= 3L || identical(session_live(rec$session)$run$model[["type"]], "cli"))
   visible = identical(kind, "text") || think
-  if (visible && isTRUE(rec$paused) && any(nzchar(delta))) {
-    rec$paused = FALSE
-    live = session_live(rec$session)
-    if (isTRUE(live$run$signal$aborted)) {
-      # what arrived before the abort continues under a dim label, one block with it
-      console_gap(rec, "text")
-      console_notice(console_style()$dim("received before the abort:"))
-    }
+  if (visible && any(nzchar(delta))) {
+    console_abort_held(rec, isTRUE(session_live(rec$session)$run$signal$aborted))
   }
   if (identical(kind, "text")) {
     if (!is.null(rec$think)) rec$think$finish()
@@ -1106,7 +1121,9 @@ console_on_message_end = function(event, ctx) {
     if (is.null(rec$md)) {
       console_print_text(console_msg_text(msg), console_stream_output(rec))
     } else {
-      rec$md$finish(cut = isTRUE(msg$stop_reason %in% c("aborted", "error", "length")))
+      aborted = identical(msg$stop_reason, "aborted")
+      if (rec$md$holds()) console_abort_held(rec, aborted)
+      rec$md$finish(cut = aborted || isTRUE(msg$stop_reason %in% c("error", "length")))
     }
     rec$think = NULL
     rec$md = NULL

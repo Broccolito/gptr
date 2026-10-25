@@ -40,6 +40,28 @@ test_that("abort labels a redactor tail received after a pause without printing 
   expect_null(console_record(list(run = run$id)))
 })
 
+test_that("an abort's cut row is labelled once though no delta follows the menu (visual round 3)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  run = abort_stream_run()
+  out = utils::capture.output({
+    abort_stream_delta(run, "It adds a column to fuel, which changes")
+    # all of it reached the renderer, which holds the partial row
+    run_flush_deltas(run)
+    # the pause menu: its records paused, their last block a question's, then [a]
+    for (rec in as.list(console_state()$active)) {
+      rec$paused = TRUE
+      rec$last = "prompt"
+    }
+    cat(">> a\n")
+    run_abort(run, "user")
+  })
+  # the held row continues under the label, never as if the model answered after the abort
+  expect_identical(out[1:3], c(">> a", "received before the abort:",
+                               "It adds a column to fuel, which changes..."))
+  expect_identical(sum(out == "received before the abort:"), 1L)
+})
+
 test_that("continuing a pause never adds an abort-tail label", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
