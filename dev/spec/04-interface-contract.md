@@ -5716,6 +5716,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     gone) and draws the live row again with the draft (`console_asked()`); after [a] the draft joins the kept
     list (Task 18). [b] closes the answer with its cut row, then, after a blank row, writes the terms `in the
     background (experimental, ?"gptr-background")` and `!!gptr::gptr_wait(gptr::gptr_last()) continues it here`
+    (without `!!` where no console REPL is on the stack, as for a `peter("...")` call at R's prompt; review R19)
     dim at column 2 (`console_terms()`, so a row ends at a whole term), the parenthesis in place of the background
     service's notice, which the menu muffles (P21 gives it once a process), and a blank row before the prompt (P28
     Task 53: the block sat right under the answer's tail; P28 Task 70, visual round 3: the service's two sentences

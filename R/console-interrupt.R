@@ -261,7 +261,9 @@ policy_menu = function(cnd, pol) {
         # nothing runs it while the chat prompt waits (later runs only at R's own prompt)
         where = "in the background"
         if (said) where = paste0(where, " (experimental, ?\"gptr-background\")")
-        terms = c(where, "!!gptr::gptr_wait(gptr::gptr_last()) continues it here")
+        # `!!` is the chat prompt's R code; at R's own prompt it would negate the session
+        bang = if (!is.null(console_repl_find())) "!!"
+        terms = c(where, paste0(bang, "gptr::gptr_wait(gptr::gptr_last()) continues it here"))
         console_write(sym$dim(paste0("  ", console_terms(terms, ui_width() - 2L))))
         console_background_settle()
         console_write("")
