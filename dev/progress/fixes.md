@@ -4472,3 +4472,269 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   that no deferred event for `s1` is left.
 - Green: `^ext-(check|events)$` PASS 455.
 - Deviations: none. Open: none.
+
+## Task FIX-20 - Console review fixes (2026-10-25, #PR)
+Scope: the cheat sheet's console sections reviewed against P28's build (`516ec73c`, PR #78); each code finding
+was confirmed by an independent refuter before it was fixed. Of 34 findings (R01-R34), 33 are fixed (R29 in part)
+in 24 commits (duplicates share one), each red on `516ec73c`'s code first; R27 is not fixed. Console neighbours
+(`^(console-|gptr-config|agent-run|agent-loop|agent-dispatch|agent-background|session-object|doc-|arch-layers)`)
+at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
+
+### R01 - A label keeps a value wider than the row on its row
+- Commit `cdd2b003`. Red: `^console-commands$` FAIL 1 PASS 146: on macOS without `.gptr/`, `/status`'s `file`
+  row (a tempdir path of about 108 columns) broke at its only space, `file` alone and the path at column 2.
+- Fix: `console_wrap()` (R/utils-conditions.R) keeps a label and one value wider than the row on one row, which
+  the terminal wraps; a value that fits still goes to the next row. The verdict's guard kept every two-word line
+  on one row, which would also overflow a pair that fits (menus and permission prompts count their rows).
+- Green: PASS 147; neighbours FAIL 0 SKIP 3 PASS 8705. Lint clean.
+- Deviations: none. Open: none.
+
+### R02 - A failing command's notice ends with a blank row too
+- Commit `6892a071`. Red: `^console-commands$` FAIL 2 PASS 147: after "Unknown command" and "Error in /<cmd>"
+  `peter>` came straight after the red notice; every other console block ends with a blank row.
+- Fix: `console_command()` prints its three notices through one local `say()`, which writes the margin's blank row.
+- Green: PASS 149; neighbours FAIL 0 SKIP 3 PASS 8707. Lint clean.
+- Deviations: none. Open: none.
+
+### R03, R05 - /env and the banner in a fork list what the fork reads
+- Commit `c54627b6`. Red: `^console-commands$` FAIL 3 PASS 151: after `/fork`, `/env` listed `ls()` of the
+  overlay alone (described with `inherits = FALSE`) and the banner's objects line too, so the home's objects the
+  fork reads were missing; `/env [pattern]` matches a literal substring (R05).
+- Fix: `console_env_names()` walks the overlay chain as `env_view_snapshot()` does (D-252), and `/env` describes
+  each name where it is bound. The verdicts named `binding_env()`, an L3 function the console may not call
+  (arch-layers), so the lookup is a two-line walk. `/help` and the console vignette (.Rmd and .Rmd.orig) say
+  `/env [text]`.
+- Green: PASS 154; neighbours FAIL 0 SKIP 3 PASS 8712. Lint clean.
+- Deviations: D-253. Open: none.
+
+### R04 - /context marks the ledger's total as an estimate
+- Commit `6c087d0b`. Red: `^console-commands$` FAIL 1 PASS 153: the ledger's `total` (gptr's estimate of what it
+  sent) sat unmarked over `context left`, which comes from the counts the provider reported.
+- Fix: the row reads `total (est.)`. The verdict also moved the test's total to `length - 2`; it is the row before
+  `context left`, so the index stays `length - 1`.
+- Green: PASS 154; neighbours FAIL 0 SKIP 3 PASS 8712. Lint clean.
+- Deviations: D-253 (IC-77). Open: none.
+
+### R06, R07 - /clear keeps the thinking level of the session it ends
+- Commit `35b954b5`. Red: `^console-commands$` FAIL 2 PASS 155: in a console reopened with `s |> peter()`
+  (`rs$model` NULL) `/clear` fell back to `s$model`, which holds no level, so the next conversation lost `:high`.
+- Fix: the fallback is the session's model with its level as the `:<level>` suffix, built inline with
+  `kernel_model_ref()`'s rule that a router chooses its own (that function is L3). R06's other points are left:
+  the fork's objects after `/clear` are R08's, and `/exit` returning NULL after `/clear` is documented.
+- Green: PASS 157; neighbours FAIL 0 SKIP 3 PASS 8715. Lint clean.
+- Deviations: none. Open: none.
+
+### R08 - /clear keeps the workspace the conversation used
+- Commit `49b67fa7`. Red: `^console-commands$` FAIL 2 PASS 158: after `/fork`, or on a piped session with its own
+  `envir`, `/clear` fell back to the console call's environment, so the objects `/env` had listed were gone from
+  `/env` and `!code` although `/clear` said they were kept.
+- Fix: `cmd_clear()` keeps the evaluation environment (`rs$envir = repl_eval_env(rs)`). R06's verdict advised
+  against keeping a fork's overlay; two conversations of a default console share globalenv the same way and the
+  fork's home stays untouched, so R08 is followed.
+- Green: PASS 160; neighbours FAIL 0 SKIP 3 PASS 8718. Lint clean.
+- Deviations: none. Open: none.
+
+### R09 - A cut listing names as.data.frame() for the rest
+- Commit `dee60779`. Red: `^(utils-text|listing-print)$` FAIL 2 PASS 85 SKIP 1: `print.gptr_listing()` said
+  `# 20 of 26 rows shown` and no way to see the rest (`/skills` and every listing command).
+- Fix: the count line adds `; as.data.frame() lists all`. No new argument; the verdict's `/skills` filter is a
+  feature and is left out.
+- Green: PASS 87 SKIP 1; neighbours FAIL 0 SKIP 3 PASS 8718. Lint clean.
+- Deviations: none (04 says only "a count line"). Open: none.
+
+### R10 - /doc and /status name the transcript the project remembers
+- Commit `6dd99544`. Red: `^console-commands$` FAIL 3 PASS 164: between turns `/doc` said "No document is bound."
+  and `/status` `document  (none)` while the console kept writing into the remembered transcript.
+- Fix: the `doc.site` service (R/doc-replay.R) falls back, outside a run where a person can answer
+  (`gptr_can_prompt()`) and with no document or `gptr_doc()` binding, to the transcript the project remembers
+  (`doc_console_site()`; never a new one). In-run callers (the documents section, the r and edit tools) and callers
+  nobody can answer are unchanged. The verdict put the fallback in `cmd_doc_site()`, which would call doc-*.R
+  functions from the console (arch-layers).
+- Green: PASS 167; neighbours FAIL 0 SKIP 3 PASS 8725. Lint clean.
+- Deviations: D-253 (04 §7.0). Open: none.
+
+### R11 - An error message of two lines is two rows
+- Commit `9a2ce208`. Red: `^console-(commands|repl)$` FAIL 2 PASS 510: `console_command()` and
+  `repl_passthrough()` escaped a line feed as `<U+000A>`, so `gptr_abort(c(msg, hint))` (`/resume` without
+  `.gptr/`) was one garbled row and `repl_passthrough()`'s split on "\n" never fired.
+- Fix: both use `console_escape()`'s default, which keeps line breaks. The two optional sites in
+  R/console-interrupt.R are left: their rows go through `console_wrap()` as one row, not a one-token change.
+- Green: PASS 512; neighbours FAIL 0 SKIP 3 PASS 8726. Lint clean.
+- Deviations: none. Open: none.
+
+### R12, R13 - /retry preloads the undone prompt's skills again
+- Commit `012b1a3b`. Red: `^(console-commands|ckpt-rewind)$` FAIL 1 PASS 412: `/retry` of a `/skill:<name>` turn,
+  or of a first turn `peter(skills =)` preloaded, sent the bare text: `gptr_rewind()` kept only the prompt's text.
+- Fix: `ckpt_rewind_target()` also returns the opening message's `skill_content` names, `gptr_rewind()` keeps them
+  as `s$last_rewind$skills` (`?gptr_rewind`, man/gptr_rewind.Rd), and `cmd_retry()` makes them the next prompt's
+  skills, as `/skill:` does. R12's version read the checkpoint tree from the console (arch-layers), so R13's is
+  followed.
+- Green: PASS 413; neighbours FAIL 0 SKIP 3 PASS 8731. Lint clean.
+- Deviations: D-253 (04 §5.1). Open: none.
+
+### R14, R29 - A turn after an undone first turn assigns the session again
+- Commit `2a74bac9`. Red: `^doc-formats$` FAIL 2 PASS 260: `doc_console_statement()` stripped the inert prefix,
+  so the `#~ s_x = peter(...)` of an undone or retried first turn still counted as the assignment and the next
+  turn was written `s_x |> peter(...)`, which `source()` could not run (object 's_x' not found).
+- Fix: only a live assignment counts (one expression). R29's recommended fix ("bug 4") is this one.
+- Green: PASS 262; neighbours FAIL 0 SKIP 3 PASS 8704. Lint clean.
+- Deviations: none. Open: R29's reported part, a later `!code` line that uses an undone turn's object, stays live,
+  so `source()` stops there; making direct-R lines inert by the names they mention is dependency tracking (about 25
+  lines and a `/redo` path) for a rare case, which the verdict and the sheet's note call a defensible limitation.
+
+### R15 - Leaving with a second Ctrl-C ends the prompt's row
+- Commit `1cb854dd`. Red: `^console-repl$` FAIL 1 PASS 344: the second Ctrl-C at the prompt left the `peter> `
+  row open, so R's own `> ` followed on the same row.
+- Fix: the row is ended before the REPL leaves.
+- Green: PASS 345; neighbours FAIL 0 SKIP 3 PASS 8705. Lint clean.
+- Deviations: none. Open: none.
+
+### R16 - The agent runs programs with peter$sh(), not system2()
+- Commit `ce976049`. Red: `^(prompt-text|northstar|bench-context|prompt-sections)$` FAIL 4 PASS 622 (the wording
+  checks and the rendered `r_session` text in fixtures/bench/prefix-baseline.json): a `system()`/`system2()` child
+  inherits fd 1, which `sink()` cannot redirect, so its output bypasses the capture ("[no output]") and lands on
+  the frozen live row, while the D-216 line told the model to use `system2(..., stdin = nullfile())`.
+- Fix: the line reads "- system() and system2() children read the user's terminal and you do not see their
+  output: use peter$sh() instead." Same 27 o200k tokens; the static prefixes stay 1262/2378/2856/2999 and
+  `dev/bench/tokens/run.R --check` passes. The verdict's `system2(..., stdout = TRUE)` alternative and its
+  `eval_r()` pins of base R's fd behaviour are left out (`peter$sh()` capture is tested in test-bridge-sh.R).
+  `?peter` (R/gptr-gateway.R, man/peter.Rd) and 03 §7.3 say the same.
+- Green: PASS 626; with `gptr-gateway` and `eval-core` FAIL 0 PASS 1422; neighbours FAIL 0 SKIP 3 PASS 8702. Lint
+  clean.
+- Deviations: D-253 (amends D-216). Open: the smeared live row of a `system()` child's output stays (no runtime
+  change, as the verdict advised).
+
+### R17 (bug 1), R18 - gptr_wait() releases the background session it settled
+- Commit `aa4bf4c2`. Red: `^agent-background$` FAIL 3 PASS 211: after `[b]` and the hinted
+  `!!gptr::gptr_wait(gptr::gptr_last())` the settled session stayed registered (only `bg_sweep()` from the 50 ms
+  timer released it, and the `peter>` prompt runs none), so `console_foreground()` was FALSE and none of its later
+  prompts rendered; `gptr_jobs()` still listed it.
+- Fix: `gptr_wait()` (R/gptr-sdk.R) runs `bg_sweep(FALSE, FALSE)` once after its pump when background state exists,
+  as the in-pump tick does (no notice, no resume); not in `sdk_pump()`, which nested pumps inside an idle tick's
+  tool also call. The new test cancels the later timer, so only the wait can release the session.
+- Green: PASS 214; `gptr-sdk` PASS 116; neighbours FAIL 0 SKIP 4 PASS 8704 (at `516ec73c` the same run had FAIL 3,
+  the console-typing pause-menu pty test under load average 20, green in all three fixed runs). Lint clean.
+- Deviations: none. Open: `gptr_step()` on a background session still relies on the timer (not reported; at R's
+  prompt the idle tick releases it at once).
+
+### R17 (bug 2), R19, R31 - [b]'s gptr_wait hint takes `!!` only under the chat
+- Commit `2e676454`. Red: `^console-interrupt$` FAIL 1 SKIP 1 PASS 131: the `[b]` row always named
+  `!!gptr::gptr_wait(...)`; for a `peter("...")` call at R's prompt `!!x` is a double negation, so the wait ran to
+  its end and `!` then failed on the session ("invalid argument type").
+- Fix: `bang = if (!is.null(console_repl_find())) "!!"` in `policy_menu()`, so `!peter(...)` in the chat's code
+  keeps it (R31's argument for `console_repl_find()` over `console_repl_prompt()`).
+- Green: PASS 132; neighbours FAIL 0 SKIP 3 PASS 8707. Lint clean.
+- Deviations: D-253 (IC-76; amends D-245). Open: R17's cheat-sheet wording is the sheet's, not code.
+
+### R20 - A transcript opens with its replay note whatever its first line
+- Commit `c3ba3748`. Red: `^doc-formats$` FAIL 6 PASS 256: a transcript whose first line was a prompt put the
+  session header above the replay note and `library(gptr)`; one started by direct R or a command put them first.
+- Fix: `doc_transcript_header()` starts a new file with the preamble, then a blank line and the header, as IC-49
+  says; one existing test that pinned the old line index moved.
+- Green: PASS 262; `doc-io` and `doc-replay` PASS 1562; neighbours FAIL 0 SKIP 3 PASS 8705. Lint clean.
+- Deviations: D-253 (04 §11.5). Open: none.
+
+### R21 - peter(.stdin = TRUE) on a terminal shows each typed line once
+- Commit `209a1d54`. Red: `^console-repl$` FAIL 1 PASS 346: the stdin reader echoed every line it read, which a
+  terminal already shows, so each line appeared twice.
+- Fix: the line is echoed only where the reader's `file("stdin")` is no tty (`typed = inherits(rd$con, "file") &&
+  stdin_tty()`); the prompt is still written. The verdict's bare `!stdin_tty()` would break the suite's echo tests
+  when Rscript runs from a terminal, as the test's textConnection pipe always echoes. Under script(1) "Hello."
+  shows once (twice before); piped input is unchanged.
+- Green: PASS 347, also with a tty stdin; neighbours FAIL 0 SKIP 3 PASS 8707. Lint clean.
+- Deviations: none. Open: a secret question under `.stdin = TRUE` on a tty is still shown by the terminal's own
+  echo, before and after this fix.
+
+### R22, R33 - A session the console returns at /exit keeps its specs
+- Commit `b3d4915f`. Red: `^console-repl$` FAIL 3 PASS 347: `repl_main()` dispatched `session_shutdown` (reason
+  "exit") for a session it created, which dropped its rank-0 records (a provider object as `model =`, `tools =`,
+  `agents =`, `plugins =`) while `/exit` returned it: `s |> peter()` then asked the egress question for an offline
+  fake and lost the session's tools.
+- Fix: the REPL no longer shuts the session down (net code removal); like an API or piped-in session it is the
+  caller's and gets `session_shutdown` when collected or at unload (the jsonl frontend already worked so). R33's
+  alternative, skipping the registry drop for reason "exit", would still stop the CLI child and forget the
+  session's plugins and checkpoints at `/exit`, and shut down a session still running in the background.
+- Green: PASS 350; `^(ext-events|ext-load|ext-registry|ext-plugins|session-live|session-registry-retention|
+  cli-common|ckpt-rewind|gptr-gateway|skill-discover)$` PASS 2326; neighbours FAIL 0 SKIP 3 PASS 8710. Lint clean.
+- Deviations: D-253 (04 §10.4 events table, 03 §10.1 step 9; P14). Open: none.
+
+### R23 - A trailing backslash continues a pasted line too
+- Commit `eb839de7`. Red: `^console-repl$` FAIL 1 PASS 350: where a paste arrives whole (CRAN's R for macOS in a
+  terminal), `repl_read_logical()` joined its lines before the continuation rule, which saw only the end of the
+  joined text: a backslash ending the first or a middle line stayed in the message.
+- Fix: every pasted line's trailing backslash continues it, as a typed one's does.
+- Green: PASS 351; neighbours FAIL 0 SKIP 3 PASS 8711. Lint clean.
+- Deviations: none. Open: none.
+
+### R24 - RStudio's /help says tab skips $ and @ words
+- Commit `9d68fdb2`. Red: `^console-commands$` FAIL 1 PASS 171: RStudio completes only syntactic names, so `!d$m`
+  and `!x@y` complete nothing, while `/help` said "after ! or /, complete the word".
+- Fix: in RStudio the key reads "after ! or / (not $ or @ words), complete the word"; the completer and the banner
+  are unchanged, as the verdict says.
+- Green: PASS 172; neighbours FAIL 0 SKIP 3 PASS 8731. Lint clean.
+- Deviations: none. Open: none.
+
+### R25, R26 - The @files of a prompt fit their budget where the line says so
+- Commit `528426f8`. Red: `^console-repl$` FAIL 8 PASS 352: the line under a prompt named each @file's 40 lines
+  before the `user_files` budget (2,000 tokens) was applied at send time, which then dropped later files whole, or
+  cut the first, unmarked.
+- Fix: `repl_mentions()` fits the files in order as it builds their blocks (`lines_fit()`, one constant
+  `console_files_budget`; `console_files_text()` deleted): a file cut to the room left is `truncated="true"` and
+  said `first <n> lines`, one with no room is `omitted="true"` and said `not attached, over the size limit`. R26's
+  sequential fill, not R25's equal split, which needs two passes and cuts files that would fit. `?peter`
+  (man/peter.Rd) and the console vignette say the files of one prompt share about 2,000 tokens.
+- Green: PASS 360; neighbours FAIL 0 SKIP 3 PASS 8720. Lint clean.
+- Deviations: D-253. Open: none.
+
+### R27 - A live re-ask does not resend an @file's head (not fixed)
+- No commit. A `gptr_source(replay = "live")` re-ask sends the literal `@notes.md` without the console-only file
+  head, which the transcript never records: a design gap, not a regression. The verdict's simplest option is no
+  change (the sheet and `?peter` are accurate; the model still sees `@notes.md` and can read the file); its
+  optional note (`# attached at the console: notes.md`) needs a call attribute, a site field and a parameter across
+  console-repl.R, doc-locate.R, doc-replay.R and doc-formats.R and sends the same request.
+- Deviations: none. Open: as above.
+
+### R28, R34 - A ```r fence typed in RStudio's console runs as R
+- Commit `b913a22d`. Red: `^console-repl$` FAIL 2 PASS 361: RStudio's insert_matching (on by default) pairs the
+  third backtick, so a typed ```` ```r ```` reads ```` ```r` ````; its info string "r`" failed the R-fence test and
+  the block went to the model as prompt text.
+- Fix: backticks after the info string are ignored (the closer already accepts extra ones); ```` ```python` ````
+  stays prompt text. Both verifiers checked the regex in RStudio; the test feeds the lines RStudio produces.
+- Green: PASS 363; `console-fences` green; neighbours FAIL 0 SKIP 3 PASS 8723. Lint clean.
+- Deviations: none. Open: none.
+
+### R30 - An interrupt right behind the first opens the pause menu
+- Commit `35f15e96`. Red: `^console-interrupt$` FAIL 3 SKIP 1 PASS 132: RStudio delivers one Esc as two interrupts
+  (it sets R's flag and sends a SIGINT whose handler sets it again); when R took the first before the second was
+  set, the second fired inside `policy_menu()`, where only the policy's exiting handler is active, and the run
+  aborted before `? Paused` showed (2 of 14 presses in the review).
+- Fix: right after `pol$abort_runs = pol$runs` the menu runs `tryCatch(Sys.sleep(0.05), interrupt = function(e)
+  NULL)`, so an interrupt in its first 50 ms is taken; a deliberate second press still aborts. The new test sends a
+  real SIGINT from an active binding on `pol$runs` (skipped on CRAN, on Windows and where SIGINT is ignored).
+- Green: PASS 135 (3 runs); with `CI=true` (INFRA-03, real SIGINTs to an interactive R) FAIL 0 SKIP 0 PASS 153;
+  neighbours with SIGINT at its default FAIL 0 SKIP 3 PASS 8710. Lint clean.
+- Deviations: D-253 (04 §7.14). Open: none (03 §6.2's "a second Ctrl-C aborts" still holds for a person's press).
+
+### R32 - gptr_init() does not ask about trust while trust holds
+- Commit `30dbaa7b`. Red: `^gptr-config$` FAIL 4 PASS 609: `gptr_init()` asked the trust question and stored the
+  answer unconditionally, so a trusted project was asked at every init and Enter's default No replaced the
+  recorded TRUE; later runs then skipped the project's resources without a notice.
+- Fix: `gptr_init()` asks only when `gptr_can_prompt()` and neither a recorded nor an in-process trust holds
+  (`trust_holds(proj)`), as `trust_resolve()` does; a recorded No, an undecided project and a lapsed trust are asked
+  as before. `?gptr_init` (R/gptr-config.R, man/gptr_init.Rd) says so; vignettes/configuration.Rmd describes a fresh
+  project and stays.
+- Green: PASS 613; the other `gptr_init()` callers' files PASS 2802; neighbours FAIL 0 SKIP 3 PASS 8706. Lint clean.
+- Deviations: D-253 (04 §6.2). Open: none.
+
+### Assembly
+- The four groups' 24 commits were cherry-picked onto `516ec73c` (G3, G4, G1, G2) without conflicts;
+  `document` changed nothing; lint of the 12 changed R and 10 test files is clean.
+- Green at the branch head: neighbours FAIL 0 SKIP 5 PASS 8759 (the two extra skips are the SIGINT tests of
+  `console-interrupt` and `console-render` in a process that ignores SIGINT; `^(console-interrupt|console-render)$`
+  with SIGINT at its default FAIL 0 SKIP 1 PASS 853); the groups' other suites
+  (`^(listing-print|utils-text|northstar|prompt-text|prompt-sections|bench-context|ckpt-rewind|gptr-sdk|gptr-gateway|
+  eval-core|ext-events|ext-load|ext-registry|ext-plugins|session-live|session-registry-retention|cli-common|
+  skill-discover|bridge-sh)$`) FAIL 0 SKIP 3 PASS 3749.
+- Open: found in passing (R27's evidence, doc-locate.R): a console transcript with a `{name}` prompt cannot replay
+  without a model, as `doc_console_site()` sets `args_hash = NULL` and the block reads stale under
+  `GPTR_REPLAY=replay`; to triage.
