@@ -27,6 +27,20 @@ test_that("the stdin reader echoes the prompt and the escaped line when asked", 
   expect_identical(got, "hello \033")
 })
 
+test_that("the stdin reader leaves a line typed on a terminal to the terminal's echo", {
+  f = withr::local_tempfile(lines = "hello")
+  local_mocked_bindings(console_stdin_open = function() file(f, open = "r"),
+                        stdin_tty = function() TRUE)
+  rd = console_reader(stdin = TRUE)
+  withr::defer(rd$close())
+  got = NULL
+  out = utils::capture.output({
+    got = rd$read("peter> ")
+  })
+  expect_identical(out, "peter> ")
+  expect_identical(got, "hello")
+})
+
 test_that("close() closes the stdin connection once (IC-59)", {
   skip_on_cran()
   n0 = nrow(showConnections())

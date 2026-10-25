@@ -108,8 +108,8 @@ readline_limit = function() {
 #' then has console_completer() as R's custom completer, the caller's kept for ! lines, but at
 #' `+ `, where the line continues !code and R's own completion applies; `caller`, list() of the
 #' caller's completer where the REPL's is installed for its whole life (RStudio). With `echo` the
-#' stdin reader writes the prompt and the escaped line (never a `secret` one) on `stream`, so a
-#' piped session reads like a terminal session.
+#' stdin reader writes the prompt and the escaped line (never a `secret` one, nor one a terminal
+#' showed as it was typed) on `stream`, so a piped session reads like a terminal session.
 #' @noRd
 console_reader = function(stdin = FALSE, echo = stdin) {
   rd = new.env(parent = emptyenv())
@@ -124,6 +124,8 @@ console_reader = function(stdin = FALSE, echo = stdin) {
   echo = isTRUE(echo)
   if (isTRUE(stdin)) {
     rd$con = console_stdin_open()
+    # a terminal shows the line typed on it (fd 0 read as file("stdin")); its prompt it does not
+    typed = inherits(rd$con, "file") && stdin_tty()
     # a question's `accept` (ui_console_read()) means nothing on a pipe
     rd$read = function(prompt = "", stream = "stdout", secret = FALSE, ...) {
       if (is.null(rd$con)) return(NA_character_)
@@ -140,7 +142,9 @@ console_reader = function(stdin = FALSE, echo = stdin) {
         return(NA_character_)
       }
       x = as_utf8(x)
-      if (echo) gptr_message_write(paste0(if (!secret) console_escape(x, FALSE), "\n"), stream)
+      if (echo && !typed) {
+        gptr_message_write(paste0(if (!secret) console_escape(x, FALSE), "\n"), stream)
+      }
       x
     }
   } else {
