@@ -377,6 +377,24 @@ test_that("/status, /tools and /env describe the console", {
                    paste0("session   ", s$id, "  (idle, 1 turn)"))
 })
 
+test_that("in the margin a label keeps a value wider than the row on its row", {
+  local_console_commands()
+  s = idle_session()
+  d = session_data(s)
+  d$file = paste0("/var/folders/j_/", strrep("f", 32), "/T//RtmpAbCdEf/gptr/sessions/",
+                  strrep("a", 25), ".jsonl")
+  testthat::local_reproducible_output(width = 80)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  out = run_command(repl_state(s, new.env()), "/status")$out
+  expect_true(paste0("  file      ", d$file) %in% out)
+  # prose still wraps at the content width, and a value that fits a row goes to the next
+  expect_identical(console_wrap(paste(rep("word", 24), collapse = " "), 40),
+                   rep(paste(rep("word", 8), collapse = " "), 3))
+  expect_identical(console_wrap(paste0("  ", strrep("l", 15), "  ", strrep("v", 30)), 40),
+                   paste0("  ", c(strrep("l", 15), strrep("v", 30))))
+})
+
 test_that("/doc and /status name a gptr_doc() binding before the first prompt", {
   local_console_commands()
   root = local_project()
