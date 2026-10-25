@@ -166,13 +166,14 @@ test_that("/help's keys follow the console, as the banner does (review of Tasks 
   local_console_commands()
   local_gptr_options(interactive = TRUE)
   words = function(...) gsub("\\s+", " ", paste(help_text(...), collapse = " "))
-  # RStudio: no composer (enter, up), its triggers ! and /, a typed line the next prompt
+  # RStudio: no composer (enter, up), its triggers ! and / but no $ or @ word (which it would put in
+  # backticks), a typed line the next prompt
   rstudio = words("L", "rstudio")
   expect_false(any(grepl("^  (enter|up) ", help_text("L", "rstudio"))))
   for (w in c("@, !, !!", "In other consoles")) {
     expect_false(grepl(w, rstudio, fixed = TRUE), info = w)
   }
-  for (w in c("tab after ! or /, complete the word", "esc pause the answer",
+  for (w in c("tab after ! or / (not $ or @ words), complete the word", "esc pause the answer",
               "A line typed while peter works is the next prompt.")) {
     expect_true(grepl(w, rstudio, fixed = TRUE), info = w)
   }
