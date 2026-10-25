@@ -617,6 +617,27 @@ test_that("/retry sends the undone prompt again, and nothing when the rewind is 
   expect_equal(s$turns, 1)
 })
 
+test_that("/retry preloads the undone prompt's skills again, and none of a later prompt", {
+  local_console_commands()
+  withr::defer(res_prune("skills:", character()))
+  local_project(trust = TRUE, files = list(
+    ".gptr/skills/stats/SKILL.md" = "---\nname: stats\ndescription: Statistics.\n---\nUse lm().\n"))
+  e = new.env()
+  fake = local_fake_provider(list("a1", "a2"))
+  s = peter("A", skills = "stats", model = fake, envir = e)
+  rs = repl_state(s, e)
+  sent = new.env(parent = emptyenv())
+  send = function(text) sent$text = text
+  expect_identical(run_command(rs, "/retry", send)$res, "prompt")
+  expect_identical(sent$text, "A")
+  expect_identical(rs$next_skills, "stats")
+  rs$next_skills = NULL
+  peter(s, "B", model = fake, envir = e)
+  run_command(rs, "/retry", send)
+  expect_identical(sent$text, "B")
+  expect_null(rs$next_skills)
+})
+
 test_that("/skill:<name> preloads the skill for the next prompt", {
   local_console_commands()
   old = the$services

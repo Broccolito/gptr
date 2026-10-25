@@ -772,7 +772,7 @@ returns the identical object (`identical(s |> peter("x"), s)`).
 | `snapshot` | df\|NULL | last workspace snapshot (names, addresses, fingerprints; no values) |
 | `ext` | named list | per-plugin JSON-able state |
 | `backend`, `agent`, `exports` | chr | children only (§5.8 of `03`) |
-| `last_rewind` | list\|NULL | report of the last `gptr_rewind()` |
+| `last_rewind` | list\|NULL | report of the last `gptr_rewind()`; its `skills` are those the undone prompt preloaded, which `/retry` preloads again (cheat-sheet review R12, R13) |
 | `editor_text` | chr(1)\|NULL | the undone prompt after a rewind |
 
 **Live record** (`session_live(s)`, P06): `home` (environment binding: `globalenv()`, an explicit `envir`, or a

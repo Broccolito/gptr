@@ -557,7 +557,8 @@ cmd_permissions = function(args, ctx) {
   }
 }
 
-#' /retry: undo the last turn (gptr_rewind(), P16) and send its prompt again
+#' /retry: undo the last turn (gptr_rewind(), P16) and send its prompt again, with the skills it
+#' preloaded
 #' @noRd
 cmd_retry = function(args, ctx) {
   s = ctx$session
@@ -572,5 +573,7 @@ cmd_retry = function(args, ctx) {
   if (!rlang::is_string(prompt) || !nzchar(prompt)) {
     return("The last prompt could not be recovered.")
   }
+  rs = console_repl_find()
+  if (!is.null(rs)) rs$next_skills = s$last_rewind$skills
   list(prompt = prompt)
 }

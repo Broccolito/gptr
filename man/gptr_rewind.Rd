@@ -38,7 +38,8 @@ state; the conversation stays where it is).}
 }
 \value{
 \code{gptr_rewind()} returns \code{s}, invisibly (the plan when \code{preview = TRUE});
-\code{s$last_rewind} holds the report and \code{s$editor_text} the undone prompt.
+\code{s$last_rewind} holds the report and \code{s$editor_text} the undone prompt, whose preloaded
+skills are \code{s$last_rewind$skills}.
 \code{gptr_checkpoints()} returns a \code{gptr_checkpoints} data frame (it prints at most 20 rows).
 }
 \description{
