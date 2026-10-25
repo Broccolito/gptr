@@ -187,11 +187,11 @@ test_that("the pause menu is a console question: its keys under it, read at the 
   expect_identical(cli::ansi_strip(m$out[[4L]]), "    not a key · s, f, c or a")
   expect_identical(kept, "add a legend")
   withr::local_options(cli.num_colors = 1L)
-  # the session's id only when more than one session is paused
+  # one title when more than one session is paused too, never a session id the person has not
+  # seen (visual round 3)
   s2 = policy_session()
   run2 = local_tracked(stand_in_run("u0000run2"), s2)
-  expect_identical(menu(runs = list(run, run2))$out[[2L]],
-                   paste0("  ? Paused ", session_data(s)$id))
+  expect_identical(menu(runs = list(run, run2))$out[[2L]], "  ? Paused")
 })
 
 test_that("an abort at the pause menu takes the call's modes back before the run stops (Task 34)", {

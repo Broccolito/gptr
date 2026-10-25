@@ -3880,6 +3880,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   (a question waits for typing to pause). Tests: test-console-typing.R "a D console's question waits for typing
   to pause; a line finished then steers", "a question drains fd 0 before it reads: lines steer, a partial line is
   kept".
+- Final visual loop, round 3 (2026-10-24): Task 81: the pause menu's title is `? Paused` always: with a
+  sub-agent running it was `? Paused sdc8df9bda4`, a session id shown nowhere else; [s] and [f] act on the
+  console's own session, which the live row and the sub-agent rows name. Contract-visible: 04 §15.10 (the pause
+  menu). Tests: test-console-interrupt.R (the menu's title).
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members, never on

@@ -160,9 +160,9 @@ console_ahead = function(rd, accept) {
 }
 
 #' The pause menu (calling handler for `interrupt`), a console question wherever it is offered
-#' (D-243): after a blank row, `? Paused` (the session's id added when more than one is paused)
-#' and under its text the keys as an approval's (ui_keys()): `s steer`, `f follow-up`, `c continue`,
-#' `a abort` and, for a foreground call, `b background`, read at the person's chevron
+#' (D-243): after a blank row, `? Paused` and under its text the keys as an approval's (ui_keys()):
+#' `s steer`, `f follow-up`, `c continue`, `a abort` and, for a foreground call, `b background`,
+#' read at the person's chevron
 #' (console_ask()), in the saved modes from before its rows (tty_question()), after a drain as at
 #' any question (ui_drain(): a D console's line SIGINT left is kept), a T console's draft said to
 #' be kept above the chevron (ui_draft_kept()). A key or its word
@@ -200,12 +200,11 @@ policy_menu = function(cnd, pol) {
   keys = c(if (!is.null(s)) c(s = "steer", f = "follow-up"), c = "continue", a = "abort",
            if (bg) c(b = "background"))
   k = names(keys)
-  ids = unique(vapply(targets, function(t) session_data(t$session)$id, ""))
   rlang::local_options(cli.num_colors = console_colors())
-  title = paste(c("Paused", if (length(ids) > 1L) ids[[1L]]), collapse = " ")
   tty_question(TRUE)
   on.exit(tty_question(FALSE), add = TRUE)
-  console_write(c("", paste0("  ", ui_question(title, ui_width() - 2L)),
+  # one title: [s] and [f] act on the console's own session, which the rows above name
+  console_write(c("", paste0("  ", ui_question("Paused", ui_width() - 2L)),
                   ui_keys(k, keys, ui_width())))
   # a key or its word answers, also one typed before the chevron showed
   answers = function(x) tolower(trimws(x)) %in% c("", k, keys)

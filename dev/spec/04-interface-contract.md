@@ -5679,8 +5679,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     a question does (`ui_drain()`): a line being typed is kept, `↳ kept in history ↑ · <line>`, never the menu's
     answer, and a key among the whole lines answers (P28 Task 58, visual round 2: TERM=dumb lost `and colour by
     gear` at Ctrl-C, and with `noflsh` alone the menu read `and colour by gearc`). The pause menu (`policy_menu()`, wherever `console_menu_available()`) is a console
-    question in every class: after a blank row, `  ? Paused` (`? Paused <session id>` only when the call's runs
-    belong to more than one session) and under its text the keys row of an approval (`ui_keys()`, shared with
+    question in every class: after a blank row, `  ? Paused` (one title: [s] and [f] act on the console's own
+    session, which the live row and the sub-agent rows name; P28 Task 81, visual round 3: `? Paused <session id>`
+    when the call's runs belonged to more than one session, a raw id seen nowhere else) and under its text the keys row of an approval (`ui_keys()`, shared with
     IC-77's question: keys bold, words dim, the separator ending a row, so it wraps only between options),
     `    s steer · f follow-up · c continue · a abort · b background` (ASCII separator ` - `; [s] and [f] only
     with a session, [b] for a foreground call when P21 is loaded). It reads at the person's chevron at column 0

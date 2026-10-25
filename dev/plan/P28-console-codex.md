@@ -1162,7 +1162,8 @@ Decisions:
   control outside the console's vocabulary, `[gptr] paused sf1a5079fab: [s]teer, ...` read at `  ? `):
   `  ? Paused`, then under its text a keys row built as the approval's,
   `    s steer · f follow-up · c continue · a abort · b background` (keys bold, words dim, wrapping
-  between the options); the session id only when more than one session is paused; no
+  between the options); the session id only when more than one session is paused (one title, `? Paused`,
+  from Task 81, visual round 3); no
   `[gptr] continuing`; an invalid key gets a dim hint naming the keys; [b] says `in the background ·
   !!gptr::gptr_wait(gptr::gptr_last()) continues it here` dim, then a blank row (amended in the review of Tasks
   16-21: it kept the `[gptr]` notice, on the prompt; in Task 51: it said `running in the background ·
@@ -1746,7 +1747,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 77 | Tab Tab at the idle prompt leaves the list to readline, on the band and paged (final visual loop, round 3) | e8b9b565 |
 | 78 | After the pause menu's [a] the held row prints without its label (final visual loop, round 3) | e56ce15d |
 | 79 | A `!` block has three indents and runs into the next prompt (final visual loop, round 3) | 9de0abae |
-| 80 | In TERM=dumb an approval that comes while a line is typed splits the line (final visual loop, round 3) | (this commit) |
+| 80 | In TERM=dumb an approval that comes while a line is typed splits the line (final visual loop, round 3) | e5afc436 |
+| 81 | With a sub-agent running the pause menu's title is a raw session id (final visual loop, round 3) | (this commit) |
 
 ## Out of scope
 
