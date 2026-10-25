@@ -150,6 +150,17 @@ test_that("console transcripts record the first prompt as an assignment and late
   expect_identical(rmd[7], "```{r gptr-a1b2c3}")
 })
 
+test_that("a console turn after an undone first turn assigns the session again", {
+  site = list(console = TRUE, session_id = "sab12cd3456", template = "fit mpg on weight",
+              path = file.path(withr::local_tempdir(), "log.R"))
+  block = function(id) doc_render_block(id, list(model = "m"), "fit = 1")
+  dead = doc_inert_text(doc_transcript_upsert(character(), site, block("a1b2c3"), "a1b2c3"),
+                        "r", "a1b2c3", TRUE, transcript = TRUE)
+  t2 = doc_transcript_upsert(dead, site, block("d4e5f6"), "d4e5f6")
+  expect_identical(sum(startsWith(t2, "s_ab12cd = peter(")), 1L)
+  expect_false(any(startsWith(t2, "s_ab12cd |> peter(")))
+})
+
 test_that("a transcript names the machine log only when it outlives R (.gptr/)", {
   console_turn = function(proj) {
     t = file.path(proj, "log.R")
