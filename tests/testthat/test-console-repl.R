@@ -322,6 +322,7 @@ test_that("the banner: dim lines at column 2 with the keys bold, then a blank li
 })
 
 test_that("the banner names the console's key and promises nothing it lacks (review, Task 26)", {
+  skip_on_cran()
   local_gptr_options(interactive = TRUE)
   keys = function(...) banner_rows(...)[[2L]]
   expect_identical(keys("terminal"),
@@ -342,6 +343,7 @@ test_that("the banner names the console's key and promises nothing it lacks (rev
 })
 
 test_that("in Positron the banner says typed text waits as R code (steering review)", {
+  skip_on_cran()
   local_gptr_options(interactive = TRUE)
   expect_identical(utils::tail(banner_rows("positron", complete = FALSE), 3L), c(
     "/help lists commands - ctrl-c twice leaves",

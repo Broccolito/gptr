@@ -386,6 +386,7 @@ test_that("a hunk line without a prefix and an update without hunks are invalid 
 })
 
 test_that("Delete File refuses a directory, an empty Add File is empty, a move removes its name", {
+  skip_on_cran()
   td = withr::local_tempdir()
   dir.create(file.path(td, "d"))
   expect_error(patch_apply("*** Begin Patch\n*** Delete File: d\n*** End Patch", root = td),
@@ -568,6 +569,7 @@ test_that("Delete File and a move remove only the file they name, whatever its c
 })
 
 test_that("a move onto its own file under another spelling keeps the file and takes the name", {
+  skip_on_cran()
   td = withr::local_tempdir()
   u = function(name) fs_path(file.path(td, name))
   mv = function(from, to, old, new) {

@@ -4777,3 +4777,84 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   that no deferred event for `s1` is left.
 - Green: `^ext-(check|events)$` PASS 455.
 - Deviations: none. Open: none.
+
+## Task CI-92 - INFRA-03 answers the pause menu at its chevron (2026-10-25, #79)
+- Red: PR #77 head 84fe1f1, R-CMD-check run 40049492168, job 120738934342 (ubuntu-latest devel)
+  failed INFRA-03 (`test-console-interrupt.R:496`, then 497, 501, 504 and 508): after `Paused` the
+  driver sent `c` and `STATUS-TTFT idle` never came, step 2's tool never ran, step 3 passed. The
+  test showed none of the child's output.
+- Rate: the R-CMD-check.yaml runs since 2026-10-06 (389 runs, 3,025 jobs of all attempts, all 580
+  failed job logs read) hold 3 INFRA-03 failures in about 1,604 runs of the test. Two (2026-10-07,
+  "connections left open") came before CI-20, the menu never shown; one since CI-20 in 1,517 runs,
+  this job. The other INFRA-03 lines in those logs are skips. Evidence (local, not committed):
+  `dev/.session/live/infra03-measure.json`.
+- Cause (the test, not the product): `readline_answer()` takes a line read back under 0.1 s as
+  typed before the question (IC-75), and the driver sent each menu key 0.2 s after `Paused`, which
+  the menu prints before its chevron. On a loaded runner the child reached the read more than
+  0.1 s after the key came: the buffered `c` was stale, the menu asked again and took the driver's
+  next line as its answer. Reproduced on d88014eb with a delay traced in before
+  `readline_answer()` and main's strict rule (no stale line answers): 0.12, 0.3 and 0.6 s FAIL 10
+  PASS 133 each, the trace showing `c` read in 0.081 s and `step_tool()` taken as the answer; 0,
+  0.05 and 0.09 s pass. P28's stale-key rule (its Fix 8: a stale line that is one of the menu's
+  keys answers it) hides it, 0.05 to 1.2 s pass, so red needed main's rule.
+- Fix (test only, db24961b): the driver waits for the menu's chevron before each answer, as the
+  steer already did, and sends it 0.2 s later; each wait is an expectation whose failure shows the
+  child's whole output.
+- Green: with the fix the injected delays (0 to 0.6 s strict, 0.12 to 1.2 s with P28's rule) PASS
+  145 each, and a 31 s delay fails naming the missing chevron, the child's output shown. `CI=true`
+  `NOT_CRAN=true` `^console-interrupt$`: 30 of 30 PASS 145 (load 25-82, 16 cores), 10 of 10 PASS
+  145 at load 254-465 (32 busy loops). Merged with P28 at ccaa2a06: 10 of 10 PASS 151, INFRA-03
+  run each time (no `SIGINT is ignored` skip); `^console-` PASS 3408; lint clean. Merged with P28
+  at ecfad58c (d924d1bb), whose Task 89 made the steer's chevron waits `pty_asked()`: every
+  chevron wait is `pty_asked()`, the chevron of the locale; 5 of 5 PASS 151 in UTF-8, 3 of 3
+  PASS 136 SKIP 1 under `LC_ALL=C` (the skip `non utf8 locale` at line 151), INFRA-03 run each time.
+- Deviations: none. Open: none.
+
+## Task CI-93 - The check fits CRAN's time budget (2026-10-25, #79)
+- Policy: CRAN asks that a check take as little CPU time as possible, long tests made optional,
+  and its incoming pretest gives a NOTE when the whole check passes 10 minutes (`Overall checktime
+  ... > 10 min`): 600 s is the de facto budget. The maintainer asked that gptr be designed to it.
+- Measured (elapsed): main's CRAN-mode lane (cran-mode: ubuntu-latest R-devel, `NOT_CRAN=false`,
+  `--no-manual`) checked 02e93fa in 301 s (job 120763739795: code checks 107 s, tests 48 s, install
+  36 s, vignettes 14 s, examples 10 s). win-builder (Windows Server 2022, R 4.6.1) checked
+  6777610e in 631 s: code checks 238 s, tests 177 s, PDF manual 40 s, examples 28 s, HTML manual
+  24 s, vignettes 17 s, incoming feasibility 13 s. That run ended in Status 1 ERROR, two console
+  tests that expected Unicode glyphs where its Windows console draws ASCII (test-console-repl.R:314,
+  test-console-ui.R:614), which P28's Task 86 fixed; its timings stand, because every test ran
+  (`[ FAIL 2 | WARN 0 | SKIP 1566 | PASS 4067 ]`) and the check went on to its end.
+- Change: (1) cran-mode takes CRAN's thresholds (`_R_CHECK_TEST_TIMING_CPU_TO_ELAPSED_THRESHOLD_`
+  and `_R_CHECK_EXAMPLE_TIMING_CPU_TO_ELAPSED_THRESHOLD_` 2.5, `_R_CHECK_EXAMPLE_TIMING_THRESHOLD_`
+  5, `_R_CHECK_LIMIT_CORES_`), errors on a NOTE and fails when its check step passes 480 s
+  (01d0b63d). (2) Windows-check.yaml's `cran` job checks the whole package as CRAN does, on
+  Windows release and unsharded: CRAN's test list, both manuals (TinyTeX, HTML Tidy), the same
+  thresholds and NOTE gate; it fails over 600 s (4d865b82). Each timed step includes the
+  package's build. (3) The CRAN test trim (6816efd3): the list goes from 66 files to 35 and 8
+  more blocks start with `skip_on_cran()`, chosen at 6777610e by time saved per CRAN-covered
+  function lost while every R file a CRAN test reached stays reached, with tests of at least a
+  quarter of its CRAN-covered functions; re-applied by block name to P28's tests. The 12 blocks
+  it also skipped in the security files run on CRAN again (8c0edb03): D-240 skips only their
+  blocks of 500 ms or more on Windows, and 11 took 250-480 ms on windows-latest in both timing
+  runs (39555362618, 39559882743), the 12th postdating them. With incoming checks off, R lists
+  slow examples without a NOTE, so the time budgets bound them, not the gate.
+- Trim, measured on macOS (16 cores, load 6.5-7.9; the CRAN list against the installed tarball,
+  `NOT_CRAN`, `CI` and `GITHUB_ACTIONS` unset, 4 alternating pairs): before (ecfad58c) 20.7 s in
+  each run (PASS 4146 SKIP 1550), after (8c0edb03) 13.7-13.8 s (PASS 2589 SKIP 896), FAIL 0 in
+  each: 33-34% less. covr over the CRAN list: lines 46.4% to 39.9%, functions 2,441 to 2,195 of
+  4,138 (246 lose their last CRAN test), R files reached 115 of 125 before and after, each
+  keeping at least 26.7% of its CRAN-covered functions (`console-input.R`, 4 of 15, the least).
+  The touched files with `NOT_CRAN=true`: PASS 3865 SKIP 1.
+- Expected: if win-builder's tests shrink alike, about 60 s less, a check near 570 s, 30 s under
+  the budget, with code checks (238 s) its largest part; cran-mode about 16 s less.
+- Tests: test-zzz.R's crashed-check guard covers the new job (`^zzz$` FAIL 2 before it, PASS 148
+  after); both workflows parse with `yaml::read_yaml()`; lint clean. At 8c0edb03, the CRAN list
+  from the installed tarball, `NOT_CRAN` unset: PASS 2589 SKIP 896 in 13.7-13.8 s in UTF-8; PASS
+  2575 SKIP 900 WARN 1 in 13.4 s under `LC_ALL=C`, the warning (`strings not representable in
+  native encoding`) from test-tool-read.R's UTF-8 BOM block, as on main at 02e93fa; `R CMD check
+  --as-cran` in CRAN mode (cran-mode's variables, both manuals) Status OK in 139 s, `Running
+  'testthat.R' [13s/14s]`. The security files with `NOT_CRAN=true`, in UTF-8 and under
+  `LC_ALL=C`: PASS 2017 SKIP 1.
+- Deviations: D-240 (amended in place). Open: the 10 R files no CRAN test reaches, before or after
+  the trim (artifact-registry, bridge-lang, console-jsonl, doc-export, doc-knitr, proc-rscript,
+  provider-bedrock, s1-emulate, s1-ollama, tool-search); the Windows budget's calibration against
+  win-builder once the new lane has run (a hosted runner is not win-builder, and its timed step
+  includes the build); that BOM block's warning in CRAN mode under `LC_ALL=C` on macOS.
