@@ -1742,7 +1742,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 73 | /compact writes sentence prose among the console's dim terms (final visual loop, round 3) | 9bb544f9 |
 | 74 | A queued message of several lines puts its later lines under the glyph (final visual loop, round 3) | 0669455e |
 | 75 | A warning from the person's `!` code waits for R's top level (final visual loop, round 3) | 88c2c325 |
-| 76 | The session record does not re-source or keep the order typed (final visual loop, round 3) | (this commit) |
+| 76 | The session record does not re-source or keep the order typed (final visual loop, round 3) | 3dbb94ba |
+| 77 | Tab Tab at the idle prompt leaves the list to readline, on the band and paged (final visual loop, round 3) | (this commit) |
 
 ## Out of scope
 

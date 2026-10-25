@@ -172,7 +172,7 @@ console_reader = function(stdin = FALSE, echo = stdin) {
         prev = utils::rc.getOption("custom.completer")
         caller = if (is.null(rd$caller)) prev else rd$caller[[1L]]
         utils::rc.options(custom.completer = if (identical(prompt, "+ ")) caller else
-          console_completer(caller))
+          console_completer(caller, if (console_readline_tty()) prompt))
         on.exit(utils::rc.options(custom.completer = prev), add = TRUE)
       }
       # on the input band, as a question's answer is (band_read())

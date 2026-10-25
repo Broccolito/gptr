@@ -27,9 +27,9 @@ console_completes = function(stdin = FALSE) {
 #' under the working directory, a directory ending in /, names starting with a dot only when the
 #' word does; after peter$, peter's members (the `ns.names` service); a first word starting with
 #' /, the registered commands, plugin and template commands among them (registered now, as /help
-#' does, D-252), and /skill:<name> for each skill registered or listed by gptr_skills() (as
-#' /skills lists them, before the first prompt has registered any). Anything else, and a
-#' failure, gives character(0).
+#' does, D-252), and `/skill:` once where a skill is registered or listed by gptr_skills() (as
+#' /skills lists them, before the first prompt has registered any), after which a word starting
+#' /skill: completes /skill:<name>. Anything else, and a failure, gives character(0).
 #' @noRd
 console_complete = function(line, end = nchar(line)) {
   line = substr(line, 1L, end)
@@ -68,10 +68,14 @@ console_complete = function(line, end = nchar(line)) {
       }
     } else {
       s = rs$session
-      console_templates_sync()
       skills = unique(c(registry_names("skill", s), gptr::gptr_skills()$name))
-      c(paste0("/", sort(registry_names("command", s), method = "radix"), recycle0 = TRUE),
-        paste0("/skill:", sort(skills, method = "radix"), recycle0 = TRUE))
+      if (startsWith(word, "/skill:")) {
+        paste0("/skill:", sort(skills, method = "radix"), recycle0 = TRUE)
+      } else {
+        console_templates_sync()
+        c(paste0("/", sort(registry_names("command", s), method = "radix"), recycle0 = TRUE),
+          if (length(skills)) "/skill:")
+      }
     }
     unique(cands[startsWith(cands, word)])
   }, error = function(e) character())
@@ -85,9 +89,13 @@ console_complete = function(line, end = nchar(line)) {
 #' in its request's frame: its editor (FALSE), which shares the request while the prompt waits,
 #' gets R's own completion (or the caller's); its console only the candidates that are syntactic
 #' names, as RStudio inserts any other in backticks, and for none the token itself, as RStudio
-#' shows its own completions for an empty result and none for the token alone
+#' shows its own completions for an empty result and none for the token alone. R's Unix readline,
+#' reading at `prompt`, gets one completion, the candidates' common head, so it never lists them
+#' (its list printed in the input band and paged a long one); where that adds nothing they are
+#' listed as the composer lists them, one dim row at column 2 above the prompt's row, written again
+#' with the line (completion_list()), and readline gets none
 #' @noRd
-console_completer = function(prev) {
+console_completer = function(prev, prompt = NULL) {
   function(env) {
     env$fileName = FALSE
     env$comps = character()
@@ -97,7 +105,17 @@ console_completer = function(prev) {
     on.exit(utils::rc.options(old), add = TRUE)
     console = dynGet("isConsole", ifnotfound = NA)
     if (isFALSE(console)) return(utils::getFromNamespace(".completeToken", "utils")())
-    comps = completion_shift(console_complete(line), console_trigger(line) %||% "", token)
+    word = console_trigger(line) %||% ""
+    full = console_complete(line)
+    if (!is.null(prompt) && length(full) > 1L) {
+      pre = full[[1L]]
+      for (x in full[-1L]) while (!startsWith(x, pre)) pre = substr(pre, 1L, nchar(pre) - 1L)
+      # several that add nothing are listed here and none goes to readline, whose next Tab would
+      # list what it got
+      if (nchar(pre) <= nchar(word)) completion_list(full, prompt, env$linebuffer, env$end)
+      full = if (nchar(pre) > nchar(word)) pre else character()
+    }
+    comps = completion_shift(full, word, token)
     if (isTRUE(console)) {
       comps = comps[make.names(comps) == comps]
       if (!length(comps)) comps = token
@@ -105,6 +123,19 @@ console_completer = function(prev) {
     env$comps = comps
     invisible(NULL)
   }
+}
+
+#' Completion candidates under readline's line: from the end of its row, the attributes reset (so a
+#' scroll is not painted with the input band), one dim row at column 2 (live_candidates()), then
+#' the prompt on the band and the whole line again, the cursor moved back to `end` with
+#' backspaces, where readline holds it; readline, which lists nothing, draws its line there
+#' @noRd
+completion_list = function(cands, prompt, line, end) {
+  sym = console_style()
+  rest = substring(line, end + 1L)
+  row = paste0("  ", sym$dim(live_candidates(cands, cli::console_width() - 3L)), "\033[K")
+  console_cat(paste0("\033[0m\r\n", row, "\r\n", sym$band, prompt, if (nzchar(sym$band)) "\033[K",
+                     line, strrep("\b", nchar(rest))))
 }
 
 #' Completions `cands` of `from` as completions of `to`, where both are tails of the line before

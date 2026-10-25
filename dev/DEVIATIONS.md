@@ -3953,6 +3953,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `/skills` lists them) besides the registered ones. The registry holds skills only once a session has started,
   so before the first prompt `/skill:` completed nothing. Contract-visible: 04 §15.10 IC-81. Tests:
   test-console-completion.R "/skill: completes the project's skills before the first prompt (Task 30)".
+- Final visual loop, round 3 (2026-10-24): Task 77: R's Unix readline gets one completion from the console's
+  completer, the candidates' common head (`console_completer(prev, prompt)`), so it never lists; where the head
+  adds nothing the candidates are one dim row at column 2, as the composer lists them, written with the prompt
+  and the line again (`completion_list()`), and readline gets none. A bare `/` completes the commands and
+  `/skill:` once, skill names only after `/skill:`. Readline's list was printed in the input band (Terminal.app
+  then filled every scrolled row with it) and the 48 words of `/` stopped at `--More--`, which took the next keys
+  (`/me about summ`). Contract-visible: 04 §15.10 IC-81. Tests: test-console-completion.R "completion comes only
+  after @, !, !!, / and peter$, in full words (IC-81)", "R's readline gets one completion; several adding
+  nothing are listed (visual round 3)", "a terminal: Tab completes after @, / and ! and never natural language
+  (IC-81)".
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Rule (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three

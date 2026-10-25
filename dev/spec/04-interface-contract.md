@@ -5898,14 +5898,23 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     - a word `@obj$...`: `.DollarNames(obj)`;
     - a word starting with `peter$`: peter's members (the `ns.names` service);
     - a first word starting with `/`: the registered commands (plugin and template commands among them,
-      registered first as `/help` does, D-252) and `/skill:<name>` for each skill registered or listed by
+      registered first as `/help` does, D-252) and `/skill:` once where a skill is registered or listed by
       `gptr_skills()` (as `/skills` lists them, also before the first prompt has registered any; P28 Task 30);
+      a word starting with `/skill:` gives `/skill:<name>` for each (P28 Task 77, visual round 3: a bare `/`
+      gave 48 words, 19 of them skills, 25 rows of readline's list);
     - anything else, and a failure: `character(0)` (natural language, `$5`, a bare `$name`, `x$y`, `wow! x`).
   - The adapter: `console_completer(prev)` is R's `custom.completer`. It sets `fileName` to FALSE and `comps`
     to `character()` first (without `fileName` R's readline aborts the `readline()` call), then gives the
     completions of the line before the cursor as completions of R's token (`completion_shift()`: readline's
     word, or utils' guess in RStudio and Windows; the longer one's extra head is cut or added), with `prev`,
-    the caller's completer (NULL when none), as the custom one meanwhile, so a `!` line calls it.
+    the caller's completer (NULL when none), as the custom one meanwhile, so a `!` line calls it. R's Unix
+    readline (`console_completer(prev, prompt)`, the reader's prompt passed where `console_readline_tty()`) gets
+    one completion, the candidates' common head, so readline never lists them: its list was printed in the
+    input band (the prompt leaves the band's background on for the line) and a long one stopped at `--More--`,
+    which took the next keys (P28 Task 77, visual round 3). Where the head adds nothing, `completion_list()`
+    writes them as the composer does, after `\033[0m` and a line end, one dim row at column 2 cut with the
+    ellipsis (`live_candidates()`), then the prompt on the band and the whole line again, backspaces to the
+    cursor, and readline gets none, as its next Tab would list what it got.
   - RStudio (Task 23) asks through its `get_completions` request, whose frame binds `isConsole`
     (`dynGet()`). From its editor (FALSE), which shares the request while `peter>` waits, the adapter gives R's
     own completion (or the caller's). From its console (TRUE) it gives only the candidates that are syntactic
