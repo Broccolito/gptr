@@ -1340,7 +1340,11 @@ Decisions:
   for the automatic one after 3 characters and 250 ms.
 - RStudio's editor shares that RPC while `peter>` waits. When
   `dynGet("isConsole", ifnotfound = NA)` is FALSE, the request came from the editor, which gets R's
-  default completion (the NULL-completer path).
+  default completion (the NULL-completer path). (Amended in Task 90, S9:) It gets RStudio's own engine
+  instead: R's completion gives whole words such as `fuel$mpg` and `stats::sd`, which RStudio inserts in
+  backticks, and replaced the engine's labels, `()` and argument tips. The adapter fails there (`stop()`),
+  RStudio's request catches the error and its own engine answers, as without peter; a caller's completer
+  still answers.
 - gptr never writes RStudio preferences. `?peter` names `insert_matching` and
   `console_code_completion`.
 - `@path` replacement in RStudio's popup is not promised.
@@ -1367,7 +1371,7 @@ Decisions:
 Tests (`test-console-completion.R`), RED first:
 - `.win32consoleCompletion()` (via `getFromNamespace`) on the trigger table.
 - An RStudio-sequence replay inside a frame binding `isConsole` TRUE (triggers only) and FALSE (R
-  completion).
+  completion). (Amended in Task 90:) FALSE: an error, or the caller's completion.
 - 'unsupported input modes and IDE consoles keep completion options unchanged' is rewritten: IDE
   consoles get the scoped completer.
 - (Amended in Task 23:) the replay's console gives only syntactic names and the token for none; the rewrite
@@ -1765,6 +1769,7 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 87 | A pty test fails on Linux: GNU readline wraps each prompt in bracketed-paste toggles (PR #78 CI) | 516ec73c |
 | 88 | A test leaves a fake key in the vault and a later gateway test sends it to Anthropic (Windows shard 1) | b505cfe4 |
 | 89 | Console tests that force UTF-8 glyphs fail in a C locale (PR #78 CI, LC_ALL=C) | b9f98545 |
+| 90 | RStudio's editor completion while peter waits puts backticks around `$` and `::` completions (S9) | (this commit) |
 
 ## Out of scope
 

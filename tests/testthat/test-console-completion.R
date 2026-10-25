@@ -401,7 +401,7 @@ rstudio_complete = function(line, isConsole) { # nolint: object_name_linter.
   u(".retrieveCompletions")()
 }
 
-test_that("RStudio's console completes only the triggers; its editor gets R's (IC-81)", {
+test_that("RStudio's console completes only the triggers; its editor gets RStudio's own (IC-81)", {
   .gptr_repl = local_completing_repl()
   old = utils::rc.options(custom.completer = console_completer(NULL))
   withr::defer(utils::rc.options(old))
@@ -420,9 +420,10 @@ test_that("RStudio's console completes only the triggers; its editor gets R's (I
   expect_identical(rstudio_complete("ask peter$rea", TRUE), "peter$rea")
   expect_identical(rstudio_complete("/skill:t", TRUE), "skill:t")
   expect_identical(rstudio_complete("!mtcars$m", TRUE), "mtcars$m")
-  # the editor, which RStudio asks through the same request while peter> waits: R's completion
-  expect_true("summary" %in% rstudio_complete("x = summ", FALSE))
-  expect_true("data.frame" %in% rstudio_complete("summarise the da", FALSE))
+  # the editor, which RStudio asks through the same request while peter> waits: the request fails,
+  # so RStudio's own engine answers (R's whole `fuel$mpg` or `stats::sd` would go in backticks)
+  expect_error(rstudio_complete("x = fuel$", FALSE), "RStudio's own completion")
+  expect_error(rstudio_complete("x = summ", FALSE), "RStudio's own completion")
   # with the caller's completer, the caller's
   caller = function(env) env$comps = paste0(env$token, "_caller")
   utils::rc.options(custom.completer = console_completer(caller))

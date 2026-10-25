@@ -5927,12 +5927,14 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     ellipsis (`live_candidates()`), then the prompt on the band and the whole line again, backspaces to the
     cursor, and readline gets none, as its next Tab would list what it got.
   - RStudio (Task 23) asks through its `get_completions` request, whose frame binds `isConsole`
-    (`dynGet()`). From its editor (FALSE), which shares the request while `peter>` waits, the adapter gives R's
-    own completion (or the caller's). From its console (TRUE) it gives only the candidates that are syntactic
-    names, since RStudio inserts any other in backticks (`@mtcars_copy`, `peter$read`, `skill:tidy-data`,
-    `mtcars$mpg`), and for none the token itself: RStudio 2026.09 shows its own completions for an empty
-    result (`.rs.getCustomRCompletions()` fails on it) and no popup for the token alone, on Tab or the
-    automatic one. So its console completes the commands after `/` and R code after `!`.
+    (`dynGet()`). From its editor (FALSE), which shares the request while `peter>` waits, the adapter gives the
+    caller's completion or fails, so RStudio's own engine answers, as without peter (R's own completion gives
+    whole words such as `fuel$mpg` and `stats::sd`, which RStudio inserts in backticks; P28 Task 90). From its
+    console (TRUE) it gives only the candidates that are syntactic names, since RStudio inserts any other in
+    backticks (`@mtcars_copy`, `peter$read`, `skill:tidy-data`, `mtcars$mpg`), and for none the token itself:
+    RStudio 2026.09 shows its own completions for an empty result (`.rs.getCustomRCompletions()` fails on it)
+    and no popup for the token alone, on Tab or the automatic one. So its console completes the commands after
+    `/` and R code after `!`.
   - Scope: where R's completion calls the custom completer (`console_completes()`): R's own Unix readline on a
     tty (`console_readline_tty()`), RStudio's console and Windows' Rgui and Rterm (utils'
     `.win32consoleCompletion()`, Task 23); not under `.stdin`, not with `R_COMPLETION=FALSE`, and not in

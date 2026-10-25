@@ -3978,6 +3978,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   after @, !, !!, / and peter$, in full words (IC-81)", "R's readline gets one completion; several adding
   nothing are listed (visual round 3)", "a terminal: Tab completes after @, / and ! and never natural language
   (IC-81)".
+- S9 in RStudio (2026-10-25): Task 90: for RStudio's editor (`isConsole` FALSE) the console's completer fails
+  unless the caller owns one, so RStudio's own engine answers, as without peter. R's completion, which it gave
+  there, inserted whole words in backticks (`` `fuel$mpg` ``, `` `stats::sd` ``) and replaced the engine's
+  labels, `()` and argument tips. Contract-visible: 03 §6.17, 04 §15.10 IC-81. Tests: test-console-completion.R
+  "RStudio's console completes only the triggers; its editor gets RStudio's own (IC-81)".
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Rule (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three
