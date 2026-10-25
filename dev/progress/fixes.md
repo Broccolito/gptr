@@ -4921,7 +4921,7 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   two testthat workers, as the Linux rows do, would halve it but loads the runner the pty tests
   time against.
 
-## Task CI-97 - An HTTP stream checks the abort before each unit (2026-10-25, #PR)
+## Task CI-97 - An HTTP stream checks the abort before each unit (2026-10-25, #82)
 - Red: main 5ee45a04, R-CMD-check run 40208376485, job 121214117745 (ubuntu-latest release, two
   testthat workers) failed `test-provider-anthropic.R:851` in "end to end on the mock server:
   streaming, retry and abort (skip on CRAN)": the aborted message held `tok01 tok02 tok03 tok04 `,
