@@ -21,7 +21,7 @@ test_that("long skill listings fit the console and retain rows, visibility and p
   expect_true(any(grepl("TRUE", out, fixed = TRUE)))
   expect_identical(sum(grepl("skill-01", out, fixed = TRUE)), 2L)
   expect_false(any(grepl("skill-11", out, fixed = TRUE)))
-  expect_true("# 20 of 26 rows shown" %in% out)
+  expect_true("# 20 of 26 rows shown; as.data.frame() lists all" %in% out)
   expect_identical(tail(out, 1L), attr(x, "footer"))
   expect_identical(x, before)
   expect_identical(result$value, before)

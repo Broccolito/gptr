@@ -105,7 +105,9 @@ test_that("listings print at most 20 rows, a count line and the footer", {
   listing = new_listing(df, "demo", footer = "Use demo(id) to open one.")
   expect_s3_class(listing, c("gptr_demo", "gptr_listing", "data.frame"))
   printed = capture.output(print(listing))
-  expect_true("# 20 of 25 rows shown" %in% printed)
+  # the count line says how to see the rest
+  expect_true("# 20 of 25 rows shown; as.data.frame() lists all" %in% printed)
+  expect_true(any(grepl("item25", capture.output(print(as.data.frame(listing))), fixed = TRUE)))
   expect_identical(printed[length(printed)], "Use demo(id) to open one.")
   expect_false(any(grepl("item21", printed, fixed = TRUE)))
   expect_output(print(new_listing(df[0, ], "gptr_demo")), "# 0 rows", fixed = TRUE)

@@ -284,7 +284,8 @@ new_listing = function(df, class, footer = NULL) {
   df
 }
 
-#' Print a listing: at most 20 rows, a count line, then the footer
+#' Print a listing: at most 20 rows, a count line (naming as.data.frame() when rows are left out),
+#' then the footer
 #'
 #' @param x A listing data frame.
 #' @param ... Ignored.
@@ -301,7 +302,7 @@ print.gptr_listing = function(x, ...) {
     cat("\n")
   }
   count = if (n > 20L) {
-    paste0("# 20 of ", n, " rows shown")
+    paste0("# 20 of ", n, " rows shown; as.data.frame() lists all")
   } else {
     paste0("# ", n, if (n == 1L) " row" else " rows")
   }
