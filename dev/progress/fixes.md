@@ -4501,3 +4501,39 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   145 at load 254-465 (32 busy loops). Merged with P28 at ccaa2a06: 10 of 10 PASS 151, INFRA-03
   run each time (no `SIGINT is ignored` skip); `^console-` PASS 3408; lint clean.
 - Deviations: none. Open: none.
+
+## Task CI-93 - The check fits CRAN's time budget (2026-10-25, #PR)
+- Policy: CRAN asks that a check take as little CPU time as possible, long tests made optional,
+  and its incoming pretest gives a NOTE when the whole check passes 10 minutes (`Overall checktime
+  ... > 10 min`): 600 s is the de facto budget. The maintainer asked that gptr be designed to it.
+- Measured: main's CRAN-mode lane (cran-mode: ubuntu-latest R-devel, `NOT_CRAN=false`,
+  `--no-manual`) checked 02e93fa in 301 s (job 120763739795: code checks 111 s, install 38 s,
+  tests 49 s, vignettes 19 s, examples 10 s). win-builder (Windows Server 2022, R 4.6.1) checked
+  6777610e in 631 s: code checks 238 s, tests 177 s, PDF manual 40 s, examples 28 s, HTML manual
+  24 s, vignettes 17 s, incoming feasibility 13 s.
+- Change: (1) cran-mode takes CRAN's thresholds (`_R_CHECK_TEST_TIMING_CPU_TO_ELAPSED_THRESHOLD_`
+  and `_R_CHECK_EXAMPLE_TIMING_CPU_TO_ELAPSED_THRESHOLD_` 2.5, `_R_CHECK_EXAMPLE_TIMING_THRESHOLD_`
+  5, `_R_CHECK_LIMIT_CORES_`), errors on a NOTE and fails when its check step passes 480 s
+  (01d0b63d). (2) Windows-check.yaml's `cran` job checks the whole package as CRAN does, on
+  Windows release and unsharded: CRAN's test list, both manuals (TinyTeX, HTML Tidy), the same
+  thresholds and NOTE gate; it fails over 600 s (4d865b82). Each timed step includes the
+  package's build. (3) The CRAN test trim (6816efd3): the list goes from 66 files to 35 and 20
+  more blocks start with `skip_on_cran()`, chosen at 6777610e by time saved per CRAN-covered
+  function lost while every R file a CRAN test reached stays reached, with tests of at least a
+  quarter of its CRAN-covered functions; re-applied by block name to P28's tests. With incoming
+  checks off, R lists slow examples without a NOTE, so the time budgets bound them, not the gate.
+- Trim, measured on macOS (16 cores, load 8-11; the CRAN list against the installed tarball,
+  `NOT_CRAN` unset): before 21.2-23.1 s (4 runs, PASS 4145 SKIP 1550), after 12.3-12.9 s (4 runs,
+  PASS 2326 SKIP 908), FAIL 0 in each: 44% less. covr over the CRAN list: lines 46.4% to 39.7%,
+  functions 2,437 to 2,195 (242 lose their last CRAN test), R files reached 115 of 125 before and
+  after, each keeping at least 27% of its CRAN-covered functions (`console-input.R` the least),
+  as at 6777610e. The touched files with `NOT_CRAN=true`: PASS 3865 SKIP 1.
+- Expected: if win-builder's tests shrink alike, about 75 s less, a check near 555 s, 45 s under
+  the budget, with code checks (238 s) its largest part; cran-mode about 20 s less.
+- Tests: test-zzz.R's crashed-check guard covers the new job (`^zzz$` FAIL 2 before it, PASS 148
+  after); both workflows parse with `yaml::read_yaml()`; lint clean.
+- Deviations: D-240 (amended in place). Open: the 10 R files no CRAN test reaches, before or after
+  the trim (artifact-registry, bridge-lang, console-jsonl, doc-export, doc-knitr, proc-rscript,
+  provider-bedrock, s1-emulate, s1-ollama, tool-search); the Windows budget's calibration against
+  win-builder once the new lane has run (a hosted runner is not win-builder, and its timed step
+  includes the build).
