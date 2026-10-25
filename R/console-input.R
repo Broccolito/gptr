@@ -120,7 +120,8 @@ console_trigger = function(line) {
 #' printed (console_queue_line()); Tab on a trigger word completes it
 #' (console_complete()), and several candidates are kept as `rd$compose$candidates`, which the live
 #' row shows until the next key; the live row is drawn again where it shows. A batch read at most
-#' 0.2 s after the reader's last read (`rd$polled`, an empty read too) is on the polling beat, and
+#' 0.2 s after the reader's last read (`rd$polled`, an empty read too) is on the polling beat, timed
+#' by its last key's read (`rd$read_at`, console_typed_chars()), not the reader's wait after it, and
 #' one there holding more keys than a person types since that read (one in 30 ms, plus one) is a
 #' paste to console_compose(); fewer were typed, as when a late read under load holds Enter and the
 #' next key. A Tab or Up that ends a batch right after a newline is a key of its own, after the
@@ -133,9 +134,10 @@ console_trigger = function(line) {
 console_keys = function(rd, s, chars) {
   # the first read of a run, or one after an in-process tool held the reactor, is off the beat
   now = reactor_now()
-  gap = now - (rd$polled %||% -Inf)
+  gap = (rd$read_at %||% now) - (rd$polled %||% -Inf)
   paste = gap <= 0.2 && nchar(chars) > 1 + gap / 0.03
   rd$polled = now
+  rd$read_at = NULL
   ctrl_c = regexpr("\003", chars, fixed = TRUE)
   if (ctrl_c > 0L) {
     after = gsub("\003", "", substring(chars, ctrl_c + 1L), fixed = TRUE)

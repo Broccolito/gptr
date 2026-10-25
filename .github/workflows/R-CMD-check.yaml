@@ -24,7 +24,8 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - {os: macos-latest, r: 'release'}
+          # macOS runs the suite serially (37-45 minutes since P28's pty tests)
+          - {os: macos-latest, r: 'release', minutes: 60}
           # R-devel installs every dependency from source (about 65 minutes on a cold cache)
           - {os: ubuntu-latest, r: 'devel', http-user-agent: 'release', minutes: 120}
           - {os: ubuntu-latest, r: 'release'}

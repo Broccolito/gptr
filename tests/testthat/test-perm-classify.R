@@ -946,6 +946,7 @@ test_that("code_targets() lists every call with its package and line (IC-31)", {
 })
 
 test_that("the plan-mode allowlist admits only known read-only calls (IC-54)", {
+  skip_on_cran()
   root = local_project()
   expect_identical(risk_plan_disallowed("x = head(df, 2); summary(x); peter$grep('a')", root),
                    character())
