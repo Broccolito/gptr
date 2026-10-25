@@ -1357,6 +1357,12 @@ Decisions:
     ``use `@fuel` ``), whatever the custom completer gives. So its console gets only the syntactic candidates:
     the commands after `/` and R code after `!` complete there, and @ words, `@obj$` and `peter$` members,
     `/skill:` names and `x$y` complete nothing.
+  - (Amended in Task 91, S9:) The token alone shows nothing only where it holds just letters, digits, `.` and
+    `_`. utils' token guess takes `:`, `$` and `@` in, and Tab put such a token back in backticks over the text
+    (``the ratio is `3:` ``, ``/`skill:` ``, ``see `stats::` ``). For a token with any other character the
+    adapter fails, so RStudio's own completion answers, as without peter: `3:` and `/skill:` stay as typed,
+    with its `(No matches)` tip, and `!fuel$m` completes to `!fuel$mpg`. A reserved word keeps the token:
+    under `make.names()` `write a function` went to RStudio's engine, whose popup then took Enter.
   - `console_completes()` in `console-complete.R` names where R's completion calls the custom completer (R's
     own readline on a tty, RStudio's console, Windows' Rgui and Rterm), and `repl_main()` sets `rd$complete`
     there; the `!` word break stays R's own readline's.
@@ -1376,7 +1382,8 @@ Tests (`test-console-completion.R`), RED first:
   consoles get the scoped completer.
 - (Amended in Task 23:) the replay's console gives only syntactic names and the token for none; the rewrite
   also covers Positron, radian, R.app and `R_COMPLETION=FALSE` in RStudio (no completer) and a Windows
-  console with a caller-owned completer.
+  console with a caller-owned completer. (Amended in Task 91:) The token for none where it holds just
+  letters, digits, `.` and `_` (a reserved word too), else an error.
 
 Spec: IC-81. (Amended in Task 23:) Also 03 §6.17's completion bullet, D-244's Task 23 note and `?peter`'s
 completion paragraph, which names `insert_matching` and `console_code_completion`.
@@ -1769,7 +1776,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 87 | A pty test fails on Linux: GNU readline wraps each prompt in bracketed-paste toggles (PR #78 CI) | 516ec73c |
 | 88 | A test leaves a fake key in the vault and a later gateway test sends it to Anthropic (Windows shard 1) | b505cfe4 |
 | 89 | Console tests that force UTF-8 glyphs fail in a C locale (PR #78 CI, LC_ALL=C) | b9f98545 |
-| 90 | RStudio's editor completion while peter waits puts backticks around `$` and `::` completions (S9) | (this commit) |
+| 90 | RStudio's editor completion while peter waits puts backticks around `$` and `::` completions (S9) | e106409d |
+| 91 | In RStudio's console Tab on plain text ending in a word such as `3:` rewrites it in backticks (S9) | (this commit) |
 
 ## Out of scope
 

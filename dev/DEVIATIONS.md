@@ -3983,6 +3983,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   there, inserted whole words in backticks (`` `fuel$mpg` ``, `` `stats::sd` ``) and replaced the engine's
   labels, `()` and argument tips. Contract-visible: 03 §6.17, 04 §15.10 IC-81. Tests: test-console-completion.R
   "RStudio's console completes only the triggers; its editor gets RStudio's own (IC-81)".
+- S9 in RStudio (2026-10-25): Task 91: where RStudio's console gets no candidate and the token holds a character
+  other than letters, digits, `.` and `_`, the console's completer fails, so RStudio's own completion answers, as
+  without peter. The token itself, which it gave, came back in backticks over the text on Tab (``the ratio is
+  `3:` ``, ``/`skill:` ``, ``see `stats::` ``). A reserved word still gets the token: under `make.names()` `write a
+  function` went to RStudio's engine, whose popup took Enter. Contract-visible: 03 §6.17, 04 §15.10 IC-81. Tests:
+  test-console-completion.R "RStudio's console completes only the triggers; its editor gets RStudio's own
+  (IC-81)".
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Rule (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input band, three

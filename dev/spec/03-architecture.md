@@ -1985,12 +1985,14 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   for its duration (restored on exit; not for a caller-owned completer, whose words stay its own). The
   terminal composer's Tab calls the same completer [IC-76]. RStudio's console gets only the candidates that
   are syntactic names (it inserts any other in backticks), so it completes the commands after `/` and R code
-  after `!`; its editor, which shares the request while `peter>` waits (`isConsole` FALSE), gets RStudio's
-  own completion: the adapter fails there, as R's would give whole words such as `fuel$mpg`, which RStudio
-  inserts in backticks (a caller's completer still answers; P28 Task 90). The REPL reads its lines with a
-  copy of `base::readline` carrying one attribute: RStudio's console completes nothing inside a frame
-  `identical()` to `base::readline`, while approval and menu prompts keep `readline()` and RStudio's choice
-  completion. R.app, radian and Positron's console keep their own completion at the prompt.
+  after `!`, and where none is left a word with a character other than letters, digits, `.` and `_` (`3:`,
+  `/skill:`) gets RStudio's own completion, as the adapter fails (P28 Task 91); its editor, which shares the
+  request while `peter>` waits (`isConsole` FALSE), gets RStudio's own completion: the adapter fails there,
+  as R's would give whole words such as `fuel$mpg`, which RStudio inserts in backticks (a caller's completer
+  still answers; P28 Task 90). The REPL reads its lines with a copy of `base::readline` carrying one
+  attribute: RStudio's console completes nothing inside a frame `identical()` to `base::readline`, while
+  approval and menu prompts keep `readline()` and RStudio's choice completion. R.app, radian and Positron's
+  console keep their own completion at the prompt.
 - **Pasted and typed-ahead input** [IC-75, D-184]: on a macOS terminal (R's own readline on a tty, where the
   BSD tty driver hands waiting input over as complete lines), the lines already waiting on fd 0 after a prompt,
   slash or `!code` line is read (a paste) join it, a dim `(pasted: Enter sends it as one message)` hint follows
