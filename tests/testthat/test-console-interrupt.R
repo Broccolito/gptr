@@ -801,7 +801,8 @@ test_that("the policy is the console.interrupt_policy service of builtin:console
 # ---------------------------------------------------------------- Task 7: INFRA-03 (real SIGINTs)
 
 # Drives an interactive R child through processx like a user at a terminal (report 18 A.8
-# e2_driver.R): reads its merged stdout/stderr, waits for markers, sends lines
+# e2_driver.R): reads its merged stdout/stderr, waits for markers, sends lines; a wait is an
+# expectation, and a failed one shows the child's whole output
 infra03_driver = function(p) {
   st = new.env(parent = emptyenv())
   st$out = ""
@@ -820,11 +821,14 @@ infra03_driver = function(p) {
       pos = regexpr(pattern, rest, fixed = TRUE)
       if (pos > 0L) {
         st$seen = st$seen + pos + nchar(pattern) - 1L
-        return(TRUE)
+        return(testthat::succeed())
       }
-      if (!p$is_alive() || Sys.time() > deadline) return(FALSE)
+      if (!p$is_alive() || Sys.time() > deadline) {
+        return(testthat::fail(paste0("No '", pattern, "' in the child's output:\n", st$out)))
+      }
     }
   }
+  # an answer goes 0.2 s after its chevron: a line read sooner counts as typed ahead (IC-75)
   st$send = function(x) {
     Sys.sleep(0.2)
     p$write_input(paste0(x, "\n"))
@@ -907,7 +911,7 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   withr::defer(if (p$is_alive()) p$kill())
   drv = infra03_driver(p)
   p$write_input(sprintf("source('%s')\n", normalizePath(child, winslash = "/")))
-  expect_true(drv$wait_for("CHILD READY", timeout = 120))
+  drv$wait_for("CHILD READY", timeout = 120)
 
   # 1. SIGINT once the mock holds the request (3 s to the first byte), then [c]ontinue: the
   # request completes
@@ -916,30 +920,32 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   while (!nrow(ttft$log()) && Sys.time() < deadline) Sys.sleep(0.05)
   expect_identical(nrow(ttft$log()), 1L)
   p$interrupt()
-  expect_true(drv$wait_for("Paused"))
+  drv$wait_for("Paused")
+  drv$wait_for(pty_asked())
   drv$send("c")
-  expect_true(drv$wait_for("STATUS-TTFT idle"))
+  drv$wait_for("STATUS-TTFT idle")
   expect_true(drv$has("tok04"))
 
   # 2. SIGINT while a tool runs, then [s]teer: the steer arrives after the tool result
   drv$send("step_tool()")
-  expect_true(drv$wait_for("Sys.sleep(3)"))
+  drv$wait_for("Sys.sleep(3)")
   Sys.sleep(0.5)
   p$interrupt()
-  expect_true(drv$wait_for("Paused"))
-  expect_true(drv$wait_for(pty_asked()))
+  drv$wait_for("Paused")
+  drv$wait_for(pty_asked())
   drv$send("s")
-  expect_true(drv$wait_for(pty_asked()))
+  drv$wait_for(pty_asked())
   drv$send("use base R only")
-  expect_true(drv$wait_for("STEER-AFTER-TOOL TRUE"))
+  drv$wait_for("STEER-AFTER-TOOL TRUE")
 
   # 3. SIGINT mid-stream, then [a]bort: the socket closes and the partial is what arrived
   drv$send("step_abort()")
-  expect_true(drv$wait_for("tok03"))
+  drv$wait_for("tok03")
   p$interrupt()
-  expect_true(drv$wait_for("Paused"))
+  drv$wait_for("Paused")
+  drv$wait_for(pty_asked())
   drv$send("a")
-  expect_true(drv$wait_for("ABORT-DONE TRUE"))
+  drv$wait_for("ABORT-DONE TRUE")
   expect_true(drv$has("STOP aborted"))
   partial = drv$value("PARTIAL")
   full = paste(sprintf("tok%02d ", 1:40), collapse = "")

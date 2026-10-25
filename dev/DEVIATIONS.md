@@ -3020,7 +3020,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   GitHub Actions runs the whole suite. win-builder needed 13 to 29 minutes for the CRAN-mode tests before this rule
   and 3.3 with the block rule alone, which left the whole check at CRAN's 10-minute budget, because skipped blocks
   and sourced files still cost time.
-- Tests: tests/testthat.R (the list); 1,183 block skips in the listed files.
+- Amended by CI-93 (2026-10-25): the list holds 35 files and 8 more blocks skip. A trim measured in CRAN mode
+  dropped files and skipped slow blocks, those saving the most time per CRAN-covered function lost first, keeping
+  the security files under the rule above and, for every R file a CRAN test reached (115 of 125), CRAN tests of at
+  least a quarter of its CRAN-covered functions. On macOS the CRAN-mode tests take 34% less time; 2,195 of the
+  2,441 CRAN-covered functions stay covered.
+- Tests: tests/testthat.R (the list); 841 block skips in the listed files.
 
 ## D-241 - P04 the Windows stdin writer retries a refused chunk read until the delivery deadline (2026-10-21)
 - Rule (IC-60, D-019 item 5; P04 `R/proc-spawn.R`, `R/http-reactor.R`):
@@ -3379,7 +3384,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   one 50 ms poll never edit the sent text; Tab and Up act only as a batch of their own (elsewhere Tab is text and Up
   is dropped), and a blank message is not sent. The trigger rule is `console_trigger()`, which Task 22's completer
   reuses, so Tab on a trigger word without a match (`@zz`, `/status`) does nothing and never queues it.
-  Contract-visible: 04 §15.10 IC-76, 03 §3.2. Tests: test-console-input.R (on D-240's CRAN list) "printable text is
+  Contract-visible: 04 §15.10 IC-76, 03 §3.2. Tests: test-console-input.R "printable text is
   added at the draft's end; DEL, BS, Ctrl-U and Ctrl-W edit it", "a key is one character: UTF-8 and wide
   characters", "cursor keys and other sequences are dropped up to their final byte", "an escape sequence cut short
   is held for 50 ms, then dropped", "Up on an empty draft takes back; only as a batch of its own", "Enter sends the

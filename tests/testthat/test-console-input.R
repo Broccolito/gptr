@@ -1,5 +1,5 @@
 # tests/testthat/test-console-input.R -- the composer of a terminal console (P28; IC-76, D-243):
-# its pure key machine. CRAN runs this file (D-240).
+# its pure key machine.
 
 # console_compose() on `chars` from the draft `draft` at time `now`; the completer knows a few
 # full words and offers those starting with the trigger word
