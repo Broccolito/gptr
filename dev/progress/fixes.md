@@ -4472,3 +4472,32 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   that no deferred event for `s1` is left.
 - Green: `^ext-(check|events)$` PASS 455.
 - Deviations: none. Open: none.
+
+## Task CI-92 - INFRA-03 answers the pause menu at its chevron (2026-10-25, #PR)
+- Red: PR #77 head 84fe1f1, R-CMD-check run 40049492168, job 120738934342 (ubuntu-latest devel)
+  failed INFRA-03 (`test-console-interrupt.R:496`, then 497, 501, 504 and 508): after `Paused` the
+  driver sent `c` and `STATUS-TTFT idle` never came, step 2's tool never ran, step 3 passed. The
+  test showed none of the child's output.
+- Rate: the R-CMD-check.yaml runs since 2026-10-06 (389 runs, 3,025 jobs of all attempts, all 580
+  failed job logs read) hold 3 INFRA-03 failures in about 1,604 runs of the test. Two (2026-10-07,
+  "connections left open") came before CI-20, the menu never shown; one since CI-20 in 1,517 runs,
+  this job. The other INFRA-03 lines in those logs are skips. Evidence (local, not committed):
+  `dev/.session/live/infra03-measure.json`.
+- Cause (the test, not the product): `readline_answer()` takes a line read back under 0.1 s as
+  typed before the question (IC-75), and the driver sent each menu key 0.2 s after `Paused`, which
+  the menu prints before its chevron. On a loaded runner the child reached the read more than
+  0.1 s after the key came: the buffered `c` was stale, the menu asked again and took the driver's
+  next line as its answer. Reproduced on d88014eb with a delay traced in before
+  `readline_answer()` and main's strict rule (no stale line answers): 0.12, 0.3 and 0.6 s FAIL 10
+  PASS 133 each, the trace showing `c` read in 0.081 s and `step_tool()` taken as the answer; 0,
+  0.05 and 0.09 s pass. P28's stale-key rule (its Fix 8: a stale line that is one of the menu's
+  keys answers it) hides it, 0.05 to 1.2 s pass, so red needed main's rule.
+- Fix (test only, db24961b): the driver waits for the menu's chevron before each answer, as the
+  steer already did, and sends it 0.2 s later; each wait is an expectation whose failure shows the
+  child's whole output.
+- Green: with the fix the injected delays (0 to 0.6 s strict, 0.12 to 1.2 s with P28's rule) PASS
+  145 each, and a 31 s delay fails naming the missing chevron, the child's output shown. `CI=true`
+  `NOT_CRAN=true` `^console-interrupt$`: 30 of 30 PASS 145 (load 25-82, 16 cores), 10 of 10 PASS
+  145 at load 254-465 (32 busy loops). Merged with P28 at ccaa2a06: 10 of 10 PASS 151, INFRA-03
+  run each time (no `SIGINT is ignored` skip); `^console-` PASS 3408; lint clean.
+- Deviations: none. Open: none.
