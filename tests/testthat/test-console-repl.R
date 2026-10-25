@@ -641,7 +641,7 @@ test_that("console_send() attaches @objects by name and @files as a block", {
 
 test_that("one dim line under a sent prompt names what its @mentions resolved to (D-244)", {
   skip_on_cran()
-  local_utf8_glyphs()
+  withr::local_options(cli.unicode = TRUE)
   local_console_test()
   local_scripted_ui()
   e = new.env(parent = globalenv())
@@ -671,7 +671,7 @@ test_that("one dim line under a sent prompt names what its @mentions resolved to
 
 test_that("a prompt to a session that runs, in the background, says it steers (steering review)", {
   local_console_test()
-  local_utf8_glyphs()
+  withr::local_options(cli.unicode = TRUE)
   s = peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
   rs = repl_state(s, new.env())
   sent = list(status = "ok", value = s)
@@ -1101,9 +1101,9 @@ test_that("a failed run says why once, whole, in its status line; the prompt kee
 test_that("a failed run's reason is red, on rows of its own above the terms (visual round 2)", {
   skip_on_cran()
   local_console_test()
-  local_utf8_glyphs()
   local_gptr_options(verbose = 2L, mode = "auto")
-  withr::local_options(cli.dynamic = TRUE, cli.width = 80L, cli.num_colors = 256L)
+  withr::local_options(cli.unicode = TRUE, cli.dynamic = TRUE, cli.width = 80L,
+                       cli.num_colors = 256L)
   fake = gptr_fake_provider(list(list(error = "provider failure: boom", status = 400L, after = 0L),
                                  "ok"))
   s = NULL

@@ -88,6 +88,9 @@ local({
     GPTR_PROJECT_ROOT = paths[["project"]],
     GPTR_REPLAY = "replay",
     OMP_THREAD_LIMIT = "2",
+    # Windows Terminal: console_style() draws its UTF-8 glyphs wherever cli's unicode output is on;
+    # a test of a Windows console that lacks them unsets WT_SESSION (D-245)
+    WT_SESSION = "gptr-tests",
     .local_envir = testthat::teardown_env()
   )
   if (!identical(Sys.getenv("GPTR_LIVE_TESTS"), "true")) {

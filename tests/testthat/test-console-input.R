@@ -214,8 +214,7 @@ live_states = list(
 )
 
 test_that("the live row says what the run does, its queue and the person's draft (D-243)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   expect_identical(live_rows(live_states, 80L), list(
     rstudio = "▌ thinking 6s · 1 queued · esc pause · typed lines run next",
     positron = "▌ thinking 6s · 1 queued · ctrl-c, then s, to steer",
@@ -276,8 +275,7 @@ test_that("the live row says what the run does, its queue and the person's draft
 })
 
 test_that("Positron's row says Ctrl-C, then s, steers there (steering review)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   state = list(what = "thinking", secs = 6, steer = TRUE, pause = TRUE, key = "Ctrl-C")
   expect_identical(console_live_row(state, 80L), "▌ thinking 6s · ctrl-c, then s, to steer")
   # the term goes whole, as every term does
@@ -288,8 +286,7 @@ test_that("Positron's row says Ctrl-C, then s, steers there (steering review)", 
 })
 
 test_that("while R code runs in this process the row has no clock and says keys wait (review)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   r = list(what = "r", secs = 5, frozen = TRUE, key = "Ctrl-C", pause = TRUE)
   states = list(keys = c(r, draft = ""), draft = c(r, draft = "and plot"), ide = r,
                 queued = c(r, queued = 1, draft = "p1 third line"),
@@ -331,8 +328,7 @@ test_that("the r call's own end unfreezes the row, not a nested call's (review)"
 })
 
 test_that("during a sub-agent the row ticks and shows the queue; keys wait in its r call", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.dynamic = TRUE)
   local_live_console()
   newest = NULL
   local_mocked_bindings(console_queued = function(s) as.integer(!is.null(newest)),
@@ -383,8 +379,7 @@ test_that("during a sub-agent the row ticks and shows the queue; keys wait in it
 })
 
 test_that("a sub-agent's long label gives way to its number before the person's text (review)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   kid = list(what = "sub-agent 'count the cars in fuel' #1", short = "sub-agent #1", secs = 4,
              key = "Ctrl-C", pause = TRUE)
   draft = "s11 during the sub-agent"
@@ -405,8 +400,7 @@ test_that("a sub-agent's long label gives way to its number before the person's 
 })
 
 test_that("the draft keeps its column as the status changes; the status only widens (review)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   rows = function(...) {
     widest = 0L
     vapply(list(...), function(s) {
@@ -438,8 +432,7 @@ test_that("the draft keeps its column as the status changes; the status only wid
 })
 
 test_that("a leading ! takes the chevron's place; / and ! drafts say when they run (D-244)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   states = list(
     bang = list(what = "thinking", secs = 6, draft = "!summary(fuel$mpg)"),
     twice = list(what = "thinking", secs = 6, draft = "!!x = 1"),
@@ -483,8 +476,7 @@ test_that("a leading ! takes the chevron's place; / and ! drafts say when they r
 })
 
 test_that("in a CJK locale every character outside ASCII counts two columns (D-243)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   ok = suppressWarnings(withr::with_locale(c(LC_CTYPE = "ja_JP.UTF-8"), Sys.getlocale("LC_CTYPE")))
   skip_if_not(grepl("^ja", ok), "no ja_JP.UTF-8 locale")
   withr::local_locale(c(LC_CTYPE = "ja_JP.UTF-8"))
@@ -495,8 +487,7 @@ test_that("in a CJK locale every character outside ASCII counts two columns (D-2
 })
 
 test_that("the live row's block is the agent's blue, its words dim and the draft ink (D-243)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 256L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 256L)
   expect_identical(c(console_live_row(live_states$question, 80L)), paste0(
     "\033[38;5;67m▌\033[39m \033[38;5;244medit 11s · question waiting\033[39m",
     "   › and plot the residu"))
@@ -506,8 +497,7 @@ test_that("the live row's block is the agent's blue, its words dim and the draft
 })
 
 test_that("the live row is drawn with \\r and erased to the line end, or padded (D-243)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L, cli.width = 40L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.width = 40L)
   state = live_states$menu
   row = "▌ r 1m 05s · ctrl-c pause"
   draws = function(cls) {
@@ -538,8 +528,7 @@ test_that("the live row is drawn with \\r and erased to the line end, or padded 
 })
 
 test_that("on the input band the live row's words take the band's grey (review)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 256L, cli.width = 40L, cli.ansi = TRUE)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 256L, cli.width = 40L, cli.ansi = TRUE)
   local_mocked_bindings(front_end = function() "terminal", console_class = function() "T")
   state = live_states$menu
   # #878787 on the band was about 2.8:1 (light) and 3.2:1 (dark)
@@ -556,8 +545,7 @@ test_that("on the input band the live row's words take the band's grey (review)"
 })
 
 test_that("the live row keeps the console's colours when drawn inside an evaluation (review)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L, cli.width = 40L, cli.ansi = TRUE)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.width = 40L, cli.ansi = TRUE)
   local_mocked_bindings(front_end = function() "terminal", console_background = function() NA)
   state = live_states$menu
   coloured = withr::with_options(list(cli.num_colors = 256L), console_live_row(state, 40L))
@@ -571,8 +559,7 @@ test_that("the live row keeps the console's colours when drawn inside an evaluat
 })
 
 test_that("a console write clears the live row and redraws it after its whole lines (D-243)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L, cli.width = 40L, cli.ansi = TRUE)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.width = 40L, cli.ansi = TRUE)
   local_mocked_bindings(front_end = function() "terminal",
                         console_live_state = function(rec) live_states$menu)
   row = "\r▌ r 1m 05s · ctrl-c pause\033[K"
@@ -680,8 +667,7 @@ ctrl_c = function() {
 }
 
 test_that("a draft a run left is edited at the prompt; Enter returns it as readline would", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L, cli.width = 80L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.width = 80L)
   # Up, Ctrl-D and Tab on plain text do nothing; the row is drawn again after every key
   r = idle_read("and label", list(" it", "\033[A", "\004", "\t", "x\177 the axes", "\r"))
   expect_identical(r$x, "and label it the axes")
@@ -722,8 +708,7 @@ test_that("a draft a run left is edited at the prompt; Enter returns it as readl
 })
 
 test_that("a draft at the prompt completes a trigger word; several are listed above (IC-81)", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L, cli.width = 80L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.width = 80L)
   withr::local_dir(withr::local_tempdir())
   # a REPL that completes, on two objects
   rs = repl_state(NULL, list2env(list(mtcars_copy = 1, mtcars_two = 2), parent = emptyenv()))
@@ -740,8 +725,7 @@ test_that("a draft at the prompt completes a trigger word; several are listed ab
 })
 
 test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C keeps it first", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L, cli.width = 80L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.width = 80L)
   r = idle_read("ab", list("\177", "\025"), "/exit")
   expect_identical(r$x, "/exit")
   expect_identical(r$rows, "")
@@ -771,8 +755,7 @@ test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C ke
 })
 
 test_that("a hand-over keeps the editor's modes until readline is called, which erases the row", {
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L, cli.width = 80L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, cli.width = 80L)
   stty = character()
   keys = character()
   at_read = NULL

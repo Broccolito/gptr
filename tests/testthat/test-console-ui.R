@@ -55,7 +55,6 @@ test_that("a console select outside a run opens its own block in the margin (D-1
 test_that("questions share one frame: ? and the title, numbered choices, a dim hint, the chevron", {
   # every row under the title is at column 4, under its text (visual review: the hint was at 2)
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
-  local_utf8_glyphs()
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)
   prompts = character()
@@ -498,7 +497,6 @@ test_that("an approval takes `no, <text>` and `No. <text>` as n <text> (steering
 test_that("the keys are a row under the question, a and p only with a rule (D-243)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
-  local_utf8_glyphs()
   root = local_project()
   req = ui_request("x = 1", rule = "r(level<=1)")
   q = function(r) utils::tail(ui_permission_lines(r), 2L)
@@ -769,8 +767,7 @@ test_that("a terminal: gptr_login() reads a key without showing it (cheat-sheet 
 
 test_that("a question drawn over the composer's draft says where it went (steering review)", {
   local_console_test()
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L, width = 80L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L, width = 80L)
   withr::defer(assign("tty", NULL, envir = the))
   local_readline(rep("y", 4L))
   rd = new.env(parent = emptyenv())

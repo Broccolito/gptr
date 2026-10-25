@@ -1760,7 +1760,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 82 | `/exit` while a [b] run works leaves without a word, and its end lands on R's prompt row (final visual loop, round 3) | 82f7bd59 |
 | 83 | A D console's wait reads the terminal's edit keys as text (Task 80, found by its visual check) | 937b9c9d |
 | 84 | `document` reads the console's bracketed keys as links (pre-PR check) | c2dd176b |
-| 85 | INFRA-03 fails six expectations in a background job, taken for a timing flake (pre-PR check) | (this commit) |
+| 85 | INFRA-03 fails six expectations in a background job, taken for a timing flake (pre-PR check) | 6777610e |
+| 86 | Console tests assume Unicode glyphs where a Windows console draws ASCII (win-builder) | (this commit) |
 
 ## Out of scope
 

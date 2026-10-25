@@ -86,8 +86,7 @@ test_that("Positron's console is no terminal REPL and offers the pause menu (vis
 test_that("RStudio's console offers the pause menu; its s steers the run (steering review)", {
   local_project()
   local_gptr_options(unsafe_no_permissions = TRUE, verbose = 2L)
-  local_utf8_glyphs()
-  withr::local_options(cli.num_colors = 1L)
+  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
   off = gptr_register(gptr_tool("slow", "Test tool slow", execute = function(input, ctx) {
     fake_interrupt()
     "slow done"
@@ -148,7 +147,6 @@ test_that("the pause menu is a console question: its keys under it, read at the 
   expect_identical(m$out, c("", "  ? Paused", keys))
   expect_identical(m$prompts, ">> ")
   testthat::local_reproducible_output(width = 80, unicode = TRUE)
-  local_utf8_glyphs()
   m = menu()
   expect_identical(m$out[[3L]], gsub(" - ", " \u00b7 ", keys, fixed = TRUE))
   expect_identical(m$prompts, "\u203a ")

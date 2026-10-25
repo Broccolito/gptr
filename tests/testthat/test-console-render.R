@@ -176,7 +176,7 @@ test_that("blank lines collapse and nested lists keep their indentation (D-186)"
   expect_identical(render_chunks(text), c("  T", "", "  - a", "    - b", "      - c",
                                           "  1. x", "     - y", "", "  end"))
   skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "symbols need a UTF-8 locale")
-  local_utf8_glyphs()
+  withr::local_options(cli.unicode = TRUE)
   # the same rows at every colour depth: without colour too the Markdown is read (visual review)
   for (colours in c(1L, 256L)) {
     withr::local_options(cli.num_colors = colours)
@@ -623,7 +623,6 @@ test_that("NO_COLOR keeps the glyphs and drops every SGR (D-245)", {
   withr::local_options(cli.num_colors = NULL, crayon.enabled = NULL, cli.default_num_colors = 256L,
                        cli.unicode = TRUE)
   withr::local_envvar(NO_COLOR = NA, R_CLI_NUM_COLORS = NA)
-  local_mocked_bindings(is_windows = function() FALSE)
   st = console_style()
   expect_identical(c(st$red("x"), st$band), c("\033[38;5;167mx\033[39m", "\033[48;5;237m"))
   withr::local_envvar(NO_COLOR = "1")
@@ -667,7 +666,6 @@ test_that("the console's one grey is the style table's dim (D-245)", {
 test_that("tool calls are cursor strips tinted by kind (D-245)", {
   skip_on_cran()
   local_project()
-  local_mocked_bindings(is_windows = function() FALSE)
   spec = function(name) tryCatch(registry_get("tool", name), error = function(e) NULL)
   kinds = c(read = "read", grep = "read", ls = "read", ask = "read", r = "act", edit = "act",
             write = "act", codex_shell = "act", mcp__github__search_issues = "act",
@@ -1434,7 +1432,6 @@ test_that("a reason's line breaks fold into one space; other controls stay escap
 
 test_that("the status line wraps between whole terms, never after a separator (review)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
-  local_utf8_glyphs()
   # a dated API model id at 80 columns, its content 76 wide, and at 60
   terms = c("done", "claude-sonnet-4-5-20250929-1", "7 requests", "19.8k tokens",
             "98% context left")
