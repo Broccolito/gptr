@@ -1240,8 +1240,8 @@ console_on_compact = function(event, ctx) {
   NULL
 }
 
-#' A compaction entry's result in the status line's terms (D-245): `compacted · <before> to <after>
-#' tokens`, or `compacted` where a count is unknown
+#' A compaction entry's result in the status line's terms (D-245): `compacted`, the separator and
+#' `<before> to <after> tokens`, or `compacted` alone where a count is unknown
 #' @noRd
 console_compacted = function(e) {
   n = c(e$tokens_before %||% NA_real_, e$details$tokens_after %||% NA_real_)
