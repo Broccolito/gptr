@@ -1,19 +1,39 @@
-## Current checkpoint — P28, CI-92/93, FIX-20 and the dev docs (PRs #78-#81), 2026-10-25
+## Current checkpoint — P28, CI-92..97, FIX-20 and the dev docs (PRs #78-#83), 2026-10-25
 
-`main` takes four PRs in this order, each brought up to date with `main` before it merges (the
-ruleset is strict): #78, P28's Codex-style `peter()` console (plan `plan/P28-console-codex.md` Tasks
-1-92, log `progress/P28.md`, D-242..D-245), merged as `b90a0040` with every check green on
-`ecfad58c`; #79, CI-92 (INFRA-03's driver answers the pause menu at its chevron) and CI-93 (the
-check fits CRAN's 600 s budget: the cran-mode lane fails on a NOTE or over 480 s,
-`Windows-check.yaml`'s new CRAN-mode job checks the whole package as CRAN does and fails on a NOTE
-or over 600 s, and the CRAN test list goes from 66 files to 35; D-240 amended); #80, FIX-20, the
-console review fixes (33 of 34 findings fixed, R29 in part; D-253); #81, the dev docs: one format
-for `dev/*.md`, the `dev/README.md` inventory and CI table, `AGENTS.md` as an exact copy of
-`CLAUDE.md`, and the cheat sheet (`07d70c6a`: the 44 planned corrections, shorter wordings so both
-pages fit, and the console review's corrections, each checked against the code with FIX-20). Between
-P27 (#51) and #78, PRs #52-#77 merged (CI-74..CI-91, FIX-13..FIX-19, D-236..D-241 and D-246..D-252).
-FIX-20's R22 also closes FIX-13's open note that `/exit` released the console session's undo images:
-after `/exit`, `gptr_rewind(s)` restores no object on `b90a0040` and restores it on `f04c3309`.
+`main` takes six PRs in this order, each brought up to date with `main` and its 14 required checks
+green before it merges (the ruleset is strict): #78, P28's Codex-style `peter()` console (plan
+`plan/P28-console-codex.md` Tasks 1-92, log `progress/P28.md`, D-242..D-245), merged as `b90a0040`
+with all 22 check runs green on `ecfad58c`; #79, CI-92 (INFRA-03's driver answers the pause menu at
+its chevron) and CI-93 (the check fits CRAN's 600 s budget: the cran-mode lane fails on a NOTE or
+over 480 s, `Windows-check.yaml`'s `windows-latest (release, NOT_CRAN=false)` job checks the package
+as CRAN does and fails on a NOTE or over 600 s, and the CRAN test list goes from 66 files to 35;
+D-240 amended), merged as `f8c48802`, with the follow-up `07e2b034` that puts CI-93's figures at the
+final tree and the installed size in `cran-comments.md`; #80, FIX-20, the console review fixes (33
+of 34 findings fixed, R29 in part; D-253), merged as `5ee45a04`; #81, CI-94 (a paste on the polling
+beat is timed by its last key's read, a product fix in `console_keys()` and `console_typed_chars()`;
+the pty paste test failed 3 of 8 finished macOS jobs on 2026-10-25), CI-95 (the 4 security test
+blocks of 500 ms or more on Windows skip on CRAN again, Windows timing run 40206216160; D-240) and
+CI-96 (the macOS row of `R-CMD-check.yaml` has 60 minutes), merged as `cbb1897d`; #82, CI-97 (an
+HTTP stream checks the abort before each unit and the body's end; D-254; the mock-server abort block
+failed 3 of 2,817 runs since 2026-10-06), merged as `b58d1e1b`; #83, the dev docs: one format for
+`dev/*.md`, the `dev/README.md` inventory and CI table, `AGENTS.md` as an exact copy of `CLAUDE.md`,
+the cheat sheet (`07d70c6a`: the 44 planned corrections, shorter wordings so both pages fit, and the
+console review's corrections, each checked against the code with FIX-20), P28's A7, the CI-94 rate,
+and `cran-comments.md` from the final win-builder and R-hub runs. PRs #52-#77 (CI-74..CI-91,
+FIX-13..FIX-19, D-236..D-241 and D-246..D-252) merged between P27 (#51) and #78. FIX-20's R22 also
+closes FIX-13's open note that `/exit` released the console session's undo images: after `/exit`,
+`gptr_rewind(s)` restores no object on `b90a0040` and restores it on `f04c3309`.
+
+Verified on the final code (`main` `b58d1e1b`, tree `ff2f16d9`, the same as #82's head `1536c273`):
+
+- `dev/ci/isolated-check.R` on a fresh worktree: 0 errors, 0 warnings, 0 notes (25 min).
+- `R CMD check --as-cran` of the built tarball in CRAN mode (`NOT_CRAN` unset, CRAN's timing
+  thresholds, both manuals): Status OK in 129 s, `Running 'testthat.R' [12s/13s]`, installed size
+  7.9 Mb (INFO).
+- `main` at `cbb1897d`: R-CMD-check (40227045686), Windows-check (40227045682) and pkgdown
+  (40227045758) green; #81 and #82: 23 of 23 checks green.
+- win-builder (R-devel, R-release, R-oldrelease) and R-hub (Windows R-devel and R-release, Ubuntu
+  gcc 12): see `cran-comments.md`.
 
 Open (found, not fixed):
 
@@ -37,13 +57,19 @@ Open (found, not fixed):
   `tool-search` (CI-93).
 - A live re-ask (`gptr_source(replay = "live")`) does not resend an `@file`'s head, which the
   transcript never records (FIX-20 R27).
-- A `!code` line that uses an undone turn's object stays live in the transcript, so `source()`
-  stops there (FIX-20 R29).
+- A `!code` line that uses an undone turn's object stays live in the transcript, so `source()` stops
+  there (FIX-20 R29).
+- A paste still splits when a read comes more than about 145 ms late (IC-76's 0.2 s bound); only
+  bracketed paste could detect a paste without timing (CI-94).
+- A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).
+- The macOS row's time grows with its serial pty tests (CI-96).
+- A transfer failure in the same reactor iteration as an abort still ends `error`, and events inside
+  one unit still follow the flag (CI-97).
+- Hosted CI on 2026-10-25: Ubuntu's apt mirror stalled twice and two Ubuntu jobs reached their
+  45-minute limit in setup; both passed on a re-run.
 - CI-93's and FIX-20's other Open notes stay in `progress/fixes.md`.
 
-Remaining: on a fresh worktree at the final `main`, `R CMD check --as-cran` with 0 errors, 0
-warnings and 0 notes and the three workflows green; then only `main` is left, every other branch and
-worktree removed. The CRAN submission and P25's live steps stay the maintainer's.
+Remaining: the CRAN submission and P25's live steps are the maintainer's.
 
 ## Historical checkpoint — P27 Windows coverage (PR #51), 2026-10-19
 
