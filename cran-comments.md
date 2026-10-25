@@ -74,8 +74,8 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   app) or gptr worker processes are skipped, and the suite needs no network. To keep the check
   short, `tests/testthat.R` runs on CRAN a fixed list of 35 test files (the permission,
   redaction and secret tests and files that reach all but 10 of the R files) without their
-  slowest blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take 15 s here
-  (`Running 'testthat.R' [14s/15s]` in the local check). Live provider tests run only when
+  slowest blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take 14 s here
+  (`Running 'testthat.R' [13s/14s]` in the local check). Live provider tests run only when
   `GPTR_LIVE_TESTS` is `"true"`.
 * The 14 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
   the tarball); the shipped `.Rmd` files contain no code chunks, so building them runs no code.
@@ -104,7 +104,7 @@ checking, and the installed size.
 
 ## Installed size
 
-The installed size is 6.8 Mb: R 5.1 Mb and doc 1.2 Mb. R is the byte-compiled code of 122 R
+The installed size is 7.9 Mb: R 6.1 Mb and doc 1.2 Mb. R is the byte-compiled code of 125 R
 files, with no data sets and no compiled code; doc holds the 14 HTML vignettes. Current R
 versions report the size as INFO; R 4.2 reports it as a NOTE.
 
