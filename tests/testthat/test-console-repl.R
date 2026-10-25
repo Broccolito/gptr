@@ -943,6 +943,12 @@ test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
   # the notice ends the prompt line first, under the banner's blank line and its keys row
   expect_identical(out[c(i - 2L, i - 1L)], c("", ""))
   expect_match(out[[i - 3L]], "twice leaves$")
+  # the second ends the prompt's row too, so R's prompt starts a row of its own
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) {
+    cat(prompt)
+    ctrl_c()
+  })
+  expect_match(written(function() console_run(NULL, new.env())), "peter> \n$")
 })
 
 test_that("a line at the readline limit is reported at once and not sent", {

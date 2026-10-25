@@ -1120,7 +1120,11 @@ repl_main = function(rs) {
       }), interrupt = function(e) FALSE)
     if (isFALSE(line)) {
       rs$interrupts = rs$interrupts + 1L
-      if (rs$interrupts >= 2L) break
+      # an interrupted readline() leaves its prompt's row open (the hint, too, ends it first)
+      if (rs$interrupts >= 2L) {
+        console_cat("\n")
+        break
+      }
       # in the banner's words, the keys bold
       sym = console_style()
       console_notice("\n", cli::style_bold(tolower(console_interrupt_key())),
