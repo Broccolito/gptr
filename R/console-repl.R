@@ -611,7 +611,7 @@ repl_passthrough = function(rs, text) {
   margin = nzchar(console_pad())
   for (e in res$events) {
     if (identical(e$type, "error")) {
-      rows = strsplit(paste0("Error: ", console_escape(as.character(e$message %||% ""), FALSE)),
+      rows = strsplit(paste0("Error: ", console_escape(as.character(e$message %||% ""))),
                       "\n", fixed = TRUE)[[1L]]
       console_notice(paste(console_style()$red(paste0(if (margin) "  ", rows)), collapse = "\n"),
                      .error = TRUE)

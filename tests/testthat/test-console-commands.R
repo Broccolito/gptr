@@ -62,7 +62,7 @@ test_that("every command of architecture 6.17 that P14 owns is a command spec", 
 
 test_that("unknown commands and failing handlers are reported; the input counts as handled", {
   local_console_commands()
-  off = gptr_register(gptr_command("boom", function(args, ctx) stop("kaput")))
+  off = gptr_register(gptr_command("boom", function(args, ctx) stop("kaput\nsecond row")))
   withr::defer(off())
   rs = repl_state(NULL, new.env())
   r = run_command(rs, "/nope")
@@ -70,7 +70,8 @@ test_that("unknown commands and failing handlers are reported; the input counts 
   expect_true(any(grepl("Unknown command /nope", r$err, fixed = TRUE)))
   r = run_command(rs, "/boom")
   expect_identical(r$res, "error")
-  expect_true(any(grepl("Error in /boom: kaput", r$err, fixed = TRUE)))
+  # a message of two lines is two rows
+  expect_identical(r$err, c("Error in /boom: kaput", "second row"))
   # in the margin the notice ends with a blank row, as a command's output does
   local_gptr_options(verbose = 2L)
   withr::local_options(cli.dynamic = TRUE)

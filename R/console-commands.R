@@ -96,8 +96,8 @@ console_command = function(text, session = NULL, send = NULL) {
   }
   ctx = (if (!is.null(session)) session_live(session)$ctx) %||% ctx_new(session)
   out = tryCatch(spec$handler(args, ctx), error = function(e) {
-    say("Error in /", console_escape(spec$name, FALSE), ": ",
-        console_escape(conditionMessage(e), FALSE), .error = TRUE)
+    say("Error in /", console_escape(spec$name, FALSE), ": ", console_escape(conditionMessage(e)),
+        .error = TRUE)
     e
   })
   if (inherits(out, "error")) return(invisible("error"))

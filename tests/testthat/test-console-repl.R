@@ -532,6 +532,10 @@ test_that("a !code block's rows share one margin and end with a blank row (visua
   expect_identical(out, c("    a message", "    cat line", "    [1] 1 2 3",
                           "    Warning: a warning", ""))
   expect_identical(err, "    Error: boom")
+  # an error message of two lines is two rows
+  err = utils::capture.output(invisible(utils::capture.output(
+    repl_passthrough(rs, "!stop('one\\ntwo')"))), type = "message")
+  expect_identical(err, c("    Error: one", "    two"))
   # nothing printed, no blank row
   expect_identical(utils::capture.output(repl_passthrough(rs, "!y = 2")), character())
 })
