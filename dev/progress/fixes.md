@@ -5179,10 +5179,11 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   failed "a terminal: a paste during a run is one draft; Enter sends it as one steer (review)"
   (`test-console-typing.R:1219`, 1220, 1223 and 1227): no `› a b c` draft, `queued` seen 6 times,
   no `REQ 1 [a/b/c]`, two requests.
-- Rate: in the 6 R-CMD-check runs that held the block (since 58874963), macos-latest (release)
-  failed it in 3 of 5 finished jobs (121172988616, push to main at b90a0040; 121173185576;
-  121181176010, PR at a61d1119), always these four lines; it passed in runs 40180028016 and
-  40190321933, the latter on a tree identical to the first failure's. Ubuntu lanes: 0 of 27.
+- Rate: in the 10 R-CMD-check runs that held the block before the fix (since 58874963), macos-latest
+  (release) failed it in 3 of 8 finished jobs, all on 2026-10-25 (121172988616, push to main at
+  b90a0040; 121173185576; 121181176010, PR at a61d1119), always these four lines; it passed in runs
+  40180028016 and 40190321933, the latter on a tree identical to the first failure's, and in the
+  three most recent. It never failed on an Ubuntu lane.
 - Cause (the product): `console_keys()` timed a batch when `console_typed_chars()` returned, 50 ms
   after its last chunk, since the reader waits that long for more keys. A batch read on the beat
   measured 0.102-0.111 s, its last key's read 0.052-0.058 s, so the count term (more than
