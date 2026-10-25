@@ -86,7 +86,9 @@ test_that("Positron's console is no terminal REPL and offers the pause menu (vis
 test_that("RStudio's console offers the pause menu; its s steers the run (steering review)", {
   local_project()
   local_gptr_options(unsafe_no_permissions = TRUE, verbose = 2L)
-  withr::local_options(cli.unicode = TRUE, cli.num_colors = 1L)
+  utf8 = l10n_info()[["UTF-8"]]
+  withr::local_options(cli.unicode = utf8, cli.num_colors = 1L)
+  person = if (utf8) "\u203a" else ">>"
   off = gptr_register(gptr_tool("slow", "Test tool slow", execute = function(input, ctx) {
     fake_interrupt()
     "slow done"
@@ -107,13 +109,13 @@ test_that("RStudio's console offers the pause menu; its s steers the run (steeri
   out = notices(with_interrupt_policy(function() run_wait(run), list(run), mode = "repl"))
   # one steer, from the menu; the tool resumed and the run went on to its end
   expect_identical(sources, "pause_menu")
-  expect_identical(log$prompts, rep("\u203a ", 2L))
+  expect_identical(log$prompts, rep(paste0(person, " "), 2L))
   expect_identical(run$status, "idle")
   msgs = fake_requests(fake)[[2L]]$messages
   expect_identical(msg_text(msgs[[length(msgs)]]),
                    "The user sent this message while you were working: use mpg")
   # delivered as the person's line at the boundary, right before the next request's output
-  shown = which(out == "\u203a use mpg")
+  shown = which(out == paste(person, "use mpg"))
   expect_length(shown, 1L)
   expect_identical(out[shown + 1L], "ack")
 })
@@ -884,9 +886,9 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   Sys.sleep(0.5)
   p$interrupt()
   expect_true(drv$wait_for("Paused"))
-  expect_true(drv$wait_for("\u203a "))
+  expect_true(drv$wait_for(pty_asked()))
   drv$send("s")
-  expect_true(drv$wait_for("\u203a "))
+  expect_true(drv$wait_for(pty_asked()))
   drv$send("use base R only")
   expect_true(drv$wait_for("STEER-AFTER-TOOL TRUE"))
 

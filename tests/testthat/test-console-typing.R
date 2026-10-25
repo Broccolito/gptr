@@ -821,8 +821,8 @@ test_that("a T console's keys edit the draft on the live row; Enter steers (D-24
   skip_on_cran()
   local_console_test()
   local_gptr_options(verbose = 2L)
-  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE, cli.num_colors = 1L,
-                       cli.unicode = TRUE, cli.width = 80L)
+  testthat::local_reproducible_output(unicode = TRUE)
+  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE)
   local_mocked_bindings(front_end = function() "terminal")
   fake = gptr_fake_provider(list(list(text = "first", delay = 0.6), "second"))
   local_keys(keys_once(c("use base", " R\r"), function() length(fake_requests(fake)) == 1L))
@@ -846,8 +846,8 @@ test_that("Tab completes a trigger word; several show on the live row until a ke
   skip_on_cran()
   local_console_test()
   local_gptr_options(verbose = 2L)
-  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE, cli.num_colors = 1L,
-                       cli.unicode = TRUE, cli.width = 80L)
+  testthat::local_reproducible_output(unicode = TRUE)
+  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE)
   local_mocked_bindings(front_end = function() "terminal")
   # a reader that completes, as on a readline tty (IC-81)
   reader = console_reader
