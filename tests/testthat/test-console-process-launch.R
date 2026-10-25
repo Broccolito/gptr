@@ -189,15 +189,16 @@ test_that("real R-tool launch observation leaves captured text and warnings inta
     input = list(code = paste0('cat("tool output\\n"); launch(); ',
       'warn("tool warning", "notice")')))
   out = utils::capture.output({
-    expect_warning({
+    expect_no_warning({
       result = with_interrupt_policy(function() {
         tool_execute_frame(w$run, call, w$live$ctx)
       }, list(w$run))
-    }, class = "gptr_warning_notice")
+    })
   })
   # printed output is a result row at column 4 in the margin (visual review), on the console's
-  # cleared live row
-  expect_identical(out, paste0("\r", strrep(" ", 39L), "\r    tool output"))
+  # cleared live row, and the warning one too (visual round 3)
+  expect_identical(out, c(paste0("\r", strrep(" ", 39L), "\r    tool output"),
+                          "    Warning: tool warning"))
   expect_false(result$is_error)
   expect_identical(result$details$warnings, "tool warning")
   expect_false(grepl("[\r\033]", tool_result_text(result)))

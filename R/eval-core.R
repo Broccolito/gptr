@@ -489,7 +489,10 @@ eval_on_message = function(st, cnd) {
   invisible()
 }
 
-#' Warning handler: record; under options(warn = 2) R turns the warning into an error next
+#' Warning handler: record and muffle; under options(warn = 2) R turns the warning into an error
+#' next. Teed, it shows as it comes, `Warning: <text>`, in the console margin at column 4 with the
+#' output (eval_echo()), else on stderr: R would defer it to its top level, which a console or a run
+#' reaches only when it ends, and name the evaluator's own call
 #' @noRd
 eval_on_warning = function(st, cnd) {
   w = getOption("warn", 0)
@@ -497,7 +500,15 @@ eval_on_warning = function(st, cnd) {
   eval_flush(st)
   eval_push(st, "warning", text = conditionMessage(cnd),
             call = eval_call_text(conditionCall(cnd)))
-  if (!st$tee) tryInvokeRestart("muffleWarning")
+  if (st$tee) {
+    text = paste0("Warning: ", conditionMessage(cnd), "\n")
+    if (isTRUE(st$echo)) {
+      eval_echo(st, text)
+    } else {
+      gptr_message_write(text, "stderr", from = st$frame)
+    }
+  }
+  tryInvokeRestart("muffleWarning")
   invisible()
 }
 

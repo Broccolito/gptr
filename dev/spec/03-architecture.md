@@ -2094,7 +2094,8 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   `gptr_message_write()`: inside an `r` evaluation it reaches the console, never the tool result,
   whatever `tee` is; in the margin what the evaluated code prints (the `r` tool, `!code`) is not teed as R
   prints it but shown as result rows, at column 4, escaped, dim and cut to the console width, per top-level
-  expression or before a notice (`eval_echo()`; the result keeps all of it) [D-245]; prompts first clear the live row, also while a tool
+  expression or before a notice, a warning as `Warning: <text>` when it comes (`eval_echo()`; the result keeps
+  all of it) [D-245]; prompts first clear the live row, also while a tool
   executes, and every other write clears and redraws it, at the sink it was drawn at (a capture in the agent's code is left alone). Children never render;
   a foreground root shows one line per sub-agent start and end at verbosity 1+ unless quiet
   (`  ▌ sub-agent a (kid/kid-1) started`, `  ▌ sub-agent a done (1/2) · 2 turns · 12 s` or

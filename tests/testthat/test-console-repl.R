@@ -492,6 +492,29 @@ test_that("!code errors are shown on stderr and noted", {
   expect_match(rs$notes, "boom", fixed = TRUE)
 })
 
+test_that("a !code warning shows before the next prompt, none left for R's top level", {
+  skip_on_cran()
+  local_console_test()
+  local_scripted_ui()
+  # R shows a deferred warning only when the console returns, naming gptr's call (visual round 3)
+  local_console_stdin(c("!warning('a warning'); x = 1", "/exit"))
+  err = NULL
+  expect_no_warning({
+    err = utils::capture.output(invisible(utils::capture.output(
+      peter(.stdin = TRUE, model = gptr_fake_provider(list("ok")), envir = new.env())
+    )), type = "message")
+  })
+  expect_true("Warning: a warning" %in% err)
+  # in the console margin at column 4, dim, in order with the code's output
+  local_mocked_bindings(console_pad = function() "  ")
+  rs = repl_state(NULL, new.env())
+  out = NULL
+  expect_no_warning({
+    out = utils::capture.output(repl_passthrough(rs, "!print(1); warning('w')"))
+  })
+  expect_identical(out[1:2], c("    [1] 1", "    Warning: w"))
+})
+
 test_that("the input event (source passthrough) can handle or transform !code", {
   skip_on_cran()
   local_project()

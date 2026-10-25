@@ -4401,6 +4401,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   Contract-visible: 04 §15.10 IC-76 (queued messages). Tests: test-console-typing.R "a steer of two lines held in
   D is one queue row, delivered whole (visual round 3)", "the person's line is on the band; a queue line is dim
   and cut to one row (D-245)".
+- Final visual loop, round 3 (2026-10-24): Task 75: `eval_r()` records and muffles every warning and, teed, shows
+  it as it comes, `Warning: <text>`, at column 4 among the output in the console margin (`eval_echo()`), else on
+  stderr: R deferred it to its top level, which the console reaches only after `/exit` (`Warning message: In
+  eval(expr, st$envir) : a warning`, naming the evaluator), and a run only when it ends. Contract-visible: 04 §7.9
+  `eval_r()`, §15.10 IC-82 (what the code prints); 03 §6.17. Tests: test-console-repl.R "a !code warning shows
+  before the next prompt, none left for R's top level".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,
