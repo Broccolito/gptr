@@ -4473,7 +4473,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^ext-(check|events)$` PASS 455.
 - Deviations: none. Open: none.
 
-## Task FIX-20 - Console review fixes (2026-10-25, #PR)
+## Task FIX-20 - Console review fixes (2026-10-25, #80)
 Scope: the cheat sheet's console sections reviewed against P28's build (`516ec73c`, PR #78); each code finding
 was confirmed by an independent refuter before it was fixed. Of 34 findings (R01-R34), 33 are fixed (R29 in part)
 in 24 commits (duplicates share one), each red on `516ec73c`'s code first; R27 is not fixed. Console neighbours
