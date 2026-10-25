@@ -454,7 +454,8 @@ test_that("/cost, /context, /fork and /resume work on a session that ran", {
   expect_match(cost[[length(cost)]], "^Total: 1 request, ")
   ctx_out = run_command(rs, "/context")$out
   expect_match(ctx_out[[1L]], "^Last request q[0-9a-f]+:$")
-  expect_match(ctx_out[[length(ctx_out) - 1L]], "^  total ")
+  # the ledger is gptr's estimate of what it sent, the context left from what the provider reported
+  expect_match(ctx_out[[length(ctx_out) - 1L]], "^  total \\(est\\.\\) +[0-9,]+$")
   # the context left, as the run's status line says it (IC-77)
   left = console_context_left(session_data(s)$usage)
   expect_true(left > 90)

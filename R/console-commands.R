@@ -386,8 +386,9 @@ cmd_cost = function(args, ctx) {
   }, ""), paste0("Total: ", format_usage(u)))
 }
 
-#' /context: the token ledger of the last request and the context it left, as the run's status line
-#' says it (console_context_left()); on a CLI route (`plan-cli`) instead what the CLI reported for
+#' /context: the token ledger of the last request, gptr's estimate of what it sent (its total marked
+#' `(est.)`), and the context it left, as the run's status line says it from the reported counts
+#' (console_context_left()); on a CLI route (`plan-cli`) instead what the CLI reported for
 #' its turn, since it keeps its own transcript. After /compact the last request is the compaction
 #' request (its `gptr.compaction_usage` record), which says so and adds the estimate of the next
 #' request, the compaction entry's `tokens_after`, as a ledger row marked `~`, from which the
@@ -415,7 +416,7 @@ cmd_context = function(args, ctx) {
   c(paste0("Last request ", id, if (!is.na(at)) " (the compaction request)", ":"),
     sprintf("  %-14s %9s%s", last$component, fmt(last$tokens),
             ifelse(is.na(last$cached), "  (cache unknown)", ifelse(last$cached, "  (cached)", ""))),
-    sprintf("  %-14s %9s", "total", fmt(sum(last$tokens))),
+    sprintf("  %-14s %9s", "total (est.)", fmt(sum(last$tokens))),
     if (!is.null(after)) sprintf("  %-14s %9s", "next request", paste0("~", fmt(after))),
     if (!is.na(left)) sprintf("  %-14s %9s", "context left", paste0(left, "%")),
     if (identical(u$route, "plan-cli")) {

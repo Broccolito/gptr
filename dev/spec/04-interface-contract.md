@@ -5881,7 +5881,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     cache_write_1h)` over `compact_threshold(window, max_output, gptr.r_output_tokens)` of `prompt_model()`'s
     record for its `provider/model`, where compaction starts (an unknown window gives `compact_at` alone), as a
     whole percent from 0; NA where that threshold is infinite, a count is unknown or the route is `plan-cli`
-    (D-202). `/context` adds it under the ledger's total (`  context left         82%`). After `/compact` the
+    (D-202). `/context` adds it under the ledger's total, which is gptr's estimate of what it sent and says so
+    (`  total (est.)       3,940`; cheat-sheet review R04: unmarked, it sat over a percentage of reported counts):
+    `  context left         82%`. After `/compact` the
     last request is the compaction request (its `gptr.compaction_usage` record): `/context` heads it `Last request
     <id> (the compaction request):`, adds the row `  next request       ~<n>` (the compaction entry's
     `tokens_after`, `~` an estimate) under the total, its value in the ledger's column (review of Tasks 22-27: it
