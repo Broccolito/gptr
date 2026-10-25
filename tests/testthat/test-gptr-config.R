@@ -1478,6 +1478,30 @@ test_that("with a human, gptr_init() asks to create the workspace and then about
   expect_true(isTRUE(trust_record(d)$trusted))
 })
 
+test_that("gptr_init() does not ask about trust again while a trust decision holds", {
+  skip_on_cran()
+  local_gw(workspace = FALSE)
+  local_gptr_options(interactive = TRUE)
+  seen = new.env()
+  seen$questions = character()
+  # yes to the first question, no to any later one
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    seen$questions = c(seen$questions, question)
+    length(seen$questions) == 1L
+  })
+  d = withr::local_tempdir()
+  gptr_init(d)
+  gptr_init(d)
+  expect_length(seen$questions, 1L)
+  expect_true(trust_record(d)$trusted)
+  # a trust recorded before the workspace existed holds unasked as well
+  e = withr::local_tempdir()
+  trust_store(e, TRUE)
+  gptr_init(e)
+  expect_length(seen$questions, 1L)
+  expect_true(trust_holds(e)$record)
+})
+
 # Task 7 adaptations (see dev/progress/P08.md, Task 7).
 
 test_that("a project never relaxes the protected local-only control by gptr_config() (IC-74)", {

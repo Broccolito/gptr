@@ -121,10 +121,10 @@ test_that("the r_session core carries exactly one fragments marker on its own li
                           "update or remove packages unless the user asked."))
 })
 
-test_that("r_session keeps programs run by system() and system2() off the user's terminal", {
+test_that("r_session runs programs with peter$sh(), not system() or system2()", {
   lines = strsplit(prompt_text("r_session"), "\n", fixed = TRUE)[[1]]
-  want = paste0("- system() and system2() children read the user's terminal: ",
-                "use system2(..., stdin = nullfile()) instead of system().")
+  want = paste0("- system() and system2() children read the user's terminal and you do not ",
+                "see their output: use peter$sh() instead.")
   expect_identical(lines[length(lines) - 1L], want)
 })
 

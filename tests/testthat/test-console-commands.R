@@ -62,7 +62,7 @@ test_that("every command of architecture 6.17 that P14 owns is a command spec", 
 
 test_that("unknown commands and failing handlers are reported; the input counts as handled", {
   local_console_commands()
-  off = gptr_register(gptr_command("boom", function(args, ctx) stop("kaput")))
+  off = gptr_register(gptr_command("boom", function(args, ctx) stop("kaput\nsecond row")))
   withr::defer(off())
   rs = repl_state(NULL, new.env())
   r = run_command(rs, "/nope")
@@ -70,7 +70,14 @@ test_that("unknown commands and failing handlers are reported; the input counts 
   expect_true(any(grepl("Unknown command /nope", r$err, fixed = TRUE)))
   r = run_command(rs, "/boom")
   expect_identical(r$res, "error")
-  expect_true(any(grepl("Error in /boom: kaput", r$err, fixed = TRUE)))
+  # a message of two lines is two rows
+  expect_identical(r$err, c("Error in /boom: kaput", "second row"))
+  # in the margin the notice ends with a blank row, as a command's output does
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  for (cmd in c("/nope", "/boom")) {
+    expect_identical(run_command(rs, cmd)$out, "", info = cmd)
+  }
 })
 
 test_that("a command's text is printed escaped and a list(prompt =) is sent", {
@@ -159,7 +166,8 @@ test_that("/help's keys follow the console, as the banner does (review of Tasks 
   local_console_commands()
   local_gptr_options(interactive = TRUE)
   words = function(...) gsub("\\s+", " ", paste(help_text(...), collapse = " "))
-  # RStudio: no composer (enter, up), its triggers ! and /, a typed line the next prompt
+  # RStudio: no composer (enter, up), its triggers ! and / (a $ or @ word there gets RStudio's own
+  # completion, P28 Task 91), a typed line the next prompt
   rstudio = words("L", "rstudio")
   expect_false(any(grepl("^  (enter|up) ", help_text("L", "rstudio"))))
   for (w in c("@, !, !!", "In other consoles")) {
@@ -377,6 +385,38 @@ test_that("/status, /tools and /env describe the console", {
                    paste0("session   ", s$id, "  (idle, 1 turn)"))
 })
 
+test_that("/env and the banner in a fork list what the fork reads, a nearer binding shadowing", {
+  local_console_commands()
+  home = list2env(list(alpha = 1L, shared = "home"))
+  ov = overlay_new(home, "s1")
+  ov$beta = 2L
+  rs = repl_state(NULL, ov)
+  expect_identical(sub(":.*", "", run_command(rs, "/env")$out), c("alpha", "beta", "shared"))
+  expect_match(run_command(rs, "/env alp")$out, "^alpha: <integer>")
+  ov$shared = c("fork", "fork")
+  expect_match(run_command(rs, "/env shared")$out, "^shared: <character> length 2")
+  expect_identical(run_command(rs, "/env zz")$out, "(no objects)")
+  expect_identical(utils::capture.output(repl_banner(rs))[[2L]], "objects: alpha, beta, shared")
+})
+
+test_that("in the margin a label keeps a value wider than the row on its row", {
+  local_console_commands()
+  s = idle_session()
+  d = session_data(s)
+  d$file = paste0("/var/folders/j_/", strrep("f", 32), "/T//RtmpAbCdEf/gptr/sessions/",
+                  strrep("a", 25), ".jsonl")
+  testthat::local_reproducible_output(width = 80)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  out = run_command(repl_state(s, new.env()), "/status")$out
+  expect_true(paste0("  file      ", d$file) %in% out)
+  # prose still wraps at the content width, and a value that fits a row goes to the next
+  expect_identical(console_wrap(paste(rep("word", 24), collapse = " "), 40),
+                   rep(paste(rep("word", 8), collapse = " "), 3))
+  expect_identical(console_wrap(paste0("  ", strrep("l", 15), "  ", strrep("v", 30)), 40),
+                   paste0("  ", c(strrep("l", 15), strrep("v", 30))))
+})
+
 test_that("/doc and /status name a gptr_doc() binding before the first prompt", {
   local_console_commands()
   root = local_project()
@@ -396,6 +436,31 @@ test_that("/doc and /status name a gptr_doc() binding before the first prompt", 
   expect_true(paste0("document  ", log) %in% status)
 })
 
+test_that("/doc and /status name the console transcript the project remembers", {
+  local_console_commands()
+  root = local_project()
+  old = the$doc_binding
+  withr::defer(assign("doc_binding", old, envir = the))
+  the$doc_binding = NULL
+  s = peter("hi", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
+  local_gptr_options(interactive = TRUE)
+  rs = repl_state(NULL, new.env())
+  expect_identical(run_command(rs, "/doc")$out, "No document is bound.")
+  target = file.path(root, ".gptr", "transcripts", "t.R")
+  doc_project_transcript(doc_rel(target))
+  expect_identical(run_command(rs, "/doc")$out, paste0("Document: ", target, " (transcript)"))
+  expect_true(paste0("document  ", target) %in% run_command(rs, "/status")$out)
+  expect_true(paste0("document  ", target) %in%
+                run_command(repl_state(s, new.env()), "/status")$out)
+  # a console call records nothing where nobody can answer, and nothing after "Nowhere"
+  local_gptr_options(interactive = FALSE)
+  expect_identical(run_command(rs, "/doc")$out, "No document is bound.")
+  local_gptr_options(interactive = TRUE)
+  doc_project_transcript("off")
+  expect_identical(run_command(rs, "/doc")$out, "No document is bound.")
+  expect_true("document  (none)" %in% run_command(rs, "/status")$out)
+})
+
 test_that("/clear starts a new conversation and keeps model and mode", {
   local_console_commands()
   s = idle_session()
@@ -407,6 +472,33 @@ test_that("/clear starts a new conversation and keeps model and mode", {
   expect_identical(rs$notes, character())
 })
 
+test_that("/clear keeps the thinking level of the session it ends", {
+  local_console_commands()
+  local_project()
+  s = peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env(),
+            .opts = list(thinking = "high"))
+  expect_identical(session_data(s)$thinking, "high")
+  rs = repl_state(s, new.env())
+  run_command(rs, "/clear")
+  expect_identical(rs$model, paste0(s$model, ":high"))
+  expect_identical(model_canonical(rs$model)$thinking, "high")
+})
+
+test_that("/clear keeps the workspace the conversation used, a fork's too", {
+  local_console_commands()
+  local_project()
+  home = new.env()
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = home)
+  rs = repl_state(s, new.env())
+  home$z = 1
+  run_command(rs, "/fork")
+  assign("y", 5, envir = repl_eval_env(rs))
+  run_command(rs, "/clear")
+  expect_null(rs$session)
+  expect_identical(get0("y", repl_eval_env(rs)), 5)
+  expect_identical(get0("z", repl_eval_env(rs)), 1)
+})
+
 test_that("/cost, /context, /fork and /resume work on a session that ran", {
   local_console_commands()
   local_project()
@@ -416,7 +508,8 @@ test_that("/cost, /context, /fork and /resume work on a session that ran", {
   expect_match(cost[[length(cost)]], "^Total: 1 request, ")
   ctx_out = run_command(rs, "/context")$out
   expect_match(ctx_out[[1L]], "^Last request q[0-9a-f]+:$")
-  expect_match(ctx_out[[length(ctx_out) - 1L]], "^  total ")
+  # the ledger is gptr's estimate of what it sent, the context left from what the provider reported
+  expect_match(ctx_out[[length(ctx_out) - 1L]], "^  total \\(est\\.\\) +[0-9,]+$")
   # the context left, as the run's status line says it (IC-77)
   left = console_context_left(session_data(s)$usage)
   expect_true(left > 90)
@@ -523,6 +616,27 @@ test_that("/retry sends the undone prompt again, and nothing when the rewind is 
   expect_identical(run_command(rs, "/retry", send)$out, "The last turn was not undone.")
   expect_identical(sent$texts, "A")
   expect_equal(s$turns, 1)
+})
+
+test_that("/retry preloads the undone prompt's skills again, and none of a later prompt", {
+  local_console_commands()
+  withr::defer(res_prune("skills:", character()))
+  local_project(trust = TRUE, files = list(
+    ".gptr/skills/stats/SKILL.md" = "---\nname: stats\ndescription: Statistics.\n---\nUse lm().\n"))
+  e = new.env()
+  fake = local_fake_provider(list("a1", "a2"))
+  s = peter("A", skills = "stats", model = fake, envir = e)
+  rs = repl_state(s, e)
+  sent = new.env(parent = emptyenv())
+  send = function(text) sent$text = text
+  expect_identical(run_command(rs, "/retry", send)$res, "prompt")
+  expect_identical(sent$text, "A")
+  expect_identical(rs$next_skills, "stats")
+  rs$next_skills = NULL
+  peter(s, "B", model = fake, envir = e)
+  run_command(rs, "/retry", send)
+  expect_identical(sent$text, "B")
+  expect_null(rs$next_skills)
 })
 
 test_that("/skill:<name> preloads the skill for the next prompt", {

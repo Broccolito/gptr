@@ -184,6 +184,9 @@ console_ahead = function(rd, accept) {
 policy_menu = function(cnd, pol) {
   # nested policies drop their runs while the stack unwinds to the exiting handler
   pol$abort_runs = pol$runs
+  # one Esc in RStudio sets R's interrupt flag twice (its own and its SIGINT's): a second interrupt
+  # in this handler would reach only the policy's abort, so one right behind the first is taken here
+  tryCatch(Sys.sleep(0.05), interrupt = function(e) NULL)
   if (is.null(findRestart("resume", cnd)) || !console_menu_available()) return(invisible(NULL))
   if (!is.null(the$live_row)) the$live_row$clear()
   recs = as.list(console_state()$active)
@@ -261,7 +264,9 @@ policy_menu = function(cnd, pol) {
         # nothing runs it while the chat prompt waits (later runs only at R's own prompt)
         where = "in the background"
         if (said) where = paste0(where, " (experimental, ?\"gptr-background\")")
-        terms = c(where, "!!gptr::gptr_wait(gptr::gptr_last()) continues it here")
+        # `!!` is the chat prompt's R code; at R's own prompt it would negate the session
+        bang = if (!is.null(console_repl_find())) "!!"
+        terms = c(where, paste0(bang, "gptr::gptr_wait(gptr::gptr_last()) continues it here"))
         console_write(sym$dim(paste0("  ", console_terms(terms, ui_width() - 2L))))
         console_background_settle()
         console_write("")

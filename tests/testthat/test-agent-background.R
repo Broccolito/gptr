@@ -378,6 +378,24 @@ test_that("gptr_cancel() aborts a background session and releases its job", {
   expect_false(s$id %in% gptr_jobs()$id)
 })
 
+test_that("gptr_wait() releases a background session that settled inside it", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  s = peter("short job", model = gptr_fake_provider(list("done")), envir = new.env(),
+           background = TRUE)
+  # no timer tick follows the wait, as at the peter> prompt: only the wait can release it, else
+  # the console renders none of the session's later prompts (console_foreground())
+  st = bg_state()
+  st$cancel()
+  st$cancel = NULL
+  gptr_wait(s)
+  expect_identical(s$status, "idle")
+  expect_false(bg_has(s$id))
+  expect_null(session_live(s)$background)
+  expect_false(s$id %in% gptr_jobs()$id)
+})
+
 test_that("an unreferenced settled background session is collected", {
   skip_on_cran()
   skip_if_not_installed("later")

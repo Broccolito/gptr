@@ -93,7 +93,8 @@ Ask in ordinary language. `@x` attaches a visible R object by name, and `@analys
 beginning of a text file. Quote a path containing spaces as `@"analysis notes.txt"`.
 A mention is a word that starts with `@`, so `me@example.org` stays text.
 Files take precedence when a mention matches both a file and an object. A file mention sends
-at most its first 40 lines; binary files contribute a description rather than their contents.
+at most its first 40 lines, and the files of one prompt share about 2,000 tokens; binary files
+contribute a description rather than their contents.
 For a larger file, ask the agent to read the relevant section. Under the prompt you send, a dim
 line says what each mention attached, such as `@ mtcars (data.frame, 32 x 11)` or
 `@ analysis.R (first 40 lines)`, or that a name was not found and was sent as text.
@@ -180,7 +181,7 @@ commands available in the current session, including any supplied by plugins or 
 | `/mode [plan|manual|edits|auto|yolo]` | Show the mode or switch it from the next turn. |
 | `/plan` | Switch to plan mode for read-only exploration and a proposed plan. |
 | `/tools` | List direct tools and `peter$` members. |
-| `/env [pattern]` | Describe workspace objects whose names contain the pattern. |
+| `/env [text]` | Describe workspace objects whose names contain the text. |
 | `/compact [focus]` | Compact the conversation now, optionally emphasizing a topic; may make a model request. |
 | `/cost` | Show this session's tokens and cost. |
 | `/context` | Show the token ledger of the last request. |

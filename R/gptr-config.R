@@ -1543,8 +1543,8 @@ init_rbuildignore = function(dir) {
 #' overwritten, so calling it again is safe. There is no default path: without `path` gptr asks
 #' `Create .gptr/ in <project>? [y/N]` when you can answer, and signals an error otherwise.
 #' Creating the workspace is consent to write there; it is not trust: gptr then asks separately
-#' whether to trust the project (see [gptr_trust()]). In a package source it offers the
-#' `^\.gptr$` line for `.Rbuildignore` and never writes it silently.
+#' whether to trust the project, unless it is trusted already (see [gptr_trust()]). In a package
+#' source it offers the `^\.gptr$` line for `.Rbuildignore` and never writes it silently.
 #'
 #' @param path The project directory (it must exist).
 #' @param instructions Write `vignette.Rmd` from the template when it is absent.
@@ -1594,10 +1594,11 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
   if (instructions) template_copy("vignette.Rmd", file.path(ws, "vignette.Rmd"))
   if (gitignore) template_copy("gitignore", file.path(ws, ".gitignore"))
   init_rbuildignore(proj)
-  if (gptr_can_prompt()) {
+  # `proj` itself: project_root() may return an IC-63 override, not the directory initialised
+  held = trust_holds(proj)
+  if (gptr_can_prompt() && !held$record && !held$live) {
     answer = isTRUE(gptr_confirm(paste0("Trust this project (its settings, skills, prompt ",
                                         "templates, agent files, extensions and MCP servers)?")))
-    # `proj` itself: project_root() may return an IC-63 override, not the directory initialised
     trust_store(proj, answer)
   }
   invisible(path_norm(ws))

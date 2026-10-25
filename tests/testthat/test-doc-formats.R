@@ -121,20 +121,21 @@ test_that("console transcripts record the first prompt as an assignment and late
   block = doc_render_block("a1b2c3", list(model = "m", prompt = prompt_hash("fit mpg on weight")),
                            "fit = lm(mpg ~ wt, data = mtcars)")
   t1 = doc_transcript_upsert(character(), site, block, "a1b2c3")
-  expect_match(t1[1], "^# gptr session sab12cd3456 -- started ")
-  expect_identical(t1[2], "# machine log: .gptr/sessions/20260929T183000_sab12cd3456.jsonl")
-  # only gptr_source() regenerates: under source() the option replays with a warning; the
+  # the file opens with the preamble, as one whose first line is direct R does (IC-49); only
+  # gptr_source() regenerates: under source() the option replays with a warning; the
   # transcript is named from the project root, where the console runs (FIX-16)
-  expect_identical(t1[3:5], c(
+  expect_identical(t1[1:4], c(
     "# source() this file to replay the recorded code without calling a model;",
     paste0("# gptr_source(\".gptr/transcripts/gptr-session-20260929-183000.R\", replay = ",
-           "\"live\") re-asks the model."), "library(gptr)"))
+           "\"live\") re-asks the model."), "library(gptr)", ""))
+  expect_match(t1[5], "^# gptr session sab12cd3456 -- started ")
+  expect_identical(t1[6], "# machine log: .gptr/sessions/20260929T183000_sab12cd3456.jsonl")
   outside = utils::modifyList(site, list(path = file.path(withr::local_tempdir(), "log.R")))
   expect_true(paste0("# gptr_source(", doc_str_literal(path_norm(outside$path)),
                      ", replay = \"live\") re-asks the model.") %in%
                 doc_transcript_upsert(character(), outside, block, "a1b2c3"))
   expect_false(any(grepl("options(gptr.replay", t1, fixed = TRUE)))
-  expect_identical(t1[6:7], c("", "s_ab12cd = peter(\"fit mpg on weight\")"))
+  expect_identical(t1[7:8], c("", "s_ab12cd = peter(\"fit mpg on weight\")"))
   site2 = utils::modifyList(site, list(template = "add \"predictions\"\nnow",
                                        context_labels = "mtcars"))
   t2 = doc_transcript_upsert(t1, site2, doc_render_block("d4e5f6", list(model = "m"), "p = 1"),
@@ -150,6 +151,17 @@ test_that("console transcripts record the first prompt as an assignment and late
   expect_identical(rmd[7], "```{r gptr-a1b2c3}")
 })
 
+test_that("a console turn after an undone first turn assigns the session again", {
+  site = list(console = TRUE, session_id = "sab12cd3456", template = "fit mpg on weight",
+              path = file.path(withr::local_tempdir(), "log.R"))
+  block = function(id) doc_render_block(id, list(model = "m"), "fit = 1")
+  dead = doc_inert_text(doc_transcript_upsert(character(), site, block("a1b2c3"), "a1b2c3"),
+                        "r", "a1b2c3", TRUE, transcript = TRUE)
+  t2 = doc_transcript_upsert(dead, site, block("d4e5f6"), "d4e5f6")
+  expect_identical(sum(startsWith(t2, "s_ab12cd = peter(")), 1L)
+  expect_false(any(startsWith(t2, "s_ab12cd |> peter(")))
+})
+
 test_that("a transcript names the machine log only when it outlives R (.gptr/)", {
   console_turn = function(proj) {
     t = file.path(proj, "log.R")
@@ -162,14 +174,14 @@ test_that("a transcript names the machine log only when it outlives R (.gptr/)",
   # without .gptr/ the log is in tempdir()/gptr, which R deletes at exit
   x = console_turn(local_project(gptr = FALSE))
   expect_true(path_inside(x$file, file.path(tempdir(), "gptr")))
-  expect_identical(x$text[2],
+  expect_identical(x$text[6],
                    "# machine log: none kept (gptr_init() keeps session logs in .gptr/)")
   for (tmp in unique(c(tempdir(), path_norm(tempdir())))) {
     expect_false(any(grepl(tmp, x$text, fixed = TRUE)))
   }
   # a .gptr/ project under tempdir() keeps its relative path
   x = console_turn(local_project())
-  expect_identical(x$text[2], paste0("# machine log: .gptr/sessions/", basename(x$file)))
+  expect_identical(x$text[6], paste0("# machine log: .gptr/sessions/", basename(x$file)))
 })
 
 # ---- adaptations (dev/DEVIATIONS.md D-070) ------------------------------------------------------

@@ -17,7 +17,8 @@ console_commands = function() {
                  "Show or switch the permission mode: /mode [plan|manual|edits|auto|yolo]"),
     gptr_command("plan", cmd_plan, "Switch to plan mode (read-only exploration, then a plan)"),
     gptr_command("tools", cmd_tools, "List the direct tools and the peter$ members"),
-    gptr_command("env", cmd_env, "List objects of the console environment: /env [pattern]"),
+    gptr_command("env", cmd_env,
+                 "List the objects, or those whose names contain text: /env [text]"),
     gptr_command("compact", cmd_compact, "Compact the conversation now: /compact [focus]"),
     gptr_command("cost", cmd_cost, "Tokens and cost of this session"),
     gptr_command("context", cmd_context, "Token ledger of the last request"),
@@ -57,9 +58,9 @@ command_parse = function(text) {
 #' it or transform it (into another command, or a prompt sent through `send(text)`). A line that
 #' is still a command goes out on the `console:command` channel (P15 records it as a comment). A
 #' character result is printed escaped (a `cli_ansi_string`, whose untrusted parts its handler
-#' escaped, with its styles), a blank row after it where lines keep the margin, as after a run's
-#' status line, `list(prompt =)` is sent, and an error is reported on
-#' stderr (the input counts as handled).
+#' escaped, with its styles), `list(prompt =)` is sent, and an error is reported on stderr (the
+#' input counts as handled); where lines keep the margin a blank row follows what is printed, as
+#' after a run's status line.
 #' @return Invisibly "unknown", "error", "prompt" or "done".
 #' @noRd
 console_command = function(text, session = NULL, send = NULL) {
@@ -84,15 +85,19 @@ console_command = function(text, session = NULL, send = NULL) {
     spec = registry_get("command", cmd$name, session = session)
     args = cmd$args
   }
+  say = function(...) {
+    console_notice(...)
+    if (nzchar(console_pad())) console_write("")
+  }
   if (is.null(spec)) {
-    console_notice("Unknown command /", console_escape(cmd$full, FALSE),
-                   ". Type /help for the list.", .error = TRUE)
+    say("Unknown command /", console_escape(cmd$full, FALSE), ". Type /help for the list.",
+        .error = TRUE)
     return(invisible("unknown"))
   }
   ctx = (if (!is.null(session)) session_live(session)$ctx) %||% ctx_new(session)
   out = tryCatch(spec$handler(args, ctx), error = function(e) {
-    console_notice("Error in /", console_escape(spec$name, FALSE), ": ",
-                   console_escape(conditionMessage(e), FALSE), .error = TRUE)
+    say("Error in /", console_escape(spec$name, FALSE), ": ", console_escape(conditionMessage(e)),
+        .error = TRUE)
     e
   })
   if (inherits(out, "error")) return(invisible("error"))
@@ -106,8 +111,7 @@ console_command = function(text, session = NULL, send = NULL) {
     } else {
       console_lines(out)
     }
-    console_notice(paste(lines, collapse = "\n"))
-    if (nzchar(console_pad())) console_write("")
+    say(paste(lines, collapse = "\n"))
   }
   invisible("done")
 }
@@ -120,8 +124,9 @@ console_templates_sync = function() {
   invisible(NULL)
 }
 
-#' The bound history document of `s`, or the gptr_doc() binding before the console's first
-#' prompt when `s` is NULL (the `doc.site` service, P15), or NULL
+#' The history document `s` records into, or before the console's first prompt (`s` NULL) the
+#' gptr_doc() binding or the transcript the project remembers (the `doc.site` service, P15), or
+#' NULL
 #' @noRd
 cmd_doc_site = function(s) {
   if (!ext_service_has("doc.site")) return(NULL)
@@ -308,19 +313,33 @@ cmd_tools = function(args, ctx) {
     paste0("peter$ members: ", if (length(members)) paste(members, collapse = ", ") else "(none)"))
 }
 
-#' The first `n` objects of `env` whose names contain `pattern`, described without forcing
-#' promises (/env)
+#' The names code in `env` reads, sorted: a fork overlay's, then each lower overlay's and the first
+#' other environment's (/env, the banner)
 #' @noRd
-console_env_lines = function(env, pattern = "", n = 30L) {
-  nms = sort(ls(env), method = "radix")
-  nms = nms[grepl(pattern, nms, fixed = TRUE)]
+console_env_names = function(env) {
+  nms = ls(env)
+  while (!is.null(attr(env, "gptr_overlay", exact = TRUE))) {
+    env = parent.env(env)
+    nms = c(nms, ls(env))
+  }
+  sort(unique(nms), method = "radix")
+}
+
+#' The first `n` objects `env` reads whose names contain `text`, each described where it is bound,
+#' without forcing promises (/env)
+#' @noRd
+console_env_lines = function(env, text = "", n = 30L) {
+  nms = console_env_names(env)
+  nms = nms[grepl(text, nms, fixed = TRUE)]
   lines = vapply(utils::head(nms, n), function(nm) {
-    describe_binding(nm, env, budget = 40L)[[1L]]
+    e = env
+    while (!exists(nm, envir = e, inherits = FALSE)) e = parent.env(e)
+    describe_binding(nm, e, budget = 40L)[[1L]]
   }, "", USE.NAMES = FALSE)
   c(lines, if (length(nms) > n) paste0("(+ ", length(nms) - n, " more)"))
 }
 
-#' `/env [pattern]`
+#' `/env [text]`
 #' @noRd
 cmd_env = function(args, ctx) {
   rs = console_repl_find()
@@ -368,8 +387,9 @@ cmd_cost = function(args, ctx) {
   }, ""), paste0("Total: ", format_usage(u)))
 }
 
-#' /context: the token ledger of the last request and the context it left, as the run's status line
-#' says it (console_context_left()); on a CLI route (`plan-cli`) instead what the CLI reported for
+#' /context: the token ledger of the last request, gptr's estimate of what it sent (its total marked
+#' `(est.)`), and the context it left, as the run's status line says it from the reported counts
+#' (console_context_left()); on a CLI route (`plan-cli`) instead what the CLI reported for
 #' its turn, since it keeps its own transcript. After /compact the last request is the compaction
 #' request (its `gptr.compaction_usage` record), which says so and adds the estimate of the next
 #' request, the compaction entry's `tokens_after`, as a ledger row marked `~`, from which the
@@ -397,7 +417,7 @@ cmd_context = function(args, ctx) {
   c(paste0("Last request ", id, if (!is.na(at)) " (the compaction request)", ":"),
     sprintf("  %-14s %9s%s", last$component, fmt(last$tokens),
             ifelse(is.na(last$cached), "  (cache unknown)", ifelse(last$cached, "  (cached)", ""))),
-    sprintf("  %-14s %9s", "total", fmt(sum(last$tokens))),
+    sprintf("  %-14s %9s", "total (est.)", fmt(sum(last$tokens))),
     if (!is.null(after)) sprintf("  %-14s %9s", "next request", paste0("~", fmt(after))),
     if (!is.na(left)) sprintf("  %-14s %9s", "context left", paste0(left, "%")),
     if (identical(u$route, "plan-cli")) {
@@ -429,7 +449,8 @@ cmd_status = function(args, ctx) {
     paste0("file      ", d$file %||% "(not written yet)"))
 }
 
-#' /clear: a new conversation that keeps the model and mode
+#' /clear: a new conversation that keeps the model, its thinking level, the mode and the workspace
+#' the old one evaluated in (a fork's overlay, a piped session's home)
 #' @noRd
 cmd_clear = function(args, ctx) {
   rs = console_repl_find()
@@ -437,10 +458,14 @@ cmd_clear = function(args, ctx) {
   s = rs$session
   if (!is.null(s)) {
     # keep the console call's (or /model's) model: a spec registered for the old session only
-    # would not resolve from its model string in a new session
-    rs$model = rs$model %||% s$model
+    # would not resolve from its model string in a new session; else the session's, its level as
+    # the `:<level>` suffix (a router chooses its own)
+    d = session_data(s)
+    level = if (!is.null(d$thinking) && !startsWith(d$model, "router:")) paste0(":", d$thinking)
+    rs$model = rs$model %||% paste0(d$model, level)
     rs$mode = s$mode
   }
+  rs$envir = repl_eval_env(rs)
   rs$session = NULL
   rs$notes = character()
   rs$attach = character()
@@ -532,7 +557,8 @@ cmd_permissions = function(args, ctx) {
   }
 }
 
-#' /retry: undo the last turn (gptr_rewind(), P16) and send its prompt again
+#' /retry: undo the last turn (gptr_rewind(), P16) and send its prompt again, with the skills it
+#' preloaded
 #' @noRd
 cmd_retry = function(args, ctx) {
   s = ctx$session
@@ -547,5 +573,7 @@ cmd_retry = function(args, ctx) {
   if (!rlang::is_string(prompt) || !nzchar(prompt)) {
     return("The last prompt could not be recovered.")
   }
+  rs = console_repl_find()
+  if (!is.null(rs)) rs$next_skills = s$last_rewind$skills
   list(prompt = prompt)
 }

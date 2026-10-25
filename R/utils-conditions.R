@@ -308,12 +308,17 @@ console_terms = function(terms, width, sep = console_style()$sep) {
   console_cut(rows, width)
 }
 
-#' Lines wrapped at `width`, continuation rows indented like their line (a wider word stays whole)
+#' Lines wrapped at `width`, continuation rows indented like their line (a wider word stays whole;
+#' a label and a value wider than a row stay one row, which the terminal wraps: a break would only
+#' leave the label alone)
 #' @noRd
 console_wrap = function(lines, width) {
   as.character(unlist(lapply(lines, function(line) {
     if (cli::ansi_nchar(line, type = "width") <= width) return(line)
-    lead = attr(regexpr("^ *", cli::ansi_strip(line)), "match.length")
+    plain = cli::ansi_strip(line)
+    lead = attr(regexpr("^ *", plain), "match.length")
+    value = sub("^ *\\S+ +", "", plain)
+    if (!grepl(" ", trimws(value)) && nchar(value, type = "width") > width - lead) return(line)
     cli::ansi_strwrap(line, width, indent = lead, exdent = lead)
   })))
 }

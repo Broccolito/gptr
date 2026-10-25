@@ -776,7 +776,7 @@ returns the identical object (`identical(s |> peter("x"), s)`).
 | `snapshot` | df\|NULL | last workspace snapshot (names, addresses, fingerprints; no values) |
 | `ext` | named list | per-plugin JSON-able state |
 | `backend`, `agent`, `exports` | chr | children only (§5.8 of `03`) |
-| `last_rewind` | list\|NULL | report of the last `gptr_rewind()` |
+| `last_rewind` | list\|NULL | report of the last `gptr_rewind()`; its `skills` are those the undone prompt preloaded, which `/retry` preloads again (cheat-sheet review R12, R13) |
 | `editor_text` | chr(1)\|NULL | the undone prompt after a rewind |
 
 **Live record** (`session_live(s)`, P06): `home` (environment binding: `globalenv()`, an explicit `envir`, or a
@@ -1219,9 +1219,10 @@ Returns `invisible(<absolute path of .gptr>)`. Creates `.gptr/`, `settings.json`
 `inst/templates/settings.json`), `skills/`, `agents/`, `prompts/` (never overwrites existing files; idempotent).
 In a package source (a `DESCRIPTION` with `Package:`) whose `.Rbuildignore` lacks `^\.gptr$` it **offers** the line
 (interactive `gptr_confirm()`; otherwise one `notice` message naming the line); it never writes it silently
-[13 §2.3]. With a human present it then asks a separate question `Trust this project (its settings, skills, prompt
-templates, agent files, extensions and MCP servers)? [y/N]` and records the answer with `gptr_trust()`; without a
-human nothing is trusted. Conditions: `noninteractive`, `workspace`, `invalid_argument`. Emits nothing.
+[13 §2.3]. With a human present, unless the project's trust already holds (`trust_holds()`), it then asks a separate
+question `Trust this project (its settings, skills, prompt templates, agent files, extensions and MCP servers)? [y/N]`
+and records the answer with `gptr_trust()`; without a human nothing is trusted. Conditions: `noninteractive`,
+`workspace`, `invalid_argument`. Emits nothing.
 
 ```r
 d = tempfile("proj"); dir.create(d)
@@ -2262,7 +2263,7 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `risk.classify` | P11 | `r` tool (P10), bridges (P22), `ctx$risk()` | `function(code, envir = NULL, root = NULL, kind = c("r", "command", "sql", "python")) <gptr_risk>` |
 | `plan.pending` | P11 | `plan` context block (P07) | `function(envir_address, consume = TRUE) chr(1) or NULL` |
 | `s1.decide` | P13 | `ctx$decide()` | `function(question, x, ...) <gptr_s1>` |
-| `doc.site` | P15 | `r` tool record flag (P10), `documents` section (P07) | `function(session) list(path, format) or NULL` |
+| `doc.site` | P15 | `r` tool record flag (P10), `documents` section (P07), `/doc` and `/status` (P14) | `function(session) list(path, format) or NULL`; outside a run where a person can answer, without a document or binding, the transcript the project remembers (cheat-sheet review R10) |
 | `doc.edit` | P15 | `edit` tool (P10) | `function(path, edits, session) <gptr_tool_result> or NULL` (NULL: not a bound document) |
 | `doc.s1_block` | P15 | top-level System 1 calls (P13) | `function(call, summary) invisible(NULL)` (writes the one-line block) |
 | `doc.replay` | P15 | `team` and `fanout` routes (P19) | `function(call) <session> or NULL`: the replayed team or fan-out session for a fresh block, else `NULL` (IC-47) |
@@ -2912,7 +2913,7 @@ res = s1_request(model_resolve("jev"), states, q, list())
 |---|---|---|---|
 | `builtin_console(gptr)` | `console-repl.R` | registers the `frontend` `console`, the route `console` (order 30), the renderer hooks (process-wide notify hooks on `message_update`, `message_end`, `tool_execution_start`, `tool_execution_end`, `agent_end` that render only for the foreground session when `verbosity() >= 2`, a hook on `artifact_start` printing `artifact  <id>  ->  <url>   (running in background)` (NS-8), a hook on `turn_end`, emitted just before the loop polls steers, that runs `console_typed()` (a terminal REPL reads what was typed and queues it), so a line sent before a step boundary reaches it (D-242), a hook on `queue_update` that prints a user's message the run takes as the person's line `› <text>` at that boundary (D-242), tool `render` functions and `renderer` records, IC-69, IC-71), the service `console.interrupt_policy`, and the command specs of §6.17 of `03` | P02 load |
 | `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s`; first-use setup per §6.1.1 before its banner/input; returns the session invisibly on `/exit`, or `NULL` when setup returns before starting it | P08 (route) |
-| `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu, a console question (`? Paused` and the keys `s steer`, `f follow-up`, `c continue`, `a abort`, `b background` for foreground calls when P21 is loaded, read at `› `; IC-76 in §15.10), writes to stdout through the console writer and resumes through the `resume` restart; a second Ctrl-C aborts; `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Windows' Rgui, Jupyter; `console_menu_available()` offers the menu in terminal R, the consoles of Positron and RStudio and R.app, D-243) | P06, P08 |
+| `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu, a console question (`? Paused` and the keys `s steer`, `f follow-up`, `c continue`, `a abort`, `b background` for foreground calls when P21 is loaded, read at `› `; IC-76 in §15.10), writes to stdout through the console writer and resumes through the `resume` restart; a second Ctrl-C aborts, but not one in the menu's first 50 ms (one Esc in RStudio sets R's interrupt flag twice; review R30); `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Windows' Rgui, Jupyter; `console_menu_available()` offers the menu in terminal R, the consoles of Positron and RStudio and R.app, D-243) | P06, P08 |
 | `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)` and `finish(cut = FALSE)`; chunk-invariant; `write()` runs under `suspendInterrupts()`, so an interrupt (a D console's Ctrl-C) comes after the delta, none of which is lost (P28 Task 59: ` be.` vanished from `would be. Eight-cylinder` after [a]); writes whole rows only, each at its line end or its wrap (prose wraps at 100 columns at most [D-245]; `finish()` ends the held partial row, `finish(cut = TRUE)` (an aborted, failed or truncated answer, the pause menu's [b], an unusual end) writes all it received and ends the held row with a dim `…` [D-245]; other output goes between whole rows and the held row continues after it; a fenced line is written once, at its line end) [D-245]; untrusted text never used as a format string | P14 |
 | `console_live()`, `console_live_row(state, width)` | `console-input.R` | the live row (IC-82 in §15.10), on the input band where `console_style()` gives one (a T console's; Task 25): an environment with `draw(state)` and `clear()`, held in `the$live_row` while a foreground run works, so `gptr_message_write()` clears it before every console write and redraws it after; `console_live_row()` is its text, fitted to width - 1 | P28 |
 | `builtin_jsonl(gptr)`, `jsonl_sink(session, con)` | `console-jsonl.R` | the `frontend` `jsonl`: subscribes to the session's events and writes one redacted JSON object per line in the §4.5 JSON form (event names verbatim) | P19 (worker children), P24 |
@@ -3609,7 +3610,7 @@ name and semantics follow Pi `1b347794`; `gptr` means gptr-specific. Handlers mu
 | `resources_discover` | pi | collect | `cwd`, `reason` | `list(skill_paths, prompt_paths, agent_paths)` (chr each) | P17 |
 | `session_start` | pi | collect (before the prompt freezes) | `reason` (`new`, `fork`, `resume`, `replay`, `child`) | `list(sections = named list (chr or NULL to remove), blocks = list of context blocks for the first message)` | P06 |
 | `session_before_fork` | pi | first decision | `source`, `at` | `list(cancel = TRUE, reason)` | P06 |
-| `session_shutdown` | pi | notify | `reason` (`exit`, `gc`, `unload`) | - | P06, P14 |
+| `session_shutdown` | pi | notify | `reason` (`gc`, `unload`; a session the console returns at `/exit` stays the caller's) | - | P06 |
 | `input` | pi | transform chain | `text`, `source` (`prompt`, `pipe`, `repl`, `passthrough`, `steer`; `steer` = pause-menu input or a line typed while a console answer runs, IC-76) | `list(action = "continue" \| "transform" \| "handled", text)` | P08, P14 |
 | `agent_start`, `agent_end` | pi | notify | `agent_end`: `status`, `reason`, `usage` (the run's rows), `doc` (site or NULL), `turns` | - | P06 |
 | `turn_start`, `turn_end` | pi | notify | `turn_end`: `message` (assistant), `results` (tool results) | - | P06 |
@@ -3936,7 +3937,7 @@ statement's first line. Ownership: the run of blocks starting at the first non-b
 | `.Rmd` | a separate chunk `` ```{r gptr-<id>} `` directly after the owning chunk (fence and prefix copied), body with the markers, no `#>` lines |
 | `.qmd` | a chunk `` ```{r} `` whose first line is `#| label: gptr-<id>`, same body |
 | `.ipynb` | a code cell `{"cell_type": "code", "execution_count": null, "id": "gptr-<id>", "metadata": {"gptr": {"id", "model", "prompt", "date", "session", "turn", "value"}}, "outputs": [], "source": [...]}` after the calling cell; keys sorted; indentation copied from the file (Jupyter: 1 space); numbers kept as read (gptr writes no float of its own, so Jupyter's Python repr is preserved; D-158); only `source` and `metadata.gptr` change on rewrite; never written while the notebook is open: in Jupyter the block is shown as the cell output and kept pending until `gptr_doc(path, sync = TRUE)` (IC-50) |
-| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: a header comment (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, or `none kept (gptr_init() keeps session logs in .gptr/)` when the log is in `tempdir()/gptr`, which R deletes at exit; `# source() this file to replay ...`), `library(gptr)` (at the top of every transcript, whatever its first block, IC-49), then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output; slash commands as comments (`# /model opus`) |
+| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: the replay note (`# source() this file to replay ...`) and `library(gptr)` (at the top of every transcript, whatever its first block, IC-49), then per session a header comment after a blank line (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, or `none kept (gptr_init() keeps session logs in .gptr/)` when the log is in `tempdir()/gptr`, which R deletes at exit), then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output; slash commands as comments (`# /model opus`) |
 
 **Undone blocks** (G7 §3.8): header `status=undone`, every body line prefixed `#~ `; Rmd/qmd chunks get
 `eval=FALSE` (`#| eval: false`); ipynb `metadata.gptr.status = "undone"` plus `#~ ` source lines. A top-level System 1
@@ -5720,6 +5721,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     gone) and draws the live row again with the draft (`console_asked()`); after [a] the draft joins the kept
     list (Task 18). [b] closes the answer with its cut row, then, after a blank row, writes the terms `in the
     background (experimental, ?"gptr-background")` and `!!gptr::gptr_wait(gptr::gptr_last()) continues it here`
+    (without `!!` where no console REPL is on the stack, as for a `peter("...")` call at R's prompt; review R19)
     dim at column 2 (`console_terms()`, so a row ends at a whole term), the parenthesis in place of the background
     service's notice, which the menu muffles (P21 gives it once a process), and a blank row before the prompt (P28
     Task 53: the block sat right under the answer's tail; P28 Task 70, visual round 3: the service's two sentences
@@ -5883,7 +5885,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     cache_write_1h)` over `compact_threshold(window, max_output, gptr.r_output_tokens)` of `prompt_model()`'s
     record for its `provider/model`, where compaction starts (an unknown window gives `compact_at` alone), as a
     whole percent from 0; NA where that threshold is infinite, a count is unknown or the route is `plan-cli`
-    (D-202). `/context` adds it under the ledger's total (`  context left         82%`). After `/compact` the
+    (D-202). `/context` adds it under the ledger's total, which is gptr's estimate of what it sent and says so
+    (`  total (est.)       3,940`; cheat-sheet review R04: unmarked, it sat over a percentage of reported counts):
+    `  context left         82%`. After `/compact` the
     last request is the compaction request (its `gptr.compaction_usage` record): `/context` heads it `Last request
     <id> (the compaction request):`, adds the row `  next request       ~<n>` (the compaction entry's
     `tokens_after`, `~` an estimate) under the total, its value in the ledger's column (review of Tasks 22-27: it

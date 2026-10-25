@@ -195,6 +195,8 @@ gptr_wait = function(x, timeout = Inf) {
     wait = console_eval_value(".gptr_console_wait")
     if (is.function(wait)) wait(ss, pump) else pump()
   }
+  # a background session that settled in the wait is released now: no idle tick may follow (P21)
+  if (!is.null(the$bg)) bg_sweep(FALSE, FALSE)
   if (inherits(x, "gptr_session") && length(runs) && isTRUE(runs[[1L]]$settled)) {
     gateway_signal(x, runs[[1L]])
   }
