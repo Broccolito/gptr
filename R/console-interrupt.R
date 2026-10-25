@@ -184,6 +184,9 @@ console_ahead = function(rd, accept) {
 policy_menu = function(cnd, pol) {
   # nested policies drop their runs while the stack unwinds to the exiting handler
   pol$abort_runs = pol$runs
+  # one Esc in RStudio sets R's interrupt flag twice (its own and its SIGINT's): a second interrupt
+  # in this handler would reach only the policy's abort, so one right behind the first is taken here
+  tryCatch(Sys.sleep(0.05), interrupt = function(e) NULL)
   if (is.null(findRestart("resume", cnd)) || !console_menu_available()) return(invisible(NULL))
   if (!is.null(the$live_row)) the$live_row$clear()
   recs = as.list(console_state()$active)

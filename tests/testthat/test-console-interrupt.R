@@ -118,6 +118,38 @@ test_that("RStudio's console offers the pause menu; its s steers the run (steeri
   expect_identical(out[shown + 1L], "ack")
 })
 
+test_that("an interrupt right behind the first still opens the pause menu (RStudio's Esc)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  skip_if_sigint_ignored()
+  # RStudio sets R's interrupt flag for one Esc and again with the SIGINT it sends: the second,
+  # pending as the menu's handler starts, would reach only the policy's abort
+  log = local_menu_answers("c")
+  write = console_write
+  # the menu's first row is a point where R takes a pending interrupt
+  local_mocked_bindings(console_write = function(...) {
+    Sys.sleep(0)
+    write(...)
+  })
+  pol = new.env(parent = emptyenv())
+  pol$mode = "call"
+  sent = FALSE
+  makeActiveBinding("runs", function() {
+    if (!sent) tools::pskill(Sys.getpid(), tools::SIGINT)
+    sent <<- TRUE
+    list()
+  }, pol)
+  cnd = structure(class = c("interrupt", "condition"), list(message = "", call = NULL))
+  res = NULL
+  err = notices({
+    res = tryCatch(withRestarts(policy_menu(cnd, pol), resume = function() "resumed"),
+                   interrupt = function(e) "aborted")
+  })
+  expect_identical(res, "resumed")
+  expect_true(any(grepl("Paused", err, fixed = TRUE)))
+  expect_length(log$prompts, 1L)
+})
+
 test_that("continue resumes the interrupted computation", {
   log = local_menu_answers("c")
   res = NULL
