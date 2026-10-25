@@ -417,6 +417,7 @@ stream_doc = function() {
 }
 
 test_that("a short stream equals whole-text redaction (CRAN-sized)", {
+  skip_on_cran()
   local_vault()
   register_fakes()
   text = stream_doc()

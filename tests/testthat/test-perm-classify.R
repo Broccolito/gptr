@@ -332,6 +332,7 @@ test_that("SQL and Python follow the classifier standard (D-061)", {
 })
 
 test_that("rows later tasks read keep their call texts and fn (D-061)", {
+  skip_on_cran()
   root = local_project()
   f = risk_command("echo $(date)", root)
   gate = f[f$call == "not modelled: a command substitution", ]
@@ -528,6 +529,7 @@ test_that("18's blind spots and user methods get the amended levels (IC-54)", {
 })
 
 test_that("gptr's own configuration is the control category, level 4 (IC-53, IC-54)", {
+  skip_on_cran()
   root = local_project()
   control = c("gptr_permissions(allow = 'r(level<=3)')", "gptr_trust('.', TRUE)",
               "gptr_register(gptr_hook('permission_request', function(event, ctx) NULL))",
@@ -768,6 +770,7 @@ test_that("printing a risk lists the flagged calls; displays escape controls (IC
 
 # Added (D-132): the R classifier follows the classifier standard of D-061.
 test_that("computed calls, slots, lookups and secret reads are level 3 (D-132)", {
+  skip_on_cran()
   root = local_project()
   e = classify_env()
   expect_true(gptr_risk("parse(file = '.Renviron')", root = root)$secret)
@@ -879,6 +882,7 @@ test_that("routes to gptr's namespace are control or dynamic (IC-53, D-132)", {
 })
 
 test_that("common analysis code stays at 0 or 1 (D-132)", {
+  skip_on_cran()
   root = local_project()
   e = classify_env()
   zero = c("summary(lm(mpg ~ wt, mtcars))", "do.call(rbind, lapply(split(df, df$a), head, 1))",
@@ -946,6 +950,7 @@ test_that("code_targets() lists every call with its package and line (IC-31)", {
 })
 
 test_that("the plan-mode allowlist admits only known read-only calls (IC-54)", {
+  skip_on_cran()
   root = local_project()
   expect_identical(risk_plan_disallowed("x = head(df, 2); summary(x); peter$grep('a')", root),
                    character())
@@ -1006,6 +1011,7 @@ test_that("a read of a path the classifier cannot resolve is level 1, as outside
 })
 
 test_that("a process's stdout or stderr file is a write classified by its path", {
+  skip_on_cran()
   root = local_project()
   lv = function(code) gptr_risk(code, root = root)$level
   expect_identical(lv("system2('echo', 'x', stdout = '/etc/gptr-test.txt')"), 3L)

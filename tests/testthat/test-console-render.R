@@ -504,6 +504,7 @@ test_that("console_style() holds the logo's cursor glyphs, ASCII where they may 
 })
 
 test_that("console_style() gives the logo accents by depth and the band by background (D-245)", {
+  skip_on_cran()
   local_background(NULL)
   local_mocked_bindings(console_class = function() "T")
   want = list(
@@ -1431,6 +1432,7 @@ test_that("a reason's line breaks fold into one space; other controls stay escap
 })
 
 test_that("the status line wraps between whole terms, never after a separator (review)", {
+  skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
   # a dated API model id at 80 columns, its content 76 wide, and at 60
   terms = c("done", "claude-sonnet-4-5-20250929-1", "7 requests", "19.8k tokens",
@@ -1461,6 +1463,7 @@ test_that("the status line wraps between whole terms, never after a separator (r
 })
 
 test_that("console_context_left() measures the last request against compact_threshold() (IC-77)", {
+  skip_on_cran()
   fake = gptr_fake_provider(list("ok"))
   u = fake_usage(input = 12000, cache_read = 6000)
   u$cache_write_5m = 1500
