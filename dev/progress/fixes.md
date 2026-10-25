@@ -5263,3 +5263,48 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: none. Open: the macOS row's time grows with the serial pty tests; running them in
   two testthat workers, as the Linux rows do, would halve it but loads the runner the pty tests
   time against.
+
+## Task CI-97 - An HTTP stream checks the abort before each unit (2026-10-25, #82)
+- Red: main 5ee45a04, R-CMD-check run 40208376485, job 121214117745 (ubuntu-latest release, two
+  testthat workers) failed `test-provider-anthropic.R:851` in "end to end on the mock server:
+  streaming, retry and abort (skip on CRAN)": the aborted message held `tok01 tok02 tok03 tok04 `,
+  not `tok01 tok02 `; its `stop_reason` `aborted` (850) and last `error` event (852) passed.
+- Rate: since the block came (ea14e6f0, 2026-10-04) it ran in 2,817 jobs of 344 runs
+  (R-CMD-check.yaml 280, Windows-check.yaml 64; the log of every failed or cancelled job that
+  reached its check read, 1,242) and failed 3 times, 0.11% (95% CI 0.04-0.31%), always there:
+  job 112532681385 (ubuntu-latest oldrel-1, serial, 2026-10-06) and 115430722254 (macos-latest
+  release, 2026-10-13) kept 1 token after the abort, this job 2. Linux 2/1985, macOS 1/286,
+  Windows 0/546; on the ubuntu rows serial 1/707, two workers 1/437. Evidence (local, not
+  committed): the job listings and stripped logs.
+- Cause (P05's glue, not the test): `stream_http()` read `opts$signal$aborted` only in its watch
+  task, which `reactor_step()` runs after `reactor_io()` has delivered every chunk curl read in
+  that iteration, and `on_bytes()` pushed every unit checking only `st$finished`. Tokens come every
+  0.2 s; a reader 0.4 s behind got tok02 to tok04 in one iteration, `mock_stream()`'s `emit()` set
+  the flag on tok02, tok03 and tok04 still reached the normaliser and `emit()`, and the watch then
+  ended the stream `aborted` with them in the partial. A body ending in that iteration lost the
+  abort (`stop`). Runs were not affected: `run_abort()` closes the request and records `run$acc`
+  itself, and `run_on_event()` drops later events.
+- Reproduced at 5ee45a04 with a stall traced in before the reader's next `curl::multi_run()` after
+  tok01 (scratch helper, not committed): 0.7 s FAIL 5 of 5 with the CI text, 0.5 s 3 of 3 with
+  `tok01 tok02 tok03 `, the trace showing tok03 and tok04 pushed with the flag set. Without a
+  stall it never failed on a 16-core Mac (plain 0/40, twice the cores busy 0/20, a second test
+  worker 0/15, both 0/15, the mock server stopped 0.6 s 0/10; longest reader gap 0.122 s).
+- Fix (1ad5d7ce): `on_bytes()` (on entry and before each unit) and `on_done()` run `stream_over()`
+  in place of `st$finished`, as `process_jsonl`'s lines and exit do (D-018): the first input after
+  the flag aborts the stream and cancels its transfer, so the reactor drops what it still holds.
+  The block is unchanged.
+- Test (9aa1e3f3): test-provider-registry.R "an abort flag set during an event ends the stream
+  before the next unit or the end" (the flag set by `emit()` on the first delta; two deltas in
+  one chunk, then one delta and the body's end): at 5ee45a04 FAIL 6 PASS 1 (the second delta
+  emitted; `done` with `stop` at the end), with the fix PASS 7; without the unit check or the end
+  check it fails again.
+- Green (`NOT_CRAN=true`, the block alone): the red stalls PASS 12 each, 0.7 s 5 of 5, 0.5 s 5 of
+  5, 3 s (the rest of the stream and its end in one iteration) 3 of 3, the trace aborting at
+  tok03's chunk; 30 of 30 in UTF-8; 10 of 10 under 32 busy loops (16 cores, load 128 at the end);
+  3 of 3 under `LC_ALL=C LANG=C`. `^(provider-|http-|reactor|agent-run|agent-loop|stream)` (19
+  files) PASS 4529 SKIP 2 FAIL 0 in UTF-8 and under `LC_ALL=C`, the skips Windows-only; lint
+  clean; `document()` no diff.
+- Deviations: D-254. Open: inside one unit (an SSE event, or a whole chunk for `stream = "raw"`,
+  Bedrock) the normaliser's events still follow each other after the flag; a transfer failure
+  delivered in the iteration that set it ends `error`, not `aborted` (`on_fail()` checks only
+  `st$finished`).

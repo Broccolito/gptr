@@ -7681,3 +7681,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   test-gptr-config.R "gptr_init() does not ask about trust again while a trust decision holds".
   Evidence: progress/fixes.md Task FIX-20 R03, R04, R10, R12, R16, R17, R19, R20, R22, R25, R30,
   R32.
+
+## D-254 - CI-97 HTTP streams check the abort before each unit and the body's end (2026-10-25)
+- Rule: P05's glue rule "A reactor task watches `opts$signal$aborted`" gains D-018 item 4's check:
+  `stream_http()` runs `stream_over()` before each body chunk, each unit it pushes and the body's
+  end. An abort set during an event (the caller's `emit()`, a hook) ends the stream before the input
+  the reactor delivers in the same iteration reaches the normaliser: the partial message holds what
+  was emitted before the flag, and a body ending in that iteration ends `aborted`, not `stop`.
+  Formerly only the watch task checked, after every delivery of the iteration.
+- Contract-visible: none.
+- Tests: test-provider-registry.R "an abort flag set during an event ends the stream before the next
+  unit or the end"; test-provider-anthropic.R "end to end on the mock server: streaming, retry and
+  abort (skip on CRAN)". Evidence: progress/fixes.md Task CI-97.

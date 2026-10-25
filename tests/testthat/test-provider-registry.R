@@ -583,6 +583,37 @@ test_that("setting the abort flag cancels the transfer and ends with an aborted 
   expect_equal(log$events[[length(log$events)]]$reason, "aborted")
 })
 
+test_that("an abort flag set during an event ends the stream before the next unit or the end", {
+  r = local_mock_reactor()
+  model = local_stream_adapter()
+  signal = new.env()
+  signal$reason = "user"
+  # the caller sets the flag on the first delta, before the watch task runs
+  open = function() {
+    signal$aborted = FALSE
+    log = local_stream_log()
+    emit = function(ev) {
+      log$emit(ev)
+      if (identical(ev$type, "text_delta")) signal$aborted = TRUE
+    }
+    id = provider_stream(model, stream_context(), list(signal = signal), emit = emit,
+                         done = log$finish)
+    log$t = r$http[[id]]
+    log
+  }
+  chunk = open()
+  chunk$t$on_bytes(sse('{"t":"text","v":"a"}', '{"t":"text","v":"b"}'))
+  end = open()
+  end$t$on_bytes(sse('{"t":"text","v":"a"}'))
+  end$t$on_done(200L, list())
+  for (s in list(chunk, end)) {
+    expect_equal(s$types(), c("start", "text_delta", "error"))
+    expect_equal(vapply(s$done, function(m) m$stop_reason, ""), "aborted")
+    expect_equal(vapply(s$done, msg_text, ""), "a")
+  }
+  expect_identical(r$cancelled, c("t1", "t2"))
+})
+
 test_that("a run that settles while its stream is open lets go of the stream", {
   r = local_mock_reactor()
   model = local_stream_adapter()
