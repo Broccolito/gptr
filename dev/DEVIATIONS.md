@@ -3109,7 +3109,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the boundary and before the next request's output, a block of its own. A follow-up the run still takes (until
   Task 14) shows the same way. Contract-visible: 04 sections 7.14 and 15.10 (IC-76); 03 section 6.17. Tests:
   test-console-typing.R "a delivered steer is the person's line at its boundary, before the next text (D-242)",
-  "the person's line is on the band; a queue line is dim and cut to three rows (D-245)", the CLI, follow-up and
+  "the person's line is on the band; a queue line is dim and cut to one row (D-245)", the CLI, follow-up and
   question-order cases and both pty cases; test-console-interrupt.R "steer and follow-up queue the text with source
   pause_menu (IC-55)".
 - Task 14: in the REPL a follow-up is the next prompt. While a prompt of a REPL that is not piped runs,
@@ -4394,6 +4394,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   totals, `/compact`), 03 §6.11. Tests: test-compaction-acceptance.R, test-compaction-wait.R (their notices and
   results), test-console-commands.R "/compact reports its saving and /context names the compaction request
   (console-4)", test-console-render.R (the automatic notice).
+- Final visual loop, round 3 (2026-10-24): Task 74: a queue line joins its message's lines with a blank and is one
+  row cut with the ellipsis, as the live row's queue view (`console_person_rows()` joins the lines of every held
+  line, the kept list's too, which keeps its three rows); the delivery still shows the text whole. A pasted steer
+  held in TERM=dumb was `↳ steer · first pasted line`, then `  second pasted line` at column 2, under the glyph.
+  Contract-visible: 04 §15.10 IC-76 (queued messages). Tests: test-console-typing.R "a steer of two lines held in
+  D is one queue row, delivered whole (visual round 3)", "the person's line is on the band; a queue line is dim
+  and cut to one row (D-245)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

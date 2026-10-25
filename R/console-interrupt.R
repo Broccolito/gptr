@@ -336,8 +336,9 @@ policy_enqueue = function(s, text, as, source = "pause_menu") {
 }
 
 #' The dim line at column 0 that shows a message queued for session `s` (D-242): the queued
-#' glyph, `steer` or `follow-up`, the separator and the text (ASCII `-> steer - <text>`), cut to
-#' three rows; a steer on a CLI route adds `after the CLI's answer`. A message taken back (`taken`)
+#' glyph, `steer` or `follow-up`, the separator and the text (ASCII `-> steer - <text>`), its lines
+#' joined, on one row as the live row's queue view; a steer on a CLI route adds `after the CLI's
+#' answer`. A message taken back (`taken`)
 #' says `taken back` in place of its kind where its queue line shows, so no line of a withdrawn
 #' steer reads as if it will be sent. A line whose text is on screen
 #' already, right above it, says `the$echoed` in its place: `not an answer` for a line a question
@@ -362,7 +363,7 @@ console_queue_line = function(s, text, as, taken = FALSE) {
     if (taken) "taken back" else if (steer) "steer" else "follow-up",
     if (nzchar(text)) paste0(sym$sep, text),
     if (on_cli && !taken) paste0(sym$sep, "after the CLI's answer")
-  ), n = 3L))
+  ), n = 1L))
   rec = Find(function(rec) identical(rec$session, s) && console_foreground(rec, tools = TRUE),
              as.list(console_state()$active))
   if (!is.null(rec$md) && identical(rec$last, "text")) {

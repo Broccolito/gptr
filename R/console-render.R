@@ -36,19 +36,23 @@ console_write = function(lines) {
 }
 
 #' The person's rows at column 0 (D-242): `glyph`, a space and the escaped `text`, wrapped inside
-#' the console width with the later rows under the text; for a finite `n`, cut to `n` rows of
-#' that width, the cut marked with an ellipsis
+#' the console width with the later rows under the text; for a finite `n` (a held line), its lines
+#' joined by a blank, as the live row shows them, and cut to `n` rows of that width, the cut marked
+#' with an ellipsis
 #' @noRd
 console_person_rows = function(glyph, text, n = Inf) {
   lead = paste0(glyph, " ")
   width = max(20L, cli::console_width() - 1L - nchar(lead))
-  rows = console_wrap(console_lines(text), width)
+  lines = console_lines(text)
+  if (is.finite(n)) lines = paste(lines, collapse = " ")
+  rows = console_wrap(lines, width)
   if (is.finite(n)) {
     ell = console_style()$ellipsis
     more = length(rows) > n
     rows = console_cut(utils::head(rows, n), width, ell)
     if (more) {
-      rows[[n]] = paste0(cli::ansi_strtrim(rows[[n]], width - nchar(ell), ellipsis = ""), ell)
+      cut = cli::ansi_strtrim(rows[[n]], width - nchar(ell), ellipsis = "")
+      rows[[n]] = paste0(sub(" +$", "", cut), ell)
     }
   }
   paste0(ifelse(seq_along(rows) == 1L, lead, strrep(" ", nchar(lead))), rows)

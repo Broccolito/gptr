@@ -107,18 +107,18 @@ test_that("a delivered steer is the person's line at its boundary, before the ne
                          function() length(fake_requests(fake)) == 1L))
   res = typing_console(fake, c("go", "/exit"))
   sym = console_style()
-  queued = which(res$out == queue_line("steer", "use base R"))
+  queued = which(res$out == queue_line("steer", "use base R and log2"))
   shown = which(res$out == paste0(sym$person, " use base R"))
   expect_length(queued, 1L)
   expect_length(shown, 1L)
-  # a message of two lines: the later rows under the text, at column 0 as the person's
-  expect_identical(res$out[c(queued, shown) + 1L],
-                   paste0(strrep(" ", nchar(c(sym$queued, sym$person)) + 1L), "and log2"))
+  # a message of two lines: one queue row, its lines joined (visual round 3); the delivery's later
+  # rows under the text, at column 0 as the person's
+  expect_identical(res$out[shown + 1L], paste0(strrep(" ", nchar(sym$person) + 1L), "and log2"))
   expect_true(all(c(queued, which(res$out == "first")) < shown) &&
                 shown < which(res$out == "second"))
 })
 
-test_that("the person's line is on the band; a queue line is dim and cut to three rows (D-245)", {
+test_that("the person's line is on the band; a queue line is dim and cut to one row (D-245)", {
   skip_on_cran()
   local_console_test()
   local_gptr_options(verbose = 2L)
@@ -138,10 +138,11 @@ test_that("the person's line is on the band; a queue line is dim and cut to thre
   plain = cli::ansi_strip(res$out)
   q = which(startsWith(plain, queue_line("steer", "use")))
   expect_length(q, 1L)
-  queued = res$out[q + 0:2]
-  expect_true(all(startsWith(queued, "\033[38;5;244m")))
-  expect_false(startsWith(res$out[[q + 3L]], "\033[38;5;244m"))
-  expect_true(endsWith(cli::ansi_strip(queued[[3L]]), sym$ellipsis))
+  # one row, as the live row's queue view (visual round 3: three)
+  queued = res$out[[q]]
+  expect_true(startsWith(queued, "\033[38;5;244m"))
+  expect_false(startsWith(res$out[[q + 1L]], "\033[38;5;244m"))
+  expect_true(endsWith(cli::ansi_strip(queued), sym$ellipsis))
   # the delivered message whole, every row on the band, the later rows under the text
   shown = res$out[startsWith(res$out, "\033[48;5;237m")]
   expect_gt(length(shown), 3L)
@@ -151,6 +152,26 @@ test_that("the person's line is on the band; a queue line is dim and cut to thre
   expect_identical(lead, c(paste0(sym$person, " "), rep(strrep(" ", k), length(shown) - 1L)))
   expect_identical(paste(substring(cli::ansi_strip(shown), k + 1L), collapse = " "), long)
   expect_true(all(cli::ansi_nchar(c(queued, shown), type = "width") <= 39L))
+})
+
+test_that("a steer of two lines held in D is one queue row, delivered whole (visual round 3)", {
+  skip_on_cran()
+  local_console_test()
+  local_gptr_options(verbose = 2L)
+  local_live_console("D")
+  withr::local_options(cli.num_colors = 1L, cli.width = 80L)
+  fake = slow_first()
+  local_typed(typed_once(c("first pasted line", "second pasted line"),
+                         function() length(fake_requests(fake)) == 1L))
+  res = typing_console(fake, c("go", "/exit"))
+  # the message's lines joined by a blank on one row, never a row under the queued glyph
+  q = which(startsWith(res$out, queue_line("steer", "")))
+  expect_identical(res$out[q], queue_line("steer", "first pasted line second pasted line"))
+  expect_identical(sum(trimws(res$out) == "second pasted line"), 1L)
+  # its delivery shows the text whole, its second line under its first
+  person = console_style()$person
+  d = match(paste(person, "first pasted line"), res$out)
+  expect_identical(res$out[d + 1L], paste0(strrep(" ", nchar(person) + 1L), "second pasted line"))
 })
 
 test_that("a line queued while an answer streams waits for its block to end (visual review)", {
@@ -644,10 +665,8 @@ test_that("a held !code line keeps the lines that complete it, also from a later
   expect_identical(msg_text(last_message(reqs[[2L]])), relay("and steer"))
   expect_identical(e$f(1), 2)
   expect_identical(e$g, 2)
-  # a held !code line and the lines that continue it are one entry, its later rows under the text
-  q = match(queue_line("follow-up", "!f = function(x) {"), res$out)
-  expect_identical(res$out[q + 1L],
-                   paste0(strrep(" ", nchar(console_style()$queued) + 1L), "  x + 1"))
+  # a held !code line and the lines that continue it are one entry, on one row (visual round 3)
+  expect_true(queue_line("follow-up", "!f = function(x) {   x + 1") %in% res$out)
 })
 
 test_that("no fd-0 reads outside a terminal REPL (.stdin, jsonl, peter() with a prompt)", {

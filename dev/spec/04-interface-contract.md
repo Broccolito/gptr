@@ -5532,8 +5532,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     `partial` of `console_typed_split()`) that is not blank goes to `console_history_add()` with
     `↳ kept in history ↑ · <line>` (`-> kept in history Up - <line>` where the output is not UTF-8), or, with
     `gptr.history` off, `↳ not kept (gptr.history is off) · <line>`: the echo is off while a run streams, so the
-    line quotes it. It is the person's held text, dim at column 0 and cut to three rows like a queue line
-    (`console_keep()`; visual review: it was a full-ink `[gptr]` notice inside the tool block). The question's `readline()` therefore starts empty: typed-ahead text is never an
+    line quotes it. It is the person's held text, dim at column 0, its lines joined by a blank and cut to three
+    rows (`console_keep()`; visual review: it was a full-ink `[gptr]` notice inside the tool block). The question's `readline()` therefore starts empty: typed-ahead text is never an
     invalid answer or an ask-tool answer, nor a partial line a denial (`no ...`). `gptr_confirm()` (L0, also asked during a
     run, e.g. by `egress_check()` for a nested call's provider) is not drained, so this holds for the
     console questions only; its stale lines go to the history (IC-75).
@@ -5543,9 +5543,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     ` · after the CLI's answer`, and prints its line in a T console while the live row is up too (review of
     Tasks 16-21). Up's take-back writes `↳ taken back · <text>` (ASCII `-> taken back - <text>`) where the
     message's queue line shows, by the same rule (P28 Task 37: a CLI route's withdrawn steer kept a line that
-    read as if it would be sent). The text is escaped and wrapped inside the console width (width - 1), later rows
-    under the text, and cut to three rows, the last ending in `…`; inside an evaluation the line has the
-    console's colours. It replaces the notices `[gptr] steering: ...` and `[gptr] follow-up queued: ...` above.
+    read as if it would be sent). The text is escaped, its lines joined by a blank, and cut to one row of the
+    console width (width - 1) ending in `…`, as the live row's queue view (P28 Task 74, visual round 3: three
+    rows, a multi-line message's later lines at column 2 under the glyph, not under its text); inside an
+    evaluation the line has the console's colours. It replaces the notices `[gptr] steering: ...` and `[gptr] follow-up queued: ...` above.
     A line a question read past (IC-75, `console_typed_ahead()`) is on screen already, after the question's
     chevron, so its queue line says `↳ steer · not an answer` (`follow-up` for its kind) in place of the text:
     RStudio and R.app showed such a line three times (visual review).

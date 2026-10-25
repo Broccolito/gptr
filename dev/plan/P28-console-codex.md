@@ -746,7 +746,8 @@ Decisions:
 - In every class for now, queueing prints one dim line at column 0:
   - `↳ steer · <text>` or `↳ follow-up · <text>`; ASCII `-> steer - <text>`;
   - on CLI routes, a steer adds ` · after the CLI's answer`;
-  - the text is escaped and cut to three rows ending in `…`;
+  - the text is escaped and cut to three rows ending in `…` (one row, its lines joined by a blank, from Task
+    74, visual round 3);
   - inside an evaluation (the pause menu during `r` code) it has the console's colours.
 - Both lines come from `console_person_rows()`: the glyph, then the text wrapped at the console
   width less one, later rows under the text. The queue line's cut also trims a row wider than that
@@ -1738,7 +1739,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 70 | The pause menu's [b] notice mixes two voices and ends a row in the separator (final visual loop, round 3) | f6cd98f5 |
 | 71 | The re-ask after an invalid answer repeats the question in sentence prose (final visual loop, round 3) | 623efc0c |
 | 72 | A sub-agent's start and done rows are cut in different places (final visual loop, round 3) | ae96b604 |
-| 73 | /compact writes sentence prose among the console's dim terms (final visual loop, round 3) | (this commit) |
+| 73 | /compact writes sentence prose among the console's dim terms (final visual loop, round 3) | 9bb544f9 |
+| 74 | A queued message of several lines puts its later lines under the glyph (final visual loop, round 3) | (this commit) |
 
 ## Out of scope
 
