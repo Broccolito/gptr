@@ -480,11 +480,17 @@ eval_print_drop = function(pe) {
   invisible()
 }
 
-#' Message handler: record; muffle unless the output is teed to the user
+#' Message handler: record; muffle unless the output is teed to the user. In the console margin an
+#' R message is a row of the output (eval_echo()) and muffled, as R would write it at column 0;
+#' gptr's own notices show themselves
 #' @noRd
 eval_on_message = function(st, cnd) {
   eval_flush(st)
   eval_push(st, "message", text = conditionMessage(cnd))
+  if (isTRUE(st$echo) && !inherits(cnd, "gptr_message")) {
+    eval_echo(st, conditionMessage(cnd))
+    tryInvokeRestart("muffleMessage")
+  }
   if (!st$tee) tryInvokeRestart("muffleMessage")
   invisible()
 }

@@ -1744,7 +1744,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 75 | A warning from the person's `!` code waits for R's top level (final visual loop, round 3) | 88c2c325 |
 | 76 | The session record does not re-source or keep the order typed (final visual loop, round 3) | 3dbb94ba |
 | 77 | Tab Tab at the idle prompt leaves the list to readline, on the band and paged (final visual loop, round 3) | e8b9b565 |
-| 78 | After the pause menu's [a] the held row prints without its label (final visual loop, round 3) | (this commit) |
+| 78 | After the pause menu's [a] the held row prints without its label (final visual loop, round 3) | e56ce15d |
+| 79 | A `!` block has three indents and runs into the next prompt (final visual loop, round 3) | (this commit) |
 
 ## Out of scope
 

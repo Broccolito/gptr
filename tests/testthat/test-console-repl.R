@@ -515,6 +515,27 @@ test_that("a !code warning shows before the next prompt, none left for R's top l
   expect_identical(out[1:2], c("    [1] 1", "    Warning: w"))
 })
 
+test_that("a !code block's rows share one margin and end with a blank row (visual round 3)", {
+  skip_on_cran()
+  local_project()
+  local_mocked_bindings(console_pad = function() "  ")
+  withr::local_options(cli.num_colors = 1L)
+  rs = repl_state(NULL, new.env())
+  code = paste0("!x = 1:3; message('a message'); cat('cat line\\n'); print(x); ",
+                "warning('a warning'); stop('boom')")
+  err = NULL
+  out = utils::capture.output({
+    err = utils::capture.output(repl_passthrough(rs, code), type = "message")
+  })
+  # R's message, the output, the warning and the error at column 4, as a tool's result rows; then
+  # the blank row a command's output ends with
+  expect_identical(out, c("    a message", "    cat line", "    [1] 1 2 3",
+                          "    Warning: a warning", ""))
+  expect_identical(err, "    Error: boom")
+  # nothing printed, no blank row
+  expect_identical(utils::capture.output(repl_passthrough(rs, "!y = 2")), character())
+})
+
 test_that("the input event (source passthrough) can handle or transform !code", {
   skip_on_cran()
   local_project()

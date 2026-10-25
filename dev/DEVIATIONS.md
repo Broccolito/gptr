@@ -4433,6 +4433,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   model answered after the abort. [b] keeps its bare cut row. Contract-visible: none. Tests:
   test-console-abort-stream.R "an abort's cut row is labelled once though no delta follows the menu (visual round
   3)".
+- Final visual loop, round 3 (2026-10-24): Task 79: in the console margin a `!` block follows one rule: R's
+  message is a row of the output at column 4 (`eval_on_message()` echoes and muffles it, gptr's own notices
+  excepted), the error is red there, `Error: <text>`, and a block that showed anything ends with a blank row, as
+  a command's output does (`repl_passthrough()`). The message was at column 0 in R's stderr, the output at 4, the
+  error at 2, and the next prompt came right under it. Contract-visible: 04 §7.9 `eval_r()`, §15.10 IC-82; 03
+  §6.17. Tests: test-console-repl.R "a !code block's rows share one margin and end with a blank row (visual round
+  3)".
 
 ## D-246 - Tests: Windows timing bounds that a cold start or a stalled runner cannot meet (2026-10-21)
 - Rule: a Windows writer case that needs a lazily started writer to deliver sets `gptr.stdin_timeout = 20`,

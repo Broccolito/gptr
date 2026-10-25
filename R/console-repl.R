@@ -561,9 +561,10 @@ console_blocks = function() {
 #' `!code` / `!!code`: the user's own R code in the REPL's environment
 #'
 #' The `input` event (source "passthrough") may handle or transform the code first. Errors are
-#' shown on stderr; `!code` leaves a note for the next prompt. The `console:direct` channel
-#' tells transcript writers (P15) what ran. A gptr_wait() in the code waits through console_wait()
-#' (`.gptr_console_wait`).
+#' shown on stderr, red, in the console margin at column 4 with what the code printed (eval_echo());
+#' there a block that showed anything ends with a blank row, as a command's output does. `!code`
+#' leaves a note for the next prompt. The `console:direct` channel tells transcript writers (P15)
+#' what ran. A gptr_wait() in the code waits through console_wait() (`.gptr_console_wait`).
 #' @noRd
 repl_passthrough = function(rs, text) {
   noted = !startsWith(text, "!!")
@@ -580,15 +581,23 @@ repl_passthrough = function(rs, text) {
   # built-in eval_r() when builtin:workspace is filtered out
   evaluate = if (ext_service_has("eval.r")) ext_service_get("eval.r") else eval_r
   res = evaluate(code, repl_eval_env(rs), plots = "auto", tee = TRUE, guard = FALSE)
+  margin = nzchar(console_pad())
   for (e in res$events) {
     if (identical(e$type, "error")) {
-      console_notice("Error: ", console_escape(as.character(e$message %||% ""), FALSE),
+      rows = strsplit(paste0("Error: ", console_escape(as.character(e$message %||% ""), FALSE)),
+                      "\n", fixed = TRUE)[[1L]]
+      console_notice(paste(console_style()$red(paste0(if (margin) "  ", rows)), collapse = "\n"),
                      .error = TRUE)
     }
   }
   if (res$status %in% c("interrupt", "timeout")) {
     said = c(interrupt = "interrupted", timeout = "timed out")[[res$status]]
     console_notice(console_style()$dim(said), .error = identical(res$status, "timeout"))
+  }
+  types = vapply(res$events, function(e) e$type %||% "", "")
+  if (margin && (any(types %in% c("output", "message", "warning", "error", "interrupt")) ||
+                   identical(res$status, "timeout"))) {
+    console_write("")
   }
   if (noted) rs$notes = utils::tail(c(rs$notes, repl_note(code, res)), 20L)
   data = list(code = code, output = as.character(unlist(res$outputs)), status = res$status,
