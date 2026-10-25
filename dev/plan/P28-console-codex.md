@@ -1763,7 +1763,8 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 | 85 | INFRA-03 fails six expectations in a background job, taken for a timing flake (pre-PR check) | 6777610e |
 | 86 | Console tests assume Unicode glyphs where a Windows console draws ASCII (win-builder) | ccaa2a06 |
 | 87 | A pty test fails on Linux: GNU readline wraps each prompt in bracketed-paste toggles (PR #78 CI) | 516ec73c |
-| 88 | A test leaves a fake key in the vault and a later gateway test sends it to Anthropic (Windows shard 1) | (this commit) |
+| 88 | A test leaves a fake key in the vault and a later gateway test sends it to Anthropic (Windows shard 1) | b505cfe4 |
+| 89 | Console tests that force UTF-8 glyphs fail in a C locale (PR #78 CI, LC_ALL=C) | b9f98545 |
 
 ## Out of scope
 
