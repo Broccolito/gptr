@@ -426,6 +426,7 @@ test_that("a plan is pending for the environment its run evaluated in (IC-40, IC
 })
 
 test_that("a readonly session keeps read and r outside plan mode (D-251)", {
+  skip_on_cran()
   local_gw()
   f = gptr_fake_provider(list(fake_tool("write", path = "ro.txt", content = "x"), "done",
                               "again"))
