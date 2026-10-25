@@ -1780,12 +1780,12 @@ Task 28's live dogfood found these defects; each was fixed test first. Evidence 
 
 | Row | Command | Actual | Status |
 |---|---|---|---|
-| A1 | `isolated-check.R test 'console-'` | | pending |
-| A2 | `isolated-check.R test 'agent-\|session-object\|provider-transform'` | | pending |
-| A3 | full `devtools::test()` | | pending |
-| A4 | `isolated-check.R lint` (whole package) | | pending |
-| A5 | cross-plan checks and `python3 -I dev/ci/check-plans.py` | | pending |
-| A6 | `R CMD check --as-cran --no-manual` (0 errors, 0 warnings) | | pending |
+| A1 | `isolated-check.R test 'console-'` | 6777610e, NOT_CRAN=true: FAIL 0, WARN 0, SKIP 2, PASS 3386; INFRA-03 with CI=true passes | pass |
+| A2 | `isolated-check.R test 'agent-\|session-object\|provider-transform'` | 6777610e: FAIL 0, WARN 0, SKIP 1, PASS 3028 | pass |
+| A3 | full `devtools::test()` | 6777610e in five parts, NOT_CRAN=true: FAIL 0 (9852, 3386, 10043, 7579, 7305 passes); test-proc-rscript-native.R failed once on a ps access_denied during a memory sample (load 7.5) and passed alone | pass |
+| A4 | `isolated-check.R lint` (whole package) | 6777610e: no lints | pass |
+| A5 | cross-plan checks and `python3 -I dev/ci/check-plans.py` | 6777610e: all four plan checks passed | pass |
+| A6 | `R CMD check --as-cran --no-manual` (0 errors, 0 warnings) | 6777610e: 0 errors, 0 warnings, 0 notes (a first run failed test-proc-windows-backpressure.R at load 120-320, a cold writer over its 2 s start); in CRAN's own mode (NOT_CRAN unset, CRAN's timing thresholds) Status OK in 244 s | pass |
 | A7 | hosted CI: the pty cases (B, C, D, G, H, I, Enter, Tab, Up, ask-after-idle, band, completion) on the ubuntu and macOS NOT_CRAN lanes; Windows lanes green with them skipped by OS guard | | pending |
 | A8 | live dogfood S1-S8 on claude-cli, codex and Ollama (Task 28) | m5 at 9af422d6 (`dev/dogfood/p28-console.R`, terminal R in tmux 100x32): 487 of 490 checks on claude-cli, codex, `ollama/qwen3.8:27b`, Versa GPT-5.6 Sol and Bedrock Opus 4.8, every recording parsed and replayed without a model; the 3 (GPT S8-cols50, the answer ended before the steer's Enter) passed alone twice. S10: 30 of 30 beside 2 x 16 busy processes. m1-m4's defects: Tasks 29-38 | pass at 9af422d6 |
 | A9 | the maintainer's manual checks (S9): RStudio console, Windows Terminal Rterm, Terminal.app and iTerm2 band | S9 at 31872d53, by an agent on windows it opened and closed: Terminal.app Basic, Pro, Novel and Man Page answer OSC 11 and get a band fitted to the background; tmux at 60, 80 and 120 columns, 15 degraded modes, VS Code's terminal, Positron and the live scenario on claude-cli and codex as designed; `R < file` (Task 40), Ocean and Grass (Task 41) and RStudio's boxed notice, from earlier screenshots (Task 39), fixed. RStudio and R.app not launched: the capture harness is marked unsafe. Windows Terminal Rterm (no Windows machine) and iTerm2 (not installed) not available | partial: RStudio, R.app, Windows Terminal Rterm and iTerm2 open |
