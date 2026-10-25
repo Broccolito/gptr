@@ -15,7 +15,7 @@ the pty paste test failed 3 of 8 finished macOS jobs on 2026-10-25), CI-95 (the 
 blocks of 500 ms or more on Windows skip on CRAN again, Windows timing run 40206216160; D-240) and
 CI-96 (the macOS row of `R-CMD-check.yaml` has 60 minutes), merged as `cbb1897d`; #82, CI-97 (an
 HTTP stream checks the abort before each unit and the body's end; D-254; the mock-server abort block
-failed 3 of 2,817 runs since 2026-10-06), merged as `b58d1e1b`; #83, the dev docs: one format for
+failed 3 of 2,817 jobs since 2026-10-04), merged as `b58d1e1b`; #83, the dev docs: one format for
 `dev/*.md`, the `dev/README.md` inventory and CI table, `AGENTS.md` as an exact copy of `CLAUDE.md`,
 the cheat sheet (`07d70c6a`: the 44 planned corrections, shorter wordings so both pages fit, and the
 console review's corrections, each checked against the code with FIX-20), P28's A7, the CI-94 rate,
@@ -65,8 +65,8 @@ Open (found, not fixed):
 - The macOS row's time grows with its serial pty tests (CI-96).
 - A transfer failure in the same reactor iteration as an abort still ends `error`, and events inside
   one unit still follow the flag (CI-97).
-- Hosted CI on 2026-10-25: Ubuntu's apt mirror stalled twice and two Ubuntu jobs reached their
-  45-minute limit in setup; both passed on a re-run.
+- Hosted CI on 2026-10-25: Ubuntu's apt mirror stalled twice; after setups of 30 and 19 minutes, two
+  Ubuntu jobs reached their 45-minute limit in R CMD check, and both passed on a re-run.
 - CI-93's and FIX-20's other Open notes stay in `progress/fixes.md`.
 
 Remaining: the CRAN submission and P25's live steps are the maintainer's.
