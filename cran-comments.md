@@ -72,10 +72,10 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   blanks provider key variables and sets replay mode. With `NOT_CRAN` unset that directory is
   under `tempdir()`, tests that start a local server (a mock provider, an MCP server or a Shiny
   app) or gptr worker processes are skipped, and the suite needs no network. To keep the check
-  short, `tests/testthat.R` runs on CRAN a fixed list of 65 test files (the permission,
-  redaction and secret tests and the files with the most coverage) without their slowest
-  blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take 15 s here (`Running
-  'testthat.R' [15s/15s]` in the local check). Live provider tests run only when
+  short, `tests/testthat.R` runs on CRAN a fixed list of 35 test files (the permission,
+  redaction and secret tests and files that reach all but 10 of the R files) without their
+  slowest blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take 15 s here
+  (`Running 'testthat.R' [14s/15s]` in the local check). Live provider tests run only when
   `GPTR_LIVE_TESTS` is `"true"`.
 * The 14 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
   the tarball); the shipped `.Rmd` files contain no code chunks, so building them runs no code.
@@ -87,8 +87,9 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   `NOT_CRAN` unset, including the PDF manual.
 * GitHub Actions, `R CMD check --as-cran`, each job failing on any warning: macOS (release),
   Windows (release, oldrel-4; four test shards each), Ubuntu (devel, release, oldrel-1,
-  oldrel-4), Ubuntu R-devel with `NOT_CRAN=false` (the tests as CRAN runs them), Ubuntu without
-  Suggests and Ubuntu under `LC_ALL=C`.
+  oldrel-4), Ubuntu without Suggests and Ubuntu under `LC_ALL=C`. Two jobs check as CRAN does
+  (`NOT_CRAN=false`, CRAN's timing thresholds), each failing on any NOTE and over its time
+  budget: Ubuntu R-devel (480 s) and Windows release with both manuals (600 s).
 * R-hub: Windows R-devel and R-release, and Ubuntu R-devel with gcc 12.
 * win-builder: R-devel (2026-10-20 r90728), R-release (4.6.1) and R-oldrelease (4.5.3); the
   whole check took 524 s, 477 s and 684 s.
