@@ -135,10 +135,9 @@ cmd_doc_site = function(s) {
 
 #' `/help [command]`: the commands, the input syntax and the keys, which follow the console as the
 #' banner's do (repl_banner()): enter, tab's follow-up and up where a composer reads keys (class T),
-#' tab's completion where the REPL completes (after `! /` in RStudio, which would put a `$` or `@`
-#' word in backticks), and what a line typed while peter works does there; in the banner's type,
-#' names bold and keys lower case, every description starting lower case, in one column, wrapped
-#' between a usage's, a key's and the last two words
+#' tab's completion where the REPL completes (after `! /` in RStudio), and what a line typed while
+#' peter works does there; in the banner's type, names bold and keys lower case, every description
+#' starting lower case, in one column, wrapped between a usage's, a key's and the last two words
 #' @noRd
 cmd_help = function(args, ctx) {
   s = ctx$session
@@ -172,11 +171,8 @@ cmd_help = function(args, ctx) {
   }
   keys = console_class() == "T"
   done = if (isTRUE(console_repl_find()$reader$complete)) {
-    paste0("after ", if (front_end() == "rstudio") {
-      "! or / (not $ or @ words)"
-    } else {
-      "@, !, !!, / or peter$"
-    }, ", complete the word")
+    paste0("after ", if (front_end() == "rstudio") "! or /" else "@, !, !!, / or peter$",
+           ", complete the word")
   }
   pause = paste0(if (console_menu_available()) {
     paste0("pause the answer: ", paste0(c("s", "f", "c", "a", "b"), nbsp,
