@@ -3018,11 +3018,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   GitHub Actions runs the whole suite. win-builder needed 13 to 29 minutes for the CRAN-mode tests before this rule
   and 3.3 with the block rule alone, which left the whole check at CRAN's 10-minute budget, because skipped blocks
   and sourced files still cost time.
-- Amended by CI-93 (2026-10-25): the list holds 35 files and 20 more blocks skip. A trim measured in CRAN mode
+- Amended by CI-93 (2026-10-25): the list holds 35 files and 8 more blocks skip. A trim measured in CRAN mode
   dropped files and skipped slow blocks, those saving the most time per CRAN-covered function lost first, keeping
-  the security files and, for every R file a CRAN test reached (115 of 125), CRAN tests of at least a quarter of its
-  CRAN-covered functions. On macOS the CRAN-mode tests take 44% less time; 2,195 of 2,437 functions stay covered.
-- Tests: tests/testthat.R (the list); 853 block skips in the listed files.
+  the security files under the rule above and, for every R file a CRAN test reached (115 of 125), CRAN tests of at
+  least a quarter of its CRAN-covered functions. On macOS the CRAN-mode tests take 34% less time; 2,195 of the
+  2,441 CRAN-covered functions stay covered.
+- Tests: tests/testthat.R (the list); 841 block skips in the listed files.
 
 ## D-241 - P04 the Windows stdin writer retries a refused chunk read until the delivery deadline (2026-10-21)
 - Rule (IC-60, D-019 item 5; P04 `R/proc-spawn.R`, `R/http-reactor.R`):

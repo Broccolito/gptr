@@ -4513,33 +4513,41 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `--no-manual`) checked 02e93fa in 301 s (job 120763739795: code checks 107 s, tests 48 s, install
   36 s, vignettes 14 s, examples 10 s). win-builder (Windows Server 2022, R 4.6.1) checked
   6777610e in 631 s: code checks 238 s, tests 177 s, PDF manual 40 s, examples 28 s, HTML manual
-  24 s, vignettes 17 s, incoming feasibility 13 s.
+  24 s, vignettes 17 s, incoming feasibility 13 s. That run ended in Status 1 ERROR, two console
+  tests that expected Unicode glyphs where its Windows console draws ASCII (test-console-repl.R:314,
+  test-console-ui.R:614), which P28's Task 86 fixed; its timings stand, because every test ran
+  (`[ FAIL 2 | WARN 0 | SKIP 1566 | PASS 4067 ]`) and the check went on to its end.
 - Change: (1) cran-mode takes CRAN's thresholds (`_R_CHECK_TEST_TIMING_CPU_TO_ELAPSED_THRESHOLD_`
   and `_R_CHECK_EXAMPLE_TIMING_CPU_TO_ELAPSED_THRESHOLD_` 2.5, `_R_CHECK_EXAMPLE_TIMING_THRESHOLD_`
   5, `_R_CHECK_LIMIT_CORES_`), errors on a NOTE and fails when its check step passes 480 s
   (01d0b63d). (2) Windows-check.yaml's `cran` job checks the whole package as CRAN does, on
   Windows release and unsharded: CRAN's test list, both manuals (TinyTeX, HTML Tidy), the same
   thresholds and NOTE gate; it fails over 600 s (4d865b82). Each timed step includes the
-  package's build. (3) The CRAN test trim (6816efd3): the list goes from 66 files to 35 and 20
+  package's build. (3) The CRAN test trim (6816efd3): the list goes from 66 files to 35 and 8
   more blocks start with `skip_on_cran()`, chosen at 6777610e by time saved per CRAN-covered
   function lost while every R file a CRAN test reached stays reached, with tests of at least a
-  quarter of its CRAN-covered functions; re-applied by block name to P28's tests. With incoming
-  checks off, R lists slow examples without a NOTE, so the time budgets bound them, not the gate.
-- Trim, measured on macOS (16 cores, load 8-11; the CRAN list against the installed tarball,
-  `NOT_CRAN` unset): before 21.2-23.1 s (4 runs, PASS 4145 SKIP 1550), after 12.3-12.9 s (4 runs,
-  PASS 2326 SKIP 908), FAIL 0 in each: 44% less. covr over the CRAN list: lines 46.4% to 39.7%,
-  functions 2,437 to 2,195 (242 lose their last CRAN test), R files reached 115 of 125 before and
-  after, each keeping at least 27% of its CRAN-covered functions (`console-input.R` the least),
-  as at 6777610e. The touched files with `NOT_CRAN=true`: PASS 3865 SKIP 1.
-- Expected: if win-builder's tests shrink alike, about 75 s less, a check near 555 s, 45 s under
-  the budget, with code checks (238 s) its largest part; cran-mode about 20 s less.
+  quarter of its CRAN-covered functions; re-applied by block name to P28's tests. The 12 blocks
+  it also skipped in the security files run on CRAN again (8c0edb03): D-240 skips only their
+  blocks of 500 ms or more on Windows, and 11 took 250-480 ms on windows-latest in both timing
+  runs (39555362618, 39559882743), the 12th postdating them. With incoming checks off, R lists
+  slow examples without a NOTE, so the time budgets bound them, not the gate.
+- Trim, measured on macOS (16 cores, load 6.5-7.9; the CRAN list against the installed tarball,
+  `NOT_CRAN`, `CI` and `GITHUB_ACTIONS` unset, 4 alternating pairs): before (ecfad58c) 20.7 s in
+  each run (PASS 4146 SKIP 1550), after (8c0edb03) 13.7-13.8 s (PASS 2589 SKIP 896), FAIL 0 in
+  each: 33-34% less. covr over the CRAN list: lines 46.4% to 39.9%, functions 2,441 to 2,195 of
+  4,138 (246 lose their last CRAN test), R files reached 115 of 125 before and after, each
+  keeping at least 26.7% of its CRAN-covered functions (`console-input.R`, 4 of 15, the least).
+  The touched files with `NOT_CRAN=true`: PASS 3865 SKIP 1.
+- Expected: if win-builder's tests shrink alike, about 60 s less, a check near 570 s, 30 s under
+  the budget, with code checks (238 s) its largest part; cran-mode about 16 s less.
 - Tests: test-zzz.R's crashed-check guard covers the new job (`^zzz$` FAIL 2 before it, PASS 148
-  after); both workflows parse with `yaml::read_yaml()`; lint clean. At d924d1bb (P28 at ecfad58c
-  merged), the CRAN list from the installed tarball, `NOT_CRAN` unset: PASS 2326 SKIP 908 in
-  14.9 s in UTF-8; PASS 2312 SKIP 912 WARN 1 in 14.2 s under `LC_ALL=C`, the warning (`strings
-  not representable in native encoding`) from test-tool-read.R's UTF-8 BOM block, as on main at
-  02e93fa; `R CMD check --as-cran --no-manual` in CRAN mode Status OK in 139 s, `Running
-  'testthat.R' [14s/15s]`.
+  after); both workflows parse with `yaml::read_yaml()`; lint clean. At 8c0edb03, the CRAN list
+  from the installed tarball, `NOT_CRAN` unset: PASS 2589 SKIP 896 in 13.7-13.8 s in UTF-8; PASS
+  2575 SKIP 900 WARN 1 in 13.4 s under `LC_ALL=C`, the warning (`strings not representable in
+  native encoding`) from test-tool-read.R's UTF-8 BOM block, as on main at 02e93fa; `R CMD check
+  --as-cran` in CRAN mode (cran-mode's variables, both manuals) Status OK in 139 s, `Running
+  'testthat.R' [13s/14s]`. The security files with `NOT_CRAN=true`, in UTF-8 and under
+  `LC_ALL=C`: PASS 2017 SKIP 1.
 - Deviations: D-240 (amended in place). Open: the 10 R files no CRAN test reaches, before or after
   the trim (artifact-registry, bridge-lang, console-jsonl, doc-export, doc-knitr, proc-rscript,
   provider-bedrock, s1-emulate, s1-ollama, tool-search); the Windows budget's calibration against
