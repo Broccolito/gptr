@@ -4473,7 +4473,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Green: `^ext-(check|events)$` PASS 455.
 - Deviations: none. Open: none.
 
-## Task CI-92 - INFRA-03 answers the pause menu at its chevron (2026-10-25, #PR)
+## Task CI-92 - INFRA-03 answers the pause menu at its chevron (2026-10-25, #79)
 - Red: PR #77 head 84fe1f1, R-CMD-check run 40049492168, job 120738934342 (ubuntu-latest devel)
   failed INFRA-03 (`test-console-interrupt.R:496`, then 497, 501, 504 and 508): after `Paused` the
   driver sent `c` and `STATUS-TTFT idle` never came, step 2's tool never ran, step 3 passed. The
@@ -4505,7 +4505,7 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   PASS 136 SKIP 1 under `LC_ALL=C` (the skip `non utf8 locale` at line 151), INFRA-03 run each time.
 - Deviations: none. Open: none.
 
-## Task CI-93 - The check fits CRAN's time budget (2026-10-25, #PR)
+## Task CI-93 - The check fits CRAN's time budget (2026-10-25, #79)
 - Policy: CRAN asks that a check take as little CPU time as possible, long tests made optional,
   and its incoming pretest gives a NOTE when the whole check passes 10 minutes (`Overall checktime
   ... > 10 min`): 600 s is the de facto budget. The maintainer asked that gptr be designed to it.
