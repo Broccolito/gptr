@@ -365,9 +365,10 @@ ckpt_final_text = function(tree, path) {
   NA_character_
 }
 
-#' The rewind target: an entry id (NULL: before the first entry), the turns kept and the undone
-#' prompt. Keeping turns 1..k targets the parent of turn k + 1's opening user message (Pi:
-#' selecting a user message moves the leaf to its parent); `to` overrides `turn`
+#' The rewind target: an entry id (NULL: before the first entry), the turns kept, the undone
+#' prompt and the skills it preloaded (its `skill_content` blocks). Keeping turns 1..k targets the
+#' parent of turn k + 1's opening user message (Pi: selecting a user message moves the leaf to its
+#' parent); `to` overrides `turn`
 #' @noRd
 ckpt_rewind_target = function(tree, turn, to) {
   path = ckpt_tree_path(tree, tree$leaf)
@@ -390,8 +391,13 @@ ckpt_rewind_target = function(tree, turn, to) {
   if (keep == last) return(list(target = if (nzchar(tree$leaf)) tree$leaf, keep = keep))
   first = starts[keep + 1L]
   parent = tree$parent[first]
-  list(target = if (nzchar(parent)) parent, keep = keep,
-       prompt = msg_text(tree$entries[[first]]$message))
+  msg = tree$entries[[first]]$message
+  skills = lapply(msg$content, function(b) {
+    nm = b$attrs$name
+    if (identical(b$kind, "skill_content") && rlang::is_string(nm)) strsplit(nm, ", ")[[1L]]
+  })
+  list(target = if (nzchar(parent)) parent, keep = keep, prompt = msg_text(msg),
+       skills = unlist(skills))
 }
 
 #' Which checkpoint records are applied now: all at creation, then the undone and redone lists of
@@ -587,7 +593,8 @@ ckpt_ext_state = function(s = NULL) {
 #' @param preview Return the plan instead: a data frame with one row per item (`record`, `turn`,
 #'   `action`, `checkpointer`, `item`, `restore`, `reason`); nothing changes.
 #' @return `gptr_rewind()` returns `s`, invisibly (the plan when `preview = TRUE`);
-#'   `s$last_rewind` holds the report and `s$editor_text` the undone prompt.
+#'   `s$last_rewind` holds the report and `s$editor_text` the undone prompt, whose preloaded
+#'   skills are `s$last_rewind$skills`.
 #'   `gptr_checkpoints()` returns a `gptr_checkpoints` data frame (it prints at most 20 rows).
 #' @order 1
 #' @section Options:
@@ -671,7 +678,8 @@ gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversatio
     d$reason = NULL
   }
   d$last_rewind = list(id = id, from = from, to = tgt$target, keep = tgt$keep, restore = restore,
-                       report = report, partial = length(bad) > 0L)
+                       report = report, partial = length(bad) > 0L,
+                       skills = if (restore != "workspace") tgt$skills)
   d$editor_text = if (restore != "workspace") tgt$prompt
   # each rewind replaces the note, so a full one leaves nothing to tell the model
   st = ckpt_ext_state(s)

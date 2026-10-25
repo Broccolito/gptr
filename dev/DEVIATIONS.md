@@ -4708,6 +4708,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (2,895 at base, 2,922 > 2,896), so baseline.csv needs one re-baseline at integration; `?peter`.
 - Tests: prompt-text (the line), northstar and bench-context/prompt-sections (composition byte for
   byte); `dev/bench/tokens/run.R --check` (the prefix gate). Evidence: progress/P26.md Task 37.
+- Amended by D-253 (R16): the line says `use peter$sh() instead`, as a `system2()` child's output
+  never reaches the model; same 27 tokens.
 
 ## D-220 - P26 A pasted block never answers a question; pasted fences are read at once (2026-10-18)
 - Rule: `ui_console_read()` (approvals, choices, input) asks again when the REPL's reader finds
@@ -6112,6 +6114,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   RStudio beside a stale live row (warn = 1), as Task 39's messages were. Contract-visible: 04
   section 2. Tests: test-console-message-stream.R "a gptr warning during a run is a console notice,
   never an IDE's box (S9)".
+- Amended by D-253 (R19): the [b] row's `gptr_wait()` call has `!!` only while a console REPL is on
+  the stack.
 
 ## D-244 - P28 trigger-only completion and special tokens (2026-10-21)
 - Rule (P28 Tasks 22-24): completion only after `@`, `!`, `!!`, `/` and `peter$` or `@obj$` members,
@@ -7611,3 +7615,68 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   replaces your earlier record". Evidence: progress/fixes.md Task FIX-19 ws-1, sessions-20, guard-1,
   guard-1b, team-1, team-4, bg-1, gate-hint, tpl-1, tpl-2, sessions-23, ident-1, mcp-trusted, art-1,
   art-2, reg-1.
+
+## D-253 - FIX-20 Console review fixes (2026-10-25)
+- Rule (R03, R05): after `/fork`, `/env` and the banner's objects line list what the fork reads: the
+  overlay's names, then each lower environment's (`console_env_names()`, the walk of
+  `env_view_snapshot()`, D-252), each described where it is bound. `/env` filters by a literal
+  substring, so `/help` and the console vignette say `/env [text]`.
+- Rule (R04): `/context` labels the ledger's total `total (est.)`: it is gptr's estimate of what it
+  sent, while the `context left` row under it comes from the counts the provider reported.
+- Rule (R10): outside a run, where a person can answer (`gptr_can_prompt()`) and with no document or
+  `gptr_doc()` binding, the `doc.site` service gives the console transcript the project remembers
+  (never a new one), so `/doc` and `/status` name the file the next console call records into.
+  In-run callers and callers nobody can answer are unchanged.
+- Rule (R12, R13): `gptr_rewind()` keeps the skills the undone prompt preloaded (its `skill_content`
+  blocks) as `s$last_rewind$skills`, and `/retry` preloads them again with the prompt, as `/skill:`
+  does.
+- Rule (R16): the `<r_session>` line is
+  `- system() and system2() children read the user's terminal and you do not
+  see their output: use peter$sh() instead.` (same 27 o200k tokens; the static prefixes are
+  unchanged), and `?peter` says the same. Amends D-216, whose line named
+  `system2(..., stdin = nullfile())`, a form whose output the model never sees (a child's fd 1
+  bypasses `sink()`).
+- Rule (R17, R19, R31): the pause menu's `[b]` row names `!!gptr::gptr_wait(gptr::gptr_last())` only
+  while a console REPL is on the stack (`console_repl_find()`), else the call without `!!`: at R's
+  prompt `!!x` is a double negation, so the wait ran to its end and `!` failed on the session.
+  Amends D-243.
+- Rule (R30): the pause menu takes an interrupt that arrives in its first 50 ms
+  (`tryCatch(Sys.sleep(0.05))` before it reads), as one Esc in RStudio sets R's interrupt flag
+  twice; a second Ctrl-C a person presses still aborts.
+- Rule (R20): a new transcript starts with the replay note and `library(gptr)` whatever its first
+  recorded line, then per session a blank line and the header, as IC-49 says; a transcript opened by
+  a prompt had the header first.
+- Rule (R22, R33): `/exit` no longer dispatches `session_shutdown` (reason `"exit"` is gone) for a
+  session the console created: the returned session is the caller's, like an API or piped-in one,
+  and keeps its rank-0 records (a provider object as `model =`, `tools =`, `agents =`, `plugins =`)
+  and its CLI child, plugins and checkpoints until it is collected or the package unloads.
+  Supersedes P14's `session_shutdown` with `reason = "exit"` (its events line and the Task 7 text),
+  ambiguity 5 and the rejection of review item 15.
+- Rule (R25, R26): the @files of one prompt share the `user_files` budget (about 2,000 tokens, one
+  constant `console_files_budget`), filled in order by `repl_mentions()` as it builds their blocks:
+  a file cut to the room left is `truncated="true"` and said `first <n> lines`, one with no room is
+  `<file path=... omitted="true"/>` and said `not attached, over the size limit`. Formerly the line
+  said 40 lines for each and the send dropped later files whole, unmarked. `?peter` and the console
+  vignette say so.
+- Rule (R32): `gptr_init()` asks the trust question only when no recorded or in-process trust holds
+  for the project (`trust_holds()`), as `trust_resolve()` does; a recorded No, an undecided project
+  and a lapsed trust are asked as before. Formerly every init asked and Enter's default No replaced
+  a recorded TRUE.
+- Contract-visible: 04 sections 5.1 `last_rewind` (R12), 6.2 `gptr_init()` (R32), 7.0 `doc.site`
+  (R10), 7.14 `with_interrupt_policy()` (R30), 10.4 `session_shutdown` reasons and emitters (R22),
+  11.5 transcript row (R20), 15.10 IC-76 (R19) and IC-77 (R04); 03 sections 7.3 `<r_session>` (R16)
+  and 10.1 step 9 (R22); P14 (R22); `?peter` (R16, R25), `?gptr_rewind` (R12), `?gptr_init` (R32),
+  `/help` and vignette("interactive-console") (R03, R25).
+- Tests: test-console-commands.R "/env and the banner in a fork list what the fork reads, a nearer
+  binding shadowing", "/cost, /context, /fork and /resume work on a session that ran", "/doc and
+  /status name the console transcript the project remembers", "/retry preloads the undone prompt's
+  skills again, and none of a later prompt"; test-prompt-text.R "r_session runs programs with
+  peter$sh(), not system() or system2()", test-northstar.R and fixtures/bench/prefix-baseline.json;
+  test-console-interrupt.R "[b]ackground hands a foreground run to bg.register (P21) and resumes",
+  "an interrupt right behind the first still opens the pause menu (RStudio's Esc)";
+  test-doc-formats.R "console transcripts record the first prompt as an assignment ...";
+  test-console-repl.R "a session the console created stays the caller's after /exit, with its
+  specs", "the @files of a prompt share the user_files budget, and the line under it says so";
+  test-gptr-config.R "gptr_init() does not ask about trust again while a trust decision holds".
+  Evidence: progress/fixes.md Task FIX-20 R03, R04, R10, R12, R16, R17, R19, R20, R22, R25, R30,
+  R32.

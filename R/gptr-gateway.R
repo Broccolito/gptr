@@ -17,8 +17,8 @@
 #' `vignette("execution-model", package = "gptr")` for these boundaries.
 #'
 #' Agent code runs in this R process: a program it starts with `system()` or `system2()` reads
-#' standard input from your terminal, so the agent is told, except under the `"minimal"` preset
-#' that sub-agents run, to use `system2(..., stdin = nullfile())` instead of `system()`.
+#' standard input from your terminal and prints there, out of the agent's sight, so the agent is
+#' told, except under the `"minimal"` preset that sub-agents run, to use `peter$sh()` instead.
 #'
 #' The dots take, in order: at most one leading session to continue, the prompt (the first
 #' unnamed string literal, else the first unnamed length-1 character value), and context objects

@@ -526,19 +526,21 @@ doc_route_run = function(call) {
 #' doc.site: the document a session records into (its replayed block's document, the site of
 #' its current run; without a session, as P10's peter$edit() member calls it, the site of the
 #' innermost running call), else the process binding of gptr_doc() while its directory exists,
-#' as list(path, format), or NULL
+#' else, outside a run where a person can answer, the transcript the project remembers, which the
+#' next console call records into (never a new one), as list(path, format), or NULL
 #' @noRd
 doc_site_service = function(session) {
   d = if (is.null(session)) NULL else session_data(session)$doc
-  if (is.null(d$path)) {
-    run = if (is.null(session)) run_current() else session_live(session)$run
-    d = run$opts$doc
-  }
+  run = if (is.null(session)) run_current() else session_live(session)$run
+  if (is.null(d$path)) d = run$opts$doc
   if (is.null(d$path)) {
     d = the$doc_binding
-    if (is.null(d$path) || !dir.exists(dirname(d$path))) return(NULL)
+    if (!is.null(d$path) && !dir.exists(dirname(d$path))) return(NULL)
   }
-  list(path = d$path, format = d$format)
+  if (is.null(d$path) && is.null(run) && gptr_can_prompt() && !is.null(doc_remembered_target())) {
+    d = doc_console_site()
+  }
+  if (is.null(d$path)) NULL else list(path = d$path, format = d$format)
 }
 
 #' Ids of the blocks whose lines an edit's old text touches (`oldText`, or `old_text` as P10's

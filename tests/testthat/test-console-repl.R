@@ -27,6 +27,20 @@ test_that("the stdin reader echoes the prompt and the escaped line when asked", 
   expect_identical(got, "hello \033")
 })
 
+test_that("the stdin reader leaves a line typed on a terminal to the terminal's echo", {
+  f = withr::local_tempfile(lines = "hello")
+  local_mocked_bindings(console_stdin_open = function() file(f, open = "r"),
+                        stdin_tty = function() TRUE)
+  rd = console_reader(stdin = TRUE)
+  withr::defer(rd$close())
+  got = NULL
+  out = utils::capture.output({
+    got = rd$read("peter> ")
+  })
+  expect_identical(out, "peter> ")
+  expect_identical(got, "hello")
+})
+
 test_that("close() closes the stdin connection once (IC-59)", {
   skip_on_cran()
   n0 = nrow(showConnections())
@@ -65,6 +79,14 @@ test_that("a fence is R code only for an r, R, {r...} or empty info string (Comm
   expect_identical(repl_read_logical(rd, "peter> "), "!if (TRUE) {\n  z = 3\n}")
   expect_identical(repl_read_logical(rd, "peter> "), "!```")
   expect_identical(repl_read_logical(rd, "peter> "), "```python\nprint({x})\n```")
+})
+
+test_that("a fence typed in RStudio, whose insert_matching adds a backtick, is still R code", {
+  rd = stdin_reader(c("```r`", "x = 1", "````", "```R`", "y = 2", "```", "```python`", "z",
+                      "```"))
+  expect_identical(repl_read_logical(rd, "peter> "), "!x = 1")
+  expect_identical(repl_read_logical(rd, "peter> "), "!y = 2")
+  expect_identical(repl_read_logical(rd, "peter> "), "```python`\nz\n```")
 })
 
 test_that("a trailing backslash continues a line; end of input ends every block", {
@@ -127,6 +149,17 @@ test_that("lines waiting after a typed line join it; Enter at '... ' sends one m
   expect_identical(out, "line1\nline2\n\n  indented")
   expect_identical(rl$prompts, c("peter> ", "... "))
   expect_match(shown, "(pasted: Enter sends it as one message)", fixed = TRUE)
+})
+
+test_that("a trailing backslash continues a pasted line as it does a typed one", {
+  local_readline(c("first \\", ""))
+  local_waiting(list(c("second \\", "third")))
+  rd = console_reader(stdin = FALSE)
+  out = NULL
+  utils::capture.output({
+    out = repl_read_logical(rd, "peter> ")
+  })
+  expect_identical(out, "first \nsecond \nthird")
 })
 
 test_that("text typed at '... ' is appended: it ends a paste without a final newline", {
@@ -469,6 +502,32 @@ test_that("a long @file is marked truncated even when the first cut line is blan
   expect_identical(repl_mentions("see @long.R", new.env())$said, "@ long.R (first 40 lines)")
 })
 
+test_that("the @files of a prompt share the user_files budget, and the line under it says so", {
+  skip_on_cran()
+  rows = function(w) vapply(1:40, function(i) substr(paste0(i, strrep("x", w)), 1L, w), "")
+  local_project(files = list("a.R" = rows(84), "b.R" = rows(84), "c.R" = rows(84),
+                             "wide.md" = rows(312)))
+  local_no_fd0()
+  local_console_blocks()
+  men = repl_mentions("compare @a.R, @b.R and @c.R", new.env())
+  expect_identical(men$said[[1L]], "@ a.R (40 lines)")
+  expect_match(men$said[[2L]], "^@ b.R [(]first [0-9]+ lines[)]$")
+  expect_identical(men$said[[3L]], "@ c.R (not attached, over the size limit)")
+  expect_match(men$files[[2L]], "<file path=\"b.R\" truncated=\"true\">", fixed = TRUE)
+  expect_identical(men$files[[3L]], "<file path=\"c.R\" omitted=\"true\"/>")
+  expect_lte(est_tokens(men$files, "code"), 2000)
+  # the request holds what the line said
+  fake = gptr_fake_provider(list("ok"))
+  rs = repl_state(NULL, new.env())
+  rs$model = fake
+  console_send(rs, "compare @a.R, @b.R and @c.R", men)
+  expect_match(last_user_blocks(fake_requests(fake)[[1L]])[["user_files"]],
+               paste(men$files, collapse = "\n"), fixed = TRUE)
+  men = repl_mentions("see @wide.md", new.env())
+  expect_match(men$said, "^@ wide.md [(]first [0-9]+ lines[)]$")
+  expect_match(men$files, "<file path=\"wide.md\" truncated=\"true\">", fixed = TRUE)
+})
+
 test_that("!code runs in the REPL environment and leaves a note; !!code does not", {
   skip_on_cran()
   local_project()
@@ -534,6 +593,10 @@ test_that("a !code block's rows share one margin and end with a blank row (visua
   expect_identical(out, c("    a message", "    cat line", "    [1] 1 2 3",
                           "    Warning: a warning", ""))
   expect_identical(err, "    Error: boom")
+  # an error message of two lines is two rows
+  err = utils::capture.output(invisible(utils::capture.output(
+    repl_passthrough(rs, "!stop('one\\ntwo')"))), type = "message")
+  expect_identical(err, c("    Error: one", "    two"))
   # nothing printed, no blank row
   expect_identical(utils::capture.output(repl_passthrough(rs, "!y = 2")), character())
 })
@@ -878,6 +941,23 @@ test_that("the end of piped input leaves the REPL like /exit", {
   expect_identical(res$text, "ok")
 })
 
+test_that("a session the console created stays the caller's after /exit, with its specs", {
+  skip_on_cran()
+  local_console_test()
+  local_scripted_ui()
+  fake = gptr_fake_provider(list("first", "second"))
+  local_console_stdin(c("hello", "/exit"))
+  s = NULL
+  utils::capture.output({
+    s = peter(.stdin = TRUE, model = fake, tools = list(test_tool("exit_probe", function(ctx) 1)),
+              envir = new.env())
+  })
+  expect_false(is.null(registry_get("tool", "exit_probe", session = s$id)))
+  # nobody answers the egress question here: without its provider record the turn is refused
+  expect_no_error(peter(s, "again", envir = new.env()))
+  expect_identical(s$text, "second")
+})
+
 test_that("under R < file the piped console reads the lines after its call, echoed once (IC-59)", {
   skip_on_cran()
   dir = withr::local_tempdir()
@@ -941,6 +1021,12 @@ test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
   # the notice ends the prompt line first, under the banner's blank line and its keys row
   expect_identical(out[c(i - 2L, i - 1L)], c("", ""))
   expect_match(out[[i - 3L]], "twice leaves$")
+  # the second ends the prompt's row too, so R's prompt starts a row of its own
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) {
+    cat(prompt)
+    ctrl_c()
+  })
+  expect_match(written(function() console_run(NULL, new.env())), "peter> \n$")
 })
 
 test_that("a line at the readline limit is reported at once and not sent", {

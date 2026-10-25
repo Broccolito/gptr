@@ -109,8 +109,8 @@ and worker transfers still have their usual costs. See
 \code{vignette("execution-model", package = "gptr")} for these boundaries.
 
 Agent code runs in this R process: a program it starts with \code{system()} or \code{system2()} reads
-standard input from your terminal, so the agent is told, except under the \code{"minimal"} preset
-that sub-agents run, to use \code{system2(..., stdin = nullfile())} instead of \code{system()}.
+standard input from your terminal and prints there, out of the agent's sight, so the agent is
+told, except under the \code{"minimal"} preset that sub-agents run, to use \code{peter$sh()} instead.
 
 The dots take, in order: at most one leading session to continue, the prompt (the first
 unnamed string literal, else the first unnamed length-1 character value), and context objects
@@ -163,7 +163,8 @@ returns to R. Piped input skips this setup.
 Each input is one of:
 \itemize{
 \item a prompt, sent as \code{session |> peter("...")} with \code{{name}} interpolation; \verb{@file} adds
-the head of a file (at most 40 lines) and \verb{@object} attaches an object by name;
+the head of a file (at most 40 lines; the files of one prompt share about 2,000 tokens)
+and \verb{@object} attaches an object by name;
 \item \code{!code}: R code run in the session's environment; the code and its output go with the next
 prompt (at most 300 estimated tokens). \code{!!code} omits that note. Both execute your own R
 immediately, without the model's permission gate or a model request. Workspace changes

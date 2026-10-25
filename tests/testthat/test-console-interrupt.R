@@ -120,6 +120,38 @@ test_that("RStudio's console offers the pause menu; its s steers the run (steeri
   expect_identical(out[shown + 1L], "ack")
 })
 
+test_that("an interrupt right behind the first still opens the pause menu (RStudio's Esc)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  skip_if_sigint_ignored()
+  # RStudio sets R's interrupt flag for one Esc and again with the SIGINT it sends: the second,
+  # pending as the menu's handler starts, would reach only the policy's abort
+  log = local_menu_answers("c")
+  write = console_write
+  # the menu's first row is a point where R takes a pending interrupt
+  local_mocked_bindings(console_write = function(...) {
+    Sys.sleep(0)
+    write(...)
+  })
+  pol = new.env(parent = emptyenv())
+  pol$mode = "call"
+  sent = FALSE
+  makeActiveBinding("runs", function() {
+    if (!sent) tools::pskill(Sys.getpid(), tools::SIGINT)
+    sent <<- TRUE
+    list()
+  }, pol)
+  cnd = structure(class = c("interrupt", "condition"), list(message = "", call = NULL))
+  res = NULL
+  err = notices({
+    res = tryCatch(withRestarts(policy_menu(cnd, pol), resume = function() "resumed"),
+                   interrupt = function(e) "aborted")
+  })
+  expect_identical(res, "resumed")
+  expect_true(any(grepl("Paused", err, fixed = TRUE)))
+  expect_length(log$prompts, 1L)
+})
+
 test_that("continue resumes the interrupted computation", {
   log = local_menu_answers("c")
   res = NULL
@@ -549,9 +581,18 @@ test_that("[b]ackground hands a foreground run to bg.register (P21) and resumes"
   local_mocked_bindings(console_render_pause = function() console_write("  the answer's cut..."))
   err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
   dim = console_style()$dim
+  # at R's prompt the call alone: `!!` is the chat prompt's R code, a double negation here
   expect_identical(utils::tail(err, 5L), c(
     "  the answer's cut...", "", dim("  in the background (experimental, ?\"gptr-background\")"),
-    dim("  !!gptr::gptr_wait(gptr::gptr_last()) continues it here"), ""))
+    dim("  gptr::gptr_wait(gptr::gptr_last()) continues it here"), ""))
+  local({
+    # a call under the chat (a prompt's, or its `!` code's) returns to its prompt, which takes `!!`
+    local_mocked_bindings(console_repl_find = function() new.env())
+    local_menu_answers("b")
+    err = notices(with_interrupt_policy(function() fake_interrupt(), list(run), mode = "call"))
+    expect_identical(utils::tail(err, 2L), c(
+      dim("  !!gptr::gptr_wait(gptr::gptr_last()) continues it here"), ""))
+  })
   expect_false(any(grepl("Background sessions", err, fixed = TRUE)))
   expect_false(any(grepl("[gptr]", err, fixed = TRUE)))
   withr::local_options(cli.num_colors = 1L)
@@ -573,7 +614,7 @@ test_that("[b] keeps the REPL's held lines and draft in the history, not sent (s
   rd$compose = list(draft = "a draft")
   rs = new.env(parent = emptyenv())
   rs$reader = rd
-  local_mocked_bindings(console_repl_prompt = function() rs)
+  local_mocked_bindings(console_repl_prompt = function() rs, console_repl_find = function() rs)
   local_gptr_options(history = TRUE)
   kept = character()
   local_mocked_bindings(timestamp = function(stamp, ...) kept <<- c(kept, stamp),

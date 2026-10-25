@@ -22,8 +22,8 @@ project-instructions file \code{vignette.Rmd} and \code{.gitignore}. Existing fi
 overwritten, so calling it again is safe. There is no default path: without \code{path} gptr asks
 \verb{Create .gptr/ in <project>? [y/N]} when you can answer, and signals an error otherwise.
 Creating the workspace is consent to write there; it is not trust: gptr then asks separately
-whether to trust the project (see \code{\link[=gptr_trust]{gptr_trust()}}). In a package source it offers the
-\verb{^\\.gptr$} line for \code{.Rbuildignore} and never writes it silently.
+whether to trust the project, unless it is trusted already (see \code{\link[=gptr_trust]{gptr_trust()}}). In a package
+source it offers the \verb{^\\.gptr$} line for \code{.Rbuildignore} and never writes it silently.
 }
 \examples{
 d = tempfile("proj")
