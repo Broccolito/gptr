@@ -1213,14 +1213,15 @@ test_that("a terminal: a paste during a run is one draft; Enter sends it as one 
   expect_true(pty$wait("peter[auto]> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("thinking"))
-  # on the polling beat, as the run goes
+  # on the polling beat, as the run goes; more keys than a person types in 0.2 s, so only the
+  # beat's bound decides
   Sys.sleep(0.5)
-  pty$send("a\rb\rc")
-  expect_true(pty$wait(paste0(person, " a b c")))
+  pty$send("one\rtwo\rthree")
+  expect_true(pty$wait(paste0(person, " one two three")))
   expect_identical(pty$seen("queued"), 0L)
   pty$send("\r")
   expect_true(pty$wait("1 queued"))
-  expect_true(pty$wait("REQ 1 [a/b/c]"))
+  expect_true(pty$wait("REQ 1 [one/two/three]"))
   expect_true(pty$wait("peter[auto]> "))
   pty$send("/exit\r")
   expect_true(pty$wait("CHILD DONE"))
