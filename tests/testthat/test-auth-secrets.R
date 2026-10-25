@@ -321,7 +321,6 @@ test_that("taint crosses evaluations: a secret read then sent later is level 4",
 })
 
 test_that("empty arguments, parse errors and a thousand statements are handled", {
-  skip_on_cran()
   local_vault()
   expect_identical(secret_scan("mtcars[, 1]; x[1, ] = 2; f = function(a, b) a")$level, 0L)
   expect_identical(secret_scan("Sys.getenv()[, 1]")$level, 3L)
@@ -402,7 +401,6 @@ test_that("known shell environment dumps include PowerShell and command case var
 spec_names = function(specs) unname(vapply(specs, function(s) s$name, ""))
 
 test_that("builtin:secrets registers sources, 12 rules, the Jev aliases and six profiles", {
-  skip_on_cran()
   expect_setequal(spec_names(registry_all("secret_source")),
                   c("environment", "dotenv", "auth", "keyring"))
   expect_identical(spec_names(registry_all("redaction_rule")),

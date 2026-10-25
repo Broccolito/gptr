@@ -84,7 +84,6 @@ test_that("r(secret:NAME) is the only allow rule that covers a registered secret
 })
 
 test_that("rule_suggest() covers exactly the flagged calls, never level 4 or control (7.11)", {
-  skip_on_cran()
   root = local_project()
   code = "write.csv(df, 'results/summary.csv')\nsaveRDS(df, 'results/df.rds')"
   expect_identical(rule_suggest(r_call(code)), "r(fn:write.csv,saveRDS)")
@@ -130,7 +129,6 @@ test_that("rules read every code-argument row; dynamic or mixed code gets no rul
 })
 
 test_that("sh: and category: rules see a program given by its path", {
-  skip_on_cran()
   root = local_project()
   for (code in c("peter$sh('/bin/rm -rf build')", "peter$sh(c('/bin/rm', '-rf', 'build'))",
                  "system('/bin/rm -rf build')", "system2('/bin/rm', c('-rf', 'build'))",

@@ -106,7 +106,6 @@ test_that("in auto a delete outside the project through a name asks a person (D-
 })
 
 test_that("control actions need a person in every mode, plan included (IC-53, IC-54)", {
-  skip_on_cran()
   root = local_project()
   local_gptr_options(critical_guard = FALSE)
   control = c("gptr_permissions(allow = 'r(level<=3)')", "gptr_trust('.', TRUE)",
