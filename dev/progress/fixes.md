@@ -4832,7 +4832,7 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   without a model, as `doc_console_site()` sets `args_hash = NULL` and the block reads stale under
   `GPTR_REPLAY=replay`; to triage.
 
-## Task CI-94 - A paste on the polling beat is timed by its last key's read (2026-10-25)
+## Task CI-94 - A paste on the polling beat is timed by its last key's read (2026-10-25, #81)
 - Red: R-CMD-check run 40194786942 (PR #79 at df37cabe), job 121173185576 (macos-latest release)
   failed "a terminal: a paste during a run is one draft; Enter sends it as one steer (review)"
   (`test-console-typing.R:1219`, 1220, 1223 and 1227): no `› a b c` draft, `queued` seen 6 times,
@@ -4870,7 +4870,7 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: none; IC-76's rule is unchanged, the reader now times a batch as it states. Open:
   none.
 
-## Task CI-95 - The security blocks of 500 ms or more on Windows skip on CRAN (2026-10-25, #PR)
+## Task CI-95 - The security blocks of 500 ms or more on Windows skip on CRAN (2026-10-25, #81)
 - Why: CI-93 put the 12 blocks its trim had skipped in the security files back on CRAN (8c0edb03),
   judged by Windows timing runs 39555362618 and 39559882743 (2026-10-21), from before two of those
   blocks changed or existed (perm-classify's plan-mode allowlist grew since; perm-rules' `sh:` block
@@ -4906,7 +4906,7 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: D-240 (amended in place). Open: a block near 500 ms can cross it between runs:
   `rule_suggest()`'s block took at most 480 ms in CI-93's runs and 510-535 ms here.
 
-## Task CI-96 - The macOS row has time for the whole suite (2026-10-25, #PR)
+## Task CI-96 - The macOS row has time for the whole suite (2026-10-25, #81)
 - Red: main's R-CMD-check run 40203827918 at f8c48802 (PR #79 merged), job 121200423672
   (macos-latest release), was cancelled at its 45-minute limit 42 minutes into R CMD check
   ("The job has exceeded the maximum execution time of 45m0s"); every other job of the run passed.
