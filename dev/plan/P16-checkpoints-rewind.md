@@ -1,40 +1,136 @@
 # P16 Checkpoints and rewind Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make every mutating agent action reversible (objects, files and session state) without copying user objects, and add `gptr_rewind()`/`gptr_checkpoints()`, the `/undo`, `/redo`, `/rewind`, `/checkpoints` commands and the `gptr_preimage()` generic (G7).
+**Goal:** Make every mutating agent action reversible (objects, files and session state) without
+copying user objects, and add `gptr_rewind()`/`gptr_checkpoints()`, the `/undo`, `/redo`, `/rewind`,
+`/checkpoints` commands and the `gptr_preimage()` generic (G7).
 
-**Architecture:** Three L4 files. `ckpt-objects.R` holds copy-safe object pre-images (bindings in a private environment released with `rm()`, list and S4 images defused before dropping, eager disk images through `serialize_leaf(xdr = FALSE)`, data.table deep copies, settle and turn-end budgets), the `gptr_preimage()` S3 generic, the `state` checkpointer and the `checkpoint.note` service; `ckpt-files.R` holds the content-addressed blob store (XXH128, gzip level 1), its garbage collector, the pruned walk and tracker, and guarded 3-way restores; `ckpt-rewind.R` registers `builtin:checkpoints` (the `objects`, `files` and `state` checkpointers that P06's dispatcher calls around each sequential mutating tool call, hooks, the rewind `workspace_changes` block, the commands) and implements `gptr_rewind()` as G7's branch-in-place on the one session object (undo newest first to the lowest common ancestor, redo oldest first, then one appended `gptr.rewind` entry parented at the target) and `gptr_checkpoints()`.
+**Architecture:** Three L4 files. `ckpt-objects.R` holds copy-safe object pre-images (bindings in a
+private environment released with `rm()`, list and S4 images defused before dropping, eager disk
+images through `serialize_leaf(xdr = FALSE)`, data.table deep copies, settle and turn-end budgets),
+the `gptr_preimage()` S3 generic, the `state` checkpointer and the `checkpoint.note` service;
+`ckpt-files.R` holds the content-addressed blob store (XXH128, gzip level 1), its garbage collector,
+the pruned walk and tracker, and guarded 3-way restores; `ckpt-rewind.R` registers
+`builtin:checkpoints` (the `objects`, `files` and `state` checkpointers that P06's dispatcher calls
+around each sequential mutating tool call, hooks, the rewind `workspace_changes` block, the
+commands) and implements `gptr_rewind()` as G7's branch-in-place on the one session object (undo
+newest first to the lowest common ancestor, redo oldest first, then one appended `gptr.rewind` entry
+parented at the target) and `gptr_checkpoints()`.
 
-**Tech Stack:** base R (methods, tools, utils, grDevices), rlang (`obj_address()`, `env_binding_are_*()` through P09, `hash()`/`hash_file()` through P01, weak references), jsonlite (through P01's `json_encode()`), ps (through P04's `pid_alive()`), testthat 3e, withr, processx (tests), data.table (Suggests; optional method and tests).
+**Tech Stack:** base R (methods, tools, utils, grDevices), rlang (`obj_address()`,
+`env_binding_are_*()` through P09, `hash()`/`hash_file()` through P01, weak references), jsonlite
+(through P01's `json_encode()`), ps (through P04's `pid_alive()`), testthat 3e, withr, processx
+(tests), data.table (Suggests; optional method and tests).
 
-**Spec:** dev/spec/03-architecture.md (§2.2, §3.2 rows `ckpt-*`, §5.11, §6.4, §6.16, §6.9.1, §7.3 `<context>` text, §11.1 checkpointers row), dev/spec/04-interface-contract.md (§1.3, §2.2 `busy`/`rewind_range`/`rewind_partial`, §3.1 `gptr.undo_*`/`gptr.checkpoint*`, §4.1.1, §4.6 `gptr.checkpoint`/`gptr.rewind`, §5.1 `last_rewind`/`editor_text`, §5.12 `gptr_checkpoints`, §6.5 `gptr_rewind()`/`gptr_checkpoints()`, §6.6 `gptr_preimage()`, §7.0 `checkpoint.note`, §7.16, §10.2 row 29 `checkpointer`, §10.3 `builtin:checkpoints`, §10.4 `session_before_tree`/`session_tree`/`checkpoint`, §11.1, §11.14, §12, §15 IC-31, IC-33, IC-52, IC-53, IC-65, IC-71), dev/spec/05-plan-decomposition.md (P16).
+**Spec:** dev/spec/03-architecture.md (sections 2.2, 3.2 rows `ckpt-*`, 5.11, 6.4, 6.16, 6.9.1, 7.3
+`<context>` text, 11.1 checkpointers row), dev/spec/04-interface-contract.md (sections 1.3, 2.2
+`busy`/`rewind_range`/`rewind_partial`, 3.1 `gptr.undo_*`/`gptr.checkpoint*`, 4.1.1, 4.6
+`gptr.checkpoint`/`gptr.rewind`, 5.1 `last_rewind`/`editor_text`, 5.12 `gptr_checkpoints`, 6.5
+`gptr_rewind()`/`gptr_checkpoints()`, 6.6 `gptr_preimage()`, 7.0 `checkpoint.note`, 7.16, 10.2
+row 29 `checkpointer`, 10.3 `builtin:checkpoints`, 10.4
+`session_before_tree`/`session_tree`/`checkpoint`, 11.1, 11.14, 12; section 15: IC-31, IC-33, IC-52,
+IC-53, IC-65, IC-71), dev/spec/05-plan-decomposition.md (P16).
 
 **Depends on:** P11, P15 (and, through them, P01-P10). **Milestone:** M3.
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full (`=` for assignment, never the left arrow; native `|>`; ASCII-only R sources; `pkg::fun()` calls; `gptr_abort()`/`gptr_warn()`/`gptr_inform()`; no `:::` in `R/`; no `.GlobalEnv`; testthat 3e; no network in tests; one commit per task). Plan-specific requirements, copied from the spec:
+`dev/plan/00-conventions.md` applies in full (`=` for assignment, never the left arrow; native `|>`;
+ASCII-only R sources; `pkg::fun()` calls; `gptr_abort()`/`gptr_warn()`/`gptr_inform()`; no `:::` in
+`R/`; no `.GlobalEnv`; testthat 3e; no network in tests; one commit per task). Plan-specific
+requirements, copied from the spec:
 
-- Owned files (05 P16 "Owns"): `R/ckpt-objects.R`, `R/ckpt-files.R`, `R/ckpt-rewind.R`, `tests/testthat/test-ckpt-objects.R`, `tests/testthat/test-ckpt-files.R`, `tests/testthat/test-ckpt-rewind.R`, `tests/testthat/test-copy-ckpt.R`; `NAMESPACE` and `man/` only through `devtools::document()`.
-- Layer L4 (03 §3.2). L4 "may call: the extension API (`gptr$register()`, `ctx`), L0, their own area, the declared services `eval-*`, `env-*`, `tool-walk`, `proc-*`, the §7.0 service table of the contract, and the **kernel SDK** allowlist [IC-33]"; "L6 and L3 never call an L4 capability by function name".
-- Exports (04 §6.5, §6.6; 3 of the 63): `gptr_rewind(s, turn = -1L, to = NULL, restore = c("all", "conversation", "workspace"), force = FALSE, preview = FALSE)`, `gptr_checkpoints(s, all = FALSE)`, `gptr_preimage(x, name, ctx, ...)` [experimental] with S3 methods `default` and `data.table`.
-- `gptr_preimage()` returns `list(mode = "ref" | "copy" | "none", reason = chr(1) | NULL, copy = <deep copy> | NULL)`; `ctx` is `list(predicted = chr in assign, modify, byref, remove, none; bytes num(1); budget num(1))`; "Packages add methods with delayed `S3method(gptr::gptr_preimage, cls)`".
-- Internal cross-plan functions (04 §7.16): `builtin_checkpoints(gptr)` "registers `checkpointer` specs `objects`, `files`, `state`; command specs `/undo`, `/redo`, `/rewind`, `/checkpoints`; the service `checkpoint.note`"; `ckpt_predict(code)` -> `list(assign, modify, byref, remove, super, files, unknown, process)` ("P11's `code_targets()` reduced"); `ckpt_store_put(path)` / `ckpt_store_get(hash, dest)` ("content-addressed blobs `<root>/checkpoints/blobs/<2hex>/<xxh128>[.gz]`"; consumer P23; `ckpt_store_put()` is in the IC-33 kernel SDK).
-- Service (04 §7.0): `checkpoint.note` = `function(call, run) chr(1) or NULL` ("cannot be undone: ..."), provided by P16, owned by `builtin:checkpoints`, consumed by P06's permission request record and P11's detail view.
-- `checkpointer` kind (04 §10.2 row 29) [experimental]: "`scope` (`objects`, `files`, `state`, `artifacts`, `other`); `before` `function(call, ctx)` -> token; `after` `function(call, ctx, token)` -> JSON-able fragment; `undo`/`redo` `function(fragment, ctx, force)` -> chr report lines; `prune` `function(live_keys, ctx)`; `describe` `function(fragment)` -> chr"; "never throws into the loop (a failure marks its fragment not restorable); runs only for sequential, non-read-only tools".
-- Options (04 §3.1): `gptr.undo_capture_max` `1e8`, `gptr.undo_max_bytes` `1e9`, `gptr.undo_spill_max` `2e9`, `gptr.undo_turns` `20L`, `gptr.checkpoint` `"on"` (`"on"`, `"files"`, `"off"`), `gptr.checkpoint_disk_bytes` `2e9`, `gptr.checkpoint_days` `30`, `gptr.checkpoint_turns` `100`, `gptr.checkpoint_track_file_max` `1e6`, `gptr.checkpoint_track_total` `1e8`, `gptr.checkpoint_capture_max` `5e7`, `gptr.checkpoint_scan_budget` `0.25`, `gptr.checkpoint_rng` `TRUE`, `gptr.checkpoint_close_devices` `FALSE`; settings key `checkpoint` `"on"` (04 §11.2; P08 registers its `setting` spec). Read through `gptr_opt()` / `setting_get()`.
-- Conditions (04 §2.2): `gptr_error_busy` (field `session`; "the session is running"), `gptr_error_rewind_range` (fields `turn`, `turns`; "rewind target out of range"), `gptr_error_invalid_argument` (`arg`, `expected`), `gptr_error_permission` (IC-53 item 3: `gptr_rewind` "on a session other than the running one" from model code), warning `gptr_warning_rewind_partial` (field `report`).
-- Entries (04 §4.6): `gptr.checkpoint` "G7 §3.1 shape (object names, addresses, sizes, classes, capture mode; file paths, hashes, modes; state names; artifact `current` before/after); never values" (P06 writes the container `{tool_call_id, fragments: {<checkpointer>: <fragment>}}`); `gptr.rewind` "`{from, to, keep, restore, report: [chr]}`; parented at the target, becomes the leaf".
-- Checkpoint store (04 §11.14): `<root>/checkpoints/blobs/<2hex>/<xxh128>[.gz]` "file contents (gzip level 1), shared by the project's sessions"; `<root>/checkpoints/objects/<session id>/<key>.rdsx` "spilled object images (serialize_leaf(ascii = FALSE, xdr = FALSE))"; `<root>/checkpoints/index.json` `{"blobs": {"<hash>": <last referenced epoch>}}` "rebuilt if missing"; "Never inside `.git`, never in `R_user_dir()`". `<root>` is the workspace root (`.gptr/` or `tempdir()/gptr`, 04 §11.1).
-- Events (04 §10.4): `session_before_tree` (first decision; payload `from`, `to`, `plan` (df); returns `list(cancel = TRUE, reason)`), `session_tree` (notify; `from`, `to`, `report`), `checkpoint` (notify; `tool_call_id`, `objects`, `files`, `restorable` (counts)); all emitted by P16.
-- Context block kind `workspace_changes` "(attrs `since`, `reason`, optional)" (04 §4.1.1): a partial rewind "sends `<workspace_changes since=... reason="rewind">` (about 87 tokens)" (03 §6.16); a full restore sends nothing.
-- Session fields (04 §5.1): `last_rewind` "report of the last `gptr_rewind()`", `editor_text` "the undone prompt after a rewind".
-- Listing (04 §5.12): class `c("gptr_checkpoints", "gptr_listing", "data.frame")`, columns `turn`, `id`, `time`, `prompt`, `objects`, `files`, `held_mb`, `disk_mb`, `branch`, built by `new_listing()`.
-- Copy safety (03 §6.4, 04 §1.3): R1 "never hold a user object ... Designated values follow the value policy"; R6 "No `mget()` or list snapshots of user objects. Checkpoint pre-images are bindings in a private environment released with `rm()`; list and S4 pre-images are defused before dropping; a finalizer does the same for dropped sessions"; R7 "Every `serialize()`/`saveRDS()` of user data passes `ascii = FALSE` explicitly ... through one leaf wrapper"; `gptr_rewind()` is tagged [R1][R6] ("pre-images are released or swapped by reference, never copied"); `gptr_preimage()` methods are leaves [R4].
-- Review amendments (05 P16, 04 §15): "File restores stay inside the project root and `tempdir()` unless the user confirms each outside path (`ask_human`, IC-52)"; "blob garbage collection keeps blobs referenced by any session file of the project and skips while another live pid holds a session lock (IC-71)" ("prunes only blobs unreferenced by every session file of the project and older than `gptr.checkpoint_days`"); "after a Codex `workspace-write` exec the files checkpointer walks, so `/undo` covers it (IC-65)".
-- Modes (03 §6.16, G7 §4.5): "plan: conversation only"; manual/edits: "the permission detail view says 'cannot be undone' when capture is impossible"; auto: "a 25-token notice" (`note: <name> (<size>) was <overwritten|modified|removed> without an undo copy (<reason>).`).
-- Lint rules that bind this plan (04 §12.3): no `Sys.setenv(` outside `auth-dotenv.R`, no `.Random.seed` assignment outside `rng_swap()`/`with_seed_preserved()`, no `serialize(`/`saveRDS(` without `ascii = FALSE` outside `utils-paths.R`, no `withr::` in `R/`, `cli_*()` first arguments literal.
+- Owned files (05 P16 "Owns"): `R/ckpt-objects.R`, `R/ckpt-files.R`, `R/ckpt-rewind.R`,
+  `tests/testthat/test-ckpt-objects.R`, `tests/testthat/test-ckpt-files.R`,
+  `tests/testthat/test-ckpt-rewind.R`, `tests/testthat/test-copy-ckpt.R`; `NAMESPACE` and `man/`
+  only through `devtools::document()`.
+- Layer L4 (03 section 3.2). L4 "may call: the extension API (`gptr$register()`, `ctx`), L0, their
+  own area, the declared services `eval-*`, `env-*`, `tool-walk`, `proc-*`, the §7.0 service table
+  of the contract, and the **kernel SDK** allowlist [IC-33]"; "L6 and L3 never call an L4 capability
+  by function name".
+- Exports (04 sections 6.5, 6.6; 3 of the 63):
+  `gptr_rewind(s, turn = -1L, to = NULL, restore = c("all", "conversation", "workspace"), force = FALSE, preview = FALSE)`,
+  `gptr_checkpoints(s, all = FALSE)`, `gptr_preimage(x, name, ctx, ...)` [experimental] with S3
+  methods `default` and `data.table`.
+- `gptr_preimage()` returns
+  `list(mode = "ref" | "copy" | "none", reason = chr(1) | NULL, copy = <deep copy> | NULL)`; `ctx`
+  is `list(predicted = chr in assign, modify, byref, remove, none; bytes num(1); budget num(1))`;
+  "Packages add methods with delayed `S3method(gptr::gptr_preimage, cls)`".
+- Internal cross-plan functions (04 section 7.16): `builtin_checkpoints(gptr)` "registers
+  `checkpointer` specs `objects`, `files`, `state`; command specs `/undo`, `/redo`, `/rewind`,
+  `/checkpoints`; the service `checkpoint.note`"; `ckpt_predict(code)` ->
+  `list(assign, modify, byref, remove, super, files, unknown, process)` ("P11's `code_targets()`
+  reduced"); `ckpt_store_put(path)` / `ckpt_store_get(hash, dest)` ("content-addressed blobs
+  `<root>/checkpoints/blobs/<2hex>/<xxh128>[.gz]`"; consumer P23; `ckpt_store_put()` is in the IC-33
+  kernel SDK).
+- Service (04 section 7.0): `checkpoint.note` = `function(call, run) chr(1) or NULL` ("cannot be
+  undone: ..."), provided by P16, owned by `builtin:checkpoints`, consumed by P06's permission
+  request record and P11's detail view.
+- `checkpointer` kind (04 section 10.2 row 29) [experimental]: "`scope` (`objects`, `files`,
+  `state`, `artifacts`, `other`); `before` `function(call, ctx)` -> token; `after`
+  `function(call, ctx, token)` -> JSON-able fragment; `undo`/`redo`
+  `function(fragment, ctx, force)` -> chr report lines; `prune` `function(live_keys, ctx)`;
+  `describe` `function(fragment)` -> chr"; "never throws into the loop (a failure marks its fragment
+  not restorable); runs only for sequential, non-read-only tools".
+- Options (04 section 3.1): `gptr.undo_capture_max` `1e8`, `gptr.undo_max_bytes` `1e9`,
+  `gptr.undo_spill_max` `2e9`, `gptr.undo_turns` `20L`, `gptr.checkpoint` `"on"` (`"on"`, `"files"`,
+  `"off"`), `gptr.checkpoint_disk_bytes` `2e9`, `gptr.checkpoint_days` `30`, `gptr.checkpoint_turns`
+  `100`, `gptr.checkpoint_track_file_max` `1e6`, `gptr.checkpoint_track_total` `1e8`,
+  `gptr.checkpoint_capture_max` `5e7`, `gptr.checkpoint_scan_budget` `0.25`, `gptr.checkpoint_rng`
+  `TRUE`, `gptr.checkpoint_close_devices` `FALSE`; settings key `checkpoint` `"on"` (04
+  section 11.2; P08 registers its `setting` spec). Read through `gptr_opt()` / `setting_get()`.
+- Conditions (04 section 2.2): `gptr_error_busy` (field `session`; "the session is running"),
+  `gptr_error_rewind_range` (fields `turn`, `turns`; "rewind target out of range"),
+  `gptr_error_invalid_argument` (`arg`, `expected`), `gptr_error_permission` (IC-53 item 3:
+  `gptr_rewind` "on a session other than the running one" from model code), warning
+  `gptr_warning_rewind_partial` (field `report`).
+- Entries (04 section 4.6): `gptr.checkpoint` "G7 §3.1 shape (object names, addresses, sizes,
+  classes, capture mode; file paths, hashes, modes; state names; artifact `current` before/after);
+  never values" (P06 writes the container
+  `{tool_call_id, fragments: {<checkpointer>: <fragment>}}`); `gptr.rewind`
+  "`{from, to, keep, restore, report: [chr]}`; parented at the target, becomes the leaf".
+- Checkpoint store (04 section 11.14): `<root>/checkpoints/blobs/<2hex>/<xxh128>[.gz]` "file
+  contents (gzip level 1), shared by the project's sessions";
+  `<root>/checkpoints/objects/<session id>/<key>.rdsx` "spilled object images
+  (serialize_leaf(ascii = FALSE, xdr = FALSE))"; `<root>/checkpoints/index.json`
+  `{"blobs": {"<hash>": <last referenced epoch>}}` "rebuilt if missing"; "Never inside `.git`, never
+  in `R_user_dir()`". `<root>` is the workspace root (`.gptr/` or `tempdir()/gptr`, 04
+  section 11.1).
+- Events (04 section 10.4): `session_before_tree` (first decision; payload `from`, `to`, `plan`
+  (df); returns `list(cancel = TRUE, reason)`), `session_tree` (notify; `from`, `to`, `report`),
+  `checkpoint` (notify; `tool_call_id`, `objects`, `files`, `restorable` (counts)); all emitted by
+  P16.
+- Context block kind `workspace_changes` "(attrs `since`, `reason`, optional)" (04 section 4.1.1): a
+  partial rewind "sends `<workspace_changes since=... reason="rewind">` (about 87 tokens)" (03
+  section 6.16); a full restore sends nothing.
+- Session fields (04 section 5.1): `last_rewind` "report of the last `gptr_rewind()`", `editor_text`
+  "the undone prompt after a rewind".
+- Listing (04 section 5.12): class `c("gptr_checkpoints", "gptr_listing", "data.frame")`, columns
+  `turn`, `id`, `time`, `prompt`, `objects`, `files`, `held_mb`, `disk_mb`, `branch`, built by
+  `new_listing()`.
+- Copy safety (03 section 6.4, 04 section 1.3): R1 "never hold a user object ... Designated values
+  follow the value policy"; R6 "No `mget()` or list snapshots of user objects. Checkpoint pre-images
+  are bindings in a private environment released with `rm()`; list and S4 pre-images are defused
+  before dropping; a finalizer does the same for dropped sessions"; R7 "Every
+  `serialize()`/`saveRDS()` of user data passes `ascii = FALSE` explicitly ... through one leaf
+  wrapper"; `gptr_rewind()` is tagged [R1][R6] ("pre-images are released or swapped by reference,
+  never copied"); `gptr_preimage()` methods are leaves [R4].
+- Review amendments (05 P16, 04 section 15): "File restores stay inside the project root and
+  `tempdir()` unless the user confirms each outside path (`ask_human`, IC-52)"; "blob garbage
+  collection keeps blobs referenced by any session file of the project and skips while another live
+  pid holds a session lock (IC-71)" ("prunes only blobs unreferenced by every session file of the
+  project and older than `gptr.checkpoint_days`"); "after a Codex `workspace-write` exec the files
+  checkpointer walks, so `/undo` covers it (IC-65)".
+- Modes (03 section 6.16, G7 section 4.5): "plan: conversation only"; manual/edits: "the permission
+  detail view says 'cannot be undone' when capture is impossible"; auto: "a 25-token notice"
+  (`note: <name> (<size>) was <overwritten|modified|removed> without an undo copy (<reason>).`).
+- Lint rules that bind this plan (04 section 12.3): no `Sys.setenv(` outside `auth-dotenv.R`, no
+  `.Random.seed` assignment outside `rng_swap()`/`with_seed_preserved()`, no `serialize(`/`saveRDS(`
+  without `ascii = FALSE` outside `utils-paths.R`, no `withr::` in `R/`, `cli_*()` first arguments
+  literal.
 
 ## File Structure
 
@@ -51,21 +147,76 @@
 
 ## Interfaces consumed (exact names; 04 is authoritative)
 
-- P01: `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `gptr_warn(message, class, ..., .data = NULL, .once = NULL)`, `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `check_class(x, class, arg, null = FALSE)`, `check_number(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE)`, `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_flag(x, arg, null = FALSE)`, `check_choice(x, choices, arg)`, `gptr_opt(name)`, `setting_get(key, session = NULL, default = NULL)`, `id_new(prefix = "", n = 10L)`, `hash_file(path)`, `hash_xxh128(x)`, `write_atomic(path, content)`, `serialize_leaf(object, xdr = TRUE)`, `path_norm(path)`, `project_root(path = getwd())`, `workspace_dir(path = getwd())`, `workspace_root(create = TRUE)`, `gptr_user_dir(which = c("config", "cache", "data"), create = FALSE)`, `path_class(path, root = project_root())`, `gptr_has_human()`, `gptr_can_prompt()`, `gptr_is_interactive()`, `est_tokens(x, class)`, `json_encode(x, pretty = FALSE)`, `json_obj()`, `new_listing(df, class, footer = NULL)`, `block_text(text, signature = NULL)`, `msg_text(msg)`, `ev_new(type, ...)`, `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_get(name)`, `ext_service_has(name)`, `` `%||%` ``; tests: `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`, `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`, `fake_tool(name, ..., .text = NULL, .id = NULL)`, `fake_requests(spec)`, `local_gptr_options(..., .env = parent.frame())`, `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`, `rscript_path()`, `front_end()` (mocked).
-- P02: `gptr_spec(kind, name, ...)`, `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`, `gptr_command(name, handler, description = NULL, complete = NULL)`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `registry_all(kind, session = NULL)`, `registry_get(kind, name, session = NULL)`, `ev_dispatch(event, payload, session = NULL, ctx = NULL)`, `ctx_new(session, run = NULL)`; the factory API object members `gptr$state`, `gptr$register(spec)`, `gptr$on(event, handler, matcher = NULL)`; `ctx$session`, `ctx$envir`, `ctx$run`, `ctx$mode()`, `ctx$has_ui()`, `ctx$ui()`; tests: `gptr_register(spec)`, `gptr_registry(kind = NULL, diagnostics = FALSE)`, `gptr_hook(event, handler, matcher = NULL)`.
+- P01: `gptr_abort(message, class, ..., .data = NULL, call = NULL)`,
+  `gptr_warn(message, class, ..., .data = NULL, .once = NULL)`,
+  `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`,
+  `check_class(x, class, arg, null = FALSE)`,
+  `check_number(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE)`,
+  `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_flag(x, arg, null = FALSE)`,
+  `check_choice(x, choices, arg)`, `gptr_opt(name)`,
+  `setting_get(key, session = NULL, default = NULL)`, `id_new(prefix = "", n = 10L)`,
+  `hash_file(path)`, `hash_xxh128(x)`, `write_atomic(path, content)`,
+  `serialize_leaf(object, xdr = TRUE)`, `path_norm(path)`, `project_root(path = getwd())`,
+  `workspace_dir(path = getwd())`, `workspace_root(create = TRUE)`,
+  `gptr_user_dir(which = c("config", "cache", "data"), create = FALSE)`,
+  `path_class(path, root = project_root())`, `gptr_has_human()`, `gptr_can_prompt()`,
+  `gptr_is_interactive()`, `est_tokens(x, class)`, `json_encode(x, pretty = FALSE)`, `json_obj()`,
+  `new_listing(df, class, footer = NULL)`, `block_text(text, signature = NULL)`, `msg_text(msg)`,
+  `ev_new(type, ...)`, `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`,
+  `ext_service_get(name)`, `ext_service_has(name)`,
+  `` `%||%` ``; tests:
+  `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`,
+  `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`,
+  `fake_tool(name, ..., .text = NULL, .id = NULL)`, `fake_requests(spec)`,
+  `local_gptr_options(..., .env = parent.frame())`,
+  `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`,
+  `rscript_path()`, `front_end()` (mocked).
+- P02: `gptr_spec(kind, name, ...)`,
+  `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`,
+  `gptr_command(name, handler, description = NULL, complete = NULL)`,
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`,
+  `registry_all(kind, session = NULL)`, `registry_get(kind, name, session = NULL)`,
+  `ev_dispatch(event, payload, session = NULL, ctx = NULL)`, `ctx_new(session, run = NULL)`; the
+  factory API object members `gptr$state`, `gptr$register(spec)`,
+  `gptr$on(event, handler, matcher = NULL)`; `ctx$session`, `ctx$envir`, `ctx$run`, `ctx$mode()`,
+  `ctx$has_ui()`, `ctx$ui()`; tests: `gptr_register(spec)`,
+  `gptr_registry(kind = NULL, diagnostics = FALSE)`, `gptr_hook(event, handler, matcher = NULL)`.
 - P04: `pid_alive(pid, create_time = NULL)`.
-- P06 (kernel SDK, IC-33): `session_data(s)`, `session_live(s)` (`$ctx`), `session_home(s)`, `session_append(s, entry)` (an entry in R shape `list(type = "custom", custom_type, data)`; it sets `id`, `parent_id` = the current leaf, `timestamp`, and makes the entry the leaf), `run_current()` (fields `session`, `signal`), `run_eval_env(run)`; `.d` fields `id`, `entries`, `index`, `leaf`, `turns`, `status`, `reason`, `last_text`, `fork_of`, `replayed`, `file`, `model`, `last_rewind`, `editor_text`; user-message entries carry `gptr$turn`; the dispatcher's `checkpoint_before()`/`checkpoint_after()` and the container `{tool_call_id, fragments}`; session locks `<file>.lock/pid` (two lines: pid, process creation time); tests: `gptr_fork(s, at = NULL, envir = c("overlay", "shared"))`.
-- P08: `peter()`, `gptr_on(s, event, handler, matcher = NULL)` (tests); the IC-53 one-shot token `run$signal$control`.
-- P09: `env_snapshot(envir, previous = NULL)` (df `name`, `kind`, `address`, `class`, `bytes`, `shape`, `fp`; never forces promises).
-- P11: `code_targets(code)` -> `list(assign, modify, byref, remove, super, files, unknown, process, calls, parse_error)` (IC-31); service `ui.get` = `function(session = NULL) <spec:ui>` (`has_ui()`, `select(title, choices, default = NULL, details = NULL, multiple = FALSE, allow_other = FALSE)`); test helper `local_scripted_ui(answers = list(), .env = parent.frame())`.
-- P15: the `session_tree` hook of `builtin:documents` makes undone blocks inert (04 §7.15); options `gptr.record`, `gptr.replay`.
+- P06 (kernel SDK, IC-33): `session_data(s)`, `session_live(s)` (`$ctx`), `session_home(s)`,
+  `session_append(s, entry)` (an entry in R shape `list(type = "custom", custom_type, data)`; it
+  sets `id`, `parent_id` = the current leaf, `timestamp`, and makes the entry the leaf),
+  `run_current()` (fields `session`, `signal`), `run_eval_env(run)`; `.d` fields `id`, `entries`,
+  `index`, `leaf`, `turns`, `status`, `reason`, `last_text`, `fork_of`, `replayed`, `file`, `model`,
+  `last_rewind`, `editor_text`; user-message entries carry `gptr$turn`; the dispatcher's
+  `checkpoint_before()`/`checkpoint_after()` and the container `{tool_call_id, fragments}`; session
+  locks `<file>.lock/pid` (two lines: pid, process creation time); tests:
+  `gptr_fork(s, at = NULL, envir = c("overlay", "shared"))`.
+- P08: `peter()`, `gptr_on(s, event, handler, matcher = NULL)` (tests); the IC-53 one-shot token
+  `run$signal$control`.
+- P09: `env_snapshot(envir, previous = NULL)` (df `name`, `kind`, `address`, `class`, `bytes`,
+  `shape`, `fp`; never forces promises).
+- P11: `code_targets(code)` ->
+  `list(assign, modify, byref, remove, super, files, unknown, process, calls, parse_error)` (IC-31);
+  service `ui.get` = `function(session = NULL) <spec:ui>` (`has_ui()`,
+  `select(title, choices, default = NULL, details = NULL, multiple = FALSE, allow_other = FALSE)`);
+  test helper `local_scripted_ui(answers = list(), .env = parent.frame())`.
+- P15: the `session_tree` hook of `builtin:documents` makes undone blocks inert (04 section 7.15);
+  options `gptr.record`, `gptr.replay`.
 
 ## Interfaces produced
 
 - `gptr_rewind()`, `gptr_checkpoints()`, `gptr_preimage()` (exports above).
-- `builtin_checkpoints(gptr)`; checkpointer specs `objects`, `files`, `state` (scope = name), each also carrying `preview(fragment, ctx, force, direction)` (a dry run, an item table) and `ckpt_state` (the extension state); commands `undo`, `redo`, `rewind`, `checkpoints`; the `context_block` `workspace_changes` (placement `both`, order 101, budget 300) rendering the rewind note.
-- `ckpt_predict(code)`, `ckpt_store_put(path)`, `ckpt_store_get(hash, dest)`, service `checkpoint.note`.
-- Events `checkpoint`, `session_before_tree`, `session_tree`; entries `gptr.rewind` (data `from`, `to`, `keep`, `restore`, `report`, plus the additive `undone`, `redone`: the checkpoint entry ids undone and redone) and the files-scan `gptr.checkpoint` entries `{tool_call_id: "scan-<fragment id>", fragments: {files}}`.
+- `builtin_checkpoints(gptr)`; checkpointer specs `objects`, `files`, `state` (scope = name), each
+  also carrying `preview(fragment, ctx, force, direction)` (a dry run, an item table) and
+  `ckpt_state` (the extension state); commands `undo`, `redo`, `rewind`, `checkpoints`; the
+  `context_block` `workspace_changes` (placement `both`, order 101, budget 300) rendering the rewind
+  note.
+- `ckpt_predict(code)`, `ckpt_store_put(path)`, `ckpt_store_get(hash, dest)`, service
+  `checkpoint.note`.
+- Events `checkpoint`, `session_before_tree`, `session_tree`; entries `gptr.rewind` (data `from`,
+  `to`, `keep`, `restore`, `report`, plus the additive `undone`, `redone`: the checkpoint entry ids
+  undone and redone) and the files-scan `gptr.checkpoint` entries
+  `{tool_call_id: "scan-<fragment id>", fragments: {files}}`.
 
 ## Tasks
 
@@ -81,15 +232,49 @@
 ### Task 1: Pre-image store and `gptr_preimage()`
 
 **Files:**
+
 - Create: `R/ckpt-objects.R`
 - Test: `tests/testthat/test-ckpt-objects.R` (create), `tests/testthat/test-copy-ckpt.R` (create)
 - Generated: `NAMESPACE`, `man/gptr_preimage.Rd` (`devtools::document()`)
 
 **Interfaces:**
-- Consumes: P01 `id_new(prefix = "", n = 10L)`, `write_atomic(path, content)`, `serialize_leaf(object, xdr = TRUE)` (R7: `serialize(object, NULL, ascii = FALSE, xdr = xdr)`); `rlang::obj_address()`; `methods::slotNames()`; tests: P01 `expect_no_copy()` (and the `save_rds()` leaf in the child script), `local_gptr_options()`.
-- Produces: the export `gptr_preimage(x, name, ctx, ...)` (04 §6.6) with methods `gptr_preimage.default` and `gptr_preimage.data.table`; internal helpers used by Tasks 2-8: `ckpt_frag_id()`, `ckpt_chr(x)`, `ckpt_scalar(x, default = "")`, `ckpt_num(x)`, `ckpt_json_num(x)`, `ckpt_fmt_bytes(b)`, `ckpt_items()`, `ckpt_item(out, item, ok, action)`, `ckpt_lines(items)`, `ckpt_is_reference(x)`, `ckpt_within_budget(bytes, budget)`; the store `ckpt_obj_store(dir = NULL)` (environment: `slots`, `index`, `dir`, `seq`), `ckpt_index_empty()`, `ckpt_index_add(store, key, frag, name, role, where = "memory", file = "", bytes = NA_real_, turn = NA_integer_, expect = "")`, `ckpt_index_find(store, frag, name, role)`, `ckpt_index_remove(store, keys)`, `ckpt_addr(envir, name)`, `ckpt_capture(store, envir, names)` -> df(`name`, `key`, `address`), `ckpt_capture_value(store, value)`, `ckpt_disk_file(dir, key)`, `ckpt_write_image(file, envir, name)`, `ckpt_read_image(file)`, `ckpt_capture_disk(store, envir, name)`, `ckpt_settle(store, envir, pending, frag = "", turn = NA_integer_)` -> df(`name`, `key`, `status`, `pre_address`, `post_address`), `ckpt_restore(store, envir, name, key, expect = NULL, force = FALSE, frag = "", turn = NA_integer_)` -> `list(ok, reason, redo, address)`, `ckpt_uncreate(store, envir, name, frag = "", turn = NA_integer_)`, `ckpt_leaf_children(x)`, `ckpt_defuse(store, key)`, `ckpt_spill(store, key)`, `ckpt_drop(store, keys)`, `ckpt_obj_sweep(store)`, `ckpt_unshared_bytes(store, key, envir, name, depth = 4L)`; the per-session state `ckpt_ck_new(sid, spill_dir = NULL)` (environment: `sid`, `obj`, `snap`, `files`, `state_img`, `notes`, `rewind_note`, `rewind_since`, `gc_done`) with its finalizer `ckpt_ck_finalize(ck)`.
 
-The store is G7's verified `p1/ckpt_obj.R` (report section 5.2; verification log items 1-4) with the deltas listed in the file header. The per-session checkpoint state `ckpt_ck_new()` and its finalizer `ckpt_ck_finalize()` (G7's `c06b_finalizer.R`) are part of this task, because the copy suite's finalizer row needs them. The copy suite reproduces G7's 24 EDIT verdicts of `run_cases.R` (report section 5.2 output: 8 COPY lines, 16 in-place lines) and the five `dbg_ser.R` serialize cases, plus two P16 rows (the R7 image writer and the state finalizer of G7's `c06b_finalizer.R`). Row c17 counts the attribute duplicate by address because tracemem does not report it (G7 logged "tracemem duplication events: 0" for c17 and found the copy by address: `attr<-` on a long vector makes an ALTREP wrapper, which tracemem does not see).
+- Consumes: P01 `id_new(prefix = "", n = 10L)`, `write_atomic(path, content)`,
+  `serialize_leaf(object, xdr = TRUE)` (R7: `serialize(object, NULL, ascii = FALSE, xdr = xdr)`);
+  `rlang::obj_address()`; `methods::slotNames()`; tests: P01 `expect_no_copy()` (and the
+  `save_rds()` leaf in the child script), `local_gptr_options()`.
+- Produces: the export `gptr_preimage(x, name, ctx, ...)` (04 section 6.6) with methods
+  `gptr_preimage.default` and `gptr_preimage.data.table`; internal helpers used by Tasks 2-8:
+  `ckpt_frag_id()`, `ckpt_chr(x)`, `ckpt_scalar(x, default = "")`, `ckpt_num(x)`,
+  `ckpt_json_num(x)`, `ckpt_fmt_bytes(b)`, `ckpt_items()`, `ckpt_item(out, item, ok, action)`,
+  `ckpt_lines(items)`, `ckpt_is_reference(x)`, `ckpt_within_budget(bytes, budget)`; the store
+  `ckpt_obj_store(dir = NULL)` (environment: `slots`, `index`, `dir`, `seq`), `ckpt_index_empty()`,
+  `ckpt_index_add(store, key, frag, name, role, where = "memory", file = "", bytes = NA_real_, turn = NA_integer_, expect = "")`,
+  `ckpt_index_find(store, frag, name, role)`, `ckpt_index_remove(store, keys)`,
+  `ckpt_addr(envir, name)`, `ckpt_capture(store, envir, names)` -> df(`name`, `key`, `address`),
+  `ckpt_capture_value(store, value)`, `ckpt_disk_file(dir, key)`,
+  `ckpt_write_image(file, envir, name)`, `ckpt_read_image(file)`,
+  `ckpt_capture_disk(store, envir, name)`,
+  `ckpt_settle(store, envir, pending, frag = "", turn = NA_integer_)` -> df(`name`, `key`, `status`,
+  `pre_address`, `post_address`),
+  `ckpt_restore(store, envir, name, key, expect = NULL, force = FALSE, frag = "", turn = NA_integer_)`
+  -> `list(ok, reason, redo, address)`,
+  `ckpt_uncreate(store, envir, name, frag = "", turn = NA_integer_)`, `ckpt_leaf_children(x)`,
+  `ckpt_defuse(store, key)`, `ckpt_spill(store, key)`, `ckpt_drop(store, keys)`,
+  `ckpt_obj_sweep(store)`, `ckpt_unshared_bytes(store, key, envir, name, depth = 4L)`; the
+  per-session state `ckpt_ck_new(sid, spill_dir = NULL)` (environment: `sid`, `obj`, `snap`,
+  `files`, `state_img`, `notes`, `rewind_note`, `rewind_since`, `gc_done`) with its finalizer
+  `ckpt_ck_finalize(ck)`.
+
+The store is G7's verified `p1/ckpt_obj.R` (report section 5.2; verification log items 1-4) with the
+deltas listed in the file header. The per-session checkpoint state `ckpt_ck_new()` and its finalizer
+`ckpt_ck_finalize()` (G7's `c06b_finalizer.R`) are part of this task, because the copy suite's
+finalizer row needs them. The copy suite reproduces G7's 24 EDIT verdicts of `run_cases.R` (report
+section 5.2 output: 8 COPY lines, 16 in-place lines) and the five `dbg_ser.R` serialize cases, plus
+two P16 rows (the R7 image writer and the state finalizer of G7's `c06b_finalizer.R`). Row c17
+counts the attribute duplicate by address because tracemem does not report it (G7 logged "tracemem
+duplication events: 0" for c17 and found the copy by address: `attr<-` on a long vector makes an
+ALTREP wrapper, which tracemem does not see).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -440,7 +625,12 @@ test_that("user data is serialised without a sticky reference only with ascii = 
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-objects|copy-ckpt")'`
 
-Expected: every test of `test-ckpt-objects.R` errors with `could not find function "gptr_preimage"`, `"ckpt_obj_store"` or `"ckpt_ck_new"`; every copy row fails with `expect_no_copy(...): the script did not finish` (the child's `get('ckpt_obj_store', envir = ns)` finds nothing) and `n` is `NA`; summary `[ FAIL 73 | WARN 0 | SKIP 0 | PASS 1 ]` (11 erroring tests, 2 failures per copy row for 31 rows; on a build without `capabilities("profmem")` the copy tests skip: `[ FAIL 11 | WARN 0 | SKIP 2 | PASS 1 ]`).
+Expected: every test of `test-ckpt-objects.R` errors with `could not find function "gptr_preimage"`,
+`"ckpt_obj_store"` or `"ckpt_ck_new"`; every copy row fails with
+`expect_no_copy(...): the script did not finish` (the child's `get('ckpt_obj_store', envir = ns)`
+finds nothing) and `n` is `NA`; summary `[ FAIL 73 | WARN 0 | SKIP 0 | PASS 1 ]` (11 erroring tests,
+2 failures per copy row for 31 rows; on a build without `capabilities("profmem")` the copy tests
+skip: `[ FAIL 11 | WARN 0 | SKIP 2 | PASS 1 ]`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1000,13 +1190,17 @@ Regenerate the documentation:
 
 Run: `Rscript --vanilla -e 'devtools::document()'`
 
-Expected: `NAMESPACE` gains `export(gptr_preimage)`, `S3method(gptr_preimage,default)` and `S3method(gptr_preimage,data.table)`; `man/gptr_preimage.Rd` is written.
+Expected: `NAMESPACE` gains `export(gptr_preimage)`, `S3method(gptr_preimage,default)` and
+`S3method(gptr_preimage,data.table)`; `man/gptr_preimage.Rd` is written.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-objects|copy-ckpt")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 118 ]` (55 in `test-ckpt-objects.R`, 63 in `test-copy-ckpt.R`: 1 + 2 x 24 matrix rows, 2 x 7 serialize rows). Without `capabilities("profmem")`: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 56 ]`. Without data.table installed: one more SKIP and 6 fewer PASS.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 118 ]` (55 in `test-ckpt-objects.R`, 63 in
+`test-copy-ckpt.R`: 1 + 2 x 24 matrix rows, 2 x 7 serialize rows). Without
+`capabilities("profmem")`: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 56 ]`. Without data.table installed:
+one more SKIP and 6 fewer PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1018,14 +1212,46 @@ git commit -m "feat(ckpt): add copy-safe object pre-images and gptr_preimage()"
 ### Task 2: Capture policy, the objects checkpointer and `checkpoint.note`
 
 **Files:**
+
 - Modify: `R/ckpt-objects.R` (append)
 - Test: `tests/testthat/test-ckpt-objects.R` (append)
 
 **Interfaces:**
-- Consumes: Task 1 (the store, the per-session state `ckpt_ck_new()`); P01 `gptr_opt(name)`, `setting_get(key, session = NULL, default = NULL)`, `workspace_root(create = TRUE)`, `workspace_dir(path = getwd())`, `gptr_has_human()`; P06 `run_current()`, `run_eval_env(run)`; P09 `env_snapshot(envir, previous = NULL)` (`name`, `kind`, `address`, `class`, `bytes`, `shape`, `fp`; `bytes` is `NA` for environments, functions, external pointers and compact sequences; promises and active bindings are never forced); P11 `code_targets(code)` (IC-31); the generic `gptr_preimage()` of Task 1.
-- Produces (used by Tasks 6-8): `ckpt_store_root()` = `file.path(workspace_root(create = TRUE), "checkpoints")`; `ckpt_spill_allowed()`; `ckpt_limits()`; `ckpt_predict(code)` -> `list(assign, modify, byref, remove, super, files, unknown, process)` (04 §7.16); `ckpt_predicted(names, tg)`; `ckpt_capture_how(bytes, predicted, mode, spill_ok, lim)`; `ckpt_value_snapshot(envir, previous = NULL)`; `ckpt_snapshot(ck, envir)`; `ckpt_preimage_modes(store, envir, snap, pred, lim, dry = FALSE)`; the objects checkpointer `ckpt_objects_before(ck, call, envir, turn = 1L)` -> token, `ckpt_objects_after(ck, call, envir, token)` -> `list(id, turn, objects = list(<row>))` or `NULL`, `ckpt_objects_undo(ck, fragment, envir, force = FALSE, dry = FALSE)` and `ckpt_objects_redo(...)` -> item tables, `ckpt_objects_describe(fragment)`, `ckpt_objects_notes(fragment)`, `ckpt_objects_budget(ck, turn)`; the service function `ckpt_note(call, run = NULL)` (registered as `checkpoint.note` in Task 6).
 
-An objects fragment row is `list(name, status ("changed", "removed", "created"), how ("ref", "copy", "disk", "none", "skip", "created"), class, bytes, pre_address, post_address, restorable, reason, image, where, held_bytes)`: names, classes, sizes and addresses only, never a value (04 §4.6). The capture plan is G7 section 3.4 step 3: every value binding up to `gptr.undo_capture_max` by reference; a predicted `assign`/`remove`/`super` target up to `gptr.undo_max_bytes` by reference; a predicted in-place (`modify`) edit of a larger object up to `gptr.undo_spill_max` as an eager disk image when images may go to disk; a predicted by-reference data.table edit as the `gptr_preimage()` copy; the rest is not undoable and is reported (the `note:` line of G7 section 3.9 in the tool result, the "cannot be undone" note in the permission detail view). After the call the settle step releases unchanged captures with `rm()`; an unchanged address with a changed fingerprint means a by-reference modification (not restorable). The turn-end budget drops images older than `gptr.undo_turns` turns, then spills the largest image while the held bytes exceed `gptr.undo_max_bytes`, or drops it when it cannot be spilled (G7 section 3.4 step 6).
+- Consumes: Task 1 (the store, the per-session state `ckpt_ck_new()`); P01 `gptr_opt(name)`,
+  `setting_get(key, session = NULL, default = NULL)`, `workspace_root(create = TRUE)`,
+  `workspace_dir(path = getwd())`, `gptr_has_human()`; P06 `run_current()`, `run_eval_env(run)`; P09
+  `env_snapshot(envir, previous = NULL)` (`name`, `kind`, `address`, `class`, `bytes`, `shape`,
+  `fp`; `bytes` is `NA` for environments, functions, external pointers and compact sequences;
+  promises and active bindings are never forced); P11 `code_targets(code)` (IC-31); the generic
+  `gptr_preimage()` of Task 1.
+- Produces (used by Tasks 6-8): `ckpt_store_root()` =
+  `file.path(workspace_root(create = TRUE), "checkpoints")`; `ckpt_spill_allowed()`;
+  `ckpt_limits()`; `ckpt_predict(code)` ->
+  `list(assign, modify, byref, remove, super, files, unknown, process)` (04 section 7.16);
+  `ckpt_predicted(names, tg)`; `ckpt_capture_how(bytes, predicted, mode, spill_ok, lim)`;
+  `ckpt_value_snapshot(envir, previous = NULL)`; `ckpt_snapshot(ck, envir)`;
+  `ckpt_preimage_modes(store, envir, snap, pred, lim, dry = FALSE)`; the objects checkpointer
+  `ckpt_objects_before(ck, call, envir, turn = 1L)` -> token,
+  `ckpt_objects_after(ck, call, envir, token)` -> `list(id, turn, objects = list(<row>))` or `NULL`,
+  `ckpt_objects_undo(ck, fragment, envir, force = FALSE, dry = FALSE)` and
+  `ckpt_objects_redo(...)` -> item tables, `ckpt_objects_describe(fragment)`,
+  `ckpt_objects_notes(fragment)`, `ckpt_objects_budget(ck, turn)`; the service function
+  `ckpt_note(call, run = NULL)` (registered as `checkpoint.note` in Task 6).
+
+An objects fragment row is
+`list(name, status ("changed", "removed", "created"), how ("ref", "copy", "disk", "none", "skip", "created"), class, bytes, pre_address, post_address, restorable, reason, image, where, held_bytes)`:
+names, classes, sizes and addresses only, never a value (04 section 4.6). The capture plan is G7
+section 3.4 step 3: every value binding up to `gptr.undo_capture_max` by reference; a predicted
+`assign`/`remove`/`super` target up to `gptr.undo_max_bytes` by reference; a predicted in-place
+(`modify`) edit of a larger object up to `gptr.undo_spill_max` as an eager disk image when images
+may go to disk; a predicted by-reference data.table edit as the `gptr_preimage()` copy; the rest is
+not undoable and is reported (the `note:` line of G7 section 3.9 in the tool result, the "cannot be
+undone" note in the permission detail view). After the call the settle step releases unchanged
+captures with `rm()`; an unchanged address with a changed fingerprint means a by-reference
+modification (not restorable). The turn-end budget drops images older than `gptr.undo_turns` turns,
+then spills the largest image while the held bytes exceed `gptr.undo_max_bytes`, or drops it when it
+cannot be spilled (G7 section 3.4 step 6).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1261,7 +1487,9 @@ test_that("checkpoint.note names what cannot be undone", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-objects")'`
 
-Expected: `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 55 ]`; the eleven new tests error with `could not find function "ckpt_predict"`, `"ckpt_capture_how"`, `"ckpt_objects_before"`, `"ckpt_objects_budget"` or `"ckpt_note"`.
+Expected: `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 55 ]`; the eleven new tests error with
+`could not find function "ckpt_predict"`, `"ckpt_capture_how"`, `"ckpt_objects_before"`,
+`"ckpt_objects_budget"` or `"ckpt_note"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1760,7 +1988,12 @@ Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-objects")'`
 
 Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 129 ]` (55 from Task 1, 74 new).
 
-Cross-plan note (do not edit P01's files): IC-31 makes `ckpt_predict()` call P11's `code_targets()` (L4 `perm-classify.R`), which IC-33's kernel SDK (P01's `arch_kernel_sdk()`) does not list. P01's `tests/testthat/helper-arch.R` admits exactly this edge through `arch_contract_edges()` (caller area `ckpt` -> `code_targets`, P01's cross-plan consolidation), so `Rscript --vanilla -e 'devtools::test(filter = "arch-layers")'` reports no P16 edge; no other P16 edge leaves the IC-33 allowlist (self-review, ambiguity 1).
+Cross-plan note (do not edit P01's files): IC-31 makes `ckpt_predict()` call P11's `code_targets()`
+(L4 `perm-classify.R`), which IC-33's kernel SDK (P01's `arch_kernel_sdk()`) does not list. P01's
+`tests/testthat/helper-arch.R` admits exactly this edge through `arch_contract_edges()` (caller area
+`ckpt` -> `code_targets`, P01's cross-plan consolidation), so
+`Rscript --vanilla -e 'devtools::test(filter = "arch-layers")'` reports no P16 edge; no other P16
+edge leaves the IC-33 allowlist (self-review, ambiguity 1).
 
 - [ ] **Step 5: Commit**
 
@@ -1772,14 +2005,31 @@ git commit -m "feat(ckpt): add the object capture policy, objects checkpointer a
 ### Task 3: The state checkpointer
 
 **Files:**
+
 - Modify: `R/ckpt-objects.R` (append)
 - Test: `tests/testthat/test-ckpt-objects.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-2 (`ckpt_frag_id()`, `ckpt_chr()`, `ckpt_scalar()`, `ckpt_items()`, `ckpt_item()`, `ckpt_limits()`, `ckpt_ck_new()`); P01 `hash_xxh128(x)`.
-- Produces (used by Task 6): `ckpt_state_before(ck, call, turn = 1L)` -> token or `NULL` (calls without R code); `ckpt_state_after(ck, call, token)` -> `list(id, turn, options, envvars, wd, locale, attached, detached, loaded, dev_opened, dev_closed, con_opened, con_closed, rng)` or `NULL`; `ckpt_state_undo(ck, fragment, force = FALSE, dry = FALSE)`, `ckpt_state_redo(ck, fragment, force = FALSE, dry = FALSE)` -> item tables; `ckpt_state_describe(fragment)`.
 
-Adapted from G7's verified `p4/ckpt_state.R` (report section 5.5; verification log item 12). The fragment holds names only; option values and working directories stay in memory (`ck$state_img`, keyed by fragment id), so a record from another R process reports "the values were not kept". Two deliberate departures from the prototype, forced by the lint rules of 04 §12.3: environment variables are reported, never set (no `Sys.setenv()` outside `auth-dotenv.R`, and values may be secrets), and the RNG state is reported, never assigned (only `rng_swap()` and `with_seed_preserved()` assign `.Random.seed`, IC-61). Options, the working directory, attached packages and connections the turn opened are restored with the 3-way rule; loaded namespaces stay loaded; devices the turn opened are closed only with `options(gptr.checkpoint_close_devices = TRUE)`.
+- Consumes: Tasks 1-2 (`ckpt_frag_id()`, `ckpt_chr()`, `ckpt_scalar()`, `ckpt_items()`,
+  `ckpt_item()`, `ckpt_limits()`, `ckpt_ck_new()`); P01 `hash_xxh128(x)`.
+- Produces (used by Task 6): `ckpt_state_before(ck, call, turn = 1L)` -> token or `NULL` (calls
+  without R code); `ckpt_state_after(ck, call, token)` ->
+  `list(id, turn, options, envvars, wd, locale, attached, detached, loaded, dev_opened, dev_closed, con_opened, con_closed, rng)`
+  or `NULL`; `ckpt_state_undo(ck, fragment, force = FALSE, dry = FALSE)`,
+  `ckpt_state_redo(ck, fragment, force = FALSE, dry = FALSE)` -> item tables;
+  `ckpt_state_describe(fragment)`.
+
+Adapted from G7's verified `p4/ckpt_state.R` (report section 5.5; verification log item 12). The
+fragment holds names only; option values and working directories stay in memory (`ck$state_img`,
+keyed by fragment id), so a record from another R process reports "the values were not kept". Two
+deliberate departures from the prototype, forced by the lint rules of 04 section 12.3: environment
+variables are reported, never set (no `Sys.setenv()` outside `auth-dotenv.R`, and values may be
+secrets), and the RNG state is reported, never assigned (only `rng_swap()` and
+`with_seed_preserved()` assign `.Random.seed`, IC-61). Options, the working directory, attached
+packages and connections the turn opened are restored with the 3-way rule; loaded namespaces stay
+loaded; devices the turn opened are closed only with
+`options(gptr.checkpoint_close_devices = TRUE)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1867,7 +2117,8 @@ test_that("connections the turn opened are closed on undo", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-objects")'`
 
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 129 ]`; the four new tests error with `could not find function "ckpt_state_before"`.
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 129 ]`; the four new tests error with
+`could not find function "ckpt_state_before"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2120,7 +2371,8 @@ ckpt_state_describe = function(fragment) {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-objects")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 154 ]` (one SKIP and five fewer PASS when `package:tools` is already attached in the test process).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 154 ]` (one SKIP and five fewer PASS when
+`package:tools` is already attached in the test process).
 
 - [ ] **Step 5: Commit**
 
@@ -2132,14 +2384,35 @@ git commit -m "feat(ckpt): add the session-state checkpointer"
 ### Task 4: Content-addressed blob store and garbage collection
 
 **Files:**
+
 - Create: `R/ckpt-files.R`
 - Test: `tests/testthat/test-ckpt-files.R` (create)
 
 **Interfaces:**
-- Consumes: Task 2 `ckpt_store_root()`, `ckpt_limits()`, Task 1 `ckpt_fmt_bytes()`; P01 `hash_file(path)` (`rlang::hash_file()`, XXH128, 32 hex), `write_atomic(path, content)`, `workspace_root(create = TRUE)`, `json_encode()`, `json_obj()`, `gptr_inform(message, class, ..., .once = NULL)`; P04 `pid_alive(pid, create_time = NULL)`; P06's lock format (`<session file>.lock/pid`, two lines: pid and process creation time); tests: P01 `local_project()`, `rscript_path()`, processx.
-- Produces: `ckpt_store_put(path)` -> chr of hashes and `ckpt_store_get(hash, dest)` -> `lgl(1)` (04 §7.16; consumers P16, P23; `ckpt_store_put()` is in the IC-33 kernel SDK); `ckpt_blob_path(hash, gz)`, `ckpt_blob_find(hash)`, `ckpt_blob_read(hash)`; `ckpt_gc(root = workspace_root(create = FALSE), days = ckpt_limits()$days, now = Sys.time())` -> `list(deleted, kept, skipped, bytes)` invisibly (IC-71); helpers `ckpt_lock_holder(session_file)`, `ckpt_foreign_lock(session_files)`, `ckpt_session_hashes(session_files)`.
 
-Adapted from G7's verified `p3/ckpt_files.R` (report section 5.4; verification log items 9-11: XXH128 through rlang, gzip level 1 up to 8 MB, already-compressed formats stored raw, new blobs written to a temporary name and renamed). The collector implements IC-71 verbatim: it "prunes only blobs unreferenced by every session file of the project and older than `gptr.checkpoint_days`, and skips while another live pid holds a session lock in the project". A blob's modification time is its "last referenced" time (refreshed on every deduplicated put); `index.json` records it. References are read from the `custom` lines of every session file (every 32-hex token counts, so an unrelated token only keeps a blob longer). The live-lock test starts a real second R process (`rscript_path()`, `skip_on_cran()`): this is acceptance 5's "pruning in one process does not delete a blob another live session references".
+- Consumes: Task 2 `ckpt_store_root()`, `ckpt_limits()`, Task 1 `ckpt_fmt_bytes()`; P01
+  `hash_file(path)` (`rlang::hash_file()`, XXH128, 32 hex), `write_atomic(path, content)`,
+  `workspace_root(create = TRUE)`, `json_encode()`, `json_obj()`,
+  `gptr_inform(message, class, ..., .once = NULL)`; P04 `pid_alive(pid, create_time = NULL)`; P06's
+  lock format (`<session file>.lock/pid`, two lines: pid and process creation time); tests: P01
+  `local_project()`, `rscript_path()`, processx.
+- Produces: `ckpt_store_put(path)` -> chr of hashes and `ckpt_store_get(hash, dest)` -> `lgl(1)` (04
+  section 7.16; consumers P16, P23; `ckpt_store_put()` is in the IC-33 kernel SDK);
+  `ckpt_blob_path(hash, gz)`, `ckpt_blob_find(hash)`, `ckpt_blob_read(hash)`;
+  `ckpt_gc(root = workspace_root(create = FALSE), days = ckpt_limits()$days, now = Sys.time())` ->
+  `list(deleted, kept, skipped, bytes)` invisibly (IC-71); helpers `ckpt_lock_holder(session_file)`,
+  `ckpt_foreign_lock(session_files)`, `ckpt_session_hashes(session_files)`.
+
+Adapted from G7's verified `p3/ckpt_files.R` (report section 5.4; verification log items 9-11:
+XXH128 through rlang, gzip level 1 up to 8 MB, already-compressed formats stored raw, new blobs
+written to a temporary name and renamed). The collector implements IC-71 verbatim: it "prunes only
+blobs unreferenced by every session file of the project and older than `gptr.checkpoint_days`, and
+skips while another live pid holds a session lock in the project". A blob's modification time is its
+"last referenced" time (refreshed on every deduplicated put); `index.json` records it. References
+are read from the `custom` lines of every session file (every 32-hex token counts, so an unrelated
+token only keeps a blob longer). The live-lock test starts a real second R process
+(`rscript_path()`, `skip_on_cran()`): this is acceptance 5's "pruning in one process does not delete
+a blob another live session references".
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2281,7 +2554,8 @@ test_that("pruning in one process keeps the blobs another live process's session
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-files")'`
 
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors with `could not find function "ckpt_store_put"`.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors with
+`could not find function "ckpt_store_put"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2519,14 +2793,48 @@ git commit -m "feat(ckpt): add the content-addressed blob store and its garbage 
 ### Task 5: Walk, tracker, the files checkpointer and guarded restores
 
 **Files:**
+
 - Modify: `R/ckpt-files.R` (append)
 - Test: `tests/testthat/test-ckpt-files.R` (append)
 
 **Interfaces:**
-- Consumes: Task 4 (`ckpt_store_put()`, `ckpt_store_get()`), Tasks 1-2 (`ckpt_frag_id()`, `ckpt_scalar()`, `ckpt_num()`, `ckpt_json_num()`, `ckpt_items()`, `ckpt_item()`, `ckpt_limits()`, `ckpt_predict()`, `ckpt_ck_new()`); P01 `path_norm(path)`, `project_root(path = getwd())`, `path_class(path, root = project_root())`, `gptr_user_dir(which, create = FALSE)`, `gptr_can_prompt()`, `ext_service_get(name)` (service `ui.get`, P11: `function(session = NULL) <spec:ui>` with `has_ui()` and `select(title, choices, default = NULL, ...)`), `gptr_inform()`; tests: P11 `local_scripted_ui(answers = list(), .env = parent.frame())`, P01 `local_project()`, `local_gptr_options()`.
-- Produces (used by Tasks 6-7): `ckpt_walk(root, max_files = 50000L)` -> df(`path`, `size`, `mtime`, `link`); the tracker `ckpt_files_tracker(root)`, `ckpt_files_tr(ck)`; `ckpt_files_baseline(tr, lim)`, `ckpt_files_scan(tr, racy = 2)`, `ckpt_files_step(tr, lim)`, `ckpt_files_sync(tr, lim)`; the files checkpointer `ckpt_files_before(ck, call, turn = 1L)` -> token, `ckpt_files_after(ck, call, token)` -> `list(id, turn, root, files = list(<row>))` or `NULL`, `ckpt_files_turn_scan(ck, turn, force = FALSE)`, `ckpt_files_undo(ck, fragment, session = NULL, force = FALSE, dry = FALSE, turn_now = NA_integer_)`, `ckpt_files_redo(ck, fragment, session = NULL, force = FALSE, dry = FALSE)`, `ckpt_files_describe(fragment)`; `ckpt_file_row(path, abs, status, pre, post, mode, size, mtime, restorable, reason)`; the guards `ckpt_restore_guard(full, root = project_root())` -> `list(ok, ask, reason)`, `ckpt_confirm_outside(full, session)`, `ckpt_temp_root()`.
 
-Adapted from G7's verified `p3/ckpt_files.R` (report section 5.4; walk, baseline of source-like files first, racy-clean rule, 3-way undo; verification log items 9-10). A files fragment row is `list(path, abs, status ("created", "modified", "deleted"), pre, post (hashes or ""), mode, post_size, post_mtime, restorable, reason)`; paths inside the walked root are relative (with the fragment's `root`), predicted paths outside it are absolute (`abs = TRUE`). Restores follow IC-52: never through a symbolic link (the file or a directory above it), never into `.git` or gptr's user directories, and "confined to the project root and `tempdir()`; a restore outside needs an `ask_human` per path"; the confinement uses the current `project_root()`, never a root read from a session file (so a planted record cannot widen it), and control or critical paths (`path_class()`, IC-54) also need the human. The walk is G7's own pruned walker, not P10's `walk_files()`: it must list symbolic links without following them, include hidden and git-ignored files (an ignored data file the agent overwrote must be restorable) and prune `.gptr`; 04 §7.10 does not specify those three behaviours for `walk_files()` (recorded in the self-review). A forced turn scan records what a CLI child changed during a turn (IC-65; wired to the `turn_end` hook in Task 6).
+- Consumes: Task 4 (`ckpt_store_put()`, `ckpt_store_get()`), Tasks 1-2 (`ckpt_frag_id()`,
+  `ckpt_scalar()`, `ckpt_num()`, `ckpt_json_num()`, `ckpt_items()`, `ckpt_item()`, `ckpt_limits()`,
+  `ckpt_predict()`, `ckpt_ck_new()`); P01 `path_norm(path)`, `project_root(path = getwd())`,
+  `path_class(path, root = project_root())`, `gptr_user_dir(which, create = FALSE)`,
+  `gptr_can_prompt()`, `ext_service_get(name)` (service `ui.get`, P11:
+  `function(session = NULL) <spec:ui>` with `has_ui()` and
+  `select(title, choices, default = NULL, ...)`), `gptr_inform()`; tests: P11
+  `local_scripted_ui(answers = list(), .env = parent.frame())`, P01 `local_project()`,
+  `local_gptr_options()`.
+- Produces (used by Tasks 6-7): `ckpt_walk(root, max_files = 50000L)` -> df(`path`, `size`, `mtime`,
+  `link`); the tracker `ckpt_files_tracker(root)`, `ckpt_files_tr(ck)`;
+  `ckpt_files_baseline(tr, lim)`, `ckpt_files_scan(tr, racy = 2)`, `ckpt_files_step(tr, lim)`,
+  `ckpt_files_sync(tr, lim)`; the files checkpointer `ckpt_files_before(ck, call, turn = 1L)` ->
+  token, `ckpt_files_after(ck, call, token)` -> `list(id, turn, root, files = list(<row>))` or
+  `NULL`, `ckpt_files_turn_scan(ck, turn, force = FALSE)`,
+  `ckpt_files_undo(ck, fragment, session = NULL, force = FALSE, dry = FALSE, turn_now = NA_integer_)`,
+  `ckpt_files_redo(ck, fragment, session = NULL, force = FALSE, dry = FALSE)`,
+  `ckpt_files_describe(fragment)`;
+  `ckpt_file_row(path, abs, status, pre, post, mode, size, mtime, restorable, reason)`; the guards
+  `ckpt_restore_guard(full, root = project_root())` -> `list(ok, ask, reason)`,
+  `ckpt_confirm_outside(full, session)`, `ckpt_temp_root()`.
+
+Adapted from G7's verified `p3/ckpt_files.R` (report section 5.4; walk, baseline of source-like
+files first, racy-clean rule, 3-way undo; verification log items 9-10). A files fragment row is
+`list(path, abs, status ("created", "modified", "deleted"), pre, post (hashes or ""), mode, post_size, post_mtime, restorable, reason)`;
+paths inside the walked root are relative (with the fragment's `root`), predicted paths outside it
+are absolute (`abs = TRUE`). Restores follow IC-52: never through a symbolic link (the file or a
+directory above it), never into `.git` or gptr's user directories, and "confined to the project root
+and `tempdir()`; a restore outside needs an `ask_human` per path"; the confinement uses the current
+`project_root()`, never a root read from a session file (so a planted record cannot widen it), and
+control or critical paths (`path_class()`, IC-54) also need the human. The walk is G7's own pruned
+walker, not P10's `walk_files()`: it must list symbolic links without following them, include hidden
+and git-ignored files (an ignored data file the agent overwrote must be restorable) and prune
+`.gptr`; 04 section 7.10 does not specify those three behaviours for `walk_files()` (recorded in the
+self-review). A forced turn scan records what a CLI child changed during a turn (IC-65; wired to the
+`turn_end` hook in Task 6).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2731,7 +3039,10 @@ test_that("a forced turn scan records what a CLI child changed (IC-65)", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-files")'`
 
-Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 28 ]`; the ten new tests error with `could not find function "ckpt_walk"`, `"ckpt_files_before"`, `"ckpt_file_row"`, `"ckpt_restore_guard"` or `"ckpt_files_sync"` (`local_mocked_bindings()` reports that `ckpt_temp_root` does not exist).
+Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 28 ]`; the ten new tests error with
+`could not find function "ckpt_walk"`, `"ckpt_files_before"`, `"ckpt_file_row"`,
+`"ckpt_restore_guard"` or `"ckpt_files_sync"` (`local_mocked_bindings()` reports that
+`ckpt_temp_root` does not exist).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3367,14 +3678,65 @@ git commit -m "feat(ckpt): add the files checkpointer with guarded 3-way restore
 ### Task 6: `builtin:checkpoints`: specs, hooks, the rewind block and the `checkpoint` event
 
 **Files:**
+
 - Create: `R/ckpt-rewind.R`
 - Test: `tests/testthat/test-ckpt-rewind.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 1-5; P01 `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `setting_get()`, `est_tokens(x, class)`, `block_text()`, `ev_new(type, ...)`; P02 `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `gptr_spec("checkpointer", ...)`, `gptr_context_block(name, provide, placement, authority, budget, order)`, `registry_all(kind, session = NULL)`, `registry_get(kind, name, session = NULL)`, `ev_dispatch(event, payload, session = NULL, ctx = NULL)`, the factory API (`gptr$state`, `gptr$register()`, `gptr$on()`), `ctx$session`, `ctx$envir`, `ctx$run`, `ctx$mode()`; P06 `session_data(s)` (`id`, `turns`, `model`, `index`, `entries`), `session_home(s)`, `session_append(s, entry)`, the dispatcher's checkpointer calls and the `gptr.checkpoint` container `{tool_call_id, fragments}` (P06 `checkpoint_after()`), the payloads of `tool_result` (`tool_call_id`, `content`, `details`), `agent_start`, `turn_end`, `agent_end`, `session_shutdown` (`session`); tests: P08 `peter()`, P02 `gptr_register()`, `gptr_hook()`, `gptr_registry()`, P01 `local_fake_provider()`, `fake_tool()`, `fake_requests()`, `local_project()`, `local_gptr_options()`, `msg_text()`.
-- Produces: `builtin_checkpoints(gptr)` declared as `builtin:checkpoints` (04 §7.16, §10.3) and the service `checkpoint.note` (owned by `builtin:checkpoints`, IC-34); `ckpt_ck_of(st, s, create = TRUE)`, `ckpt_turn(s)`, `ckpt_setting(s = NULL)`, `ckpt_pure_read(call)`, `ckpt_enabled(s, name, ctx, call)`, `ckpt_cli_session(s)`, `ckpt_spec(st, name)` (with `preview()` and `ckpt_state`), `ckpt_cp_apply(st, name, direction, fragment, ctx, force, dry)`, `ckpt_append_scan(s, frag)`, `ckpt_emit_checkpoint(s, ctx, event)`, the hook functions `ckpt_on_tool_result()`, `ckpt_on_agent_start()`, `ckpt_on_turn_end()`, `ckpt_on_agent_end()`, `ckpt_on_shutdown()`, `ckpt_rewind_lines(report)`, `ckpt_rewind_block(st, ctx, budget)`, `ckpt_ext_state(s)`, `ckpt_specs(s)`; the event `checkpoint` (04 §10.4).
 
-The dispatcher of P06 calls every `checkpointer` record's `before(call, ctx)` after the gate and `after(call, ctx, token)` after the tool, for sequential tools that are not read-only, and writes one `gptr.checkpoint` entry `{tool_call_id, fragments: {objects, files, state}}` before the tool's result message, setting `details$checkpoint` to its id. The per-session state of the three built-ins lives in the extension's private `gptr$state` under `rlang::new_weakref(key = <session shell>, value = <state>)` (shells hold no frames or user objects, rule R10); when the shell is collected the state's finalizer defuses its images (G7 c06b), and `session_shutdown` releases them at once. Objects are captured only when the call evaluates in the session's kept home (`ctx$envir` identical to `session_home(s)`): never a function-frame home (R2), never the plan-mode scratch overlay or an inline sub-agent overlay. Plan mode and `options(gptr.checkpoint = "off")` record nothing; `"files"` records files only; only pure reads are skipped: an R call the classifier rated level 0 (`call$risk$level`) whose code has no target in `ckpt_predict()` (no binding assigned, modified, removed or super-assigned, no file, no process, nothing unknown). A level-0 call that only creates a binding (`y = 2`: no existing object is overwritten, so P11 rates it 0) is checkpointed, so a rewind removes what it created (G7 section 3.4 step 5, section 4.1: every tool that is not `read_only`). The `tool_result` hook appends the G7 section 3.9 notices to the result the model sees and emits the `checkpoint` event with the counts of the entry named in `details$checkpoint`. On a subscription-CLI route (a provider record of type `cli`, IC-65) the `agent_start` hook brings the file tracker up to date and the `turn_end` hook walks after every turn, so `/undo` covers what the CLI child edited itself; the scan becomes its own `gptr.checkpoint` entry with `tool_call_id = "scan-<fragment id>"`. The `agent_end` hook runs the per-turn scan of adaptive mode, the turn-end memory budget and one blob collection per session. The `workspace_changes` context block (placement `both`, order 101, budget 300; next to P09's own `workspace_changes` block at order 100, which the `all`-resolving `context_block` kind keeps) renders the rewind note of Task 7 once, as G7 section 3.9's `<workspace_changes since="turn 1" reason="rewind">`; it returns `NULL` otherwise.
+- Consumes: Tasks 1-5; P01 `on_load(expr)`,
+  `ext_service_set(name, fun, provided_by, builtin = NULL)`, `setting_get()`,
+  `est_tokens(x, class)`, `block_text()`, `ev_new(type, ...)`; P02
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`,
+  `gptr_spec("checkpointer", ...)`,
+  `gptr_context_block(name, provide, placement, authority, budget, order)`,
+  `registry_all(kind, session = NULL)`, `registry_get(kind, name, session = NULL)`,
+  `ev_dispatch(event, payload, session = NULL, ctx = NULL)`, the factory API (`gptr$state`,
+  `gptr$register()`, `gptr$on()`), `ctx$session`, `ctx$envir`, `ctx$run`, `ctx$mode()`; P06
+  `session_data(s)` (`id`, `turns`, `model`, `index`, `entries`), `session_home(s)`,
+  `session_append(s, entry)`, the dispatcher's checkpointer calls and the `gptr.checkpoint`
+  container `{tool_call_id, fragments}` (P06 `checkpoint_after()`), the payloads of `tool_result`
+  (`tool_call_id`, `content`, `details`), `agent_start`, `turn_end`, `agent_end`, `session_shutdown`
+  (`session`); tests: P08 `peter()`, P02 `gptr_register()`, `gptr_hook()`, `gptr_registry()`, P01
+  `local_fake_provider()`, `fake_tool()`, `fake_requests()`, `local_project()`,
+  `local_gptr_options()`, `msg_text()`.
+- Produces: `builtin_checkpoints(gptr)` declared as `builtin:checkpoints` (04 sections 7.16, 10.3)
+  and the service `checkpoint.note` (owned by `builtin:checkpoints`, IC-34);
+  `ckpt_ck_of(st, s, create = TRUE)`, `ckpt_turn(s)`, `ckpt_setting(s = NULL)`,
+  `ckpt_pure_read(call)`, `ckpt_enabled(s, name, ctx, call)`, `ckpt_cli_session(s)`,
+  `ckpt_spec(st, name)` (with `preview()` and `ckpt_state`),
+  `ckpt_cp_apply(st, name, direction, fragment, ctx, force, dry)`, `ckpt_append_scan(s, frag)`,
+  `ckpt_emit_checkpoint(s, ctx, event)`, the hook functions `ckpt_on_tool_result()`,
+  `ckpt_on_agent_start()`, `ckpt_on_turn_end()`, `ckpt_on_agent_end()`, `ckpt_on_shutdown()`,
+  `ckpt_rewind_lines(report)`, `ckpt_rewind_block(st, ctx, budget)`, `ckpt_ext_state(s)`,
+  `ckpt_specs(s)`; the event `checkpoint` (04 section 10.4).
+
+The dispatcher of P06 calls every `checkpointer` record's `before(call, ctx)` after the gate and
+`after(call, ctx, token)` after the tool, for sequential tools that are not read-only, and writes
+one `gptr.checkpoint` entry `{tool_call_id, fragments: {objects, files, state}}` before the tool's
+result message, setting `details$checkpoint` to its id. The per-session state of the three built-ins
+lives in the extension's private `gptr$state` under
+`rlang::new_weakref(key = <session shell>, value = <state>)` (shells hold no frames or user objects,
+rule R10); when the shell is collected the state's finalizer defuses its images (G7 c06b), and
+`session_shutdown` releases them at once. Objects are captured only when the call evaluates in the
+session's kept home (`ctx$envir` identical to `session_home(s)`): never a function-frame home (R2),
+never the plan-mode scratch overlay or an inline sub-agent overlay. Plan mode and
+`options(gptr.checkpoint = "off")` record nothing; `"files"` records files only; only pure reads are
+skipped: an R call the classifier rated level 0 (`call$risk$level`) whose code has no target in
+`ckpt_predict()` (no binding assigned, modified, removed or super-assigned, no file, no process,
+nothing unknown). A level-0 call that only creates a binding (`y = 2`: no existing object is
+overwritten, so P11 rates it 0) is checkpointed, so a rewind removes what it created (G7 section 3.4
+step 5, section 4.1: every tool that is not `read_only`). The `tool_result` hook appends the G7
+section 3.9 notices to the result the model sees and emits the `checkpoint` event with the counts of
+the entry named in `details$checkpoint`. On a subscription-CLI route (a provider record of type
+`cli`, IC-65) the `agent_start` hook brings the file tracker up to date and the `turn_end` hook
+walks after every turn, so `/undo` covers what the CLI child edited itself; the scan becomes its own
+`gptr.checkpoint` entry with `tool_call_id = "scan-<fragment id>"`. The `agent_end` hook runs the
+per-turn scan of adaptive mode, the turn-end memory budget and one blob collection per session. The
+`workspace_changes` context block (placement `both`, order 101, budget 300; next to P09's own
+`workspace_changes` block at order 100, which the `all`-resolving `context_block` kind keeps)
+renders the rewind note of Task 7 once, as G7 section 3.9's
+`<workspace_changes since="turn 1" reason="rewind">`; it returns `NULL` otherwise.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3525,7 +3887,11 @@ test_that("on a CLI route the files the child changes during a turn are checkpoi
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-rewind")'`
 
-Expected: failures, among them `mine$name[mine$kind == "checkpointer"]` being empty, `ext_service_has("checkpoint.note")` being `FALSE`, `expect_length(cps, 1L)` seeing 0 entries, `could not find function "ckpt_ck_of"` and `"ckpt_pure_read"`, and a `local_mocked_bindings()` error for `ckpt_cli_session`; the summary reads about `[ FAIL 17 | WARN 0 | SKIP 0 | PASS 2 ]` (the exact count depends on how many expectations fail before each test's first error).
+Expected: failures, among them `mine$name[mine$kind == "checkpointer"]` being empty,
+`ext_service_has("checkpoint.note")` being `FALSE`, `expect_length(cps, 1L)` seeing 0 entries,
+`could not find function "ckpt_ck_of"` and `"ckpt_pure_read"`, and a `local_mocked_bindings()` error
+for `ckpt_cli_session`; the summary reads about `[ FAIL 17 | WARN 0 | SKIP 0 | PASS 2 ]` (the exact
+count depends on how many expectations fail before each test's first error).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3942,15 +4308,66 @@ git commit -m "feat(ckpt): register builtin:checkpoints with its checkpointers a
 ### Task 7: The session tree and `gptr_rewind()`
 
 **Files:**
+
 - Modify: `R/ckpt-rewind.R` (append)
 - Test: `tests/testthat/test-ckpt-rewind.R` (append), `tests/testthat/test-copy-ckpt.R` (append)
 - Generated: `NAMESPACE`, `man/gptr_rewind.Rd` (`devtools::document()`)
 
 **Interfaces:**
-- Consumes: Tasks 1-6 (`ckpt_ck_of()`, `ckpt_ext_state()`, `ckpt_specs()`, the specs' `undo`/`redo`/`preview`, `ckpt_partial_re` users); P01 `check_class()`, `check_number()`, `check_string()`, `check_choice()`, `check_flag()`, `gptr_abort()`, `gptr_warn()`, `gptr_inform()`, `msg_text()`, `ev_new()`; P02 `ev_dispatch()`, `ctx_new(session, run = NULL)`; P06 `session_data()`, `session_live()` (`$ctx`), `session_append()`, `run_current()` (`session`, `signal`); the IC-53 one-shot token `run$signal$control` (P06's `perm_grant_control()` appends the approved export's name; P08 consumes it the same way); tests: P08 `peter()`, `gptr_on()`, P06 `gptr_fork()`, P15's `builtin:documents` (record and replay of `.R` documents, its `session_tree` hook), P01 `front_end()` (mocked), `local_fake_provider()`, `fake_tool()`, `fake_requests()`, `local_project()`, `local_gptr_options()`, `expect_no_copy()`.
-- Produces: the export `gptr_rewind(s, turn = -1L, to = NULL, restore = c("all", "conversation", "workspace"), force = FALSE, preview = FALSE)` (04 §6.5); the events `session_before_tree` (first decision; payload `from`, `to`, `plan`; `list(cancel = TRUE, reason)` cancels) and `session_tree` (notify; payload `from`, `to`, `report`, plus `restore`, `keep`, `undone`, `redone`); the entry `gptr.rewind` `{from, to, keep, restore, report, undone, redone}`; the session fields `.d$last_rewind` (`list(id, from, to, keep, restore, report, partial)`) and `.d$editor_text`; internal `ckpt_tree(d)`, `ckpt_tree_path(tree, id)`, `ckpt_path_starts(tree, path)`, `ckpt_user_turn(e)`, `ckpt_tree_entry(tree, id)`, `ckpt_entry_text(tree, id)`, `ckpt_final_text(tree, path)`, `ckpt_fragment(data, name)`, `ckpt_rewind_target(tree, turn, to)`, `ckpt_applied(tree, ids)`, `ckpt_wanted(tree, target, ids)`, `ckpt_rewind_ops(tree, target, fork_entry = NULL)`, `ckpt_rewind_apply(tree, ops, specs, ctx, force)`, `ckpt_rewind_plan(tree, ops, specs, ctx, force)`, `ckpt_plan_chain(plan)`, `ckpt_partial(report)`, `ckpt_rewind_guard(d)` (`d` is a `.d` environment or a list with `id` and `status`), `ckpt_session_ctx(s)`, `ckpt_append_at(s, parent, entry)`.
 
-Adapted from G7's verified `p5/ckpt_session.R` (report section 5.6, 13/13 PASS; verification log item 13) and sections 3.2, 3.6, 4.2-4.3. A turn is one `peter()` call on the session: P06 stamps every user message with `gptr$turn` (the prompt turn it belongs to), so a turn opens at the first user message of a new turn number; steers and follow-ups belong to the running turn. Keeping turns `1..k` targets the parent of turn `k + 1`'s opening user message (Pi: selecting a user message moves the leaf to its parent); `turn = 0` keeps the `gptr.frozen` entry, so the frozen prefix survives. The records to undo are those applied now (all at creation, then the `undone`/`redone` lists of every earlier `gptr.rewind` in file order) but not wanted at the target (on its path, minus workspace-only rewinds there): undone newest first through every registered checkpointer (`undo(fragment, ctx, force)`, plugins included; a fragment whose checkpointer is gone is reported), then redone oldest first. Records a fork copied from its source session belong to the source and are never undone by the fork (G7 section 4.2; `.d$fork_of$entry`). Then one `gptr.rewind` entry is appended under the target (P06's `session_append()` parents at the leaf, so the leaf moves first), so the JSONL stays byte-append-only and the leaf is durable on reload (Pi: the leaf is the last entry in file order); `restore = "workspace"` parents it at the old leaf instead (the conversation stays, so no prompt is handed back: `s$editor_text` is `NULL`). P16 writes `.d$turns`, `.d$last_text`, `.d$status` (a terminal status of the abandoned turn becomes `idle`), `.d$last_rewind` and `.d$editor_text` itself: P06 offers no verb for a rewind (self-review). A full restore tells the model nothing (the next request's prefix equals the earlier request at the target; P07's prefix guard resets on `session_tree`); a partial one leaves the not-restored items for the Task 6 block, warns `gptr_warning_rewind_partial` (field `report`) and lists them in `s$last_rewind$report`. A replayed session (`.d$replayed`) and `restore = "conversation"` only move the leaf (G7 section 4.4: a `gptr_rewind()` written into a script is a workspace no-op in replay). The IC-53 guard: a running or waiting session is `gptr_error_busy`; model code of a run rewinding another session is `gptr_error_permission` unless the one-shot token `gptr_rewind` is present (it is consumed). P15's `session_tree` hook makes the undone blocks of a bound document inert (`status=undone`, `#~ ` lines, 04 §11.5), which is acceptance 4.
+- Consumes: Tasks 1-6 (`ckpt_ck_of()`, `ckpt_ext_state()`, `ckpt_specs()`, the specs'
+  `undo`/`redo`/`preview`, `ckpt_partial_re` users); P01 `check_class()`, `check_number()`,
+  `check_string()`, `check_choice()`, `check_flag()`, `gptr_abort()`, `gptr_warn()`,
+  `gptr_inform()`, `msg_text()`, `ev_new()`; P02 `ev_dispatch()`, `ctx_new(session, run = NULL)`;
+  P06 `session_data()`, `session_live()` (`$ctx`), `session_append()`, `run_current()` (`session`,
+  `signal`); the IC-53 one-shot token `run$signal$control` (P06's `perm_grant_control()` appends the
+  approved export's name; P08 consumes it the same way); tests: P08 `peter()`, `gptr_on()`, P06
+  `gptr_fork()`, P15's `builtin:documents` (record and replay of `.R` documents, its `session_tree`
+  hook), P01 `front_end()` (mocked), `local_fake_provider()`, `fake_tool()`, `fake_requests()`,
+  `local_project()`, `local_gptr_options()`, `expect_no_copy()`.
+- Produces: the export
+  `gptr_rewind(s, turn = -1L, to = NULL, restore = c("all", "conversation", "workspace"), force = FALSE, preview = FALSE)`
+  (04 section 6.5); the events `session_before_tree` (first decision; payload `from`, `to`, `plan`;
+  `list(cancel = TRUE, reason)` cancels) and `session_tree` (notify; payload `from`, `to`, `report`,
+  plus `restore`, `keep`, `undone`, `redone`); the entry `gptr.rewind`
+  `{from, to, keep, restore, report, undone, redone}`; the session fields `.d$last_rewind`
+  (`list(id, from, to, keep, restore, report, partial)`) and `.d$editor_text`; internal
+  `ckpt_tree(d)`, `ckpt_tree_path(tree, id)`, `ckpt_path_starts(tree, path)`, `ckpt_user_turn(e)`,
+  `ckpt_tree_entry(tree, id)`, `ckpt_entry_text(tree, id)`, `ckpt_final_text(tree, path)`,
+  `ckpt_fragment(data, name)`, `ckpt_rewind_target(tree, turn, to)`, `ckpt_applied(tree, ids)`,
+  `ckpt_wanted(tree, target, ids)`, `ckpt_rewind_ops(tree, target, fork_entry = NULL)`,
+  `ckpt_rewind_apply(tree, ops, specs, ctx, force)`,
+  `ckpt_rewind_plan(tree, ops, specs, ctx, force)`, `ckpt_plan_chain(plan)`, `ckpt_partial(report)`,
+  `ckpt_rewind_guard(d)` (`d` is a `.d` environment or a list with `id` and `status`),
+  `ckpt_session_ctx(s)`, `ckpt_append_at(s, parent, entry)`.
+
+Adapted from G7's verified `p5/ckpt_session.R` (report section 5.6, 13/13 PASS; verification log
+item 13) and sections 3.2, 3.6, 4.2-4.3. A turn is one `peter()` call on the session: P06 stamps
+every user message with `gptr$turn` (the prompt turn it belongs to), so a turn opens at the first
+user message of a new turn number; steers and follow-ups belong to the running turn. Keeping turns
+`1..k` targets the parent of turn `k + 1`'s opening user message (Pi: selecting a user message moves
+the leaf to its parent); `turn = 0` keeps the `gptr.frozen` entry, so the frozen prefix survives.
+The records to undo are those applied now (all at creation, then the `undone`/`redone` lists of
+every earlier `gptr.rewind` in file order) but not wanted at the target (on its path, minus
+workspace-only rewinds there): undone newest first through every registered checkpointer
+(`undo(fragment, ctx, force)`, plugins included; a fragment whose checkpointer is gone is reported),
+then redone oldest first. Records a fork copied from its source session belong to the source and are
+never undone by the fork (G7 section 4.2; `.d$fork_of$entry`). Then one `gptr.rewind` entry is
+appended under the target (P06's `session_append()` parents at the leaf, so the leaf moves first),
+so the JSONL stays byte-append-only and the leaf is durable on reload (Pi: the leaf is the last
+entry in file order); `restore = "workspace"` parents it at the old leaf instead (the conversation
+stays, so no prompt is handed back: `s$editor_text` is `NULL`). P16 writes `.d$turns`,
+`.d$last_text`, `.d$status` (a terminal status of the abandoned turn becomes `idle`),
+`.d$last_rewind` and `.d$editor_text` itself: P06 offers no verb for a rewind (self-review). A full
+restore tells the model nothing (the next request's prefix equals the earlier request at the target;
+P07's prefix guard resets on `session_tree`); a partial one leaves the not-restored items for the
+Task 6 block, warns `gptr_warning_rewind_partial` (field `report`) and lists them in
+`s$last_rewind$report`. A replayed session (`.d$replayed`) and `restore = "conversation"` only move
+the leaf (G7 section 4.4: a `gptr_rewind()` written into a script is a workspace no-op in replay).
+The IC-53 guard: a running or waiting session is `gptr_error_busy`; model code of a run rewinding
+another session is `gptr_error_permission` unless the one-shot token `gptr_rewind` is present (it is
+consumed). P15's `session_tree` hook makes the undone blocks of a bound document inert
+(`status=undone`, `#~ ` lines, 04 section 11.5), which is acceptance 4.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4320,7 +4737,13 @@ test_that("gptr_preimage() is a leaf (R4)", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-rewind|copy-ckpt")'`
 
-Expected: the two tree tests and the preview-chain test error with `could not find function "ckpt_tree"` or `"ckpt_plan_chain"` (the block-lines test exercises Task 6 code and passes); the IC-53 guard test errors with `could not find function "ckpt_rewind_guard"`; every end-to-end test errors with `could not find function "gptr_rewind"`, the end-to-end IC-53 test (a negative test: the classifier already stops the call) already passes, and the copy row "gptr_rewind() swaps the pre-image back" fails with `the script did not finish`. The Task 6 and Task 1 tests still pass.
+Expected: the two tree tests and the preview-chain test error with
+`could not find function "ckpt_tree"` or `"ckpt_plan_chain"` (the block-lines test exercises Task 6
+code and passes); the IC-53 guard test errors with `could not find function "ckpt_rewind_guard"`;
+every end-to-end test errors with `could not find function "gptr_rewind"`, the end-to-end IC-53 test
+(a negative test: the classifier already stops the call) already passes, and the copy row
+"gptr_rewind() swaps the pre-image back" fails with `the script did not finish`. The Task 6 and
+Task 1 tests still pass.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4846,7 +5269,9 @@ Expected: `NAMESPACE` gains `export(gptr_rewind)`; `man/gptr_rewind.Rd` is writt
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-rewind|copy-ckpt")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 199 ]` (133 in `test-ckpt-rewind.R`, 66 in `test-copy-ckpt.R`; without `capabilities("profmem")` the five copy tests skip: `[ FAIL 0 | WARN 0 | SKIP 5 | PASS 134 ]`).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 199 ]` (133 in `test-ckpt-rewind.R`, 66 in
+`test-copy-ckpt.R`; without `capabilities("profmem")` the five copy tests skip:
+`[ FAIL 0 | WARN 0 | SKIP 5 | PASS 134 ]`).
 
 - [ ] **Step 5: Commit**
 
@@ -4858,15 +5283,43 @@ git commit -m "feat(ckpt): add gptr_rewind() as a branch-in-place on the session
 ### Task 8: `gptr_checkpoints()` and the console commands
 
 **Files:**
+
 - Modify: `R/ckpt-rewind.R` (append; one line added to `builtin_checkpoints()`)
 - Test: `tests/testthat/test-ckpt-rewind.R` (append), `tests/testthat/test-copy-ckpt.R` (append)
 - Generated: `NAMESPACE`, `man/gptr_checkpoints.Rd` (`devtools::document()`)
 
 **Interfaces:**
-- Consumes: Tasks 1-7 (`ckpt_tree()`, `ckpt_tree_path()`, `ckpt_path_starts()`, `ckpt_fragment()`, `ckpt_entry_text()`, `ckpt_ck_of()`, `ckpt_ext_state()`, `ckpt_index_empty()`, `gptr_rewind()`); P01 `new_listing(df, class, footer = NULL)`, `gptr_opt("history")`, `gptr_is_interactive()`; P02 `gptr_command(name, handler, description = NULL, complete = NULL)` (the handler is `function(args, ctx)` and returns `NULL`, a chr printed verbatim or `list(prompt = chr(1))`, 04 §10.2 row 10); `ctx$session`, `ctx$has_ui()`, `ctx$ui()` (`select()`); tests: P11 `local_scripted_ui()`, the `ui.get` service, P02 `gptr_registry()`, `registry_get()`.
-- Produces: the export `gptr_checkpoints(s, all = FALSE)` -> a `gptr_checkpoints` listing (04 §5.12: `turn`, `id`, `time`, `prompt`, `objects`, `files`, `held_mb`, `disk_mb`, `branch`); the command specs `undo`, `redo`, `rewind`, `checkpoints` registered by `builtin:checkpoints` (P14's console dispatches them; 03 §6.17); internal `ckpt_turn_rows(tree, path, branch, ck = NULL, exclude = character())`, `ckpt_segment_counts(tree, idx, ck)`, `ckpt_time(x)`, `ckpt_cmd_run(s, turn = -1L, to = NULL, restore = "all")`, `ckpt_history_push(text)`, `ckpt_cmd_undo(args, ctx)`, `ckpt_is_redo(tree, dat)`, `ckpt_redo_target(tree)`, `ckpt_cmd_redo(args, ctx)`, `ckpt_cmd_rewind(args, ctx)`, `ckpt_cmd_checkpoints(args, ctx)`, `ckpt_commands()`.
 
-The commands follow G7 section 4.2: `/undo` is `gptr_rewind(s, -1)` and asks first (through the UI) when the preview shows items that cannot be restored, then pushes the undone prompt into the console history with `utils::timestamp()` so Up recalls it (`readline()` cannot pre-fill; only with `gptr.history` and a human); `/redo` rewinds to the `from` of the latest `gptr.rewind` on the active path when no turn started since, skipping rewinds that were themselves redos (a rewind whose `from` is an earlier rewind and whose `to` is that rewind's `from`) and the rewinds they redid, so a second `/redo` says "Nothing to redo." instead of undoing the first and `/undo`, `/undo`, `/redo`, `/redo` walks back and forth through both turns; `/rewind <k>` keeps turns `1..k`; `/rewind` without a number offers the turns and Claude Code's actions ("Code and conversation", "Conversation only", "Code only", "Never mind") through `ctx$ui()$select()`; `/checkpoints [all]` prints the listing. A command returns its report lines (the console prints them verbatim); a `gptr_error` becomes its message and the partial warning is muffled because the report already lists the items.
+- Consumes: Tasks 1-7 (`ckpt_tree()`, `ckpt_tree_path()`, `ckpt_path_starts()`, `ckpt_fragment()`,
+  `ckpt_entry_text()`, `ckpt_ck_of()`, `ckpt_ext_state()`, `ckpt_index_empty()`, `gptr_rewind()`);
+  P01 `new_listing(df, class, footer = NULL)`, `gptr_opt("history")`, `gptr_is_interactive()`; P02
+  `gptr_command(name, handler, description = NULL, complete = NULL)` (the handler is
+  `function(args, ctx)` and returns `NULL`, a chr printed verbatim or `list(prompt = chr(1))`, 04
+  section 10.2 row 10); `ctx$session`, `ctx$has_ui()`, `ctx$ui()` (`select()`); tests: P11
+  `local_scripted_ui()`, the `ui.get` service, P02 `gptr_registry()`, `registry_get()`.
+- Produces: the export `gptr_checkpoints(s, all = FALSE)` -> a `gptr_checkpoints` listing (04
+  section 5.12: `turn`, `id`, `time`, `prompt`, `objects`, `files`, `held_mb`, `disk_mb`, `branch`);
+  the command specs `undo`, `redo`, `rewind`, `checkpoints` registered by `builtin:checkpoints`
+  (P14's console dispatches them; 03 section 6.17); internal
+  `ckpt_turn_rows(tree, path, branch, ck = NULL, exclude = character())`,
+  `ckpt_segment_counts(tree, idx, ck)`, `ckpt_time(x)`,
+  `ckpt_cmd_run(s, turn = -1L, to = NULL, restore = "all")`, `ckpt_history_push(text)`,
+  `ckpt_cmd_undo(args, ctx)`, `ckpt_is_redo(tree, dat)`, `ckpt_redo_target(tree)`,
+  `ckpt_cmd_redo(args, ctx)`, `ckpt_cmd_rewind(args, ctx)`, `ckpt_cmd_checkpoints(args, ctx)`,
+  `ckpt_commands()`.
+
+The commands follow G7 section 4.2: `/undo` is `gptr_rewind(s, -1)` and asks first (through the UI)
+when the preview shows items that cannot be restored, then pushes the undone prompt into the console
+history with `utils::timestamp()` so Up recalls it (`readline()` cannot pre-fill; only with
+`gptr.history` and a human); `/redo` rewinds to the `from` of the latest `gptr.rewind` on the active
+path when no turn started since, skipping rewinds that were themselves redos (a rewind whose `from`
+is an earlier rewind and whose `to` is that rewind's `from`) and the rewinds they redid, so a second
+`/redo` says "Nothing to redo." instead of undoing the first and `/undo`, `/undo`, `/redo`, `/redo`
+walks back and forth through both turns; `/rewind <k>` keeps turns `1..k`; `/rewind` without a
+number offers the turns and Claude Code's actions ("Code and conversation", "Conversation only",
+"Code only", "Never mind") through `ctx$ui()$select()`; `/checkpoints [all]` prints the listing. A
+command returns its report lines (the console prints them verbatim); a `gptr_error` becomes its
+message and the partial warning is muffled because the report already lists the items.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4990,7 +5443,11 @@ test_that("gptr_checkpoints() reads only", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-rewind|copy-ckpt")'`
 
-Expected: the six new tests of `test-ckpt-rewind.R` fail (`could not find function "gptr_checkpoints"`, `"ckpt_cmd_undo"`, `"ckpt_cmd_rewind"`, `"ckpt_redo_target"`; the registry test finds no `builtin:checkpoints` commands) and the new copy row fails with `the script did not finish`; the 133 earlier rewind expectations and 66 copy expectations still pass.
+Expected: the six new tests of `test-ckpt-rewind.R` fail
+(`could not find function "gptr_checkpoints"`, `"ckpt_cmd_undo"`, `"ckpt_cmd_rewind"`,
+`"ckpt_redo_target"`; the registry test finds no `builtin:checkpoints` commands) and the new copy
+row fails with `the script did not finish`; the 133 earlier rewind expectations and 66 copy
+expectations still pass.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5242,7 +5699,8 @@ ckpt_commands = function() {
 }
 ```
 
-In `R/ckpt-rewind.R`, replace the whole `builtin_checkpoints()` definition of Task 6 (its roxygen block and body):
+In `R/ckpt-rewind.R`, replace the whole `builtin_checkpoints()` definition of Task 6 (its roxygen
+block and body):
 
 ```r
 #' builtin:checkpoints (contract 7.16, 10.3): the checkpointers `objects`, `files` and `state`,
@@ -5300,7 +5758,8 @@ Expected: `NAMESPACE` gains `export(gptr_checkpoints)`; `man/gptr_checkpoints.Rd
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "ckpt-rewind|copy-ckpt")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 236 ]` (169 in `test-ckpt-rewind.R`, 67 in `test-copy-ckpt.R`; without `capabilities("profmem")`: `[ FAIL 0 | WARN 0 | SKIP 6 | PASS 170 ]`).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 236 ]` (169 in `test-ckpt-rewind.R`, 67 in
+`test-copy-ckpt.R`; without `capabilities("profmem")`: `[ FAIL 0 | WARN 0 | SKIP 6 | PASS 170 ]`).
 
 - [ ] **Step 5: Commit**
 
@@ -5311,7 +5770,8 @@ git commit -m "feat(ckpt): add gptr_checkpoints() and the /undo, /redo, /rewind,
 
 ## Plan acceptance
 
-Every acceptance check of 05 P16 (including its review amendments), the task and test that prove it, and the command:
+Every acceptance check of 05 P16 (including its review amendments), the task and test that prove it,
+and the command:
 
 | # | Acceptance check (05 P16) | Proved by | Command | Expected |
 |---|---|---|---|---|
@@ -5325,56 +5785,189 @@ Every acceptance check of 05 P16 (including its review amendments), the task and
 | 5b | "pruning in one process does not delete a blob another live session references" (IC-71) | Task 4: "pruning in one process keeps the blobs another live process's session references" (a real second R process holds the session lock: the collector skips; after it exits the blob survives because the session file references it) and "blob GC skips while another live process holds a session lock (IC-71)", "blob GC keeps referenced and young blobs and deletes old unreferenced ones" | as 5a | as 5a |
 | 5c | review amendment: "after a Codex `workspace-write` exec the files checkpointer walks, so `/undo` covers it" (IC-65) | Task 5: "a forced turn scan records what a CLI child changed (IC-65)"; Task 6: "on a CLI route the files the child changes during a turn are checkpointed (IC-65)"; Task 7: "a CLI child's file edit is undone by gptr_rewind() (IC-65)" | as 3a and 5a | as 3a and 5a |
 
-The M3 exit check (`/undo` and rewind on the fake provider, `devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")` clean) is P17's acceptance item 5 and runs once P14-P17 are complete; the P16 part of it is acceptance 1 above.
+The M3 exit check (`/undo` and rewind on the fake provider,
+`devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")` clean) is P17's
+acceptance item 5 and runs once P14-P17 are complete; the P16 part of it is acceptance 1 above.
 
 ## Self-review
 
 **Spec coverage (05 P16 scope -> task).**
-- `ckpt-objects.R`: "pre-images as private-environment bindings released with `rm()`" -> Task 1 (`ckpt_capture()`, `ckpt_settle()`, `ckpt_drop()`); "defusing of list and S4 pre-images" -> Task 1 (`ckpt_defuse()`, G7 variant v5; copy rows c12, c12d, c12e); "capture policy and budgets of architecture §6.16" -> Task 2 (`ckpt_capture_how()`, `ckpt_objects_budget()`, options `gptr.undo_*`); "eager disk images with `serialize(ascii = FALSE, xdr = FALSE)`" -> Tasks 1-2 (`ckpt_capture_disk()`, `ckpt_spill()` through `serialize_leaf(xdr = FALSE)`); "data.table deep copies" -> Tasks 1-2 (`gptr_preimage.data.table()`, `how = "copy"`); "settle" -> Task 2 (`ckpt_objects_after()`); the exported `gptr_preimage()` S3 generic (IC-01) -> Task 1; the per-session state `ckpt_ck_new()` and its finalizer (G7 c06b; needed by Task 1's copy rows) -> Task 1; the `state` checkpointer -> Task 3; `checkpoint.note` -> Task 2 (function) and Task 6 (service registration).
-- `ckpt-files.R`: "content-addressed store with XXH128" -> Task 4; "baseline and pruned walk" -> Task 5; "3-way restore" -> Task 5; "symlink and `.git` guards" -> Task 5 (`ckpt_restore_guard()`); IC-52 confinement -> Task 5; IC-71 collection -> Task 4; IC-65 walk -> Tasks 5-6.
-- `ckpt-rewind.R`: "`gptr.checkpoint` and `gptr.rewind` entries" -> Task 6 (fragments into P06's container, scan entries) and Task 7 (`gptr.rewind`); "`gptr_rewind()`" -> Task 7; "`gptr_checkpoints()`" -> Task 8; "`/undo`, `/redo`, `/rewind`, `/checkpoints` commands" -> Task 8; "`builtin:checkpoints` registering the `checkpointer` kind's built-ins for objects, files and state" -> Task 6.
+
+- `ckpt-objects.R`: "pre-images as private-environment bindings released with `rm()`" -> Task 1
+  (`ckpt_capture()`, `ckpt_settle()`, `ckpt_drop()`); "defusing of list and S4 pre-images" -> Task 1
+  (`ckpt_defuse()`, G7 variant v5; copy rows c12, c12d, c12e); "capture policy and budgets of
+  architecture §6.16" -> Task 2 (`ckpt_capture_how()`, `ckpt_objects_budget()`, options
+  `gptr.undo_*`); "eager disk images with `serialize(ascii = FALSE, xdr = FALSE)`" -> Tasks 1-2
+  (`ckpt_capture_disk()`, `ckpt_spill()` through `serialize_leaf(xdr = FALSE)`); "data.table deep
+  copies" -> Tasks 1-2 (`gptr_preimage.data.table()`, `how = "copy"`); "settle" -> Task 2
+  (`ckpt_objects_after()`); the exported `gptr_preimage()` S3 generic (IC-01) -> Task 1; the
+  per-session state `ckpt_ck_new()` and its finalizer (G7 c06b; needed by Task 1's copy rows) ->
+  Task 1; the `state` checkpointer -> Task 3; `checkpoint.note` -> Task 2 (function) and Task 6
+  (service registration).
+- `ckpt-files.R`: "content-addressed store with XXH128" -> Task 4; "baseline and pruned walk" ->
+  Task 5; "3-way restore" -> Task 5; "symlink and `.git` guards" -> Task 5 (`ckpt_restore_guard()`);
+  IC-52 confinement -> Task 5; IC-71 collection -> Task 4; IC-65 walk -> Tasks 5-6.
+- `ckpt-rewind.R`: "`gptr.checkpoint` and `gptr.rewind` entries" -> Task 6 (fragments into P06's
+  container, scan entries) and Task 7 (`gptr.rewind`); "`gptr_rewind()`" -> Task 7;
+  "`gptr_checkpoints()`" -> Task 8; "`/undo`, `/redo`, `/rewind`, `/checkpoints` commands" ->
+  Task 8; "`builtin:checkpoints` registering the `checkpointer` kind's built-ins for objects, files
+  and state" -> Task 6.
 - Owns `test-copy-ckpt.R` -> Tasks 1, 7, 8. Every acceptance check -> the table above.
 
-**Placeholder scan.** Searched the plan for "TBD", "TODO", "implement later", "fill in", "appropriate error handling", "handle edge cases", "similar to Task": none. Every step that changes code shows the complete code; the only edit to earlier code (Task 8, `builtin_checkpoints()`) shows the full old and new definitions. Red-phase counts for the integration tasks (6, 7, 8) are stated as the failures to expect, because the exact count depends on how many expectations precede the first error in each test.
+**Placeholder scan.** Searched the plan for "TBD", "TODO", "implement later", "fill in",
+"appropriate error handling", "handle edge cases", "similar to Task": none. Every step that changes
+code shows the complete code; the only edit to earlier code (Task 8, `builtin_checkpoints()`) shows
+the full old and new definitions. Red-phase counts for the integration tasks (6, 7, 8) are stated as
+the failures to expect, because the exact count depends on how many expectations precede the first
+error in each test.
 
-**Type and name consistency with 04.** Exports and arguments match 04 §6.5/§6.6 exactly: `gptr_rewind(s, turn = -1L, to = NULL, restore = c("all", "conversation", "workspace"), force = FALSE, preview = FALSE)`, `gptr_checkpoints(s, all = FALSE)`, `gptr_preimage(x, name, ctx, ...)` returning `list(mode, reason, copy)`. Internal names match 04 §7.16 (`builtin_checkpoints(gptr)`, `ckpt_predict(code)`, `ckpt_store_put(path)`, `ckpt_store_get(hash, dest)`), the service `checkpoint.note` (`function(call, run)`), the checkpointer fields of 04 §10.2 row 29 (`scope`, `before`, `after`, `undo`, `redo`, `prune`, `describe`), the events of 04 §10.4 (`session_before_tree`, `session_tree`, `checkpoint` with `tool_call_id`, `objects`, `files`, `restorable`), the condition classes (`busy`, `rewind_range`, `invalid_argument`, `permission`, warning `rewind_partial` with field `report`), the listing class and columns of 04 §5.12, the store layout of 04 §11.14 and the option names and defaults of 04 §3.1. No P16 function name repeats a name another plan defines (checked against the `ckpt_` prefix: only P16 uses it; P23 calls `ckpt_store_put()`/`ckpt_store_get()`).
+**Type and name consistency with 04.** Exports and arguments match 04 sections 6.5/6.6 exactly:
+`gptr_rewind(s, turn = -1L, to = NULL, restore = c("all", "conversation", "workspace"), force = FALSE, preview = FALSE)`,
+`gptr_checkpoints(s, all = FALSE)`, `gptr_preimage(x, name, ctx, ...)` returning
+`list(mode, reason, copy)`. Internal names match 04 section 7.16 (`builtin_checkpoints(gptr)`,
+`ckpt_predict(code)`, `ckpt_store_put(path)`, `ckpt_store_get(hash, dest)`), the service
+`checkpoint.note` (`function(call, run)`), the checkpointer fields of 04 section 10.2 row 29
+(`scope`, `before`, `after`, `undo`, `redo`, `prune`, `describe`), the events of 04 section 10.4
+(`session_before_tree`, `session_tree`, `checkpoint` with `tool_call_id`, `objects`, `files`,
+`restorable`), the condition classes (`busy`, `rewind_range`, `invalid_argument`, `permission`,
+warning `rewind_partial` with field `report`), the listing class and columns of 04 section 5.12, the
+store layout of 04 section 11.14 and the option names and defaults of 04 section 3.1. No P16
+function name repeats a name another plan defines (checked against the `ckpt_` prefix: only P16 uses
+it; P23 calls `ckpt_store_put()`/`ckpt_store_get()`).
 
 **Contract ambiguities and the readings chosen.**
-1. IC-31 and 04 §7.11/§7.16 say `ckpt_predict()` wraps P11's `code_targets()`, but IC-33's kernel SDK (P01 `arch_kernel_sdk()`) does not list `code_targets`, and `perm-classify.R` is a plain L4 file. This plan follows IC-31 (the decision that names this exact edge). Resolved in P01's cross-plan consolidation: P01's `arch_contract_edges()` (`tests/testthat/helper-arch.R`) admits `ckpt-*.R` -> `code_targets()` while `arch_kernel_sdk()` stays the IC-33 list, so P01's `test-arch-layers.R` reports no P16 edge.
-2. 04 §4.6 describes `gptr.checkpoint` data as "G7 §3.1 shape"; P06's dispatcher writes `{tool_call_id, fragments: {<checkpointer>: <fragment>}}`. P16 follows P06's container (P06 writes the entry); each fragment carries G7's per-scope content; `ckpt_fragment()` also reads the flat shape.
-3. `gptr.rewind` data adds `undone` and `redone` (the checkpoint entry ids) to `{from, to, keep, restore, report}`; they let a later rewind know which records are applied after a reload. 04 §11 lets readers ignore unknown keys.
-4. 04 §5.1 says `.d` is written only through P06's functions, while 04 §6.5 makes `gptr_rewind()` set `last_rewind` and `editor_text`; P06 has no rewind verb, so P16 writes `.d$leaf` (before `session_append()`, to parent the entry at the target), `.d$turns`, `.d$last_text`, `.d$status`/`.d$reason` (a terminal status becomes `idle`), `.d$last_rewind` and `.d$editor_text`.
-5. 03 §6.16 and G7 §3.9 send `<workspace_changes since=... reason="rewind">` after a partial rewind, but `workspace_changes` is P09's block with no `reason` input. P16 registers a second `context_block` record named `workspace_changes` (order 101); the kind resolves `all` (P02's collision diagnostic covers only `first` kinds) and P07 renders the spec name as the tag.
-6. P09's `workspace_changes` block (baseline: the `agent_end` snapshot in P09's private `ctx$state()`) will list objects a rewind restored as `~ name` lines on the next request, so "a full restore sends the model nothing" holds for P16's own block only; the byte-identical prefix of acceptance 3 is unaffected (the block is inside the new user message).
-7. G7 restores environment variables and `.Random.seed` with the 3-way rule; 04 §12.3 forbids `Sys.setenv(` outside `auth-dotenv.R` and `.Random.seed` assignment outside `rng_swap()`/`with_seed_preserved()`, so the state checkpointer reports both as not restored.
-8. 04 §7.10 lists P16 among the consumers of P10's `walk_files()` and `diff_lines()`, and §7.7 of `extract_state()`. `walk_files()`'s contract does not say how it treats symbolic links, hidden files or the `prune` argument, which G7's verified walker needs (links listed but not followed, git-ignored files included, `.gptr` pruned); P16 keeps G7's walker. `diff_lines()` and `extract_state()` would serve G7's preview diffs and `summarize = TRUE`, which 04 §6.5 does not include.
-9. IC-65 asks for a files walk after a Codex `workspace-write` exec, but the Codex adapter (P20, later, L1) has no way to call P16. P16 detects a subscription-CLI route from the provider record (`type = "cli"`) and walks at every `turn_end` of such a session (the baseline is brought up to date at `agent_start`); the tests mock `ckpt_cli_session()`.
-10. P11's detail view calls `checkpoint.note` as `(call, NULL)`; `ckpt_note()` then uses `run_current()`.
-11. G7 §3.6 makes `turn = 0` "a null target (a new root)"; P16 keeps the entries before the first user message (the `gptr.frozen` entry), so resume and the frozen prefix stay valid.
-12. IC-52 confines restores to "the project root and `tempdir()`"; P16 measures this against the current `project_root()` (never the root a session file records) and also asks for `control` and `critical` path classes (IC-54), a tightening.
-13. Acceptance 4 relies on P15's `builtin:documents` writing blocks at once when `front_end()` is not `"rscript"` (04 §7.15: writes are "deferred under Rscript"); the test mocks `front_end()` to `"terminal"` and sets `gptr.record = "auto"` and `gptr.replay = "auto"`. P15's plan consumes exactly the `session_tree` fields P16 emits: its `doc_on_session_tree()` reads `from`, `to` and `report` and makes the `gptr.doc_block` blocks between them inert (`doc_set_inert()`), appending `gptr.doc_block` entries after P16's `gptr.rewind` entry (so the leaf after a rewind can be one of those entries; acceptance 3 counts only `gptr.rewind` entries).
-14. IC-53 item 3: P16 consumes the one-shot token in `run$signal$control` exactly as P06's `session_control_check()` (the one IC-53 check, D-146) does; calling it would leave the IC-33 allowlist.
-15. G7's `checkpoint` event payload had `turn` and summary counts; 04 §10.4 fixes `tool_call_id`, `objects`, `files`, `restorable`; P16 emits it from its `tool_result` hook (after P06 wrote the entry) with those fields (and `turn` in the standard event fields).
-16. Once loaded, `builtin:checkpoints` takes part in every `peter()` run of the package: a mutating `r` call now gets a `gptr.checkpoint` entry (written by P06 by design). Tests of earlier plans that assert an exact entry sequence for such calls would see it; Task 6 Step 4 re-runs the dispatcher, `r` tool and permission suites to catch that.
-17. 04 §4.6 says a `gptr.rewind` entry is "parented at the target, becomes the leaf". For `restore = "workspace"` (only objects, files and state; 04 §6.5) the conversation must stay where it is, so P16 parents that entry at the old leaf; `ckpt_wanted()` then reads such workspace-only rewinds on a path to know which records they undid. `s$editor_text` is `NULL` after a workspace-only rewind (no prompt was undone).
-18. 03 §6.16 says the manual/edits permission detail view "offers 'spill first'" when capture is impossible. 04 gives no interface for it (the `checkpoint.note` service returns only `chr(1)` or `NULL`, and P11's detail view has no such action), so P16 provides the "cannot be undone: ..." note only; a spill-first action would need a contract change in 04 §7.0 and P11.
-19. 04 §6.6 lists `ctx` fields `predicted`, `bytes`, `budget` for `gptr_preimage()`; P16 adds `dry` (`TRUE` for the `checkpoint.note` dry run, when a method must not copy). It is documented in `@param ctx`; methods that ignore it still work (they copy, and the dry run drops the copy).
-20. 04 §10.2 row 29 runs checkpointers for every "sequential, non-read-only" tool. P16 additionally skips pure reads (`ckpt_pure_read()`: an R call at level 0 whose `ckpt_predict()` result is empty), which only saves a walk and a snapshot; a level-0 call that creates a binding (P11 rates `y = 2` level 0 because nothing existing is overwritten) is still checkpointed so a rewind removes it (G7 section 3.4 step 5).
-21. G7 section 3.1 says spilled images carry `"where":"disk"` in the record, but a pre-image spilled at a turn end belongs to a fragment that P06 already appended (append-only). `ckpt_objects_undo()` therefore looks for `<root>/checkpoints/objects/<session id>/<image>.rdsx` whatever the row's `where` says (image keys are unique), and restores such an image of an earlier R process only with `force = TRUE` (the address check means nothing across processes).
+
+1. IC-31 and 04 sections 7.11/7.16 say `ckpt_predict()` wraps P11's `code_targets()`, but IC-33's
+   kernel SDK (P01 `arch_kernel_sdk()`) does not list `code_targets`, and `perm-classify.R` is a
+   plain L4 file. This plan follows IC-31 (the decision that names this exact edge). Resolved in
+   P01's cross-plan consolidation: P01's `arch_contract_edges()` (`tests/testthat/helper-arch.R`)
+   admits `ckpt-*.R` -> `code_targets()` while `arch_kernel_sdk()` stays the IC-33 list, so P01's
+   `test-arch-layers.R` reports no P16 edge.
+2. 04 section 4.6 describes `gptr.checkpoint` data as "G7 §3.1 shape"; P06's dispatcher writes
+   `{tool_call_id, fragments: {<checkpointer>: <fragment>}}`. P16 follows P06's container (P06
+   writes the entry); each fragment carries G7's per-scope content; `ckpt_fragment()` also reads the
+   flat shape.
+3. `gptr.rewind` data adds `undone` and `redone` (the checkpoint entry ids) to
+   `{from, to, keep, restore, report}`; they let a later rewind know which records are applied after
+   a reload. 04 section 11 lets readers ignore unknown keys.
+4. 04 section 5.1 says `.d` is written only through P06's functions, while 04 section 6.5 makes
+   `gptr_rewind()` set `last_rewind` and `editor_text`; P06 has no rewind verb, so P16 writes
+   `.d$leaf` (before `session_append()`, to parent the entry at the target), `.d$turns`,
+   `.d$last_text`, `.d$status`/`.d$reason` (a terminal status becomes `idle`), `.d$last_rewind` and
+   `.d$editor_text`.
+5. 03 section 6.16 and G7 section 3.9 send `<workspace_changes since=... reason="rewind">` after a
+   partial rewind, but `workspace_changes` is P09's block with no `reason` input. P16 registers a
+   second `context_block` record named `workspace_changes` (order 101); the kind resolves `all`
+   (P02's collision diagnostic covers only `first` kinds) and P07 renders the spec name as the tag.
+6. P09's `workspace_changes` block (baseline: the `agent_end` snapshot in P09's private
+   `ctx$state()`) will list objects a rewind restored as `~ name` lines on the next request, so "a
+   full restore sends the model nothing" holds for P16's own block only; the byte-identical prefix
+   of acceptance 3 is unaffected (the block is inside the new user message).
+7. G7 restores environment variables and `.Random.seed` with the 3-way rule; 04 section 12.3 forbids
+   `Sys.setenv(` outside `auth-dotenv.R` and `.Random.seed` assignment outside
+   `rng_swap()`/`with_seed_preserved()`, so the state checkpointer reports both as not restored.
+8. 04 section 7.10 lists P16 among the consumers of P10's `walk_files()` and `diff_lines()`, and
+   section 7.7 of `extract_state()`. `walk_files()`'s contract does not say how it treats symbolic
+   links, hidden files or the `prune` argument, which G7's verified walker needs (links listed but
+   not followed, git-ignored files included, `.gptr` pruned); P16 keeps G7's walker. `diff_lines()`
+   and `extract_state()` would serve G7's preview diffs and `summarize = TRUE`, which 04 section 6.5
+   does not include.
+9. IC-65 asks for a files walk after a Codex `workspace-write` exec, but the Codex adapter (P20,
+   later, L1) has no way to call P16. P16 detects a subscription-CLI route from the provider record
+   (`type = "cli"`) and walks at every `turn_end` of such a session (the baseline is brought up to
+   date at `agent_start`); the tests mock `ckpt_cli_session()`.
+10. P11's detail view calls `checkpoint.note` as `(call, NULL)`; `ckpt_note()` then uses
+    `run_current()`.
+11. G7 section 3.6 makes `turn = 0` "a null target (a new root)"; P16 keeps the entries before the
+    first user message (the `gptr.frozen` entry), so resume and the frozen prefix stay valid.
+12. IC-52 confines restores to "the project root and `tempdir()`"; P16 measures this against the
+    current `project_root()` (never the root a session file records) and also asks for `control` and
+    `critical` path classes (IC-54), a tightening.
+13. Acceptance 4 relies on P15's `builtin:documents` writing blocks at once when `front_end()` is
+    not `"rscript"` (04 section 7.15: writes are "deferred under Rscript"); the test mocks
+    `front_end()` to `"terminal"` and sets `gptr.record = "auto"` and `gptr.replay = "auto"`. P15's
+    plan consumes exactly the `session_tree` fields P16 emits: its `doc_on_session_tree()` reads
+    `from`, `to` and `report` and makes the `gptr.doc_block` blocks between them inert
+    (`doc_set_inert()`), appending `gptr.doc_block` entries after P16's `gptr.rewind` entry (so the
+    leaf after a rewind can be one of those entries; acceptance 3 counts only `gptr.rewind`
+    entries).
+14. IC-53 item 3: P16 consumes the one-shot token in `run$signal$control` exactly as P06's
+    `session_control_check()` (the one IC-53 check, D-146) does; calling it would leave the IC-33
+    allowlist.
+15. G7's `checkpoint` event payload had `turn` and summary counts; 04 section 10.4 fixes
+    `tool_call_id`, `objects`, `files`, `restorable`; P16 emits it from its `tool_result` hook
+    (after P06 wrote the entry) with those fields (and `turn` in the standard event fields).
+16. Once loaded, `builtin:checkpoints` takes part in every `peter()` run of the package: a mutating
+    `r` call now gets a `gptr.checkpoint` entry (written by P06 by design). Tests of earlier plans
+    that assert an exact entry sequence for such calls would see it; Task 6 Step 4 re-runs the
+    dispatcher, `r` tool and permission suites to catch that.
+17. 04 section 4.6 says a `gptr.rewind` entry is "parented at the target, becomes the leaf". For
+    `restore = "workspace"` (only objects, files and state; 04 section 6.5) the conversation must
+    stay where it is, so P16 parents that entry at the old leaf; `ckpt_wanted()` then reads such
+    workspace-only rewinds on a path to know which records they undid. `s$editor_text` is `NULL`
+    after a workspace-only rewind (no prompt was undone).
+18. 03 section 6.16 says the manual/edits permission detail view "offers 'spill first'" when capture
+    is impossible. 04 gives no interface for it (the `checkpoint.note` service returns only `chr(1)`
+    or `NULL`, and P11's detail view has no such action), so P16 provides the "cannot be
+    undone: ..." note only; a spill-first action would need a contract change in 04 section 7.0 and
+    P11.
+19. 04 section 6.6 lists `ctx` fields `predicted`, `bytes`, `budget` for `gptr_preimage()`; P16 adds
+    `dry` (`TRUE` for the `checkpoint.note` dry run, when a method must not copy). It is documented
+    in `@param ctx`; methods that ignore it still work (they copy, and the dry run drops the copy).
+20. 04 section 10.2 row 29 runs checkpointers for every "sequential, non-read-only" tool. P16
+    additionally skips pure reads (`ckpt_pure_read()`: an R call at level 0 whose `ckpt_predict()`
+    result is empty), which only saves a walk and a snapshot; a level-0 call that creates a binding
+    (P11 rates `y = 2` level 0 because nothing existing is overwritten) is still checkpointed so a
+    rewind removes it (G7 section 3.4 step 5).
+21. G7 section 3.1 says spilled images carry `"where":"disk"` in the record, but a pre-image spilled
+    at a turn end belongs to a fragment that P06 already appended (append-only).
+    `ckpt_objects_undo()` therefore looks for `<root>/checkpoints/objects/<session id>/<image>.rdsx`
+    whatever the row's `where` says (image keys are unique), and restores such an image of an
+    earlier R process only with `force = TRUE` (the address check means nothing across processes).
 
 **Executed validation.**
-- Every `r` code block of this plan was extracted and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all 21 parse.
-- Grep of the code blocks: no left-arrow assignment and no `%>%`; R sources are ASCII and at most 100 characters per line. P01's lint scanner (`lint_scan()` of `test-lint-rules.R`, copied from P01's plan) over the three assembled R files reports no hit (no `Sys.setenv()` call, no `.Random.seed` assignment, every `serialize()`/`saveRDS()` through `serialize_leaf()`, every `readLines()` with `encoding = "UTF-8"`, no `withr::`, no `:::`).
-- Codetools' `findGlobals()` over the assembled files: every function the code calls outside P16 is one listed under "Interfaces consumed"; no top-level name is defined twice (Task 8's replacement of `builtin_checkpoints()` excepted).
-- The R code of Tasks 1-5 was sourced with scratch stand-ins of contract shape for P01, P04, P06 and P11 (`code_targets()` approximated by G7's verified `ckpt_targets()` walker) and the real P09 `env_snapshot()` and P01 `fingerprint()` code copied from their plans, and the unit tests ran with testthat 3.3: Task 1 alone 54 expectations, Tasks 1-3 `test-ckpt-objects.R` 153, Tasks 4-5 `test-ckpt-files.R` 86 (with `NOT_CRAN=true`, including the real second R process), all passing; Task 2's red phase gives `[ FAIL 11 | ... | PASS 54 ]` against Task 1's code.
-- The 24 G7 matrix rows and the 7 serialize/finalizer rows of `test-copy-ckpt.R` ran in fresh `Rscript --vanilla` processes through `expect_no_copy()`'s script layout against Task 1's code alone: every count equals G7's verdict (8 COPY, 16 in place; row c17 needs the address check, as in G7). Twelve further rows drove the full objects checkpointer (`ckpt_objects_before()`/`after()`, undo, redo, the turn-end budget, spill and restore from disk, a created and a removed object, a list and a data frame, the `checkpoint.note` dry run, a collected state): the user's next in-place edit copied nothing in every row (a data frame column copies once on its first `df$a[1] = 0` in plain R too, so that row counts the second edit).
-- The pure tree tests of Task 7 (targets, applied/wanted records, the preview chain, the report lines), the IC-53 guard test and Task 8's `/redo` chain test ran against Tasks 6-8's code: 32 expectations passing; the `/redo` chain test fails against the plan's earlier `ckpt_redo_target()` (a second `/redo` undid the first).
-- Not executed here: the `peter()`-driven tests of Tasks 6-8, the documents test and the end-to-end copy rows, which need the assembled package (P01-P15).
-- Finalize pass (cross-plan consolidation log rows 3-5): with the same stand-ins, Task 1 alone gives 55 expectations, Task 2's red phase `[ FAIL 11 | ... | PASS 55 ]`, Task 2 green 129, Task 3's red phase `[ FAIL 4 | ... | PASS 129 ]` and Tasks 1-3 `test-ckpt-objects.R` 154, all as stated in the steps; the new POSIXlt test errors with "subscript out of bounds" against the earlier walk.
+
+- Every `r` code block of this plan was extracted and parsed with
+  `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all 21 parse.
+- Grep of the code blocks: no left-arrow assignment and no `%>%`; R sources are ASCII and at most
+  100 characters per line. P01's lint scanner (`lint_scan()` of `test-lint-rules.R`, copied from
+  P01's plan) over the three assembled R files reports no hit (no `Sys.setenv()` call, no
+  `.Random.seed` assignment, every `serialize()`/`saveRDS()` through `serialize_leaf()`, every
+  `readLines()` with `encoding = "UTF-8"`, no `withr::`, no `:::`).
+- Codetools' `findGlobals()` over the assembled files: every function the code calls outside P16 is
+  one listed under "Interfaces consumed"; no top-level name is defined twice (Task 8's replacement
+  of `builtin_checkpoints()` excepted).
+- The R code of Tasks 1-5 was sourced with scratch stand-ins of contract shape for P01, P04, P06 and
+  P11 (`code_targets()` approximated by G7's verified `ckpt_targets()` walker) and the real P09
+  `env_snapshot()` and P01 `fingerprint()` code copied from their plans, and the unit tests ran with
+  testthat 3.3: Task 1 alone 54 expectations, Tasks 1-3 `test-ckpt-objects.R` 153, Tasks 4-5
+  `test-ckpt-files.R` 86 (with `NOT_CRAN=true`, including the real second R process), all passing;
+  Task 2's red phase gives `[ FAIL 11 | ... | PASS 54 ]` against Task 1's code.
+- The 24 G7 matrix rows and the 7 serialize/finalizer rows of `test-copy-ckpt.R` ran in fresh
+  `Rscript --vanilla` processes through `expect_no_copy()`'s script layout against Task 1's code
+  alone: every count equals G7's verdict (8 COPY, 16 in place; row c17 needs the address check, as
+  in G7). Twelve further rows drove the full objects checkpointer
+  (`ckpt_objects_before()`/`after()`, undo, redo, the turn-end budget, spill and restore from disk,
+  a created and a removed object, a list and a data frame, the `checkpoint.note` dry run, a
+  collected state): the user's next in-place edit copied nothing in every row (a data frame column
+  copies once on its first `df$a[1] = 0` in plain R too, so that row counts the second edit).
+- The pure tree tests of Task 7 (targets, applied/wanted records, the preview chain, the report
+  lines), the IC-53 guard test and Task 8's `/redo` chain test ran against Tasks 6-8's code: 32
+  expectations passing; the `/redo` chain test fails against the plan's earlier `ckpt_redo_target()`
+  (a second `/redo` undid the first).
+- Not executed here: the `peter()`-driven tests of Tasks 6-8, the documents test and the end-to-end
+  copy rows, which need the assembled package (P01-P15).
+- Finalize pass (cross-plan consolidation log rows 3-5): with the same stand-ins, Task 1 alone gives
+  55 expectations, Task 2's red phase `[ FAIL 11 | ... | PASS 55 ]`, Task 2 green 129, Task 3's red
+  phase `[ FAIL 4 | ... | PASS 129 ]` and Tasks 1-3 `test-ckpt-objects.R` 154, all as stated in the
+  steps; the new POSIXlt test errors with "subscript out of bounds" against the earlier walk.
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 00-conventions, 04 (incl. §15), 05 P16, G7 and the dependency plans (P01, P02, P04, P06, P07, P09, P11, P15, P20). Every code block was re-extracted and parsed, linted with P01's scanner, and the self-contained parts were run in scratch (see "Executed validation").
+Adversarial review of 2026-10-01 against 00-conventions, 04 (incl. section 15), 05 P16, G7 and the
+dependency plans (P01, P02, P04, P06, P07, P09, P11, P15, P20). Every code block was re-extracted
+and parsed, linted with P01's scanner, and the self-contained parts were run in scratch (see
+"Executed validation").
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
@@ -5388,7 +5981,7 @@ Adversarial review of 2026-10-01 against 00-conventions, 04 (incl. §15), 05 P16
 | 8 | minor | Task 6 `ckpt_rewind_block()` | The once-only rewind note was consumed by any provider call, including a `gptr_prompt()` preview, so the real next request could lose it. | applied | The note is cleared only when `ctx$input$preview` is not `TRUE` (P07's rendering input). |
 | 9 | minor | Task 4 `ckpt_gc()` | Temporary blob names (`<hash>.tmp-<pid>`) left by an interrupted write were excluded from collection forever. | applied | `ckpt_gc()` deletes temporary names older than one day; the GC test plants one and checks it is gone (Task 4 28, Task 5 86). |
 | 10 | minor | Task 1 intro, Plan acceptance row 2 | "7 COPY lines, 17 in-place lines": G7's output has 8 COPY and 16 in-place verdicts (the rows themselves were right). | applied | Text corrected in both places. |
-| 11 | minor | Self-review | Item 13 said P15 was "not yet planned" (P15's `doc_on_session_tree()` exists and reads `from`, `to`, `report`); the workspace-only parenting (04 §4.6 says "parented at the target"), the missing "spill first" action of 03 §6.16, the additive `ctx$dry` of `gptr_preimage()` and the pure-read rule were not recorded. | applied | Item 13 rewritten; ambiguities 17-21 added; executed validation rewritten with this review's runs; Plan acceptance counts updated (474 -> 475 total after item 9). |
+| 11 | minor | Self-review | Item 13 said P15 was "not yet planned" (P15's `doc_on_session_tree()` exists and reads `from`, `to`, `report`); the workspace-only parenting (04 section 4.6 says "parented at the target"), the missing "spill first" action of 03 section 6.16, the additive `ctx$dry` of `gptr_preimage()` and the pure-read rule were not recorded. | applied | Item 13 rewritten; ambiguities 17-21 added; executed validation rewritten with this review's runs; Plan acceptance counts updated (474 -> 475 total after item 9). |
 | 12 | minor | Tasks 2-8 expected outputs | Counts derived from the old test sets (and Task 6's red-phase estimate) no longer matched after fixes 1-9. | applied | Recounted: objects 153, files 86, rewind 169 (Task 6 35, Task 7 133), copy 67; acceptance 1 `PASS 475` (`SKIP 6`, `PASS 409` without profmem), 3b `PASS 239`, 5a `PASS 86`. |
 | 13 | minor | `test-copy-ckpt.R` coverage | Suspected sticky references from the full objects checkpointer (`ckpt_unshared_bytes()` inside restore, `gptr_preimage()` dispatch, the state finalizer) that G7's matrix does not exercise. | rejected | Twelve extra scratch rows (see Executed validation) showed no copy on the user's next in-place edit; the one copying row (a data frame column) copies identically in plain R without gptr. No change needed. |
 | 14 | minor | Task 5 `ckpt_through_link()` | Compares the resolved directory with an unnormalised one, so a raw `tempdir()`-style path under macOS `/var` reads as "through a link". | rejected | Every caller passes paths built from `path_norm()`ed roots (`project_root()`, fragment roots, `ckpt_call_paths()`); the only unnormalised input is a test path that is refused anyway (gptr's user directory). |
@@ -5397,7 +5990,9 @@ Adversarial review of 2026-10-01 against 00-conventions, 04 (incl. §15), 05 P16
 
 ## Cross-plan consolidation log
 
-Cross-plan check of 2026-10-01 against 04 (incl. §15), 05 and the related plans. Every `r` code block was re-extracted and parsed with `Rscript --vanilla` afterwards (all parse; no left-arrow assignment and no `%>%` in code).
+Cross-plan check of 2026-10-01 against 04 (incl. section 15), 05 and the related plans. Every `r`
+code block was re-extracted and parsed with `Rscript --vanilla` afterwards (all parse; no left-arrow
+assignment and no `%>%` in code).
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|

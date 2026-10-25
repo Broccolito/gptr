@@ -55,7 +55,8 @@ the configured `dev/.library`, `Rscript --vanilla`, isolated child directories, 
 credentials and `GPTR_LIVE_TESTS=false`.
 
 - roxygen generation: success, no unresolved documentation links; unchanged NAMESPACE.
-- Precomputed the initial 13 vignettes and README, then the updated getting-started and new Why Peter guide: zero problems (all 14 guides).
+- Precomputed the initial 13 vignettes and README, then the updated getting-started and new Why
+  Peter guide: zero problems (all 14 guides).
 - pkgdown manifest, Rd coverage/spelling, README and file checks: zero problems.
 - Documentation/release checks: 71 passing assertions, zero failures, warnings or skips.
 - All 58 reference example pages: zero problems; offline execution only.
@@ -116,7 +117,6 @@ are retained. Locally supplied SVG tab icons follow the selected theme. A pkgdow
 template override changes only its favicon block, so no external favicon generator or image
 conversion is needed. Logo source artwork is unmodified; package executable code is unchanged.
 
-
 ## Namesake and responsive design follow-up
 
 Added the concise Why Peter guide with primary sources for Peter Naur's ALGOL 60/syntax
@@ -147,9 +147,8 @@ Evidence adds responsive-matrix.json, text-scale-matrix.json and logo-light-prev
 ignored dev/.validation/documentation-20261010/.
 
 Hosted run 38071919571 for documentation commit 42a89f6 was still in progress at the last check;
-its completed benchmark, copy-safety, macOS-release and Ubuntu-oldrel-4 jobs had passed. These are revision-specific
-observations, not a completed hosted gate for this follow-up.
-
+its completed benchmark, copy-safety, macOS-release and Ubuntu-oldrel-4 jobs had passed. These are
+revision-specific observations, not a completed hosted gate for this follow-up.
 
 ## White background follow-up
 
@@ -185,13 +184,13 @@ layout certificate predate these edits; a fresh site build and browser review ar
 
 ## Living plan and cross-plan gate
 
-Saved `dev/TESTING_PLAN.md` covers all14 guides/tables,63 exports, provider/frontend combinations,
+Saved `dev/TESTING_PLAN.md` covers all14 guides/tables, 63 exports, provider/frontend combinations,
 native/system-wide decisions, interactive UX, extensions, optional tools, memory/performance and
 CRAN gates. A row is updated only from its revision-specific evidence; inherited tests, prepared
 fixtures and inventory are distinguished from live behavior.
 
-The required rerun after the latest plan edit completed successfully:25 implementation plans,
-1,446 indexed blocks,4,389 definitions,28,337 calls;910 findings (821 info,89 warnings,0errors).
+The required rerun after the latest plan edit completed successfully: 25 implementation plans,
+1,446 indexed blocks, 4,389 definitions, 28,337 calls; 910 findings (821 info, 89 warnings,0errors).
 Extraction/parse checked770 R blocks with0parse/style problems; single-worker lintr3.4 found no
 lints. Three LONG notes are nested P17 skill examples. Read-only warning triage found recorded
 ownership/signature/prototype/historical-contract exceptions and current implementation coverage

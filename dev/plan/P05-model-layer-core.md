@@ -9,15 +9,32 @@
 > reconcile the affected steps before implementation. No implementation has
 > been performed as part of this design update.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give gptr its provider-neutral model layer: provider records as data with origin-bound credentials, the `provider_stream()` transport glue, transcript projection and cross-provider hand-off, usage rows with dated cost, and an offline model catalog with a resolver.
+**Goal:** Give gptr its provider-neutral model layer: provider records as data with origin-bound
+credentials, the `provider_stream()` transport glue, transcript projection and cross-provider
+hand-off, usage rows with dated cost, and an offline model catalog with a resolver.
 
-**Architecture:** Four L1 files. `provider-registry.R` declares `builtin:providers` (17 provider records as data) and `builtin:fake`, resolves credentials and base URLs, and drives every adapter transport (`http_*`, `inprocess`, `process_jsonl`) on P04's reactor so that each request emits INFRA-02 events and calls `done()` exactly once; `provider-transform.R` projects a session's JSONL tree into the message list a target model may see and applies Pi's hand-off rules. `catalog-models.R` merges a shipped models.dev snapshot with gptr's overrides and live layers and resolves `provider/id[:thinking]` references, and `provider-usage.R` prices usage rows with dated tiers and TTL-split cache writes.
+**Architecture:** Four L1 files. `provider-registry.R` declares `builtin:providers` (17 provider
+records as data) and `builtin:fake`, resolves credentials and base URLs, and drives every adapter
+transport (`http_*`, `inprocess`, `process_jsonl`) on P04's reactor so that each request emits
+INFRA-02 events and calls `done()` exactly once; `provider-transform.R` projects a session's JSONL
+tree into the message list a target model may see and applies Pi's hand-off rules.
+`catalog-models.R` merges a shipped models.dev snapshot with gptr's overrides and live layers and
+resolves `provider/id[:thinking]` references, and `provider-usage.R` prices usage rows with dated
+tiers and TTL-split cache writes.
 
-**Tech Stack:** base R (>= 4.2.0), jsonlite, curl (only through P04's reactor), cli (through P01's `hash_sha256()`), testthat 3e, withr (tests only); curl and pkgload in the maintainer script `dev/catalog/build_models.R` only.
+**Tech Stack:** base R (>= 4.2.0), jsonlite, curl (only through P04's reactor), cli (through P01's
+`hash_sha256()`), testthat 3e, withr (tests only); curl and pkgload in the maintainer script
+`dev/catalog/build_models.R` only.
 
-**Spec:** dev/spec/03-architecture.md (sections 2.2, 3.2, 5.2, 5.5, 6.5, 8.1-8.4), dev/spec/04-interface-contract.md (sections 1.1-1.2, 2.2, 3.1-3.2, 4.1-4.9, 5.9, 5.12, 6.2 `gptr_providers()` and `gptr_models()`, 7.0-7.5, 8.1-8.5, 10.1-10.3, 11.2, 11.8-11.10, 12.1-12.3, 15: IC-33, IC-35, IC-45, IC-64, IC-65, IC-67, IC-71, IC-73), dev/spec/05-plan-decomposition.md (P05).
+**Spec:** dev/spec/03-architecture.md (sections 2.2, 3.2, 5.2, 5.5, 6.5, 8.1-8.4),
+dev/spec/04-interface-contract.md (sections 1.1-1.2, 2.2, 3.1-3.2, 4.1-4.9, 5.9, 5.12, 6.2
+`gptr_providers()` and `gptr_models()`, 7.0-7.5, 8.1-8.5, 10.1-10.3, 11.2, 11.8-11.10, 12.1-12.3,
+15: IC-33, IC-35, IC-45, IC-64, IC-65, IC-67, IC-71, IC-73),
+dev/spec/05-plan-decomposition.md (P05).
 
 **Depends on:** P02, P03, P04 (and P01 through them). **Milestone:** M1.
 
@@ -25,23 +42,91 @@
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full (house style `=` and `|>`, ASCII-only sources, `pkg::fun()`, `gptr_abort()`/`gptr_warn()`/`gptr_inform()`, no `:::` in `R/`, no `.GlobalEnv`, `readLines(..., encoding = "UTF-8")`, connections closed with `on.exit()` in the opening function, testthat 3e, no network in tests, TDD, one commit per task). Plan-specific requirements, copied from the specification:
+`dev/plan/00-conventions.md` applies in full (house style `=` and `|>`, ASCII-only sources,
+`pkg::fun()`, `gptr_abort()`/`gptr_warn()`/`gptr_inform()`, no `:::` in `R/`, no `.GlobalEnv`,
+`readLines(..., encoding = "UTF-8")`, connections closed with `on.exit()` in the opening function,
+testthat 3e, no network in tests, TDD, one commit per task). Plan-specific requirements, copied from
+the specification:
 
-- Owned files (05 P05): `R/provider-transform.R`, `R/provider-registry.R`, `R/provider-usage.R`, `R/catalog-models.R`, `tests/testthat/test-provider-transform.R`, `tests/testthat/test-provider-registry.R`, `tests/testthat/test-provider-usage.R`, `tests/testthat/test-catalog-models.R`, `inst/extdata/models.json.gz`, `dev/catalog/build_models.R`; plus `NAMESPACE` and `man/` through `Rscript --vanilla -e 'devtools::document()'`.
-- Exports (04 section 14.1, P05): `gptr_providers(check = FALSE)` and `gptr_models(query = NULL, provider = NULL, refresh = FALSE)`.
-- Internal contract (04 section 7.5), exact signatures: `project_messages(entries, leaf, target)`, `handoff_transform(messages, target)`, `provider_get(id)`, `adapter_get(api)`, `provider_credential(provider)`, `provider_stream(model, context, opts, emit, done, run = NULL)`, `builtin_providers(gptr)`, `usage_new(...)`, `usage_cost(usage, model, when = Sys.Date())`, `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)`, `usage_log_append(row)`, `usage_log()`, `catalog_get()`, `model_resolve(ref, strict = TRUE)`, `catalog_aliases()`, `model_default(role = c("chat", "small", "system1"))`.
-- Built-ins (04 section 10.3, IC-08): `builtin:providers` (`provider-registry.R`, replaceable) and `builtin:fake` (factory `builtin_fake()` of P01's `provider-fake.R`, declared here), both through top-level `on_load(ext_declare_builtin("<name>", builtin_<name>))`.
-- Package state owned (04 section 7.0): `the$catalog` (merged model catalog) and `the$s1_log` (process System 1 accounting log). Nothing else global; no run state (INFRA-15).
-- Conditions (04 section 2.2): `gptr_error_no_key` (fields `provider`, `variables`), `gptr_error_unknown_model` (`ref`, `suggestions`), `gptr_error_not_available` (`member`, `provided_by`), `gptr_error_invalid_argument` (`arg`, `expected`), `gptr_error_network` with parent `gptr_error_provider` (`provider`, `status`, `curl_code`), `gptr_error_invalid_spec` (`kind`, `name`, `field`, `problem`), `gptr_error_internal` (`detail`). Stream failures are classed, unsignalled condition objects carried in `error` events, never signalled after `provider_stream()` returns (INFRA-02).
-- Options read through `gptr_opt()` (04 section 3.1): `gptr.max_attempts` = `4L`, `gptr.max_retry_delay` = `60`, `gptr.first_byte_timeout` = `120`, `gptr.idle_timeout` = `90`, `gptr.connect_timeout` = `20`. Settings read through `setting_get()` (04 section 11.2): `providers` = `{<id>: {base_url, models, headers, enabled}}` (a project `base_url` needs trust and a one-time confirmation, enforced by P08's layers; `enabled: false` keeps a provider out of `model_default()` and refuses `provider_stream()`; an optional `rate` is IC-64's settings override of the static rate), `egress` = `{<provider>: "ack"}` (user file only), `model`, `small_model`, `system1`.
-- Provider key variables (04 section 3.2): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `TOGETHER_API_KEY`, `XAI_API_KEY`, `CEREBRAS_API_KEY`, `FIREWORKS_API_KEY`, `VLLM_API_KEY`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` (not secret), `AWS_BEARER_TOKEN_BEDROCK`, `TYPESAFE_API_KEY`. Values are registered at once with `secret_register(..., origin = <provider origin>)`; nothing but a `gptr_secret` handle leaves `provider_credential()`.
-- Provider records (04 section 10.2 row 1, IC-35, IC-45, IC-64): fields `id`, `api`, `base_url`, `auth`, `models`, `compat`, `type`, `headers`, `discover`, `status`, `aliases`, `local`, `offline`, `rate`; `offline = TRUE` only for providers that call no remote model (the fake, mock-server and fake-CLI providers); static `rate = list(requests_per_s, tokens_per_s)` (the `typesafe` record of P13: 40 and 1e5), "overridable by settings and catalog" (IC-64): `provider_stream()` passes a `providers.<id>.rate` setting or a catalog `providers.<id>.rate` to P04's `ratelimit_set()`.
-- Adapter `opts` (04 section 8.1, IC-33): `emit`, `retry`, `signal`, `credential`, `base_url`, `state`, `memo`, `send`, `gate`, `mcp_dispatch`, `tool_result`, `run`, `session`, `first_byte_timeout`, `idle_timeout`, `connect_timeout`, plus `provider` (the provider record; P01's fake adapter reads `opts$provider$log`). `retry(info)` is wired to P04's `reactor_retry()` (P04 plan, Task 12). `provider_stream()` injects `gate`, `mcp_dispatch` (the `mcp.dispatch_local` service) and `tool_result`; adapters never call L2+ functions.
-- Model record (04 section 4.9) plus IC-67 `max_images` and IC-71 `capabilities$forced_tool_choice` (`FALSE` for Anthropic 5.x); IC-73 `cache_min` per model. Thinking levels `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`; a requested level is clamped upwards first, then downwards (Pi `models.ts:1215-1247`).
-- Aliases (architecture section 8.4, 04 section 11.10): `sonnet`, `opus`, `haiku`, `gemini`, `flash`, `gpt`, `jev`, `claude_code`, `codex`; a family alias resolves to the newest `active` model of the family by `release_date`. Default chat route: an Anthropic key -> `anthropic/claude-sonnet-5-5`; OpenAI -> `openai/gpt-6-sol`; Gemini -> `google/gemini-3.8-flash`; otherwise a detected CLI.
-- Snapshot (04 section 11.10): `inst/extdata/models.json.gz` with `schema_version` 1, `generated`, `source`, `providers`, `models`, `aliases`; merge order snapshot < cache < overrides < user config `providers.*.models` < live discovery of local servers; refresh only on explicit request with ETag into `tools::R_user_dir("gptr", "cache")` as `models.json` + `models.etag` (04 section 11.9). No disk write, network or process at load.
-- Usage (04 section 4.3, architecture section 5.5): per-request columns `request_id` (`q` + 12 hex), `session`, `agent`, `parent_id`, `provider`, `model`, `route` (`api`, `plan-cli`, `system-one`, `emulated`), `input`, `output`, `cache_read`, `cache_write_5m`, `cache_write_1h`, `reasoning`, `images`, `cost`, `tier`, `stop_reason`, `started`, `seconds`, `estimated`, `multiplier`. Cost from the dated price tier in force on the request date; 1-hour cache writes at 2x input, 5-minute writes at 1.25x input (07 section 3.5).
-- Every test runs offline: the fake provider (`gptr_fake_provider()`, `local_fake_provider()`), P04's reactor and process functions replaced with `testthat::local_mocked_bindings()`, and no helper file of our own (05: a plan writes only the files it owns, so small test helpers live at the top of the test file that uses them).
+- Owned files (05 P05): `R/provider-transform.R`, `R/provider-registry.R`, `R/provider-usage.R`,
+  `R/catalog-models.R`, `tests/testthat/test-provider-transform.R`,
+  `tests/testthat/test-provider-registry.R`, `tests/testthat/test-provider-usage.R`,
+  `tests/testthat/test-catalog-models.R`, `inst/extdata/models.json.gz`,
+  `dev/catalog/build_models.R`; plus `NAMESPACE` and `man/` through
+  `Rscript --vanilla -e 'devtools::document()'`.
+- Exports (04 section 14.1, P05): `gptr_providers(check = FALSE)` and
+  `gptr_models(query = NULL, provider = NULL, refresh = FALSE)`.
+- Internal contract (04 section 7.5), exact signatures: `project_messages(entries, leaf, target)`,
+  `handoff_transform(messages, target)`, `provider_get(id)`, `adapter_get(api)`,
+  `provider_credential(provider)`, `provider_stream(model, context, opts, emit, done, run = NULL)`,
+  `builtin_providers(gptr)`, `usage_new(...)`, `usage_cost(usage, model, when = Sys.Date())`,
+  `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)`,
+  `usage_log_append(row)`, `usage_log()`, `catalog_get()`, `model_resolve(ref, strict = TRUE)`,
+  `catalog_aliases()`, `model_default(role = c("chat", "small", "system1"))`.
+- Built-ins (04 section 10.3, IC-08): `builtin:providers` (`provider-registry.R`, replaceable) and
+  `builtin:fake` (factory `builtin_fake()` of P01's `provider-fake.R`, declared here), both through
+  top-level `on_load(ext_declare_builtin("<name>", builtin_<name>))`.
+- Package state owned (04 section 7.0): `the$catalog` (merged model catalog) and `the$s1_log`
+  (process System 1 accounting log). Nothing else global; no run state (INFRA-15).
+- Conditions (04 section 2.2): `gptr_error_no_key` (fields `provider`, `variables`),
+  `gptr_error_unknown_model` (`ref`, `suggestions`), `gptr_error_not_available` (`member`,
+  `provided_by`), `gptr_error_invalid_argument` (`arg`, `expected`), `gptr_error_network` with
+  parent `gptr_error_provider` (`provider`, `status`, `curl_code`), `gptr_error_invalid_spec`
+  (`kind`, `name`, `field`, `problem`), `gptr_error_internal` (`detail`). Stream failures are
+  classed, unsignalled condition objects carried in `error` events, never signalled after
+  `provider_stream()` returns (INFRA-02).
+- Options read through `gptr_opt()` (04 section 3.1): `gptr.max_attempts` = `4L`,
+  `gptr.max_retry_delay` = `60`, `gptr.first_byte_timeout` = `120`, `gptr.idle_timeout` = `90`,
+  `gptr.connect_timeout` = `20`. Settings read through `setting_get()` (04 section 11.2):
+  `providers` = `{<id>: {base_url, models, headers, enabled}}` (a project `base_url` needs trust and
+  a one-time confirmation, enforced by P08's layers; `enabled: false` keeps a provider out of
+  `model_default()` and refuses `provider_stream()`; an optional `rate` is IC-64's settings override
+  of the static rate), `egress` = `{<provider>: "ack"}` (user file only), `model`, `small_model`,
+  `system1`.
+- Provider key variables (04 section 3.2): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`,
+  `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`,
+  `TOGETHER_API_KEY`, `XAI_API_KEY`, `CEREBRAS_API_KEY`, `FIREWORKS_API_KEY`, `VLLM_API_KEY`,
+  `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` (not secret), `AWS_BEARER_TOKEN_BEDROCK`,
+  `TYPESAFE_API_KEY`. Values are registered at once with
+  `secret_register(..., origin = <provider origin>)`; nothing but a `gptr_secret` handle leaves
+  `provider_credential()`.
+- Provider records (04 section 10.2 row 1, IC-35, IC-45, IC-64): fields `id`, `api`, `base_url`,
+  `auth`, `models`, `compat`, `type`, `headers`, `discover`, `status`, `aliases`, `local`,
+  `offline`, `rate`; `offline = TRUE` only for providers that call no remote model (the fake,
+  mock-server and fake-CLI providers); static `rate = list(requests_per_s, tokens_per_s)` (the
+  `typesafe` record of P13: 40 and 1e5), "overridable by settings and catalog" (IC-64):
+  `provider_stream()` passes a `providers.<id>.rate` setting or a catalog `providers.<id>.rate` to
+  P04's `ratelimit_set()`.
+- Adapter `opts` (04 section 8.1, IC-33): `emit`, `retry`, `signal`, `credential`, `base_url`,
+  `state`, `memo`, `send`, `gate`, `mcp_dispatch`, `tool_result`, `run`, `session`,
+  `first_byte_timeout`, `idle_timeout`, `connect_timeout`, plus `provider` (the provider record;
+  P01's fake adapter reads `opts$provider$log`). `retry(info)` is wired to P04's `reactor_retry()`
+  (P04 plan, Task 12). `provider_stream()` injects `gate`, `mcp_dispatch` (the `mcp.dispatch_local`
+  service) and `tool_result`; adapters never call L2+ functions.
+- Model record (04 section 4.9) plus IC-67 `max_images` and IC-71 `capabilities$forced_tool_choice`
+  (`FALSE` for Anthropic 5.x); IC-73 `cache_min` per model. Thinking levels `off`, `minimal`, `low`,
+  `medium`, `high`, `xhigh`, `max`; a requested level is clamped upwards first, then downwards (Pi
+  `models.ts:1215-1247`).
+- Aliases (architecture section 8.4, 04 section 11.10): `sonnet`, `opus`, `haiku`, `gemini`,
+  `flash`, `gpt`, `jev`, `claude_code`, `codex`; a family alias resolves to the newest `active`
+  model of the family by `release_date`. Default chat route: an Anthropic key ->
+  `anthropic/claude-sonnet-5-5`; OpenAI -> `openai/gpt-6-sol`; Gemini -> `google/gemini-3.8-flash`;
+  otherwise a detected CLI.
+- Snapshot (04 section 11.10): `inst/extdata/models.json.gz` with `schema_version` 1, `generated`,
+  `source`, `providers`, `models`, `aliases`; merge order snapshot < cache < overrides < user config
+  `providers.*.models` < live discovery of local servers; refresh only on explicit request with ETag
+  into `tools::R_user_dir("gptr", "cache")` as `models.json` + `models.etag` (04 section 11.9). No
+  disk write, network or process at load.
+- Usage (04 section 4.3, architecture section 5.5): per-request columns `request_id` (`q` + 12 hex),
+  `session`, `agent`, `parent_id`, `provider`, `model`, `route` (`api`, `plan-cli`, `system-one`,
+  `emulated`), `input`, `output`, `cache_read`, `cache_write_5m`, `cache_write_1h`, `reasoning`,
+  `images`, `cost`, `tier`, `stop_reason`, `started`, `seconds`, `estimated`, `multiplier`. Cost
+  from the dated price tier in force on the request date; 1-hour cache writes at 2x input, 5-minute
+  writes at 1.25x input (07 section 3.5).
+- Every test runs offline: the fake provider (`gptr_fake_provider()`, `local_fake_provider()`),
+  P04's reactor and process functions replaced with `testthat::local_mocked_bindings()`, and no
+  helper file of our own (05: a plan writes only the files it owns, so small test helpers live at
+  the top of the test file that uses them).
 
 ## File Structure
 
@@ -59,7 +144,10 @@
 | `dev/catalog/build_models.R` | maintainer script: models.dev (MIT) + seed + overrides -> `inst/extdata/models.json.gz` |
 | `NAMESPACE`, `man/gptr_models.Rd`, `man/gptr_providers.Rd` | generated by `devtools::document()` |
 
-Every command runs from the repository root (`/Users/wanjun/Desktop/gptr`) with `Rscript --vanilla`. The task order follows the dependencies inside the plan: usage records first (the catalog reads their price tables), provider records before the transform (tool-id rules read a provider's compat flags), the catalog before usage rows and the stream glue (both resolve model records).
+Every command runs from the repository root (`/Users/wanjun/Desktop/gptr`) with `Rscript --vanilla`.
+The task order follows the dependencies inside the plan: usage records first (the catalog reads
+their price tables), provider records before the transform (tool-id rules read a provider's compat
+flags), the catalog before usage rows and the stream glue (both resolve model records).
 
 ## Tasks
 
@@ -68,7 +156,8 @@ Every command runs from the repository root (`/Users/wanjun/Desktop/gptr`) with 
 3. Origin-bound provider credentials (`provider-registry.R`)
 4. Cross-provider hand-off transform (`provider-transform.R`)
 5. Projection of the transcript tree (`provider-transform.R`)
-6. Catalog data, models.dev conversion and the shipped snapshot (`catalog-models.R`, `dev/catalog/build_models.R`, `inst/extdata/models.json.gz`)
+6. Catalog data, models.dev conversion and the shipped snapshot (`catalog-models.R`,
+   `dev/catalog/build_models.R`, `inst/extdata/models.json.gz`)
 7. Merged catalog and the model resolver (`catalog-models.R`)
 8. `gptr_models()`, defaults, explicit refresh and local discovery (`catalog-models.R`)
 9. Usage rows, roll-up and the process System 1 log (`provider-usage.R`)
@@ -85,10 +174,23 @@ Every command runs from the repository root (`/Users/wanjun/Desktop/gptr`) with 
 - Test: `tests/testthat/test-provider-usage.R` (create)
 
 **Interfaces:**
-- Consumes: `gptr_abort(message, class, ..., .data = NULL, call = NULL)` and the internal `` `%||%` `` (P01, 04 sections 2.1 and 7.1).
-- Produces: `usage_new(...)` -> a usage record with fields `input`, `output`, `cache_read`, `cache_write_5m`, `cache_write_1h`, `reasoning`, `images`, `total`, `cost` (`list(input, output, cache_read, cache_write, total)`, USD), `estimated` (04 section 4.3); `usage_cost(usage, model, when = Sys.Date())` -> the usage record with `cost` filled from `model$prices` (04 section 7.5). Private helpers used by later tasks: `prices_df(x)` (a model's price table as a data frame with columns `from`, `tier`, `input`, `output`, `cache_read`, `cache_write_5m`, `cache_write_1h`), `price_select(prices, prompt_tokens, when = Sys.Date())` (the price row in force), `price_threshold(tier)`.
+- Consumes: `gptr_abort(message, class, ..., .data = NULL, call = NULL)` and the internal
+  `` `%||%` `` (P01, 04 sections 2.1 and 7.1).
+- Produces: `usage_new(...)` -> a usage record with fields `input`, `output`, `cache_read`,
+  `cache_write_5m`, `cache_write_1h`, `reasoning`, `images`, `total`, `cost`
+  (`list(input, output, cache_read, cache_write, total)`, USD), `estimated` (04 section 4.3);
+  `usage_cost(usage, model, when = Sys.Date())` -> the usage record with `cost` filled from
+  `model$prices` (04 section 7.5). Private helpers used by later tasks: `prices_df(x)` (a model's
+  price table as a data frame with columns `from`, `tier`, `input`, `output`, `cache_read`,
+  `cache_write_5m`, `cache_write_1h`), `price_select(prices, prompt_tokens, when = Sys.Date())` (the
+  price row in force), `price_threshold(tier)`.
 
-Price-tier semantics (from Pi's `calculateCost()`, report 03 sections 2.7 and 3.4, extended with dates): the latest price set whose `from` is not after the request date applies; within it a `>Nk` row applies when the prompt (`input + cache_read + cache_write_5m + cache_write_1h`) exceeds N thousand tokens (the highest matching threshold wins), otherwise the base row (`default` or `<=Nk`). Missing cache rates default to the multipliers of report 07 section 3.5 and G2: reads 0.1x input, 5-minute writes 1.25x input, 1-hour writes 2x input.
+Price-tier semantics (from Pi's `calculateCost()`, report 03 sections 2.7 and 3.4, extended with
+dates): the latest price set whose `from` is not after the request date applies; within it a `>Nk`
+row applies when the prompt (`input + cache_read + cache_write_5m + cache_write_1h`) exceeds N
+thousand tokens (the highest matching threshold wins), otherwise the base row (`default` or `<=Nk`).
+Missing cache rates default to the multipliers of report 07 section 3.5 and G2: reads 0.1x input,
+5-minute writes 1.25x input, 1-hour writes 2x input.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -168,7 +270,8 @@ test_that("price tiers switch on the prompt size and on the date", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-usage")'`
-Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 0 ]`, with errors such as ``Error in `usage_new(input = 10, output = 5, cache_read = 100)`: could not find function "usage_new"``.
+Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 0 ]`, with errors such as
+``Error in `usage_new(input = 10, output = 5, cache_read = 100)`: could not find function "usage_new"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -360,10 +463,45 @@ git commit -m "feat(provider): usage records and dated price tiers"
 - Test: `tests/testthat/test-provider-registry.R` (create)
 
 **Interfaces:**
-- Consumes: `on_load(expr)` (P01 `aaa-state.R`), `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)` (P02), `builtin_fake(gptr)` (P01 `provider-fake.R`), `gptr_provider(id, api, base_url = NULL, auth = NULL, models = NULL, compat = list(), type = c("chat", "classifier", "cli"), headers = list(), discover = NULL, status = NULL, aliases = character(), local = FALSE, offline = FALSE, rate = NULL)` (P02), `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)` (P02), `check_string(x, arg, null = FALSE, empty = FALSE)`, `setting_get(key, session = NULL, default = NULL)`, `check_running()`, `json_decode(text)`, `raw_to_utf8(x, fallback = "CP1252")` (P01), `gptr_check(x, error = FALSE, tokens = FALSE)` and `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))` in the tests; for the plugin-adapter test of INFRA-17 (architecture section 6.18 row 17: "the fake provider and a plugin adapter pass `gptr_check()`"), `ext_load(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE, session = NULL)` -> `lgl(1)`, `ext_unload(source)` (P02 `ext-load.R`), `gptr_adapter(api, transport, build = NULL, parse = NULL, stream = NULL, classify = NULL, capabilities = list())` (P02) and `fake_stream(model, context, opts)` (P01 `provider-fake.R`, which plays the script of the provider spec in `opts$provider`).
-- Produces: `builtin_providers(gptr)` (registers 17 provider specs), `provider_get(id)` -> `<spec:provider>` or `NULL` (also by provider alias; the record carries the settings `providers.<id>.headers` merged over its own non-secret `headers` and a logical `enabled`, `FALSE` only when `providers.<id>.enabled` is `false`; 04 section 11.2 gives the `providers` key to P05), `adapter_get(api)` -> `<spec:adapter>` or `gptr_error_not_available` (fields `member`, `provided_by`); private `provider_table()` (the provider data; also read by the catalog in Task 6), `provider_settings(id)` (the `providers.<id>` settings entry), `provider_effective(p)`, `provider_base_url(provider)` (settings `providers.<id>.base_url` > record `base_url` > the `base_url_env`/`base_url_default`/`base_url_template` compat fields), `provider_origin(url)` (lower-case scheme, host and non-default port). The compat field names below are the contract P12's `compat_flags()` reads (snake_case forms of Pi's `OpenAICompletionsCompat`, report 09 section 3.3): `supports_store`, `supports_developer_role`, `supports_reasoning_effort`, `supports_strict_mode`, `supports_tool_choice`, `max_tokens_field`, `requires_tool_result_name`, `requires_reasoning_content`, `thinking_format`, `thinking_in_content`, `think_tags`, `cache_control_format`, `session_affinity`, `image_mode`, `tool_id` (`"alnum9"` = Mistral's 9-character ids), `auth_header`, `deployment_model`, `base_url_env`, `base_url_default`, `base_url_template`.
+- Consumes: `on_load(expr)` (P01 `aaa-state.R`),
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)` (P02),
+  `builtin_fake(gptr)` (P01 `provider-fake.R`),
+  `gptr_provider(id, api, base_url = NULL, auth = NULL, models = NULL, compat = list(), type = c("chat", "classifier", "cli"), headers = list(), discover = NULL, status = NULL, aliases = character(), local = FALSE, offline = FALSE, rate = NULL)`
+  (P02), `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)` (P02),
+  `check_string(x, arg, null = FALSE, empty = FALSE)`,
+  `setting_get(key, session = NULL, default = NULL)`, `check_running()`, `json_decode(text)`,
+  `raw_to_utf8(x, fallback = "CP1252")` (P01), `gptr_check(x, error = FALSE, tokens = FALSE)` and
+  `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))` in the tests; for the
+  plugin-adapter test of INFRA-17 (architecture section 6.18 row 17: "the fake provider and a plugin
+  adapter pass `gptr_check()`"),
+  `ext_load(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE, session = NULL)` ->
+  `lgl(1)`, `ext_unload(source)` (P02 `ext-load.R`),
+  `gptr_adapter(api, transport, build = NULL, parse = NULL, stream = NULL, classify = NULL, capabilities = list())`
+  (P02) and `fake_stream(model, context, opts)` (P01 `provider-fake.R`, which plays the script of
+  the provider spec in `opts$provider`).
+- Produces: `builtin_providers(gptr)` (registers 17 provider specs), `provider_get(id)` ->
+  `<spec:provider>` or `NULL` (also by provider alias; the record carries the settings
+  `providers.<id>.headers` merged over its own non-secret `headers` and a logical `enabled`, `FALSE`
+  only when `providers.<id>.enabled` is `false`; 04 section 11.2 gives the `providers` key to P05),
+  `adapter_get(api)` -> `<spec:adapter>` or `gptr_error_not_available` (fields `member`,
+  `provided_by`); private `provider_table()` (the provider data; also read by the catalog in
+  Task 6), `provider_settings(id)` (the `providers.<id>` settings entry), `provider_effective(p)`,
+  `provider_base_url(provider)` (settings `providers.<id>.base_url` > record `base_url` > the
+  `base_url_env`/`base_url_default`/`base_url_template` compat fields), `provider_origin(url)`
+  (lower-case scheme, host and non-default port). The compat field names below are the contract
+  P12's `compat_flags()` reads (snake_case forms of Pi's `OpenAICompletionsCompat`, report 09
+  section 3.3): `supports_store`, `supports_developer_role`, `supports_reasoning_effort`,
+  `supports_strict_mode`, `supports_tool_choice`, `max_tokens_field`, `requires_tool_result_name`,
+  `requires_reasoning_content`, `thinking_format`, `thinking_in_content`, `think_tags`,
+  `cache_control_format`, `session_affinity`, `image_mode`, `tool_id` (`"alnum9"` = Mistral's
+  9-character ids), `auth_header`, `deployment_model`, `base_url_env`, `base_url_default`,
+  `base_url_template`.
 
-The provider table is architecture section 8.1 (base URLs and key variables cross-checked with report 09 section 3.5). `typesafe` (section 8.2) is registered by P13's `builtin_system1()` (04 section 7.13) and the plan routes `claude-cli`/`codex` by P20's `builtin_cli()` (04 section 7.20); registering them here too would create same-rank collisions. The loopback servers get `discover` functions that run only on request (Task 8) and never under `R CMD check`.
+The provider table is architecture section 8.1 (base URLs and key variables cross-checked with
+report 09 section 3.5). `typesafe` (section 8.2) is registered by P13's `builtin_system1()` (04
+section 7.13) and the plan routes `claude-cli`/`codex` by P20's `builtin_cli()` (04 section 7.20);
+registering them here too would create same-rank collisions. The loopback servers get `discover`
+functions that run only on request (Task 8) and never under `R CMD check`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -469,11 +607,14 @@ test_that("base URLs come from settings, the record or an environment template",
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-registry")'`
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 1 ]`, with errors such as ``could not find function "provider_get"`` and ``could not find function "adapter_get"`` (the one pass is the plugin test's `expect_true(ok)`: P02's `ext_load()` already exists).
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 1 ]`, with errors such as
+``could not find function "provider_get"`` and ``could not find function "adapter_get"`` (the one
+pass is the plugin test's `expect_true(ok)`: P02's `ext_load()` already exists).
 
 - [ ] **Step 3: Write the implementation**
 
-Create `R/provider-registry.R` (the two `on_load()` lines are evaluated by `.onLoad`, after the whole namespace exists, IC-32):
+Create `R/provider-registry.R` (the two `on_load()` lines are evaluated by `.onLoad`, after the
+whole namespace exists, IC-32):
 
 ```r
 # Provider records as data, credentials, the provider_stream() glue and gptr_providers() (P05).
@@ -719,7 +860,9 @@ provider_origin = function(url) {
 }
 ```
 
-`provider_discoverer()` calls `catalog_http_get()` and `provider_optional_auth()` calls `provider_credential()`; both are defined in Tasks 8 and 3 and are only reached when those closures run.
+`provider_discoverer()` calls `catalog_http_get()` and `provider_optional_auth()` calls
+`provider_credential()`; both are defined in Tasks 8 and 3 and are only reached when those
+closures run.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -742,10 +885,42 @@ git commit -m "feat(provider): provider records as data and the builtin:fake dec
 - Test: `tests/testthat/test-provider-registry.R` (append)
 
 **Interfaces:**
-- Consumes: `secret_lookup(name)` -> handle or `NULL`, `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` -> handle, `auth_store_get(key)` (P03, 04 section 7.3; P03's `auth_store_get()` returns the record with every secret field already registered and replaced by an unbound handle); the `gptr_secret` fields `id`, `name`, `fp`, `origin` (04 section 5.9; P03's `secret_value()` checks the handle's own `origin` before its vault entry's, P03 plan Task 1); `hash_sha256(x)` (P01: the fingerprint of a refused `sk-ant-oat` token, and the test vault); `gptr_provider()` (P02, in the tests); `provider_base_url()`, `provider_origin()` (Task 2).
-- Produces: `provider_credential(provider)` -> a `gptr_secret` handle bound to the provider's origin, `NULL` for providers without `auth` (and for `offline` providers), else `gptr_error_no_key` with `provider` and `variables` (04 section 7.5); for the `anthropic` provider a Claude subscription OAuth token (`sk-ant-oat...`) in `ANTHROPIC_API_KEY` is refused (architecture section 8.1: "refuses subscription tokens (`sk-ant-oat`)"), as is the vault handle with the same fingerprint, and when nothing else is found the `gptr_error_no_key` message names the token type and points to an API key or `model = "claude_code"`.
+- Consumes: `secret_lookup(name)` -> handle or `NULL`,
+  `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` -> handle,
+  `auth_store_get(key)` (P03, 04 section 7.3; P03's `auth_store_get()` returns the record with every
+  secret field already registered and replaced by an unbound handle); the `gptr_secret` fields `id`,
+  `name`, `fp`, `origin` (04 section 5.9; P03's `secret_value()` checks the handle's own `origin`
+  before its vault entry's, P03 plan Task 1); `hash_sha256(x)` (P01: the fingerprint of a refused
+  `sk-ant-oat` token, and the test vault); `gptr_provider()` (P02, in the tests);
+  `provider_base_url()`, `provider_origin()` (Task 2).
+- Produces: `provider_credential(provider)` -> a `gptr_secret` handle bound to the provider's
+  origin, `NULL` for providers without `auth` (and for `offline` providers), else
+  `gptr_error_no_key` with `provider` and `variables` (04 section 7.5); for the `anthropic` provider
+  a Claude subscription OAuth token (`sk-ant-oat...`) in `ANTHROPIC_API_KEY` is refused
+  (architecture section 8.1: "refuses subscription tokens (`sk-ant-oat`)"), as is the vault handle
+  with the same fingerprint, and when nothing else is found the `gptr_error_no_key` message names
+  the token type and points to an API key or `model = "claude_code"`.
 
-Order (architecture section 8; report 03 section 4.5 as amended by G6 section 4.5): an `auth` function (the explicit form: it returns a handle or `NULL`) > the vault (`gptr_env()`, ambient discovery) > the credential store (`gptr_login()`; P03 resolves keyring references and returns handles) > the provider's environment variables, registered at once with the provider origin. A vault handle bound to another origin is never used; origins are compared after `provider_origin()`, because P03's `secret_register()` stores them in canonical form with the port (`https://api.anthropic.com:443`, P03 `origin_of()`). Every handle `provider_credential()` returns is origin-bound as 04 section 7.5 requires: an unbound handle (ambient discovery and `.env` values register without an origin; P03's credential store registers its fields without one; an `auth` function may return one) gets the provider origin in its own `origin` field, the binding P03's `secret_value()` honours first (P03 plan, Task 1). A key read from the environment exists only inside `provider_credential()` long enough to call `secret_register()` or, for the `anthropic` provider, to recognise a subscription token by its `sk-ant-oat` prefix and compute its fingerprint (`substr(hash_sha256(value), 1, 6)`, P03's `fp`), which marks a vault handle holding the same token (ambient discovery registers the environment's values); no other function takes a secret value (G6 section 4.3). An API key held only in the vault (a `.env` value not exported) has another fingerprint and is still used. Tests that set a key variable use `local_test_vault()`, which mocks `secret_register()` and `secret_lookup()` with a private environment: P03's process vault has no unregister function, and a test key left in it would change `model_default()` and credential lookups in later test files.
+Order (architecture section 8; report 03 section 4.5 as amended by G6 section 4.5): an `auth`
+function (the explicit form: it returns a handle or `NULL`) > the vault (`gptr_env()`, ambient
+discovery) > the credential store (`gptr_login()`; P03 resolves keyring references and returns
+handles) > the provider's environment variables, registered at once with the provider origin. A
+vault handle bound to another origin is never used; origins are compared after `provider_origin()`,
+because P03's `secret_register()` stores them in canonical form with the port
+(`https://api.anthropic.com:443`, P03 `origin_of()`). Every handle `provider_credential()` returns
+is origin-bound as 04 section 7.5 requires: an unbound handle (ambient discovery and `.env` values
+register without an origin; P03's credential store registers its fields without one; an `auth`
+function may return one) gets the provider origin in its own `origin` field, the binding P03's
+`secret_value()` honours first (P03 plan, Task 1). A key read from the environment exists only
+inside `provider_credential()` long enough to call `secret_register()` or, for the `anthropic`
+provider, to recognise a subscription token by its `sk-ant-oat` prefix and compute its fingerprint
+(`substr(hash_sha256(value), 1, 6)`, P03's `fp`), which marks a vault handle holding the same token
+(ambient discovery registers the environment's values); no other function takes a secret value (G6
+section 4.3). An API key held only in the vault (a `.env` value not exported) has another
+fingerprint and is still used. Tests that set a key variable use `local_test_vault()`, which mocks
+`secret_register()` and `secret_lookup()` with a private environment: P03's process vault has no
+unregister function, and a test key left in it would change `model_default()` and credential lookups
+in later test files.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -863,7 +1038,8 @@ test_that("the anthropic provider refuses a Claude subscription OAuth token (sk-
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-registry")'`
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 41 ]`, with ``could not find function "provider_credential"``.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 41 ]`, with
+``could not find function "provider_credential"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -996,10 +1172,25 @@ git commit -m "feat(provider): origin-bound provider credentials"
 - Test: `tests/testthat/test-provider-transform.R` (create)
 
 **Interfaces:**
-- Consumes: `block_text(text, signature = NULL)`, `hash_sha256(x)` (P01); `registry_get(kind, name, session = NULL)` (P02, for the target adapter's `capabilities$reasoning_replay`, 04 section 8.1); `provider_get(id)` (Task 2, for the `tool_id` compat flag). Tests also use `msg_user()`, `msg_assistant()`, `msg_tool_result()`, `msg_to_json()`, `block_thinking()`, `block_opaque()`, `block_tool_call()`, `block_image()`, `json_encode()` (P01, 04 sections 4.1-4.2), `gptr_register()` and `gptr_adapter()` (P02).
-- Produces: `handoff_transform(messages, target)` -> the messages for `target` (a model record, 04 section 4.9) (04 section 7.5); private `handoff_thinking_as_text()`, `id_sanitize()`, `id_completions()`, `id_responses()`, `id_alnum9_normaliser()`.
+- Consumes: `block_text(text, signature = NULL)`, `hash_sha256(x)` (P01);
+  `registry_get(kind, name, session = NULL)` (P02, for the target adapter's
+  `capabilities$reasoning_replay`, 04 section 8.1); `provider_get(id)` (Task 2, for the `tool_id`
+  compat flag). Tests also use `msg_user()`, `msg_assistant()`, `msg_tool_result()`,
+  `msg_to_json()`, `block_thinking()`, `block_opaque()`, `block_tool_call()`, `block_image()`,
+  `json_encode()` (P01, 04 sections 4.1-4.2), `gptr_register()` and `gptr_adapter()` (P02).
+- Produces: `handoff_transform(messages, target)` -> the messages for `target` (a model record, 04
+  section 4.9) (04 section 7.5); private `handoff_thinking_as_text()`, `id_sanitize()`,
+  `id_completions()`, `id_responses()`, `id_alnum9_normaliser()`.
 
-Rules (Pi `transformMessages()` pass 1, `transform-messages.ts:64-235`; report 03 section 2.9; INFRA-08): same model = provider, api and model id equal; a same-model turn is kept byte for byte (signatures, redacted thinking, opaque blocks of that model), except empty unsigned thinking. A foreign turn: thinking becomes a plain `text` block without tags (dropped when the target model record or, failing that, the registered adapter of the target api declares `reasoning_replay = FALSE`, 04 section 8.1), redacted thinking and opaque blocks of other models are dropped, text signatures and tool-call thought signatures are removed, tool ids are normalised for the target api and results follow the new ids. Images in user messages and tool results become one placeholder text per run when the target reads no images.
+Rules (Pi `transformMessages()` pass 1, `transform-messages.ts:64-235`; report 03 section 2.9;
+INFRA-08): same model = provider, api and model id equal; a same-model turn is kept byte for byte
+(signatures, redacted thinking, opaque blocks of that model), except empty unsigned thinking. A
+foreign turn: thinking becomes a plain `text` block without tags (dropped when the target model
+record or, failing that, the registered adapter of the target api declares
+`reasoning_replay = FALSE`, 04 section 8.1), redacted thinking and opaque blocks of other models are
+dropped, text signatures and tool-call thought signatures are removed, tool ids are normalised for
+the target api and results follow the new ids. Images in user messages and tool results become one
+placeholder text per run when the target reads no images.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1125,7 +1316,8 @@ test_that("foreign thinking becomes text unless the target refuses reasoning rep
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-transform")'`
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`, with ``could not find function "handoff_transform"``.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`, with
+``could not find function "handoff_transform"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1391,12 +1583,33 @@ git commit -m "feat(provider): cross-provider hand-off transform"
 - Test: `tests/testthat/test-provider-transform.R` (append)
 
 **Interfaces:**
-- Consumes: `msg_user(content, source = "prompt", timestamp = NULL)`, `msg_tool_result(tool_call_id, tool_name, content, is_error = FALSE, details = NULL, usage = NULL, timestamp = NULL)`, `msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)`, `block_context(kind, text, attrs = list(), anchor = FALSE)`, `block_text()` (P01); `handoff_transform()` (Task 4).
+- Consumes: `msg_user(content, source = "prompt", timestamp = NULL)`,
+  `msg_tool_result(tool_call_id, tool_name, content, is_error = FALSE, details = NULL, usage = NULL, timestamp = NULL)`,
+  `msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)`,
+  `block_context(kind, text, attrs = list(), anchor = FALSE)`, `block_text()` (P01);
+  `handoff_transform()` (Task 4).
 - Produces: `project_messages(entries, leaf, target)` (04 section 7.5), consumed by P06 and P07.
 
-Entries are in their R shape (04 section 4.6 with the section 4.8 name mapping), exactly as P06's store writes and reads them (`entry_message()`, `entry_from_json()` in P06's plan): every entry has `type`, `id`, `parent_id`, `timestamp`; a `message` entry holds `message` (a section 4.2 message); a `gptr.operator` `custom_message` entry holds the operator message itself as `message` (P06's shape, which has no `custom_type` field), or, in the flat form, `custom_type = "gptr.operator"`, `content` (text blocks) and `details = list(kind, tool_add, origin_text)`; other `custom_message` types (P06 keeps them under `raw`) are not model context; a `compaction` entry holds `summary`, `first_kept_entry_id`, `tokens_before` and `gptr = list(blocks, state, n)`. Other types (`model_change`, `thinking_level_change`, `custom`) are not model context.
+Entries are in their R shape (04 section 4.6 with the section 4.8 name mapping), exactly as P06's
+store writes and reads them (`entry_message()`, `entry_from_json()` in P06's plan): every entry has
+`type`, `id`, `parent_id`, `timestamp`; a `message` entry holds `message` (a section 4.2 message); a
+`gptr.operator` `custom_message` entry holds the operator message itself as `message` (P06's shape,
+which has no `custom_type` field), or, in the flat form, `custom_type = "gptr.operator"`, `content`
+(text blocks) and `details = list(kind, tool_add, origin_text)`; other `custom_message` types (P06
+keeps them under `raw`) are not model context; a `compaction` entry holds `summary`,
+`first_kept_entry_id`, `tokens_before` and `gptr = list(blocks, state, n)`. Other types
+(`model_change`, `thinking_level_change`, `custom`) are not model context.
 
-Projection (INFRA-04; report 02 sections 2.7 and 5.3 with the verifier's held-message fix): walk root -> `leaf` (a missing parent re-parents to the previous entry in file order); the newest compaction's blocks become the first user message, followed by its kept range and everything after it; errored and aborted assistant messages are dropped; every tool call gets exactly one result: an orphan closed by an aborted turn gets `interrupted after <s> s; side effects may have occurred` (s from the two message timestamps), any other orphan `No result provided`, results that match no open call are dropped; operator messages that arrive while results are pending (steering relays) are held until the results are complete. Entries are never edited, and synthetic results take the timestamp of their assistant message so projections are byte-stable across turns (the prefix cache depends on it).
+Projection (INFRA-04; report 02 sections 2.7 and 5.3 with the verifier's held-message fix): walk
+root -> `leaf` (a missing parent re-parents to the previous entry in file order); the newest
+compaction's blocks become the first user message, followed by its kept range and everything after
+it; errored and aborted assistant messages are dropped; every tool call gets exactly one result: an
+orphan closed by an aborted turn gets `interrupted after <s> s; side effects may have occurred` (s
+from the two message timestamps), any other orphan `No result provided`, results that match no open
+call are dropped; operator messages that arrive while results are pending (steering relays) are held
+until the results are complete. Entries are never edited, and synthetic results take the timestamp
+of their assistant message so projections are byte-stable across turns (the prefix cache depends
+on it).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1541,7 +1754,8 @@ test_that("the path follows parent ids, tolerates a missing parent and rejects a
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-transform")'`
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 32 ]`, with ``could not find function "project_messages"``.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 32 ]`, with
+``could not find function "project_messages"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1753,10 +1967,23 @@ git commit -m "feat(provider): projection of the transcript tree for model reque
 - Test: `tests/testthat/test-catalog-models.R` (create)
 
 **Interfaces:**
-- Consumes: `json_obj()`, `json_decode(text)`, `json_encode(x, pretty = FALSE)`, `gptr_user_dir(which = c("config", "cache", "data"), create = FALSE)` (P01); `provider_table()` (Task 2).
-- Produces: the snapshot format of 04 section 11.10; private `catalog_snapshot(api = NULL, decision = NULL, generated = format(Sys.Date(), "%Y-%m-%d"))`, `catalog_from_modelsdev(api, decision = NULL)`, `catalog_read(path)`, `catalog_merge_models(base, layer, patch_only = FALSE)`, `catalog_seed()`, `catalog_overrides()`, the path helpers `catalog_snapshot_path()`, `catalog_cache_path()`, `catalog_etag_path()`, and `catalog_thinking_levels`.
+- Consumes: `json_obj()`, `json_decode(text)`, `json_encode(x, pretty = FALSE)`,
+  `gptr_user_dir(which = c("config", "cache", "data"), create = FALSE)` (P01); `provider_table()`
+  (Task 2).
+- Produces: the snapshot format of 04 section 11.10; private
+  `catalog_snapshot(api = NULL, decision = NULL, generated = format(Sys.Date(), "%Y-%m-%d"))`,
+  `catalog_from_modelsdev(api, decision = NULL)`, `catalog_read(path)`,
+  `catalog_merge_models(base, layer, patch_only = FALSE)`, `catalog_seed()`, `catalog_overrides()`,
+  the path helpers `catalog_snapshot_path()`, `catalog_cache_path()`, `catalog_etag_path()`, and
+  `catalog_thinking_levels`.
 
-A snapshot is built as seed < models.dev < overrides. The seed holds complete entries for the models the specification names (so an offline build still resolves every alias the architecture uses); models.dev entries are pruned to gptr's providers, tool-capable, text-output, non-deprecated models (report 09 section 4.8: about 700 models, about 22 KB gzipped); the overrides carry gptr's reviewed prices (dated tiers), `cache_min`, `max_images`, capabilities and aliases, and only patch existing entries unless they are complete. models.dev is MIT licensed and credited in P01's `inst/COPYRIGHTS`.
+A snapshot is built as seed < models.dev < overrides. The seed holds complete entries for the models
+the specification names (so an offline build still resolves every alias the architecture uses);
+models.dev entries are pruned to gptr's providers, tool-capable, text-output, non-deprecated models
+(report 09 section 4.8: about 700 models, about 22 KB gzipped); the overrides carry gptr's reviewed
+prices (dated tiers), `cache_min`, `max_images`, capabilities and aliases, and only patch existing
+entries unless they are complete. models.dev is MIT licensed and credited in P01's
+`inst/COPYRIGHTS`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1840,7 +2067,8 @@ test_that("models.dev entries are pruned and converted; overrides only patch", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "catalog-models")'`
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`, with ``could not find function "catalog_read"`` and ``could not find function "catalog_from_modelsdev"``.
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`, with
+``could not find function "catalog_read"`` and ``could not find function "catalog_from_modelsdev"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2200,7 +2428,8 @@ catalog_read = function(path) {
 }
 ```
 
-Create `dev/catalog/build_models.R` (a maintainer tool; `dev/` is in `.Rbuildignore`, so nothing here runs on CRAN):
+Create `dev/catalog/build_models.R` (a maintainer tool; `dev/` is in `.Rbuildignore`, so nothing
+here runs on CRAN):
 
 ```r
 # Builds inst/extdata/models.json.gz: models.dev (MIT) pruned to gptr's providers, gptr's seed
@@ -2255,15 +2484,20 @@ cat(sprintf("wrote %s: %d models, %d providers, %d aliases, %.1f KB (%s)\n", out
             file.size(out) / 1024, snap$source))
 ```
 
-Generate the snapshot (the download is models.dev's free public catalog, about 5 MB; no model is called):
+Generate the snapshot (the download is models.dev's free public catalog, about 5 MB; no model
+is called):
 
 Run: `Rscript --vanilla dev/catalog/build_models.R`
-Expected (counts drift with models.dev; this line is from the 2026-09-29 `api.json`): `wrote inst/extdata/models.json.gz: 709 models, 18 providers, 9 aliases, 21.6 KB (models.dev (MIT) + gptr overrides)`
+Expected (counts drift with models.dev; this line is from the 2026-09-29 `api.json`):
+`wrote inst/extdata/models.json.gz: 709 models, 18 providers, 9 aliases, 21.6 KB (models.dev (MIT) + gptr overrides)`
 
-With an `api.json` downloaded earlier, `Rscript --vanilla dev/catalog/build_models.R --api api.json` builds the same snapshot without a download. Without network access, build the seed-only snapshot instead and rebuild online before the release:
+With an `api.json` downloaded earlier, `Rscript --vanilla dev/catalog/build_models.R --api api.json`
+builds the same snapshot without a download. Without network access, build the seed-only snapshot
+instead and rebuild online before the release:
 
 Run: `Rscript --vanilla dev/catalog/build_models.R --offline`
-Expected: `wrote inst/extdata/models.json.gz: 8 models, 18 providers, 9 aliases, 1.9 KB (gptr seed + overrides)`
+Expected:
+`wrote inst/extdata/models.json.gz: 8 models, 18 providers, 9 aliases, 1.9 KB (gptr seed + overrides)`
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -2286,10 +2520,46 @@ git commit -m "feat(catalog): model catalog snapshot from models.dev, seed and o
 - Test: `tests/testthat/test-catalog-models.R` (append)
 
 **Interfaces:**
-- Consumes: `registry_get()`, `registry_names()`, `registry_all(kind, session = NULL)` (P02; `gptr_spec()` and `gptr_register()` in the tests), `secret_lookup(name)`, `auth_store_get(key)` (P03), `setting_get()`, `check_string()`, `check_flag(x, arg, null = FALSE)`, `gptr_abort()` (P01), `fake_engine(model, opts = list())` and `fake_model_record(name, type, api, log)` (P01's `provider-fake.R`: the weak index of live fake engines by name that P01 keeps for exactly this lookup; not listed in 04), `provider_get()` (Task 2), `prices_df()` (Task 1), `provider_credential()` (Task 3, in the tests).
-- Produces: `catalog_get()` -> the merged catalog (a list: `schema_version`, `generated`, `source`, `providers`, `models` named by `provider/id`, `aliases`, `small`, `index` (data frame `ref`, `provider`, `id`, `name`, `family`, `release_date`, `status`, `type`, `owner`, `norm`, `aliases`), `alias_targets`); `model_resolve(ref, strict = TRUE)` -> the model record of 04 section 4.9 (fields `ref`, `provider`, `id`, `name`, `family`, `api`, `type`, `release_date`, `context`, `max_output`, `reasoning`, `thinking_levels`, `thinking`, `input`, `tool_call`, `structured_output`, `prices`, `cache_min`, `max_images`, `capabilities` (`mid_system`, `tool_addition`, `images_in_results`, `operator_role`, `adaptive_thinking`, `effort`, `forced_tool_choice`), `aliases`, `status`, `local`) or `gptr_error_unknown_model` with `ref` and up to three `suggestions` (`NULL` with `strict = FALSE`); `catalog_aliases()` -> chr; private `catalog_reset(discovered = FALSE)`, `catalog_model_specs()`, `model_key_present(id, vars)` (also used by `model_default()` in Task 8), `model_provider_keyed(pid)`, `model_fake_entry(pid, id)`.
+- Consumes: `registry_get()`, `registry_names()`, `registry_all(kind, session = NULL)` (P02;
+  `gptr_spec()` and `gptr_register()` in the tests), `secret_lookup(name)`, `auth_store_get(key)`
+  (P03), `setting_get()`, `check_string()`, `check_flag(x, arg, null = FALSE)`, `gptr_abort()`
+  (P01), `fake_engine(model, opts = list())` and `fake_model_record(name, type, api, log)` (P01's
+  `provider-fake.R`: the weak index of live fake engines by name that P01 keeps for exactly this
+  lookup; not listed in 04), `provider_get()` (Task 2), `prices_df()` (Task 1),
+  `provider_credential()` (Task 3, in the tests).
+- Produces: `catalog_get()` -> the merged catalog (a list: `schema_version`, `generated`, `source`,
+  `providers`, `models` named by `provider/id`, `aliases`, `small`, `index` (data frame `ref`,
+  `provider`, `id`, `name`, `family`, `release_date`, `status`, `type`, `owner`, `norm`, `aliases`),
+  `alias_targets`); `model_resolve(ref, strict = TRUE)` -> the model record of 04 section 4.9
+  (fields `ref`, `provider`, `id`, `name`, `family`, `api`, `type`, `release_date`, `context`,
+  `max_output`, `reasoning`, `thinking_levels`, `thinking`, `input`, `tool_call`,
+  `structured_output`, `prices`, `cache_min`, `max_images`, `capabilities` (`mid_system`,
+  `tool_addition`, `images_in_results`, `operator_role`, `adaptive_thinking`, `effort`,
+  `forced_tool_choice`), `aliases`, `status`, `local`) or `gptr_error_unknown_model` with `ref` and
+  up to three `suggestions` (`NULL` with `strict = FALSE`); `catalog_aliases()` -> chr; private
+  `catalog_reset(discovered = FALSE)`, `catalog_model_specs()`, `model_key_present(id, vars)` (also
+  used by `model_default()` in Task 8), `model_provider_keyed(pid)`, `model_fake_entry(pid, id)`.
 
-Merge order (04 section 11.10): the newer of the shipped snapshot and the refreshed cache < overrides < models declared by registered provider specs (`gptr_register(gptr_provider(..., models = ))`, INFRA-17) < registered `model` specs (`gptr_spec("model", "<provider>/<id>", ...)`, 04 section 10.2 row 3, whose display name is the spec's `label`) < user configuration `providers.<id>.models` < live discovery. The cached catalog is rebuilt only when one of those layers changes (registered provider and model specs, the `providers` setting, the cache file's mtime, discovered models). Resolution (report 09 section 5.5, verified; verification log rows 33-35): exact `provider/id`; a known provider prefix (ids and provider aliases) then exact id, normalised id (`.`/`_` -> `-`), an alias of that provider, family, substring; else exact id and normalised id across providers (a tie goes to the single candidate whose provider has a credential, then to the owner's own listing: row 34 corrected the report's summary, which had the order reversed), alias, family, substring. Only when nothing matches is the last `:suffix` peeled as a thinking level (Pi's rule); a local provider accepts unknown ids. A `fake/fake-1` reference whose provider is registered only for a session (`peter(model = gptr_fake_provider(...))` registers it at rank 0, invisible without the session) resolves through P01's index of live fake engines. A family alias picks the newest non-deprecated model by `release_date` (an `active` one when there is one); on a date tie the undated id beats its `-YYYYMMDD` twin (models.dev lists both `claude-haiku-4-5` and `claude-haiku-4-5-20251001`, and only the undated id carries gptr's overrides). `model_resolve()` also accepts a `gptr_provider` spec (its first model), which is how a session-scoped `model = <spec>` resolves without a registry lookup.
+Merge order (04 section 11.10): the newer of the shipped snapshot and the refreshed cache <
+overrides < models declared by registered provider specs
+(`gptr_register(gptr_provider(..., models = ))`, INFRA-17) < registered `model` specs
+(`gptr_spec("model", "<provider>/<id>", ...)`, 04 section 10.2 row 3, whose display name is the
+spec's `label`) < user configuration `providers.<id>.models` < live discovery. The cached catalog is
+rebuilt only when one of those layers changes (registered provider and model specs, the `providers`
+setting, the cache file's mtime, discovered models). Resolution (report 09 section 5.5, verified;
+verification log rows 33-35): exact `provider/id`; a known provider prefix (ids and provider
+aliases) then exact id, normalised id (`.`/`_` -> `-`), an alias of that provider, family,
+substring; else exact id and normalised id across providers (a tie goes to the single candidate
+whose provider has a credential, then to the owner's own listing: row 34 corrected the report's
+summary, which had the order reversed), alias, family, substring. Only when nothing matches is the
+last `:suffix` peeled as a thinking level (Pi's rule); a local provider accepts unknown ids. A
+`fake/fake-1` reference whose provider is registered only for a session
+(`peter(model = gptr_fake_provider(...))` registers it at rank 0, invisible without the session)
+resolves through P01's index of live fake engines. A family alias picks the newest non-deprecated
+model by `release_date` (an `active` one when there is one); on a date tie the undated id beats its
+`-YYYYMMDD` twin (models.dev lists both `claude-haiku-4-5` and `claude-haiku-4-5-20251001`, and only
+the undated id carries gptr's overrides). `model_resolve()` also accepts a `gptr_provider` spec (its
+first model), which is how a session-scoped `model = <spec>` resolves without a registry lookup.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2488,7 +2758,8 @@ test_that("a fake provider used only as a session's spec still resolves by refer
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "catalog-models")'`
-Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 26 ]`, with ``could not find function "catalog_reset"``.
+Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 26 ]`, with
+``could not find function "catalog_reset"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3009,10 +3280,31 @@ git commit -m "feat(catalog): merged catalog and model resolver"
 - Test: `tests/testthat/test-catalog-models.R` (append)
 
 **Interfaces:**
-- Consumes: `reactor_http(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL, provider = NULL, retry = NULL)`, `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`, `reactor_cancel(ids)` (P04, 04 section 8.2); `write_atomic(path, content)`, `gptr_user_dir(..., create = TRUE)`, `new_listing(df, class, footer = NULL)`, `check_choice(x, choices, arg)`, `raw_to_utf8()` (P01); `model_key_present()` (Task 7), `provider_settings()` (Task 2).
-- Produces: the export `gptr_models(query = NULL, provider = NULL, refresh = FALSE)` -> `c("gptr_models", "gptr_listing", "data.frame")` with columns `ref`, `provider`, `name`, `context`, `max_output`, `input_price`, `output_price`, `reasoning`, `aliases`, `status` (04 sections 5.12, 6.2); `model_default(role = c("chat", "small", "system1"))` -> chr(1) or `NULL` (04 section 7.5); private `catalog_http_get(url, headers = list(), timeout = 30)` -> `list(status, headers, body)` (one GET on the reactor; P04 sets `followlocation = 0L`, IC-64), `catalog_refresh()` -> `TRUE` (written) or `FALSE` (304), `model_route_ready(id, vars)`, `model_cli_available(id)`.
+- Consumes:
+  `reactor_http(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL, provider = NULL, retry = NULL)`,
+  `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`,
+  `reactor_cancel(ids)` (P04, 04 section 8.2); `write_atomic(path, content)`,
+  `gptr_user_dir(..., create = TRUE)`, `new_listing(df, class, footer = NULL)`,
+  `check_choice(x, choices, arg)`, `raw_to_utf8()` (P01); `model_key_present()` (Task 7),
+  `provider_settings()` (Task 2).
+- Produces: the export `gptr_models(query = NULL, provider = NULL, refresh = FALSE)` ->
+  `c("gptr_models", "gptr_listing", "data.frame")` with columns `ref`, `provider`, `name`,
+  `context`, `max_output`, `input_price`, `output_price`, `reasoning`, `aliases`, `status` (04
+  sections 5.12, 6.2); `model_default(role = c("chat", "small", "system1"))` -> chr(1) or `NULL` (04
+  section 7.5); private `catalog_http_get(url, headers = list(), timeout = 30)` ->
+  `list(status, headers, body)` (one GET on the reactor; P04 sets `followlocation = 0L`, IC-64),
+  `catalog_refresh()` -> `TRUE` (written) or `FALSE` (304), `model_route_ready(id, vars)`,
+  `model_cli_available(id)`.
 
-`refresh = TRUE` is the only network use of `gptr_models()`: a conditional GET of `https://models.dev/api.json` with the stored ETag (304 keeps the cache), converted with Task 6's `catalog_snapshot()` and written atomically to `R_user_dir("gptr", "cache")`; with `provider = <a local provider>` it asks that loopback server for its models instead (1 s timeout, never under `R CMD check`). `model_default()` never registers or materialises a key: it only checks whether one exists (environment, vault, store; `model_key_present()` of Task 7), and it skips a provider whose `providers.<id>.enabled` setting is `false`. A subscription CLI counts as available when its provider's `status()` (called with `check = FALSE` when it has that formal, so it reads cached data only) returns `available = TRUE` (P20 contract).
+`refresh = TRUE` is the only network use of `gptr_models()`: a conditional GET of
+`https://models.dev/api.json` with the stored ETag (304 keeps the cache), converted with Task 6's
+`catalog_snapshot()` and written atomically to `R_user_dir("gptr", "cache")`; with
+`provider = <a local provider>` it asks that loopback server for its models instead (1 s timeout,
+never under `R CMD check`). `model_default()` never registers or materialises a key: it only checks
+whether one exists (environment, vault, store; `model_key_present()` of Task 7), and it skips a
+provider whose `providers.<id>.enabled` setting is `false`. A subscription CLI counts as available
+when its provider's `status()` (called with `check = FALSE` when it has that formal, so it reads
+cached data only) returns `available = TRUE` (P20 contract).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3153,7 +3445,8 @@ test_that("resolution is offline: builtins and gptr_models('sonnet') start no tr
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "catalog-models")'`
-Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 93 ]`, with ``Can't find binding for `catalog_http_get` `` and ``could not find function "gptr_models"``.
+Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 93 ]`, with
+``Can't find binding for `catalog_http_get` `` and ``could not find function "gptr_models"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3410,7 +3703,8 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
 Regenerate the documentation:
 
 Run: `Rscript --vanilla -e 'devtools::document()'`
-Expected: `Writing 'NAMESPACE'` and `Writing 'gptr_models.Rd'`; `NAMESPACE` now contains `export(gptr_models)`.
+Expected: `Writing 'NAMESPACE'` and `Writing 'gptr_models.Rd'`; `NAMESPACE` now contains
+`export(gptr_models)`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -3433,10 +3727,24 @@ git commit -m "feat(catalog): gptr_models(), model defaults and explicit ETag re
 - Test: `tests/testthat/test-provider-usage.R` (append)
 
 **Interfaces:**
-- Consumes: `id_new(prefix = "", n = 10L)` (P01), `model_resolve()` (Task 7), `usage_cost()`, `price_select()`, `prices_df()` (Task 1); tests use `gptr_provider()`, `gptr_register()` (P02) and `msg_assistant()` (P01).
-- Produces: `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)` -> a one-row data frame with the 21 columns of 04 section 4.3 (consumed by P06, P12, P13, P20); `usage_log_append(row)`, `usage_log()` (the append-only process System 1 log in `the$s1_log`, consumed by P13 and P06); private `usage_empty()` (the zero-row table with the section 4.3 columns and types) and `usage_rollup(rows)` (one row per root session with the columns of the aggregated `gptr_usage` view of 04 section 5.12: `group`, `requests`, `input`, `output`, `cache_read`, `cache_write`, `cost`).
+- Consumes: `id_new(prefix = "", n = 10L)` (P01), `model_resolve()` (Task 7), `usage_cost()`,
+  `price_select()`, `prices_df()` (Task 1); tests use `gptr_provider()`, `gptr_register()` (P02) and
+  `msg_assistant()` (P01).
+- Produces: `usage_row(msg, session, agent, parent_id, started, seconds, multiplier)` -> a one-row
+  data frame with the 21 columns of 04 section 4.3 (consumed by P06, P12, P13, P20);
+  `usage_log_append(row)`, `usage_log()` (the append-only process System 1 log in `the$s1_log`,
+  consumed by P13 and P06); private `usage_empty()` (the zero-row table with the section 4.3 columns
+  and types) and `usage_rollup(rows)` (one row per root session with the columns of the aggregated
+  `gptr_usage` view of 04 section 5.12: `group`, `requests`, `input`, `output`, `cache_read`,
+  `cache_write`, `cost`).
 
-The row's model record is resolved from the message's `provider` and `model`; its cost is recomputed from the dated price tier in force on the request date, except on the `plan-cli` route, which keeps the CLI's own `total_cost_usd` estimate (04 section 8.5). Storing rows in `.d$usage` and `gptr_usage()` are P06's (IC-05); the roll-up rule is P05's (05 scope: "routes, roll-up"): every row's session is followed through the `session -> parent_id` pairs to its root, so a child session's requests are charged to the session that started it and the per-agent sum equals the session total (INFRA-20).
+The row's model record is resolved from the message's `provider` and `model`; its cost is recomputed
+from the dated price tier in force on the request date, except on the `plan-cli` route, which keeps
+the CLI's own `total_cost_usd` estimate (04 section 8.5). Storing rows in `.d$usage` and
+`gptr_usage()` are P06's (IC-05); the roll-up rule is P05's (05 scope: "routes, roll-up"): every
+row's session is followed through the `session -> parent_id` pairs to its root, so a child session's
+requests are charged to the session that started it and the per-agent sum equals the session total
+(INFRA-20).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3689,12 +3997,70 @@ git commit -m "feat(provider): usage rows, roll-up and the process System 1 log"
 - Test: `tests/testthat/test-provider-registry.R` (append)
 
 **Interfaces:**
-- Consumes: `reactor_http(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL, provider = NULL, retry = NULL)` with `retry = list(max_attempts, committed, on_retry)`, `reactor_task(fn, run = NULL)`, `reactor_cancel(ids)`, `reactor_now()` (P04, 04 section 8.2); from P04's plan (internal, documented there for exactly this wiring): `reactor_retry(id, info)` (Task 12: "the transport side of the adapters' `opts$retry(info)` ... P05 wires `opts$retry = function(info) reactor_retry(<transfer id>, info)`": the reactor re-sends the same spec on the same transfer id after its backoff while `committed()` is `FALSE`, reporting `on_retry("retry_start" | "retry_end", info)`, and otherwise fails the transfer through `on_fail`), `ratelimit_get(provider)` and `ratelimit_set(provider, rate)` (Task 9: "settings and catalog overrides of the static rate, IC-64"); `sse_splitter()`, `ndjson_splitter()` (P04, 04 section 8.3); `gptr_condition(message, class, kind = "error", fields = list(), call = NULL)` (P01 plan, `utils-conditions.R`: the redacted, unsignalled condition objects of 04 section 2.2, last paragraph), `acc_new()`, `ev_new(type, ...)`, `msg_assistant()`, `msg_tool_result()`, `block_text()`, `json_encode()`, `raw_to_utf8()`, `gptr_opt(name)`, `gptr_abort()`, `ext_service_has(name)`, `ext_service_get(name)` (P01); `registry_get(kind, name, session = NULL)`, `registry_diagnostic(source, event, class, message)` (P02); `write_all(p, data)` (P04, for `opts$send`); `adapter_get()`, `provider_get()`, `provider_effective()`, `provider_settings()`, `provider_base_url()`, `provider_credential()` (Tasks 2-3), `catalog_get()` (Task 7). The `gptr_run` fields read are those of 04 section 7.6 (`id`, `session`, `status`, `signal`). Tests use `gptr_adapter(api, transport, build, parse, stream, classify, capabilities)`, `gptr_tool_result()` (P02) and `local_mocked_bindings()` on the P04 functions.
-- Produces also: `stream_chat_model(model)` returns invisibly for conversational models and refuses a
-  decision-only classifier with `gptr_error_not_available` before recording or starting anything.
-- Produces: `provider_stream(model, context, opts, emit, done, run = NULL)` (04 sections 7.5 and 8.4) -> the transfer id (`http_*`; one id for the whole request, retries included, so the caller's `reactor_cancel(id)` always reaches the live transfer), the generator task id (`inprocess`) or the stream-watch task id (`process_jsonl`), or `NA_character_` when the adapter failed to build the request; every INFRA-02 event, plus the transport's `retry_start`/`retry_end` notes (P06's `run_on_event()` turns them into the agent events of 04 section 10.4), reaches `emit(ev)`; `done(msg)` runs exactly once with the final assistant message; nothing is signalled after it returns. The context's `request_id` (04 section 4.5) is filled into the `start` event, the `error` event's `error` list and the assistant message of the `done`/`error` event and of `done(msg)` wherever the adapter left it `NULL` (P12's normalisers cannot know it: `parse(model, opts)` sees no request context), so P14's `jsonl` sink, the wire and the stored message carry it. Private `stream_request_id(st, ev, type)` and `stream_condition(message, class, ...)` (a classed, unsignalled, redacted condition, through P01's `gptr_condition()`).
+- Consumes:
+  `reactor_http(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL, provider = NULL, retry = NULL)`
+  with `retry = list(max_attempts, committed, on_retry)`, `reactor_task(fn, run = NULL)`,
+  `reactor_cancel(ids)`, `reactor_now()` (P04, 04 section 8.2); from P04's plan (internal,
+  documented there for exactly this wiring): `reactor_retry(id, info)` (Task 12: "the transport side
+  of the adapters' `opts$retry(info)` ... P05 wires
+  `opts$retry = function(info) reactor_retry(<transfer id>, info)`": the reactor re-sends the same
+  spec on the same transfer id after its backoff while `committed()` is `FALSE`, reporting
+  `on_retry("retry_start" | "retry_end", info)`, and otherwise fails the transfer through
+  `on_fail`), `ratelimit_get(provider)` and `ratelimit_set(provider, rate)` (Task 9: "settings and
+  catalog overrides of the static rate, IC-64"); `sse_splitter()`, `ndjson_splitter()` (P04, 04
+  section 8.3); `gptr_condition(message, class, kind = "error", fields = list(), call = NULL)` (P01
+  plan, `utils-conditions.R`: the redacted, unsignalled condition objects of 04 section 2.2, last
+  paragraph), `acc_new()`, `ev_new(type, ...)`, `msg_assistant()`, `msg_tool_result()`,
+  `block_text()`, `json_encode()`, `raw_to_utf8()`, `gptr_opt(name)`, `gptr_abort()`,
+  `ext_service_has(name)`, `ext_service_get(name)` (P01);
+  `registry_get(kind, name, session = NULL)`, `registry_diagnostic(source, event, class, message)`
+  (P02); `write_all(p, data)` (P04, for `opts$send`); `adapter_get()`, `provider_get()`,
+  `provider_effective()`, `provider_settings()`, `provider_base_url()`, `provider_credential()`
+  (Tasks 2-3), `catalog_get()` (Task 7). The `gptr_run` fields read are those of 04 section 7.6
+  (`id`, `session`, `status`, `signal`). Tests use
+  `gptr_adapter(api, transport, build, parse, stream, classify, capabilities)`, `gptr_tool_result()`
+  (P02) and `local_mocked_bindings()` on the P04 functions.
+- Produces also: `stream_chat_model(model)` returns invisibly for conversational models and refuses
+  a decision-only classifier with `gptr_error_not_available` before recording or starting anything.
+- Produces: `provider_stream(model, context, opts, emit, done, run = NULL)` (04 sections 7.5 and
+  8.4) -> the transfer id (`http_*`; one id for the whole request, retries included, so the caller's
+  `reactor_cancel(id)` always reaches the live transfer), the generator task id (`inprocess`) or the
+  stream-watch task id (`process_jsonl`), or `NA_character_` when the adapter failed to build the
+  request; every INFRA-02 event, plus the transport's `retry_start`/`retry_end` notes (P06's
+  `run_on_event()` turns them into the agent events of 04 section 10.4), reaches `emit(ev)`;
+  `done(msg)` runs exactly once with the final assistant message; nothing is signalled after it
+  returns. The context's `request_id` (04 section 4.5) is filled into the `start` event, the `error`
+  event's `error` list and the assistant message of the `done`/`error` event and of `done(msg)`
+  wherever the adapter left it `NULL` (P12's normalisers cannot know it: `parse(model, opts)` sees
+  no request context), so P14's `jsonl` sink, the wire and the stored message carry it. Private
+  `stream_request_id(st, ev, type)` and `stream_condition(message, class, ...)` (a classed,
+  unsignalled, redacted condition, through P01's `gptr_condition()`).
 
-Glue rules (04 sections 8.1 and 8.4, with the decisions this plan records in its self-review): the adapter and provider are looked up among the session's rank-0 records first (`opts$session`), then globally, and the provider's settings are applied (`provider_effective()`); a missing adapter (`gptr_error_not_available`), a provider whose settings say `enabled: false` (`gptr_error_not_available`, `member` = the provider id) or a missing key (`gptr_error_no_key`) is signalled before anything starts. `opts` receives `credential`, `base_url`, `provider` (the provider record found, so P01's fake adapter, whose `fake_engine(model, opts)` reads `opts$provider$log`, plays the session's own spec), `emit`, `retry`, `send`, `signal` (the caller's, else `run$signal`, else a new one), `state`, `memo`, and the injected `gate`, `tool_result` and `mcp_dispatch` (IC-33): the caller's (P06's `run_request()` passes the run's `perm_check()` closure and `tool_result_message()` in `opts`), else fail-closed defaults (deny; a minimal `msg_tool_result()`; the `mcp.dispatch_local` service bound to the session, or a JSON-RPC `-32601` error when P18 is absent). The request spec gets the optional fields P04 reads (`request_id`, `model`, `session_id`, `connect_timeout`, `first_byte_timeout`, `idle_timeout` from `opts`), and a static-rate override from the settings (`providers.<id>.rate`) or the catalog's providers section reaches P04's limiter once (IC-64). At most one `start` event reaches `emit`; `retry$committed` turns `TRUE` at the first `*_delta` event. An in-stream retryable failure reported through `opts$retry(info)` goes to P04's `reactor_retry()`: the reactor re-sends the same spec on the same transfer id while nothing was committed (a second `on_headers()` call resets the normaliser and splitter; the rest of the abandoned attempt's chunk is not pushed), and otherwise fails the transfer, so the normaliser's `fail()` ends the stream with the partial message; for transports without a transfer the stream fails at once. A reactor task watches `opts$signal$aborted`: it cancels the transfer and ends the stream with `stop_reason = "aborted"` and the partial message; it also lets go of the stream (without calling `done`) once the caller's run has settled, because P06's `run_settle()` cancels a transfer without callbacks and a watcher that kept polling would hold the run (INFRA-15).
+Glue rules (04 sections 8.1 and 8.4, with the decisions this plan records in its self-review): the
+adapter and provider are looked up among the session's rank-0 records first (`opts$session`), then
+globally, and the provider's settings are applied (`provider_effective()`); a missing adapter
+(`gptr_error_not_available`), a provider whose settings say `enabled: false`
+(`gptr_error_not_available`, `member` = the provider id) or a missing key (`gptr_error_no_key`) is
+signalled before anything starts. `opts` receives `credential`, `base_url`, `provider` (the provider
+record found, so P01's fake adapter, whose `fake_engine(model, opts)` reads `opts$provider$log`,
+plays the session's own spec), `emit`, `retry`, `send`, `signal` (the caller's, else `run$signal`,
+else a new one), `state`, `memo`, and the injected `gate`, `tool_result` and `mcp_dispatch` (IC-33):
+the caller's (P06's `run_request()` passes the run's `perm_check()` closure and
+`tool_result_message()` in `opts`), else fail-closed defaults (deny; a minimal `msg_tool_result()`;
+the `mcp.dispatch_local` service bound to the session, or a JSON-RPC `-32601` error when P18 is
+absent). The request spec gets the optional fields P04 reads (`request_id`, `model`, `session_id`,
+`connect_timeout`, `first_byte_timeout`, `idle_timeout` from `opts`), and a static-rate override
+from the settings (`providers.<id>.rate`) or the catalog's providers section reaches P04's limiter
+once (IC-64). At most one `start` event reaches `emit`; `retry$committed` turns `TRUE` at the first
+`*_delta` event. An in-stream retryable failure reported through `opts$retry(info)` goes to P04's
+`reactor_retry()`: the reactor re-sends the same spec on the same transfer id while nothing was
+committed (a second `on_headers()` call resets the normaliser and splitter; the rest of the
+abandoned attempt's chunk is not pushed), and otherwise fails the transfer, so the normaliser's
+`fail()` ends the stream with the partial message; for transports without a transfer the stream
+fails at once. A reactor task watches `opts$signal$aborted`: it cancels the transfer and ends the
+stream with `stop_reason = "aborted"` and the partial message; it also lets go of the stream
+(without calling `done`) once the caller's run has settled, because P06's `run_settle()` cancels a
+transfer without callbacks and a watcher that kept polling would hold the run (INFRA-15).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4048,7 +4414,8 @@ test_that("adapters receive the injected gate, MCP dispatcher and tool-result bu
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-registry")'`
-Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 71 ]`, every new test failing with ``could not find function "provider_stream"``.
+Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 71 ]`, every new test failing with
+``could not find function "provider_stream"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4529,7 +4896,8 @@ provider_stream = function(model, context, opts, emit, done, run = NULL) {
 }
 ```
 
-`stream_inprocess()` and `stream_process()` are added in Task 11; until then only HTTP adapters stream.
+`stream_inprocess()` and `stream_process()` are added in Task 11; until then only HTTP
+adapters stream.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -4552,8 +4920,28 @@ git commit -m "feat(provider): provider_stream() glue for HTTP adapters"
 - Test: `tests/testthat/test-provider-registry.R` (append)
 
 **Interfaces:**
-- Consumes: `child_env(profile, pass = character(), set = character(), provider = NULL)` (P03; called without `provider`, which would copy the provider's key into the child after the profile removed the billing variables), `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "|", stderr = "|", cleanup_tree = TRUE, supervise = supervise_default())`, `reactor_proc(proc, on_line, on_exit, run = NULL, stream = "stdout", on_stderr = NULL)`, `write_all(p, data)`, `kill_all(p, grace = 2)`, `job_add(kind, id, name, pid = NA, stop, status = function() "running")`, `job_remove(id)` (P04), `write_close(p)` (P04's plan, Task 8, internal: "closes stdin once the queued bytes are written; P20's codex route closes stdin after the prompt", named there for P05's `close_stdin`), `id_new()`, `json_decode()`, `json_encode()` (P01); the fake adapter of `builtin:fake` (P01) and `local_fake_provider()` (P01 `helper-fake.R`) in the tests; `reactor_pump()` (P04).
-- Produces: steps 3 and 4 of 04 section 8.4 inside `provider_stream()`: `inprocess` adapters (IC-16) return a generator pumped by `reactor_task()` (events emitted in order, the next call after `wait` seconds, a throwing generator ends the stream with an `error` event, an abort gives the generator two calls to finish itself before the glue ends the stream); `process_jsonl` adapters get one supervised child per session (`proc_spawn()` with `stdin = "|"` and `child_env(<env_profile>, set = <env>)`, kept in `opts$state$process`, recorded in the job table as kind `cli`), `send` objects written as JSON lines with `write_all()` and, with `close_stdin = TRUE`, the child's stdin closed after them with `write_close()` (EOF once the bytes are written); child stdout lines are parsed and pushed as `list(data, obj)` (non-JSON lines ignored), and the child's exit ends the turn. Only the session's current child reaches a turn: the late lines and the exit of a child that was replaced or killed are dropped.
+- Consumes: `child_env(profile, pass = character(), set = character(), provider = NULL)` (P03;
+  called without `provider`, which would copy the provider's key into the child after the profile
+  removed the billing variables),
+  `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "|", stderr = "|", cleanup_tree = TRUE, supervise = supervise_default())`,
+  `reactor_proc(proc, on_line, on_exit, run = NULL, stream = "stdout", on_stderr = NULL)`,
+  `write_all(p, data)`, `kill_all(p, grace = 2)`,
+  `job_add(kind, id, name, pid = NA, stop, status = function() "running")`, `job_remove(id)` (P04),
+  `write_close(p)` (P04's plan, Task 8, internal: "closes stdin once the queued bytes are written;
+  P20's codex route closes stdin after the prompt", named there for P05's `close_stdin`),
+  `id_new()`, `json_decode()`, `json_encode()` (P01); the fake adapter of `builtin:fake` (P01) and
+  `local_fake_provider()` (P01 `helper-fake.R`) in the tests; `reactor_pump()` (P04).
+- Produces: steps 3 and 4 of 04 section 8.4 inside `provider_stream()`: `inprocess` adapters (IC-16)
+  return a generator pumped by `reactor_task()` (events emitted in order, the next call after `wait`
+  seconds, a throwing generator ends the stream with an `error` event, an abort gives the generator
+  two calls to finish itself before the glue ends the stream); `process_jsonl` adapters get one
+  supervised child per session (`proc_spawn()` with `stdin = "|"` and
+  `child_env(<env_profile>, set = <env>)`, kept in `opts$state$process`, recorded in the job table
+  as kind `cli`), `send` objects written as JSON lines with `write_all()` and, with
+  `close_stdin = TRUE`, the child's stdin closed after them with `write_close()` (EOF once the bytes
+  are written); child stdout lines are parsed and pushed as `list(data, obj)` (non-JSON lines
+  ignored), and the child's exit ends the turn. Only the session's current child reaches a turn: the
+  late lines and the exit of a child that was replaced or killed are dropped.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4781,7 +5169,12 @@ test_that("a replaced child's late output and exit never reach the next turn", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-registry")'`
-Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 147 ]`: the five new tests fail (nine failed expectations), for example ``Expected `types[[1]]` to equal "start".`` (the stream ends at once with an `error` event whose `error_message` reads ``could not find function "stream_inprocess"``) (the stream's `error_message` reads ``could not find function "stream_inprocess"``) and ``Error in `pr$spawned[[1]]`: subscript out of bounds``.
+Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 147 ]`: the five new tests fail (nine failed
+expectations), for example
+``Expected `types[[1]]` to equal "start".`` (the stream ends at once with an `error` event whose
+`error_message` reads ``could not find function "stream_inprocess"``) (the stream's `error_message`
+reads ``could not find function "stream_inprocess"``) and
+``Error in `pr$spawned[[1]]`: subscript out of bounds``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4920,10 +5313,24 @@ git commit -m "feat(provider): inprocess and process_jsonl transports"
 - Test: `tests/testthat/test-provider-registry.R` (append)
 
 **Interfaces:**
-- Consumes: `gptr_registry(kind = NULL, diagnostics = FALSE)` (P02), `new_listing()`, `check_flag()`, `check_running()`, `setting_get()` (P01), `catalog_http_get()`, `catalog_get()` (Tasks 7-8), `provider_credential()`, `provider_base_url()` (Tasks 2-3). A provider's optional `status` function (P20 contributes them for `claude-cli` and `codex`) is called as `status(check = check)` when it has a `check` formal, else `status()`, and may return `status`, `version` and `available`.
-- Produces: the export `gptr_providers(check = FALSE)` -> `c("gptr_providers", "gptr_listing", "data.frame")` with columns `id`, `type`, `api`, `credential` (`"NAME #fp"` or `NA`), `source` (the registry source of the provider's active record: `builtin:providers`, `user`, `plugin:<pkg>`, ...; self-review ambiguity 23), `status`, `default_model`, `egress` (`ack`/`needed`), `version` (04 sections 5.12 and 6.2).
+- Consumes: `gptr_registry(kind = NULL, diagnostics = FALSE)` (P02), `new_listing()`,
+  `check_flag()`, `check_running()`, `setting_get()` (P01), `catalog_http_get()`, `catalog_get()`
+  (Tasks 7-8), `provider_credential()`, `provider_base_url()` (Tasks 2-3). A provider's optional
+  `status` function (P20 contributes them for `claude-cli` and `codex`) is called as
+  `status(check = check)` when it has a `check` formal, else `status()`, and may return `status`,
+  `version` and `available`.
+- Produces: the export `gptr_providers(check = FALSE)` ->
+  `c("gptr_providers", "gptr_listing", "data.frame")` with columns `id`, `type`, `api`, `credential`
+  (`"NAME #fp"` or `NA`), `source` (the registry source of the provider's active record:
+  `builtin:providers`, `user`, `plugin:<pkg>`, ...; self-review ambiguity 23), `status`,
+  `default_model`, `egress` (`ack`/`needed`), `version` (04 sections 5.12 and 6.2).
 
-`check = FALSE` performs no network or process I/O (IC-65): statuses come from the settings (`disabled` when `providers.<id>.enabled` is `false`), the credential lookup (`ready`/`no key`) or the provider's own cached `status()`. `check = TRUE` sends one unauthenticated GET to each HTTP provider's models endpoint with a 2 s timeout (`reachable (HTTP <status>)`/`unreachable`; a 401 proves reachability without sending a key) and is skipped under `R CMD check`. Local and offline providers need no egress acknowledgement (`ack`).
+`check = FALSE` performs no network or process I/O (IC-65): statuses come from the settings
+(`disabled` when `providers.<id>.enabled` is `false`), the credential lookup (`ready`/`no key`) or
+the provider's own cached `status()`. `check = TRUE` sends one unauthenticated GET to each HTTP
+provider's models endpoint with a 2 s timeout (`reachable (HTTP <status>)`/`unreachable`; a 401
+proves reachability without sending a key) and is skipped under `R CMD check`. Local and offline
+providers need no egress acknowledgement (`ack`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4991,7 +5398,8 @@ test_that("gptr_providers(check = TRUE) probes models endpoints without credenti
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-registry")'`
-Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 176 ]`, with ``could not find function "gptr_providers"``.
+Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 176 ]`, with
+``could not find function "gptr_providers"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5096,7 +5504,8 @@ gptr_providers = function(check = FALSE) {
 Regenerate the documentation:
 
 Run: `Rscript --vanilla -e 'devtools::document()'`
-Expected: `Writing 'NAMESPACE'` and `Writing 'gptr_providers.Rd'`; `NAMESPACE` now contains `export(gptr_providers)`.
+Expected: `Writing 'NAMESPACE'` and `Writing 'gptr_providers.Rd'`; `NAMESPACE` now contains
+`export(gptr_providers)`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -5114,9 +5523,11 @@ git commit -m "feat(provider): gptr_providers() status listing"
 
 ## Plan acceptance
 
-Every acceptance check of 05 P05 (including its review amendments), the task and test that prove it, and the command with its expected result. Run from the repository root after Task 12, with P01-P04 in place.
+Every acceptance check of 05 P05 (including its review amendments), the task and test that prove it,
+and the command with its expected result. Run from the repository root after Task 12, with P01-P04
+in place.
 
-| # | Acceptance check (05 P05) | Proven by | Command and expected result |
+| # | Acceptance check (05 P05) | Proved by | Command and expected result |
 |---|---|---|---|
 | 1 | The four P05 test files are green | Tasks 1-12 | `Rscript --vanilla -e 'devtools::test(filter = "provider-transform\|provider-registry\|provider-usage\|catalog")'` -> `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 465 ]` |
 | 2 | INFRA-04: after a recorded 401 and after an abort, the projected message list has no assistant content for them and every tool call has exactly one result | Task 5, `test-provider-transform.R`: "a recorded 401 and an abort are projected out; every call has one result (INFRA-04)" (the synthetic result reads `interrupted after 2.3 s; side effects may have occurred`), plus "a call left open by a new user turn gets 'No result provided'" (a late result for a closed call is dropped) | `Rscript --vanilla -e 'devtools::test(filter = "provider-transform")'` -> `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 58 ]` |
@@ -5162,64 +5573,247 @@ Every acceptance check (1-6 and the four review amendments) maps to a named test
 
 ### Placeholder scan
 
-The plan was searched for "TBD", "TODO", "implement later", "fill in", "appropriate error handling", "handle edge cases", "similar to Task" and "write tests for the above": none occur. Every step that changes code shows the complete code; every function the code calls is defined in this plan or in an earlier plan, and was checked against those plans' code (`dev/plan/P01-foundation.md` .. `P04-reactor-process-engine.md`). Listed in 04: P01 `gptr_abort`, `check_*`, `gptr_opt`, `setting_get`, `on_load`, `ext_service_has/get`, `hash_sha256`, `id_new`, `json_*`, `raw_to_utf8`, `write_atomic`, `gptr_user_dir`, `new_listing`, `check_running`, `block_*`, `msg_*`, `ev_new`, `acc_new`, `builtin_fake`, `gptr_fake_provider`; P02 `ext_declare_builtin`, `registry_get/names/all/diagnostic`, `gptr_provider`, `gptr_adapter`, `gptr_spec`, `gptr_register`, `gptr_registry`, `gptr_check`, `gptr_tool_result`; P03 `secret_lookup`, `secret_register`, `auth_store_get`, `child_env`; P04 `reactor_*` of 04 section 8.2, `sse_splitter`, `ndjson_splitter`, `proc_spawn`, `kill_all`, `job_add`, `job_remove`, `write_all`. Not listed in 04 but defined by an earlier plan for exactly this use: P01 `gptr_condition()` (unsignalled conditions, `utils-conditions.R`), `fake_engine()` and `fake_model_record()` (`provider-fake.R`); P04 `reactor_retry()` (Task 12: "P05 wires `opts$retry`"), `write_close()` (Task 8: "for ... P05's `close_stdin`"), `ratelimit_get()` and `ratelimit_set()` (Task 9: "settings and catalog overrides of the static rate, IC-64"). Test helpers are P01's (`local_fake_provider()`) or defined at the top of the test file that uses them (`local_settings()`, `local_test_vault()`, `local_catalog()`, `local_mock_reactor()`, `local_mock_process()`, `local_stream_adapter()`, `local_stream_log()`, `local_run()`, `local_priced_provider()`, ...), because 05 lets a plan add no helper file; `local_settings()` is therefore defined in both `test-provider-registry.R` and `test-catalog-models.R`.
+The plan was searched for "TBD", "TODO", "implement later", "fill in", "appropriate error handling",
+"handle edge cases", "similar to Task" and "write tests for the above": none occur. Every step that
+changes code shows the complete code; every function the code calls is defined in this plan or in an
+earlier plan, and was checked against those plans' code (`dev/plan/P01-foundation.md` ..
+`P04-reactor-process-engine.md`). Listed in 04: P01 `gptr_abort`, `check_*`, `gptr_opt`,
+`setting_get`, `on_load`, `ext_service_has/get`, `hash_sha256`, `id_new`, `json_*`, `raw_to_utf8`,
+`write_atomic`, `gptr_user_dir`, `new_listing`, `check_running`, `block_*`, `msg_*`, `ev_new`,
+`acc_new`, `builtin_fake`, `gptr_fake_provider`; P02 `ext_declare_builtin`,
+`registry_get/names/all/diagnostic`, `gptr_provider`, `gptr_adapter`, `gptr_spec`, `gptr_register`,
+`gptr_registry`, `gptr_check`, `gptr_tool_result`; P03 `secret_lookup`, `secret_register`,
+`auth_store_get`, `child_env`; P04 `reactor_*` of 04 section 8.2, `sse_splitter`, `ndjson_splitter`,
+`proc_spawn`, `kill_all`, `job_add`, `job_remove`, `write_all`. Not listed in 04 but defined by an
+earlier plan for exactly this use: P01 `gptr_condition()` (unsignalled conditions,
+`utils-conditions.R`), `fake_engine()` and `fake_model_record()` (`provider-fake.R`); P04
+`reactor_retry()` (Task 12: "P05 wires `opts$retry`"), `write_close()` (Task 8: "for ... P05's
+`close_stdin`"), `ratelimit_get()` and `ratelimit_set()` (Task 9: "settings and catalog overrides of
+the static rate, IC-64"). Test helpers are P01's (`local_fake_provider()`) or defined at the top of
+the test file that uses them (`local_settings()`, `local_test_vault()`, `local_catalog()`,
+`local_mock_reactor()`, `local_mock_process()`, `local_stream_adapter()`, `local_stream_log()`,
+`local_run()`, `local_priced_provider()`, ...), because 05 lets a plan add no helper file;
+`local_settings()` is therefore defined in both `test-provider-registry.R` and
+`test-catalog-models.R`.
 
 ### Type and name consistency with 04
 
-- Signatures match 04 section 7.5 and section 6.2 exactly (listed under Global Constraints); argument names and defaults were compared one by one, and with the consumers' plans (P06 calls `provider_stream(target, req$context, opts, emit =, done =, run = run)` with `opts$signal`, `state`, `memo`, `run`, `session`, `gate`, `tool_result` and, when P18 is loaded, `mcp_dispatch`; P06 also reads `usage_empty()`, `usage_row()`, `usage_new()`, `usage_log()`, `project_messages()`, `model_resolve()`, `model_default()` and `adapter_get()`; P07 and P08 read `project_messages()`, `model_resolve()`, `model_default()`, `catalog_aliases()` and `provider_get()`).
-- Records: usage (section 4.3) field and column names and order; model record (section 4.9) field order, plus `max_images` (IC-67, after `cache_min`) and `capabilities$forced_tool_choice` (IC-71); listing classes `gptr_models` and `gptr_providers` with the section 5.12 columns in order.
-- Conditions use only section 2.2 classes and fields (`no_key`: `provider`, `variables`; `unknown_model`: `ref`, `suggestions`; `not_available`: `member`, `provided_by`; `network` under `provider`: `provider`, `status`, `curl_code`; `invalid_spec`: `kind`, `name`, `field`, `problem`; `internal`: `detail`).
-- Events: the INFRA-02 types (`start`, `*_delta`, `done`, `error` with `reason`, `message`, `error = list(class, status, request_id, retry_after)`), section 4.5, with the context's `request_id` filled into the `start` event, the `error` list and the assistant message where the adapter left it `NULL` (`stream_request_id()`, Task 10), plus the transport's `retry_start` (`attempt`, `delay`, `class`) and `retry_end` (`attempt`, `ok`) notes, which P06's `run_on_event()` turns into the section 10.4 agent events.
-- Options and settings keys as in sections 3.1 and 11.2 (`gptr_opt("max_attempts")` etc.); `the` fields `catalog` and `s1_log` as in section 7.0.
-- The `gptr_secret` handle fields read or set (`id`, `name`, `fp`, `origin`) are those of section 5.9; the registry listing columns read (`name`, `source`, `state`) are those of section 5.5; the run fields read (`id`, `session`, `status`, `signal`) are those of section 7.6.
+- Signatures match 04 section 7.5 and section 6.2 exactly (listed under Global Constraints);
+  argument names and defaults were compared one by one, and with the consumers' plans (P06 calls
+  `provider_stream(target, req$context, opts, emit =, done =, run = run)` with `opts$signal`,
+  `state`, `memo`, `run`, `session`, `gate`, `tool_result` and, when P18 is loaded, `mcp_dispatch`;
+  P06 also reads `usage_empty()`, `usage_row()`, `usage_new()`, `usage_log()`, `project_messages()`,
+  `model_resolve()`, `model_default()` and `adapter_get()`; P07 and P08 read `project_messages()`,
+  `model_resolve()`, `model_default()`, `catalog_aliases()` and `provider_get()`).
+- Records: usage (section 4.3) field and column names and order; model record (section 4.9) field
+  order, plus `max_images` (IC-67, after `cache_min`) and `capabilities$forced_tool_choice` (IC-71);
+  listing classes `gptr_models` and `gptr_providers` with the section 5.12 columns in order.
+- Conditions use only section 2.2 classes and fields (`no_key`: `provider`, `variables`;
+  `unknown_model`: `ref`, `suggestions`; `not_available`: `member`, `provided_by`; `network` under
+  `provider`: `provider`, `status`, `curl_code`; `invalid_spec`: `kind`, `name`, `field`, `problem`;
+  `internal`: `detail`).
+- Events: the INFRA-02 types (`start`, `*_delta`, `done`, `error` with `reason`, `message`,
+  `error = list(class, status, request_id, retry_after)`), section 4.5, with the context's
+  `request_id` filled into the `start` event, the `error` list and the assistant message where the
+  adapter left it `NULL` (`stream_request_id()`, Task 10), plus the transport's `retry_start`
+  (`attempt`, `delay`, `class`) and `retry_end` (`attempt`, `ok`) notes, which P06's
+  `run_on_event()` turns into the section 10.4 agent events.
+- Options and settings keys as in sections 3.1 and 11.2 (`gptr_opt("max_attempts")` etc.); `the`
+  fields `catalog` and `s1_log` as in section 7.0.
+- The `gptr_secret` handle fields read or set (`id`, `name`, `fp`, `origin`) are those of
+  section 5.9; the registry listing columns read (`name`, `source`, `state`) are those of
+  section 5.5; the run fields read (`id`, `session`, `status`, `signal`) are those of section 7.6.
 
 ### Ambiguities in 04 and the reading this plan implements
 
-The plans of P01-P04 exist in `dev/plan/`; every name this plan consumes was checked against them as well as against 04, and the readings below were checked against their code where they touch it.
+The plans of P01-P04 exist in `dev/plan/`; every name this plan consumes was checked against them as
+well as against 04, and the readings below were checked against their code where they touch it.
 
-1. **R shape of session entries.** Section 4.6 gives the JSON shape only. This plan reads the section 4.8 snake_case mapping: `parent_id`, `custom_type`, `first_kept_entry_id`, `tokens_before`, `details = list(kind, tool_add, origin_text)`, compaction blocks under `gptr$blocks`; P06's `entry_message()` stores an operator entry as `list(type = "custom_message", custom_type = "gptr.operator", message = <operator>)`, which is projected as is, and the flat form is accepted too.
-2. **Which orphan text.** Section 7.5 names both `"interrupted after <s> s; side effects may have occurred"` and `"No result provided"`. An orphan closed by an aborted assistant turn gets the first (s = the two message timestamps apart, one decimal), every other orphan the second. Results for unknown or already answered calls are dropped so every call has exactly one result (INFRA-04).
-3. **Held messages.** Operator messages (steering relays, the only "system" role gptr has) are held while results are pending (Pi's held system messages); a user message closes pending calls, as in Pi.
-4. **Missing parents** ("re-parented to the nearest valid ancestor in projection", section 7.6): the previous entry in file order is used, since the missing entry's own parent is unknown.
-5. **"Dropped when the target lacks reasoning replay"** (section 7.5): `reasoning_replay` is an adapter capability (section 8.1); it is read from the target model record's `capabilities`, else from the adapter registered for the target api. Only an explicit `FALSE` drops foreign thinking; otherwise it becomes text (Pi), although section 8.1 says missing capability entries mean `FALSE`, because dropping reasoning for every adapter that omits the entry would silently lose context.
-6. **Compat flag names** are not fixed by 04; this plan fixes them as snake_case forms of Pi's flags (Task 2 lists them) and P12's `compat_flags()` must read these names.
-7. **`typesafe`**: 05 says section 8.1-8.2 providers, but 04 section 7.13 has P13's `builtin_system1()` register `typesafe` with its rate; registering it in both would collide at rank 6, so P05 keeps it only in the snapshot's providers section (which also lets `model_resolve("jev")` report `api = "typesafe-system-one"` before P13). Likewise the `fake` row of architecture section 8.1 is served by `gptr_fake_provider()` specs (which carry their script); `builtin:fake` registers only the adapters (section 10.3).
-8. **Credential binding.** `secret_value()` may be called only by P04 and P03 (section 7.3), so P05 never sees a stored value. Every handle `provider_credential()` returns is bound to the provider origin: an unbound handle (ambient discovery, `.env` values, P03's credential-store handles, an `auth` function's result) gets the origin in its own `origin` field, which P03's `secret_value()` checks first (P03 plan, Task 1, "how P05 binds a looked-up handle"); a handle bound to another origin is skipped; environment values are registered with the origin. A store record may hold a handle (`handle`/`key`) or, defensively, a raw `key` value that is registered at once. **Subscription tokens.** Architecture section 8.1 says the `anthropic` provider "refuses subscription tokens (`sk-ant-oat`)"; 04 names no owner, adapters see handles only (P12 self-review, ambiguity 9), and only `provider_credential()` reads the environment value, so the check lives there: an `ANTHROPIC_API_KEY` value starting with `sk-ant-oat` is not registered, the vault handle with the same fingerprint (P03's `fp`, the first 6 hex of `hash_sha256(value)`; ambient discovery registers the environment's values) is skipped, and when nothing else is found `gptr_error_no_key` (`provider = "anthropic"`, `variables`) says the variable holds a subscription OAuth token and points to an API key or `model = "claude_code"`. P05 never reads vault values (`secret_value()` is P03's and P04's), so a token that exists only in the vault (a `.env` value read with `gptr_env(set_env = FALSE)` or by the trusted-project discovery, or a credential-store record) cannot be recognised here; an API key held only in the vault next to an `sk-ant-oat` environment value has another fingerprint and is used.
-9. **Injected callbacks (IC-33).** An L1 file cannot name `perm_check()` or `tool_result_message()` (the kernel SDK allowlist covers L3-L6 and L4 built-ins), so `provider_stream()` keeps the `gate` and `tool_result` its caller passes in `opts` (P06's `run_request()` passes the run's) and otherwise installs fail-closed defaults (deny; a minimal `msg_tool_result()`); `mcp_dispatch` is the caller's or the `mcp.dispatch_local` service bound to the session.
-10. **Retries.** Section 8.1 lets a normaliser report an in-stream retryable failure through `opts$retry(info)` and says "the transport" retries only while nothing was committed. P04's plan provides that transport side as `reactor_retry(id, info)`; `opts$retry` calls it, so a retry keeps the transfer id P06 recorded (P06 cancels by that id), passes P04's backoff, wire log and `on_retry` notes, and a second `on_headers()` call resets the normaliser and splitter. P04 reports `retry_start`/`retry_end` through the `on_retry` callback of the `retry` list; `provider_stream()` forwards them to `emit` as events, where P06's `run_on_event()` expects them (P04 plan, ambiguity 3).
-11. **Abort.** A reactor task watches `opts$signal$aborted` and ends the stream (`stop_reason = "aborted"`, partial message kept); for `process_jsonl` it kills the child after forgetting it. A protocol-level interrupt (the claude `control_request`) is P20's, from its normaliser, which sees `opts$signal` on every line.
-12. **`close_stdin`.** The turn's JSON lines go through the non-blocking `write_all()` and P04's `write_close(p)` closes stdin once they are written (P04 plan, Task 8, written for this flag and P20's codex route); with a reused child the flag closes that child's stdin, so an adapter that keeps a child alive across turns sets it `FALSE`.
-13. **`model = <spec>`.** A session-scoped provider spec (rank 0) is invisible to `registry_get()` without the session, so `model_resolve()` also accepts a `gptr_provider` spec; `provider_stream()` looks up the session's records first through `opts$session` and passes the record found as `opts$provider`, which P01's `fake_engine(model, opts)` reads so a session plays its own fake script even when another live fake has the same name (04 section 8.1 does not list `opts$provider`; adapters ignore unknown `opts` fields).
-14. **Model record extras.** `max_images` is a top-level field and `forced_tool_choice` a capability (IC-67, IC-71); capabilities default to `FALSE` except `forced_tool_choice`, which defaults to `TRUE` (only Anthropic 5.x models say `FALSE`).
-15. **Aliases.** Entries take the forms `{provider, family}`, `{provider, pattern}` and `{ref}`; `gemini` is limited to `^gemini-[0-9.]+-pro(-preview)?$` because models.dev files research previews under the `gemini-pro` family; on a release-date tie the undated id wins over its `-YYYYMMDD` twin. `claude_code` and `codex` resolve only once P20 registers their providers; turning `default` into a full CLI model id is P20's (section 11.10: "through the CLI provider's status()").
-16. **Price tiers.** Labels are `default`, `<=Nk` (base) and `>Nk` (threshold); a dated set applies from its `from` date; missing cache rates default to 0.1x/1.25x/2x input.
-17. **HTTP details of `catalog_http_get()`.** P04's `http_handle()` sends a GET when `method = "GET"` and `body = NULL`; a 304 (a 3xx, which P04 fails as class `redirect` and never follows) is read from the failure condition's `status` field, which P04's `reactor_fail_final()` sets.
-18. **Provider `status()` contract.** Called as `status(check = check)` when it has a `check` formal, else `status()`; the fields read are `status`, `version` and `available`. P20 must return these names.
-19. **Discovery trigger.** "Live discovery of local servers" runs on `gptr_models(refresh = TRUE, provider = <local id>)` only; the default `refresh = TRUE` refreshes models.dev.
-20. **Egress column.** Local and offline providers show `ack` (no acknowledgement is needed for them, section 10.2 row 1).
-21. **Image elision** (`gptr.image_elision`, IC-67) is not applied by `project_messages()`: 04 defines no image id, and P06 owns that entry; P06 or P07 apply it to the projected list.
-22. **Timing.** Acceptance 6's 0.1 s bound is checked by a command, not a test (conventions section 7 forbids tighter wall-clock assertions than 5 s), on an installed build (byte-compiled, as users run it).
-23. **`source` column of `gptr_providers()`.** Section 5.12 lists `credential` (`"NAME #fp"`) and `source` separately, and the handle of section 5.9 carries no credential source; `source` is read as the provider record's registry source (`builtin:providers`, `user`, `plugin:<pkg>`, `project`, `session`) of the active record.
-24. **Snapshot < cache.** The refreshed cache is a complete catalog, so it replaces the shipped snapshot when its `generated` date is at least as new; an older cache left from a previous package version is ignored rather than merged (merging would resurrect models models.dev dropped).
-25. **Roll-up.** 05 gives P05 "roll-up" while IC-05 gives `gptr_usage()` to P06; `usage_rollup(rows)` is a private P05 helper whose output columns are those of the aggregated `gptr_usage` view (section 5.12); P06's plan aggregates its own way (its ambiguity 12) and agrees on totals.
-26. **`new_listing(df, class, footer = NULL)`.** P01's `new_listing()` prepends `gptr_` only when the class lacks it, so passing `"gptr_models"` and `"gptr_providers"` gives `c("gptr_<name>", "gptr_listing", "data.frame")` (section 5.12).
-27. **Disabled providers.** Section 11.2 gives the `providers.<id>.enabled` key to P05 without its effect: a provider whose settings say `false` is skipped by `model_default()`, refused by `provider_stream()` before anything starts (`gptr_error_not_available`, `member` = the provider id, `provided_by` = `"settings"`) and listed with status `disabled`.
-28. **Static-rate overrides (IC-64: "overridable by settings and catalog").** 04 names no reader; P05 owns the `providers` settings key and the catalog, so `provider_stream()` passes a `providers.<id>.rate` setting, else a `rate` in the merged catalog's providers section, to P04's `ratelimit_set()` before an HTTP transfer, and only when it differs from the limiter's current static rate (`ratelimit_set()` refills the bucket).
-29. **Streams of settled runs.** P06's `run_settle()` cancels a run's transfers without callbacks (P04: "removed from the pool without callbacks"); the stream's watch task then sees a terminal run status (section 7.6) and lets go of the stream without calling `done`, so no task keeps polling and holding the run (INFRA-15).
-30. **Child environment of `process_jsonl`.** Section 8.4 says `child_env(<profile>)`; P03's `provider =` argument would copy the provider's key into the child after the profile removed the billing variables (IC-65), and fails for a provider registered only for a session, so it is not passed.
+1. **R shape of session entries.** Section 4.6 gives the JSON shape only. This plan reads the
+   section 4.8 snake_case mapping: `parent_id`, `custom_type`, `first_kept_entry_id`,
+   `tokens_before`, `details = list(kind, tool_add, origin_text)`, compaction blocks under
+   `gptr$blocks`; P06's `entry_message()` stores an operator entry as
+   `list(type = "custom_message", custom_type = "gptr.operator", message = <operator>)`, which is
+   projected as is, and the flat form is accepted too.
+2. **Which orphan text.** Section 7.5 names both
+   `"interrupted after <s> s; side effects may have occurred"` and `"No result provided"`. An orphan
+   closed by an aborted assistant turn gets the first (s = the seconds between the two message
+   timestamps, one decimal), every other orphan the second. Results for unknown or already answered
+   calls are dropped so every call has exactly one result (INFRA-04).
+3. **Held messages.** Operator messages (steering relays, the only "system" role gptr has) are held
+   while results are pending (Pi's held system messages); a user message closes pending calls, as
+   in Pi.
+4. **Missing parents** ("re-parented to the nearest valid ancestor in projection", section 7.6): the
+   previous entry in file order is used, since the missing entry's own parent is unknown.
+5. **"Dropped when the target lacks reasoning replay"** (section 7.5): `reasoning_replay` is an
+   adapter capability (section 8.1); it is read from the target model record's `capabilities`, else
+   from the adapter registered for the target api. Only an explicit `FALSE` drops foreign thinking;
+   otherwise it becomes text (Pi), although section 8.1 says missing capability entries mean
+   `FALSE`, because dropping reasoning for every adapter that omits the entry would silently
+   lose context.
+6. **Compat flag names** are not fixed by 04; this plan fixes them as snake_case forms of Pi's flags
+   (Task 2 lists them) and P12's `compat_flags()` must read these names.
+7. **`typesafe`**: 05 says section 8.1-8.2 providers, but 04 section 7.13 has P13's
+   `builtin_system1()` register `typesafe` with its rate; registering it in both would collide at
+   rank 6, so P05 keeps it only in the snapshot's providers section (which also lets
+   `model_resolve("jev")` report `api = "typesafe-system-one"` before P13). Likewise the `fake` row
+   of architecture section 8.1 is served by `gptr_fake_provider()` specs (which carry their script);
+   `builtin:fake` registers only the adapters (section 10.3).
+8. **Credential binding.** `secret_value()` may be called only by P04 and P03 (section 7.3), so P05
+   never sees a stored value. Every handle `provider_credential()` returns is bound to the provider
+   origin: an unbound handle (ambient discovery, `.env` values, P03's credential-store handles, an
+   `auth` function's result) gets the origin in its own `origin` field, which P03's `secret_value()`
+   checks first (P03 plan, Task 1, "how P05 binds a looked-up handle"); a handle bound to another
+   origin is skipped; environment values are registered with the origin. A store record may hold a
+   handle (`handle`/`key`) or, defensively, a raw `key` value that is registered at once.
+   **Subscription tokens.** Architecture section 8.1 says the `anthropic` provider "refuses
+   subscription tokens (`sk-ant-oat`)"; 04 names no owner, adapters see handles only (P12
+   self-review, ambiguity 9), and only `provider_credential()` reads the environment value, so the
+   check lives there: an `ANTHROPIC_API_KEY` value starting with `sk-ant-oat` is not registered, the
+   vault handle with the same fingerprint (P03's `fp`, the first 6 hex of `hash_sha256(value)`;
+   ambient discovery registers the environment's values) is skipped, and when nothing else is found
+   `gptr_error_no_key` (`provider = "anthropic"`, `variables`) says the variable holds a
+   subscription OAuth token and points to an API key or `model = "claude_code"`. P05 never reads
+   vault values (`secret_value()` is P03's and P04's), so a token that exists only in the vault (a
+   `.env` value read with `gptr_env(set_env = FALSE)` or by the trusted-project discovery, or a
+   credential-store record) cannot be recognised here; an API key held only in the vault next to an
+   `sk-ant-oat` environment value has another fingerprint and is used.
+9. **Injected callbacks (IC-33).** An L1 file cannot name `perm_check()` or `tool_result_message()`
+   (the kernel SDK allowlist covers L3-L6 and L4 built-ins), so `provider_stream()` keeps the `gate`
+   and `tool_result` its caller passes in `opts` (P06's `run_request()` passes the run's) and
+   otherwise installs fail-closed defaults (deny; a minimal `msg_tool_result()`); `mcp_dispatch` is
+   the caller's or the `mcp.dispatch_local` service bound to the session.
+10. **Retries.** Section 8.1 lets a normaliser report an in-stream retryable failure through
+    `opts$retry(info)` and says "the transport" retries only while nothing was committed. P04's plan
+    provides that transport side as `reactor_retry(id, info)`; `opts$retry` calls it, so a retry
+    keeps the transfer id P06 recorded (P06 cancels by that id), passes P04's backoff, wire log and
+    `on_retry` notes, and a second `on_headers()` call resets the normaliser and splitter. P04
+    reports `retry_start`/`retry_end` through the `on_retry` callback of the `retry` list;
+    `provider_stream()` forwards them to `emit` as events, where P06's `run_on_event()` expects them
+    (P04 plan, ambiguity 3).
+11. **Abort.** A reactor task watches `opts$signal$aborted` and ends the stream
+    (`stop_reason = "aborted"`, partial message kept); for `process_jsonl` it kills the child after
+    forgetting it. A protocol-level interrupt (the claude `control_request`) is P20's, from its
+    normaliser, which sees `opts$signal` on every line.
+12. **`close_stdin`.** The turn's JSON lines go through the non-blocking `write_all()` and P04's
+    `write_close(p)` closes stdin once they are written (P04 plan, Task 8, written for this flag and
+    P20's codex route); with a reused child the flag closes that child's stdin, so an adapter that
+    keeps a child alive across turns sets it `FALSE`.
+13. **`model = <spec>`.** A session-scoped provider spec (rank 0) is invisible to `registry_get()`
+    without the session, so `model_resolve()` also accepts a `gptr_provider` spec;
+    `provider_stream()` looks up the session's records first through `opts$session` and passes the
+    record found as `opts$provider`, which P01's `fake_engine(model, opts)` reads so a session plays
+    its own fake script even when another live fake has the same name (04 section 8.1 does not list
+    `opts$provider`; adapters ignore unknown `opts` fields).
+14. **Model record extras.** `max_images` is a top-level field and `forced_tool_choice` a capability
+    (IC-67, IC-71); capabilities default to `FALSE` except `forced_tool_choice`, which defaults to
+    `TRUE` (only Anthropic 5.x models say `FALSE`).
+15. **Aliases.** Entries take the forms `{provider, family}`, `{provider, pattern}` and `{ref}`;
+    `gemini` is limited to `^gemini-[0-9.]+-pro(-preview)?$` because models.dev files research
+    previews under the `gemini-pro` family; on a release-date tie the undated id wins over its
+    `-YYYYMMDD` twin. `claude_code` and `codex` resolve only once P20 registers their providers;
+    turning `default` into a full CLI model id is P20's (section 11.10: "through the CLI provider's
+    status()").
+16. **Price tiers.** Labels are `default`, `<=Nk` (base) and `>Nk` (threshold); a dated set applies
+    from its `from` date; missing cache rates default to 0.1x/1.25x/2x input.
+17. **HTTP details of `catalog_http_get()`.** P04's `http_handle()` sends a GET when
+    `method = "GET"` and `body = NULL`; a 304 (a 3xx, which P04 fails as class `redirect` and never
+    follows) is read from the failure condition's `status` field, which P04's
+    `reactor_fail_final()` sets.
+18. **Provider `status()` contract.** Called as `status(check = check)` when it has a `check`
+    formal, else `status()`; the fields read are `status`, `version` and `available`. P20 must
+    return these names.
+19. **Discovery trigger.** "Live discovery of local servers" runs on
+    `gptr_models(refresh = TRUE, provider = <local id>)` only; the default `refresh = TRUE`
+    refreshes models.dev.
+20. **Egress column.** Local and offline providers show `ack` (no acknowledgement is needed for
+    them, section 10.2 row 1).
+21. **Image elision** (`gptr.image_elision`, IC-67) is not applied by `project_messages()`: 04
+    defines no image id, and P06 owns that entry; P06 or P07 apply it to the projected list.
+22. **Timing.** Acceptance 6's 0.1 s bound is checked by a command, not a test (conventions
+    section 7 forbids tighter wall-clock assertions than 5 s), on an installed build (byte-compiled,
+    as users run it).
+23. **`source` column of `gptr_providers()`.** Section 5.12 lists `credential` (`"NAME #fp"`) and
+    `source` separately, and the handle of section 5.9 carries no credential source; `source` is
+    read as the provider record's registry source (`builtin:providers`, `user`, `plugin:<pkg>`,
+    `project`, `session`) of the active record.
+24. **Snapshot < cache.** The refreshed cache is a complete catalog, so it replaces the shipped
+    snapshot when its `generated` date is at least as new; an older cache left from a previous
+    package version is ignored rather than merged (merging would resurrect models that
+    models.dev dropped).
+25. **Roll-up.** 05 gives P05 "roll-up" while IC-05 gives `gptr_usage()` to P06;
+    `usage_rollup(rows)` is a private P05 helper whose output columns are those of the aggregated
+    `gptr_usage` view (section 5.12); P06's plan aggregates its own way (its ambiguity 12) and
+    agrees on totals.
+26. **`new_listing(df, class, footer = NULL)`.** P01's `new_listing()` prepends `gptr_` only when
+    the class lacks it, so passing `"gptr_models"` and `"gptr_providers"` gives
+    `c("gptr_<name>", "gptr_listing", "data.frame")` (section 5.12).
+27. **Disabled providers.** Section 11.2 gives the `providers.<id>.enabled` key to P05 without its
+    effect: a provider whose settings say `false` is skipped by `model_default()`, refused by
+    `provider_stream()` before anything starts (`gptr_error_not_available`, `member` = the provider
+    id, `provided_by` = `"settings"`) and listed with status `disabled`.
+28. **Static-rate overrides (IC-64: "overridable by settings and catalog").** 04 names no reader;
+    P05 owns the `providers` settings key and the catalog, so `provider_stream()` passes a
+    `providers.<id>.rate` setting, else a `rate` in the merged catalog's providers section, to P04's
+    `ratelimit_set()` before an HTTP transfer, and only when it differs from the limiter's current
+    static rate (`ratelimit_set()` refills the bucket).
+29. **Streams of settled runs.** P06's `run_settle()` cancels a run's transfers without callbacks
+    (P04: "removed from the pool without callbacks"); the stream's watch task then sees a terminal
+    run status (section 7.6) and lets go of the stream without calling `done`, so no task keeps
+    polling and holding the run (INFRA-15).
+30. **Child environment of `process_jsonl`.** Section 8.4 says `child_env(<profile>)`; P03's
+    `provider =` argument would copy the provider's key into the child after the profile removed the
+    billing variables (IC-65), and fails for a provider registered only for a session, so it is
+    not passed.
 
 ### Executed validation
 
-- Every `r` block of the plan (25 blocks) was extracted into `scratchpad/work/plans/review-P05/` and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. `getParseData()` finds no `LEFT_ASSIGN` `<-` token (only the closure-state `<<-` of `project_structure()` and `id_alnum9_normaliser()`), and the blocks contain no `%>%`, no `:::`, no non-ASCII byte and no line over 100 characters.
-- A scratch package (in the scratchpad, never the repository) was assembled from the code blocks of the **current** P01, P02, P03 and P04 plans (their `R/` files, `setup.R`, `helper-*.R` and fixtures) plus this plan's blocks, with `inst/extdata/models.json.gz` built by this plan's `dev/catalog/build_models.R --offline`. Staged assemblies ran every red and green step: each Step 2 and Step 4 summary in this plan is the measured one (Task 1: 3 failures, then 23 passes; Task 10: 10 failures and 71 passes, then 143 passes; Task 12: 2 failures and 176 passes, then 226 passes). The four files together: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 465 ]` (444 before the cross-plan consolidation, which added 21 expectations to `test-provider-registry.R`; re-measured with the seed-only snapshot on the P01-P04 plans of 2026-10-01).
-- `dev/catalog/build_models.R` ran both ways: `--offline` wrote 8 models, 18 providers, 9 aliases (1.9 KB); `--api` with the models.dev `api.json` downloaded for report 09's verification wrote 709 models (21.6 KB). No model API was called.
-- P01's `test-lint-rules.R` and `test-arch-layers.R`, run over the same assembly, pass for the P05 files (the arch test's only failure is its "one home per function" check, triggered by P03/P04 definitions that their plans replace in place and the scratch assembler appended). `lintr::lint()` with the repository linters (`assignment_linter(operator = c("=", "<<-"))`, `line_length_linter(100)`, the snake_case `object_name_linter` with the S3 regex) finds nothing in the four R files, the four test files and the build script, apart from `object_usage_linter` notes that appear for every file of the scratch package because lintr cannot load its namespace there. With the namespace loaded first (`pkgload::load_all(quiet = TRUE)`, as acceptance row H now runs it) and P01's `.lintr`, `lintr::lint()` gives 0 lints on the four R files and the four test files, notes included (cross-plan consolidation).
-- On the 709-model snapshot: cold `gptr_models("sonnet")` 0.050-0.072 s on an installed build in a temporary library (0.11-0.12 s under `pkgload::load_all()`, whose functions R compiles on first use), warm 0.013-0.016 s; `sonnet` -> `anthropic/claude-sonnet-5-5` (`cache_min` 512), `opus:xhigh` -> `anthropic/claude-opus-5-5` (`xhigh`), `opus:minimal` -> `low`, `haiku` and `haiku:max` -> `anthropic/claude-haiku-4-5` (`high`, `cache_min` 4096), `gpt` -> `openai/gpt-6.1-sol`, `flash` -> `google/gemini-3.8-flash`, `gemini` -> `google/gemini-3.1-pro-preview`, `gpt-6-sol` -> `openai/gpt-6-sol` (owner tie-break), `openrouter/anthropic/claude-sonnet-5-5` -> `openrouter/anthropic/claude-sonnet-5.5`, `ollama/qwen3.5:9b:high` -> local id `qwen3.5:9b` with `high`, `jev` -> `typesafe/jev-latest`, `claude-sonet-5-5` -> `gptr_error_unknown_model` suggesting `claude-sonnet-5-5, claude-sonnet-4-5, claude-sonnet-4-6`.
-- Not executed: the live HTTP paths (no network in this review), and the P06-P20 consumers, whose plans were read for the names and shapes they pass and expect.
+- Every `r` block of the plan (25 blocks) was extracted into `scratchpad/work/plans/review-P05/` and
+  parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. `getParseData()`
+  finds no `LEFT_ASSIGN` `<-` token (only the closure-state `<<-` of `project_structure()` and
+  `id_alnum9_normaliser()`), and the blocks contain no `%>%`, no `:::`, no non-ASCII byte and no
+  line over 100 characters.
+- A scratch package (in the scratchpad, never the repository) was assembled from the code blocks of
+  the **current** P01, P02, P03 and P04 plans (their `R/` files, `setup.R`, `helper-*.R` and
+  fixtures) plus this plan's blocks, with `inst/extdata/models.json.gz` built by this plan's
+  `dev/catalog/build_models.R --offline`. Staged assemblies ran every red and green step: each
+  Step 2 and Step 4 summary in this plan is the measured one (Task 1: 3 failures, then 23 passes;
+  Task 10: 10 failures and 71 passes, then 143 passes; Task 12: 2 failures and 176 passes, then 226
+  passes). The four files together: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 465 ]` (444 before the
+  cross-plan consolidation, which added 21 expectations to `test-provider-registry.R`; re-measured
+  with the seed-only snapshot on the P01-P04 plans of 2026-10-01).
+- `dev/catalog/build_models.R` ran both ways: `--offline` wrote 8 models, 18 providers, 9 aliases
+  (1.9 KB); `--api` with the models.dev `api.json` downloaded for report 09's verification wrote 709
+  models (21.6 KB). No model API was called.
+- P01's `test-lint-rules.R` and `test-arch-layers.R`, run over the same assembly, pass for the P05
+  files (the arch test's only failure is its "one home per function" check, triggered by P03/P04
+  definitions that their plans replace in place and the scratch assembler appended). `lintr::lint()`
+  with the repository linters (`assignment_linter(operator = c("=", "<<-"))`,
+  `line_length_linter(100)`, the snake_case `object_name_linter` with the S3 regex) finds nothing in
+  the four R files, the four test files and the build script, apart from `object_usage_linter` notes
+  that appear for every file of the scratch package because lintr cannot load its namespace there.
+  With the namespace loaded first (`pkgload::load_all(quiet = TRUE)`, as acceptance row H now runs
+  it) and P01's `.lintr`, `lintr::lint()` gives 0 lints on the four R files and the four test files,
+  notes included (cross-plan consolidation).
+- On the 709-model snapshot: cold `gptr_models("sonnet")` 0.050-0.072 s on an installed build in a
+  temporary library (0.11-0.12 s under `pkgload::load_all()`, whose functions R compiles on first
+  use), warm 0.013-0.016 s; `sonnet` -> `anthropic/claude-sonnet-5-5` (`cache_min` 512),
+  `opus:xhigh` -> `anthropic/claude-opus-5-5` (`xhigh`), `opus:minimal` -> `low`, `haiku` and
+  `haiku:max` -> `anthropic/claude-haiku-4-5` (`high`, `cache_min` 4096), `gpt` ->
+  `openai/gpt-6.1-sol`, `flash` -> `google/gemini-3.8-flash`, `gemini` ->
+  `google/gemini-3.1-pro-preview`, `gpt-6-sol` -> `openai/gpt-6-sol` (owner tie-break),
+  `openrouter/anthropic/claude-sonnet-5-5` -> `openrouter/anthropic/claude-sonnet-5.5`,
+  `ollama/qwen3.5:9b:high` -> local id `qwen3.5:9b` with `high`, `jev` -> `typesafe/jev-latest`,
+  `claude-sonet-5-5` -> `gptr_error_unknown_model` suggesting
+  `claude-sonnet-5-5, claude-sonnet-4-5, claude-sonnet-4-6`.
+- Not executed: the live HTTP paths (no network in this review), and the P06-P20 consumers, whose
+  plans were read for the names and shapes they pass and expect.
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 05 (P05), 04 (sections 4, 7.1-7.6, 8, 10, 11, 15), the current P01-P04 plans (whose code was assembled and run with this plan's) and the P06-P08 plans that consume P05. Every applied fix is in the task text above; counts were re-measured.
+Adversarial review of 2026-10-01 against 05 (P05), 04 (sections 4, 7.1-7.6, 8, 10, 11, 15), the
+current P01-P04 plans (whose code was assembled and run with this plan's) and the P06-P08 plans that
+consume P05. Every applied fix is in the task text above; counts were re-measured.
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
@@ -5249,7 +5843,14 @@ Adversarial review of 2026-10-01 against 05 (P05), 04 (sections 4, 7.1-7.6, 8, 1
 
 ## Cross-plan consolidation log
 
-Cross-plan check of 2026-10-01 (obligations and trace lenses) against 04, 03, 05 and the related plans (P01, P02, P03, P12, P14). Every applied change is in the task text above; the test counts of Tasks 2, 3 and 10-12 and of acceptance rows 1, 4 and R4 were re-measured on staged scratch assemblies of the current P01-P04 plans plus this plan (Task 2: 4 failures and 1 pass, then 40 passes; Task 3: 6 failures and 41 passes, then 71; Task 10: 10 failures and 71 passes, then 143; Task 11: 9 failures and 147 passes, then 176; Task 12: 2 failures and 176 passes, then 226; the four files 465; `provider-registry|catalog-models` 356). Every `r` block (25) was re-extracted and parses with `Rscript --vanilla`; no `<-`, `%>%`, `:::`, non-ASCII byte or line over 100 characters.
+Cross-plan check of 2026-10-01 (obligations and trace lenses) against 04, 03, 05 and the related
+plans (P01, P02, P03, P12, P14). Every applied change is in the task text above; the test counts of
+Tasks 2, 3 and 10-12 and of acceptance rows 1, 4 and R4 were re-measured on staged scratch
+assemblies of the current P01-P04 plans plus this plan (Task 2: 4 failures and 1 pass, then 40
+passes; Task 3: 6 failures and 41 passes, then 71; Task 10: 10 failures and 71 passes, then 143;
+Task 11: 9 failures and 147 passes, then 176; Task 12: 2 failures and 176 passes, then 226; the four
+files 465; `provider-registry|catalog-models` 356). Every `r` block (25) was re-extracted and parses
+with `Rscript --vanilla`; no `<-`, `%>%`, `:::`, non-ASCII byte or line over 100 characters.
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|

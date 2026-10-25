@@ -7,7 +7,7 @@ readiness guidance, not evidence that the current release tarball passes CRAN ch
 ## Current rules and useful thresholds
 
 | Area | Requirement or guidance | Primary source |
-| --- | --- | --- |
+|---|---|---|
 | Distribution size | Data and documentation generally stay within 5 MB; documentation may be required to shrink to that maximum. Source tarballs should preferably stay within 10 MB. | [CRAN Repository Policy](https://cran.r-project.org/web/packages/policies.html) |
 | Check resources | At most two simultaneous cores/threads. Minimize checking CPU time; examples should take only a few seconds. No universal five-minute total-check limit was stated in the reviewed policy/manual. | [CRAN Repository Policy](https://cran.r-project.org/web/packages/policies.html) |
 | Network and state | Handle unavailable Internet gracefully; obtain consent for third-party session transmission. Restrict writes to permitted temporary/user directories and close started external programs. | [CRAN Repository Policy](https://cran.r-project.org/web/packages/policies.html) |
@@ -28,7 +28,8 @@ the historical maintainer-only NOTE.
   [the shipped engine](../../vignettes/getting-started.Rmd#L3). Both packages were already
   suggested. Only this metadata field was edited; `Config/roxygen2/version: 8.1.0` was
   preserved. Matching guards in [release tooling](../release/lib.R#L569), its existing
-  [self-test](../release/tests/test-description.R#L6), and [test-zzz](../../tests/testthat/test-zzz.R#L34)
+  [self-test](../release/tests/test-description.R#L6),
+  and [test-zzz](../../tests/testthat/test-zzz.R#L34)
   were aligned. Root validation passed: package metadata tests 88 assertions and release
   metadata self-tests 19 assertions, with zero test failures/warnings/skips. Documentation
   and release-file audits each reported zero problems; three changed R files lint clean.
@@ -161,9 +162,10 @@ or total package-size measurement. No source-size or timing threshold is relaxed
 
 Remote `cb180d3` completed all 13 CI jobs. Its Windows release used actual R 4.6.1 and oldrel-4
 used R 4.2.3; each had zero test failures/warnings and 23,826 assertions. Both retained a
-temporary-directory detritus NOTE: release listed 15 `Rscript*` entries and oldrel-4 listed
-14. The category also existed at `e5703be`. Oldrel additionally reports an 8.7 MB installed-size diagnostic. These are
-older-head, independently rebuilt CI results, not the current exact archive check.
+temporary-directory detritus NOTE: release listed 15 `Rscript*` entries and oldrel-4 listed 14.
+The category also existed at `e5703be`. Oldrel additionally reports an 8.7 MB installed-size
+diagnostic. These are older-head, independently rebuilt CI results, not the current exact
+archive check.
 
 Official Windows R source writes every `Rscript -e` input into TMPDIR (then TMP/TEMP fallback)
 and normally removes it during R exit. Intentional force-kill tests bypass that finalizer.
@@ -184,7 +186,8 @@ but recorded five Chromium component-update URL-fetcher directories. Chromium on
 inherits TMPDIR; the existing suite-owned `child-temp` fix should cover this category too.
 Mac Chromium instead reads MAC_CHROMIUM_TMPDIR. That variable now joins the same existing
 test-only restoration scope and owned directory; shipping browser behavior is unchanged.
-[Chromium Mac source](https://chromium.googlesource.com/chromium/src/+/refs/tags/146.0.7680.180/base/files/file_util_apple.mm)
+[Chromium Mac
+source](https://chromium.googlesource.com/chromium/src/+/refs/tags/146.0.7680.180/base/files/file_util_apple.mm)
 
 The outside-sentinel regression failed one assertion before the change and passed all five
 afterward, with zero test failures/warnings and one honest Windows-only skip. Two-file lint
@@ -254,6 +257,6 @@ failing the same completion-fixture cleanup. Windows release R 4.6.1 and oldrel-
 each reported PASS 24,143 / FAIL 1 / WARN 0 / SKIP 84. Release status was one ERROR with
 zero NOTEs; oldrel-4 additionally retained its installed-size NOTE (8.7 MB / R 7.4 MB with
 source retained). Both temporary-detritus and nonstandard-directory checks were OK. The
-complete failure/skip reports contain no test-environment case, supporting—but not separately
-counting—the path-normalization and Windows force-kill checks. The 2aeb9f0 fixture correction
+complete failure/skip reports contain no test-environment case, supporting, but not separately
+counting, the path-normalization and Windows force-kill checks. The 2aeb9f0 fixture correction
 passed 71 local Unix assertions and file lint; its Windows execution remains pending.

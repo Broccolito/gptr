@@ -17,7 +17,8 @@ No live login, actual settings reset, inference, credential read or package inst
 - `2908cf2`: three existing internal as_state S3 annotations and generated S3method entries.
   No new public exports, Imports or function-body changes. Required for clean roxygen2 8.1.1.
 - `c8f7390`: English setup/reset guide; normative setup/selector contracts; reference and authored
-  README/guide updates; offline regeneration of README and the two edited guides. Logo HTML unchanged.
+  README/guide updates; offline regeneration of README and the two edited guides. Logo HTML
+  unchanged.
 
 ## Evidence
 

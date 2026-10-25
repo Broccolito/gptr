@@ -1,48 +1,185 @@
 # P23 Artifacts Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Artifacts are Shiny apps (S-5, REQ-39) that the model writes into `<root>/artifacts/<id>/app.R` and launches from the live session with `peter$app(id, data =)`, as immutable, token-protected versions served by supervised background R processes, validated by a parse, launch, HTTP and session ladder, and listed, relaunched and stopped with `gptr_artifacts()`.
+**Goal:** Artifacts are Shiny apps (S-5, REQ-39) that the model writes into
+`<root>/artifacts/<id>/app.R` and launches from the live session with `peter$app(id, data =)`, as
+immutable, token-protected versions served by supervised background R processes, validated by a
+parse, launch, HTTP and session ladder, and listed, relaunched and stopped with `gptr_artifacts()`.
 
-**Architecture:** `R/artifact-app.R` holds the built-in `builtin:artifacts`: the artifact types `shiny` and `html` (static checks of the working copy, immutable `vNNN/` snapshots written through P01's leaf `save_rds()`, a self-contained child entry `artifact_serve()` started with `callr::r_bg()` in the secret-free `artifact` environment, behind a per-launch access token, on a loopback port published by atomic rename, with a parent-PID watchdog), the HTTP 200 check through P04's reactor, the optional chromote session check with a 1000x700 screenshot attached to the running `r` result, the `peter$app()` member, the `artifacts` prompt section and the `artifacts` checkpointer. `R/artifact-registry.R` holds the artifact process table (records, status, stop, run files, redacted logs, job-table rows, the `artifact_start`/`artifact_stop` events), the lazy orphan sweep, the `.onUnload` cleanup and the export `gptr_artifacts()`.
+**Architecture:** `R/artifact-app.R` holds the built-in `builtin:artifacts`: the artifact types
+`shiny` and `html` (static checks of the working copy, immutable `vNNN/` snapshots written through
+P01's leaf `save_rds()`, a self-contained child entry `artifact_serve()` started with
+`callr::r_bg()` in the secret-free `artifact` environment, behind a per-launch access token, on a
+loopback port published by atomic rename, with a parent-PID watchdog), the HTTP 200 check through
+P04's reactor, the optional chromote session check with a 1000x700 screenshot attached to the
+running `r` result, the `peter$app()` member, the `artifacts` prompt section and the `artifacts`
+checkpointer. `R/artifact-registry.R` holds the artifact process table (records, status, stop, run
+files, redacted logs, job-table rows, the `artifact_start`/`artifact_stop` events), the lazy orphan
+sweep, the `.onUnload` cleanup and the export `gptr_artifacts()`.
 
-**Tech Stack:** base R (>= 4.2.0); Imports callr (`r_bg()`), processx and ps (through P04 and directly for creation times), jsonlite and cli (through P01), curl (through P04's reactor); Suggests shiny, httpuv and later (loaded only inside the child), openssl (the access token), chromote (the session check and screenshot); testthat 3e and withr in tests; rtiktoken only through P07's development runner `dev/bench/tokens/run.R`.
+**Tech Stack:** base R (>= 4.2.0); Imports callr (`r_bg()`), processx and ps (through P04 and
+directly for creation times), jsonlite and cli (through P01), curl (through P04's reactor); Suggests
+shiny, httpuv and later (loaded only inside the child), openssl (the access token), chromote (the
+session check and screenshot); testthat 3e and withr in tests; rtiktoken only through P07's
+development runner `dev/bench/tokens/run.R`.
 
-**Spec:** dev/spec/03-architecture.md (§2.2, §3.2 rows `artifact-*`, §3.3 `shiny-bslib`, §5.7, §6.4, §6.5, §6.7, §6.15, §7.3 `<artifacts>`, §7.4 `<environment>`, §10.6, §12.2, §12.4, §12.7), dev/spec/04-interface-contract.md (§1.1-§1.5, §2.2 `artifact`/`artifact_too_large`, §3.1 `gptr.artifact_max_bytes`, §4.4, §4.6 `gptr.artifact`, §5.10 `gptr_artifact`, §5.12 `gptr_artifacts`, §6.4 `gptr_artifacts()`, §7.1, §7.3, §7.4, §7.6, §7.10, §7.14, §7.16, §7.23, §8.2, §9.3, §9.4 `app`, §10.2 rows 19 and 29, §10.3, §10.4, §11.1, §11.6, §12; §15 IC-33, IC-60, IC-61, IC-63, IC-68, IC-69, IC-70, IC-71, IC-73), dev/spec/05-plan-decomposition.md (P23).
+**Spec:** dev/spec/03-architecture.md (sections 2.2, 3.2 rows `artifact-*`, 3.3 `shiny-bslib`, 5.7,
+6.4, 6.5, 6.7, 6.15, 7.3 `<artifacts>`, 7.4 `<environment>`, 10.6, 12.2, 12.4, 12.7),
+dev/spec/04-interface-contract.md (sections 1.1-1.5, 2.2 `artifact`/`artifact_too_large`, 3.1
+`gptr.artifact_max_bytes`, 4.4, 4.6 `gptr.artifact`, 5.10 `gptr_artifact`, 5.12 `gptr_artifacts`,
+6.4 `gptr_artifacts()`, 7.1, 7.3, 7.4, 7.6, 7.10, 7.14, 7.16, 7.23, 8.2, 9.3, 9.4 `app`, 10.2
+rows 19 and 29, 10.3, 10.4, 11.1, 11.6, 12; section 15 IC-33, IC-60, IC-61, IC-63, IC-68, IC-69,
+IC-70, IC-71, IC-73), dev/spec/05-plan-decomposition.md (P23).
 
 **Depends on:** P10, P11, P14, P16 (and through them P01-P09 and P15). **Milestone:** M5.
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full (`=` for assignment, never the left arrow; native `|>`; ASCII-only R sources; `pkg::fun()` calls; `gptr_abort()`/`gptr_warn()`/`gptr_inform()`; no `:::` in `R/`; no `.GlobalEnv`; `on.exit(..., add = TRUE)` right after any state change; testthat 3e; no network in tests; `Rscript --vanilla`; one commit per task). Plan-specific requirements, copied from the spec:
+`dev/plan/00-conventions.md` applies in full (`=` for assignment, never the left arrow; native `|>`;
+ASCII-only R sources; `pkg::fun()` calls; `gptr_abort()`/`gptr_warn()`/`gptr_inform()`; no `:::` in
+`R/`; no `.GlobalEnv`; `on.exit(..., add = TRUE)` right after any state change; testthat 3e; no
+network in tests; `Rscript --vanilla`; one commit per task). Plan-specific requirements, copied from
+the spec:
 
-- Files and layer (03 §3.2): `artifact-app.R` | L4 | "`peter$app()`: working copy, immutable snapshots, callr child, validation ladder, screenshot" | builtin `artifacts`; `artifact-registry.R` | L4 | "`gptr_artifacts()`, stop, relaunch, lazy orphan sweep". L4 code "may call: the extension API (`gptr$register()`, `ctx`), L0, their own area, the declared services `eval-*`, `env-*`, `tool-walk`, `proc-*`, the §7.0 service table of the contract, and the **kernel SDK** allowlist [IC-33]"; the record constructors of `provider-message.R`/`provider-events.R` are callable from every layer (P01's `helper-arch.R`); `test-arch-layers.R` enforces it.
-- Owned files (05 P23 "Owns"): "The two R files and tests; `test-copy-artifact.R`; `inst/gptr/skills/shiny-bslib/`", plus the NS-8 golden transcript and its baseline row under `dev/bench/tokens/` (IC-73: "P10, P13, P15, P18, P19, P22 and P23 each add their NS fixture and baseline rows"), plus `NAMESPACE` and `man/` through `Rscript --vanilla -e 'devtools::document()'`.
-- Export (04 §6.4): `gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)`: "Without `id`: a `gptr_artifacts` data frame (after a lazy orphan sweep). With `id`: the `gptr_artifact` handle; `open = TRUE` opens it in the viewer or browser (interactive only; relaunches a stopped artifact); `version = <int>` relaunches that immutable version; `stop = TRUE` stops its process (interrupt, 3 s grace, `kill_all()`). Conditions: `invalid_argument` (unknown id), `artifact`, `missing_package` (shiny). Emits `artifact_start`, `artifact_stop`." Example: `gptr_artifacts()  # an empty listing when no artifact exists`.
-- Member (04 §9.4): `peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = interactive())` "(`kind`: a registered `artifact_type`, IC-69; ids that are Windows reserved names are refused, IC-63)"; returns "`gptr_artifact`; the `r` result gets its URL, checks and screenshot image"; risk level 3 (03 §6.15: "level 3: launching model-written code").
-- Internal contract (04 §7.23): `builtin_artifacts(gptr)` "registers `artifact_type` specs `shiny` and `html`, the member `app` (§9.4), the `artifacts` prompt section (IC-68) and the `artifacts` checkpointer"; `artifact_serve(dir, port_file, parent_pid, token)` "runs inside the callr child: picks a free 127.0.0.1 port from `port_candidates()`, publishes it by atomic rename of `port_file`, starts a parent-PID watchdog, runs the app behind the `gptr_token` check (IC-71); stdout/stderr are read by the parent and appended redacted to `app-vNNN.log` (IC-70)".
-- Handle (04 §5.10): `gptr_artifact` = "list(id, title, kind, version (int), url (with the `gptr_token` query, IC-71), path, status (`running`, `stopped`, `failed`), checks (list(parse, launch, http, session) of lgl|NA plus `messages`), screenshot (chr(1)|NULL), session (chr(1)|NULL))"; print: "`artifact  <id>  ->  <url>   (<status text>)`, where `running` reads `running in background` (NS-8; P14's renderer prints the same line on `artifact_start`)".
-- Listing (04 §5.12): class `c("gptr_artifacts", "gptr_listing", "data.frame")` with columns `id`, `title`, `version`, `status`, `url`, `pid`, `bytes`, `path`, "built by `new_listing(df, class, footer = NULL)` (P01, `utils-text.R`)".
-- Files (04 §11.6): `<root>/artifacts/<id>/app.R` "working copy (model-written; committed)"; `artifact.json` "metadata (committed)"; `vNNN/app.R` "immutable snapshot copy (NNN = 001, 002, ...)"; `vNNN/R/gptr_data.R` "loader: reads data/<file> for each name listed in artifact.json (IC-63)"; `vNNN/data/001.rds` "snapshots via save_rds(compress = FALSE), numbered (ignored)"; `run/run.json` "`{pid, port, url, version, started}` (ignored; the URL carries the token)"; `run/port` "the child's port, published by atomic rename (ignored)"; `run/app-vNNN.log` "child stdout/stderr read by the parent and appended with persist redaction (ignored; IC-70)". `artifact.json`: `{"id", "title", "kind": "shiny" | "html", "versions": [{"n", "created", "app_sha", "data": [{"name", "file", "class", "dim", "bytes"}], "session", "checks": {"parse", "launch", "http", "session"}}], "current": int, "port": int | null, "created", "updated"}` (this plan adds the unknown key `kind` to each version record, Self-review ambiguity 8). "Ids match `^[a-z0-9][a-z0-9-]{0,62}$` and are not a Windows reserved device name (`con`, `aux`, `nul`, `prn`, `com1`-`com9`, `lpt1`-`lpt9`; IC-63)". All JSON files are UTF-8 without BOM, LF, written atomically (04 §11).
-- `<root>` (03 §5.7): "`.gptr` in a consented workspace (so NS-8's `.gptr/artifacts/marker-explorer/app.R` is literal), else `tempdir()/gptr`" (P01's `workspace_root()`); `.gptr/.gitignore` already ignores `artifacts/*/v*/data/` and `artifacts/*/run/` (04 §11.1, P08's template).
-- Option (04 §3.1): `gptr.artifact_max_bytes` (`num(1)`, default `5e8`, owner P23): "snapshot cap"; read through `gptr_opt("artifact_max_bytes")`.
-- Conditions (04 §2.2): `gptr_error_artifact` (fields `id`, `stage`, `log` (tail)): "a validation-ladder stage failed"; `gptr_error_artifact_too_large` (parent `artifact`; fields `bytes`, `max`): "snapshot above `gptr.artifact_max_bytes`"; `gptr_error_invalid_argument` (`arg`, `expected`; never the value); `gptr_error_missing_package` (`package`, `feature`). Stages used here: `parse`, `static`, `snapshot`, `launch`, `http`.
-- Events (04 §10.4): `artifact_start`, `artifact_stop` (gptr, notify; payload `id`, `url`, `version`; stop: `reason`). Custom entry (04 §4.6): `gptr.artifact` `{id, version, url, status, checks}`. `r` tool details (04 §4.4): `artifacts` = "paths of artifacts written (`.gptr/artifacts/<id>/app.R`)" (P10 collects them from `artifact_start`).
-- Prompt section (04 §9.3, IC-68): `artifacts` | T0 | order `600` | budget `150` | "shiny installed and `builtin:artifacts` enabled" | P23; text verbatim from 03 §7.3 (measured 124 o200k tokens, 03 §7.3 table).
-- Kinds (04 §10.2): row 19 `artifact_type` [experimental] "`build` `function(id, dir, data, ctx)`; `check` `function(dir, ctx)` -> `list(ok, messages)`; `launch` `function(version_dir, ctx)` -> `list(url, pid, stop)`; `stop` `function(handle)`" ("failures become tool results with the stage and a log tail"); row 29 `checkpointer` [experimental] "`scope` (`objects`, `files`, `state`, `artifacts`, `other`); `before` `function(call, ctx)` -> token; `after` `function(call, ctx, token)` -> JSON-able fragment; `undo`/`redo` `function(fragment, ctx, force)` -> chr report lines; `prune` `function(live_keys, ctx)`; `describe` `function(fragment)` -> chr" ("never throws into the loop (a failure marks its fragment not restorable)").
-- Children (IC-60): "`proc_spawn()` and every `callr::r_bg()` pass `encoding = "UTF-8"`"; `supervise = supervise_default()`; callr receives `child_env_callr(child_env("artifact"))` ("every profile ... points `R_ENVIRON_USER` and `R_PROFILE_USER` at gptr's empty files and drops `R_ENVIRON`"); "Every long-lived child exits when the parent dies: ... artifacts through their watchdog"; "A requested stop is recorded in the job table (`stop_requested`); any exit after it maps to status `stopped` (artifacts, bridges) ..., never `error` (callr 3.8.0 exits 1 with `callr_timeout_error`)"; "every process-spawning test calls `skip_on_cran()`".
-- R children and R CMD check (Self-review ambiguity 13): passing `env =` to callr replaces its default `callr::rcmd_safe_env()`, so `artifact_child_env()` sets its three values `R_TESTS = ""`, `R_BROWSER = "false"`, `R_PDFVIEWER = "false"` (R CMD check runs tests with `R_TESTS=startup.Rs`, which R's base profile sources in every R child); test helpers that start `Rscript` children pass `env = c("current", R_TESTS = "")`.
-- Child-only environment variable: `GPTR_ARTIFACT_PORTS` (comma-separated candidate ports, previous port first, set by `artifact_child_env()` only in the artifact child and read only by `artifact_serve()`; a child-only variable beside 04 §3.2's `GPTR_MCP_TOKEN`, `GPTR_SUBAGENT_DEPTH` and `GPTR_WORKER`, never set in the user's session and never read by gptr there). It carries the ports because 04 §7.23's signature `artifact_serve(dir, port_file, parent_pid, token)` is fixed and the self-contained child cannot call `port_candidates()` (Self-review ambiguity 1); Task 4's child-environment test asserts its value.
-- Randomness (IC-61): "Ports come from `port_candidates()` (P01: RNG-free hash bits in 49152-65535)"; "`httpuv::randomPort()` is never called (it calls `sample()`, verified)"; `with_seed_preserved()` "around third-party calls that use R's RNG in the parent (`chromote::Chromote$new()`, loading shiny, httpuv helpers)"; "Tests assert an identical `.Random.seed` after ... `peter$app(check = TRUE)`".
-- Logs (IC-70): "MCP stderr and artifact logs are read incrementally and appended through `redact_stream("persist")`; raw redirect files are deleted at process exit".
-- Access (IC-71): "each launch gets a 128-bit token (`openssl::rand_bytes(16)`, else `/dev/urandom` on Unix; on Windows without openssl no token and a notice); the wrapper app rejects sessions whose URL lacks `gptr_token=<hex>`; the handle's URL carries it; static checks flag reads of `secret_file` paths at level 3".
-- Paths and names (IC-63): "Artifact ids that are Windows reserved device names ... are rejected. Data snapshots are `data/001.rds`, `data/002.rds`, ... with the mapping in `artifact.json` (`data: [{name, file, class, dim, bytes}]`); the loader reads the file listed for each name."
-- Ladder constants (report 17 §3.4 and its verification log): host `127.0.0.1`; launch timeout 30 s; stop grace 3 s then `kill_all()`; watchdog every 1 s; session check: "connected, no `shiny-busy`, 0 `.recalculating`, stable for 5x100 ms; timeout 20 s"; screenshot 1000x700 PNG ("about 900 tokens", 03 §6.15, §12.2: "artifact result | about 80 + about 900 screenshot").
-- CRAN (13 C-42, C-43; report 17 §3.5): "Packages should not start external software (such as PDF viewers or browsers) during examples or tests unless that specific instance of the software is explicitly closed afterwards"; no fixed ports; the viewer opens only when a human is present; nothing is written by default in non-interactive runs (IC-45: artifacts live in a consented `.gptr/` or `tempdir()`).
-- Copy safety (03 §6.4, 04 §1.3): user objects are read only through leaf functions returning primitives [R4], serialised only through `save_rds()` (`ascii = FALSE`) [R7], never held after return [R1]; the caller's frame is used during the call only [R2]; `test-copy-artifact.R` proves that "the snapshot leaves the source object editable in place" (05 P23 acceptance 3).
-- Tests: the fake provider and helpers of 04 §12 (`local_fake_provider()`, `fake_tool()`, `fake_requests()`, `local_project()`, `local_gptr_options()`, `expect_no_copy()`); no plan-specific helper file (helpers live in the two test files); fake keys are assembled at run time with `paste0()` (no key-shaped literal in a source file, as in P03); process tests clean up with `withr::defer()`.
+- Files and layer (03 section 3.2): `artifact-app.R` | L4 | "`peter$app()`: working copy, immutable
+  snapshots, callr child, validation ladder, screenshot" | builtin `artifacts`;
+  `artifact-registry.R` | L4 | "`gptr_artifacts()`, stop, relaunch, lazy orphan sweep". L4 code "may
+  call: the extension API (`gptr$register()`, `ctx`), L0, their own area, the declared services
+  `eval-*`, `env-*`, `tool-walk`, `proc-*`, the §7.0 service table of the contract, and the
+  **kernel SDK** allowlist [IC-33]"; the record constructors of
+  `provider-message.R`/`provider-events.R` are callable from every layer (P01's `helper-arch.R`);
+  `test-arch-layers.R` enforces it.
+- Owned files (05 P23 "Owns"): "The two R files and tests; `test-copy-artifact.R`;
+  `inst/gptr/skills/shiny-bslib/`", plus the NS-8 golden transcript and its baseline row under
+  `dev/bench/tokens/` (IC-73: "P10, P13, P15, P18, P19, P22 and P23 each add their NS fixture and
+  baseline rows"), plus `NAMESPACE` and `man/` through
+  `Rscript --vanilla -e 'devtools::document()'`.
+- Export (04 section 6.4): `gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)`:
+  "Without `id`: a `gptr_artifacts` data frame (after a lazy orphan sweep). With `id`: the
+  `gptr_artifact` handle; `open = TRUE` opens it in the viewer or browser (interactive only;
+  relaunches a stopped artifact); `version = <int>` relaunches that immutable version; `stop = TRUE`
+  stops its process (interrupt, 3 s grace, `kill_all()`). Conditions: `invalid_argument` (unknown
+  id), `artifact`, `missing_package` (shiny). Emits `artifact_start`, `artifact_stop`." Example:
+  `gptr_artifacts()  # an empty listing when no artifact exists`.
+- Member (04 section 9.4):
+  `peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = interactive())`
+  "(`kind`: a registered `artifact_type`, IC-69; ids that are Windows reserved names are refused,
+  IC-63)"; returns "`gptr_artifact`; the `r` result gets its URL, checks and screenshot image"; risk
+  level 3 (03 section 6.15: "level 3: launching model-written code").
+- Internal contract (04 section 7.23): `builtin_artifacts(gptr)` "registers `artifact_type` specs
+  `shiny` and `html`, the member `app` (§9.4), the `artifacts` prompt section (IC-68) and the
+  `artifacts` checkpointer"; `artifact_serve(dir, port_file, parent_pid, token)` "runs inside the
+  callr child: picks a free 127.0.0.1 port from `port_candidates()`, publishes it by atomic rename
+  of `port_file`, starts a parent-PID watchdog, runs the app behind the `gptr_token` check (IC-71);
+  stdout/stderr are read by the parent and appended redacted to `app-vNNN.log` (IC-70)".
+- Handle (04 section 5.10): `gptr_artifact` = "list(id, title, kind, version (int), url (with the
+  `gptr_token` query, IC-71), path, status (`running`, `stopped`, `failed`), checks (list(parse,
+  launch, http, session) of lgl|NA plus `messages`), screenshot (chr(1)|NULL), session
+  (chr(1)|NULL))"; print: "`artifact  <id>  ->  <url>   (<status text>)`, where `running` reads
+  `running in background` (NS-8; P14's renderer prints the same line on `artifact_start`)".
+- Listing (04 section 5.12): class `c("gptr_artifacts", "gptr_listing", "data.frame")` with columns
+  `id`, `title`, `version`, `status`, `url`, `pid`, `bytes`, `path`, "built by
+  `new_listing(df, class, footer = NULL)` (P01, `utils-text.R`)".
+- Files (04 section 11.6): `<root>/artifacts/<id>/app.R` "working copy (model-written; committed)";
+  `artifact.json` "metadata (committed)"; `vNNN/app.R` "immutable snapshot copy (NNN = 001, 002,
+  ...)"; `vNNN/R/gptr_data.R` "loader: reads data/<file> for each name listed in artifact.json
+  (IC-63)"; `vNNN/data/001.rds` "snapshots via save_rds(compress = FALSE), numbered (ignored)";
+  `run/run.json` "`{pid, port, url, version, started}` (ignored; the URL carries the token)";
+  `run/port` "the child's port, published by atomic rename (ignored)"; `run/app-vNNN.log` "child
+  stdout/stderr read by the parent and appended with persist redaction (ignored; IC-70)".
+  `artifact.json`:
+  `{"id", "title", "kind": "shiny" | "html", "versions": [{"n", "created", "app_sha", "data": [{"name", "file", "class", "dim", "bytes"}], "session", "checks": {"parse", "launch", "http", "session"}}], "current": int, "port": int | null, "created", "updated"}`
+  (this plan adds the unknown key `kind` to each version record, Self-review ambiguity 8). "Ids
+  match `^[a-z0-9][a-z0-9-]{0,62}$` and are not a Windows reserved device name (`con`, `aux`, `nul`,
+  `prn`, `com1`-`com9`, `lpt1`-`lpt9`; IC-63)". All JSON files are UTF-8 without BOM, LF, written
+  atomically (04 section 11).
+- `<root>` (03 section 5.7): "`.gptr` in a consented workspace (so NS-8's
+  `.gptr/artifacts/marker-explorer/app.R` is literal), else `tempdir()/gptr`" (P01's
+  `workspace_root()`); `.gptr/.gitignore` already ignores `artifacts/*/v*/data/` and
+  `artifacts/*/run/` (04 section 11.1, P08's template).
+- Option (04 section 3.1): `gptr.artifact_max_bytes` (`num(1)`, default `5e8`, owner P23): "snapshot
+  cap"; read through `gptr_opt("artifact_max_bytes")`.
+- Conditions (04 section 2.2): `gptr_error_artifact` (fields `id`, `stage`, `log` (tail)): "a
+  validation-ladder stage failed"; `gptr_error_artifact_too_large` (parent `artifact`; fields
+  `bytes`, `max`): "snapshot above `gptr.artifact_max_bytes`"; `gptr_error_invalid_argument` (`arg`,
+  `expected`; never the value); `gptr_error_missing_package` (`package`, `feature`). Stages used
+  here: `parse`, `static`, `snapshot`, `launch`, `http`.
+- Events (04 section 10.4): `artifact_start`, `artifact_stop` (gptr, notify; payload `id`, `url`,
+  `version`; stop: `reason`). Custom entry (04 section 4.6): `gptr.artifact`
+  `{id, version, url, status, checks}`. `r` tool details (04 section 4.4): `artifacts` = "paths of
+  artifacts written (`.gptr/artifacts/<id>/app.R`)" (P10 collects them from `artifact_start`).
+- Prompt section (04 section 9.3, IC-68): `artifacts` | T0 | order `600` | budget `150` | "shiny
+  installed and `builtin:artifacts` enabled" | P23; text verbatim from 03 section 7.3 (measured 124
+  o200k tokens, 03 section 7.3 table).
+- Kinds (04 section 10.2): row 19 `artifact_type` [experimental] "`build`
+  `function(id, dir, data, ctx)`; `check` `function(dir, ctx)` -> `list(ok, messages)`; `launch`
+  `function(version_dir, ctx)` -> `list(url, pid, stop)`; `stop` `function(handle)`" ("failures
+  become tool results with the stage and a log tail"); row 29 `checkpointer` [experimental] "`scope`
+  (`objects`, `files`, `state`, `artifacts`, `other`); `before` `function(call, ctx)` -> token;
+  `after` `function(call, ctx, token)` -> JSON-able fragment; `undo`/`redo`
+  `function(fragment, ctx, force)` -> chr report lines; `prune` `function(live_keys, ctx)`;
+  `describe` `function(fragment)` -> chr" ("never throws into the loop (a failure marks its fragment
+  not restorable)").
+- Children (IC-60): "`proc_spawn()` and every `callr::r_bg()` pass `encoding = "UTF-8"`";
+  `supervise = supervise_default()`; callr receives `child_env_callr(child_env("artifact"))` ("every
+  profile ... points `R_ENVIRON_USER` and `R_PROFILE_USER` at gptr's empty files and drops
+  `R_ENVIRON`"); "Every long-lived child exits when the parent dies: ... artifacts through their
+  watchdog"; "A requested stop is recorded in the job table (`stop_requested`); any exit after it
+  maps to status `stopped` (artifacts, bridges) ..., never `error` (callr 3.8.0 exits 1 with
+  `callr_timeout_error`)"; "every process-spawning test calls `skip_on_cran()`".
+- R children and R CMD check (Self-review ambiguity 13): passing `env =` to callr replaces its
+  default `callr::rcmd_safe_env()`, so `artifact_child_env()` sets its three values `R_TESTS = ""`,
+  `R_BROWSER = "false"`, `R_PDFVIEWER = "false"` (R CMD check runs tests with `R_TESTS=startup.Rs`,
+  which R's base profile sources in every R child); test helpers that start `Rscript` children pass
+  `env = c("current", R_TESTS = "")`.
+- Child-only environment variable: `GPTR_ARTIFACT_PORTS` (comma-separated candidate ports, previous
+  port first, set by `artifact_child_env()` only in the artifact child and read only by
+  `artifact_serve()`; a child-only variable beside 04 section 3.2's `GPTR_MCP_TOKEN`,
+  `GPTR_SUBAGENT_DEPTH` and `GPTR_WORKER`, never set in the user's session and never read by gptr
+  there). It carries the ports because 04 section 7.23's signature
+  `artifact_serve(dir, port_file, parent_pid, token)` is fixed and the self-contained child cannot
+  call `port_candidates()` (Self-review ambiguity 1); Task 4's child-environment test asserts its
+  value.
+- Randomness (IC-61): "Ports come from `port_candidates()` (P01: RNG-free hash bits in
+  49152-65535)"; "`httpuv::randomPort()` is never called (it calls `sample()`, verified)";
+  `with_seed_preserved()` "around third-party calls that use R's RNG in the parent
+  (`chromote::Chromote$new()`, loading shiny, httpuv helpers)"; "Tests assert an identical
+  `.Random.seed` after ... `peter$app(check = TRUE)`".
+- Logs (IC-70): "MCP stderr and artifact logs are read incrementally and appended through
+  `redact_stream("persist")`; raw redirect files are deleted at process exit".
+- Access (IC-71): "each launch gets a 128-bit token (`openssl::rand_bytes(16)`, else `/dev/urandom`
+  on Unix; on Windows without openssl no token and a notice); the wrapper app rejects sessions whose
+  URL lacks `gptr_token=<hex>`; the handle's URL carries it; static checks flag reads of
+  `secret_file` paths at level 3".
+- Paths and names (IC-63): "Artifact ids that are Windows reserved device names ... are rejected.
+  Data snapshots are `data/001.rds`, `data/002.rds`, ... with the mapping in `artifact.json`
+  (`data: [{name, file, class, dim, bytes}]`); the loader reads the file listed for each name."
+- Ladder constants (report 17 section 3.4 and its verification log): host `127.0.0.1`; launch
+  timeout 30 s; stop grace 3 s then `kill_all()`; watchdog every 1 s; session check: "connected, no
+  `shiny-busy`, 0 `.recalculating`, stable for 5x100 ms; timeout 20 s"; screenshot 1000x700 PNG
+  ("about 900 tokens", 03 sections 6.15, 12.2: "artifact result | about 80 + about 900 screenshot").
+- CRAN (13 C-42, C-43; report 17 section 3.5): "Packages should not start external software (such as
+  PDF viewers or browsers) during examples or tests unless that specific instance of the software is
+  explicitly closed afterwards"; no fixed ports; the viewer opens only when a human is present;
+  nothing is written by default in non-interactive runs (IC-45: artifacts live in a consented
+  `.gptr/` or `tempdir()`).
+- Copy safety (03 section 6.4, 04 section 1.3): user objects are read only through leaf functions
+  returning primitives [R4], serialised only through `save_rds()` (`ascii = FALSE`) [R7], never held
+  after return [R1]; the caller's frame is used during the call only [R2]; `test-copy-artifact.R`
+  proves that "the snapshot leaves the source object editable in place" (05 P23 acceptance 3).
+- Tests: the fake provider and helpers of 04 section 12 (`local_fake_provider()`, `fake_tool()`,
+  `fake_requests()`, `local_project()`, `local_gptr_options()`, `expect_no_copy()`); no
+  plan-specific helper file (helpers live in the two test files); fake keys are assembled at run
+  time with `paste0()` (no key-shaped literal in a source file, as in P03); process tests clean up
+  with `withr::defer()`.
 
-Test counts below are those of `devtools::test()` (which sets `NOT_CRAN=true`) on the development machine with shiny 1.13.0, bslib, httpuv, later, openssl, chromote and a Chrome binary installed. Without shiny, httpuv or later the launch tests skip; without chromote or a Chrome binary the two session-check tests of Task 6 skip (`SKIP 2`); without `capabilities("profmem")` the copy rows skip.
+Test counts below are those of `devtools::test()` (which sets `NOT_CRAN=true`) on the development
+machine with shiny 1.13.0, bslib, httpuv, later, openssl, chromote and a Chrome binary installed.
+Without shiny, httpuv or later the launch tests skip; without chromote or a Chrome binary the two
+session-check tests of Task 6 skip (`SKIP 2`); without `capabilities("profmem")` the copy rows skip.
 
 ## File Structure
 
@@ -53,25 +190,85 @@ Test counts below are those of `devtools::test()` (which sets `NOT_CRAN=true`) o
 | `tests/testthat/test-artifact-app.R` | create (Task 1), extend (Tasks 2, 3, 4, 6, 7, 8, 9, 11) | tests of `R/artifact-app.R` and of the shipped skill |
 | `tests/testthat/test-artifact-registry.R` | create (Task 5), extend (Task 10) | tests of `R/artifact-registry.R` and NS-8 end to end on the fake provider |
 | `tests/testthat/test-copy-artifact.R` | create (Task 9) | the copy-safety rows: `peter$app()` from user code and from model code leaves the snapshotted object editable in place |
-| `inst/gptr/skills/shiny-bslib/SKILL.md` | create (Task 11) | the artifact house-style skill (03 §3.3, §7.3 catalog line) |
+| `inst/gptr/skills/shiny-bslib/SKILL.md` | create (Task 11) | the artifact house-style skill (03 sections 3.3, 7.3 catalog line) |
 | `dev/bench/tokens/fixtures/ns08-marker-explorer.json` | create (Task 12) | the NS-8 golden transcript (IC-73) |
 | `dev/bench/tokens/baseline.csv` | modify (Task 12, one row written by P07's runner) | the `ns08-marker-explorer` baseline row |
 | `NAMESPACE`, `man/gptr_artifacts.Rd` | generated (Tasks 1, 10) | `Rscript --vanilla -e 'devtools::document()'`: `S3method(format,gptr_artifact)`, `S3method(print,gptr_artifact)`, `export(gptr_artifacts)` |
 
 ## Interfaces consumed (exact names; 04 is authoritative)
 
-- P01: `the`, `` `%||%` ``, `on_load(expr)`, `on_unload(fun)`, `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_strings(x, arg, null = FALSE)`, `check_flag(x, arg, null = FALSE)`, `check_number(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE)`, `gptr_opt(name)`, `gptr_has_human()`, `supervise_default()`, `workspace_root(create = TRUE)`, `path_norm(path)`, `path_rel(path, root = project_root())`, `save_rds(object, file, compress = FALSE)` [R7][leaf], `port_candidates(n = 20L)`, `with_seed_preserved(expr)` [leaf], `hash_sha256(x)`, `as_utf8(x)`, `raw_to_utf8(x, fallback = "CP1252")`, `read_utf8(path)` (`$text`), `write_utf8(path, text, eol = "\n", bom = FALSE, final_newline = TRUE)`, `json_encode(x, pretty = FALSE)`, `json_decode(text)`, `new_listing(df, class, footer = NULL)`, `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)` (`source = "screenshot"`), `ev_new(type, ...)`; tests: `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`, `local_gptr_options(..., .env = parent.frame())`, `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`, `fake_tool(name, ..., .text = NULL, .id = NULL)`, `fake_requests(spec)`, `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`, `rscript_path()`.
-- P02: `gptr_spec(kind, name, ...)`, `gptr_tool(name, description, parameters = NULL, execute = NULL, fun = NULL, exposure = c("direct", "r", "deferred", "hidden"), namespace = NULL, execution = c("sequential", "concurrent"), risk = NULL, snippet = NULL, guidelines = NULL, signature = NULL, output_tokens = NULL, record = TRUE, available = NULL, annotations = list())`, `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`, `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)`, `ev_dispatch(event, payload, session = NULL, ctx = NULL)`; the factory API object's `gptr$register(spec)`; `ctx$session`, `ctx$envir`; tests: `hook_add(event, handler, matcher = NULL, rank = 3L, source = "user", session = NULL)`, `hook_remove(id)`.
-- P03: `child_env(profile, pass = character(), set = character(), provider = NULL)` (profile `artifact`), `child_env_callr(env)`, `redact_stream(profile = "stream")` (`push(chunk)`, `flush()`), `secret_scan(code, tainted = character())` (`$findings` with `rule`, `name`; rule `secret_file`); tests: `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` and `vault_reset()` (P03's reset of the secret vault, which every test that registers a secret calls first and defers, as P03, P14, P18 and P22 tests do).
-- P04: `reactor_http(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL, provider = NULL, retry = NULL)` (spec fields `url`, `method`, `headers`, `connect_timeout`, `first_byte_timeout`, `idle_timeout`; `on_fail(cnd)` gets a classed condition whose `status` is the HTTP status of a non-2xx answer), `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)` (returns `TRUE` when `until()` held), `reactor_cancel(ids)`, `reactor_now()`, `kill_all(p, grace = 2)`, `job_add(kind, id, name, pid = NA, stop, status = function() "running")` (kind `artifact`), `job_remove(id)`, `pid_alive(pid, create_time = NULL)`; tests: `job_list(kind = NULL)`.
-- P06 (kernel SDK, IC-33): `run_current()`, `run_eval_env(run)`, `run_emit(run, type, ...)`, `session_data(s)` (`$id`, `$entries`), `session_append(s, entry)` (an entry in R shape `list(type = "custom", custom_type, data)`); `dispatch_nested(name, input, ctx)` calls the member's `execute` for model code (validated input; an error result becomes `gptr_error_tool` inside the model's code); tests: `gptr_last()`.
-- P08: the exported gateway object `peter` (`peter$app` through the `ns.resolve` service), `peter(...)` (tests).
-- P10: the member closure of `peter$app` (`member_closure(spec)`: formals from the spec's `fun`; called by the user it evaluates `fun` in its own frame, called from model code it passes `dispatch_nested()`); the r-call marker of the `r` tool, a binding `gptr_r_call` of class `gptr_r_call` in the `r` tool's execute frame whose `images` (list of image blocks) and `dropped` (int) collect images for the running `r` result, capped at `gptr.r_max_images` (P10 Task 1; read here by data because `tool-namespace.R` is an L4 file outside this area, see Self-review ambiguity 3); the `r` tool's session hook on `artifact_start` that fills `details$artifacts`.
-- P11: the risk table and `risk.classify` service read the member's `risk` (level 3 here); in `auto` mode level 3 runs without asking (03 §6.8.1).
-- P14: the `builtin:console` hook on `artifact_start` that prints `artifact  <id>  ->  <url>   (running in background)` at verbosity >= 1 (stdout at 2).
-- P16: the dispatcher-facing `checkpointer` contract above; report lines matching `not restored|not redone|conflict|failed` mark a rewind partial (P16 `ckpt_partial_re`).
-- P17: nothing (P17 is outside P23's dependency closure, 05: P10, P11, P14, P16). Task 11's skill test reads the frontmatter with `yaml::yaml.load()` (yaml is an Import, 03 §9) instead of P17's `skill_parse()`; P17's discovery of `inst/gptr/skills/` finds the shipped `shiny-bslib` without a call from this plan.
-- P07: `Rscript --vanilla dev/bench/tokens/run.R [--check] [--update [ids]]` and its fixture format (Task 12).
+- P01: `the`, `` `%||%` ``, `on_load(expr)`, `on_unload(fun)`,
+  `gptr_abort(message, class, ..., .data = NULL, call = NULL)`,
+  `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`,
+  `check_string(x, arg, null = FALSE, empty = FALSE)`, `check_strings(x, arg, null = FALSE)`,
+  `check_flag(x, arg, null = FALSE)`,
+  `check_number(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE)`, `gptr_opt(name)`,
+  `gptr_has_human()`, `supervise_default()`, `workspace_root(create = TRUE)`, `path_norm(path)`,
+  `path_rel(path, root = project_root())`, `save_rds(object, file, compress = FALSE)` [R7][leaf],
+  `port_candidates(n = 20L)`, `with_seed_preserved(expr)` [leaf], `hash_sha256(x)`, `as_utf8(x)`,
+  `raw_to_utf8(x, fallback = "CP1252")`, `read_utf8(path)` (`$text`),
+  `write_utf8(path, text, eol = "\n", bom = FALSE, final_newline = TRUE)`,
+  `json_encode(x, pretty = FALSE)`, `json_decode(text)`, `new_listing(df, class, footer = NULL)`,
+  `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)`
+  (`source = "screenshot"`), `ev_new(type, ...)`; tests:
+  `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`,
+  `local_gptr_options(..., .env = parent.frame())`,
+  `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`,
+  `fake_tool(name, ..., .text = NULL, .id = NULL)`, `fake_requests(spec)`,
+  `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`,
+  `rscript_path()`.
+- P02: `gptr_spec(kind, name, ...)`,
+  `gptr_tool(name, description, parameters = NULL, execute = NULL, fun = NULL, exposure = c("direct", "r", "deferred", "hidden"), namespace = NULL, execution = c("sequential", "concurrent"), risk = NULL, snippet = NULL, guidelines = NULL, signature = NULL, output_tokens = NULL, record = TRUE, available = NULL, annotations = list())`,
+  `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`,
+  `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)`,
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`,
+  `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)`,
+  `ev_dispatch(event, payload, session = NULL, ctx = NULL)`; the factory API object's
+  `gptr$register(spec)`; `ctx$session`, `ctx$envir`; tests:
+  `hook_add(event, handler, matcher = NULL, rank = 3L, source = "user", session = NULL)`,
+  `hook_remove(id)`.
+- P03: `child_env(profile, pass = character(), set = character(), provider = NULL)` (profile
+  `artifact`), `child_env_callr(env)`, `redact_stream(profile = "stream")` (`push(chunk)`,
+  `flush()`), `secret_scan(code, tainted = character())` (`$findings` with `rule`, `name`; rule
+  `secret_file`); tests:
+  `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` and `vault_reset()`
+  (P03's reset of the secret vault, which every test that registers a secret calls first and defers,
+  as P03, P14, P18 and P22 tests do).
+- P04:
+  `reactor_http(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL, provider = NULL, retry = NULL)`
+  (spec fields `url`, `method`, `headers`, `connect_timeout`, `first_byte_timeout`, `idle_timeout`;
+  `on_fail(cnd)` gets a classed condition whose `status` is the HTTP status of a non-2xx answer),
+  `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`
+  (returns `TRUE` when `until()` held), `reactor_cancel(ids)`, `reactor_now()`,
+  `kill_all(p, grace = 2)`, `job_add(kind, id, name, pid = NA, stop, status = function() "running")`
+  (kind `artifact`), `job_remove(id)`, `pid_alive(pid, create_time = NULL)`; tests:
+  `job_list(kind = NULL)`.
+- P06 (kernel SDK, IC-33): `run_current()`, `run_eval_env(run)`, `run_emit(run, type, ...)`,
+  `session_data(s)` (`$id`, `$entries`), `session_append(s, entry)` (an entry in R shape
+  `list(type = "custom", custom_type, data)`); `dispatch_nested(name, input, ctx)` calls the
+  member's `execute` for model code (validated input; an error result becomes `gptr_error_tool`
+  inside the model's code); tests: `gptr_last()`.
+- P08: the exported gateway object `peter` (`peter$app` through the `ns.resolve` service),
+  `peter(...)` (tests).
+- P10: the member closure of `peter$app` (`member_closure(spec)`: formals from the spec's `fun`;
+  called by the user it evaluates `fun` in its own frame, called from model code it passes
+  `dispatch_nested()`); the r-call marker of the `r` tool, a binding `gptr_r_call` of class
+  `gptr_r_call` in the `r` tool's execute frame whose `images` (list of image blocks) and `dropped`
+  (int) collect images for the running `r` result, capped at `gptr.r_max_images` (P10 Task 1; read
+  here by data because `tool-namespace.R` is an L4 file outside this area, see Self-review
+  ambiguity 3); the `r` tool's session hook on `artifact_start` that fills `details$artifacts`.
+- P11: the risk table and `risk.classify` service read the member's `risk` (level 3 here); in `auto`
+  mode level 3 runs without asking (03 section 6.8.1).
+- P14: the `builtin:console` hook on `artifact_start` that prints
+  `artifact  <id>  ->  <url>   (running in background)` at verbosity >= 1 (stdout at 2).
+- P16: the dispatcher-facing `checkpointer` contract above; report lines matching
+  `not restored|not redone|conflict|failed` mark a rewind partial (P16 `ckpt_partial_re`).
+- P17: nothing (P17 is outside P23's dependency closure, 05: P10, P11, P14, P16). Task 11's skill
+  test reads the frontmatter with `yaml::yaml.load()` (yaml is an Import, 03 section 9) instead of
+  P17's `skill_parse()`; P17's discovery of `inst/gptr/skills/` finds the shipped `shiny-bslib`
+  without a call from this plan.
+- P07: `Rscript --vanilla dev/bench/tokens/run.R [--check] [--update [ids]]` and its fixture format
+  (Task 12).
 
 ## Tasks
 
@@ -96,10 +293,37 @@ Test counts below are those of `devtools::test()` (which sets `NOT_CRAN=true`) o
 - Generated: `NAMESPACE` (`S3method(format,gptr_artifact)`, `S3method(print,gptr_artifact)`)
 
 **Interfaces:**
-- Consumes: P01 `check_string(x, arg, null = FALSE, empty = FALSE)`, `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `workspace_root(create = TRUE)` (called with `create = FALSE`: nothing is created until a version is written), `read_utf8(path)`, `write_utf8(path, text, ...)` (atomic), `json_encode(x, pretty = FALSE)`, `json_decode(text)`, `hash_sha256(x)` (raw -> chr(1)), `path_rel(path, root = project_root())`, `as_utf8(x)`, `` `%||%` ``; P06 kernel SDK `session_data(s)` (`$id`); tests: P01 `local_project()`.
-- Produces (internal, used by every later task): `artifact_state` (environment: `procs` = the process table, an environment id -> record; `browser`; `swept`), `artifact_reserved`, `artifact_launch_timeout` (30), `artifact_stop_grace` (3), `artifact_shot_size` (`c(width = 1000L, height = 700L)`), `artifact_id_check(id)`, `artifact_root()`, `artifact_dir(id)`, `artifact_version_dir(id, n)`, `artifact_working_file(dir, kind)`, `artifact_time()`, `artifact_session_id(ctx)`, `artifact_meta_path(id)`, `artifact_exists(id)`, `artifact_meta_read(id)`, `artifact_meta_write(id, meta)`, `artifact_meta_new(id, title = NULL, kind = "shiny")`, `artifact_version_record(meta, n)`, `artifact_set_current(id, n)`, `artifact_version_checks_set(id, n, checks)`, `artifact_checks(parse = NA, launch = NA, http = NA, session = NA, messages = character())`, `artifact_checks_json(checks)`, `artifact_checks_from_json(x)`, `artifact_file_sha(path)`, `artifact_dir_bytes(id)`, `new_gptr_artifact(id, title, kind, version, url = NA_character_, path, status = "stopped", checks = artifact_checks(), screenshot = NULL, session = NULL)` -> the 04 §5.10 handle (fields in contract order); S3 methods `format.gptr_artifact()` (the NS-8 line, then `checks: parse ok | launch ok | http ok | session skipped`, the messages and the screenshot path) and `print.gptr_artifact()`.
+- Consumes: P01 `check_string(x, arg, null = FALSE, empty = FALSE)`,
+  `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `workspace_root(create = TRUE)`
+  (called with `create = FALSE`: nothing is created until a version is written), `read_utf8(path)`,
+  `write_utf8(path, text, ...)` (atomic), `json_encode(x, pretty = FALSE)`, `json_decode(text)`,
+  `hash_sha256(x)` (raw -> chr(1)), `path_rel(path, root = project_root())`, `as_utf8(x)`,
+  `` `%||%` ``; P06 kernel SDK `session_data(s)` (`$id`); tests: P01 `local_project()`.
+- Produces (internal, used by every later task): `artifact_state` (environment: `procs` = the
+  process table, an environment id -> record; `browser`; `swept`), `artifact_reserved`,
+  `artifact_launch_timeout` (30), `artifact_stop_grace` (3), `artifact_shot_size`
+  (`c(width = 1000L, height = 700L)`), `artifact_id_check(id)`, `artifact_root()`,
+  `artifact_dir(id)`, `artifact_version_dir(id, n)`, `artifact_working_file(dir, kind)`,
+  `artifact_time()`, `artifact_session_id(ctx)`, `artifact_meta_path(id)`, `artifact_exists(id)`,
+  `artifact_meta_read(id)`, `artifact_meta_write(id, meta)`,
+  `artifact_meta_new(id, title = NULL, kind = "shiny")`, `artifact_version_record(meta, n)`,
+  `artifact_set_current(id, n)`, `artifact_version_checks_set(id, n, checks)`,
+  `artifact_checks(parse = NA, launch = NA, http = NA, session = NA, messages = character())`,
+  `artifact_checks_json(checks)`, `artifact_checks_from_json(x)`, `artifact_file_sha(path)`,
+  `artifact_dir_bytes(id)`,
+  `new_gptr_artifact(id, title, kind, version, url = NA_character_, path, status = "stopped", checks = artifact_checks(), screenshot = NULL, session = NULL)`
+  -> the 04 section 5.10 handle (fields in contract order); S3 methods `format.gptr_artifact()` (the
+  NS-8 line, then `checks: parse ok | launch ok | http ok | session skipped`, the messages and the
+  screenshot path) and `print.gptr_artifact()`.
 
-Report 17 §5.1 (`artifact_lib3.R`, verified) is the reference: ids, `artifact.json` written atomically, `vNNN` version directories. The contract changes its layout (04 §11.6: the working copy `app.R` next to `artifact.json`, numbered data files, `port` and `current` in `artifact.json`) and its id rules (IC-63). JSON `null` is written for a missing port and for checks that did not run (`NA`), and read back as `NA`. The handle prints on stdout with `writeLines()` (its messages are untrusted text, never a format string, rule C1), so an `r` evaluation captures the NS-8 line when the model prints the handle; an artifact that is not running shows its working copy instead of a URL.
+Report 17 section 5.1 (`artifact_lib3.R`, verified) is the reference: ids, `artifact.json` written
+atomically, `vNNN` version directories. The contract changes its layout (04 section 11.6: the
+working copy `app.R` next to `artifact.json`, numbered data files, `port` and `current` in
+`artifact.json`) and its id rules (IC-63). JSON `null` is written for a missing port and for checks
+that did not run (`NA`), and read back as `NA`. The handle prints on stdout with `writeLines()` (its
+messages are untrusted text, never a format string, rule C1), so an `r` evaluation captures the NS-8
+line when the model prints the handle; an artifact that is not running shows its working copy
+instead of a URL.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -211,7 +435,9 @@ test_that("the handle formats as the NS-8 line with its checks, and prints it", 
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "artifact-app")'
 ```
 
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`; the four tests error with `could not find function "artifact_id_check"` (and `"artifact_dir"`, `"artifact_meta_new"`, `"new_gptr_artifact"`).
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`; the four tests error with
+`could not find function "artifact_id_check"` (and `"artifact_dir"`, `"artifact_meta_new"`,
+`"new_gptr_artifact"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -454,7 +680,9 @@ Rscript --vanilla -e 'devtools::document()'
 Rscript --vanilla -e 'devtools::test(filter = "artifact-app")'
 ```
 
-Expected: `devtools::document()` adds `S3method(format,gptr_artifact)` and `S3method(print,gptr_artifact)` to `NAMESPACE` (no Rd file: the methods carry `@noRd`); the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 41 ]`.
+Expected: `devtools::document()` adds `S3method(format,gptr_artifact)` and
+`S3method(print,gptr_artifact)` to `NAMESPACE` (no Rd file: the methods carry `@noRd`); the tests
+print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 41 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -470,10 +698,31 @@ git commit -m "feat(artifact): add artifact ids, metadata and the gptr_artifact 
 - Test: `tests/testthat/test-artifact-app.R` (append)
 
 **Interfaces:**
-- Consumes: Task 1 (`path_rel()` messages through `artifact_dir()`); P01 `as_utf8()`, `read_utf8()`, `` `%||%` ``; P03 `secret_scan(code, tainted = character())` (`$findings`, a df with `rule` and `name`; rule `secret_file` is the G6 §3.8 secret-file read, level 3).
-- Produces: `artifact_static_check(code)` -> `list(ok = lgl(1), stage = "parse" | "static" | "ok", messages = chr, packages = chr)` (never evaluates the code); the `check` functions of the two built-in `artifact_type` specs (04 §10.2 row 19, `function(dir, ctx)` -> `list(ok, messages)` plus `stage`): `artifact_check_shiny(dir, ctx)` (static checks of `<dir>/app.R`) and `artifact_check_html(dir, ctx)` (`<dir>/page.html` exists and is not empty); helpers `artifact_forbidden_calls`, `artifact_read_calls`, `artifact_path_args`, `artifact_call_name(fn)`, `artifact_calls(exprs)`, `artifact_packages(calls)`, `artifact_outside_reads(calls)`, `artifact_secret_reads(code)`, `artifact_ends_with_app(exprs)`.
+- Consumes: Task 1 (`path_rel()` messages through `artifact_dir()`); P01 `as_utf8()`, `read_utf8()`,
+  `` `%||%` ``; P03 `secret_scan(code, tainted = character())` (`$findings`, a df with `rule` and
+  `name`; rule `secret_file` is the G6 section 3.8 secret-file read, level 3).
+- Produces: `artifact_static_check(code)` ->
+  `list(ok = lgl(1), stage = "parse" | "static" | "ok", messages = chr, packages = chr)` (never
+  evaluates the code); the `check` functions of the two built-in `artifact_type` specs (04
+  section 10.2 row 19, `function(dir, ctx)` -> `list(ok, messages)` plus `stage`):
+  `artifact_check_shiny(dir, ctx)` (static checks of `<dir>/app.R`) and
+  `artifact_check_html(dir, ctx)` (`<dir>/page.html` exists and is not empty); helpers
+  `artifact_forbidden_calls`, `artifact_read_calls`, `artifact_path_args`, `artifact_call_name(fn)`,
+  `artifact_calls(exprs)`, `artifact_packages(calls)`, `artifact_outside_reads(calls)`,
+  `artifact_secret_reads(code)`, `artifact_ends_with_app(exprs)`.
 
-Report 17 §5.1 `art_static_check()` with the two defects of its verification log fixed (item 12: empty code crashed with "attempt to select less than one element"; a last expression `shiny::shinyApp(ui, server)` was rejected because `as.character(last[[1]])[1]` is `"::"`), extended with architecture 6.15's rules ("parses; ends with `shinyApp()`; no `setwd()`, installs, `runApp()` or reads outside the snapshot") and IC-71's "static checks flag reads of `secret_file` paths at level 3": such an app is refused (stage `static`), since the artifact process runs model-written code. A version directory holds only `app.R`, `R/gptr_data.R` and `data/`, so any literal path except one under `data/` names a file the running app cannot see; strings containing a newline are inline data (`fread("a,b\n1,2")`), not paths. Missing packages are found with `system.file()` without loading anything (loading shiny in the parent would touch the RNG, IC-61). The call walk skips empty arguments by index (as P03's `scan_strings()` does): binding the empty symbol to a variable would make that variable unusable.
+Report 17 section 5.1 `art_static_check()` with the two defects of its verification log fixed
+(item 12: empty code crashed with "attempt to select less than one element"; a last expression
+`shiny::shinyApp(ui, server)` was rejected because `as.character(last[[1]])[1]` is `"::"`), extended
+with architecture 6.15's rules ("parses; ends with `shinyApp()`; no `setwd()`, installs, `runApp()`
+or reads outside the snapshot") and IC-71's "static checks flag reads of `secret_file` paths at
+level 3": such an app is refused (stage `static`), since the artifact process runs model-written
+code. A version directory holds only `app.R`, `R/gptr_data.R` and `data/`, so any literal path
+except one under `data/` names a file the running app cannot see; strings containing a newline are
+inline data (`fread("a,b\n1,2")`), not paths. Missing packages are found with `system.file()`
+without loading anything (loading shiny in the parent would touch the RNG, IC-61). The call walk
+skips empty arguments by index (as P03's `scan_strings()` does): binding the empty symbol to a
+variable would make that variable unusable.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -557,7 +806,8 @@ test_that("the shiny and html type checks look at the working copy", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "artifact-app")'
 ```
 
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 41 ]`; the four new tests error with `could not find function "artifact_static_check"` (and `"artifact_check_shiny"`).
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 41 ]`; the four new tests error with
+`could not find function "artifact_static_check"` (and `"artifact_check_shiny"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -781,10 +1031,34 @@ git commit -m "feat(artifact): add the static checks of app.R"
 - Test: `tests/testthat/test-artifact-app.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-2; P01 `save_rds(object, file, compress = FALSE)` [R7][leaf], `gptr_opt("artifact_max_bytes")` (default `5e8`), `write_utf8()`, `gptr_abort()`, `path_rel()`; tests: P01 `local_gptr_options()`, withr `with_dir()`.
-- Produces: `artifact_snapshot(vdir, data, envir, id = basename(dirname(vdir)))` -> the `data` records of `artifact.json` (`list(name, file, class, dim, bytes)` per object, files `data/001.rds`, `data/002.rds`, ...; IC-63) and the loader `R/gptr_data.R`; signals `gptr_error_artifact_too_large` (parent `artifact`; fields `id`, `stage = "snapshot"`, `log`, `bytes`, `max`) before anything is written, and `gptr_error_invalid_argument` (`arg = "data"`) for missing objects; `artifact_data_facts(name, envir)` [R4][leaf], `artifact_data_save(name, envir, file)` [R7][leaf], `artifact_mb(bytes)`, `artifact_loader_lines(records)`, `artifact_version_claim(id)` -> int (the next `vNNN`, claimed with `dir.create()`); the `build` functions of the built-in types (04 §10.2 row 19, `function(id, dir, data, ctx)`): `artifact_build_shiny()` (copies the working `app.R` into the version directory) and `artifact_build_html()` (copies `page.html` and writes the wrapper `app.R`); `artifact_html_wrapper(names)`.
+- Consumes: Tasks 1-2; P01 `save_rds(object, file, compress = FALSE)` [R7][leaf],
+  `gptr_opt("artifact_max_bytes")` (default `5e8`), `write_utf8()`, `gptr_abort()`, `path_rel()`;
+  tests: P01 `local_gptr_options()`, withr `with_dir()`.
+- Produces: `artifact_snapshot(vdir, data, envir, id = basename(dirname(vdir)))` -> the `data`
+  records of `artifact.json` (`list(name, file, class, dim, bytes)` per object, files
+  `data/001.rds`, `data/002.rds`, ...; IC-63) and the loader `R/gptr_data.R`; signals
+  `gptr_error_artifact_too_large` (parent `artifact`; fields `id`, `stage = "snapshot"`, `log`,
+  `bytes`, `max`) before anything is written, and `gptr_error_invalid_argument` (`arg = "data"`) for
+  missing objects; `artifact_data_facts(name, envir)` [R4][leaf],
+  `artifact_data_save(name, envir, file)` [R7][leaf], `artifact_mb(bytes)`,
+  `artifact_loader_lines(records)`, `artifact_version_claim(id)` -> int (the next `vNNN`, claimed
+  with `dir.create()`); the `build` functions of the built-in types (04 section 10.2 row 19,
+  `function(id, dir, data, ctx)`): `artifact_build_shiny()` (copies the working `app.R` into the
+  version directory) and `artifact_build_html()` (copies `page.html` and writes the wrapper
+  `app.R`); `artifact_html_wrapper(names)`.
 
-Report 17 §5.1 `art_snapshot()` with the contract's numbering (IC-63: "Data snapshots are `data/001.rds`, `data/002.rds`, ... with the mapping in `artifact.json`; the loader reads the file listed for each name"), so a data object named `a/b` snapshots as `data/001.rds` and the loader binds it as `` `a/b` `` (05 P23 acceptance 5). Shiny sources `R/*.R` of the app directory before `app.R` (report 17 §2.2, verified for shiny 1.13.0 and 1.14.0 by its verification log item 3), so the objects exist under their names when `app.R` runs. User objects are read only through two leaves: `artifact_data_facts()` returns primitives (class, dim, `object.size()`) and `artifact_data_save()` hands the object straight to `save_rds()` (R4, R7); `envir` is never kept (R1, R2). The total size is checked against `gptr.artifact_max_bytes` before anything is written (NS-11: "`pbmc` exceeds `gptr.artifact_max_bytes`, so `peter$app()` errors with advice"). The `html` kind is report 17 §2.5 "A" (verified: iframe `srcdoc`, so the page's CSS and JS are isolated from Bootstrap), with the data as `window.GPTR_DATA.<name>` and `</` escaped inside the script.
+Report 17 section 5.1 `art_snapshot()` with the contract's numbering (IC-63: "Data snapshots are
+`data/001.rds`, `data/002.rds`, ... with the mapping in `artifact.json`; the loader reads the file
+listed for each name"), so a data object named `a/b` snapshots as `data/001.rds` and the loader
+binds it as `` `a/b` `` (05 P23 acceptance 5). Shiny sources `R/*.R` of the app directory before
+`app.R` (report 17 section 2.2, verified for shiny 1.13.0 and 1.14.0 by its verification log
+item 3), so the objects exist under their names when `app.R` runs. User objects are read only
+through two leaves: `artifact_data_facts()` returns primitives (class, dim, `object.size()`) and
+`artifact_data_save()` hands the object straight to `save_rds()` (R4, R7); `envir` is never kept
+(R1, R2). The total size is checked against `gptr.artifact_max_bytes` before anything is written
+(NS-11: "`pbmc` exceeds `gptr.artifact_max_bytes`, so `peter$app()` errors with advice"). The `html`
+kind is report 17 section 2.5 "A" (verified: iframe `srcdoc`, so the page's CSS and JS are isolated
+from Bootstrap), with the data as `window.GPTR_DATA.<name>` and `</` escaped inside the script.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -877,7 +1151,9 @@ test_that("version directories are claimed in order and never reused", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "artifact-app")'
 ```
 
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 107 ]`; the four new tests error with `could not find function "artifact_snapshot"` (and `"artifact_build_shiny"`, `"artifact_version_claim"`).
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 107 ]`; the four new tests error with
+`could not find function "artifact_snapshot"` (and `"artifact_build_shiny"`,
+`"artifact_version_claim"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1042,10 +1318,51 @@ git commit -m "feat(artifact): snapshot data into numbered files and build versi
 - Test: `tests/testthat/test-artifact-app.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-3; P01 `port_candidates(n = 20L)`, `gptr_inform(message, class, ..., .once = NULL)` (class `notice`), `` `%||%` ``; P03 `child_env("artifact", set = c(...))`, `child_env_callr(env)`; Suggests openssl (`rand_bytes()`), and inside the child only: shiny (`shinyAppDir()`, `parseQueryString()`, `isolate()`, `runApp()`, `stopApp()`), httpuv (`startServer()`, `stopServer()`), later (`later()`), ps (`ps_handle()`, `ps_is_running()`); tests: callr `r_bg()`, P04 `kill_all(p, grace = 2)`, P01 `rscript_path()`, processx, curl.
-- Produces: `artifact_serve(dir, port_file, parent_pid, token)` (04 §7.23; the callr child's entry); `artifact_token()` -> chr(1) 32 lower-case hex digits, or `""` with a one-time `gptr_message_notice`; `artifact_has_openssl()`, `artifact_shiny_available()` (seams for tests); `artifact_ports(id)` -> int (the artifact's previous port first, then 20 `port_candidates()`); `artifact_child_env(ports)` -> the callr environment (the `artifact` profile plus `GPTR_ARTIFACT_PORTS`, `R_LIBS` and the three values of callr's own default environment `callr::rcmd_safe_env()`: `R_TESTS = ""`, `R_BROWSER = "false"`, `R_PDFVIEWER = "false"`).
+- Consumes: Tasks 1-3; P01 `port_candidates(n = 20L)`,
+  `gptr_inform(message, class, ..., .once = NULL)` (class `notice`), `` `%||%` ``; P03
+  `child_env("artifact", set = c(...))`, `child_env_callr(env)`; Suggests openssl (`rand_bytes()`),
+  and inside the child only: shiny (`shinyAppDir()`, `parseQueryString()`, `isolate()`, `runApp()`,
+  `stopApp()`), httpuv (`startServer()`, `stopServer()`), later (`later()`), ps (`ps_handle()`,
+  `ps_is_running()`); tests: callr `r_bg()`, P04 `kill_all(p, grace = 2)`, P01 `rscript_path()`,
+  processx, curl.
+- Produces: `artifact_serve(dir, port_file, parent_pid, token)` (04 section 7.23; the callr child's
+  entry); `artifact_token()` -> chr(1) 32 lower-case hex digits, or `""` with a one-time
+  `gptr_message_notice`; `artifact_has_openssl()`, `artifact_shiny_available()` (seams for tests);
+  `artifact_ports(id)` -> int (the artifact's previous port first, then 20 `port_candidates()`);
+  `artifact_child_env(ports)` -> the callr environment (the `artifact` profile plus
+  `GPTR_ARTIFACT_PORTS`, `R_LIBS` and the three values of callr's own default environment
+  `callr::rcmd_safe_env()`: `R_TESTS = ""`, `R_BROWSER = "false"`, `R_PDFVIEWER = "false"`).
 
-The child entry is report 17 §5.1 `art_child_main()` (verified) with the contract's changes: no `httpuv::randomPort()` (IC-61: it calls `sample()`; the candidates come from P01's RNG-free `port_candidates()`), a per-launch token (IC-71) and a watchdog that stops the app instead of quitting (so the child reports and returns). It is self-contained (base R and `pkg::` calls only) and runs with `callr::r_bg(package = FALSE)`: the child never loads gptr, so it behaves the same under an installed gptr and under `devtools::load_all()` (report 17 §4.2 names this fallback; see Self-review ambiguity 1), and model-written code in the child cannot reach gptr internals. Because the signature of 04 §7.23 is fixed, the parent passes the candidate ports in the child's environment (`GPTR_ARTIFACT_PORTS`), previous port first, so a revision keeps its URL (report 17 E12: "v2 on the SAME URL"). In order, the child: builds the app with `shiny::shinyAppDir()`, which in shiny 1.13.0 evaluates `appObj()` eagerly (it reads `appObj()$options`), so `R/gptr_data.R` and `app.R` are sourced now and a broken UI ends the child before a port exists (stage `launch`); wraps the HTTP handler and the server function so that the page request and every Shiny session must carry `gptr_token=<token>` (403 for a page request without it; a session without it is closed; static assets carry no data); binds the first free candidate on `127.0.0.1` and publishes it by writing `<port_file>.tmp` and renaming it; starts the watchdog (`later`, every second; report 17 E2: "only SIGKILL without supervise/watchdog orphans the child"); runs `shiny::runApp()`. With the empty `R_PROFILE_USER` of IC-60, callr's own profile does not run in the child (so its error handler cannot print the error and the child does not inherit the parent's library paths through it): the child reports errors itself on stderr (`Error: <message>`) and the parent passes `R_LIBS`. Passing `env =` also replaces callr's default `callr::rcmd_safe_env()` (`R_TESTS = ""`, `R_BROWSER = "false"`, `R_PDFVIEWER = "false"`), so the parent sets those three itself: `R CMD check` runs the tests with `R_TESTS=startup.Rs`, a relative path that R's base profile sources in every R child, and a child started in its version directory halts with "cannot open file 'startup.Rs'" (reproduced in the review run with `R_TESTS=startup.Rs Rscript -e 'cat(1)'`: exit status 1), which would fail every launch under `devtools::check()` (it sets `NOT_CRAN=true`); `R_BROWSER = "false"` also keeps model-written code in the child from opening a browser (13 C-42). The token comes from `openssl::rand_bytes(16)`, else `/dev/urandom` opened with `raw = TRUE` (a plain `file()` warns "'raw = FALSE' but '/dev/urandom' is not a regular file", observed in this plan's scratch run), never from R's RNG.
+The child entry is report 17 section 5.1 `art_child_main()` (verified) with the contract's changes:
+no `httpuv::randomPort()` (IC-61: it calls `sample()`; the candidates come from P01's RNG-free
+`port_candidates()`), a per-launch token (IC-71) and a watchdog that stops the app instead of
+quitting (so the child reports and returns). It is self-contained (base R and `pkg::` calls only)
+and runs with `callr::r_bg(package = FALSE)`: the child never loads gptr, so it behaves the same
+under an installed gptr and under `devtools::load_all()` (report 17 section 4.2 names this fallback;
+see Self-review ambiguity 1), and model-written code in the child cannot reach gptr internals.
+Because the signature of 04 section 7.23 is fixed, the parent passes the candidate ports in the
+child's environment (`GPTR_ARTIFACT_PORTS`), previous port first, so a revision keeps its URL
+(report 17 E12: "v2 on the SAME URL"). In order, the child: builds the app with
+`shiny::shinyAppDir()`, which in shiny 1.13.0 evaluates `appObj()` eagerly (it reads
+`appObj()$options`), so `R/gptr_data.R` and `app.R` are sourced now and a broken UI ends the child
+before a port exists (stage `launch`); wraps the HTTP handler and the server function so that the
+page request and every Shiny session must carry `gptr_token=<token>` (403 for a page request without
+it; a session without it is closed; static assets carry no data); binds the first free candidate on
+`127.0.0.1` and publishes it by writing `<port_file>.tmp` and renaming it; starts the watchdog
+(`later`, every second; report 17 E2: "only SIGKILL without supervise/watchdog orphans the child");
+runs `shiny::runApp()`. With the empty `R_PROFILE_USER` of IC-60, callr's own profile does not run
+in the child (so its error handler cannot print the error and the child does not inherit the
+parent's library paths through it): the child reports errors itself on stderr (`Error: <message>`)
+and the parent passes `R_LIBS`. Passing `env =` also replaces callr's default
+`callr::rcmd_safe_env()` (`R_TESTS = ""`, `R_BROWSER = "false"`, `R_PDFVIEWER = "false"`), so the
+parent sets those three itself: `R CMD check` runs the tests with `R_TESTS=startup.Rs`, a relative
+path that R's base profile sources in every R child, and a child started in its version directory
+halts with "cannot open file 'startup.Rs'" (reproduced in the review run with
+`R_TESTS=startup.Rs Rscript -e 'cat(1)'`: exit status 1), which would fail every launch under
+`devtools::check()` (it sets `NOT_CRAN=true`); `R_BROWSER = "false"` also keeps model-written code
+in the child from opening a browser (13 C-42). The token comes from `openssl::rand_bytes(16)`, else
+`/dev/urandom` opened with `raw = TRUE` (a plain `file()` warns "'raw = FALSE' but '/dev/urandom' is
+not a regular file", observed in this plan's scratch run), never from R's RNG.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1191,7 +1508,9 @@ test_that("the watchdog stops the app when the parent process is gone", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "artifact-app")'
 ```
 
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 140 ]`; the six new tests error with `could not find function "artifact_token"` (and `"artifact_ports"`, `"artifact_child_env"`); the two tests that go through `serve_child()` stop with `object 'artifact_serve' not found`.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 140 ]`; the six new tests error with
+`could not find function "artifact_token"` (and `"artifact_ports"`, `"artifact_child_env"`); the two
+tests that go through `serve_child()` stop with `object 'artifact_serve' not found`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1364,10 +1683,47 @@ git commit -m "feat(artifact): serve a version from a callr child behind an acce
 - Test: `tests/testthat/test-artifact-registry.R` (create; Task 10 appends)
 
 **Interfaces:**
-- Consumes: Tasks 1-4; P01 `read_utf8()`, `write_utf8()`, `json_encode()`, `json_decode()`, `raw_to_utf8()`, `as_utf8()`, `path_rel()`, `path_norm()`, `ev_new(type, ...)`, `gptr_abort()`; P02 `ev_dispatch(event, payload, session = NULL, ctx = NULL)`; P03 `redact_stream("persist")` (`push(chunk)` -> text safe to emit now, `flush()` -> the rest); P04 `pid_alive(pid, create_time = NULL)`, `job_add(kind, id, name, pid = NA, stop, status = function() "running")`, `job_remove(id)`; P06 kernel SDK `run_current()`, `run_emit(run, type, ...)`; ps `ps_handle()`, `ps_create_time()`, `ps_kill()`; tests: P02 `hook_add()`, `hook_remove()`, P03 `secret_register()`, `vault_reset()`, P04 `kill_all()`, `job_list(kind = NULL)`, P01 `rscript_path()`, processx.
-- Produces: `artifact_proc_get(id)` -> record environment or `NULL`; `artifact_record_new(id, version, type, handle)` (fields `id`, `version`, `type`, `handle`, `url`, `pid`, `port`, `create_time`, `raw`, `offset`, `log`, `rs`, `stop_requested`, `checks`, `screenshot`, `started`); `artifact_status(id)` -> `"running"`, `"stopped"` or `"failed"` (IC-60: a requested stop never reads `failed`); `artifact_rec_alive(rec)`; `artifact_create_time(pid)`; `artifact_log_new(raw, log)`, `artifact_append(path, text)`, `artifact_log_sync(rec, final = FALSE)` (IC-70), `artifact_log_tail(log, n = 30L)`, `artifact_tail_text(tail, log)`; `artifact_run_write(rec)` (`run/run.json`: the contract's `pid`, `port`, `url`, `version`, `started` plus `create_time`, `parent_pid`, `parent_create_time` for the sweep), `artifact_run_clear(id)`; `artifact_emit(type, ...)` (through `run_emit()` inside a run, else `ev_dispatch()` with `session = NULL`); `artifact_job_id(id)` (`"artifact:<id>"`), `artifact_job_add(id, name, pid)`; `artifact_stop(id, reason = "user", emit = TRUE)` -> `invisible(lgl(1))` (emits `artifact_stop` with `id`, `url`, `version`, `reason` when a process was running); `artifact_handle(id)` -> `gptr_artifact` (signals `gptr_error_invalid_argument` for an unknown id); `artifact_sweep()` -> killed ids, invisibly; `artifact_sweep_once()`.
+- Consumes: Tasks 1-4; P01 `read_utf8()`, `write_utf8()`, `json_encode()`, `json_decode()`,
+  `raw_to_utf8()`, `as_utf8()`, `path_rel()`, `path_norm()`, `ev_new(type, ...)`, `gptr_abort()`;
+  P02 `ev_dispatch(event, payload, session = NULL, ctx = NULL)`; P03 `redact_stream("persist")`
+  (`push(chunk)` -> text safe to emit now, `flush()` -> the rest); P04
+  `pid_alive(pid, create_time = NULL)`,
+  `job_add(kind, id, name, pid = NA, stop, status = function() "running")`, `job_remove(id)`; P06
+  kernel SDK `run_current()`, `run_emit(run, type, ...)`; ps `ps_handle()`, `ps_create_time()`,
+  `ps_kill()`; tests: P02 `hook_add()`, `hook_remove()`, P03 `secret_register()`, `vault_reset()`,
+  P04 `kill_all()`, `job_list(kind = NULL)`, P01 `rscript_path()`, processx.
+- Produces: `artifact_proc_get(id)` -> record environment or `NULL`;
+  `artifact_record_new(id, version, type, handle)` (fields `id`, `version`, `type`, `handle`, `url`,
+  `pid`, `port`, `create_time`, `raw`, `offset`, `log`, `rs`, `stop_requested`, `checks`,
+  `screenshot`, `started`); `artifact_status(id)` -> `"running"`, `"stopped"` or `"failed"` (IC-60:
+  a requested stop never reads `failed`); `artifact_rec_alive(rec)`; `artifact_create_time(pid)`;
+  `artifact_log_new(raw, log)`, `artifact_append(path, text)`,
+  `artifact_log_sync(rec, final = FALSE)` (IC-70), `artifact_log_tail(log, n = 30L)`,
+  `artifact_tail_text(tail, log)`; `artifact_run_write(rec)` (`run/run.json`: the contract's `pid`,
+  `port`, `url`, `version`, `started` plus `create_time`, `parent_pid`, `parent_create_time` for the
+  sweep), `artifact_run_clear(id)`; `artifact_emit(type, ...)` (through `run_emit()` inside a run,
+  else `ev_dispatch()` with `session = NULL`); `artifact_job_id(id)` (`"artifact:<id>"`),
+  `artifact_job_add(id, name, pid)`; `artifact_stop(id, reason = "user", emit = TRUE)` ->
+  `invisible(lgl(1))` (emits `artifact_stop` with `id`, `url`, `version`, `reason` when a process
+  was running); `artifact_handle(id)` -> `gptr_artifact` (signals `gptr_error_invalid_argument` for
+  an unknown id); `artifact_sweep()` -> killed ids, invisibly; `artifact_sweep_once()`.
 
-The table follows architecture 2.2 rule 5 ("the artifact and job process tables (to stop children on unload)") and report 17 §5.1 (`artifact_stop()`, `art_sweep_orphans()`, `artifacts()`), with the verification-log fixes: a stopped child's exit status is never read as a failure (item 9: callr 3.8.0 exits with status 1 after an interrupt; IC-60 maps any exit after a requested stop to `stopped`), and the sweep runs lazily, never at package load (item 42). A record holds the type spec and the handle that the type's `launch()` returned (closures over the child process only), never a user object or frame (R1, R2). Child output is persisted only through gptr (IC-70): the child writes to a raw file in `tempdir()`; `artifact_log_sync()` copies the new complete lines (bytes up to the last newline, so neither a UTF-8 sequence nor a secret is split) through `redact_stream("persist")` into `run/app-vNNN.log` (open, append, close; IC-59) and, at the end, flushes the redactor and deletes the raw file. The sweep reads every `run/run.json` of the workspace: a child is killed only when its owning R process is gone (pid and creation time) and its own pid still runs with the recorded creation time (report 17 verification log item 13: the PID-reuse guard spared a reused pid). Events go through the running run when there is one (`run_emit()`: session listeners such as the `r` tool's path collector first, then registry hooks such as P14's NS-8 line), else process-wide.
+The table follows architecture 2.2 rule 5 ("the artifact and job process tables (to stop children on
+unload)") and report 17 section 5.1 (`artifact_stop()`, `art_sweep_orphans()`, `artifacts()`), with
+the verification-log fixes: a stopped child's exit status is never read as a failure (item 9: callr
+3.8.0 exits with status 1 after an interrupt; IC-60 maps any exit after a requested stop to
+`stopped`), and the sweep runs lazily, never at package load (item 42). A record holds the type spec
+and the handle that the type's `launch()` returned (closures over the child process only), never a
+user object or frame (R1, R2). Child output is persisted only through gptr (IC-70): the child writes
+to a raw file in `tempdir()`; `artifact_log_sync()` copies the new complete lines (bytes up to the
+last newline, so neither a UTF-8 sequence nor a secret is split) through `redact_stream("persist")`
+into `run/app-vNNN.log` (open, append, close; IC-59) and, at the end, flushes the redactor and
+deletes the raw file. The sweep reads every `run/run.json` of the workspace: a child is killed only
+when its owning R process is gone (pid and creation time) and its own pid still runs with the
+recorded creation time (report 17 verification log item 13: the PID-reuse guard spared a reused
+pid). Events go through the running run when there is one (`run_emit()`: session listeners such as
+the `r` tool's path collector first, then registry hooks such as P14's NS-8 line), else
+process-wide.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1556,7 +1912,9 @@ test_that("the orphan sweep kills children of dead owners and spares the rest", 
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "artifact-registry")'
 ```
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`; the five tests error with `could not find function "artifact_status"` (and `"artifact_record_new"`, `"artifact_log_new"`, `"artifact_handle"`, `"artifact_create_time"`).
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`; the five tests error with
+`could not find function "artifact_status"` (and `"artifact_record_new"`, `"artifact_log_new"`,
+`"artifact_handle"`, `"artifact_create_time"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1840,7 +2198,8 @@ artifact_sweep_once = function() {
 Rscript --vanilla -e 'devtools::test(filter = "artifact-registry")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 44 ]` (sleeping R children start and are killed; a few seconds).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 44 ]` (sleeping R children start and are killed; a few
+seconds).
 
 - [ ] **Step 5: Commit**
 
@@ -1856,10 +2215,32 @@ git commit -m "feat(artifact): add the artifact process table, redacted logs and
 - Test: `tests/testthat/test-artifact-app.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-5 (`artifact_log_sync()`, `artifact_log_new()` in tests); P01 `with_seed_preserved(expr)` [leaf], `json_decode()`, `read_utf8()`, `` `%||%` ``; P04 `reactor_now()`, `reactor_pump(until, slice_ms, timeout)` (the 100 ms pause between state polls, so the wait never blocks other runs' transfers); Suggests chromote (`find_chrome()`, `Chromote$new()`, sessions with `Runtime`, `Page`, `wait_for()`, `captureScreenshot()`), jsonlite (`base64_dec()`); tests: Task 4's `serve_child()`, `build_version()`, `http_status()`, `ok_app`.
-- Produces: `artifact_session_check(rec, png, width = 1000L, height = 700L, timeout = 20)` -> `list(ok = TRUE | FALSE | NA, messages = chr, screenshot = <png path> | NULL)` (`NA` = the check could not run: an HTTP-only check, which the messages say); `artifact_chromote_missing()` -> chr(1) reason or `NULL`; `artifact_browser()` (one headless browser per process) and `artifact_browser_close()`; `artifact_log_errors(log)` -> `list(errors, warnings)`; `artifact_log_messages(log)` -> chr; internal `artifact_session_browse()`, `artifact_session_run()`, `artifact_js_state`, `artifact_js_errors`, `artifact_js_validation`.
+- Consumes: Tasks 1-5 (`artifact_log_sync()`, `artifact_log_new()` in tests); P01
+  `with_seed_preserved(expr)` [leaf], `json_decode()`, `read_utf8()`, `` `%||%` ``; P04
+  `reactor_now()`, `reactor_pump(until, slice_ms, timeout)` (the 100 ms pause between state polls,
+  so the wait never blocks other runs' transfers); Suggests chromote (`find_chrome()`,
+  `Chromote$new()`, sessions with `Runtime`, `Page`, `wait_for()`, `captureScreenshot()`), jsonlite
+  (`base64_dec()`); tests: Task 4's `serve_child()`, `build_version()`, `http_status()`, `ok_app`.
+- Produces: `artifact_session_check(rec, png, width = 1000L, height = 700L, timeout = 20)` ->
+  `list(ok = TRUE | FALSE | NA, messages = chr, screenshot = <png path> | NULL)` (`NA` = the check
+  could not run: an HTTP-only check, which the messages say); `artifact_chromote_missing()` ->
+  chr(1) reason or `NULL`; `artifact_browser()` (one headless browser per process) and
+  `artifact_browser_close()`; `artifact_log_errors(log)` -> `list(errors, warnings)`;
+  `artifact_log_messages(log)` -> chr; internal `artifact_session_browse()`,
+  `artifact_session_run()`, `artifact_js_state`, `artifact_js_errors`, `artifact_js_validation`.
 
-Report 17 §5.2 `art_session_check()` (verified; §2.3: HTTP 200 alone passes three broken apps, the session check catches all three and passes `validate(need())` messages) with its known gaps fixed: a warning's text is on the line after `Warning in ...` and is read with it; printed promises are silenced with `invisible()`; the load-event promise is registered before navigating (the first version raced). One headless browser per process (cold start about 3.4 s, later checks 1.1-2.1 s), closed by `artifact_browser_close()` (CRAN: "external software ... explicitly closed afterwards"). The screenshot is 1000x700 (03 §6.15, "about 900 tokens": `ceiling(1000/28) * ceiling(700/28)` = 900 Anthropic image tokens) instead of the report's 1100x750. The whole check runs inside `with_seed_preserved()`: `chromote::Chromote$new()` changes `.Random.seed` (report 17 verification log item 6; IC-61). Without chromote or a Chrome binary the check returns `ok = NA` with the message `HTTP-only check: <reason>; the page was not rendered` plus the server-log errors (report 17 §7 risk 4).
+Report 17 section 5.2 `art_session_check()` (verified; section 2.3: HTTP 200 alone passes three
+broken apps, the session check catches all three and passes `validate(need())` messages) with its
+known gaps fixed: a warning's text is on the line after `Warning in ...` and is read with it;
+printed promises are silenced with `invisible()`; the load-event promise is registered before
+navigating (the first version raced). One headless browser per process (cold start about 3.4 s,
+later checks 1.1-2.1 s), closed by `artifact_browser_close()` (CRAN: "external software ...
+explicitly closed afterwards"). The screenshot is 1000x700 (03 section 6.15, "about 900 tokens":
+`ceiling(1000/28) * ceiling(700/28)` = 900 Anthropic image tokens) instead of the report's 1100x750.
+The whole check runs inside `with_seed_preserved()`: `chromote::Chromote$new()` changes
+`.Random.seed` (report 17 verification log item 6; IC-61). Without chromote or a Chrome binary the
+check returns `ok = NA` with the message `HTTP-only check: <reason>; the page was not rendered` plus
+the server-log errors (report 17 section 7 risk 4).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1967,7 +2348,9 @@ test_that("the session check catches render errors and crashed servers but not v
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "artifact-app")'
 ```
 
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 163 ]`; the four new tests error with `could not find function "artifact_log_errors"` (and `"artifact_session_check"`, `"artifact_chromote_missing"`).
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 163 ]`; the four new tests error with
+`could not find function "artifact_log_errors"` (and `"artifact_session_check"`,
+`"artifact_chromote_missing"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2165,7 +2548,8 @@ artifact_session_check = function(rec, png, width = artifact_shot_size[["width"]
 Rscript --vanilla -e 'devtools::test(filter = "artifact-app")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 184 ]` (four app children and one headless Chrome; about 15 s). Without chromote or a Chrome binary: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 170 ]`.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 184 ]` (four app children and one headless Chrome;
+about 15 s). Without chromote or a Chrome binary: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 170 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -2181,10 +2565,46 @@ git commit -m "feat(artifact): add the headless session check and the screenshot
 - Test: `tests/testthat/test-artifact-app.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-6; P01 `supervise_default()`, `path_norm()`, `gptr_has_human()`, `check_string()`, `gptr_abort()`; P02 `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)`; P04 `reactor_http(spec, on_bytes, on_done, on_fail, ..., retry = NULL)`, `reactor_pump(until, slice_ms, timeout)`, `reactor_cancel(ids)`, `reactor_now()`, `kill_all(p, grace)`; callr `r_bg()`; tests: P02 `hook_add()`, `hook_remove()`, P03 `secret_register()`, `vault_reset()`, P04 `job_list()`, ps `ps_environ()`, withr `local_envvar()`, `local_options()`, `local_seed()`.
-- Produces: `artifact_launch_shiny(version_dir, ctx)` (the `launch` of both built-in types, 04 §10.2 row 19) -> `list(url, pid, stop)` plus `alive`, `port`, `token`, `raw`, `log`; signals `gptr_error_artifact` (stage `launch`, `log` = the redacted tail) when the child ends or publishes no port within 30 s, and `gptr_error_missing_package` (`package = "shiny"`, `feature = "artifacts"`); `artifact_stop_handle(handle)` (the `stop` of both types); `artifact_wait_port(proc, port_file, timeout = 30)`; `artifact_proc_fns(proc)`; `artifact_http_status(url, timeout = 3)` -> int or `NA`; `artifact_wait_http(url, alive, timeout = 30)` -> `list(ok, status, reason)`; `artifact_view(url)` -> `invisible(lgl(1))`; `artifact_type_get(kind, ctx = NULL)` -> the registered `artifact_type` spec (IC-69) or `gptr_error_invalid_argument` (`arg = "kind"`); `artifact_record_failed(id, version, type)`, `artifact_launch_failed(rec, checks)`; `artifact_start(id, version, type, ctx = NULL, session_check = FALSE)` -> the `gptr_artifact` handle (signals `gptr_error_artifact` with stage `launch` or `http`); `artifact_relaunch(id, version, ctx = NULL)`.
+- Consumes: Tasks 1-6; P01 `supervise_default()`, `path_norm()`, `gptr_has_human()`,
+  `check_string()`, `gptr_abort()`; P02 `registry_get(kind, name, session = NULL)`,
+  `registry_names(kind, session = NULL)`; P04
+  `reactor_http(spec, on_bytes, on_done, on_fail, ..., retry = NULL)`,
+  `reactor_pump(until, slice_ms, timeout)`, `reactor_cancel(ids)`, `reactor_now()`,
+  `kill_all(p, grace)`; callr `r_bg()`; tests: P02 `hook_add()`, `hook_remove()`, P03
+  `secret_register()`, `vault_reset()`, P04 `job_list()`, ps `ps_environ()`, withr `local_envvar()`,
+  `local_options()`, `local_seed()`.
+- Produces: `artifact_launch_shiny(version_dir, ctx)` (the `launch` of both built-in types, 04
+  section 10.2 row 19) -> `list(url, pid, stop)` plus `alive`, `port`, `token`, `raw`, `log`;
+  signals `gptr_error_artifact` (stage `launch`, `log` = the redacted tail) when the child ends or
+  publishes no port within 30 s, and `gptr_error_missing_package` (`package = "shiny"`,
+  `feature = "artifacts"`); `artifact_stop_handle(handle)` (the `stop` of both types);
+  `artifact_wait_port(proc, port_file, timeout = 30)`; `artifact_proc_fns(proc)`;
+  `artifact_http_status(url, timeout = 3)` -> int or `NA`;
+  `artifact_wait_http(url, alive, timeout = 30)` -> `list(ok, status, reason)`;
+  `artifact_view(url)` -> `invisible(lgl(1))`; `artifact_type_get(kind, ctx = NULL)` -> the
+  registered `artifact_type` spec (IC-69) or `gptr_error_invalid_argument` (`arg = "kind"`);
+  `artifact_record_failed(id, version, type)`, `artifact_launch_failed(rec, checks)`;
+  `artifact_start(id, version, type, ctx = NULL, session_check = FALSE)` -> the `gptr_artifact`
+  handle (signals `gptr_error_artifact` with stage `launch` or `http`);
+  `artifact_relaunch(id, version, ctx = NULL)`.
 
-The launch is report 17 §5.1 `artifact_start()`/`art_wait()` (verified: v2 on the same URL; cleanup) with the contract's changes. The child is `callr::r_bg(artifact_serve, ..., supervise = supervise_default(), package = FALSE, user_profile = FALSE, system_profile = FALSE, env = artifact_child_env(...), cleanup = TRUE, cleanup_tree = TRUE, encoding = "UTF-8")` (IC-60; architecture 6.15) with the version directory as working directory, stdout and stderr in a raw file in `tempdir()` (IC-70). The parent pumps P04's reactor while it waits for the port file (no busy loop: the reactor sleeps between iterations) and checks HTTP 200 through the reactor (architecture 6.15: "checks HTTP 200 through the reactor"), one attempt per poll (`retry = list(max_attempts = 1L, committed = function() TRUE)`), so the wait never blocks other agents' transfers. The ladder: a child that ends before it publishes a port is the `launch` failure; an answer other than 200 is the `http` failure; both record the checks in `artifact.json`, leave the record with status `failed` and signal `gptr_error_artifact` whose message carries the redacted log tail, so the model sees the child's error (05 P23 acceptance 2); a failing session check is reported in the checks and messages, not raised (the model reads them with the screenshot). On success the run files, the port in `artifact.json` and the job row are written, `artifact_start` is emitted and, with a human present, the viewer opens (`getOption("viewer", utils::browseURL)`; 13 C-42: never outside an interactive session). The artifact's running process is stopped first and its port offered again, so a revision keeps its URL (the token changes with every launch).
+The launch is report 17 section 5.1 `artifact_start()`/`art_wait()` (verified: v2 on the same URL;
+cleanup) with the contract's changes. The child is
+`callr::r_bg(artifact_serve, ..., supervise = supervise_default(), package = FALSE, user_profile = FALSE, system_profile = FALSE, env = artifact_child_env(...), cleanup = TRUE, cleanup_tree = TRUE, encoding = "UTF-8")`
+(IC-60; architecture 6.15) with the version directory as working directory, stdout and stderr in a
+raw file in `tempdir()` (IC-70). The parent pumps P04's reactor while it waits for the port file (no
+busy loop: the reactor sleeps between iterations) and checks HTTP 200 through the reactor
+(architecture 6.15: "checks HTTP 200 through the reactor"), one attempt per poll
+(`retry = list(max_attempts = 1L, committed = function() TRUE)`), so the wait never blocks other
+agents' transfers. The ladder: a child that ends before it publishes a port is the `launch` failure;
+an answer other than 200 is the `http` failure; both record the checks in `artifact.json`, leave the
+record with status `failed` and signal `gptr_error_artifact` whose message carries the redacted log
+tail, so the model sees the child's error (05 P23 acceptance 2); a failing session check is reported
+in the checks and messages, not raised (the model reads them with the screenshot). On success the
+run files, the port in `artifact.json` and the job row are written, `artifact_start` is emitted and,
+with a human present, the viewer opens (`getOption("viewer", utils::browseURL)`; 13 C-42: never
+outside an interactive session). The artifact's running process is stopped first and its port
+offered again, so a revision keeps its URL (the token changes with every launch).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2373,7 +2793,9 @@ test_that("the ladder with the session check leaves .Random.seed unchanged (IC-6
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "artifact-app")'
 ```
 
-Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 184 ]`; the nine new tests error with `could not find function "artifact_launch_shiny"` (and `"artifact_start"`, `"artifact_view"`; `shiny_type()` stops with `object 'artifact_launch_shiny' not found`).
+Expected: `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 184 ]`; the nine new tests error with
+`could not find function "artifact_launch_shiny"` (and `"artifact_start"`, `"artifact_view"`;
+`shiny_type()` stops with `object 'artifact_launch_shiny' not found`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2636,7 +3058,9 @@ artifact_relaunch = function(id, version, ctx = NULL) {
 Rscript --vanilla -e 'devtools::test(filter = "artifact-app")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 237 ]`. Without chromote or a Chrome binary: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 223 ]` (the ladder test with `session_check = TRUE` then records an HTTP-only check).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 237 ]`. Without chromote or a Chrome binary:
+`[ FAIL 0 | WARN 0 | SKIP 2 | PASS 223 ]` (the ladder test with `session_check = TRUE` then records
+an HTTP-only check).
 
 - [ ] **Step 5: Commit**
 
@@ -2652,10 +3076,36 @@ git commit -m "feat(artifact): launch versions through the validation ladder"
 - Test: `tests/testthat/test-artifact-app.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-7 (`artifact_status()`, `artifact_stop()`, `artifact_set_current()`, `artifact_relaunch()`, `artifact_exists()`); P01 `json_decode()`, `json_encode()` (tests), `read_utf8()`, `` `%||%` ``.
-- Produces: the five functions of the `checkpointer` spec `artifacts` (04 §10.2 row 29; registered by Task 9): `artifact_ckpt_before(call, ctx)` -> token (`current` and `running` per artifact id, for `r` and `app` calls; `NULL` for every other tool), `artifact_ckpt_after(call, ctx, token)` -> fragment (a list of `list(id, current_before, current_after, running_before, running_after)` for the artifacts whose `current` changed, or `NULL`), `artifact_ckpt_undo(fragment, ctx, force)` and `artifact_ckpt_redo(fragment, ctx, force)` -> chr report lines, `artifact_ckpt_prune(live_keys, ctx)`, `artifact_ckpt_describe(fragment)` -> chr; helpers `artifact_ckpt_state()`, `artifact_ckpt_move(fragment, side, running, ctx = NULL)`, `artifact_ckpt_unrestorable(fragment)`.
+- Consumes: Tasks 1-7 (`artifact_status()`, `artifact_stop()`, `artifact_set_current()`,
+  `artifact_relaunch()`, `artifact_exists()`); P01 `json_decode()`, `json_encode()` (tests),
+  `read_utf8()`, `` `%||%` ``.
+- Produces: the five functions of the `checkpointer` spec `artifacts` (04 section 10.2 row 29;
+  registered by Task 9): `artifact_ckpt_before(call, ctx)` -> token (`current` and `running` per
+  artifact id, for `r` and `app` calls; `NULL` for every other tool),
+  `artifact_ckpt_after(call, ctx, token)` -> fragment (a list of
+  `list(id, current_before, current_after, running_before, running_after)` for the artifacts whose
+  `current` changed, or `NULL`), `artifact_ckpt_undo(fragment, ctx, force)` and
+  `artifact_ckpt_redo(fragment, ctx, force)` -> chr report lines,
+  `artifact_ckpt_prune(live_keys, ctx)`, `artifact_ckpt_describe(fragment)` -> chr; helpers
+  `artifact_ckpt_state()`, `artifact_ckpt_move(fragment, side, running, ctx = NULL)`,
+  `artifact_ckpt_unrestorable(fragment)`.
 
-G7 §3.1 records "artifact `current` before/after" in the `gptr.checkpoint` entry (04 §4.6); P06's dispatcher calls every checkpointer's `before`/`after` around each sequential, non-read-only tool call and writes one container entry `{tool_call_id, fragments: {<checkpointer>: <fragment>}}`; P16's rewind calls `undo` newest first and `redo` oldest first. A `peter$app()` inside an `r` call creates a new immutable version, so undo only has to move `current` back and relaunch what was running (G7 §4.3: "The record stores `artifact.json$current` before and after. Undo resets `current` and restarts the previous version on the same port if it was running."); redo moves it forward again. Version directories are immutable and stay on disk: `prune` keeps them, because `artifact.json` lists them and `gptr_artifacts(version =)` relaunches them (G7 adds "they are pruned with the retention settings"; see Self-review ambiguity 6). Report lines follow P16's partial-rewind rule (`not restored|not redone|conflict|failed`): an artifact that no longer exists reads `not restored (it no longer exists)`, a relaunch that fails `(relaunch failed)`, and a fragment that P06 marked `list(restorable = FALSE, reason)` (its `after` failed) reads `artifacts: not restored (<reason>)`. Fragments are JSON-able (they round-trip through the session file).
+G7 section 3.1 records "artifact `current` before/after" in the `gptr.checkpoint` entry (04
+section 4.6); P06's dispatcher calls every checkpointer's `before`/`after` around each sequential,
+non-read-only tool call and writes one container entry
+`{tool_call_id, fragments: {<checkpointer>: <fragment>}}`; P16's rewind calls `undo` newest first
+and `redo` oldest first. A `peter$app()` inside an `r` call creates a new immutable version, so undo
+only has to move `current` back and relaunch what was running (G7 section 4.3: "The record stores
+`artifact.json$current` before and after. Undo resets `current` and restarts the previous version on
+the same port if it was running."); redo moves it forward again. Version directories are immutable
+and stay on disk: `prune` keeps them, because `artifact.json` lists them and
+`gptr_artifacts(version =)` relaunches them (G7 adds "they are pruned with the retention settings";
+see Self-review ambiguity 6). Report lines follow P16's partial-rewind rule
+(`not restored|not redone|conflict|failed`): an artifact that no longer exists reads
+`not restored (it no longer exists)`, a relaunch that fails `(relaunch failed)`, and a fragment that
+P06 marked `list(restorable = FALSE, reason)` (its `after` failed) reads
+`artifacts: not restored (<reason>)`. Fragments are JSON-able (they round-trip through the session
+file).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2726,7 +3176,8 @@ test_that("undo and redo move current and report each artifact", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "artifact-app")'
 ```
 
-Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 237 ]`; the two new tests error with `could not find function "artifact_ckpt_before"` (and `"artifact_ckpt_undo"`).
+Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 237 ]`; the two new tests error with
+`could not find function "artifact_ckpt_before"` (and `"artifact_ckpt_undo"`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2867,10 +3318,54 @@ git commit -m "feat(artifact): add the artifacts checkpointer"
 - Create: `tests/testthat/test-copy-artifact.R`
 
 **Interfaces:**
-- Consumes: Tasks 1-8; P01 `check_strings()`, `check_flag()`, `gptr_opt("r_max_images")`, `block_image(data, mime = "image/png", source = "screenshot", width, height)`, `on_load(expr)`; P02 `gptr_spec("artifact_type", ...)`, `gptr_spec("checkpointer", ...)`, `gptr_tool(...)`, `gptr_prompt_section(...)`, `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the API object's `gptr$register(spec)`, `ctx$session`, `ctx$envir`; P06 kernel SDK `run_current()`, `run_eval_env(run)`, `session_append(s, entry)`; P10 the member closure (`member_closure(spec)`) and the r-call marker `gptr_r_call` (`images`, `dropped`); tests: P08's `peter` object (`peter$app`), P01 `expect_no_copy()`, `gptr_fake_provider()` (in the child script), `local_gptr_options()`.
-- Produces: `artifact_app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = FALSE, envir = globalenv(), ctx = NULL)` -> `gptr_artifact` (the body of `peter$app()`); the member `app` (04 §9.4): `artifact_member_fun(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = interactive())` (the spec's `fun`, the signature of 04 §9.4), `artifact_member_execute(input, ctx)` (the spec's `execute` for model code: appends the `gptr.artifact` entry `{id, version, url, status, checks}` and attaches the screenshot to the running `r` result), `artifact_risk(input, ctx)` -> `list(level = 3L, categories = "process", paths)`, `artifact_tool_spec()`; `artifact_entry(ctx, handle)`, `artifact_screenshot_block(handle)`, `artifact_attach_image(block)`, `artifact_tool_result(handle, block)`; the section text `artifact_section_text` (03 §7.3 verbatim) and `artifact_section(ctx)`; `builtin_artifacts(gptr)` (04 §7.23), declared with `on_load(ext_declare_builtin("artifacts", builtin_artifacts))`.
+- Consumes: Tasks 1-8; P01 `check_strings()`, `check_flag()`, `gptr_opt("r_max_images")`,
+  `block_image(data, mime = "image/png", source = "screenshot", width, height)`, `on_load(expr)`;
+  P02 `gptr_spec("artifact_type", ...)`, `gptr_spec("checkpointer", ...)`, `gptr_tool(...)`,
+  `gptr_prompt_section(...)`,
+  `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)`,
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the API object's
+  `gptr$register(spec)`, `ctx$session`, `ctx$envir`; P06 kernel SDK `run_current()`,
+  `run_eval_env(run)`, `session_append(s, entry)`; P10 the member closure (`member_closure(spec)`)
+  and the r-call marker `gptr_r_call` (`images`, `dropped`); tests: P08's `peter` object
+  (`peter$app`), P01 `expect_no_copy()`, `gptr_fake_provider()` (in the child script),
+  `local_gptr_options()`.
+- Produces:
+  `artifact_app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = FALSE, envir = globalenv(), ctx = NULL)`
+  -> `gptr_artifact` (the body of `peter$app()`); the member `app` (04 section 9.4):
+  `artifact_member_fun(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = interactive())`
+  (the spec's `fun`, the signature of 04 section 9.4), `artifact_member_execute(input, ctx)` (the
+  spec's `execute` for model code: appends the `gptr.artifact` entry
+  `{id, version, url, status, checks}` and attaches the screenshot to the running `r` result),
+  `artifact_risk(input, ctx)` -> `list(level = 3L, categories = "process", paths)`,
+  `artifact_tool_spec()`; `artifact_entry(ctx, handle)`, `artifact_screenshot_block(handle)`,
+  `artifact_attach_image(block)`, `artifact_tool_result(handle, block)`; the section text
+  `artifact_section_text` (03 section 7.3 verbatim) and `artifact_section(ctx)`;
+  `builtin_artifacts(gptr)` (04 section 7.23), declared with
+  `on_load(ext_declare_builtin("artifacts", builtin_artifacts))`.
 
-`peter$app()` (architecture 6.15) resolves the kind against the registry (IC-69: any registered `artifact_type`, so a plugin's `quarto` type works the same way), runs the lazy orphan sweep once per process, runs the type's `check` on the working directory (stage `parse`/`static` failures raise `gptr_error_artifact` with the messages in `log`, before any version exists), claims the next `vNNN`, snapshots the data, runs the type's `build`, records the version in `artifact.json` (`n`, `created`, `app_sha`, `data`, `session`, `checks`) and, with `launch = TRUE`, runs the ladder of Task 7 with the session check when `check = TRUE`. A version claimed by a call that fails before its build finished is removed again. The member is one tool spec with both forms (IC-37): `fun` for the user (objects are looked up in the frame that called `peter$app()`: P10's member closure evaluates `fun` in its own frame, so the caller is that closure's caller, found through `sys.parents()`; frame numbers only, never `sys.frames()`, rule R3; the frame is used during the call only, R2) and `execute` for model code, which reaches it through P06's `dispatch_nested()` with the validated input (`data` arrives as a list) and looks objects up in the run's evaluation environment (the plan-mode overlay when there is one). The screenshot reaches the `r` result through P10's r-call marker: the binding `gptr_r_call` of class `gptr_r_call` in the `r` tool's frame is found by walking `sys.frame(k)` outwards, and its `images` are capped at `gptr.r_max_images` like P10's own attachments (refused ones are counted in `dropped`, which P10's result names, IC-67). The `artifacts` section is a `function(ctx)` returning `NULL` when shiny is not installed (04 §9.3: "shiny installed and `builtin:artifacts` enabled"); disabling the built-in with `-builtin:artifacts` removes the member, the section, the types and the checkpointer together. The copy rows (05 P23 acceptance 3) run `peter$app()` on a 40 MB vector from user code and from model code in a fresh `Rscript` and count copies on the next in-place edit (03 §6.4 test list: "artifact snapshots").
+`peter$app()` (architecture 6.15) resolves the kind against the registry (IC-69: any registered
+`artifact_type`, so a plugin's `quarto` type works the same way), runs the lazy orphan sweep once
+per process, runs the type's `check` on the working directory (stage `parse`/`static` failures raise
+`gptr_error_artifact` with the messages in `log`, before any version exists), claims the next
+`vNNN`, snapshots the data, runs the type's `build`, records the version in `artifact.json` (`n`,
+`created`, `app_sha`, `data`, `session`, `checks`) and, with `launch = TRUE`, runs the ladder of
+Task 7 with the session check when `check = TRUE`. A version claimed by a call that fails before its
+build finished is removed again. The member is one tool spec with both forms (IC-37): `fun` for the
+user (objects are looked up in the frame that called `peter$app()`: P10's member closure evaluates
+`fun` in its own frame, so the caller is that closure's caller, found through `sys.parents()`; frame
+numbers only, never `sys.frames()`, rule R3; the frame is used during the call only, R2) and
+`execute` for model code, which reaches it through P06's `dispatch_nested()` with the validated
+input (`data` arrives as a list) and looks objects up in the run's evaluation environment (the
+plan-mode overlay when there is one). The screenshot reaches the `r` result through P10's r-call
+marker: the binding `gptr_r_call` of class `gptr_r_call` in the `r` tool's frame is found by walking
+`sys.frame(k)` outwards, and its `images` are capped at `gptr.r_max_images` like P10's own
+attachments (refused ones are counted in `dropped`, which P10's result names, IC-67). The
+`artifacts` section is a `function(ctx)` returning `NULL` when shiny is not installed (04
+section 9.3: "shiny installed and `builtin:artifacts` enabled"); disabling the built-in with
+`-builtin:artifacts` removes the member, the section, the types and the checkpointer together. The
+copy rows (05 P23 acceptance 3) run `peter$app()` on a 40 MB vector from user code and from model
+code in a fresh `Rscript` and count copies on the next in-place edit (03 section 6.4 test list:
+"artifact snapshots").
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3122,7 +3617,13 @@ test_that("peter$app() called by model code snapshots big and leaves it editable
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "artifact-app|copy-artifact")'
 ```
 
-Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 252 ]`. In `test-artifact-app.R` the ten new tests error with `object 'builtin_artifacts' not found`, `object 'artifact_section_text' not found`, `could not find function "artifact_member_execute"` and, for every `peter$app()` call, `gptr_error_unknown_member` (the namespace has no `app` member yet); in `test-copy-artifact.R` both rows fail with `expect_no_copy(...): the script did not finish (status 1)`, because no snapshot `v001/data/001.rds` was written (the first row's script stops at `peter$app`, the second at `stopifnot(file.exists(snap))` after the run ends with the model's error result).
+Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 252 ]`. In `test-artifact-app.R` the ten new tests
+error with `object 'builtin_artifacts' not found`, `object 'artifact_section_text' not found`,
+`could not find function "artifact_member_execute"` and, for every `peter$app()` call,
+`gptr_error_unknown_member` (the namespace has no `app` member yet); in `test-copy-artifact.R` both
+rows fail with `expect_no_copy(...): the script did not finish (status 1)`, because no snapshot
+`v001/data/001.rds` was written (the first row's script stops at `peter$app`, the second at
+`stopifnot(file.exists(snap))` after the run ends with the model's error result).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3360,7 +3861,8 @@ on_load(ext_declare_builtin("artifacts", builtin_artifacts))
 Rscript --vanilla -e 'devtools::test(filter = "artifact-app|copy-artifact")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 335 ]` (333 in `test-artifact-app.R`, 2 copy rows with 0 copies each).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 335 ]` (333 in `test-artifact-app.R`, 2 copy rows with
+0 copies each).
 
 - [ ] **Step 5: Commit**
 
@@ -3377,10 +3879,45 @@ git commit -m 'feat(artifact): add peter$app(), the artifacts section and builti
 - Generated: `NAMESPACE` (`export(gptr_artifacts)`), `man/gptr_artifacts.Rd`
 
 **Interfaces:**
-- Consumes: Tasks 1-9 (`artifact_handle()`, `artifact_proc_get()`, `artifact_status()`, `artifact_stop()`, `artifact_sweep()`, `artifact_relaunch()`, `artifact_view()`, `artifact_browser_close()`, `artifact_dir_bytes()`, `artifact_meta_read()`, `artifact_exists()`, `artifact_id_check()`); P01 `new_listing(df, class, footer = NULL)`, `check_string()`, `check_flag()`, `check_number(x, arg, min, int, null)`, `gptr_abort()`, `on_load(expr)`, `on_unload(fun)`; tests: P08 `peter(...)` and the `peter` object, P06 `gptr_last()`, `session_data()`, P01 `local_fake_provider()`, `fake_tool()`, `fake_requests()`, `local_gptr_options()`, P04 `pid_alive()`, `job_list()`; the P14 hook that prints the NS-8 line at verbosity 2 and P02 `ev_dispatch(event, payload, session = NULL, ctx = NULL)` (the NS-8 test re-dispatches the recorded payload); the P10 `r` tool (its `details$artifacts`).
-- Produces: the export `gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)` (04 §6.4); `artifact_list()` -> `c("gptr_artifacts", "gptr_listing", "data.frame")` with `id`, `title`, `version`, `status`, `url`, `pid`, `bytes`, `path` (04 §5.12; an artifact whose committed `artifact.json` cannot be read, for example after a merge conflict, is named in the listing's footer instead of failing the listing); `artifact_unload()`, registered with `on_load(on_unload(artifact_unload))`.
+- Consumes: Tasks 1-9 (`artifact_handle()`, `artifact_proc_get()`, `artifact_status()`,
+  `artifact_stop()`, `artifact_sweep()`, `artifact_relaunch()`, `artifact_view()`,
+  `artifact_browser_close()`, `artifact_dir_bytes()`, `artifact_meta_read()`, `artifact_exists()`,
+  `artifact_id_check()`); P01 `new_listing(df, class, footer = NULL)`, `check_string()`,
+  `check_flag()`, `check_number(x, arg, min, int, null)`, `gptr_abort()`, `on_load(expr)`,
+  `on_unload(fun)`; tests: P08 `peter(...)` and the `peter` object, P06 `gptr_last()`,
+  `session_data()`, P01 `local_fake_provider()`, `fake_tool()`, `fake_requests()`,
+  `local_gptr_options()`, P04 `pid_alive()`, `job_list()`; the P14 hook that prints the NS-8 line at
+  verbosity 2 and P02 `ev_dispatch(event, payload, session = NULL, ctx = NULL)` (the NS-8 test
+  re-dispatches the recorded payload); the P10 `r` tool (its `details$artifacts`).
+- Produces: the export `gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)` (04
+  section 6.4); `artifact_list()` -> `c("gptr_artifacts", "gptr_listing", "data.frame")` with `id`,
+  `title`, `version`, `status`, `url`, `pid`, `bytes`, `path` (04 section 5.12; an artifact whose
+  committed `artifact.json` cannot be read, for example after a merge conflict, is named in the
+  listing's footer instead of failing the listing); `artifact_unload()`, registered with
+  `on_load(on_unload(artifact_unload))`.
 
-`gptr_artifacts()` is 04 §6.4: without `id` a listing of every `artifact.json` of the workspace after a sweep of orphaned children; with `id` the handle (`stop = TRUE` stops the process and returns the handle invisibly, now `stopped`; `version =` relaunches that stored version, makes it current and returns the handle invisibly; `open = TRUE` relaunches a stopped artifact and opens the viewer when a human is present). Invalid combinations (`open`, `stop` or `version` without `id`; `stop` with `open` or `version`) are `gptr_error_invalid_argument`. `artifact_unload()` stops every artifact of this process and closes the headless browser when the package unloads (architecture 6.15: "children stop through `gptr_artifacts(id, stop = TRUE)`, `.onUnload` or R exit"; report 17 §4.3: the shared browser must not outlive the package); it is not registered as an exit finalizer (closing chromote's websocket while R shuts down crashed R in the scratch run of the earlier draft), so at R exit supervision, processx's cleanup and the child's watchdog end the processes and the next session's sweep removes stale run files. The two NS-8 tests run the north-star example on the fake provider (02 §8; architecture 10.6): the model writes `.gptr/artifacts/marker-explorer/app.R`, launches it with `peter$app()` in `r` and `artifact_start` carries the id, version 1 and the tokenised loopback URL; P14's renderer prints `artifact  marker-explorer  ->  <url>   (running in background)` for that payload (05 P23 acceptance 4: because the event fires inside the model's `r` evaluation, whose output P09 captures, with `tee` only when a human is present, the test sends the recorded payload through the registered hooks again and captures what they print, instead of reading the console capture of the run), the `r` result carries the NS-8 line and the checks, its `details$artifacts` names the app, the session holds one `gptr.artifact` entry, and `gptr_artifacts(id, stop = TRUE)` leaves no process; a broken app returns the child's error to the model (acceptance 2).
+`gptr_artifacts()` is 04 section 6.4: without `id` a listing of every `artifact.json` of the
+workspace after a sweep of orphaned children; with `id` the handle (`stop = TRUE` stops the process
+and returns the handle invisibly, now `stopped`; `version =` relaunches that stored version, makes
+it current and returns the handle invisibly; `open = TRUE` relaunches a stopped artifact and opens
+the viewer when a human is present). Invalid combinations (`open`, `stop` or `version` without `id`;
+`stop` with `open` or `version`) are `gptr_error_invalid_argument`. `artifact_unload()` stops every
+artifact of this process and closes the headless browser when the package unloads (architecture
+6.15: "children stop through `gptr_artifacts(id, stop = TRUE)`, `.onUnload` or R exit"; report 17
+section 4.3: the shared browser must not outlive the package); it is not registered as an exit
+finalizer (closing chromote's websocket while R shuts down crashed R in the scratch run of the
+earlier draft), so at R exit supervision, processx's cleanup and the child's watchdog end the
+processes and the next session's sweep removes stale run files. The two NS-8 tests run the
+north-star example on the fake provider (02 section 8; architecture 10.6): the model writes
+`.gptr/artifacts/marker-explorer/app.R`, launches it with `peter$app()` in `r` and `artifact_start`
+carries the id, version 1 and the tokenised loopback URL; P14's renderer prints
+`artifact  marker-explorer  ->  <url>   (running in background)` for that payload (05 P23 acceptance
+4: because the event fires inside the model's `r` evaluation, whose output P09 captures, with `tee`
+only when a human is present, the test sends the recorded payload through the registered hooks again
+and captures what they print, instead of reading the console capture of the run), the `r` result
+carries the NS-8 line and the checks, its `details$artifacts` names the app, the session holds one
+`gptr.artifact` entry, and `gptr_artifacts(id, stop = TRUE)` leaves no process; a broken app returns
+the child's error to the model (acceptance 2).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3624,7 +4161,10 @@ test_that("a broken app returns the child's error to the model", {
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "artifact-registry")'
 ```
 
-Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 60 ]`; the eight new tests error with `could not find function "gptr_artifacts"` (and `"artifact_unload"`); the NS-8 test passes its 14 expectations up to its `gptr_artifacts(..., stop = TRUE)` call and the broken-app test its two up to `gptr_artifacts("broken")`.
+Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 60 ]`; the eight new tests error with
+`could not find function "gptr_artifacts"` (and `"artifact_unload"`); the NS-8 test passes its 14
+expectations up to its `gptr_artifacts(..., stop = TRUE)` call and the broken-app test its two up to
+`gptr_artifacts("broken")`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3765,7 +4305,10 @@ Rscript --vanilla -e 'devtools::test(filter = "artifact-registry")'
 Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); pkgload::dev_example("gptr_artifacts")'
 ```
 
-Expected: `devtools::document()` adds `export(gptr_artifacts)` to `NAMESPACE` and writes `man/gptr_artifacts.Rd`; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 105 ]`; the example prints the call and `# 0 rows`; no `artifacts` directory is created (the listing reads `workspace_root(create = FALSE)`).
+Expected: `devtools::document()` adds `export(gptr_artifacts)` to `NAMESPACE` and writes
+`man/gptr_artifacts.Rd`; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 105 ]`; the example
+prints the call and `# 0 rows`; no `artifacts` directory is created (the listing reads
+`workspace_root(create = FALSE)`).
 
 - [ ] **Step 5: Commit**
 
@@ -3781,10 +4324,24 @@ git commit -m "feat(artifact): add gptr_artifacts(), relaunch and unload cleanup
 - Test: `tests/testthat/test-artifact-app.R` (append)
 
 **Interfaces:**
-- Consumes: Task 2 (`artifact_static_check()`); yaml `yaml::yaml.load()` (tests: the frontmatter's `name` and `description`; yaml is an Import, 03 §9). No P17 function is called: P17 is outside P23's dependency closure (05: P10, P11, P14, P16). P17's discovery of gptr's own `inst/gptr/skills/` (P17 Task 3: "P23 and P19 add `shiny-bslib` and `gptr-orchestration` to `inst/gptr/skills/`") picks the file up at run time without a code dependency in either direction.
-- Produces: the shipped skill `shiny-bslib`, whose catalog line is exactly the one of 03 §7.3: `- shiny-bslib: Build Shiny apps with bslib layouts (page_sidebar, cards, value boxes) for artifacts. [skill:shiny-bslib/SKILL.md]`.
+- Consumes: Task 2 (`artifact_static_check()`); yaml `yaml::yaml.load()` (tests: the frontmatter's
+  `name` and `description`; yaml is an Import, 03 section 9). No P17 function is called: P17 is
+  outside P23's dependency closure (05: P10, P11, P14, P16). P17's discovery of gptr's own
+  `inst/gptr/skills/` (P17 Task 3: "P23 and P19 add `shiny-bslib` and `gptr-orchestration` to
+  `inst/gptr/skills/`") picks the file up at run time without a code dependency in either direction.
+- Produces: the shipped skill `shiny-bslib`, whose catalog line is exactly the one of 03
+  section 7.3:
+  `- shiny-bslib: Build Shiny apps with bslib layouts (page_sidebar, cards, value boxes) for artifacts. [skill:shiny-bslib/SKILL.md]`.
 
-The skill is the house style of report 17 §4.4 (verified bslib 0.10.0 signatures in §2.4; Posit's `shiny-bslib` skill rules: `page_sidebar()`, `layout_columns()`, `card(full_screen = TRUE)`, never nest `card()` or `page_*()`), rewritten for gptr's flow: the model writes `app.R` with `write`, launches it with `peter$app()` in `r`, revises with `edit` (an edit is 3.9x cheaper than a rewrite, G2 (a)) and reads the checks and the screenshot. It uses `=` and `|>` (S-9), recommends `peter$describe(x)`, `dim()` and `head()` and never `str(` (IC-67; P07's test scans shipped skills), is ASCII, and its one R example passes the static checks of Task 2. The frontmatter follows P17's `high-performance-r` skill (`name`, quoted `description`, `license`, `metadata`). The `html` fallback is one paragraph (S-5).
+The skill is the house style of report 17 section 4.4 (verified bslib 0.10.0 signatures in
+section 2.4; Posit's `shiny-bslib` skill rules: `page_sidebar()`, `layout_columns()`,
+`card(full_screen = TRUE)`, never nest `card()` or `page_*()`), rewritten for gptr's flow: the model
+writes `app.R` with `write`, launches it with `peter$app()` in `r`, revises with `edit` (an edit is
+3.9x cheaper than a rewrite, G2 (a)) and reads the checks and the screenshot. It uses `=` and `|>`
+(S-9), recommends `peter$describe(x)`, `dim()` and `head()` and never `str(` (IC-67; P07's test
+scans shipped skills), is ASCII, and its one R example passes the static checks of Task 2. The
+frontmatter follows P17's `high-performance-r` skill (`name`, quoted `description`, `license`,
+`metadata`). The `html` fallback is one paragraph (S-5).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3826,7 +4383,8 @@ test_that("the shiny-bslib skill has its catalog line, house style and a valid e
 Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "artifact-app")'
 ```
 
-Expected: `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 333 ]`; the new test errors with `no file found` (from `system.file(..., mustWork = TRUE)`).
+Expected: `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 333 ]`; the new test errors with `no file found` (from
+`system.file(..., mustWork = TRUE)`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3889,7 +4447,12 @@ Rscript --vanilla -e 'devtools::test(filter = "artifact-app")'
 Rscript --vanilla -e 'devtools::test(filter = "skill-discover|bench-context")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 342 ]` for `artifact-app` (the skill test needs no P17 function; it reads the frontmatter with yaml); P17's and P07's suites stay green (`FAIL 0`): gptr's own skills now include `shiny-bslib`, whose catalog line is the second line of 03 §7.3's `<skills>` catalog, and no shipped text mentions `str(` (IC-67). The second command is a regression cross-check only: in the numeric execution order P17 is already in `R/`, and if it were not, the filter would still select P07's `test-bench-context.R`.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 342 ]` for `artifact-app` (the skill test needs no P17
+function; it reads the frontmatter with yaml); P17's and P07's suites stay green (`FAIL 0`): gptr's
+own skills now include `shiny-bslib`, whose catalog line is the second line of 03 section 7.3's
+`<skills>` catalog, and no shipped text mentions `str(` (IC-67). The second command is a regression
+cross-check only: in the numeric execution order P17 is already in `R/`, and if it were not, the
+filter would still select P07's `test-bench-context.R`.
 
 - [ ] **Step 5: Commit**
 
@@ -3905,14 +4468,35 @@ git commit -m "feat(artifact): add the shiny-bslib skill"
 - Modify: `dev/bench/tokens/baseline.csv` (one row, written by P07's runner with `--update`)
 
 **Interfaces:**
-- Consumes (P07, IC-73): `Rscript --vanilla dev/bench/tokens/run.R [--check] [--update [ids]]` and its fixture format (`id`, `north_star`, `description`, `mode`, `human`, `preset`, `models`, `standins`, `environment`, `files`, `objects`, `facts`, `turns` with `prompt`, `source`, `context`, `steps` of `text` and `calls` (`id`, `name`, `input`, `result`, `images`, `details`)); its metrics (`requests`, `prefix`, `input_total`, `output_total`, `image_tokens`, `catalog`, `facts`, `est_prefix`, `est_input_total`) and gates (prefix +2%, input and output totals +5%, requests and image tokens +0, catalog +5%, facts no loss; `gptr_error_token_regression`); the development package rtiktoken.
-- Produces: the fixture `ns08-marker-explorer` and its row in `dev/bench/tokens/baseline.csv` (05 P23 acceptance 5: "P23's NS-8 fixture is added to `dev/bench/tokens/`"; P24 gates every row).
+- Consumes (P07, IC-73): `Rscript --vanilla dev/bench/tokens/run.R [--check] [--update [ids]]` and
+  its fixture format (`id`, `north_star`, `description`, `mode`, `human`, `preset`, `models`,
+  `standins`, `environment`, `files`, `objects`, `facts`, `turns` with `prompt`, `source`,
+  `context`, `steps` of `text` and `calls` (`id`, `name`, `input`, `result`, `images`, `details`));
+  its metrics (`requests`, `prefix`, `input_total`, `output_total`, `image_tokens`, `catalog`,
+  `facts`, `est_prefix`, `est_input_total`) and gates (prefix +2%, input and output totals +5%,
+  requests and image tokens +0, catalog +5%, facts no loss; `gptr_error_token_regression`); the
+  development package rtiktoken.
+- Produces: the fixture `ns08-marker-explorer` and its row in `dev/bench/tokens/baseline.csv` (05
+  P23 acceptance 5: "P23's NS-8 fixture is added to `dev/bench/tokens/`"; P24 gates every row).
 
-The fixture scripts NS-8 the way architecture 10.6 walks it: `markers` is attached (a 4,211 x 7 marker table built by deterministic code, no RNG), the `<artifacts>` section and the `shiny-bslib` catalog line steer the model, which reads the skill once (the result is Task 11's `SKILL.md`, 582 o200k tokens), writes `.gptr/artifacts/marker-explorer/app.R` (the bslib explorer below, which this plan's scratch run launched through the full ladder: parse, launch, HTTP 200 and the session check all ok), calls `peter$app()` in one `r` call whose result is the handle's three lines plus P09's state lines (111 o200k tokens) and one 1000x700 screenshot (900 image tokens, 03 §12.2 "artifact result | about 80 + about 900 screenshot"), and answers. The `<environment>` block names the artifacts directory (03 §7.4 `Artifacts: .gptr/artifacts`). The runner never runs the scripted code; the stand-ins are those of P07's fixtures (used only when no real spec is registered, so the real `artifacts` section and skills catalog are measured once their owners are loaded).
+The fixture scripts NS-8 the way architecture 10.6 walks it: `markers` is attached (a 4,211 x 7
+marker table built by deterministic code, no RNG), the `<artifacts>` section and the `shiny-bslib`
+catalog line steer the model, which reads the skill once (the result is Task 11's `SKILL.md`, 582
+o200k tokens), writes `.gptr/artifacts/marker-explorer/app.R` (the bslib explorer below, which this
+plan's scratch run launched through the full ladder: parse, launch, HTTP 200 and the session check
+all ok), calls `peter$app()` in one `r` call whose result is the handle's three lines plus P09's
+state lines (111 o200k tokens) and one 1000x700 screenshot (900 image tokens, 03 section 12.2
+"artifact result | about 80 + about 900 screenshot"), and answers. The `<environment>` block names
+the artifacts directory (03 section 7.4 `Artifacts: .gptr/artifacts`). The runner never runs the
+scripted code; the stand-ins are those of P07's fixtures (used only when no real spec is registered,
+so the real `artifacts` section and skills catalog are measured once their owners are loaded).
 
 - [ ] **Step 1: Write the failing test**
 
-Check the development tool first: `Rscript --vanilla -e 'cat(requireNamespace("rtiktoken", quietly = TRUE), "\n")'` must print `TRUE`. If it prints `FALSE`, stop and ask the maintainer to install rtiktoken (CRAN) into their library; do not install it from a plan step (conventions §1).
+Check the development tool first:
+`Rscript --vanilla -e 'cat(requireNamespace("rtiktoken", quietly = TRUE), "\n")'` must print `TRUE`.
+If it prints `FALSE`, stop and ask the maintainer to install rtiktoken (CRAN) into their library; do
+not install it from a plan step (conventions section 1).
 
 Create `dev/bench/tokens/fixtures/ns08-marker-explorer.json`:
 
@@ -4017,7 +4601,9 @@ Create `dev/bench/tokens/fixtures/ns08-marker-explorer.json`:
 Rscript --vanilla dev/bench/tokens/run.R --check
 ```
 
-Expected: P07's static-prefix table and one results row per fixture (including `ns08-marker-explorer`) are printed, then the run stops with the `gptr_error_token_regression` message:
+Expected: P07's static-prefix table and one results row per fixture (including
+`ns08-marker-explorer`) are printed, then the run stops with the `gptr_error_token_regression`
+message:
 
 ```text
 Error: Token-efficiency regression:
@@ -4033,14 +4619,27 @@ Record the baseline row with P07's runner:
 Rscript --vanilla dev/bench/tokens/run.R --update ns08-marker-explorer
 ```
 
-Expected: the static-prefix and results tables, then `baseline written: ns08-marker-explorer`. Check the new row of `dev/bench/tokens/baseline.csv` against what the fixture scripts:
+Expected: the static-prefix and results tables, then `baseline written: ns08-marker-explorer`. Check
+the new row of `dev/bench/tokens/baseline.csv` against what the fixture scripts:
 
-- `requests` is 4 (before the `read` call, before the `write` call, before the `r` call, before the answer);
-- `prefix` and `catalog` equal those of the `ns02-mixed-model` row of the same run (the same composition: standard preset, a human, no document, the same stand-ins); with every built-in registered the prefix is the IC-68 total of 2,722 o200k tokens, of which the `<artifacts>` section is 124 and the `shiny-bslib` catalog line part of the 542-token T1 fixture;
-- `output_total` is 781 (the `read` call 17, the `write` call with the app 613, the `r` call 29, the answer 122; a call counts its name plus the JSON of its input);
-- `image_tokens` is 900 (`ceiling(1000 / 28) * ceiling(700 / 28)`, P01's `est_image_tokens(1000, 700, "anthropic")`);
-- `facts` is the number of the five fixture facts (`markers`, `gene`, `avg_log2FC`, `p_val_adj`, `cluster`) found in the first message's `<attached name="markers">` block (P09's describer at its default budget);
-- `input_total` is the sum over the four requests of the prefix and every message so far: `4 x prefix + 4 x <first user message> + 3 x (17 + 582) + 2 x (613 + 14) + (29 + 111 + 900)`, that is `4 x prefix + 4 x <first user message> + 4,091` (the first user message holds the project instructions, the pinned `<environment>`, the mode block, the workspace and the `<attached name="markers">` description).
+- `requests` is 4 (before the `read` call, before the `write` call, before the `r` call, before the
+  answer);
+- `prefix` and `catalog` equal those of the `ns02-mixed-model` row of the same run (the same
+  composition: standard preset, a human, no document, the same stand-ins); with every built-in
+  registered the prefix is the IC-68 total of 2,722 o200k tokens, of which the `<artifacts>` section
+  is 124 and the `shiny-bslib` catalog line part of the 542-token T1 fixture;
+- `output_total` is 781 (the `read` call 17, the `write` call with the app 613, the `r` call 29, the
+  answer 122; a call counts its name plus the JSON of its input);
+- `image_tokens` is 900 (`ceiling(1000 / 28) * ceiling(700 / 28)`, P01's
+  `est_image_tokens(1000, 700, "anthropic")`);
+- `facts` is the number of the five fixture facts (`markers`, `gene`, `avg_log2FC`, `p_val_adj`,
+  `cluster`) found in the first message's `<attached name="markers">` block (P09's describer at its
+  default budget);
+- `input_total` is the sum over the four requests of the prefix and every message so far:
+  `4 x prefix + 4 x <first user message> + 3 x (17 + 582) + 2 x (613 + 14) + (29 + 111 + 900)`, that
+  is `4 x prefix + 4 x <first user message> + 4,091` (the first user message holds the project
+  instructions, the pinned `<environment>`, the mode block, the workspace and the
+  `<attached name="markers">` description).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -4048,7 +4647,9 @@ Expected: the static-prefix and results tables, then `baseline written: ns08-mar
 Rscript --vanilla dev/bench/tokens/run.R --check
 ```
 
-Expected: the last line `OK: 4 static prefixes and <n> golden transcripts within the baseline tolerances`, where `<n>` is the number of files in `dev/bench/tokens/fixtures/`.
+Expected: the last line
+`OK: 4 static prefixes and <n> golden transcripts within the baseline tolerances`, where `<n>` is
+the number of files in `dev/bench/tokens/fixtures/`.
 
 - [ ] **Step 5: Commit**
 
@@ -4061,7 +4662,10 @@ git commit -m "chore(bench): add the NS-8 artifact golden transcript and baselin
 
 ## Plan acceptance
 
-Every acceptance check of 05 P23, including its review amendments, the task and test that prove it, and the command with its expected result. Counts assume the environment stated under Global Constraints (shiny, httpuv, later, openssl, chromote and a Chrome binary installed, `NOT_CRAN=true` as `devtools::test()` sets it, `capabilities("profmem")` TRUE).
+Every acceptance check of 05 P23, including its review amendments, the task and test that prove it,
+and the command with its expected result. Counts assume the environment stated under Global
+Constraints (shiny, httpuv, later, openssl, chromote and a Chrome binary installed, `NOT_CRAN=true`
+as `devtools::test()` sets it, `capabilities("profmem")` TRUE).
 
 | # | Acceptance check (05 P23) | Proved by |
 |---|---|---|
@@ -4095,13 +4699,20 @@ Commands and expected results:
 Rscript --vanilla -e 'devtools::test(filter = "artifact|copy-artifact")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 449 ]`. Without chromote or a Chrome binary: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 435 ]`. With `NOT_CRAN` unset (CRAN): every process-starting test and both copy rows skip.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 449 ]`. Without chromote or a Chrome binary:
+`[ FAIL 0 | WARN 0 | SKIP 2 | PASS 435 ]`. With `NOT_CRAN` unset (CRAN): every process-starting test
+and both copy rows skip.
 
 ```bash
 Rscript --vanilla -e 'devtools::test(filter = "^(arch-layers|lint-rules)$")'
 ```
 
-Expected: P01's layering and lint suites (`test-arch-layers.R`, `test-lint-rules.R`; the anchored filter keeps out P10's `test-tool-search.R`, whose name contains `arch`) stay green: `artifact-app.R` and `artifact-registry.R` call only L0 files, the record constructors, the kernel SDK (`run_current()`, `run_eval_env()`, `run_emit()`, `session_data()`, `session_append()`) and their own area; no left-arrow assignment, no `:::`, `set.seed(`, `sample(`, `httpuv::randomPort(`, `tools::pskill(`, `withr::` or non-literal `cli_*()` first argument in `R/`.
+Expected: P01's layering and lint suites (`test-arch-layers.R`, `test-lint-rules.R`; the anchored
+filter keeps out P10's `test-tool-search.R`, whose name contains `arch`) stay green:
+`artifact-app.R` and `artifact-registry.R` call only L0 files, the record constructors, the kernel
+SDK (`run_current()`, `run_eval_env()`, `run_emit()`, `session_data()`, `session_append()`) and
+their own area; no left-arrow assignment, no `:::`, `set.seed(`, `sample(`, `httpuv::randomPort(`,
+`tools::pskill(`, `withr::` or non-literal `cli_*()` first argument in `R/`.
 
 ```bash
 Rscript --vanilla dev/bench/tokens/run.R --check
@@ -4113,77 +4724,243 @@ Expected: `OK: 4 static prefixes and <n> golden transcripts within the baseline 
 Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'
 ```
 
-Expected (milestone M5 run, P25 repeats it): 0 errors, 0 warnings and no NOTE apart from the incoming-feasibility NOTE naming the maintainer; the `gptr_artifacts()` example runs offline and writes nothing.
+Expected (milestone M5 run, P25 repeats it): 0 errors, 0 warnings and no NOTE apart from the
+incoming-feasibility NOTE naming the maintainer; the `gptr_artifacts()` example runs offline and
+writes nothing.
 
 ## Self-review
 
-**Spec coverage.** 05 P23 scope, item by item: static checks -> Task 2; immutable `vNNN/` snapshots with the leaf `saveRDS` wrapper and size cap -> Task 3 (`save_rds()`, `gptr.artifact_max_bytes`, `gptr_error_artifact_too_large`); callr child with the `artifact` environment -> Tasks 4 and 7; random port file -> Task 4; parent-PID watchdog -> Task 4; HTTP 200 check -> Task 7 (through P04's reactor); optional chromote session check and 1000x700 screenshot -> Task 6, attached to the `r` result in Task 9; `html` kind -> Tasks 2, 3 and 9; `artifact_start/stop` events -> Tasks 5 and 7; the artifacts `checkpointer` -> Task 8; `builtin:artifacts` -> Task 9; `gptr_artifacts()`, open, relaunch a version, stop -> Tasks 5, 7 and 10; lazy orphan sweep -> Task 5 (first `peter$app()` per process, every listing); `.onUnload` cleanup -> Task 10; `inst/gptr/skills/shiny-bslib/` -> Task 11. Review amendments -> rows R1-R8 above. Acceptance checks 1-5 -> the table above. Contract items owned: export `gptr_artifacts()` (04 §6.4) -> Task 10; member `app` (04 §9.4) -> Task 9; `builtin_artifacts(gptr)` and `artifact_serve(dir, port_file, parent_pid, token)` (04 §7.23) -> Tasks 9 and 4; class `gptr_artifact` with `format`/`print` (04 §5.10) -> Task 1; listing `gptr_artifacts` (04 §5.12) -> Task 10; option `gptr.artifact_max_bytes` (04 §3.1) -> Task 3, documented in `?gptr_artifacts`; conditions `artifact`, `artifact_too_large` (04 §2.2) -> Tasks 2, 3, 7, 9; events `artifact_start`, `artifact_stop` (04 §10.4) -> Tasks 5, 7; custom entry `gptr.artifact` (04 §4.6) -> Task 9; file formats of 04 §11.6 -> Tasks 1, 3, 4, 5; `artifact_type` and `checkpointer` specs (04 §10.2 rows 19, 29) -> Tasks 2, 3, 7, 8, 9; prompt section `artifacts` (04 §9.3) -> Task 9; NS-8 golden transcript (IC-73) -> Task 12.
+**Spec coverage.** 05 P23 scope, item by item: static checks -> Task 2; immutable `vNNN/` snapshots
+with the leaf `saveRDS` wrapper and size cap -> Task 3 (`save_rds()`, `gptr.artifact_max_bytes`,
+`gptr_error_artifact_too_large`); callr child with the `artifact` environment -> Tasks 4 and 7;
+random port file -> Task 4; parent-PID watchdog -> Task 4; HTTP 200 check -> Task 7 (through P04's
+reactor); optional chromote session check and 1000x700 screenshot -> Task 6, attached to the `r`
+result in Task 9; `html` kind -> Tasks 2, 3 and 9; `artifact_start/stop` events -> Tasks 5 and 7;
+the artifacts `checkpointer` -> Task 8; `builtin:artifacts` -> Task 9; `gptr_artifacts()`, open,
+relaunch a version, stop -> Tasks 5, 7 and 10; lazy orphan sweep -> Task 5 (first `peter$app()` per
+process, every listing); `.onUnload` cleanup -> Task 10; `inst/gptr/skills/shiny-bslib/` -> Task 11.
+Review amendments -> rows R1-R8 above. Acceptance checks 1-5 -> the table above. Contract items
+owned: export `gptr_artifacts()` (04 section 6.4) -> Task 10; member `app` (04 section 9.4) ->
+Task 9; `builtin_artifacts(gptr)` and `artifact_serve(dir, port_file, parent_pid, token)` (04
+section 7.23) -> Tasks 9 and 4; class `gptr_artifact` with `format`/`print` (04 section 5.10) ->
+Task 1; listing `gptr_artifacts` (04 section 5.12) -> Task 10; option `gptr.artifact_max_bytes` (04
+section 3.1) -> Task 3, documented in `?gptr_artifacts`; conditions `artifact`, `artifact_too_large`
+(04 section 2.2) -> Tasks 2, 3, 7, 9; events `artifact_start`, `artifact_stop` (04 section 10.4) ->
+Tasks 5, 7; custom entry `gptr.artifact` (04 section 4.6) -> Task 9; file formats of 04
+section 11.6 -> Tasks 1, 3, 4, 5; `artifact_type` and `checkpointer` specs (04 section 10.2
+rows 19, 29) -> Tasks 2, 3, 7, 8, 9; prompt section `artifacts` (04 section 9.3) -> Task 9; NS-8
+golden transcript (IC-73) -> Task 12.
 
-**Placeholder scan.** The plan was searched for "TBD", "TODO", "implement later", "fill in", "appropriate error handling", "handle edge cases", "similar to Task" and for steps without code: none. Every function the tasks call is defined in this plan or named in 04 (or, for P10's member closure and r-call marker, P14's renderer hook and P07's runner, defined by those plans and listed under "Interfaces consumed").
+**Placeholder scan.** The plan was searched for "TBD", "TODO", "implement later", "fill in",
+"appropriate error handling", "handle edge cases", "similar to Task" and for steps without code:
+none. Every function the tasks call is defined in this plan or named in 04 (or, for P10's member
+closure and r-call marker, P14's renderer hook and P07's runner, defined by those plans and listed
+under "Interfaces consumed").
 
-**Type and name consistency with 04.** `gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)`; `peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = interactive())` (the formals of `artifact_member_fun()`, which P10's member closure copies); `builtin_artifacts(gptr)`; `artifact_serve(dir, port_file, parent_pid, token)`; handle fields `id, title, kind, version, url, path, status, checks, screenshot, session` in that order, `checks` = `parse, launch, http, session` plus `messages`, statuses `running`, `stopped`, `failed`; listing columns `id, title, version, status, url, pid, bytes, path`; `artifact.json` keys of 04 §11.6; condition classes `gptr_error_artifact` (fields `id`, `stage`, `log`) and `gptr_error_artifact_too_large` (adds `bytes`, `max`), `gptr_error_invalid_argument` (`arg`, `expected`), `gptr_error_missing_package` (`package`, `feature`); events `artifact_start` (`id`, `url`, `version`) and `artifact_stop` (plus `reason`); section `artifacts` T0/600/150; spec functions with the formals P02's validators require (`build(id, dir, data, ctx)`, `check(dir, ctx)`, `launch(version_dir, ctx)`, `stop(handle)`; `before(call, ctx)`, `after(call, ctx, token)`, `undo/redo(fragment, ctx, force)`, `prune(live_keys, ctx)`, `describe(fragment)`).
+**Type and name consistency with 04.**
+`gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)`;
+`peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE, launch = interactive())`
+(the formals of `artifact_member_fun()`, which P10's member closure copies);
+`builtin_artifacts(gptr)`; `artifact_serve(dir, port_file, parent_pid, token)`; handle fields
+`id, title, kind, version, url, path, status, checks, screenshot, session` in that order, `checks` =
+`parse, launch, http, session` plus `messages`, statuses `running`, `stopped`, `failed`; listing
+columns `id, title, version, status, url, pid, bytes, path`; `artifact.json` keys of 04
+section 11.6; condition classes `gptr_error_artifact` (fields `id`, `stage`, `log`) and
+`gptr_error_artifact_too_large` (adds `bytes`, `max`), `gptr_error_invalid_argument` (`arg`,
+`expected`), `gptr_error_missing_package` (`package`, `feature`); events `artifact_start` (`id`,
+`url`, `version`) and `artifact_stop` (plus `reason`); section `artifacts` T0/600/150; spec
+functions with the formals P02's validators require (`build(id, dir, data, ctx)`, `check(dir, ctx)`,
+`launch(version_dir, ctx)`, `stop(handle)`; `before(call, ctx)`, `after(call, ctx, token)`,
+`undo/redo(fragment, ctx, force)`, `prune(live_keys, ctx)`, `describe(fragment)`).
 
 **Contract ambiguities and the readings implemented.**
 
-1. *callr `package =`.* 03 §6.15 writes `callr::r_bg(artifact_serve, package = TRUE, ...)`; 04 §7.23 fixes only the signature and says the child "picks a free 127.0.0.1 port from `port_candidates()`". With `package = TRUE` the child would load the installed gptr, which under `devtools::test()` may be absent or the CRAN 0.7.0. Reading: `artifact_serve()` is self-contained (base R and `pkg::` calls) and runs with `package = FALSE` (report 17 §4.2 names this fallback); the parent computes the candidates with `port_candidates()` and passes them, previous port first, in `GPTR_ARTIFACT_PORTS`, and passes `R_LIBS` because the empty `R_PROFILE_USER` of IC-60 stops callr's own profile from setting the child's library paths. Suggested contract edit: name `package = FALSE` and the environment variable in 04 §7.23.
-2. *The token in printed URLs.* 02 §8 shows `http://127.0.0.1:4827` without a token; 04 §5.10 and IC-71 put the token in the handle's URL; 03 §10.6 says "the handle's URL also carries the access token". Reading: the `artifact_start` payload and therefore P14's NS-8 line carry the full URL (the user needs it to open the app; P14 prints `event$url`). The token is not registered as a secret (it would be replaced by a marker in the printed line); it is per launch, loopback-only, and persisted only in gitignored files (`run/run.json`, the session JSONL).
-3. *Screenshot into the `r` result.* 04 §9.4 says "the `r` result gets its URL, checks and screenshot image" but defines no interface; P10 collects member images through its r-call marker (`gptr_r_call`, fields `images`, `dropped`, capped at `gptr.r_max_images`) and `r_call_attach_image()` in `tool-namespace.R`, an L4 file outside the artifact area that P01's layering test forbids P23 to call. Reading: `artifact_attach_image()` finds the marker by the same frame walk and appends to `images` with the same cap (a data coupling to P10's documented marker). Suggested contract edit: list `r_call_attach_image()` in the kernel SDK (IC-33) or as a service.
-4. *`open = TRUE` without a human.* 04 §6.4: "opens it in the viewer or browser (interactive only; relaunches a stopped artifact)". Reading: `open = TRUE` relaunches a stopped artifact in any session and opens the viewer only when `gptr_has_human()` (13 C-42).
-5. *`launch` default.* 04 §9.4 fixes `launch = interactive()`; the viewer decision uses `gptr_has_human()` (P01), so `interactive()` under testthat with `gptr.interactive = FALSE` launches but does not open a viewer.
-6. *Version retention.* G7 §4.3 says `vNNN/` directories "are pruned with the retention settings"; 04 defines no retention for artifacts and `gptr_artifacts(version =)` must relaunch any stored version. Reading: the checkpointer's `prune` keeps version directories; their disk use is visible in the `bytes` column of `gptr_artifacts()`, and data snapshots are gitignored (04 §11.1).
-7. *Validation stages.* 04 names the `stage` field but no values. Reading: `parse`, `static`, `snapshot`, `launch`, `http`; a failing session check is reported in `checks$session = FALSE` and `checks$messages`, not raised (the model reads it with the screenshot); `checks$session = NA` means the check could not run (no chromote or Chrome).
-8. *`run.json` fields.* 04 §11.6 lists `{pid, port, url, version, started}`; the sweep also needs the creation times and the owner. Reading: `create_time`, `parent_pid`, `parent_create_time` are added (unknown keys are allowed, 04 §11). Likewise each version record of `artifact.json` carries the `kind` it was built with (an unknown key), so `artifact_relaunch()` and the handle use the version's own type when an id changes kind (for example a plugin's `quarto` type replacing `shiny`).
-9. *`gptr.artifact` entry.* Appended only when `peter$app()` from model code succeeds; a failure reaches the transcript as the `r` call's error result (04 §10.2 row 19: "failures become tool results with the stage and a log tail").
-10. *The `html` kind's check.* 04 §10.2 gives `check(dir, ctx)` for both types; the `html` type checks that `page.html` exists and is not empty (its generated wrapper is validated at launch).
-11. *Test helpers.* 05 allows a plan only its R files, their test files and the files it names; no plan adds a helper file, so the few helpers both test files need (`local_artifact_project()`, `local_events()`, `skip_if_cannot_launch()`, `tiny_app`, `write_working()`) are defined in each file. The two tests that register a fake secret under the test-only name `GPTR_ARTIFACT_TEST_KEY` (Tasks 5 and 7) start with P03's `vault_reset()` and defer it, as P03's own tests and those of P14, P18 and P22 do (it is an internal of an earlier plan, not listed in 04, and tests run inside the namespace).
-12. *Skill size.* 03 §10.6 estimates the skill read at "about 400 tokens"; the shipped `SKILL.md` measures 582 o200k tokens (rtiktoken 0.0.7, Task 12), mostly its example app; the golden transcript records the real figure.
-13. *R children under R CMD check.* `R CMD check` runs the tests with `R_TESTS=startup.Rs`, a relative path that R's base profile (`R_HOME/library/base/R/Rprofile`) sources in every R process, so any R child started with the parent's environment and another working directory halts at startup (verified: `R_TESTS=startup.Rs Rscript -e 'cat(1)'` exits with status 1, also with `--vanilla`). callr's default `env = rcmd_safe_env()` blanks it, but the artifact launch passes its own `env =`. Reading: `artifact_child_env()` sets callr's three safe values (`R_TESTS = ""`, `R_BROWSER = "false"`, `R_PDFVIEWER = "false"`) and the test's sleeping R children pass `env = c("current", R_TESTS = "")`. Suggested contract edit: name these three values in the `artifact` profile of 04 §7.3 (they are not secrets, so `child_env()` keeps `R_TESTS` today).
-14. *The NS-8 line inside an `r` evaluation (cross-plan note, P14 and P09).* `artifact_start` fires while the model's `r` code runs, and P14's hook writes the line with `cat()`, so P09's evaluation sink receives it: without a human (`tee = FALSE`) it reaches only the model's `r` output, and with a human it reaches the console and the `r` output, so the model reads the line twice when its code also prints the handle (about 40 tokens). P23 cannot route around the sink; suggested P14 change: write the artifact line to the console connection saved at `agent_start` (or as a progress message), never through the captured stdout. The NS-8 test therefore checks the dispatched payload and what P14's registered hook prints for it, separately.
-15. *Risk of `gptr_artifacts()` from model code (cross-plan note, P11).* P11's R risk table lists `gptr::gptr_artifacts` at level 0 (`read`), although `gptr_artifacts(id, version =)` and `open = TRUE` relaunch model-written code, the risk `peter$app()` declares as level 3. P23 keeps exactly the registrations 04 §7.23 names for `builtin_artifacts()` (no `risk_rule`); suggested P11 change: level 3 (`process`) when the call passes `version` or `open`. Applied by P11's cross-plan consolidation (its log row 5): `flag_special()` rates `gptr_artifacts()` level 3 `process` when it passes `open = TRUE`, `version` or `stop = TRUE` (matched against the 04 §6.2 signature), so plan mode denies `gptr_artifacts('a', open = TRUE)`; the table row stays level 0 `read`.
-16. *`expect_no_copy()` under R CMD check (cross-plan note, P01).* P01's helper starts its `Rscript` with `env = c("current", R_LIBS = ...)`, which keeps `R_TESTS=startup.Rs` under `R CMD check`, so its child halts and every copy row (the two of `test-copy-artifact.R` included) fails under `devtools::check()` (`NOT_CRAN=true`); `devtools::test()` is unaffected. Suggested P01 change: add `R_TESTS = ""` to that environment. Resolved without that change (P01 cross-plan consolidation, issue 7): testthat (>= 2.0.0) sets `R_TESTS = ""` in `local_test_directory()` for the whole `test_dir()`/`test_check()` run, so the helper's children inherit the blank value under `R CMD check` too, and P01's Task 1 environment test asserts it. This plan's own `R_TESTS = ""` settings stay: they also cover artifact children launched outside testthat.
+1. *callr `package =`.* 03 section 6.15 writes `callr::r_bg(artifact_serve, package = TRUE, ...)`;
+   04 section 7.23 fixes only the signature and says the child "picks a free 127.0.0.1 port from
+   `port_candidates()`". With `package = TRUE` the child would load the installed gptr, which under
+   `devtools::test()` may be absent or the CRAN 0.7.0. Reading: `artifact_serve()` is self-contained
+   (base R and `pkg::` calls) and runs with `package = FALSE` (report 17 section 4.2 names this
+   fallback); the parent computes the candidates with `port_candidates()` and passes them, previous
+   port first, in `GPTR_ARTIFACT_PORTS`, and passes `R_LIBS` because the empty `R_PROFILE_USER` of
+   IC-60 stops callr's own profile from setting the child's library paths. Suggested contract edit:
+   name `package = FALSE` and the environment variable in 04 section 7.23.
+2. *The token in printed URLs.* 02 section 8 shows `http://127.0.0.1:4827` without a token; 04
+   section 5.10 and IC-71 put the token in the handle's URL; 03 section 10.6 says "the handle's URL
+   also carries the access token". Reading: the `artifact_start` payload and therefore P14's NS-8
+   line carry the full URL (the user needs it to open the app; P14 prints `event$url`). The token is
+   not registered as a secret (it would be replaced by a marker in the printed line); it is per
+   launch, loopback-only, and persisted only in gitignored files (`run/run.json`, the session
+   JSONL).
+3. *Screenshot into the `r` result.* 04 section 9.4 says "the `r` result gets its URL, checks and
+   screenshot image" but defines no interface; P10 collects member images through its r-call marker
+   (`gptr_r_call`, fields `images`, `dropped`, capped at `gptr.r_max_images`) and
+   `r_call_attach_image()` in `tool-namespace.R`, an L4 file outside the artifact area that P01's
+   layering test forbids P23 to call. Reading: `artifact_attach_image()` finds the marker by the
+   same frame walk and appends to `images` with the same cap (a data coupling to P10's documented
+   marker). Suggested contract edit: list `r_call_attach_image()` in the kernel SDK (IC-33) or as a
+   service.
+4. *`open = TRUE` without a human.* 04 section 6.4: "opens it in the viewer or browser (interactive
+   only; relaunches a stopped artifact)". Reading: `open = TRUE` relaunches a stopped artifact in
+   any session and opens the viewer only when `gptr_has_human()` (13 C-42).
+5. *`launch` default.* 04 section 9.4 fixes `launch = interactive()`; the viewer decision uses
+   `gptr_has_human()` (P01), so `interactive()` under testthat with `gptr.interactive = FALSE`
+   launches but does not open a viewer.
+6. *Version retention.* G7 section 4.3 says `vNNN/` directories "are pruned with the retention
+   settings"; 04 defines no retention for artifacts and `gptr_artifacts(version =)` must relaunch
+   any stored version. Reading: the checkpointer's `prune` keeps version directories; their disk use
+   is visible in the `bytes` column of `gptr_artifacts()`, and data snapshots are gitignored (04
+   section 11.1).
+7. *Validation stages.* 04 names the `stage` field but no values. Reading: `parse`, `static`,
+   `snapshot`, `launch`, `http`; a failing session check is reported in `checks$session = FALSE` and
+   `checks$messages`, not raised (the model reads it with the screenshot); `checks$session = NA`
+   means the check could not run (no chromote or Chrome).
+8. *`run.json` fields.* 04 section 11.6 lists `{pid, port, url, version, started}`; the sweep also
+   needs the creation times and the owner. Reading: `create_time`, `parent_pid`,
+   `parent_create_time` are added (unknown keys are allowed, 04 section 11). Likewise each version
+   record of `artifact.json` carries the `kind` it was built with (an unknown key), so
+   `artifact_relaunch()` and the handle use the version's own type when an id changes kind (for
+   example a plugin's `quarto` type replacing `shiny`).
+9. *`gptr.artifact` entry.* Appended only when `peter$app()` from model code succeeds; a failure
+   reaches the transcript as the `r` call's error result (04 section 10.2 row 19: "failures become
+   tool results with the stage and a log tail").
+10. *The `html` kind's check.* 04 section 10.2 gives `check(dir, ctx)` for both types; the `html`
+    type checks that `page.html` exists and is not empty (its generated wrapper is validated at
+    launch).
+11. *Test helpers.* 05 allows a plan only its R files, their test files and the files it names; no
+    plan adds a helper file, so the few helpers both test files need (`local_artifact_project()`,
+    `local_events()`, `skip_if_cannot_launch()`, `tiny_app`, `write_working()`) are defined in each
+    file. The two tests that register a fake secret under the test-only name
+    `GPTR_ARTIFACT_TEST_KEY` (Tasks 5 and 7) start with P03's `vault_reset()` and defer it, as P03's
+    own tests and those of P14, P18 and P22 do (it is an internal of an earlier plan, not listed in
+    04, and tests run inside the namespace).
+12. *Skill size.* 03 section 10.6 estimates the skill read at "about 400 tokens"; the shipped
+    `SKILL.md` measures 582 o200k tokens (rtiktoken 0.0.7, Task 12), mostly its example app; the
+    golden transcript records the real figure.
+13. *R children under R CMD check.* `R CMD check` runs the tests with `R_TESTS=startup.Rs`, a
+    relative path that R's base profile (`R_HOME/library/base/R/Rprofile`) sources in every R
+    process, so any R child started with the parent's environment and another working directory
+    halts at startup (verified: `R_TESTS=startup.Rs Rscript -e 'cat(1)'` exits with status 1, also
+    with `--vanilla`). callr's default `env = rcmd_safe_env()` blanks it, but the artifact launch
+    passes its own `env =`. Reading: `artifact_child_env()` sets callr's three safe values
+    (`R_TESTS = ""`, `R_BROWSER = "false"`, `R_PDFVIEWER = "false"`) and the test's sleeping R
+    children pass `env = c("current", R_TESTS = "")`. Suggested contract edit: name these three
+    values in the `artifact` profile of 04 section 7.3 (they are not secrets, so `child_env()` keeps
+    `R_TESTS` today).
+14. *The NS-8 line inside an `r` evaluation (cross-plan note, P14 and P09).* `artifact_start` fires
+    while the model's `r` code runs, and P14's hook writes the line with `cat()`, so P09's
+    evaluation sink receives it: without a human (`tee = FALSE`) it reaches only the model's `r`
+    output, and with a human it reaches the console and the `r` output, so the model reads the line
+    twice when its code also prints the handle (about 40 tokens). P23 cannot route around the sink;
+    suggested P14 change: write the artifact line to the console connection saved at `agent_start`
+    (or as a progress message), never through the captured stdout. The NS-8 test therefore checks
+    the dispatched payload and what P14's registered hook prints for it, separately.
+15. *Risk of `gptr_artifacts()` from model code (cross-plan note, P11).* P11's R risk table lists
+    `gptr::gptr_artifacts` at level 0 (`read`), although `gptr_artifacts(id, version =)` and
+    `open = TRUE` relaunch model-written code, the risk `peter$app()` declares as level 3. P23 keeps
+    exactly the registrations 04 section 7.23 names for `builtin_artifacts()` (no `risk_rule`);
+    suggested P11 change: level 3 (`process`) when the call passes `version` or `open`. Applied by
+    P11's cross-plan consolidation (its log row 5): `flag_special()` rates `gptr_artifacts()` level
+    3 `process` when it passes `open = TRUE`, `version` or `stop = TRUE` (matched against the 04
+    section 6.2 signature), so plan mode denies `gptr_artifacts('a', open = TRUE)`; the table row
+    stays level 0 `read`.
+16. *`expect_no_copy()` under R CMD check (cross-plan note, P01).* P01's helper starts its `Rscript`
+    with `env = c("current", R_LIBS = ...)`, which keeps `R_TESTS=startup.Rs` under `R CMD check`,
+    so its child halts and every copy row (the two of `test-copy-artifact.R` included) fails under
+    `devtools::check()` (`NOT_CRAN=true`); `devtools::test()` is unaffected. Suggested P01 change:
+    add `R_TESTS = ""` to that environment. Resolved without that change (P01 cross-plan
+    consolidation, issue 7): testthat (>= 2.0.0) sets `R_TESTS = ""` in `local_test_directory()` for
+    the whole `test_dir()`/`test_check()` run, so the helper's children inherit the blank value
+    under `R CMD check` too, and P01's Task 1 environment test asserts it. This plan's own
+    `R_TESTS = ""` settings stay: they also cover artifact children launched outside testthat.
 
 **Executed validation (scratch directory `work/plans/P23/`).**
 
-- A scratch package assembled from this plan's R code (the two files exactly as the task blocks give them), the P01, P03 and P04 functions it consumes extracted verbatim from those plans (conditions, checkers, paths, encoding, JSON, listings, ids, ports, `with_seed_preserved()`, `secret_scan()`, `pid_alive()`, `kill_all()`, the job table) and stand-ins for P02 (specs, registry, events), P06 (run and session SDK), P10 (member closure), P17 (`skill_parse()`) and P04's reactor (synchronous curl), installed into a private library, with shiny 1.13.0, bslib 0.10.0, httpuv 1.6.17, later 1.4.8, callr 3.7.6, processx 3.8.6, ps 1.9.3, openssl 2.3.5 and chromote with a local Chrome. `test-artifact-app.R` and `test-artifact-registry.R` (without the two NS-8 tests, which need the gateway) gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 424 ]` (339 + 85), with real Shiny children, real loopback HTTP and real headless Chrome screenshots. Every task's red and green summaries above were measured by rebuilding the package at each task boundary (Task 9's red count of `peter$app()` failures and the NS-8 and copy counts are derived from the expectations, since they need P06-P14).
-- An earlier draft passed with two warnings (`'raw = FALSE' but '/dev/urandom' is not a regular file`); `artifact_token()` now opens it with `raw = TRUE`. An earlier draft's Task 7 tests referenced `artifact_launch_shiny` at the top level of the test file, so its red run stopped at one failure; `shiny_type()` is now a function.
-- Copy safety: `peter$app("big-view", data = "big")` through a member closure on `runif(5e6)`, from the global environment and from a function frame: 0 `tracemem` copies on the next edit; the control (a list holding `big`) 1 copy.
-- The NS-8 fixture's app was launched through the full ladder in the scratch package on the fixture's 4,211 x 7 table: `checks: parse ok | launch ok | http ok | session ok`; the 1000x700 screenshot was inspected (sidebar, two value boxes, volcano plot, table).
-- `lintr::lint_dir()` with the repository's `.lintr` linters on both files: no lints except `object_usage_linter` for functions defined by other plans.
-- o200k counts (rtiktoken 0.0.7): the `<artifacts>` text 116 (124 with its tags, as 03 §7.3 measures), `SKILL.md` 582, the fixture's outputs 17 + 613 + 29 + 122 = 781 and results 582, 14, 111.
-- Review run (2026-10-01, scratch directory `work/plans/review-P23/`): the scratch package above rebuilt from this reviewed plan's blocks (the two R files and both test files; the review harness adds stand-ins for `vault_reset()` and `skill_parse()` and installs `SKILL.md`) gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 428 ]` (342 + 86, the NS-8 tests excluded) with real Shiny children and headless Chrome; per-test counts match every red and green summary above. `artifact_serve()` alone in a callr child with an empty `R_PROFILE_USER` and `R_ENVIRON_USER` answered 200 with the token, 403 without it and with a wrong one, 200 for `shared/shiny.min.js`; a broken UI ended the child before a port file with `Error: object 'no_such_object' not found`; the watchdog stopped a child whose parent was gone; an interrupt stopped the child in 0.03 s. A simulation of P10's member closure (`run(frame)` evaluating `member_fun(...)` in the closure's frame) confirmed that `artifact_member_fun()` finds the caller's frame from the global environment, a function frame, a `local()` block, an `eval()` environment and `peter$app` reached through a list.
-- The NS-8 fixture parses with `jsonlite::fromJSON()`, its `read` result equals Task 11's `SKILL.md` byte for byte, its `write` content parses as R and ends with `shinyApp(ui, server)` (1,733 bytes; `details$bytes` is 1,734 with the final newline the write adds), and it is ASCII.
-- Every R code block of this plan was extracted and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`; the plan contains no left-arrow assignment and no magrittr pipe in its code.
+- A scratch package assembled from this plan's R code (the two files exactly as the task blocks give
+  them), the P01, P03 and P04 functions it consumes extracted verbatim from those plans (conditions,
+  checkers, paths, encoding, JSON, listings, ids, ports, `with_seed_preserved()`, `secret_scan()`,
+  `pid_alive()`, `kill_all()`, the job table) and stand-ins for P02 (specs, registry, events), P06
+  (run and session SDK), P10 (member closure), P17 (`skill_parse()`) and P04's reactor (synchronous
+  curl), installed into a private library, with shiny 1.13.0, bslib 0.10.0, httpuv 1.6.17, later
+  1.4.8, callr 3.7.6, processx 3.8.6, ps 1.9.3, openssl 2.3.5 and chromote with a local Chrome.
+  `test-artifact-app.R` and `test-artifact-registry.R` (without the two NS-8 tests, which need the
+  gateway) gave `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 424 ]` (339 + 85), with real Shiny children, real
+  loopback HTTP and real headless Chrome screenshots. Every task's red and green summaries above
+  were measured by rebuilding the package at each task boundary (Task 9's red count of `peter$app()`
+  failures and the NS-8 and copy counts are derived from the expectations, since they need P06-P14).
+- An earlier draft passed with two warnings
+  (`'raw = FALSE' but '/dev/urandom' is not a regular file`); `artifact_token()` now opens it with
+  `raw = TRUE`. An earlier draft's Task 7 tests referenced `artifact_launch_shiny` at the top level
+  of the test file, so its red run stopped at one failure; `shiny_type()` is now a function.
+- Copy safety: `peter$app("big-view", data = "big")` through a member closure on `runif(5e6)`, from
+  the global environment and from a function frame: 0 `tracemem` copies on the next edit; the
+  control (a list holding `big`) 1 copy.
+- The NS-8 fixture's app was launched through the full ladder in the scratch package on the
+  fixture's 4,211 x 7 table: `checks: parse ok | launch ok | http ok | session ok`; the 1000x700
+  screenshot was inspected (sidebar, two value boxes, volcano plot, table).
+- `lintr::lint_dir()` with the repository's `.lintr` linters on both files: no lints except
+  `object_usage_linter` for functions defined by other plans.
+- o200k counts (rtiktoken 0.0.7): the `<artifacts>` text 116 (124 with its tags, as 03 section 7.3
+  measures), `SKILL.md` 582, the fixture's outputs 17 + 613 + 29 + 122 = 781 and results 582,
+  14, 111.
+- Review run (2026-10-01, scratch directory `work/plans/review-P23/`): the scratch package above
+  rebuilt from this reviewed plan's blocks (the two R files and both test files; the review harness
+  adds stand-ins for `vault_reset()` and `skill_parse()` and installs `SKILL.md`) gave
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 428 ]` (342 + 86, the NS-8 tests excluded) with real Shiny
+  children and headless Chrome; per-test counts match every red and green summary above.
+  `artifact_serve()` alone in a callr child with an empty `R_PROFILE_USER` and `R_ENVIRON_USER`
+  answered 200 with the token, 403 without it and with a wrong one, 200 for `shared/shiny.min.js`; a
+  broken UI ended the child before a port file with `Error: object 'no_such_object' not found`; the
+  watchdog stopped a child whose parent was gone; an interrupt stopped the child in 0.03 s. A
+  simulation of P10's member closure (`run(frame)` evaluating `member_fun(...)` in the closure's
+  frame) confirmed that `artifact_member_fun()` finds the caller's frame from the global
+  environment, a function frame, a `local()` block, an `eval()` environment and `peter$app` reached
+  through a list.
+- The NS-8 fixture parses with `jsonlite::fromJSON()`, its `read` result equals Task 11's `SKILL.md`
+  byte for byte, its `write` content parses as R and ends with `shinyApp(ui, server)` (1,733 bytes;
+  `details$bytes` is 1,734 with the final newline the write adds), and it is ASCII.
+- Every R code block of this plan was extracted and parsed with
+  `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`; the plan contains no left-arrow
+  assignment and no magrittr pipe in its code.
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 00-conventions, 04 (with §15), 05 P23, the dependency plans P01-P17 as written, report 17 and its verification log. Every R block was re-extracted and parsed; the plan's R code and both test files (the NS-8 tests excepted, which need the gateway) were rebuilt into a copy of the scratch package of `work/plans/P23/final/` (in `work/plans/review-P23/harness/`) and run with real Shiny children and headless Chrome (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 428 ]`, Self-review "Executed validation").
+Adversarial review of 2026-10-01 against 00-conventions, 04 (with section 15), 05 P23, the
+dependency plans P01-P17 as written, report 17 and its verification log. Every R block was
+re-extracted and parsed; the plan's R code and both test files (the NS-8 tests excepted, which need
+the gateway) were rebuilt into a copy of the scratch package of `work/plans/P23/final/` (in
+`work/plans/review-P23/harness/`) and run with real Shiny children and headless Chrome
+(`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 428 ]`, Self-review "Executed validation").
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
 | 1 | major | Task 4 `artifact_child_env()`; Task 5 `sleeper_handle()` | Passing `env =` to callr replaces its default `callr::rcmd_safe_env()`, which blanks `R_TESTS`. `R CMD check` runs tests with `R_TESTS=startup.Rs` (relative) and R's base profile sources it in every R child, so under `devtools::check()` (which sets `NOT_CRAN=true`) every artifact child (working directory: its version directory) and every sleeping test child would halt at startup (reproduced: `R_TESTS=startup.Rs Rscript -e 'cat(1)'` exits 1), failing the launch tests and the M5 check. | applied | `artifact_child_env()` sets `R_TESTS = ""`, `R_BROWSER = "false"`, `R_PDFVIEWER = "false"` (callr's safe values; the browser ones also keep model code from opening a viewer, 13 C-42); the sleeping R children pass `env = c("current", R_TESTS = "")`; the child-environment test sets `R_TESTS=startup.Rs` and asserts the two values (+2 expectations); new Global Constraints line; Self-review ambiguity 13. |
 | 2 | major | Task 10 NS-8 test, `expect_true(line %in% out)` | The assertion could not pass: `artifact_start` fires inside the model's `r` evaluation, whose stdout P09's `eval_r()` sinks (split to the console only when a human is present; tests set `gptr.interactive = FALSE`), so P14's `cat()` of the line lands in the `r` output, not in `capture.output(peter(...))`. | applied | The test checks the dispatched payload (id, version 1, tokenised URL) and then sends that payload through the registered hooks with `ev_dispatch()` under `capture.output()`, where P14's renderer prints the exact NS-8 line (same expectation count); Task 10 prose, interfaces and acceptance row 4 updated; the double line in the model's context is a cross-plan note (Self-review ambiguity 14). |
 | 3 | minor | Tasks 5 and 7, tests that register a fake secret | The fake secret stayed in the process vault for the rest of the test run, unlike the tests of P03, P14, P18 and P22. | applied | Both tests start with `vault_reset()` and defer it; P03 `vault_reset()` listed under consumed interfaces; ambiguity 11 rewritten. |
-| 4 | minor | Task 6 `artifact_session_browse()` | The state poll slept with `Sys.sleep(0.1)` for up to 20 s, blocking the reactor, although 04 §8.2 makes `reactor_pump()` "the only blocking wait" and the plan's own port and HTTP waits use it. | applied | The pause is `reactor_pump(until = function() FALSE, slice_ms = 50L, timeout = 0.1)`; Task 6 interfaces list it; the "did not connect" message uses the `timeout` argument instead of a hard-coded 20 s. |
+| 4 | minor | Task 6 `artifact_session_browse()` | The state poll slept with `Sys.sleep(0.1)` for up to 20 s, blocking the reactor, although 04 section 8.2 makes `reactor_pump()` "the only blocking wait" and the plan's own port and HTTP waits use it. | applied | The pause is `reactor_pump(until = function() FALSE, slice_ms = 50L, timeout = 0.1)`; Task 6 interfaces list it; the "did not connect" message uses the `timeout` argument instead of a hard-coded 20 s. |
 | 5 | minor | Task 7 `artifact_wait_http()`, `artifact_launch_shiny()` | The failure reasons hard-coded "30 s" whatever the `timeout`. | applied | Built from `timeout` and `artifact_launch_timeout`. |
-| 6 | minor | Tasks 5, 7, 9 (`artifact_handle()`, `artifact_relaunch()`, `artifact_app()`) | Relaunch and the handle used the artifact-level `kind`, so after an id changed kind (IC-69: any registered `artifact_type`, e.g. a plugin's `quarto`) older versions were relaunched with the wrong type's `launch`. | applied | Each version record stores the `kind` it was built with (an unknown key, allowed by 04 §11); `artifact_relaunch()` and `artifact_handle()` use it before the artifact-level `kind`; the html test asserts it (+1); Global Constraints and ambiguity 8 note it. |
+| 6 | minor | Tasks 5, 7, 9 (`artifact_handle()`, `artifact_relaunch()`, `artifact_app()`) | Relaunch and the handle used the artifact-level `kind`, so after an id changed kind (IC-69: any registered `artifact_type`, e.g. a plugin's `quarto`) older versions were relaunched with the wrong type's `launch`. | applied | Each version record stores the `kind` it was built with (an unknown key, allowed by 04 section 11); `artifact_relaunch()` and `artifact_handle()` use it before the artifact-level `kind`; the html test asserts it (+1); Global Constraints and ambiguity 8 note it. |
 | 7 | minor | Task 8 `artifact_ckpt_move()` | Undo and redo relaunched without the checkpointer's `ctx`, so an `artifact_type` registered for the rewound session only could not be resolved. | applied | `artifact_ckpt_move(fragment, side, running, ctx = NULL)` passes `ctx` to `artifact_relaunch()`; `undo`/`redo` forward their `ctx`. |
 | 8 | minor | Task 10 `artifact_list()` | `artifact.json` is committed, so one unreadable file (merge conflict, hand edit) made `artifact_handle()` abort and `gptr_artifacts()` fail for every artifact. | applied | Unreadable files are skipped and named in the listing footer (`new_listing(footer =)`); the listing test plants a conflicted file (+1). |
 | 9 | minor | Expected summaries of Tasks 4, 6-11 and Plan acceptance | The counts had to follow the added expectations. | applied | Re-measured per test in the review run: `test-artifact-app.R` 342 (Task 4 163, Task 6 184/170, Task 7 237/223, Task 8 252, Task 9 335 with the copy rows, Task 11 342), `test-artifact-registry.R` 105, totals 449 (435 without Chrome). |
-| 10 | minor | Task 7 `artifact_relaunch()` in `artifact-app.R` | 03 §3.2 lists "relaunch" under `artifact-registry.R`. | rejected | Both files are P23's own area; the user-facing relaunch `gptr_artifacts(version =)` lives in `artifact-registry.R`, while the helper sits next to `artifact_start()` that it wraps and is needed by Tasks 8-9 before Task 10; moving it adds churn without changing behaviour. |
+| 10 | minor | Task 7 `artifact_relaunch()` in `artifact-app.R` | 03 section 3.2 lists "relaunch" under `artifact-registry.R`. | rejected | Both files are P23's own area; the user-facing relaunch `gptr_artifacts(version =)` lives in `artifact-registry.R`, while the helper sits next to `artifact_start()` that it wraps and is needed by Tasks 8-9 before Task 10; moving it adds churn without changing behaviour. |
 | 11 | minor | Task 1 `artifact_reserved` | Duplicates P01's `reserved_name()`. | rejected | P01's helper is not in 04 (not a consumable contract), and ids cannot contain `.`, so the exact list is equivalent. |
-| 12 | minor | Task 2 `artifact_ends_with_app()` | `app = shinyApp(ui, server); app` is valid Shiny but is refused. | rejected | 03 §6.15 specifies "ends with `shinyApp()`" (report 17's ladder too); the message tells the model the one-line fix. |
-| 13 | minor | Task 9, user calls at an interactive console | The NS-8 line appears twice (P14's hook on `artifact_start` and the autoprinted handle). | rejected | Both are contract behaviour (04 §5.10 print, 04 §7.14 renderer); only at an interactive console. |
+| 12 | minor | Task 2 `artifact_ends_with_app()` | `app = shinyApp(ui, server); app` is valid Shiny but is refused. | rejected | 03 section 6.15 specifies "ends with `shinyApp()`" (report 17's ladder too); the message tells the model the one-line fix. |
+| 13 | minor | Task 9, user calls at an interactive console | The NS-8 line appears twice (P14's hook on `artifact_start` and the autoprinted handle). | rejected | Both are contract behaviour (04 section 5.10 print, 04 section 7.14 renderer); only at an interactive console. |
 | 14 | major (cross-plan) | P01 `expect_no_copy()` used by `test-copy-artifact.R` | The helper's `Rscript` child inherits `R_TESTS=startup.Rs` under `R CMD check` and halts, so every copy row fails under `devtools::check()`. | rejected (not P23's file) | Recorded with the suggested P01 change as Self-review ambiguity 16. |
-| 15 | minor (cross-plan) | P11 risk table, `gptr_artifacts` at level 0 | `gptr_artifacts(id, version =)` and `open = TRUE` from model code relaunch model-written code (level 3 for `peter$app()`). | rejected (not P23's file) | 04 §7.23 fixes what `builtin_artifacts()` registers; recorded as Self-review ambiguity 15 with the suggested P11 change. |
+| 15 | minor (cross-plan) | P11 risk table, `gptr_artifacts` at level 0 | `gptr_artifacts(id, version =)` and `open = TRUE` from model code relaunch model-written code (level 3 for `peter$app()`). | rejected (not P23's file) | 04 section 7.23 fixes what `builtin_artifacts()` registers; recorded as Self-review ambiguity 15 with the suggested P11 change. |
 | 16 | minor | Task 12 baseline figures | Checked rather than assumed. | no change | rtiktoken o200k counts re-measured in the review: `SKILL.md` 582, the section 116 (124 with tags), results 582 / 14 / 111, answer 122; the fixture is valid JSON, ASCII, and its `read` result equals `SKILL.md`. |
 
 ## Cross-plan consolidation log
 
-Cross-plan consistency pass of 2026-10-01 against 04 (with §15), 03 §3.2 and §9, 05 (P23 dependencies P10, P11, P14, P16 and their closure P01-P11, P14-P16), P01, P10 and P17. After the changes every R block of this plan was re-extracted and parsed with `Rscript --vanilla` (no left-arrow assignment, no `%>%` in code), and Task 11's new frontmatter read was run with yaml 2.3.12 on this plan's `SKILL.md` (name and catalog line as expected).
+Cross-plan consistency pass of 2026-10-01 against 04 (with section 15), 03 sections 3.2 and 9, 05
+(P23 dependencies P10, P11, P14, P16 and their closure P01-P11, P14-P16), P01, P10 and P17. After
+the changes every R block of this plan was re-extracted and parsed with `Rscript --vanilla` (no
+left-arrow assignment, no `%>%` in code), and Task 11's new frontmatter read was run with yaml
+2.3.12 on this plan's `SKILL.md` (name and catalog line as expected).
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| 1 | interfaces | minor | Task 11 skill test and its Consumes line; Interfaces consumed (P17) | applied | P17 is outside P23's 05 dependency closure (P10, P11, P14, P16 reach P01-P11 and P14-P16, not P17), so the test no longer calls `skill_parse()`: it reads the frontmatter between the first two `---` lines with `yaml::yaml.load()` (yaml is an Import, 03 §9) and keeps the same expectations, so every count is unchanged (`artifact-app` 342). Task 11 Consumes and the Interfaces-consumed list now name yaml and say no P17 function is called; Task 11 Step 4 notes that P17's `skill-discover` suite is a regression cross-check only. The Self-review's "Executed validation" entries keep their historical mention of a `skill_parse()` stand-in, which the rebuilt test no longer needs. |
-| 2 | shared-names | minor | Task 4 `artifact_child_env()` / `artifact_serve()`; Global Constraints | applied | No code change (04 §7.23's `artifact_serve(dir, port_file, parent_pid, token)` stays as written). Global Constraints now record `GPTR_ARTIFACT_PORTS` as a child-only variable beside 04 §3.2's `GPTR_MCP_TOKEN`, `GPTR_SUBAGENT_DEPTH` and `GPTR_WORKER`: set by `artifact_child_env()` only in the artifact child, read only by `artifact_serve()`, never set or read in the user's session. 04 §3.2 does not list it, and 04 §7.23 leaves open how the parent's `port_candidates()` reach the self-contained child, so this records a gap rather than deviating from 04. Task 4's existing child-environment test already asserts its value (`"50001,50002"`). |
+| 1 | interfaces | minor | Task 11 skill test and its Consumes line; Interfaces consumed (P17) | applied | P17 is outside P23's 05 dependency closure (P10, P11, P14, P16 reach P01-P11 and P14-P16, not P17), so the test no longer calls `skill_parse()`: it reads the frontmatter between the first two `---` lines with `yaml::yaml.load()` (yaml is an Import, 03 section 9) and keeps the same expectations, so every count is unchanged (`artifact-app` 342). Task 11 Consumes and the Interfaces-consumed list now name yaml and say no P17 function is called; Task 11 Step 4 notes that P17's `skill-discover` suite is a regression cross-check only. The Self-review's "Executed validation" entries keep their historical mention of a `skill_parse()` stand-in, which the rebuilt test no longer needs. |
+| 2 | shared-names | minor | Task 4 `artifact_child_env()` / `artifact_serve()`; Global Constraints | applied | No code change (04 section 7.23's `artifact_serve(dir, port_file, parent_pid, token)` stays as written). Global Constraints now record `GPTR_ARTIFACT_PORTS` as a child-only variable beside 04 section 3.2's `GPTR_MCP_TOKEN`, `GPTR_SUBAGENT_DEPTH` and `GPTR_WORKER`: set by `artifact_child_env()` only in the artifact child, read only by `artifact_serve()`, never set or read in the user's session. 04 section 3.2 does not list it, and 04 section 7.23 leaves open how the parent's `port_candidates()` reach the self-contained child, so this records a gap rather than deviating from 04. Task 4's existing child-environment test already asserts its value (`"50001,50002"`). |
 | 3 | trace | minor | Plan acceptance, layering and lint command | applied | `arch\|lint` also matched P10's `test-tool-search.R` (`search` contains `arch`). The command is now `Rscript --vanilla -e 'devtools::test(filter = "^(arch-layers\|lint-rules)$")'`, the anchored form P06 and P13 use, and the expected text names the two P01 files. |
 | F1 | finalize | minor | Task 9 test "a second peter$app() after an edit creates v002 without touching v001" (`object_name_linter` on `assign("a/b", 1:3)`, the only P23 row of the consolidation lint run) | applied | The object name `a/b` is fixed by 05 P23 acceptance 5 ("a data object named `a/b` snapshots as `data/001.rds`") and is what the test checks (`data/002.rds` in the version directory, the `name` field of the version's `data` records), so it cannot be renamed; the line now carries `# nolint: object_name_linter. 05 P23 acceptance 5 names the object a/b.` (P08's precedent for a binding name fixed outside the plan). No other code changed and every test count is unchanged. With P01's linters (`object_usage_linter = NULL`, `indentation_linter = NULL`) the 22 R blocks of the plan now give 0 lints; every R block was re-extracted and parses with `Rscript --vanilla` (no left-arrow assignment, no `%>%`, ASCII, lines <= 100 characters). |

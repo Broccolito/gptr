@@ -74,8 +74,8 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   app) or gptr worker processes are skipped, and the suite needs no network. To keep the check
   short, `tests/testthat.R` runs on CRAN a fixed list of 35 test files (the permission,
   redaction and secret tests and files that reach all but 10 of the R files) without their
-  slowest blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take 14 s here
-  (`Running 'testthat.R' [13s/14s]` in the local check). Live provider tests run only when
+  slowest blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take 13 s here
+  (`Running 'testthat.R' [12s/13s]` in the local check). Live provider tests run only when
   `GPTR_LIVE_TESTS` is `"true"`.
 * The 14 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
   the tarball); the shipped `.Rmd` files contain no code chunks, so building them runs no code.
@@ -91,8 +91,8 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   (`NOT_CRAN=false`, CRAN's timing thresholds), each failing on any NOTE and over its time
   budget: Ubuntu R-devel (480 s) and Windows release with both manuals (600 s).
 * R-hub: Windows R-devel and R-release, and Ubuntu R-devel with gcc 12.
-* win-builder: R-devel (2026-10-20 r90728), R-release (4.6.1) and R-oldrelease (4.5.3); the
-  whole check took 524 s, 477 s and 684 s.
+* win-builder: R-devel (2026-10-24 r90762), R-release (4.6.1) and R-oldrelease (4.5.3); the
+  whole check took 525 s, 516 s and 366 s.
 
 ## R CMD check results
 

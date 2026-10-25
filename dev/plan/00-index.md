@@ -27,24 +27,24 @@ Quick start:
 |---|---|---|
 | 1 | `CLAUDE.md` (repository root) | non-negotiable rules: `=` and `\|>`, `Rscript --vanilla`, no R LLM packages, offline tests, key hygiene |
 | 2 | `dev/plan/00-conventions.md` | Global Constraints of every plan: commands, layout, style, errors, JSON, tests, dependencies, commits |
-| 3 | `dev/spec/03-architecture.md` | layers, file ownership (§3.2), mechanisms, dependencies (§9), risks (§13) |
-| 4 | `dev/spec/04-interface-contract.md` | every export, internal interface, class, option and file format; **§15 (IC-32..IC-73) wins over earlier sections** |
+| 3 | `dev/spec/03-architecture.md` | layers, file ownership (section 3.2), mechanisms, dependencies (section 9), risks (section 13) |
+| 4 | `dev/spec/04-interface-contract.md` | every export, internal interface, class, option and file format; **section 15 (IC-32..IC-73) wins over earlier sections** |
 | 5 | `dev/spec/05-plan-decomposition.md` | scope, dependencies and acceptance checks of each plan; the milestone table |
 | 6 | `dev/plan/Pxx-*.md` | the plan you implement: Global Constraints, File Structure, Tasks, Plan acceptance |
 
-Authority when texts disagree: 04 (§15 first) > 03 > 05 > plans. `00-conventions.md` wins over a
-plan unless the plan names the exception. Reference while working: `dev/spec/02-north-star-examples.md`
-(NS-1..NS-12, the end-to-end shapes the tests name) and `dev/spec/06-review-resolution.md` (origin of
-IC-32..IC-73).
+Authority when texts disagree: 04 (section 15 first) > 03 > 05 > plans. `00-conventions.md` wins
+over a plan unless the plan names the exception. Reference while working:
+`dev/spec/02-north-star-examples.md` (NS-1..NS-12, the end-to-end shapes the tests name) and
+`dev/spec/06-review-resolution.md` (origin of IC-32..IC-73).
 
-Research lives in `dev/research/`: start with `README.md` and `00-digest.md`; open a full report only
-for the exact section a plan cites. **A report's Verification log overrides its body.** Prototype code
-in reports may use `<-`; convert it to the house style when copying.
+Research lives in `dev/research/`: start with `README.md` and `00-digest.md`; open a full report
+only for the exact section a plan cites. **A report's Verification log overrides its body.**
+Prototype code in reports may use `<-`; convert it to the house style when copying.
 
 ## 2. Preflight (one time)
 
 Installing anything needs the maintainer's approval. Plan steps never install packages: when a
-tool is missing, the step stops for the maintainer (conventions §1).
+tool is missing, the step stops for the maintainer (conventions section 1).
 
 | Item | State on the development machine (checked 2026-10-01) | Action |
 |---|---|---|
@@ -78,9 +78,9 @@ Other one-time facts:
   implemented. Never print, log, copy or commit them. Preserve the Git and R build exclusions.
 - **Old `.Rprofile`.** It sources a missing `renv/activate.R`; P01 Task 1 deletes it. Until then,
   always run `Rscript --vanilla`.
-- **Git.** Work on a feature branch (`gptr-1.0`) off `main`. One commit per task with the message the
-  plan gives, adding only the files the task lists (conventions §10). Never commit `.env` files
-  (P01's `.gitignore` adds `.env` and `*.env`). Tag each milestone after its gate, for example
+- **Git.** Work on a feature branch (`gptr-1.0`) off `main`. One commit per task with the message
+  the plan gives, adding only the files the task lists (conventions section 10). Never commit `.env`
+  files (P01's `.gitignore` adds `.env` and `*.env`). Tag each milestone after its gate, for example
   `git tag -a gptr-1.0-m0 -m "M0 gate passed"`. Pushing, opening a pull request and pushing tags
   leave this machine: ask the maintainer first.
 - **Versioned design files.** `dev/` and `CLAUDE.md` were committed on `gptr-1.0` and consolidated
@@ -282,7 +282,7 @@ provider key unless `GPTR_LIVE_TESTS=true`, and sets `GPTR_REPLAY=replay`.
 | `test-live-anthropic.R`, `test-live-openai.R`, `test-live-google.R` | P12 Task 10 | `GPTR_LIVE_TESTS=true` plus `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` or `GOOGLE_API_KEY` | paid; `GPTR_LIVE_TESTS=true Rscript --vanilla -e 'devtools::test(filter = "^live-(anthropic\|openai\|google)$")'`; skipped: `SKIP 3` |
 | `test-live-jev.R` | P13 Task 12 | `GPTR_LIVE_TESTS=true` | reads the Jev key file through `gptr_env()` (default path above; override `GPTR_JEV_KEY_FILE`); under one cent; `PASS 14` |
 | `test-live-cli.R` | P20 Task 11 | `GPTR_LIVE_TESTS=true GPTR_LIVE_HOME="$HOME"` | spends plan quota; needs signed-in `claude` and `codex` (setup.R moves `HOME`); `PASS 7`, skipped: `SKIP 2` |
-| All live files at once | conventions §2 | `GPTR_LIVE_TESTS=true Rscript --vanilla -e 'devtools::test(filter = "live")'` | also selects P06's `test-session-live.R` (offline, harmless) |
+| All live files at once | conventions section 2 | `GPTR_LIVE_TESTS=true Rscript --vanilla -e 'devtools::test(filter = "live")'` | also selects P06's `test-session-live.R` (offline, harmless) |
 | INFRA-03 (real SIGINTs into an interactive R child) | P14 Task 7 | `CI=true` | Linux and macOS; skipped elsewhere |
 | Quarto record and replay | P15 Task 18 | `quarto` on `PATH` | `SKIP 1` without it |
 | Worker legs (INFRA-16, NS-6) | P19, P20 Task 10 | the version under test installed | run under `devtools::check()`; skip under `devtools::test()` otherwise |
@@ -295,8 +295,8 @@ The benchmark tree `dev/bench/` (P07's `tokens/` runner, P24's suites; see `dev/
 once P24 writes it) needs:
 
 - **rtiktoken** (o200k counts) and **pkgload**; runners exit 0 on pass, 1 on a regression or error,
-  2 when a tool is missing. Run the token runner with `env -u TYPESAFE_API_KEY`: the golden rows were
-  recorded without a System 1 key (a key adds the `system1` prompt section, about 130 tokens).
+  2 when a tool is missing. Run the token runner with `env -u TYPESAFE_API_KEY`: the golden rows
+  were recorded without a System 1 key (a key adds the `system1` prompt section, about 130 tokens).
 - **Shiny ladder** (`dev/bench/shiny-html/`): shiny, bslib, plotly, DT, httpuv, chromote and Chrome
   or Edge.
 - **Polyglot baseline** (`dev/bench/polyglot/run.R --update`, recorded on the maintainer's machine):
@@ -310,15 +310,15 @@ once P24 writes it) needs:
 
 | Item | Status | Pointer |
 |---|---|---|
-| Claude-plan route vs Anthropic's terms | policy UNCERTAIN; ships experimental and opt-in with a one-time notice; ask Anthropic before advertising it | 01 D-15, 03 §13, research 07 §2.18, P20 |
-| `{gptr}` knitr chunk engine | deferred; maintainer decision pending; v1 uses `peter("...")` in R chunks with `knit_print` | 03 §1.3, research 14 §4.6 |
-| Sign in with ChatGPT; Codex app-server | deferred to v1.x plugins; v1 uses `codex exec --json` | 03 §1.3, research 08 |
-| Other v1.x deferrals | nested-call cassettes, `apply_patch` tool, fork backend and mirai, Bedrock/Vertex/Copilot, provider-native compaction, Claude plugin hooks and `.codex` agents, file-inbox steering | 03 §1.3 |
-| Windows | untested locally; relies on CI (Windows release and oldrel-4) and win-builder; some process tests skip on Windows; the Codex Windows sandbox probe is UNCERTAIN; worker stdin polling verified on macOS only | 03 §13, P20 ambiguity 9, P19 ambiguity 23(d), P25 Task 15 |
-| Interactive front ends | pause menu, background pumping and readline unverified in RStudio, Positron, Jupyter, Rgui and Windows consoles; run the manual checks and record results in P21's support matrix | 03 §13, P14 and P21 "Manual check" |
+| Claude-plan route vs Anthropic's terms | policy UNCERTAIN; ships experimental and opt-in with a one-time notice; ask Anthropic before advertising it | 01 D-15, 03 section 13, research 07 section 2.18, P20 |
+| `{gptr}` knitr chunk engine | deferred; maintainer decision pending; v1 uses `peter("...")` in R chunks with `knit_print` | 03 section 1.3, research 14 section 4.6 |
+| Sign in with ChatGPT; Codex app-server | deferred to v1.x plugins; v1 uses `codex exec --json` | 03 section 1.3, research 08 |
+| Other v1.x deferrals | nested-call cassettes, `apply_patch` tool, fork backend and mirai, Bedrock/Vertex/Copilot, provider-native compaction, Claude plugin hooks and `.codex` agents, file-inbox steering | 03 section 1.3 |
+| Windows | untested locally; relies on CI (Windows release and oldrel-4) and win-builder; some process tests skip on Windows; the Codex Windows sandbox probe is UNCERTAIN; worker stdin polling verified on macOS only | 03 section 13, P20 ambiguity 9, P19 ambiguity 23(d), P25 Task 15 |
+| Interactive front ends | pause menu, background pumping and readline unverified in RStudio, Positron, Jupyter, Rgui and Windows consoles; run the manual checks and record results in P21's support matrix | 03 section 13, P14 and P21 "Manual check" |
 | CI trigger | the workflow runs on pushes to `main` and on pull requests; P04's M0 step and P25 Task 15 Step 6 say "push the branch", which alone starts no run: open a draft PR | P01 Task 21 |
-| Spec additions for 04's next revision | `gptr_warning_cli_sandbox` (§2.2); child-only `GPTR_ARTIFACT_PORTS` and test-only `GPTR_LIVE_HOME`, `GPTR_JEV_KEY_FILE` (§3.2); `secret_live_entries_set()` (§7.3); `write_close()` (§7.4); MCP tool `output_schema` and handle `token` (§7.18, §5.11); artifact `run.json` fields `create_time`, `parent_pid`, `parent_create_time` (§11.6) | P20 amb. 4 and 16, P23 Global Constraints and amb. 8, P13 Task 12, P03 A1, P06 amb. 20, P04 amb. 10, P18 amb. 3 and 8 |
-| 04 text to correct | `\dontrun{}` for `gptr_login`/`gptr_mcp_add`/`gptr_mcp_serve` (the plans use `@examplesIf` and offline examples); `gptr.checkpoint_rng` defers to a `.Random.seed` restore that IC-61 forbids; `cli_version()`/`cli_probe()` collide with the §12.3 `cli_*()` lint rule (implemented as `pcli_*` with aliases) | P25 amb. 2 and 7, P18 amb. 6, P20 amb. 22 |
+| Spec additions for 04's next revision | `gptr_warning_cli_sandbox` (section 2.2); child-only `GPTR_ARTIFACT_PORTS` and test-only `GPTR_LIVE_HOME`, `GPTR_JEV_KEY_FILE` (section 3.2); `secret_live_entries_set()` (section 7.3); `write_close()` (section 7.4); MCP tool `output_schema` and handle `token` (sections 7.18, 5.11); artifact `run.json` fields `create_time`, `parent_pid`, `parent_create_time` (section 11.6) | P20 amb. 4 and 16, P23 Global Constraints and amb. 8, P13 Task 12, P03 A1, P06 amb. 20, P04 amb. 10, P18 amb. 3 and 8 |
+| 04 text to correct | `\dontrun{}` for `gptr_login`/`gptr_mcp_add`/`gptr_mcp_serve` (the plans use `@examplesIf` and offline examples); `gptr.checkpoint_rng` defers to a `.Random.seed` restore that IC-61 forbids; `cli_version()`/`cli_probe()` collide with the section 12.3 `cli_*()` lint rule (implemented as `pcli_*` with aliases) | P25 amb. 2 and 7, P18 amb. 6, P20 amb. 22 |
 | Contract readings | every plan records the reading it implemented where 04 is silent or ambiguous: "Contract ambiguities" in the Self-review of P02-P09, P11-P16, P18-P25 (about 470 items); P01, P10, P17 under "Type and name consistency with 04" | each plan's Self-review |
 | Plugin document formats | `gptr_doc()` binds only `.R`, `.Rmd`, `.qmd`, `.ipynb`, so a plugin `doc_format` works only by shadowing a built-in name | P24 amb. 22 |
 | Token benchmark | the whole `run.R` cannot meet the 5 s bound with rtiktoken (needs a persistent memo in P07's `bench_counter()`); the machine-dependent `<r_env>` section can make a baseline recorded on the maintainer's Mac fail on another machine (CI `bench` job) | P24 amb. 1 and its Executed validation |
@@ -333,6 +333,6 @@ once P24 writes it) needs:
 | Research reports 01-21, G1-G7 | `dev/research/` (`README.md` index, `00-digest.md` summaries; each report ends with its Verification log) |
 | Prototypes and measurement scripts | `dev/research/assets/` (`G2/` benchmark apps and scripts, `design-final/`, `design-review-resolution/`, `lead/`; `assets/README.md`); `consolidation-lint-results.csv` (plan-code lint run of 2026-10-01) |
 | Design decisions | `dev/spec/00-vision-brief.md`, `01-decision-register.md` ("Final decisions"), `dev/spec/proposals/` (P-A, P-B, P-C skeletons) |
-| Review of the design | `dev/spec/06-review-resolution.md`; contract §13 (reconciliation) and §15 (IC-32..IC-73); 03 Appendix A (checks) and B (judges' grafts) |
+| Review of the design | `dev/spec/06-review-resolution.md`; contract sections 13 (reconciliation) and 15 (IC-32..IC-73); 03 Appendix A (checks) and B (judges' grafts) |
 | Per-plan evidence | each plan's Self-review (spec coverage, contract ambiguities, executed validation), "Plan review log" (adversarial review) and "Cross-plan consolidation log" (2026-10-01); every log row has a verdict (applied, rejected or no change) |
 | Benchmarks and release tooling | `dev/bench/` (P07, P24) and `dev/release/` (P25), created during implementation |

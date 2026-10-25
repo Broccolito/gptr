@@ -9,15 +9,36 @@
 > reconcile the affected steps before implementation. No implementation has
 > been performed as part of this design update.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship gptr's four native wire adapters (`anthropic-messages`, `openai-responses`, `openai-completions`, `google-generative-ai`) with byte-exact replay of opaque provider data, request bodies driven by the cache plans of `prompt-cache.R`, `.opts$returns` support and a fixture-replay conformance check (REQ-11).
+**Goal:** Ship gptr's four native wire adapters (`anthropic-messages`, `openai-responses`,
+`openai-completions`, `google-generative-ai`) with byte-exact replay of opaque provider data,
+request bodies driven by the cache plans of `prompt-cache.R`, `.opts$returns` support and a
+fixture-replay conformance check (REQ-11).
 
-**Architecture:** Four L1 files. `R/provider-anthropic.R` holds the normaliser core every adapter shares (per-stream state, linear delta buffers, the INFRA-02 events with exactly one `start` and one terminal event, the retry hand-off), the Anthropic normaliser and request builder, and `check_adapter()` (the `check.adapter` service behind `gptr_check()`), which replays `tests/testthat/fixtures/sse/<api>/` whole, byte by byte and in deterministic pseudo-random chunkings against hand-written golden files; the three other files hold one adapter each (`compat_flags()` and the streaming `<think>` splitter live with Chat Completions). Each file registers its adapter from its own `builtin_<name>()` through `on_load(ext_declare_builtin())`; P05's `provider_stream()` drives the adapters on P04's reactor, and every request body is a concatenation of JSON pieces serialised once per session through `opts$memo`, so the frozen prefix stays byte-identical across turns.
+**Architecture:** Four L1 files. `R/provider-anthropic.R` holds the normaliser core every adapter
+shares (per-stream state, linear delta buffers, the INFRA-02 events with exactly one `start` and one
+terminal event, the retry hand-off), the Anthropic normaliser and request builder, and
+`check_adapter()` (the `check.adapter` service behind `gptr_check()`), which replays
+`tests/testthat/fixtures/sse/<api>/` whole, byte by byte and in deterministic pseudo-random
+chunkings against hand-written golden files; the three other files hold one adapter each
+(`compat_flags()` and the streaming `<think>` splitter live with Chat Completions). Each file
+registers its adapter from its own `builtin_<name>()` through `on_load(ext_declare_builtin())`;
+P05's `provider_stream()` drives the adapters on P04's reactor, and every request body is a
+concatenation of JSON pieces serialised once per session through `opts$memo`, so the frozen prefix
+stays byte-identical across turns.
 
-**Tech Stack:** base R (>= 4.2.0); jsonlite, cli and rlang only through P01's `json_encode()`/`json_decode()`, `hash_sha256()` and `hash_xxh128()`; testthat 3e; withr and processx in tests only (processx through P01's mock server).
+**Tech Stack:** base R (>= 4.2.0); jsonlite, cli and rlang only through P01's
+`json_encode()`/`json_decode()`, `hash_sha256()` and `hash_xxh128()`; testthat 3e; withr and
+processx in tests only (processx through P01's mock server).
 
-**Spec:** dev/spec/03-architecture.md (sections 3.2 rows `provider-*.R`, 3.4, 6.1, 6.3, 6.5, 6.6, 6.11, 6.18 rows INFRA-02/07/08/23/25, 8.1, 12.3), dev/spec/04-interface-contract.md (sections 2.2, 4.1-4.5, 4.9, 5.9, 5.11, 7.0 `check.adapter`, 7.1, 7.5, 7.12, 8.1-8.4, 10.2 rows 1-2, 10.3, 10.4 `request_params`, 12.2-12.4, 15: IC-33, IC-34, IC-35, IC-61, IC-62, IC-64, IC-67, IC-69, IC-71, IC-72), dev/spec/05-plan-decomposition.md (P12).
+**Spec:** dev/spec/03-architecture.md (sections 3.2 rows `provider-*.R`, 3.4, 6.1, 6.3, 6.5, 6.6,
+6.11, 6.18 rows INFRA-02/07/08/23/25, 8.1, 12.3), dev/spec/04-interface-contract.md (sections 2.2,
+4.1-4.5, 4.9, 5.9, 5.11, 7.0 `check.adapter`, 7.1, 7.5, 7.12, 8.1-8.4, 10.2 rows 1-2, 10.3, 10.4
+`request_params`, 12.2-12.4, 15: IC-33, IC-34, IC-35, IC-61, IC-62, IC-64, IC-67, IC-69, IC-71,
+IC-72), dev/spec/05-plan-decomposition.md (P12).
 
 **Depends on:** P05, P07 (and P01-P04 through them; the INFRA-25 run test also uses P06's `session_run()`, which P07 already requires). **Milestone:** M2.
 
@@ -25,17 +46,74 @@
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment and `|>` for pipes (never `<-` or `%>%`; `<<-` only for closure state), ASCII-only R sources (non-ASCII text written as backslash-u escapes), `pkg::fun()` calls, no `:::` in `R/`, no `.GlobalEnv`, `readLines(..., encoding = "UTF-8")`, testthat 3e, no network in tests, TDD, one commit per task whose message ends with the attribution line required by the executing harness (conventions section 10). Plan-specific requirements, copied from the specification:
+`dev/plan/00-conventions.md` applies in full: `=` for assignment and `|>` for pipes (never `<-` or
+`%>%`; `<<-` only for closure state), ASCII-only R sources (non-ASCII text written as backslash-u
+escapes), `pkg::fun()` calls, no `:::` in `R/`, no `.GlobalEnv`,
+`readLines(..., encoding = "UTF-8")`, testthat 3e, no network in tests, TDD, one commit per task
+whose message ends with the attribution line required by the executing harness (conventions
+section 10). Plan-specific requirements, copied from the specification:
 
-- Owned files (05 P12): `R/provider-anthropic.R`, `R/provider-openai-responses.R`, `R/provider-openai-completions.R`, `R/provider-google.R`; `tests/testthat/test-provider-anthropic.R`, `tests/testthat/test-provider-openai-responses.R`, `tests/testthat/test-provider-openai-completions.R`, `tests/testthat/test-provider-google.R`; `tests/testthat/fixtures/sse/` (here: the generator `make_fixtures.R`, the shared test helpers `replay_helpers.R` and the generated `<api>/<case>.sse`, `.events.json`, `.message.json`, `model.json`); `tests/testthat/test-live-anthropic.R`, `tests/testthat/test-live-openai.R`, `tests/testthat/test-live-google.R`. P12 exports nothing (every function is `@noRd`), so `NAMESPACE` and `man/` do not change.
-- Built-ins (04 section 10.3): `builtin:anthropic`, `builtin:openai`, `builtin:openai-compat`, `builtin:google` ("P12 files | adapters | yes"), each declared at the top level of its own file as `on_load(ext_declare_builtin("<name>", builtin_<name>))` with the factories `builtin_anthropic`, `builtin_openai`, `builtin_openai_compat`, `builtin_google` (04 section 7.12).
-- Cross-plan functions (04 section 7.12), exact names and arguments: `anthropic_normaliser(model, opts)` -> "the Anthropic SSE normaliser (`push(ev)`, `finish()`, `fail(cnd)`, `message()`), accepting either SSE events or already-parsed stream-event objects (`push_parsed(obj)`)" (consumer P20); `check_adapter(adapter, fixtures = NULL)` (service `check.adapter`, signature `function(adapter, fixtures = NULL) <gptr_check>`, 04 section 7.0) -> "replays `fixtures/sse/<api>/*.sse` (or `fixtures`) through the adapter with random chunkings and compares with `<case>.events.json` / `<case>.message.json`; returns `gptr_check` rows" (consumers P02 `gptr_check()`, P24); `compat_flags(provider, model)` -> "the compat record of 09 section 3 (field names, `max_tokens` vs `max_completion_tokens`, `reasoning_content` replay, tool-id length, image modes)".
-- Adapter specs (04 section 8.1, IC-35): `gptr_adapter(api, transport = c(...), build = NULL, parse = NULL, stream = NULL, classify = NULL, capabilities = list())`; all four adapters use `transport = "http_sse"`. `build(model, context, opts)` returns `list(url = chr(1), method = "POST", headers = named list of chr(1) or handles, body = chr(1) (UTF-8 JSON text assembled by concatenation of memoised pieces), stream = "sse")`; `parse(model, opts)` returns a normaliser `list(push, finish, fail, message)`.
-- Request context (04 section 8.1, built by P07's `request_build()`): `system = list(t0, t1)`, `tools_json` (json_verbatim, Anthropic shape of 04 section 9.2, "adapters convert it once per session and keep the conversion in `opts$memo`"), `tools`, `messages`, `cache_plan = list(anchors = chr element ids ("t0", "project"), tail_ttl = "5m" | "1h", key = chr(1))`, `params = list(max_tokens, thinking, effort, tool_choice = "auto" | "none" | list, returns = JSON Schema | NULL, temperature)`, `session_id`, `request_id`.
-- Options read by the adapters (04 section 8.1): `emit(ev)`, `retry(info)` with `info = list(class, status, retry_after)` ("The transport retries only if no delta was committed; otherwise it calls `fail()`"), `signal` (environment with `aborted`, `reason`), `credential` (a `gptr_secret` handle "adapters put it in `headers` as a handle, never as a value"), `base_url`, `memo` (environment). Adapters never call L2+ functions (IC-33).
-- Normalisers (04 section 8.1): `push(ev)` takes `list(event, data, id)` and returns `TRUE` once the terminal event was emitted; `finish()` emits the terminal event if not yet emitted ("`done`, or `error` for a truncated stream") and returns the final message; `fail(cnd)` "emits `error` with the partial message and returns it"; `message()` is "materialised lazily; never per delta". "Normalisers never signal R conditions after `start`; every failure becomes exactly one terminal `error` event carrying the partial message (INFRA-02). Opaque provider data (signatures, encrypted reasoning, `phase`, thought signatures) is stored byte for byte (INFRA-07). Deltas accumulate in preallocated lists joined once."
-- Events (04 section 4.5): `start` (`api`, `provider`, `model`, `request_id`, `response_id`) exactly once and first; `text_start`/`text_delta`/`text_end`, `thinking_start`/`thinking_delta`/`thinking_end` (`index`; `delta`; `block`); `toolcall_start` (`index`, `id`, `name`), `toolcall_delta` (`delta`, `preview` throttled to 10 Hz by `json-partial.R`), `toolcall_end` (`block`); `done` (`reason`, `message`, `usage`); `error` (`reason` `"error"` or `"aborted"`, `message`, `error = list(class, status, request_id, retry_after)`). `index` is 1-based. Every event is built with `ev_new()`.
-- Capabilities (04 section 8.1, IC-69, IC-71): `images_in_results`, `tool_addition`, `structured_output`, `reasoning_replay`, `parallel_tools`, `forced_tool_choice` ("`FALSE` for Anthropic 5.x models"), `request_params` ("non-prefix request fields a `request_params` handler may patch"), `operator_role` (`"system"`, `"developer"`, `"user"`), `cache` (`"anthropic"`, `"openai"`, `"gemini"`, `"openrouter"`, `"none"`), `max_tool_name`, `tool_shape` (`"anthropic"`, `"responses"`, `"chat"`, `"gemini"`). Values used here:
+- Owned files (05 P12): `R/provider-anthropic.R`, `R/provider-openai-responses.R`,
+  `R/provider-openai-completions.R`, `R/provider-google.R`;
+  `tests/testthat/test-provider-anthropic.R`, `tests/testthat/test-provider-openai-responses.R`,
+  `tests/testthat/test-provider-openai-completions.R`, `tests/testthat/test-provider-google.R`;
+  `tests/testthat/fixtures/sse/` (here: the generator `make_fixtures.R`, the shared test helpers
+  `replay_helpers.R` and the generated `<api>/<case>.sse`, `.events.json`, `.message.json`,
+  `model.json`); `tests/testthat/test-live-anthropic.R`, `tests/testthat/test-live-openai.R`,
+  `tests/testthat/test-live-google.R`. P12 exports nothing (every function is `@noRd`), so
+  `NAMESPACE` and `man/` do not change.
+- Built-ins (04 section 10.3): `builtin:anthropic`, `builtin:openai`, `builtin:openai-compat`,
+  `builtin:google` ("P12 files | adapters | yes"), each declared at the top level of its own file as
+  `on_load(ext_declare_builtin("<name>", builtin_<name>))` with the factories `builtin_anthropic`,
+  `builtin_openai`, `builtin_openai_compat`, `builtin_google` (04 section 7.12).
+- Cross-plan functions (04 section 7.12), exact names and arguments:
+  `anthropic_normaliser(model, opts)` -> "the Anthropic SSE normaliser (`push(ev)`, `finish()`,
+  `fail(cnd)`, `message()`), accepting either SSE events or already-parsed stream-event objects
+  (`push_parsed(obj)`)" (consumer P20); `check_adapter(adapter, fixtures = NULL)` (service
+  `check.adapter`, signature `function(adapter, fixtures = NULL) <gptr_check>`, 04 section 7.0) ->
+  "replays `fixtures/sse/<api>/*.sse` (or `fixtures`) through the adapter with random chunkings and
+  compares with `<case>.events.json` / `<case>.message.json`; returns `gptr_check` rows" (consumers
+  P02 `gptr_check()`, P24); `compat_flags(provider, model)` -> "the compat record of 09 section 3
+  (field names, `max_tokens` vs `max_completion_tokens`, `reasoning_content` replay, tool-id length,
+  image modes)".
+- Adapter specs (04 section 8.1, IC-35):
+  `gptr_adapter(api, transport = c(...), build = NULL, parse = NULL, stream = NULL, classify = NULL, capabilities = list())`;
+  all four adapters use `transport = "http_sse"`. `build(model, context, opts)` returns
+  `list(url = chr(1), method = "POST", headers = named list of chr(1) or handles, body = chr(1) (UTF-8 JSON text assembled by concatenation of memoised pieces), stream = "sse")`;
+  `parse(model, opts)` returns a normaliser `list(push, finish, fail, message)`.
+- Request context (04 section 8.1, built by P07's `request_build()`): `system = list(t0, t1)`,
+  `tools_json` (json_verbatim, Anthropic shape of 04 section 9.2, "adapters convert it once per
+  session and keep the conversion in `opts$memo`"), `tools`, `messages`,
+  `cache_plan = list(anchors = chr element ids ("t0", "project"), tail_ttl = "5m" | "1h", key = chr(1))`,
+  `params = list(max_tokens, thinking, effort, tool_choice = "auto" | "none" | list, returns = JSON Schema | NULL, temperature)`,
+  `session_id`, `request_id`.
+- Options read by the adapters (04 section 8.1): `emit(ev)`, `retry(info)` with
+  `info = list(class, status, retry_after)` ("The transport retries only if no delta was committed;
+  otherwise it calls `fail()`"), `signal` (environment with `aborted`, `reason`), `credential` (a
+  `gptr_secret` handle "adapters put it in `headers` as a handle, never as a value"), `base_url`,
+  `memo` (environment). Adapters never call L2+ functions (IC-33).
+- Normalisers (04 section 8.1): `push(ev)` takes `list(event, data, id)` and returns `TRUE` once the
+  terminal event was emitted; `finish()` emits the terminal event if not yet emitted ("`done`, or
+  `error` for a truncated stream") and returns the final message; `fail(cnd)` "emits `error` with
+  the partial message and returns it"; `message()` is "materialised lazily; never per delta".
+  "Normalisers never signal R conditions after `start`; every failure becomes exactly one terminal
+  `error` event carrying the partial message (INFRA-02). Opaque provider data (signatures, encrypted
+  reasoning, `phase`, thought signatures) is stored byte for byte (INFRA-07). Deltas accumulate in
+  preallocated lists joined once."
+- Events (04 section 4.5): `start` (`api`, `provider`, `model`, `request_id`, `response_id`) exactly
+  once and first; `text_start`/`text_delta`/`text_end`,
+  `thinking_start`/`thinking_delta`/`thinking_end` (`index`; `delta`; `block`); `toolcall_start`
+  (`index`, `id`, `name`), `toolcall_delta` (`delta`, `preview` throttled to 10 Hz by
+  `json-partial.R`), `toolcall_end` (`block`); `done` (`reason`, `message`, `usage`); `error`
+  (`reason` `"error"` or `"aborted"`, `message`,
+  `error = list(class, status, request_id, retry_after)`). `index` is 1-based. Every event is built
+  with `ev_new()`.
+- Capabilities (04 section 8.1, IC-69, IC-71): `images_in_results`, `tool_addition`,
+  `structured_output`, `reasoning_replay`, `parallel_tools`, `forced_tool_choice` ("`FALSE` for
+  Anthropic 5.x models"), `request_params` ("non-prefix request fields a `request_params` handler
+  may patch"), `operator_role` (`"system"`, `"developer"`, `"user"`), `cache` (`"anthropic"`,
+  `"openai"`, `"gemini"`, `"openrouter"`, `"none"`), `max_tool_name`, `tool_shape` (`"anthropic"`,
+  `"responses"`, `"chat"`, `"gemini"`). Values used here:
 
   | Adapter | images_in_results | tool_addition | structured_output | forced_tool_choice | request_params | operator_role | cache | max_tool_name | tool_shape |
   |---|---|---|---|---|---|---|---|---|---|
@@ -44,21 +122,79 @@
   | `openai-completions` | FALSE | FALSE | FALSE | TRUE | `service_tier`, `metadata`, `user` | user | openrouter | 64 | chat |
   | `google-generative-ai` | TRUE | FALSE | FALSE | TRUE | `labels`, `service_tier` | user | gemini | 128 | gemini |
 
-  All four set `reasoning_replay = TRUE` and `parallel_tools = TRUE`. A model's own `capabilities$forced_tool_choice` (P05 catalog, IC-71) wins over the adapter's.
-- Forced tool choice and `returns` (IC-71): "model capability `forced_tool_choice` (`FALSE` for Anthropic 5.x); `returns =` uses `output_config.format` on Anthropic, elsewhere `auto` + instruction + validation; `gptr_check()` rejects adapters sending a list `tool_choice` when the capability is `FALSE`". Validation of the final answer is P06's `run_returns()`.
-- `request_params` (IC-69): "payload `params` limited to the fields the adapter declares non-prefix (`capabilities$request_params`, e.g. `service_tier`, `metadata`, `user`)"; an adapter copies exactly those fields of `context$params` into the body.
-- Caching (architecture section 6.11, G4 sections 3.7-3.8): Anthropic "BP1 end of T0 system block (1h), BP2 project block or T1 block (1h), automatic tail (5m default; 1h adaptive)" with body key order "model, max_tokens, stream, cache_control, thinking, tools, system, messages"; OpenAI Responses "model, store=false, stream, prompt_cache_key, prompt_cache_options, reasoning, tools, input", a developer message with "two `input_text` blocks, each `prompt_cache_breakpoint: {mode: explicit}`", the project block with an explicit breakpoint, `prompt_cache_options: {mode: "implicit"}`, `prompt_cache_key` = "`gptr:` + 12 hex of the project root hash (<= 64 chars)"; Gemini "systemInstruction, tools, generationConfig, contents" with implicit caching only; OpenAI-compatible "model, stream, stream_options, tools, messages", "OpenRouter: `session_id`; `cache_control` on the project block and system for anthropic/* and google/* models". Breakpoints follow `context$cache_plan$anchors`; the tail TTL follows `context$cache_plan$tail_ttl`.
-- Endpoints and credentials (architecture section 8.1; reports 07 section 2.2, 08 section 3.1, 09 section 3.1 and verification row 2): Anthropic `POST {base}/v1/messages` with `x-api-key` (or `Authorization: Bearer` plus `anthropic-beta: oauth-2025-04-20` for an `ANTHROPIC_AUTH_TOKEN` handle; "never sends both") and `anthropic-version: 2023-06-01`; OpenAI `POST {base}/responses` with `Authorization: Bearer` and a unique `x-client-request-id` per request; Chat Completions `POST {base}/chat/completions` with `Authorization: Bearer` (Azure: `api-key`); Gemini `POST {base}/models/{id}:streamGenerateContent?alt=sse` with the key in `x-goog-api-key` (never in the URL). Headers hold handles (or `list(prefix, handle)`); only P04's `http-request.R` materialises them.
-- Anthropic betas (reports 07 section 3.8, G4 sections 2.3 and 3.7): `interleaved-thinking-2025-05-14` for budget-thinking models, `inline-tools-2026-09-15` when an operator message carries `tool_addition` blocks, `oauth-2025-04-20` for Bearer tokens.
-- Stop reasons (04 section 4.2): `stop`, `length`, `tool_use`, `aborted`, `error`, `refusal`, `pause`; unknown provider values map to `error` with `raw_stop_reason` kept (architecture section 8.1: "unknown finish reasons map to error with the raw value").
-- Error classes in `error` events are 04 section 2.2 suffixes: `overloaded`, `rate_limit`, `spend_cap` (Anthropic `enforced_spend_limit_reached`, "never retried"), `auth`, `network` (truncated stream), `provider`, `internal`.
-- Compat field names (P05 Task 2, the contract `compat_flags()` reads): `supports_store`, `supports_developer_role`, `supports_reasoning_effort`, `supports_strict_mode`, `supports_tool_choice`, `max_tokens_field`, `requires_tool_result_name`, `requires_reasoning_content`, `thinking_format`, `thinking_in_content`, `think_tags`, `cache_control_format`, `session_affinity`, `image_mode`, `tool_id` (`"alnum9"`), `auth_header`, `deployment_model`; P12 adds the defaults `supports_usage_in_streaming`, `supports_finish_reason`, `requires_assistant_after_tool_result`, `requires_thinking_as_text`, `explicit_cache_mode` (report 09 section 3.3 flags), and accepts Pi's camelCase names in provider records.
-- Randomness and encoding (IC-61, IC-62): chunkings for conformance replay come from sha256 hash bits, never from R's RNG; every string an adapter creates goes through P01's constructors, which mark UTF-8.
-- Tests: offline, fixture replay through the real normalisers, P04's `reactor_http()` replaced with `testthat::local_mocked_bindings()` for scripted wires, P01's `local_mock_server()` (skips on CRAN) for end-to-end streams; live tests begin with `skip_if_not(identical(Sys.getenv("GPTR_LIVE_TESTS"), "true"))` plus a key check (conventions section 7). Golden files are written by hand in `make_fixtures.R`, never computed by gptr. 04 section 12.3: "fixtures store events without the volatile fields `ts`, `session`, `run`, `request_id`; comparisons use `expect_equal()` on the JSON-decoded lists".
-- Test filters: testthat matches `filter` against the file name without `test-` and `.R`, so `filter = "live"` also selects P06's `test-session-live.R` (and, later, P13's `test-live-jev.R`). This plan selects its own live files with `filter = "^live-(anthropic|openai|google)$"`; the other filters (`provider-anthropic`, `provider-openai-completions`, `provider-openai-responses`, `provider-google`, `provider-(anthropic|openai|google)`) match only P12's test files.
-- Mid-conversation `system` messages (report 07 section 2.3 and verification row 14): only on models with `mid_system`; each "must follow a user message ... AND must be either the last entry in `messages` or be followed by an `assistant` turn", so a run of operator messages is sent as one system message, never as consecutive system messages.
-- Sampling parameters (report 07 section 2.3): "`temperature`/`top_p`/`top_k`: non-default values are 400 on all 5.x models", so the Anthropic adapter sends `temperature` only to models without adaptive thinking and only when no thinking is configured.
-- Precondition from P02 (see Task 3 and the self-review): 04 section 7.12 gives the name `check_adapter()` to P12, so P02's `R/ext-check.R` must not define a function of that name (its private per-spec helper is renamed, for example to `check_adapter_rows()`); two definitions of one name in `R/` let the later-collating file replace the other silently.
+  All four set `reasoning_replay = TRUE` and `parallel_tools = TRUE`. A model's own
+  `capabilities$forced_tool_choice` (P05 catalog, IC-71) wins over the adapter's.
+- Forced tool choice and `returns` (IC-71): "model capability `forced_tool_choice` (`FALSE` for
+  Anthropic 5.x); `returns =` uses `output_config.format` on Anthropic, elsewhere `auto` +
+  instruction + validation; `gptr_check()` rejects adapters sending a list `tool_choice` when the
+  capability is `FALSE`". Validation of the final answer is P06's `run_returns()`.
+- `request_params` (IC-69): "payload `params` limited to the fields the adapter declares non-prefix
+  (`capabilities$request_params`, e.g. `service_tier`, `metadata`, `user`)"; an adapter copies
+  exactly those fields of `context$params` into the body.
+- Caching (architecture section 6.11, G4 sections 3.7-3.8): Anthropic "BP1 end of T0 system block
+  (1h), BP2 project block or T1 block (1h), automatic tail (5m default; 1h adaptive)" with body key
+  order "model, max_tokens, stream, cache_control, thinking, tools, system, messages"; OpenAI
+  Responses "model, store=false, stream, prompt_cache_key, prompt_cache_options, reasoning, tools,
+  input", a developer message with "two `input_text` blocks, each
+  `prompt_cache_breakpoint: {mode: explicit}`", the project block with an explicit breakpoint,
+  `prompt_cache_options: {mode: "implicit"}`, `prompt_cache_key` = "`gptr:` + 12 hex of the project
+  root hash (<= 64 chars)"; Gemini "systemInstruction, tools, generationConfig, contents" with
+  implicit caching only; OpenAI-compatible "model, stream, stream_options, tools, messages",
+  "OpenRouter: `session_id`; `cache_control` on the project block and system for anthropic/* and
+  google/* models". Breakpoints follow `context$cache_plan$anchors`; the tail TTL follows
+  `context$cache_plan$tail_ttl`.
+- Endpoints and credentials (architecture section 8.1; reports 07 section 2.2, 08 section 3.1,
+  09 section 3.1 and verification row 2): Anthropic `POST {base}/v1/messages` with `x-api-key` (or
+  `Authorization: Bearer` plus `anthropic-beta: oauth-2025-04-20` for an `ANTHROPIC_AUTH_TOKEN`
+  handle; "never sends both") and `anthropic-version: 2023-06-01`; OpenAI `POST {base}/responses`
+  with `Authorization: Bearer` and a unique `x-client-request-id` per request; Chat Completions
+  `POST {base}/chat/completions` with `Authorization: Bearer` (Azure: `api-key`); Gemini
+  `POST {base}/models/{id}:streamGenerateContent?alt=sse` with the key in `x-goog-api-key` (never in
+  the URL). Headers hold handles (or `list(prefix, handle)`); only P04's `http-request.R`
+  materialises them.
+- Anthropic betas (reports 07 section 3.8, G4 sections 2.3 and 3.7):
+  `interleaved-thinking-2025-05-14` for budget-thinking models, `inline-tools-2026-09-15` when an
+  operator message carries `tool_addition` blocks, `oauth-2025-04-20` for Bearer tokens.
+- Stop reasons (04 section 4.2): `stop`, `length`, `tool_use`, `aborted`, `error`, `refusal`,
+  `pause`; unknown provider values map to `error` with `raw_stop_reason` kept (architecture
+  section 8.1: "unknown finish reasons map to error with the raw value").
+- Error classes in `error` events are 04 section 2.2 suffixes: `overloaded`, `rate_limit`,
+  `spend_cap` (Anthropic `enforced_spend_limit_reached`, "never retried"), `auth`, `network`
+  (truncated stream), `provider`, `internal`.
+- Compat field names (P05 Task 2, the contract `compat_flags()` reads): `supports_store`,
+  `supports_developer_role`, `supports_reasoning_effort`, `supports_strict_mode`,
+  `supports_tool_choice`, `max_tokens_field`, `requires_tool_result_name`,
+  `requires_reasoning_content`, `thinking_format`, `thinking_in_content`, `think_tags`,
+  `cache_control_format`, `session_affinity`, `image_mode`, `tool_id` (`"alnum9"`), `auth_header`,
+  `deployment_model`; P12 adds the defaults `supports_usage_in_streaming`, `supports_finish_reason`,
+  `requires_assistant_after_tool_result`, `requires_thinking_as_text`, `explicit_cache_mode`
+  (report 09 section 3.3 flags), and accepts Pi's camelCase names in provider records.
+- Randomness and encoding (IC-61, IC-62): chunkings for conformance replay come from sha256 hash
+  bits, never from R's RNG; every string an adapter creates goes through P01's constructors, which
+  mark UTF-8.
+- Tests: offline, fixture replay through the real normalisers, P04's `reactor_http()` replaced with
+  `testthat::local_mocked_bindings()` for scripted wires, P01's `local_mock_server()` (skips on
+  CRAN) for end-to-end streams; live tests begin with
+  `skip_if_not(identical(Sys.getenv("GPTR_LIVE_TESTS"), "true"))` plus a key check (conventions
+  section 7). Golden files are written by hand in `make_fixtures.R`, never computed by gptr.
+  04 section 12.3: "fixtures store events without the volatile fields `ts`, `session`, `run`,
+  `request_id`; comparisons use `expect_equal()` on the JSON-decoded lists".
+- Test filters: testthat matches `filter` against the file name without `test-` and `.R`, so
+  `filter = "live"` also selects P06's `test-session-live.R` (and, later, P13's `test-live-jev.R`).
+  This plan selects its own live files with `filter = "^live-(anthropic|openai|google)$"`; the other
+  filters (`provider-anthropic`, `provider-openai-completions`, `provider-openai-responses`,
+  `provider-google`, `provider-(anthropic|openai|google)`) match only P12's test files.
+- Mid-conversation `system` messages (report 07 section 2.3 and verification row 14): only on models
+  with `mid_system`; each "must follow a user message ... AND must be either the last entry in
+  `messages` or be followed by an `assistant` turn", so a run of operator messages is sent as one
+  system message, never as consecutive system messages.
+- Sampling parameters (report 07 section 2.3): "`temperature`/`top_p`/`top_k`: non-default values
+  are 400 on all 5.x models", so the Anthropic adapter sends `temperature` only to models without
+  adaptive thinking and only when no thinking is configured.
+- Precondition from P02 (see Task 3 and the self-review): 04 section 7.12 gives the name
+  `check_adapter()` to P12, so P02's `R/ext-check.R` must not define a function of that name (its
+  private per-spec helper is renamed, for example to `check_adapter_rows()`); two definitions of one
+  name in `R/` let the later-collating file replace the other silently.
 
 ## File Structure
 
@@ -77,14 +213,17 @@
 | `tests/testthat/fixtures/sse/replay_helpers.R` | test helpers sourced by every P12 test file (fixture replay, golden comparison, request contexts, scripted wire, mock-server driver, the INFRA-08 hand-off transcript and the closed Responses and Gemini body schemas, live helpers) |
 | `tests/testthat/fixtures/sse/<api>/...` | generated wire fixtures: `anthropic-messages` (6 cases), `openai-completions` (4), `openai-responses` (5), `google-generative-ai` (5) |
 
-Every command runs from the repository root (`/Users/wanjun/Desktop/gptr`) with `Rscript --vanilla`. `devtools::test()` sets `NOT_CRAN=true`, so the mock-server tests run; under `R CMD check --as-cran` they skip.
+Every command runs from the repository root (`/Users/wanjun/Desktop/gptr`) with `Rscript --vanilla`.
+`devtools::test()` sets `NOT_CRAN=true`, so the mock-server tests run; under `R CMD check --as-cran`
+they skip.
 
 ## Tasks
 
 1. Shared normaliser core and the Anthropic normaliser (`provider-anthropic.R`)
 2. Anthropic request bodies and `builtin:anthropic` (`provider-anthropic.R`)
 3. `check_adapter()` and the `check.adapter` service (`provider-anthropic.R`)
-4. Chat Completions compat flags, `<think>` splitter and normaliser (`provider-openai-completions.R`)
+4. Chat Completions compat flags, `<think>` splitter and normaliser
+   (`provider-openai-completions.R`)
 5. Chat Completions request bodies and `builtin:openai-compat` (`provider-openai-completions.R`)
 6. Responses normaliser (`provider-openai-responses.R`)
 7. Responses request bodies and `builtin:openai` (`provider-openai-responses.R`)
@@ -97,18 +236,61 @@ Every command runs from the repository root (`/Users/wanjun/Desktop/gptr`) with 
 ### Task 1: Shared normaliser core and the Anthropic normaliser
 
 **Files:**
+
 - Create: `R/provider-anthropic.R`
-- Create: `tests/testthat/fixtures/sse/make_fixtures.R` (generator) and, by running it, `tests/testthat/fixtures/sse/anthropic-messages/` (18 files)
+- Create: `tests/testthat/fixtures/sse/make_fixtures.R` (generator) and, by running it,
+  `tests/testthat/fixtures/sse/anthropic-messages/` (18 files)
 - Create: `tests/testthat/fixtures/sse/replay_helpers.R`
 - Test: `tests/testthat/test-provider-anthropic.R` (create)
 
 **Interfaces:**
-- Consumes (04 sections 4.1-4.5, 7.1, 7.4, 7.5, 8.3): `ev_new(type, ...)`; `block_text(text, signature = NULL)`, `block_thinking(thinking, signature = NULL, redacted = FALSE, data = NULL, origin = NULL)`, `block_tool_call(id, name, arguments, raw_arguments = NULL, thought_signature = NULL)`, `block_opaque(provider, api, model, json)`, `msg_assistant(content, api, provider, model, usage = NULL, stop_reason = "stop", response_id = NULL, response_model = NULL, error_message = NULL, raw_stop_reason = NULL, thinking_level = NULL, route = "api", request_id = NULL, timestamp = NULL)`; `json_encode(x)`, `json_decode(text)`, `json_obj()`; `partial_json()` (an environment with `push(delta)` and `preview()`); `hash_sha256(x)`; `read_utf8(path)` (-> `list(text, ...)`); `raw_to_utf8(x, fallback = "CP1252")`; `%||%` (P01). `usage_new(...)`, `usage_cost(usage, model, when = Sys.Date())` (P05). `sse_splitter()` (`push(raw)` -> list of `list(event, data, id, retry)`, `flush()` -> one event or `NULL`), `ndjson_splitter()` (P04).
-- Produces: `anthropic_normaliser(model, opts)` -> `list(push(ev), push_parsed(obj), finish(), fail(cnd), message())` (04 section 7.12). The private core every later task uses: `adp_state(model, opts)`, `adp_open(st, type, ...)` (types `text`, `thinking`, `tool_call`, `opaque`; returns the 1-based index), `adp_delta(st, i, text)`, `adp_close(st, i)`, `adp_set_opaque(st, i, json)`, `adp_message(st)`, `adp_error(st, message, class = "provider", status = NA_integer_, retry_after = NULL, aborted = FALSE)`, `adp_done(st)`, `adp_stream_error(st, opts, message, class, status = NA_integer_, retry_after = NULL, retryable = FALSE)`, `adp_finish_pending(st)`, `adp_fail(st, cnd)`, `adp_normaliser(st, push, finish, push_parsed = NULL)` (which wraps each step in `adp_guard(st, f)`), `adp_route(model)`, `adp_json_try(text)`, `adp_is_object(x)`, `adp_chr(x)`, `adp_buffer_text(b)`; and for tests and Task 3: `adp_golden_event(ev)`, `adp_golden_message(m)`, `adp_chunk_sizes(key)`, `adp_replay(adapter, model, bytes, sizes)`, `adp_fixture_model(api, dir = NULL)`.
 
-The core follows the verified accumulator of report 07 section 5.1 and report 03 section 5.3, rewritten as a state machine of environments so that a delta costs O(1): each content slot keeps its deltas in a list that doubles when full and is joined once (the list is taken out of its environment and the binding cleared before an element is set; assigning `b$v[[n]] = x` on an environment passed as an argument copies the whole list on every call, which was measured at 1.7 s for 20,000 appends). `start` is emitted lazily before the first content event or the terminal event; a retryable in-stream failure before any delta calls `opts$retry(info)` and leaves the stream open for the transport to restart (04 section 8.1); every R error inside a normaliser step becomes the one terminal `error` event (class `internal`). Anthropic specifics (report 07 sections 2.4, 2.10, 2.11, 5.1 and its verification log): `$` partial matching is avoided for usage fields (`cache_creation` vs `cache_creation_input_tokens`), the 5-minute and 1-hour cache writes are split, `refusal` keeps `stop_details.explanation`, `pause_turn` maps to `pause`, server-tool and unknown blocks are kept as opaque JSON with their streamed `input`, and the spend-cap 429 (`enforced_spend_limit_reached`) is never retried.
+- Consumes (04 sections 4.1-4.5, 7.1, 7.4, 7.5, 8.3): `ev_new(type, ...)`;
+  `block_text(text, signature = NULL)`,
+  `block_thinking(thinking, signature = NULL, redacted = FALSE, data = NULL, origin = NULL)`,
+  `block_tool_call(id, name, arguments, raw_arguments = NULL, thought_signature = NULL)`,
+  `block_opaque(provider, api, model, json)`,
+  `msg_assistant(content, api, provider, model, usage = NULL, stop_reason = "stop", response_id = NULL, response_model = NULL, error_message = NULL, raw_stop_reason = NULL, thinking_level = NULL, route = "api", request_id = NULL, timestamp = NULL)`;
+  `json_encode(x)`, `json_decode(text)`, `json_obj()`; `partial_json()` (an environment with
+  `push(delta)` and `preview()`); `hash_sha256(x)`; `read_utf8(path)` (-> `list(text, ...)`);
+  `raw_to_utf8(x, fallback = "CP1252")`; `%||%` (P01). `usage_new(...)`,
+  `usage_cost(usage, model, when = Sys.Date())` (P05). `sse_splitter()` (`push(raw)` -> list of
+  `list(event, data, id, retry)`, `flush()` -> one event or `NULL`), `ndjson_splitter()` (P04).
+- Produces: `anthropic_normaliser(model, opts)` ->
+  `list(push(ev), push_parsed(obj), finish(), fail(cnd), message())` (04 section 7.12). The private
+  core every later task uses: `adp_state(model, opts)`, `adp_open(st, type, ...)` (types `text`,
+  `thinking`, `tool_call`, `opaque`; returns the 1-based index), `adp_delta(st, i, text)`,
+  `adp_close(st, i)`, `adp_set_opaque(st, i, json)`, `adp_message(st)`,
+  `adp_error(st, message, class = "provider", status = NA_integer_, retry_after = NULL, aborted = FALSE)`,
+  `adp_done(st)`,
+  `adp_stream_error(st, opts, message, class, status = NA_integer_, retry_after = NULL, retryable = FALSE)`,
+  `adp_finish_pending(st)`, `adp_fail(st, cnd)`,
+  `adp_normaliser(st, push, finish, push_parsed = NULL)` (which wraps each step in
+  `adp_guard(st, f)`), `adp_route(model)`, `adp_json_try(text)`, `adp_is_object(x)`, `adp_chr(x)`,
+  `adp_buffer_text(b)`; and for tests and Task 3: `adp_golden_event(ev)`, `adp_golden_message(m)`,
+  `adp_chunk_sizes(key)`, `adp_replay(adapter, model, bytes, sizes)`,
+  `adp_fixture_model(api, dir = NULL)`.
 
-The fixtures are raw SSE bytes with golden files written by hand (04 section 12.4): `text` (CRLF line ends, a comment line, a `ping`, multi-byte UTF-8 text), `thinking_tools` (signed thinking, redacted thinking, parallel tool use, 5-minute and 1-hour cache writes), `error_midstream` (an overload `error` event after a delta), `truncated` (the connection ends inside a tool call), `refusal`, `server_tool` (server-tool blocks kept as opaque JSON).
+The core follows the verified accumulator of report 07 section 5.1 and report 03 section 5.3,
+rewritten as a state machine of environments so that a delta costs O(1): each content slot keeps its
+deltas in a list that doubles when full and is joined once (the list is taken out of its environment
+and the binding cleared before an element is set; assigning `b$v[[n]] = x` on an environment passed
+as an argument copies the whole list on every call, which was measured at 1.7 s for 20,000 appends).
+`start` is emitted lazily before the first content event or the terminal event; a retryable
+in-stream failure before any delta calls `opts$retry(info)` and leaves the stream open for the
+transport to restart (04 section 8.1); every R error inside a normaliser step becomes the one
+terminal `error` event (class `internal`). Anthropic specifics (report 07 sections 2.4, 2.10, 2.11,
+5.1 and its verification log): `$` partial matching is avoided for usage fields (`cache_creation` vs
+`cache_creation_input_tokens`), the 5-minute and 1-hour cache writes are split, `refusal` keeps
+`stop_details.explanation`, `pause_turn` maps to `pause`, server-tool and unknown blocks are kept as
+opaque JSON with their streamed `input`, and the spend-cap 429 (`enforced_spend_limit_reached`) is
+never retried.
+
+The fixtures are raw SSE bytes with golden files written by hand (04 section 12.4): `text` (CRLF
+line ends, a comment line, a `ping`, multi-byte UTF-8 text), `thinking_tools` (signed thinking,
+redacted thinking, parallel tool use, 5-minute and 1-hour cache writes), `error_midstream` (an
+overload `error` event after a delta), `truncated` (the connection ends inside a tool call),
+`refusal`, `server_tool` (server-tool blocks kept as opaque JSON).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -505,9 +687,12 @@ Rscript --vanilla tests/testthat/fixtures/sse/make_fixtures.R
 ls tests/testthat/fixtures/sse/anthropic-messages | wc -l
 ```
 
-Expected: the script prints nothing and the count is `18` (`error_midstream`, `refusal`, `server_tool`, `text`, `thinking_tools`, `truncated`, each with `.sse`, `.events.json` and `.message.json`).
+Expected: the script prints nothing and the count is `18` (`error_midstream`, `refusal`,
+`server_tool`, `text`, `thinking_tools`, `truncated`, each with `.sse`, `.events.json` and
+`.message.json`).
 
-Create `tests/testthat/fixtures/sse/replay_helpers.R` (P12 owns `fixtures/sse/` and no `helper-*.R` file, so every P12 test file sources this file):
+Create `tests/testthat/fixtures/sse/replay_helpers.R` (P12 owns `fixtures/sse/` and no `helper-*.R`
+file, so every P12 test file sources this file):
 
 ```r
 # Shared helpers of the P12 adapter tests. P12 owns tests/testthat/fixtures/sse/ and no
@@ -773,7 +958,8 @@ test_that("push_parsed() accepts stream-event objects (the cli-claude reuse, 04 
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-anthropic")'`
-Expected: `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 1 ]`, with errors such as ``object 'anthropic_normaliser' not found`` and ``could not find function "anthropic_normaliser"``.
+Expected: `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 1 ]`, with errors such as
+``object 'anthropic_normaliser' not found`` and ``could not find function "anthropic_normaliser"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1483,7 +1669,8 @@ anthropic_normaliser = function(model, opts) {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-anthropic")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 99 ]` (the linear-time test runs because `devtools::test()` sets `NOT_CRAN=true`; under `R CMD check --as-cran` it is one skip).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 99 ]` (the linear-time test runs because
+`devtools::test()` sets `NOT_CRAN=true`; under `R CMD check --as-cran` it is one skip).
 
 - [ ] **Step 5: Commit**
 
@@ -1497,15 +1684,65 @@ git commit -m "feat(provider): add the shared normaliser core and the anthropic 
 ### Task 2: Anthropic request bodies and `builtin:anthropic`
 
 **Files:**
+
 - Modify: `R/provider-anthropic.R` (append)
 - Modify: `tests/testthat/fixtures/sse/replay_helpers.R` (append)
 - Test: `tests/testthat/test-provider-anthropic.R` (append)
 
 **Interfaces:**
-- Consumes: `json_verbatim(text)`, `hash_xxh128(x)`, `gptr_has_human()`, `on_load(expr)` (P01); `gptr_adapter(api, transport = c(...), build = NULL, parse = NULL, stream = NULL, classify = NULL, capabilities = list())`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)` (P02); `provider_get(id)` (P05, for the provider record's non-secret `headers`). Tests also use `msg_user()`, `msg_tool_result()`, `msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)`, `block_context(kind, text, attrs = list(), anchor = FALSE)`, `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)`, `local_gptr_options()`, `local_mock_server(scenario, ..., .env = parent.frame())` (P01); `gptr_register()`, `gptr_provider()`, `gptr_tool()`, `registry_get(kind, name, session = NULL)` (P02); `reactor_http()` (mocked), `reactor_task(fn, run = NULL)`, `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)` (P04); `adapter_get(api)`, `model_resolve(ref, strict = TRUE)`, `provider_stream(model, context, opts, emit, done, run = NULL)` (P05); `session_new(model, mode, home = NULL, ...)`, `session_run(s, input, opts = list())` (P06); the `default` `cache_policy` record with `plan(parts, caps, session)` (P07).
-- Produces: `anthropic_build(model, context, opts)` (the adapter's `build`), `anthropic_caps()`, `builtin_anthropic(gptr)` and the registered adapter `anthropic-messages` (`transport = "http_sse"`, `build = anthropic_build`, `parse = anthropic_normaliser`, the capabilities of the Global Constraints table). Request helpers shared by Tasks 5, 7 and 9: `adp_model_cap(model, name, default = FALSE)`, `adp_same_model(msg, model)`, `adp_images_ok(model)`, `adp_image_note()`, `adp_header_secret(handle, prefix = "")`, `adp_url(base, path)`, `adp_provider_headers(model)`, `adp_returns_instruction(schema)`, `adp_memo(opts, key, fun)`, `adp_msg_key(msg)`, `adp_sanitize_id(id, max = 64L)`, `adp_tools_json(opts, api, tools_json, convert)`, `adp_has_tool_calls(msgs)`, `adp_anchor_index(msgs)`, `adp_operator_text(m)`, `adp_level_effort(level)`, `adp_budget(level)`, `adp_body(head, extra, key, elements)`, `adp_cache_plan(context)`, `adp_forced(tc)`, `adp_forced_ok(model, caps)`.
 
-Body rules (G4 sections 2.3, 3.7, 3.8, 5.4 `layout.R`; report 07 sections 2.3-2.8 and its verification log): key order `model`, `max_tokens`, `stream`, `cache_control` (the automatic tail breakpoint, `ttl = "1h"` when the plan's `tail_ttl` is `"1h"`), `thinking`, `output_config`, `tool_choice`, the declared request params, `tools` (the frozen array verbatim), `system` (`[T0 with BP1 1 h, T1]`), `messages` last. BP2 (1 h) goes on the anchored project block when the plan names `project`, else on T1 when the plan names `t1`. Each message element is serialised once per session through `opts$memo`. Consecutive tool results become one user message with the `tool_result` blocks first; tool-result images are native `image` blocks (acceptance 3). Signed thinking, redacted thinking and opaque blocks replay byte for byte only to the model that produced them; foreign thinking becomes text. A run of consecutive operator messages becomes ONE message (report 07 section 2.3: a mid-conversation system message must follow a user message and be last or followed by an assistant turn, so two system messages never follow each other): a mid-conversation `system` message only on models with `mid_system` and only when the run follows a user turn and precedes an assistant turn or the end; its `tool_add` declarations become `tool_addition` blocks with the `inline-tools-2026-09-15` beta; elsewhere the run is user text. Adaptive models get `thinking: {type: "adaptive", display}` (`summarized` when a human watches, else `omitted`) and `output_config.effort`; budget models (Haiku 4.5) get `enabled` with a budget below `max_tokens` and the interleaved-thinking beta. `temperature` is sent only to models without adaptive thinking and without a thinking configuration (non-default values are a 400 on every 5.x model). `returns` uses `output_config.format` (`json_schema`) when the model supports structured output, otherwise an instruction appended at the tail (a system message right after a user turn on `mid_system` models, so a trailing operator run is then sent as user text, else a user message); a forced `tool_choice` is sent only when the model allows it and neither thinking nor `returns` is active.
+- Consumes: `json_verbatim(text)`, `hash_xxh128(x)`, `gptr_has_human()`, `on_load(expr)` (P01);
+  `gptr_adapter(api, transport = c(...), build = NULL, parse = NULL, stream = NULL, classify = NULL, capabilities = list())`,
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)` (P02);
+  `provider_get(id)` (P05, for the provider record's non-secret `headers`). Tests also use
+  `msg_user()`, `msg_tool_result()`,
+  `msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)`,
+  `block_context(kind, text, attrs = list(), anchor = FALSE)`,
+  `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)`,
+  `local_gptr_options()`, `local_mock_server(scenario, ..., .env = parent.frame())` (P01);
+  `gptr_register()`, `gptr_provider()`, `gptr_tool()`, `registry_get(kind, name, session = NULL)`
+  (P02); `reactor_http()` (mocked), `reactor_task(fn, run = NULL)`,
+  `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)` (P04);
+  `adapter_get(api)`, `model_resolve(ref, strict = TRUE)`,
+  `provider_stream(model, context, opts, emit, done, run = NULL)` (P05);
+  `session_new(model, mode, home = NULL, ...)`, `session_run(s, input, opts = list())` (P06); the
+  `default` `cache_policy` record with `plan(parts, caps, session)` (P07).
+- Produces: `anthropic_build(model, context, opts)` (the adapter's `build`), `anthropic_caps()`,
+  `builtin_anthropic(gptr)` and the registered adapter `anthropic-messages`
+  (`transport = "http_sse"`, `build = anthropic_build`, `parse = anthropic_normaliser`, the
+  capabilities of the Global Constraints table). Request helpers shared by Tasks 5, 7 and 9:
+  `adp_model_cap(model, name, default = FALSE)`, `adp_same_model(msg, model)`,
+  `adp_images_ok(model)`, `adp_image_note()`, `adp_header_secret(handle, prefix = "")`,
+  `adp_url(base, path)`, `adp_provider_headers(model)`, `adp_returns_instruction(schema)`,
+  `adp_memo(opts, key, fun)`, `adp_msg_key(msg)`, `adp_sanitize_id(id, max = 64L)`,
+  `adp_tools_json(opts, api, tools_json, convert)`, `adp_has_tool_calls(msgs)`,
+  `adp_anchor_index(msgs)`, `adp_operator_text(m)`, `adp_level_effort(level)`, `adp_budget(level)`,
+  `adp_body(head, extra, key, elements)`, `adp_cache_plan(context)`, `adp_forced(tc)`,
+  `adp_forced_ok(model, caps)`.
+
+Body rules (G4 sections 2.3, 3.7, 3.8, 5.4 `layout.R`; report 07 sections 2.3-2.8 and its
+verification log): key order `model`, `max_tokens`, `stream`, `cache_control` (the automatic tail
+breakpoint, `ttl = "1h"` when the plan's `tail_ttl` is `"1h"`), `thinking`, `output_config`,
+`tool_choice`, the declared request params, `tools` (the frozen array verbatim), `system`
+(`[T0 with BP1 1 h, T1]`), `messages` last. BP2 (1 h) goes on the anchored project block when the
+plan names `project`, else on T1 when the plan names `t1`. Each message element is serialised once
+per session through `opts$memo`. Consecutive tool results become one user message with the
+`tool_result` blocks first; tool-result images are native `image` blocks (acceptance 3). Signed
+thinking, redacted thinking and opaque blocks replay byte for byte only to the model that produced
+them; foreign thinking becomes text. A run of consecutive operator messages becomes ONE message
+(report 07 section 2.3: a mid-conversation system message must follow a user message and be last or
+followed by an assistant turn, so two system messages never follow each other): a mid-conversation
+`system` message only on models with `mid_system` and only when the run follows a user turn and
+precedes an assistant turn or the end; its `tool_add` declarations become `tool_addition` blocks
+with the `inline-tools-2026-09-15` beta; elsewhere the run is user text. Adaptive models get
+`thinking: {type: "adaptive", display}` (`summarized` when a human watches, else `omitted`) and
+`output_config.effort`; budget models (Haiku 4.5) get `enabled` with a budget below `max_tokens` and
+the interleaved-thinking beta. `temperature` is sent only to models without adaptive thinking and
+without a thinking configuration (non-default values are a 400 on every 5.x model). `returns` uses
+`output_config.format` (`json_schema`) when the model supports structured output, otherwise an
+instruction appended at the tail (a system message right after a user turn on `mid_system` models,
+so a trailing operator run is then sent as user text, else a user message); a forced `tool_choice`
+is sent only when the model allows it and neither thinking nor `returns` is active.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2028,7 +2265,9 @@ test_that("end to end on the mock server: streaming, retry and abort (skip on CR
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-anthropic")'`
-Expected: `[ FAIL 20 | WARN 0 | SKIP 0 | PASS 99 ]`, with errors such as ``could not find function "anthropic_build"`` and `No adapter is registered for the api anthropic-messages.`
+Expected: `[ FAIL 20 | WARN 0 | SKIP 0 | PASS 99 ]`, with errors such as
+``could not find function "anthropic_build"`` and
+`No adapter is registered for the api anthropic-messages.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2527,7 +2766,8 @@ on_load(ext_declare_builtin("anthropic", builtin_anthropic))
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-anthropic")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 204 ]` (the mock-server test starts P01's base-R server with `rscript_path()`; it skips on CRAN).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 204 ]` (the mock-server test starts P01's base-R server
+with `rscript_path()`; it skips on CRAN).
 
 - [ ] **Step 5: Commit**
 
@@ -2541,14 +2781,40 @@ git commit -m "feat(provider): build anthropic-messages request bodies and regis
 ### Task 3: `check_adapter()` and the `check.adapter` service
 
 **Files:**
+
 - Modify: `R/provider-anthropic.R` (append)
 - Test: `tests/testthat/test-provider-anthropic.R` (append)
 
 **Interfaces:**
-- Consumes: `ext_service_set(name, fun, provided_by, builtin = NULL)`, `on_load(expr)`, `canonical_json(x)`, `msg_to_json(msg)`, `msg_from_json(x)`, `msg_user()`, `msg_tool_result()`, `json_verbatim()`, `read_utf8()` (P01); tests use `gptr_check(x, error = FALSE, tokens = FALSE)` (P02, which calls the service as `adapter_check(spec)` and turns its rows into `gptr_check` rows), `gptr_adapter(api, transport = c(...), build = NULL, parse = NULL, stream = NULL, classify = NULL, capabilities = list())` (P02; a classifier adapter in the IC-35 shape), `ext_service_has(name)`, `write_utf8(path, text, eol = "\n", bom = FALSE, final_newline = TRUE)` (P01).
-- Produces: `check_adapter(adapter, fixtures = NULL)` (04 section 7.12) -> a `gptr_check` data frame (columns `target`, `check`, `ok`, `message`; 04 section 5.11) with target `adapter:<api>`, registered as the service `check.adapter` (`function(adapter, fixtures = NULL) <gptr_check>`, 04 section 7.0), owned by `builtin:anthropic` (IC-34). Check names: `adapter.tool_choice`; `adapter.fixtures` (only when none are found); per case `adapter.<case>.no_condition`, `.event_order`, `.golden_events`, `.golden_message`, `.chunk_invariance` and, for cases that end in `done`, `.roundtrip`; `adapter.replay` for `inprocess` adapters and for classifier adapters without a top-level `parse` (P13's `typesafe-system-one` is `http_json` with only `classify`; nothing to replay, so `gptr_check()` on it does not fail for want of stream fixtures).
 
-What it checks (05 P12 acceptance 2 and review amendments, 04 section 6.7 `gptr_check()`): no R condition escapes the normaliser; exactly one `start` first and one terminal event last; golden events and final message; identical events when the bytes arrive whole, one byte at a time and in three chunkings of 1-17 bytes derived from sha256 bits (RNG-free, IC-61); byte-identical re-serialisation (the final message, and its JSON round trip through the session-file form, build the same body with and without the memo, and every signature, redacted payload, thought signature and opaque item is on the wire verbatim); and "a list `tool_choice` sent while the model capability `forced_tool_choice` is `FALSE` fails". Fixtures come from `fixtures`, else `fixtures/sse/<api>` under the working directory (testthat runs in `tests/testthat`), else `tests/testthat/fixtures/sse/<api>`; a `model.json` in the fixture directory overrides fields of the fixture model record.
+- Consumes: `ext_service_set(name, fun, provided_by, builtin = NULL)`, `on_load(expr)`,
+  `canonical_json(x)`, `msg_to_json(msg)`, `msg_from_json(x)`, `msg_user()`, `msg_tool_result()`,
+  `json_verbatim()`, `read_utf8()` (P01); tests use `gptr_check(x, error = FALSE, tokens = FALSE)`
+  (P02, which calls the service as `adapter_check(spec)` and turns its rows into `gptr_check` rows),
+  `gptr_adapter(api, transport = c(...), build = NULL, parse = NULL, stream = NULL, classify = NULL, capabilities = list())`
+  (P02; a classifier adapter in the IC-35 shape), `ext_service_has(name)`,
+  `write_utf8(path, text, eol = "\n", bom = FALSE, final_newline = TRUE)` (P01).
+- Produces: `check_adapter(adapter, fixtures = NULL)` (04 section 7.12) -> a `gptr_check` data frame
+  (columns `target`, `check`, `ok`, `message`; 04 section 5.11) with target `adapter:<api>`,
+  registered as the service `check.adapter` (`function(adapter, fixtures = NULL) <gptr_check>`,
+  04 section 7.0), owned by `builtin:anthropic` (IC-34). Check names: `adapter.tool_choice`;
+  `adapter.fixtures` (only when none are found); per case `adapter.<case>.no_condition`,
+  `.event_order`, `.golden_events`, `.golden_message`, `.chunk_invariance` and, for cases that end
+  in `done`, `.roundtrip`; `adapter.replay` for `inprocess` adapters and for classifier adapters
+  without a top-level `parse` (P13's `typesafe-system-one` is `http_json` with only `classify`;
+  nothing to replay, so `gptr_check()` on it does not fail for want of stream fixtures).
+
+What it checks (05 P12 acceptance 2 and review amendments, 04 section 6.7 `gptr_check()`): no R
+condition escapes the normaliser; exactly one `start` first and one terminal event last; golden
+events and final message; identical events when the bytes arrive whole, one byte at a time and in
+three chunkings of 1-17 bytes derived from sha256 bits (RNG-free, IC-61); byte-identical
+re-serialisation (the final message, and its JSON round trip through the session-file form, build
+the same body with and without the memo, and every signature, redacted payload, thought signature
+and opaque item is on the wire verbatim); and "a list `tool_choice` sent while the model capability
+`forced_tool_choice` is `FALSE` fails". Fixtures come from `fixtures`, else `fixtures/sse/<api>`
+under the working directory (testthat runs in `tests/testthat`), else
+`tests/testthat/fixtures/sse/<api>`; a `model.json` in the fixture directory overrides fields of the
+fixture model record.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2639,10 +2905,16 @@ First confirm the P02 precondition of the Global Constraints:
 grep -n "^check_adapter = function" R/*.R
 ```
 
-Expected: no output. If it prints `R/ext-check.R:...: check_adapter = function(spec, target, adapter_check) {`, stop: P02's private helper still has the name 04 section 7.12 gives to P12, and this task's function would replace it (`gptr_check()` on any adapter would then fail with `unused argument (adapter_check)`); ask the maintainer to rename P02's helper (for example `check_adapter_rows()`, with its one call in `check_spec()`) before continuing.
+Expected: no output. If it prints
+`R/ext-check.R:...: check_adapter = function(spec, target, adapter_check) {`, stop: P02's private
+helper still has the name 04 section 7.12 gives to P12, and this task's function would replace it
+(`gptr_check()` on any adapter would then fail with `unused argument (adapter_check)`); ask the
+maintainer to rename P02's helper (for example `check_adapter_rows()`, with its one call in
+`check_spec()`) before continuing.
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-anthropic")'`
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 205 ]`, with errors such as ``could not find function "check_adapter"``.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 205 ]`, with errors such as
+``could not find function "check_adapter"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2887,17 +3159,51 @@ git commit -m "feat(provider): add check_adapter() and the check.adapter service
 ### Task 4: Chat Completions compat flags, `<think>` splitter and normaliser
 
 **Files:**
+
 - Create: `R/provider-openai-completions.R`
-- Modify: `tests/testthat/fixtures/sse/make_fixtures.R` (append) and, by running it, `tests/testthat/fixtures/sse/openai-completions/` (13 files)
+- Modify: `tests/testthat/fixtures/sse/make_fixtures.R` (append) and, by running it,
+  `tests/testthat/fixtures/sse/openai-completions/` (13 files)
 - Test: `tests/testthat/test-provider-openai-completions.R` (create)
 
 **Interfaces:**
-- Consumes: the Task 1 core (`adp_state()`, `adp_open()`, `adp_delta()`, `adp_set_opaque()`, `adp_error()`, `adp_done()`, `adp_stream_error()`, `adp_finish_pending()`, `adp_normaliser()`, `adp_json_try()`, `adp_is_object()`); `provider_get(id)` (P05; the record's `id`, `base_url`, `local`, `compat`); `partial_json()`, `json_encode()`, `hash_sha256()` (P01). Tests use `gptr_register()`, `gptr_provider(id, api, base_url = NULL, auth = NULL, models = NULL, compat = list(), type = c("chat", "classifier", "cli"), headers = list(), discover = NULL, status = NULL, aliases = character(), local = FALSE, offline = FALSE, rate = NULL)` (P02).
-- Produces: `compat_flags(provider, model)` (04 section 7.12; `provider` is a provider id or record, `model` a model record or `NULL`) -> a named list with every field of `compat_defaults()`; `compat_defaults()`, `compat_snake(x)`, `completions_model_name(model, compat)` (Azure deployments from `AZURE_OPENAI_DEPLOYMENT_NAME_MAP`), `think_splitter()` (`push(x)` -> list of `list(kind = "text" | "thinking", text)`, `flush()`), `completions_tool_id(id, compat, provider = "")`, `completions_error_info(err)`, `completions_normaliser(model, opts)` (the adapter's `parse`).
 
-`compat_flags()` ports Pi's `detectCompat()`/`getCompat()` (report 09 section 3.3, `openai-completions.ts:1585-1726`): detection from the provider id and base URL (non-standard hosts, local servers, OpenRouter, DeepSeek, Mistral, Together, xAI, Azure), then the provider record's `compat` field by field, in P05's snake_case names or Pi's camelCase. OpenRouter forwards `cache_control` only for `anthropic/*` and `google/*` models (report 09 verification row 11, G4 section 2.6). The normaliser ports Pi's chunk loop (`openai-completions.ts:553-700`; report 09 section 3.2 and verification rows 12-14): text, reasoning in the first of `reasoning_content`, `reasoning` or `reasoning_text` (the field name is kept as the thinking block's signature so that a replay uses the same field), Mistral thinking content items, `reasoning_details` kept as an opaque block, tool-call fragments by `index` with their `id`, usage from the final chunk (`prompt_tokens` minus cached and cache-write tokens), the finish-reason map (`stop`/`end` -> `stop`, `length`, `tool_calls`/`function_call` -> `tool_use`, others -> `error` with the raw value), an `error` chunk (OpenRouter mid-stream errors) as a retryable or final failure, and a missing `finish_reason` as a truncated stream unless the compat record says `supports_finish_reason = FALSE`. With `think_tags` (Together's R1-style models) text passes through the streaming `<think>` splitter, which holds back a tag split across chunks (report 09 section 4.6).
+- Consumes: the Task 1 core (`adp_state()`, `adp_open()`, `adp_delta()`, `adp_set_opaque()`,
+  `adp_error()`, `adp_done()`, `adp_stream_error()`, `adp_finish_pending()`, `adp_normaliser()`,
+  `adp_json_try()`, `adp_is_object()`); `provider_get(id)` (P05; the record's `id`, `base_url`,
+  `local`, `compat`); `partial_json()`, `json_encode()`, `hash_sha256()` (P01). Tests use
+  `gptr_register()`,
+  `gptr_provider(id, api, base_url = NULL, auth = NULL, models = NULL, compat = list(), type = c("chat", "classifier", "cli"), headers = list(), discover = NULL, status = NULL, aliases = character(), local = FALSE, offline = FALSE, rate = NULL)`
+  (P02).
+- Produces: `compat_flags(provider, model)` (04 section 7.12; `provider` is a provider id or record,
+  `model` a model record or `NULL`) -> a named list with every field of `compat_defaults()`;
+  `compat_defaults()`, `compat_snake(x)`, `completions_model_name(model, compat)` (Azure deployments
+  from `AZURE_OPENAI_DEPLOYMENT_NAME_MAP`), `think_splitter()` (`push(x)` -> list of
+  `list(kind = "text" | "thinking", text)`, `flush()`),
+  `completions_tool_id(id, compat, provider = "")`, `completions_error_info(err)`,
+  `completions_normaliser(model, opts)` (the adapter's `parse`).
 
-Fixtures: `tools` (an OpenRouter comment line, `reasoning_content`, text, a tool call in fragments, a usage chunk, `[DONE]`), `think_tags` (`<think>` tags split across chunks), `error_chunk` (a mid-stream error chunk after a delta), `truncated` (no finish reason); `model.json` makes the fixture model `together/deepseek-r1` so the splitter is on.
+`compat_flags()` ports Pi's `detectCompat()`/`getCompat()` (report 09 section 3.3,
+`openai-completions.ts:1585-1726`): detection from the provider id and base URL (non-standard hosts,
+local servers, OpenRouter, DeepSeek, Mistral, Together, xAI, Azure), then the provider record's
+`compat` field by field, in P05's snake_case names or Pi's camelCase. OpenRouter forwards
+`cache_control` only for `anthropic/*` and `google/*` models (report 09 verification row 11, G4
+section 2.6). The normaliser ports Pi's chunk loop (`openai-completions.ts:553-700`;
+report 09 section 3.2 and verification rows 12-14): text, reasoning in the first of
+`reasoning_content`, `reasoning` or `reasoning_text` (the field name is kept as the thinking block's
+signature so that a replay uses the same field), Mistral thinking content items, `reasoning_details`
+kept as an opaque block, tool-call fragments by `index` with their `id`, usage from the final chunk
+(`prompt_tokens` minus cached and cache-write tokens), the finish-reason map (`stop`/`end` ->
+`stop`, `length`, `tool_calls`/`function_call` -> `tool_use`, others -> `error` with the raw value),
+an `error` chunk (OpenRouter mid-stream errors) as a retryable or final failure, and a missing
+`finish_reason` as a truncated stream unless the compat record says
+`supports_finish_reason = FALSE`. With `think_tags` (Together's R1-style models) text passes through
+the streaming `<think>` splitter, which holds back a tag split across chunks
+(report 09 section 4.6).
+
+Fixtures: `tools` (an OpenRouter comment line, `reasoning_content`, text, a tool call in fragments,
+a usage chunk, `[DONE]`), `think_tags` (`<think>` tags split across chunks), `error_chunk` (a
+mid-stream error chunk after a delta), `truncated` (no finish reason); `model.json` makes the
+fixture model `together/deepseek-r1` so the splitter is on.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3024,7 +3330,9 @@ Rscript --vanilla tests/testthat/fixtures/sse/make_fixtures.R
 ls tests/testthat/fixtures/sse/openai-completions | wc -l
 ```
 
-Expected: the count is `13` (four cases with three files each, plus `model.json`); `git status --short tests/testthat/fixtures/sse` lists only the new directory and the modified generator.
+Expected: the count is `13` (four cases with three files each, plus `model.json`);
+`git status --short tests/testthat/fixtures/sse` lists only the new directory and the modified
+generator.
 
 Create `tests/testthat/test-provider-openai-completions.R`:
 
@@ -3178,7 +3486,8 @@ test_that("Mistral thinking arrives as content items and becomes a thinking bloc
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-openai-completions")'`
-Expected: `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 1 ]`, with errors such as ``could not find function "compat_flags"``.
+Expected: `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 1 ]`, with errors such as
+``could not find function "compat_flags"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3534,7 +3843,7 @@ completions_normaliser = function(model, opts) {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-openai-completions")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 89 ]`
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 89 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -3548,14 +3857,39 @@ git commit -m "feat(provider): add compat flags, the think splitter and the chat
 ### Task 5: Chat Completions request bodies and `builtin:openai-compat`
 
 **Files:**
+
 - Modify: `R/provider-openai-completions.R` (append)
 - Test: `tests/testthat/test-provider-openai-completions.R` (append)
 
 **Interfaces:**
-- Consumes: the Task 2 request helpers (`adp_memo()`, `adp_msg_key()`, `adp_tools_json()`, `adp_body()`, `adp_cache_plan()`, `adp_anchor_index()`, `adp_same_model()`, `adp_images_ok()`, `adp_image_note()`, `adp_header_secret()`, `adp_url()`, `adp_provider_headers()`, `adp_returns_instruction()`, `adp_forced()`, `adp_forced_ok()`, `adp_operator_text()`, `adp_has_tool_calls()`), `compat_flags()` and `completions_tool_id()` (Task 4), `gptr_adapter()`, `ext_declare_builtin()`, `on_load()`, `json_encode()`, `json_obj()`, `json_verbatim()` (P01/P02); `check_adapter()` (Task 3) and `gptr_check()` (P02) in the tests.
-- Produces: `completions_build(model, context, opts)`, `completions_caps()`, `completions_user()`, `completions_assistant()`, `completions_tool_results()`, `completions_tools()`, `completions_thinking()`, `builtin_openai_compat(gptr)` and the registered adapter `openai-completions`.
 
-Body rules (report 09 sections 3.2-3.4 and verification rows 13-14, 41-45; G4 section 3.7): key order `model`, `stream`, `stream_options` (`include_usage`), `store` (`false` where supported), the max-tokens field named by the compat record, thinking fields per `thinking_format` (`openai` `reasoning_effort`, `openrouter` `reasoning.effort`, `deepseek` `thinking.type`, `zai`, `qwen`, `qwen-chat-template`, `together` `reasoning.enabled`), `tool_choice`, the declared request params, `tools` (the frozen array converted once per session to `{type: "function", function: {...}}`; `tools: []` when there are no tools but the history holds tool calls), `messages` last. One system message (`developer` for reasoning models where supported) holds T0 and T1; with an OpenRouter Anthropic or Google model and a plan that names them, the system's last part and the anchored project block carry `cache_control: {type: "ephemeral"}`, and the session id goes in `x-session-id`. Reasoning is replayed only to the same model in the field it arrived in (DeepSeek forces `reasoning_content: ""` on replayed assistant messages); tool results become `tool` messages with ids within each host's rules (Mistral 9 alphanumeric characters), and their images follow as one user message (`images_in_results = FALSE`); operator messages and `returns` instructions are user messages. Azure sends the key as `api-key`, every other host as `Authorization: Bearer`.
+- Consumes: the Task 2 request helpers (`adp_memo()`, `adp_msg_key()`, `adp_tools_json()`,
+  `adp_body()`, `adp_cache_plan()`, `adp_anchor_index()`, `adp_same_model()`, `adp_images_ok()`,
+  `adp_image_note()`, `adp_header_secret()`, `adp_url()`, `adp_provider_headers()`,
+  `adp_returns_instruction()`, `adp_forced()`, `adp_forced_ok()`, `adp_operator_text()`,
+  `adp_has_tool_calls()`), `compat_flags()` and `completions_tool_id()` (Task 4), `gptr_adapter()`,
+  `ext_declare_builtin()`, `on_load()`, `json_encode()`, `json_obj()`, `json_verbatim()` (P01/P02);
+  `check_adapter()` (Task 3) and `gptr_check()` (P02) in the tests.
+- Produces: `completions_build(model, context, opts)`, `completions_caps()`, `completions_user()`,
+  `completions_assistant()`, `completions_tool_results()`, `completions_tools()`,
+  `completions_thinking()`, `builtin_openai_compat(gptr)` and the registered adapter
+  `openai-completions`.
+
+Body rules (report 09 sections 3.2-3.4 and verification rows 13-14, 41-45; G4 section 3.7): key
+order `model`, `stream`, `stream_options` (`include_usage`), `store` (`false` where supported), the
+max-tokens field named by the compat record, thinking fields per `thinking_format` (`openai`
+`reasoning_effort`, `openrouter` `reasoning.effort`, `deepseek` `thinking.type`, `zai`, `qwen`,
+`qwen-chat-template`, `together` `reasoning.enabled`), `tool_choice`, the declared request params,
+`tools` (the frozen array converted once per session to `{type: "function", function: {...}}`;
+`tools: []` when there are no tools but the history holds tool calls), `messages` last. One system
+message (`developer` for reasoning models where supported) holds T0 and T1; with an OpenRouter
+Anthropic or Google model and a plan that names them, the system's last part and the anchored
+project block carry `cache_control: {type: "ephemeral"}`, and the session id goes in `x-session-id`.
+Reasoning is replayed only to the same model in the field it arrived in (DeepSeek forces
+`reasoning_content: ""` on replayed assistant messages); tool results become `tool` messages with
+ids within each host's rules (Mistral 9 alphanumeric characters), and their images follow as one
+user message (`images_in_results = FALSE`); operator messages and `returns` instructions are user
+messages. Azure sends the key as `api-key`, every other host as `Authorization: Bearer`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3739,7 +4073,8 @@ test_that("end to end on the mock server: a Chat Completions stream (skip on CRA
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-openai-completions")'`
-Expected: `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 89 ]`, with errors such as ``could not find function "completions_build"``.
+Expected: `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 89 ]`, with errors such as
+``could not find function "completions_build"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4048,7 +4383,7 @@ on_load(ext_declare_builtin("openai-compat", builtin_openai_compat))
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-openai-completions")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 142 ]`
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 142 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -4062,17 +4397,39 @@ git commit -m "feat(provider): build chat completions request bodies and registe
 ### Task 6: Responses normaliser
 
 **Files:**
+
 - Create: `R/provider-openai-responses.R`
-- Modify: `tests/testthat/fixtures/sse/make_fixtures.R` (append) and, by running it, `tests/testthat/fixtures/sse/openai-responses/` (15 files)
+- Modify: `tests/testthat/fixtures/sse/make_fixtures.R` (append) and, by running it,
+  `tests/testthat/fixtures/sse/openai-responses/` (15 files)
 - Test: `tests/testthat/test-provider-openai-responses.R` (create)
 
 **Interfaces:**
-- Consumes: the Task 1 core (`adp_state()`, `adp_open()`, `adp_delta()`, `adp_close()`, `adp_set_opaque()`, `adp_buffer_text()`, `adp_error()`, `adp_done()`, `adp_stream_error()`, `adp_finish_pending()`, `adp_normaliser()`, `adp_json_try()`, `adp_is_object()`), `partial_json()`, `json_encode()` (P01).
-- Produces: `responses_normaliser(model, opts)` (the adapter's `parse`), `responses_error_info(code)`, `responses_reasoning_item(item)`.
 
-The normaliser follows report 08 sections 2.A, 3.2-3.3 and 5.7 with the verification-log fixes: a reasoning output item opens a thinking slot (summary text, streamed from `response.reasoning_summary_text.delta` with a blank line between summary parts) and an opaque slot holding the reasoning item for replay (`type`, `id`, `summary`, `encrypted_content`, `content`); the completed item comes from `response.output_item.done`, and an `encrypted_content` missing there is backfilled from `response.completed` (row 32, "the quirk is a missing `encrypted_content` on reasoning items"); a message item's `id` and `phase` are kept as the text block's signature `{"v":1,"id":...,"phase":...}` (Pi's text signature; row 37 "`phase` must be preserved"); a function call's id is `<call_id>|<fc_id>` (04 section 4.1: "provider id verbatim, e.g. `call_1|fc_2`"); usage is `input_tokens` minus cached and cache-write tokens (08 section 3.3); `response.completed` gives `stop` (or `tool_use` when the output holds calls), `response.incomplete` with `max_output_tokens` gives `length` and any other reason `error`; `response.failed` and the top-level `error` event are retryable (`server_error`, `server_is_overloaded`, `rate_limit_exceeded`, `slow_down`) or final (spend and quota codes are never retried, 08 section 3.5).
+- Consumes: the Task 1 core (`adp_state()`, `adp_open()`, `adp_delta()`, `adp_close()`,
+  `adp_set_opaque()`, `adp_buffer_text()`, `adp_error()`, `adp_done()`, `adp_stream_error()`,
+  `adp_finish_pending()`, `adp_normaliser()`, `adp_json_try()`, `adp_is_object()`),
+  `partial_json()`, `json_encode()` (P01).
+- Produces: `responses_normaliser(model, opts)` (the adapter's `parse`),
+  `responses_error_info(code)`, `responses_reasoning_item(item)`.
 
-Fixtures: `reasoning_tools` (a reasoning item with a two-part summary and encrypted content, a `commentary` message, a function call streamed in fragments), `backfill` (`encrypted_content` only in `response.completed`), `failed`, `incomplete` (`max_output_tokens`), `truncated`.
+The normaliser follows report 08 sections 2.A, 3.2-3.3 and 5.7 with the verification-log fixes: a
+reasoning output item opens a thinking slot (summary text, streamed from
+`response.reasoning_summary_text.delta` with a blank line between summary parts) and an opaque slot
+holding the reasoning item for replay (`type`, `id`, `summary`, `encrypted_content`, `content`); the
+completed item comes from `response.output_item.done`, and an `encrypted_content` missing there is
+backfilled from `response.completed` (row 32, "the quirk is a missing `encrypted_content` on
+reasoning items"); a message item's `id` and `phase` are kept as the text block's signature
+`{"v":1,"id":...,"phase":...}` (Pi's text signature; row 37 "`phase` must be preserved"); a function
+call's id is `<call_id>|<fc_id>` (04 section 4.1: "provider id verbatim, e.g. `call_1|fc_2`"); usage
+is `input_tokens` minus cached and cache-write tokens (08 section 3.3); `response.completed` gives
+`stop` (or `tool_use` when the output holds calls), `response.incomplete` with `max_output_tokens`
+gives `length` and any other reason `error`; `response.failed` and the top-level `error` event are
+retryable (`server_error`, `server_is_overloaded`, `rate_limit_exceeded`, `slow_down`) or final
+(spend and quota codes are never retried, 08 section 3.5).
+
+Fixtures: `reasoning_tools` (a reasoning item with a two-part summary and encrypted content, a
+`commentary` message, a function call streamed in fragments), `backfill` (`encrypted_content` only
+in `response.completed`), `failed`, `incomplete` (`max_output_tokens`), `truncated`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4452,7 +4809,8 @@ test_that("an error event before any delta asks the transport to retry", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-openai-responses")'`
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 1 ]`, with errors such as ``object 'responses_normaliser' not found``.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 1 ]`, with errors such as
+``object 'responses_normaliser' not found``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4672,7 +5030,7 @@ responses_normaliser = function(model, opts) {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-openai-responses")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 49 ]`
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 49 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -4686,15 +5044,41 @@ git commit -m "feat(provider): add the openai-responses normaliser"
 ### Task 7: Responses request bodies and `builtin:openai`
 
 **Files:**
+
 - Modify: `R/provider-openai-responses.R` (append)
 - Modify: `tests/testthat/fixtures/sse/replay_helpers.R` (append)
 - Test: `tests/testthat/test-provider-openai-responses.R` (append)
 
 **Interfaces:**
-- Consumes: the Task 2 request helpers, `compat_flags()` (Task 4; its `explicit_cache_mode` is `TRUE` for the provider `openai`), `gptr_adapter()`, `ext_declare_builtin()`, `on_load()`, `json_encode()`, `json_obj()`, `json_verbatim()`, `hash_xxh128()` (P01/P02); tests as in Task 2, plus P05's `project_messages()` and P01's `schema_validate()` for the INFRA-08 hand-off test.
-- Produces: `responses_build(model, context, opts)`, `responses_caps()`, `responses_image()`, `responses_user()`, `responses_assistant()`, `responses_tool_result()`, `responses_tools()`, `responses_operator()`, `responses_tool_choice()`, `builtin_openai(gptr)` and the registered adapter `openai-responses`. Test helpers (in `replay_helpers.R`): `handoff_entries(more = list())` (an Anthropic-origin transcript and its opaque strings), `wire_object()` and `responses_body_schema()` (the Responses schema fixture of INFRA-08).
 
-Body rules (report 08 sections 2.A, 3.1-3.2 and verification rows 34-40; G4 sections 2.4, 3.7): key order `model`, `store: false`, `stream`, `prompt_cache_key` (the plan's key, at most 64 characters), `prompt_cache_options: {mode: "implicit"}` (OpenAI itself, GPT-5.6 and later), `reasoning` (`effort`, `summary: "auto"`; `effort: "none"` for `off` where the model allows it) with `include: ["reasoning.encrypted_content"]`, `max_output_tokens` (at least 16), `tool_choice` (`"none"`, `"required"` or `{type: "function", name}` when forced choice is allowed and `returns` is not set), the declared request params, `tools` (flat function tools with `strict: false`, converted once per session), `input` last. `input[0]` is a developer message holding T0 and T1 as `input_text` parts with `prompt_cache_breakpoint: {mode: "explicit"}` on the anchors the plan names, and the anchored project block carries one too. For the same model, opaque reasoning items replay verbatim, text replays as a `message` item with its `id` and `phase`, and calls keep their `fc_` id; other models get plain assistant text and `call_` ids only. Tool results are `function_call_output` items whose output is a string or, with images, `input_text` and `input_image` parts (acceptance 3). Operator messages are developer messages, with their tool declarations as an `additional_tools` item; `returns` adds a developer instruction at the tail. Every request carries `x-client-request-id` = the context's `request_id` ("must be unique per request", verification row 40).
+- Consumes: the Task 2 request helpers, `compat_flags()` (Task 4; its `explicit_cache_mode` is
+  `TRUE` for the provider `openai`), `gptr_adapter()`, `ext_declare_builtin()`, `on_load()`,
+  `json_encode()`, `json_obj()`, `json_verbatim()`, `hash_xxh128()` (P01/P02); tests as in Task 2,
+  plus P05's `project_messages()` and P01's `schema_validate()` for the INFRA-08 hand-off test.
+- Produces: `responses_build(model, context, opts)`, `responses_caps()`, `responses_image()`,
+  `responses_user()`, `responses_assistant()`, `responses_tool_result()`, `responses_tools()`,
+  `responses_operator()`, `responses_tool_choice()`, `builtin_openai(gptr)` and the registered
+  adapter `openai-responses`. Test helpers (in `replay_helpers.R`): `handoff_entries(more = list())`
+  (an Anthropic-origin transcript and its opaque strings), `wire_object()` and
+  `responses_body_schema()` (the Responses schema fixture of INFRA-08).
+
+Body rules (report 08 sections 2.A, 3.1-3.2 and verification rows 34-40; G4 sections 2.4, 3.7): key
+order `model`, `store: false`, `stream`, `prompt_cache_key` (the plan's key, at most 64 characters),
+`prompt_cache_options: {mode: "implicit"}` (OpenAI itself, GPT-5.6 and later), `reasoning`
+(`effort`, `summary: "auto"`; `effort: "none"` for `off` where the model allows it) with
+`include: ["reasoning.encrypted_content"]`, `max_output_tokens` (at least 16), `tool_choice`
+(`"none"`, `"required"` or `{type: "function", name}` when forced choice is allowed and `returns` is
+not set), the declared request params, `tools` (flat function tools with `strict: false`, converted
+once per session), `input` last. `input[0]` is a developer message holding T0 and T1 as `input_text`
+parts with `prompt_cache_breakpoint: {mode: "explicit"}` on the anchors the plan names, and the
+anchored project block carries one too. For the same model, opaque reasoning items replay verbatim,
+text replays as a `message` item with its `id` and `phase`, and calls keep their `fc_` id; other
+models get plain assistant text and `call_` ids only. Tool results are `function_call_output` items
+whose output is a string or, with images, `input_text` and `input_image` parts (acceptance 3).
+Operator messages are developer messages, with their tool declarations as an `additional_tools`
+item; `returns` adds a developer instruction at the tail. Every request carries
+`x-client-request-id` = the context's `request_id` ("must be unique per request", verification
+row 40).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5021,7 +5405,9 @@ test_that("end to end on the mock server: a Responses stream (skip on CRAN)", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-openai-responses")'`
-Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 50 ]`, with errors such as ``could not find function "responses_build"`` and `No adapter is registered for the api openai-responses.`
+Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 50 ]`, with errors such as
+``could not find function "responses_build"`` and
+`No adapter is registered for the api openai-responses.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5267,7 +5653,7 @@ on_load(ext_declare_builtin("openai", builtin_openai))
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-openai-responses")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 120 ]`
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 120 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -5281,17 +5667,39 @@ git commit -m "feat(provider): build openai-responses request bodies and registe
 ### Task 8: Gemini normaliser
 
 **Files:**
+
 - Create: `R/provider-google.R`
-- Modify: `tests/testthat/fixtures/sse/make_fixtures.R` (append) and, by running it, `tests/testthat/fixtures/sse/google-generative-ai/` (16 files)
+- Modify: `tests/testthat/fixtures/sse/make_fixtures.R` (append) and, by running it,
+  `tests/testthat/fixtures/sse/google-generative-ai/` (16 files)
 - Test: `tests/testthat/test-provider-google.R` (create)
 
 **Interfaces:**
-- Consumes: the Task 1 core (`adp_state()`, `adp_open()`, `adp_delta()`, `adp_close()`, `adp_error()`, `adp_done()`, `adp_stream_error()`, `adp_finish_pending()`, `adp_normaliser()`, `adp_json_try()`, `adp_is_object()`), `json_encode()`, `json_obj()` (P01).
-- Produces: `google_normaliser(model, opts)` (the adapter's `parse`), `google_major(id)`, `google_uses_level(id)`, `google_needs_id(id)`, `google_valid_sig(s)`, `google_budget(id, level)`, `google_error_info(err)`.
 
-The normaliser ports Pi's Gemini stream loop (report 09 sections 2.1-2.2, 3.1, 4.5 and verification rows 4-9; `google-generative-ai.ts:106-278`, `google-shared.ts:72-83`): parts with `thought: true` stream as thinking and others as text, a `thoughtSignature` is kept on the exact block its part belongs to (a signature on an empty text part attaches to the open block or opens an empty text block), function calls arrive whole (their arguments are emitted as one delta and the block closes at once) with the signature of the first parallel call kept on that call only, missing or duplicate call ids are generated as `<name>_<response id fragment>_<n>`, usage is `promptTokenCount - cachedContentTokenCount` input, `candidatesTokenCount + thoughtsTokenCount` output, `cachedContentTokenCount` cache reads and `thoughtsTokenCount` reasoning, `STOP` maps to `stop` (`tool_use` with calls) and `MAX_TOKENS` to `length`, and every other finish reason, a blocked prompt (`promptFeedback.blockReason`) or a stream without a finish reason ends in one `error` event with the raw value kept. Error chunks (`RESOURCE_EXHAUSTED`, `UNAVAILABLE`, `INTERNAL`) are retryable before any delta.
+- Consumes: the Task 1 core (`adp_state()`, `adp_open()`, `adp_delta()`, `adp_close()`,
+  `adp_error()`, `adp_done()`, `adp_stream_error()`, `adp_finish_pending()`, `adp_normaliser()`,
+  `adp_json_try()`, `adp_is_object()`), `json_encode()`, `json_obj()` (P01).
+- Produces: `google_normaliser(model, opts)` (the adapter's `parse`), `google_major(id)`,
+  `google_uses_level(id)`, `google_needs_id(id)`, `google_valid_sig(s)`, `google_budget(id, level)`,
+  `google_error_info(err)`.
 
-Fixtures: `thought_tools` (a signed thought, text, two parallel calls with the signature on the first, usage with cached tokens), `text_signature` (a signature on a final empty text part), `blocked`, `unknown_finish` (`MISSING_THOUGHT_SIGNATURE`), `truncated`; `model.json` makes the fixture model `google/gemini-3.8-flash` so calls and responses carry ids.
+The normaliser ports Pi's Gemini stream loop (report 09 sections 2.1-2.2, 3.1, 4.5 and verification
+rows 4-9; `google-generative-ai.ts:106-278`, `google-shared.ts:72-83`): parts with `thought: true`
+stream as thinking and others as text, a `thoughtSignature` is kept on the exact block its part
+belongs to (a signature on an empty text part attaches to the open block or opens an empty text
+block), function calls arrive whole (their arguments are emitted as one delta and the block closes
+at once) with the signature of the first parallel call kept on that call only, missing or duplicate
+call ids are generated as `<name>_<response id fragment>_<n>`, usage is
+`promptTokenCount - cachedContentTokenCount` input, `candidatesTokenCount + thoughtsTokenCount`
+output, `cachedContentTokenCount` cache reads and `thoughtsTokenCount` reasoning, `STOP` maps to
+`stop` (`tool_use` with calls) and `MAX_TOKENS` to `length`, and every other finish reason, a
+blocked prompt (`promptFeedback.blockReason`) or a stream without a finish reason ends in one
+`error` event with the raw value kept. Error chunks (`RESOURCE_EXHAUSTED`, `UNAVAILABLE`,
+`INTERNAL`) are retryable before any delta.
+
+Fixtures: `thought_tools` (a signed thought, text, two parallel calls with the signature on the
+first, usage with cached tokens), `text_signature` (a signature on a final empty text part),
+`blocked`, `unknown_finish` (`MISSING_THOUGHT_SIGNATURE`), `truncated`; `model.json` makes the
+fixture model `google/gemini-3.8-flash` so calls and responses carry ids.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5492,7 +5900,8 @@ test_that("missing or duplicate function-call ids are generated", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-google")'`
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 1 ]`, with errors such as ``object 'google_normaliser' not found``.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 1 ]`, with errors such as
+``object 'google_normaliser' not found``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5690,7 +6099,7 @@ google_normaliser = function(model, opts) {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-google")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 56 ]`
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 56 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -5704,15 +6113,37 @@ git commit -m "feat(provider): add the google-generative-ai normaliser"
 ### Task 9: Gemini request bodies and `builtin:google`
 
 **Files:**
+
 - Modify: `R/provider-google.R` (append)
 - Modify: `tests/testthat/fixtures/sse/replay_helpers.R` (append)
 - Test: `tests/testthat/test-provider-google.R` (append)
 
 **Interfaces:**
-- Consumes: the Task 2 request helpers, `gptr_adapter()`, `ext_declare_builtin()`, `on_load()`, `json_encode()`, `json_obj()` (P01/P02); tests as in Task 2, plus the Task 7 helpers `handoff_entries()` and `wire_object()`, P05's `project_messages()`, P01's `schema_validate()` and the Task 6 `responses_normaliser()` (the INFRA-08 chain Anthropic -> Responses -> Gemini).
-- Produces: `google_build(model, context, opts)`, `google_caps()`, `google_schema(x)`, `google_image()`, `google_user()`, `google_assistant()`, `google_tool_results()`, `google_generation(model, params)`, `builtin_google(gptr)` and the registered adapter `google-generative-ai`. Test helper (in `replay_helpers.R`): `gemini_body_schema()` (the Gemini schema fixture of INFRA-08).
 
-Body rules (report 09 sections 2.1, 3.1, 4.5 and verification rows 2, 5-7, 9; G4 sections 2.5, 3.7): key order `systemInstruction` (`parts = [T0, T1]`), `tools` (`functionDeclarations` with `parametersJsonSchema`, converted once per session), `toolConfig.functionCallingConfig` (`AUTO`; `NONE` for `tool_choice = "none"`; `ANY`, with `allowedFunctionNames` for one named tool, when forced choice is allowed and `returns` is not set), `generationConfig` (`maxOutputTokens`, `temperature`, `thinkingConfig`: `thinkingLevel` in upper case on Gemini 3.x with `xhigh` and `max` clamped to `HIGH` and `off` sent as the lowest level the model accepts, `thinkingBudget` on 2.5 with `0` for `off` and `-1` for dynamic), the declared request params (`labels`, `serviceTier`), `contents` last. No cache markers: Gemini caches implicitly. A thought signature replays only to the same model and only on the part it arrived on, and only when it is valid base64; Gemini 3 calls and responses carry ids; tool results are one user content of `functionResponse` parts (`response.output` or `response.error`), with images inside `functionResponse.parts` on Gemini 3 and in a following user content on 2.5; operator messages and `returns` instructions are user contents. The key travels in `x-goog-api-key`, never in the URL.
+- Consumes: the Task 2 request helpers, `gptr_adapter()`, `ext_declare_builtin()`, `on_load()`,
+  `json_encode()`, `json_obj()` (P01/P02); tests as in Task 2, plus the Task 7 helpers
+  `handoff_entries()` and `wire_object()`, P05's `project_messages()`, P01's `schema_validate()` and
+  the Task 6 `responses_normaliser()` (the INFRA-08 chain Anthropic -> Responses -> Gemini).
+- Produces: `google_build(model, context, opts)`, `google_caps()`, `google_schema(x)`,
+  `google_image()`, `google_user()`, `google_assistant()`, `google_tool_results()`,
+  `google_generation(model, params)`, `builtin_google(gptr)` and the registered adapter
+  `google-generative-ai`. Test helper (in `replay_helpers.R`): `gemini_body_schema()` (the Gemini
+  schema fixture of INFRA-08).
+
+Body rules (report 09 sections 2.1, 3.1, 4.5 and verification rows 2, 5-7, 9; G4 sections 2.5, 3.7):
+key order `systemInstruction` (`parts = [T0, T1]`), `tools` (`functionDeclarations` with
+`parametersJsonSchema`, converted once per session), `toolConfig.functionCallingConfig` (`AUTO`;
+`NONE` for `tool_choice = "none"`; `ANY`, with `allowedFunctionNames` for one named tool, when
+forced choice is allowed and `returns` is not set), `generationConfig` (`maxOutputTokens`,
+`temperature`, `thinkingConfig`: `thinkingLevel` in upper case on Gemini 3.x with `xhigh` and `max`
+clamped to `HIGH` and `off` sent as the lowest level the model accepts, `thinkingBudget` on 2.5 with
+`0` for `off` and `-1` for dynamic), the declared request params (`labels`, `serviceTier`),
+`contents` last. No cache markers: Gemini caches implicitly. A thought signature replays only to the
+same model and only on the part it arrived on, and only when it is valid base64; Gemini 3 calls and
+responses carry ids; tool results are one user content of `functionResponse` parts
+(`response.output` or `response.error`), with images inside `functionResponse.parts` on Gemini 3 and
+in a following user content on 2.5; operator messages and `returns` instructions are user contents.
+The key travels in `x-goog-api-key`, never in the URL.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5933,7 +6364,9 @@ test_that("end to end on the mock server: a Gemini stream (skip on CRAN)", {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-google")'`
-Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 57 ]`, with errors such as ``could not find function "google_build"`` and `No adapter is registered for the api google-generative-ai.`
+Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 57 ]`, with errors such as
+``could not find function "google_build"`` and
+`No adapter is registered for the api google-generative-ai.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6174,7 +6607,7 @@ on_load(ext_declare_builtin("google", builtin_google))
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "provider-google")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 111 ]`
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 111 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -6188,14 +6621,27 @@ git commit -m "feat(provider): build google-generative-ai request bodies and reg
 ### Task 10: Gated live tests
 
 **Files:**
-- Create: `tests/testthat/test-live-anthropic.R`, `tests/testthat/test-live-openai.R`, `tests/testthat/test-live-google.R`
+
+- Create: `tests/testthat/test-live-anthropic.R`, `tests/testthat/test-live-openai.R`,
+  `tests/testthat/test-live-google.R`
 - Modify: `tests/testthat/fixtures/sse/replay_helpers.R` (append)
 
 **Interfaces:**
-- Consumes: `model_resolve(ref, strict = TRUE)`, `provider_stream(model, context, opts, emit, done, run = NULL)` (P05), `reactor_pump()` (P04), `msg_user()`, `msg_tool_result()`, `msg_text()`, `json_verbatim()` (P01), and `ctx_fixture()` (Task 2).
-- Produces: `skip_unless_live(keys)`, `live_stream(model, context)`, `live_context(messages, params = list())`, `expect_live_round_trip(ref, thinking = "low")` (test helpers).
 
-Each live test makes paid requests and therefore runs only with `GPTR_LIVE_TESTS=true` and the provider's key (conventions sections 2 and 7; P01's `setup.R` blanks the provider keys unless `GPTR_LIVE_TESTS=true`). A round trip is a text turn, then a tool call answered with a result and replayed to the same model with its thinking, signatures, reasoning items or thought signatures, which is the live counterpart of acceptance 2. Keys are never printed: they reach the request only as origin-bound handles through P05's `provider_credential()`.
+- Consumes: `model_resolve(ref, strict = TRUE)`,
+  `provider_stream(model, context, opts, emit, done, run = NULL)` (P05), `reactor_pump()` (P04),
+  `msg_user()`, `msg_tool_result()`, `msg_text()`, `json_verbatim()` (P01), and `ctx_fixture()`
+  (Task 2).
+- Produces: `skip_unless_live(keys)`, `live_stream(model, context)`,
+  `live_context(messages, params = list())`, `expect_live_round_trip(ref, thinking = "low")` (test
+  helpers).
+
+Each live test makes paid requests and therefore runs only with `GPTR_LIVE_TESTS=true` and the
+provider's key (conventions sections 2 and 7; P01's `setup.R` blanks the provider keys unless
+`GPTR_LIVE_TESTS=true`). A round trip is a text turn, then a tool call answered with a result and
+replayed to the same model with its thinking, signatures, reasoning items or thought signatures,
+which is the live counterpart of acceptance 2. Keys are never printed: they reach the request only
+as origin-bound handles through P05's `provider_credential()`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6241,7 +6687,8 @@ test_that("google: a text turn and a tool round trip with thought signatures (li
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^live-(anthropic|openai|google)$")'`
-Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 0 ]`, with errors such as ``could not find function "skip_unless_live"``.
+Expected: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 0 ]`, with errors such as
+``could not find function "skip_unless_live"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6303,7 +6750,13 @@ expect_live_round_trip = function(ref, thinking = "low") {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "^live-(anthropic|openai|google)$")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 3 | PASS 0 ]` (each skipped with "live tests need GPTR_LIVE_TESTS=true"; the filter selects only this plan's three live files, never P06's `test-session-live.R`). The maintainer's opt-in run is `GPTR_LIVE_TESTS=true Rscript --vanilla -e 'devtools::test(filter = "^live-(anthropic|openai|google)$")'` (the conventions' `filter = "live"` also runs P06's `test-session-live.R`, which is harmless there) with `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) set; it is not part of this task's automated checks.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 3 | PASS 0 ]` (each skipped with "live tests need
+GPTR_LIVE_TESTS=true"; the filter selects only this plan's three live files, never P06's
+`test-session-live.R`). The maintainer's opt-in run is
+`GPTR_LIVE_TESTS=true Rscript --vanilla -e 'devtools::test(filter = "^live-(anthropic|openai|google)$")'`
+(the conventions' `filter = "live"` also runs P06's `test-session-live.R`, which is harmless there)
+with `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) set; it is not
+part of this task's automated checks.
 
 - [ ] **Step 5: Commit**
 
@@ -6316,9 +6769,11 @@ git commit -m "test(provider): add gated live round trips for the native adapter
 
 ## Plan acceptance
 
-Every acceptance check of 05 P12 (including its review amendments), the task and test that prove it, and the command with its expected result. Run from the repository root after Task 10, with P01-P07 in place and the P02 precondition of the Global Constraints met.
+Every acceptance check of 05 P12 (including its review amendments), the task and test that prove it,
+and the command with its expected result. Run from the repository root after Task 10, with P01-P07
+in place and the P02 precondition of the Global Constraints met.
 
-| # | Acceptance check (05 P12) | Proven by | Command and expected result |
+| # | Acceptance check (05 P12) | Proved by | Command and expected result |
 |---|---|---|---|
 | 1 | `devtools::test(filter = "provider-(anthropic\|openai\|google)")` is green; live tests skip unless `GPTR_LIVE_TESTS=true` | Tasks 1-9 (all four test files); Task 10 (the three live files skip) | `Rscript --vanilla -e 'devtools::test(filter = "provider-(anthropic\|openai\|google)")'` -> `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 604 ]` (under `R CMD check --as-cran`: `SKIP 5`, the four mock-server tests and the linear-time test); `Rscript --vanilla -e 'devtools::test(filter = "^live-(anthropic\|openai\|google)$")'` -> `[ FAIL 0 \| WARN 0 \| SKIP 3 \| PASS 0 ]` |
 | 2 | `gptr_check()` passes for each adapter: golden event sequences per fixture; a server error event and a truncated connection each give exactly one `error` event with the partial; chunk invariance; byte-identical re-serialisation of thinking + signature + redacted thinking + parallel tool use (Anthropic), encrypted reasoning with `fc_`/`call_` ids (Responses), thought signatures (Gemini) | Task 3 ("check_adapter() passes for anthropic-messages on its fixtures (acceptance 2)", "the check.adapter service makes gptr_check() replay the fixtures (acceptance 2)"); Tasks 5, 7, 9 ("builtin:... registers the adapter; check_adapter() and gptr_check() pass"); adapters with nothing to replay: Task 3 ("check_adapter() reports missing fixtures and skips inprocess and classifier adapters"); one-error tests: Task 1 ("a server error event and a truncated stream each end with one error and the partial"), Task 4 ("a mid-stream error chunk and a truncated stream each give one error event"), Task 6 ("failed and truncated streams each end with one error event and the partial"), Task 8 ("blocked prompts, unknown finish reasons and truncation end in one error event"); chunk invariance: the `... do not depend on how the bytes are chunked (INFRA-23)` tests of Tasks 1, 4, 6, 8; re-serialisation: Task 2 ("signed and redacted thinking replay byte for byte only to the same model"), Task 7 ("reasoning items, phase and fc_ ids replay byte for byte to the same model only"), Task 9 ("thought signatures replay byte for byte to the same model only (acceptance 2)") and the `adapter.<case>.roundtrip` rows | `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); for (api in c("anthropic-messages", "openai-responses", "openai-completions", "google-generative-ai")) { a = adapter_get(api); r = gptr_check(a); cat(api, ": ", nrow(r), " checks, ", sum(!r$ok), " failed\n", sep = "") }'` -> `anthropic-messages: 37 checks, 0 failed`, `openai-responses: 31 checks, 0 failed`, `openai-completions: 25 checks, 0 failed`, `google-generative-ai: 30 checks, 0 failed` |
@@ -6362,50 +6817,198 @@ Every acceptance check maps to named tests in the Plan acceptance table.
 
 ### Placeholder scan
 
-The plan was searched for "TBD", "TODO", "implement later", "fill in", "appropriate error handling", "handle edge cases", "similar to Task" and "write tests for the above": none occur. Every step that changes code shows the complete code. Every function the code calls is defined in this plan or listed for an earlier plan in 04: P01 (`%||%`, `on_load`, `ext_service_set`, `ext_service_has`, `ev_new`, `block_*`, `msg_*`, `json_encode`, `json_decode`, `json_obj`, `json_verbatim`, `partial_json`, `canonical_json`, `hash_sha256`, `hash_xxh128`, `read_utf8`, `write_utf8`, `raw_to_utf8`, `gptr_has_human`, `schema_validate`; test helpers `local_gptr_options`, `local_mock_server`), P02 (`gptr_adapter`, `ext_declare_builtin`, `gptr_check`, `gptr_register`, `gptr_provider`, `gptr_tool`, `registry_get`), P04 (`sse_splitter`, `ndjson_splitter`, `reactor_http`, `reactor_task`, `reactor_pump`), P05 (`provider_get`, `adapter_get`, `model_resolve`, `provider_stream`, `usage_new`, `usage_cost`; tests: `project_messages`), P06 (`session_new`, `session_run`), P07 (the `default` `cache_policy` record). The test helpers live in `tests/testthat/fixtures/sse/replay_helpers.R` because 05 lets P12 write only the files it owns and it owns `fixtures/sse/`; each P12 test file sources it with `source(testthat::test_path("fixtures", "sse", "replay_helpers.R"), local = TRUE)`.
+The plan was searched for "TBD", "TODO", "implement later", "fill in", "appropriate error handling",
+"handle edge cases", "similar to Task" and "write tests for the above": none occur. Every step that
+changes code shows the complete code. Every function the code calls is defined in this plan or
+listed for an earlier plan in 04: P01 (`%||%`, `on_load`, `ext_service_set`, `ext_service_has`,
+`ev_new`, `block_*`, `msg_*`, `json_encode`, `json_decode`, `json_obj`, `json_verbatim`,
+`partial_json`, `canonical_json`, `hash_sha256`, `hash_xxh128`, `read_utf8`, `write_utf8`,
+`raw_to_utf8`, `gptr_has_human`, `schema_validate`; test helpers `local_gptr_options`,
+`local_mock_server`), P02 (`gptr_adapter`, `ext_declare_builtin`, `gptr_check`, `gptr_register`,
+`gptr_provider`, `gptr_tool`, `registry_get`), P04 (`sse_splitter`, `ndjson_splitter`,
+`reactor_http`, `reactor_task`, `reactor_pump`), P05 (`provider_get`, `adapter_get`,
+`model_resolve`, `provider_stream`, `usage_new`, `usage_cost`; tests: `project_messages`), P06
+(`session_new`, `session_run`), P07 (the `default` `cache_policy` record). The test helpers live in
+`tests/testthat/fixtures/sse/replay_helpers.R` because 05 lets P12 write only the files it owns and
+it owns `fixtures/sse/`; each P12 test file sources it with
+`source(testthat::test_path("fixtures", "sse", "replay_helpers.R"), local = TRUE)`.
 
 ### Type and name consistency with 04
 
-- `anthropic_normaliser(model, opts)`, `check_adapter(adapter, fixtures = NULL)` and `compat_flags(provider, model)` have the names, arguments and files of 04 section 7.12; the service is registered as `check.adapter` with the signature of 04 section 7.0 and owned by a built-in (IC-34).
-- The built-ins are `builtin:anthropic`, `builtin:openai`, `builtin:openai-compat` and `builtin:google` (04 section 10.3) with the factories of 04 section 7.12; the adapters are `anthropic-messages`, `openai-responses`, `openai-completions` and `google-generative-ai` (04 section 8.1), built with `gptr_adapter()` as amended by IC-35.
-- `build()` returns exactly the request-spec fields of 04 section 8.1 (`url`, `method`, `headers`, `body`, `stream`); normalisers expose `push`, `finish`, `fail`, `message` (and `push_parsed` for Anthropic); `capabilities` carry only the 04 section 8.1 names with values from their allowed sets.
-- Events use only the INFRA-02 types and fields of 04 section 4.5 and are built with `ev_new()`; messages and blocks only through P01's constructors with the 04 section 4.1-4.2 fields; usage through P05's `usage_new()` with the 04 section 4.3 fields; stop reasons and routes from 04 section 4.2; error classes from 04 section 2.2.
-- Compat fields use P05's snake_case names (P05 Task 2), plus five P12 defaults named in the Global Constraints.
+- `anthropic_normaliser(model, opts)`, `check_adapter(adapter, fixtures = NULL)` and
+  `compat_flags(provider, model)` have the names, arguments and files of 04 section 7.12; the
+  service is registered as `check.adapter` with the signature of 04 section 7.0 and owned by a
+  built-in (IC-34).
+- The built-ins are `builtin:anthropic`, `builtin:openai`, `builtin:openai-compat` and
+  `builtin:google` (04 section 10.3) with the factories of 04 section 7.12; the adapters are
+  `anthropic-messages`, `openai-responses`, `openai-completions` and `google-generative-ai`
+  (04 section 8.1), built with `gptr_adapter()` as amended by IC-35.
+- `build()` returns exactly the request-spec fields of 04 section 8.1 (`url`, `method`, `headers`,
+  `body`, `stream`); normalisers expose `push`, `finish`, `fail`, `message` (and `push_parsed` for
+  Anthropic); `capabilities` carry only the 04 section 8.1 names with values from their allowed
+  sets.
+- Events use only the INFRA-02 types and fields of 04 section 4.5 and are built with `ev_new()`;
+  messages and blocks only through P01's constructors with the 04 section 4.1-4.2 fields; usage
+  through P05's `usage_new()` with the 04 section 4.3 fields; stop reasons and routes from
+  04 section 4.2; error classes from 04 section 2.2.
+- Compat fields use P05's snake_case names (P05 Task 2), plus five P12 defaults named in the Global
+  Constraints.
 
 ### Ambiguities in 04 and deviations of dependency plans (recorded, not resolved by inventing API)
 
-1. **P02 defines a private `check_adapter(spec, target, adapter_check)`** in `R/ext-check.R` (plan text of 2026-10-01, 11:19). 04 section 7.12 gives `check_adapter(adapter, fixtures = NULL)` to P12 in `provider-anthropic.R`. Two definitions of one name let the later-collating `provider-anthropic.R` replace P02's, and `gptr_check()` then fails with `unused argument (adapter_check)` (reproduced). This plan follows 04 and adds a precondition check to Task 3; P02 must rename its helper (for example `check_adapter_rows()`, one call in `check_spec()`). With that rename applied in the scratch build, all P12 tests and `gptr_check()` pass.
-2. **How `.opts$returns` reaches `context$params` (resolved in P07).** 04 section 8.1 carries `returns` in `context$params`. An earlier P07 text set `params$returns = NULL`; P07's current `prompt_request_context()` (plan text of 2026-10-01, 11:49) reads the running call's `run$opts$returns` from the session's live run, so with P06 and P07 loaded the adapters receive the schema. The two run tests (Tasks 2 and 7) therefore assert it on the wire: Anthropic's first request carries `output_config.format`, the Responses request closes with the developer instruction. If a later P07 revision stops filling `params$returns`, those expectations fail instead of passing vacuously on P06's text validation.
-3. **P01's `acc_new()` is quadratic.** `buffer$parts[[buffer$n]] = ev$delta` on an environment reached through a variable copies the whole list on every delta (measured with the P01 code of 2026-10-01: 5,000 deltas 0.14-0.16 s, 20,000 deltas 1.7-2.2 s). P05's `provider_stream()` and P06's run push every event into such an accumulator, so INFRA-23's linear decoding does not hold end to end until P01 takes the list out of the environment and clears the binding before setting an element (the form `adp_buffer_add()` uses: 20,000 appends in 0.013 s). P12's own normalisers are linear (40,000 deltas in about 1.6 s, dominated by JSON parsing; Task 1 test).
-4. **`request_id` in `start` and `error` events.** `parse(model, opts)` receives no request context and the response headers stay in P05's transport, so P12's normalisers emit `request_id = NULL`. P05's `provider_stream()` knows `context$request_id` and fills it into those events and the final message (P05's `stream_request_id()`, its cross-plan consolidation row C1; an id the adapter set is kept); P06 already keys usage rows by its own `run$request_id`.
-5. **Golden-event projection.** 04 section 12.3 names `ts`, `session`, `run` and `request_id` as the volatile fields. P12's projection also leaves out `preview` (throttled by wall-clock time), `agent` and `turn` (set by the run, not the adapter), the `start` event's `api`, `provider` and `model` (the fixture model), and the terminal event's `message` and `usage`, which are compared through `<case>.message.json`.
-6. **The `cache` capability is per adapter, but `openai-completions` serves many hosts.** It declares `"openrouter"`, so P07's default policy anchors T0 and the project block, and the adapter writes `cache_control` markers only for providers whose compat record has `cache_control_format = "anthropic"` (OpenRouter's Anthropic and Google models); every other host ignores the anchors.
-7. **Memo keys.** 04 section 8.1 describes the memo as "keyed `<entry id>|<api>|<same model>`", but projected messages carry no entry id (P05's `project_messages()` returns message records). P12 keys each serialised piece by a hash of the fields that reach the wire (role, content, api, provider, model, call ids, kind, tool declarations) plus the api, the same-model flag and the placement flags, so a rebuilt copy of an entry hits the same piece.
-8. **`returns` without native structured output.** "auto + instruction + validation" leaves the instruction's position open; P12 appends it at the tail (on Anthropic models with `mid_system` a system message when it directly follows a user turn, so a trailing operator run is then sent as user text and no two system messages meet; a developer message on Responses; a user message on Chat Completions and Gemini), so every earlier element except, on Anthropic, a trailing operator run stays unchanged. The instruction sits at the tail, so the next request diverges from the previous one at the instruction's position (the cache read stops there); that cost is inherent to a tail instruction. Anthropic uses `output_config.format` only when the model record says `structured_output = TRUE`.
-9. **Refusing `sk-ant-oat` subscription tokens** (architecture section 8.1) needs the key value, which only P03 and P04 may read (04 section 7.3); adapters see handles only. It belongs to P05's credential resolution or P03's registration; P12 does not implement it, and neither P03's nor P05's plan text of 2026-10-01 does (a gap reported for those owners). Resolved in P05's cross-plan consolidation (its log row C2): `provider_credential()` skips an `sk-ant-oat` value for the `anthropic` provider and, with nothing else found, signals `gptr_error_no_key` naming the subscription token; P12 still does nothing here.
-10. **Fixture lookup for `gptr_check()` outside the source tree.** The service is called without `fixtures`, so `check_adapter()` looks in `fixtures/sse/<api>` under the working directory and in `tests/testthat/fixtures/sse/<api>`; an installed package ships no tests, so `gptr_check()` on a built-in adapter run from another directory reports `adapter.fixtures` as failed with a message naming the `fixtures` argument.
-11. **Owner of `check.adapter`.** IC-34 makes every service owned by a built-in; the service lives in `provider-anthropic.R`, so it is owned by `builtin:anthropic`, and a `-builtin:anthropic` filter also removes fixture replay from `gptr_check()`.
-12. **`thinking = "off"` on Anthropic adaptive models.** The `thinking` field is omitted (the API default is adaptive on 5.x; Sonnet 5.5's `between_tools` is not used), because the catalog clamps `off` for models that cannot disable thinking.
-13. **Explicit OpenAI cache mode.** `prompt_cache_options` and explicit breakpoints apply to GPT-5.6 and later (report 08 section 2.A); P12 enables them for the provider `openai` only (`compat_flags()$explicit_cache_mode`); whether older OpenAI models reject the field is not documented (UNCERTAIN), and a provider record can switch it off through `compat`.
-14. **Route of reused normalisers.** Messages get `route = "plan-cli"` for CLI model records and `"system-one"` for classifier records (the mapping P05's `stream_route()` uses), so P20's reuse of `anthropic_normaliser()` needs no patch.
-15. **Classifier adapters in `gptr_check()`.** P02's `gptr_check()` calls the `check.adapter` service for every adapter spec, including P13's `typesafe-system-one` (`transport = "http_json"`, only `classify`) and any plugin classifier. Such an adapter has no stream normaliser to replay, so `check_adapter()` returns the one row `adapter.replay` (ok) for it, as for `inprocess` generators; its fixtures are P13's `fixtures/jev/`. Process adapters (P20's `cli-claude`, `cli-codex`) are replayed from `.jsonl` files only when `fixtures` points at them; `adp_replay()` passes `emit`, `signal`, `base_url` and a no-op `send`, so a P20 normaliser that needs `opts$gate` or `opts$mcp_dispatch` for a fixture must be checked through P20's own tests.
+1. **P02 defines a private `check_adapter(spec, target, adapter_check)`** in `R/ext-check.R` (plan
+   text of 2026-10-01, 11:19). 04 section 7.12 gives `check_adapter(adapter, fixtures = NULL)` to
+   P12 in `provider-anthropic.R`. Two definitions of one name let the later-collating
+   `provider-anthropic.R` replace P02's, and `gptr_check()` then fails with
+   `unused argument (adapter_check)` (reproduced). This plan follows 04 and adds a precondition
+   check to Task 3; P02 must rename its helper (for example `check_adapter_rows()`, one call in
+   `check_spec()`). With that rename applied in the scratch build, all P12 tests and `gptr_check()`
+   pass.
+2. **How `.opts$returns` reaches `context$params` (resolved in P07).** 04 section 8.1 carries
+   `returns` in `context$params`. An earlier P07 text set `params$returns = NULL`; P07's current
+   `prompt_request_context()` (plan text of 2026-10-01, 11:49) reads the running call's
+   `run$opts$returns` from the session's live run, so with P06 and P07 loaded the adapters receive
+   the schema. The two run tests (Tasks 2 and 7) therefore assert it on the wire: Anthropic's first
+   request carries `output_config.format`, the Responses request closes with the developer
+   instruction. If a later P07 revision stops filling `params$returns`, those expectations fail
+   instead of passing vacuously on P06's text validation.
+3. **P01's `acc_new()` is quadratic.** `buffer$parts[[buffer$n]] = ev$delta` on an environment
+   reached through a variable copies the whole list on every delta (measured with the P01 code of
+   2026-10-01: 5,000 deltas 0.14-0.16 s, 20,000 deltas 1.7-2.2 s). P05's `provider_stream()` and
+   P06's run push every event into such an accumulator, so INFRA-23's linear decoding does not hold
+   end to end until P01 takes the list out of the environment and clears the binding before setting
+   an element (the form `adp_buffer_add()` uses: 20,000 appends in 0.013 s). P12's own normalisers
+   are linear (40,000 deltas in about 1.6 s, dominated by JSON parsing; Task 1 test).
+4. **`request_id` in `start` and `error` events.** `parse(model, opts)` receives no request context
+   and the response headers stay in P05's transport, so P12's normalisers emit `request_id = NULL`.
+   P05's `provider_stream()` knows `context$request_id` and fills it into those events and the final
+   message (P05's `stream_request_id()`, its cross-plan consolidation row C1; an id the adapter set
+   is kept); P06 already keys usage rows by its own `run$request_id`.
+5. **Golden-event projection.** 04 section 12.3 names `ts`, `session`, `run` and `request_id` as the
+   volatile fields. P12's projection also leaves out `preview` (throttled by wall-clock time),
+   `agent` and `turn` (set by the run, not the adapter), the `start` event's `api`, `provider` and
+   `model` (the fixture model), and the terminal event's `message` and `usage`, which are compared
+   through `<case>.message.json`.
+6. **The `cache` capability is per adapter, but `openai-completions` serves many hosts.** It
+   declares `"openrouter"`, so P07's default policy anchors T0 and the project block, and the
+   adapter writes `cache_control` markers only for providers whose compat record has
+   `cache_control_format = "anthropic"` (OpenRouter's Anthropic and Google models); every other host
+   ignores the anchors.
+7. **Memo keys.** 04 section 8.1 describes the memo as "keyed `<entry id>|<api>|<same model>`", but
+   projected messages carry no entry id (P05's `project_messages()` returns message records). P12
+   keys each serialised piece by a hash of the fields that reach the wire (role, content, api,
+   provider, model, call ids, kind, tool declarations) plus the api, the same-model flag and the
+   placement flags, so a rebuilt copy of an entry hits the same piece.
+8. **`returns` without native structured output.** "auto + instruction + validation" leaves the
+   instruction's position open; P12 appends it at the tail (on Anthropic models with `mid_system` a
+   system message when it directly follows a user turn, so a trailing operator run is then sent as
+   user text and no two system messages meet; a developer message on Responses; a user message on
+   Chat Completions and Gemini), so every earlier element except, on Anthropic, a trailing operator
+   run stays unchanged. The instruction sits at the tail, so the next request diverges from the
+   previous one at the instruction's position (the cache read stops there); that cost is inherent to
+   a tail instruction. Anthropic uses `output_config.format` only when the model record says
+   `structured_output = TRUE`.
+9. **Refusing `sk-ant-oat` subscription tokens** (architecture section 8.1) needs the key value,
+   which only P03 and P04 may read (04 section 7.3); adapters see handles only. It belongs to P05's
+   credential resolution or P03's registration; P12 does not implement it, and neither P03's nor
+   P05's plan text of 2026-10-01 does (a gap reported for those owners). Resolved in P05's
+   cross-plan consolidation (its log row C2): `provider_credential()` skips an `sk-ant-oat` value
+   for the `anthropic` provider and, with nothing else found, signals `gptr_error_no_key` naming the
+   subscription token; P12 still does nothing here.
+10. **Fixture lookup for `gptr_check()` outside the source tree.** The service is called without
+    `fixtures`, so `check_adapter()` looks in `fixtures/sse/<api>` under the working directory and
+    in `tests/testthat/fixtures/sse/<api>`; an installed package ships no tests, so `gptr_check()`
+    on a built-in adapter run from another directory reports `adapter.fixtures` as failed with a
+    message naming the `fixtures` argument.
+11. **Owner of `check.adapter`.** IC-34 makes every service owned by a built-in; the service lives
+    in `provider-anthropic.R`, so it is owned by `builtin:anthropic`, and a `-builtin:anthropic`
+    filter also removes fixture replay from `gptr_check()`.
+12. **`thinking = "off"` on Anthropic adaptive models.** The `thinking` field is omitted (the API
+    default is adaptive on 5.x; Sonnet 5.5's `between_tools` is not used), because the catalog
+    clamps `off` for models that cannot disable thinking.
+13. **Explicit OpenAI cache mode.** `prompt_cache_options` and explicit breakpoints apply to GPT-5.6
+    and later (report 08 section 2.A); P12 enables them for the provider `openai` only
+    (`compat_flags()$explicit_cache_mode`); whether older OpenAI models reject the field is not
+    documented (UNCERTAIN), and a provider record can switch it off through `compat`.
+14. **Route of reused normalisers.** Messages get `route = "plan-cli"` for CLI model records and
+    `"system-one"` for classifier records (the mapping P05's `stream_route()` uses), so P20's reuse
+    of `anthropic_normaliser()` needs no patch.
+15. **Classifier adapters in `gptr_check()`.** P02's `gptr_check()` calls the `check.adapter`
+    service for every adapter spec, including P13's `typesafe-system-one`
+    (`transport = "http_json"`, only `classify`) and any plugin classifier. Such an adapter has no
+    stream normaliser to replay, so `check_adapter()` returns the one row `adapter.replay` (ok) for
+    it, as for `inprocess` generators; its fixtures are P13's `fixtures/jev/`. Process adapters
+    (P20's `cli-claude`, `cli-codex`) are replayed from `.jsonl` files only when `fixtures` points
+    at them; `adp_replay()` passes `emit`, `signal`, `base_url` and a no-op `send`, so a P20
+    normaliser that needs `opts$gate` or `opts$mcp_dispatch` for a fixture must be checked through
+    P20's own tests.
 
 ### Executed validation
 
-All runs used `Rscript --vanilla` (R 4.4.3, macOS) in a scratch directory, never the repository; no model API was called.
+All runs used `Rscript --vanilla` (R 4.4.3, macOS) in a scratch directory, never the repository; no
+model API was called.
 
-- **Code blocks.** Every ```` ```r ```` block of this plan (30) was extracted to its own file and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. `getParseData()` finds no `LEFT_ASSIGN` token in any block (no `<-` and no `<<-`); no block contains `%>%` or `:::`; the plan file is ASCII only (non-ASCII test text is written as backslash-u escapes inside R strings).
-- **The plan builds and passes.** The R and test files were extracted mechanically from this plan's `Create`/`Append to` blocks into a scratch package together with the code of the P01-P07 plan files as they stood on 2026-10-01 (11:19-11:30). Two fixes to the dependency text were needed, neither in P12: P06's "replace ... with ..." fragment for `run_start()` was applied by hand, and P02's private helper was renamed `check_adapter_rows()` (ambiguity 1). The extracted `R/provider-*.R` files are byte-identical to the files the red/green runs used. `make_fixtures.R` wrote 62 fixture files (18 + 13 + 15 + 16), byte-identical on a rerun.
-- **Red and green.** For each task, the red run (the task's tests with the previous tasks' code) and the green run gave exactly the summaries written in Steps 2 and 4 (with `NOT_CRAN=true`, as `devtools::test()` sets it). Final runs (re-run by the cross-plan consolidation of 2026-10-01 against the P01-P07 plan texts used by the review, with P05's current `provider-registry.R`, `provider-transform.R`, `provider-usage.R` and `catalog-models.R`): `provider-(anthropic|openai|google)` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 604 ]`; without `NOT_CRAN` -> `[ FAIL 0 | WARN 0 | SKIP 5 | PASS 580 ]`; also under `LC_ALL=C`; `^live-(anthropic|openai|google)$` -> `[ FAIL 0 | WARN 0 | SKIP 3 | PASS 0 ]`; per file 231, 142, 120 and 111 passes; `gptr_check()` on the four adapters from the package root: 37, 31, 25 and 30 checks, none failed. The mock-server tests started P01's base-R server through processx and passed (stream, overload retry, abort, parallel tools, and the Chat Completions, Responses and Gemini scenarios).
-- **Lint and layering.** With P01's `.lintr` (all default linters, including `indentation_linter` and `object_usage_linter`) and the namespace loaded first (`pkgload::load_all(quiet = TRUE)`, P01 A3), `lintr::lint_package()` reports 0 lints in the four R files, the seven test files and the two fixture scripts (the remaining lints of the scratch package were all in P06/P07 files of the older plan snapshot it holds, not in P12 files); `lintr::lint()` over the same 13 files: 0 lints. The consolidation fixed the 42 indentation and 2 object-usage lints in the test code that the earlier run (indentation and object-usage linters off) had not seen; see the consolidation log. P01's `lint_scan()` (the rules of `test-lint-rules.R`) over the four R files: 0 hits. P01's `helper-arch.R` function map: no P12 function name is defined twice, and the 355 calls from P12 files into other files break no layer rule.
-- **Linear decoding.** The Anthropic normaliser consumed 5,000, 20,000 and 40,000 text deltas in 0.20, 0.76 and 1.6 s (linear; JSON parsing dominates). The earlier buffer form `b$v[[n]] = x` measured 0.32 s and 2.45 s for 5,000 and 20,000 deltas (quadratic), which is why `adp_buffer_add()` takes the list out of the environment first.
-- **Not executed here:** the live tests (paid requests; `GPTR_LIVE_TESTS` was not set), `R CMD check` (not a P12 gate) and Windows. The P12 test files were run under `LC_ALL=C` in the scratch package (all pass), not through the CI job itself.
+- **Code blocks.** Every ```` ```r ```` block of this plan (30) was extracted to its own file and
+  parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'`: all parse. `getParseData()`
+  finds no `LEFT_ASSIGN` token in any block (no `<-` and no `<<-`); no block contains `%>%` or
+  `:::`; the plan file is ASCII only (non-ASCII test text is written as backslash-u escapes inside R
+  strings).
+- **The plan builds and passes.** The R and test files were extracted mechanically from this plan's
+  `Create`/`Append to` blocks into a scratch package together with the code of the P01-P07 plan
+  files as they stood on 2026-10-01 (11:19-11:30). Two fixes to the dependency text were needed,
+  neither in P12: P06's "replace ... with ..." fragment for `run_start()` was applied by hand, and
+  P02's private helper was renamed `check_adapter_rows()` (ambiguity 1). The extracted
+  `R/provider-*.R` files are byte-identical to the files the red/green runs used. `make_fixtures.R`
+  wrote 62 fixture files (18 + 13 + 15 + 16), byte-identical on a rerun.
+- **Red and green.** For each task, the red run (the task's tests with the previous tasks' code) and
+  the green run gave exactly the summaries written in Steps 2 and 4 (with `NOT_CRAN=true`, as
+  `devtools::test()` sets it). Final runs (re-run by the cross-plan consolidation of 2026-10-01
+  against the P01-P07 plan texts used by the review, with P05's current `provider-registry.R`,
+  `provider-transform.R`, `provider-usage.R` and `catalog-models.R`):
+  `provider-(anthropic|openai|google)` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 604 ]`; without
+  `NOT_CRAN` -> `[ FAIL 0 | WARN 0 | SKIP 5 | PASS 580 ]`; also under `LC_ALL=C`;
+  `^live-(anthropic|openai|google)$` -> `[ FAIL 0 | WARN 0 | SKIP 3 | PASS 0 ]`; per file 231, 142,
+  120 and 111 passes; `gptr_check()` on the four adapters from the package root: 37, 31, 25 and 30
+  checks, none failed. The mock-server tests started P01's base-R server through processx and passed
+  (stream, overload retry, abort, parallel tools, and the Chat Completions, Responses and Gemini
+  scenarios).
+- **Lint and layering.** With P01's `.lintr` (all default linters, including `indentation_linter`
+  and `object_usage_linter`) and the namespace loaded first (`pkgload::load_all(quiet = TRUE)`, P01
+  A3), `lintr::lint_package()` reports 0 lints in the four R files, the seven test files and the two
+  fixture scripts (the remaining lints of the scratch package were all in P06/P07 files of the older
+  plan snapshot it holds, not in P12 files); `lintr::lint()` over the same 13 files: 0 lints. The
+  consolidation fixed the 42 indentation and 2 object-usage lints in the test code that the earlier
+  run (indentation and object-usage linters off) had not seen; see the consolidation log. P01's
+  `lint_scan()` (the rules of `test-lint-rules.R`) over the four R files: 0 hits. P01's
+  `helper-arch.R` function map: no P12 function name is defined twice, and the 355 calls from P12
+  files into other files break no layer rule.
+- **Linear decoding.** The Anthropic normaliser consumed 5,000, 20,000 and 40,000 text deltas in
+  0.20, 0.76 and 1.6 s (linear; JSON parsing dominates). The earlier buffer form `b$v[[n]] = x`
+  measured 0.32 s and 2.45 s for 5,000 and 20,000 deltas (quadratic), which is why
+  `adp_buffer_add()` takes the list out of the environment first.
+- **Not executed here:** the live tests (paid requests; `GPTR_LIVE_TESTS` was not set),
+  `R CMD check` (not a P12 gate) and Windows. The P12 test files were run under `LC_ALL=C` in the
+  scratch package (all pass), not through the CI job itself.
 
 ---
 
 ## Plan review log
 
-Adversarial review of 2026-10-01. Method: every `R/`, test and fixture-script block of this plan was extracted task by task into a scratch package with the P01-P07 plan code of that day (P07 at 11:49; the two dependency fixes of the "Executed validation" list applied), and each task's red phase (its tests and fixtures with the previous tasks' code) and green phase were run with `NOT_CRAN=true`. The original text reproduced every summary it states (red 12/1, 19/95, 6/191, 11/1, 11/89, 6/1, 11/49, 6/1, 9/56, 3/0; green 95, 190, 213, 89, 142, 49, 105, 56, 97, skip 3) and the `gptr_check()` counts 37/31/25/30, so the review concentrated on contract, research and test-design defects that the plan's own tests could not reveal. After the fixes below the red/green runs give the summaries now written in Steps 2 and 4 (Task 1: 13/1 and 99; Task 2: 20/99 and 204; Task 3: 6/205 and 231; Task 7: 11/49 and 108; the others unchanged), the combined filter gives `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 578 ]` (`SKIP 5 | PASS 554` without `NOT_CRAN`, also under `LC_ALL=C`), all 29 R blocks parse, no block has a `LEFT_ASSIGN` token, `%>%` or `:::`, the plan file is ASCII, P01's `lint_scan()` finds nothing in the four R files, no line exceeds 100 characters, every top-level function carries an `@noRd` roxygen block, and P01's `helper-arch.R` finds no layering violation and no duplicate name from a P12 file.
+Adversarial review of 2026-10-01. Method: every `R/`, test and fixture-script block of this plan was
+extracted task by task into a scratch package with the P01-P07 plan code of that day (P07 at 11:49;
+the two dependency fixes of the "Executed validation" list applied), and each task's red phase (its
+tests and fixtures with the previous tasks' code) and green phase were run with `NOT_CRAN=true`. The
+original text reproduced every summary it states (red 12/1, 19/95, 6/191, 11/1, 11/89, 6/1, 11/49,
+6/1, 9/56, 3/0; green 95, 190, 213, 89, 142, 49, 105, 56, 97, skip 3) and the `gptr_check()` counts
+37/31/25/30, so the review concentrated on contract, research and test-design defects that the
+plan's own tests could not reveal. After the fixes below the red/green runs give the summaries now
+written in Steps 2 and 4 (Task 1: 13/1 and 99; Task 2: 20/99 and 204; Task 3: 6/205 and 231; Task 7:
+11/49 and 108; the others unchanged), the combined filter gives
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 578 ]` (`SKIP 5 | PASS 554` without `NOT_CRAN`, also under
+`LC_ALL=C`), all 29 R blocks parse, no block has a `LEFT_ASSIGN` token, `%>%` or `:::`, the plan
+file is ASCII, P01's `lint_scan()` finds nothing in the four R files, no line exceeds 100
+characters, every top-level function carries an `@noRd` roxygen block, and P01's `helper-arch.R`
+finds no layering violation and no duplicate name from a P12 file.
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
@@ -6432,7 +7035,17 @@ Adversarial review of 2026-10-01. Method: every `R/`, test and fixture-script bl
 
 ## Cross-plan consolidation log
 
-Cross-plan consolidation of 2026-10-01. Each issue was checked against 04, 05, 03 and the related plans' current text. Validation ran in a scratch package (`work/consolidate/P12/pkg`: the P01-P07 plan code used by the review, with P05's current `provider-registry.R`, `provider-transform.R`, `provider-usage.R` and `catalog-models.R`, and this plan's R, test and fixture-script blocks extracted mechanically): every task's red and green phase gives the summaries written in Steps 2 and 4 (Tasks 1-6, 8 and 10 unchanged; Task 7 red `FAIL 12 | PASS 50`, green `PASS 120`; Task 9 red `FAIL 10 | PASS 57`, green `PASS 111`), the combined filter gives `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 604 ]` (`SKIP 5 | PASS 580` without `NOT_CRAN`, also under `LC_ALL=C`), `gptr_check()` still gives 37, 31, 25 and 30 checks with none failed, all 30 `r` blocks parse with no left-arrow token, `%>%` or `:::`, no code line exceeds 100 characters, and the plan file is ASCII.
+Cross-plan consolidation of 2026-10-01. Each issue was checked against 04, 05, 03 and the related
+plans' current text. Validation ran in a scratch package (`work/consolidate/P12/pkg`: the P01-P07
+plan code used by the review, with P05's current `provider-registry.R`, `provider-transform.R`,
+`provider-usage.R` and `catalog-models.R`, and this plan's R, test and fixture-script blocks
+extracted mechanically): every task's red and green phase gives the summaries written in Steps 2 and
+4 (Tasks 1-6, 8 and 10 unchanged; Task 7 red `FAIL 12 | PASS 50`, green `PASS 120`; Task 9 red
+`FAIL 10 | PASS 57`, green `PASS 111`), the combined filter gives
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 604 ]` (`SKIP 5 | PASS 580` without `NOT_CRAN`, also under
+`LC_ALL=C`), `gptr_check()` still gives 37, 31, 25 and 30 checks with none failed, all 30 `r` blocks
+parse with no left-arrow token, `%>%` or `:::`, no code line exceeds 100 characters, and the plan
+file is ASCII.
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|

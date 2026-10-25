@@ -22,6 +22,9 @@ test_that("pkgdown_yaml() lists every page once, secondary group members never",
   sheet = readLines(file.path(assets, "cheatsheet.html"), warn = FALSE)
   expect_true(any(grepl('href="gptr-cheatsheet.pdf"', sheet, fixed = TRUE)))
   expect_true(file.exists(file.path(assets, "gptr-cheatsheet.pdf")))
+  # Learn more opens the site's guides: browseVignettes() lists none when the install built none
+  expect_false(any(grepl("<dt>browseVignettes(", sheet, fixed = TRUE)))
+  expect_true(any(grepl("broccolito.github.io/gptr/articles", sheet, fixed = TRUE)))
 })
 
 test_that("pkgdown_extra() and pkgdown_problems() keep the index complete", {

@@ -42,7 +42,7 @@ requires actual production execution before integration.
 ## Execution ledger
 
 | Item | State | Evidence |
-| --- | --- | --- |
+|---|---|---|
 | Quarto/tool-path discovery helper | DONE hostedb6fff3d; local child discovery DONE38cc8dc | Actual Quarto/Python/Chrome/rg/Perl preflights and record/replay71 on both hosts; local parent environment unchanged/no child started |
 | Local pandas/NumPy install | WAITING resources | Existing private Python lacks both modules; no dependency installation during resource hold |
 | Actual Windows security | Native207/pure21 DONE;426 exact restore RED | Checkpoint115 passes/2 raw errors/0 warnings/5 guards; fixed phases prove restore-sddl-mismatch after successful ACL readback. Native Codex retarget4 failures/ReadData-restore2 typed errors; no capability skips. Independent oracles unchanged. |
@@ -55,14 +55,15 @@ requires actual production execution before integration.
 | App browser/search integrations | DONE actual63a2454 | Linux506 and Windows502 assertions across search/app/cleanup,0 failures/warnings; one named Windows app OS guard. Mandatory actual-browser cases executed, no unhandled close promise |
 | Shared Ollama model | PRESERVED | No stop, unload, reconfiguration or inference request |
 
-Initial hosted baseline: [Windows run 38112622473](https://github.com/Broccolito/gptr/actions/runs/38112622473).
-It uses the unchanged legacy file runner to collect failures, not to certify warning/skip coverage.
-All three process cases reached the 30-second case bound in about 32 seconds; owned families
-settled, peak family RSS was 348-374 MB, output about 10 KB, and sampling errors were zero.
-Cancellation reached the queued phase before hanging, consistent with the native write inside
-the drain preventing later output/timer/timeout handling. Public processx pipe writes also use
-the blocking Windows write operation. An independently owned writer prototype is being reviewed;
-no speculative runtime fix has been applied.
+Initial hosted baseline: [Windows run
+38112622473](https://github.com/Broccolito/gptr/actions/runs/38112622473). It uses the unchanged
+legacy file runner to collect failures, not to certify warning/skip coverage. All three process
+cases reached the 30-second case bound in about 32 seconds; owned families settled, peak family RSS
+was 348-374 MB, output about 10 KB, and sampling errors were zero. Cancellation reached the queued
+phase before hanging, consistent with the native write inside the drain preventing later
+output/timer/timeout handling. Public processx pipe writes also use the blocking Windows write
+operation. An independently owned writer prototype is being reviewed; no speculative runtime fix has
+been applied.
 
 Six security cases stopped before link creation because positional `local_tempfile()` used its
 deprecated binding mode rather than returning a path. The two timestamp fixtures lost fractional
@@ -73,24 +74,24 @@ names will be diagnosed without exposing their values. Link/caching runtime fail
 established by this scaffold run. The legacy numeric summary misses raw expectation errors;
 the new strict runner counts raw error/failure/warning conditions independently.
 
-The plan-check diagnostic controller passed six stdlib regression tests after a test-first RED.
-The subsequent strict [run `38113192422`](https://github.com/Broccolito/gptr/actions/runs/38113192422)
-executed all four actual plan stages successfully on Linux at exact `245de54`: index about
-90 seconds, extraction 0.3 seconds, parse 1 second and lint 53 seconds, with unchanged39-file
-source hashes. The25-plan index had0 error-level and90 historical warning-level findings;
-770 R blocks had0 parse/style problems and scoped plan lint had0 findings. Its retained
-Linux artifact SHA256 is75c33efa0c44799c1b7d9d231d6414114112e93fa18a08696663f7f854552466.
-Integration setup failed separately: Python `3.12.12` has no Windows x64 archive,
-and `test_file()` changes into `dev/ci`, making the unit helper's root-relative source path
-invalid. The reviewed correction selects Python `3.12.10`, available for both hosts, and a
-helper path valid in either controlled working directory. Optional integration cases, their
-scoped R lint, and corrected Windows fixtures have not run yet. Source syntax and Python tests
-are preparation only. The corrected exact39f3248 hosted rerun38113687980 completed:
-dependency provisioning succeeded and both hosts passed9 Python tests plus21 R gate assertions,
-with0 failures/warnings/skips. Windows then reported launcher exit139 before R lint; Linux
-reported exactly two brace-linter findings in the runner and0 in the pure R gate file. No
-optional integration or corrected security/prototype case ran. The minimal follow-up uses
-Windows `subprocess.run(..., shell=False, env=owned_environment)` with exact exit propagation,
+The plan-check diagnostic controller passed six stdlib regression tests after a tests-first RED.
+The subsequent strict [run
+`38113192422`](https://github.com/Broccolito/gptr/actions/runs/38113192422) executed all four actual
+plan stages successfully on Linux at exact `245de54`: index about 90 seconds, extraction 0.3
+seconds, parse 1 second and lint 53 seconds, with unchanged39-file source hashes. The25-plan index
+had0 error-level and90 historical warning-level findings; 770 R blocks had0 parse/style problems and
+scoped plan lint had0 findings. Its retained Linux artifact SHA256
+is75c33efa0c44799c1b7d9d231d6414114112e93fa18a08696663f7f854552466. Integration setup failed
+separately: Python `3.12.12` has no Windows x64 archive, and `test_file()` changes into `dev/ci`,
+making the unit helper's root-relative source path invalid. The reviewed correction selects Python
+`3.12.10`, available for both hosts, and a helper path valid in either controlled working directory.
+Optional integration cases, their scoped R lint, and corrected Windows fixtures have not run yet.
+Source syntax and Python tests are preparation only. The corrected exact39f3248 hosted
+rerun38113687980 completed: dependency provisioning succeeded and both hosts passed9 Python tests
+plus21 R gate assertions, with0 failures/warnings/skips. Windows then reported launcher exit139
+before R lint; Linux reported exactly two brace-linter findings in the runner and0 in the pure R
+gate file. No optional integration or corrected security/prototype case ran. The minimal follow-up
+uses Windows `subprocess.run(..., shell=False, env=owned_environment)` with exact exit propagation,
 preserves POSIX exec, and adds the two missing function braces without disabling lint rules.
 Its two mock launcher tests were RED before the correction and GREEN afterwards; that does
 not prove actual Windows R launch. All four Linux plan stages again passed39f3248 (index164s,
@@ -98,12 +99,12 @@ extraction0.5s, parse1.8s, lint101s), within their original bounds and with unch
 manifests. The prototype packet is committed at3a17f9e and awaits the corrected nine-file run.
 
 The next [nine-file run38114220610](https://github.com/Broccolito/gptr/actions/runs/38114220610)
-uses exact89f804d. Windows actually passed11 Python tests,41 R gate assertions, both scoped
+uses exact89f804d. Windows actually passed11 Python tests, 41 R gate assertions, both scoped
 R lint files, source installation and real dependency preflight: Quarto1.10.19, configured
 Python3.12.10 with pandas/NumPy and sum6, ripgrep15.1.0, Perl42, Chrome expression2 and owned
 close under the unchanged10s startup bound. Preflight observed0 request events/usage events/
 native usage rows. Artifact SHA2565ecf57addd82a70d599fcaec72f6157dab0e6f9bbca7a3450a8264fef93f353f
-is retained and verified. Each of the nine subsequent per-file launches failed in0.06–0.10s
+is retained and verified. Each of the nine subsequent per-file launches failed in0.06-0.10s
 before any test body, with empty test logs and a closed processx supervisor pipe (system232).
 One cleanup witness had root stopped but1 marked process remaining. The controller's
 per-child supervisor/marker interaction and actual five-second family settlement are being
@@ -140,37 +141,37 @@ security/native-process/browser/prototype oracles. The strict runner and sampler
 passed independent source review. Current-source hosted unit/lint/plan/integration results
 are retained separately from any production-repair claim.
 
-Atb6fff3d both hosts passed11 Python tests,74 R gate assertions, both scoped R lints,
+Atb6fff3d both hosts passed11 Python tests, 74 R gate assertions, both scoped R lints,
 installation and real dependency preflight. All11 exact child-family cleanup witnesses passed
 on each host. Windows actual Quarto71, notebook protocol44, history58, bridge118 (2 named OS
 guards), prototype92 and sampler21 passed404 assertions/0 failures/warnings. Linux same
 files plus search passed539 assertions/0 failures/warnings/skips. The four original process
 prototype cases passed on BOTH actual operating systems; production transport is unchanged.
-All four plan gates passedb6fff3d,770 selected R blocks/0 parse/style problems/0 lints,
+All four plan gates passedb6fff3d, 770 selected R blocks/0 parse/style problems/0 lints,
 with unchanged39-file source manifests. Verified Windows artifact SHA256
 c99b8734dad4119a5256efc81ff6c73e05d9b3f63bed45d2664b672a6125426a;
 Linux6da9cf308a1ff38949f96eda1f44110f9d4403a26452d7f021f07b6bfd24378e.
 
 Open witnessed failures are now specific:
 
-- Windows security:92 passed expectations,6 native-tag inspection timeout errors,4 failed
-  assertions,0 warnings/skips. Link creation succeeded and deferred nonrecursive deletion
+- Windows security: 92 passed expectations, 6 native-tag inspection timeout errors, 4 failed
+  assertions, 0 warnings/skips. Link creation succeeded and deferred nonrecursive deletion
   preserved foreign targets. The two exact-stamp rewrite cases reproduce stale settings and
   retained trust/fingerprint; a Windows-only content-sensitive cache stamp is being prepared.
   The extra options-restoration failure names only diffobj reporter defaults initialized by
   its failure rendering; package options mutations must still fail the oracle.
-- Windows search:122 passes/3 failures/0 warnings/skips; ripgrep returns native relative
+- Windows search: 122 passes/3 failures/0 warnings/skips; ripgrep returns native relative
   spelling `.\\a.R` while gptr returns`a.R`. Normalize spelling in the independent fixture;
   retain exact file and line comparisons.
-- Windows app:357 passes/0 failures/warnings/1 named OS guard, but an unhandled asynchronous
+- Windows app: 357 passes/0 failures/warnings/1 named OS guard, but an unhandled asynchronous
   `Browser.close` timeout printed during a later test. Strict gate correctly fails; owned
   browser shutdown is being corrected without changing startup/close bounds.
-- Linux app:346 passes/0 failures/warnings/2 mandatory skips. Retained Chrome FATAL diagnostics
+- Linux app: 346 passes/0 failures/warnings/2 mandatory skips. Retained Chrome FATAL diagnostics
   identify an overlong SingletonSocket path inside the deeply nested fixture TMPDIR. Use an
   exact owned private short Linux test root; preflight had already passed in its shorter root.
-- Original native Windows child cases:24 passes/3 bounded watchdog failures,0 warnings/skips.
+- Original native Windows child cases: 24 passes/3 bounded watchdog failures, 0 warnings/skips.
   D-019 remains open pending a secure minimal runtime correction and actual production proof.
-- Linux native timeout:48 passes/2 failed assertions,0 warnings/skips;1 resource-observation
+- Linux native timeout: 48 passes/2 failed assertions, 0 warnings/skips; 1 resource-observation
   error, all owned processes stopped. Its structured error was physically overwritten by
   independent stdout/stderr handles sharing one log. Separate logs and scan both for unhandled
   promises before diagnosing that condition; no sampler guard is weakened.
@@ -181,23 +182,23 @@ carry bounded raw input; ACK totals advance only for bytes accepted by the real 
 Four probes require exact40000-line stdout/stderr, typed no-reader timeout, queued cancellation
 without a late exit callback, and ordered binary/NUL/UTF-8 bytes. An independent source review
 found no blocker; Windows handle inheritance, raw FD1 writes, native ACLs and cleanup still
-require actual hosted proof. The final helper SHA256 is27e36707f08a208da0b52f520b78e40113b2c9e8fff0b3035de75053f196dfb4.
-The strict registry adds these four mandatory, unskipped cases on both hosts. Its pure negative
-tests reject a missing title, zero assertions or skipped probe. This is not a production fix
-or closure of D-019; the original native-runtime regression cases remain unchanged.
-The complete older exact-archive run `38102472275` has finished: all five consumers failed.
-Mac's two failures are the old notebook stdout assertion already corrected at `ad4e6a9`;
-Linux devel reports the same two plus the known mock-path fixture assertions. These older
-archives do not include this new packet or prove current-source regressions.
-
+require actual hosted proof. The final helper SHA256
+is27e36707f08a208da0b52f520b78e40113b2c9e8fff0b3035de75053f196dfb4. The strict registry adds these
+four mandatory, unskipped cases on both hosts. Its pure negative tests reject a missing title, zero
+assertions or skipped probe. This is not a production fix or closure of D-019; the original
+native-runtime regression cases remain unchanged. The complete older exact-archive run `38102472275`
+has finished: all five consumers failed. Mac's two failures are the old notebook stdout assertion
+already corrected at `ad4e6a9`; Linux devel reports the same two plus the known mock-path fixture
+assertions. These older archives do not include this new packet or prove current-source regressions.
 
 Reviewed cache, native-tag fixture, owned-browser shutdown, short private Linux temp root,
 Windows search comparison and distinct-log/strict-gate corrections are pushed task by task
 through `38cc8dc023c2c2ec2fa22e6aaaee94d3ea5e3caa`. The six affected full files are running on
-actual Windows and Linux in [38116814583](https://github.com/Broccolito/gptr/actions/runs/38116814583);
-new cache/cleanup regressions and full existing configuration coverage are included. Scoped
-lintr and all four cross-plan checks remain required on that exact source. No result is
-claimed before evidence completes.
+actual Windows and Linux in
+[38116814583](https://github.com/Broccolito/gptr/actions/runs/38116814583); new cache/cleanup
+regressions and full existing configuration coverage are included. Scoped lintr and all four
+cross-plan checks remain required on that exact source. No result is claimed before evidence
+completes.
 
 Local child-only discovery at38cc8dc confirms the existing RStudio bundled Quarto is on
 the isolated child PATH, the existing private Python is selected, and the parent environment
@@ -214,13 +215,12 @@ unchanged; Unix retains its original write path. Secure DACL startup, acceptance
 shutdown/orphan ownership and measured overhead must pass actual hosted production tests
 before D-019 can close.
 
-
 The38cc8dc six-file rerun stopped before package bodies on both hosts. Actual Windows
 Rscript rejected the multiline inline lint expression (`unexpected end of input`). Linux
 ran lint and found a syntax error in the new cleanup fixture: deferred member assignment
 requires a braced expression. Other10scoped files were lint-clean. Both corrections preserve
 rules/oracles and are being reviewed. All four plan stages passed38cc8dc with unchanged
-39-file source manifests,770 selected R blocks/0 parse/style problems/0 lints. Verified
+39-file source manifests, 770 selected R blocks/0 parse/style problems/0 lints. Verified
 Windows artifact SHA256c2dec42d3e9f6ec935c3b98278e63456c6c45dfddba9637e5565c38808857445;
 Linux4baa83ed51b26deef9bec2591091edc021d5702fcc91132c0aa1a177893084bb.
 These infrastructure failures add no package integration coverage.
@@ -229,7 +229,6 @@ Independent production source review also caught the Windows R Core9998-byte sin
 limit and Unix ENOENT marker-release behavior; both are being corrected before runtime
 execution. Stable root/owner/child-alias validation is included in both the parent and actor.
 Source review is not production validation; D-019 remains open.
-
 
 Saved lint-file launch and braced teardown corrections were pushed through
 `63a24543183ba00e236b6ee3a89d3daf42766617`. Actual six-file Windows/Linux rerun
@@ -248,18 +247,17 @@ unexpected capability skips (including existing Codex permission/link cases) rem
 Start production hosted tests only after the two current hosted jobs finish. Local resource
 hold and shared-model preservation remain unchanged.
 
-
-## Actual core completion and next native transport run —23:31 PDT
+## Actual core completion and next native transport run — 23:31 PDT
 
 [Run38117605612](https://github.com/Broccolito/gptr/actions/runs/38117605612), exact63a2454,
 completed. Linux five complete core files passed1026 assertions/0 failures/warnings/skips;
 its eight Windows-only security cases are explicit OS guards. Windows five complete core
 files passed1018 assertions/0 failures/warnings plus3 named OS guards. Both hosts passed
 Python12/R gate619/all12 scoped file lints, dependency preflight and all7 recorded owned-family
-cleanup witnesses. Linux's4 plan stages passed:39-file before/after manifests equal,25 plans,
-770 selected R blocks/0 parse-style problems/0 lints;90 historical index warnings remain.
-Verified Linux artifact SHA256:f234d980b77667da4ba35ca06088e291e047e4dd3665543781a68115ee8e0bb4.
-Verified Windows artifact SHA256:1a022c2918cf7dad380829c52549a4e58ba29b65a891067fbf81ee579826c2e8.
+cleanup witnesses. Linux's4 plan stages passed: 39-file before/after manifests equal, 25 plans,
+770 selected R blocks/0 parse-style problems/0 lints; 90 historical index warnings remain.
+Verified Linux artifact SHA256: f234d980b77667da4ba35ca06088e291e047e4dd3665543781a68115ee8e0bb4.
+Verified Windows artifact SHA256: 1a022c2918cf7dad380829c52549a4e58ba29b65a891067fbf81ee579826c2e8.
 
 Actual Windows security remains RED with192 passes/12 failed assertions and1 raw error,
 0 warnings/skips. The native-link byte helper incorrectly sizes reads using zero-sized alias
@@ -272,16 +270,15 @@ Windows-link detection or protection against concurrent same-user reparse replac
 
 The independently reviewed Windows writer is pushed at316a5e6. Hosted
 [run38118221551](https://github.com/Broccolito/gptr/actions/runs/38118221551) is ONGOING with
-8 full transport files,20 new lifecycle/guard cases and31 scoped lint paths. Production startup,
+8 full transport files, 20 new lifecycle/guard cases and31 scoped lint paths. Production startup,
 actual private-mailbox ACL/size, native backpressure, cancellation, orphan cleanup, Unix
 regressions and performance still require evidence. The updated plan must pass4 cross-plan
 stages on the next exact candidate. No local heavy job, model inference, shared-model stop,
 unload or reconfiguration was performed.
 
+## Source-reviewed corrections after the lint gate — 23:37 PDT
 
-## Source-reviewed corrections after the lint gate —23:37 PDT
-
-Actual38118221551 stopped on both hosts before package bodies:6 scoped formatting findings
+Actual38118221551 stopped on both hosts before package bodies: 6 scoped formatting findings
 in proc-spawn and3 process helpers. Other scoped paths were clean. Four-file correction4b75650
 adds braces/newlines only; independent review reverse-recovered all four frozen baseline hashes.
 Native3, prototype, sampler and runtime test files are unchanged; helper generated-code whitespace
@@ -296,8 +293,7 @@ spellings can be conservatively excluded from capture; missing Windows targets r
 Next ten-file actual transport/security rerun is WAITING dispatch on a fresh exact candidate,
 including4 serial Linux plan stages for this update. Nothing is production GREEN yet.
 
-
-## Native results and original-suite gate checkpoint —2026-10-10 23:52 PDT
+## Native results and original-suite gate checkpoint — 2026-10-10 23:52 PDT
 
 Actual [run38118685201](https://github.com/Broccolito/gptr/actions/runs/38118685201) at668ae5b:
 all8 native Windows security cases pass207 assertions/0 failures/warnings/skips. Five pure
@@ -316,7 +312,7 @@ witnesses pass per host; no hangs exceed case limits, no recorded family exceeds
 
 Both Python12/R gate746/all37 scoped lints pass. All4 Linux plan stages pass with39 equal
 before/after hashes/25 plans/770 selected R blocks/0 parse-style problems/0 lints. Verified
-Linux artifact SHA256:c1cf8c5ad5cf4e7aa594e4b779fc86e7e48a9653d8ff645e8dfea52c1a27531d;
+Linux artifact SHA256: c1cf8c5ad5cf4e7aa594e4b779fc86e7e48a9653d8ff645e8dfea52c1a27531d;
 Windows88915f57c3557518251288bd7591c65f0c589894f045fbc35ec20e7637fbfdfc.
 
 Production repair remains ONGOING. Its trusted full bootstrap measured9841 bytes on Windows,
@@ -327,19 +323,18 @@ No user payload or credential may enter argv. Correct2 pure base-function mocks 
 ownership assertions. The previous Linux sampling failure is not reproduced; no new sampler
 runtime change is justified or claimed.
 
-The original7 filesystem suites have a SOURCE-CLEAR registry3f0b79a:31 files/110 titles,
-18 new mandatory representatives/21 literal Windows OS guards,44 lint paths. No original
+The original7 filesystem suites have a SOURCE-CLEAR registry3f0b79a: 31 files/110 titles,
+18 new mandatory representatives/21 literal Windows OS guards, 44 lint paths. No original
 fixtures were copied or altered. Missing locale/Git/stringi/link/permission prerequisites and
 case-sensitive filesystem trait skips remain fatal for diagnosis; OS guards remain separate
 from coverage. Actual seven-suite run is WAITING dispatch; this plan needs fresh4-stage gates.
 The23:44 resource snapshot still holds local jobs; no shared model operation was performed.
 
-
-## Original filesystem results and corrective writer checkpoint —2026-10-11 00:04 PDT
+## Original filesystem results and corrective writer checkpoint — 2026-10-11 00:04 PDT
 
 Actual [run38119480288](https://github.com/Broccolito/gptr/actions/runs/38119480288), exact85d387d,
 completed both hosts. Windows original7:567 passing assertions/0 failed assertions/16 warnings/
-22 skips;21 are previously recorded Windows OS guards, one is a chmod-based writable-directory
+22 skips; 21 are previously recorded Windows OS guards, one is a chmod-based writable-directory
 capability guard. Linux661 passing assertions/0 failed assertions/0 warnings/2 case-sensitive
 filesystem trait skips. Windows5 complete files359 assertions with16 named OS guards pass;
 Linux5 complete files387 assertions/0 failures/warnings/skips pass. Whole strict packet RED:
@@ -351,9 +346,9 @@ established by these zero-assertion-failure results.
 
 Both hosts pass Python12/R gate1187/all44 scoped lints/all8 owned-family cleanup witnesses.
 All4 Linux plan stages pass39 equal hashes/25 plans/770 selected R blocks/0 parse-style problems/
-0 lints,90 historical index warnings. Verified Windows artifact SHA256:
+0 lints, 90 historical index warnings. Verified Windows artifact SHA256:
 ca6dbb7b55a6e88369d7b8b17917e028341dd69e95b32b724f272c7fc5761f3b;
-Linux:a254d2f0f3e84a7e04dc33aa913109357baa642bda309d665ee44608fe1b808a.
+Linux: a254d2f0f3e84a7e04dc33aa913109357baa642bda309d665ee44608fe1b808a.
 
 Writer corrective six-file packet is independently SOURCE-CLEAR and committed4b2f0ce. Existing
 native3/prototype/sampler tests are byte-identical. Parent and actor compare canonical parents,
@@ -370,13 +365,13 @@ Latest00:01 resource snapshot records load127.40/79.81/74.56, CPU0.79%idle, RAM1
 swap11,524MiB and disk201GiB. Local compute remains held; shared Ollama untouched. Next exact
 candidate needs all4 plan gates for this update. No candidate merge or D-019 closure.
 
-Strict25-case registry packet independently SOURCE-CLEAR and committedf0242c9;31 suites/115 exact mandatory titles,44 lint paths unchanged. Actual production rerun WAITING dispatch.
+Strict25-case registry packet independently SOURCE-CLEAR and committedf0242c9; 31 suites/115 exact
+mandatory titles, 44 lint paths unchanged. Actual production rerun WAITING dispatch.
 
-
-## Reviewed native variants and fresh combined validation —2026-10-11 00:19 PDT
+## Reviewed native variants and fresh combined validation — 2026-10-11 00:19 PDT
 
 Actual [run38120193658](https://github.com/Broccolito/gptr/actions/runs/38120193658) atfa20be5
-stopped before package test bodies on both hosts. Python12/R gate1247 pass each;43 scoped paths
+stopped before package test bodies on both hosts. Python12/R gate1247 pass each; 43 scoped paths
 are lint-clean, one helper object-usage lint references a diagnostic callback outside visible
 scope. One-file98e4f63 explicitly passes that callback through real/generated formals; independent
 review confirms no test-body/oracle/deadline change or lint exclusion. All4 Linux plan stages
@@ -396,24 +391,24 @@ Case-only rename retains undo/redo byte checks with measured alias-visibility wi
 directory-link duplicate edits run both hosts; folded additions reject aliases or verify two
 distinct files according to the actual owned filesystem. No capability or trait skips added.
 
-Matching strict CIf6c3f65 has31 suites/120 mandatory titles/44 scoped lint paths:5 strengthened
+Matching strict CIf6c3f65 has31 suites/120 mandatory titles/44 scoped lint paths: 5 strengthened
 ckpt/edit rows required on BOTH hosts. The obsolete combined-case Windows allowance is removed,
 leaving20 actual original literal OS guards. Raw errors/warnings, missing/duplicate/zero-assert
 rows and unexpected skips remain fatal; prior writer25/native3/security8/prototype/sampler
 registry and budgets preserved. Proposed combined15-file transport +original7 rerun WAITING
 actual execution on a fresh exact source; all4 plan stages must rerun for this update.
 
-Latest00:13 PDT resources: load114.22/114.07/97.04, CPU0.64%idle,111GiB physical RAM used,
+Latest00:13 PDT resources: load114.22/114.07/97.04, CPU0.64%idle, 111GiB physical RAM used,
 11,516MiB swap and160GiB free disk. Local installs/R/browser/model/build jobs remain held;
 shared Ollama preserved. Source review does not establish Windows ACL/runtime behavior; merge
 and D-019 closure still WAITING actual strict GREEN.
 
-## Actual combined15 rerun and expanded source/process gates -2026-10-11 00:40 PDT
+## Actual combined15 rerun and expanded source/process gates — 2026-10-11 00:40 PDT
 
 Actual [run38120994420](https://github.com/Broccolito/gptr/actions/runs/38120994420) uses
-exactf419fd64ded7504e30bc70c53432c3e7ab21029e. Linux strict PASS:15 complete files,1481
-assertions,0 failed conditions/warnings,5 explicitly named Windows-only lifecycle guards.
-Windows strict RED:1587 passes,8 failed conditions,0 test/outside-test warnings and23 named
+exactf419fd64ded7504e30bc70c53432c3e7ab21029e. Linux strict PASS: 15 complete files, 1481
+assertions, 0 failed conditions/warnings, 5 explicitly named Windows-only lifecycle guards.
+Windows strict RED: 1587 passes, 8 failed conditions, 0 test/outside-test warnings and23 named
 OS guards.11 complete Windows files pass1166 assertions with17 named guards. All16 owned
 cleanup witnesses pass per host with0 remaining marked processes. Main Windows controller
 also reports32 uncaptured warnings; do not confuse0 row warnings with a clean controller.
@@ -421,7 +416,7 @@ also reports32 uncaptured warnings; do not confuse0 row warnings with a clean co
 Production native5 lifecycle cases and native duplex stop before READY; bounded diagnostics
 record startup stage1.83-1.97s, expressions4706-4722B and0 accepted bytes. The typed no-reader
 2s result passes at startup, so delivery/no-progress coverage remains unproved. The separate
-4MB spawn echo case raises IO;2MB/EOF succeeds under its normal60s setting. Keep the
+4MB spawn echo case raises IO; 2MB/EOF succeeds under its normal60s setting. Keep the
 2s enqueue budget and existing watchdog/size limits while diagnosing and optimizing startup.
 The native owned-bucket permission case has8 setup passes before its5s PowerShell timeout;
 no effective-denial or restoration assertions ran. Link teardown, measured casefold and
@@ -435,24 +430,24 @@ Linux ZIP9296360753fd5ac3d7a525e0e2be665a7479b937ee6efe4e52ceda287ab55081.
 Both hosts pass Python12/R result gate1326/all44 scoped lint paths. All4 Linux plan stages
 pass39 equal source hashes/770 selected R blocks/0 parse-style problems/0 lints.
 
-Separate source audit identified3 bare encoding calls;714aad4 replaces them with the existing
+Separate source audit identified3 bare encoding calls; 714aad4 replaces them with the existing
 UTF8 helper.3074e01 adds the full existing package-convention test with strict mandatory
 negative controls; actual result pending.332324d adds a bounded3-reader cross-pool case:
 2 acknowledged idle Windows writers must not starve the third target under the unchanged
-CRAN cap2.6f92d3c registers that exact case:33 suites/123 representatives/46 lint paths;
+CRAN cap2.6f92d3c registers that exact case: 33 suites/123 representatives/46 lint paths;
 Windows must execute19 assertions, Linux records only its named platform guard. Prior
 25 writer/native3 fixtures and strict gates stay intact. An early startup failure makes the
 idle-slot probe inconclusive; it cannot count as contention coverage.
 
 Next selected8 full files are lint-rules, proc-writer-idle-slots, mcp-client, subagent-worker,
-cli-common, cli-claude, cli-codex and ckpt-files. Source conventions plus actual stdio, worker, permission,
-control-file and child cancellation tests remain fatal for unexpected capability skips.
-This diagnostic run does not close the current2s production failure. Latest00:36 resource
-snapshot keeps local R/install/browser/model/build jobs held; shared Ollama untouched.
+cli-common, cli-claude, cli-codex and ckpt-files. Source conventions plus actual stdio, worker,
+permission, control-file and child cancellation tests remain fatal for unexpected capability skips.
+This diagnostic run does not close the current2s production failure. Latest00:36 resource snapshot
+keeps local R/install/browser/model/build jobs held; shared Ollama untouched.
 
-Native ACL fixture correction75dc9e9 is independently SOURCE-CLEAR:2 direct .NET constructors
+Native ACL fixture correction75dc9e9 is independently SOURCE-CLEAR: 2 direct .NET constructors
 replace cmdlet discovery, and fixed allowlisted stage diagnostics preserve the original error.
-All test bodies/titles/guards,5s bound, minimal child environment, private backup, deny and
+All test bodies/titles/guards, 5s bound, minimal child environment, private backup, deny and
 exact restore oracles remain unchanged. The cmdlet-delay explanation is a hypothesis until
 actual hosted evidence. Candidate-only copy; primary67-line prepared suffix untouched.
 
@@ -471,21 +466,20 @@ ACL rules, ACK accounting, resource/argv caps and original native3/prototype/sam
 stay intact. This is observability hardening, not a startup-speed fix or actual GREEN.
 
 Next exact candidate expands the8 planned source/idle/adapter/checkpoint files with full
-proc-writer-runtime, proc-windows-backpressure and proc-spawn:11 files, strict warnings/skips
+proc-writer-runtime, proc-windows-backpressure and proc-spawn: 11 files, strict warnings/skips
 and fresh4 Linux plan stages. Updated4-title CI registration and actual execution pending.
 At00:49 disk122GiB and active swap11,388MiB/load22.60 keep the local compute lease closed
 despite37.76% CPU idle; no shared-model operation.
 
-Final strict startup registration3ffecab is independently SOURCE-CLEAR:33 full files/127
+Final strict startup registration3ffecab is independently SOURCE-CLEAR: 33 full files/127
 representatives/46 lint paths. Exact29 writer titles match the frozen test; the first25 and
-all other32 vectors stay intact. All29 writer cases are mandatory on Windows;23 pure cases
+all other32 vectors stay intact. All29 writer cases are mandatory on Windows; 23 pure cases
 mandatory on Linux, with6 exact Windows-only guards. Missing/duplicate/raw errors/warnings/
 zero assertions and passing-prefix capability skips remain fatal. Actual11-file source/
 protocol/checkpoint/transport execution is next; all4 cross-plan gates must run on this
 updated exact candidate.57 required titles across the11 full files were source-verified once.
 
-
-## Actual diagnostic gate and callback correction -2026-10-11 01:05 PDT
+## Actual diagnostic gate and callback correction — 2026-10-11 01:05 PDT
 
 Actual [run38122876440](https://github.com/Broccolito/gptr/actions/runs/38122876440),
 exacta135f84e1bef1d11fb6e6c1407a019024f7596a6, completed on both hosts with a scoped-lint
@@ -498,26 +492,25 @@ Both hosts actually pass12 Python tests and1559 R unit assertions/0 failures/ski
 synthetic warnings escape the warning-controller negative controls. Earlier1456 clean-prefix
 counts are incomplete and must not replace this final1559/27 result. The test expectation
 captures only the first warning. Source-reviewed5b3f5bb captures only exact synthetic
-class/message vectors after inner observation;10dc59a makes unexpected unit warnings fatal.
+class/message vectors after inner observation; 10dc59a makes unexpected unit warnings fatal.
 All original unit expectations and production warning semantics stay intact. Actual clean
-unit/lint and platform bodies remain pending. Production warnings remain visible and fatal; no platform
-body or startup/idle/ACL result is established by this gate-only run.
+unit/lint and platform bodies remain pending. Production warnings remain visible and fatal; no
+platform body or startup/idle/ACL result is established by this gate-only run.
 
 Both artifact ZIP checksums are verified:
 Windows45f0057f7c802557191ba6137ab0c4c5276f4c895293467e8a55bf2281a138e0;
 Linux28895a547e50e3a008177a63c57c374dc8063bef2fecfcbececb5b5aeffa79bc.
-All4 Linux plan stages pass with39 unchanged source hashes,770 R blocks,0 parse/style
+All4 Linux plan stages pass with39 unchanged source hashes, 770 R blocks, 0 parse/style
 problems/0 lints and90 retained historical index warnings. The next exact candidate must
 repeat the same11 files plus all4 plan gates. Both hosted leases are now free; at most2
 jobs remain allowed. Local installation/compute stays held by the01:05 snapshot above.
 No shared Ollama action occurred.
 
-
-## Actual platform diagnosis and reviewed follow-up -2026-10-11 01:35 PDT
+## Actual platform diagnosis and reviewed follow-up — 2026-10-11 01:35 PDT
 
 Actual [run38123918333](https://github.com/Broccolito/gptr/actions/runs/38123918333)
 uses exacte3f4b47f8a47fdde53058ea2fe87d461dace230e. Both jobs completed RED. Both hosts
-pass12 Python tests,1559 R gate assertions with0 failures/warnings/skips, and all46 scoped
+pass12 Python tests, 1559 R gate assertions with0 failures/warnings/skips, and all46 scoped
 lint paths. Each actual package-convention file passes6 assertions, including negative controls.
 
 Linux eleven selected files report1596 passes/1 raw error/0 row or outside warnings/8 exact
@@ -525,7 +518,7 @@ OS guards. Only the trusted-bootstrap fixture fails: capture.output named its ar
 than assigning local value. Reviewed44b24db adds the local assignment inside braces, preserving
 all assertions and runtime. MCP166/worker129/Claude243/Codex259/checkpoint149 all pass.
 
-Windows nine files have completed raw results:1172 passes/13 failed conditions/0 row or outside
+Windows nine files have completed raw results: 1172 passes/13 failed conditions/0 row or outside
 warnings/10 skips. MCP307.55s and Claude308.67s exceed their300s child bounds without final
 raw result files; retained partial logs cannot certify either. The ordinary spawn149 assertions
 and one named Unix guard pass, including4MB echo and EOF under the normal60s timeout.
@@ -539,11 +532,12 @@ startup latency attribution and security-equivalent native execution still requi
 No timeout, resource limit or assertion is increased.
 
 Checkpoint effective create denial and store refusal now pass. Both raw errors occur after
-restore-applied before native readback versus exact Access SDDL comparison is distinguished; full restoration remains RED. Codex
-reports two capability skips (unreadable-file permission enforcement and dangling target lookup)
-and one33.4s concurrency failure against13s. Reviewed09f9ea1/df16cde replaces those capability
-skips with owned native link/ReadData-denial witnesses and registers all three relevant titles.
-Current registry33 files/130 titles/47 lint paths is source-ready, not executed.
+restore-applied, before native readback is distinguished from exact Access SDDL comparison; full
+restoration remains RED. Codex reports two capability skips (unreadable-file permission enforcement
+and dangling target lookup) and one33.4s concurrency failure against13s. Reviewed09f9ea1/df16cde
+replaces those capability skips with owned native link/ReadData-denial witnesses and registers all
+three relevant titles. Current registry33 files/130 titles/47 lint paths is source-ready, not
+executed.
 
 Both controllers report24 fatal ps_find_tree warnings, one marker-kill and one marked-query
 per12 launches. The old controller marker has a nonnumeric second underscore field; the
@@ -558,7 +552,7 @@ Both artifact ZIP digests were verified:
 Windows5836d6e0dc74cd1e2708ec55a23b3f1b953946c8438d1a89779c88d9cacaeb82;
 Linux887940c93793268d6c009a9330719d3cf84812607fe3787cc4c07a4fd4ee91f0.
 All4 Linux plan stages pass39 unchanged source hashes/25 plans/770 R blocks/0 parse-style
-problems/0 lints;90 historical index warnings remain. The updated plan requires fresh gates
+problems/0 lints; 90 historical index warnings remain. The updated plan requires fresh gates
 on the next exact candidate. Both hosted leases are free; at most2 jobs may run. Local private
 dependencies, native frontends, model inference and full CRAN/release remain WAITING resources.
 Shared Ollama remains untouched.
@@ -582,7 +576,7 @@ Applied, independently source-reviewed commits remain awaiting actual execution:
   still belongs to the current user. b0130c7 makes this30th title mandatory on Windows,
   with one exact Linux platform guard. No Windows capability skip is accepted.
 
-Strict source registry:34 full files/132 required titles/49 lint paths. The next filter selects
+Strict source registry: 34 full files/132 required titles/49 lint paths. The next filter selects
 12 complete files: lint-rules, proc-writer-idle-slots, proc-marker-family, mcp-client,
 subagent-worker, cli-common, cli-claude, cli-codex, ckpt-files, proc-writer-runtime,
 proc-windows-backpressure and proc-spawn. Both hosted jobs require the exact full commit;
@@ -598,7 +592,7 @@ source a03068ee3f4516f8d2e9c49bf51a5375cb70aaa0. Both jobs completed RED before 
 installation, preflight and all12 selected full-file bodies. Both actually passed12 Python
 unit tests and1727 R result-gate assertions with0 failures/warnings/skips. The lint gate
 found5 issues across3 fixture paths: bootstrap brace layout, one compound semicolon/brace
-and two multiline function bodies;46 of49 paths are clean. No runtime failure is established
+and two multiline function bodies; 46 of49 paths are clean. No runtime failure is established
 by this run; the e3 native failures remain open.
 
 The minimal three-file corrective packet preserves all ordered strings, titles, assertions,
@@ -643,9 +637,9 @@ OS guards. Windows ten final raw files1282 passes/22 failed conditions, includin
 0 warnings/8 named guards. MCP307.27s and Claude308.14s exceed300s without final raw results.
 Both controller warning totals are0 and all13 cleanup witnesses each confirm original owned
 roots stopped, settled, and0 marked survivors. All4 Linux plan stages pass39 equal hashes/
-25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings remain.
+25 plans/770 R blocks/0 parse-style problems/0 lints; 90 historical index warnings remain.
 
-Writer startup remains last-phase acl_wait0.18-0.25s,0 accepted bytes, before READY; the
+Writer startup remains last-phase acl_wait0.18-0.25s, 0 accepted bytes, before READY; the
 reviewed three native .NET calls did not close the failure. Five lifecycle cases fail at
 1.83-1.96s; new nativeACL at1.80s. Idle stops before its first ACK at1.97s, so the conditional
 idle-retirement proposal remains unapplied. Normal spawn4MB echo/EOF passes; native duplex
@@ -658,7 +652,7 @@ existing concurrency34.3s versus13s failure. Source-only triage is split across 
 Family enumeration lists contain the expected exact PIDs/create-times; vapply preserved names
 on the independently held handles and compared them with unnamed found lists. Reviewed
 3fd20b1 removes only those incidental vector names and adds missing/extra/substituted live
-handle negative controls. All41 original assertions remain plus3 new controls;44 prepared
+handle negative controls. All41 original assertions remain plus3 new controls; 44 prepared
 assertions are unrun. Windows-only parent-env-restored failure remains separately under
 review; do not weaken environment restoration. No shipping marker migration is proposed.
 
@@ -890,15 +884,14 @@ and unrelated processes/files remain untouched. A dedicated Windows worker paren
 witness and fixed private protocol-readiness diagnostics are prepared only, undergoing
 source review; neither changes the active runtime or current CI selection.
 
-
 ## Actual 679f5d6 integration review — 2026-10-11 04:59 PDT
 
 Hosted [run38135856469](https://github.com/Broccolito/gptr/actions/runs/38135856469)
 tested exact679f5d650a9dad643cc5e035ab1e76944721fb14. Both jobs completed; both leases are free.
-All16 final raw files exist on each host. Linux:2188 passes/0 failed conditions/0 R warnings/
-11 exact OS guards. Windows:2341 passes/13 failed conditions (9 failures+4 errors)/1 R warning/
+All16 final raw files exist on each host. Linux: 2188 passes/0 failed conditions/0 R warnings/
+11 exact OS guards. Windows: 2341 passes/13 failed conditions (9 failures+4 errors)/1 R warning/
 10 exact OS guards. A failed condition includes its error; it is not counted twice.
-Both hosts pass2242 result-gate assertions,12 Python tests, executed dependency preflight and
+Both hosts pass2242 result-gate assertions, 12 Python tests, executed dependency preflight and
 all51 scoped lint paths. All17 cleanup records per host confirm settlement, stopped roots,
 no marked survivors and no cleanup error; controller warnings are0. This is scoped source
 integration evidence, not current full CRAN, installed/native GUI or universal platform proof.
@@ -914,11 +907,12 @@ changes. New native absence case7P/1F/1W lacks sufficient utility phase/status e
 outer Windows file.info follows its deliberate dangling link and emits the retained warning.
 Do not suppress unknown metadata errors or relax ACL, state, cleanup or time/resource oracles.
 
-All four fresh Linux plan stages pass on679:25 plans/770 R blocks,0 parse/style problems,
+All four fresh Linux plan stages pass on679:25 plans/770 R blocks, 0 parse/style problems,
 0 lints and39 equal source hashes. The90 historical index warnings remain recorded.
-Compact actual summaries are ignored: Linux SHAfe9c1600ba8477aec11ba9e073991fd1cdb323760f0d126ab10154b34951e329;
-Windows SHA980b67975298410414a1c0fbd61830b71c28c027dffa96b516c2b5066d9e88c5.
-Both canonical source archives have SHAbfe40bfcaa410a925d0a67d4bccac893cdbab88a3541ec2e8533315a7b70f3fc.
+Compact actual summaries are ignored: Linux
+SHAfe9c1600ba8477aec11ba9e073991fd1cdb323760f0d126ab10154b34951e329; Windows
+SHA980b67975298410414a1c0fbd61830b71c28c027dffa96b516c2b5066d9e88c5. Both canonical source archives
+have SHAbfe40bfcaa410a925d0a67d4bccac893cdbab88a3541ec2e8533315a7b70f3fc.
 
 Reviewed fixes are now applied/pushed: f3b2570 replaces harness-created empty startup entries
 with fresh owned empty files (new pure test reproduced RED; all13 mock-only Python tests pass
@@ -936,7 +930,6 @@ model jobs held. No thermal/performance warning is recorded. Swap occupancy is n
 claim; sampled system pressure and owned child RSS are distinct. Shared Ollama, unrelated
 processes and user files are untouched. Private pandas/NumPy wheel installation, local
 Quarto/bridges, installed display/frontends and current full CRAN/release remain waiting.
-
 
 ## Next strict17-file source nomination — 2026-10-11 05:09 PDT
 
@@ -957,9 +950,9 @@ failures/warnings/skips. Two brace_linter findings, retirement lines349 and367, 
 installation/preflight and all17 integration bodies; the other52 scoped lint paths were
 clean. Native progress is not inferred from these unit results. Both hosted leases are free.
 
-Four fresh Linux plan stages passed:25 plans/1446 indexed blocks/4389 definitions/28337
-calls/912 findings (822 info/90 historical warnings/0 errors),1523 extracted blocks/770 R
-blocks,0 parse/style problems/0 lints and39 identical before/after source hashes. Bounded
+Four fresh Linux plan stages passed: 25 plans/1446 indexed blocks/4389 definitions/28337
+calls/912 findings (822 info/90 historical warnings/0 errors), 1523 extracted blocks/770 R
+blocks, 0 parse/style problems/0 lints and39 identical before/after source hashes. Bounded
 artifact extraction retains only seven plan metadata/log files; ZIP SHA256
 67964c8d39fb00bfbc73e296e4f9c53bdc8a756b1a2fd3946e5fa3631a6771d0.
 
@@ -979,12 +972,14 @@ remain pending. No model inference, local imports/render/install/test or arbitra
 
 Run38139096870 on exact26dc5185a8989157e48bfdbb7debc4c1d9d2c223 completed17 full files
 on both hosts: Linux2353P/0F/0R warnings/13 guards GREEN; Windows2550P/13 failed conditions
-(11 failures+2 errors)/1R warning/10 guards RED.53 lint paths,13 Python units and2571 result-
+(11 failures+2 errors)/1R warning/10 guards RED.53 lint paths, 13 Python units and2571 result-
 gate assertions pass per host.18 cleanup records per host have no marked survivors/errors;
 controller warnings0. All4 fresh Linux plan stages pass25 plans/1523 blocks/770 R blocks/
-0 parse-style problems/0 lints/39 equal hashes;90 historical index warnings remain.
-Artifacts are diagnostic-linux-26dc518.zip (SHA256113b305e535c39195f1cac988444e78e089c24c46d4533cd7b172c8789cc19cb)
-and diagnostic-windows-26dc518.zip (SHA25666bb07d55d3bb3daa5582ea259a981ddbb1bee08131cb407e0af275e61a04b5c).
+0 parse-style problems/0 lints/39 equal hashes; 90 historical index warnings remain.
+Artifacts are diagnostic-linux-26dc518.zip
+(SHA256113b305e535c39195f1cac988444e78e089c24c46d4533cd7b172c8789cc19cb) and
+diagnostic-windows-26dc518.zip
+(SHA25666bb07d55d3bb3daa5582ea259a981ddbb1bee08131cb407e0af275e61a04b5c).
 
 Actual gains: owned checkpoint ACL119, MCP167, cold19, warm42 and retirement180 Windows
 assertions pass. Remaining Windows failures: Codex raw LF oracle detects text-mode CRLF;
@@ -1016,11 +1011,12 @@ Exactbea8c67d0cc25f84a47b47d42d8f71c618c9aeb4/run38141027264 completes one full4
 writer file on both hosts: Linux308P/1F/0R warnings/8 exact OS guards; Windows469P/2F/1R
 warning/0 skips. Ordinary input is4P/1F on both; alias and directory controls pass5 each.
 Thus expected regression RED is actual, separate from known native absence7P/1F/1W. Both
-pass13 Python units,2678 result-gate assertions,53 lint paths, actual dependency preflight
+pass13 Python units, 2678 result-gate assertions, 53 lint paths, actual dependency preflight
 and2 cleanup records/no marked survivors; controller warnings0. All4 fresh Linux plan
 stages pass25 plans/770 R blocks/0 parse-style problems/0 lints/39 equal source hashes,
-retaining90 historical index warnings. Both canonical archive hashes are461d47960d1cd88c79dc88f72541e09e6bef782a67d29ee71e3cb8f8662b02bd.
-Raw ZIP hashes: Linuxaf48ae24bd2b55a7dff1eaf6089997ac23ba289f9e9df862d9e983a43700b1f9;
+retaining90 historical index warnings. Both canonical archive hashes
+are461d47960d1cd88c79dc88f72541e09e6bef782a67d29ee71e3cb8f8662b02bd. Raw ZIP hashes:
+Linuxaf48ae24bd2b55a7dff1eaf6089997ac23ba289f9e9df862d9e983a43700b1f9;
 Windows068da21c0c164709774ffef41fb3b156bcac1d190fd3331b8943564599e41fdf.
 
 8bfa6da applies the minimal race fix only after this actual RED.7c69690 composes the new
@@ -1042,10 +1038,10 @@ installed frontends, production callr empty-state/native gaps and merge remain O
 
 Exactf374dafbc73157b7823412446d257f9486b0276c/run38141881131 completes both hosted jobs
 but stops before installation, preflight or any of17 integration bodies. One object-usage
-lint at helper-worker-parent-death.R:58 lacks a local phase_path binding;52 other paths
+lint at helper-worker-parent-death.R:58 lacks a local phase_path binding; 52 other paths
 are clean.13 Python units and2721 strict result-gate assertions pass per host with no
 failures/warnings/skips. All4 fresh Linux plan stages pass25 plans/770 R blocks/0 parse-style
-problems/0 lints/39 equal source hashes;90 historical index warnings remain. Linux plan-only
+problems/0 lints/39 equal source hashes; 90 historical index warnings remain. Linux plan-only
 ZIP SHA256161085f8b3ca80c8e1f8d8902db338ff4dcfa5f54a50ea78cda885337b777075,8 retained files.
 
 eb55a5b binds the identical phase path before callback creation and assigns private state
@@ -1126,12 +1122,11 @@ Linux plan stages after this plan edit. Missing/partial/duplicate raw results, z
 unexpected skips and any test/runtime warning remain fatal. Do not accept probe 2 as denial,
 normalize empty state, suppress metadata warnings or relax timing/resource/cleanup oracles.
 
-The optional nofollow observer/POSIX state correction remains SOURCE CLEAR but INACTIVE;
+The optional nofollow observer/POSIX state correction remains SOURCE-CLEAR but INACTIVE;
 7 R/10 Python actual cases and combined supervisor/family RSS proof are pending. Genuine
 junction and unknown-reparse native coverage remains a documented design gap. Merge,
 D-019, current full CRAN and release remain OPEN. No live inference, local import/install/
 render/test/build or unrelated process cleanup while resources are unsafe.
-
 
 ## Optional integrations and Windows transport — 2026-10-11 07:16 PDT
 
@@ -1203,7 +1198,7 @@ sampling errors. Production parent-state preservation remains OPEN. Broader proc
 launcher proposals stay INACTIVE with watcher-order/lifecycle/private-ACL/API-parity gaps.
 A shared callr hook is not adopted; it is not a supported fail-closed per-call correction.
 
-The unchanged Windows worker test proves pre-kill checks 1–18 TRUE, then 19 FALSE: its
+The unchanged Windows worker test proves pre-kill checks 1-18 TRUE, then 19 FALSE: its
 parent's marker file is missing; check 20 was not evaluated. Source reviews identify
 startup proc_sweep() deleting the loading child's parent-written self record before parent
 liveness checking. The four new tests-first regressions preserve the original 35-case source
@@ -1230,12 +1225,11 @@ files to prove preserved old behavior and native parent-death/cleanup. Missing/p
 duplicate results, zero assertions, unexpected skips and test/runtime warnings stay fatal.
 Do not normalize empty state, suppress metadata warnings or relax timing/resource oracles.
 
-The optional nofollow observer/POSIX state correction remains SOURCE CLEAR but INACTIVE;
+The optional nofollow observer/POSIX state correction remains SOURCE-CLEAR but INACTIVE;
 7 R/10 Python actual cases and combined supervisor/family RSS proof are pending. Genuine
 junction and unknown-reparse native coverage remains a documented design gap. Merge,
 D-019, current full CRAN and release remain OPEN. No live inference, local import/install/
 render/test/build or unrelated process cleanup while resources are unsafe.
-
 
 ## Optional integrations and Windows transport — 2026-10-11 07:35 PDT
 
@@ -1256,7 +1250,8 @@ controller warnings. Canonical source archive SHA256 is
 `9f407347f32fc2dbb9d57d40dd8e5b0798b73eed002e83ea5fbda1cdcedee6bb`.
 All four fresh Linux plan stages pass: 25 plans/1523 blocks/770 R blocks, zero parse/style
 problems or lints, 39 equal before/after hashes; retain 90 historical index warnings.
-Raw ZIPs, source manifests and summaries stay in ignored `dev/.validation/windows-security-20261010`.
+Raw ZIPs, source manifests and summaries stay in ignored
+`dev/.validation/windows-security-20261010`.
 
 The exact-self, unknown-self-identity and direct-self-cleanup regressions fail on BOTH hosts
 against unchanged production supervision. Malformed/foreign-record controls pass 32
@@ -1265,11 +1260,11 @@ before `892ac9e` adopts the reviewed minimal runtime correction: retain an exact
 self marker, retain uncertain self creation-time recovery without cleanup authority, and
 refuse current-PID cleanup before process operations. Ordinary self-record validation stays
 FALSE. All four new cases and all original behavior need actual GREEN; source review alone
-is not completion. The Windows worker's prior pre-kill checks 1–18 TRUE/19 FALSE/20
+is not completion. The Windows worker's prior pre-kill checks 1-18 TRUE/19 FALSE/20
 unobserved remain the native baseline. Preserved marker checks 19/20 and parent-only death
 within 10 seconds are required after the correction.
 
-Actual fixed FILE diagnostics prove flags 36868→37892, XOR 1024, ordered DACL byte
+Actual fixed FILE diagnostics prove flags 36868->37892, XOR 1024, ordered DACL byte
 difference zero and Access SDDL inequality on main stage 14/recovery 106. Parent restoration
 is exact: 37892 on both sides, XOR/DACL differences zero, SDDL equality one. Reviewed
 `c20df78` establishes twice-verified stable Access and owner baselines for only fresh owned
@@ -1310,7 +1305,6 @@ Optional nofollow observer remains INACTIVE, with actual native/combined RSS pro
 Merge, D-019, current full CRAN and release gates remain OPEN. No local inference/import/
 install/render/build/test or unrelated cleanup while resource gates are unsafe.
 
-
 ## Optional integrations and Windows transport — 2026-10-11 07:48 PDT
 
 Use `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
@@ -1348,8 +1342,8 @@ replacement actually executed; Linux guards are eight Windows writer cases plus 
 Windows worker case. No dependency/zero-assertion/unknown guard is accepted.
 
 Owned parent AND file ACL restoration is ACTUALLY exact on main and recovery: flags
-37892→37892, XOR zero, ordered DACL byte difference zero and Access SDDL equality one.
-Main reaches restored/stages 15–16, recovery reaches 107–108 and status zero/settled one.
+37892->37892, XOR zero, ordered DACL byte difference zero and Access SDDL equality one.
+Main reaches restored/stages 15-16, recovery reaches 107-108 and status zero/settled one.
 The fresh-owned baseline permits only AI+1024 stabilization before backup and requires a
 second exact Access/owner round-trip; caller paths and all 45 test bytes remain unchanged.
 Native absence still produces PROBE2, proving safe existing-entry refusal without proving
@@ -1385,7 +1379,6 @@ installed-package profile; this status-only check does not replace broad externa
 package/integration or CRAN coverage. Its result is ONGOING until retained evidence is read;
 latest result belongs in the companion progress/ignored execution ledger without another
 plan edit. Current Windows denial/warning/callr gates, merge, D-019 and release remain OPEN.
-
 
 ## Optional integrations and Windows transport — 2026-10-11 08:00 PDT
 
@@ -1424,8 +1417,8 @@ replacement actually executed; Linux guards are eight Windows writer cases plus 
 Windows worker case. No dependency/zero-assertion/unknown guard is accepted.
 
 Owned parent AND file ACL restoration is ACTUALLY exact on main and recovery: flags
-37892→37892, XOR zero, ordered DACL byte difference zero and Access SDDL equality one.
-Main reaches restored/stages 15–16, recovery reaches 107–108 and status zero/settled one.
+37892->37892, XOR zero, ordered DACL byte difference zero and Access SDDL equality one.
+Main reaches restored/stages 15-16, recovery reaches 107-108 and status zero/settled one.
 The fresh-owned baseline permits only AI+1024 stabilization before backup and requires a
 second exact Access/owner round-trip; caller paths and all 45 test bytes remain unchanged.
 Native absence still produces PROBE2, proving safe existing-entry refusal without proving
@@ -1454,33 +1447,34 @@ WAITING the disk/resource gate. No local inference/import/install/build/test was
 All four fresh broad-profile Linux plan stages pass on exact 3a27: 25 plans, 1523 blocks,
 770 R blocks, zero parse/style problems/lints and 39 equal before/after source hashes.
 Retain 90 historical index warnings, distinct from test/runtime warnings. Registry remains
-37 files/172 mandatory titles/55 lint paths with no new OS allowances. The first plan-only job4910648/run38148828001 passes exact identity, dependency setup,
-six controller units and39 equal before/after hashes, but fails the strict index gate:
-25plans/1446blocks/4389definitions/28337calls with14135ERROR/878INFO/150WARN.
-Actual installed-profile metadata proves testthat absent. Source review shows bare assertion
-exports disappearing into undefined classifications; the exact per-category error distribution
-was not retained. Extraction/parse/lint were not reached. The actual RED remains recorded;
-it does not invalidate the broad3a plan GREEN or the separately proved runtime/native fixes.
+37 files/172 mandatory titles/55 lint paths with no new OS allowances. The first plan-only
+job4910648/run38148828001 passes exact identity, dependency setup, six controller units and39 equal
+before/after hashes, but fails the strict index gate: 25plans/1446blocks/4389definitions/28337calls
+with14135ERROR/878INFO/150WARN. Actual installed-profile metadata proves testthat absent. Source
+review shows bare assertion exports disappearing into undefined classifications; the exact
+per-category error distribution was not retained. Extraction/parse/lint were not reached. The actual
+RED remains recorded; it does not invalidate the broad3a plan GREEN or the separately proved
+runtime/native fixes.
 
 The reviewed plan-only correction uses the exact pinned integration needs:check R dependency
 action and six extra packages, inherits its effective libraries and requires testthat/jsonlite/
 lintr. It records actual package versions and36 availability booleans without requiring every
 optional research package. The same six units/all four bounded stages/zero index errors/
 parse-style/zero lint/source-hash gates remain strict. Numeric fixed-category diagnostics
-improve retained failure evidence without uploading arbitrary source/messages. The dependency action may provision Pandoc/Quarto automatically; no browser, Quarto render,
-Python module, gptr runtime or model is exercised by this status-only job.
-Corrected exact-source all4 outcome is ONGOING until evidence is read; record the latest
-result in companion progress/ignored ledger without another plan edit. This check does not
-replace package/integration, native or CRAN coverage. Current Windows denial/warning/callr
-gates, merge, D-019 and release remain OPEN.
+improve retained failure evidence without uploading arbitrary source/messages. The dependency action
+may provision Pandoc/Quarto automatically; no browser, Quarto render, Python module, gptr runtime or
+model is exercised by this status-only job. Corrected exact-source all4 outcome is ONGOING until
+evidence is read; record the latest result in companion progress/ignored ledger without another plan
+edit. This check does not replace package/integration, native or CRAN coverage. Current Windows
+denial/warning/callr gates, merge, D-019 and release remain OPEN.
 
 ## Corrected plan checks complete — 2026-10-11 08:18 PDT
 
 The dependency correction is committed and pushed as
 `7685c00c829dd0f6de12994166558e5b365c6be7`. Its one-job
 [hosted run38150135957](https://github.com/Broccolito/gptr/actions/runs/38150135957)
-is COMPLETE GREEN. Verified artifacts prove all four plan stages pass:25 plans,
-1446 indexed/1523 extracted blocks,770 R blocks,0 parse/style problems and0 lints.
+is COMPLETE GREEN. Verified artifacts prove all four plan stages pass: 25 plans,
+1446 indexed/1523 extracted blocks, 770 R blocks, 0 parse/style problems and0 lints.
 All39 frozen source hashes match before/after; all six controller tests pass.
 The actual profile includes testthat3.3.2/jsonlite2.0.0/lintr3.4.0. Index findings
 remain822 INFO/90 historical WARN/0 ERROR. All15 bounded evidence files pass size/hash
@@ -1491,21 +1485,20 @@ Artifact ZIP24609bytes/SHA256:
 The earlier491 missing-testthat RED stays retained. This checkpoint updates the living
 plan's companion status as directed by TESTING_PLAN; no implementation plan changed.
 
-Runtime/tests remain identical to the actual3a four-file run:Linux859 passed/0 failed/
-0 warnings,Windows1040 passed/1 failed/2 warnings. Native Windows parent-death,
+Runtime/tests remain identical to the actual3a four-file run: Linux859 passed/0 failed/
+0 warnings, Windows1040 passed/1 failed/2 warnings. Native Windows parent-death,
 self-marker preservation and exact owned FILE/PARENT ACL restoration are proved.
 Windows effective-denial/metadata warnings and the separate native callr empty-env
 failure remain OPEN; no merge/release or complete native-security claim is made.
 Quarto's child-only PATH fix and prior actual hosted Quarto/bridge checks remain recorded;
 private pandas/NumPy installation, local reruns/frontends/models and current full CRAN are
-WAITING. At08:10:48 PDT load48.65/46.55/55.82,CPU13.90%idle,RAM92GiB used/35GiB unused,
+WAITING. At08:10:48 PDT load48.65/46.55/55.82, CPU13.90%idle, RAM92GiB used/35GiB unused,
 swap22332.19MiB and15GiB disk fail the local resource gate. No local heavy job or shared
 Ollama stop/unload/reconfigure/inference occurred. Hosted active leases are now0.
 
-Evidence:ignored `dev/.validation/windows-security-20261010/plan-only-7685c00-summary.json`
+Evidence: ignored `dev/.validation/windows-security-20261010/plan-only-7685c00-summary.json`
 and `current-execution.json`. Resume from [the living plan](../TESTING_PLAN.md) and
 [task progress](skipped-platform-tests-20261010.md).
-
 
 ## Authorized upstream callr repair — 2026-10-11
 
@@ -1519,22 +1512,19 @@ Local heavy execution stays HELD: fresh disk7.4GiB is below200GiB. Ollama is unt
 This plan edit requires fresh all-four exact-source hosted plan checks before the two-host
 stock-versus-patched dependency validation. Track outcomes here without another plan edit.
 
-
 Tests-first checkpoint: six strict worker/artifact/value/startup-error/cancel cases and four
 separate startup/PATH admission cases are source-cleared. Original helper/test prefixes are
 unchanged; patch round trips recover exact original hashes. No new skip allowance is added.
 Parser/lint/native execution remains pending. Independent upstream partial patch and bounded
 private-install controller are source-cleared; no GPTR runtime or shared dependency changed.
-Fresh15:13PDT snapshot: disk265GiB, load39.69/88.90/160.80,43.51%CPUidle,125GiB used/2018MiB
-unused,20539.50MiB swap, no thermal warning. Local heavy jobs remain HELD; Ollama untouched.
-
+Fresh15:13PDT snapshot: disk265GiB, load39.69/88.90/160.80,43.51%CPUidle, 125GiB used/2018MiB
+unused, 20539.50MiB swap, no thermal warning. Local heavy jobs remain HELD; Ollama untouched.
 
 Reviewed partial upstream patch and isolated stock/patched controller are committed as the
 next task checkpoint. Provenance freezes all167 upstream files; delta is six R launch/helper
 files plus one nine-case upstream test. Registry is6strict/4admission/9upstream. No callr
 namespace/shared library or GPTR runtime/Imports changed. Native execution remains WAITING
 until the one active all-four plan job settles; then launch at most two hosted jobs.
-
 
 Actual3682/run38179769396 is lint-only RED on both hosts: package install succeeded,
 but dedicated lint omitted the existing package/helper loading context. Linux reports
@@ -1543,10 +1533,9 @@ No pinned callr install or native test ran; secondary upload found no native art
 Reviewed correction uses the same pkgload::load_all context as the existing passing scoped
 lint program, sources pure optional definitions, and checks all five files without suppressing
 linters or changing runtime/tests/oracles. Fresh exact-source native repeat is ONGOING.
-Actual b984/run38179265286 plan artifact is independently verified: all4 stages,39 equal
-hashes,770R zero parse/style/lint,6units,90 historical indexWARN/0ERROR; current Plan bytes
+Actual b984/run38179265286 plan artifact is independently verified: all4 stages, 39 equal
+hashes, 770R zero parse/style/lint, 6units, 90 historical indexWARN/0ERROR; current Plan bytes
 are unchanged. Failed3682 logs remain retained in ignored callr-native-env-20261011.
-
 
 ## Native fixture corrections after e733 — 2026-10-11
 
@@ -1569,12 +1558,11 @@ unknown existing-file size and all bounds/warnings remain fatal. Observer lint i
 No GPTR or upstream runtime handoff, public class, hook or dependency binding changed.
 Fresh exact-source Windows/Linux repeat is ONGOING, with at most two hosted jobs.
 
-At15:32PDT load9.09/21.10/61.81,55.96%CPUidle,115GiB RAM used/12GiB unused,20539.50MiB
+At15:32PDT load9.09/21.10/61.81,55.96%CPUidle, 115GiB RAM used/12GiB unused, 20539.50MiB
 swap and260GiB free disk; no thermal warning. Local-heavy jobs remain HELD for resource
 pressure; shared Ollama is untouched. All four plan checks remain the verified b984
 artifact because plan content is unchanged. Separate security/CRT/PATH/locale admission
 boundaries, upstream compatible release, adoption and merge remain OPEN.
-
 
 ## Complete26cab native observations and next correction — 2026-10-11
 
@@ -1601,7 +1589,7 @@ the Windows line-ending hypothesis is not proven by that Mac check. Diagnostics
 unit passes, including truncation/missing/unexpected count and no unknown filenames.
 
 After core6/9 and exact stock controls pass in each fresh hosted job, four complete
-unchanged upstream files run stock/patched separately:20 lifecycle/error/stream,
+unchanged upstream files run stock/patched separately: 20 lifecycle/error/stream,
 hook, timeout and tracing titles. Five actual stdlib controller units pass0.011s
 with no R/network/child requests; they enforce core-before-compatibility, dependency
 parity and explicit failure. The optional otelsdk test dependency has no GPTR Import.
@@ -1614,10 +1602,9 @@ bytes changed; verified all4 b984 checks remain the plan evidence. Seven-variabl
 CRT, essential PATH, non-ASCII matching, separate Windows security, upstream release,
 production adoption/merge and broader local/frontend/model/CRAN gates remain OPEN.
 
-Fresh15:48:53PDT resource witness:load64.65/75.27/58.56,51.46%CPUidle,95GiB RAM used/
-33GiB unused,20507.50MiB swap,259GiB disk free, no thermal/performance warning. CPU/load
+Fresh15:48:53PDT resource witness: load64.65/75.27/58.56,51.46%CPUidle, 95GiB RAM used/
+33GiB unused, 20507.50MiB swap, 259GiB disk free, no thermal/performance warning. CPU/load
 still fails the local gate; hosted-only execution and shared Ollama preservation continue.
-
 
 ## Complete cad776 native outcomes; compatibility not run — 2026-10-11
 
@@ -1627,7 +1614,7 @@ COMPLETE RED with both jobs finished. Both scoped lint jobs and all five
 controller units pass. Independently retained raw packets report:
 
 | Packet | Linux stock | Linux patched | Windows stock | Windows patched |
-| --- | --- | --- | --- | --- |
+|---|---|---|---|---|
 | Six strict native cases | 187P/0F | 187P/0F | 165P/22F | 187P/0F |
 | Four admission cases | 136P/4F | 136P/4F | 99P/16F | 135P/5F |
 | Nine upstream cases | Not selected | 35P/1F | Not selected | 35P/1F |
@@ -1658,17 +1645,17 @@ pass across the completed admissions. Startup/CRT and essential-variable removal
 boundaries remain OPEN on the hosts indicated by the witnesses, not silently
 skipped or normalized.
 
-Both hosts now pass stock and patched isolated installation:167 pinned upstream
+Both hosts now pass stock and patched isolated installation: 167 pinned upstream
 files plus the added test are exact against the expected168-file patched map.
 Per-command autocrlfFALSE/eolLF is applied without global Git configuration changes;
 the preceding Windows mismatch's precise cause is still not proved. All installs
 retain callr3.8.0/processx3.9.0, and no shared dependency or GPTR runtime changes.
 
-All seven owned families per host settle with stopped roots,0 marked survivors,
+All seven owned families per host settle with stopped roots, 0 marked survivors,
 0 cleanup errors and0 controller warnings. Sampled family RSS ranges153-591MiB
 Linux and184-655MiB Windows; these are sampled observations, not OS peak claims.
-The unchanged native-case bounds remain30s/60s,1GiB RSS,4MiB input/64MiB owned
-files. Per validation child,300s/2GiB RSS/1MiB watched files and the360s outer
+The unchanged native-case bounds remain30s/60s, 1GiB RSS, 4MiB input/64MiB owned
+files. Per validation child, 300s/2GiB RSS/1MiB watched files and the360s outer
 controller timeout remain strict; no larger cap, skip or warning allowance is added.
 Evidence remains under ignored callr-native-env-20261011/native-cad776-evidence,
 including all earlier RED artifacts. Current branch nomination
@@ -1680,14 +1667,13 @@ expected compatibility titles remain PENDING until this exact run's results;
 no prior pass is borrowed for that source. Primary main718e81e with69 dirty
 paths/0 staged remains preserved.
 
-At16:00:50PDT load21.49/50.85/63.11,RAM126GiB used/1736MiB unused,
+At16:00:50PDT load21.49/50.85/63.11, RAM126GiB used/1736MiB unused,
 swap20459.5MiB and sampled paging0,259GiB free disk and no thermal warning were
 observed. Swap occupancy does not establish active paging; load and memory still
 hold local-heavy work. Shared Ollama is untouched. No plan bytes changed; all-four
 b984 plan evidence remains the current unchanged-plan checkpoint. Admissions,
 upstream release/adoption, production integration, merge and broader
 native/security/CRAN gates stay OPEN.
-
 
 ## Exact 189e202 required gates GREEN; admissions retained — 2026-10-11
 
@@ -1697,7 +1683,7 @@ COMPLETE GREEN on both hosts with 0 active hosted leases. Both scoped lint jobs
 report 0 lints and all five controller units pass. Actual raw results are:
 
 | Packet | Linux stock | Linux patched | Windows stock | Windows patched |
-| --- | --- | --- | --- | --- |
+|---|---|---|---|---|
 | Six strict native cases | 187P/0F | 187P/0F | 165P/22F | 187P/0F |
 | Nine upstream cases | Not selected | 36P/0F | Not selected | 36P/0F |
 | Four compatibility files/20 titles | 49P/0F | 49P/0F | 49P/0F | 49P/0F |

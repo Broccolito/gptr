@@ -123,7 +123,7 @@ live/replay probes for the selected five models without claiming the fake is liv
 
 ## Completion and interruption checks
 
-Native Unix TTY R: establish ordinary `mtc` + Tab first. At Peter test `!mtc`, `!!mtc`,
+Native Unix TTY R: establish ordinary `mtc` + Tab first. At Peter's prompt, test `!mtc`, `!!mtc`,
 `!stats::med`, quoted paths and multiline R. Check suggestions and inserted text, then
 oracles; keep a separately named object/environment rather than changing a user's data.
 Check exact original `rl_word_breaks` after exit, error and actual interrupt. The package
@@ -211,7 +211,6 @@ replay use separate explicitly selected kernels; replay has no live bootstrap/ke
 Native resize/zoom/completion/interrupt observations must remain separate from headless
 IRkernel passes and saved-output inspection.
 
-
 ## Installed 8952567 actual headless notebook checks
 
 The coordinator certified the normal `8952567` archive before these checks; SHA256
@@ -223,7 +222,7 @@ closed before a separate zero-request sync process, then a fresh key-free replay
 One serial cell ran at a time under nice15/BLAS1 and an owned900s controller.
 
 | Provider/case | Live / replay seconds | Request events live / replay | Native rows live / replay | Peak family RSS MiB |
-|---|---:|---:|---:|---:|
+|---|---|---|---|---|
 | versa regression | 4.595 / 1.365 | 2 / 0 | 0 / 0 | 332.1 |
 | codex regression | 13.690 / 1.111 | 1 / 0 | 0 / 0 | 711.7 |
 | jev typed | 1.619 / 1.037 | 0 / 0 | 3 / 0 | 294.3 |
@@ -590,7 +589,7 @@ public print. No new dependency, model request, eager optional load or full-data
 Function help describes the same default preview in notebooks, R Markdown and Quarto.
 
 Expected production RED had39fail/19pass; focused GREEN58pass, zero failures/test warnings/
-skips,1.703s and318.3MiB child maxRSS. Final combined affected packet passed726 assertions
+skips, 1.703s and318.3MiB child maxRSS. Final combined affected packet passed726 assertions
 with zero failures/test warnings and one Quarto skip because the isolated PATH excluded
 RStudio's installed Quarto binary. It took57.643s with350.0MiB child maxRSS. The focused
 C-locale packet passed58 assertions with no failures/warnings/skips; four files lint clean.
@@ -604,7 +603,7 @@ Independent final source/test review is clear. Raw evidence is ignored
 `resume-68017d0/client/doc-history-display-20261011/`.
 
 Installed/native notebook, Rmd and Quarto rendering remains required. All local-heavy jobs
-are held after the19:06PDT snapshot: load103.03, CPU1.36%idle,127GiB RAM used/112GiB wired,
-memory-pressure free5%,31,266.94MiB swap,40GiB disk, no thermal warning. Test children had
+are held after the19:06PDT snapshot: load103.03, CPU1.36%idle, 127GiB RAM used/112GiB wired,
+memory-pressure free5%, 31,266.94MiB swap,40GiB disk, no thermal warning. Test children had
 exited; read-only process/model inventory identifies a separate active Ollama server at
 about103.4GiB RSS with a131,072-token context. No server/model was stopped or unloaded.

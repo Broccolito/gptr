@@ -9,15 +9,39 @@
 > reconcile the affected steps before implementation. No implementation has
 > been performed as part of this design update.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `peter()` itself (copy-safe base-R capture, identifier resolution, `{identifier}` interpolation, routing through registry `route` records) together with the settings layers, trust, egress and replay controls and the session SDK verbs, so that the whole S-8 session contract of milestone M1 runs offline on the fake provider.
+**Goal:** Build `peter()` itself (copy-safe base-R capture, identifier resolution, `{identifier}`
+interpolation, routing through registry `route` records) together with the settings layers, trust,
+egress and replay controls and the session SDK verbs, so that the whole S-8 session contract of
+milestone M1 runs offline on the fake provider.
 
-**Architecture:** Four layer-L6 files. `gptr-config.R` owns the settings layers of contract 11.2 (package defaults < user file < project file under the trust rules < user-level project file < `options(gptr.*)` < the session layer), `gptr_config()`, `gptr_init()`, `gptr_trust()` with trust fingerprints, the egress acknowledgement, `replay_mode()`/`replay_guard()` and the `settings.get`/`trust.get` services. `gptr-capture.R` turns one `peter(...)` call into a `gptr_call` record without ever forcing a plain-symbol dot (rules R2-R3, IC-41), resolves bare identifiers (contract 6.1.3, IC-42) and interpolates literal prompts; `gptr-gateway.R` holds the classed closure `peter`, walks the `route` records in `order` and registers the `builtin:gateway` routes `nested` (20), `continue` (60) and `new` (70), the core `setting` specs and the `router.call` service; `gptr-sdk.R` holds the verbs `gptr_step()`, `gptr_wait()`, `gptr_steer()`, `gptr_cancel()`, `gptr_on()` and `gptr_return()`. P08 reaches the kernel only through the kernel SDK of IC-33 and later plans only through services of contract 7.0 with their documented fallbacks.
+**Architecture:** Four layer-L6 files. `gptr-config.R` owns the settings layers of contract 11.2
+(package defaults < user file < project file under the trust rules < user-level project file <
+`options(gptr.*)` < the session layer), `gptr_config()`, `gptr_init()`, `gptr_trust()` with trust
+fingerprints, the egress acknowledgement, `replay_mode()`/`replay_guard()` and the
+`settings.get`/`trust.get` services. `gptr-capture.R` turns one `peter(...)` call into a `gptr_call`
+record without ever forcing a plain-symbol dot (rules R2-R3, IC-41), resolves bare identifiers
+(contract 6.1.3, IC-42) and interpolates literal prompts; `gptr-gateway.R` holds the classed closure
+`peter`, walks the `route` records in `order` and registers the `builtin:gateway` routes `nested`
+(20), `continue` (60) and `new` (70), the core `setting` specs and the `router.call` service;
+`gptr-sdk.R` holds the verbs `gptr_step()`, `gptr_wait()`, `gptr_steer()`, `gptr_cancel()`,
+`gptr_on()` and `gptr_return()`. P08 reaches the kernel only through the kernel SDK of IC-33 and
+later plans only through services of contract 7.0 with their documented fallbacks.
 
-**Tech Stack:** base R (>= 4.2.0); rlang (`obj_address()` only; no quosures, rule R3); jsonlite through P01's `json_encode()`/`json_decode()`; ps (lock owner creation times); grDevices (PNG rendering of `.opts$images` plots); testthat 3e, withr and processx in tests only.
+**Tech Stack:** base R (>= 4.2.0); rlang (`obj_address()` only; no quosures, rule R3); jsonlite
+through P01's `json_encode()`/`json_decode()`; ps (lock owner creation times); grDevices (PNG
+rendering of `.opts$images` plots); testthat 3e, withr and processx in tests only.
 
-**Spec:** dev/spec/03-architecture.md (§2.2, §3.2, §4.1, §4.2, §5.1, §6.2, §6.3, §6.4, §6.8.5, §6.9.1, §6.10, §8.4, §11.1), dev/spec/04-interface-contract.md (§1.1-1.5, §2.1-2.2, §3.1-3.2, §4.2, §4.5, §5.1, §5.3, §5.11, §5.13, §6.1, §6.2 `gptr_init()`/`gptr_config()`/`gptr_trust()`, §6.5 `gptr_step()`/`gptr_wait()`/`gptr_steer()`/`gptr_cancel()`/`gptr_on()`, §6.6 `gptr_return()`, §7.0, §7.1, §7.2, §7.5, §7.6, §7.8, §8.2, §10.1-10.7, §11.1-11.3, §11.8, §11.16, §12; §15: IC-33, IC-34, IC-36, IC-39..IC-45, IC-48, IC-52, IC-53, IC-55, IC-57, IC-61, IC-62, IC-66, IC-69, IC-71), dev/spec/05-plan-decomposition.md (P08).
+**Spec:** dev/spec/03-architecture.md (sections 2.2, 3.2, 4.1, 4.2, 5.1, 6.2, 6.3, 6.4, 6.8.5,
+6.9.1, 6.10, 8.4, 11.1), dev/spec/04-interface-contract.md (sections 1.1-1.5, 2.1-2.2, 3.1-3.2, 4.2,
+4.5, 5.1, 5.3, 5.11, 5.13, 6.1, 6.2 `gptr_init()`/`gptr_config()`/`gptr_trust()`, 6.5
+`gptr_step()`/`gptr_wait()`/`gptr_steer()`/`gptr_cancel()`/`gptr_on()`, 6.6 `gptr_return()`, 7.0,
+7.1, 7.2, 7.5, 7.6, 7.8, 8.2, 10.1-10.7, 11.1-11.3, 11.8, 11.16, 12; section 15: IC-33, IC-34,
+IC-36, IC-39..IC-45, IC-48, IC-52, IC-53, IC-55, IC-57, IC-61, IC-62, IC-66, IC-69, IC-71),
+dev/spec/05-plan-decomposition.md (P08).
 
 **Depends on:** P03, P07 (and through them P01, P02, P04, P05, P06). **Milestone:** M1 (P08 is the milestone's last plan: its acceptance includes the M1 exit check).
 
@@ -25,34 +49,174 @@
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment (never `<-`; `<<-` only for closure state), the native `|>` (never `%>%`), ASCII-only R sources (non-ASCII as `\u` escapes), `pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions (messages built by plain concatenation, never glue-interpolated), no `:::` in `R/`, no `.GlobalEnv`, no `withr::` in `R/`, every changed global state restored with `on.exit(..., add = TRUE)`, testthat 3e, no network in tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose message ends with the attribution line required by the executing harness (conventions §10). Plan-specific requirements, copied from the specification:
+`dev/plan/00-conventions.md` applies in full: `=` for assignment (never `<-`; `<<-` only for closure
+state), the native `|>` (never `%>%`), ASCII-only R sources (non-ASCII as `\u` escapes),
+`pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions (messages built by
+plain concatenation, never glue-interpolated), no `:::` in `R/`, no `.GlobalEnv`, no `withr::` in
+`R/`, every changed global state restored with `on.exit(..., add = TRUE)`, testthat 3e, no network
+in tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per
+task whose message ends with the attribution line required by the executing harness
+(conventions section 10). Plan-specific requirements, copied from the specification:
 
-- Owned files (05 P08): `R/gptr-gateway.R`, `R/gptr-capture.R`, `R/gptr-sdk.R`, `R/gptr-config.R`, their tests `tests/testthat/test-gptr-gateway.R`, `test-gptr-capture.R`, `test-gptr-sdk.R`, `test-gptr-config.R`, the copy suite `tests/testthat/test-copy-gateway.R`, and `inst/templates/` (`vignette.Rmd`, `settings.json`, `gitignore`); plus `NAMESPACE` and `man/` through `Rscript --vanilla -e 'devtools::document()'`.
-- Layers (03 §3.2): all four files are L6. They call L0-L3 functions, the kernel SDK of IC-33 (`session_data()`, `session_live()`, `session_home()`, `session_append()`, `session_set_model()`, `session_set_mode()`, `session_enqueue()`, `session_value_set()`, `session_run()`, `run_start()`, `run_wait()`, `run_abort()`, `run_current()`, `last_set()`, ...) and services only; P08 never calls a function of P09-P25 by name.
-- Exports (04 §14.1: P08's 10 names), exact signatures:
+- Owned files (05 P08): `R/gptr-gateway.R`, `R/gptr-capture.R`, `R/gptr-sdk.R`, `R/gptr-config.R`,
+  their tests `tests/testthat/test-gptr-gateway.R`, `test-gptr-capture.R`, `test-gptr-sdk.R`,
+  `test-gptr-config.R`, the copy suite `tests/testthat/test-copy-gateway.R`, and `inst/templates/`
+  (`vignette.Rmd`, `settings.json`, `gitignore`); plus `NAMESPACE` and `man/` through
+  `Rscript --vanilla -e 'devtools::document()'`.
+- Layers (03 section 3.2): all four files are L6. They call L0-L3 functions, the kernel SDK of IC-33
+  (`session_data()`, `session_live()`, `session_home()`, `session_append()`, `session_set_model()`,
+  `session_set_mode()`, `session_enqueue()`, `session_value_set()`, `session_run()`, `run_start()`,
+  `run_wait()`, `run_abort()`, `run_current()`, `last_set()`, ...) and services only; P08 never
+  calls a function of P09-P25 by name.
+- Exports (04 section 14.1: P08's 10 names), exact signatures:
   `peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL, extensions = NULL, tools = NULL, agents = NULL, parallel = NULL, choices = NULL, levels = NULL, threshold = 0.5, min_confidence = NULL, uncertain = NULL, prompt = NULL, envir = parent.frame(), background = FALSE, budget = NULL, replay = NULL, .opts = list(), .run = TRUE, .stdin = FALSE)`;
-  `gptr_init(path, instructions = TRUE, gitignore = TRUE)`; `gptr_config(..., .scope = NULL)`; `gptr_trust(path = ".", trust = NULL)`;
-  `gptr_step(s, turns = 1L)`; `gptr_wait(x, timeout = Inf)`; `gptr_steer(s, text, as = c("steer", "follow_up"))`; `gptr_cancel(x)`; `gptr_on(s, event, handler, matcher = NULL)`; `gptr_return(x)`.
-- Classes: `peter` has `class(peter) == c("gptr_gateway", "function")` with methods `$`, `[[`, `$<-`, `[[<-` (refuse, `gptr_error_readonly`), `.DollarNames` and `print` (04 §5.3); `gptr_config` is "named list of effective settings with attribute `sources` (named chr: key -> layer); `print` shows value and source per key" (04 §5.11); `gptr_call` is an environment (04 §5.13, §7.8).
-- The `gptr_call` record (IC-13, 04 §7.8): bindings `id` (`c` + 8 hex), `prompt`, `template`, `session`, `context` (one `list(label, kind = "symbol" | "value" | "literal", name, slot, facts = list(class, dim, length, bytes, is_chr1))` per context dot), `values` (env, `.v1`, `.v2`, ...), `envir` (reset to `NULL` by `call_release()` [R2]), `ids` (`model`, `mode`, `skills`, `plugins`, `extensions`, `tools`, `agents`), `args` (`parallel`, `choices`, `levels`, `threshold`, `min_confidence`, `uncertain`, `background`, `budget`, `replay`, `opts`, `run`, `stdin`), `sys_call`, `nframe`, `top_level` (`NA` until P15's locator), `doc`; plus `interp` ("the sorted `name=value` pairs used", 04 §6.1.4).
-- Internal functions with contract signatures (04 §7.8): `call_new(...)`, `call_release(call)`, `call_value(call, i)`, `route_pass()`, `gateway_defer(expr_fun)`, `gateway_run(call, s = NULL)`, `dot_facts(x)`, `resolve_identifier(expr, arg, envir)`, `identifier_known(name, arg)`, `interpolate_prompt(template, envir)`, `settings_get(key, session = NULL)`, `settings_effective()`, `settings_write(scope, patch)`, `trust_get(path = getwd())`, `home_address(envir)`, `replay_mode(arg = NULL)`, `replay_guard(model, what = "model call")`, `egress_check(provider_id)`.
-- Services provided (04 §7.0): `settings.get` = `function(key, session = NULL) value`; `trust.get` = `function(path = getwd()) lgl(1)` (fallback `FALSE`); `identifier.resolve` = `function(expr, arg, envir) chr or spec`; `router.call` = `function(s, reason) list(model, thinking, state)`. Each is registered with `on_load(ext_service_set(<name>, <fun>, provided_by = "P08", builtin = "gateway"))`.
-- Services consumed, with the fallback each consumer documents: `ns.resolve` (`$`/`[[` of `peter`; `gptr_error_not_available` before P10), `ns.names` (`.DollarNames`; `character(0)` before P10), `context.first`/`context.turn`/`session.add_tools` (P07), `console.interrupt_policy` (P14; abort-only fallback), `skill.body` and `plugin.enable` (P17; `gptr_error_not_available`), `bg.register` (P21; `gptr_error_not_available`).
-- Built-in (04 §10.3): `builtin:gateway` registers "routes `nested` (20), `continue` (60), `new` (70); core `setting` specs", not replaceable. Route orders (IC-39): `classifier` 10, `team` 15, `fanout` 16, `nested` 20, `console` 30, `document` 50, `continue` 60, `new` 70.
-- Settings (04 §11.2): layers "package defaults < user `settings.json` < project `.gptr/settings.json` < the user-level project file `projects/<hash>.json` (IC-52) < `options(gptr.*)` < `gptr_config(.scope = "session")` < call arguments"; "An **untrusted** project contributes only changes that tighten `tighten`-type settings"; `egress` "is read only from the user file". Core keys and defaults exactly as the 04 §11.2 table (`version` 1, `model` null, `small_model` null, `system1` null, `mode` `"manual"` with tighten order `plan, manual, edits, auto`, `preset` `"standard"`, `tools` `{}`, `permissions` `{}`, `context` `"summary"` (`none, names, summary`), `record` `"ask"` (`off, ask, auto`), `replay` `"auto"`, `transcript` `"ask"`, `plugins` `[]`, `filters` `[]`, `skills` `{budget: 1500}`, `mcp` `{exposure: "r", budget: 1500, import: [...]}`, `subagents` `{max_depth: 1, max_active: 8, max_workers: null, max_cli: 4, max_tasks: 8}`, `output_tokens` null, `plot` `{width: 768, height: 512, res: 120}`, `budget` `{tokens: 2000000, cost: 5, turns: null}`, `cache` `{ttl: "gap"}`, `compactor` `"checkpoint"`, `compact_at` `200000`, `checkpoint` `"on"`, `doc` `{outputs: true, output_lines: 12}`, `cache_commit` `{s1: true, s2: false}`, `ui` null, `frontend` null, `store` `"jsonl"`, `evaluator` `"r"`, `providers` `{}`, `egress` `{}` user file only).
-- Files: user settings `tools::R_user_dir("gptr", "config")/settings.json`; project settings `.gptr/settings.json`; user-level project file `R_user_dir("gptr", "config")/projects/<first 16 hex of sha256(path_key(project root))>.json` (`{"version": 1, "root": ..., "permissions": {...}, "transcript": {...}, "record": {...}}`); `trust.json` = `{"version": 1, "projects": {"<path_key of the project root>": {"trusted": true, "date": "2026-09-29", "fingerprint": "<sha256 of the trust-gated files>", "base_url_confirmed": {...}}}}`; trust-gated files (IC-52) `.gptr/settings.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `APPEND_SYSTEM.md`, `agents/`, an auto-discovered `.env`. All JSON "UTF-8 without BOM, LF, written atomically (`write_atomic()`)", "Unknown keys are preserved on rewrite"; read-modify-write "under a short `mkdir` lock (`<file>.lock/`, pid + creation time, 50 x 100 ms retries)" (IC-71).
-- Templates (04 §11.16): `inst/templates/vignette.Rmd` "an R Markdown document with a YAML header (`title: "Project instructions"`, `output: html_document`), a first line `@AGENTS.md` comment hint (as an HTML comment), and sections "Data", "Conventions", "Do not" with placeholder bullets; it contains no executable chunks"; `inst/templates/settings.json` = `{"version": 1, "mode": "manual", "record": "ask"}`; `inst/templates/gitignore` = the ten lines of 04 §11.1 (`sessions/`, `cache/s2/`, `cache/tmp/`, `checkpoints/`, `artifacts/*/v*/data/`, `artifacts/*/run/`, `locks/`, `*.lock/`, `settings.local.json`, `transcripts/`).
-- Options owned (04 §3.1): `gptr.model`, `gptr.mode`, `gptr.preset`, `gptr.system1`, `gptr.small_model` (option layer of the settings keys, default "settings"); `gptr.replay` (resolution; default settings `"auto"`); `gptr.interpolate` (`TRUE`); `gptr.subagents.max_depth` (`1L`; "nesting depth of child sessions (at most 2)"). Environment variables read: `GPTR_REPLAY` ("replay mode below the option") and `TESTTHAT` (`"true"` under testthat: no forced replay). Options consumed (owned elsewhere): `gptr.prompt_secrets` (owner P03, default `"redact"`, "secret-looking text in prompts: `"redact"` or `"ask"`"; P03 states that the gateway applies it: `gateway_prompt_secrets()`, Task 9) and `gptr.verbose` (through P01's `verbosity()`: the `interpolated` echo at verbosity >= 2, Task 8).
-- Replay (IC-45): `replay_mode(arg)` = "`arg` > `gptr.replay` > `GPTR_REPLAY` > settings > `"auto"`; `"replay"` is forced when `check_running()` and `Sys.getenv("TESTTHAT") != "true"` (examples), unless `arg` is given"; `replay_guard()` "in replay mode, signals `gptr_error_not_recorded` before any request to a provider whose record is not `offline = TRUE`".
-- Egress (IC-29, 03 §6.10): `egress_check(provider_id)` is "`invisible(TRUE)` if acknowledged (user settings `egress`), local or offline, or `.opts$context = "none"`; when `gptr_can_prompt()`: shows what automatic context is sent and records the acknowledgement at user scope (an `ask_human`, IC-53); otherwise `gptr_error_egress`" (fields `provider`, `how_to_ack`); the recorded acknowledgement is announced with the message class `egress_ack`.
-- Control category (IC-53 item 3): `gptr_config`, `gptr_trust`, `gptr_init`, `gptr_on`, and `gptr_steer`/`gptr_cancel` "on a session other than the running one" (the pipe into another running session included) check `run_current()`: "called from model code during a run they signal `gptr_error_permission` unless the dispatcher approved exactly that call through an `ask_human` (a one-shot token on the run)". The token is the function name appended to `run$signal$control`, the slot P06's `perm_grant_control()` and P11's gate grant (see contract ambiguities). P08's check is `control_check(what)`, the name P06 and P11 cite for it ("the slot P08's `control_check()` consumes"); P06 named its own session-level check `session_control_check(what, s = NULL)` and P11 its `perm_control_guard(what)` so that the three never collide.
-- Internal names unique across plans: P06 reserved `mode_tighter()` and `control_check()` for P08 (its own helpers are `run_mode_tighter()` and `session_control_check()`); P07 owns `context_items()`, so P08's context-item builder is `gateway_context_items()`. Two top-level definitions of one name in one package silently override each other, so every P08 helper name was checked against every plan in `dev/plan/` (P01-P07, P09-P11, P14, P17, P21): none is defined twice.
-- Human predicates (IC-43): every question uses `gptr_can_prompt()` and `gptr_confirm()`; `peter()` with no prompt, nobody to prompt and `.stdin = FALSE` signals `gptr_error_noninteractive` (fields `what`, `questions`).
-- Conditions used (04 §2.2): `gptr_error_invalid_argument` (`arg`, `expected`; never the argument's value), `gptr_error_invalid_identifier` (parent `invalid_argument`; `arg`, `class`), `gptr_error_noninteractive`, `gptr_error_not_available` (`member`, `provided_by`), `gptr_error_readonly` (`object`, `field`), `gptr_error_unknown_member`, `gptr_error_workspace` (`path`), `gptr_error_egress` (`provider`, `how_to_ack`), `gptr_error_not_recorded` (`document`, `prompt`), `gptr_error_permission` (`action`, `tool`, `risk`, `how_to_allow`, `session`), `gptr_error_provider` (`provider`, `model`, `status`, `request_id`, `error_type`, `session`), `gptr_error_budget_<kind>` (`kind`, `budget`, `used`, `session`), `gptr_error_max_turns` (`max_turns`, `session`), `gptr_error_missing_package` (`package`, `feature`), `gptr_error_internal` (`detail`); warning `gptr_warning_two_prompts`; messages `gptr_message_alias_shadowed`, `gptr_message_egress_ack`, `gptr_message_interpolated`, `gptr_message_notice`. Terminal statuses (04 §6.1.2): "`error` signals `gptr_error_provider`; `blocked` signals `gptr_error_permission`; `budget` signals `gptr_error_budget_<kind>`; `max_turns` signals `gptr_error_max_turns`. Each condition carries the session as `cnd$session`"; R's `interrupt` is re-signalled unchanged.
-- Events emitted (04 §6.1.5, §10.4): `route` (`route`, `router`, `model`, `reason`), `model_select` (`from`, `to`, `reason`), `input` (transform chain; `text`, `source`), `project_trust` (first decision; `cwd`, `changed`). `session_start` is P06's; so are the per-switch `model_change`/`gptr.router` entries and `route` events of router sessions (P06 `run_route()` records what P08's `router.call` returns).
-- Terminal conditions: P06 stores the unsignalled condition of a terminal status in `session_data(s)$condition` ("read by P08", P06 self-review item 7); `gateway_signal()` signals that object with `$session` set to the session, and builds one only when none is stored.
-- Copy safety (03 §6.4 R1-R3, IC-41, G3 verification log): no rlang quosures; "a plain-symbol dot is read by name through a `get0()` leaf and its promise is never forced"; other dots "reach only leaf functions through `...elt(i)` in `while` loops"; "no closures, `tryCatch`, `withCallingHandlers` or `match.arg` in a frame that holds `...` or the home; never assign to a formal"; alias masks get `parent.env<-` `emptyenv()` after use; "never put a user frame in a list or closure that can become garbage; hold it only in environment bindings that are explicitly reset".
-- Tests (conventions §7, 04 §12): the fake provider and P01's helpers with their exact names (`gptr_fake_provider()`, `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`, `fake_text()`, `fake_tool()`, `fake_requests(spec)`, `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`, `local_gptr_options(..., .env = parent.frame())`, `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`); `setup.R` sets `GPTR_REPLAY=replay`, `gptr.interactive = FALSE`, `gptr.quiet = TRUE` and redirects every user directory.
+  `gptr_init(path, instructions = TRUE, gitignore = TRUE)`; `gptr_config(..., .scope = NULL)`;
+  `gptr_trust(path = ".", trust = NULL)`;
+  `gptr_step(s, turns = 1L)`; `gptr_wait(x, timeout = Inf)`;
+  `gptr_steer(s, text, as = c("steer", "follow_up"))`; `gptr_cancel(x)`;
+  `gptr_on(s, event, handler, matcher = NULL)`; `gptr_return(x)`.
+- Classes: `peter` has `class(peter) == c("gptr_gateway", "function")` with methods `$`, `[[`,
+  `$<-`, `[[<-` (refuse, `gptr_error_readonly`), `.DollarNames` and `print` (04 section 5.3);
+  `gptr_config` is "named list of effective settings with attribute `sources` (named chr: key ->
+  layer); `print` shows value and source per key" (04 section 5.11); `gptr_call` is an environment
+  (04 sections 5.13, 7.8).
+- The `gptr_call` record (IC-13, 04 section 7.8): bindings `id` (`c` + 8 hex), `prompt`, `template`,
+  `session`, `context` (one
+  `list(label, kind = "symbol" | "value" | "literal", name, slot, facts = list(class, dim, length, bytes, is_chr1))`
+  per context dot), `values` (env, `.v1`, `.v2`, ...), `envir` (reset to `NULL` by `call_release()`
+  [R2]), `ids` (`model`, `mode`, `skills`, `plugins`, `extensions`, `tools`, `agents`), `args`
+  (`parallel`, `choices`, `levels`, `threshold`, `min_confidence`, `uncertain`, `background`,
+  `budget`, `replay`, `opts`, `run`, `stdin`), `sys_call`, `nframe`, `top_level` (`NA` until P15's
+  locator), `doc`; plus `interp` ("the sorted `name=value` pairs used", 04 section 6.1.4).
+- Internal functions with contract signatures (04 section 7.8): `call_new(...)`,
+  `call_release(call)`, `call_value(call, i)`, `route_pass()`, `gateway_defer(expr_fun)`,
+  `gateway_run(call, s = NULL)`, `dot_facts(x)`, `resolve_identifier(expr, arg, envir)`,
+  `identifier_known(name, arg)`, `interpolate_prompt(template, envir)`,
+  `settings_get(key, session = NULL)`, `settings_effective()`, `settings_write(scope, patch)`,
+  `trust_get(path = getwd())`, `home_address(envir)`, `replay_mode(arg = NULL)`,
+  `replay_guard(model, what = "model call")`, `egress_check(provider_id)`.
+- Services provided (04 section 7.0): `settings.get` = `function(key, session = NULL) value`;
+  `trust.get` = `function(path = getwd()) lgl(1)` (fallback `FALSE`); `identifier.resolve` =
+  `function(expr, arg, envir) chr or spec`; `router.call` =
+  `function(s, reason) list(model, thinking, state)`. Each is registered with
+  `on_load(ext_service_set(<name>, <fun>, provided_by = "P08", builtin = "gateway"))`.
+- Services consumed, with the fallback each consumer documents: `ns.resolve` (`$`/`[[` of `peter`;
+  `gptr_error_not_available` before P10), `ns.names` (`.DollarNames`; `character(0)` before P10),
+  `context.first`/`context.turn`/`session.add_tools` (P07), `console.interrupt_policy` (P14;
+  abort-only fallback), `skill.body` and `plugin.enable` (P17; `gptr_error_not_available`),
+  `bg.register` (P21; `gptr_error_not_available`).
+- Built-in (04 section 10.3): `builtin:gateway` registers "routes `nested` (20), `continue` (60),
+  `new` (70); core `setting` specs", not replaceable. Route orders (IC-39): `classifier` 10, `team`
+  15, `fanout` 16, `nested` 20, `console` 30, `document` 50, `continue` 60, `new` 70.
+- Settings (04 section 11.2): layers "package defaults < user `settings.json` < project
+  `.gptr/settings.json` < the user-level project file `projects/<hash>.json` (IC-52) <
+  `options(gptr.*)` < `gptr_config(.scope = "session")` < call arguments"; "An **untrusted** project
+  contributes only changes that tighten `tighten`-type settings"; `egress` "is read only from the
+  user file". Core keys and defaults exactly as the 04 section 11.2 table (`version` 1, `model`
+  null, `small_model` null, `system1` null, `mode` `"manual"` with tighten order
+  `plan, manual, edits, auto`, `preset` `"standard"`, `tools` `{}`, `permissions` `{}`, `context`
+  `"summary"` (`none, names, summary`), `record` `"ask"` (`off, ask, auto`), `replay` `"auto"`,
+  `transcript` `"ask"`, `plugins` `[]`, `filters` `[]`, `skills` `{budget: 1500}`, `mcp`
+  `{exposure: "r", budget: 1500, import: [...]}`, `subagents`
+  `{max_depth: 1, max_active: 8, max_workers: null, max_cli: 4, max_tasks: 8}`, `output_tokens`
+  null, `plot` `{width: 768, height: 512, res: 120}`, `budget`
+  `{tokens: 2000000, cost: 5, turns: null}`, `cache` `{ttl: "gap"}`, `compactor` `"checkpoint"`,
+  `compact_at` `200000`, `checkpoint` `"on"`, `doc` `{outputs: true, output_lines: 12}`,
+  `cache_commit` `{s1: true, s2: false}`, `ui` null, `frontend` null, `store` `"jsonl"`, `evaluator`
+  `"r"`, `providers` `{}`, `egress` `{}` user file only).
+- Files: user settings `tools::R_user_dir("gptr", "config")/settings.json`; project settings
+  `.gptr/settings.json`; user-level project file
+  `R_user_dir("gptr", "config")/projects/<first 16 hex of sha256(path_key(project root))>.json`
+  (`{"version": 1, "root": ..., "permissions": {...}, "transcript": {...}, "record": {...}}`);
+  `trust.json` =
+  `{"version": 1, "projects": {"<path_key of the project root>": {"trusted": true, "date": "2026-09-29", "fingerprint": "<sha256 of the trust-gated files>", "base_url_confirmed": {...}}}}`;
+  trust-gated files (IC-52) `.gptr/settings.json`, `mcp.json`, `extensions/`, `plugins/`,
+  `SYSTEM.md`, `APPEND_SYSTEM.md`, `agents/`, an auto-discovered `.env`. All JSON "UTF-8 without
+  BOM, LF, written atomically (`write_atomic()`)", "Unknown keys are preserved on rewrite";
+  read-modify-write "under a short `mkdir` lock (`<file>.lock/`, pid + creation time, 50 x 100 ms
+  retries)" (IC-71).
+- Templates (04 section 11.16): `inst/templates/vignette.Rmd` "an R Markdown document with a YAML
+  header (`title: "Project instructions"`, `output: html_document`), a first line `@AGENTS.md`
+  comment hint (as an HTML comment), and sections "Data", "Conventions", "Do not" with placeholder
+  bullets; it contains no executable chunks"; `inst/templates/settings.json` =
+  `{"version": 1, "mode": "manual", "record": "ask"}`; `inst/templates/gitignore` = the ten lines of
+  04 section 11.1 (`sessions/`, `cache/s2/`, `cache/tmp/`, `checkpoints/`, `artifacts/*/v*/data/`,
+  `artifacts/*/run/`, `locks/`, `*.lock/`, `settings.local.json`, `transcripts/`).
+- Options owned (04 section 3.1): `gptr.model`, `gptr.mode`, `gptr.preset`, `gptr.system1`,
+  `gptr.small_model` (option layer of the settings keys, default "settings"); `gptr.replay`
+  (resolution; default settings `"auto"`); `gptr.interpolate` (`TRUE`); `gptr.subagents.max_depth`
+  (`1L`; "nesting depth of child sessions (at most 2)"). Environment variables read: `GPTR_REPLAY`
+  ("replay mode below the option") and `TESTTHAT` (`"true"` under testthat: no forced replay).
+  Options consumed (owned elsewhere): `gptr.prompt_secrets` (owner P03, default `"redact"`,
+  "secret-looking text in prompts: `"redact"` or `"ask"`"; P03 states that the gateway applies it:
+  `gateway_prompt_secrets()`, Task 9) and `gptr.verbose` (through P01's `verbosity()`: the
+  `interpolated` echo at verbosity >= 2, Task 8).
+- Replay (IC-45): `replay_mode(arg)` = "`arg` > `gptr.replay` > `GPTR_REPLAY` > settings > `"auto"`;
+  `"replay"` is forced when `check_running()` and `Sys.getenv("TESTTHAT") != "true"` (examples),
+  unless `arg` is given"; `replay_guard()` "in replay mode, signals `gptr_error_not_recorded` before
+  any request to a provider whose record is not `offline = TRUE`".
+- Egress (IC-29, 03 section 6.10): `egress_check(provider_id)` is "`invisible(TRUE)` if acknowledged
+  (user settings `egress`), local or offline, or `.opts$context = "none"`; when `gptr_can_prompt()`:
+  shows what automatic context is sent and records the acknowledgement at user scope (an
+  `ask_human`, IC-53); otherwise `gptr_error_egress`" (fields `provider`, `how_to_ack`); the
+  recorded acknowledgement is announced with the message class `egress_ack`.
+- Control category (IC-53 item 3): `gptr_config`, `gptr_trust`, `gptr_init`, `gptr_on`, and
+  `gptr_steer`/`gptr_cancel` "on a session other than the running one" (the pipe into another
+  running session included) check `run_current()`: "called from model code during a run they signal
+  `gptr_error_permission` unless the dispatcher approved exactly that call through an `ask_human` (a
+  one-shot token on the run)". The token is the function name appended to `run$signal$control`, the
+  slot P06's `perm_grant_control()` and P11's gate grant (see contract ambiguities). P08's check is
+  `control_check(what)`, the name P06 and P11 cite for it ("the slot P08's `control_check()`
+  consumes"); P06 named its own session-level check `session_control_check(what, s = NULL)` and P11
+  its `perm_control_guard(what)` so that the three never collide.
+- Internal names unique across plans: P06 reserved `mode_tighter()` and `control_check()` for P08
+  (its own helpers are `run_mode_tighter()` and `session_control_check()`); P07 owns
+  `context_items()`, so P08's context-item builder is `gateway_context_items()`. Two top-level
+  definitions of one name in one package silently override each other, so every P08 helper name was
+  checked against every plan in `dev/plan/` (P01-P07, P09-P11, P14, P17, P21): none is defined
+  twice.
+- Human predicates (IC-43): every question uses `gptr_can_prompt()` and `gptr_confirm()`; `peter()`
+  with no prompt, nobody to prompt and `.stdin = FALSE` signals `gptr_error_noninteractive` (fields
+  `what`, `questions`).
+- Conditions used (04 section 2.2): `gptr_error_invalid_argument` (`arg`, `expected`; never the
+  argument's value), `gptr_error_invalid_identifier` (parent `invalid_argument`; `arg`, `class`),
+  `gptr_error_noninteractive`, `gptr_error_not_available` (`member`, `provided_by`),
+  `gptr_error_readonly` (`object`, `field`), `gptr_error_unknown_member`, `gptr_error_workspace`
+  (`path`), `gptr_error_egress` (`provider`, `how_to_ack`), `gptr_error_not_recorded` (`document`,
+  `prompt`), `gptr_error_permission` (`action`, `tool`, `risk`, `how_to_allow`, `session`),
+  `gptr_error_provider` (`provider`, `model`, `status`, `request_id`, `error_type`, `session`),
+  `gptr_error_budget_<kind>` (`kind`, `budget`, `used`, `session`), `gptr_error_max_turns`
+  (`max_turns`, `session`), `gptr_error_missing_package` (`package`, `feature`),
+  `gptr_error_internal` (`detail`); warning `gptr_warning_two_prompts`; messages
+  `gptr_message_alias_shadowed`, `gptr_message_egress_ack`, `gptr_message_interpolated`,
+  `gptr_message_notice`. Terminal statuses (04 section 6.1.2): "`error` signals
+  `gptr_error_provider`; `blocked` signals `gptr_error_permission`; `budget` signals
+  `gptr_error_budget_<kind>`; `max_turns` signals `gptr_error_max_turns`. Each condition carries the
+  session as `cnd$session`"; R's `interrupt` is re-signalled unchanged.
+- Events emitted (04 sections 6.1.5, 10.4): `route` (`route`, `router`, `model`, `reason`),
+  `model_select` (`from`, `to`, `reason`), `input` (transform chain; `text`, `source`),
+  `project_trust` (first decision; `cwd`, `changed`). `session_start` is P06's; so are the
+  per-switch `model_change`/`gptr.router` entries and `route` events of router sessions (P06
+  `run_route()` records what P08's `router.call` returns).
+- Terminal conditions: P06 stores the unsignalled condition of a terminal status in
+  `session_data(s)$condition` ("read by P08", P06 self-review item 7); `gateway_signal()` signals
+  that object with `$session` set to the session, and builds one only when none is stored.
+- Copy safety (03 section 6.4 R1-R3, IC-41, G3 verification log): no rlang quosures; "a plain-symbol
+  dot is read by name through a `get0()` leaf and its promise is never forced"; other dots "reach
+  only leaf functions through `...elt(i)` in `while` loops"; "no closures, `tryCatch`,
+  `withCallingHandlers` or `match.arg` in a frame that holds `...` or the home; never assign to a
+  formal"; alias masks get `parent.env<-` `emptyenv()` after use; "never put a user frame in a list
+  or closure that can become garbage; hold it only in environment bindings that are explicitly
+  reset".
+- Tests (conventions section 7, 04 section 12): the fake provider and P01's helpers with their exact
+  names (`gptr_fake_provider()`,
+  `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())`, `fake_text()`,
+  `fake_tool()`, `fake_requests(spec)`,
+  `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())`,
+  `local_gptr_options(..., .env = parent.frame())`,
+  `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`);
+  `setup.R` sets `GPTR_REPLAY=replay`, `gptr.interactive = FALSE`, `gptr.quiet = TRUE` and redirects
+  every user directory.
 
 ## File Structure
 
@@ -70,38 +234,59 @@
 | `tests/testthat/test-copy-gateway.R` | create (Task 11) | the fresh-process tracemem rows of G3 t5 and IC-41 |
 | `NAMESPACE`, `man/peter.Rd`, `man/gptr_init.Rd`, `man/gptr_config.Rd`, `man/gptr_trust.Rd`, `man/gptr_step.Rd`, `man/gptr_wait.Rd`, `man/gptr_steer.Rd`, `man/gptr_cancel.Rd`, `man/gptr_on.Rd`, `man/gptr_return.Rd` | generated (Task 12) | `Rscript --vanilla -e 'devtools::document()'` |
 
-## Tasks (overview)
+## Tasks
 
 1. Settings files, scopes, locks, the core setting specs and the control check (`gptr-config.R`)
-2. Project trust: `trust.json`, fingerprints, `gptr_trust()` and the `trust.get` service (`gptr-config.R`)
-3. Settings layers: `settings_get()`, `settings_effective()` and the `settings.get` service (`gptr-config.R`)
+2. Project trust: `trust.json`, fingerprints, `gptr_trust()` and the `trust.get` service
+   (`gptr-config.R`)
+3. Settings layers: `settings_get()`, `settings_effective()` and the `settings.get` service
+   (`gptr-config.R`)
 4. Replay mode, the replay guard and the egress acknowledgement (`gptr-config.R`)
-5. Capture leaves, prompt selection, interpolation, argument validation and the call record (`gptr-capture.R`)
+5. Capture leaves, prompt selection, interpolation, argument validation and the call record
+   (`gptr-capture.R`)
 6. Identifier resolution and the `identifier.resolve` service (`gptr-capture.R`)
 7. `gptr_config()`, `gptr_init()` and the templates (`gptr-config.R`, `inst/templates/`)
 8. The gateway closure, route dispatch and the `gptr_gateway` methods (`gptr-gateway.R`)
-9. `gateway_run()`, terminal conditions, `builtin:gateway` and the `router.call` service (`gptr-gateway.R`)
+9. `gateway_run()`, terminal conditions, `builtin:gateway` and the `router.call` service
+   (`gptr-gateway.R`)
 10. The session SDK verbs (`gptr-sdk.R`)
 11. The gateway copy suite (`test-copy-gateway.R`)
 12. Documentation, NAMESPACE, plan acceptance and the M1 exit check
 
 ---
+
 ### Task 1: Settings files, scopes, locks, the core setting specs and the control check
 
 **Files:**
+
 - Create: `R/gptr-config.R`
 - Test: `tests/testthat/test-gptr-config.R` (create)
 
 **Interfaces:**
-- Consumes (P01, 04 §7.1): `gptr_user_dir(which, create = FALSE)`, `workspace_dir(path = getwd())`, `project_root(path = getwd())`, `path_key(path)`, `hash_sha256(x)`, `write_atomic(path, content)`, `read_utf8(path)`, `json_encode(x, pretty = FALSE)`, `json_decode(text)`, `json_obj()`, the checkers of 04 §1.1, `gptr_abort()`. (P02, 04 §7.2): `gptr_spec(kind, name, ...)`, `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)`, `registry_diagnostic(source, event, class, message)`. (P04, 04 §7.4): `pid_alive(pid, create_time = NULL)`. (P06, IC-33): `run_current()` and the `gptr_run` fields `session` and `signal`.
-- Produces (04 §7.8): `settings_write(scope, patch)` (scopes `"session"`, `"project"`, `"user"` and `"user_project"`, the user-level project file of IC-52 that P11's `gptr_permissions(scope = "project")` writes), plus the helpers later P08 tasks and P11/P15 read: `settings_read(scope)`, `settings_path(scope, create = FALSE)`, `settings_spec(key)`, `settings_keys()`, `gateway_setting_specs()` (the core `setting` specs of IC-24, registered in Task 9), `file_lock(path)`/`file_unlock(lock)` (IC-71) and `control_check(what)` (IC-53; the name P06 and P11 cite; P06's own check is `session_control_check()`).
 
-The settings files are plain JSON objects; unknown keys survive a rewrite, a `NULL` in a patch removes the key,
-arrays of names stay arrays at length 1 (`I()`), and every read-modify-write takes the short `mkdir` lock of IC-71.
-The process layer is `the$settings_session` (04 §7.0). `control_check()` is the IC-53 check shared by
-`gptr_config()`, `gptr_trust()`, `gptr_init()`, `gptr_on()` and the SDK verbs: inside a run (`run_current()`
-non-`NULL`) it refuses unless the dispatcher left a one-shot approval token (the function name) in
-`run$signal$control`.
+- Consumes (P01, 04 section 7.1): `gptr_user_dir(which, create = FALSE)`,
+  `workspace_dir(path = getwd())`, `project_root(path = getwd())`, `path_key(path)`,
+  `hash_sha256(x)`, `write_atomic(path, content)`, `read_utf8(path)`,
+  `json_encode(x, pretty = FALSE)`, `json_decode(text)`, `json_obj()`, the checkers of
+  04 section 1.1, `gptr_abort()`. (P02, 04 section 7.2): `gptr_spec(kind, name, ...)`,
+  `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)`,
+  `registry_diagnostic(source, event, class, message)`. (P04, 04 section 7.4):
+  `pid_alive(pid, create_time = NULL)`. (P06, IC-33): `run_current()` and the `gptr_run` fields
+  `session` and `signal`.
+- Produces (04 section 7.8): `settings_write(scope, patch)` (scopes `"session"`, `"project"`,
+  `"user"` and `"user_project"`, the user-level project file of IC-52 that P11's
+  `gptr_permissions(scope = "project")` writes), plus the helpers later P08 tasks and P11/P15 read:
+  `settings_read(scope)`, `settings_path(scope, create = FALSE)`, `settings_spec(key)`,
+  `settings_keys()`, `gateway_setting_specs()` (the core `setting` specs of IC-24, registered in
+  Task 9), `file_lock(path)`/`file_unlock(lock)` (IC-71) and `control_check(what)` (IC-53; the name
+  P06 and P11 cite; P06's own check is `session_control_check()`).
+
+The settings files are plain JSON objects; unknown keys survive a rewrite, a `NULL` in a patch
+removes the key, arrays of names stay arrays at length 1 (`I()`), and every read-modify-write takes
+the short `mkdir` lock of IC-71. The process layer is `the$settings_session` (04 section 7.0).
+`control_check()` is the IC-53 check shared by `gptr_config()`, `gptr_trust()`, `gptr_init()`,
+`gptr_on()` and the SDK verbs: inside a run (`run_current()` non-`NULL`) it refuses unless the
+dispatcher left a one-shot approval token (the function name) in `run$signal$control`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -224,7 +409,8 @@ test_that("the core setting specs cover contract 11.2 and validate their values 
 Rscript --vanilla -e 'devtools::test(filter = "gptr-config")'
 ```
 
-Expected: the run stops with errors such as `could not find function "settings_write"` (`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`), because `R/gptr-config.R` does not exist yet.
+Expected: the run stops with errors such as `could not find function "settings_write"`
+(`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`), because `R/gptr-config.R` does not exist yet.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -615,21 +801,35 @@ git commit -m "feat(gateway): add settings files, scopes, locks and the control 
 ### Task 2: Project trust: `trust.json`, fingerprints, `gptr_trust()` and the `trust.get` service
 
 **Files:**
+
 - Modify: `R/gptr-config.R` (append the trust functions; replace `settings_write()`)
 - Test: `tests/testthat/test-gptr-config.R` (append)
 
 **Interfaces:**
-- Consumes: Task 1 (`settings_file_read()`, `settings_file_write()`, `file_lock()`, `control_check()`, `gateway_state()`); P01 `path_rel(path, root)`, `gptr_can_prompt()`, `gptr_confirm(question, default = FALSE)`, `gptr_inform()`, `ev_new(type, ...)`, `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`; P02 `ev_dispatch(event, payload, session = NULL, ctx = NULL)` (event `project_trust`, first decision, 04 §10.4).
-- Produces: the export `gptr_trust(path = ".", trust = NULL)` (04 §6.2); `trust_get(path = getwd())` (04 §7.8: "`TRUE` only when recorded and the trust fingerprint still matches (IC-52)") registered as the service `trust.get` (IC-33, fallback `FALSE` for its consumers P03, P07, P15, P17, P18); `trust_resolve(root)` (the first decision used by Task 9 and P17/P18 through `trust.get`), `trust_store(root, trusted)`, `trust_mark(root, decision)`, `trust_holds(root)`, `trust_fingerprint(root)` and `trust_resources_present(root)`.
 
-`trust.json` follows 04 §11.8. The fingerprint (IC-52) is sha256 over the sorted root-relative paths and the
-content hashes of the trust-gated files, cached by path, mtime and size; the per-file hashes are stored as well, so
-that a later mismatch can list which files changed. gptr's own writes to a trusted project re-fingerprint it (the
-replaced `settings_write()`). `trust_resolve()` decides once per process and fingerprint: the recorded decision,
-else the first decision of `project_trust` handlers, else the interactive question, else "untrusted" with one
-notice. A decision taken in this process is remembered with the fingerprint it was taken for (`trust_mark()`), so
-a gated file changed later in the process (for example by model code) voids it, as IC-52 requires ("Control
-files modified during the process are not loaded again without confirmation").
+- Consumes: Task 1 (`settings_file_read()`, `settings_file_write()`, `file_lock()`,
+  `control_check()`, `gateway_state()`); P01 `path_rel(path, root)`, `gptr_can_prompt()`,
+  `gptr_confirm(question, default = FALSE)`, `gptr_inform()`, `ev_new(type, ...)`, `on_load(expr)`,
+  `ext_service_set(name, fun, provided_by, builtin = NULL)`; P02
+  `ev_dispatch(event, payload, session = NULL, ctx = NULL)` (event `project_trust`, first decision,
+  04 section 10.4).
+- Produces: the export `gptr_trust(path = ".", trust = NULL)` (04 section 6.2);
+  `trust_get(path = getwd())` (04 section 7.8: "`TRUE` only when recorded and the trust fingerprint
+  still matches (IC-52)") registered as the service `trust.get` (IC-33, fallback `FALSE` for its
+  consumers P03, P07, P15, P17, P18); `trust_resolve(root)` (the first decision used by Task 9 and
+  P17/P18 through `trust.get`), `trust_store(root, trusted)`, `trust_mark(root, decision)`,
+  `trust_holds(root)`, `trust_fingerprint(root)` and `trust_resources_present(root)`.
+
+`trust.json` follows 04 section 11.8. The fingerprint (IC-52) is sha256 over the sorted
+root-relative paths and the content hashes of the trust-gated files, cached by path, mtime and size;
+the per-file hashes are stored as well, so that a later mismatch can list which files changed.
+gptr's own writes to a trusted project re-fingerprint it (the replaced `settings_write()`).
+`trust_resolve()` decides once per process and fingerprint: the recorded decision, else the first
+decision of `project_trust` handlers, else the interactive question, else "untrusted" with one
+notice. A decision taken in this process is remembered with the fingerprint it was taken for
+(`trust_mark()`), so a gated file changed later in the process (for example by model code) voids it,
+as IC-52 requires ("Control files modified during the process are not loaded again without
+confirmation").
 
 - [ ] **Step 1: Write the failing test**
 
@@ -741,7 +941,8 @@ test_that("gptr_trust() is refused from model code during a run (IC-53)", {
 Rscript --vanilla -e 'devtools::test(filter = "gptr-config")'
 ```
 
-Expected: the new tests fail with `could not find function "gptr_trust"` and `could not find function "trust_get"`.
+Expected: the new tests fail with `could not find function "gptr_trust"` and
+`could not find function "trust_get"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -952,7 +1153,8 @@ gptr_trust = function(path = ".", trust = NULL) {
 on_load(ext_service_set("trust.get", trust_get, provided_by = "P08", builtin = "gateway"))
 ```
 
-In `R/gptr-config.R`, replace the Task 1 definition of `settings_write()` (and its roxygen block) with this version, which re-fingerprints a trusted project after gptr's own write:
+In `R/gptr-config.R`, replace the Task 1 definition of `settings_write()` (and its roxygen block)
+with this version, which re-fingerprints a trusted project after gptr's own write:
 
 ```r
 # R/gptr-config.R (Task 2: replace settings_write())
@@ -1007,19 +1209,29 @@ git commit -m "feat(gateway): add project trust, fingerprints and gptr_trust()"
 ### Task 3: Settings layers: `settings_get()`, `settings_effective()` and the `settings.get` service
 
 **Files:**
+
 - Modify: `R/gptr-config.R` (append)
 - Test: `tests/testthat/test-gptr-config.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-2 (`settings_read()`, `settings_path()`, `settings_spec()`, `settings_keys()`, `settings_file_read()`, `trust_get()`); P01 `setting_get(key, session = NULL, default = NULL)` (which calls the `settings.get` service once it is registered), `gptr_inform()`.
-- Produces (04 §7.8): `settings_get(key, session = NULL)` ("the effective value through the layers of §11.2"), registered as the service `settings.get` (`function(key, session = NULL) value`, consumed by every plan through P01's `setting_get()`); `settings_effective()` returning the `gptr_config` class of 04 §5.11 with its `print` method; the helper `settings_resolve(key)` -> `list(value, source)`.
 
-Layers, lowest first (04 §11.2): defaults < user file < project file (IC-52: untrusted projects only tighten
-`tighten`-type keys and add `permissions.deny`/`ask`; trusted projects add every key but still only tighten
-`tighten`-type keys; a trusted project's legacy `.gptr/settings.local.json` adds deny/ask rules only) < the
-user-level project file (permission rules) < `options(gptr.<key>)` < the session layer. `egress` is read from the
-user file only. Objects merge key by key (`utils::modifyList()`); a dotted key such as `subagents.max_depth`
-resolves inside its object, and its own option (`gptr.subagents.max_depth`, 04 §3.1) and session entry win.
+- Consumes: Tasks 1-2 (`settings_read()`, `settings_path()`, `settings_spec()`, `settings_keys()`,
+  `settings_file_read()`, `trust_get()`); P01 `setting_get(key, session = NULL, default = NULL)`
+  (which calls the `settings.get` service once it is registered), `gptr_inform()`.
+- Produces (04 section 7.8): `settings_get(key, session = NULL)` ("the effective value through the
+  layers of §11.2"), registered as the service `settings.get`
+  (`function(key, session = NULL) value`, consumed by every plan through P01's `setting_get()`);
+  `settings_effective()` returning the `gptr_config` class of 04 section 5.11 with its `print`
+  method; the helper `settings_resolve(key)` -> `list(value, source)`.
+
+Layers, lowest first (04 section 11.2): defaults < user file < project file (IC-52: untrusted
+projects only tighten `tighten`-type keys and add `permissions.deny`/`ask`; trusted projects add
+every key but still only tighten `tighten`-type keys; a trusted project's legacy
+`.gptr/settings.local.json` adds deny/ask rules only) < the user-level project file (permission
+rules) < `options(gptr.<key>)` < the session layer. `egress` is read from the user file only.
+Objects merge key by key (`utils::modifyList()`); a dotted key such as `subagents.max_depth`
+resolves inside its object, and its own option (`gptr.subagents.max_depth`, 04 section 3.1) and
+session entry win.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1110,7 +1322,8 @@ test_that("settings_get() is registered as the settings.get service of builtin:g
 Rscript --vanilla -e 'devtools::test(filter = "gptr-config")'
 ```
 
-Expected: the new tests fail with `could not find function "settings_get"` and `could not find function "settings_effective"`.
+Expected: the new tests fail with `could not find function "settings_get"` and
+`could not find function "settings_effective"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1364,20 +1577,30 @@ git commit -m "feat(gateway): add the settings layers and the settings.get servi
 ### Task 4: Replay mode, the replay guard and the egress acknowledgement
 
 **Files:**
+
 - Modify: `R/gptr-config.R` (append)
 - Test: `tests/testthat/test-gptr-config.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-3 (`settings_get()`, `settings_write()`, `settings_path()`, `settings_file_read()`); P01 `check_running()`, `gptr_can_prompt()`, `gptr_confirm()`, `gptr_inform()`; P05 `provider_get(id)`, `model_resolve(ref, strict = TRUE)`.
-- Produces (04 §7.8, kernel SDK of IC-33): `replay_mode(arg = NULL)` -> `chr(1)` (consumers P13, P15, P19), `replay_guard(model, what = "model call")` -> `invisible(TRUE)` or `gptr_error_not_recorded` (consumers P13, P19; `model` is a model record, a provider spec or a reference), `egress_check(provider_id)` -> `invisible(TRUE)` or `gptr_error_egress` (consumers P13, P19; IC-29).
 
-`replay_mode()` implements IC-45: an explicit argument always wins; otherwise `"replay"` is forced when R CMD check
-runs outside testthat (examples), then the option, `GPTR_REPLAY`, the settings and `"auto"`. `replay_guard()`
-refuses, in replay mode, any provider whose record is not `offline = TRUE`, so `GPTR_REPLAY=replay` in `setup.R`
-blocks real models but never the fake provider (IC-30). `egress_check()` is the acknowledgement of 03 §6.10: local
-and offline providers need none; a missing acknowledgement is asked once when someone can answer (an `ask_human`,
-IC-53; recorded at user scope with the `egress_ack` message) and is `gptr_error_egress` otherwise. The
-`.opts$context = "none"` exemption is applied by the gateway before it calls `egress_check()` (Task 9).
+- Consumes: Tasks 1-3 (`settings_get()`, `settings_write()`, `settings_path()`,
+  `settings_file_read()`); P01 `check_running()`, `gptr_can_prompt()`, `gptr_confirm()`,
+  `gptr_inform()`; P05 `provider_get(id)`, `model_resolve(ref, strict = TRUE)`.
+- Produces (04 section 7.8, kernel SDK of IC-33): `replay_mode(arg = NULL)` -> `chr(1)` (consumers
+  P13, P15, P19), `replay_guard(model, what = "model call")` -> `invisible(TRUE)` or
+  `gptr_error_not_recorded` (consumers P13, P19; `model` is a model record, a provider spec or a
+  reference), `egress_check(provider_id)` -> `invisible(TRUE)` or `gptr_error_egress` (consumers
+  P13, P19; IC-29).
+
+`replay_mode()` implements IC-45: an explicit argument always wins; otherwise `"replay"` is forced
+when R CMD check runs outside testthat (examples), then the option, `GPTR_REPLAY`, the settings and
+`"auto"`. `replay_guard()` refuses, in replay mode, any provider whose record is not
+`offline = TRUE`, so `GPTR_REPLAY=replay` in `setup.R` blocks real models but never the fake
+provider (IC-30). `egress_check()` is the acknowledgement of 03 section 6.10: local and offline
+providers need none; a missing acknowledgement is asked once when someone can answer (an
+`ask_human`, IC-53; recorded at user scope with the `egress_ack` message) and is `gptr_error_egress`
+otherwise. The `.opts$context = "none"` exemption is applied by the gateway before it calls
+`egress_check()` (Task 9).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1458,7 +1681,8 @@ test_that("an interactive yes records the acknowledgement at user scope", {
 Rscript --vanilla -e 'devtools::test(filter = "gptr-config")'
 ```
 
-Expected: the new tests fail with `could not find function "replay_mode"`, `"replay_guard"` and `"egress_check"`.
+Expected: the new tests fail with `could not find function "replay_mode"`, `"replay_guard"` and
+`"egress_check"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1584,24 +1808,40 @@ git commit -m "feat(gateway): add replay_mode(), replay_guard() and the egress a
 ### Task 5: Capture leaves, prompt selection, interpolation, argument validation and the call record
 
 **Files:**
+
 - Create: `R/gptr-capture.R`
 - Test: `tests/testthat/test-gptr-capture.R` (create)
 
 **Interfaces:**
-- Consumes: P01 `as_utf8(x)`, `id_new(prefix = "", n = 10L)`, `gptr_opt(name)`, `schema_problems(schema)`, the checkers of 04 §1.1; P02 `registry_names(kind, session = NULL)`, `registry_get(kind, name, session = NULL)`; Task 4 `replay_modes()`.
-- Produces (04 §7.8): `dot_facts(x)` [leaf] -> `list(class, is_session, is_chr1, length, dim, bytes, text)`; `interpolate_prompt(template, envir)` -> `list(prompt = chr(1), interp = chr)` (the sorted `name=value` pairs; P14 echoes `prompt`, P15 hashes `interp` into `args=`); `call_new(...)` -> a `gptr_call`; `call_release(call)` -> `invisible(lgl(1))`; `call_value(call, i)` [leaf]; plus the gateway helpers used by Tasks 6-9: `dot_get()`, `binding_address()`, `dot_is_literal()`, `dot_sites()`, `dot_labels()`, `select_prompt()`, `gateway_context_items()` (not `context_items()`, which is P07's), `unmask_env()`, `name_norm()`, `gateway_modes()`, `gateway_presets()`, `gateway_builtin_tools()`, `gateway_interpolate()`, `gateway_opts()`, `gateway_args()`.
 
-This task writes the copy-safe capture machinery of G3 (§3 "GATEWAY CAPTURE RULES", t2b, t5 and the verification
-log) with IC-41 applied: a dot whose expression at the call site (`sys.call()`) is a plain symbol is read **by name**
-from the caller frame through the leaf `dot_get()` (`get0()`), so its promise is never forced; literals are taken
-from the expression; every other dot (a call such as the inner `peter()` of a pipe, a forwarded `...`/`..n`, a value
-spliced in by `do.call()`) is forced exactly once through `...elt(i)` in the gateway's `while` loop and parked in the
-call record's `values` environment, which `call_release()` empties at settlement [R2]. `dot_sites()` maps each dot
-to the symbol written at the call site, skipping arguments named after a formal that follows the dots; with more
-than one forwarded `...` it gives up and returns `NA` for every dot, so they are all forced through `...elt()`.
-Prompt selection is report 12 §2.D3: `prompt =` wins, else the first unnamed string literal, else the first unnamed
-length-1 character value that is not a session; a leading unnamed session is the continuation target; two unnamed
-literals warn `two_prompts` (Task 8 signals it). Interpolation is contract 6.1.4.
+- Consumes: P01 `as_utf8(x)`, `id_new(prefix = "", n = 10L)`, `gptr_opt(name)`,
+  `schema_problems(schema)`, the checkers of 04 section 1.1; P02
+  `registry_names(kind, session = NULL)`, `registry_get(kind, name, session = NULL)`; Task 4
+  `replay_modes()`.
+- Produces (04 section 7.8): `dot_facts(x)` [leaf] ->
+  `list(class, is_session, is_chr1, length, dim, bytes, text)`;
+  `interpolate_prompt(template, envir)` -> `list(prompt = chr(1), interp = chr)` (the sorted
+  `name=value` pairs; P14 echoes `prompt`, P15 hashes `interp` into `args=`); `call_new(...)` -> a
+  `gptr_call`; `call_release(call)` -> `invisible(lgl(1))`; `call_value(call, i)` [leaf]; plus the
+  gateway helpers used by Tasks 6-9: `dot_get()`, `binding_address()`, `dot_is_literal()`,
+  `dot_sites()`, `dot_labels()`, `select_prompt()`, `gateway_context_items()` (not
+  `context_items()`, which is P07's), `unmask_env()`, `name_norm()`, `gateway_modes()`,
+  `gateway_presets()`, `gateway_builtin_tools()`, `gateway_interpolate()`, `gateway_opts()`,
+  `gateway_args()`.
+
+This task writes the copy-safe capture machinery of G3 (section 3 "GATEWAY CAPTURE RULES", t2b, t5
+and the verification log) with IC-41 applied: a dot whose expression at the call site (`sys.call()`)
+is a plain symbol is read **by name** from the caller frame through the leaf `dot_get()` (`get0()`),
+so its promise is never forced; literals are taken from the expression; every other dot (a call such
+as the inner `peter()` of a pipe, a forwarded `...`/`..n`, a value spliced in by `do.call()`) is
+forced exactly once through `...elt(i)` in the gateway's `while` loop and parked in the call
+record's `values` environment, which `call_release()` empties at settlement [R2]. `dot_sites()` maps
+each dot to the symbol written at the call site, skipping arguments named after a formal that
+follows the dots; with more than one forwarded `...` it gives up and returns `NA` for every dot, so
+they are all forced through `...elt()`. Prompt selection is report 12 section 2.D3: `prompt =` wins,
+else the first unnamed string literal, else the first unnamed length-1 character value that is not a
+session; a leading unnamed session is the continuation target; two unnamed literals warn
+`two_prompts` (Task 8 signals it). Interpolation is contract 6.1.4.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1775,7 +2015,9 @@ test_that("gateway_opts() validates the core switches and plugin namespaces (IC-
 Rscript --vanilla -e 'devtools::test(filter = "gptr-capture")'
 ```
 
-Expected: every test fails with `could not find function` (`dot_facts`, `dot_sites`, `select_prompt`, `name_norm`, `interpolate_prompt`, `gateway_interpolate`, `call_new`, `unmask_env`, `gateway_args`, `gateway_opts`).
+Expected: every test fails with `could not find function` (`dot_facts`, `dot_sites`,
+`select_prompt`, `name_norm`, `interpolate_prompt`, `gateway_interpolate`, `call_new`, `unmask_env`,
+`gateway_args`, `gateway_opts`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2297,24 +2539,39 @@ git commit -m "feat(gateway): add copy-safe capture leaves, interpolation and th
 ### Task 6: Identifier resolution and the `identifier.resolve` service
 
 **Files:**
+
 - Modify: `R/gptr-capture.R` (append)
 - Test: `tests/testthat/test-gptr-capture.R` (append)
 
 **Interfaces:**
-- Consumes: Task 5 (`name_norm()`, `gateway_modes()`, `gateway_presets()`, `gateway_builtin_tools()`); P01 `as_utf8()`, `json_obj()`, `gptr_inform()`, `on_load()`, `ext_service_set()`; P02 `registry_names()`, `registry_get()`, `gptr_registry()`, `gptr_agent()` (which stores the raw captured `model`/`skills` expressions, IC-34); P05 `catalog_aliases()` -> chr (P05 ships `sonnet`, `opus`, `haiku`, `gemini`, `flash`, `gpt`, `jev`, `claude_code`).
-- Produces (04 §7.8): `resolve_identifier(expr, arg, envir)` -> `NULL`, chr, a spec, or a list (`tools`/`extensions`), registered as the service `identifier.resolve` (consumers: `gptr_agent()` capture via P02 stores raw expressions, P17 agent files); `identifier_known(name, arg)` -> `lgl(1)`; plus the gateway helpers `ident_force_needed(expr, arg, envir)`, `ident_value(x, arg, expr)` [leaf], `ident_label(expr)`, `resolve_agents(expr, envir)` (with `agents_check_names()` and `agents_named_call()`: P02's `gptr_agent()` requires a `name`, so the list names of a literal `list(stats = agent(...))` are passed into the `agent()` calls before they are evaluated) and `session_accessor_names()` (IC-71).
 
-The table of contract 6.1.3, in order: `NULL` -> the settings default; a string -> itself; a symbol that is a
-**known identifier** for the argument (catalog aliases, registered provider/model/router ids and provider aliases
-for `model`; the four modes; presets; tools; skills, plugins, extensions and agents compared after `name_norm()`,
-IC-42) -> its canonical name, with a once-per-session `alias_shadowed` message when a character variable of that
-name holds a different value; `!!x` and `I(x)` -> the value of `x`; another bound symbol -> its value, which must
-be character or a spec of the right kind (`gptr_error_invalid_identifier` names the class otherwise); an unknown
-unbound symbol -> the literal name (a decimal-looking model name such as `gpt5.1` is echoed once); `c(a, "b")`,
-`+name`, `-name` -> element-wise; any other call -> evaluated in an alias mask whose parent is reset to `emptyenv()`
-afterwards (rule R3). The gateway (Task 8) forces a formal's promise instead of reading a bound symbol by name
-whenever `ident_force_needed()` says so: forcing evaluates in the promise's own environment, which is what makes
-forwarded dots correct (G3 t2b: a wrapper's local `m` never wins).
+- Consumes: Task 5 (`name_norm()`, `gateway_modes()`, `gateway_presets()`,
+  `gateway_builtin_tools()`); P01 `as_utf8()`, `json_obj()`, `gptr_inform()`, `on_load()`,
+  `ext_service_set()`; P02 `registry_names()`, `registry_get()`, `gptr_registry()`, `gptr_agent()`
+  (which stores the raw captured `model`/`skills` expressions, IC-34); P05 `catalog_aliases()` ->
+  chr (P05 ships `sonnet`, `opus`, `haiku`, `gemini`, `flash`, `gpt`, `jev`, `claude_code`).
+- Produces (04 section 7.8): `resolve_identifier(expr, arg, envir)` -> `NULL`, chr, a spec, or a
+  list (`tools`/`extensions`), registered as the service `identifier.resolve` (consumers:
+  `gptr_agent()` capture via P02 stores raw expressions, P17 agent files);
+  `identifier_known(name, arg)` -> `lgl(1)`; plus the gateway helpers
+  `ident_force_needed(expr, arg, envir)`, `ident_value(x, arg, expr)` [leaf], `ident_label(expr)`,
+  `resolve_agents(expr, envir)` (with `agents_check_names()` and `agents_named_call()`: P02's
+  `gptr_agent()` requires a `name`, so the list names of a literal `list(stats = agent(...))` are
+  passed into the `agent()` calls before they are evaluated) and `session_accessor_names()` (IC-71).
+
+The table of contract 6.1.3, in order: `NULL` -> the settings default; a string -> itself; a symbol
+that is a **known identifier** for the argument (catalog aliases, registered provider/model/router
+ids and provider aliases for `model`; the four modes; presets; tools; skills, plugins, extensions
+and agents compared after `name_norm()`, IC-42) -> its canonical name, with a once-per-session
+`alias_shadowed` message when a character variable of that name holds a different value; `!!x` and
+`I(x)` -> the value of `x`; another bound symbol -> its value, which must be character or a spec of
+the right kind (`gptr_error_invalid_identifier` names the class otherwise); an unknown unbound
+symbol -> the literal name (a decimal-looking model name such as `gpt5.1` is echoed once);
+`c(a, "b")`, `+name`, `-name` -> element-wise; any other call -> evaluated in an alias mask whose
+parent is reset to `emptyenv()` afterwards (rule R3). The gateway (Task 8) forces a formal's promise
+instead of reading a bound symbol by name whenever `ident_force_needed()` says so: forcing evaluates
+in the promise's own environment, which is what makes forwarded dots correct (G3 t2b: a wrapper's
+local `m` never wins).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2408,7 +2665,9 @@ test_that("resolve_identifier() is registered as the identifier.resolve service"
 Rscript --vanilla -e 'devtools::test(filter = "gptr-capture")'
 ```
 
-Expected: the new tests fail with `could not find function "resolve_identifier"`, `"identifier_known"` and `"resolve_agents"`, and the service test with `attempt to apply non-function` (no bootstrap entry `the$services[["identifier.resolve"]]` yet).
+Expected: the new tests fail with `could not find function "resolve_identifier"`,
+`"identifier_known"` and `"resolve_agents"`, and the service test with
+`attempt to apply non-function` (no bootstrap entry `the$services[["identifier.resolve"]]` yet).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2784,28 +3043,41 @@ git commit -m "feat(gateway): add identifier resolution and the identifier.resol
 ### Task 7: `gptr_config()`, `gptr_init()` and the templates
 
 **Files:**
+
 - Modify: `R/gptr-config.R` (append)
 - Create: `inst/templates/vignette.Rmd`, `inst/templates/settings.json`, `inst/templates/gitignore`
 - Test: `tests/testthat/test-gptr-config.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-4 (`settings_read()`, `settings_write()`, `settings_spec()`, `settings_keys()`, `settings_effective()`, `settings_file_read()`, `settings_path()`, `gateway_state()`, `control_check()`, `trust_store()`, `trust_get()`), Task 6 `resolve_identifier()`; P01 `workspace_dir()`, `project_root()`; P01 `path_norm()`, `write_atomic()`, `gptr_can_prompt()`, `gptr_confirm(question, default = FALSE)` (which appends the ` [y/N] ` hint itself, so P08's questions end with `?`); P02 `registry_filters_set(filters, scope = c("session", "user", "project"))`.
-- Produces the exports (04 §6.2) `gptr_config(..., .scope = NULL)` and `gptr_init(path, instructions = TRUE, gitignore = TRUE)`, the helpers `template_file(name)` and `gateway_filters_sync()` (the user and project `filters` settings applied to the registry; called again by Task 9's `gateway_run()`) and the three template files of 04 §11.16.
 
-`gptr_config()` without arguments returns `settings_effective()`. With named arguments it validates every key
-against the registered `setting` specs (core keys plus plugin settings), resolves `model`, `small_model`,
-`system1`, `mode` and `preset` as bare identifiers, refuses `egress` outside user scope, writes the patch into the
-scope (IC-71: `.scope = NULL` is `"project"` when a workspace exists, else `"session"`) and returns the previous
-values invisibly. Setting `filters` also hands the scope's new filter list to P02's
-`registry_filters_set(filters, scope)` (04 §10.1 names `gptr_config(filters =)` as a filter path; P02 applies its
-own safety rules, IC-53): the session list directly, the user and project files through `gateway_filters_sync()`.
-That helper is how the settings key `filters` of the user file and of a trusted project's file (an untrusted
-project contributes no `filters`, IC-52) reaches the registry at all, also after a restart: P02 relies on the
-settings layer for it (P02 self-review item 18), and Task 9 calls it at the start of every top-level
-`gateway_run()`. It re-applies a scope only when its list changed since the last application. `gptr_init()` has no default path: without `path` it asks when someone can answer and signals
-`gptr_error_noninteractive` otherwise; it never overwrites an existing file, never writes `.Rbuildignore` (it
-offers the `^\.gptr$` line), and asks the separate trust question only when someone can answer. Both are
-control-category calls (IC-53).
+- Consumes: Tasks 1-4 (`settings_read()`, `settings_write()`, `settings_spec()`, `settings_keys()`,
+  `settings_effective()`, `settings_file_read()`, `settings_path()`, `gateway_state()`,
+  `control_check()`, `trust_store()`, `trust_get()`), Task 6 `resolve_identifier()`; P01
+  `workspace_dir()`, `project_root()`; P01 `path_norm()`, `write_atomic()`, `gptr_can_prompt()`,
+  `gptr_confirm(question, default = FALSE)` (which appends the ` [y/N] ` hint itself, so P08's
+  questions end with `?`); P02
+  `registry_filters_set(filters, scope = c("session", "user", "project"))`.
+- Produces the exports (04 section 6.2) `gptr_config(..., .scope = NULL)` and
+  `gptr_init(path, instructions = TRUE, gitignore = TRUE)`, the helpers `template_file(name)` and
+  `gateway_filters_sync()` (the user and project `filters` settings applied to the registry; called
+  again by Task 9's `gateway_run()`) and the three template files of 04 section 11.16.
+
+`gptr_config()` without arguments returns `settings_effective()`. With named arguments it validates
+every key against the registered `setting` specs (core keys plus plugin settings), resolves `model`,
+`small_model`, `system1`, `mode` and `preset` as bare identifiers, refuses `egress` outside user
+scope, writes the patch into the scope (IC-71: `.scope = NULL` is `"project"` when a workspace
+exists, else `"session"`) and returns the previous values invisibly. Setting `filters` also hands
+the scope's new filter list to P02's `registry_filters_set(filters, scope)` (04 section 10.1 names
+`gptr_config(filters =)` as a filter path; P02 applies its own safety rules, IC-53): the session
+list directly, the user and project files through `gateway_filters_sync()`. That helper is how the
+settings key `filters` of the user file and of a trusted project's file (an untrusted project
+contributes no `filters`, IC-52) reaches the registry at all, also after a restart: P02 relies on
+the settings layer for it (P02 self-review item 18), and Task 9 calls it at the start of every
+top-level `gateway_run()`. It re-applies a scope only when its list changed since the last
+application. `gptr_init()` has no default path: without `path` it asks when someone can answer and
+signals `gptr_error_noninteractive` otherwise; it never overwrites an existing file, never writes
+`.Rbuildignore` (it offers the `^\.gptr$` line), and asks the separate trust question only when
+someone can answer. Both are control-category calls (IC-53).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2982,7 +3254,8 @@ test_that("with a human, gptr_init() asks to create the workspace and then about
 Rscript --vanilla -e 'devtools::test(filter = "gptr-config")'
 ```
 
-Expected: the new tests fail with `could not find function "gptr_config"` and `could not find function "gptr_init"`.
+Expected: the new tests fail with `could not find function "gptr_config"` and
+`could not find function "gptr_init"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2992,7 +3265,7 @@ Create `inst/templates/settings.json` (one line):
 {"version": 1, "mode": "manual", "record": "ask"}
 ```
 
-Create `inst/templates/gitignore` (written as `.gptr/.gitignore`; the lines of 04 §11.1):
+Create `inst/templates/gitignore` (written as `.gptr/.gitignore`; the lines of 04 section 11.1):
 
 ```text
 sessions/
@@ -3294,7 +3567,8 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 Rscript --vanilla -e 'devtools::test(filter = "gptr-config")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 135 ]` (the skip is the `gptr_permissions()` leg, which runs once P11 exists).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 135 ]` (the skip is the `gptr_permissions()` leg, which
+runs once P11 exists).
 
 - [ ] **Step 5: Commit**
 
@@ -3308,28 +3582,44 @@ git commit -m "feat(gateway): add gptr_config(), gptr_init() and the workspace t
 ### Task 8: The gateway closure, route dispatch and the `gptr_gateway` methods
 
 **Files:**
+
 - Create: `R/gptr-gateway.R`
 - Test: `tests/testthat/test-gptr-gateway.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 5-6 (capture leaves, `select_prompt()`, `gateway_args()`, `interpolate_prompt()`, `resolve_identifier()`, `ident_force_needed()`, `ident_value()`, `resolve_agents()`, `call_new()`, `call_release()`), Task 1 `gateway_state()`; P01 `gptr_can_prompt()`, `gptr_warn()`, `gptr_inform()` and `verbosity()` (the `interpolated` echo of 04 §2.2 at verbosity >= 2), `ev_new()`, `ext_service_get()`, `ext_service_has()`; P02 `registry_all(kind, session = NULL)` (route records ordered by `order`), `registry_diagnostic()`, `ev_dispatch()`; P06 `run_current()` (the `gptr_run` field `mode`); P10 services `ns.resolve` (`function(path)`) and `ns.names` (`function(pattern)`).
-- Produces: the export `peter` (class `c("gptr_gateway", "function")`, 04 §6.1, §5.3) with the S3 methods `$.gptr_gateway`, `[[.gptr_gateway`, `$<-.gptr_gateway`, `[[<-.gptr_gateway`, `.DollarNames.gptr_gateway`, `print.gptr_gateway`; `route_pass()` (the sentinel for P13, P14, P15, P19), `gateway_defer(expr_fun)` (P19's `gptr_parallel()`), `home_address(envir)` -> chr(1) (P11), `mode_tighter(a, b)` (the name P06 reserved for P08; P06's own is `run_mode_tighter()`), `gateway_dispatch(call)`.
 
-`peter()` is dispatch steps 1-5 of contract 6.1.1. Its frame holds `...` and the caller frame, so it follows the
-capture rules literally: no closure, handler or `match.arg()` in the frame, no assignment to a formal (new locals
-only), plain-symbol dots read by name through leaves, every other dot forced once through `...elt(i)` in a `while`
-loop. Identifier formals are resolved with `resolve_identifier()` on `substitute(<formal>)`, except that the
-formal's own promise is forced (through the leaf `ident_value()`) when `ident_force_needed()` says the symbol is
-bound and unknown, or the expression is `I(x)`. A literal prompt that `{identifier}` interpolation changed is
-echoed at verbosity >= 2 as the message class `gptr_message_interpolated` (04 §2.2; silenced by `gptr.quiet`).
-Routing walks `registry_all("route")` in ascending `order`: an error
-in `match()` skips the route with a diagnostic, the first match emits `route` and runs, and `route_pass()` hands
-the call to the next match. Inside a run the call's mode is tightened to the running mode before any route sees it
-(IC-53). The record is released on every exit path (`on.exit()` in `gateway_dispatch()`, a frame that holds no
-dots). `$`, `[[` and `.DollarNames` go through P10's services (IC-36) and have no side effects.
+- Consumes: Tasks 5-6 (capture leaves, `select_prompt()`, `gateway_args()`, `interpolate_prompt()`,
+  `resolve_identifier()`, `ident_force_needed()`, `ident_value()`, `resolve_agents()`, `call_new()`,
+  `call_release()`), Task 1 `gateway_state()`; P01 `gptr_can_prompt()`, `gptr_warn()`,
+  `gptr_inform()` and `verbosity()` (the `interpolated` echo of 04 section 2.2 at verbosity >= 2),
+  `ev_new()`, `ext_service_get()`, `ext_service_has()`; P02 `registry_all(kind, session = NULL)`
+  (route records ordered by `order`), `registry_diagnostic()`, `ev_dispatch()`; P06 `run_current()`
+  (the `gptr_run` field `mode`); P10 services `ns.resolve` (`function(path)`) and `ns.names`
+  (`function(pattern)`).
+- Produces: the export `peter` (class `c("gptr_gateway", "function")`, 04 sections 6.1, 5.3) with
+  the S3 methods `$.gptr_gateway`, `[[.gptr_gateway`, `$<-.gptr_gateway`, `[[<-.gptr_gateway`,
+  `.DollarNames.gptr_gateway`, `print.gptr_gateway`; `route_pass()` (the sentinel for P13, P14, P15,
+  P19), `gateway_defer(expr_fun)` (P19's `gptr_parallel()`), `home_address(envir)` -> chr(1) (P11),
+  `mode_tighter(a, b)` (the name P06 reserved for P08; P06's own is `run_mode_tighter()`),
+  `gateway_dispatch(call)`.
 
-The tests use a probe route of order 1 that records what the gateway captured; the built-in routes arrive in
-Task 9.
+`peter()` is dispatch steps 1-5 of contract 6.1.1. Its frame holds `...` and the caller frame, so it
+follows the capture rules literally: no closure, handler or `match.arg()` in the frame, no
+assignment to a formal (new locals only), plain-symbol dots read by name through leaves, every other
+dot forced once through `...elt(i)` in a `while` loop. Identifier formals are resolved with
+`resolve_identifier()` on `substitute(<formal>)`, except that the formal's own promise is forced
+(through the leaf `ident_value()`) when `ident_force_needed()` says the symbol is bound and unknown,
+or the expression is `I(x)`. A literal prompt that `{identifier}` interpolation changed is echoed at
+verbosity >= 2 as the message class `gptr_message_interpolated` (04 section 2.2; silenced by
+`gptr.quiet`). Routing walks `registry_all("route")` in ascending `order`: an error in `match()`
+skips the route with a diagnostic, the first match emits `route` and runs, and `route_pass()` hands
+the call to the next match. Inside a run the call's mode is tightened to the running mode before any
+route sees it (IC-53). The record is released on every exit path (`on.exit()` in
+`gateway_dispatch()`, a frame that holds no dots). `$`, `[[` and `.DollarNames` go through P10's
+services (IC-36) and have no side effects.
+
+The tests use a probe route of order 1 that records what the gateway captured; the built-in routes
+arrive in Task 9.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3969,7 +4259,15 @@ mode_tighter = function(a, b) {
 Rscript --vanilla -e 'devtools::test(filter = "gptr-gateway")'
 ```
 
-Expected on the first run: `[ FAIL 0 | WARN 1 | SKIP 0 | PASS 74 ]`, the warning being testthat's "Adding new snapshot" for `print(peter)`, which writes `tests/testthat/_snaps/gptr-gateway.md` with the two lines `<peter gateway> peter("prompt", objects..., model =, mode =) runs an agent in this session` and `members: peter$<tab> (read, edit, write, grep, find, ls, ... when the tools are loaded)`. Run it again: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 74 ]` (testthat 3.3 counts the new snapshot as a pass on the first run, together with its warning; on CI, where `on_ci()` is true, a missing snapshot fails instead, so commit the `_snaps` file in this task). (Once P10 registers `ns.resolve`, the test "before the namespace services exist" skips.)
+Expected on the first run: `[ FAIL 0 | WARN 1 | SKIP 0 | PASS 74 ]`, the warning being testthat's
+"Adding new snapshot" for `print(peter)`, which writes `tests/testthat/_snaps/gptr-gateway.md` with
+the two lines
+`<peter gateway> peter("prompt", objects..., model =, mode =) runs an agent in this session` and
+`members: peter$<tab> (read, edit, write, grep, find, ls, ... when the tools are loaded)`. Run it
+again: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 74 ]` (testthat 3.3 counts the new snapshot as a pass on
+the first run, together with its warning; on CI, where `on_ci()` is true, a missing snapshot fails
+instead, so commit the `_snaps` file in this task). (Once P10 registers `ns.resolve`, the test
+"before the namespace services exist" skips.)
 
 - [ ] **Step 5: Commit**
 
@@ -3983,50 +4281,94 @@ git commit -m "feat(gateway): add the peter() closure, route dispatch and its me
 ### Task 9: `gateway_run()`, terminal conditions, `builtin:gateway` and the `router.call` service
 
 **Files:**
+
 - Modify: `R/gptr-gateway.R` (append)
 - Test: `tests/testthat/test-gptr-gateway.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-8 (including Task 7's `gateway_filters_sync()`); P01 `setting_get()`, `verbosity()`, `gptr_opt()` (`gptr.prompt_secrets`, owner P03, 04 §3.1), `gptr_can_prompt()`, `gptr_confirm(question, default = FALSE)`, `gptr_inform()`, `block_text()`, `block_image()`, `block_context()`, `msg_user(content, source = "prompt", timestamp = NULL)`, `msg_text()`, `ev_new()`, `project_root()`, `workspace_dir()`; P02 `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`, `registry_filters_set(filters, scope = c("session", "user", "project"))`, `ext_load(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE, session = NULL)`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `gptr_hook(event, handler, matcher = NULL)` (the release hooks of `builtin:gateway`), `ev_dispatch()`; P03 `redact(x, profile = "persist")` (profile `context` for prompts); P04 `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`, `reactor_now()`, and in tests `reactor_timer(at, fn, run = NULL)` and `reactor_cancel(ids)`; P05 `model_resolve()`, `model_default(role = c("chat", "small", "system1"))`, `provider_get()`, `project_messages(entries, leaf, target)`; P06 `session_new(model, mode, home = NULL, kind = "chat", parent = NULL, preset = NULL, opts = list())` (`parent` is the running session object), `session_data()`, `session_live()`, `session_home()`, `session_append()`, `session_set_model(s, ref, reason = "user")`, `session_set_mode(s, mode, source = "user")`, `session_enqueue(s, text, as, source, blocks)`, `run_start(s, input, opts = list())`, `run_wait(runs, timeout = Inf)`, `run_abort(run, reason = "user")`, `run_current()`, `live_all()`, `last_set(s)`, the `gptr_run` fields `id`, `session`, `status`, `mode`, `depth`, `opts`, `signal` and P06's `settled` flag (set by `run_settle()`), and the `.d` field `condition` (the unsignalled condition of the last terminal status, which P06 documents as read by P08); services `context.first`, `context.turn`, `session.add_tools` (P07), `skill.body`, `plugin.enable` (P17), `bg.register` (P21), `console.interrupt_policy` (P14).
-- Produces (04 §7.8): `gateway_run(call, s = NULL)` (the default System 2 runner used by the `continue`, `new` and `nested` routes and by P13, P14, P15, P19), the `builtin:gateway` built-in (routes `nested` 20, `continue` 60, `new` 70; the core `setting` specs of Task 1), the `router.call` service `function(s, reason) list(model, thinking, state)` (IC-69, called by P06 before every request of a routed session), and the helpers `gateway_signal(s, run = NULL)`, `sdk_pump(runs, until = NULL, timeout = Inf)`, `run_foreground(run)`, `run_settled(run)`, `gateway_prompt_secrets(prompt)`, `call_hold(call, s)`, `gateway_release_held(sid)`, `gateway_control_other(s, what)`, `gateway_register_spec(spec, sid)`, `gateway_filters_apply(filters)`, `gateway_continue_envir(call, s)` and the pending run options (`gateway_pending_set()`, `gateway_pending_take()`, `gateway_pending_has()`) used by the SDK (Task 10).
 
-`gateway_run()` is step 6 of contract 6.1.1 for System 2 calls. It first fixes the evaluation environment (a
-continuation applies the IC-40 precedence: explicit `envir` > kept home > caller frame) and runs the IC-40
-visibility check, so a hidden context symbol fails before anything changes. A new top-level session then settles
-project trust (IC-52); every top-level call then applies the `filters` of the user and (trusted) project settings
-files to the registry through Task 7's `gateway_filters_sync()` (04 §10.1; a no-op unless a file or the project
-changed), so `"filters": ["-builtin:mcp"]` in `settings.json` holds after a restart; then `session_new()` with the resolved model reference (a provider spec's first
-model, a registered provider's model, a router stored as `router:<name>` (IC-69), the settings default or
-`model_default("chat")`), the mode (settings default `manual`; inside a run tightened to the running mode and made a
-child of the running session with depth + 1, bounded by `gptr.subagents.max_depth`), the call's evaluation
-environment as home (P06 keeps it only when it is not a function frame) and the call's rank-0 specs (a newer spec
-of the same kind and name replaces the session's older one), extensions, plugins and filters (call-level filters
-join the R-process filter layer, since P02 has no per-session scope; from model code they are a control-category
-change). A continuation applies model and mode changes and new tools (`session.add_tools`). Both then set
-`gptr_last()`, check egress (skipped for local/offline providers and `.opts$context = "none"`) and the replay
-guard, apply `gptr.prompt_secrets` (04 §3.1, owner P03, applied here: a secret-looking value is replaced by a
-`[secret:...]` marker with a notice under `"redact"`; under `"ask"` someone who can answer is asked first and a
-no stops the call before anything is sent; P06 redacts at ingress anyway, so the original is never sent),
-dispatch the `input` event (transform chain), build the user message from P07's context blocks, `skills =`
-preloads, the prompt and `.opts$images`, and either queue it (`.run = FALSE`: the prompt waits in the session's
-follow-up queue with its blocks, so `run_start(s, NULL, opts)` of any plan starts it, and the run options wait in
-P08's pending store; status stays `idle`), start it
-for the background pump (`bg.register`, P21), or run it to settlement under the interrupt policy
-(`console.interrupt_policy` of P14, else abort-only) and signal the terminal status (contract 6.1.2) from the
-condition P06 stored in `session_data(s)$condition`. A foreground run that the pause menu's `[b]ackground` hands
-to P21 (`run$opts$background = TRUE`, 03 §6.2, 04 §7.14) ends the foreground wait as it does in P06's
-`run_wait_foreground()`: `peter()` then returns the still-running session invisibly and signals nothing. The call record is held past `peter()` only for pending and
-background runs, and released by `builtin:gateway`'s process-level `agent_end` and `session_shutdown` hooks when
-the run settles, the session shuts down or it is garbage-collected [R2]. The `continue` route steers a running
-session with the pipe as a user source (IC-55) and returns it invisibly at once; from model code it may steer only
-the running session itself unless the gate approved a `gptr_steer` token (IC-53). `router.call` only chooses the
-model (and checks egress and replay for it); P06's `run_route()` records each switch. A call with `parallel =` or `agents =` that reaches the built-in
-routes (the `team` and `fanout` routes of P19, orders 15 and 16, are absent or filtered out) is refused with
+- Consumes: Tasks 1-8 (including Task 7's `gateway_filters_sync()`); P01 `setting_get()`,
+  `verbosity()`, `gptr_opt()` (`gptr.prompt_secrets`, owner P03, 04 section 3.1),
+  `gptr_can_prompt()`, `gptr_confirm(question, default = FALSE)`, `gptr_inform()`, `block_text()`,
+  `block_image()`, `block_context()`, `msg_user(content, source = "prompt", timestamp = NULL)`,
+  `msg_text()`, `ev_new()`, `project_root()`, `workspace_dir()`; P02
+  `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`,
+  `registry_filters_set(filters, scope = c("session", "user", "project"))`,
+  `ext_load(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE, session = NULL)`,
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`,
+  `gptr_hook(event, handler, matcher = NULL)` (the release hooks of `builtin:gateway`),
+  `ev_dispatch()`; P03 `redact(x, profile = "persist")` (profile `context` for prompts); P04
+  `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`,
+  `reactor_now()`, and in tests `reactor_timer(at, fn, run = NULL)` and `reactor_cancel(ids)`; P05
+  `model_resolve()`, `model_default(role = c("chat", "small", "system1"))`, `provider_get()`,
+  `project_messages(entries, leaf, target)`; P06
+  `session_new(model, mode, home = NULL, kind = "chat", parent = NULL, preset = NULL, opts = list())`
+  (`parent` is the running session object), `session_data()`, `session_live()`, `session_home()`,
+  `session_append()`, `session_set_model(s, ref, reason = "user")`,
+  `session_set_mode(s, mode, source = "user")`, `session_enqueue(s, text, as, source, blocks)`,
+  `run_start(s, input, opts = list())`, `run_wait(runs, timeout = Inf)`,
+  `run_abort(run, reason = "user")`, `run_current()`, `live_all()`, `last_set(s)`, the `gptr_run`
+  fields `id`, `session`, `status`, `mode`, `depth`, `opts`, `signal` and P06's `settled` flag (set
+  by `run_settle()`), and the `.d` field `condition` (the unsignalled condition of the last terminal
+  status, which P06 documents as read by P08); services `context.first`, `context.turn`,
+  `session.add_tools` (P07), `skill.body`, `plugin.enable` (P17), `bg.register` (P21),
+  `console.interrupt_policy` (P14).
+- Produces (04 section 7.8): `gateway_run(call, s = NULL)` (the default System 2 runner used by the
+  `continue`, `new` and `nested` routes and by P13, P14, P15, P19), the `builtin:gateway` built-in
+  (routes `nested` 20, `continue` 60, `new` 70; the core `setting` specs of Task 1), the
+  `router.call` service `function(s, reason) list(model, thinking, state)` (IC-69, called by P06
+  before every request of a routed session), and the helpers `gateway_signal(s, run = NULL)`,
+  `sdk_pump(runs, until = NULL, timeout = Inf)`, `run_foreground(run)`, `run_settled(run)`,
+  `gateway_prompt_secrets(prompt)`, `call_hold(call, s)`, `gateway_release_held(sid)`,
+  `gateway_control_other(s, what)`, `gateway_register_spec(spec, sid)`,
+  `gateway_filters_apply(filters)`, `gateway_continue_envir(call, s)` and the pending run options
+  (`gateway_pending_set()`, `gateway_pending_take()`, `gateway_pending_has()`) used by the SDK
+  (Task 10).
+
+`gateway_run()` is step 6 of contract 6.1.1 for System 2 calls. It first fixes the evaluation
+environment (a continuation applies the IC-40 precedence: explicit `envir` > kept home > caller
+frame) and runs the IC-40 visibility check, so a hidden context symbol fails before anything
+changes. A new top-level session then settles project trust (IC-52); every top-level call then
+applies the `filters` of the user and (trusted) project settings files to the registry through
+Task 7's `gateway_filters_sync()` (04 section 10.1; a no-op unless a file or the project changed),
+so `"filters": ["-builtin:mcp"]` in `settings.json` holds after a restart; then `session_new()` with
+the resolved model reference (a provider spec's first model, a registered provider's model, a router
+stored as `router:<name>` (IC-69), the settings default or `model_default("chat")`), the mode
+(settings default `manual`; inside a run tightened to the running mode and made a child of the
+running session with depth + 1, bounded by `gptr.subagents.max_depth`), the call's evaluation
+environment as home (P06 keeps it only when it is not a function frame) and the call's rank-0 specs
+(a newer spec of the same kind and name replaces the session's older one), extensions, plugins and
+filters (call-level filters join the R-process filter layer, since P02 has no per-session scope;
+from model code they are a control-category change). A continuation applies model and mode changes
+and new tools (`session.add_tools`). Both then set `gptr_last()`, check egress (skipped for
+local/offline providers and `.opts$context = "none"`) and the replay guard, apply
+`gptr.prompt_secrets` (04 section 3.1, owner P03, applied here: a secret-looking value is replaced
+by a `[secret:...]` marker with a notice under `"redact"`; under `"ask"` someone who can answer is
+asked first and a no stops the call before anything is sent; P06 redacts at ingress anyway, so the
+original is never sent), dispatch the `input` event (transform chain), build the user message from
+P07's context blocks, `skills =` preloads, the prompt and `.opts$images`, and either queue it
+(`.run = FALSE`: the prompt waits in the session's follow-up queue with its blocks, so
+`run_start(s, NULL, opts)` of any plan starts it, and the run options wait in P08's pending store;
+status stays `idle`), start it for the background pump (`bg.register`, P21), or run it to settlement
+under the interrupt policy (`console.interrupt_policy` of P14, else abort-only) and signal the
+terminal status (contract 6.1.2) from the condition P06 stored in `session_data(s)$condition`. A
+foreground run that the pause menu's `[b]ackground` hands to P21 (`run$opts$background = TRUE`,
+03 section 6.2, 04 section 7.14) ends the foreground wait as it does in P06's
+`run_wait_foreground()`: `peter()` then returns the still-running session invisibly and signals
+nothing. The call record is held past `peter()` only for pending and background runs, and released
+by `builtin:gateway`'s process-level `agent_end` and `session_shutdown` hooks when the run settles,
+the session shuts down or it is garbage-collected [R2]. The `continue` route steers a running
+session with the pipe as a user source (IC-55) and returns it invisibly at once; from model code it
+may steer only the running session itself unless the gate approved a `gptr_steer` token (IC-53).
+`router.call` only chooses the model (and checks egress and replay for it); P06's `run_route()`
+records each switch. A call with `parallel =` or `agents =` that reaches the built-in routes (the
+`team` and `fanout` routes of P19, orders 15 and 16, are absent or filtered out) is refused with
 `gptr_error_not_available` instead of silently running one session.
 
-The tests below exercise the real routes on the fake provider; direct tools used in tests are registered with
-`tools = list(<spec>)`, and runs that execute tools set `options(gptr.unsafe_no_permissions = TRUE)` because no
-`mode` policy exists before P11 (the gate fails closed, IC-53).
+The tests below exercise the real routes on the fake provider; direct tools used in tests are
+registered with `tools = list(<spec>)`, and runs that execute tools set
+`options(gptr.unsafe_no_permissions = TRUE)` because no `mode` policy exists before P11 (the gate
+fails closed, IC-53).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4539,7 +4881,9 @@ test_that("parallel = and agents = need the sub-agent routes (P19)", {
 Rscript --vanilla -e 'devtools::test(filter = "gptr-gateway")'
 ```
 
-Expected: the new tests fail: `builtin:gateway` registers no routes yet, so every `peter()` call ends in `gptr_error_internal` ("No gateway route handled this call."), and `gateway_signal` / `gateway_pending_has` are not found.
+Expected: the new tests fail: `builtin:gateway` registers no routes yet, so every `peter()` call
+ends in `gptr_error_internal` ("No gateway route handled this call."), and `gateway_signal` /
+`gateway_pending_has` are not found.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -5527,7 +5871,8 @@ on_load(ext_service_set("router.call", router_call, provided_by = "P08", builtin
 Rscript --vanilla -e 'devtools::test(filter = "gptr-gateway")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 192 ]` with later installed (without later, or once P21 registers `bg.register`, the `background` test skips: `SKIP 1 | PASS 190`).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 192 ]` with later installed (without later, or once P21
+registers `bg.register`, the `background` test skips: `SKIP 1 | PASS 190`).
 
 - [ ] **Step 5: Commit**
 
@@ -5541,24 +5886,38 @@ git commit -m "feat(gateway): add gateway_run(), the built-in routes and the rou
 ### Task 10: The session SDK verbs
 
 **Files:**
+
 - Create: `R/gptr-sdk.R`
 - Test: `tests/testthat/test-gptr-sdk.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 5 and 9 (`call_new()`, `unmask_env()`, `ident_label()`, `call_hold()`, `gateway_pending_take()`, `gateway_session_by_id()`, `sdk_pump()`, `run_settled()`, `gateway_signal()`, `gateway_control_other()`), Tasks 1 and 4 (`control_check()`, `replay_mode()`); P01 checkers, `as_utf8()`, `gptr_inform()`; P02 `hook_add()` (validates event names: Claude/Codex names are `gptr_error_invalid_argument` with a hint), `hook_remove()`; P03 `redact(x, profile)`; P06 `session_live()`, `session_data()`, `session_home()`, `session_enqueue()`, `session_value_set(s, label, value, name = NULL, forced_home = NULL)`, `run_start()`, `run_abort()`, `run_current()`.
-- Produces the exports of 04 §6.5-6.6: `gptr_step(s, turns = 1L)`, `gptr_wait(x, timeout = Inf)`, `gptr_steer(s, text, as = c("steer", "follow_up"))`, `gptr_cancel(x)`, `gptr_on(s, event, handler, matcher = NULL)`, `gptr_return(x)`; P14 (pause menu), P19 and P21 call `gptr_steer()`, `gptr_wait()` and `gptr_cancel()`.
 
-Every verb takes the session first, so it composes with `|>`, and needs no internals beyond the kernel SDK (G1
-§4.6). `gptr_step()` and `gptr_wait()` start a session's queued input (`run_start(s, NULL, opts)`: the run takes
-the queue, which holds the rendered prompt of a `.run = FALSE` call, then steers and follow-ups) with the pending run
-options of that call (Task 9), then pump: `gptr_step()` until `turns` `turn_end` events or
-settlement, `gptr_wait()` until no session is `running` or `waiting` (P21 resumes `waiting` sessions from any
-blocking pump) or the timeout; a single settled session signals its terminal condition. `gptr_steer()` redacts the
-text with the `context` profile and enqueues it with source `api_user` (IC-55; P06 refuses a call from model code
-of the same session tree). IC-53: `gptr_on()` always, and `gptr_steer()`/`gptr_cancel()` on a session other than
-the running one, are control-category calls. `gptr_return()` outside a run returns `invisible(x)` with a
-once-per-session notice that is silent in replay mode (IC-48); inside a run it passes the value and its expression
-to `session_value_set()`, which applies the value policy of 03 §5.1.
+- Consumes: Tasks 5 and 9 (`call_new()`, `unmask_env()`, `ident_label()`, `call_hold()`,
+  `gateway_pending_take()`, `gateway_session_by_id()`, `sdk_pump()`, `run_settled()`,
+  `gateway_signal()`, `gateway_control_other()`), Tasks 1 and 4 (`control_check()`,
+  `replay_mode()`); P01 checkers, `as_utf8()`, `gptr_inform()`; P02 `hook_add()` (validates event
+  names: Claude/Codex names are `gptr_error_invalid_argument` with a hint), `hook_remove()`; P03
+  `redact(x, profile)`; P06 `session_live()`, `session_data()`, `session_home()`,
+  `session_enqueue()`, `session_value_set(s, label, value, name = NULL, forced_home = NULL)`,
+  `run_start()`, `run_abort()`, `run_current()`.
+- Produces the exports of 04 sections 6.5-6.6: `gptr_step(s, turns = 1L)`,
+  `gptr_wait(x, timeout = Inf)`, `gptr_steer(s, text, as = c("steer", "follow_up"))`,
+  `gptr_cancel(x)`, `gptr_on(s, event, handler, matcher = NULL)`, `gptr_return(x)`; P14 (pause
+  menu), P19 and P21 call `gptr_steer()`, `gptr_wait()` and `gptr_cancel()`.
+
+Every verb takes the session first, so it composes with `|>`, and needs no internals beyond the
+kernel SDK (G1 section 4.6). `gptr_step()` and `gptr_wait()` start a session's queued input
+(`run_start(s, NULL, opts)`: the run takes the queue, which holds the rendered prompt of a
+`.run = FALSE` call, then steers and follow-ups) with the pending run options of that call (Task 9),
+then pump: `gptr_step()` until `turns` `turn_end` events or settlement, `gptr_wait()` until no
+session is `running` or `waiting` (P21 resumes `waiting` sessions from any blocking pump) or the
+timeout; a single settled session signals its terminal condition. `gptr_steer()` redacts the text
+with the `context` profile and enqueues it with source `api_user` (IC-55; P06 refuses a call from
+model code of the same session tree). IC-53: `gptr_on()` always, and `gptr_steer()`/`gptr_cancel()`
+on a session other than the running one, are control-category calls. `gptr_return()` outside a run
+returns `invisible(x)` with a once-per-session notice that is silent in replay mode (IC-48); inside
+a run it passes the value and its expression to `session_value_set()`, which applies the value
+policy of 03 section 5.1.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5777,7 +6136,8 @@ test_that("gptr_return() designates the run's value from R code during a run", {
 Rscript --vanilla -e 'devtools::test(filter = "gptr-sdk")'
 ```
 
-Expected: every test fails with `could not find function` (`gptr_step`, `gptr_wait`, `gptr_steer`, `gptr_cancel`, `gptr_on`, `gptr_return`).
+Expected: every test fails with `could not find function` (`gptr_step`, `gptr_wait`, `gptr_steer`,
+`gptr_cancel`, `gptr_on`, `gptr_return`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6077,27 +6437,38 @@ git commit -m "feat(gateway): add the session SDK verbs"
 ### Task 11: The gateway copy suite
 
 **Files:**
+
 - Create: `tests/testthat/test-copy-gateway.R`
 
 **Interfaces:**
-- Consumes: P01's `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)` (fresh `Rscript --vanilla` through `rscript_path()`; with `in_run_edit = TRUE` it defines `fake = gptr_fake_provider(list(list(tool = 'r', input = list(code = <edit>)), 'done.'))` after the setup and counts copies from the start of the action); P02 `gptr_tool()`, `gptr_register()`; P06 `gptr_fork()`, `print`/`summary`/`str`/`format` of sessions and the value policy behind `session_value_set()`; everything of Tasks 5-10.
-- Produces: the copy-safety evidence of 05 P08 acceptance 4 (the gateway rows of G3 t5 and the in-run edit rows of IC-41).
 
-This is the headline copy-safety check of the gateway (03 §6.4, "Test"; 04 §12.3). The rows are G3 t5's gateway
-rows (top level, pipe, continuation with context, wrapper with forwarded dots, alias and `if`/`else` models,
-`$value` reads, print/summary/str/format of a session, fork, `saveRDS`), the G3 verification-log row for tool code
-run in a function-frame home, the SDK paths added by this plan (`.run = FALSE` then `gptr_step()`/`gptr_wait()`,
-`gptr_return()` outside a run, an interpolated prompt with `tools = c(...)` in a wrapper) and the three in-run edit
-rows of IC-41 (`peter("x", big)`, `big |> peter("x")`, `s |> peter("x", big)` with `in_run_edit = TRUE`). System 1,
-parallel and background rows belong to `test-copy-s1.R` (P13), `test-copy-subagent.R` (P19) and P21. Before P10
-there is no `r` tool, so the rows register a stand-in `r` spec through `tools = list(r_tool)`; it evaluates in
-`ctx$envir`, the run's evaluation environment (P06).
+- Consumes: P01's
+  `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`
+  (fresh `Rscript --vanilla` through `rscript_path()`; with `in_run_edit = TRUE` it defines
+  `fake = gptr_fake_provider(list(list(tool = 'r', input = list(code = <edit>)), 'done.'))` after
+  the setup and counts copies from the start of the action); P02 `gptr_tool()`, `gptr_register()`;
+  P06 `gptr_fork()`, `print`/`summary`/`str`/`format` of sessions and the value policy behind
+  `session_value_set()`; everything of Tasks 5-10.
+- Produces: the copy-safety evidence of 05 P08 acceptance 4 (the gateway rows of G3 t5 and the
+  in-run edit rows of IC-41).
 
-While writing this plan every row was run in fresh processes against a scratch stand-in of P02-P07: all P08 paths
-stayed in place, and the run exposed one real pin that the code of Tasks 5, 6, 9 and 10 now avoids: a `for` loop
-that calls a closure with a local variable bound to a user frame keeps that frame referenced after the function
-returns (G3 cause 2 in a new place: `gateway_check_visible()` with a `for` loop made the wrapper row `f(big)`
-copy). Those loops are `while` loops.
+This is the headline copy-safety check of the gateway (03 section 6.4, "Test"; 04 section 12.3). The
+rows are G3 t5's gateway rows (top level, pipe, continuation with context, wrapper with forwarded
+dots, alias and `if`/`else` models, `$value` reads, print/summary/str/format of a session, fork,
+`saveRDS`), the G3 verification-log row for tool code run in a function-frame home, the SDK paths
+added by this plan (`.run = FALSE` then `gptr_step()`/`gptr_wait()`, `gptr_return()` outside a run,
+an interpolated prompt with `tools = c(...)` in a wrapper) and the three in-run edit rows of IC-41
+(`peter("x", big)`, `big |> peter("x")`, `s |> peter("x", big)` with `in_run_edit = TRUE`). System
+1, parallel and background rows belong to `test-copy-s1.R` (P13), `test-copy-subagent.R` (P19) and
+P21. Before P10 there is no `r` tool, so the rows register a stand-in `r` spec through
+`tools = list(r_tool)`; it evaluates in `ctx$envir`, the run's evaluation environment (P06).
+
+While writing this plan every row was run in fresh processes against a scratch stand-in of P02-P07:
+all P08 paths stayed in place, and the run exposed one real pin that the code of Tasks 5, 6, 9 and
+10 now avoids: a `for` loop that calls a closure with a local variable bound to a user frame keeps
+that frame referenced after the function returns (G3 cause 2 in a new place:
+`gateway_check_visible()` with a `for` loop made the wrapper row `f(big)` copy). Those loops are
+`while` loops.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6213,11 +6584,20 @@ for (label in names(copy_rows)) {
 Rscript --vanilla -e 'devtools::test(filter = "copy-gateway")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 20 ]` (about 20 fresh processes; a few minutes). To see the suite catch a regression (the red phase of this test-only task), temporarily change the loop in `gateway_check_visible()` (`R/gptr-gateway.R`) to `for (it in call$context) {` with the body's first two lines unchanged and run the command again: the row `session created inside a function: f(big)` fails with `session created inside a function: f(big): 1 copies of `big` (allowed 0)`. Restore the `while` loop.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 20 ]` (about 20 fresh processes; a few minutes). To see
+the suite catch a regression (the red phase of this test-only task), temporarily change the loop in
+`gateway_check_visible()` (`R/gptr-gateway.R`) to `for (it in call$context) {` with the body's first
+two lines unchanged and run the command again: the row `session created inside a function: f(big)`
+fails with `session created inside a function: f(big): 1 copies of `big` (allowed 0)`. Restore the
+`while` loop.
 
 - [ ] **Step 3: Write the implementation**
 
-No new package code: the implementation under test is Tasks 5-10. If a row fails, find the frame that keeps a reference with the rules of 03 §6.4 (a forced symbol dot, a closure or handler created in a frame that holds `...` or a user frame, a `for` loop calling closures with a frame-bound local, a list that held a frame, an assigned formal) and fix it in the owning file. For reference, the check that the red phase above toggles is:
+No new package code: the implementation under test is Tasks 5-10. If a row fails, find the frame
+that keeps a reference with the rules of 03 section 6.4 (a forced symbol dot, a closure or handler
+created in a frame that holds `...` or a user frame, a `for` loop calling closures with a
+frame-bound local, a list that held a frame, an assigned formal) and fix it in the owning file. For
+reference, the check that the red phase above toggles is:
 
 ```r
 # R/gptr-gateway.R (reference: the loop of Task 9 that the red phase toggles; do not paste twice)
@@ -6251,7 +6631,8 @@ gateway_check_visible = function(call) {
 Rscript --vanilla -e 'devtools::test(filter = "copy-gateway")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 20 ]`. On CRAN, or without `capabilities("profmem")`, every row skips (`SKIP 20`).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 20 ]`. On CRAN, or without `capabilities("profmem")`,
+every row skips (`SKIP 20`).
 
 - [ ] **Step 5: Commit**
 
@@ -6265,21 +6646,28 @@ git commit -m "test(gateway): add the gateway copy-safety suite"
 ### Task 12: Documentation, NAMESPACE, plan acceptance and the M1 exit check
 
 **Files:**
-- Modify: `NAMESPACE`, `man/peter.Rd`, `man/gptr_init.Rd`, `man/gptr_config.Rd`, `man/gptr_trust.Rd`, `man/gptr_step.Rd`, `man/gptr_wait.Rd`, `man/gptr_steer.Rd`, `man/gptr_cancel.Rd`, `man/gptr_on.Rd`, `man/gptr_return.Rd` (all generated by roxygen2)
+
+- Modify: `NAMESPACE`, `man/peter.Rd`, `man/gptr_init.Rd`, `man/gptr_config.Rd`,
+  `man/gptr_trust.Rd`, `man/gptr_step.Rd`, `man/gptr_wait.Rd`, `man/gptr_steer.Rd`,
+  `man/gptr_cancel.Rd`, `man/gptr_on.Rd`, `man/gptr_return.Rd` (all generated by roxygen2)
 - Test: `tests/testthat/test-gptr-gateway.R` (append)
 
 **Interfaces:**
-- Consumes: the roxygen blocks written in Tasks 2, 3, 7, 8 and 10 (every export has `@param`, `@return` and offline `@examples` on the fake provider; conventions §4).
-- Produces: the NAMESPACE entries of P08's 10 exports (04 §14.1) and its 7 S3 methods, the Rd pages, and the M1 exit evidence (05 P08 acceptance 7).
+
+- Consumes: the roxygen blocks written in Tasks 2, 3, 7, 8 and 10 (every export has `@param`,
+  `@return` and offline `@examples` on the fake provider; conventions section 4).
+- Produces: the NAMESPACE entries of P08's 10 exports (04 section 14.1) and its 7 S3 methods, the Rd
+  pages, and the M1 exit evidence (05 P08 acceptance 7).
 
 roxygen2 turns `@export` on the S3 methods into `S3method()` lines (no `export()`), `@exportS3Method
 utils::.DollarNames` into the delayed-free registration of the `utils` generic, and the explicit `@usage` of `peter`
-keeps the Rd usage identical to the formals although `peter` is built with `structure(function(...), class = ...)`
-(the pattern G5's toy package passed `R CMD check --as-cran` with, codoc included). Every example runs offline: the
-fake provider is local and `offline = TRUE`, so neither the egress acknowledgement nor the replay mode that
-`replay_mode()` forces while R CMD check runs examples (IC-45) stops it, sessions are stored under
-`tempdir()/gptr`, and `gptr_init()`/`gptr_trust()` only touch `tempfile()` directories and read the (redirected)
-user config.
+keeps the Rd usage identical to the formals although `peter` is built with
+`structure(function(...), class = ...)` (the pattern G5's toy package passed `R CMD check --as-cran`
+with, codoc included). Every example runs offline: the fake provider is local and `offline = TRUE`,
+so neither the egress acknowledgement nor the replay mode that `replay_mode()` forces while R CMD
+check runs examples (IC-45) stops it, sessions are stored under `tempdir()/gptr`, and
+`gptr_init()`/`gptr_trust()` only touch `tempfile()` directories and read the (redirected) user
+config.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6310,7 +6698,9 @@ test_that("NAMESPACE exports P08's ten names and registers its S3 methods", {
 Rscript --vanilla -e 'devtools::test(filter = "gptr-gateway")'
 ```
 
-Expected: the new test's eight expectations fail (for example `all(paste0("export(", exports, ")") %in% ns) is not TRUE`) until roxygen has written the entries: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 192 ]`.
+Expected: the new test's eight expectations fail (for example
+`all(paste0("export(", exports, ")") %in% ns) is not TRUE`) until roxygen has written the entries:
+`[ FAIL 8 | WARN 0 | SKIP 0 | PASS 192 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6349,10 +6739,13 @@ export(peter)
 Rscript --vanilla -e 'devtools::test(filter = "gptr-|copy-gateway")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 506 ]`: `test-gptr-config.R` 135 (the skip is the P11 leg of the `gptr_permissions()` test), `test-gptr-capture.R` 96, `test-gptr-gateway.R` 200, `test-gptr-sdk.R` 55, `test-copy-gateway.R` 20 (without later the `background` test skips as well: `SKIP 2 | PASS 504`).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 506 ]`: `test-gptr-config.R` 135 (the skip is the P11
+leg of the `gptr_permissions()` test), `test-gptr-capture.R` 96, `test-gptr-gateway.R` 200,
+`test-gptr-sdk.R` 55, `test-copy-gateway.R` 20 (without later the `background` test skips as well:
+`SKIP 2 | PASS 504`).
 
-Then run the acceptance commands of the next section, in this order (the last is the M1 exit check; it needs
-P05-P07 complete):
+Then run the acceptance commands of the next section, in this order (the last is the M1 exit check;
+it needs P05-P07 complete):
 
 ```bash
 Rscript --vanilla -e 'devtools::test()'
@@ -6360,11 +6753,11 @@ Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_packa
 Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'
 ```
 
-Expected: `devtools::test()` ends with `[ FAIL 0 | WARN 0 | ...` (skips only those named by P01-P08);
-the lint command prints `No lints found.` and exits 0 (P01 acceptance A3: the namespace is loaded first, because
-on the uninstalled tree lintr's `object_usage_linter` otherwise reports every call to an internal function);
-`devtools::check()` reports `0 errors | 0 warnings | 1 note`, the note being
-the incoming-feasibility NOTE naming the maintainer.
+Expected: `devtools::test()` ends with `[ FAIL 0 | WARN 0 | ...` (skips only those named by
+P01-P08); the lint command prints `No lints found.` and exits 0 (P01 acceptance A3: the namespace is
+loaded first, because on the uninstalled tree lintr's `object_usage_linter` otherwise reports every
+call to an internal function); `devtools::check()` reports `0 errors | 0 warnings | 1 note`, the
+note being the incoming-feasibility NOTE naming the maintainer.
 
 - [ ] **Step 5: Commit**
 
@@ -6377,8 +6770,8 @@ git commit -m "docs(gateway): document the gateway and SDK exports"
 
 ## Plan acceptance
 
-Every acceptance check of 05 P08 (including its review amendments), the task and test that prove it, and the
-command with its expected result. Run from the repository root after Task 12.
+Every acceptance check of 05 P08 (including its review amendments), the task and test that prove it,
+and the command with its expected result. Run from the repository root after Task 12.
 
 | # | Check (05 P08) | Proved by | Command | Expected |
 |---|---|---|---|---|
@@ -6387,7 +6780,7 @@ command with its expected result. Run from the repository root after Task 12.
 | 2b | `peter("a") \|> peter("b") \|> peter("c", model = <second fake>)` returns the same object with three turns and a `model_change` entry | Task 9, test "a pipe chain returns the same session and a model switch appends model_change" | same | green |
 | 2c | a test tool that pipes into its own running session enqueues a steer delivered after the tool result | Task 9, test "a tool that pipes into its own running session enqueues a steer after the result" (the relay `The user sent this message while you were working: use TPM` is the message right after the tool result) | same | green |
 | 2d | `peter()` non-interactively errors with `gptr_error_noninteractive` | Task 8, test "peter() without a prompt needs a human" | same | green |
-| 3 | identifier table: every row of 04 §6.1.3 including the wrapper `w = function(...) peter("x", ...)` with a local `m` resolving to the caller's value (G3 t2b), an alias shadowed by a character variable (notice), `!!m`, `I(m)`, `if (hard) a else b` | Task 6, tests "resolve_identifier() follows the table of contract 6.1.3", "an alias shadowed by a character variable wins, with a message", "skill names compare after name_norm()", "an ambiguous normalised match lists the candidates"; Task 8, tests "identifiers through the gateway, including a wrapper with a local m (G3 t2b)" and "a shadowed alias wins with a notice; skill names normalise (IC-42)" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-capture\|gptr-gateway")'` | green |
+| 3 | identifier table: every row of 04 section 6.1.3 including the wrapper `w = function(...) peter("x", ...)` with a local `m` resolving to the caller's value (G3 t2b), an alias shadowed by a character variable (notice), `!!m`, `I(m)`, `if (hard) a else b` | Task 6, tests "resolve_identifier() follows the table of contract 6.1.3", "an alias shadowed by a character variable wins, with a message", "skill names compare after name_norm()", "an ambiguous normalised match lists the candidates"; Task 8, tests "identifiers through the gateway, including a wrapper with a local m (G3 t2b)" and "a shadowed alias wins with a notice; skill names normalise (IC-42)" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-capture\|gptr-gateway")'` | green |
 | 4 | copy suite: every gateway row of G3 t5 (top level, pipe, continuation with context, wrapper with forwarded dots, alias and if/else models, `$value` reads, print/summary/str of a session, fork, `saveRDS`) and the in-run edit rows of IC-41 (`peter("x", big)`, `big \|> peter("x")`, `s \|> peter("x", big)` with `in_run_edit = TRUE`) report 0 copies | Task 11 (`test-copy-gateway.R`, 20 rows) | `Rscript --vanilla -e 'devtools::test(filter = "copy-gateway")'` | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 20 ]` (every row `SKIP` on CRAN or without `capabilities("profmem")`) |
 | 5a | `gptr_init()` without `path` errors non-interactively | Task 7, test "gptr_init() without a path needs someone to answer" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-config")'` | green |
 | 5b | with a path it creates the template files and does not touch `.Rbuildignore` | Task 7, tests "gptr_init(path) writes the templates once and never overwrites them" and "gptr_init() in a package source offers the .Rbuildignore line, never writes it" | same | green |
@@ -6402,18 +6795,23 @@ command with its expected result. Run from the repository root after Task 12.
 | 6g | `.opts = list(panel = list(size = 3))` reaches `ctx$input$opts$panel` when a `panel.size` setting is registered | Task 9, test ".opts entries named by a plugin namespace reach ctx$input$opts (IC-44)"; Task 5, test "gateway_opts() validates the core switches and plugin namespaces (IC-44)" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-gateway\|gptr-capture")'` | green |
 | 7 | **M1 exit** (P05-P08 complete): `devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")` clean; every exported example runs offline on the fake provider (no example needs a later plan; IC-36) | Task 12 (roxygen, NAMESPACE, examples of Tasks 2, 3, 7, 8, 10) | `Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'` | `0 errors \| 0 warnings \| 1 note` (the incoming-feasibility NOTE naming the maintainer) |
 
-The contract's other P08 obligations are covered as well: route orders and route events (Task 9, "builtin:gateway
-registers the routes ..." and "the gateway emits route, model_select and input"), terminal statuses (Task 9,
-"a provider failure signals gptr_error_provider carrying the session", "a run that reaches max_turns ...",
-"blocked and budget statuses map to their conditions"), visibility and `.run = FALSE` (Task 9), nested calls
-(Task 9, "a peter() call made during a run becomes a child session (route nested)"), routers (Task 9, two tests),
-`.opts$images` (Task 9), the refusal of `parallel =`/`agents =` before P19 (Task 9), the SDK verbs (Task 10), trust fingerprints and `project_trust` (Task 2, including "a trust decision taken in this process lapses when a gated file changes"), the four services once `builtin:gateway` is loaded and call-level filters (Task 9, "with builtin:gateway loaded, P08's four services are served" and "call-level filters join the session filter layer instead of replacing it"), the
-`filters` of the user and project settings files (Task 7, "user and trusted project filters reach the registry once
-per change (04 10.1)"; Task 9, "a top-level peter() applies the filters of the user settings file (04 10.1)"),
-`gptr.prompt_secrets` (Task 9, "a secret-looking prompt is sent redacted, with a notice" and the `"ask"` test, "...
-asks first; a no sends nothing"), the `interpolated` echo (Task 8, "an interpolated prompt is echoed at
-verbosity 2"), the pause menu's `[b]ackground` (Task 9, "a run sent to the background returns the session at
-once"), and the `gptr_gateway` methods (Task 8).
+The contract's other P08 obligations are covered as well: route orders and route events (Task 9,
+"builtin:gateway registers the routes ..." and "the gateway emits route, model_select and input"),
+terminal statuses (Task 9, "a provider failure signals gptr_error_provider carrying the session", "a
+run that reaches max_turns ...", "blocked and budget statuses map to their conditions"), visibility
+and `.run = FALSE` (Task 9), nested calls (Task 9, "a peter() call made during a run becomes a child
+session (route nested)"), routers (Task 9, two tests), `.opts$images` (Task 9), the refusal of
+`parallel =`/`agents =` before P19 (Task 9), the SDK verbs (Task 10), trust fingerprints and
+`project_trust` (Task 2, including "a trust decision taken in this process lapses when a gated file
+changes"), the four services once `builtin:gateway` is loaded and call-level filters (Task 9, "with
+builtin:gateway loaded, P08's four services are served" and "call-level filters join the session
+filter layer instead of replacing it"), the `filters` of the user and project settings files
+(Task 7, "user and trusted project filters reach the registry once per change (04 10.1)"; Task 9, "a
+top-level peter() applies the filters of the user settings file (04 10.1)"), `gptr.prompt_secrets`
+(Task 9, "a secret-looking prompt is sent redacted, with a notice" and the `"ask"` test, "... asks
+first; a no sends nothing"), the `interpolated` echo (Task 8, "an interpolated prompt is echoed at
+verbosity 2"), the pause menu's `[b]ackground` (Task 9, "a run sent to the background returns the
+session at once"), and the `gptr_gateway` methods (Task 8).
 
 ---
 
@@ -6424,7 +6822,7 @@ once"), and the `gptr_gateway` methods (Task 8).
 | Scope item (05 P08, 04) | Task |
 |---|---|
 | `gptr-gateway.R`: classed closure `peter` with `$`, `[[`, `.DollarNames`, `$<-` refusal and `print` through `ns.resolve`/`ns.names` (IC-36) | 8 |
-| dispatch steps 1-5 of 03 §4.1.1 with routes looked up in the registry; return visibility; registration point for routes of later plans (`route_pass()`, `gateway_run()`, `gateway_defer()`) | 8, 9 |
+| dispatch steps 1-5 of 03 section 4.1.1 with routes looked up in the registry; return visibility; registration point for routes of later plans (`route_pass()`, `gateway_run()`, `gateway_defer()`) | 8, 9 |
 | `gptr-capture.R`: base-R capture under R2-R3, prompt selection, identifier resolution incl. `!!` and `I()`, `{identifier}` interpolation | 5, 6 |
 | `gptr-sdk.R`: `gptr_step()`, `gptr_wait()`, `gptr_steer()`, `gptr_cancel()`, `gptr_on()`, `gptr_return()` (`gptr_prob()` is P13's) | 10 |
 | `gptr-config.R`: settings layers, `gptr_config()`, `gptr_init()` without a default path, `gptr_trust()`, egress acknowledgement, settings I/O for P11 (IC-06), `replay_mode()`, `replay_guard()` | 1, 2, 3, 4, 7 |
@@ -6436,10 +6834,10 @@ once"), and the `gptr_gateway` methods (Task 8).
 | IC-44, IC-61, IC-69 namespaced `.opts`, `.opts$images`, `.opts$seed`, `.opts$frontend` | 5 (validation), 9 (images, `ctx$input$opts`) |
 | IC-39 route orders | 9 |
 | IC-53 mode and filter inheritance for calls made during a run; control-category checks in the setup exports | 8 (mode), 9 (continuations, children, call-level filters through `gateway_filters_apply()`), 1 (`control_check()`), 2, 7, 10 |
-| 04 §10.1 settings key `filters` of the user and project files applied to the registry (P02 self-review item 18) | 7 (`gateway_filters_sync()`), 9 (top-level `gateway_run()`) |
-| 04 §3.1 `gptr.prompt_secrets` (owner P03, applied by the gateway) | 9 (`gateway_prompt_secrets()` in `gateway_input()` and the `continue` route's steer) |
-| 04 §2.2 message `interpolated` (echo of the interpolated prompt at verbosity >= 2) | 8 |
-| 03 §6.2, 04 §7.14 the pause menu's `[b]ackground` returns the foreground `peter()` call (P21 marks `run$opts$background`) | 9 (`run_foreground()`, `gateway_run()`) |
+| 04 section 10.1 settings key `filters` of the user and project files applied to the registry (P02 self-review item 18) | 7 (`gateway_filters_sync()`), 9 (top-level `gateway_run()`) |
+| 04 section 3.1 `gptr.prompt_secrets` (owner P03, applied by the gateway) | 9 (`gateway_prompt_secrets()` in `gateway_input()` and the `continue` route's steer) |
+| 04 section 2.2 message `interpolated` (echo of the interpolated prompt at verbosity >= 2) | 8 |
+| 03 section 6.2, 04 section 7.14 the pause menu's `[b]ackground` returns the foreground `peter()` call (P21 marks `run$opts$background`) | 9 (`run_foreground()`, `gateway_run()`) |
 | IC-69 router models stored as `router:<name>`; the `router.call` service | 9 |
 | IC-43 `gptr_can_prompt()` for the human check and questions | 2, 4, 7, 8 |
 | IC-48 `gptr_return()` returns `invisible(x)` outside a run | 10 |
@@ -6453,231 +6851,262 @@ once"), and the `gptr_gateway` methods (Task 8).
 
 ### Placeholder scan
 
-The plan was searched for `TBD`, `TODO`, `implement later`, `fill in`, `appropriate error handling`, `handle edge
-cases`, `similar to Task` and `NN`; none occurs in task text or code. Every function a code block calls is defined
-in this plan or listed in 04 for P01-P07 (and the late services of P10, P14, P17, P21 are reached only through
-`ext_service_get()`/`ext_service_has()`).
+The plan was searched for `TBD`, `TODO`, `implement later`, `fill in`, `appropriate error handling`,
+`handle edge
+cases`, `similar to Task` and `NN`; none occurs in task text or code. Every function a code block
+calls is defined in this plan or listed in 04 for P01-P07 (and the late services of P10, P14, P17,
+P21 are reached only through `ext_service_get()`/`ext_service_has()`).
 
 ### Type and name consistency with 04
 
-- Exports and signatures match 04 §6.1, §6.2, §6.5, §6.6 exactly (checked against the Global Constraints list):
-  `peter(...)` with all 21 formals after the dots (Task 8 test "the capture helpers know peter()'s formals after the
-  dots" guards the capture copy of the list), `gptr_init(path, instructions = TRUE, gitignore = TRUE)`,
-  `gptr_config(..., .scope = NULL)`, `gptr_trust(path = ".", trust = NULL)`, `gptr_step(s, turns = 1L)`,
-  `gptr_wait(x, timeout = Inf)`, `gptr_steer(s, text, as = c("steer", "follow_up"))`, `gptr_cancel(x)`,
+- Exports and signatures match 04 sections 6.1, 6.2, 6.5, 6.6 exactly (checked against the Global
+  Constraints list): `peter(...)` with all 21 formals after the dots (Task 8 test "the capture
+  helpers know peter()'s formals after the dots" guards the capture copy of the list),
+  `gptr_init(path, instructions = TRUE, gitignore = TRUE)`, `gptr_config(..., .scope = NULL)`,
+  `gptr_trust(path = ".", trust = NULL)`, `gptr_step(s, turns = 1L)`, `gptr_wait(x, timeout = Inf)`,
+  `gptr_steer(s, text, as = c("steer", "follow_up"))`, `gptr_cancel(x)`,
   `gptr_on(s, event, handler, matcher = NULL)`, `gptr_return(x)`.
-- Internal contract functions keep their 04 §7.8 signatures: `call_new(...)`, `call_release(call)`,
-  `call_value(call, i)`, `route_pass()`, `gateway_defer(expr_fun)`, `gateway_run(call, s = NULL)`, `dot_facts(x)`,
-  `resolve_identifier(expr, arg, envir)`, `identifier_known(name, arg)`, `interpolate_prompt(template, envir)`,
+- Internal contract functions keep their 04 section 7.8 signatures: `call_new(...)`,
+  `call_release(call)`, `call_value(call, i)`, `route_pass()`, `gateway_defer(expr_fun)`,
+  `gateway_run(call, s = NULL)`, `dot_facts(x)`, `resolve_identifier(expr, arg, envir)`,
+  `identifier_known(name, arg)`, `interpolate_prompt(template, envir)`,
   `settings_get(key, session = NULL)`, `settings_effective()`, `settings_write(scope, patch)`,
   `trust_get(path = getwd())`, `home_address(envir)`, `replay_mode(arg = NULL)`,
   `replay_guard(model, what = "model call")`, `egress_check(provider_id)`.
-- Classes: `c("gptr_gateway", "function")`, `gptr_config` (attribute `sources`), `gptr_call`, the sentinel class
-  `gptr_route_pass`. Condition classes and fields as in 04 §2.2; message classes `alias_shadowed`, `egress_ack`,
-  `interpolated`, `notice`; warning class `two_prompts`.
-- Services: `settings.get`, `trust.get`, `identifier.resolve`, `router.call`, each `provided_by = "P08"`,
-  `builtin = "gateway"`.
-- Consumed names from 04: `run_start()`, `run_wait()`, `run_abort()`, `run_current()`, `session_new()`,
-  `session_set_model()`, `session_set_mode()`, `session_enqueue()`, `session_value_set()`, `last_set()`,
-  `live_all()`, `hook_add()`, `hook_remove()`, `registry_add()`, `registry_all()`, `registry_filters_set()`,
-  `ext_load()`, `ext_declare_builtin()`, `ev_dispatch()`, `ev_new()`, `model_resolve()`, `model_default()`,
-  `catalog_aliases()`, `provider_get()`, `project_messages()`, `redact()`, `reactor_pump()`, P01's helpers.
+- Classes: `c("gptr_gateway", "function")`, `gptr_config` (attribute `sources`), `gptr_call`, the
+  sentinel class `gptr_route_pass`. Condition classes and fields as in 04 section 2.2; message
+  classes `alias_shadowed`, `egress_ack`, `interpolated`, `notice`; warning class `two_prompts`.
+- Services: `settings.get`, `trust.get`, `identifier.resolve`, `router.call`, each
+  `provided_by = "P08"`, `builtin = "gateway"`.
+- Consumed names from 04: `run_start()`, `run_wait()`, `run_abort()`, `run_current()`,
+  `session_new()`, `session_set_model()`, `session_set_mode()`, `session_enqueue()`,
+  `session_value_set()`, `last_set()`, `live_all()`, `hook_add()`, `hook_remove()`,
+  `registry_add()`, `registry_all()`, `registry_filters_set()`, `ext_load()`,
+  `ext_declare_builtin()`, `ev_dispatch()`, `ev_new()`, `model_resolve()`, `model_default()`,
+  `catalog_aliases()`, `provider_get()`, `project_messages()`, `redact()`, `reactor_pump()`, P01's
+  helpers.
 
 ### Contract ambiguities (resolved as follows; also returned to the orchestrator)
 
-1. **P08's process state.** 04 §7.0 gives P08 the fields `settings_session` and `interp` only. The settings-file
-   cache, this process's trust decisions, the fingerprint cache, the `gateway_defer()` depth, the pending run
-   options and held call records of `.run = FALSE` sessions and the ids of each session's rank-0 records live in
-   one more P08 field, `the$gateway` (`gateway_state()`); `the$interp` is left unused. Nothing in it is run state.
-2. **The IC-53 approval token.** 04 says the dispatcher approves "exactly that call through an `ask_human` (a
-   one-shot token on the run)" without naming the field; `control_check(what)` consumes the function name from
-   `run$signal$control` (a character vector), which P06's `perm_grant_control()` writes for P11's gate (and which
-   P06's `session_control_check()` and P11's `perm_control_guard()` read too). P02 keeps a parallel grant list
-   (`ext_control_grant()`) for its own `gptr_register()`/`gptr_reload()` guard; P06 fills both.
-3. **Where the terminal condition is stored.** 04 §2.2 says the condition object "travels ... in the run";
-   P06's `run_settle()` stores it in `session_data(s)$condition` (and `run$signal$condition`), and
-   `gateway_signal()` reads `session_data(s)$condition`, otherwise building the condition from the session
-   status, reason and transcript (`gptr.budget` entry, last failed assistant message).
-4. **`session_new(parent =)`.** The gateway passes the running session **object** (found by id through
-   `live_all()`), not its id.
-5. **Queued input of `.run = FALSE`.** The rendered first message waits in the session's follow-up queue
+1. **P08's process state.** 04 section 7.0 gives P08 the fields `settings_session` and `interp`
+   only. The settings-file cache, this process's trust decisions, the fingerprint cache, the
+   `gateway_defer()` depth, the pending run options and held call records of `.run = FALSE` sessions
+   and the ids of each session's rank-0 records live in one more P08 field, `the$gateway`
+   (`gateway_state()`); `the$interp` is left unused. Nothing in it is run state.
+2. **The IC-53 approval token.** 04 says the dispatcher approves "exactly that call through an
+   `ask_human` (a one-shot token on the run)" without naming the field; `control_check(what)`
+   consumes the function name from `run$signal$control` (a character vector), which P06's
+   `perm_grant_control()` writes for P11's gate (and which P06's `session_control_check()` and P11's
+   `perm_control_guard()` read too). P02 keeps a parallel grant list (`ext_control_grant()`) for its
+   own `gptr_register()`/`gptr_reload()` guard; P06 fills both.
+3. **Where the terminal condition is stored.** 04 section 2.2 says the condition object "travels ...
+   in the run"; P06's `run_settle()` stores it in `session_data(s)$condition` (and
+   `run$signal$condition`), and `gateway_signal()` reads `session_data(s)$condition`, otherwise
+   building the condition from the session status, reason and transcript (`gptr.budget` entry, last
+   failed assistant message).
+4. **`session_new(parent =)`.** The gateway passes the running session **object** (found by id
+   through `live_all()`), not its id.
+5. **Queued input of `.run = FALSE`.** The rendered first message waits in the session's follow-up
+   queue
    (`session_enqueue(s, prompt, as = "follow_up", source = "api_user", blocks = <context, skill and image
-   blocks>)`), so `run_start(s, NULL, opts)` of any plan starts it (04 §7.21's `bg.register` example, P19 after
-   `gateway_defer()`), read as "the input is the queued items" (04 §7.6); the call's run options wait in P08's
-   pending store for `gptr_step()`/`gptr_wait()`. P06's IC-55 refusal of enqueues from model code must not apply
-   to this first input of a session that has never run (nested `.run = FALSE` calls made by model code).
-6. **Scope name of the user-level project file.** `settings_write()`/`settings_read()` call it `"user_project"`
-   (04 names only session, project and user); P11's `gptr_permissions(scope = "project")` uses it.
-7. **Holding a call record past `peter()`.** `call_release(call)` keeps its one-argument signature; a record needed
-   by a pending or background run carries `hold = TRUE` (`call_hold()`) and is released by `builtin:gateway`'s
-   process-level `agent_end` and `session_shutdown` hooks, which see only the session id of the event.
+   blocks>)`), so `run_start(s, NULL, opts)` of any plan starts it (04 section 7.21's `bg.register`
+   example, P19 after `gateway_defer()`), read as "the input is the queued items" (04 section 7.6);
+   the call's run options wait in P08's pending store for `gptr_step()`/`gptr_wait()`. P06's IC-55
+   refusal of enqueues from model code must not apply to this first input of a session that has
+   never run (nested `.run = FALSE` calls made by model code).
+6. **Scope name of the user-level project file.** `settings_write()`/`settings_read()` call it
+   `"user_project"` (04 names only session, project and user); P11's
+   `gptr_permissions(scope = "project")` uses it.
+7. **Holding a call record past `peter()`.** `call_release(call)` keeps its one-argument signature;
+   a record needed by a pending or background run carries `hold = TRUE` (`call_hold()`) and is
+   released by `builtin:gateway`'s process-level `agent_end` and `session_shutdown` hooks, which see
+   only the session id of the event.
 8. **`interpolate_prompt()` returns `list(prompt, interp)`**; 04 fixes no return shape.
 9. **Call-level filters** (`plugins = "-builtin:x"`). 04 has no per-session filter API and P02's
-   `registry_filters_set(filters, scope)` replaces a scope's whole list, so `gateway_filters_apply()` merges the
-   call's filters into the session settings key `filters` (a later `+x` replaces an earlier `-x`), applies the
-   merged list with `registry_filters_set(scope = "session")`, says once that they stay in force for the R
-   session, and treats the change as control-category when model code makes it (IC-53 items 3-4).
-   `gptr_config(filters =)` applies its scope's list the same way (04 §10.1). The user and project `filters`
-   settings are applied by P08 too (P02 self-review item 18: only the settings layer knows which layer a value
-   came from): `gateway_filters_sync()` (Task 7) passes the user file's list with `scope = "user"` and a trusted
-   project's list with `scope = "project"` (an untrusted project contributes no `filters`, IC-52), whenever a list
-   differs from the one applied last, at the start of every top-level `gateway_run()` and after
-   `gptr_config(filters =, .scope = "user" | "project")`. So all three scopes are P08's; a changed file is picked
-   up by the next top-level call (the settings cache re-reads it), not by a hook inside the cache, which would
-   give a read function a registry side effect.
-10. **The egress question** uses `gptr_confirm()` whenever `gptr_can_prompt()` holds; no UI backend exists before
-    P11, so the `ask_human` tier is honoured by never letting a hook answer it.
-11. **`.opts$images` plots** are rendered by the gateway with `grDevices::png()` at the `gptr.plot_*` size;
-    IC-44 names P09's `plot_png()`, which a P08 file may not call (P09 is later).
-12. **`gptr_config()` without arguments during a run** only reads and is allowed; setting keys is the
-    control-category action.
-13. **"silent while a document is replayed"** (IC-48) is implemented as silent when `replay_mode()` is
-    `"replay"`; 04 offers no other signal from P15.
-14. **The `gptr_config()` example** passes `.scope = "session"` (04's example omits it) so that a check run inside a
-    project with a `.gptr/` can never write the project file.
-15. **P06 behaviour the tests rely on**, all from 04: `s$messages` lists operator messages (role `operator`, kind
-    `steer_relay`); a test tool (not model-evaluated code) may pipe into its own running session (IC-55 refuses
-    only model code: P06's `session_enqueue()` refuses only an `r` tool call of the same tree); `$turns` counts
-    prompt turns, one per run (P06's `run_append_messages()` increments it at the run's first user message), so
-    `gptr_step(turns = 1)` stops at the first `turn_end` while `$turns` is already 1; `.d$queue$follow_up` items
-    carry `text` and `source`; model-change entries in R shape have `type = "model_change"` and `gptr$reason`;
-    a `fake/fake-1` reference whose provider is registered only for a session resolves (P05's index of live fake
-    engines), so `session_set_model()` accepts a continuation's session-scoped fake.
-16. **`gptr_wait()` and `waiting`.** A `waiting` session counts as not settled (P21 ambiguity A10), so
-    `gptr_wait()` keeps pumping until P21 resumes it or the timeout passes.
-17. **`parallel =` and `agents =` before P19.** 04 says the sub-agent routes are simply absent before P19; the
-    built-in routes then refuse such calls with `gptr_error_not_available` (`provided_by = "builtin:subagents"`)
-    rather than run one session and ignore the argument.
-18. **Dependency plans.** The plan was first written against 04 alone; the review of 2026-10-01 checked it against
-    the P01-P07, P09-P11, P14, P17 and P21 plans now in `dev/plan/` (signatures of `local_project()`,
-    `project_root()`, `setting_get()`, `ext_service_set()`/`service_builtin_active()`, `ev_dispatch()`, the
-    `setting`/`route`/`agent` kind validators, `session_new()`, `session_enqueue()`, `run_start()`,
-    `run_settle()`, `run_target()`, P05's catalog and P07's `context_input()`), see the Plan review log.
-19. **`builtin:gateway` and the services before Task 9.** P01's `service_builtin_active()` hides a bootstrap
-    service whose built-in the registry does not list, and `builtin:gateway` (04 §10.3: declared in
-    `gptr-gateway.R`) exists only from Task 9. Tasks 2, 3 and 6 therefore test the bootstrap entries
-    (`the$services[[name]]`), and Task 9 tests the four services end to end (`ext_service_has()`,
-    `setting_get()`); until Task 9, `setting_get()` reads the option layer only, which no P08 code before Task 9
-    relies on.
-20. **Trust decided in this process** (a `project_trust` handler without `remember`, or the interactive
-    answer) is kept with the fingerprint it was given for (`trust_mark()`); a gated file changed later in the
-    process voids it (IC-52 "Control files modified during the process are not loaded again without
-    confirmation"), and gptr's own project-settings writes carry it over without turning it into a recorded
-    decision.
-21. **Router timeout.** `setTimeLimit()` cannot be read back, so arming it inside a tool evaluation would clear
-    the per-expression limit P09 set; a nested routed session gets a soft timeout (a slower router counts as
-    failed) and a top-level one the armed limit.
-22. **Run settlement** is read from P06's `run$settled` flag (or a terminal status); 04 §7.6 lists the run's
-    status values but not the flag, and a `waiting` run (P21) is not settled.
+   `registry_filters_set(filters, scope)` replaces a scope's whole list, so
+   `gateway_filters_apply()` merges the call's filters into the session settings key `filters` (a
+   later `+x` replaces an earlier `-x`), applies the merged list with
+   `registry_filters_set(scope = "session")`, says once that they stay in force for the R session,
+   and treats the change as control-category when model code makes it (IC-53 items 3-4).
+   `gptr_config(filters =)` applies its scope's list the same way (04 section 10.1). The user and
+   project `filters` settings are applied by P08 too (P02 self-review item 18: only the settings
+   layer knows which layer a value came from): `gateway_filters_sync()` (Task 7) passes the user
+   file's list with `scope = "user"` and a trusted project's list with `scope = "project"` (an
+   untrusted project contributes no `filters`, IC-52), whenever a list differs from the one applied
+   last, at the start of every top-level `gateway_run()` and after
+   `gptr_config(filters =, .scope = "user" | "project")`. So all three scopes are P08's; a changed
+   file is picked up by the next top-level call (the settings cache re-reads it), not by a hook
+   inside the cache, which would give a read function a registry side effect.
+10. **The egress question** uses `gptr_confirm()` whenever `gptr_can_prompt()` holds; no UI backend
+    exists before P11, so the `ask_human` tier is honoured by never letting a hook answer it.
+11. **`.opts$images` plots** are rendered by the gateway with `grDevices::png()` at the
+    `gptr.plot_*` size; IC-44 names P09's `plot_png()`, which a P08 file may not call (P09 is
+    later).
+12. **`gptr_config()` without arguments during a run** only reads and is allowed; setting keys is
+    the control-category action.
+13. **"silent while a document is replayed"** (IC-48) is implemented as silent when `replay_mode()`
+    is `"replay"`; 04 offers no other signal from P15.
+14. **The `gptr_config()` example** passes `.scope = "session"` (04's example omits it) so that a
+    check run inside a project with a `.gptr/` can never write the project file.
+15. **P06 behaviour the tests rely on**, all from 04: `s$messages` lists operator messages (role
+    `operator`, kind `steer_relay`); a test tool (not model-evaluated code) may pipe into its own
+    running session (IC-55 refuses only model code: P06's `session_enqueue()` refuses only an `r`
+    tool call of the same tree); `$turns` counts prompt turns, one per run (P06's
+    `run_append_messages()` increments it at the run's first user message), so
+    `gptr_step(turns = 1)` stops at the first `turn_end` while `$turns` is already 1;
+    `.d$queue$follow_up` items carry `text` and `source`; model-change entries in R shape have
+    `type = "model_change"` and `gptr$reason`; a `fake/fake-1` reference whose provider is
+    registered only for a session resolves (P05's index of live fake engines), so
+    `session_set_model()` accepts a continuation's session-scoped fake.
+16. **`gptr_wait()` and `waiting`.** A `waiting` session counts as not settled (P21 ambiguity A10),
+    so `gptr_wait()` keeps pumping until P21 resumes it or the timeout passes.
+17. **`parallel =` and `agents =` before P19.** 04 says the sub-agent routes are simply absent
+    before P19; the built-in routes then refuse such calls with `gptr_error_not_available`
+    (`provided_by = "builtin:subagents"`) rather than run one session and ignore the argument.
+18. **Dependency plans.** The plan was first written against 04 alone; the review of 2026-10-01
+    checked it against the P01-P07, P09-P11, P14, P17 and P21 plans now in `dev/plan/` (signatures
+    of `local_project()`, `project_root()`, `setting_get()`,
+    `ext_service_set()`/`service_builtin_active()`, `ev_dispatch()`, the `setting`/`route`/`agent`
+    kind validators, `session_new()`, `session_enqueue()`, `run_start()`, `run_settle()`,
+    `run_target()`, P05's catalog and P07's `context_input()`), see the Plan review log.
+19. **`builtin:gateway` and the services before Task 9.** P01's `service_builtin_active()` hides a
+    bootstrap service whose built-in the registry does not list, and `builtin:gateway`
+    (04 section 10.3: declared in `gptr-gateway.R`) exists only from Task 9. Tasks 2, 3 and 6
+    therefore test the bootstrap entries (`the$services[[name]]`), and Task 9 tests the four
+    services end to end (`ext_service_has()`, `setting_get()`); until Task 9, `setting_get()` reads
+    the option layer only, which no P08 code before Task 9 relies on.
+20. **Trust decided in this process** (a `project_trust` handler without `remember`, or the
+    interactive answer) is kept with the fingerprint it was given for (`trust_mark()`); a gated file
+    changed later in the process voids it (IC-52 "Control files modified during the process are not
+    loaded again without confirmation"), and gptr's own project-settings writes carry it over
+    without turning it into a recorded decision.
+21. **Router timeout.** `setTimeLimit()` cannot be read back, so arming it inside a tool evaluation
+    would clear the per-expression limit P09 set; a nested routed session gets a soft timeout (a
+    slower router counts as failed) and a top-level one the armed limit.
+22. **Run settlement** is read from P06's `run$settled` flag (or a terminal status); 04 section 7.6
+    lists the run's status values but not the flag, and a `waiting` run (P21) is not settled.
 23. **Rank-0 specs of one session.** P02 keeps the first of two records of equal rank, so
-    `gateway_register_spec()` removes the session's earlier record of the same kind and name before it adds a
-    continuation's newer spec; the ids are kept in `the$gateway$specs` and forgotten at `session_shutdown`.
-24. **`gptr.prompt_secrets = "ask"`.** 04 §3.1 gives the values `"redact"` and `"ask"` only (G6's open question 1
-    also considered moving the value into the vault). P06 redacts every entry at ingress and `session_enqueue()`
-    redacts with the `context` profile, so the original value can never be sent: `"ask"` asks whether to send the
-    prompt with the value replaced by a `[secret:...]` marker (default yes) and a no stops the call with
-    `gptr_error_invalid_argument` (`arg = "prompt"`) before anything is sent; without someone to answer it acts as
-    `"redact"` (IC-43), which sends the redacted prompt with a `notice` each time. The check covers gateway
-    prompts (`gateway_input()` and the `continue` route's steer); `gptr_steer()` keeps its documented silent
-    redaction.
-25. **The `interpolated` echo and the console.** P08 signals `gptr_message_interpolated` (stderr) whenever a
-    literal prompt was interpolated at verbosity >= 2 (04 §2.2). P14's `console_call()` also echoes the
-    interpolated text on stdout at verbosity 2, so a console prompt with `{x}` shows both lines; P14 may drop its
-    own echo or muffle the class (recorded for P14; P08 follows 04).
-26. **`[b]ackground` from the pause menu.** `run_foreground()` ends its wait when `run$opts$background` is set (as
-    P06's `run_wait_foreground()` does) and `gateway_run()` then returns the running session invisibly, holds the
-    call record until the run settles and signals nothing (P21 ambiguities A3 and A17).
+    `gateway_register_spec()` removes the session's earlier record of the same kind and name before
+    it adds a continuation's newer spec; the ids are kept in `the$gateway$specs` and forgotten at
+    `session_shutdown`.
+24. **`gptr.prompt_secrets = "ask"`.** 04 section 3.1 gives the values `"redact"` and `"ask"` only
+    (G6's open question 1 also considered moving the value into the vault). P06 redacts every entry
+    at ingress and `session_enqueue()` redacts with the `context` profile, so the original value can
+    never be sent: `"ask"` asks whether to send the prompt with the value replaced by a
+    `[secret:...]` marker (default yes) and a no stops the call with `gptr_error_invalid_argument`
+    (`arg = "prompt"`) before anything is sent; without someone to answer it acts as `"redact"`
+    (IC-43), which sends the redacted prompt with a `notice` each time. The check covers gateway
+    prompts (`gateway_input()` and the `continue` route's steer); `gptr_steer()` keeps its
+    documented silent redaction.
+25. **The `interpolated` echo and the console.** P08 signals `gptr_message_interpolated` (stderr)
+    whenever a literal prompt was interpolated at verbosity >= 2 (04 section 2.2). P14's
+    `console_call()` also echoes the interpolated text on stdout at verbosity 2, so a console prompt
+    with `{x}` shows both lines; P14 may drop its own echo or muffle the class (recorded for P14;
+    P08 follows 04).
+26. **`[b]ackground` from the pause menu.** `run_foreground()` ends its wait when
+    `run$opts$background` is set (as P06's `run_wait_foreground()` does) and `gateway_run()` then
+    returns the running session invisibly, holds the call record until the run settles and signals
+    nothing (P21 ambiguities A3 and A17).
 
 ### Executed validation
 
-- Every ` ```r ` block of this plan was extracted and parsed with `Rscript --vanilla -e 'invisible(parse(file =
-  "<f>"))'`: all parse. A token check with `getParseData()` found no `LEFT_ASSIGN` (`<-`) and no `%>%` in any code
-  block.
-- First draft: the package code and tests of Tasks 1-10 were extracted and run with testthat 3e in a scratch
-  harness (the P01 draft sources plus contract-shaped stand-ins of P02-P07, including a mini session kernel that
-  plays fake-provider scripts): `test-gptr-config.R` 124 expectations and 1 skip, `test-gptr-capture.R` 90,
-  `test-gptr-gateway.R` 136 (the `print(peter)` snapshot included), `test-gptr-sdk.R` 53, all passing. (The
-  counts stated in the tasks are the current ones; see the 2026-10-01 entry below.)
-- The 20 rows of `test-copy-gateway.R` were run in fresh `Rscript --vanilla` processes against the same harness
-  with tracemem: every row whose behaviour P08 owns reported 0 copies, including the three in-run edit rows of
-  IC-41 and the function-frame tool row; the `$value`, `summary` and `gptr_fork()` rows depend on P06's value
-  policy and methods, which the stand-in does not implement. The run found one real pin, fixed in this plan: a
-  `for` loop that calls closures with a local bound to a user frame keeps the frame referenced
-  (`gateway_check_visible()`, `interpolate_prompt()`, `resolve_agents()`, `resolve_identifier()`'s `c()` branch
-  and `gptr_wait()` now use `while` loops).
-- The regular expressions of the Task 12 NAMESPACE test were checked against the expected roxygen output.
-- Review of 2026-10-01 (re-run after the fixes in the Plan review log): all 24 ` ```r ` blocks re-extracted and
-  parsed; `getParseData()` finds no `LEFT_ASSIGN` and no `%>%`; no non-ASCII byte; no code line over 100
-  characters. A scratch package was assembled from P01's plan code (`aaa-state.R`, the service table,
-  `utils-conditions.R`, `utils-encoding.R`, `utils-options.R`, `utils-paths.R`, `json-encode.R`,
-  `utils-hash.R`, `zzz.R`, `setup.R`, `helper-fake.R`), small stand-ins for the P02/P04/P05/P06 functions
-  `gptr-config.R` and `gptr-capture.R` call, and this plan's four R files; `devtools::test()` with
-  `NOT_CRAN=true` gave `test-gptr-config.R` 30 / 55 / 79 / 97 / 130 + 1 skip after Tasks 1 / 2 / 3 / 4 / 7 and
-  `test-gptr-capture.R` 65 / 96 after Tasks 5 / 6 (exactly the counts stated above), Task 1's red phase
-  `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]` and Task 5's 12 failing tests. A scratch test of the changed gateway
-  helpers (`mode_tighter()` with a non-mode, `run_settled()` with `waiting`, `gateway_register_spec()`
-  replacing an older spec, `gateway_filters_apply()` merging, `router_invoke()` armed at top level and soft
-  inside a tool evaluation) passed 20 expectations. The gateway, SDK and copy-suite tests need the P06 kernel
-  and were parse-checked only; testthat 3.3.2 was confirmed to count a new snapshot as a pass with one warning.
-- Cross-plan consolidation of 2026-10-01 (see the log at the end): all 24 ` ```r ` blocks re-extracted and parsed
-  with `Rscript --vanilla`; `getParseData()` finds no `LEFT_ASSIGN` and no `%>%`; no non-ASCII byte; no code line
-  over 100 characters. The new helpers were run against stand-ins in a scratch script: `gateway_filters_sync()`
-  (nothing applied for empty files; the user list applied once; an untrusted project's list ignored, a trusted
-  one applied, an emptied or untrusted-again project re-applied as `character()`; a list P02 rejects gives one
-  diagnostic and one notice and is not retried), `gateway_prompt_secrets()` (unchanged text passes silently;
-  `"redact"` and `"ask"` without a human return the redacted text with a notice; `"ask"` with a human asks once,
-  returns the redacted text on yes and on no signals `gptr_error_invalid_argument` with `arg = "prompt"` and no
-  value in the message) and `run_foreground()` (its `until()` is true once the run settles or
-  `run$opts$background` is set). The new gateway tests need the P06 kernel and were parse-checked only.
+- Every ` ```r ` block of this plan was extracted and parsed with
+  `Rscript --vanilla -e 'invisible(parse(file =
+  "<f>"))'`: all parse. A token check with `getParseData()` found no `LEFT_ASSIGN` (`<-`) and no
+  `%>%` in any code block.
+- First draft: the package code and tests of Tasks 1-10 were extracted and run with testthat 3e in a
+  scratch harness (the P01 draft sources plus contract-shaped stand-ins of P02-P07, including a mini
+  session kernel that plays fake-provider scripts): `test-gptr-config.R` 124 expectations and 1
+  skip, `test-gptr-capture.R` 90, `test-gptr-gateway.R` 136 (the `print(peter)` snapshot included),
+  `test-gptr-sdk.R` 53, all passing. (The counts stated in the tasks are the current ones; see the
+  2026-10-01 entry below.)
+- The 20 rows of `test-copy-gateway.R` were run in fresh `Rscript --vanilla` processes against the
+  same harness with tracemem: every row whose behaviour P08 owns reported 0 copies, including the
+  three in-run edit rows of IC-41 and the function-frame tool row; the `$value`, `summary` and
+  `gptr_fork()` rows depend on P06's value policy and methods, which the stand-in does not
+  implement. The run found one real pin, fixed in this plan: a `for` loop that calls closures with a
+  local bound to a user frame keeps the frame referenced (`gateway_check_visible()`,
+  `interpolate_prompt()`, `resolve_agents()`, `resolve_identifier()`'s `c()` branch and
+  `gptr_wait()` now use `while` loops).
+- The regular expressions of the Task 12 NAMESPACE test were checked against the expected roxygen
+  output.
+- Review of 2026-10-01 (re-run after the fixes in the Plan review log): all 24 ` ```r ` blocks
+  re-extracted and parsed; `getParseData()` finds no `LEFT_ASSIGN` and no `%>%`; no non-ASCII byte;
+  no code line over 100 characters. A scratch package was assembled from P01's plan code
+  (`aaa-state.R`, the service table, `utils-conditions.R`, `utils-encoding.R`, `utils-options.R`,
+  `utils-paths.R`, `json-encode.R`, `utils-hash.R`, `zzz.R`, `setup.R`, `helper-fake.R`), small
+  stand-ins for the P02/P04/P05/P06 functions `gptr-config.R` and `gptr-capture.R` call, and this
+  plan's four R files; `devtools::test()` with `NOT_CRAN=true` gave `test-gptr-config.R` 30 / 55 /
+  79 / 97 / 130 + 1 skip after Tasks 1 / 2 / 3 / 4 / 7 and `test-gptr-capture.R` 65 / 96 after
+  Tasks 5 / 6 (exactly the counts stated above), Task 1's red phase
+  `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]` and Task 5's 12 failing tests. A scratch test of the
+  changed gateway helpers (`mode_tighter()` with a non-mode, `run_settled()` with `waiting`,
+  `gateway_register_spec()` replacing an older spec, `gateway_filters_apply()` merging,
+  `router_invoke()` armed at top level and soft inside a tool evaluation) passed 20 expectations.
+  The gateway, SDK and copy-suite tests need the P06 kernel and were parse-checked only; testthat
+  3.3.2 was confirmed to count a new snapshot as a pass with one warning.
+- Cross-plan consolidation of 2026-10-01 (see the log at the end): all 24 ` ```r ` blocks
+  re-extracted and parsed with `Rscript --vanilla`; `getParseData()` finds no `LEFT_ASSIGN` and no
+  `%>%`; no non-ASCII byte; no code line over 100 characters. The new helpers were run against
+  stand-ins in a scratch script: `gateway_filters_sync()` (nothing applied for empty files; the user
+  list applied once; an untrusted project's list ignored, a trusted one applied, an emptied or
+  untrusted-again project re-applied as `character()`; a list P02 rejects gives one diagnostic and
+  one notice and is not retried), `gateway_prompt_secrets()` (unchanged text passes silently;
+  `"redact"` and `"ask"` without a human return the redacted text with a notice; `"ask"` with a
+  human asks once, returns the redacted text on yes and on no signals `gptr_error_invalid_argument`
+  with `arg = "prompt"` and no value in the message) and `run_foreground()` (its `until()` is true
+  once the run settles or `run$opts$background` is set). The new gateway tests need the P06 kernel
+  and were parse-checked only.
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against `00-conventions.md`, 04 (with §15), 05 P08, 03 and the plans now in
-`dev/plan/` (P01-P07, P09-P11, P14, P17, P21). Every fix was applied in place above; the counts in Tasks 2-4, 6-9
-and 12 and in the Plan acceptance were recomputed (and re-run for `test-gptr-config.R` and
-`test-gptr-capture.R` in a scratch package, see "Executed validation").
+Adversarial review of 2026-10-01 against `00-conventions.md`, 04 (with section 15), 05 P08, 03 and
+the plans now in `dev/plan/` (P01-P07, P09-P11, P14, P17, P21). Every fix was applied in place
+above; the counts in Tasks 2-4, 6-9 and 12 and in the Plan acceptance were recomputed (and re-run
+for `test-gptr-config.R` and `test-gptr-capture.R` in a scratch package, see "Executed validation").
 
 | # | Severity | Location | Finding | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| 1 | blocker | Tasks 2, 3, 6 (service tests); Task 9 | The services `trust.get`, `settings.get` and `identifier.resolve` are registered with `builtin = "gateway"`, but `builtin:gateway` is declared only in Task 9, and P01's `service_builtin_active()` hides a bootstrap service whose built-in the registry does not list. The tests "the trust.get service answers for other plans", "the settings.get service backs setting_get()" and "the identifier.resolve service is resolve_identifier()" could not pass in their own tasks (`gptr_error_not_available`). | applied | Tasks 2, 3 and 6 test the bootstrap entries `the$services[[name]]` (provider, built-in, function); Task 9 adds "with builtin:gateway loaded, P08's four services are served" (`ext_service_has()` for all four, `setting_get()` end to end). Moving the declaration to Task 1 was rejected because 04 §10.3 places `builtin:gateway` in `gptr-gateway.R`. Contract ambiguity 19. |
+| 1 | blocker | Tasks 2, 3, 6 (service tests); Task 9 | The services `trust.get`, `settings.get` and `identifier.resolve` are registered with `builtin = "gateway"`, but `builtin:gateway` is declared only in Task 9, and P01's `service_builtin_active()` hides a bootstrap service whose built-in the registry does not list. The tests "the trust.get service answers for other plans", "the settings.get service backs setting_get()" and "the identifier.resolve service is resolve_identifier()" could not pass in their own tasks (`gptr_error_not_available`). | applied | Tasks 2, 3 and 6 test the bootstrap entries `the$services[[name]]` (provider, built-in, function); Task 9 adds "with builtin:gateway loaded, P08's four services are served" (`ext_service_has()` for all four, `setting_get()` end to end). Moving the declaration to Task 1 was rejected because 04 section 10.3 places `builtin:gateway` in `gptr-gateway.R`. Contract ambiguity 19. |
 | 2 | major | Task 2 `trust_get()`/`trust_resolve()`, Task 2 `settings_write()` | A trust decision taken in this process (a `project_trust` handler without `remember`, or the interactive answer) was cached as a bare `TRUE` that `trust_get()` returned before any fingerprint check, so a gated file changed later in the process (for example by model code) stayed trusted, against IC-52 ("Control files modified during the process are not loaded again without confirmation"). `settings_write()` also turned such an in-process decision into a recorded one. | applied | `trust_mark()` stores the decision with its fingerprint; `trust_holds()` checks both the record and the in-process decision against the current fingerprint; `trust_resolve()` re-decides after a change; `settings_write()` carries a recorded trust to trust.json and an in-process one to memory only. New test "a trust decision taken in this process lapses when a gated file changes (IC-52)". Contract ambiguity 20. |
-| 3 | major | Task 9 `gateway_register()`; Task 7 `gptr_config()` | A call-level filter (`plugins = "-builtin:mcp"`) went to `registry_filters_set(filters, "session")`, which replaces the whole R-process filter list: one call silently dropped earlier session filters and disabled the built-in for every later call; from model code it reconfigured gptr without the IC-53 control check. `gptr_config(filters =)` (a filter path of 04 §10.1) only wrote the settings file and never reached the registry. | applied | `gateway_filters_apply()` merges the call's filters into the session settings key `filters` (a later `+x` replaces an earlier `-x`), applies the merged list, prints a one-time notice and calls `control_check("gptr_config")`; `gptr_config()` hands the scope's filter list to `registry_filters_set()` after writing. New tests in Tasks 7 and 9 (with `registry_filters_set()` mocked). Contract ambiguity 9 rewritten. |
-| 4 | major | Task 4 `egress_check()` | The `how_to_ack` hint `gptr_config(egress = list(<id> = "ack"), .scope = "user")` replaces the whole `egress` object (`gptr_config()` merges top-level keys only, 04 §6.2), so following it erased every earlier acknowledgement. | applied | The hint is `gptr_config(egress = utils::modifyList(gptr_config()$egress, list(<id> = "ack")), .scope = "user")`; the Task 4 test checks the string and that evaluating it keeps an earlier `anthropic` acknowledgement. |
+| 3 | major | Task 9 `gateway_register()`; Task 7 `gptr_config()` | A call-level filter (`plugins = "-builtin:mcp"`) went to `registry_filters_set(filters, "session")`, which replaces the whole R-process filter list: one call silently dropped earlier session filters and disabled the built-in for every later call; from model code it reconfigured gptr without the IC-53 control check. `gptr_config(filters =)` (a filter path of 04 section 10.1) only wrote the settings file and never reached the registry. | applied | `gateway_filters_apply()` merges the call's filters into the session settings key `filters` (a later `+x` replaces an earlier `-x`), applies the merged list, prints a one-time notice and calls `control_check("gptr_config")`; `gptr_config()` hands the scope's filter list to `registry_filters_set()` after writing. New tests in Tasks 7 and 9 (with `registry_filters_set()` mocked). Contract ambiguity 9 rewritten. |
+| 4 | major | Task 4 `egress_check()` | The `how_to_ack` hint `gptr_config(egress = list(<id> = "ack"), .scope = "user")` replaces the whole `egress` object (`gptr_config()` merges top-level keys only, 04 section 6.2), so following it erased every earlier acknowledgement. | applied | The hint is `gptr_config(egress = utils::modifyList(gptr_config()$egress, list(<id> = "ack")), .scope = "user")`; the Task 4 test checks the string and that evaluating it keeps an earlier `anthropic` acknowledgement. |
 | 5 | minor | Global Constraints; Tasks 1, 8; whole plan | The plan named its helpers `gateway_control_check()`/`gateway_mode_tighter()` "because P06 owns `control_check()` and `mode_tighter()`", which is false: P06 named its own `session_control_check()`/`run_mode_tighter()` and reserved `control_check()`/`mode_tighter()` for P08, and P06 and P11 cite "P08's `control_check()`". | applied | Renamed to `control_check()` and `mode_tighter()` everywhere; the rationale lines and roxygen comments now state the real ownership (P07 does own `context_items()`, so `gateway_context_items()` stays). Re-checked: no top-level name of this plan is defined by another plan. |
 | 6 | minor | Task 9 `router_invoke()` | `setTimeLimit(elapsed = Inf, transient = FALSE)` after the router call clears any limit set by an enclosing `r` evaluation (P09 arms one per top-level expression; R cannot read it back), so a routed session nested in model code removed the `r` timeout for the rest of that expression. | applied | The limit is armed only when `run_current()` is `NULL`; inside a tool evaluation the router gets a soft timeout (a slower router counts as failed). Scratch-tested both paths. Contract ambiguity 21. |
 | 7 | minor | Task 9 `gateway_run()` | The IC-40 visibility check ran after the session was created (or the continuation's specs registered and model/mode switched), so "fails fast" still left side effects. | applied | `gateway_continue_envir()` fixes the evaluation environment and `gateway_check_visible()` runs before any session, registration or switch. |
 | 8 | minor | Task 9 `run_settled()` | Settlement was "status not in the active list", so a run parked as `waiting` (P21, IC-57) counted as settled and `gptr_step()`/`gptr_wait()` would signal or stop early. | applied | `run_settled()` reads P06's `run$settled` flag or a terminal status. Contract ambiguity 22. |
 | 9 | minor | Task 9 `gateway_register()` | A continuation passing a newer spec with the name of one the session already had (`model = gptr_fake_provider(...)` twice, a revised tool) added a second rank-0 record; P02 keeps the first of equal rank, so the stale spec silently won. | applied | `gateway_register_spec()` removes the session's earlier record of the same kind and name (ids in `the$gateway$specs`, forgotten at `session_shutdown`); test "a continuation's newer spec replaces the session's older spec of the same name". Contract ambiguity 23. |
 | 10 | minor | Tasks 4, 7 (`egress_question()`, `gptr_init()`, `init_rbuildignore()`) | Every question ended with `[y/N]` although P01's `gptr_confirm()` appends ` [y/N] ` itself: the prompts read `... [y/N]  [y/N]`. | applied | The question texts end with `?`; Task 7 Consumes notes the hint. |
-| 11 | minor | Task 8 `peter()` | `envir` was never validated (04 §1.1: every export validates its arguments); `peter("x", envir = 1)` failed later with an unrelated error. | applied | `check_env(envir, "envir")` when `envir` is given (a formal, not a dot, so forcing it is copy-safe); test added. |
+| 11 | minor | Task 8 `peter()` | `envir` was never validated (04 section 1.1: every export validates its arguments); `peter("x", envir = 1)` failed later with an unrelated error. | applied | `check_env(envir, "envir")` when `envir` is given (a formal, not a dot, so forcing it is copy-safe); test added. |
 | 12 | minor | Task 6 `ident_symbol()`; Task 8 `mode_tighter()` | An unknown, unbound symbol such as `mode = fast` was returned unchecked, reaching `mode_tighter()` (where `match()` gives `NA` and `if (NA)` errors) or the kernel. | applied | The literal name goes through `ident_check_chr()` (invalid modes are `gptr_error_invalid_argument` at resolution); `mode_tighter()` never loosens on a non-mode. Test added in Task 6. |
 | 13 | minor | Task 10 test "gptr_on() registers a session listener" | `model = local_fake_provider(...)` inside the `peter()` call is evaluated in the gateway's alias mask, so withr attached the helper's cleanup to that evaluation and unregistered the provider at once; the test passed only because the spec was also registered at rank 0. | applied | The provider is bound first (`fake = local_fake_provider(...)`). |
 | 14 | minor | Task 9 `gateway_new_session()` | `session_new(opts = list(tools, depth, thinking, system, frontend, background))`: P06 reads only `thinking`; the rest suggested behaviour that does not happen (`.opts$system` reaches P07 through `call$args$opts`). | applied | `opts = list(thinking = ...)` with a comment saying where the other values travel. |
 | 15 | minor | Self-review (ambiguities 2, 3, 7, 15, 18), `call_hold()` roxygen | Stale statements: the token check named `control_check()` while the code used another name; `gateway_signal()` said to read `run$signal$condition` (it reads `session_data(s)$condition`); held records "released by session listeners" (they are process-level hooks); `$turns` "one per `turn_end`" (P06 counts one per run); "P01, P02, P07 absent"; "P06's finalizer dispatches `session_shutdown` with `session = NULL`" (it passes the id). | applied | Each statement corrected; ambiguities 19-23 added; "Executed validation" records this review's runs. |
 | 16 | minor | Tasks 2, 3, 6 tests | Three new test lines exceeded the 100-character lint limit. | applied | Wrapped. |
 | 17 | major | Task 9: session-scoped provider specs | Concern: `session_set_model()` and P06's `run_target()` resolve `d$model` with `model_resolve()`, whose catalog lists only process-level providers, so `model = <spec>` registered at rank 0 could not be resolved. | rejected | P05 resolves a session-scoped `fake/fake-1` through its index of live fake engines and `provider_stream()` looks up the session's records first (P05 self-review item 13); every P08 test and example uses fakes. Non-fake session-scoped providers are P05/P06's resolution concern; recorded in contract ambiguity 15. |
-| 18 | minor | Task 5 `interpolate_prompt()` | `{pi}` or `{letters}` would interpolate base objects because the lookup inherits. | rejected | 04 §6.1.4 specifies `get0(inherits = TRUE)`. |
+| 18 | minor | Task 5 `interpolate_prompt()` | `{pi}` or `{letters}` would interpolate base objects because the lookup inherits. | rejected | 04 section 6.1.4 specifies `get0(inherits = TRUE)`. |
 | 19 | minor | Task 2 `trust_fingerprint()` | The content-hash cache is keyed by path, mtime and size, so a same-size edit inside one mtime tick could reuse a stale hash. | rejected | Current file systems (APFS, NTFS, ext4) record sub-second mtimes; without the cache every `setting_get()` would rehash all gated files. |
-| 20 | minor | Task 9 `.run = FALSE` | The queued first input becomes a user message with source `follow_up` (P06's `queue_item_message()`), not `prompt`. | rejected | The message source is P06's choice for queue items; contract ambiguity 5 documents the queue route that 04 §7.6 allows. |
+| 20 | minor | Task 9 `.run = FALSE` | The queued first input becomes a user message with source `follow_up` (P06's `queue_item_message()`), not `prompt`. | rejected | The message source is P06's choice for queue items; contract ambiguity 5 documents the queue route that 04 section 7.6 allows. |
 | 21 | minor | Task 11 Step 2 | The red phase expects a pass. | rejected | A test-only task over code written in Tasks 5-10; Step 2 documents the regression toggle (`for` loop in `gateway_check_visible()`) that makes a row fail. |
 | 22 | minor | Task 10 `gptr_step(turns = 1)` | The pump might run past the first `turn_end` within one reactor iteration. | rejected | P04's `reactor_pump()` checks `until()` before every iteration, and the next model request needs further iterations, so the run is still `running` when the pump returns. |
 
 ## Cross-plan consolidation log
 
-Issues raised by the cross-plan checkers (2026-10-01), verified against 04 (§2.2 message classes, §3.1
-`gptr.prompt_secrets`, §7.14, §10.1 filters, §11.2 project trust rule), 03 §6.2 (pause menu), G6 (option table and
-open question 1), P01 (`verbosity()`, `gptr_inform()`, acceptance A3), P02 (self-review item 18,
-`registry_filters_set()`), P03 (spec-coverage row: "`gptr.prompt_secrets` is applied by the gateway (P08)"), P06
-(`run_wait_foreground()`, ingress redaction in `session_append()`/`session_enqueue()`), P14 (`console_call()` echo,
-pause menu) and P21 (A3, A17). Counts changed: Task 7 130 -> 135; Task 8 69 -> 74; Task 9 167 -> 192 (165 -> 190
-when the `background` test skips); Task 12 red phase `PASS 167` -> `PASS 192`; Task 12 and Plan acceptance 1
-476 -> 506 (474 -> 504 without later).
+Issues raised by the cross-plan checkers (2026-10-01), verified against 04 (sections 2.2 message
+classes, 3.1 `gptr.prompt_secrets`, 7.14, 10.1 filters, 11.2 project trust rule), 03 section 6.2
+(pause menu), G6 (option table and open question 1), P01 (`verbosity()`, `gptr_inform()`, acceptance
+A3), P02 (self-review item 18, `registry_filters_set()`), P03 (spec-coverage row:
+"`gptr.prompt_secrets` is applied by the gateway (P08)"), P06 (`run_wait_foreground()`, ingress
+redaction in `session_append()`/`session_enqueue()`), P14 (`console_call()` echo, pause menu) and
+P21 (A3, A17). Counts changed: Task 7 130 -> 135; Task 8 69 -> 74; Task 9 167 -> 192 (165 -> 190
+when the `background` test skips); Task 12 red phase `PASS 167` -> `PASS 192`; Task 12 and Plan
+acceptance 1 476 -> 506 (474 -> 504 without later).
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| C1 | shared-names | minor | Task 8 `peter()` interpolation block; Global Constraints (conditions) | applied | Valid: 04 §2.2 assigns `interpolated` to P08 ("echo of the interpolated prompt at verbosity >= 2") and no plan raised it. After `interp = ip$interp` the closure now calls `gptr_inform(paste0("Interpolated prompt: ", prompt_text), "interpolated")` when `length(interp) && verbosity() >= 2L` (no closure or handler in the frame, rule R3; the message passes P01's redaction hook and honours `gptr.quiet`). New Task 8 test "an interpolated prompt is echoed at verbosity 2 (gptr_message_interpolated, 04 2.2)" (5 expectations: the class, the text, the prompt, no echo without braces, none at verbosity 1). The test sits in Task 8 because the interpolation code is in Task 8's `peter()`, not Task 6. P14's own stdout echo (`console_call()`) stays as P14 wrote it; the double echo at verbosity 2 in the console is recorded as contract ambiguity 25 for P14 (drop its echo or muffle the class). Task 8 Consumes, prose, self-review (message classes, spec coverage) updated |
+| C1 | shared-names | minor | Task 8 `peter()` interpolation block; Global Constraints (conditions) | applied | Valid: 04 section 2.2 assigns `interpolated` to P08 ("echo of the interpolated prompt at verbosity >= 2") and no plan raised it. After `interp = ip$interp` the closure now calls `gptr_inform(paste0("Interpolated prompt: ", prompt_text), "interpolated")` when `length(interp) && verbosity() >= 2L` (no closure or handler in the frame, rule R3; the message passes P01's redaction hook and honours `gptr.quiet`). New Task 8 test "an interpolated prompt is echoed at verbosity 2 (gptr_message_interpolated, 04 2.2)" (5 expectations: the class, the text, the prompt, no echo without braces, none at verbosity 1). The test sits in Task 8 because the interpolation code is in Task 8's `peter()`, not Task 6. P14's own stdout echo (`console_call()`) stays as P14 wrote it; the double echo at verbosity 2 in the console is recorded as contract ambiguity 25 for P14 (drop its echo or muffle the class). Task 8 Consumes, prose, self-review (message classes, spec coverage) updated |
 | C2 | shared-names | minor | Task 9 `gateway_input()` | applied (in part) | Valid: nothing read `gptr.prompt_secrets`, although P03 leaves it to the gateway. New `gateway_prompt_secrets(prompt)` redacts with the `context` profile; on a change, `"redact"` (and `"ask"` with nobody to answer, IC-43) sends the redacted prompt with a `notice`, and `"ask"` with a human asks through `gptr_confirm(..., default = TRUE)`. Rejected part: "keep the original only on an explicit no". P06 redacts every entry at ingress (`session_append()`, `persist` profile) and every queued item (`session_enqueue()`, `context` profile), so the original can never reach the provider; keeping it would promise what cannot happen. A no therefore stops the call before anything is sent (as C5 proposes). The check runs before the `input` event, so hooks see the redacted text, and also on the `continue` route's steer. `.once = "prompt_secrets"` was not used: a notice per prompt that carried a secret is the "redact (with a message)" of G6. Tests in Task 9 use a pattern key built with `paste0()` (P03's convention), so no vault state is involved |
-| C3 | obligations | major | Task 7 `gptr_config()`; Task 9 `gateway_run()`; contract ambiguity 9 | applied | Valid: 04 §10.1 makes the settings key `filters` a filter path, and P02 (self-review item 18) relies on P08 to pass the user and project lists with their scope; only `gptr_config()` reached the registry, so a `"filters": ["-builtin:mcp"]` in `settings.json` was ignored after a restart. New `gateway_filters_sync()` in `gptr-config.R` (Task 7): the user file's list with `scope = "user"`, the project file's list with `scope = "project"` only while the project is trusted (the rule `settings_layered()` applies to a non-tighten key, IC-52), each re-applied only when it differs from `the$gateway$filters_applied[[scope]]`; a list P02 rejects becomes a diagnostic and a one-time notice. `gptr_config(filters =)` uses it for the user and project scopes (the session scope still goes straight to `registry_filters_set()`), and `gateway_run()` calls it at the start of every top-level call, after the trust question of a new session and before the session is built. "After each settings-file cache reload" is met by that per-call comparison (the cache re-reads a changed file) rather than a hook inside `settings_file_read()`, which would give a read function a registry side effect. Ambiguity 9 now says P08 applies all three scopes. Tests: Task 7 "user and trusted project filters reach the registry once per change (04 10.1)" (5 expectations); Task 9 "a top-level peter() applies the filters of the user settings file (04 10.1)" (2), both with `registry_filters_set()` mocked and `the$gateway$filters_applied` restored |
+| C3 | obligations | major | Task 7 `gptr_config()`; Task 9 `gateway_run()`; contract ambiguity 9 | applied | Valid: 04 section 10.1 makes the settings key `filters` a filter path, and P02 (self-review item 18) relies on P08 to pass the user and project lists with their scope; only `gptr_config()` reached the registry, so a `"filters": ["-builtin:mcp"]` in `settings.json` was ignored after a restart. New `gateway_filters_sync()` in `gptr-config.R` (Task 7): the user file's list with `scope = "user"`, the project file's list with `scope = "project"` only while the project is trusted (the rule `settings_layered()` applies to a non-tighten key, IC-52), each re-applied only when it differs from `the$gateway$filters_applied[[scope]]`; a list P02 rejects becomes a diagnostic and a one-time notice. `gptr_config(filters =)` uses it for the user and project scopes (the session scope still goes straight to `registry_filters_set()`), and `gateway_run()` calls it at the start of every top-level call, after the trust question of a new session and before the session is built. "After each settings-file cache reload" is met by that per-call comparison (the cache re-reads a changed file) rather than a hook inside `settings_file_read()`, which would give a read function a registry side effect. Ambiguity 9 now says P08 applies all three scopes. Tests: Task 7 "user and trusted project filters reach the registry once per change (04 10.1)" (5 expectations); Task 9 "a top-level peter() applies the filters of the user settings file (04 10.1)" (2), both with `registry_filters_set()` mocked and `the$gateway$filters_applied` restored |
 | C4 | obligations | minor | Task 9 `run_foreground()`, `gateway_run()` | applied | Valid: P21 marks `run$opts$background` for the pause menu's `[b]ackground` and P06's `run_wait_foreground()` honours it, but `run_foreground()` waited for settlement through `run_wait()`. It now pumps with `until = function() run_settled(run) \|\| isTRUE(run$opts$background)`; `gateway_run()` then, for a run that is not settled and is marked background, holds the call record (`call_hold()`, released at `agent_end` [R2], as the `background = TRUE` path does; the fix as proposed omitted this, and `gateway_dispatch()`'s `on.exit()` would otherwise release a record the still-running run uses) and returns the session invisibly without `gateway_signal()`. New Task 9 test "a run sent to the background returns the session at once (pause menu [b]ackground)" (4 expectations; a reactor timer marks the run during a slow fake stream; the run is drained with `run_wait()`). Ambiguity 26 added (P21 A3/A17) |
 | C5 | obligations | minor | Task 9 `gateway_input()`; Global Constraints options | applied (merged with C2) | Same defect as C2; its semantics are the ones applied: `"redact"` notifies, `"ask"` asks and a no aborts with `gptr_error_invalid_argument` (`arg = "prompt"`), no human means `"redact"`. The option is now listed under "Options consumed" in the Global Constraints. The test is in Task 9 (where `gateway_input()` lives), not Task 8: "a secret-looking prompt is sent redacted, with a notice (gptr.prompt_secrets)" (4 expectations) and the `"ask"` test (10 expectations). Ambiguity 24 records the reading |
 | C6 | obligations | minor | Task 12 Step 4 acceptance commands | applied | Valid: a bare `lintr::lint_package()` on the uninstalled tree reports every internal call (P01 decision 5, A3). Replaced with `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'`, expected `No lints found.` and exit 0 |

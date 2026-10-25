@@ -1,14 +1,43 @@
 # P20 Subscription CLI providers Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Use the user's Claude plan through their own `claude` CLI and the ChatGPT plan through their own Codex CLI as two `process_jsonl` model routes (`claude-cli`, alias `claude_code`; `codex`) whose tools evaluate R in the live session through gptr's permission gate (REQ-12, REQ-34, INFRA-19).
+**Goal:** Use the user's Claude plan through their own `claude` CLI and the ChatGPT plan through
+their own Codex CLI as two `process_jsonl` model routes (`claude-cli`, alias `claude_code`; `codex`)
+whose tools evaluate R in the live session through gptr's permission gate (REQ-12, REQ-34,
+INFRA-19).
 
-**Architecture:** Three L1 files. `cli-common.R` finds the CLIs without starting a process (`options(gptr.cli_path)`, PATH, per-OS install locations; the `claude.cmd` shim refused), probes `--version`/`--help` once per command, prints one-time notices, reports cached status to `gptr_providers()`, holds the turn helpers both adapters share (one INFRA-02 stream per CLI turn, wire log, wall clock, a weak table of live children) and declares `builtin:cli`, whose hooks pass the run's mode and remaining budget to the adapters as request parameters and stop a child whose run ended mid-turn (interrupt control request, then `kill_all()`). `cli-claude.R` drives one long-lived `claude -p` child per session in stream-json mode (per run while budget flags apply, resuming the CLI session), answers the control protocol (`mcp_message` through the injected `opts$mcp_dispatch`, the single gate; `can_use_tool` through `opts$gate`) and reuses P12's Anthropic normaliser for `stream_event` lines; `cli-codex.R` runs one `codex exec --json --ignore-user-config ... -` per turn with the prompt on stdin, the MCP overrides pointing at `gptr_mcp_serve()` (token only in the child's environment), the sandbox mapping, control-file hashing and a turn cap.
+**Architecture:** Three L1 files. `cli-common.R` finds the CLIs without starting a process
+(`options(gptr.cli_path)`, PATH, per-OS install locations; the `claude.cmd` shim refused), probes
+`--version`/`--help` once per command, prints one-time notices, reports cached status to
+`gptr_providers()`, holds the turn helpers both adapters share (one INFRA-02 stream per CLI turn,
+wire log, wall clock, a weak table of live children) and declares `builtin:cli`, whose hooks pass
+the run's mode and remaining budget to the adapters as request parameters and stop a child whose run
+ended mid-turn (interrupt control request, then `kill_all()`). `cli-claude.R` drives one long-lived
+`claude -p` child per session in stream-json mode (per run while budget flags apply, resuming the
+CLI session), answers the control protocol (`mcp_message` through the injected `opts$mcp_dispatch`,
+the single gate; `can_use_tool` through `opts$gate`) and reuses P12's Anthropic normaliser for
+`stream_event` lines; `cli-codex.R` runs one `codex exec --json --ignore-user-config ... -` per turn
+with the prompt on stdin, the MCP overrides pointing at `gptr_mcp_serve()` (token only in the
+child's environment), the sandbox mapping, control-file hashing and a turn cap.
 
-**Tech Stack:** R (>= 4.2.0); processx and jsonlite through P04/P01 helpers; rlang (weak references); P05's `process_jsonl` transport on P04's reactor; P12's `anthropic_normaliser()`; P18's `mcp.dispatch_local`/`mcp.serve_ensure` services; testthat 3e and withr (tests only); a fake CLI written in R (`inst/gptr/fixtures/fake_cli.R`) run through `rscript_path()`.
+**Tech Stack:** R (>= 4.2.0); processx and jsonlite through P04/P01 helpers; rlang (weak
+references); P05's `process_jsonl` transport on P04's reactor; P12's `anthropic_normaliser()`; P18's
+`mcp.dispatch_local`/`mcp.serve_ensure` services; testthat 3e and withr (tests only); a fake CLI
+written in R (`inst/gptr/fixtures/fake_cli.R`) run through `rscript_path()`.
 
-**Spec:** dev/spec/03-architecture.md (§2.1-2.2, §3.2 rows `cli-*`, §3.3 `inst/gptr/fixtures/fake_cli.R`, §3.4 `test-live-cli.R` and `fixtures/cli/`, §6.5, §6.7, §6.13 `cli` backend, §6.18 rows 16 and 19, §8.3, §8.4), dev/spec/04-interface-contract.md (§2.2 `billing`, `cli_missing`, `pcli_version`, `billing_env`, `notice`; §3.1 `gptr.cli_path`, `gptr.cli_turn_timeout`; §3.2 `GPTR_MCP_TOKEN`; §4.2-4.5; §5.1 accessors; §5.11 `gptr_mcp_handle`; §7.0 services `mcp.dispatch_local`, `mcp.serve_ensure`; §7.3 `child_env()`; §7.4; §7.5; §7.12 `anthropic_normaliser()`; §7.18; §7.19; §7.20; §8.1; §8.4; §8.5; §10.2 rows 1-2; §10.3 `builtin:cli`; §10.4 `request_params`, `usage`, `agent_end`, `session_shutdown`; §10.6; §11.10; §12.2-12.4; §15 IC-33, IC-36, IC-45, IC-57, IC-58, IC-60, IC-61, IC-62, IC-65, IC-66), dev/spec/05-plan-decomposition.md (P20).
+**Spec:** dev/spec/03-architecture.md (sections 2.1-2.2, 3.2 rows `cli-*`, 3.3
+`inst/gptr/fixtures/fake_cli.R`, 3.4 `test-live-cli.R` and `fixtures/cli/`, 6.5, 6.7, 6.13 `cli`
+backend, 6.18 rows 16 and 19, 8.3, 8.4), dev/spec/04-interface-contract.md (sections 2.2 `billing`,
+`cli_missing`, `pcli_version`, `billing_env`, `notice`; 3.1 `gptr.cli_path`,
+`gptr.cli_turn_timeout`; 3.2 `GPTR_MCP_TOKEN`; 4.2-4.5; 5.1 accessors; 5.11 `gptr_mcp_handle`; 7.0
+services `mcp.dispatch_local`, `mcp.serve_ensure`; 7.3 `child_env()`; 7.4; 7.5; 7.12
+`anthropic_normaliser()`; 7.18; 7.19; 7.20; 8.1; 8.4; 8.5; 10.2 rows 1-2; 10.3 `builtin:cli`; 10.4
+`request_params`, `usage`, `agent_end`, `session_shutdown`; 10.6; 11.10; 12.2-12.4; section 15
+IC-33, IC-36, IC-45, IC-57, IC-58, IC-60, IC-61, IC-62, IC-65, IC-66),
+dev/spec/05-plan-decomposition.md (P20).
 
 **Depends on:** P12, P18, P19 (and through them P01-P11, P14, P15, P17). **Milestone:** M4.
 
@@ -16,30 +45,154 @@
 
 ## Global Constraints
 
-`dev/plan/00-conventions.md` applies in full: `=` for assignment (never `<-`; `<<-` only for closure state), native `|>` (never `%>%`), ASCII-only R sources (non-ASCII as `\u` escapes), `pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions (messages by concatenation, never glue), JSON through `json_encode()`/`json_decode()`, testthat 3e, no network and no real keys in tests, every process-spawning test calls `skip_on_cran()`, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose message ends with the attribution line the executing harness specifies (conventions §10).
+`dev/plan/00-conventions.md` applies in full: `=` for assignment (never `<-`; `<<-` only for closure
+state), native `|>` (never `%>%`), ASCII-only R sources (non-ASCII as `\u` escapes), `pkg::fun()`
+calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions (messages by concatenation, never
+glue), JSON through `json_encode()`/`json_decode()`, testthat 3e, no network and no real keys in
+tests, every process-spawning test calls `skip_on_cran()`, `Rscript --vanilla` from the repository
+root `/Users/wanjun/Desktop/gptr`, one commit per task whose message ends with the attribution line
+the executing harness specifies (conventions section 10).
 
 Plan-specific requirements (values copied verbatim from the spec):
 
-- Function names: P20's internal functions and objects use the prefix `pcli_` (plan-route CLI), never `cli_`: P01's lint rule `cli_literal` (conventions §5, 04 §12.3, `tests/testthat/test-lint-rules.R` "R/ follows the package lint rules") flags every unqualified `cli_*()` call in `R/` whose first argument is not a literal, which would hit P20's own calls such as `cli_find(cli)` and `cli_version(path)` (231 hits in the review's scan). The three contract names of 04 §7.20, `cli_find(cli)`, `cli_version(path)` and `cli_probe(path)`, are implemented as `pcli_find()`, `pcli_version()` and `pcli_probe()`, without aliases (simplicity package P20-S, D-144). Option names (`gptr.cli_path`, `gptr.cli_turn_timeout`), request parameters (`cli_mode`, `cli_budget`), condition classes (`gptr_error_cli_missing`, `gptr_error_cli_version`, `gptr_warning_cli_sandbox`) and test-only helpers keep their names.
-- Files and layer (03 §3.2): `cli-common.R` | L1 | "CLI discovery (native binaries preferred), minimum-version probe, one-time notice, billing-switch scrub" | built-in `cli` | P20; `cli-claude.R` | L1 | "`cli-claude` adapter: stream-json, control protocol, in-process `sdk` MCP, `can_use_tool`"; `cli-codex.R` | L1 | "`cli-codex` adapter: `codex exec --json --ignore-user-config -`, sandbox mapping, MCP via `-c`". L1 "may call L0" (and L1); "the run's gate, MCP dispatcher and tool-result builder arrive as injected `opts` callbacks [IC-33]"; `cli-claude.R` "uses only these" (IC-33).
-- Contract rows (04 §7.20): `builtin_cli(gptr)` "registers providers `claude-cli` (alias `claude_code`, `type = "cli"`) and `codex` (alias `codex`), adapters `cli-claude` and `cli-codex` (`transport = "process_jsonl"`), a `status` function per provider for `gptr_providers()`"; `cli_find(cli = c("claude", "codex"))` "path from `gptr.cli_path`, then PATH, then the per-OS known locations of IC-65; native binaries only for claude (the npm `claude.cmd` shim is refused with an install hint); `gptr_error_cli_missing` otherwise"; `cli_version(path)`, `cli_probe(path)` "`package_version` from `--version` and a capability probe of `--help` (cached per path and mtime; run only on first use or `check = TRUE`); below the minimum (`claude` >= 2.0.0), or a `-p` that defaults to `--bare` without a documented opt-out, signals `gptr_error_cli_version`".
-- claude argv (04 §8.5, 03 §8.3), exactly: `-p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --tools "" --strict-mcp-config --setting-sources "" --disable-slash-commands --mcp-config <file> --permission-prompt-tool stdio --permission-mode default --allowedTools mcp__gptr__* --system-prompt-file <file> --model <full id>`, "plus `--max-turns <n> --max-budget-usd <x>` when a budget is in force (IC-65, IC-66) (never `--bare`)". The `--mcp-config` file "contains `{"mcpServers":{"gptr":{"type":"sdk","name":"gptr"}}}`; the system-prompt file holds the session's frozen T0 + T1". "Per turn `send` = one `{"type":"user","message":{"role":"user","content":<blocks>},"parent_tool_use_id":null,"session_id":""}` line." `mcp_message` is answered as `{"type":"control_response","response":{"subtype":"success","request_id":…,"response":{"mcp_response":…}}}`; `can_use_tool` "`{"behavior":"allow","updatedInput":…}` or `{"behavior":"deny","message":…}`; unknown subtypes -> an error response. After `system/init`, an `apiKeySource` other than `"none"` aborts the turn with `gptr_error_billing`." "`result` lines end the turn (usage from `usage` and `total_cost_usd` as an estimate, route `plan-cli`); `rate_limit_event` updates the provider's plan status. Interrupt: `{"type":"control_request","request_id":…,"request":{"subtype":"interrupt"}}`, then `kill_all()` after the grace period." (P26 D-204: gptr prints `stream_event` deltas as they arrive; an answer that follows a served call usually arrives in one burst when the CLI completes it.)
-- codex argv (04 §8.5, IC-65), exactly: `codex exec --json --ignore-user-config --skip-git-repo-check -m <full id> -C <wd> -c mcp_servers.gptr.url=http://127.0.0.1:<port>/mcp -c mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN -c mcp_servers.gptr.default_tools_approval_mode="approve" -c mcp_servers.gptr.required=true -c mcp_servers.gptr.tool_timeout_sec=3600 --sandbox <read-only | workspace-write> -`; "resume: `codex exec resume <thread> --json ... -c sandbox_mode=<mode> -` (resume rejects `-s` and `-C`)"; "the prompt on stdin (`write_all()`), `GPTR_MCP_TOKEN` (a token bound to this session, IC-58) only in the child's environment (`child_env("cli-codex", set =)`); the MCP server comes from the `mcp.serve_ensure` service (P18); without httpuv/later/openssl the route runs on files only with a `notice`." (P26 IC-79: Codex starts gptr's base-R stdio relay instead, `-c mcp_servers.gptr.command="<Rscript>" -c mcp_servers.gptr.args=["--vanilla","<mcp_relay.R>","<mailbox>","<seconds>"]` plus `startup_timeout_sec=60`, no url, token or files-only fallback; `mcp.serve_ensure` is gone.)
-- Codex events (04 §8.5): "`thread.started`, `turn.started`, `item.started|updated|completed` (`agent_message` -> text, `reasoning` -> thinking, `mcp_tool_call`/`command_execution` -> informational `tool_execution_*` events), `turn.completed{usage}`, `turn.failed{error}`, `error`"; "gptr counts turns and cancels at the cap, with `gptr.cli_turn_timeout` per exec". (P26 D-192: the run passes the informational events, marked `informational = TRUE` and untracked by IC-53, to the session's hooks, so the console shows them; a served `tools/call` of either route is reported by `mcp_serve_call()` as `tool_execution_*` under its gate's call id, the end with the result's `content` and `details`, and Codex's `mcp_tool_call` items for gptr are skipped; on the CLI routes a thinking block's first line shows dim at verbosity 2, then the waiting row again; both routes probe their CLI in an `agent_start` hook, before the waiting row.)
-- Sandbox mapping (IC-65): "`plan`, `manual` and `edits` -> `read-only` (file changes go through gptr's gated `write`/`edit` over MCP, so edits-mode approval and checkpoints apply); `auto` -> `workspace-write`" (P26 IC-78: `yolo` too). "Before a `workspace-write` exec gptr hashes the `control` files (IC-54) and refuses to load changed ones until the user confirms; the files checkpointer walks after each exec so `/undo` covers Codex's edits" (the walk is P16's `turn_end` hook for `type = "cli"` sessions); "On native Windows the sandbox is probed and the route falls back to `read-only` with a warning when it is not ready". Control files (IC-54): `.gptr/settings*.json`, `.gptr/mcp.json`, `.gptr/extensions/`, `.gptr/plugins/`, `.gptr/SYSTEM.md`, `.gptr/APPEND_SYSTEM.md`, `.gptr/agents/`, `.git/hooks/`, `.git/config`, `.Rprofile`, `Rprofile.site`, `Renviron.site` (the project-root members of the list).
-- Child environments (IC-65, G6 §3.7, through P03's `child_env()` profiles `cli-claude` and `cli-codex`): claude removes "secret-like names, registered values, `^(CLAUDECODE$|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDE_PID$)` and `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`; keep `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`; `CLAUDE_CODE_USE_BEDROCK`/`VERTEX`/`FOUNDRY` are removed with the `billing_env` warning"; codex "removes `^(CODEX_MANAGED_|CODEX_SANDBOX)`, `CODEX_API_KEY`, `CODEX_ACCESS_TOKEN`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` and keeps `CODEX_HOME`". Every profile points `R_ENVIRON_USER`/`R_PROFILE_USER` at empty files (IC-60). P05's `process_jsonl` transport calls `child_env(<env_profile>, set = <env>)`; P20 never calls `child_env()` with `provider =`.
-- Minimum version (03 §8.3): "The minimum CLI version is probed (>= 2.0.0, the Agent SDK's floor; 2.1.261 tested)". "Never `--bare` (it never reads the subscription login [07]); a capability probe of `--help` and the version detects a CLI whose `-p` defaults to bare and passes the documented opt-out or stops with `gptr_error_cli_version`."
-- Discovery (IC-65): "`options(gptr.cli_path = list(claude =, codex =))`, then PATH, then per-OS known locations (`~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/.npm-global/bin`, `%USERPROFILE%\.local\bin`, WinGet links, and for codex the npm prefix resolved to the vendored `codex.exe`)"; "The providers' `status()` functions use only cached `Sys.which()` data unless `gptr_providers(check = TRUE)`; `check = FALSE` never spawns a process." P05 calls `status(check = check)` and reads `status`, `version`, `available` (P05 plan, ambiguity 18).
-- Options (04 §3.1): `gptr.cli_path` | named list \| `NULL` | `NULL` | P20 | "explicit `claude`/`codex` paths (tests point them at the fake CLI, IC-65)"; `gptr.cli_turn_timeout` | `num(1)` | `3600` | P20 | "wall-clock seconds per CLI turn (IC-65)"; both read with `gptr_opt()`. The codex turn cap falls back to `gptr.max_turns` (`50L`). Settings default (IC-66, P08): `budget` `{tokens: 2000000, cost: 5, turns: null}`.
-- Conditions (04 §2.2): `gptr_error_billing` (parent `provider`, field `source`) "the claude CLI reports an `apiKeySource` other than `"none"` on the plan route"; `gptr_error_cli_missing` (`cli`) "the `claude`/`codex` binary was not found"; `gptr_error_cli_version` (`cli`, `found`, `required`) "below the minimum version"; warning `gptr_warning_billing_env` (P03/P20; "names of removed billing variables"); message `gptr_message_notice` ("one-time notices: experimental routes, Codex overhead"). P20 addition to 04 §2.2's warnings: `gptr_warning_cli_sandbox` (P20; Codex's Windows sandbox not ready, the route runs read-only; once per process; the same class reports control files that a `workspace-write` exec changed, after the exec's terminal event). 04 §8.5 and IC-65 require a warning for the Windows fallback ("falls back to `read-only` with a warning") without naming its class and no listed class fits, so the class is an addition, recorded here so that the condition reference assembled by P25 lists it (self-review ambiguity 4). Adapters signal nothing after `start`: failures are one terminal `error` event (04 §8.1).
-- Environment variable (04 §3.2): `GPTR_MCP_TOKEN` | P18/P20 | "set only in a child's environment: the bearer token of `gptr_mcp_serve()`".
-- Messages (04 §4.2): CLI assistant messages carry `route = "plan-cli"`; usage (04 §4.3) has `estimated = FALSE` (the CLI reports usage) and the claude cost is `total_cost_usd` (P05's `usage_row()` keeps `u$cost$total` for route `plan-cli`).
-- Wire log (04 §8.2, IC-65): "one file per session" at `cache/tmp/wire-<session id>.jsonl`, "each line open-append-close"; one line per CLI turn start and terminal event, never prompts or output.
-- Model ids (03 §8.4, 04 §11.10): "CLI invocations always receive full ids"; "`claude-cli/default` and `codex/default` resolve through the CLI provider's `status()` to a full id before any invocation".
-- Concurrency (03 §8.3, IC-57, IC-60): "one `claude-cli` child per session by default" (a child that carries `--max-turns`/`--max-budget-usd` serves only the run that started it, and the next run resumes the CLI session in a new child: the flags are fixed at launch while IC-66 budgets restart with every top-level call; Task 5); R tools never overlap (the claude `tools/call` runs from P04's tool FIFO of the run); a codex exec served by gptr's MCP server is marked with `reactor_served(run)` so a nested pump keeps servicing `later`; "Under `check_running()` every child-process pool ... is capped at 2" (`proc_pool_cap()`).
-- Tests (04 §12.4, IC-45, IC-60): "`fixtures/cli/claude-<case>.ndjson`, `codex-<case>.jsonl` ... redacted CLI transcripts; `inst/gptr/fixtures/fake_cli.R` replays them as a fake `claude`/`codex`, run as `c(rscript_path(), fake_cli)` through `gptr.cli_path` with `offline = TRUE` provider records". Live tests (IC-65): "(`GPTR_LIVE_TESTS=true`) run Codex in a non-git temporary directory and require it to call the gptr MCP `r` tool".
-- Copy safety (03 §6.4): P20 holds no user object and no frame; adapter state holds a process handle, ids and two temporary file paths.
-- Policy (03 §8.3): the provider id avoids the Claude Code product name; `claude_code` is only an alias; "gptr never reads, stores or brokers Claude credentials"; "gptr never reads `~/.codex/auth.json`".
+- Function names: P20's internal functions and objects use the prefix `pcli_` (plan-route CLI),
+  never `cli_`: P01's lint rule `cli_literal` (conventions section 5, 04 section 12.3,
+  `tests/testthat/test-lint-rules.R` "R/ follows the package lint rules") flags every unqualified
+  `cli_*()` call in `R/` whose first argument is not a literal, which would hit P20's own calls such
+  as `cli_find(cli)` and `cli_version(path)` (231 hits in the review's scan). The three contract
+  names of 04 section 7.20, `cli_find(cli)`, `cli_version(path)` and `cli_probe(path)`, are
+  implemented as `pcli_find()`, `pcli_version()` and `pcli_probe()`, without aliases (simplicity
+  package P20-S, D-144). Option names (`gptr.cli_path`, `gptr.cli_turn_timeout`), request parameters
+  (`cli_mode`, `cli_budget`), condition classes (`gptr_error_cli_missing`, `gptr_error_cli_version`,
+  `gptr_warning_cli_sandbox`) and test-only helpers keep their names.
+- Files and layer (03 section 3.2): `cli-common.R` | L1 | "CLI discovery (native binaries
+  preferred), minimum-version probe, one-time notice, billing-switch scrub" | built-in `cli` | P20;
+  `cli-claude.R` | L1 | "`cli-claude` adapter: stream-json, control protocol, in-process `sdk` MCP,
+  `can_use_tool`"; `cli-codex.R` | L1 | "`cli-codex` adapter:
+  `codex exec --json --ignore-user-config -`, sandbox mapping, MCP via `-c`". L1 "may call L0" (and
+  L1); "the run's gate, MCP dispatcher and tool-result builder arrive as injected `opts` callbacks
+  [IC-33]"; `cli-claude.R` "uses only these" (IC-33).
+- Contract rows (04 section 7.20): `builtin_cli(gptr)` "registers providers `claude-cli` (alias
+  `claude_code`, `type = "cli"`) and `codex` (alias `codex`), adapters `cli-claude` and `cli-codex`
+  (`transport = "process_jsonl"`), a `status` function per provider for `gptr_providers()`";
+  `cli_find(cli = c("claude", "codex"))` "path from `gptr.cli_path`, then PATH, then the per-OS
+  known locations of IC-65; native binaries only for claude (the npm `claude.cmd` shim is refused
+  with an install hint); `gptr_error_cli_missing` otherwise"; `cli_version(path)`, `cli_probe(path)`
+  "`package_version` from `--version` and a capability probe of `--help` (cached per path and mtime;
+  run only on first use or `check = TRUE`); below the minimum (`claude` >= 2.0.0), or a `-p` that
+  defaults to `--bare` without a documented opt-out, signals `gptr_error_cli_version`".
+- claude argv (04 section 8.5, 03 section 8.3), exactly:
+  `-p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --tools "" --strict-mcp-config --setting-sources "" --disable-slash-commands --mcp-config <file> --permission-prompt-tool stdio --permission-mode default --allowedTools mcp__gptr__* --system-prompt-file <file> --model <full id>`,
+  "plus `--max-turns <n> --max-budget-usd <x>` when a budget is in force (IC-65, IC-66) (never
+  `--bare`)". The `--mcp-config` file "contains
+  `{"mcpServers":{"gptr":{"type":"sdk","name":"gptr"}}}`; the system-prompt file holds the session's
+  frozen T0 + T1". "Per turn `send` = one
+  `{"type":"user","message":{"role":"user","content":<blocks>},"parent_tool_use_id":null,"session_id":""}`
+  line." `mcp_message` is answered as
+  `{"type":"control_response","response":{"subtype":"success","request_id":…,"response":{"mcp_response":…}}}`;
+  `can_use_tool` "`{"behavior":"allow","updatedInput":…}` or `{"behavior":"deny","message":…}`;
+  unknown subtypes -> an error response. After `system/init`, an `apiKeySource` other than `"none"`
+  aborts the turn with `gptr_error_billing`." "`result` lines end the turn (usage from `usage` and
+  `total_cost_usd` as an estimate, route `plan-cli`); `rate_limit_event` updates the provider's plan
+  status. Interrupt: `{"type":"control_request","request_id":…,"request":{"subtype":"interrupt"}}`,
+  then `kill_all()` after the grace period." (P26 D-204: gptr prints `stream_event` deltas as they
+  arrive; an answer that follows a served call usually arrives in one burst when the CLI completes
+  it.)
+- codex argv (04 section 8.5, IC-65), exactly:
+  `codex exec --json --ignore-user-config --skip-git-repo-check -m <full id> -C <wd> -c mcp_servers.gptr.url=http://127.0.0.1:<port>/mcp -c mcp_servers.gptr.bearer_token_env_var=GPTR_MCP_TOKEN -c mcp_servers.gptr.default_tools_approval_mode="approve" -c mcp_servers.gptr.required=true -c mcp_servers.gptr.tool_timeout_sec=3600 --sandbox <read-only | workspace-write> -`;
+  "resume: `codex exec resume <thread> --json ... -c sandbox_mode=<mode> -` (resume rejects `-s` and
+  `-C`)"; "the prompt on stdin (`write_all()`), `GPTR_MCP_TOKEN` (a token bound to this session,
+  IC-58) only in the child's environment (`child_env("cli-codex", set =)`); the MCP server comes
+  from the `mcp.serve_ensure` service (P18); without httpuv/later/openssl the route runs on files
+  only with a `notice`." (P26 IC-79: Codex starts gptr's base-R stdio relay instead,
+  `-c mcp_servers.gptr.command="<Rscript>" -c mcp_servers.gptr.args=["--vanilla","<mcp_relay.R>","<mailbox>","<seconds>"]`
+  plus `startup_timeout_sec=60`, no url, token or files-only fallback; `mcp.serve_ensure` is gone.)
+- Codex events (04 section 8.5): "`thread.started`, `turn.started`, `item.started|updated|completed`
+  (`agent_message` -> text, `reasoning` -> thinking, `mcp_tool_call`/`command_execution` ->
+  informational `tool_execution_*` events), `turn.completed{usage}`, `turn.failed{error}`, `error`";
+  "gptr counts turns and cancels at the cap, with `gptr.cli_turn_timeout` per exec". (P26 D-192: the
+  run passes the informational events, marked `informational = TRUE` and untracked by IC-53, to the
+  session's hooks, so the console shows them; a served `tools/call` of either route is reported by
+  `mcp_serve_call()` as `tool_execution_*` under its gate's call id, the end with the result's
+  `content` and `details`, and Codex's `mcp_tool_call` items for gptr are skipped; on the CLI routes
+  a thinking block's first line shows dim at verbosity 2, then the waiting row again; both routes
+  probe their CLI in an `agent_start` hook, before the waiting row.)
+- Sandbox mapping (IC-65): "`plan`, `manual` and `edits` -> `read-only` (file changes go through
+  gptr's gated `write`/`edit` over MCP, so edits-mode approval and checkpoints apply); `auto` ->
+  `workspace-write`" (P26 IC-78: `yolo` too). "Before a `workspace-write` exec gptr hashes the
+  `control` files (IC-54) and refuses to load changed ones until the user confirms; the files
+  checkpointer walks after each exec so `/undo` covers Codex's edits" (the walk is P16's `turn_end`
+  hook for `type = "cli"` sessions); "On native Windows the sandbox is probed and the route falls
+  back to `read-only` with a warning when it is not ready". Control files (IC-54):
+  `.gptr/settings*.json`, `.gptr/mcp.json`, `.gptr/extensions/`, `.gptr/plugins/`,
+  `.gptr/SYSTEM.md`, `.gptr/APPEND_SYSTEM.md`, `.gptr/agents/`, `.git/hooks/`, `.git/config`,
+  `.Rprofile`, `Rprofile.site`, `Renviron.site` (the project-root members of the list).
+- Child environments (IC-65, G6 section 3.7, through P03's `child_env()` profiles `cli-claude` and
+  `cli-codex`): claude removes "secret-like names, registered values,
+  `^(CLAUDECODE$|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDE_PID$)` and `ANTHROPIC_API_KEY`,
+  `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_FEDERATION_RULE_ID`,
+  `ANTHROPIC_ORGANIZATION_ID`; keep `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`,
+  `CLAUDE_CODE_GIT_BASH_PATH`; `CLAUDE_CODE_USE_BEDROCK`/`VERTEX`/`FOUNDRY` are removed with the
+  `billing_env` warning"; codex "removes `^(CODEX_MANAGED_|CODEX_SANDBOX)`, `CODEX_API_KEY`,
+  `CODEX_ACCESS_TOKEN`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` and keeps `CODEX_HOME`". Every profile
+  points `R_ENVIRON_USER`/`R_PROFILE_USER` at empty files (IC-60). P05's `process_jsonl` transport
+  calls `child_env(<env_profile>, set = <env>)`; P20 never calls `child_env()` with `provider =`.
+- Minimum version (03 section 8.3): "The minimum CLI version is probed (>= 2.0.0, the Agent SDK's
+  floor; 2.1.261 tested)". "Never `--bare` (it never reads the subscription login [07]); a
+  capability probe of `--help` and the version detects a CLI whose `-p` defaults to bare and passes
+  the documented opt-out or stops with `gptr_error_cli_version`."
+- Discovery (IC-65): "`options(gptr.cli_path = list(claude =, codex =))`, then PATH, then per-OS
+  known locations (`~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/.npm-global/bin`,
+  `%USERPROFILE%\.local\bin`, WinGet links, and for codex the npm prefix resolved to the vendored
+  `codex.exe`)"; "The providers' `status()` functions use only cached `Sys.which()` data unless
+  `gptr_providers(check = TRUE)`; `check = FALSE` never spawns a process." P05 calls
+  `status(check = check)` and reads `status`, `version`, `available` (P05 plan, ambiguity 18).
+- Options (04 section 3.1): `gptr.cli_path` | named list \| `NULL` | `NULL` | P20 | "explicit
+  `claude`/`codex` paths (tests point them at the fake CLI, IC-65)"; `gptr.cli_turn_timeout` |
+  `num(1)` | `3600` | P20 | "wall-clock seconds per CLI turn (IC-65)"; both read with `gptr_opt()`.
+  The codex turn cap falls back to `gptr.max_turns` (`50L`). Settings default (IC-66, P08): `budget`
+  `{tokens: 2000000, cost: 5, turns: null}`.
+- Conditions (04 section 2.2): `gptr_error_billing` (parent `provider`, field `source`) "the claude
+  CLI reports an `apiKeySource` other than `"none"` on the plan route"; `gptr_error_cli_missing`
+  (`cli`) "the `claude`/`codex` binary was not found"; `gptr_error_cli_version` (`cli`, `found`,
+  `required`) "below the minimum version"; warning `gptr_warning_billing_env` (P03/P20; "names of
+  removed billing variables"); message `gptr_message_notice` ("one-time notices: experimental
+  routes, Codex overhead"). P20 addition to 04 section 2.2's warnings: `gptr_warning_cli_sandbox`
+  (P20; Codex's Windows sandbox not ready, the route runs read-only; once per process; the same
+  class reports control files that a `workspace-write` exec changed, after the exec's terminal
+  event). 04 section 8.5 and IC-65 require a warning for the Windows fallback ("falls back to
+  `read-only` with a warning") without naming its class and no listed class fits, so the class is an
+  addition, recorded here so that the condition reference assembled by P25 lists it (self-review
+  ambiguity 4). Adapters signal nothing after `start`: failures are one terminal `error` event
+  (04 section 8.1).
+- Environment variable (04 section 3.2): `GPTR_MCP_TOKEN` | P18/P20 | "set only in a child's
+  environment: the bearer token of `gptr_mcp_serve()`".
+- Messages (04 section 4.2): CLI assistant messages carry `route = "plan-cli"`; usage
+  (04 section 4.3) has `estimated = FALSE` (the CLI reports usage) and the claude cost is
+  `total_cost_usd` (P05's `usage_row()` keeps `u$cost$total` for route `plan-cli`).
+- Wire log (04 section 8.2, IC-65): "one file per session" at `cache/tmp/wire-<session id>.jsonl`,
+  "each line open-append-close"; one line per CLI turn start and terminal event, never prompts or
+  output.
+- Model ids (03 section 8.4, 04 section 11.10): "CLI invocations always receive full ids";
+  "`claude-cli/default` and `codex/default` resolve through the CLI provider's `status()` to a full
+  id before any invocation".
+- Concurrency (03 section 8.3, IC-57, IC-60): "one `claude-cli` child per session by default" (a
+  child that carries `--max-turns`/`--max-budget-usd` serves only the run that started it, and the
+  next run resumes the CLI session in a new child: the flags are fixed at launch while IC-66 budgets
+  restart with every top-level call; Task 5); R tools never overlap (the claude `tools/call` runs
+  from P04's tool FIFO of the run); a codex exec served by gptr's MCP server is marked with
+  `reactor_served(run)` so a nested pump keeps servicing `later`; "Under `check_running()` every
+  child-process pool ... is capped at 2" (`proc_pool_cap()`).
+- Tests (04 section 12.4, IC-45, IC-60): "`fixtures/cli/claude-<case>.ndjson`, `codex-<case>.jsonl`
+  ... redacted CLI transcripts; `inst/gptr/fixtures/fake_cli.R` replays them as a fake
+  `claude`/`codex`, run as `c(rscript_path(), fake_cli)` through `gptr.cli_path` with
+  `offline = TRUE` provider records". Live tests (IC-65): "(`GPTR_LIVE_TESTS=true`) run Codex in a
+  non-git temporary directory and require it to call the gptr MCP `r` tool".
+- Copy safety (03 section 6.4): P20 holds no user object and no frame; adapter state holds a process
+  handle, ids and two temporary file paths.
+- Policy (03 section 8.3): the provider id avoids the Claude Code product name; `claude_code` is
+  only an alias; "gptr never reads, stores or brokers Claude credentials"; "gptr never reads
+  `~/.codex/auth.json`".
 
 ## File Structure
 
@@ -50,8 +203,8 @@ Plan-specific requirements (values copied verbatim from the spec):
 | `R/cli-codex.R` | create (Task 7) | the `cli-codex` adapter: argv and resume form, sandbox mapping and the Windows probe, the MCP handle and token, the stdin prompt, control-file hashing, the turn cap, the exec normaliser |
 | `inst/gptr/fixtures/fake_cli.R` | create (Task 2) | the fake `claude`/`codex` CLI (answers `--version`/`--help`, logs argv, env names and stdin, replays a fixture, speaks the control protocol, calls gptr's HTTP MCP server) |
 | `tests/testthat/fixtures/cli/local-fake-cli.R` | create (Task 1), append (Tasks 2-4, 6-8, 10) | test support sourced by the three test files (P20 owns `fixtures/cli/`, not a `helper-*.R` file) |
-| `tests/testthat/fixtures/cli/claude-call2.ndjson`, `claude-apikey.ndjson`, `claude-hang.ndjson` | create (Task 6) | the redacted live capture of 07 §3.14 and two constructed claude transcripts |
-| `tests/testthat/fixtures/cli/codex-call1.jsonl`, `codex-text.jsonl`, `codex-mcp.jsonl`, `codex-many.jsonl`, `codex-hang.jsonl` | create (Task 7) | the redacted capture of 08 §5.2 and constructed codex transcripts |
+| `tests/testthat/fixtures/cli/claude-call2.ndjson`, `claude-apikey.ndjson`, `claude-hang.ndjson` | create (Task 6) | the redacted live capture of 07 section 3.14 and two constructed claude transcripts |
+| `tests/testthat/fixtures/cli/codex-call1.jsonl`, `codex-text.jsonl`, `codex-mcp.jsonl`, `codex-many.jsonl`, `codex-hang.jsonl` | create (Task 7) | the redacted capture of 08 section 5.2 and constructed codex transcripts |
 | `tests/testthat/fixtures/cli/claude-text.ndjson`, `claude-tool.ndjson`, `claude-slow.ndjson` | create (Task 8) | constructed claude transcripts for the end-to-end tests |
 | `tests/testthat/fixtures/cli/codex-slow.jsonl` | create (Task 10) | a codex transcript with pauses for the INFRA-16 leg |
 | `tests/testthat/test-cli-common.R` | create (Task 1), append (Tasks 2-4, 8-10) | tests of `cli-common.R` |
@@ -75,24 +228,24 @@ Exact signatures (04 and the dependency plans); the tasks call nothing else.
 | P03 | `child_env(profile, pass = character(), set = character(), provider = NULL)` (profiles `cli-claude`, `cli-codex`; warning `gptr_warning_billing_env` with field `variables`); `redact(x, profile = "persist")` | probe environments, redaction of the wire log and of error text |
 | P04 | `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)`; `write_all(p, data)`; `write_close(p)`; `kill_all(p, grace = 2)`; `reactor_now()`; `reactor_timer(at, fn, run = NULL)`; `reactor_cancel(ids)`; `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`; `reactor_enqueue_tool(run, fn)`; `reactor_served(run, served = TRUE)` (P04 plan); `wire_log_path(session)`, `wire_log_append(path, line)` (P04 plan); `proc_pool_cap(n)`; `pid_alive(pid, create_time = NULL)` | probes, the stdin writer, timers, the FIFO, the wire log |
 | P05 | `provider_stream(model, context, opts, emit, done, run = NULL)` with the `process_jsonl` transport: `build()` returns `list(start = list(command, args, env_profile, env = named chr, wd) \| NULL, send = list(...), close_stdin = lgl(1))`; the child lives in `opts$state$process` (a new `start` kills the old child); lines arrive as `list(data, obj)`; `opts$send(obj)` writes one JSON line; `usage_new(...)`; `model_resolve(ref, strict = TRUE)`; `gptr_providers(check = FALSE)` calls `status(check = check)` | the transport, usage records, model ids |
-| P06 | events (04 §10.4): `request_params` (patch chain; payload `provider`, `model`, `params` limited to the adapter's `capabilities$request_params`), `usage` (`row`), `agent_end` (`status`, `reason`, ...), `session_shutdown` (`reason`); `ctx` members (04 §10.6) `ctx$session`, `ctx$run`, `ctx$mode()`, `ctx$state()`, `ctx$get(kind, name)`; the injected `opts$gate`, `opts$mcp_dispatch`, `opts$signal`, `opts$run`, `opts$session` (04 §8.1); in tests `peter()`, `gptr_wait(x, timeout = Inf)`, `gptr_cancel(x)` and the session accessors `$text`, `$status`, `$id`, `$messages`, `$cost`, `$kind` | hooks and end-to-end tests |
+| P06 | events (04 section 10.4): `request_params` (patch chain; payload `provider`, `model`, `params` limited to the adapter's `capabilities$request_params`), `usage` (`row`), `agent_end` (`status`, `reason`, ...), `session_shutdown` (`reason`); `ctx` members (04 section 10.6) `ctx$session`, `ctx$run`, `ctx$mode()`, `ctx$state()`, `ctx$get(kind, name)`; the injected `opts$gate`, `opts$mcp_dispatch`, `opts$signal`, `opts$run`, `opts$session` (04 section 8.1); in tests `peter()`, `gptr_wait(x, timeout = Inf)`, `gptr_cancel(x)` and the session accessors `$text`, `$status`, `$id`, `$messages`, `$cost`, `$kind` | hooks and end-to-end tests |
 | P11 tests | `local_scripted_ui(answers = list(), .env = parent.frame())` (log column `method`, value `"permission"`) | the gated-once test |
 | P12 | `anthropic_normaliser(model, opts)` -> `list(push, push_parsed, finish, fail, message)` | claude `stream_event` lines |
-| P18 | services `mcp.dispatch_local` `function(message, session) list` (reached through the injected `opts$mcp_dispatch`, IC-33) and `mcp.serve_ensure` `function(session) <gptr_mcp_handle>` (`session` is the `gptr_session` object: P18's `mcp_serve_ensure()` checks its class, so builtin:cli's `request_params` hook calls it with `ctx$session`; fields `url`, `port`, `token_env`, `config` with `config$codex$env[[token_env]]` = the token, `stop()`, 04 §5.11); `gptr_mcp_serve(..., stop = FALSE)` in tests; `mcp_rpc_err(id, code, message, data = NULL)` (internal, L0 `json-encode.R`) | live R for both routes; JSON-RPC errors in claude's `mcp_message` answers |
+| P18 | services `mcp.dispatch_local` `function(message, session) list` (reached through the injected `opts$mcp_dispatch`, IC-33) and `mcp.serve_ensure` `function(session) <gptr_mcp_handle>` (`session` is the `gptr_session` object: P18's `mcp_serve_ensure()` checks its class, so builtin:cli's `request_params` hook calls it with `ctx$session`; fields `url`, `port`, `token_env`, `config` with `config$codex$env[[token_env]]` = the token, `stop()`, 04 section 5.11); `gptr_mcp_serve(..., stop = FALSE)` in tests; `mcp_rpc_err(id, code, message, data = NULL)` (internal, L0 `json-encode.R`) | live R for both routes; JSON-RPC errors in claude's `mcp_message` answers |
 | P19 | `subagent_backend(agent, model)` (the `auto` rule); `gptr_agent(..., model = NULL, ..., backend = c("auto", "inline", "worker", "cli"), ...)`; teams through `peter(agents = list(...))` | the `cli` backend tests (IC-36) |
 
 ## Interfaces this plan produces
 
 | Name | Contract |
 |---|---|
-| `builtin_cli(gptr)` | 04 §7.20 (declared with `on_load(ext_declare_builtin("cli", builtin_cli))`); providers `claude-cli` (`api = "cli-claude"`, `type = "cli"`, `aliases = "claude_code"`) and `codex` (`api = "cli-codex"`, `aliases = "codex"`), each with `models` (`default` plus full ids) and `status = function(check = FALSE) list(status, available, path, version, default_model, plan)`; adapters `cli-claude`, `cli-codex` (`transport = "process_jsonl"`, `capabilities$request_params = c("cli_mode", "cli_budget")`); hooks `request_params`, `usage`, `agent_end`, `session_shutdown` |
-| `cli_find(cli = c("claude", "codex"))` (implemented as `pcli_find()`) | 04 §7.20; returns the command (executable followed by prefix arguments) with attribute `cli` |
-| `cli_version(path)`, `cli_probe(path)` (implemented as `pcli_version()`, `pcli_probe()`) | 04 §7.20; the probe returns `list(cli, version, bare_default, bare_optout, resume, missing)` |
-| `pcli_claude_build(model, context, opts)`, `pcli_claude_parse(model, opts)`, `pcli_codex_build(model, context, opts)`, `pcli_codex_parse(model, opts)` | 04 §8.1 `build`/`parse` of a `process_jsonl` adapter |
+| `builtin_cli(gptr)` | 04 section 7.20 (declared with `on_load(ext_declare_builtin("cli", builtin_cli))`); providers `claude-cli` (`api = "cli-claude"`, `type = "cli"`, `aliases = "claude_code"`) and `codex` (`api = "cli-codex"`, `aliases = "codex"`), each with `models` (`default` plus full ids) and `status = function(check = FALSE) list(status, available, path, version, default_model, plan)`; adapters `cli-claude`, `cli-codex` (`transport = "process_jsonl"`, `capabilities$request_params = c("cli_mode", "cli_budget")`); hooks `request_params`, `usage`, `agent_end`, `session_shutdown` |
+| `cli_find(cli = c("claude", "codex"))` (implemented as `pcli_find()`) | 04 section 7.20; returns the command (executable followed by prefix arguments) with attribute `cli` |
+| `cli_version(path)`, `cli_probe(path)` (implemented as `pcli_version()`, `pcli_probe()`) | 04 section 7.20; the probe returns `list(cli, version, bare_default, bare_optout, resume, missing)` |
+| `pcli_claude_build(model, context, opts)`, `pcli_claude_parse(model, opts)`, `pcli_codex_build(model, context, opts)`, `pcli_codex_parse(model, opts)` | 04 section 8.1 `build`/`parse` of a `process_jsonl` adapter |
 | `pcli_stop_child(state, wait_ack = TRUE, grace = 2)`, `pcli_tracked(session)` | internal: stop a session's CLI child (interrupt for claude mid-turn, stdin closed, then `kill_all()`); the adapter state of a session |
 | `pcli_codex_ensure(session)`, `pcli_codex_mcp(opts)`, `pcli_codex_forget(session)` | internal: the per-session MCP record (URL, port, token) that the `request_params` hook fills from `mcp.serve_ensure(<session object>)` and the codex adapter reads by session id (P26 IC-79: replaced by the exec's relay mailbox, the relay task and the MCP answer helper both routes share) |
 | `pcli_fake_command(cli, case, fixtures, log)`, `pcli_fake_provider(cli, id = NULL, models = NULL)` | internal, for tests and examples: the fake CLI's command for `options(gptr.cli_path)` and its `offline = TRUE` provider record (IC-45, IC-60) |
-| `inst/gptr/fixtures/fake_cli.R`, `tests/testthat/fixtures/cli/*` | 04 §12.4 |
+| `inst/gptr/fixtures/fake_cli.R`, `tests/testthat/fixtures/cli/*` | 04 section 12.4 |
 
 ## Tasks
 
@@ -118,14 +271,32 @@ Exact signatures (04 and the dependency plans); the tasks call nothing else.
 - Test: `tests/testthat/test-cli-common.R` (create)
 
 **Interfaces:**
-- Consumes: `gptr_opt(name)`, `check_choice(x, choices, arg)`, `user_home()`, `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `` `%||%` `` (P01); in tests `rscript_path()` (P01).
-- Produces: `pcli_find(cli = c("claude", "codex"))` (named `cli_find` in 04 §7.20, see Global Constraints) -> chr, the normalised executable followed by any prefix arguments, with attribute `cli`; `gptr_error_cli_missing` with field `cli` (04 §2.2). Private: `pcli_cache` (process-level data: discovery results, versions, probes, plan status and, from Task 4, the weak child table), `pcli_cache_clear()`, `pcli_install_hint`, `pcli_is_windows()`, `pcli_path_dirs()`, `pcli_exe_names(cli)`, `pcli_on_path(cli)`, `pcli_known_paths(cli)`, `pcli_is_shim(path)`, `pcli_codex_vendored(shim)`, `pcli_record(cli, path = NULL, version = NULL, error = NULL)`, `pcli_forget(cli)`, `pcli_found(cli, cmd)`, `pcli_refuse_shim(cli, shim)`, `pcli_identity(cmd)`. Test support: `fake_cli_fixtures()`, `cli_billing_vars`.
+- Consumes: `gptr_opt(name)`, `check_choice(x, choices, arg)`, `user_home()`,
+  `gptr_abort(message, class, ..., .data = NULL, call = NULL)`,
+  `` `%||%` `` (P01); in tests `rscript_path()` (P01).
+- Produces: `pcli_find(cli = c("claude", "codex"))` (named `cli_find` in 04 section 7.20, see Global
+  Constraints) -> chr, the normalised executable followed by any prefix arguments, with attribute
+  `cli`; `gptr_error_cli_missing` with field `cli` (04 section 2.2). Private: `pcli_cache`
+  (process-level data: discovery results, versions, probes, plan status and, from Task 4, the weak
+  child table), `pcli_cache_clear()`, `pcli_install_hint`, `pcli_is_windows()`, `pcli_path_dirs()`,
+  `pcli_exe_names(cli)`, `pcli_on_path(cli)`, `pcli_known_paths(cli)`, `pcli_is_shim(path)`,
+  `pcli_codex_vendored(shim)`, `pcli_record(cli, path = NULL, version = NULL, error = NULL)`,
+  `pcli_forget(cli)`, `pcli_found(cli, cmd)`, `pcli_refuse_shim(cli, shim)`, `pcli_identity(cmd)`.
+  Test support: `fake_cli_fixtures()`, `cli_billing_vars`.
 
-Adapted from `cc_find_cli()` of report 07 §5.7 (verified live; verification log item 37 confirms the install paths) with the review fixes of IC-65: PATH is scanned with `file.exists()`/`file.access()` instead of `Sys.which()` (which runs `which` on Unix, and `status()` must never start a process), native executables anywhere on PATH come before `.cmd`/`.bat` shims (07 §6.2: the official SDK prefers `claude.exe`), the npm `claude.cmd` shim is refused (so the empty-string arguments `--tools ""` and `--setting-sources ""` reach a native binary intact), and an npm `codex.cmd` shim resolves to its vendored `codex.exe` (08 §3.11, §6.2). The `~/.claude/local` location comes from the same verified prototype.
+Adapted from `cc_find_cli()` of report 07 section 5.7 (verified live; verification log item 37
+confirms the install paths) with the review fixes of IC-65: PATH is scanned with
+`file.exists()`/`file.access()` instead of `Sys.which()` (which runs `which` on Unix, and `status()`
+must never start a process), native executables anywhere on PATH come before `.cmd`/`.bat` shims
+(07 section 6.2: the official SDK prefers `claude.exe`), the npm `claude.cmd` shim is refused (so
+the empty-string arguments `--tools ""` and `--setting-sources ""` reach a native binary intact),
+and an npm `codex.cmd` shim resolves to its vendored `codex.exe` (08 section 3.11, section 6.2). The
+`~/.claude/local` location comes from the same verified prototype.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/testthat/fixtures/cli/local-fake-cli.R` (the shared test support; later tasks append to it):
+Create `tests/testthat/fixtures/cli/local-fake-cli.R` (the shared test support; later tasks append
+to it):
 
 ```r
 # tests/testthat/fixtures/cli/local-fake-cli.R -- shared support of test-cli-*.R (P20).
@@ -248,7 +419,9 @@ test_that("a codex npm shim resolves to its vendored codex.exe", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors, with ``could not find function "pcli_cache_clear"``, ``could not find function "pcli_find"``, ``Can't find binding for `pcli_is_windows` `` and ``could not find function "pcli_codex_vendored"``.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors, with
+``could not find function "pcli_cache_clear"``, ``could not find function "pcli_find"``,
+``Can't find binding for `pcli_is_windows` `` and ``could not find function "pcli_codex_vendored"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -481,10 +654,38 @@ git commit -m "feat(cli): find the claude and codex CLIs without starting a proc
 - Test: `tests/testthat/test-cli-common.R` (append)
 
 **Interfaces:**
-- Consumes: `child_env(profile, pass = character(), set = character(), provider = NULL)` (P03; profiles `cli-claude`, `cli-codex`), `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` (P04; never a shell, R only through `rscript_path()`), `as_utf8(x)`, `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `rscript_path()` (P01); `pid_alive(pid, create_time = NULL)` (P04) in the test support.
-- Produces: `pcli_version(path)` -> `package_version`, `pcli_probe(path)` -> `list(cli, version, bare_default, bare_optout, resume, missing)` (named `cli_version` and `cli_probe` in 04 §7.20; both cached per command and executable mtime); `gptr_error_cli_version` with fields `cli`, `found`, `required`; `pcli_notice(cli)` (a `gptr_message_notice` once per route, `.once = "cli_notice:<cli>"`); `pcli_fake_command(cli = c("claude", "codex"), case = "text", fixtures, log)` -> the fake CLI's command for `options(gptr.cli_path)`. Private: `pcli_min_version` (`claude = "2.0.0"`), `pcli_profile(cli)`, `pcli_cache_key(cmd)`, `pcli_run(cmd, args, timeout = 30)`, `pcli_version_forget(path)`, `pcli_flags(help)`, `pcli_bare_state(help)`. The fake CLI's command-line and fixture grammar are documented at the top of `fake_cli.R`. Test support: `local_fake_cli_path(cli, case = "text", .env = parent.frame())`, `fake_log(fake, kind = NULL)`, `fake_argv(fake)`, `fake_env_names(fake)`, `fake_prompts(fake)`, `fake_pids(fake)`, `expect_all_dead(pids)`.
+- Consumes: `child_env(profile, pass = character(), set = character(), provider = NULL)` (P03;
+  profiles `cli-claude`, `cli-codex`),
+  `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)`
+  (P04; never a shell, R only through `rscript_path()`), `as_utf8(x)`,
+  `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `rscript_path()` (P01);
+  `pid_alive(pid, create_time = NULL)` (P04) in the test support.
+- Produces: `pcli_version(path)` -> `package_version`, `pcli_probe(path)` ->
+  `list(cli, version, bare_default, bare_optout, resume, missing)` (named `cli_version` and
+  `cli_probe` in 04 section 7.20; both cached per command and executable mtime);
+  `gptr_error_cli_version` with fields `cli`, `found`, `required`; `pcli_notice(cli)` (a
+  `gptr_message_notice` once per route, `.once = "cli_notice:<cli>"`);
+  `pcli_fake_command(cli = c("claude", "codex"), case = "text", fixtures, log)` -> the fake CLI's
+  command for `options(gptr.cli_path)`. Private: `pcli_min_version` (`claude = "2.0.0"`),
+  `pcli_profile(cli)`, `pcli_cache_key(cmd)`, `pcli_run(cmd, args, timeout = 30)`,
+  `pcli_version_forget(path)`, `pcli_flags(help)`, `pcli_bare_state(help)`. The fake CLI's
+  command-line and fixture grammar are documented at the top of `fake_cli.R`. Test support:
+  `local_fake_cli_path(cli, case = "text", .env = parent.frame())`, `fake_log(fake, kind = NULL)`,
+  `fake_argv(fake)`, `fake_env_names(fake)`, `fake_prompts(fake)`, `fake_pids(fake)`,
+  `expect_all_dead(pids)`.
 
-The fake CLI adapts the verified offline fake of report 07 §5.9 (verification log item 32: it "needs R >= 4.4.0 for base `%||%`", so the script defines its own) and the stdin handling of 08 §5.1 (the looping writer of verification item 54 is P04's `write_all()` on the gptr side; the fake reads stdin to EOF in binary). Its `--help` texts reproduce the relevant lines of `claude --help` 2.1.261 and `codex exec --help` 0.157.0 (07 §2.13, 08 §2.E, 15 §2.9). The `--bare` probe follows 15 §2.9's verifier note ("`--bare` ... will become the default for `-p` in a future release", so the subscription path may later need an explicit opt-out): a help line that names `--bare` with "default" and `-p`/`--print` (and not "future") means bare by default; `--no-bare` is the opt-out passed when the help lists it. The probes run through `child_env("cli-<name>")`, so even `--version` never sees a billing variable. The test support unsets the billing variables of G6 §3.7 and passes this session's library paths in `R_LIBS` (setup.R moves `HOME`, so a user library would not be found by the child Rscript).
+The fake CLI adapts the verified offline fake of report 07 section 5.9 (verification log item 32: it
+"needs R >= 4.4.0 for base `%||%`", so the script defines its own) and the stdin handling of
+08 section 5.1 (the looping writer of verification item 54 is P04's `write_all()` on the gptr side;
+the fake reads stdin to EOF in binary). Its `--help` texts reproduce the relevant lines of
+`claude --help` 2.1.261 and `codex exec --help` 0.157.0 (07 section 2.13, 08 section 2.E,
+15 section 2.9). The `--bare` probe follows 15 section 2.9's verifier note ("`--bare` ... will
+become the default for `-p` in a future release", so the subscription path may later need an
+explicit opt-out): a help line that names `--bare` with "default" and `-p`/`--print` (and not
+"future") means bare by default; `--no-bare` is the opt-out passed when the help lists it. The
+probes run through `child_env("cli-<name>")`, so even `--version` never sees a billing variable. The
+test support unsets the billing variables of G6 section 3.7 and passes this session's library paths
+in `R_LIBS` (setup.R moves `HOME`, so a user library would not be found by the child Rscript).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -972,7 +1173,9 @@ test_that("each route prints its one-time notice through gptr_inform()", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 26 ]`; the four new tests error with ``could not find function "pcli_bare_state"``, ``could not find function "pcli_fake_command"`` (twice, from `local_fake_cli_path()`) and ``could not find function "pcli_notice"``.
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 26 ]`; the four new tests error with
+``could not find function "pcli_bare_state"``, ``could not find function "pcli_fake_command"``
+(twice, from `local_fake_cli_path()`) and ``could not find function "pcli_notice"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1176,10 +1379,30 @@ git commit -m "feat(cli): version and capability probes, notices and the fake CL
 - Test: `tests/testthat/test-cli-common.R` (append)
 
 **Interfaces:**
-- Consumes: `model_resolve(ref, strict = TRUE)` (P05; the `sonnet` and `gpt` aliases), `gptr_provider(...)` (P02), `check_choice()` (P01); in the test support `gptr_register(spec)` (P02).
-- Produces: `pcli_status(cli, provider, api)` -> the provider record's `status = function(check = FALSE)` returning `list(status, available, path, version, default_model, plan)` (P05 calls `status(check = check)` and reads `status`, `version`, `available`; `check = FALSE` starts no process, IC-65); status values `"not found"`, `"found"`, `"ready"`, or the recorded problem (`"shim refused"`, `"outdated"`, `"version unreadable"`, `"bare by default"`, `"missing exec flags"`); `pcli_default_model(api)`, `pcli_model_id(model)` (`default` -> a full id, 04 §11.10); `pcli_plan_set(provider, info)` (the plan status of a `rate_limit_event`, 07 §2.14); `pcli_model_entry(id, name, input = "text", context = 200000, max_output = 64000)`; `pcli_models(cli)`; `pcli_fake_provider(cli = c("claude", "codex"), id = NULL, models = NULL)` -> a `gptr_provider` with `type = "cli"` and `offline = TRUE` (IC-45). Test support: `local_fake_cli(cli, case = "text", models = NULL, register = TRUE, .env = parent.frame())` -> `list(path, log, cli, provider, id, model)`.
+- Consumes: `model_resolve(ref, strict = TRUE)` (P05; the `sonnet` and `gpt` aliases),
+  `gptr_provider(...)` (P02), `check_choice()` (P01); in the test support `gptr_register(spec)`
+  (P02).
+- Produces: `pcli_status(cli, provider, api)` -> the provider record's
+  `status = function(check = FALSE)` returning
+  `list(status, available, path, version, default_model, plan)` (P05 calls `status(check = check)`
+  and reads `status`, `version`, `available`; `check = FALSE` starts no process, IC-65); status
+  values `"not found"`, `"found"`, `"ready"`, or the recorded problem (`"shim refused"`,
+  `"outdated"`, `"version unreadable"`, `"bare by default"`, `"missing exec flags"`);
+  `pcli_default_model(api)`, `pcli_model_id(model)` (`default` -> a full id, 04 section 11.10);
+  `pcli_plan_set(provider, info)` (the plan status of a `rate_limit_event`, 07 section 2.14);
+  `pcli_model_entry(id, name, input = "text", context = 200000, max_output = 64000)`;
+  `pcli_models(cli)`; `pcli_fake_provider(cli = c("claude", "codex"), id = NULL, models = NULL)` ->
+  a `gptr_provider` with `type = "cli"` and `offline = TRUE` (IC-45). Test support:
+  `local_fake_cli(cli, case = "text", models = NULL, register = TRUE, .env = parent.frame())` ->
+  `list(path, log, cli, provider, id, model)`.
 
-`status(check = FALSE)` reports the cached discovery and, when nothing is cached yet, runs the file-system discovery of `pcli_find()` once (a PATH scan, the replacement of `Sys.which()`); this is how P05's `model_default()` can fall back to "a detected CLI" (03 §8.4) without process I/O. `check = TRUE` forgets the cache entry, finds the CLI again and re-runs `--version`. The model lists carry `default` plus the full ids the CLIs accept (07 §3.13, 08 §2.C); `default` resolves to the newest Sonnet (claude) or GPT (codex) of the catalog, with fixed fallbacks when the catalog has none.
+`status(check = FALSE)` reports the cached discovery and, when nothing is cached yet, runs the
+file-system discovery of `pcli_find()` once (a PATH scan, the replacement of `Sys.which()`); this is
+how P05's `model_default()` can fall back to "a detected CLI" (03 section 8.4) without process I/O.
+`check = TRUE` forgets the cache entry, finds the CLI again and re-runs `--version`. The model lists
+carry `default` plus the full ids the CLIs accept (07 section 3.13, 08 section 2.C); `default`
+resolves to the newest Sonnet (claude) or GPT (codex) of the catalog, with fixed fallbacks when the
+catalog has none.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1285,7 +1508,9 @@ test_that("the plan routes list `default` and full ids; fake CLI records are off
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 59 ]`; the five new tests error with ``could not find function "pcli_status"``, ``could not find function "pcli_model_id"``, ``could not find function "pcli_plan_set"`` and ``could not find function "pcli_models"``.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 59 ]`; the five new tests error with
+``could not find function "pcli_status"``, ``could not find function "pcli_model_id"``,
+``could not find function "pcli_plan_set"`` and ``could not find function "pcli_models"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1432,10 +1657,56 @@ git commit -m "feat(cli): cached status, plan status and the plan-route model en
 - Test: `tests/testthat/test-cli-common.R` (append)
 
 **Interfaces:**
-- Consumes: `msg_assistant(...)`, `block_text(text, signature = NULL)`, `block_thinking(thinking, signature = NULL, redacted = FALSE, data = NULL, origin = NULL)`, `ev_new(type, ...)`, `id_new(prefix = "", n = 10L)`, `json_encode(x, pretty = FALSE)`, `json_decode(text)` (P01); `usage_new(...)` (P05); `write_all(p, data)`, `write_close(p)`, `kill_all(p, grace = 2)`, `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`, `reactor_now()`, `reactor_timer(at, fn, run = NULL)`, `reactor_cancel(ids)`, `reactor_served(run, served = TRUE)`, `wire_log_path(session)`, `wire_log_append(path, line)` (P04); `redact(x, profile = "persist")` (P03); `rlang::new_weakref()`, `rlang::wref_key()`; in tests `msg_user()`, `block_context()`, `msg_text()`, `local_project()`, `local_gptr_options()` (P01).
-- Produces (used by Tasks 5-10): `pcli_split(messages)` -> `list(prior, input)`; `pcli_unseen(prior, provider)` (the earlier messages after the last assistant message `provider` answered); `pcli_block_text(b)`, `pcli_message_text(m)`, `pcli_input_text(messages)`, `pcli_history_text(prior)`, `pcli_system_text(context)`; `pcli_scalar_num(x)`; `pcli_params(context)` -> `list(mode, turns, cost)` from `context$params$cli_mode`/`cli_budget` (default mode `"manual"`); `pcli_state(opts)`; `pcli_child(state)`; `pcli_alive(p)`; the weak child table `pcli_track(session, state)`, `pcli_tracked(session)`, `pcli_untrack(session)`; `pcli_request_id(state)` (`req_<n>_<8 hex>`, RNG-free); `pcli_control_request(state, request)`; `pcli_send(opts, obj)`; `pcli_stop_child(state, wait_ack = TRUE, grace = 2)`; the turn state `pcli_turn_new(model, opts)`, `pcli_aborted(s)`, `pcli_start(s, response_id = NULL)`, `pcli_text_block(s, text, kind = "text")`, `pcli_blocks(s)`, `pcli_message(s, stop_reason = "stop", usage = NULL, error_message = NULL, raw_stop_reason = NULL)`, `pcli_finish(s, msg, event)`, `pcli_done(s, usage, stop_reason = "stop", raw_stop_reason = NULL)`, `pcli_fail(s, class, message, reason = "error", status = NA_integer_, usage = NULL, retry_after = NULL)`, `pcli_turn_seconds()`, `pcli_turn_timer(s, on_timeout)`, `pcli_wire_log(s, event)`. Adapter state fields set here: `turn_open`, `turn_timer`, `interrupt_id`, `interrupt_acked`, `served_run`, `n_req`. Test support: `stub_opts(gate = NULL, dispatch = NULL, ...)`, `stub_model(cli = "claude", id = NULL)`, `event_types(opts)`, `stub_process(pid = 4242L)`.
+- Consumes: `msg_assistant(...)`, `block_text(text, signature = NULL)`,
+  `block_thinking(thinking, signature = NULL, redacted = FALSE, data = NULL, origin = NULL)`,
+  `ev_new(type, ...)`, `id_new(prefix = "", n = 10L)`, `json_encode(x, pretty = FALSE)`,
+  `json_decode(text)` (P01); `usage_new(...)` (P05); `write_all(p, data)`, `write_close(p)`,
+  `kill_all(p, grace = 2)`,
+  `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`,
+  `reactor_now()`, `reactor_timer(at, fn, run = NULL)`, `reactor_cancel(ids)`,
+  `reactor_served(run, served = TRUE)`, `wire_log_path(session)`, `wire_log_append(path, line)`
+  (P04); `redact(x, profile = "persist")` (P03); `rlang::new_weakref()`, `rlang::wref_key()`; in
+  tests `msg_user()`, `block_context()`, `msg_text()`, `local_project()`, `local_gptr_options()`
+  (P01).
+- Produces (used by Tasks 5-10): `pcli_split(messages)` -> `list(prior, input)`;
+  `pcli_unseen(prior, provider)` (the earlier messages after the last assistant message `provider`
+  answered); `pcli_block_text(b)`, `pcli_message_text(m)`, `pcli_input_text(messages)`,
+  `pcli_history_text(prior)`, `pcli_system_text(context)`; `pcli_scalar_num(x)`;
+  `pcli_params(context)` -> `list(mode, turns, cost)` from `context$params$cli_mode`/`cli_budget`
+  (default mode `"manual"`); `pcli_state(opts)`; `pcli_child(state)`; `pcli_alive(p)`; the weak
+  child table `pcli_track(session, state)`, `pcli_tracked(session)`, `pcli_untrack(session)`;
+  `pcli_request_id(state)` (`req_<n>_<8 hex>`, RNG-free); `pcli_control_request(state, request)`;
+  `pcli_send(opts, obj)`; `pcli_stop_child(state, wait_ack = TRUE, grace = 2)`; the turn state
+  `pcli_turn_new(model, opts)`, `pcli_aborted(s)`, `pcli_start(s, response_id = NULL)`,
+  `pcli_text_block(s, text, kind = "text")`, `pcli_blocks(s)`,
+  `pcli_message(s, stop_reason = "stop", usage = NULL, error_message = NULL, raw_stop_reason = NULL)`,
+  `pcli_finish(s, msg, event)`, `pcli_done(s, usage, stop_reason = "stop", raw_stop_reason = NULL)`,
+  `pcli_fail(s, class, message, reason = "error", status = NA_integer_, usage = NULL, retry_after = NULL)`,
+  `pcli_turn_seconds()`, `pcli_turn_timer(s, on_timeout)`, `pcli_wire_log(s, event)`. Adapter state
+  fields set here: `turn_open`, `turn_timer`, `interrupt_id`, `interrupt_acked`, `served_run`,
+  `n_req`. Test support: `stub_opts(gate = NULL, dispatch = NULL, ...)`,
+  `stub_model(cli = "claude", id = NULL)`, `event_types(opts)`, `stub_process(pid = 4242L)`.
 
-One CLI turn is one INFRA-02 stream (04 §4.5): one `start`, block events, exactly one terminal `done` or `error` carrying the partial message (04 §8.1: "Normalisers never signal R conditions after `start`"). Messages carry `route = "plan-cli"` and the request id. The child table maps a session id to its adapter state through `rlang::new_weakref()`: the session's live record owns the state (`opts$state` is the live record's `adapter` environment), so the table never keeps a session alive and a collected session's processx object cleans its child up; the table is a process table like P04's job table (03 §2.2 rule 5). `pcli_stop_child()` sends the claude interrupt control request only while a turn is open (07 §3.10: `interrupt` ends the turn cleanly), pumps the reactor with `allow_runs = character()` (no FIFO tool runs, IC-57) until the CLI acknowledges or `grace` seconds pass, forgets the child (`state$process = NULL`, so P05 routes none of its late lines or its exit, as P05's own `stream_abort()` does), closes its stdin with P04's `write_close()` (a claude CLI in stream-json mode exits at end of input, and so does the fake, which an R child blocked on stdin would otherwise ignore SIGINT for the whole grace period) and then calls `kill_all(p, grace = 1)`. `pcli_unseen()` serves cross-model continuity (REQ-34, 03 §8.3 "another model may have answered"): a reused claude child, a resumed claude session and a resumed Codex thread have seen the conversation only up to the last assistant message their own provider answered, so the messages after it (a turn answered by another model in between) travel as a `<conversation_history>` block. The wire log writes the fields of P04's `wire_log()` (`ts` in epoch seconds, `request_id`, `provider`, `model`, `url` as `cli:<name>`, `seconds`, `event`), redacted, never prompts or output.
+One CLI turn is one INFRA-02 stream (04 section 4.5): one `start`, block events, exactly one
+terminal `done` or `error` carrying the partial message (04 section 8.1: "Normalisers never signal R
+conditions after `start`"). Messages carry `route = "plan-cli"` and the request id. The child table
+maps a session id to its adapter state through `rlang::new_weakref()`: the session's live record
+owns the state (`opts$state` is the live record's `adapter` environment), so the table never keeps a
+session alive and a collected session's processx object cleans its child up; the table is a process
+table like P04's job table (03 section 2.2 rule 5). `pcli_stop_child()` sends the claude interrupt
+control request only while a turn is open (07 section 3.10: `interrupt` ends the turn cleanly),
+pumps the reactor with `allow_runs = character()` (no FIFO tool runs, IC-57) until the CLI
+acknowledges or `grace` seconds pass, forgets the child (`state$process = NULL`, so P05 routes none
+of its late lines or its exit, as P05's own `stream_abort()` does), closes its stdin with P04's
+`write_close()` (a claude CLI in stream-json mode exits at end of input, and so does the fake, which
+an R child blocked on stdin would otherwise ignore SIGINT for the whole grace period) and then calls
+`kill_all(p, grace = 1)`. `pcli_unseen()` serves cross-model continuity (REQ-34, 03 section 8.3
+"another model may have answered"): a reused claude child, a resumed claude session and a resumed
+Codex thread have seen the conversation only up to the last assistant message their own provider
+answered, so the messages after it (a turn answered by another model in between) travel as a
+`<conversation_history>` block. The wire log writes the fields of P04's `wire_log()` (`ts` in epoch
+seconds, `request_id`, `provider`, `model`, `url` as `cli:<name>`, `seconds`, `event`), redacted,
+never prompts or output.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1681,7 +1952,10 @@ test_that("the wire log gets one redacted line per CLI turn start and terminal e
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 86 ]`; the eight new tests error with ``could not find function "pcli_split"``, ``could not find function "pcli_unseen"``, ``could not find function "pcli_params"``, ``could not find function "pcli_turn_new"``, ``could not find function "pcli_track"`` and ``could not find function "pcli_stop_child"``.
+Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 86 ]`; the eight new tests error with
+``could not find function "pcli_split"``, ``could not find function "pcli_unseen"``,
+``could not find function "pcli_params"``, ``could not find function "pcli_turn_new"``,
+``could not find function "pcli_track"`` and ``could not find function "pcli_stop_child"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2106,12 +2380,48 @@ git commit -m "feat(cli): shared turn helpers, the weak child table and pcli_sto
 - Test: `tests/testthat/test-cli-claude.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 1-4 (`pcli_find()`, `pcli_probe()`, `pcli_notice()`, `pcli_state()`, `pcli_track()`, `pcli_model_id()`, `pcli_params()`, `pcli_split()`, `pcli_unseen()`, `pcli_history_text()`, `pcli_block_text()`, `pcli_system_text()`, `pcli_child()`, `pcli_alive()`, `pcli_stop_child()`, `pcli_control_request()`, `pcli_scalar_num()`); `write_utf8(path, text, eol = "\n", bom = FALSE, final_newline = TRUE)`, `path_norm(path)`, `id_new()` (P01). P05's `process_jsonl` contract: `build()` returns `list(start = list(command, args, env_profile, env, wd) | NULL, send = list(...), close_stdin = lgl(1))`, and a non-`NULL` `start` replaces the session's child.
-- Produces: `pcli_claude_args(model_id, mcp_config, system_file, budget = NULL, optout = NULL, resume = NULL)` (the 04 §8.5 argv in its exact order, then `--max-turns`/`--max-budget-usd`, the opt-out, `--resume`); `pcli_claude_mcp_json()`; `pcli_claude_files(state, context, session)` (the two files under `file.path(tempdir(), "gptr", "cli")`, written once per session); `pcli_claude_content(input)` (Anthropic content blocks); `pcli_claude_user_line(content)`; `pcli_claude_budgeted(flags)` (does a child carry `--max-turns`/`--max-budget-usd`?); `pcli_claude_build(model, context, opts)` (04 §8.1 `build`). Adapter state fields: `cli_api` (`"cli-claude"`), `claude_model`, `claude_session` (set by Task 6), `claude_run` (the run that started the child), `claude_flags` (`list(turns, cost)` it was started with), `claude_cost_seen` (its last `total_cost_usd`, Task 6), `claude_mcp_file`, `claude_system_file`, `pcli_request_id`.
+- Consumes: Tasks 1-4 (`pcli_find()`, `pcli_probe()`, `pcli_notice()`, `pcli_state()`,
+  `pcli_track()`, `pcli_model_id()`, `pcli_params()`, `pcli_split()`, `pcli_unseen()`,
+  `pcli_history_text()`, `pcli_block_text()`, `pcli_system_text()`, `pcli_child()`, `pcli_alive()`,
+  `pcli_stop_child()`, `pcli_control_request()`, `pcli_scalar_num()`);
+  `write_utf8(path, text, eol = "\n", bom = FALSE, final_newline = TRUE)`, `path_norm(path)`,
+  `id_new()` (P01). P05's `process_jsonl` contract: `build()` returns
+  `list(start = list(command, args, env_profile, env, wd) | NULL, send = list(...), close_stdin = lgl(1))`,
+  and a non-`NULL` `start` replaces the session's child.
+- Produces:
+  `pcli_claude_args(model_id, mcp_config, system_file, budget = NULL, optout = NULL, resume = NULL)`
+  (the 04 section 8.5 argv in its exact order, then `--max-turns`/`--max-budget-usd`, the opt-out,
+  `--resume`); `pcli_claude_mcp_json()`; `pcli_claude_files(state, context, session)` (the two files
+  under `file.path(tempdir(), "gptr", "cli")`, written once per session);
+  `pcli_claude_content(input)` (Anthropic content blocks); `pcli_claude_user_line(content)`;
+  `pcli_claude_budgeted(flags)` (does a child carry `--max-turns`/`--max-budget-usd`?);
+  `pcli_claude_build(model, context, opts)` (04 section 8.1 `build`). Adapter state fields:
+  `cli_api` (`"cli-claude"`), `claude_model`, `claude_session` (set by Task 6), `claude_run` (the
+  run that started the child), `claude_flags` (`list(turns, cost)` it was started with),
+  `claude_cost_seen` (its last `total_cost_usd`, Task 6), `claude_mcp_file`, `claude_system_file`,
+  `pcli_request_id`.
 
-The argv is architecture §8.3 / 04 §8.5 verbatim. Report 07 §3.9's verified launch argv used `--session-id`; gptr instead learns the CLI's own session id from `system/init` (Task 6) and passes `--resume <id>` when a session's child is restarted (07 §2.16: "gptr must send the same system prompt file on resume", hence the files are written once per session). A fresh child without a CLI session gets the earlier conversation as a `<conversation_history>` text block (03 §8.3: another model may have answered it); a reused child or a resumed session gets only the turns after the last one its provider answered (`pcli_unseen()`). The first send of a new child is the `initialize` control request of 07 §3.10 (`{"subtype":"initialize","hooks":null}`), which makes the CLI connect the in-process `sdk` server through `mcp_message` before the first user line. The budget flags come from `context$params$cli_budget` (Task 8's `request_params` hook); without them no budget flag is passed.
+The argv is architecture section 8.3 / 04 section 8.5 verbatim. Report 07 section 3.9's verified
+launch argv used `--session-id`; gptr instead learns the CLI's own session id from `system/init`
+(Task 6) and passes `--resume <id>` when a session's child is restarted (07 section 2.16: "gptr must
+send the same system prompt file on resume", hence the files are written once per session). A fresh
+child without a CLI session gets the earlier conversation as a `<conversation_history>` text block
+(03 section 8.3: another model may have answered it); a reused child or a resumed session gets only
+the turns after the last one its provider answered (`pcli_unseen()`). The first send of a new child
+is the `initialize` control request of 07 section 3.10 (`{"subtype":"initialize","hooks":null}`),
+which makes the CLI connect the in-process `sdk` server through `mcp_message` before the first user
+line. The budget flags come from `context$params$cli_budget` (Task 8's `request_params` hook);
+without them no budget flag is passed.
 
-Child lifetime under a budget: `--max-turns` and `--max-budget-usd` are fixed when the long-lived child starts, the CLI's cost tracker covers the whole process (07 §3.14: `total_cost_usd` equals `modelUsage.costUSD`, which also counts the CLI's auxiliary calls), and IC-66 budgets restart with every top-level call. A child that carries budget flags therefore serves only the run that started it: a later run retires it (stdin closed, then `pcli_stop_child()`) and starts a new child with `--resume <CLI session>` and that run's remaining budget, so continuity and the frozen system-prompt file are kept. Without any budget flag (the user disabled the budget) the child is reused across runs, as 03 §8.3 describes. Task 9's `agent_end` hook retires a budgeted child as soon as its run ends, so no idle CLI process waits for a run that would replace it anyway.
+Child lifetime under a budget: `--max-turns` and `--max-budget-usd` are fixed when the long-lived
+child starts, the CLI's cost tracker covers the whole process (07 section 3.14: `total_cost_usd`
+equals `modelUsage.costUSD`, which also counts the CLI's auxiliary calls), and IC-66 budgets restart
+with every top-level call. A child that carries budget flags therefore serves only the run that
+started it: a later run retires it (stdin closed, then `pcli_stop_child()`) and starts a new child
+with `--resume <CLI session>` and that run's remaining budget, so continuity and the frozen
+system-prompt file are kept. Without any budget flag (the user disabled the budget) the child is
+reused across runs, as 03 section 8.3 describes. Task 9's `agent_end` hook retires a budgeted child
+as soon as its run ends, so no idle CLI process waits for a run that would replace it anyway.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2277,7 +2587,9 @@ test_that("a restarted child resumes the CLI session; a fresh one gets the histo
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-claude")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`; the five tests error with ``could not find function "pcli_claude_args"``, ``could not find function "pcli_claude_content"`` and ``could not find function "pcli_claude_build"``.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 0 ]`; the five tests error with
+``could not find function "pcli_claude_args"``, ``could not find function "pcli_claude_content"``
+and ``could not find function "pcli_claude_build"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2450,19 +2762,62 @@ git commit -m "feat(cli): cli-claude build with the exact argv of architecture 8
 
 **Files:**
 - Modify: `R/cli-claude.R` (append)
-- Create: `tests/testthat/fixtures/cli/claude-call2.ndjson`, `claude-apikey.ndjson`, `claude-hang.ndjson`
+- Create: `tests/testthat/fixtures/cli/claude-call2.ndjson`, `claude-apikey.ndjson`,
+  `claude-hang.ndjson`
 - Modify: `tests/testthat/fixtures/cli/local-fake-cli.R` (append)
 - Test: `tests/testthat/test-cli-claude.R` (append)
 
 **Interfaces:**
-- Consumes: `anthropic_normaliser(model, opts)` with `push_parsed(obj)` (P12, 04 §7.12); the injected `opts$send(obj)`, `opts$mcp_dispatch(message)` (P18's `mcp.dispatch_local` bound to the session, "the single gate for the claude route", IC-65), `opts$gate(call)` (the run's `perm_check()`), `opts$signal`, `opts$run`, `opts$emit` (04 §8.1, IC-33); `reactor_enqueue_tool(run, fn)` (P04); `redact(x, profile = "persist")` (P03); `usage_new(...)` (P05); `json_obj()` (P01); `mcp_rpc_err(id, code, message, data = NULL)` (P18, L0 `json-encode.R`); Tasks 3-4.
-- Produces: `pcli_claude_parse(model, opts)` -> `list(push, finish, fail, message)` (04 §8.1); private `pcli_control_ok(id, response)`, `pcli_control_err(id, error)`, `pcli_claude_ack(obj, state)`, `pcli_claude_mcp(req, id, s)`, `pcli_claude_permission(req, opts)`, `pcli_claude_control(obj, s)`, `pcli_claude_refuse(obj, s)`, `pcli_claude_forward(ev, s)`, `pcli_claude_stream(event, s)`, `pcli_claude_system(obj, s)`, `pcli_claude_cost(obj, state = NULL)`, `pcli_claude_usage(obj, state = NULL)`, `pcli_claude_stop(raw)`, `pcli_claude_error_class(obj)`, `pcli_claude_result(obj, s)`, `pcli_claude_timeout(s)`. Terminal error classes: `billing`, `max_turns`, `budget_cost`, `auth`, `rate_limit`, `overloaded`, `provider`, `timeout`, `aborted`. Test support: `local_normaliser(parse, model, opts, .env = parent.frame())`, `feed_fixture(n, name)`, `push_obj(n, obj)`.
+- Consumes: `anthropic_normaliser(model, opts)` with `push_parsed(obj)` (P12, 04 section 7.12); the
+  injected `opts$send(obj)`, `opts$mcp_dispatch(message)` (P18's `mcp.dispatch_local` bound to the
+  session, "the single gate for the claude route", IC-65), `opts$gate(call)` (the run's
+  `perm_check()`), `opts$signal`, `opts$run`, `opts$emit` (04 section 8.1, IC-33);
+  `reactor_enqueue_tool(run, fn)` (P04); `redact(x, profile = "persist")` (P03); `usage_new(...)`
+  (P05); `json_obj()` (P01); `mcp_rpc_err(id, code, message, data = NULL)` (P18, L0
+  `json-encode.R`); Tasks 3-4.
+- Produces: `pcli_claude_parse(model, opts)` -> `list(push, finish, fail, message)`
+  (04 section 8.1); private `pcli_control_ok(id, response)`, `pcli_control_err(id, error)`,
+  `pcli_claude_ack(obj, state)`, `pcli_claude_mcp(req, id, s)`, `pcli_claude_permission(req, opts)`,
+  `pcli_claude_control(obj, s)`, `pcli_claude_refuse(obj, s)`, `pcli_claude_forward(ev, s)`,
+  `pcli_claude_stream(event, s)`, `pcli_claude_system(obj, s)`,
+  `pcli_claude_cost(obj, state = NULL)`, `pcli_claude_usage(obj, state = NULL)`,
+  `pcli_claude_stop(raw)`, `pcli_claude_error_class(obj)`, `pcli_claude_result(obj, s)`,
+  `pcli_claude_timeout(s)`. Terminal error classes: `billing`, `max_turns`, `budget_cost`, `auth`,
+  `rate_limit`, `overloaded`, `provider`, `timeout`, `aborted`. Test support:
+  `local_normaliser(parse, model, opts, .env = parent.frame())`, `feed_fixture(n, name)`,
+  `push_obj(n, obj)`.
 
-The control protocol follows report 07 §3.10 and §5.7 (`cc_proto.R`, verified live with CLI 2.1.261; verification log item 18): `mcp_message` is answered with `{"mcp_response": <JSON-RPC response>}`, a JSON-RPC notification (no `id`) with the ack `{"jsonrpc":"2.0","result":{}}` (`query.py:670-673`), an unknown server with JSON-RPC error `-32601`, an unsupported subtype with an error response `Unsupported control request subtype: <subtype>`. `tools/call` runs from P04's tool FIFO of the run (`reactor_enqueue_tool(opts$run, ...)`), so it never overlaps another agent's R tool and a nested pump runs it only for the runs it waits for (IC-57); the handshake runs at once. `can_use_tool` for `mcp__gptr__*` is allowed without a gate call (they are pre-allowed by `--allowedTools`, so the gate runs once, in the `mcp_message` dispatch; IC-65); any other tool goes to `opts$gate(call)` with a 04 §4.4 call record. `stream_event` lines (07 §2.14; `parent_tool_use_id` non-null lines belong to the CLI's own sub-agents and are skipped) feed a fresh `anthropic_normaliser()` per API message (07 §5.8: "The CLI stream reuses the native accumulator", verified); its `start` and terminal events are absorbed and text/thinking blocks re-indexed into the one outer stream of the turn, while its tool-call events are dropped (the tools ran through `mcp_message`). `rate_limit_event` is nested under `rate_limit_info` (07 verification log item 25). The `result` line ends the turn (07 §2.14 subtypes; an API failure arrives as `subtype: "success"` with `is_error: true` and `api_error_status`); its `total_cost_usd` covers the CLI process (it equals `modelUsage.costUSD` in the 07 §3.14 capture, which also counts the CLI's auxiliary calls), so a turn's cost is the increase since the child's previous result (`pcli_claude_cost()`; a child without budget flags serves several runs); "No conversation found" clears the CLI session id so the next child starts fresh (07 §2.13). Error texts for a timeout contain "out of budget", which P06's retry rules treat as final. The fixture `claude-call2.ndjson` is the redacted live capture of 07 §3.14 (39 lines; only the R code the model wrote inside two JSON strings is spelled with `=`, conventions §4); `claude-apikey.ndjson` and `claude-hang.ndjson` are constructed in the same shapes.
+The control protocol follows report 07 section 3.10 and section 5.7 (`cc_proto.R`, verified live
+with CLI 2.1.261; verification log item 18): `mcp_message` is answered with
+`{"mcp_response": <JSON-RPC response>}`, a JSON-RPC notification (no `id`) with the ack
+`{"jsonrpc":"2.0","result":{}}` (`query.py:670-673`), an unknown server with JSON-RPC error
+`-32601`, an unsupported subtype with an error response
+`Unsupported control request subtype: <subtype>`. `tools/call` runs from P04's tool FIFO of the run
+(`reactor_enqueue_tool(opts$run, ...)`), so it never overlaps another agent's R tool and a nested
+pump runs it only for the runs it waits for (IC-57); the handshake runs at once. `can_use_tool` for
+`mcp__gptr__*` is allowed without a gate call (they are pre-allowed by `--allowedTools`, so the gate
+runs once, in the `mcp_message` dispatch; IC-65); any other tool goes to `opts$gate(call)` with a
+04 section 4.4 call record. `stream_event` lines (07 section 2.14; `parent_tool_use_id` non-null
+lines belong to the CLI's own sub-agents and are skipped) feed a fresh `anthropic_normaliser()` per
+API message (07 section 5.8: "The CLI stream reuses the native accumulator", verified); its `start`
+and terminal events are absorbed and text/thinking blocks re-indexed into the one outer stream of
+the turn, while its tool-call events are dropped (the tools ran through `mcp_message`).
+`rate_limit_event` is nested under `rate_limit_info` (07 verification log item 25). The `result`
+line ends the turn (07 section 2.14 subtypes; an API failure arrives as `subtype: "success"` with
+`is_error: true` and `api_error_status`); its `total_cost_usd` covers the CLI process (it equals
+`modelUsage.costUSD` in the 07 section 3.14 capture, which also counts the CLI's auxiliary calls),
+so a turn's cost is the increase since the child's previous result (`pcli_claude_cost()`; a child
+without budget flags serves several runs); "No conversation found" clears the CLI session id so the
+next child starts fresh (07 section 2.13). Error texts for a timeout contain "out of budget", which
+P06's retry rules treat as final. The fixture `claude-call2.ndjson` is the redacted live capture of
+07 section 3.14 (39 lines; only the R code the model wrote inside two JSON strings is spelled with
+`=`, conventions section 4); `claude-apikey.ndjson` and `claude-hang.ndjson` are constructed in the
+same shapes.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/testthat/fixtures/cli/claude-call2.ndjson` (the 07 §3.14 capture, one JSON object per line; keep each line on one line):
+Create `tests/testthat/fixtures/cli/claude-call2.ndjson` (the 07 section 3.14 capture, one JSON
+object per line; keep each line on one line):
 
 ```text
 {"type":"system","subtype":"init","cwd":"<cwd>","session_id":"<session_id>","tools":["mcp__gptr__r_eval","mcp__gptr__r_plot"],"mcp_servers":[{"name":"gptr","status":"connected"}],"model":"claude-haiku-4-5-20251001","permissionMode":"default","slash_commands":[],"apiKeySource":"none","claude_code_version":"2.1.261","output_style":"default","agents":["claude","Explore","general-purpose","Plan","statusline-setup"],"skills":[],"plugins":[],"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1","msg_lifecycle_v1"],"analytics_disabled":false,"product_feedback_disabled":false,"uuid":"<uuid>","memory_paths":{"auto":"<path>"},"messaging_socket_path":"<socket>","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required"}
@@ -2749,7 +3104,8 @@ test_that("the per-turn wall clock interrupts the CLI and ends the turn as out o
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-claude")'`
 
-Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 38 ]`; the eight new tests error with ``could not find function "pcli_claude_parse"`` or ``could not find function "pcli_claude_cost"``.
+Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 38 ]`; the eight new tests error with
+``could not find function "pcli_claude_parse"`` or ``could not find function "pcli_claude_cost"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3128,15 +3484,72 @@ git commit -m "feat(cli): cli-claude normaliser with the control protocol and bi
 
 **Files:**
 - Create: `R/cli-codex.R`
-- Create: `tests/testthat/fixtures/cli/codex-call1.jsonl`, `codex-text.jsonl`, `codex-mcp.jsonl`, `codex-many.jsonl`, `codex-hang.jsonl`
+- Create: `tests/testthat/fixtures/cli/codex-call1.jsonl`, `codex-text.jsonl`, `codex-mcp.jsonl`,
+  `codex-many.jsonl`, `codex-hang.jsonl`
 - Modify: `tests/testthat/fixtures/cli/local-fake-cli.R` (append)
 - Test: `tests/testthat/test-cli-codex.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 1-4; `ext_service_has(name)`, `ext_service_get(name)` (P01) for `mcp.serve_ensure` `function(session) <gptr_mcp_handle>` (P18; `session` is the `gptr_session` object, which P18's `mcp_serve_ensure()` checks with `check_class()`, as P19's `backend_cli_start()` passes it; handle fields `url`, `port`, `token_env`, `config`, `stop()`, 04 §5.11; P20 reads the token from `h$config$codex$env[[h$token_env]]`, the shape P18 produces); in tests `gptr_register(spec)`, `gptr_spec("service", name, fun = )` (P02; a user-rank `service` record replaces P18's built-in for one test, IC-34); `reactor_served(run, served = TRUE)` (P04); `hash_file(path)`, `project_root()`, `path_rel()`, `path_norm()`, `json_verbatim(text)`, `json_obj()`, `gptr_warn()` (P01); `usage_new(...)` (P05).
-- Produces: `pcli_codex_mcp_args(port)`, `pcli_codex_args(model_id, wd, sandbox, port = NULL, resume = NULL)` (the IC-65 argv and resume form), `pcli_codex_windows_ready(path)`, `pcli_codex_sandbox(mode, path)` (mapping and Windows fallback with `gptr_warning_cli_sandbox`), `pcli_codex_files_only(why)`, `pcli_codex_env(h)` -> `c(GPTR_MCP_TOKEN = <token>)` or `character()`, `pcli_codex_ensure(session)` (called by Task 8's `request_params` hook with the session object: `mcp.serve_ensure(session)`, then the URL, port and this session's token kept per session id in `pcli_cache$mcp`, or `list(error = <why>)`), `pcli_codex_forget(session)` (Task 9's `session_shutdown` hook), `pcli_codex_mcp(opts)` (the record of `opts$session`, else `NULL` with the files-only notice), `pcli_codex_prompt(context, fresh, provider = NULL)`, `pcli_control_paths(root)`, `pcli_control_hash(root = project_root())`, `pcli_control_changed(before, after)`, `pcli_codex_cap(par)`, `pcli_codex_build(model, context, opts)` (04 §8.1 `build`; `close_stdin = TRUE`), `pcli_codex_tool_kinds`, `pcli_num(x)`, `pcli_codex_usage(u)`, `pcli_codex_files(item)`, `pcli_codex_tool_name(item)`, `pcli_codex_tool(s, item, phase)`, `pcli_codex_after(s)` (changed control files, without signalling), `pcli_codex_warn(changed)`, `pcli_codex_error(s, class, text, reason = "error", kill = FALSE, usage = NULL)`, `pcli_codex_item(s, item)`, `pcli_codex_event(obj, s)`, `pcli_codex_timeout(s)`, `pcli_codex_parse(model, opts)` (04 §8.1 `parse`). Adapter state fields: `cli_api` (`"cli-codex"`), `codex_thread`, `codex_sandbox`, `codex_cap`, `codex_control`, `served_run`. Test support: `stub_mcp_handle(port = 54321L, token = "tok-test-0123456789")`, `local_mcp_stub(handle = stub_mcp_handle(), .env = parent.frame())`.
+- Consumes: Tasks 1-4; `ext_service_has(name)`, `ext_service_get(name)` (P01) for `mcp.serve_ensure`
+  `function(session) <gptr_mcp_handle>` (P18; `session` is the `gptr_session` object, which P18's
+  `mcp_serve_ensure()` checks with `check_class()`, as P19's `backend_cli_start()` passes it; handle
+  fields `url`, `port`, `token_env`, `config`, `stop()`, 04 section 5.11; P20 reads the token from
+  `h$config$codex$env[[h$token_env]]`, the shape P18 produces); in tests `gptr_register(spec)`,
+  `gptr_spec("service", name, fun = )` (P02; a user-rank `service` record replaces P18's built-in
+  for one test, IC-34); `reactor_served(run, served = TRUE)` (P04); `hash_file(path)`,
+  `project_root()`, `path_rel()`, `path_norm()`, `json_verbatim(text)`, `json_obj()`, `gptr_warn()`
+  (P01); `usage_new(...)` (P05).
+- Produces: `pcli_codex_mcp_args(port)`,
+  `pcli_codex_args(model_id, wd, sandbox, port = NULL, resume = NULL)` (the IC-65 argv and resume
+  form), `pcli_codex_windows_ready(path)`, `pcli_codex_sandbox(mode, path)` (mapping and Windows
+  fallback with `gptr_warning_cli_sandbox`), `pcli_codex_files_only(why)`, `pcli_codex_env(h)` ->
+  `c(GPTR_MCP_TOKEN = <token>)` or `character()`, `pcli_codex_ensure(session)` (called by Task 8's
+  `request_params` hook with the session object: `mcp.serve_ensure(session)`, then the URL, port and
+  this session's token kept per session id in `pcli_cache$mcp`, or `list(error = <why>)`),
+  `pcli_codex_forget(session)` (Task 9's `session_shutdown` hook), `pcli_codex_mcp(opts)` (the
+  record of `opts$session`, else `NULL` with the files-only notice),
+  `pcli_codex_prompt(context, fresh, provider = NULL)`, `pcli_control_paths(root)`,
+  `pcli_control_hash(root = project_root())`, `pcli_control_changed(before, after)`,
+  `pcli_codex_cap(par)`, `pcli_codex_build(model, context, opts)` (04 section 8.1 `build`;
+  `close_stdin = TRUE`), `pcli_codex_tool_kinds`, `pcli_num(x)`, `pcli_codex_usage(u)`,
+  `pcli_codex_files(item)`, `pcli_codex_tool_name(item)`, `pcli_codex_tool(s, item, phase)`,
+  `pcli_codex_after(s)` (changed control files, without signalling), `pcli_codex_warn(changed)`,
+  `pcli_codex_error(s, class, text, reason = "error", kill = FALSE, usage = NULL)`,
+  `pcli_codex_item(s, item)`, `pcli_codex_event(obj, s)`, `pcli_codex_timeout(s)`,
+  `pcli_codex_parse(model, opts)` (04 section 8.1 `parse`). Adapter state fields: `cli_api`
+  (`"cli-codex"`), `codex_thread`, `codex_sandbox`, `codex_cap`, `codex_control`, `served_run`. Test
+  support: `stub_mcp_handle(port = 54321L, token = "tok-test-0123456789")`,
+  `local_mcp_stub(handle = stub_mcp_handle(), .env = parent.frame())`.
 
-The exec driver follows report 08 §5.1 (verified) with its verification log: `--ignore-user-config` keeps the user's MCP servers and settings out while auth still comes from `CODEX_HOME` (item 14), `exec resume` rejects `-s` and `-C` (item 16), and the prompt goes on stdin through a writer that loops until every byte is written (item 54: `write_input()` truncated at 8 KB; P04's `write_all()` does this, and P05 closes stdin after it with `write_close()` for `close_stdin = TRUE`). The prompt is the send object `json_verbatim(<text>)`, which `json_encode()` writes unchanged. The event schema is 08 §3.9 (`codex-rs/exec/src/exec_events.rs`): `input_tokens` includes `cached_input_tokens` (OpenAI semantics), so the usage record keeps the uncached part as `input`. The informational `tool_execution_*` events of 04 §8.5 are emitted for tool items; codex tool items count against the run's turn cap (IC-65: "Codex has no turn cap flag"). A top-level `error` event is noted, not terminal: the verified driver of 08 §5.1 only records it and decides at `turn.failed` or the exit, and ending the turn there would leave a Codex that is still working unsupervised (its turn would no longer be open for Task 9's `agent_end` hook); `turn.failed` ends the turn, and an exit without `turn.completed` reports the last error. The server and token come from `mcp.serve_ensure`, which takes the `gptr_session` object (P18 checks its class), while an adapter holds only ids (04 §8.1 `opts$session`): builtin:cli's `request_params` hook (Task 8), which receives the session as `ctx$session`, calls `pcli_codex_ensure(ctx$session)` before every codex request and keeps the URL, port and this session's token (strings only, never the handle, whose `stop()` would keep the session alive) for `pcli_codex_mcp(opts)`. Without a token for the session (no httpuv/later/openssl, no P18 service, or a request that did not pass the hook) the MCP overrides are left out, because `required=true` would make Codex fail at startup, and a one-time notice says the route works on files only. Changed control files are reported with `gptr_warning_cli_sandbox` only after the terminal event (04 §8.1: normalisers signal nothing before their terminal event; a warning turned into an error by `options(warn = 2)` then cannot fail a completed exec). The Windows sandbox probe runs `codex sandbox windows cmd.exe /d /c exit 0` once per command (08 §6.2 names the setup requirement, not the probe command; see the self-review). `codex-call1.jsonl` is the redacted live capture of 08 §5.2; the other transcripts are constructed in the 08 §3.9 shapes (`$THREAD`, `$TOOL_TEXT` and `$PROMPT_BYTES` are filled in by the fake CLI).
+The exec driver follows report 08 section 5.1 (verified) with its verification log:
+`--ignore-user-config` keeps the user's MCP servers and settings out while auth still comes from
+`CODEX_HOME` (item 14), `exec resume` rejects `-s` and `-C` (item 16), and the prompt goes on stdin
+through a writer that loops until every byte is written (item 54: `write_input()` truncated at 8 KB;
+P04's `write_all()` does this, and P05 closes stdin after it with `write_close()` for
+`close_stdin = TRUE`). The prompt is the send object `json_verbatim(<text>)`, which `json_encode()`
+writes unchanged. The event schema is 08 section 3.9 (`codex-rs/exec/src/exec_events.rs`):
+`input_tokens` includes `cached_input_tokens` (OpenAI semantics), so the usage record keeps the
+uncached part as `input`. The informational `tool_execution_*` events of 04 section 8.5 are emitted
+for tool items; codex tool items count against the run's turn cap (IC-65: "Codex has no turn cap
+flag"). A top-level `error` event is noted, not terminal: the verified driver of 08 section 5.1 only
+records it and decides at `turn.failed` or the exit, and ending the turn there would leave a Codex
+that is still working unsupervised (its turn would no longer be open for Task 9's `agent_end` hook);
+`turn.failed` ends the turn, and an exit without `turn.completed` reports the last error. The server
+and token come from `mcp.serve_ensure`, which takes the `gptr_session` object (P18 checks its
+class), while an adapter holds only ids (04 section 8.1 `opts$session`): builtin:cli's
+`request_params` hook (Task 8), which receives the session as `ctx$session`, calls
+`pcli_codex_ensure(ctx$session)` before every codex request and keeps the URL, port and this
+session's token (strings only, never the handle, whose `stop()` would keep the session alive) for
+`pcli_codex_mcp(opts)`. Without a token for the session (no httpuv/later/openssl, no P18 service, or
+a request that did not pass the hook) the MCP overrides are left out, because `required=true` would
+make Codex fail at startup, and a one-time notice says the route works on files only. Changed
+control files are reported with `gptr_warning_cli_sandbox` only after the terminal event
+(04 section 8.1: normalisers signal nothing before their terminal event; a warning turned into an
+error by `options(warn = 2)` then cannot fail a completed exec). The Windows sandbox probe runs
+`codex sandbox windows cmd.exe /d /c exit 0` once per command (08 section 6.2 names the setup
+requirement, not the probe command; see the self-review). `codex-call1.jsonl` is the redacted live
+capture of 08 section 5.2; the other transcripts are constructed in the 08 section 3.9 shapes
+(`$THREAD`, `$TOOL_TEXT` and `$PROMPT_BYTES` are filled in by the fake CLI).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3472,7 +3885,11 @@ test_that("a workspace-write exec that changes control files is reported after i
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-codex")'`
 
-Expected: `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 0 ]`; the thirteen tests error with ``could not find function "pcli_codex_args"``, ``could not find function "pcli_codex_sandbox"``, ``could not find function "pcli_codex_prompt"``, ``could not find function "pcli_codex_ensure"``, ``Can't find binding for `pcli_codex_mcp` ``, ``could not find function "pcli_codex_parse"`` and ``could not find function "pcli_control_hash"``.
+Expected: `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 0 ]`; the thirteen tests error with
+``could not find function "pcli_codex_args"``, ``could not find function "pcli_codex_sandbox"``,
+``could not find function "pcli_codex_prompt"``, ``could not find function "pcli_codex_ensure"``,
+``Can't find binding for `pcli_codex_mcp` ``, ``could not find function "pcli_codex_parse"`` and
+``could not find function "pcli_control_hash"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3947,15 +4364,48 @@ git commit -m "feat(cli): cli-codex adapter with sandbox mapping, MCP overrides 
 
 **Files:**
 - Modify: `R/cli-common.R` (append)
-- Create: `tests/testthat/fixtures/cli/claude-text.ndjson`, `claude-tool.ndjson`, `claude-slow.ndjson`
+- Create: `tests/testthat/fixtures/cli/claude-text.ndjson`, `claude-tool.ndjson`,
+  `claude-slow.ndjson`
 - Modify: `tests/testthat/fixtures/cli/local-fake-cli.R` (append)
 - Test: `tests/testthat/test-cli-common.R` (append), `tests/testthat/test-cli-claude.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-7 (among them `pcli_codex_ensure(session)` and, in tests, `local_mcp_stub()`, `pcli_codex_mcp()`, `pcli_codex_forget()` of Task 7); `on_load(expr)` (P01), `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `gptr_provider(...)`, `gptr_adapter(...)`, the factory API `gptr$register(spec)` and `gptr$on(event, handler, matcher = NULL)` (P02); `setting_get(key, session = NULL, default = NULL)` (P01; the `budget` setting); the `request_params` patch chain and the `usage` event of P06 (04 §10.4: a `request_params` handler returns `list(params)` and may patch only the fields in the adapter's `capabilities$request_params`); `ctx$get(kind, name)`, `ctx$mode()`, `ctx$run`, `ctx$state()`, `ctx$session` (04 §10.6); in tests `peter()`, `gptr_wait()`, the session accessors (P06/P08), `local_scripted_ui()` (P11), `gptr_registry()`, `registry_get()` (P02), `proc_pool_cap(n)` (P04). The `mcp_message` round trip needs P18's `mcp.dispatch_local` (injected by P06 as `opts$mcp_dispatch`).
-- Produces: `builtin_cli(gptr)` (04 §7.20; here the `claude-cli` provider, the `cli-claude` adapter and two hooks; Tasks 9 and 10 complete it), `pcli_capabilities()`, `pcli_used(ctx)`, `pcli_hook_usage(event, ctx)`, `pcli_hook_params(event, ctx)` -> `list(params = list(cli_mode, cli_budget = list(turns, cost)))` for `cli-*` providers, else `NULL`; for a `cli-codex` provider it first calls Task 7's `pcli_codex_ensure(ctx$session)` (the session object `mcp.serve_ensure` needs). Test support: `local_cli_cleanup(s, .env = parent.frame())`, `wait_fake_log(fake, kind, n, runs, timeout = 20)`.
+- Consumes: Tasks 1-7 (among them `pcli_codex_ensure(session)` and, in tests, `local_mcp_stub()`,
+  `pcli_codex_mcp()`, `pcli_codex_forget()` of Task 7); `on_load(expr)` (P01),
+  `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`,
+  `gptr_provider(...)`, `gptr_adapter(...)`, the factory API `gptr$register(spec)` and
+  `gptr$on(event, handler, matcher = NULL)` (P02);
+  `setting_get(key, session = NULL, default = NULL)` (P01; the `budget` setting); the
+  `request_params` patch chain and the `usage` event of P06 (04 section 10.4: a `request_params`
+  handler returns `list(params)` and may patch only the fields in the adapter's
+  `capabilities$request_params`); `ctx$get(kind, name)`, `ctx$mode()`, `ctx$run`, `ctx$state()`,
+  `ctx$session` (04 section 10.6); in tests `peter()`, `gptr_wait()`, the session accessors
+  (P06/P08), `local_scripted_ui()` (P11), `gptr_registry()`, `registry_get()` (P02),
+  `proc_pool_cap(n)` (P04). The `mcp_message` round trip needs P18's `mcp.dispatch_local` (injected
+  by P06 as `opts$mcp_dispatch`).
+- Produces: `builtin_cli(gptr)` (04 section 7.20; here the `claude-cli` provider, the `cli-claude`
+  adapter and two hooks; Tasks 9 and 10 complete it), `pcli_capabilities()`, `pcli_used(ctx)`,
+  `pcli_hook_usage(event, ctx)`, `pcli_hook_params(event, ctx)` ->
+  `list(params = list(cli_mode, cli_budget = list(turns, cost)))` for `cli-*` providers, else
+  `NULL`; for a `cli-codex` provider it first calls Task 7's `pcli_codex_ensure(ctx$session)` (the
+  session object `mcp.serve_ensure` needs). Test support:
+  `local_cli_cleanup(s, .env = parent.frame())`, `wait_fake_log(fake, kind, n, runs, timeout = 20)`.
 
-An L1 adapter receives no mode and no budget in `opts` (04 §8.1; P06 passes `signal`, `state`, `memo`, `run`, `session`, `gate`, `tool_result`, `mcp_dispatch`), and IC-33 forbids it to call the session kernel. builtin:cli therefore declares the request parameters `cli_mode` and `cli_budget` in both adapters' `capabilities$request_params` and patches them in with a `request_params` hook: the mode is `ctx$mode()`, the remaining budget is the `budget` setting (default `{tokens: 2000000, cost: 5, turns: null}`, IC-66) minus the cost and request count of the current run, which a `usage` hook accumulates in the session's plugin state (`ctx$state()`, inside an environment so P06 never persists it as a `gptr.ext` entry). Under the default budget the claude argv therefore ends with `--max-budget-usd 5` (and no `--max-turns`, whose budget is `null`), and each top-level call starts its own claude child that resumes the CLI session (Task 5). P06's own budget check stays authoritative between requests. The same hook is where a codex request gets gptr's MCP server: `ctx$session` is the session object that P18's `mcp.serve_ensure` takes, so the hook calls `pcli_codex_ensure(ctx$session)` and the adapter, which holds only the session id, reads the result (Task 7). The end-to-end tests drive `peter()` with the fake CLI through P05's `process_jsonl` transport.
+An L1 adapter receives no mode and no budget in `opts` (04 section 8.1; P06 passes `signal`,
+`state`, `memo`, `run`, `session`, `gate`, `tool_result`, `mcp_dispatch`), and IC-33 forbids it to
+call the session kernel. builtin:cli therefore declares the request parameters `cli_mode` and
+`cli_budget` in both adapters' `capabilities$request_params` and patches them in with a
+`request_params` hook: the mode is `ctx$mode()`, the remaining budget is the `budget` setting
+(default `{tokens: 2000000, cost: 5, turns: null}`, IC-66) minus the cost and request count of the
+current run, which a `usage` hook accumulates in the session's plugin state (`ctx$state()`, inside
+an environment so P06 never persists it as a `gptr.ext` entry). Under the default budget the claude
+argv therefore ends with `--max-budget-usd 5` (and no `--max-turns`, whose budget is `null`), and
+each top-level call starts its own claude child that resumes the CLI session (Task 5). P06's own
+budget check stays authoritative between requests. The same hook is where a codex request gets
+gptr's MCP server: `ctx$session` is the session object that P18's `mcp.serve_ensure` takes, so the
+hook calls `pcli_codex_ensure(ctx$session)` and the adapter, which holds only the session id, reads
+the result (Task 7). The end-to-end tests drive `peter()` with the fake CLI through P05's
+`process_jsonl` transport.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3974,7 +4424,9 @@ Create `tests/testthat/fixtures/cli/claude-text.ndjson`:
 {"type":"result","subtype":"success","is_error":false,"result":"Hello from the fake claude CLI.","stop_reason":"end_turn","session_id":"11111111-1111-4111-8111-111111111111","num_turns":1,"total_cost_usd":0.0012,"usage":{"input_tokens":12,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":9,"cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0}},"terminal_reason":"completed","uuid":"u"}
 ```
 
-Create `tests/testthat/fixtures/cli/claude-tool.ndjson` (the CLI asks permission for a pre-allowed tool, as an older CLI that ignored `--allowedTools` would, then calls gptr's `r` tool over `mcp_message`):
+Create `tests/testthat/fixtures/cli/claude-tool.ndjson` (the CLI asks permission for a pre-allowed
+tool, as an older CLI that ignored `--allowedTools` would, then calls gptr's `r` tool over
+`mcp_message`):
 
 ```text
 {"type":"system","subtype":"init","cwd":"<cwd>","session_id":"11111111-1111-4111-8111-111111111111","tools":["mcp__gptr__r","mcp__gptr__read","mcp__gptr__edit","mcp__gptr__write"],"mcp_servers":[{"name":"gptr","status":"connected"}],"model":"claude-sonnet-5-5","permissionMode":"default","apiKeySource":"none","claude_code_version":"2.1.261","uuid":"u"}
@@ -4259,11 +4711,15 @@ test_that("three concurrent fake-CLI agents stream into one reactor (INFRA-19)",
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 142 ]`; the registration test records ten failed expectations (`registry_get("provider", "claude-cli")` and `registry_get("adapter", "cli-claude")` are `NULL`) and the two hook tests error with ``could not find function "pcli_hook_params"``.
+Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 142 ]`; the registration test records ten failed
+expectations (`registry_get("provider", "claude-cli")` and `registry_get("adapter", "cli-claude")`
+are `NULL`) and the two hook tests error with ``could not find function "pcli_hook_params"``.
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-claude")'`
 
-Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 106 ]`; every `peter()` call ends with ``No adapter is registered for the api cli-claude.`` (seven tests error; the INFRA-19 test, whose sessions are started by `gptr_wait()`, records three failed expectations and passes its time bound).
+Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 106 ]`; every `peter()` call ends with
+``No adapter is registered for the api cli-claude.`` (seven tests error; the INFRA-19 test, whose
+sessions are started by `gptr_wait()`, records three failed expectations and passes its time bound).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4377,10 +4833,29 @@ git commit -m "feat(cli): builtin:cli with the claude-cli route, mode and budget
 - Test: `tests/testthat/test-cli-common.R` (append), `tests/testthat/test-cli-claude.R` (append)
 
 **Interfaces:**
-- Consumes: the `agent_end` (`status`, `reason`, ...) and `session_shutdown` (`reason`) events (04 §10.4; P06 emits `agent_end` inside `run_settle()`, so it runs during `run_abort()` from Ctrl-C through P14's `console.interrupt_policy` and from `gptr_cancel()`); `ctx$session` and its `$id` accessor (04 §5.1); Task 4's `pcli_tracked()`, `pcli_untrack()`, `pcli_stop_child()`, Task 5's `pcli_claude_budgeted()`, Task 7's `pcli_codex_forget()`; in tests `gptr_wait(x, timeout = Inf)` and `gptr_cancel(x)` (P08), Task 8's `wait_fake_log()`.
-- Produces: `pcli_ctx_session(ctx)`, `pcli_hook_end(event, ctx)` (stops a child whose turn is still open: the claude interrupt control request, a wait of up to 2 s for its acknowledgement, then `kill_all()`; retires a claude child that carries budget flags once its run has ended, Task 5), `pcli_hook_shutdown(event, ctx)` (stops the child without waiting, removes the session's claude files and forgets its MCP record, `pcli_codex_forget()`); `builtin_cli()` gains `gptr$on("agent_end", pcli_hook_end)` and `gptr$on("session_shutdown", pcli_hook_shutdown)`.
+- Consumes: the `agent_end` (`status`, `reason`, ...) and `session_shutdown` (`reason`) events
+  (04 section 10.4; P06 emits `agent_end` inside `run_settle()`, so it runs during `run_abort()`
+  from Ctrl-C through P14's `console.interrupt_policy` and from `gptr_cancel()`); `ctx$session` and
+  its `$id` accessor (04 section 5.1); Task 4's `pcli_tracked()`, `pcli_untrack()`,
+  `pcli_stop_child()`, Task 5's `pcli_claude_budgeted()`, Task 7's `pcli_codex_forget()`; in tests
+  `gptr_wait(x, timeout = Inf)` and `gptr_cancel(x)` (P08), Task 8's `wait_fake_log()`.
+- Produces: `pcli_ctx_session(ctx)`, `pcli_hook_end(event, ctx)` (stops a child whose turn is still
+  open: the claude interrupt control request, a wait of up to 2 s for its acknowledgement, then
+  `kill_all()`; retires a claude child that carries budget flags once its run has ended, Task 5),
+  `pcli_hook_shutdown(event, ctx)` (stops the child without waiting, removes the session's claude
+  files and forgets its MCP record, `pcli_codex_forget()`); `builtin_cli()` gains
+  `gptr$on("agent_end", pcli_hook_end)` and `gptr$on("session_shutdown", pcli_hook_shutdown)`.
 
-Why a hook: P06's `run_abort()` cancels the run's transfers, which include P05's stream-watch task, so P05's own abort path (`kill_all()` without the protocol interrupt) never runs for an aborted run, and a claude child would keep working on the turn. 03 §8.3 and 04 §8.5 ask for "a `control_request` interrupt, then `kill_all()`"; 15 §2.9 for "SIGINT first ... then `kill_tree()` after a grace period"; `kill_all()` (P04) sends the interrupt signal, waits and kills the tree. A child whose turn ended without budget flags is left alive for the next turn (one claude child per session, 03 §8.3) and is stopped at `session_shutdown`; a child with budget flags would only be replaced by the next run (Task 5), so `agent_end` retires it at once. The e2e tests wait for the fake's own log rows (`wait_fake_log()`), never on a wall-clock limit under 5 s (conventions §7).
+Why a hook: P06's `run_abort()` cancels the run's transfers, which include P05's stream-watch task,
+so P05's own abort path (`kill_all()` without the protocol interrupt) never runs for an aborted run,
+and a claude child would keep working on the turn. 03 section 8.3 and 04 section 8.5 ask for "a
+`control_request` interrupt, then `kill_all()`"; 15 section 2.9 for "SIGINT first ... then
+`kill_tree()` after a grace period"; `kill_all()` (P04) sends the interrupt signal, waits and kills
+the tree. A child whose turn ended without budget flags is left alive for the next turn (one claude
+child per session, 03 section 8.3) and is stopped at `session_shutdown`; a child with budget flags
+would only be replaced by the next run (Task 5), so `agent_end` retires it at once. The e2e tests
+wait for the fake's own log rows (`wait_fake_log()`), never on a wall-clock limit under 5 s
+(conventions section 7).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4472,11 +4947,14 @@ test_that("an abort of three running CLI agents leaves no process tree (INFRA-19
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 162 ]`; ``could not find function "pcli_hook_end"`` and `c("agent_end", "session_shutdown") %in% cli_hook_events()` is not all `TRUE`.
+Expected: `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 162 ]`; ``could not find function "pcli_hook_end"`` and
+`c("agent_end", "session_shutdown") %in% cli_hook_events()` is not all `TRUE`.
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-claude")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 145 ]`; after `gptr_cancel()` the fake logged no `interrupt` (`fake_log(f, "interrupt")` has length 0), its processes are still alive after 10 s and `pcli_tracked(s$id)$process` is not `NULL`.
+Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 145 ]`; after `gptr_cancel()` the fake logged no
+`interrupt` (`fake_log(f, "interrupt")` has length 0), its processes are still alive after 10 s and
+`pcli_tracked(s$id)$process` is not `NULL`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4525,7 +5003,8 @@ pcli_hook_shutdown = function(event, ctx) {
 }
 ```
 
-In `R/cli-common.R`, replace the whole definition of `builtin_cli()` (its roxygen block and function; the `on_load()` line after it stays) with:
+In `R/cli-common.R`, replace the whole definition of `builtin_cli()` (its roxygen block and
+function; the `on_load()` line after it stays) with:
 
 ```r
 #' builtin:cli: the subscription-plan routes (`claude-cli`, alias claude_code, experimental;
@@ -4574,10 +5053,25 @@ git commit -m "feat(cli): interrupt then kill a CLI child whose run ends mid-tur
 - Test: `tests/testthat/test-cli-common.R` (append), `tests/testthat/test-cli-codex.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 3, 7 and 8; `gptr_providers(check = FALSE)` (P05); in tests Task 7's `local_mcp_stub()` (a user-rank `service` record replaces P18's built-in `mcp.serve_ensure`, IC-34, so neither the request hook nor P19's `backend_cli_start()` starts a real server), `gptr_mcp_serve(stop = TRUE)` (P18), `subagent_backend(agent, model)`, `gptr_agent(...)` and teams through `peter(agents = list(...))` (P19), `gptr_fake_provider(script, name = "fake", type = "chat")` with the `delay` modifier (P01, 04 §12.1), `model_resolve()` (P05), `path_norm()` (P01).
-- Produces: the complete `builtin_cli(gptr)` of 04 §7.20 (providers `claude-cli` and `codex`, adapters `cli-claude` and `cli-codex`, four hooks). Test support: `skip_without_installed_gptr()`.
+- Consumes: Tasks 3, 7 and 8; `gptr_providers(check = FALSE)` (P05); in tests Task 7's
+  `local_mcp_stub()` (a user-rank `service` record replaces P18's built-in `mcp.serve_ensure`,
+  IC-34, so neither the request hook nor P19's `backend_cli_start()` starts a real server),
+  `gptr_mcp_serve(stop = TRUE)` (P18), `subagent_backend(agent, model)`, `gptr_agent(...)` and teams
+  through `peter(agents = list(...))` (P19),
+  `gptr_fake_provider(script, name = "fake", type = "chat")` with the `delay` modifier (P01,
+  04 section 12.1), `model_resolve()` (P05), `path_norm()` (P01).
+- Produces: the complete `builtin_cli(gptr)` of 04 section 7.20 (providers `claude-cli` and `codex`,
+  adapters `cli-claude` and `cli-codex`, four hooks). Test support: `skip_without_installed_gptr()`.
 
-The `cli` backend is P19's code; its tests are P20's (IC-36): the `auto` rule ("inline, except `cli` for CLI-only models", 03 §6.13) and a team in which a fake codex agent joins two inline agents and two workers on one reactor (INFRA-16, 03 §6.18 row 16: "the CLI leg (a fake CLI joining them) in `test-cli-codex.R` (P20)"). Each of the five agents takes about 3 s, so a sequential run takes at least 15 s; the test asks for under 13 s. Worker children load the installed gptr through callr, so that test runs under `R CMD check` (which installs the package) and skips under `devtools::test()` unless the version under test is installed; conventions §1 forbid installing from a plan step. The MCP round trip uses P18's real server (httpuv, later and openssl are Suggests; the test skips without them).
+The `cli` backend is P19's code; its tests are P20's (IC-36): the `auto` rule ("inline, except `cli`
+for CLI-only models", 03 section 6.13) and a team in which a fake codex agent joins two inline
+agents and two workers on one reactor (INFRA-16, 03 section 6.18 row 16: "the CLI leg (a fake CLI
+joining them) in `test-cli-codex.R` (P20)"). Each of the five agents takes about 3 s, so a
+sequential run takes at least 15 s; the test asks for under 13 s. Worker children load the installed
+gptr through callr, so that test runs under `R CMD check` (which installs the package) and skips
+under `devtools::test()` unless the version under test is installed; conventions section 1 forbids
+installing from a plan step. The MCP round trip uses P18's real server (httpuv, later and openssl
+are Suggests; the test skips without them).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4759,15 +5253,20 @@ no token. The current body is in `tests/testthat/test-cli-codex.R`.)
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 174 ]`; `registry_get("provider", "codex")` is `NULL` and `gptr_providers()` has no `codex` row.
+Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 174 ]`; `registry_get("provider", "codex")` is `NULL`
+and `gptr_providers()` has no `codex` row.
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-codex")'`
 
-Expected (the current gptr not installed): `[ FAIL 3 | WARN 0 | SKIP 1 | PASS 72 ]`; the `peter()` calls end with ``No adapter is registered for the api cli-codex.``; the auto-rule test already passes (the fake provider has `type = "cli"` since Task 3); the INFRA-16 test is skipped with "worker children need this version of gptr installed".
+Expected (the current gptr not installed): `[ FAIL 3 | WARN 0 | SKIP 1 | PASS 72 ]`; the `peter()`
+calls end with ``No adapter is registered for the api cli-codex.``; the auto-rule test already
+passes (the fake provider has `type = "cli"` since Task 3); the INFRA-16 test is skipped with
+"worker children need this version of gptr installed".
 
 - [ ] **Step 3: Write the implementation**
 
-In `R/cli-common.R`, replace the whole definition of `builtin_cli()` (its roxygen block and function; the `on_load()` line after it stays) with:
+In `R/cli-common.R`, replace the whole definition of `builtin_cli()` (its roxygen block and
+function; the `on_load()` line after it stays) with:
 
 ```r
 #' builtin:cli: the subscription-plan routes (`claude-cli`, alias claude_code, experimental;
@@ -4802,7 +5301,9 @@ Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 184 ]`
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-codex")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 93 ]` (the INFRA-16 test skips unless the version under test is installed; with it installed `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 99 ]`; without httpuv, later or openssl the MCP round trip skips too: `SKIP 2 | PASS 90`).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 93 ]` (the INFRA-16 test skips unless the version under
+test is installed; with it installed `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 99 ]`; without httpuv, later
+or openssl the MCP round trip skips too: `SKIP 2 | PASS 90`).
 
 - [ ] **Step 5: Commit**
 
@@ -4819,10 +5320,26 @@ git commit -m "feat(cli): codex route end to end and the CLI leg of INFRA-16"
 - Test: `tests/testthat/test-live-cli.R` (create)
 
 **Interfaces:**
-- Consumes: everything above; `pcli_find()`, `pcli_hook_shutdown()`; `peter()`, `gptr_mcp_serve(stop = TRUE)` (P08, P18); the real `claude` and `codex` CLIs, signed in by the user.
-- Produces: `test-live-cli.R` (03 §3.4: "gated; real `claude`/`codex`"); each test makes one small model call through the user's own plan.
+- Consumes: everything above; `pcli_find()`, `pcli_hook_shutdown()`; `peter()`,
+  `gptr_mcp_serve(stop = TRUE)` (P08, P18); the real `claude` and `codex` CLIs, signed in by the
+  user.
+- Produces: `test-live-cli.R` (03 section 3.4: "gated; real `claude`/`codex`"); each test makes one
+  small model call through the user's own plan.
 
-05 P20 acceptance 3: "the gated live test runs Codex in a non-git temporary directory and requires a call of the gptr `r` tool"; IC-65: "Live tests (`GPTR_LIVE_TESTS=true`) run Codex in a non-git temporary directory and require it to call the gptr MCP `r` tool". `tests/testthat/setup.R` (P01) moves `HOME` and `USERPROFILE` to a temporary directory for every test, where neither CLI finds its sign-in, so the live tests also need `GPTR_LIVE_HOME` (the real home directory) and point `HOME`/`USERPROFILE` back at it for the duration of each test; they never read a credential file themselves. `setup.R` also sets `GPTR_REPLAY=replay`, under which P08's `replay_guard()` refuses every provider that is not `offline = TRUE` (`gptr_error_not_recorded`), and runs non-interactively, where P08's `egress_check()` stops a provider without a recorded acknowledgement (`gptr_error_egress`): the helper sets `GPTR_REPLAY=live` for the test, and the calls pass `.opts = list(context = "none")` (P08's documented egress exemption; the prompts are self-contained). The helper also unsets the billing variables, so a developer's own API keys (setup.R keeps them when `GPTR_LIVE_TESTS=true`) neither reach the CLIs nor add a `billing_env` warning.
+05 P20 acceptance 3: "the gated live test runs Codex in a non-git temporary directory and requires a
+call of the gptr `r` tool"; IC-65: "Live tests (`GPTR_LIVE_TESTS=true`) run Codex in a non-git
+temporary directory and require it to call the gptr MCP `r` tool". `tests/testthat/setup.R` (P01)
+moves `HOME` and `USERPROFILE` to a temporary directory for every test, where neither CLI finds its
+sign-in, so the live tests also need `GPTR_LIVE_HOME` (the real home directory) and point
+`HOME`/`USERPROFILE` back at it for the duration of each test; they never read a credential file
+themselves. `setup.R` also sets `GPTR_REPLAY=replay`, under which P08's `replay_guard()` refuses
+every provider that is not `offline = TRUE` (`gptr_error_not_recorded`), and runs non-interactively,
+where P08's `egress_check()` stops a provider without a recorded acknowledgement
+(`gptr_error_egress`): the helper sets `GPTR_REPLAY=live` for the test, and the calls pass
+`.opts = list(context = "none")` (P08's documented egress exemption; the prompts are
+self-contained). The helper also unsets the billing variables, so a developer's own API keys
+(setup.R keeps them when `GPTR_LIVE_TESTS=true`) neither reach the CLIs nor add a `billing_env`
+warning.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4900,11 +5417,13 @@ test_that("Codex in a non-git temporary directory calls the gptr r tool", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "live-cli")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 0 ]` ("GPTR_LIVE_TESTS is not true"). No package code is missing: the live test exercises Tasks 1-10 against the real CLIs.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 0 ]` ("GPTR_LIVE_TESTS is not true"). No package code
+is missing: the live test exercises Tasks 1-10 against the real CLIs.
 
 - [ ] **Step 3: Write the implementation**
 
-No package code changes in this task. When the maintainer chooses to spend plan quota (optional; never in CI), run with both CLIs installed and signed in:
+No package code changes in this task. When the maintainer chooses to spend plan quota (optional;
+never in CI), run with both CLIs installed and signed in:
 
 ```bash
 GPTR_LIVE_TESTS=true GPTR_LIVE_HOME="$HOME" Rscript --vanilla -e 'devtools::test(filter = "live-cli")'
@@ -4914,7 +5433,8 @@ GPTR_LIVE_TESTS=true GPTR_LIVE_HOME="$HOME" Rscript --vanilla -e 'devtools::test
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "live-cli")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 0 ]`. With the live command of Step 3: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 7 ]` (a missing or signed-out CLI skips its test instead).
+Expected: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 0 ]`. With the live command of Step 3:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 7 ]` (a missing or signed-out CLI skips its test instead).
 
 - [ ] **Step 5: Commit**
 
@@ -4927,9 +5447,14 @@ git commit -m "test(cli): gated live tests of the claude and codex plan routes"
 
 ## Plan acceptance
 
-Run from the repository root after Task 11, with P01-P19 in place. Every check of 05 P20 (acceptance 1-3 and the review amendments) maps to the tasks and tests below; acceptance 4 (the M4 exit) is row 4, proven by the Milestone gate after this section (steps 1-4 at the end of this plan, step 5 in P21). Rows 3a, 3b and R11 cite Task 7 and 8 codex tests by this plan's titles: P26 renamed those of 3a and 3b (IC-79, IC-78) and retired R11's with the MCP token (IC-79); the current tests are in `tests/testthat/test-cli-codex.R`.
+Run from the repository root after Task 11, with P01-P19 in place. Every check of 05 P20 (acceptance
+1-3 and the review amendments) maps to the tasks and tests below; acceptance 4 (the M4 exit) is row
+4, proven by the Milestone gate after this section (steps 1-4 at the end of this plan, step 5 in
+P21). Rows 3a, 3b and R11 cite Tasks 7 and 8 codex tests by this plan's titles: P26 renamed those of
+3a and 3b (IC-79, IC-78) and retired R11's with the MCP token (IC-79); the current tests are in
+`tests/testthat/test-cli-codex.R`.
 
-| # | Check (05 P20) | Proven by | Command and expected result |
+| # | Check (05 P20) | Proved by | Command and expected result |
 |---|---|---|---|
 | 1 | "`devtools::test(filter = "cli-")` is green; the live test skips unless `GPTR_LIVE_TESTS=true`" | Tasks 1-10 (`test-cli-common.R`, `test-cli-claude.R`, `test-cli-codex.R`); Task 11 (`test-live-cli.R`) | `Rscript --vanilla -e 'devtools::test(filter = "cli-")'` -> `[ FAIL 0 \| WARN 0 \| SKIP 1 \| PASS 427 ]` (184 + 150 + 93; the INFRA-16 leg skips unless the version under test is installed, else `SKIP 0 \| PASS 433`; without httpuv, later or openssl the codex MCP round trip skips too: `SKIP 2 \| PASS 424`); `Rscript --vanilla -e 'devtools::test(filter = "live-cli")'` -> `[ FAIL 0 \| WARN 0 \| SKIP 2 \| PASS 0 ]` |
 | 2a | "the claude argv equals §8.3 exactly" | Task 5 "the claude argv equals architecture 8.3 exactly, plus budget, opt-out, resume", "build() starts a child once, then reuses it for the next turn", "a budgeted child serves one run; an unbudgeted child lives across runs"; Task 8 "the claude argv of a peter() call equals architecture 8.3" | `devtools::test(filter = "cli-claude")` green |
@@ -4963,15 +5488,29 @@ Run from the repository root after Task 11, with P01-P19 in place. Every check o
 
 ## Milestone gate (M4 exit, 05 P20 acceptance 4)
 
-05 P20 acceptance 4 is the M4 exit ("once P18-P21 are complete"; P21 is outside this plan's dependency chain). Steps 1-4 run at the end of this plan (they need P18-P20 only; P21's later-dependent tests skip or are absent). Step 5, the R CMD check, is P21's Plan acceptance command 5, run once P18-P21 are complete. Run every command from the repository root `/Users/wanjun/Desktop/gptr`:
+05 P20 acceptance 4 is the M4 exit ("once P18-P21 are complete"; P21 is outside this plan's
+dependency chain). Steps 1-4 run at the end of this plan (they need P18-P20 only; P21's
+later-dependent tests skip or are absent). Step 5, the R CMD check, is P21's Plan acceptance command
+5, run once P18-P21 are complete. Run every command from the repository root
+`/Users/wanjun/Desktop/gptr`:
 
-1. The whole suite: `Rscript --vanilla -e 'devtools::test()'` -> `[ FAIL 0 | WARN 0 | SKIP n | PASS m ]` with only the documented skips (live tests, Suggests-dependent tests, worker tests when the version under test is not installed, P21's later-dependent tests once P21 is in place; at the end of this plan P21's tests are absent).
-2. NS-6 ("two inline fakes, one worker and fake codex on one reactor"): P19's team tests and this plan's Task 10 INFRA-16 leg pass under step 5 (P21's check: R CMD check installs the package, so the worker leg runs there); within step 1 the INFRA-16 leg skips unless the version under test is installed.
-3. NS-9 (`gptr_config(model = sonnet, mode = manual)` writing project defaults after `gptr_init()`, P08's tests) and `gptr_providers(check = TRUE)` with the fake CLIs:
+1. The whole suite: `Rscript --vanilla -e 'devtools::test()'` ->
+   `[ FAIL 0 | WARN 0 | SKIP n | PASS m ]` with only the documented skips (live tests,
+   Suggests-dependent tests, worker tests when the version under test is not installed, P21's
+   later-dependent tests once P21 is in place; at the end of this plan P21's tests are absent).
+2. NS-6 ("two inline fakes, one worker and fake codex on one reactor"): P19's team tests and this
+   plan's Task 10 INFRA-16 leg pass under step 5 (P21's check: R CMD check installs the package, so
+   the worker leg runs there); within step 1 the INFRA-16 leg skips unless the version under test is
+   installed.
+3. NS-9 (`gptr_config(model = sonnet, mode = manual)` writing project defaults after `gptr_init()`,
+   P08's tests) and `gptr_providers(check = TRUE)` with the fake CLIs:
    `Rscript --vanilla -e 'pkgload::load_all(".", quiet = TRUE); fix = normalizePath("tests/testthat/fixtures/cli"); options(gptr.cli_path = list(claude = pcli_fake_command("claude", "text", fix, tempfile()), codex = pcli_fake_command("codex", "text", fix, tempfile()))); p = gptr_providers(check = TRUE); print(p[p$type == "cli", c("id", "status", "version")])'`
    -> rows `claude-cli ready 2.1.261` and `codex ready 0.157.0`.
 4. NS-10 MCP: P18's acceptance tests green within step 1.
-5. P21's Plan acceptance command 5, run once P18-P21 are complete (not at the end of this plan): `Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'` -> 0 errors, 0 warnings, no NOTE apart from the incoming-feasibility NOTE naming the maintainer, on the CI matrix of P01.
+5. P21's Plan acceptance command 5, run once P18-P21 are complete (not at the end of this plan):
+   `Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'`
+   -> 0 errors, 0 warnings, no NOTE apart from the incoming-feasibility NOTE naming the maintainer,
+   on the CI matrix of P01.
 
 ---
 
@@ -5009,82 +5548,226 @@ Every acceptance check and review amendment is mapped in "Plan acceptance" above
 
 ### Placeholder scan
 
-The plan contains no "TBD", "TODO", "implement later", "similar to Task N" or step without code. The strings `$TOOL_TEXT`, `$THREAD` and `$PROMPT_BYTES` in fixtures are substitution tokens of the fake CLI (documented at the top of `fake_cli.R`); `<session_id>`, `<signature>`, `<uuid>`, `<UUID>` and similar are the redaction markers of the reports' live captures (07 §3.14, 08 §5.2), kept as captured.
+The plan contains no "TBD", "TODO", "implement later", "similar to Task N" or step without code. The
+strings `$TOOL_TEXT`, `$THREAD` and `$PROMPT_BYTES` in fixtures are substitution tokens of the fake
+CLI (documented at the top of `fake_cli.R`); `<session_id>`, `<signature>`, `<uuid>`, `<UUID>` and
+similar are the redaction markers of the reports' live captures (07 section 3.14, 08 section 5.2),
+kept as captured.
 
 ### Type and name consistency with 04
 
-- `builtin_cli(gptr)` and `pcli_find(cli = c("claude", "codex"))`, `pcli_version(path)`, `pcli_probe(path)` have the 04 §7.20 signatures of `builtin_cli()`, `cli_find()`, `cli_version()`, `cli_probe()` (without aliases, D-144); providers `claude-cli` (alias `claude_code`, `type = "cli"`) and `codex` (alias `codex`), adapters `cli-claude` and `cli-codex` with `transport = "process_jsonl"` and `build`/`parse` of 04 §8.1.
-- Conditions: `gptr_error_cli_missing` (`cli`), `gptr_error_cli_version` (`cli`, `found`, `required`), `billing` as the class of the terminal error event (P06 turns it into `gptr_error_billing`/`gptr_error_provider`), `gptr_warning_billing_env` (raised by P03's `child_env()`), `gptr_message_notice`; plus the P20 addition `gptr_warning_cli_sandbox` (Global Constraints, ambiguity 4).
-- Options `gptr.cli_path`, `gptr.cli_turn_timeout` read through `gptr_opt()`; events and payloads of 04 §10.4; `ctx` members of 04 §10.6; adapter `opts` fields of 04 §8.1; message, usage and event shapes of 04 §4.2-4.5 (`route = "plan-cli"`).
-- Every function consumed from P01-P05 and P12 was taken from those plans' code (and executed, see below). P18 and P19 were checked against their plan files in the review of 2026-10-01: P18's `mcp_serve_ensure(session)` requires the `gptr_session` object (`check_class()`) and returns the handle whose `config$codex$env[[token_env]]` holds the token (P18 ambiguity 19); P19's `backend_cli_start()` passes the child session object to the same service and `subagent_backend(agent, model)` reads `model$type`; P06 passes `opts$session = <session id>` and `opts$mcp_dispatch = function(message)` bound to the session; P16 walks the files checkpointer at `turn_end` of `type = "cli"` sessions (P16 ambiguity 9); P08's `replay_guard()`/`egress_check()` govern the live tests.
+- `builtin_cli(gptr)` and `pcli_find(cli = c("claude", "codex"))`, `pcli_version(path)`,
+  `pcli_probe(path)` have the 04 section 7.20 signatures of `builtin_cli()`, `cli_find()`,
+  `cli_version()`, `cli_probe()` (without aliases, D-144); providers `claude-cli` (alias
+  `claude_code`, `type = "cli"`) and `codex` (alias `codex`), adapters `cli-claude` and `cli-codex`
+  with `transport = "process_jsonl"` and `build`/`parse` of 04 section 8.1.
+- Conditions: `gptr_error_cli_missing` (`cli`), `gptr_error_cli_version` (`cli`, `found`,
+  `required`), `billing` as the class of the terminal error event (P06 turns it into
+  `gptr_error_billing`/`gptr_error_provider`), `gptr_warning_billing_env` (raised by P03's
+  `child_env()`), `gptr_message_notice`; plus the P20 addition `gptr_warning_cli_sandbox` (Global
+  Constraints, ambiguity 4).
+- Options `gptr.cli_path`, `gptr.cli_turn_timeout` read through `gptr_opt()`; events and payloads of
+  04 section 10.4; `ctx` members of 04 section 10.6; adapter `opts` fields of 04 section 8.1;
+  message, usage and event shapes of 04 section 4.2-4.5 (`route = "plan-cli"`).
+- Every function consumed from P01-P05 and P12 was taken from those plans' code (and executed, see
+  below). P18 and P19 were checked against their plan files in the review of 2026-10-01: P18's
+  `mcp_serve_ensure(session)` requires the `gptr_session` object (`check_class()`) and returns the
+  handle whose `config$codex$env[[token_env]]` holds the token (P18 ambiguity 19); P19's
+  `backend_cli_start()` passes the child session object to the same service and
+  `subagent_backend(agent, model)` reads `model$type`; P06 passes `opts$session = <session id>` and
+  `opts$mcp_dispatch = function(message)` bound to the session; P16 walks the files checkpointer at
+  `turn_end` of `type = "cli"` sessions (P16 ambiguity 9); P08's `replay_guard()`/`egress_check()`
+  govern the live tests.
 
 ### Contract ambiguities and decisions
 
-1. `mcp.serve_ensure(session)` (04 §7.0) takes the session object: P18's `mcp_serve_ensure()` checks `check_class(session, "gptr_session")` and P19 passes the child session, while an L1 adapter holds only the session id (04 §8.1 `opts$session`; P06 passes `d$id`) and IC-33 keeps it away from the kernel's session lookup. The earlier draft passed the id, so every real Codex exec would have run on files only. builtin:cli's `request_params` hook, which receives the session as `ctx$session`, now calls the service (`pcli_codex_ensure()`) before every codex request and keeps the URL, port and token (strings, never the handle, whose `stop()` closure would keep the session alive) per session id for the adapter; `session_shutdown` forgets them. `mcp.dispatch_local(message, session)` arrives bound to the session as P06's `opts$mcp_dispatch(message)`. The token is read from `h$config$codex$env[[h$token_env]]`, the shape P18 produces (its ambiguity 19).
-2. The run's mode (codex sandbox) and remaining budget (claude `--max-turns`/`--max-budget-usd`, codex turn cap) are not in the adapter `opts` of 04 §8.1, and IC-33 forbids L1 code to call the kernel. They reach the adapters as request parameters `cli_mode`/`cli_budget`, declared in `capabilities$request_params` (IC-69) and patched in by a `request_params` hook of `builtin:cli`. The remaining budget is the `budget` setting minus the current run's own usage rows (counted by a `usage` hook); a call's `budget =` argument and the root-level charges of IC-66 are not visible there, so the CLI caps are an extra limit and P06's `budget_check()` stays authoritative between requests. The claude caps are fixed when the child starts, so a child with budget flags serves only the run that started it (decision 19).
-3. Ctrl-C: P06's `run_abort()` cancels P05's stream watch, so P05's abort (a kill without the protocol interrupt, P05 ambiguity 11) never runs for an aborted run. The interrupt is sent from `builtin:cli`'s `agent_end` hook (which runs inside `run_settle()`), through a weak table of adapter states keyed by session id (a process table like P04's job table, 03 §2.2 rule 5). 05's "a Ctrl-C sends the interrupt control request then `kill_all()`" is tested through `gptr_cancel()`, which follows the same `run_abort()` -> `agent_end` path as P14's interrupt policy.
-4. 04 §2.2 lists no warning class for "falls back to `read-only` with a warning" (IC-65, 04 §8.5) or for changed control files; P20 uses `gptr_warning_cli_sandbox` for both (once per process for the Windows fallback, `.once = "cli_sandbox_windows"`) and records it in Global Constraints as a P20 addition to 04 §2.2's warnings, so that the condition reference assembled by P25 lists it.
-5. `gptr_error_billing` has the field `source` in 04 §2.2, but P06's `run_condition()` copies only fixed fields from the error event (04 §4.5 `error = list(class, status, request_id, retry_after)`); the source is named in the message instead.
-6. IC-65's "cached `Sys.which()` data": `Sys.which()` runs `which` on Unix, so `status(check = FALSE)` performs a PATH scan with `file.exists()`/`file.access()` once and caches it; it never starts a process. This also gives P05's `model_default()` "a detected CLI".
-7. Status strings are not enumerated in 04; P20 returns `not found`, `found`, `ready` or the recorded problem, plus `available`, `version`, `path`, `default_model`, `plan` (P05 reads `status`, `version`, `available`).
-8. The `--bare` opt-out is hypothetical (no released CLI defaults `-p` to bare; 15 §2.9 verifier); the probe passes `--no-bare` when `--help` lists it and otherwise stops with `gptr_error_cli_version`.
-9. The Windows sandbox probe command (`codex sandbox windows cmd.exe /d /c exit 0`) is UNCERTAIN: 08 §6.2 names the setup requirement (`windowsSandbox/readiness` exists only in app-server) but no exec-level probe; nothing was run on Windows.
-10. The codex argv is fixed (IC-65), so gptr's frozen T0 + T1 travel in the stdin prompt of a fresh thread as `<gptr_instructions>`; a resumed thread gets only the new input.
-11. `claude-cli/default` and `codex/default` resolve to the catalog's newest Sonnet and GPT (aliases `sonnet`, `gpt`), with fixed fallbacks `claude-sonnet-5-5` and `gpt-6-sol`.
-12. The informational codex `tool_execution_*` events are emitted through `opts$emit` as 04 §8.5 says; P06's `run_on_event()` forwards only stream events, so they reach P05's accumulator but no hook.
-13. The files checkpointer walk after a `workspace-write` exec is P16's `turn_end` hook for `type = "cli"` sessions (P16 ambiguity 9); P20 hashes the control files and warns about changes; P08's trust fingerprint (IC-52) keeps changed trust-gated files untrusted until confirmed.
-14. P12's normaliser appends `signature_delta` to the signature given in `content_block_start`; the redacted capture carries a placeholder in both, so the tests assert a non-empty signature only.
-15. The provider `codex` has alias `codex` equal to its id (04 §7.20, literally).
-16. The live tests need `GPTR_LIVE_HOME` (read only by `test-live-cli.R`): P01's `setup.R` moves `HOME` for every test, where the CLIs find no sign-in.
-17. INFRA-19's "three concurrent fake-CLI agents" uses `proc_pool_cap(3L)` agents (2 under R CMD check, IC-60).
-18. The INFRA-16 leg needs worker children, which load the installed gptr; it runs under R CMD check and skips under `devtools::test()` unless the version under test is installed (conventions §1 forbid installing from a plan step).
-19. Claude child lifetime under a budget (UNCERTAIN CLI semantics, decided defensively). 03 §8.3 wants one long-lived child per session, and IC-65/IC-66 want `--max-turns`/`--max-budget-usd` set to the remaining budget of a budget that restarts with every top-level call. The flags are fixed at launch, and report 07 ran one query per process, so whether a stream-json child applies `--max-budget-usd` and reports `total_cost_usd` per query or per process is not verified; the 07 §3.14 capture points to the process (`total_cost_usd` equals `modelUsage.costUSD`, whose 946 input tokens include the CLI's auxiliary calls, against `usage`'s 20). P20 therefore (a) reuses a child that carries budget flags only within the run that started it: the next run retires it and resumes the CLI session (`--resume`, the same system-prompt file) with fresh flags, and `agent_end` retires it at once; a child without budget flags lives across runs, as 03 §8.3 describes; and (b) records a turn's cost as the increase of `total_cost_usd` since the child's previous result (`pcli_claude_cost()`; a smaller value counts whole). Under the default budget (`cost: 5`) each top-level call therefore starts one claude process. Should a live check show per-query semantics, the reuse rule can drop its run condition; the cost rule is then wrong only for a later turn that costs more than the previous one on the same child.
-20. Codex's top-level `error` event is treated as non-terminal (the verified driver of 08 §5.1 records it and decides at `turn.failed` or the exit). Codex reports transient problems such as stream reconnects through it (UNCERTAIN for the 0.157.0 schema; non-terminal handling is the safe reading either way: a fatal error is followed by `turn.failed` or the exit, and the per-exec wall clock bounds a hang).
-21. Cross-model continuity (REQ-34): a reused claude child, a resumed claude session and a resumed Codex thread get the turns after the last assistant message their own provider answered as a `<conversation_history>` block (`pcli_unseen()`), so turns answered by another model in between are not lost.
-22. 04 is internally inconsistent on names: §7.20 names `cli_version(path)` and `cli_probe(path)`, while §12.3's lint rule (IC-72; P01's `lint_call_rule()`) flags every unqualified `cli_*()` call in `R/` whose first argument is not a literal, which any call of those two functions is. P20 implements and calls everything under the prefix `pcli_` (the §7.20 names had one-line aliases until the simplicity package P20-S removed them, D-144), so P01's lint test stays green without a change to P01. P18's prose (its ambiguity 19) still names the reader `cli_codex_env()`, now `pcli_codex_env()`; P18 has no code that calls it.
+1. `mcp.serve_ensure(session)` (04 section 7.0) takes the session object: P18's `mcp_serve_ensure()`
+   checks `check_class(session, "gptr_session")` and P19 passes the child session, while an L1
+   adapter holds only the session id (04 section 8.1 `opts$session`; P06 passes `d$id`) and IC-33
+   keeps it away from the kernel's session lookup. The earlier draft passed the id, so every real
+   Codex exec would have run on files only. builtin:cli's `request_params` hook, which receives the
+   session as `ctx$session`, now calls the service (`pcli_codex_ensure()`) before every codex
+   request and keeps the URL, port and token (strings, never the handle, whose `stop()` closure
+   would keep the session alive) per session id for the adapter; `session_shutdown` forgets them.
+   `mcp.dispatch_local(message, session)` arrives bound to the session as P06's
+   `opts$mcp_dispatch(message)`. The token is read from `h$config$codex$env[[h$token_env]]`, the
+   shape P18 produces (its ambiguity 19).
+2. The run's mode (codex sandbox) and remaining budget (claude `--max-turns`/`--max-budget-usd`,
+   codex turn cap) are not in the adapter `opts` of 04 section 8.1, and IC-33 forbids L1 code to
+   call the kernel. They reach the adapters as request parameters `cli_mode`/`cli_budget`, declared
+   in `capabilities$request_params` (IC-69) and patched in by a `request_params` hook of
+   `builtin:cli`. The remaining budget is the `budget` setting minus the current run's own usage
+   rows (counted by a `usage` hook); a call's `budget =` argument and the root-level charges of
+   IC-66 are not visible there, so the CLI caps are an extra limit and P06's `budget_check()` stays
+   authoritative between requests. The claude caps are fixed when the child starts, so a child with
+   budget flags serves only the run that started it (decision 19).
+3. Ctrl-C: P06's `run_abort()` cancels P05's stream watch, so P05's abort (a kill without the
+   protocol interrupt, P05 ambiguity 11) never runs for an aborted run. The interrupt is sent from
+   `builtin:cli`'s `agent_end` hook (which runs inside `run_settle()`), through a weak table of
+   adapter states keyed by session id (a process table like P04's job table, 03 section 2.2 rule 5).
+   05's "a Ctrl-C sends the interrupt control request then `kill_all()`" is tested through
+   `gptr_cancel()`, which follows the same `run_abort()` -> `agent_end` path as P14's interrupt
+   policy.
+4. 04 section 2.2 lists no warning class for "falls back to `read-only` with a warning" (IC-65,
+   04 section 8.5) or for changed control files; P20 uses `gptr_warning_cli_sandbox` for both (once
+   per process for the Windows fallback, `.once = "cli_sandbox_windows"`) and records it in Global
+   Constraints as a P20 addition to 04 section 2.2's warnings, so that the condition reference
+   assembled by P25 lists it.
+5. `gptr_error_billing` has the field `source` in 04 section 2.2, but P06's `run_condition()` copies
+   only fixed fields from the error event (04 section 4.5
+   `error = list(class, status, request_id, retry_after)`); the source is named in the message
+   instead.
+6. IC-65's "cached `Sys.which()` data": `Sys.which()` runs `which` on Unix, so
+   `status(check = FALSE)` performs a PATH scan with `file.exists()`/`file.access()` once and caches
+   it; it never starts a process. This also gives P05's `model_default()` "a detected CLI".
+7. Status strings are not enumerated in 04; P20 returns `not found`, `found`, `ready` or the
+   recorded problem, plus `available`, `version`, `path`, `default_model`, `plan` (P05 reads
+   `status`, `version`, `available`).
+8. The `--bare` opt-out is hypothetical (no released CLI defaults `-p` to bare; 15 section 2.9
+   verifier); the probe passes `--no-bare` when `--help` lists it and otherwise stops with
+   `gptr_error_cli_version`.
+9. The Windows sandbox probe command (`codex sandbox windows cmd.exe /d /c exit 0`) is UNCERTAIN:
+   08 section 6.2 names the setup requirement (`windowsSandbox/readiness` exists only in app-server)
+   but no exec-level probe; nothing was run on Windows.
+10. The codex argv is fixed (IC-65), so gptr's frozen T0 + T1 travel in the stdin prompt of a fresh
+    thread as `<gptr_instructions>`; a resumed thread gets only the new input.
+11. `claude-cli/default` and `codex/default` resolve to the catalog's newest Sonnet and GPT (aliases
+    `sonnet`, `gpt`), with fixed fallbacks `claude-sonnet-5-5` and `gpt-6-sol`.
+12. The informational codex `tool_execution_*` events are emitted through `opts$emit` as
+    04 section 8.5 says; P06's `run_on_event()` forwards only stream events, so they reach P05's
+    accumulator but no hook.
+13. The files checkpointer walk after a `workspace-write` exec is P16's `turn_end` hook for
+    `type = "cli"` sessions (P16 ambiguity 9); P20 hashes the control files and warns about changes;
+    P08's trust fingerprint (IC-52) keeps changed trust-gated files untrusted until confirmed.
+14. P12's normaliser appends `signature_delta` to the signature given in `content_block_start`; the
+    redacted capture carries a placeholder in both, so the tests assert a non-empty signature only.
+15. The provider `codex` has alias `codex` equal to its id (04 section 7.20, literally).
+16. The live tests need `GPTR_LIVE_HOME` (read only by `test-live-cli.R`): P01's `setup.R` moves
+    `HOME` for every test, where the CLIs find no sign-in.
+17. INFRA-19's "three concurrent fake-CLI agents" uses `proc_pool_cap(3L)` agents (2 under R CMD
+    check, IC-60).
+18. The INFRA-16 leg needs worker children, which load the installed gptr; it runs under R CMD check
+    and skips under `devtools::test()` unless the version under test is installed
+    (conventions section 1 forbids installing from a plan step).
+19. Claude child lifetime under a budget (UNCERTAIN CLI semantics, decided defensively).
+    03 section 8.3 wants one long-lived child per session, and IC-65/IC-66 want
+    `--max-turns`/`--max-budget-usd` set to the remaining budget of a budget that restarts with
+    every top-level call. The flags are fixed at launch, and report 07 ran one query per process, so
+    whether a stream-json child applies `--max-budget-usd` and reports `total_cost_usd` per query or
+    per process is not verified; the 07 section 3.14 capture points to the process (`total_cost_usd`
+    equals `modelUsage.costUSD`, whose 946 input tokens include the CLI's auxiliary calls, against
+    `usage`'s 20). P20 therefore (a) reuses a child that carries budget flags only within the run
+    that started it: the next run retires it and resumes the CLI session (`--resume`, the same
+    system-prompt file) with fresh flags, and `agent_end` retires it at once; a child without budget
+    flags lives across runs, as 03 section 8.3 describes; and (b) records a turn's cost as the
+    increase of `total_cost_usd` since the child's previous result (`pcli_claude_cost()`; a smaller
+    value counts whole). Under the default budget (`cost: 5`) each top-level call therefore starts
+    one claude process. Should a live check show per-query semantics, the reuse rule can drop its
+    run condition; the cost rule is then wrong only for a later turn that costs more than the
+    previous one on the same child.
+20. Codex's top-level `error` event is treated as non-terminal (the verified driver of
+    08 section 5.1 records it and decides at `turn.failed` or the exit). Codex reports transient
+    problems such as stream reconnects through it (UNCERTAIN for the 0.157.0 schema; non-terminal
+    handling is the safe reading either way: a fatal error is followed by `turn.failed` or the exit,
+    and the per-exec wall clock bounds a hang).
+21. Cross-model continuity (REQ-34): a reused claude child, a resumed claude session and a resumed
+    Codex thread get the turns after the last assistant message their own provider answered as a
+    `<conversation_history>` block (`pcli_unseen()`), so turns answered by another model in between
+    are not lost.
+22. 04 is internally inconsistent on names: section 7.20 names `cli_version(path)` and
+    `cli_probe(path)`, while section 12.3's lint rule (IC-72; P01's `lint_call_rule()`) flags every
+    unqualified `cli_*()` call in `R/` whose first argument is not a literal, which any call of
+    those two functions is. P20 implements and calls everything under the prefix `pcli_` (the
+    section 7.20 names had one-line aliases until the simplicity package P20-S removed them, D-144),
+    so P01's lint test stays green without a change to P01. P18's prose (its ambiguity 19) still
+    names the reader `cli_codex_env()`, now `pcli_codex_env()`; P18 has no code that calls it.
 
 ### Validation executed
 
-- Every ```` ```r ```` block of this plan (34) was extracted to the scratch directory and parsed with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'` (no errors); `getParseData()` finds no `LEFT_ASSIGN` token in the R files, tests, test support or fake CLI, no `<<-`, no `%>%` and no `:::`; every R block is ASCII and at most 100 characters per line. P01's own lint scanner (`lint_scan()` of `test-lint-rules.R`, extracted from the P01 plan) reports 0 hits on `R/cli-common.R`, `R/cli-claude.R` and `R/cli-codex.R` (231 `cli_literal` hits before the `pcli_` rename of the review).
-- A scratch package (`DESCRIPTION` `Package: gptr`) held the definitions extracted from the code of P01-P05 and P12 (the transitive closure of everything P20 and its tests call, with P01's `the` fields, P03's `on_load()` registrations and `.onLoad`) plus this plan's files, assembled from the plan's own blocks by a script; `builtin:cli` loaded through P02's real registry. Every red and green summary line of Tasks 1-7 and of the `test-cli-common.R` steps of Tasks 8-10 was produced there by building the package stage by stage (the R code of the earlier tasks, the tests of the task) and running `devtools::test(reporter = "check")`: final `test-cli-common.R` 32 tests, 184 expectations; `test-cli-claude.R` 13 unit tests, 105 expectations; `test-cli-codex.R` 13 unit tests, 71 expectations, all passing; `test-live-cli.R` 2 skips. The end-to-end tests (Tasks 8-10) error there only with ``could not find function "gptr"`` / `"subagent_backend"` (P06-P19 not extracted); their red and green lines are counted from the tests.
-- Integration through P05's `provider_stream()` and P04's reactor with the fake CLI (scratch script, not part of the plan): claude, two requests of one run on one child, then a request of a new run under `cli_budget = list(cost = 5)`: a second child whose argv ends `--max-budget-usd 5 --resume 11111111-1111-4111-8111-111111111111`, the first child dead (stdin closed, 0.3 s), and the resumed child receiving only the new input; `pcli_stop_child()` on a hanging turn: the fake logged and acknowledged the interrupt and was gone after 0.06 s (stdin closed); codex with the MCP record that `pcli_codex_ensure()` keeps for the session: the argv carries the `mcp_servers.gptr.url` override, `GPTR_MCP_TOKEN` is in the child's environment and not in its argv, and an `error` event (`Reconnecting... 1/5`) followed by `turn.completed` ends the exec with `done` and the text `Recovered.`. The original writer's integration run (50 KB prompt with a non-ASCII character under the C locale received intact, the resume argv, `status(check = TRUE)` `ready` for both fakes) was not affected by the review's changes.
-- `claude-call2.ndjson` is identical to the 07 §3.14 capture (`diff`) except that the R code the model wrote inside two JSON strings uses `=` instead of `<-` (conventions §4: "every code block in the plans"); `codex-call1.jsonl` is identical to the 08 §5.2 capture.
-- Probes run: the fake receives empty-string arguments intact (`--tools ""`, `--setting-sources ""`); an Rscript child blocked in `readLines()` on stdin survives SIGINT, which is why `pcli_stop_child()` closes stdin before `kill_all()`.
-- Not executed: `peter()` end to end (needs P06-P19), worker children, P18's real MCP server, Windows, the live CLIs.
+- Every ```` ```r ```` block of this plan (34) was extracted to the scratch directory and parsed
+  with `Rscript --vanilla -e 'invisible(parse(file = "<f>"))'` (no errors); `getParseData()` finds
+  no `LEFT_ASSIGN` token in the R files, tests, test support or fake CLI, no `<<-`, no `%>%` and no
+  `:::`; every R block is ASCII and at most 100 characters per line. P01's own lint scanner
+  (`lint_scan()` of `test-lint-rules.R`, extracted from the P01 plan) reports 0 hits on
+  `R/cli-common.R`, `R/cli-claude.R` and `R/cli-codex.R` (231 `cli_literal` hits before the `pcli_`
+  rename of the review).
+- A scratch package (`DESCRIPTION` `Package: gptr`) held the definitions extracted from the code of
+  P01-P05 and P12 (the transitive closure of everything P20 and its tests call, with P01's `the`
+  fields, P03's `on_load()` registrations and `.onLoad`) plus this plan's files, assembled from the
+  plan's own blocks by a script; `builtin:cli` loaded through P02's real registry. Every red and
+  green summary line of Tasks 1-7 and of the `test-cli-common.R` steps of Tasks 8-10 was produced
+  there by building the package stage by stage (the R code of the earlier tasks, the tests of the
+  task) and running `devtools::test(reporter = "check")`: final `test-cli-common.R` 32 tests, 184
+  expectations; `test-cli-claude.R` 13 unit tests, 105 expectations; `test-cli-codex.R` 13 unit
+  tests, 71 expectations, all passing; `test-live-cli.R` 2 skips. The end-to-end tests (Tasks 8-10)
+  error there only with ``could not find function "gptr"`` / `"subagent_backend"` (P06-P19 not
+  extracted); their red and green lines are counted from the tests.
+- Integration through P05's `provider_stream()` and P04's reactor with the fake CLI (scratch script,
+  not part of the plan): claude, two requests of one run on one child, then a request of a new run
+  under `cli_budget = list(cost = 5)`: a second child whose argv ends
+  `--max-budget-usd 5 --resume 11111111-1111-4111-8111-111111111111`, the first child dead (stdin
+  closed, 0.3 s), and the resumed child receiving only the new input; `pcli_stop_child()` on a
+  hanging turn: the fake logged and acknowledged the interrupt and was gone after 0.06 s (stdin
+  closed); codex with the MCP record that `pcli_codex_ensure()` keeps for the session: the argv
+  carries the `mcp_servers.gptr.url` override, `GPTR_MCP_TOKEN` is in the child's environment and
+  not in its argv, and an `error` event (`Reconnecting... 1/5`) followed by `turn.completed` ends
+  the exec with `done` and the text `Recovered.`. The original writer's integration run (50 KB
+  prompt with a non-ASCII character under the C locale received intact, the resume argv,
+  `status(check = TRUE)` `ready` for both fakes) was not affected by the review's changes.
+- `claude-call2.ndjson` is identical to the 07 section 3.14 capture (`diff`) except that the R code
+  the model wrote inside two JSON strings uses `=` instead of `<-` (conventions section 4: "every
+  code block in the plans"); `codex-call1.jsonl` is identical to the 08 section 5.2 capture.
+- Probes run: the fake receives empty-string arguments intact (`--tools ""`,
+  `--setting-sources ""`); an Rscript child blocked in `readLines()` on stdin survives SIGINT, which
+  is why `pcli_stop_child()` closes stdin before `kill_all()`.
+- Not executed: `peter()` end to end (needs P06-P19), worker children, P18's real MCP server,
+  Windows, the live CLIs.
 
 ## Plan review log
 
-Adversarial review of 2026-10-01 against 00-conventions, 04 (with §15), 05 P20, 03 §8.3, the research reports 07/08 and the dependency plans P01-P06, P08, P12, P16, P18 and P19. Every R block was re-extracted and parsed, P01's lint scanner was run over the R files, the red and green lines of Tasks 1-10 were recomputed by stage builds of a scratch package assembled from the plan's own blocks, and the changed behaviour was run through P05's `provider_stream()` with the fake CLI (see "Validation executed").
+Adversarial review of 2026-10-01 against 00-conventions, 04 (with section 15), 05 P20,
+03 section 8.3, the research reports 07/08 and the dependency plans P01-P06, P08, P12, P16, P18 and
+P19. Every R block was re-extracted and parsed, P01's lint scanner was run over the R files, the red
+and green lines of Tasks 1-10 were recomputed by stage builds of a scratch package assembled from
+the plan's own blocks, and the changed behaviour was run through P05's `provider_stream()` with the
+fake CLI (see "Validation executed").
 
 | # | Severity | Location | Verdict | What changed, or why rejected |
 |---|---|---|---|---|
-| 1 | blocker | Task 7 `pcli_codex_mcp()`; Task 8 `pcli_hook_params()` | applied | The codex adapter called `mcp.serve_ensure` with `opts$session`, a session id (04 §8.1; P06 passes `d$id`), but P18's `mcp_serve_ensure()` requires the `gptr_session` (`check_class()`), as P19's `backend_cli_start()` passes it: every real Codex exec would have run on files only and Task 10's real-server round trip would fail. The `request_params` hook, which has the session as `ctx$session`, now calls `pcli_codex_ensure()`, which keeps the URL, port and token (strings, never the handle) per session id; `pcli_codex_mcp(opts)` reads them; `session_shutdown` forgets them (`pcli_codex_forget()`). Tests: Task 7 (two), Task 8 (one), Task 9 (shutdown). |
-| 2 | blocker | all R code of Tasks 1-10 | applied | 126 internal functions and objects were named `cli_*` and called unqualified with non-literal first arguments; P01's lint rule `cli_literal` (conventions §5: "Every `cli_*()` call in `R/` takes a literal first argument"; `test-lint-rules.R` "R/ follows the package lint rules") reports 231 hits, so P01's lint test would fail once P20 lands. A token-based rename gave them the prefix `pcli_` (709 symbols, comments, test names and prose); the 04 §7.20 names `cli_find()`, `cli_version()`, `cli_probe()` stay as tested one-line aliases; option names, request parameters and condition classes keep their names. P01's scanner now reports 0 hits (ambiguity 22). |
+| 1 | blocker | Task 7 `pcli_codex_mcp()`; Task 8 `pcli_hook_params()` | applied | The codex adapter called `mcp.serve_ensure` with `opts$session`, a session id (04 section 8.1; P06 passes `d$id`), but P18's `mcp_serve_ensure()` requires the `gptr_session` (`check_class()`), as P19's `backend_cli_start()` passes it: every real Codex exec would have run on files only and Task 10's real-server round trip would fail. The `request_params` hook, which has the session as `ctx$session`, now calls `pcli_codex_ensure()`, which keeps the URL, port and token (strings, never the handle) per session id; `pcli_codex_mcp(opts)` reads them; `session_shutdown` forgets them (`pcli_codex_forget()`). Tests: Task 7 (two), Task 8 (one), Task 9 (shutdown). |
+| 2 | blocker | all R code of Tasks 1-10 | applied | 126 internal functions and objects were named `cli_*` and called unqualified with non-literal first arguments; P01's lint rule `cli_literal` (conventions section 5: "Every `cli_*()` call in `R/` takes a literal first argument"; `test-lint-rules.R` "R/ follows the package lint rules") reports 231 hits, so P01's lint test would fail once P20 lands. A token-based rename gave them the prefix `pcli_` (709 symbols, comments, test names and prose); the 04 section 7.20 names `cli_find()`, `cli_version()`, `cli_probe()` stay as tested one-line aliases; option names, request parameters and condition classes keep their names. P01's scanner now reports 0 hits (ambiguity 22). |
 | 3 | major | Task 11 `test-live-cli.R` | applied | `setup.R`'s `GPTR_REPLAY=replay` makes P08's `replay_guard()` refuse the non-offline `claude-cli`/`codex` providers (`gptr_error_not_recorded`), and the non-interactive `egress_check()` stops without an acknowledgement (`gptr_error_egress`): neither live test could pass. The helper sets `GPTR_REPLAY=live` and unsets the billing variables (a developer's own keys would also have produced a `billing_env` warning, contradicting `WARN 0`); the calls pass `.opts = list(context = "none")`. |
-| 4 | major | Task 7 `pcli_codex_event()`, `parse()$finish` | applied | A top-level `error` event ended the turn, although the verified driver of 08 §5.1 only records it and decides at `turn.failed` or the exit; ending there leaves a Codex that may still be working (and writing under `workspace-write`) unsupervised, since its turn is no longer open for the `agent_end` hook. The event is now noted (`s$last_error`), `turn.failed` ends the turn, an exit without `turn.completed` reports the last error; new test; integration run (`Reconnecting... 1/5` then `done`). Ambiguity 20. |
-| 5 | major | Tasks 5, 6, 9 (claude child lifetime and cost) | applied | The long-lived claude child kept the `--max-turns`/`--max-budget-usd` of the run that started it, while IC-66 budgets restart with every top-level call, and each turn recorded the result's `total_cost_usd`, which the 07 §3.14 capture shows to be process-level (equal to `modelUsage.costUSD`, which counts the CLI's auxiliary calls): later calls could be cut off by a stale cap and the session cost would double count. A child with budget flags now serves only its run (the next run retires it, stdin closed, and resumes the CLI session with `--resume` and fresh flags; `agent_end` retires it at once); a turn's cost is the increase since the child's previous result (`pcli_claude_cost()`). Tests in Tasks 5, 6, 8 and 9; ambiguity 19 records the unverified CLI semantics. |
-| 6 | major | Tasks 4, 5, 7 (continuity, REQ-34) | applied | A reused or resumed claude child and a resumed Codex thread received only the messages after the last assistant message, so turns another model answered in between (03 §8.3) never reached the CLI. `pcli_unseen(prior, provider)` sends the turns after the last one this provider answered as `<conversation_history>`; tests in Tasks 4, 5 and 7. |
-| 7 | minor | Task 9 end-to-end tests | applied | `gptr_wait(timeout = 3)` and `timeout = 4` followed by assertions that the fakes had started were wall-clock limits under 5 s (conventions §7). `wait_fake_log()` (Task 8 test support) waits for the fake's log rows with a 20 s cap. |
+| 4 | major | Task 7 `pcli_codex_event()`, `parse()$finish` | applied | A top-level `error` event ended the turn, although the verified driver of 08 section 5.1 only records it and decides at `turn.failed` or the exit; ending there leaves a Codex that may still be working (and writing under `workspace-write`) unsupervised, since its turn is no longer open for the `agent_end` hook. The event is now noted (`s$last_error`), `turn.failed` ends the turn, an exit without `turn.completed` reports the last error; new test; integration run (`Reconnecting... 1/5` then `done`). Ambiguity 20. |
+| 5 | major | Tasks 5, 6, 9 (claude child lifetime and cost) | applied | The long-lived claude child kept the `--max-turns`/`--max-budget-usd` of the run that started it, while IC-66 budgets restart with every top-level call, and each turn recorded the result's `total_cost_usd`, which the 07 section 3.14 capture shows to be process-level (equal to `modelUsage.costUSD`, which counts the CLI's auxiliary calls): later calls could be cut off by a stale cap and the session cost would double count. A child with budget flags now serves only its run (the next run retires it, stdin closed, and resumes the CLI session with `--resume` and fresh flags; `agent_end` retires it at once); a turn's cost is the increase since the child's previous result (`pcli_claude_cost()`). Tests in Tasks 5, 6, 8 and 9; ambiguity 19 records the unverified CLI semantics. |
+| 6 | major | Tasks 4, 5, 7 (continuity, REQ-34) | applied | A reused or resumed claude child and a resumed Codex thread received only the messages after the last assistant message, so turns another model answered in between (03 section 8.3) never reached the CLI. `pcli_unseen(prior, provider)` sends the turns after the last one this provider answered as `<conversation_history>`; tests in Tasks 4, 5 and 7. |
+| 7 | minor | Task 9 end-to-end tests | applied | `gptr_wait(timeout = 3)` and `timeout = 4` followed by assertions that the fakes had started were wall-clock limits under 5 s (conventions section 7). `wait_fake_log()` (Task 8 test support) waits for the fake's log rows with a 20 s cap. |
 | 8 | minor | Task 8 INFRA-19 test | applied | Under R CMD check the pool holds 2 agents, so a sequential run (2 x 3 s plus start-up) also met the 8 s bound and the test proved no concurrency there. The fake now logs `turn_done`; the test asserts that every turn started before any ended. |
-| 9 | minor | Task 7 `pcli_codex_after()` | applied | `gptr_warn()` was signalled inside the normaliser before the terminal `done` event (04 §8.1); under `options(warn = 2)` a completed exec became an internal failure. The changed files are computed first and `pcli_codex_warn()` warns after the terminal event; the test checks that `done` came first. |
+| 9 | minor | Task 7 `pcli_codex_after()` | applied | `gptr_warn()` was signalled inside the normaliser before the terminal `done` event (04 section 8.1); under `options(warn = 2)` a completed exec became an internal failure. The changed files are computed first and `pcli_codex_warn()` warns after the terminal event; the test checks that `done` came first. |
 | 10 | minor | Task 10 INFRA-16 test | applied | Mocking `cli_codex_mcp()` left P19's `backend_cli_start()` (and now the request hook) calling P18's real `mcp.serve_ensure`, which starts an HTTP server that the test never stops. It uses `local_mcp_stub()`, moved to Task 7's test support. |
 | 11 | minor | Task 4 `pcli_stop_child()` | applied | An R child blocked on stdin ignores SIGINT, so every stop of an idle child (and each per-run replacement of finding 5) waited the whole kill grace. stdin is closed with P04's `write_close()` before `kill_all()` (0.06-0.3 s measured); the unit test asserts it. |
 | 12 | minor | Self-review ambiguity 1, Interfaces tables, Global Constraints | applied | Ambiguity 1 said P18 and P19 had no plan and that the service gets the session id. Rewritten after checking both plans; the P18 row of "Interfaces used" and the concurrency line of Global Constraints updated. |
 | 13 | minor | every Step 2/Step 4 line, Plan acceptance row 1 | applied | Recomputed by stage builds after the changes (for example Task 7 green 54 -> 71, `test-cli-common.R` 166 -> 184, `filter = "cli-"` 373 -> 427). |
-| 14 | minor | Task 6 `pcli_claude_permission()` | rejected | Suggested denying every non-`mcp__gptr__*` `can_use_tool` outright (IC-65: "the handler still denies anything else"). That parenthesis describes the `mcp_message` dispatch handler; 04 §8.5 and 05's review amendment route other requests through `opts$gate`, and `--tools ""` with `--strict-mcp-config` leaves the CLI no other tool. |
-| 15 | minor | Task 7 `gptr_warning_cli_sandbox` | rejected | Not in 04 §2.2, but IC-65 requires a warning for the Windows fallback and no listed class fits; kept and recorded as ambiguity 4. |
+| 14 | minor | Task 6 `pcli_claude_permission()` | rejected | Suggested denying every non-`mcp__gptr__*` `can_use_tool` outright (IC-65: "the handler still denies anything else"). That parenthesis describes the `mcp_message` dispatch handler; 04 section 8.5 and 05's review amendment route other requests through `opts$gate`, and `--tools ""` with `--strict-mcp-config` leaves the CLI no other tool. |
+| 15 | minor | Task 7 `gptr_warning_cli_sandbox` | rejected | Not in 04 section 2.2, but IC-65 requires a warning for the Windows fallback and no listed class fits; kept and recorded as ambiguity 4. |
 | 16 | minor | Task 3 `pcli_status()` | rejected | Suggested using `Sys.which()` as IC-65 words it; `Sys.which()` runs `which` (a process) on Unix, and IC-65 also says `check = FALSE` never spawns one; the file-system PATH scan is kept (ambiguity 6). |
 | 17 | minor | Task 10 INFRA-16 bound (13 s) | rejected | A tighter bound would be flaky: worker start-up under R CMD check (two callr children loading gptr, slower on Windows) dominates; the leg's purpose is that a fake CLI joins the shared reactor, and P19 owns the inline/worker overlap check. |
 
 ## Cross-plan consolidation log
 
-Issues raised by the cross-plan checkers (2026-10-01), verified against 04 (§2.2 warning list, §8.5, IC-65), 00-conventions §5 ("complete list of class names is ... section 2.2"), 05 (P20 acceptance 4, the M4 row of the milestone table), P18 (Plan acceptance note: "The M4 exit check ... is P20's acceptance 4, run once P18-P21 are complete"), P19 (NS-6 team tests, real-worker tests) and P21 (Plan acceptance command 5). After the changes every ```` ```r ```` block (34) was re-extracted and parsed with `Rscript --vanilla` (0 errors; no `<-` or `%>%` in any block, no `LEFT_ASSIGN` token, ASCII only, no line over 100 characters), and the Milestone gate step 3 command parses as well. No test, code block or expected count changed.
+Issues raised by the cross-plan checkers (2026-10-01), verified against 04 (sections 2.2 warning
+list, 8.5, IC-65), 00-conventions section 5 ("complete list of class names is ... section 2.2"), 05
+(P20 acceptance 4, the M4 row of the milestone table), P18 (Plan acceptance note: "The M4 exit check
+... is P20's acceptance 4, run once P18-P21 are complete"), P19 (NS-6 team tests, real-worker tests)
+and P21 (Plan acceptance command 5). After the changes
+every ```` ```r ```` block (34) was re-extracted and parsed with `Rscript --vanilla` (0 errors; no
+`<-` or `%>%` in any block, no `LEFT_ASSIGN` token, ASCII only, no line over 100 characters), and
+the Milestone gate step 3 command parses as well. No test, code block or expected count changed.
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| C1 | shared-names | minor | Task 7 `pcli_codex_sandbox()` (`gptr_warning_cli_sandbox`); Global Constraints conditions list | applied | Valid: 04 §2.2's warning list has no `cli_sandbox`, while 04 §8.5 and IC-65 mandate a warning for the Windows fallback ("falls back to `read-only` with a warning") without naming a class, and no listed class fits; 04 is silent, so the class is kept as an addition, not a deviation. The Global Constraints conditions bullet now records "P20 addition to 04 §2.2's warnings: `gptr_warning_cli_sandbox` (P20; Codex's Windows sandbox not ready, the route runs read-only; once per process; the same class reports control files that a `workspace-write` exec changed, after the exec's terminal event)", so that the condition reference assembled by P25 lists it; the second use (`pcli_codex_warn()`, Task 7) is named too because the plan's code raises the class there. Ambiguity 4 and "Type and name consistency with 04" point at the record. The class is already proven by Task 7's tests "plan, manual and edits run read-only; auto workspace-write; Windows falls back" (`expect_warning(..., class = "gptr_warning_cli_sandbox")`) and "a workspace-write exec that changes control files is reported after it ends"; no test change. P25 (not edited here) should list the class in its condition reference. |
+| C1 | shared-names | minor | Task 7 `pcli_codex_sandbox()` (`gptr_warning_cli_sandbox`); Global Constraints conditions list | applied | Valid: 04 section 2.2's warning list has no `cli_sandbox`, while 04 section 8.5 and IC-65 mandate a warning for the Windows fallback ("falls back to `read-only` with a warning") without naming a class, and no listed class fits; 04 is silent, so the class is kept as an addition, not a deviation. The Global Constraints conditions bullet now records "P20 addition to 04 §2.2's warnings: `gptr_warning_cli_sandbox` (P20; Codex's Windows sandbox not ready, the route runs read-only; once per process; the same class reports control files that a `workspace-write` exec changed, after the exec's terminal event)", so that the condition reference assembled by P25 lists it; the second use (`pcli_codex_warn()`, Task 7) is named too because the plan's code raises the class there. Ambiguity 4 and "Type and name consistency with 04" point at the record. The class is already proven by Task 7's tests "plan, manual and edits run read-only; auto workspace-write; Windows falls back" (`expect_warning(..., class = "gptr_warning_cli_sandbox")`) and "a workspace-write exec that changes control files is reported after it ends"; no test change. P25 (not edited here) should list the class in its condition reference. |
 | C2 | trace | major | "Milestone gate" section; Plan acceptance intro and rows 2f and 4 | applied | Valid: the plan index that the section said to run the gate from does not exist (only `00-conventions.md` and P01-P25 are in `dev/plan/`), P21's acceptance runs only `devtools::check()` (its command 5), so the NS-9 `gptr_providers(check = TRUE)` command with the fake CLIs (step 3) was never executed, and step 2 named step 4 for the R CMD check, which is step 5. Heading renamed "Milestone gate (M4 exit, 05 P20 acceptance 4)"; the intro now says steps 1-4 run at the end of this plan (they need P18-P20 only; P21's later-dependent tests skip or are absent) and step 5, the R CMD check, is P21's Plan acceptance command 5, run once P18-P21 are complete; step 1's skip list notes that P21's tests are absent at the end of this plan; step 2 says "pass under step 5 (P21's check ...)" and that the INFRA-16 leg skips within step 1 unless the version under test is installed; step 5 names P21's command 5. New Plan acceptance row 4 quotes 05 P20 acceptance 4 and maps it to gate steps 1-4 (commands of steps 1 and 3, results as stated there), step 5 in P21; row 2f and the intro point at gate step 5 / P21 command 5. No reference to that index file remains. The checker's 5-cell row was fitted to the table's 4 columns. |
 | F1 | finalize | minor | Task 1 `tests/testthat/fixtures/cli/local-fake-cli.R`, header comment | applied | `commented_code_linter` (consolidation lint `P20_L00130.R:3`): the header quoted the sourcing call `source(testthat::test_path(...), local = TRUE)` on a comment line of its own, which parses as code. The header is now prose ("Each test-cli-*.R file sources it as its first statement, with local = TRUE, from the path testthat::test_path("fixtures", "cli", "local-fake-cli.R") ..."), one line shorter; the call itself stays in the three test files. No code, test or count change. |
 | F2 | finalize | minor | Task 2 `inst/gptr/fixtures/fake_cli.R`, definition of `` `%\|\|%` `` | applied | `object_name_linter` (consolidation lint `P20_L00505.R:26`): not renamed, because the infix name is fixed (an operator, the same name as P01's `R/aaa-state.R` helper, which carries the same nolint). The fake runs as a standalone `Rscript --vanilla` script, where gptr's internal `%\|\|%` is not visible and base R (>= 4.2.0 per DESCRIPTION) has one only from 4.4.0, so the script keeps its own definition; the line now ends `# nolint: object_name_linter.` and a comment line above gives the reason. No other plan calls the fake's copy (it is a script, not a function of the namespace). No behaviour, test or count change. |
 | F3 | finalize | minor | Task 3 `R/cli-common.R`, roxygen of `pcli_fake_provider()` | applied | `commented_code_linter` (consolidation lint `P20_L01322.R:105`): the roxygen line `#' options(gptr.cli_path) like the real CLIs'` parsed as a single-quoted string after the `#`. Reworded to "like the real CLIs, it takes its command from options(gptr.cli_path)" (same meaning). Lint of all 34 P20 `r` blocks with P01's linters (`indentation_linter = NULL`; `object_usage_linter = NULL` for standalone blocks): 0 lints; every block re-extracted and parsed under `Rscript --vanilla` (0 errors, no `<-` or `%>%`, ASCII, no line over 100 characters). No test or count change. |
-| C3 | contract-names | minor | Global Constraints; Tasks 1-2 Produces; ambiguity 22 | recorded (2026-10-05) | The simplicity package P20-S (D-144) removed the aliases `cli_find`, `cli_version` and `cli_probe`, so `build_index.py` warns 6 times that 04 §7.20 (lines 2890-2897, 4669) and this plan's prose name functions no plan defines. They stay until 04 §7.20 names the `pcli_*` implementations (00-index row "04 text to correct"). |
+| C3 | contract-names | minor | Global Constraints; Tasks 1-2 Produces; ambiguity 22 | recorded (2026-10-05) | The simplicity package P20-S (D-144) removed the aliases `cli_find`, `cli_version` and `cli_probe`, so `build_index.py` warns 6 times that 04 section 7.20 (lines 2890-2897, 4669) and this plan's prose name functions no plan defines. They stay until 04 section 7.20 names the `pcli_*` implementations (00-index row "04 text to correct"). |

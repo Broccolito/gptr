@@ -10,15 +10,15 @@ made no external model request. Later dated sections record separately authorize
 
 The ignored detailed closure checklist is
 `dev/.validation/live-20261010/resume-68017d0/CLOSURE_CHECKLIST.md`. It accounts for all
-G01–G14 guides, A01–A08 exported API groups, D01–D07 decisions, IM01–IM06 memory cases,
-UX01–UX03, X01–X14 and Q01–Q05, every still-P frontend/provider cell and the plan's
+G01..G14 guides, A01..A08 exported API groups, D01..D07 decisions, IM01..IM06 memory cases,
+UX01..UX03, X01..X14 and Q01..Q05, every still-P frontend/provider cell and the plan's
 unscheduled gaps. IDs identify clauses, not a promise that one smoke closes an entire row.
 
 | Group | Smallest next action | Scope/status |
 |---|---|---|
 | Fanout/SDK/backend | Resolve assigned-input visibility, keep existing request budget, verify independent means before formats/replay; explicit worker/deferred/cancel/fork cases separately | First Versa fanout F; named team not reached; other live children P |
 | Native/emulated decisions | Actual native role-default/service and no-key fallback; prepared emulation types/provenance/cache and unsupported CLI no-inference checks | P/conditional; Jev recorded R/Rmd/qmd already LR |
-| Loaded R objects | Tiny counts→totals→named plot across turns, request-body bounds, original identity/invariance and storage opt-ins | P; actual4GiB resource-blocked |
+| Loaded R objects | Tiny counts->totals->named plot across turns, request-body bounds, original identity/invariance and storage opt-ins | P; actual 4GiB resource-blocked |
 | Controls/native clients | Witness request/tool in flight before steer; abort/recovery/unknown usage; completion and active resize at actual client surfaces | P beyond recorded older terminal/IDE/kernel/PTY/R.app subsets |
 | Commands/config/security/history | Every table member/alias/scope/unset/invalid type; deferred/record/replay/edited/missing cache and installed failure restoration | P current installed exhaustive sweep; historical suites remain H |
 | Extensions/MCP/apps | Agent files/trust changes/package install-unload/protected records; HTTP/auth/UI/artifacts | P beyond installed optional/stdio/template/workflow O |
@@ -53,7 +53,7 @@ R objects exist, but the request does not communicate the assignment. This is a 
 ambiguity, not proof that the backend failed to bind data.
 
 Root approved one focused installed fake probe and then one corrected-instrumentation run,
-each bounded by a60s exact-owned-family controller. The final probe PASS in1.415s:
+each bounded by a 60s exact-owned-family controller. The final probe PASS in1.415s:
 
 - Canonical none-mode bodies omit `.x[[key]]`; names-mode sends the correct four/six labels
   and bounded dataframe headers. Fake `last_user` excludes attached context and is insufficient
@@ -70,12 +70,12 @@ each bounded by a60s exact-owned-family controller. The final probe PASS in1.415
 
 Evidence: ignored `resume-68017d0/fanout-budget-probe-canonical/fanout-budget-probe.json`
 and `fanout-budget-probe.R`. The minimal next fixture repair is context names for fanout
-(or explicit per-child input labels), preserving60k/8. Do not silently increase the budget
+(or explicit per-child input labels), preserving 60k/8. Do not silently increase the budget
 to hide retries. Root owns any fixture correction and fresh live repeat.
 
 ## Additional pre-execution fixture findings
 
-1. `steering-and-background.R:6` is a legitimate queued-steer test. At`:26`, running status
+1. `steering-and-background.R:6` is a legitimate queued-steer test. At `:26`, running status
    without request/tool-start evidence does not prove in-flight steering. The explicit wait
    pumps completion; idle-only completion needs a separate observed client capability.
 2. Current team/fanout fixtures use backend auto. `R/subagent-backends.R:47` selects inline
@@ -90,7 +90,7 @@ to hide retries. Root owns any fixture correction and fresh live repeat.
    failure-path restoration claim. Typed/team direct-Rscript and explicit worker cases are absent.
 5. Headless notebook execution verifies computations, request witnesses, cleanup and source
    fingerprints, not native UI/display/error channels. Its external doc-check lacks an individual
-   timeout but is inside the900s whole-worker owned-family bound. Actual GUI interrupt/resize,
+   timeout but is inside the 900s whole-worker owned-family bound. Actual GUI interrupt/resize,
    completion and screenshot checks remain separate.
 6. Prepared emulation supports Versa and suitable discovered Qwen structured emulation,
    never native calibration. Qwen fresh-process cache replay needs discovery; same-process
@@ -109,20 +109,20 @@ a selected route; inventory is not readiness or inference evidence. Local Clef a
 full-window Qwen/calibration, other-OS GUI and large external engines remain conditional or
 unscheduled. Preserve failed and NOT REACHED evidence when later passes arrive.
 
-Architecture's exact final artifact lane has not built an archive at this snapshot; Q03–Q05
+Architecture's exact final artifact lane has not built an archive at this snapshot; Q03..Q05
 remain pending. It will record exact bytes/hash/contents/installed sizes and <=2-core checks.
 Local R4.5.0 is distinct from current R4.6.1 release/R4.7.0 devel. Hosted checkout builds do
 not establish an identical upload-tarball check; corrected Windows actual execution remains P.
 
 A possible next installed offline sweep is proposed only: fresh Rscript --vanilla, tiny public
-values2/5, no network/auth/model CLI/worker,45s inner/60s outer cap. Enumerate current setting/
+values2/5, no network/auth/model CLI/worker, 45s inner/60s outer cap. Enumerate current setting/
 option/command members with explicit covered/skipped names, type/scope/unset/nested defaults;
 then deferred step/wait/cancel/fork/return listener cleanup and synthetic trust/egress/document
-mode/missing-cache negatives. Estimated10–20s is unmeasured. Root must approve scope and slot
+mode/missing-cache negatives. Estimated10-20s is unmeasured. Root must approve scope and slot
 before preparation or execution; this is not a complete security audit or a paid-model matrix.
 
 No tracked plan, source, generated file or Git state was changed by this lane. This progress
-report and the ignored checklist/probe are the owned outputs. Disk12GiB and active resource
+report and the ignored checklist/probe are the owned outputs. Disk 12GiB and active resource
 limits at resume forbid expanding local jobs or large allocations; preserve unrelated processes.
 
 ## Later3d92b05 bounded closure evidence
@@ -151,21 +151,21 @@ explicitly directs R to its already-bound dat; the8-turn/60k budget is unchanged
 live steering pass remains pending.
 
 The raw simulation failed after returning numeric output because B no longer matched its
-integer1000L invariant; reassignment as double1000 is the current suspected cause, not an
+integer 1000L invariant; reassignment as double1000 is the current suspected cause, not an
 observed type/value witness. The prepared correction
 locks only the private synthetic B/n inputs, asks for separate output names, verifies the
-named two-value shape/finite coverage, and compares against fixed1000L/20L independent
+named two-value shape/finite coverage, and compares against fixed 1000L/20L independent
 calculations. Safe input types/values are printed for diagnosis. This tests explicit read-only
 input protection; it does not retroactively pass the unrestricted failed case.
 
-Installed offline closure finally PASS: eight stages,1.887s in R/2.285s owned controller,
-zero warnings,13 fake requests, zero external requests. All restoration flags passed:
+Installed offline closure finally PASS: eight stages, 1.887s in R/2.285s owned controller,
+zero warnings, 13 fake requests, zero external requests. All restoration flags passed:
 options, library paths, working directory, seed, RNG kind, namespace, prior document binding,
 and no cleanup errors. No RAM peak was sampled. Evidence is ignored
 `resume-68017d0/offline-closure-3d92b05-guarded/offline-closure.json`.
 
 - All32 core setting schemas checked valid/invalid values, available choices, isolated
-  user/session roundtrips, unset and user-only session refusal. User→project→option→session
+  user/session roundtrips, unset and user-only session refusal. User->project->option->session
   precedence passed. One separately registered inactive setting validated/roundtripped/removed.
 - All90 option defaults/getters passed; this proves getter behavior only, not all90 consumers.
 - All28 installed slash commands passed schema/help lookup. Actual handlers checked exit/quit/q,
@@ -204,7 +204,7 @@ manual evidence. Current release/devel/Windows same-byte checks and fresh revdep
 
 ## Read-only memory anomaly attribution after native VS Code Qwen
 
-2026-10-10,17:08–17:12 PDT. Root's verified native VS Code live R process and its
+2026-10-10,17:08-17:12 PDT. Root's verified native VS Code live R process and its
 currently observed family totaled776.6MiB RSS at17:10:47. A different R process had
 been running sinceOctober4 and held about34.5GiB RSS; it is a separate baseline,
 not a process started by this test. Current RSS is not peak/private memory and
@@ -212,35 +212,37 @@ cannot reconstruct earlier allocations. Process arguments, environments and acco
 details were not inspected. Machine PIDs/command names remain in ignored numeric metrics.
 
 The exact Qwen MLX process started17:06:05, coinciding with the native fixture's
-17:06:05.702 start. The fixture completed17:06:24.393 (18.703s,three request/usage
+17:06:05.702 start. The fixture completed17:06:24.393 (18.703s, three request/usage
 events). The authorized localhost resident-model API reported qwen3.8:27b, MLX/nvfp4,
 size/size_vram17.946GiB, context_length262144, expiration17:11:24.350. These are
 resident-model fields; they do not measure separate KV allocation or actual prompt
-tokens. The endpoint lists currently loaded models. [Ollama API reference](https://docs.ollama.com/api/ps)
+tokens. The endpoint lists currently loaded models.
+[Ollama API reference](https://docs.ollama.com/api/ps)
 
 | Observation | Physical unused / wired | Other evidence |
 |---|---|---|
-|17:08:17, model resident|3075MiB /23GiB|CPU62.7%idle; pressure query73%; swap42479.94MiB; disk13GiB|
-|17:10:49, same model resident|9802MiB /23GiB|CPU64.6%idle; pressure73%; swap42471.94MiB|
-|17:11:54, after reported natural expiry|27GiB /7122MiB|Loaded models empty; CPU57.4%idle; pressure86%; swap42463.94MiB|
+| 17:08:17, model resident | 3075MiB /23GiB | CPU62.7%idle; pressure query73%; swap42479.94MiB; disk 13GiB |
+| 17:10:49, same model resident | 9802MiB /23GiB | CPU64.6%idle; pressure73%; swap42471.94MiB |
+| 17:11:54, after reported natural expiry | 27GiB /7122MiB | Loaded models empty; CPU57.4%idle; pressure86%; swap42463.94MiB |
 
 No unload, kill, cache flush, inference, discovery, account or R operation occurred
 in this lane. The natural resident-model expiry and wired-memory fall strongly
 attribute most of the swing to model residency. File-backed pages also fell from
-about25GiB to18GiB while the model stayed resident and unused memory increased,
+about 25GiB to 18GiB while the model stayed resident and unused memory increased,
 consistent with ordinary reclamation. No pre-run process/VM baseline exists to
-assign every byte of the earlier33GiB→3.7GiB unused change.
+assign every byte of the earlier 33GiB->3.7GiB unused change.
 
-The17:08 VM snapshot had about45.5GiB inactive,25GiB file-backed and0.85GiB purgeable;
+The17:08 VM snapshot had about45.5GiB inactive, 25GiB file-backed and0.85GiB purgeable;
 those categories overlap and must not be added as independent capacity. The
 memory_pressure query's percentage is not physical unused RAM. macOS uses cached
 memory and bases pressure on free memory, swap rate, wired memory and file caching.
-[Apple memory usage guide](https://support.apple.com/guide/activity-monitor/view-memory-usage-actmntr1004/10.14/mac/15.0)
+[Apple memory usage
+guide](https://support.apple.com/guide/activity-monitor/view-memory-usage-actmntr1004/10.14/mac/15.0)
 
-At the last sample RAM has headroom for one bounded serial4GiB read-only fixture,
+At the last sample RAM has headroom for one bounded serial 4GiB read-only fixture,
 without concurrent model/check work or disk serialization. This is a resource
 nomination, not an allocation/pass or a guarantee against unexpected copying.
-Disk13GiB and active historical swap still prohibit expanding concurrency; unrelated
+Disk 13GiB and active historical swap still prohibit expanding concurrency; unrelated
 processes remain untouched. Large-workload performance on this changing host needs
 its own measured process/system samples and failure cleanup.
 
@@ -251,7 +253,7 @@ material. No compute lane, R session or GPU job was started.
 
 ## Deferred steering input order and corrected live smoke
 
-2026-10-10, 17:21–17:23 PDT, installed `8952567`. The retained corrected-context
+2026-10-10, 17:21-17:23 PDT, installed `8952567`. The retained corrected-context
 `3d92b05` failure stopped after 8 turns in 20.658s. Its first user entry contains
 only the short median steer, with no workspace/attached blocks. The original
 bound-data/R-only task never appears before the cap. This is a fixture sequencing
@@ -299,7 +301,7 @@ account changes, package source edits or Git operations occurred in this lane.
 Four separate ignored sources and a fresh-process wrapper are now prepared under
 `resume-68017d0/`: file-format round trips; trusted local skill/directory-plugin
 import plus owned stdio MCP; a single bounded public-data download through a
-loaded caller R function; and trusted file-defined specialist/fan-out workflows.
+loaded caller R function; and trusted file-defined specialist/fanout workflows.
 Each has independent numeric/file/actual-call oracles rather than relying on a
 model's summary. `LIVE_INTEGRATIONS.md` records the exact entry command, source
 contracts, resource limits and remaining conditional cases. No R parse, model
@@ -317,7 +319,7 @@ Shiny artifacts and crash/timeout recovery remain their own pending cases.
 
 ## Actual serial integration results on installed 8952567
 
-2026-10-10, 17:34–17:40 PDT. Root certified the installed archive revision and held
+2026-10-10, 17:34-17:40 PDT. Root certified the installed archive revision and held
 installation replacement throughout these cases. The wrapper checked the certified
 lazy-load hashes before and after each process. All five initial R sources parsed.
 The actual frontend is fresh `Rscript --vanilla` sourcing R, using Versa
@@ -385,7 +387,7 @@ controlled replacement or cached-input recipe before promising offline replay.
 2026-10-10, 17:58 PDT. The final bounded offline audit passed all11 stages in
 5.550s outer /4.265s profiled elapsed, with13 fake provider requests across the
 parent and fresh children, zero external requests, zero warnings, and zero
-sampling errors. Approximate sampled family RSS peaked at457MiB over5 samples;
+sampling errors. Approximate sampled family RSS peaked at 457MiB over5 samples;
 this is process RSS, not unified/GPU memory. Certified lazy-load hashes remained
 unchanged. The owned R compute slot was released immediately after completion.
 
@@ -458,7 +460,7 @@ It exercised actual modern HTTP against one owned127.0.0.1 server:
   instruction. The successful header used only a synthetic fixture value; no
   OAuth, browser flow or real account credential was used.
 - Add2/5 returned7, four actual streamed progress notifications completed in1.429s
-  despite a1s inactivity timeout, and a deliberate server isError became
+  despite a 1s inactivity timeout, and a deliberate server isError became
   `gptr_error_mcp_tool` in model R.
 - The no-progress call stopped in1.021s. Server-side metadata witnessed modern
   response-stream closure and no late response, followed by a new successful add7.
@@ -486,7 +488,7 @@ native renderer or GUI witness. All setup and caller-restoration checks passed.
 
 One actual owned stdio MCP `web_search()` used only the fixed public query
 `Iris flower data set`. Independent transport logs show exactly two direct
-MediaWiki GETs, both HTTP200,315 and488 bytes, within the8s/128KiB-per-response
+MediaWiki GETs, both HTTP200,315 and488 bytes, within the 8s/128KiB-per-response
 limits and with redirects/proxies disabled. Search returned three result rows,
 656 total hits and selected page ID10477224/wordcount1034; the second GET verified
 the canonical `https://en.wikipedia.org/wiki/Iris_flower_data_set` source. Loaded
