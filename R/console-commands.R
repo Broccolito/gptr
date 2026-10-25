@@ -448,7 +448,8 @@ cmd_status = function(args, ctx) {
     paste0("file      ", d$file %||% "(not written yet)"))
 }
 
-#' /clear: a new conversation that keeps the model, its thinking level and the mode
+#' /clear: a new conversation that keeps the model, its thinking level, the mode and the workspace
+#' the old one evaluated in (a fork's overlay, a piped session's home)
 #' @noRd
 cmd_clear = function(args, ctx) {
   rs = console_repl_find()
@@ -463,6 +464,7 @@ cmd_clear = function(args, ctx) {
     rs$model = rs$model %||% paste0(d$model, level)
     rs$mode = s$mode
   }
+  rs$envir = repl_eval_env(rs)
   rs$session = NULL
   rs$notes = character()
   rs$attach = character()

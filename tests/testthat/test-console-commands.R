@@ -457,6 +457,21 @@ test_that("/clear keeps the thinking level of the session it ends", {
   expect_identical(model_canonical(rs$model)$thinking, "high")
 })
 
+test_that("/clear keeps the workspace the conversation used, a fork's too", {
+  local_console_commands()
+  local_project()
+  home = new.env()
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = home)
+  rs = repl_state(s, new.env())
+  home$z = 1
+  run_command(rs, "/fork")
+  assign("y", 5, envir = repl_eval_env(rs))
+  run_command(rs, "/clear")
+  expect_null(rs$session)
+  expect_identical(get0("y", repl_eval_env(rs)), 5)
+  expect_identical(get0("z", repl_eval_env(rs)), 1)
+})
+
 test_that("/cost, /context, /fork and /resume work on a session that ran", {
   local_console_commands()
   local_project()
