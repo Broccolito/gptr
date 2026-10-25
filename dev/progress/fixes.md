@@ -4673,6 +4673,9 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   are unchanged, as the verdict says.
 - Green: PASS 172; neighbours FAIL 0 SKIP 3 PASS 8731. Lint clean.
 - Deviations: none. Open: none.
+- Reverted by `e8f2728f` after the merge of P28's Tasks 88-92 (`bb87e279`): Task 91 gives a `$` or `@` word on a
+  `!` line to RStudio's own completion, which completes it (S9: `!fuel$m` gives `!fuel$mpg`), so /help's "after
+  ! or /, complete the word" holds again. Red with R24's code `^console-commands$` FAIL 1 PASS 171; green PASS 172.
 
 ### R25, R26 - The @files of a prompt fit their budget where the line says so
 - Commit `528426f8`. Red: `^console-repl$` FAIL 8 PASS 352: the line under a prompt named each @file's 40 lines
@@ -4735,6 +4738,14 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   (`^(listing-print|utils-text|northstar|prompt-text|prompt-sections|bench-context|ckpt-rewind|gptr-sdk|gptr-gateway|
   eval-core|ext-events|ext-load|ext-registry|ext-plugins|session-live|session-registry-retention|cli-common|
   skill-discover|bridge-sh)$`) FAIL 0 SKIP 3 PASS 3749.
+- Merged with P28's Tasks 88-92 (`ecfad58c`) in `bb87e279`: D-243 conflicted (both appended; Task 92's bullet
+  is kept in order and D-253's amendment stays last); console-repl.R merged cleanly (Task 92's warning handler
+  with R15's row end and R22's returned session); `e8f2728f` reverts R24 (above). No test this branch added
+  forces UTF-8 glyphs. Green at `e8f2728f` (NOT_CRAN=true CI=true, SIGINT at its default): neighbours FAIL 0
+  SKIP 2 PASS 8796, LC_ALL=C FAIL 0 SKIP 29 PASS 8618 (INFRA-03 ran with its 18 expectations in both);
+  `^(gptr-gateway|cli-claude|provider-fake|ckpt-rewind|listing-|utils-text|eval-core)` FAIL 0 SKIP 1 PASS 1753,
+  LC_ALL=C FAIL 0 SKIP 2 PASS 1744. Lint of the 33 R files either side changed is clean; `document` changed
+  nothing; the four plan checks pass.
 - Open: found in passing (R27's evidence, doc-locate.R): a console transcript with a `{name}` prompt cannot replay
   without a model, as `doc_console_site()` sets `args_hash = NULL` and the block reads stale under
   `GPTR_REPLAY=replay`; to triage.
