@@ -246,9 +246,9 @@ repl_terminal = function(rs) {
 
 #' The text typed or pasted on fd 0 that waits to be read, without blocking: one
 #' conn_read_chars() per ready poll (the first waits `wait` ms, later ones 50 ms), as a line read
-#' waits for a newline a partial line never sends. `rd$fd` is reopened after an end of input and
-#' dropped, never closed: closing it closes fd 0 (IC-75). An error reads nothing, as it would end
-#' the REPL.
+#' waits for a newline a partial line never sends; the last one's time is `rd$read_at`. `rd$fd` is
+#' reopened after an end of input and dropped, never closed: closing it closes fd 0 (IC-75). An
+#' error reads nothing, as it would end the REPL.
 #' @noRd
 console_typed_chars = function(rd, wait = 50L) {
   tryCatch({
@@ -260,6 +260,7 @@ console_typed_chars = function(rd, wait = 50L) {
       x = processx::conn_read_chars(rd$fd)
       if (!nzchar(x)) break
       txt = paste0(txt, x)
+      rd$read_at = reactor_now()
       wait = 50L
     }
     txt

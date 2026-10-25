@@ -313,9 +313,11 @@ test_that("the hosted jobs have time for the whole suite (CI-19)", {
   minutes = vapply(config, function(x) as.numeric(x$minutes %||% 45), 0)
   expect_identical(jobs[["R-CMD-check"]][["timeout-minutes"]],
                    "${{ matrix.config.minutes || 45 }}")
-  # October 2026: 26-31 minutes on Ubuntu and macOS, about 23 for the slowest Windows shard
+  # October 2026: 26-31 minutes on Ubuntu, 37-45 on macOS since P28's serial pty tests (CI-96),
+  # about 23 for the slowest Windows shard
   expect_gte(shards[["timeout-minutes"]], 45)
   expect_identical(unname(minutes[combos == "ubuntu-latest devel"]), 120)
+  expect_identical(unname(minutes[combos == "macos-latest release"]), 60)
   expect_gte(jobs$connections[["timeout-minutes"]], 60)
 })
 
