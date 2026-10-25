@@ -2259,7 +2259,7 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `risk.classify` | P11 | `r` tool (P10), bridges (P22), `ctx$risk()` | `function(code, envir = NULL, root = NULL, kind = c("r", "command", "sql", "python")) <gptr_risk>` |
 | `plan.pending` | P11 | `plan` context block (P07) | `function(envir_address, consume = TRUE) chr(1) or NULL` |
 | `s1.decide` | P13 | `ctx$decide()` | `function(question, x, ...) <gptr_s1>` |
-| `doc.site` | P15 | `r` tool record flag (P10), `documents` section (P07) | `function(session) list(path, format) or NULL` |
+| `doc.site` | P15 | `r` tool record flag (P10), `documents` section (P07), `/doc` and `/status` (P14) | `function(session) list(path, format) or NULL`; outside a run where a person can answer, without a document or binding, the transcript the project remembers (cheat-sheet review R10) |
 | `doc.edit` | P15 | `edit` tool (P10) | `function(path, edits, session) <gptr_tool_result> or NULL` (NULL: not a bound document) |
 | `doc.s1_block` | P15 | top-level System 1 calls (P13) | `function(call, summary) invisible(NULL)` (writes the one-line block) |
 | `doc.replay` | P15 | `team` and `fanout` routes (P19) | `function(call) <session> or NULL`: the replayed team or fan-out session for a fresh block, else `NULL` (IC-47) |

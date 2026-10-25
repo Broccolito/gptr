@@ -124,8 +124,9 @@ console_templates_sync = function() {
   invisible(NULL)
 }
 
-#' The bound history document of `s`, or the gptr_doc() binding before the console's first
-#' prompt when `s` is NULL (the `doc.site` service, P15), or NULL
+#' The history document `s` records into, or before the console's first prompt (`s` NULL) the
+#' gptr_doc() binding or the transcript the project remembers (the `doc.site` service, P15), or
+#' NULL
 #' @noRd
 cmd_doc_site = function(s) {
   if (!ext_service_has("doc.site")) return(NULL)

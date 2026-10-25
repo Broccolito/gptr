@@ -434,6 +434,31 @@ test_that("/doc and /status name a gptr_doc() binding before the first prompt", 
   expect_true(paste0("document  ", log) %in% status)
 })
 
+test_that("/doc and /status name the console transcript the project remembers", {
+  local_console_commands()
+  root = local_project()
+  old = the$doc_binding
+  withr::defer(assign("doc_binding", old, envir = the))
+  the$doc_binding = NULL
+  s = peter("hi", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
+  local_gptr_options(interactive = TRUE)
+  rs = repl_state(NULL, new.env())
+  expect_identical(run_command(rs, "/doc")$out, "No document is bound.")
+  target = file.path(root, ".gptr", "transcripts", "t.R")
+  doc_project_transcript(doc_rel(target))
+  expect_identical(run_command(rs, "/doc")$out, paste0("Document: ", target, " (transcript)"))
+  expect_true(paste0("document  ", target) %in% run_command(rs, "/status")$out)
+  expect_true(paste0("document  ", target) %in%
+                run_command(repl_state(s, new.env()), "/status")$out)
+  # a console call records nothing where nobody can answer, and nothing after "Nowhere"
+  local_gptr_options(interactive = FALSE)
+  expect_identical(run_command(rs, "/doc")$out, "No document is bound.")
+  local_gptr_options(interactive = TRUE)
+  doc_project_transcript("off")
+  expect_identical(run_command(rs, "/doc")$out, "No document is bound.")
+  expect_true("document  (none)" %in% run_command(rs, "/status")$out)
+})
+
 test_that("/clear starts a new conversation and keeps model and mode", {
   local_console_commands()
   s = idle_session()
