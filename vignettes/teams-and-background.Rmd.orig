@@ -83,9 +83,9 @@ self-contained: a fan-out child that succeeds keeps only the values it returned 
 finds the caller's objects but none of the child's other objects.
 
 At the console each child of a foreground call prints one line when it starts,
-`sub-agent A started (<model>)`, and one when it ends, `sub-agent A done (1/3)` with its turns
+`sub-agent A (<model>) started`, and one when it ends, `sub-agent A done (1/3)` with its turns
 and seconds, or `sub-agent A failed (1/3): <reason>`. A child's approval prompts and questions
-name it (`sub-agent A > r  ...`; a nested `peter()` call by its prompt and number,
+name it (`? sub-agent A: allow r?`; a nested `peter()` call by its prompt and number,
 `'Summarise ...' #2`), and its printed output stays in its own result. A `peter()` call that
 the agent's own R code makes without `envir =` reads your objects and keeps the ones it creates
 in `res$envir`. R code that wraps such calls in `capture.output()` or `sink()` also captures

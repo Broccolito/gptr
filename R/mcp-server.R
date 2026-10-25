@@ -186,7 +186,8 @@ mcp_serve_gate = function(call, run, ctx, sid = NULL) {
 #' stack (the CLI routes, also a nested CLI run inside its parent's tool; an MCP client during a
 #' run), it is reported as `tool_execution_start`/`_end` under its gate's call id, the end with
 #' the result's `content` and `details` and the execution time, and its approval's control tokens
-#' end with it, as for a call of the agent loop (IC-53, D-192)
+#' end with it, as for a call of the agent loop (IC-53, D-192); a refused call's end says why
+#' it did not run (`refused`)
 #' @noRd
 mcp_serve_call = function(target, name, args, id, schema) {
   run = session_live(target$session)$run
@@ -202,7 +203,8 @@ mcp_serve_call = function(target, name, args, id, schema) {
     run_emit(run, "tool_execution_end", tool_call_id = cid, tool_name = name,
              is_error = !isFALSE(st$res$is_error),
              elapsed = if (is.null(st$t0)) 0 else reactor_now() - st$t0,
-             details = st$res$details %||% list(), content = st$res$content %||% list())
+             details = st$res$details %||% list(), content = st$res$content %||% list(),
+             refused = st$refused)
   }, add = TRUE)
   st$res = mcp_serve_exec(target, name, args, id, schema, st)
   st$res
@@ -248,12 +250,16 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
   call = list(id = paste0("mcp_", id), name = name, input = input, tool = spec, nested = FALSE,
               risk = risk)
   if (!is.null(run)) call = tool_call_hook(run, call, risk)
-  if (!is.null(call$blocked)) return(gptr_tool_result(call$blocked, is_error = TRUE))
+  if (!is.null(call$blocked)) {
+    if (!is.null(st)) st$refused = call$refused
+    return(gptr_tool_result(call$blocked, is_error = TRUE))
+  }
   d = mcp_serve_gate(call, run, ctx, sid)
   if (!identical(d$decision, "allow")) {
-    return(gptr_tool_result(paste0("Permission denied: ", d$reason %||% "not allowed",
-                                   ". To allow it, run it yourself at the R prompt or add a ",
-                                   "rule with gptr_permissions(allow = ...)."), is_error = TRUE))
+    if (!is.null(st)) st$refused = perm_refused(d) %||% "not allowed"
+    d$how = paste0("To allow it, run it yourself at the R prompt or add a rule with ",
+                   "gptr_permissions(allow = ...).")
+    return(gptr_tool_result(perm_denial_text(d), is_error = TRUE))
   }
   if (is.list(d$input)) call$input = d$input
   tokens = NULL
@@ -274,7 +280,8 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
 #' Evaluate served R code in `env` through the eval.r service (the evaluator kind, IC-69).
 #' Mark the running tool on this call stack, as tool_execute_frame() does, so gptr_return()
 #' and nested calls belong to the session whose MCP token authorized this evaluation. During a
-#' run its plots are drawn as the loop's `r` tool draws them ("auto"), else offscreen (#42).
+#' run its plots are drawn and its printed output shown as the loop's `r` tool does ("auto", tee
+#' for a depth-0 run with a human; P28 Task 31), else offscreen and silent (#42).
 #' @noRd
 mcp_serve_r = function(input, env, run, session = NULL) {
   .gptr_tool_run = run
@@ -283,9 +290,10 @@ mcp_serve_r = function(input, env, run, session = NULL) {
   budget = as.integer(gptr_opt("r_output_tokens"))
   timeout = input$timeout %||% (if (gptr_has_human()) NULL else gptr_opt("r_timeout"))
   plots = if (is.null(run)) "capture" else "auto"
+  tee = !is.null(run) && gptr_has_human() && !isTRUE(run$depth > 0L)
   n_values = if (is.null(session)) 0L else length(session_data(session)$values)
-  res = ext_service_get("eval.r")(input$code, env, timeout = timeout, plots = plots,
-                                  tee = FALSE, budget_tokens = budget, rng = run$opts$rng_state,
+  res = ext_service_get("eval.r")(input$code, env, timeout = timeout, plots = plots, tee = tee,
+                                  budget_tokens = budget, rng = run$opts$rng_state,
                                   record = record)
   if (record && identical(res$status, "ok") && mcp_r_recording(run, session)) {
     data = list(code = input$code, record = TRUE, status = res$status,

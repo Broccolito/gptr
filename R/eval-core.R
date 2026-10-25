@@ -124,6 +124,7 @@ eval_state_new = function(code, timeout, plots, tee, budget, guard, record, max_
   st$objects = NULL
   st$state1 = NULL
   st$interrupted_after = NULL
+  st$interrupt_seen = NULL
   st$line = NA_integer_
   st$catch_interrupt = is.null(run_current())
   st$restored = FALSE
@@ -194,7 +195,10 @@ eval_run = function(st) {
 }
 
 #' Harness options, the anonymous-file sink and plot capture (undone by eval_restore()); the
-#' message sink in use is noted, so one the code leaves open is undone
+#' message sink in use is noted, so one the code leaves open is undone. Teed output is split to the
+#' console as R prints it, except in the console margin, where eval_echo() shows it (D-245); the
+#' evaluation's frame (`st$frame`) is where that display looks for the writer below it. During a T
+#' console's call isig is on while the code runs, so Ctrl-C interrupts it (tty_isig_on())
 #' @noRd
 eval_open = function(st) {
   force(st)
@@ -204,16 +208,22 @@ eval_open = function(st) {
     NULL
   }
   st$pad = console_pad()
+  st$colors = console_colors()
+  st$echo = st$tee && nzchar(st$pad)
+  st$split = st$tee && !st$echo
+  st$width = max(20L, cli::console_width() - nchar(st$pad))
+  st$frame = sys.nframe() - 1L
   st$old_opts = options(max.print = 1000L, width = 100L, rlang_interactive = FALSE,
                         cli.dynamic = FALSE, cli.num_colors = 1L, askYesNo = eval_no_ask)
   st$msg_sink = sink.number(type = "message")
   st$con = file("", "w+b")
-  sink(st$con, split = st$tee)
+  sink(st$con, split = st$split)
   st$sink_n = sink.number()
   st$old_try = options(try.outFile = st$con)
   st$ps = plot_begin(st$plots, st$human)
   st$hook = eval_plot_hook(st)
   for (h in eval_hook_names) setHook(h, st$hook, "append")
+  st$tty = tty_isig_on()
   invisible(st)
 }
 
@@ -253,7 +263,7 @@ eval_read_sink = function(st) {
     options(try.outFile = st$con)
   }
   if (sink.number() < st$sink_n) {
-    sink(st$con, split = st$tee)
+    sink(st$con, split = st$split)
     st$sink_n = sink.number()
   }
   bytes = raw()
@@ -266,7 +276,8 @@ eval_read_sink = function(st) {
   raw_to_utf8(bytes[bytes != as.raw(0L)])
 }
 
-#' Move captured output into an `output` event (merged with a preceding output event)
+#' Move captured output into an `output` event (merged with a preceding output event), and show
+#' it in the console margin (eval_echo())
 #' @noRd
 eval_flush = function(st) {
   txt = eval_read_sink(st)
@@ -277,7 +288,24 @@ eval_flush = function(st) {
   } else {
     eval_push(st, "output", text = txt)
   }
+  if (isTRUE(st$echo)) eval_echo(st, txt)
   invisible()
+}
+
+#' Show printed output in the console margin as a tool's result rows are (D-245): each line at
+#' column 4, escaped, dim in the console's colours and cut to its width, written by the writer below
+#' this evaluation with its own sink lifted; a sink the code left on top keeps the output
+#' @noRd
+eval_echo = function(st, txt) {
+  if (sink.number() != st$sink_n) return(invisible())
+  sink()
+  on.exit(sink(st$con, split = st$split), add = TRUE)
+  rlang::local_options(cli.num_colors = st$colors)
+  sym = console_style()
+  lines = console_escape(strsplit(sub("\n$", "", txt), "\n", fixed = TRUE)[[1L]], FALSE)
+  rows = console_cut(paste0("    ", lines), st$width, sym$ellipsis)
+  rows = ifelse(nzchar(lines), sym$dim(rows), "")
+  gptr_message_write(paste0(rows, "\n", collapse = ""), "stdout", from = st$frame)
 }
 
 #' Evaluate the expressions in order; stop at the first failure
@@ -305,11 +333,14 @@ eval_loop_catch = function(st, exprs) {
   tryCatch(eval_loop(st, exprs), interrupt = function(cnd) eval_interrupted(st))
 }
 
-#' Record an interrupt that ended the evaluation
+#' Record an interrupt that ended the evaluation: its `interrupt` event, after the seconds
+#' eval_on_interrupt() noted (now when it hit between expressions)
 #' @noRd
 eval_interrupted = function(st) {
   setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
-  if (is.null(st$interrupted_after)) st$interrupted_after = eval_now() - st$t0
+  st$interrupted_after = st$interrupt_seen %||% (eval_now() - st$t0)
+  eval_push(st, "interrupt", message = "Interrupted by the user.",
+            seconds = st$interrupted_after)
   st$status = "interrupt"
   invisible(st)
 }
@@ -332,14 +363,30 @@ eval_one = function(st, expr, i, sref) {
     own = identical(stream, "stdout") && sink.number() == st$sink_n
     if (own) sink()
     on.exit({
-      if (own) sink(st$con, split = st$tee)
+      if (own) sink(st$con, split = st$split)
       tryCatch(eval_read_sink(st), error = function(e) invisible(NULL))
     }, add = TRUE)
     gptr_message_write(text, stream, margin, from = k - 1L)
   }
   force(.gptr_message_write)
+  # the console's own code waiting for a session (console_wait()) shows it as the console does:
+  # outside this capture (its sink lifted when on top) and in the options from before it
+  .gptr_eval_outside = function(f) {
+    eval_flush(st)
+    own = sink.number() == st$sink_n
+    if (own) sink()
+    opts = options(st$old_opts)
+    on.exit({
+      options(opts)
+      if (own) sink(st$con, split = st$split)
+    }, add = TRUE)
+    f()
+  }
+  force(.gptr_eval_outside)
   .gptr_console_pad = st$pad
   force(.gptr_console_pad)
+  .gptr_console_colors = st$colors
+  force(.gptr_console_colors)
   st$line = if (is.null(sref)) NA_integer_ else as.integer(sref[1L])
   eval_push(st, "source", text = paste(as.character(sref), collapse = "\n"), line = st$line)
   start = length(st$events)
@@ -433,16 +480,25 @@ eval_print_drop = function(pe) {
   invisible()
 }
 
-#' Message handler: record; muffle unless the output is teed to the user
+#' Message handler: record; muffle unless the output is teed to the user. In the console margin an
+#' R message is a row of the output (eval_echo()) and muffled, as R would write it at column 0;
+#' gptr's own notices show themselves
 #' @noRd
 eval_on_message = function(st, cnd) {
   eval_flush(st)
   eval_push(st, "message", text = conditionMessage(cnd))
+  if (isTRUE(st$echo) && !inherits(cnd, "gptr_message")) {
+    eval_echo(st, conditionMessage(cnd))
+    tryInvokeRestart("muffleMessage")
+  }
   if (!st$tee) tryInvokeRestart("muffleMessage")
   invisible()
 }
 
-#' Warning handler: record; under options(warn = 2) R turns the warning into an error next
+#' Warning handler: record and muffle; under options(warn = 2) R turns the warning into an error
+#' next. Teed, it shows as it comes, `Warning: <text>`, in the console margin at column 4 with the
+#' output (eval_echo()), else on stderr: R would defer it to its top level, which a console or a run
+#' reaches only when it ends, and name the evaluator's own call
 #' @noRd
 eval_on_warning = function(st, cnd) {
   w = getOption("warn", 0)
@@ -450,7 +506,15 @@ eval_on_warning = function(st, cnd) {
   eval_flush(st)
   eval_push(st, "warning", text = conditionMessage(cnd),
             call = eval_call_text(conditionCall(cnd)))
-  if (!st$tee) tryInvokeRestart("muffleWarning")
+  if (st$tee) {
+    text = paste0("Warning: ", conditionMessage(cnd), "\n")
+    if (isTRUE(st$echo)) {
+      eval_echo(st, text)
+    } else {
+      gptr_message_write(text, "stderr", from = st$frame)
+    }
+  }
+  tryInvokeRestart("muffleWarning")
   invisible()
 }
 
@@ -482,13 +546,14 @@ eval_overflow = function(st, cnd) {
   "error"
 }
 
-#' Interrupt handler: record and decline, so the run's interrupt policy decides
+#' Interrupt handler: flush, note when, and decline, so the run's interrupt policy decides. Only
+#' an interrupt that ends the evaluation is reported (eval_interrupted(); in a run the abort's
+#' tool_interrupted()): code the pause menu resumes runs to its end, and its result is as if it
+#' had not paused (steering review)
 #' @noRd
 eval_on_interrupt = function(st) {
-  if (is.null(st$interrupted_after)) st$interrupted_after = eval_now() - st$t0
+  st$interrupt_seen = eval_now() - st$t0
   eval_flush(st)
-  eval_push(st, "interrupt", message = "Interrupted by the user.",
-            seconds = st$interrupted_after)
   invisible()
 }
 
@@ -615,6 +680,8 @@ eval_finish = function(st) {
 eval_restore = function(st) {
   if (isTRUE(st$restored)) return(invisible())
   st$restored = TRUE
+  tty_isig_off(st$tty)
+  st$tty = NULL
   setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
   if (!is.null(st$hook)) {
     for (h in eval_hook_names) {

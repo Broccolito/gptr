@@ -552,6 +552,85 @@ test_that("session_enqueue() appends FIFO items by kind and emits queue_update",
   expect_error(session_enqueue(s, 1), class = "gptr_error_invalid_argument")
 })
 
+test_that("session_enqueue() refuses blank text unless it has attachments (steering review)", {
+  ev = local_events("queue_update")
+  s = test_session()
+  for (text in c("   ", "\t\n")) {
+    cnd = expect_error(session_enqueue(s, text), class = "gptr_error_invalid_argument")
+    expect_identical(cnd$expected, "a non-blank string")
+  }
+  expect_identical(session_data(s)$queue, list(steer = list(), follow_up = list()))
+  img = block_image(as.raw(1:4), source = "user")
+  session_enqueue(s, " ", as = "follow_up", source = "pipe", blocks = list(img))
+  expect_identical(session_data(s)$queue$follow_up[[1L]]$blocks, list(img))
+  expect_length(ev(s), 1L)
+})
+
+# the queue_update fields that name the item, then the counts left in the queue
+queue_fields = c("op", "which", "text", "source", "steer", "follow_up")
+
+test_that("queue_update names the item it adds: the redacted text and the source (D-242)", {
+  ev = local_events("queue_update")
+  s = test_session()
+  key = paste0("sk-ant-api03-", strrep("A1b2", 6L))
+  session_enqueue(s, paste("use", key), as = "steer", source = "repl")
+  session_enqueue(s, "then plot", as = "follow_up", source = "pipe")
+  e = lapply(ev(s), `[`, queue_fields)
+  expect_identical(e, list(
+    list(op = "add", which = "steer", text = "use [secret:anthropic-key]", source = "repl",
+         steer = 1L, follow_up = 0L),
+    list(op = "add", which = "follow_up", text = "then plot", source = "pipe", steer = 1L,
+         follow_up = 1L)))
+})
+
+test_that("session_unqueue() takes back the newest user item and emits withdraw (D-242)", {
+  ev = local_events("queue_update")
+  s = test_session()
+  session_enqueue(s, "use TPM", as = "steer", source = "pipe")
+  session_enqueue(s, "and log2", as = "steer", source = "repl")
+  session_enqueue(s, "a note", as = "steer", source = "extension")
+  session_enqueue(s, "done", as = "steer", source = "agent")
+  session_enqueue(s, "then plot", as = "follow_up", source = "repl")
+  item = session_unqueue(s)
+  expect_identical(item[c("text", "source")], list(text = "and log2", source = "repl"))
+  expect_identical(vapply(session_data(s)$queue$steer, function(i) i$text, ""),
+                   c("use TPM", "a note", "done"))
+  e = ev(s)
+  expect_identical(e[[length(e)]][queue_fields],
+                   list(op = "withdraw", which = "steer", text = "and log2", source = "repl",
+                        steer = 3L, follow_up = 1L))
+  expect_identical(session_unqueue(s)$text, "use TPM")
+  # extension and agent items are never touched
+  expect_null(session_unqueue(s))
+  expect_identical(vapply(session_data(s)$queue$steer, function(i) i$source, ""),
+                   c("extension", "agent"))
+  expect_identical(session_unqueue(s, "follow_up")$text, "then plot")
+  expect_length(ev(s), 8L)
+  expect_error(session_unqueue(s, "later"), class = "gptr_error_invalid_argument")
+})
+
+test_that("session_unqueue() returns NULL on an empty queue and emits nothing", {
+  ev = local_events("queue_update")
+  s = test_session()
+  expect_null(session_unqueue(s))
+  expect_null(session_unqueue(s, "follow_up"))
+  expect_length(ev(s), 0L)
+})
+
+test_that("a replayed block's notes take back queued items with one withdraw each (D-242)", {
+  ev = local_events("queue_update")
+  s = test_session()
+  session_enqueue(s, "use TPM", as = "steer", source = "api_user")
+  session_enqueue(s, "then plot", as = "follow_up", source = "pipe")
+  steps = list(list(type = "steer", text = "use TPM"), list(type = "follow_up", text = "then plot"))
+  replay_notes_add(s, "b1", list(steps = steps))
+  expect_identical(lapply(ev(s)[3:4], `[`, queue_fields), list(
+    list(op = "withdraw", which = "steer", text = "use TPM", source = "api_user", steer = 0L,
+         follow_up = 1L),
+    list(op = "withdraw", which = "follow_up", text = "then plot", source = "pipe", steer = 0L,
+         follow_up = 0L)))
+})
+
 test_that("session_root_id() follows live parents to the root", {
   root = test_session()
   child = test_session(kind = "child", parent = root)

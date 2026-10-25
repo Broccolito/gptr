@@ -83,6 +83,31 @@ test_that("gptr_steer() queues a follow-up delivered when the agent would stop",
   expect_identical(s$text, "second")
 })
 
+test_that("a steer sent before a deferred prompt runs joins it, recorded (steering review)", {
+  local_gw()
+  fake = local_fake_provider(list("ok"))
+  s = peter("Summarise mtcars", model = fake, .run = FALSE, envir = new.env())
+  gptr_steer(s, "Use only the mpg column")
+  gptr_wait(s)
+  reqs = fake_requests(fake)
+  expect_length(reqs, 1L)
+  users = Filter(function(m) identical(m$role, "user"), reqs[[1L]]$messages)
+  expect_identical(vapply(users, msg_text, ""), c("Summarise mtcars", "Use only the mpg column"))
+  expect_identical(vapply(users, function(m) m$source, ""), c("follow_up", "steer"))
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "Summarise mtcars"), 1L)
+  expect_true("## Steer: Use only the mpg column" %in% lines)
+  expect_false(any(startsWith(lines, "## Follow-up")))
+})
+
+test_that("a deferred prompt run alone records no follow-up line (steering review)", {
+  local_gw()
+  fake = local_fake_provider(list("ok"))
+  s = peter("Summarise mtcars", model = fake, .run = FALSE, envir = new.env())
+  gptr_wait(s)
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "Summarise mtcars"), 1L)
+  expect_false(any(startsWith(lines, "## Follow-up")))
+})
+
 test_that("a turn started from queued input says once that the bound document misses it", {
   local_gw()
   slot = "message:sdk_turn_unrecorded"
@@ -115,6 +140,26 @@ test_that("gptr_steer() redacts with the context profile and queues an api_user 
   expect_identical(box$profile, "context")
   expect_identical(item$text, "[redacted]")
   expect_identical(item$source, "api_user")
+})
+
+test_that("a blank steer is refused by gptr_steer() and by a pipe into a running session", {
+  local_gw()
+  local_gptr_options(unsafe_no_permissions = TRUE)
+  pipe_blank = test_tool("pipe_blank", function(ctx) {
+    err = tryCatch(ctx$session |> peter("  "), error = function(e) e)
+    paste(class(err)[1L], length(session_data(ctx$session)$queue$steer))
+  })
+  fake = local_fake_provider(list(fake_tool("pipe_blank"), "done"))
+  s = peter("x", model = fake, tools = list(pipe_blank), .run = FALSE, envir = new.env())
+  expect_error(gptr_steer(s, "   "), class = "gptr_error_invalid_argument")
+  expect_error(gptr_steer(s, "\t\n", as = "follow_up"), class = "gptr_error_invalid_argument")
+  expect_identical(lengths(session_data(s)$queue), c(steer = 0L, follow_up = 1L))
+  gptr_wait(s)
+  roles = vapply(s$messages, function(m) m$role, "")
+  expect_identical(msg_text(s$messages[[which(roles == "tool_result")]]),
+                   "gptr_error_invalid_argument 0")
+  expect_false("operator" %in% roles)
+  expect_identical(s$text, "done")
 })
 
 test_that("the verbs validate their arguments", {

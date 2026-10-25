@@ -477,7 +477,9 @@ doc_context_labels = function(context) {
 #' call (a call inside a function, a later pass of a top-level loop under Rscript, an evaluated
 #' text), the call is nested there (architecture 6.9.3: no block): its site has no statement and
 #' is not top-level, with or without srcrefs, and it is neither a console turn nor looked up in
-#' the IDE's buffer. Only an IDE location that fails falls back to the console.
+#' the IDE's buffer. Only an IDE location that fails falls back to the console. A console turn
+#' (a call with the attribute `gptr_console`, which the console REPL builds) is in no document,
+#' whatever sourced the console or the editor holds (IC-49).
 #' @noRd
 doc_locate = function(call) {
   template = call$template %||% call$prompt
@@ -487,6 +489,7 @@ doc_locate = function(call) {
   nested = FALSE
   finders = list(doc_site_srcref, doc_site_source_frame, doc_site_knitr, doc_site_jupyter,
                  doc_site_rscript, doc_site_ide)
+  if (isTRUE(attr(call$sys_call, "gptr_console"))) finders = list()
   for (f in finders) {
     raw = tryCatch(f(call, ph, call0), error = function(e) NULL)
     if (is.null(raw)) next

@@ -7,7 +7,7 @@ queue_user_sources = c("pipe", "pause_menu", "repl", "api_user")
 queue_sources = c(queue_user_sources, "extension", "agent")
 
 #' Create a loop state machine (class `gptr_loop`)
-#' `steering`/`follow_up` return at most one queued message each (Pi's one-at-a-time delivery);
+#' `steering` returns every queued steer (D-242); `follow_up` at most one queued message;
 #' `finish_turn(turn)` returns NULL or `list(action = "end", reason)`.
 #' @noRd
 loop_new = function(max_turns = NULL, steering = function() list(), follow_up = function() list(),

@@ -1166,7 +1166,7 @@ pcli_hook_params = function(event, ctx) {
 }
 
 #' `agent_start` hook: probe the CLI of a session on a plan route before its run's first request,
-#' so the probe's runs (about a second, then cached) never freeze its waiting row; a probe that
+#' so the probe's runs (about a second, then cached) never freeze its live row; a probe that
 #' fails is left to build(), which reports it (D-192)
 #' @noRd
 pcli_hook_start = function(event, ctx) {

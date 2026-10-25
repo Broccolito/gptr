@@ -1116,6 +1116,25 @@ test_that("queued items start an idle session's run (input = NULL)", {
   expect_identical(s$turns, 1L)
 })
 
+test_that("a steer older than every follow-up still opens a run without input (steering review)", {
+  skip_on_cran()
+  local_permissive()
+  fake = local_fake_provider(list("first", "second"))
+  s = test_session()
+  session_enqueue(s, "old steer", as = "steer")
+  session_enqueue(s, "new follow-up", as = "follow_up")
+  # a leftover steer was queued before the follow-up, as by an earlier run
+  d = session_data(s)
+  q = d$queue
+  q$steer[[1L]]$t = q$follow_up[[1L]]$t - 1
+  d$queue = q
+  session_run(s, NULL)
+  users = Filter(function(m) identical(m$role, "user"), s$messages)
+  expect_identical(vapply(users, msg_text, ""), c("old steer", "new follow-up"))
+  expect_identical(vapply(users, function(m) m$source, ""), c("steer", "follow_up"))
+  expect_identical(vapply(fake_requests(fake)[[1L]]$messages, msg_text, ""), "old steer")
+})
+
 test_that("run_start(s, NULL) continues from the leaf after an abort", {
   skip_on_cran()
   local_permissive()
@@ -1413,6 +1432,92 @@ test_that("a tool piping into its own running session enqueues a steer delivered
   expect_identical(req_roles(req), c("user", "assistant", "tool_result", "operator"))
   expect_identical(msg_text(req$messages[[4L]]),
                    "The user sent this message while you were working: use TPM")
+})
+
+test_that("every steer queued during a tool call reaches the next request, in order (D-242)", {
+  skip_on_cran()
+  local_permissive()
+  local_tool("self", function(input, ctx) {
+    session_enqueue(ctx$session, "use TPM", as = "steer", source = "pipe")
+    session_enqueue(ctx$session, "and log2", as = "steer", source = "repl")
+    "sent"
+  })
+  fake = local_fake_provider(list(fake_tool("self"), "ack", "done"))
+  s = test_session()
+  run_text(s, "go")
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  expect_identical(req_roles(reqs[[2L]]),
+                   c("user", "assistant", "tool_result", "operator", "operator"))
+  expect_identical(vapply(reqs[[2L]]$messages[4:5], msg_text, ""),
+                   paste("The user sent this message while you were working:",
+                         c("use TPM", "and log2")))
+})
+
+test_that("queue_update names each item the run takes, after it left the queue (D-242)", {
+  skip_on_cran()
+  local_permissive()
+  local_tool("self", function(input, ctx) {
+    session_enqueue(ctx$session, "use TPM", as = "steer", source = "pipe")
+    session_enqueue(ctx$session, "and log2", as = "steer", source = "repl")
+    "sent"
+  })
+  local_fake_provider(list(fake_tool("self"), "ack"))
+  ev = local_events("queue_update")
+  s = test_session()
+  session_enqueue(s, "go", as = "follow_up")
+  session_run(s, NULL)
+  took = Filter(function(e) identical(e$op, "take"), ev(s))
+  expect_identical(lapply(took, `[`, c("op", "which", "text", "source", "steer", "follow_up")),
+                   list(list(op = "take", which = "follow_up", text = "go", source = "api_user",
+                             steer = 0L, follow_up = 0L),
+                        list(op = "take", which = "steer", text = "use TPM", source = "pipe",
+                             steer = 0L, follow_up = 0L),
+                        list(op = "take", which = "steer", text = "and log2", source = "repl",
+                             steer = 0L, follow_up = 0L)))
+})
+
+test_that("a steer sent during a final answer adds one request to the same run (D-242)", {
+  skip_on_cran()
+  local_permissive()
+  once = new.env()
+  local_hook("message_end", function(event, ctx) {
+    if (identical(event$role, "assistant") && is.null(once$sent)) {
+      once$sent = TRUE
+      session_enqueue(ctx$session, "also plot it", as = "steer", source = "repl")
+    }
+    NULL
+  })
+  fake = local_fake_provider(list("the answer", "plotted"))
+  s = test_session()
+  run_text(s, "go")
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  expect_identical(req_roles(reqs[[2L]]), c("user", "assistant", "operator"))
+  expect_identical(s$text, "plotted")
+  expect_identical(s$turns, 1L)
+})
+
+test_that("a steer sent during the first of two calls waits for both results; no call is skipped",
+          {
+  skip_on_cran()
+  local_permissive()
+  ran = new.env()
+  local_tool("first", function(input, ctx) {
+    session_enqueue(ctx$session, "use TPM", as = "steer", source = "repl")
+    "one"
+  })
+  local_tool("second", function(input, ctx) {
+    ran$second = TRUE
+    "two"
+  })
+  fake = local_fake_provider(list(fake_tools(list("first"), list("second")), "ack"))
+  run_text(test_session(), "go")
+  expect_true(isTRUE(ran$second))
+  req = fake_requests(fake)[[2L]]
+  expect_identical(req_roles(req),
+                   c("user", "assistant", "tool_result", "tool_result", "operator"))
+  expect_identical(vapply(req$messages[3:4], msg_text, ""), c("one", "two"))
 })
 
 test_that("a mode change during a run reaches the model as an operator message after the results", {
@@ -2174,6 +2279,7 @@ test_that("abort() from a tool_call hook ends the call unrun, then settles the r
   expect_true(res[[1L]]$is_error)
   expect_identical(msg_text(res[[1L]]), "Tool call not executed: the run was aborted (hook stop).")
   expect_identical(vapply(ev(s), function(e) e$type, ""), c("tool_execution_end", "agent_end"))
+  expect_identical(ev(s)[[1L]]$refused, "the run was aborted")
 })
 
 test_that("aborted() and run() still see a run that was aborted while its tool executes", {

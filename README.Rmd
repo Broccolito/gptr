@@ -68,6 +68,9 @@ gptr_config(model = "openai/gpt-6-sol", .scope = "session")
 peter()                          # chat in the console
 ```
 
+In the chat you can keep typing while Peter works: in a terminal, Enter steers the running answer
+and Tab queues a follow-up for the next prompt. `/help` lists the commands and keys.
+
 ## A first session
 
 With a configured model, tell Peter what to do:
@@ -173,7 +176,7 @@ example. Recipes that need a real provider, MCP server or external program are s
 | Understand the name and ideas behind Peter | `vignette("why-peter")` |
 | Choose a language model; call Peter from functions and scripts | `vignette("language-models")` |
 | Make logical, choice and score decisions | `vignette("system-one")` |
-| Chat, use slash commands, or run inline R with `!` | `vignette("interactive-console")` |
+| Chat, steer a running answer, use slash commands, or run inline R with `!` | `vignette("interactive-console")` |
 | Set defaults, permissions, paths and runtime options | `vignette("configuration")` |
 | Record, replay and summarize a workflow | `vignette("script-as-history")` |
 | Run teams, fan-outs, background sessions and the session SDK | `vignette("teams-and-background")` |

@@ -120,9 +120,10 @@ test_that("a delayed aborted checkpoint is charged without a late reply or histo
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
+  local_live_console()
   x = compaction_fixture(function(request) {
     reactor_timer(at = reactor_now() + 0.05, fn = function() {
-      seen$task = console_record(list(run = run$id))$task
+      seen$task = the$live_row$task
       run_abort(run, "user")
     })
     fake_text("late summary", delay = 1)
@@ -238,7 +239,7 @@ test_that("manual compaction announces waiting before inference and respects qui
   seen$notices = character()
   seen$before = FALSE
   x = compaction_fixture(function(request) {
-    seen$before = any(grepl("Compacting", seen$notices, fixed = TRUE))
+    seen$before = any(grepl("compacting", seen$notices, fixed = TRUE))
     fake_text("A summary.", delay = 0.02)
   })
   returned = withVisible(withCallingHandlers(compact_run(x$s, "manual"),
@@ -247,7 +248,7 @@ test_that("manual compaction announces waiting before inference and respects qui
     invokeRestart("muffleMessage")
   }))
   expect_true(seen$before)
-  expect_identical(seen$notices, "Compacting conversation...\n")
+  expect_identical(seen$notices, "compacting...\n")
   expect_identical(returned$value, x$s)
   expect_false(returned$visible)
   seen$notices = character()
@@ -256,8 +257,8 @@ test_that("manual compaction announces waiting before inference and respects qui
     seen$notices = c(seen$notices, conditionMessage(cnd))
     invokeRestart("muffleMessage")
   })
-  expect_identical(seen$notices, "Compacting conversation...\n")
-  expect_identical(acknowledgement, "Conversation compacted.")
+  expect_identical(seen$notices, "compacting...\n")
+  expect_match(acknowledgement, "^compacted - \\S+ to \\S+ tokens$")
   local_gptr_options(verbose = 0L)
   expect_no_message(compact_run(x$s, "manual"))
   local_gptr_options(verbose = 1L, quiet = TRUE)
@@ -281,7 +282,7 @@ test_that("a failed manual checkpoint preserves its exception and reports unfini
     seen$notices = c(seen$notices, conditionMessage(cnd))
     invokeRestart("muffleMessage")
   }), "Synthetic checkpoint persistence failure", fixed = TRUE)
-  expect_identical(seen$notices, c("Compacting conversation...\n", "Compaction did not finish.\n"))
+  expect_identical(seen$notices, c("compacting...\n", "compaction did not finish\n"))
   expect_length(compaction_entries(x$s), 0L)
   expect_identical(nrow(x$s$usage), 1L)
   expect_false(isTRUE(session_live(x$s)$compacting))
@@ -294,7 +295,7 @@ test_that("a cancelled compact command never claims that the conversation was co
   }))
   withr::defer(off())
   text = cmd_compact("", session_live(x$s)$ctx)
-  expect_identical(text, "Compaction was cancelled.")
+  expect_identical(as.character(text), "not compacted - cancelled")
   expect_length(fake_requests(x$fake), 0L)
   expect_length(compaction_entries(x$s), 0L)
   expect_identical(nrow(x$s$usage), 0L)
@@ -439,7 +440,7 @@ test_that("a refused checkpoint restores its tool scope without inventing a requ
   expect_identical(nrow(x$s$usage), 0L)
   expect_length(fake_requests(x$fake), 0L)
   expect_length(compaction_entries(x$s), 1L)
-  expect_identical(notices$text, "Compacting conversation...\n")
+  expect_identical(notices$text, "compacting...\n")
   expect_match(compaction_entries(x$s)[[1L]]$summary, "No model summary", fixed = TRUE)
 })
 

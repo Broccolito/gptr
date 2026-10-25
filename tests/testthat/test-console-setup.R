@@ -66,7 +66,7 @@ test_that("manual setup shows API and local Ollama paths without discovering or 
   expect_false(file.exists(settings_path("user")))
 })
 
-for (choice in list(NA_integer_, 1L)) {
+for (choice in list(NA_integer_, 4L, 1L)) {
   test_that(paste("cancelled or unavailable CLI choice", choice, "saves no fallback"), {
     local_gw(workspace = FALSE)
     local_setup_providers(c("not found", "found"))
@@ -114,7 +114,7 @@ test_that("peter opens with the chosen default and skips setup on its next openi
   local_mocked_bindings(gptr_readline = function(prompt = "", ...) "/exit")
   local_no_fd0()
   out = utils::capture.output(peter())
-  expect_match(paste(out, collapse = "\n"), "model codex/default", fixed = TRUE)
+  expect_match(paste(out, collapse = "\n"), "gptr [0-9.]+ - codex/default - ")
   expect_identical(settings_read("user")$model, "codex/default")
   utils::capture.output(peter())
   expect_identical(ui$log$method, "select")
@@ -146,26 +146,74 @@ test_that("the console menu consumes a CLI choice before normal chat input", {
     out = utils::capture.output(peter())
   }, type = "message")
   text = paste(c(err, out), collapse = "\n")
-  expect_match(text, "1: Codex CLI", fixed = TRUE)
-  expect_match(text, "2: Claude Code CLI", fixed = TRUE)
+  expect_match(text, "1  Codex CLI", fixed = TRUE)
+  expect_match(text, "2  Claude Code CLI", fixed = TRUE)
   expect_match(text, "Welcome to Peter", fixed = TRUE)
   expect_match(text, "Saved in your user settings", fixed = TRUE)
   expect_match(text, "does not verify billing or online access", fixed = TRUE)
-  expect_match(text, "3: Manual setup (API or Ollama)", fixed = TRUE)
+  expect_match(text, "3  Manual setup (API or Ollama)", fixed = TRUE)
   expect_match(text, "Default provider saved: claude-cli", fixed = TRUE)
-  expect_match(text, "Welcome to Peter.\nChoose a default model provider.", fixed = TRUE)
+  expect_match(text, "? Welcome to Peter.\n  Choose a default model provider.", fixed = TRUE)
   expect_false(grepl("<U+000A>", text, fixed = TRUE))
   expect_false(grepl("login:", text, fixed = TRUE))
-  rows = out[grepl("^[[:space:]]+[12]: ", out)]
+  rows = out[grepl("^[[:space:]]+[12]  ", out)]
   expect_length(rows, 2L)
   expect_true(all(grepl("Signed in", rows, fixed = TRUE)))
   expect_identical(regexpr("Signed in", rows, fixed = TRUE)[1L],
                    regexpr("Signed in", rows, fixed = TRUE)[2L])
-  first = which(grepl("^[[:space:]]+1: ", out))
-  expect_identical(out[first - 1L], "")
-  expect_match(text, "model claude-cli/default", fixed = TRUE)
+  # the question's frame (D-243): its details under the title, then the numbered choices
+  first = which(grepl("^[[:space:]]+1  ", out))
+  expect_identical(out[first - 1L],
+                   "  Manual setup shows API and Ollama commands, then returns to R.")
+  expect_match(text, "gptr [0-9.]+ - claude-cli/default - ")
   expect_identical(settings_read("user")$model, "claude-cli/default")
   expect_length(box$answers, 0L)
+})
+
+test_that("the console menu offers Cancel, and Enter chooses it (cheat-sheet review)", {
+  local_gw(workspace = FALSE)
+  local_setup_providers()
+  local_gptr_options(interactive = TRUE, ui = "console")
+  box = new.env(parent = emptyenv())
+  box$answers = ""
+  box$reads = 0L
+  local_mocked_bindings(gptr_readline = function(prompt = "", ...) {
+    box$reads = box$reads + 1L
+    if (!length(box$answers)) return(NA_character_)
+    a = box$answers[[1L]]
+    box$answers = box$answers[-1L]
+    a
+  })
+  local_no_fd0()
+  res = "not returned"
+  out = NULL
+  err = utils::capture.output({
+    out = utils::capture.output({
+      res = peter()
+    })
+  }, type = "message")
+  text = paste(c(err, out), collapse = "\n")
+  expect_null(res)
+  expect_identical(box$reads, 1L)
+  expect_match(text, "4  Cancel and return to R", fixed = TRUE)
+  expect_match(text, "Choose a number; Enter = Cancel and return to R", fixed = TRUE)
+  expect_match(text, "Setup cancelled. No default provider was saved.", fixed = TRUE)
+  expect_false(file.exists(settings_path("user")))
+})
+
+test_that("a call with a prompt resolves its model and never shows the setup menu", {
+  local_gw(workspace = FALSE)
+  local_setup_providers()
+  local_fake_provider(list("done"))
+  ui = local_scripted_ui()
+  local_mocked_bindings(model_default = function(role = "chat") "fake/fake-1")
+  s = NULL
+  utils::capture.output({
+    s = peter("x")
+  })
+  expect_s3_class(s, "gptr_session")
+  expect_identical(s$text, "done")
+  expect_false("select" %in% ui$log$method)
 })
 
 for (choice in 1:2) {

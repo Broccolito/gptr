@@ -113,8 +113,10 @@ test_that("a session UI wrapper delegates outside idle ticks and never prompts d
   expect_identical(ui$input("name?"), NA_character_)
   st$ticking = FALSE
   expect_identical(ans$decision, "deny")
-  expect_match(ans$feedback, "runs in the background", fixed = TRUE)
-  expect_match(ans$feedback, "call the tool again with the same input", fixed = TRUE)
+  # gptr's own denial: a reason, never the person's words (cheat-sheet review)
+  expect_null(ans$feedback)
+  expect_match(ans$reason, "runs in the background", fixed = TRUE)
+  expect_match(ans$reason, "call the tool again with the same input", fixed = TRUE)
   expect_identical(calls$n, 1L)
   ask = session_live(s)$background$ask
   expect_identical(ask$what, "permission")
@@ -370,8 +372,9 @@ test_that("gptr_cancel() aborts a background session and releases its job", {
   gptr_cancel(s)
   expect_identical(s$status, "aborted")
   local_gptr_options(quiet = FALSE)
+  # on a row of its own at R's prompt, in the console's words, named by its prompt (visual round 3)
   expect_message(expect_true(bg_pump_until(function() !bg_has(s$id))),
-                 "finished with status aborted", class = "gptr_message_notice")
+                 "^\nbackground session 'long task' aborted", class = "gptr_message_notice")
   expect_false(s$id %in% gptr_jobs()$id)
 })
 
@@ -486,6 +489,24 @@ test_that("a message piped into a waiting session is delivered with the console 
   texts = vapply(fake$log$requests[[2L]]$messages, msg_text, "")
   expect_true(any(grepl("also say hi", texts, fixed = TRUE)))
   expect_true(any(grepl("I am at the console now. Repeat the call", texts, fixed = TRUE)))
+})
+
+test_that("a follow-up queued while a session waits comes after its resumed turn", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  local_scripted_ui(answers = list())
+  local_gptr_options(background_tools = "idle", record = "off", verbose = 0L)
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "z = 3")), "done", "ok"))
+  s = peter("do it", model = fake, mode = "manual", envir = new.env(), background = TRUE)
+  expect_true(bg_pump_until(function() identical(s$status, "waiting")))
+  gptr_steer(s, "LATER QUESTION", as = "follow_up")
+  gptr_wait(s, timeout = 20)
+  texts = lapply(fake$log$requests[2:3], function(r) vapply(r$messages, msg_text, ""))
+  expect_match(texts[[1L]][[length(texts[[1L]])]], "I am at the console now. Repeat the call",
+               fixed = TRUE)
+  expect_false("LATER QUESTION" %in% texts[[1L]])
+  expect_identical(texts[[2L]][[length(texts[[2L]])]], "LATER QUESTION")
 })
 
 test_that("gptr_jobs(kill = TRUE) cancels a waiting background session", {

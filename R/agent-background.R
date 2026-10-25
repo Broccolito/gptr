@@ -235,7 +235,7 @@ bg_ui_spec = function(name, id) {
     permission = function(request) {
       if (!bg_ticking()) return(bg_ui_target(name)$permission(request))
       bg_park(id, "permission", bg_request_summary(request))
-      list(decision = "deny", remember = NULL, feedback = bg_pending_text("approval"),
+      list(decision = "deny", remember = NULL, reason = bg_pending_text("approval"),
            how = "Nothing ran and nobody declined.")
     }
   )
@@ -319,9 +319,9 @@ bg_run_opts = function(run) {
   o
 }
 
-#' Hold the session and record its live handle `list(ui, run, ask, waiting, opts)` (ids, the
-#' pending ask, flags and options only); the first registration also adds the job row, installs
-#' the UI wrappers and prints the notice
+#' Hold the session and record its live handle `list(ui, name, run, ask, waiting, opts)` (ids, its
+#' first prompt cut, the pending ask, flags and options only); the first registration also adds the
+#' job row, installs the UI wrappers and prints the notice
 #' @noRd
 bg_track = function(s, run) {
   d = session_data(s)
@@ -329,9 +329,10 @@ bg_track = function(s, run) {
   bg = live$background
   if (!bg_has(d$id)) {
     assign(d$id, s, envir = bg_state()$sessions)
-    bg = list(ui = bg_install_ui(d$id))
     first = Filter(function(m) identical(m$role, "user"), path_messages(entries_path(d)))
-    bg_job_add(d$id, bg_cut(if (length(first)) msg_text(first[[1L]]), 40L))
+    name = bg_cut(if (length(first)) msg_text(first[[1L]]), 40L)
+    bg = list(ui = bg_install_ui(d$id), name = name)
+    bg_job_add(d$id, name)
     gptr_inform(c("Background sessions are experimental.",
                   "See help(\"gptr-background\") for the consoles where they are supported."),
                 "notice", .once = "background_experimental")
@@ -369,12 +370,15 @@ bg_stop = function(id) {
 }
 
 #' Forget a background session: UI wrappers, live handle, job row, strong reference; with
-#' `notice`, tell the idle console how it settled
+#' `notice`, tell the idle console how it settled, on a row of its own after R's prompt, dim in the
+#' console's words, the session named by its first prompt: `background session '<prompt>' done`, or
+#' its status and reason
 #' @noRd
 bg_release = function(id, notice = FALSE) {
   s = bg_get(id)
   if (is.null(s)) return(invisible(FALSE))
   live = session_live(s)
+  name = live$background$name
   if (!is.null(live)) {
     for (rid in live$background$ui) registry_remove(rid)
     live$background = NULL
@@ -383,9 +387,11 @@ bg_release = function(id, notice = FALSE) {
   rm(list = id, envir = bg_state()$sessions)
   if (notice) {
     d = session_data(s)
-    why = if (length(d$reason) && nzchar(d$reason)) paste0(": ", bg_cut(d$reason, 120L))
-    gptr_inform(paste0("Background session ", id, " finished with status ", d$status, why, "."),
-                "notice")
+    sym = console_style()
+    why = if (length(d$reason) && nzchar(d$reason)) paste0(sym$sep, bg_cut(d$reason, 120L))
+    said = paste0("background session", if (nzchar(name %||% "")) paste0(" '", name, "'"), " ",
+                  if (identical(d$status, "idle")) "done" else d$status, why)
+    gptr_inform(paste0("\n", sym$dim(said)), "notice")
   }
   invisible(TRUE)
 }
@@ -526,23 +532,21 @@ bg_park_session = function(s, run) {
   invisible(s)
 }
 
-#' Continue a waiting session inside a blocking gptr call: the run opens with a user message that
-#' says the user is at the console (a steer, so it comes before re-queued follow-ups), and the
-#' model repeats the denied (or blocked) call, which the gate asks the user about. A session that
-#' cannot continue keeps its queue as it was, is set to `aborted` and released (one diagnostic),
-#' never left waiting
+#' Continue a waiting session inside a blocking gptr call: the run's input is a user steer that
+#' says the user is at the console, so steers piped in meanwhile join it and queued follow-ups
+#' come when it would stop, and the model repeats the denied (or blocked) call, which the gate
+#' asks the user about. A session that cannot continue is set to `aborted` and released (one
+#' diagnostic), never left waiting
 #' @noRd
 bg_resume = function(s) {
   d = session_data(s)
-  q = d$queue
   live = session_live(s)
   ask = live$background$ask
-  run = tryCatch({
-    if (!is.null(ask)) session_enqueue(s, bg_resume_text(ask), as = "steer", source = "api_user")
-    run_start(s, NULL, opts = live$background$opts)
-  }, error = function(e) e)
+  input = if (!is.null(ask)) {
+    msg_user(redact(bg_resume_text(ask), "context"), source = "steer")
+  }
+  run = tryCatch(run_start(s, input, opts = live$background$opts), error = function(e) e)
   if (!inherits(run, "error")) return(invisible(run))
-  d$queue = q
   registry_diagnostic("builtin:background", "resume", class(run)[1L], conditionMessage(run))
   if (identical(d$status, "waiting")) {
     d$status = "aborted"

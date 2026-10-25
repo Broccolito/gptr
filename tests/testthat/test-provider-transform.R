@@ -479,3 +479,34 @@ test_that("unparsable entry timestamps consistently fall back to zero", {
   out = project_messages(list(entry), "c", target_sonnet())
   expect_identical(out[[1]]$timestamp, 0)
 })
+
+test_that("two relays after the tool results serialise in each native adapter (D-242)", {
+  skip_on_cran()
+  source(testthat::test_path("fixtures", "sse", "replay_helpers.R"), local = TRUE)
+  relays = lapply(c("use TPM", "and log2"), function(x) {
+    msg_operator("steer_relay", paste("The user sent this message while you were working:", x),
+                 origin_text = x)
+  })
+  builds = list(
+    `anthropic-messages` = list(anthropic_build, c("user", "assistant", "user", "system")),
+    `openai-completions` = list(completions_build,
+                                c("developer", "user", "assistant", "tool", "user", "user")),
+    `openai-responses` = list(responses_build, c("developer", "user", "function_call",
+                                                 "function_call_output", "developer",
+                                                 "developer")),
+    `bedrock-converse` = list(bedrock_build, c("user", "assistant", "user"))
+  )
+  for (api in names(builds)) {
+    model = test_model(api)
+    call = msg_assistant(list(block_tool_call("call_1", "r", list(code = "nrow(d)"))), api = api,
+                         provider = model$provider, model = model$id, stop_reason = "tool_use",
+                         timestamp = 2)
+    msgs = c(list(first_message(), call, msg_tool_result("call_1", "r", "[1] 32", timestamp = 3)),
+             relays)
+    body = as.character(builds[[api]][[1L]](model, ctx_fixture(msgs), list())$body)
+    items = json_decode(body)$messages %||% json_decode(body)$input
+    expect_identical(vapply(items, function(m) m$role %||% m$type, ""), builds[[api]][[2L]])
+    at = vapply(c("[1] 32", "use TPM", "and log2"), function(x) regexpr(x, body, fixed = TRUE), 1L)
+    expect_true(all(at > 0L) && all(diff(at) > 0L), label = api)
+  }
+})

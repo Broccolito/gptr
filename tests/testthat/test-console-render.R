@@ -51,6 +51,18 @@ screen_rows = function(bytes) {
   rows
 }
 
+# What each step of a stream writes, finish() last: a step is a delta for write() or a function
+# of the renderer
+render_writes = function(steps, width = 40L) {
+  steps = c(as.list(steps), function(r) r$finish())
+  out = character(length(steps))
+  i = 0L
+  local_mocked_bindings(console_cat = function(text) out[[i]] <<- paste0(out[[i]], text))
+  r = render_markdown_stream(width)
+  for (i in seq_along(steps)) if (is.function(steps[[i]])) steps[[i]](r) else r$write(steps[[i]])
+  out
+}
+
 # Every construct of the renderer, nested lists, a fence indented under an item (D-187), a
 # table, a rule and two languages (D-186)
 render_rich = paste0(
@@ -65,7 +77,7 @@ test_that("the output does not depend on chunking in the four console modes (acc
   skip_on_cran()
   withr::local_seed(42)
   # highlighting decides per complete line; cli's parser is slow for 800 renders
-  local_mocked_bindings(code_highlight = function(code) code, .package = "cli")
+  local_mocked_bindings(code_highlight = function(code, ...) code, .package = "cli")
   for (dynamic in c(FALSE, TRUE)) {
     for (colours in c(1L, 256L)) {
       withr::local_options(cli.num_colors = colours, cli.dynamic = dynamic, gptr.verbose = 2L)
@@ -75,6 +87,40 @@ test_that("the output does not depend on chunking in the four console modes (acc
       }, NA)
       expect_true(all(same))
     }
+  }
+})
+
+test_that("the transcript is written in whole rows, each at its line end or its wrap (D-245)", {
+  skip_on_cran()
+  withr::local_seed(45)
+  local_mocked_bindings(code_highlight = function(code, ...) code, .package = "cli")
+  for (dynamic in c(FALSE, TRUE)) {
+    for (colours in c(1L, 256L)) {
+      withr::local_options(cli.num_colors = colours, cli.dynamic = dynamic, gptr.verbose = 2L)
+      ref = paste(render_writes(render_rich), collapse = "")
+      for (i in seq_len(20L)) {
+        out = render_writes(random_chunks(render_rich, 9L))
+        expect_true(all(!nzchar(out) | endsWith(out, "\n")))
+        expect_identical(paste(out, collapse = ""), ref)
+      }
+    }
+  }
+  # the wrap is at the width less the margin's four columns
+  withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE)
+  expect_identical(render_writes(c("Hello wor", "ld and ", "more\n", "alpha beta gamma delta ",
+                                   "epsilon"), 24L),
+                   c("", "", "  Hello world and more\n", "  alpha beta gamma\n", "",
+                     "  delta epsilon\n"))
+})
+
+test_that("prose wraps at 100 columns at most, however wide the console (visual review)", {
+  words = sprintf("word%02d", 1:40)
+  for (dynamic in c(TRUE, FALSE)) {
+    withr::local_options(cli.num_colors = 1L, cli.dynamic = dynamic, gptr.verbose = 2L)
+    pad = if (dynamic) "  " else ""
+    out = render_chunks(paste(words, collapse = " "), width = 140L)
+    expect_identical(out[[1L]], paste0(pad, paste(words[1:14], collapse = " ")), info = pad)
+    expect_true(all(nchar(out) <= 100L + nchar(pad)))
   }
 })
 
@@ -124,29 +170,71 @@ test_that("an interactive console keeps a two-column margin at 40 columns (D-186
 
 test_that("blank lines collapse and nested lists keep their indentation (D-186)", {
   skip_on_cran()
-  withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE, gptr.verbose = 2L)
+  withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE, gptr.verbose = 2L,
+                       cli.unicode = FALSE)
   text = "\n\n# T\n\n\n- a\n  - b\n    - c\n1. x\n   - y\n\nend\n\n"
-  expect_identical(render_chunks(text), c("  # T", "", "  - a", "    - b", "      - c",
+  expect_identical(render_chunks(text), c("  T", "", "  - a", "    - b", "      - c",
                                           "  1. x", "     - y", "", "  end"))
   skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "symbols need a UTF-8 locale")
-  withr::local_options(cli.num_colors = 256L, cli.unicode = TRUE)
-  expect_identical(cli::ansi_strip(render_chunks(text)),
-                   c("  T", "", "  \u2022 a", "    \u25e6 b", "      \u25e6 c", "  1. x",
-                     "     \u25e6 y", "", "  end"))
+  withr::local_options(cli.unicode = TRUE)
+  # the same rows at every colour depth: without colour too the Markdown is read (visual review)
+  for (colours in c(1L, 256L)) {
+    withr::local_options(cli.num_colors = colours)
+    expect_identical(cli::ansi_strip(render_chunks(text)),
+                     c("  T", "", "  \u2022 a", "    \u25e6 b", "      \u25e6 c", "  1. x",
+                       "     \u25e6 y", "", "  end"), info = paste(colours))
+  }
 })
 
-test_that("a line ended by other output continues at the margin, nesting kept (D-186)", {
+test_that("a console shows the same text at any colour depth; only SGR differs (visual review)", {
+  skip_on_cran()
+  local_mocked_bindings(code_highlight = function(code, ...) code, .package = "cli")
+  withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L)
+  for (unicode in c(TRUE, FALSE)) {
+    withr::local_options(cli.unicode = unicode, cli.num_colors = 256L)
+    styled = cli::ansi_strip(render_chunks(render_rich))
+    withr::local_options(cli.num_colors = 1L)
+    expect_identical(render_chunks(render_rich), styled, info = paste(unicode))
+  }
+  withr::local_options(cli.num_colors = 1L)
+  expect_identical(render_chunks("Use `mtcars` and **bold** *it* here."),
+                   "  Use mtcars and bold it here.")
+})
+
+test_that("other output goes between whole rows; the held row continues, nesting kept (D-245)", {
   withr::local_options(cli.num_colors = 1L, cli.dynamic = TRUE, gptr.verbose = 2L)
-  out = utils::capture.output({
-    r = render_markdown_stream(40L)
-    r$write("keeps streaming ")
-    r$reset_line()
-    r$write("slowly on.\n- a\n  ")
-    r$reset_line()
-    r$write("- b")
+  note = function(r) console_cat("(note)\n")
+  expect_identical(render_writes(list("keeps streaming ", note, "slowly on.\n- a\n  ", note,
+                                      "- b")),
+                   c("", "(note)\n", "  keeps streaming slowly on.\n  - a\n", "(note)\n", "",
+                     "    - b\n"))
+})
+
+test_that("an interrupt while a row is written loses none of its delta (visual round 2)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  skip_if_sigint_ignored()
+  withr::local_options(cli.num_colors = 1L, cli.dynamic = FALSE, gptr.verbose = 0L)
+  # SIGINT, as a D console's Ctrl-C, arrives while the first row is written, and R would take it at
+  # the loop's check; it comes at the next check after the delta instead (Sys.sleep())
+  first = TRUE
+  r = render_markdown_stream(width = 80L, before_output = function(x) {
+    if (!first) return()
+    first <<- FALSE
+    tools::pskill(Sys.getpid(), tools::SIGINT)
+    for (i in 1:1e5) NULL
+  })
+  hit = FALSE
+  out = written(function() {
+    tryCatch({
+      r$write("the means would be.\nEight-cylinder cars")
+      Sys.sleep(0.05)
+    }, interrupt = function(e) hit <<- TRUE)
+    r$write(" are heavier\n")
     r$finish()
   })
-  expect_identical(out, c("  keeps streaming", "  slowly on.", "  - a", "    - b"))
+  expect_true(hit)
+  expect_identical(out, "the means would be.\nEight-cylinder cars are heavier\n")
 })
 
 test_that("pipe tables are aligned on an interactive console and stay valid Markdown (D-186)", {
@@ -200,8 +288,10 @@ test_that("italics, link URLs, quotes, rules and headings are styled only with c
   out = render_chunks(text, 80L)
   expect_identical(cli::ansi_strip(out), "An it and [d](http://x.y) a * b 2*3")
   expect_match(out, "An \033[0;3mit\033[0m and", fixed = TRUE)
-  expect_match(out, "[d]\033[0;2m(http://x.y)\033[0m a * b 2*3", fixed = TRUE)
-  expect_identical(render_chunks("> q"), "\033[2m> \033[22mq")
+  expect_match(out, "[d]\033[0;38;5;244m(http://x.y)\033[0m a * b 2*3", fixed = TRUE)
+  expect_identical(render_chunks("> q"), "\033[38;5;244m> \033[39mq")
+  expect_identical(render_chunks("a\n\n---\n\nb")[[3L]],
+                   paste0("\033[38;5;244m", strrep("-", 40L), "\033[39m"))
   expect_identical(cli::ansi_strip(render_chunks("a\n\n---\n\nb")),
                    c("a", "", strrep("-", 40L), "", "b"))
   expect_identical(render_chunks("# One\n## Two"),
@@ -216,71 +306,76 @@ test_that("italics, link URLs, quotes, rules and headings are styled only with c
   }
 })
 
-test_that("complete R lines use cli's highlighter and other code a light one (D-186)", {
+test_that("R code is highlighted in the logo palette and other code is plain (D-245)", {
   skip_on_cran()
-  withr::local_options(cli.num_colors = 256L, cli.dynamic = FALSE)
-  whole = "x = f(1, 'a')"
-  expect_false(identical(as.character(cli::code_highlight(whole)), whole))
-  for (lang in c("r", "R", "{r, echo=FALSE}", "r title")) {
-    out = render_chunks(paste0("```", lang, "\n", whole, "\np = g('b',\n```"), 80L)
-    expect_match(out[[2L]], cli::code_highlight(whole), fixed = TRUE)
-    expect_match(out[[3L]], code_light("p = g('b',", "r"), fixed = TRUE)
-    expect_match(out[[3L]], "\033\\[[0-9;]+m'b'")
+  withr::local_options(cli.dynamic = FALSE)
+  code = c("f = function(x) if (x) \"s\" else NULL  # c", "y = mean(1L, na.rm = TRUE)")
+  # reserved words red; strings, numbers and constants blue; calls bold; comments dim; the rest ink
+  lit = function(red, blue, grey) {
+    r = function(x) paste0("\033[", red, "m", x, "\033[39m")
+    b = function(x) paste0("\033[", blue, "m", x, "\033[39m")
+    c(paste0("f = ", r("function"), "(x) ", r("if"), " (x) ", b("\"s\""), " ", r("else"), " ",
+             b("NULL"), "  ", grey),
+      paste0("y = \033[1mmean\033[22m(", b("1L"), ", na.rm = ", b("TRUE"), ")"))
   }
-  py = render_chunks("```python\nx = 'a'  # c 1\n```", 80L)[[2L]]
-  expect_match(py, "\033\\[[0-9;]+m'a'")
-  expect_match(py, "\033\\[[0-9;]+m# c 1")
-  expect_identical(cli::ansi_strip(py), "x = 'a'  # c 1")
-  expect_match(render_chunks("```json\n{\"a\": 1}\n```", 80L)[[2L]],
-               "\033\\[[0-9;]+m\"a\".*\033\\[[0-9;]+m1")
-  expect_identical(render_chunks("```text\n'a' 1\n```", 80L)[[2L]], "'a' 1")
+  want = list(`16777216` = lit("38;2;184;84;80", "38;2;85;126;168",
+                               "\033[38;2;135;135;135m# c\033[39m"),
+              `256` = lit("38;5;167", "38;5;67", "\033[38;5;244m# c\033[39m"),
+              `16` = lit("31", "34", "\033[2m# c\033[22m"), `1` = code)
+  for (n in names(want)) {
+    withr::local_options(cli.num_colors = as.integer(n))
+    for (lang in c("r", "R", "{r, echo=FALSE}", "r title")) {
+      out = render_chunks(paste0("```", lang, "\n", paste(code, collapse = "\n"), "\n```"), 80L)
+      expect_identical(out[2:3], want[[n]], info = paste(n, lang))
+    }
+    expect_identical(console_call_line(list(name = "r", input = list(code = code)), 80L)[2:3],
+                     paste0("    ", want[[n]]), info = n)
+  }
+  withr::local_options(cli.num_colors = 256L)
+  # R that does not parse and other languages: ink between dim fences
+  expect_identical(render_chunks("```r\np = g('b',\n```", 80L)[[2L]], "p = g('b',")
+  for (lang in c("python", "json", "text", "")) {
+    expect_identical(render_chunks(paste0("```", lang, "\nx = 'a'  # c 1\n```"), 80L),
+                     c(paste0("\033[38;5;244m```", lang, "\033[39m"), "x = 'a'  # c 1",
+                       "\033[38;5;244m```\033[39m"), info = lang)
+  }
+  # a user's cli.code_theme wins
+  withr::local_options(cli.code_theme = list(reserved = "#00ff00"))
+  expect_identical(render_chunks("```r\nfunction(x) 's'\n```", 80L)[[2L]],
+                   "\033[38;5;46mfunction\033[39m(x) 's'")
 })
 
-test_that("fenced lines stream as they arrive and a line that fits is redrawn (D-187)", {
+test_that("highlighted R has no help links, as RStudio would add (visual review)", {
+  withr::local_options(cli.num_colors = 256L, cli.hyperlink = TRUE, cli.hyperlink_help = TRUE)
+  out = console_code("fit = lm(mpg ~ wt, data = fuel)", "r")
+  expect_identical(out, "fit = \033[1mlm\033[22m(mpg ~ wt, data = fuel)")
+})
+
+test_that("a fenced line is written once, whole and highlighted, at its line end (D-245)", {
   skip_on_cran()
   withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L)
-  long = "zz = c('a line too long to be redrawn')"
+  long = "zz = c('a line longer than the row, never wrapped')"
   for (colours in c(1L, 256L)) {
     withr::local_options(cli.num_colors = colours)
-    con = rawConnection(raw(), "w")
-    sink(con)
-    tryCatch({
-      r = render_markdown_stream(40L)
-      r$write("```r\nx = mean(")
-      partial = rawToChar(rawConnectionValue(con))
-      r$write(paste0("y)\n", long, "\n\tif (a) b\n```\n"))
-      r$finish()
-    }, finally = sink())
-    bytes = rawToChar(rawConnectionValue(con))
-    close(con)
-    expect_identical(cli::ansi_strip(partial), "  ```r\n  x = mean(")
-    expect_identical(screen_rows(cli::ansi_strip(bytes)),
-                     c("  ```r", "  x = mean(y)", paste0("  ", long), "  \tif (a) b", "  ```"))
-    expect_false(grepl(paste0("\r  ", long), bytes, fixed = TRUE))
-    # a TAB has no display width in nchar(), so a line holding one is never redrawn
-    expect_false(grepl("\tif (a) b\r", bytes, fixed = TRUE))
-    if (colours == 1L) {
-      expect_false(grepl("\r", bytes, fixed = TRUE))
-    } else {
-      expect_match(bytes, paste0("x = mean(y)\r  ", cli::code_highlight("x = mean(y)"), "\n"),
-                   fixed = TRUE)
-    }
+    out = render_writes(c("```r\nx = mean(", paste0("y)\n", long, "\n```\n")))
+    expect_identical(cli::ansi_strip(out),
+                     c("  ```r\n", paste0("  x = mean(y)\n  ", long, "\n  ```\n"), ""))
+    expect_false(any(grepl("\r", out, fixed = TRUE)))
+    if (colours > 1L) expect_match(out[[2L]], "  x = \033[1mmean\033[22m(y)\n", fixed = TRUE)
   }
 })
 
-test_that("a fenced line broken by other output is shown whole after it (D-187)", {
+test_that("a fenced line broken by other output is written once, after it (D-245)", {
   withr::local_options(cli.dynamic = TRUE, gptr.verbose = 2L, cli.num_colors = 256L)
   out = utils::capture.output({
     r = render_markdown_stream(60L)
     r$write("```python\nif x:\n    y = foo(")
-    r$reset_line()
     cat("  (a notice)\n")
     r$write("bar)\n```\n")
     r$finish()
   })
-  expect_identical(screen_rows(paste0(cli::ansi_strip(out), "\n", collapse = "")),
-                   c("  ```python", "  if x:", "      y = foo(", "  (a notice)",
-                     "      y = foo(bar)", "  ```"))
+  expect_identical(cli::ansi_strip(out),
+                   c("  ```python", "  if x:", "  (a notice)", "      y = foo(bar)", "  ```"))
 })
 
 test_that("prose lines respect the width and bullets hang (UTF-8 locale)", {
@@ -356,19 +451,6 @@ test_that("ordinary notices use stdout and actual errors use stderr", {
   expect_identical(err, "Error: failure")
 })
 
-test_that("reset_line() ends a partial line and finish() closes it", {
-  withr::local_options(cli.num_colors = 1L)
-  out = utils::capture.output({
-    r = render_markdown_stream(80L)
-    r$write("partial answer ")
-    r$write("continues")
-    r$reset_line()
-    r$write(" next line")
-    r$finish()
-  })
-  expect_identical(out, c("partial answer", "continues next line"))
-})
-
 test_that("console_print_text() prints a whole reply and skips empty text", {
   withr::local_options(cli.num_colors = 1L)
   expect_identical(utils::capture.output(console_print_text("Hello **there**")),
@@ -377,20 +459,355 @@ test_that("console_print_text() prints a whole reply and skips empty text", {
   expect_identical(utils::capture.output(console_print_text("")), character())
 })
 
-test_that("the spinner is silent when stdout is not a dynamic terminal", {
-  withr::local_options(cli.dynamic = FALSE)
-  sp = console_spinner()
-  expect_identical(utils::capture.output({
-    sp$tick()
-    sp$clear()
-  }), character())
-})
-
 test_that("the interrupt key follows the front end", {
   local_mocked_bindings(front_end = function() "rstudio")
   expect_identical(console_interrupt_key(), "Esc")
+  # Ctrl-C reaches R in Positron's console (visual review)
+  local_mocked_bindings(front_end = function() "positron")
+  expect_identical(console_interrupt_key(), "Ctrl-C")
   local_mocked_bindings(front_end = function() "terminal")
   expect_identical(console_interrupt_key(), "Ctrl-C")
+})
+
+# ---------------------------------------------------------------- P28 Task 8: the style table
+
+# The terminal background console_style() reads, set for the calling test only
+local_background = function(value, .env = parent.frame()) {
+  old = the$background
+  the$background = value
+  withr::defer(assign("background", old, envir = the), envir = .env)
+}
+
+test_that("console_style() holds the logo's cursor glyphs, ASCII where they may not show (D-245)", {
+  utf8 = list(person = "\u203a", tool = "\u258e", agent = "\u258c", queued = "\u21b3",
+              up = "\u2191", bullet = "\u2022", nested = "\u25e6", sep = " \u00b7 ",
+              ellipsis = "\u2026")
+  # ASCII's chevron is doubled, so an answer never reads as R's own prompt `> ` (visual review)
+  ascii = list(person = ">>", tool = "|", agent = "#", queued = "->", up = "Up", bullet = "-",
+               nested = "-", sep = " - ", ellipsis = "...")
+  glyphs = function() console_style()[names(utf8)]
+  local_mocked_bindings(is_windows = function() FALSE)
+  withr::local_options(cli.unicode = TRUE)
+  expect_identical(glyphs(), utf8)
+  withr::local_options(cli.unicode = FALSE)
+  expect_identical(glyphs(), ascii)
+  # U+258E and U+21B3 are not in WGL4: Windows consoles outside Windows Terminal and RStudio
+  withr::local_options(cli.unicode = TRUE)
+  local_mocked_bindings(is_windows = function() TRUE, front_end = function() "rgui")
+  withr::local_envvar(WT_SESSION = NA)
+  expect_identical(glyphs(), ascii)
+  withr::local_envvar(WT_SESSION = "8e2c")
+  expect_identical(glyphs(), utf8)
+  withr::local_envvar(WT_SESSION = NA)
+  local_mocked_bindings(front_end = function() "rstudio")
+  expect_identical(glyphs(), utf8)
+})
+
+test_that("console_style() gives the logo accents by depth and the band by background (D-245)", {
+  local_background(NULL)
+  local_mocked_bindings(console_class = function() "T")
+  want = list(
+    `16777216` = c("\033[38;2;184;84;80mx\033[39m", "\033[38;2;85;126;168mx\033[39m"),
+    `256` = c("\033[38;5;167mx\033[39m", "\033[38;5;67mx\033[39m"),
+    `16` = c("\033[31mx\033[39m", "\033[34mx\033[39m"),
+    `1` = c("x", "x"))
+  # the one grey: halfway between the logo's ink and cream where 256 colours show, else SGR 2
+  grey = c(`16777216` = "\033[38;2;135;135;135mx\033[39m", `256` = "\033[38;5;244mx\033[39m",
+           `16` = "\033[2mx\033[22m", `1` = "x")
+  band = c(dark = "\033[48;5;237m", light = "\033[48;5;254m")
+  for (n in names(want)) {
+    withr::local_options(cli.num_colors = as.integer(n))
+    dim = grey[[n]]
+    for (bg in c("dark", "light", NA)) {
+      the$background = bg
+      st = console_style()
+      expect_identical(c(st$red("x"), st$blue("x"), st$dim("x")), c(want[[n]], dim), info = n)
+      expect_identical(st$band, if (n %in% c("16777216", "256") && !is.na(bg)) band[[bg]] else "",
+                       info = paste(n, bg))
+    }
+  }
+  # only a T console has the band: never TERM=dumb (D), RStudio, Positron or Windows (L), or
+  # Rscript (P); the live row's words keep the band's grey, as it may be drawn inside an evaluation
+  withr::local_options(cli.num_colors = 256L)
+  the$background = "dark"
+  for (cls in c("D", "L", "P")) {
+    local_mocked_bindings(console_class = function() cls)
+    st = console_style()
+    expect_identical(c(st$band, st$band_dim("x")), c("", "\033[38;5;247mx\033[39m"), info = cls)
+  }
+})
+
+test_that("a probed background's band is Codex's fill in its nearest cell (review)", {
+  local_background(NULL)
+  local_mocked_bindings(console_class = function() "T")
+  withr::local_options(cli.num_colors = 256L)
+  band = function(reply) {
+    the$background = background_reply(reply)
+    st = console_style()
+    c(st$band, st$band_dim("x"))
+  }
+  # Terminal.app's Novel (cream): 4% black over it is a darker cream (#d7d7af), not the cooler grey
+  # 254, and its words a grey about 4.5:1 on it
+  expect_identical(band("\033]11;rgb:dfff/dba4/c3ff\a"),
+                   c("\033[48;5;187m", "\033[38;5;240mx\033[39m"))
+  # Solarized light and dark, whose nearest cells are greys; 12% white over #1c1c1c is 237 as before
+  expect_identical(band("\033]11;rgb:fd/f6/e3\a"), c("\033[48;5;254m", "\033[38;5;241mx\033[39m"))
+  expect_identical(band("\033]11;rgb:00/2b/36\a"), c("\033[48;5;237m", "\033[38;5;247mx\033[39m"))
+  expect_identical(band("\033]11;rgb:1c1c/1c1c/1c1c\a"),
+                   c("\033[48;5;237m", "\033[38;5;247mx\033[39m"))
+  expect_identical(band("\033]11;rgb:ffff/ffff/ffff\a"),
+                   c("\033[48;5;255m", "\033[38;5;242mx\033[39m"))
+  # COLORFGBG names no colour: the two cells and greys as before
+  the$background = "light"
+  expect_identical(c(console_style()$band, console_style()$band_dim("x")),
+                   c("\033[48;5;254m", "\033[38;5;242mx\033[39m"))
+  # a truecolor terminal gets the fill itself, a darker shade of the same paper (Man Page, Novel),
+  # and its words a grey 4.5:1 against that fill (visual round 1)
+  withr::local_options(cli.num_colors = 16777216L)
+  expect_identical(band("\033]11;rgb:fe/f2/91\a"),
+                   c("\033[48;2;244;232;139m", "\033[38;2;103;103;103mx\033[39m"))
+  expect_identical(band("\033]11;rgb:1c1c/1c1c/1c1c\a"),
+                   c("\033[48;2;55;55;55m", "\033[38;2;160;160;160mx\033[39m"))
+  the$background = "light"
+  expect_identical(console_style()$band, "\033[48;5;254m")
+})
+
+test_that("on a saturated background the accents and the grey keep 3:1 against it (Task 41)", {
+  local_background(NULL)
+  local_mocked_bindings(console_class = function() "T")
+  withr::local_options(cli.num_colors = 16777216L)
+  # WCAG contrast of a truecolor foreground against background `bg` (0 to 255); bold: the default's
+  ratio = function(x, bg) {
+    if (startsWith(x, "\033[1m")) return(Inf)
+    fg = as.numeric(regmatches(x, regexec("38;2;([0-9]+);([0-9]+);([0-9]+)m", x))[[1L]][-1L])
+    lum = function(v) {
+      v = v / 255
+      sum(c(0.2126, 0.7152, 0.0722) * ifelse(v <= 0.04045, v / 12.92, ((v + 0.055) / 1.055)^2.4))
+    }
+    y = c(lum(fg), lum(bg))
+    (max(y) + 0.05) / (min(y) + 0.05)
+  }
+  # Terminal.app's Ocean and Grass; Basic's black and white keep the logo's colours
+  for (bg in list(c(43, 102, 201), c(19, 119, 61))) {
+    the$background = background_reply(sprintf("\033]11;rgb:%02x/%02x/%02x\a", bg[1], bg[2], bg[3]))
+    st = console_style()
+    for (x in c(st$red("x"), st$blue("x"), st$dim("x"))) {
+      expect_gte(ratio(x, bg), 3)
+    }
+  }
+  for (reply in c("\033]11;rgb:0000/0000/0000\a", "\033]11;rgb:ffff/ffff/ffff\a")) {
+    the$background = background_reply(reply)
+    st = console_style()
+    expect_identical(c(st$red("x"), st$blue("x"), st$dim("x")),
+                     c("\033[38;2;184;84;80mx\033[39m", "\033[38;2;85;126;168mx\033[39m",
+                       "\033[38;2;135;135;135mx\033[39m"))
+  }
+})
+
+test_that("the background comes from COLORFGBG's last field, read once (D-245)", {
+  local_background(NULL)
+  fgbg = c("15;0", "0;15", "15;default;8", "0;7", "0;16", "default;default", "")
+  want = c("dark", "light", "dark", "light", NA, NA, NA)
+  for (i in seq_along(fgbg)) {
+    the$background = NULL
+    withr::local_envvar(COLORFGBG = fgbg[[i]])
+    expect_identical(console_background(), want[[i]], info = fgbg[[i]])
+  }
+  withr::local_envvar(COLORFGBG = "0;15")
+  expect_identical(console_background(), NA_character_)
+})
+
+test_that("NO_COLOR keeps the glyphs and drops every SGR (D-245)", {
+  local_background("dark")
+  local_mocked_bindings(console_class = function() "T")
+  withr::local_options(cli.num_colors = NULL, crayon.enabled = NULL, cli.default_num_colors = 256L,
+                       cli.unicode = TRUE)
+  withr::local_envvar(NO_COLOR = NA, R_CLI_NUM_COLORS = NA)
+  st = console_style()
+  expect_identical(c(st$red("x"), st$band), c("\033[38;5;167mx\033[39m", "\033[48;5;237m"))
+  withr::local_envvar(NO_COLOR = "1")
+  st = console_style()
+  expect_identical(c(st$tool, st$agent, st$red("x"), st$blue("x"), st$dim("x"), st$band),
+                   c("\u258e", "\u258c", "x", "x", "x", ""))
+})
+
+test_that("no U+25CF dot and no Braille spinner anywhere in R/ (D-245)", {
+  dir = arch_source_dir()
+  skip_if(is.null(dir), "the package sources under R/ were not found")
+  for (path in list.files(dir, pattern = "[.][Rr]$", full.names = TRUE)) {
+    text = readLines(path, encoding = "UTF-8", warn = FALSE)
+    expect_false(any(grepl("\\\\u(25[cC][fF]|28[0-9a-fA-F]{2})|[\u25cf\u2800-\u28ff]", text,
+                           perl = TRUE)), info = basename(path))
+  }
+})
+
+test_that("inline code in an answer takes the blue accent, not cli's cyan (D-245)", {
+  text = "Use `mtcars` here."
+  withr::local_options(cli.num_colors = 256L)
+  expect_identical(render_chunks(text, width = 80L), "Use \033[0;38;5;67mmtcars\033[0m here.")
+  withr::local_options(cli.num_colors = 16L)
+  expect_identical(render_chunks(text, width = 80L), "Use \033[0;34mmtcars\033[0m here.")
+  withr::local_options(cli.num_colors = 1L)
+  expect_identical(render_chunks(text, width = 80L), text)
+})
+
+test_that("the console's one grey is the style table's dim (D-245)", {
+  dir = arch_source_dir()
+  skip_if(is.null(dir), "the package sources under R/ were not found")
+  for (path in list.files(dir, pattern = "^console-.*[.][Rr]$", full.names = TRUE)) {
+    text = readLines(path, encoding = "UTF-8", warn = FALSE)
+    expect_false(any(grepl("col_grey|col_silver|make_ansi_style[(]\"grey", text)),
+                 info = basename(path))
+  }
+})
+
+# ---------------------------------------------------------------- P28 Task 11: tool kinds
+
+test_that("tool calls are cursor strips tinted by kind (D-245)", {
+  skip_on_cran()
+  local_project()
+  spec = function(name) tryCatch(registry_get("tool", name), error = function(e) NULL)
+  kinds = c(read = "read", grep = "read", ls = "read", ask = "read", r = "act", edit = "act",
+            write = "act", codex_shell = "act", mcp__github__search_issues = "act",
+            codex_agent = "agent")
+  expect_identical(vapply(names(kinds), function(n) console_tool_kind(n, spec(n)), ""), kinds)
+  # a trusted MCP server's readOnlyHint arrives as read_only
+  hint = gptr_spec("tool", "mcp__docs__search", description = "Search the docs.",
+                   parameters = list(type = "object", properties = list()),
+                   execute = function(input, ctx) "ok", annotations = list(readOnlyHint = TRUE))
+  expect_identical(console_tool_kind(hint$name, hint), "read")
+  calls = list(list(id = "c1", name = "read", input = list(path = "R/plot.R")),
+               list(id = "c2", name = "r", input = list(code = "zz = 1")),
+               list(id = "c3", name = "mcp__github__search_issues", input = list(q = "bug")),
+               list(id = "c4", name = "codex_agent", input = json_obj()))
+  fit = c(msg_tool_result("c2", "r", "", details = list(objects = list(added = "fit"))),
+          list(elapsed = 1.2))
+  diff = msg_tool_result("c5", "edit", "ok", details = list(
+    diff = c("--- a/x.R", "+++ b/x.R", "@@ -1 +1 @@", "-a", "+b")))
+  shown = function() {
+    list(calls = vapply(calls, console_tool_line, "", width = 80L),
+         results = c(console_tool_line(calls[[2L]], fit),
+                     console_tool_line(list(name = "codex_shell"),
+                                       list(is_error = FALSE, elapsed = 3)),
+                     console_tool_line(list(name = "edit"), diff)),
+         # a read shows no result line unless it fails
+         read = console_tool_line(calls[[1L]], c(msg_tool_result("c1", "read", "text"),
+                                                 list(elapsed = 3))),
+         failed = console_tool_line(calls[[1L]], msg_tool_result("c1", "read", "no such file",
+                                                                 is_error = TRUE)))
+  }
+  want = function(tool, agent, sep, red = identity, blue = identity, dim = identity,
+                  bold = identity) {
+    list(calls = c(paste0("  ", dim(paste0(tool, " read  R/plot.R"))),
+                   paste0("  ", red(tool), " ", bold("r"), "  zz = ", blue("1")),
+                   paste0("  ", red(tool), " ", bold("github/search_issues"), "  ",
+                          dim("{\"q\":\"bug\"}")),
+                   paste0("  ", blue(agent), " codex_agent")),
+         results = c(dim(paste0("    + fit", sep, "1.2 s")), dim(paste0("    done", sep, "3.0 s")),
+                     dim("    @@ -1 +1 @@"), red("    -a"), blue("    +b")),
+         read = character(), failed = red("    error: no such file"))
+  }
+  sgr = function(on, off) function(x) paste0("\033[", on, "m", x, "\033[", off, "m")
+  at256 = list(red = sgr("38;5;167", 39), blue = sgr("38;5;67", 39), dim = sgr("38;5;244", 39),
+               bold = sgr(1, 22))
+  testthat::local_reproducible_output(unicode = TRUE)
+  withr::local_options(cli.num_colors = 256L)
+  expect_identical(shown(), do.call(want, c(list("\u258e", "\u258c", " \u00b7 "), at256)))
+  withr::local_options(cli.unicode = FALSE)
+  expect_identical(shown(), do.call(want, c(list("|", "#", " - "), at256)))
+  withr::local_options(cli.num_colors = NULL, crayon.enabled = NULL, cli.default_num_colors = 256L,
+                       cli.unicode = TRUE)
+  withr::local_envvar(NO_COLOR = "1", R_CLI_NUM_COLORS = NA)
+  expect_identical(shown(), want("\u258e", "\u258c", " \u00b7 "))
+  # a sub-agent's lines start with the agent's blue block, its model after its label, also from
+  # the agent's r code, whose evaluation says 1 colour: the console's depth holds there
+  withr::local_options(cli.num_colors = 256L)
+  withr::local_envvar(NO_COLOR = NA)
+  local_gptr_options(mode = "auto", verbose = 1L, quiet = FALSE)
+  e = new.env()
+  e$kid = local_fake_provider(function(request) "ok", name = "kid")
+  code = "res = peter('each', list(a = 1), model = kid, parallel = 1)"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("fan out", model = lead, envir = e))
+  block = paste0("  ", at256$blue("\u258c"), " sub-agent a ")
+  kids = grep("sub-agent a ", out, value = TRUE, fixed = TRUE)
+  expect_identical(kids[[1L]], paste0(block, "(kid/kid-1) started"))
+  done = paste0(block, "done (1/1) \u00b7 1 turn \u00b7 ")
+  expect_identical(substr(kids[[2L]], 1L, nchar(done)), done)
+})
+
+test_that("a sub-agent's started line cut to the width keeps its last word (Task 36)", {
+  local_gptr_options(mode = "auto", verbose = 1L, quiet = FALSE)
+  withr::local_options(cli.num_colors = 1L, cli.unicode = FALSE, cli.width = 40L)
+  e = new.env()
+  e$kid = local_fake_provider(function(request) "ok", name = "a-provider-with-a-long-name")
+  code = "res = peter('each', list(a = 1), model = kid, parallel = 1)"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("fan out", model = lead, envir = e))
+  start = grep("sub-agent a ", out, value = TRUE, fixed = TRUE)[[1L]]
+  expect_identical(start, "  # sub-agent a (a-provider-w... started")
+  # so does its done line, which cuts the label and keeps its turns and time (visual round 2)
+  withr::local_options(cli.width = 60L)
+  code = "res = peter('each', list(count_the_cars_in_fuel = 1), model = kid, parallel = 1)"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("fan out", model = lead, envir = e))
+  done = grep(" done ", grep("sub-agent count", out, value = TRUE, fixed = TRUE), value = TRUE)
+  expect_match(done, "^  # sub-agent count_the_cars.*\\.\\.\\. done \\(1/1\\) - 1 turn - [0-9]+ s$")
+  expect_lte(nchar(done), 60L)
+  # a nested call's two rows cut its label alike, inside its quotes and with no blank before the
+  # ellipsis; its run tag, model and outcome stay whole (visual round 3)
+  e$kid = local_fake_provider(function(request) "ok", name = "kid")
+  code = "res = peter('count the cars in fuel', model = kid)"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("delegate", model = lead, envir = e))
+  rows = grep("sub-agent '", out, value = TRUE, fixed = TRUE)
+  expect_length(rows, 2L)
+  expect_match(rows[[1L]], "^  # sub-agent '[^']+\\.\\.\\.' #1 \\(kid/kid-1\\) started$")
+  expect_match(rows[[2L]], "^  # sub-agent '[^']+\\.\\.\\.' #1 done - 1 turn - [0-9]+ s$")
+  expect_identical(sub(" #1 .*$", "", rows[[1L]]), sub(" #1 .*$", "", rows[[2L]]))
+  expect_false(any(grepl(" ...", rows, fixed = TRUE)))
+  expect_true(all(nchar(rows) <= 60L))
+})
+
+test_that("a sub-agent's rows are the block of the r call that runs them (visual round 2)", {
+  skip_on_cran()
+  # a person watches, so the call's printed value shows
+  local_gptr_options(mode = "auto", verbose = 2L, quiet = FALSE, interactive = TRUE)
+  withr::local_options(cli.num_colors = 1L, cli.unicode = FALSE, cli.width = 80L,
+                       cli.dynamic = TRUE)
+  e = new.env()
+  e$kid = local_fake_provider(function(request) "ok", name = "kid")
+  code = "res = peter('each', list(a = 1), model = kid, parallel = 1); 'sub-agent done'"
+  lead = local_fake_provider(list(fake_tool("r", code = code), "done"), name = "lead")
+  out = utils::capture.output(peter("fan out", model = lead, envir = e))
+  # the call's rows, the sub-agent's, the printed value and the end row: no blank row among them
+  rows = out[seq(grep("| r", out, fixed = TRUE)[[1L]], grep("+ res", out, fixed = TRUE)[[1L]])]
+  expect_true(any(grepl("sub-agent a done", rows, fixed = TRUE)))
+  expect_true(any(grepl("[1] \"sub-agent done\"", rows, fixed = TRUE)))
+  expect_false(any(rows == ""))
+})
+
+test_that("the ask tool's call line counts its questions in words (visual review)", {
+  q = list(id = "fit", question = "Which fit?", options = list("lm", "loess"))
+  expect_identical(console_preview(list(questions = list(q))), "1 question")
+  expect_identical(console_preview(list(questions = list(q, q))), "2 questions")
+})
+
+test_that("a diff row wider than the console is cut, its spaces and sign kept (visual review)", {
+  withr::local_options(cli.num_colors = 1L, cli.unicode = FALSE)
+  row = "+     xlab = \"weight (1000 lb)\", ylab = \"miles per gallon\")"
+  diff = msg_tool_result("c5", "edit", "ok", details = list(diff = c("@@ -1 +1,2 @@", " a", row)))
+  out = console_tool_line(list(name = "edit"), diff, width = 40L)
+  # no blank before the ellipsis (visual round 3)
+  expect_identical(out, c("    @@ -1 +1,2 @@", "     a",
+                          "    +     xlab = \"weight (1000 lb)\",..."))
+  # a row that fits keeps its last character beside one that is cut (cli 3.6.6's vectorised
+  # ansi_strtrim() cut both)
+  fits = paste0("+", strrep("a", 35L))
+  diff = msg_tool_result("c6", "edit", "ok",
+                         details = list(diff = c(fits, paste0("+", strrep("b", 50L)))))
+  out = console_tool_line(list(name = "edit"), diff, width = 40L)
+  expect_identical(out, c(paste0("    ", fits), paste0("    +", strrep("b", 32L), "...")))
 })
 
 # ---------------------------------------------------------------- Task 2: renderer hooks
@@ -447,7 +864,7 @@ test_that("a foreground run streams its answer and ends with a status line (verb
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Hello")),
     hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
                turns = 1L)))
-  expect_identical(out, c("Hello **world** {x}", "  done | 0 requests | 0 tokens | $0.0000"))
+  expect_identical(out, c("Hello **world** {x}", "done - 0 requests - 0 tokens"))
   expect_null(console_record(list(run = "u0000test")))
 })
 
@@ -486,12 +903,24 @@ test_that("a compaction during a foreground run prints one dim notice with its c
                summary_tokens = 300, run = run)
   }
   expect_identical(render_events(s, list(hook_event("agent_start", s), done())),
-                   "  conversation compacted: 98.2k -> 4.1k tokens")
+                   "  compacted - 98.2k to 4.1k tokens")
   # /compact outside a run reports itself
   expect_identical(render_events(s, list(done(NULL))), character())
   testthat::local_reproducible_output(width = 80, crayon = TRUE, unicode = FALSE)
   expect_identical(render_events(s, list(done())),
-                   as.character(cli::col_grey("  conversation compacted: 98.2k -> 4.1k tokens")))
+                   "\033[2m  compacted - 98.2k to 4.1k tokens\033[22m")
+})
+
+test_that("a retry names its error's class, and no class when it has none (visual round 1)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  retry = function(class) hook_event("retry_start", s, attempt = 1L, delay = 2, class = class)
+  expect_identical(render_events(s, list(hook_event("agent_start", s), retry("rate_limit"),
+                                         retry(NA_character_))),
+                   c("  retrying in 2.0 s (rate_limit)", "  retrying in 2.0 s"))
 })
 
 test_that("an answer without deltas is printed whole at message_end", {
@@ -543,7 +972,7 @@ test_that("same-block chunks stay contiguous and tools follow the complete text 
                input = list(code = "1 + 1")),
     hook_event("message_update", s, index = 2L, kind = "text", delta = "Second ending"),
     hook_event("message_end", s, role = "assistant", message = assistant_msg("ignored"))))
-  expect_identical(out, c("First tail", "  * r  1 + 1", "Second ending"))
+  expect_identical(out, c("First tail", "  | r  1 + 1", "Second ending"))
 })
 
 test_that("tool lines escape the preview and summarise the result (acceptance 7)", {
@@ -561,8 +990,8 @@ test_that("tool lines escape the preview and summarise the result (acceptance 7)
     hook_event("tool_execution_end", s, tool_call_id = "c1", tool_name = "r", is_error = FALSE,
                elapsed = 2.5, details = list()),
     hook_event("message_end", s, role = "tool_result", message = result)))
-  expect_identical(out, c("  * r", "```r", "x = 1 # <U+001B>[31mred", "y = 2", "```",
-                          "    + x, y (2.5 s)"))
+  expect_identical(out, c("  | r", "    x = 1 # <U+001B>[31mred", "    y = 2",
+                          "    + x, y - 2.5 s"))
   expect_false(any(grepl("\033", out, fixed = TRUE)))
 })
 
@@ -578,6 +1007,15 @@ test_that("an error result shows the lines of its message", {
                input = list(code = "z + 1")),
     hook_event("message_end", s, role = "tool_result", message = bad)))
   expect_identical(out[-1L], c("    error: Error: object 'z' not found", "    In: z + 1"))
+})
+
+test_that("an interrupted call's error row states its time once (visual round 1)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  r = list(id = "c1", name = "r", input = list(code = "Sys.sleep(9)"))
+  cut = c(msg_tool_result("c1", "r", "Interrupted after 2.8 s; side effects may have occurred.",
+                          is_error = TRUE, details = list(interrupted = TRUE)), list(elapsed = 2.8))
+  expect_identical(console_tool_line(r, cut),
+                   "    error: Interrupted after 2.8 s; side effects may have occurred.")
 })
 
 test_that("result lines keep a failed call's objects, project paths and whole errors (#35)", {
@@ -633,10 +1071,37 @@ test_that("the end of a call served to a CLI route prints its result line (D-192
     hook_event("tool_execution_end", s, tool_call_id = "mcp_5", tool_name = "r", is_error = TRUE,
                elapsed = 0.1, details = list(objects = list(added = "res"), plots = 0L),
                content = list(list(type = "text", text = "Error: boom")))))
-  expect_identical(out, c("  * r  mean(big_vector)",
+  expect_identical(out, c("  | r  mean(big_vector)",
                           "    error: Error: object 'big_vector' not found",
-                          "  * r  answer = 42", "    + answer",
-                          "  * r  res = 1; stop('boom')", "    error: Error: boom", "    + res"))
+                          "  | r  answer = 42", "    + answer",
+                          "  | r  res = 1; stop('boom')", "    error: Error: boom", "    + res"))
+})
+
+test_that("a refused call's result is one dim row that says it was not run (review)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 60, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  call = list(path = "analysis.R", edits = list(list(oldText = "a", newText = "b")))
+  refused = function(why, id) {
+    list(hook_event("tool_execution_start", s, tool_call_id = id, tool_name = "edit", input = call),
+         hook_event("tool_execution_end", s, tool_call_id = id, tool_name = "edit", is_error = TRUE,
+                    elapsed = 0, details = list(), refused = why),
+         hook_event("message_end", s, role = "tool_result", message = msg_tool_result(
+           id, "edit", "Permission denied: the user declined.", is_error = TRUE)))
+  }
+  why = c("the user declined", "the user said: Use base graphics and label the axes in bold",
+          "denied by the rule r(fn:writeLines)", "blocked by a hook: held")
+  out = render_events(s, c(list(hook_event("agent_start", s)),
+                           unlist(Map(refused, why, paste0("c", 1:4)), recursive = FALSE)))
+  expect_identical(out[c(FALSE, TRUE)], c(
+    "    not run - you declined", "    not run - you said: Use base graphics and label the a...",
+    "    not run - denied by the rule r(fn:writeLines)", "    not run - blocked by a hook: held"))
+  # dim, never the red of a call that ran and failed
+  withr::local_options(cli.num_colors = 8L)
+  out = render_events(s, c(list(hook_event("agent_start", s)), refused(why[[1L]], "c5")))
+  expect_identical(out[[2L]], "\033[2m    not run - you declined\033[22m")
 })
 
 test_that("on a CLI route verbosity 2 shows each thinking block's first line, dim (D-192)", {
@@ -657,14 +1122,14 @@ test_that("on a CLI route verbosity 2 shows each thinking block's first line, di
                input = list(code = "1 + 1")),
     hook_event("message_update", s, index = 3L, kind = "text", delta = "Done."),
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Done.")))
-  expect_identical(render_events(s, events), c("  * r  1 + 1", "Done."))
+  expect_identical(render_events(s, events), c("  | r  1 + 1", "Done."))
   local_cli_run(s)
-  plain = c("  Planning", "  step 2 is a line far longer than fo...", "  * r  1 + 1", "Done.")
+  plain = c("  Planning", "  step 2 is a line far longer than fo...", "  | r  1 + 1", "Done.")
   expect_identical(render_events(s, events), plain)
   withr::local_options(cli.num_colors = 256L)
   out = render_events(s, events)
   expect_identical(cli::ansi_strip(out), plain)
-  expect_true(all(grepl("\033[90m", out[1:2], fixed = TRUE)))
+  expect_true(all(startsWith(out[1:2], "\033[38;5;244m  ")))
   local_gptr_options(verbose = 1L)
   expect_identical(render_events(s, events[1:5]), character())
 })
@@ -687,7 +1152,7 @@ test_that("a thinking line cut at the width ends with an ellipsis", {
                           paste0("  ", strrep("y", 57L), "\u2026"), paste0("  ", full)))
 })
 
-test_that("on a CLI route the waiting row keeps its clock around each thinking line (D-192)", {
+test_that("on a CLI route the live row keeps its clock around each thinking line (D-192)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   withr::local_options(cli.dynamic = TRUE)
@@ -696,6 +1161,7 @@ test_that("on a CLI route the waiting row keeps its clock around each thinking l
   local_cli_run(s)
   ctx = session_live(s)$ctx
   withr::defer(console_drop("u0000test"))
+  local_live_console()
   think = function(index, delta) {
     utils::capture.output(invisible(console_on_message_update(
       hook_event("message_update", s, index = index, kind = "thinking", delta = delta), ctx)))
@@ -707,14 +1173,20 @@ test_that("on a CLI route the waiting row keeps its clock around each thinking l
                                          tokens_est = 10), ctx)
   })
   rec = console_record(list(run = "u0000test"))
-  task = rec$task
-  t0 = rec$spinner$t0
+  # the row's clock reads 0s on any runner, however slow
+  rec$t0 = Inf
+  task = the$live_row$task
+  t0 = rec$t0
   expect_identical(think(1L, "**Plan"), character())
-  expect_identical(think(1L, "ning**\n\nThe body"), paste0("\r", strrep(" ", 39L), "\r  Planning"))
+  # padded, the row ends at the line's block, and comes back under it as the request still waits
+  # (the session's queued prompt counts)
+  expect_identical(sub(" +$", "", think(1L, "ning**\n\nThe body")),
+                   c(paste0("\r", strrep(" ", 39L), "\r"), "  Planning",
+                     "\r# thinking 0s - 1 queued - ctrl-c stop"))
   think(1L, " goes on.")
   think(2L, "a first line far longer than forty columns")
-  expect_identical(rec$task, task)
-  expect_identical(rec$spinner$t0, t0)
+  expect_identical(the$live_row$task, task)
+  expect_identical(rec$t0, t0)
   # nothing of a held thinking line is on screen when a prompt ends partial lines
   think(3L, "held")
   expect_no_error(utils::capture.output(console_before_message(kind = "prompt", tools = TRUE)))
@@ -723,7 +1195,7 @@ test_that("on a CLI route the waiting row keeps its clock around each thinking l
   utils::capture.output(console_on_tool_start(start, ctx))
   # a thinking line after a tool block opens its own block (D-186)
   expect_identical(think(4L, "after a tool line\n")[1:2], c("", "  after a tool line"))
-  expect_false(is.null(rec$task))
+  expect_false(is.null(the$live_row))
 })
 
 test_that("a tool's render() function replaces the default lines (IC-69)", {
@@ -830,27 +1302,188 @@ test_that("verbosity 1 reports tool calls and the end as progress messages", {
   expect_message(
     console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = NULL, turns = 2L),
                          ctx),
-    "gptr: done | 0 requests", fixed = TRUE)
+    "gptr: done - 0 requests", fixed = TRUE)
 })
 
-test_that("the status line names an unusual end and sums the usage rows", {
+test_that("verbosity 1 says a refused call was not run and counts its code lines (console-3)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
-  usage = data.frame(input = c(1000, 200), output = c(50, 10), cache_read = c(0, 900),
-                     cost = c(0.001, 0.0005))
-  expect_identical(console_status_line("idle", NULL, usage),
-                   "  done | 2 requests | 2.2k tokens | $0.0015")
-  expect_identical(console_status_line("aborted", "aborted (user)", NULL),
-                   "  aborted: aborted (user) | 0 requests | 0 tokens | $0.0000")
-  expect_identical(console_status_line("idle", NULL, data.frame(input = 999950)),
-                   "  done | 1 request | 1.0M tokens | $0.0000")
+  local_project()
+  local_permission_rules()
+  local_gptr_options(verbose = 1L, quiet = FALSE, mode = "manual")
+  code = "cat('== check ==\\n')\nstr(mtcars)\nwriteLines('hi', 'out.txt')"
+  progress = function() {
+    fake = gptr_fake_provider(list(fake_tool("r", code = code), "done"))
+    msgs = testthat::capture_messages(utils::capture.output(tryCatch(
+      peter("check", model = fake, envir = new.env()), gptr_error_permission = function(e) NULL)))
+    paste(msgs, collapse = "")
+  }
+  out = progress()
+  expect_match(out, "gptr: r  cat('== check ==\\n')  (+2 more lines)\n", fixed = TRUE)
+  expect_match(out, "gptr: r not run: approval is needed", fixed = TRUE)
+  expect_no_match(out, "r failed", fixed = TRUE)
+  gptr_permissions(deny = "r(fn:writeLines)")
+  expect_match(progress(), "gptr: r not run: denied by the rule r(fn:writeLines)\n", fixed = TRUE)
+})
+
+test_that("a cut answer keeps what it received, the cut marked (visual review)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  cut = function(text, cut = TRUE) {
+    utils::capture.output({
+      r = render_markdown_stream(80L)
+      r$write(text)
+      r$finish(cut = cut)
+    })
+  }
+  expect_identical(cut("Heavy cars are also the heaviest, so par"),
+                   "Heavy cars are also the heaviest, so par...")
+  expect_identical(cut("Heavy cars, so par", cut = FALSE), "Heavy cars, so par")
+  expect_identical(cut("Heavy cars.\n"), "Heavy cars.")
+  # an aborted run's answer ends so, an idle one whole
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  ended = function(status) {
+    render_events(s, list(hook_event("agent_start", s),
+                          hook_event("message_update", s, index = 1L, kind = "text",
+                                     delta = "Heavy cars, so par"),
+                          hook_event("agent_end", s, status = status, usage = NULL)))[[1L]]
+  }
+  expect_identical(c(ended("aborted"), ended("idle")),
+                   c("Heavy cars, so par...", "Heavy cars, so par"))
+  # run_abort() ends the partial answer with stop_reason "aborted" before agent_end (visual review:
+  # RStudio's abort showed `already` unmarked); a truncated or failed answer is cut too
+  stopped = function(reason) {
+    msg = assistant_msg("Heavy cars, so par")
+    msg$stop_reason = reason
+    render_events(s, list(hook_event("agent_start", s),
+                          hook_event("message_update", s, index = 1L, kind = "text",
+                                     delta = "Heavy cars, so par"),
+                          hook_event("message_end", s, role = "assistant", message = msg)))[[1L]]
+  }
+  expect_identical(vapply(c("aborted", "error", "length", "stop"), stopped, ""),
+                   c(aborted = "Heavy cars, so par...", error = "Heavy cars, so par...",
+                     length = "Heavy cars, so par...", stop = "Heavy cars, so par"))
+})
+
+# Usage rows of the fake provider's model (window 200,000, maximum output 8,192), as usage_row()
+# gives them
+fake_usage = function(model = "fake-1", input = 200, output = 10, cache_read = 900, cost = 0,
+                      route = "api") {
+  usage_conform(data.frame(request_id = paste0("q", seq_along(input)), provider = "fake",
+                           model = model, route = route, input = input, output = output,
+                           cache_read = cache_read, cache_write_5m = 0, cache_write_1h = 0,
+                           cost = cost, stringsAsFactors = FALSE))
+}
+
+# The status line's terms on one line (console_status_line())
+status_line = function(...) paste(console_status_line(...), collapse = console_style()$sep)
+
+test_that("the status line names the model and the context left; unknown terms go (IC-77)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  fake = gptr_fake_provider(list("ok"))
+  usage = fake_usage(c("fake-0", "fake-1"), c(1000, 200), c(50, 10), c(0, 900), c(0.001, 0.0005))
+  # the last request's model, and its 1,100 prompt tokens against the 170,000 where compaction
+  # starts
+  expect_identical(status_line("idle", NULL, usage),
+                   "done - fake-1 - 2 requests - 2.2k tokens - $0.0015 - 99% context left")
+  expect_identical(status_line("aborted", "aborted (user)", NULL),
+                   "aborted: aborted (user) - 0 requests - 0 tokens")
+  # a cost of 0, a free or local model's, is left out; past the threshold no context is left
+  expect_identical(status_line("error", "network error", fake_usage(input = 999950)),
+                   "error: network error - fake-1 - 1 request - 1.0M tokens - 0% context left")
   usage$cost[[2L]] = NA
   usage$output[[1L]] = NA
-  expect_identical(console_status_line("idle", NULL, usage, c(0.5, NA)), paste(
-    "  done | 2 requests | unknown tokens | $0.0010 + 1 request of unknown cost | sub-agents",
-    "$0.5000 + 1 request of unknown cost"))
+  expect_identical(status_line("idle", NULL, usage, c(0.5, NA)), paste(
+    "done - fake-1 - 2 requests - $0.0010 + 1 request of unknown cost - sub-agents $0.5000 + 1",
+    "request of unknown cost - 99% context left"))
   usage$cost[[1L]] = NA
-  expect_identical(console_status_line("idle", NULL, usage, NA_real_),
-                   "  done | 2 requests | unknown tokens | unknown cost | sub-agents unknown cost")
+  usage$model[[2L]] = NA
+  usage$cache_read[[2L]] = NA
+  expect_identical(status_line("aborted", NULL, usage, NA_real_), "aborted - 2 requests")
+  # a CLI keeps its own transcript: no context term
+  expect_identical(status_line("idle", NULL, fake_usage(route = "plan-cli", cost = 0.01)),
+                   "done - fake-1 - 1 request - 1.1k tokens - $0.0100")
+})
+
+test_that("the status line names the model a CLI's default runs, as /status does (Task 33)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  off = gptr_register(pcli_fake_provider("claude"))
+  withr::defer(off())
+  local_mocked_bindings(pcli_default_model = function(api) paste0(api, "-id"))
+  usage = fake_usage("default", route = "plan-cli", cost = 0.01)
+  usage$provider = "fakeclaude"
+  expect_identical(status_line("idle", NULL, usage),
+                   "done - cli-claude-id - 1 request - 1.1k tokens - $0.0100")
+  usage$model = "claude-sonnet-5-5"
+  expect_identical(status_line("idle", NULL, usage),
+                   "done - claude-sonnet-5-5 - 1 request - 1.1k tokens - $0.0100")
+})
+
+test_that("a reason's line breaks fold into one space; other controls stay escaped (sessions-7)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  # curl's two-line error, as a network failure gives it
+  x = status_line("error", "network error: a [h]:\nb")
+  expect_length(x, 1L)
+  expect_false(grepl("U+000A", x, fixed = TRUE))
+  expect_false(grepl("\n", x, fixed = TRUE))
+  expect_match(x, "a [h]: b", fixed = TRUE)
+  expect_identical(status_line("error", "a  \r\n  b\rc\n\nd \033[31m"),
+                   "error: a b c d <U+001B>[31m - 0 requests - 0 tokens")
+})
+
+test_that("the status line wraps between whole terms, never after a separator (review)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = TRUE)
+  # a dated API model id at 80 columns, its content 76 wide, and at 60
+  terms = c("done", "claude-sonnet-4-5-20250929-1", "7 requests", "19.8k tokens",
+            "98% context left")
+  expect_identical(console_terms(terms, 76L), c(
+    "done \u00b7 claude-sonnet-4-5-20250929-1 \u00b7 7 requests \u00b7 19.8k tokens",
+    "98% context left"))
+  expect_identical(console_terms(terms, 56L), c(
+    "done \u00b7 claude-sonnet-4-5-20250929-1 \u00b7 7 requests",
+    "19.8k tokens \u00b7 98% context left"))
+  # a term wider than a row is cut
+  expect_identical(console_terms(c("ok", strrep("x", 30L)), 20L), c("ok", paste0(strrep("x", 19L),
+                                                                               "\u2026")))
+  # the run's end writes the rows in the margin, dim
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = TRUE)
+  local_gptr_options(verbose = 2L)
+  local_mocked_bindings(console_pad = function() "  ")
+  s = render_session()
+  ctx = session_live(s)$ctx
+  usage = fake_usage(c("fake-0", "fake-1"), c(1000, 200), c(50, 10), c(0, 900), c(0.001, 0.0005))
+  out = utils::capture.output({
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    invisible(console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = usage,
+                                              turns = 2L), ctx))
+  })
+  expect_identical(out[nzchar(out)], c("  done \u00b7 fake-1 \u00b7 2 requests",
+                                       "  2.2k tokens \u00b7 $0.0015", "  99% context left"))
+})
+
+test_that("console_context_left() measures the last request against compact_threshold() (IC-77)", {
+  fake = gptr_fake_provider(list("ok"))
+  u = fake_usage(input = 12000, cache_read = 6000)
+  u$cache_write_5m = 1500
+  u$cache_write_1h = 500
+  # 20,000 prompt tokens; compaction of the fake's window starts at 170,000
+  expect_identical(compact_threshold(200000, 8192, gptr_opt("r_output_tokens")), 170000)
+  expect_identical(console_context_left(u), round(100 * (1 - 20000 / 170000)))
+  local_gptr_options(compact_at = 40000)
+  expect_identical(console_context_left(u), 50)
+  # a model whose window is unknown: compact_at alone; with compact_at off nothing is known
+  unknown = u
+  unknown$model = "fake-9"
+  expect_identical(console_context_left(unknown), 50)
+  local_gptr_options(compact_at = Inf)
+  expect_identical(console_context_left(unknown), NA_real_)
+  u$input = 180000
+  expect_identical(console_context_left(u), 0)
+  # an unknown count, a CLI route and no request give no term
+  u$cache_read = NA
+  expect_identical(console_context_left(u), NA_real_)
+  expect_identical(console_context_left(fake_usage(route = "plan-cli")), NA_real_)
+  expect_identical(console_context_left(NULL), NA_real_)
 })
 
 test_that("the status line counts the run's requests and adds its sub-agents' cost (#38)", {
@@ -878,10 +1511,32 @@ test_that("the status line counts the run's requests and adds its sub-agents' co
   usage_add(kid, row("q-kid", session_data(kid)$id, 0.5))
   own = rbind(row("q1", d$id, 0.001), row("q2", d$id, 0.002))
   for (i in 1:2) usage_add(s, own[i, ])
-  expect_message(end(own), "gptr: done | 2 requests | 220 tokens | $0.0030 | sub-agents $0.5000",
-                 fixed = TRUE)
+  # rows that name no model: no model term, the context left measured against compact_at
+  expect_message(end(own), paste("gptr: done - 2 requests - 220 tokens - $0.0030 - sub-agents",
+                                 "$0.5000 - 100% context left"), fixed = TRUE)
   console_on_agent_start(hook_event("agent_start", s), ctx)
-  expect_message(end(own[1L, ]), "^gptr: done \\| 1 request \\| 110 tokens \\| \\$0\\.0010\\s*$")
+  expect_message(end(own[1L, ]),
+                 "^gptr: done - 1 request - 110 tokens - \\$0\\.0010 - 100% context left\\s*$")
+})
+
+test_that("at verbosity 1 a run ending in a condition leaves its reason to it (visual round 2)", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 1L, quiet = FALSE)
+  s = render_session()
+  ctx = session_live(s)$ctx
+  end = function(status, reason) {
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    console_on_agent_end(hook_event("agent_end", s, status = status, reason = reason, usage = NULL,
+                                    turns = 1L), ctx)
+  }
+  # R's error says why once, as the caller sees it (gateway_signal())
+  why = "The run stopped: `r` needs approval and no one can answer in this run."
+  terms = " - 0 requests - 0 tokens\\s*$"
+  expect_message(end("blocked", why), paste0("^gptr: blocked", terms))
+  expect_message(end("error", "provider failure: boom"), paste0("^gptr: error", terms))
+  # a run that ends in no condition keeps its reason
+  expect_message(end("aborted", "the user"), paste0("^gptr: aborted: the user", terms))
 })
 
 test_that("custom entries of a run are shown through renderer records (IC-69)", {
@@ -905,31 +1560,34 @@ test_that("custom entries of a run are shown through renderer records (IC-69)", 
   expect_identical(out[[1L]], "NOTE: kept <U+001B> safe")
 })
 
-test_that("the spinner runs as a reactor task until the first rendered text", {
+test_that("the live row runs as a reactor task from a request to the run's end (D-243)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
-  withr::local_options(cli.dynamic = TRUE)
+  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE)
   local_gptr_options(verbose = 2L)
   s = render_session()
+  local_live_console()
   ctx = session_live(s)$ctx
   console_on_agent_start(hook_event("agent_start", s), ctx)
-  rec = console_record(list(run = "u0000test"))
-  console_on_before_request(hook_event("before_request", s, provider = "fake",
-                                       model = "fake/fake-1", request_id = "q1",
-                                       tokens_est = 10), ctx)
-  expect_false(is.null(rec$task))
-  utils::capture.output(console_on_message_update(
-    hook_event("message_update", s, index = 1L, kind = "text", delta = "x"), ctx))
-  expect_false(is.null(rec$task))
-  expect_false(is.null(rec$spinner))
-  utils::capture.output(console_on_message_update(
-    hook_event("message_update", s, index = 1L, kind = "text", delta = " "), ctx))
-  expect_null(rec$task)
-  expect_null(rec$spinner)
-  console_drop("u0000test")
+  utils::capture.output(console_on_before_request(
+    hook_event("before_request", s, provider = "fake", model = "fake/fake-1", request_id = "q1",
+               tokens_est = 10), ctx))
+  row = the$live_row
+  expect_true(exists(row$task, envir = reactor_get()$tasks, inherits = FALSE))
+  for (delta in c("x", " y", "\n")) {
+    utils::capture.output(console_on_message_update(
+      hook_event("message_update", s, index = 1L, kind = "text", delta = delta), ctx))
+    expect_identical(the$live_row, row)
+    expect_true(row$shown)
+  }
+  utils::capture.output(console_on_agent_end(
+    hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
+               turns = 1L), ctx))
+  expect_null(the$live_row)
+  expect_false(exists(row$task, envir = reactor_get()$tasks, inherits = FALSE))
 })
 
-test_that("the console UI ends a partial answer line before it prompts (D-186)", {
+test_that("the console UI prompts between whole rows; the held row waits (D-186, D-245)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
@@ -943,7 +1601,7 @@ test_that("the console UI ends a partial answer line before it prompts (D-186)",
                                          delta = "partial "), ctx)
     ans = ui_console_permission(req, read = function(...) "y")
   })
-  expect_identical(out, c("partial", "  r  x = 1"))
+  expect_identical(out, c("  | r  x = 1", "  ? Allow r?", "    y yes - n no - ? more"))
   expect_identical(ans$decision, "allow")
   expect_false("permission_request" %in% vapply(console_hooks(), function(h) h$event, ""))
 })
@@ -974,21 +1632,22 @@ test_that("a prompt or pause in a tool's evaluation ends partial lines on the co
                                          delta = "Fanning out HELDWORD"), ctx)
     res = eval_r("ans = tool(ask)", home, plots = "none", tee = FALSE)
   })
-  # the held word continues after the prompt (D-186), never in the tool result
-  expect_identical(out, c("Fanning out", "  sub-agent a > r  x = 1"))
+  # the held row continues after the prompt (D-186, D-245), never in the tool result
+  expect_identical(out, c("  | r  x = 1", "  ? sub-agent a: allow r?", "    y yes - n no - ? more"))
   expect_identical(home$ans$decision, "allow")
   expect_false(grepl("HELDWORD|x = 1", text(res)))
   withr::local_options(cli.dynamic = TRUE)
+  local_live_console()
   rec = console_record(list(run = "u0000test"))
   bytes = paste(utils::capture.output({
-    rec$spinner = console_spinner()
-    rec$last = "wait"
-    rec$spinner$tick()
+    console_live_start(rec)
+    rec$last = "text"
     res = eval_r("tool(pause)", home, plots = "none", tee = FALSE)
   }), collapse = "\n")
   expect_match(bytes, "thinking", fixed = TRUE)
-  expect_match(bytes, "\r +\rHELDWORD$")
-  expect_null(rec$spinner)
+  # the abort's pause takes the live row down and ends the held row, the cut marked
+  expect_match(bytes, "\r +\rFanning out HELDWORD\\.\\.\\.$")
+  expect_null(the$live_row)
   expect_false(grepl("\r|HELDWORD", text(res)))
 })
 
@@ -1008,8 +1667,8 @@ test_that("inside an evaluation the console margin follows the person's console 
   out = utils::capture.output(eval_r("p = pad(); k = pick()", home, plots = "none", tee = FALSE))
   expect_identical(home$p, "  ")
   expect_identical(home$k, 1L)
-  expect_identical(prompts, "  Choose (a number): ")
-  expect_true("  Which format?" %in% out)
+  expect_identical(prompts, ">> ")
+  expect_true("  ? Which format?" %in% out)
 })
 
 test_that("sub-agent lines need a child of a foreground root, verbosity 1+, no quiet (D-188)", {
@@ -1036,11 +1695,11 @@ test_that("sub-agent lines need a child of a foreground root, verbosity 1+, no q
   expect_false(console_child_shown(kid))
   local_gptr_options(verbose = 1L, quiet = TRUE)
   expect_false(console_child_shown(kid))
-  # two columns, as the prompts, with or without the console margin
+  # two columns, as the prompts, with or without the console margin, after the agent's block
   withr::local_options(cli.dynamic = TRUE)
   local_gptr_options(verbose = 2L)
   expect_identical(utils::capture.output(console_child_line(list(child = list(label = "a")), "x")),
-                   "  sub-agent a x")
+                   "  # sub-agent a x")
 })
 
 test_that("a failed sub-agent line counts it and gives its reason's first line, cut (#36)", {
@@ -1058,9 +1717,9 @@ test_that("a failed sub-agent line counts it and gives its reason's first line, 
   out = utils::capture.output(tryCatch(peter("each", list(a = 1, b = 2), model = fake,
                                              parallel = 1), error = function(e) NULL))
   failed = grep("failed", out, value = TRUE)
-  expect_identical(failed[[1L]], paste0("  sub-agent a failed (1/2): No credential found for ",
-                                        "provider fake. Set FAKE_A..."))
-  expect_match(failed[[2L]], "^  sub-agent b failed \\(2/2\\): No credential found for")
+  expect_identical(failed[[1L]], paste0("  # sub-agent a failed (1/2): No credential found for ",
+                                        "provider fake. Set FAKE..."))
+  expect_match(failed[[2L]], "^  # sub-agent b failed \\(2/2\\): No credential found for")
   # without a reason, the status
   local_gptr_options(verbose = 0L)
   rec = console_track("u0000test", s)
@@ -1068,10 +1727,32 @@ test_that("a failed sub-agent line counts it and gives its reason's first line, 
   rec$child = list(label = "c", run = list(started = Sys.time()))
   expect_identical(utils::capture.output(invisible(console_on_agent_end(
     hook_event("agent_end", s, status = "aborted", usage = NULL, turns = 1L),
-    session_live(s)$ctx))), "  sub-agent c failed: aborted")
+    session_live(s)$ctx))), "  # sub-agent c failed: aborted")
 })
 
-test_that("a foreground run separates text, tool and status blocks once (D-186)", {
+test_that("a line routed at a question sits under it; a later person's line opens a block", {
+  skip_on_cran()
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  withr::local_options(cli.dynamic = TRUE)
+  local_mocked_bindings(front_end = function() "terminal")
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  render_events(s, list(hook_event("agent_start", s)))
+  rec = console_record(list(run = "u0000test"))
+  # a line the question's read routes sits right under its rows
+  rec$last = "prompt"
+  expect_identical(utils::capture.output(console_queue_line(s, "use base R", "steer")),
+                   queue_line("steer", "use base R"))
+  # the steer delivered after the call the question approved, which printed only output (no
+  # result line closed the block), opens its own block (visual review)
+  rec$last = "prompt"
+  took = render_events(s, list(hook_event("queue_update", s, op = "take", which = "steer",
+                                          text = "use base R", source = "repl")))
+  expect_identical(took, c("", ">> use base R"))
+})
+
+test_that("a foreground run separates text, tool and status blocks once (D-186, D-245)", {
   skip_on_cran()
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)
@@ -1080,6 +1761,7 @@ test_that("a foreground run separates text, tool and status blocks once (D-186)"
   local_mocked_bindings(front_end = function() fe)
   s = render_session()
   withr::defer(console_drop("u0000test"))
+  local_live_console()
   hooks = console_hooks()
   types = vapply(hooks, function(h) h$event, "")
   request = function(id) {
@@ -1102,38 +1784,50 @@ test_that("a foreground run separates text, tool and status blocks once (D-186)"
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Second ending")),
     hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
                turns = 1L))
-  # a launch boundary and a notice replacing a shown waiting row, which then resumes as the
-  # reactor task draws it
-  rec = function() console_record(list(run = "u0000test"))
-  tick = function() {
-    sp = rec()$spinner
-    sp$last = 0
-    sp$tick()
-  }
+  # a launch boundary clears the shown live row, which its reactor task draws again; a notice
+  # replaces it, and a padded row then waits for the next request
+  tick = function() get(the$live_row$task, envir = reactor_get()$tasks)$fn()
   waits = list(
     hook_event("agent_start", s), request("q1"), function() console_before_message(kind = NULL),
     tick, function() {
       console_before_message()
       console_notice("[gptr] a notice")
-    }, function() {
-      console_gap(rec(), "wait")
-      tick()
-    },
+    }, tick,
     hook_event("message_update", s, index = 1L, kind = "text", delta = "Answer\n\n"),
     hook_event("message_end", s, role = "assistant", message = assistant_msg("Answer")),
     hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
                turns = 1L))
-  rows = list(c("", "  First tail", "", "  * r  1 + 1", "    + value", "", "  Second ending", "",
-                "  done | 0 requests | 0 tokens | $0.0000", ""),
+  # tool blocks of consecutive requests group as those of one response: the live row between them
+  # is no block, and the text after the last one is spaced (D-245)
+  call = function(id, code) {
+    list(hook_event("message_end", s, role = "assistant", message = assistant_msg("")),
+         hook_event("tool_execution_start", s, tool_call_id = id, tool_name = "r",
+                    input = list(code = code)),
+         hook_event("tool_execution_end", s, tool_call_id = id, tool_name = "r", is_error = FALSE,
+                    elapsed = 0.1, details = list()),
+         hook_event("message_end", s, role = "tool_result",
+                    message = modifyList(result, list(tool_call_id = id))))
+  }
+  tools = c(list(hook_event("agent_start", s), request("q1")), call("c1", "1 + 1"),
+            list(request("q2")), call("c2", "2 + 2"),
+            list(request("q3"),
+                 hook_event("message_update", s, index = 1L, kind = "text", delta = "Done\n\n"),
+                 hook_event("message_end", s, role = "assistant", message = assistant_msg("Done")),
+                 hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL,
+                            doc = NULL, turns = 1L)))
+  rows = list(c("", "  First tail", "", "  | r  1 + 1", "    + value", "", "  Second ending", "",
+                "  done - 0 requests - 0 tokens", ""),
               c("", "  [gptr] a notice", "", "  Answer", "",
-                "  done | 0 requests | 0 tokens | $0.0000", ""))
+                "  done - 0 requests - 0 tokens", ""),
+              c("", "  | r  1 + 1", "    + value", "  | r  2 + 2", "    + value", "", "  Done", "",
+                "  done - 0 requests - 0 tokens", ""))
   # an R GUI spaces the blocks exactly as a terminal does
   for (fe in c("terminal", "rgui")) {
-    for (i in 1:2) {
+    for (i in 1:3) {
       con = rawConnection(raw(), "w")
       sink(con)
       tryCatch({
-        for (ev in list(events, waits)[[i]]) {
+        for (ev in list(events, waits, tools)[[i]]) {
           if (is.function(ev)) {
             ev()
           } else {
@@ -1144,7 +1838,9 @@ test_that("a foreground run separates text, tool and status blocks once (D-186)"
       bytes = rawToChar(rawConnectionValue(con))
       close(con)
       expect_match(bytes, "thinking", fixed = TRUE)
-      expect_false(grepl("\r +\r\n", bytes))
+      # the live row takes no blank line before it, so a block that owes one writes it on the
+      # cleared row, and a tool block after a tool block none
+      expect_identical(lengths(regmatches(bytes, gregexpr("\r +\r\n", bytes))), c(2L, 1L, 2L)[[i]])
       expect_identical(screen_rows(bytes), rows[[i]], info = fe)
     }
   }
@@ -1166,7 +1862,7 @@ test_that("a streamed reply is printed verbatim and never evaluated (acceptance 
   expect_true("Use {Sys.setenv(GPTR_PWNED = \"1\")} with care." %in% out)
   expect_identical(Sys.getenv("GPTR_PWNED"), "")
   expect_false(res$visible)
-  expect_match(out[[length(out)]], "^  done \\| 1 request \\| ")
+  expect_match(out[[length(out)]], "^done - fake-1 - 1 request - ")
 })
 
 test_that("nothing is rendered at verbosity 0 (knitr, testthat)", {
@@ -1187,7 +1883,7 @@ test_that("tool calls of a run show escaped previews and results (acceptance 7)"
                                  "done"))
   e = new.env(parent = globalenv())
   out = utils::capture.output(peter("go", model = fake, envir = e, mode = auto))
-  expect_true("  * r  z = 1 # <U+001B>[31mred" %in% out)
+  expect_true("  | r  z = 1 # <U+001B>[31mred" %in% out)
   # the elapsed time follows when the call took a second or more (a first call on a slow runner)
   expect_match(out, "^    \\+ z( \\([0-9.]+ s\\))?$", all = FALSE)
   expect_false(any(grepl("\033", out, fixed = TRUE)))

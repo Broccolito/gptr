@@ -1,4 +1,4 @@
-# Provider notices are ordinary conditions; clear a foreground redraw before their delivery.
+# Provider notices are ordinary conditions; their delivery clears the live row first (D-243).
 notice_record = function(.env = parent.frame()) {
   local_project(.env = .env)
   local_fake_provider(list("ok"), .env = .env)
@@ -12,7 +12,11 @@ notice_record = function(.env = parent.frame()) {
     console_drop(run$id)
     live$run = NULL
   }, envir = .env)
-  list(s = s, live = live, run = run, rec = console_record(list(run = run$id)))
+  local_live_console(.env = .env)
+  rec = console_record(list(run = run$id))
+  # the row's clock reads 0s on any runner, however slow
+  rec$t0 = Inf
+  list(s = s, live = live, run = run, rec = rec)
 }
 
 notice_request = function(w) {
@@ -28,45 +32,42 @@ local_notice_once = function(.env = parent.frame()) {
   }, envir = .env)
 }
 
-test_that("a CLI notice clears before delivery and the pending spinner resumes", {
+test_that("a CLI notice clears the live row and goes above it, which keeps its clock (D-243)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
-  withr::local_options(cli.dynamic = TRUE)
+  withr::local_options(cli.dynamic = TRUE, cli.ansi = TRUE)
   local_notice_once()
   w = notice_record()
   utils::capture.output(notice_request(w))
-  sp = w$rec$spinner
-  task = w$rec$task
-  start = sp$t0
+  row = the$live_row
+  task = row$task
+  start = w$rec$t0
   observed = new.env(parent = emptyenv())
-  out = utils::capture.output({
-    err = utils::capture.output({
+  bytes = written(function() {
+    observed$err = utils::capture.output({
       observed$value = withCallingHandlers(with_interrupt_policy(function() {
         pcli_notice("claude")
         17L
-      }, list(w$run)), gptr_message_notice = function(cnd) {
-        observed$shown = sp$shown
-        observed$condition = cnd
-      })
+      }, list(w$run)), gptr_message_notice = function(cnd) observed$condition = cnd)
     }, type = "message")
   })
-  expect_false(observed$shown)
-  expect_true(startsWith(out[[1L]],
-    paste0("\r", strrep(" ", 79L), "\r  The claude-cli route is experimental:")))
-  out[[1L]] = sub("^\r +\r", "", out[[1L]])
-  expect_true(all(startsWith(out, "  ")))
-  expect_true(all(nchar(out, type = "width") <= 78L))
-  expect_identical(err, character())
+  expect_true(startsWith(bytes, "\r\033[K"))
+  out = term_rows(bytes)
+  expect_identical(out[[1L]], "")
+  expect_match(out[[2L]], "^  The claude-cli route is experimental:")
+  # the notice's rows, then the row redrawn below them
+  expect_identical(out[[length(out)]], "# thinking 0s - ctrl-c stop")
+  notice = out[-c(1L, length(out))]
+  expect_true(all(startsWith(notice, "  ")))
+  expect_true(all(nchar(notice, type = "width") <= 78L))
+  expect_identical(observed$err, character())
   expect_s3_class(observed$condition, "gptr_message_notice")
   expect_identical(observed$value, 17L)
-  expect_identical(w$rec$spinner, sp)
-  expect_identical(w$rec$task, task)
-  expect_identical(sp$t0, start)
+  expect_identical(the$live_row, row)
+  expect_identical(row$task, task)
+  expect_identical(w$rec$t0, start)
   expect_true(w$rec$request_pending)
-  sp$last = 0
-  redraw = utils::capture.output(invisible(get(task, envir = reactor_get()$tasks)$fn()))
-  expect_true(any(grepl("thinking", redraw, fixed = TRUE)))
-  expect_true(sp$shown)
+  expect_true(row$shown)
 })
 
 test_that("once and quiet notices do not clear an otherwise pending redraw", {
@@ -78,57 +79,52 @@ test_that("once and quiet notices do not clear an otherwise pending redraw", {
   utils::capture.output(notice_request(w))
   utils::capture.output(expect_message(with_interrupt_policy(function() pcli_notice("claude"),
     list(w$run)), class = "gptr_message_notice"))
-  w$rec$spinner$last = 0
-  utils::capture.output(invisible(w$rec$spinner$tick()))
+  utils::capture.output(invisible(the$live_row$draw()))
   out = utils::capture.output(expect_no_message(with_interrupt_policy(function() {
     pcli_notice("claude")
   }, list(w$run))))
   expect_identical(out, character())
-  expect_true(w$rec$spinner$shown)
+  expect_true(the$live_row$shown)
   local_gptr_options(quiet = TRUE)
   out = utils::capture.output(expect_no_message(with_interrupt_policy(function() {
     gptr_inform("quiet notice", "notice")
   }, list(w$run))))
   expect_identical(out, character())
-  expect_true(w$rec$spinner$shown)
+  expect_true(the$live_row$shown)
 })
 
-test_that("native R GUI notices replace the cleared waiting row, as on a terminal (D-186)", {
+test_that("native R GUI notices replace the cleared live row, which then waits (D-186, D-243)", {
   testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE)
   local_mocked_bindings(front_end = function() "rgui")
   w = notice_record()
   utils::capture.output(notice_request(w))
-  sp = w$rec$spinner
   observed = new.env(parent = emptyenv())
   out = utils::capture.output({
     err = utils::capture.output(withCallingHandlers(with_interrupt_policy(function() {
       gptr_inform(strrep("long notice ", 12L), "notice")
-    }, list(w$run)), gptr_message_notice = function(cnd) {
-      observed$condition = cnd
-      observed$shown = sp$shown
-    }), type = "message")
+    }, list(w$run)), gptr_message_notice = function(cnd) observed$condition = cnd),
+    type = "message")
   })
   clear = paste0("\r", strrep(" ", 39L), "\r")
   expect_true(startsWith(out[[1L]], clear))
   lines = c(substring(out[[1L]], nchar(clear) + 1L), out[-1L])
+  expect_identical(lines[[1L]], "")
+  lines = lines[-1L]
   expect_true(all(startsWith(lines, "  ")))
   expect_true(all(nchar(lines) <= 38L))
   expect_identical(paste(trimws(lines), collapse = " "), trimws(strrep("long notice ", 12L)))
   expect_identical(err, character())
   expect_s3_class(observed$condition, "gptr_message_notice")
-  expect_false(observed$shown)
+  # padded, the row is not drawn again under the notice: its spaces would stay in each row
+  expect_false(the$live_row$shown)
+  expect_false(the$live_row$on)
   expect_true(w$rec$request_pending)
-  # no line feed follows the cleared row: the block gap before it gave R.app its stdout line
-  bytes = rawConnection(raw(), "w")
-  on.exit(close(bytes), add = TRUE)
-  sp$last = 0
-  utils::capture.output(invisible(sp$tick()))
-  sink(bytes)
-  tryCatch(console_before_message(list(w$run)), finally = sink())
-  expect_identical(rawToChar(rawConnectionValue(bytes)), clear)
-  expect_identical(utils::capture.output(console_before_message(list(w$run))), character())
+  # a launch clears a shown row with no line feed after it
+  utils::capture.output(invisible(the$live_row$draw()))
+  expect_identical(written(function() console_before_message(list(w$run), kind = NULL)), clear)
+  expect_identical(written(function() console_before_message(list(w$run), kind = NULL)), "")
 })
 
 test_that("notices on an interactive console wrap inside the two-column margin (D-186)", {
@@ -180,7 +176,8 @@ test_that("messages keep redaction, metadata and caller handlers", {
   expect_identical(conditionMessage(observed$condition), "literal {x}: [secret:TEST]\n")
   expect_identical(observed$condition$route, "fake")
   expect_null(conditionCall(observed$condition))
-  expect_false(w$rec$spinner$shown)
+  # the notice block's blank line is written at the signal, though the message is muffled
+  expect_false(the$live_row$shown)
 })
 
 test_that("background and nested conditions do not write foreground clear bytes", {
@@ -197,16 +194,16 @@ test_that("background and nested conditions do not write foreground clear bytes"
   out = utils::capture.output(expect_message(with_interrupt_policy(nested, list(w$run)),
     "nested notice", fixed = TRUE))
   expect_identical(out, character())
-  expect_true(w$rec$spinner$shown)
+  expect_true(the$live_row$shown)
   w$live$background = list(id = "b-notice")
   out = utils::capture.output(expect_message(with_interrupt_policy(function() {
     gptr_inform("background notice", "notice")
   }, list(w$run)), "background notice", fixed = TRUE))
   expect_identical(out, character())
-  expect_true(w$rec$spinner$shown)
+  expect_true(the$live_row$shown)
 })
 
-test_that("real R-tool capture contains no spinner clear bytes or altered warnings", {
+test_that("real R-tool capture contains no live row bytes or altered warnings", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L, quiet = FALSE)
   withr::local_options(cli.dynamic = TRUE, warn = 1L)
@@ -220,20 +217,23 @@ test_that("real R-tool capture contains no spinner clear bytes or altered warnin
       'warn("tool warning", "notice")')))
   out = utils::capture.output({
     err = utils::capture.output({
-      expect_warning({
+      expect_no_warning({
         result = with_interrupt_policy(function() {
           tool_execute_frame(w$run, call, w$live$ctx)
         }, list(w$run))
-      }, class = "gptr_warning_notice")
+      })
     }, type = "message")
   })
-  # the notice keeps the margin of the console the evaluation started from (D-186)
-  expect_identical(out, c("tool output", "  tool notice"))
+  # the notice keeps the margin of the console the evaluation started from (D-186), the printed
+  # output is a result row at column 4 (visual review), the warning one too, never left for R's
+  # top level (visual round 3); the console's live row is cleared first
+  expect_identical(out, c(paste0("\r", strrep(" ", 79L), "\r    tool output"), "  tool notice",
+                          "    Warning: tool warning"))
   expect_identical(err, character())
   expect_false(result$is_error)
   expect_identical(result$details$warnings, "tool warning")
   expect_false(grepl("[\r\033]", tool_result_text(result)))
-  expect_true(w$rec$spinner$shown)
+  expect_false(the$live_row$shown)
 })
 
 test_that("non-dynamic and quiet consoles emit no redraw bytes around notices", {
@@ -245,7 +245,7 @@ test_that("non-dynamic and quiet consoles emit no redraw bytes around notices", 
     gptr_inform("static notice", "notice")
   }, list(w$run)), "static notice", fixed = TRUE))
   expect_identical(out, character())
-  expect_null(w$rec$spinner)
+  expect_null(the$live_row)
   local_gptr_options(quiet = TRUE)
   expect_no_message(expect_output(with_interrupt_policy(function() {
     gptr_inform("quiet notice", "notice")

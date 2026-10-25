@@ -925,6 +925,8 @@ session_enqueue = function(s, text, as = c("steer", "follow_up"), source = "api_
                            blocks = list()) {
   check_class(s, "gptr_session", "s")
   check_string(text, "text")
+  # the model would read a blank steer as an empty message; attachments carry a follow-up alone
+  if (!length(blocks) && !nzchar(trimws(text))) arg_abort(text, "text", "a non-blank string")
   as = check_choice(as, c("steer", "follow_up"), "as")
   source = check_choice(source, queue_sources, "source")
   queue_blocks_check(blocks, as, source)
@@ -944,8 +946,34 @@ session_enqueue = function(s, text, as = c("steer", "follow_up"), source = "api_
               source = source, t = as.numeric(Sys.time()))
   q[[as]][[length(q[[as]]) + 1L]] = item
   d$queue = q
-  session_emit(s, "queue_update", steer = length(q$steer), follow_up = length(q$follow_up))
+  queue_emit(s, "add", as, item)
   invisible(s)
+}
+
+#' Take back the newest queued item of `which` that came from a user source, or NULL; extension
+#' and agent items stay (D-242)
+#' @noRd
+session_unqueue = function(s, which = "steer") {
+  check_class(s, "gptr_session", "s")
+  which = check_choice(which, c("steer", "follow_up"), "which")
+  d = session_data(s)
+  q = d$queue
+  i = Position(function(item) item$source %in% queue_user_sources, q[[which]], right = TRUE)
+  if (is.na(i)) return(NULL)
+  item = q[[which]][[i]]
+  q[[which]] = q[[which]][-i]
+  d$queue = q
+  queue_emit(s, "withdraw", which, item)
+  item
+}
+
+#' Emit `queue_update` for one item that entered (`add`) or left (`take`, `withdraw`) the queue:
+#' its kind, redacted text and source, then the counts the queue now holds (04 section 10.4)
+#' @noRd
+queue_emit = function(s, op, which, item, .run = NULL) {
+  q = session_data(s)$queue
+  session_emit(s, "queue_update", op = op, which = which, text = item$text, source = item$source,
+               steer = length(q$steer), follow_up = length(q$follow_up), .run = .run)
 }
 
 #' Check the attachments of a queue item before it enters the queue (the loop dequeues before it
@@ -1301,7 +1329,7 @@ replay_adopt = function(s, block, header, doc) {
 #' The texts of a replayed block's `## Steer:` and `## Follow-up:` lines (`doc$steps`) become the
 #' session's notes of that block, set anew each time the block is replayed (a script sourced again
 #' sends them again): replay_note_take() keeps them from reaching the model twice. A matching item
-#' the script queued before the call that took it is taken back now.
+#' the script queued before the call that took it is taken back now (a `withdraw` each).
 #' @noRd
 replay_notes_add = function(s, block, doc) {
   notes = Filter(function(st) st$type %in% c("steer", "follow_up"), doc$steps %||% list())
@@ -1310,15 +1338,13 @@ replay_notes_add = function(s, block, doc) {
   kept = d$replay_notes %||% list()
   kept[[block]] = vapply(notes, function(st) st$text, "")
   d$replay_notes = kept
-  q = d$queue
   for (which in c("steer", "follow_up")) {
-    q[[which]] = Filter(function(it) {
-      !(it$source %in% c("api_user", "pipe") && replay_note_take(s, it$text))
-    }, q[[which]])
-  }
-  if (!identical(q, d$queue)) {
-    d$queue = q
-    session_emit(s, "queue_update", steer = length(q$steer), follow_up = length(q$follow_up))
+    items = d$queue[[which]]
+    taken = vapply(items, function(it) {
+      it$source %in% c("api_user", "pipe") && replay_note_take(s, it$text)
+    }, NA)
+    d$queue[[which]] = items[!taken]
+    for (item in items[taken]) queue_emit(s, "withdraw", which, item)
   }
   invisible(s)
 }

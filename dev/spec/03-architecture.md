@@ -247,8 +247,10 @@ Rules that keep this honest:
    shell holds no frames or user objects [IC-71]) and the replay-block table [IC-46]. Usage, queues, abort flags,
    the `peter$out()` store and every in-flight cache live in sessions and runs; `gptr_usage()` aggregates [G3 (2)].
    The console input layer also keeps the seconds its last `readline()` waited (`readline_secs`: process-level
-   input timing, not run state [IC-75]) and the terminal modes a console call saved before it turned the echo off
-   (`tty_modes`, cleared when the call ends [IC-76]).
+   input timing, not run state [IC-75]) and the terminal modes a console call saved before it set its own
+   (`tty`: the saved and set modes, cleared when the call ends; a finalizer restores them at `q()` [IC-76]); the console's style table reads the terminal's background
+   once (`background` [IC-82]); the console's live row is held while a foreground run works (`live_row`, so every
+   console write clears and redraws it [IC-82]).
 
 ### 2.3 Execution model
 
@@ -297,7 +299,7 @@ Final areas, in layer order:
 `doc`, `artifact` (L4); `console` (L5); `gptr` (L6); plus `zzz.R`. `cli` means the subscription-CLI
 providers, never the cli package.
 
-### 3.2 `R/` files (123 files after the Rscript launcher amendment, P26's Bedrock adapter and D-247's `utils-size.R`)
+### 3.2 `R/` files (125 files after the Rscript launcher amendment, P26's Bedrock adapter, D-247's `utils-size.R` and P28's composer and completer)
 
 Every file has exactly one owning plan (`05-plan-decomposition.md`). "Builtin" names the factory the file
 declares, if any.
@@ -305,7 +307,7 @@ declares, if any.
 | File | Layer | Responsibility | Builtin | Plan |
 |---|---|---|---|---|
 | `aaa-state.R` | L0 | `the`, `on_load()`, `on_unload()`, the bootstrap service table (`ext_service_set/get/has()`), the redaction hook (`redactor_set()`, `redact_hook()`), the internal `%||%`; collates first [IC-32, IC-34] | - | P01 |
-| `utils-conditions.R` | L0 | `gptr_abort()/gptr_warn()/gptr_inform()` with the `gptr_error_<class>` scheme; `msg_verbatim()` (safe rendering of untrusted text) | - | P01 |
+| `utils-conditions.R` | L0 | `gptr_abort()/gptr_warn()/gptr_inform()` with the `gptr_error_<class>` scheme; `msg_verbatim()` (safe rendering of untrusted text); the console's L0 helpers (`gptr_message_write()`, `console_pad()`, `console_colors()`, the style table `console_style()`) | - | P01 |
 | `utils-hash.R` | L0 | sha256 via `cli::hash_sha256()`, `canonical_json()` (radix key order), RNG-free ids (session, entry, block), sampled fingerprints, `with_seed_preserved()`, `port_candidates()` [IC-61] | - | P01 |
 | `utils-encoding.R` | L0 | `as_utf8()` at every ingress [IC-62], UTF-8 marking before every parse/serialise, `os_bytes()`, binary-connection text I/O, C-locale guards | - | P01 |
 | `utils-options.R` | L0 | documented `gptr.*` option defaults; `gptr_has_human()`, `gptr_can_prompt()` [IC-43], front-end detection, verbosity, `supervise_default()`; mockable `gptr_is_interactive()`, `gptr_readline()`, `gptr_confirm()`; `setting_get()` (contract IC-09) | - | P01 |
@@ -397,6 +399,8 @@ declares, if any.
 | `console-interrupt.R` | L5 | interrupt policy: pause menu (steer, follow-up, continue, abort) via the `resume` restart | - | P14 |
 | `console-commands.R` | L5 | built-in slash commands | - | P14 |
 | `console-jsonl.R` | L5 | JSONL event-sink front end (Pi-named events, redacted) | jsonl | P14 |
+| `console-input.R` | L5 | the terminal composer: its key machine and trigger words [IC-76] | - | P28 |
+| `console-complete.R` | L5 | completion only after the trigger characters: the completer and R's custom-completer adapter [IC-81] | - | P28 |
 | `doc-locate.R` | L4 | locate the calling statement (srcref, source frame, knitr, Quarto, IRkernel, Rscript, IDE, console) | - | P15 |
 | `doc-blocks.R` | L4 | block grammar, ownership, idempotent upsert, stale and user-edited detection | - | P15 |
 | `doc-io.R` | L4 | atomic raw I/O (EOL/BOM), md5 conflict checks, deferred Rscript writes, IDE backends | - | P15 |
@@ -640,8 +644,9 @@ quoted canonical ids [09 §4.9].
 Only literal prompts are interpolated, and only `{identifier}` where `identifier` is a syntactic name bound in
 `envir` to an atomic vector of 1-50 elements (joined with `", "`, cut at 1,000 characters). `{{`/`}}` are
 literal braces; code, JSON and unbound names are untouched; variables and `glue` objects are never
-re-interpolated; `.opts$interpolate = FALSE` or `options(gptr.interpolate = FALSE)` disables it. The console
-echoes the interpolated prompt; documents keep the template. Report 12 §2.D4 advised against automatic
+re-interpolated; `.opts$interpolate = FALSE` or `options(gptr.interpolate = FALSE)` disables it. At verbosity 2
+the gateway echoes the interpolated prompt (`Interpolated prompt: ...`), at the console too; documents keep the
+template. Report 12 §2.D4 advised against automatic
 interpolation; this narrow rule is the one all three proposals converged on. Token effect: about 10 tokens
 instead of 60-120 for attaching `cl` and `top` as context [P-C §4.1.4].
 
@@ -1227,21 +1232,42 @@ which drop out at settlement; run state lives in sessions (INFRA-15). Nested run
 running session (gateway route f), the console pause menu, a line typed in a terminal console while an answer
 runs [IC-76], `gptr_steer()` (SDK and front ends), `ctx$send()`
 (plugins, hooks and sibling agents). Consumer: the loop polls at run start, after `turn_end` and after tool
-preflight; a steer is delivered only after the **complete** tool-result message. Only user sources (the pipe, the
-pause menu, the REPL, `gptr_steer()` called outside a run) become the operator relay "The user sent this message
-while you were working: <text>"; `ctx$send()` from a plugin becomes user-role data "Extension <name> sent this note
-(not from the user): <text>", sibling and child agents' text arrives as `<agent_report>` data, and a send from
-model code of the same session tree is refused [IC-55]. Follow-ups are taken one at a time when the agent would
-otherwise stop. Abort moves the queue to `dropped`. Enqueueing returns immediately. There is no file-inbox
-channel in core (J-cran K-16); a front end that needs one is a plugin calling `gptr_steer()`.
+preflight; each poll takes every queued steer, in order, each its own message, so a step boundary delivers them
+all to the next request [D-242]; a steer is delivered only after the **complete** tool-result message. Only user
+sources (the pipe, the pause menu, the REPL, `gptr_steer()` called outside a run) become the operator relay "The
+user sent this message while you were working: <text>"; `ctx$send()` from a plugin becomes user-role data
+"Extension <name> sent this note (not from the user): <text>", sibling and child agents' text arrives as
+`<agent_report>` data, and a send from model code of the same session tree is refused [IC-55]. Follow-ups are
+taken one at a time when the agent would otherwise stop. The console REPL keeps its own instead: while one of its
+prompts runs, a follow-up (a typed line under `type_ahead = "follow_up"`, the pause menu's [f]) and any `/command`
+or `!code` line wait in its reader with the held lines, in the order typed, and after the run's status line each
+is the next prompt, its own run; outside it (`peter("...")`, `.stdin`, `jsonl`) [f] uses the FIFO [D-242]. Abort
+moves the queue to `dropped`. Nothing the person queued is lost [D-242]: at the end of a foreground run that ended
+idle or at `max_turns`, the console makes its user steers still queued (or held while a tool ran) the REPL's next
+prompts; after any other end (an abort, an error) it sends none of it and adds the user items the abort dropped,
+the steers still queued, the items held and the REPL's held lines to the console history, listed once. This holds
+in an interactive R; under Rscript, knitr or any other R without a console history the console settles nothing, so
+the queue stays as the run left it, for the session's next run.
+Enqueueing returns immediately. `session_unqueue()` takes back the newest user item (the console's Up) [D-242];
+each item added, taken or withdrawn emits one `queue_update` that names it. There is no file-inbox channel in core
+(J-cran K-16); a front end that needs one is a plugin calling `gptr_steer()`.
 
 **Interrupt policy** [18 §4.6, 02 §5.4, G3 (5)]. Runs execute inside
 `tryCatch(withCallingHandlers(<run>, interrupt = pause_menu), interrupt = abort_run)`. The pause menu uses R's
-`resume` restart: `[s]teer`, `[f]ollow-up`, `[c]ontinue`, `[a]bort`, and `[b]ackground` (foreground calls
-only, experimental); a second Ctrl-C aborts. Menu output goes to stderr (the handler may run inside a tool's
-stdout capture) and tools record interruption with `on.exit()`, never with an exiting `tryCatch(interrupt =)`
-that would pre-empt the menu (G3 menu fixes). Where the resume restart is unavailable or unverified (Rgui,
-IDE consoles), the policy falls back to abort-only. R in an IDE's terminal tab reads a tty and is terminal R
+`resume` restart. It is a console question in every console that offers it [D-243]: `? Paused` (with the
+session's id only when more than one session is paused) and under its text a keys row as an approval's,
+`s steer · f follow-up · c continue · a abort · b background` ([b] for foreground calls only, experimental),
+read at the person's chevron `› ` at column 0. A key or its word answers, Enter alone continues, and anything
+else gets a dim hint naming the keys; [s] and [f] read their text at the same chevron and queue it as a typed
+message is queued [D-242]. Continuing writes no notice, and a terminal console's draft survives the menu; a
+second Ctrl-C aborts. Menu output goes to stdout through the console writer, which keeps
+it out of a tool's captured output (the handler may run inside it), and tools record interruption with `on.exit()`,
+never with an exiting `tryCatch(interrupt =)` that would pre-empt the menu (G3 menu fixes). The menu is offered
+in terminal R, in the consoles of Positron and RStudio and in R.app, where resuming is verified
+(`console_menu_available()`); in RStudio and R.app Esc opens it, RStudio clears a line being typed at that Esc, so
+the menu reads at an empty input line, and a line entered during the run still is the next prompt unless a
+question reads it [D-243]. Where the resume restart is unavailable or unverified (Windows' Rgui, Jupyter), the
+policy falls back to abort-only. R in an IDE's terminal tab reads a tty and is terminal R
 (`front_end()` counts the inherited `RSTUDIO=1`/`POSITRON=1` only without one), so it has the pause menu and
 Ctrl-C [D-183]. Abort: `curl::multi_cancel()`, interrupt then `kill_all()`
 child trees after a grace period, record the partial with `stop_reason = "aborted"`; the REPL returns to its
@@ -1488,20 +1514,38 @@ backend is not an isolation boundary). `modify` changes the arguments the tool s
 
 #### 6.8.3 The prompt
 
-One line (NS-1): the tool and the call's first line, cut to the console width (less the margin) before `(+N more
-lines)`, the flagged calls one per line (highest level first, each cut to the width, at most 5, then `(+N more; ?
-shows all)`), then `allow? [y]es / [a]lways / [n]o / [?]`, with C0/C1 controls, bidi and zero-width
-characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. `a` adds a session rule covering exactly the
-flagged calls (`r(fn:FindNeighbors,FindClusters)`), offered only when the request suggests one; `?`
-opens the detail view (code, flagged calls with levels,
-paths, "cannot be undone" when no checkpoint is possible, and "always in this project", written to the user-level
-project file `R_user_dir("gptr", "config")/projects/<hash>.json`, never into the project tree [IC-52]); `n` optionally takes feedback text that becomes the tool result; Ctrl-C aborts
-the run. Never `askYesNo()`, `menu()` or `select.list()` for gptr's own prompts [18 §2.1].
-A sub-agent's prompt names it (`  sub-agent alpha > r  cm = 1`; a nested `peter()` by its quoted prompt and number) and an
-`ask_human` prompt adds `asks in every mode: <reason>`. Every console prompt first ends partial lines and clears the
-waiting row, and its lines reach the console even from inside the parent's `r` evaluation (never its tool result).
-An invalid answer is explained (`a` where nothing can be remembered says why); five (`?` is none) end in a refusal
-whose feedback tells the model that no valid answer was given [IC-77; D-188].
+An approval asks under the call it gates (NS-1) [D-243]. The call line (`  ▎ r  <first line>`, the strip red and the
+name bold, cut to the console width less the margin before `(+N more lines)`) is printed only when the console's
+last printed call line is not the request's (its session and `tool_call_id`, §7.11): a background ask, a nested
+member call inside `r` code, a sub-agent's call; a question and the tool block it is asked in are one block (no
+blank line between the call, its ask and its result lines). A tool whose input has a `path` and no `code` shows the
+change it asks for under the call line, from its input alone (the file is never read): at most 12 rows at column 4,
+styled and cut as a result's diff, `-` rows of each edit's old text, `+` rows of its new text and of a write's
+content, `@@` between edits, a patch envelope as its own lines, another tool's other fields as JSON (dim), then
+`(+N more lines; ? shows more)` [cheat-sheet review]. Then come, dim at column 4, the flagged calls one per
+line (highest level first, each cut to the width, at most 5, then `(+N more; ? shows all)`) and an `ask_human`
+request's `asks in every mode: <reason>`, then the question `  ? Allow r?` (`?` blue, the question bold), and under its text the
+keys, `    y yes · a always (session) · p always (project) · n no · ? more` (the keys bold, what they do dim; 68
+columns whatever the tool or who asks, wrapped between the options in a narrower console), with C0/C1 controls,
+bidi and zero-width characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. The answer is read after
+the person's chevron `› ` (ASCII `>> `) at column 0, with R's readline, echo on and Enter required; no single key
+answers. `a` adds a session rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`) and `p`
+the same rule for the project, both offered only when the request suggests one; a remembered answer adds one dim
+line, `    allowed r(fn:FindNeighbors,FindClusters) for this session` (or `project`). `?` opens the detail view
+(code, or a path tool's change, at most 40 rows, its path then in the first row; flagged calls with levels, paths,
+"cannot be undone" when no checkpoint is possible, and "always in this project", written to the user-level project
+file `R_user_dir("gptr", "config")/projects/<hash>.json`, never into the project tree [IC-52]); `n` optionally takes
+text that the tool result gives the model as the person's own instruction (`n use base R`; also `no, use base R` or
+`No. Use base R`: punctuation right after `n` or `no` is part of the key); Ctrl-C aborts the run. Never
+`askYesNo()`, `menu()` or `select.list()` for gptr's own prompts [18 §2.1]. A sub-agent's question names it
+(`  ? sub-agent alpha: allow r?`; a nested `peter()` by its quoted prompt and number). Choices and inputs (the `ask`
+tool's questions among them) use the same frame: `? <title>` in bold, details dim under it, numbered choices
+(`    1  dplyr`, the number bold), a dim hint (`Choose a number, or type your own answer; Enter = base`; an input's
+`Enter = <default>`), then `› `; each part word-wraps at the console width less the margin, under its own text (a
+title's later rows at column 4, a choice's under its label). Every console prompt first clears the live row (an
+answer's held row continues after it, D-245), and its lines reach the console, in its colours, even from inside the parent's `r` evaluation (never its tool result). An
+invalid answer is explained (`a` or `p` where nothing can be remembered says why); five (`?` is none) end in a
+refusal whose reason (not the person's text) tells the model that no valid answer was given [IC-77; D-188].
 
 #### 6.8.4 Nested gating
 
@@ -1757,7 +1801,8 @@ preset; after a threshold compaction the next one waits until the context grew b
 On a CLI route (a model of `type = "cli"`) neither rule triggers, nor the halved tool-output budget: the CLI
 compacts its own conversation; `/compact` still runs, and the next turn starts a fresh CLI conversation from its
 checkpoint [D-203]. A compaction during a foreground run prints one dim line
-with its before and after token counts [D-202].
+with its before and after token counts [D-202]; `/compact` reports the same counts
+(`compacted · 5.7k to 3.2k tokens`, dim as the status line) [D-245].
 
 ### 6.12 Evaluator [12 §3-4]
 
@@ -1917,15 +1962,37 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 - **REPL** (`frontend` "console"): `readline()` when interactive, one persistent `file("stdin")` under
   `.stdin = TRUE`; input grammar: natural language, `/command`, `!expr` (evaluated in `envir`, added to the
   next prompt's context within 300 tokens [IC-73]) and `!!expr` (not added), fenced ```` ```r ```` blocks, `"""` multi-line prompts,
-  trailing backslash, `@file` and `@object` mentions; a warning near the readline line limit (4,095 bytes on
+  trailing backslash, `@file` and `@object` mentions (a word starting with `@`, so an e-mail address stays text;
+  after a sent prompt one dim line names what they resolved to, `@ mtcars_copy (data.frame, 32 x 11) · @ notes.md
+  (first 40 lines) · @ fit2 not found, sent as text`, wrapped between its terms, and none without a mention
+  [D-244]); a warning
+  near the readline line limit (4,095 bytes on
   R < 4.5, 8,190 on R >= 4.5 [18 fact-check]); optional history through `utils::timestamp()`
-  (`gptr.history`). Banner: `gptr 1.0.0 | model ... | mode ... | .gptr/ found` plus the workspace summary.
-- **REPL completion** [D-183]: wherever R's own Unix readline reads a tty (terminal R, an IDE's terminal tab)
-  the REPL adds `!` to `rl_word_breaks` for its duration (restored on exit; a caller's `custom.completer`
-  keeps its policy), so R completes the code after `!`/`!!`. The REPL reads its lines with a copy of
-  `base::readline` carrying one attribute: RStudio's console completes nothing inside a frame `identical()` to
-  `base::readline`, so it completes R code at `peter>`, while approval and menu prompts keep `readline()` and
-  RStudio's choice completion. radian and Positron's console offer no completion at the prompt.
+  (`gptr.history`). Banner [D-245]: dim lines at column 2, `gptr 1.0.0 · <model> · <mode> · .gptr/ found`,
+  `objects: ` and up to six names, then the keys in bold, `/help lists commands · tab completes after @ ! / ·
+  ctrl-c twice leaves` (the tab only where the REPL completes, after `! /` in RStudio's console; the console's
+  own key, `esc` in RStudio, R.app and Rgui, which does not pause at the prompt), in Positron a line `text typed
+  while peter works waits as R code · ctrl-c, then s, to steer` (the live row's words), then a blank line.
+- **REPL completion** [D-183, D-244]: completion comes only after gptr's trigger characters, never on natural
+  language [IC-81]: R's own completion of the code on a `!`/`!!` line; objects, then files and directories
+  after `@`; the object's members after `@obj$`; peter's members after `peter$`; commands and `/skill:<name>`
+  for a first word starting with `/` (`console_complete()`). Where R's completion calls the custom completer
+  (`console_completes()`: R's own Unix readline on a tty, i.e. terminal R and an IDE's terminal tab, RStudio's
+  console, Windows' Rgui and Rterm; not with `R_COMPLETION=FALSE`) the REPL's reader installs
+  `console_completer()` as `custom.completer` around its prompt reads (`peter>`, `... `; not `+ `, which
+  continues `!` code), so questions, the pause menu and tool `readline()` calls keep R's; a caller's
+  completer is kept and completes the `!` lines. On R's own readline the REPL adds `!` to `rl_word_breaks`
+  for its duration (restored on exit; not for a caller-owned completer, whose words stay its own). The
+  terminal composer's Tab calls the same completer [IC-76]. RStudio's console gets only the candidates that
+  are syntactic names (it inserts any other in backticks), so it completes the commands after `/` and R code
+  after `!`, and where none is left a word with a character other than letters, digits, `.` and `_` (`3:`,
+  `/skill:`) gets RStudio's own completion, as the adapter fails (P28 Task 91); its editor, which shares the
+  request while `peter>` waits (`isConsole` FALSE), gets RStudio's own completion: the adapter fails there,
+  as R's would give whole words such as `fuel$mpg`, which RStudio inserts in backticks (a caller's completer
+  still answers; P28 Task 90). The REPL reads its lines with a copy of `base::readline` carrying one
+  attribute: RStudio's console completes nothing inside a frame `identical()` to `base::readline`, while
+  approval and menu prompts keep `readline()` and RStudio's choice completion. R.app, radian and Positron's
+  console keep their own completion at the prompt.
 - **Pasted and typed-ahead input** [IC-75, D-184]: on a macOS terminal (R's own readline on a tty, where the
   BSD tty driver hands waiting input over as complete lines), the lines already waiting on fd 0 after a prompt,
   slash or `!code` line is read (a paste) join it, a dim `(pasted: Enter sends it as one message)` hint follows
@@ -1936,73 +2003,130 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   rather than on fd 0) pasted lines arrive one per read: use `"""`. Every console question (approvals, choices,
   input, the pause menu, `gptr_confirm()`) reads again while an interactive answer arrived within 0.1 s of its
   prompt (at most 100 reads): a line typed, pasted or queued from a script (an IDE's run selection) before the
-  question is discarded and never answers it. On a macOS terminal an approval, choice or input answer with lines
-  waiting after it (a paste) is dropped with them and the question asked again (D-220). A fence runs as R only
-  for an `r`, `R`, `{r...}` or empty info string; other fences are prompt text; the body loses the opener's
-  indentation and closes on a fence at least as long (CommonMark).
+  question never answers it. During a run a console question routes that line as typed lines are (`type_ahead`;
+  a `/command` or `!code` line waits for the next prompt); `gptr_confirm()`, and any question outside a run, puts
+  it in the console history [D-243]. On a macOS terminal an approval, choice or input answer with lines waiting
+  after it (a paste) goes to the history with them and the question is asked again (D-220); so does an invalid
+  approval answer [D-243]. A fence runs as R only for an `r`, `R`, `{r...}` or empty info string; other fences are
+  prompt text; the body loses the opener's indentation and closes on a fence at least as long (CommonMark).
 - **Typing during an answer** [IC-76, D-185]: on a terminal (not `.stdin`, not Windows, interactive, a tty
-  stdin; any front end), a reactor task of each prompt call reads the complete lines typed while the call's
-  session runs, every 0.1 s. They steer it (setting `type_ahead`: `"steer"`, or `"follow_up"`); one batch (a
-  paste) is one message; `/command` and `!code` lines wait for the next prompt and an interrupt drops them. The
-  terminal does not echo during the call (`stty -echo`, modes restored after it), so typed text shows only in its
-  notice; console questions read with the echo restored (D-221). IDE consoles, R.app and `peter("...")` at R's
-  prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current response.
-- **Rendering**: chunk-invariant, width-aware markdown stream renderer; colours only when
-  `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()`
+  stdin; any front end), a reactor task of each prompt call reads what is typed while the call's session runs,
+  every 0.05 s: in a T console, in character mode (`stty -icanon -echo -iexten min 1 time 0`), the keys go to the
+  composer, whose draft the live row shows (Up on an empty draft takes back the newest message waiting) [D-243],
+  a draft starting with `/` or `!` after the hint `runs after this answer` and a leading `!` as the bold red shell
+  glyph in the chevron's place (at the prompt's editor below, bold red after the prompt) [D-244];
+  in a D console (TERM=dumb, Emacs) the complete lines. Enter steers (setting `type_ahead`: `"steer"`), or, with
+  `"follow_up"`, makes the next prompt, and Tab does the other [D-242]; one batch (a paste) is one message;
+  `/command` and `!code` lines wait for the next prompt, shown as follow-ups, in the order typed with them; after
+  an interrupt they go to the console history, unsent [D-242]. The terminal does not echo during the call (modes
+  restored after it, at `q()` too), so typed text shows on the live row (T) or on its dim queue line
+  (`↳ steer · <text>`, D) and, when the run takes it, as the person's line `› <text>` at that step boundary
+  [D-242]; console questions read with the saved modes, which echo (D-221). In T a console question is drawn once
+  no key has come for a second (the live row says `question waiting`, and Enter and Tab still queue), what was
+  typed going to the composer, whose draft stays and is on the live row again when the question has its answer
+  [D-243]. A console question also drains fd 0 just before it reads, under its rows: in T into the composer; in D
+  (`stty -icanon min 0 time 0`, the modes restored after) typed lines are routed as above and a partial line goes
+  to the console history, listed as the person's held text; so the question starts empty [D-243]. A draft a run
+  left (idle or at max_turns) continues at the REPL's next prompt, after the follow-ups: the prompt and the draft
+  are one row edited with the composer's keys until Enter sends it as the line readline would return; once the
+  draft is empty readline reads at the same prompt, and Ctrl-C there adds the draft to the history first [D-243].
+  IDE consoles, R.app and
+  `peter("...")` at R's prompt keep type-ahead as the next input; CLI routes take a steer after the CLI's current
+  response.
+- **Rendering**: chunk-invariant, width-aware markdown stream renderer, written in whole rows, each at its line
+  end or its wrap, the partial row held [D-245]; colours only when
+  `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; the live row redrawn by a reactor task; `flush.console()`
   after deltas. Verbosity: 0 in knitr/testthat, 1 under Rscript (progress to stderr), 2 at the console.
+  Glyphs and colours come from one style table, `console_style()` [IC-82, D-245]: the logo's cursor shapes (`›`
+  the person, `▎` a tool call, `▌` the agent, whose live row's block does not move, `↳` a queued message), ASCII where
+  the output is not UTF-8 and in Windows consoles outside Windows Terminal and RStudio; the logo's red and a
+  darker logo blue (basic red and blue below 256 colours), dim, and an input band in a terminal (T class) whose
+  background its answer to OSC 11 or `COLORFGBG` gives, under the prompts, the live row and the person's lines;
+  no Braille or U+25CF.
   Where the renderer is active (verbosity 2 on a dynamic TTY; `capture.output()` of an
   interactive call captures it too), a run's lines (text, lists, quotes, tables, code, tool
-  lines, notices, prompts, the waiting row, the status line) keep a two-column margin and wrap at
-  width - 4; one blank line separates text, tool, notice, prompt and status blocks (and two
-  prompts, and two text blocks in a row [D-208]) and follows the input and status lines. Separators are written on finished lines only, so a block overwrites
-  the cleared waiting row (`\r\033[K` on ANSI terminals, spaces otherwise; no LF follows a cleared
-  row, R GUIs included; the pause-menu notice excepted, D-225); the margin is that of the console an
-  evaluation started from, also for prompts and notices drawn inside it. There nested lists keep their
+  lines, notices, prompts, the status line) keep a two-column margin and wrap at
+  width - 4 (an answer's prose at 100 columns at most, a readable measure in a wide console [D-245]), while the person's lines (an answer, a queued or delivered message) start at column 0; one blank
+  line separates text, tool, notice, prompt, the person's lines and status blocks (and two prompts, and two text
+  blocks in a row [D-208], but not a question from the tool block it is asked in [D-243], nor the tool blocks of
+  consecutive requests, which group as those of one response [D-245]) and follows the input
+  and status lines. Separators are written on finished lines only. The live row (`console_live()`, IC-82
+  [D-243]: `▌ thinking 6s · ctrl-c pause`, the block blue and the words dim) is no block: at column 0 under the
+  transcript's last row, it is cleared before every console write (`\r\033[K` where that ends the line, an
+  ANSI terminal and RStudio; spaces in Rgui, TERM=dumb and Positron, whose console erases with spaces; none in R.app; no
+  LF follows a cleared row, R GUIs included) and redrawn after a whole line where `\033[K` erases it; where it is padded the first
+  write ends it until the run next waits, so its spaces never trail a transcript row; the margin is that of the console an
+  evaluation started from, also for prompts and notices drawn inside it, and a sub-agent line or a
+  question drawn there has that console's colours, though the evaluation's options say 1 colour (D-245). There nested lists keep their
   indentation, pipe tables are aligned
   (when malformed or too wide, verbatim and unwrapped like fenced code so a copied table stays valid,
   each row printed as it ends once the rows so far rule alignment out)
   and a reply's leading, trailing and repeated blank lines
-  collapse; `NO_COLOR` removes colours and styles only. Rscript (verbosity 1), knitr, jsonl and
+  collapse; `NO_COLOR` removes colours and styles only: the Markdown is read at every depth there, so a
+  console without colour (`NO_COLOR`, TERM=dumb, R.app) shows the text a colour console shows, without
+  SGR [D-245]. Rscript (verbosity 1), knitr, jsonl and
   tests (verbosity 0) and non-dynamic outputs (pipes, Jupyter) keep the plain layout (no margin,
   block gaps, table alignment or notice wrapping). Styling adds
-  italics within one token (`*x*`; an unmatched `*` prints), dim link URLs, quotes and rules, bold headings (H1 underlined); R lines
-  that parse are highlighted by `cli::code_highlight()`, other R lines and known languages by a
-  light highlighter (strings, numbers, comments). The console UI itself ends partial lines and
-  clears waiting rows, keeping their task, before it prompts (D-186).
+  italics within one token (`*x*`; an unmatched `*` prints), inline code in the blue accent (D-245), dim link URLs,
+  quotes and rules, bold headings (H1 underlined); R
+  that parses is highlighted by `cli::code_highlight()` in the user's `cli.code_theme`, else in the style table's
+  R theme (reserved words red; strings, numbers and constants blue; calls bold; comments dim) [IC-82, D-245];
+  other R and other languages are shown as written. The console UI itself clears the live row,
+  keeping its task, before it prompts (D-186); a question, a notice or a queue line goes between
+  an answer's whole rows and its held row continues after it, unsplit [D-245].
   Fenced code stays Markdown in every mode: fence lines as written (dim when styled), the body
   verbatim, unwrapped and de-indented by the opener's indentation (CommonMark: a fence indented
-  under a list item closes), so a copied block is Markdown whose body runs; in the margin code
-  characters appear as they stream and a line without a TAB that fit one row is redrawn
-  highlighted. A tool call shows its code on its line when it fits, else as a fence of at most
-  20 lines (info string `r` only for the r tool); result lines are indented four spaces and wrap
-  at the width, also indented (a word wider than it is cut); an error shows its message in at most
-  6 rows, then an ellipsis, an `r` error then its object changes; `write` shows the path relative
-  to the project and the byte count (D-223); the one-line approval prompt (6.8.3) is cut to the
-  console width before its `+N more lines`, and the `?` detail shows the code as a plain fence of
-  at most 40 lines. A cut fence ends with a `# … +N more lines` line inside the fence, so a copied
-  block shows the cut (D-207). Console output draws no box characters (D-187).
+  under a list item closes), so a copied block is Markdown whose body runs; a fenced line is
+  written once, whole and highlighted, at its line end.
+  A tool call is a cursor strip by its kind (`console_tool_kind()`, IC-82, D-245): a read (a tool
+  annotated read-only) is one dim line, `▎ read  R/plot.R`, with no result line unless it fails; an
+  act (every other tool) has a red strip and its name bold, an MCP call named `server/tool` with its
+  arguments dim; a sub-agent call (Codex's collab call) has the agent's blue block. It shows its
+  code on its line when it fits, else under its name: at most 20 rows at column 4, with the results, and
+  no fence lines, a row wider than the console cut with `…` (R highlighted in both forms; visual review); result lines are indented four spaces, dim, and wrap
+  at the width, also indented (a word wider than it is cut); an error shows its message in red in at most
+  6 rows, then an ellipsis, an `r` error then its object changes; an edit's diff has `+` lines blue
+  and `-` lines red (its file headers left out, as the call line names the file; hunk headers dim; a row
+  wider than the console cut, never wrapped), at
+  most 12; `write` shows the path relative to the project and the byte count (D-223); a call of a second
+  or more adds ` · 3.0 s`; an approval's call line (6.8.3) is cut to the console width before its
+  `+N more lines`, and the `?` detail shows at most 40 code rows the same way, unless the call line just
+  above showed it whole. A cut block ends with a `# … +N more lines` row, so a copied block shows the cut
+  (D-207). Console output draws no box characters (D-187).
   Every renderer write and console control (prompts, notices, the pause menu) goes through
   `gptr_message_write()`: inside an `r` evaluation it reaches the console, never the tool result,
-  whatever `tee` is; prompts and sub-agent lines first end partial lines, also while a tool
-  executes (conditions raised inside a tool leave the waiting row alone). Children never render;
+  whatever `tee` is; in the margin what the evaluated code prints (the `r` tool, `!code`) is not teed as R
+  prints it but shown as result rows, at column 4, escaped, dim and cut to the console width, per top-level
+  expression or before a notice, a warning as `Warning: <text>` and an R message when they come (`eval_echo()`;
+  the result keeps all of it) [D-245]; prompts first clear the live row, also while a tool
+  executes, and every other write clears and redraws it, at the sink it was drawn at (a capture in the agent's code is left alone). Children never render;
   a foreground root shows one line per sub-agent start and end at verbosity 1+ unless quiet
-  (`  sub-agent a started (kid/kid-1)`, `  sub-agent a done (1/2) · 2 turns · 12 s` or
-  `failed (1/2): <first line of the reason>`, cut to the console width; `(k/N)` for a team, fan-out or
+  (`  ▌ sub-agent a (kid/kid-1) started`, `  ▌ sub-agent a done (1/2) · 2 turns · 12 s` or
+  `failed (1/2): <first line of the reason>`, after the agent's blue block [D-245], cut to the console width; `(k/N)` for a team, fan-out or
   `gptr_parallel()` group; a nested `peter()` by its quoted prompt and its number among the parent run's
   children, `'Summarise ...' #2`, D-224). Model code that wraps such calls in `capture.output()` or `sink()`
-  still captures prompts and lines (D-188). A run's status line counts its own requests and adds what its
-  sub-agents cost (`done · 2 requests · 156.7k tokens · $0.2125 · sub-agents $0.8500`, D-206).
+  still captures prompts and lines (D-188). A run's status line, dim and wrapped as a notice, names the model of
+  its last request, counts its own requests, adds what its sub-agents cost (D-206) and ends with the context the
+  last request left before compaction starts (`done · claude-sonnet-5-5 · 2 requests · 156.7k tokens · $0.2125
+  · sub-agents $0.8500 · 82% context left`, none on a CLI route); a term whose value is unknown, and a cost not
+  above 0, is left out [IC-77, D-245].
 - **Slash commands** (`command` specs): `/help`, `/exit`, `/model`, `/mode`, `/plan`, `/tools`, `/env`,
-  `/compact [focus]`, `/cost` (by agent, one total), `/context` (token ledger; on a CLI route also the
-  CLI's reported turn input, D-206), `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
+  `/compact [focus]`, `/cost` (by agent, one total), `/context` (token ledger and the context left, as the
+  status line says it [D-245]; on a CLI route instead the CLI's reported turn input, D-206; after `/compact` it names
+  the compaction request and the next request's estimate as a ledger row, from which it measures the context
+  left [D-245]),
+  `/status`, `/clear`, `/resume`, `/fork`, `/doc`,
   `/skills`, `/skill:<name>`, `/mcp`, `/undo`, `/redo`, `/rewind`, `/checkpoints`, `/retry`, plus prompt
   templates as `/<name> args`, registered when a session starts and by the console (the `templates.sync`
-  service) before `/help` and before it calls a name unknown, so a template works as the first input and a
-  template saved since is found (D-252). Commands are recorded as comments in transcripts. Their output,
+  service) before `/help`, a `/` completion and a call of a name unknown, so a template works as the first input
+  and a template saved since is found (D-252). Commands are recorded as comments in transcripts. Their output,
   like a prompt over 200 bytes or wider than a content row, is word-wrapped in the console margin; the listings
   they print are formatted at width - 4 (`print_lines()`), so they are not wrapped again, and `/help` wraps
-  each description under its column (`formatDL()`). The Ctrl-C notices at the prompt and of the pause menu
-  start with a line end (D-225).
+  each description under one column (`formatDL()`); its keys follow the console as the banner's do: Enter (a
+  steer), Tab (a follow-up) and Up (take one back) where a composer reads keys, Tab's completion after `@`, `!`,
+  `!!`, `/` and `peter$` where the REPL completes (`!` and `/` in RStudio), the console's pause key, and what a
+  line typed while peter works does there (Positron: the banner's line) [D-242, D-244]. The
+  Ctrl-C notices at the prompt and of the pause menu start with a line end (D-225).
 - **UI backends** (`ui` specs): `console`, `none`, `scripted` (tests), `rstudio` (dialogs; a timed-out dialog
   is a denial with a notice). The UI abstraction is how Shiny or RPC front ends replace the console. Whether anyone
   can be prompted is `gptr_can_prompt()`: true in IRkernel, where `interactive()` is false but `readline()` works
@@ -2431,9 +2555,9 @@ item is a thinking block. Each whole block of a CLI route streams as one delta e
 shows its last word at once [D-208].
 The informational events run outside R, so IC-53 does not track them and the user's own control exports still work.
 On both CLI routes, whose one request runs a whole agent turn, the console shows each thinking block's first line dim
-(cut at the width with an ellipsis [D-207]) at verbosity 2 above the waiting row, whose clock a thinking line does not reset; other routes keep thinking hidden below verbosity 3. `exec --json`
+(cut at the width with an ellipsis [D-207]) at verbosity 2 above the live row, whose clock a thinking line does not reset; other routes keep thinking hidden below verbosity 3. `exec --json`
 carries no text deltas, so the answer arrives whole; token streaming needs the app-server driver (open item). Both
-routes probe their CLI when a run starts, before its waiting row [D-192]. Continuity: `codex exec resume <thread>` when supported
+routes probe their CLI when a run starts, before its live row [D-192]. Continuity: `codex exec resume <thread>` when supported
 (UNCERTAIN), else, and after a rewind or a compaction [D-203], a new thread with a synthetic history. The console states Codex's 19-38K extra input tokens
 per turn [08]. The Codex app-server driver (dynamic tools calling back into R, token streaming, steer, interrupt) and Sign in
 with ChatGPT (the native `openai` provider with `auth = "chatgpt"`, avoiding Codex's overhead) are v1.x plugins
@@ -2537,9 +2661,9 @@ Prices: Sonnet 5.5 at $2 input / $10 output per million tokens, 1-hour cache wri
    discovery, registry resolution, `session_start` hooks, the system prompt frozen (standard preset with
    `ask`, `<documents>` because the user bound `analysis.R` once, `<artifacts>`, `<r_env>`), `store_open()`
    appends the JSONL header in `.gptr/sessions/`, the task callback for user expressions is registered.
-   Banner: `gptr 1.0.0 | model anthropic/claude-sonnet-5-5 | mode manual | .gptr/ found` and
-   `pbmc <Seurat, 3,012,448 cells x 33,538 features, 5.1 GB>` from the shipped `gptr_describe.Seurat` method
-   (S4 accessors, address-keyed size cache, no copy). First provider use: the egress acknowledgement was
+   Banner: `gptr 1.0.0 · anthropic/claude-sonnet-5-5 · manual · .gptr/ found`, `objects: pbmc` and the keys
+   (§6.17); `/env` shows `pbmc <Seurat, 3,012,448 cells x 33,538 features, 5.1 GB>` from the shipped
+   `gptr_describe.Seurat` method (S4 accessors, address-keyed size cache, no copy). First provider use: the egress acknowledgement was
    recorded earlier at user scope.
 3. The prompt passes the `input` hook chain and becomes the first user message: `<project_instructions>`
    (vignette.Rmd, about 200), `<environment>` (76), `<mode name="manual">` (50), `<workspace>` (about 40 for
@@ -2549,9 +2673,9 @@ Prices: Sonnet 5.5 at $2 input / $10 output per million tokens, 1-hour cache wri
    sends one `r` call composing the three steps (the `<r_session>` composition rule), with `note =
    "resolution 0.8 because 0.4 merged the two monocyte groups"`.
 5. Dispatcher: validation; `gptr_risk()` sees `pbmc` overwritten above `gptr.protect_size` -> level 3;
-   `manual` -> ask; the console shows `r  pbmc = FindNeighbors(pbmc, dims = 1:30) ...  allow? [y]es / [a]lways
-   / [n]o / [?]`; `?` would say "cannot be undone: pbmc 5.1 GB exceeds gptr.undo_spill_max" (no pre-image, so
-   no copy). `y`.
+   `manual` -> ask; under the call line `▎ r  pbmc = FindNeighbors(pbmc, dims = 1:30)` the console asks
+   `? Allow r?` over `y yes · a always (session) · p always (project) · n no · ? more`; `?` would say "cannot be undone:
+   pbmc 5.1 GB exceeds gptr.undo_spill_max" (no pre-image, so no copy). `y` at `› `.
 6. FIFO -> `eval_r()` in `globalenv()`, teed to the console; Seurat mutates `pbmc` in memory with no gptr
    copy (the copy-safety suite pins this). Ctrl-C would open the pause menu; a steer typed there is delivered
    after this tool result. Result: collapsed progress output plus `~ pbmc <Seurat> modified` and `+ markers

@@ -231,6 +231,10 @@ test_that("an IDE's terminal tab is a terminal: inherited IDE variables count on
   expect_identical(front_end(), "terminal")
   withr::local_envvar(RSTUDIO = NA, POSITRON = "1", TERM_PROGRAM = "vscode")
   expect_identical(front_end(), "vscode")
+  # Positron's console runs R in ark, whose stdin is a tty too: ark's tools:positron says so
+  attach(NULL, name = "tools:positron")
+  withr::defer(detach("tools:positron"))
+  expect_identical(front_end(), "positron")
 })
 
 test_that("verbosity() follows the option, then the context", {

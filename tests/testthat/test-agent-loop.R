@@ -425,11 +425,11 @@ test_that(oracle_title(loop_recs, "L11"), {
   local_permissive()
   box = new.env()
   steer_during_slow(box)
-  local_fake_provider(list(fake_tool("slow"), "ack steer 1", "ack steer 2", "summary"))
+  local_fake_provider(list(fake_tool("slow"), "ack steers", "summary"))
   box$s = test_session()
   run_text(box$s, "go")
-  expect_identical(roles(box$s), c("user", "assistant", "tool_result", "operator", "assistant",
-                                   "operator", "assistant", "user", "assistant"))
+  expect_identical(roles(box$s), c("user", "assistant", "tool_result", "operator", "operator",
+                                   "assistant", "user", "assistant"))
 })
 
 test_that(oracle_title(loop_recs, "L12"), {
@@ -437,13 +437,14 @@ test_that(oracle_title(loop_recs, "L12"), {
   local_permissive()
   box = new.env()
   steer_during_slow(box)
-  local_fake_provider(list(fake_tool("slow"), "ack steer 1", "ack steer 2", "summary"))
+  local_fake_provider(list(fake_tool("slow"), "ack steers", "summary"))
   box$s = test_session()
   run_text(box$s, "go")
   txt = vapply(box$s$messages, msg_text, "")
   expect_match(txt[[4L]], "STEER-1", fixed = TRUE)
-  expect_match(txt[[6L]], "STEER-2", fixed = TRUE)
-  expect_match(txt[[8L]], "FOLLOWUP", fixed = TRUE)
+  expect_no_match(txt[[4L]], "STEER-2", fixed = TRUE)
+  expect_match(txt[[5L]], "STEER-2", fixed = TRUE)
+  expect_match(txt[[7L]], "FOLLOWUP", fixed = TRUE)
 })
 
 test_that(oracle_title(loop_recs, "L13"), {
@@ -451,13 +452,13 @@ test_that(oracle_title(loop_recs, "L13"), {
   local_permissive()
   box = new.env()
   steer_during_slow(box)
-  fake = local_fake_provider(list(fake_tool("slow"), "ack steer 1", "ack steer 2", "summary"))
+  fake = local_fake_provider(list(fake_tool("slow"), "ack steers", "summary"))
   box$s = test_session()
   run_text(box$s, "go")
   reqs = fake_requests(fake)
-  expect_length(reqs, 4L)
-  last_role = vapply(reqs[2:3], function(r) r$messages[[length(r$messages)]]$role, "")
-  expect_identical(last_role, c("operator", "operator"))
+  expect_length(reqs, 3L)
+  expect_identical(tail(req_roles(reqs[[2L]]), 3L), c("tool_result", "operator", "operator"))
+  expect_identical(tail(req_roles(reqs[[3L]]), 1L), "user")
 })
 
 test_that(oracle_title(loop_recs, "L14"), {

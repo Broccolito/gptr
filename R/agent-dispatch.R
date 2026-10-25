@@ -73,9 +73,18 @@ dispatch_one = function(run, call, st = NULL) {
 }
 
 #' The pipeline of one call: lookup, validation, tool_call hooks, perm_check(), checkpointers,
-#' execution, tool_result hooks; a run aborted while the call is prepared ends it unrun
+#' execution, tool_result hooks; a run aborted while the call is prepared ends it unrun. A call
+#' refused (a hook's block, a denial, the abort) leaves why in `st$refused` (dispatch_finish()).
 #' @noRd
 dispatch_steps = function(run, call, st = NULL) {
+  refuse = function(why, text) {
+    if (!is.null(st)) st$refused = why
+    tool_error(text)
+  }
+  aborted = function() {
+    refuse("the run was aborted", paste0("Tool call not executed: the run was aborted (",
+                                         run$signal$reason %||% "user", ")."))
+  }
   ctx = run_ctx(run)
   if (is.null(call$tool)) return(tool_error(paste0("Tool ", call$name, " not found")))
   v = tool_validate(tool_frozen(run, call$tool), call$input)
@@ -85,14 +94,14 @@ dispatch_steps = function(run, call, st = NULL) {
   }
   call$input = v$input
   call = tool_call_hook(run, call, call_risk(call, ctx, run))
-  if (!is.null(call$blocked)) return(tool_error(call$blocked))
-  if (isTRUE(run$signal$aborted)) return(dispatch_aborted_result(run))
+  if (!is.null(call$blocked)) return(refuse(call$refused, call$blocked))
+  if (isTRUE(run$signal$aborted)) return(aborted())
   dec = perm_check(call, run)
   call$risk = dec$risk
-  if (!identical(dec$decision, "allow")) return(tool_error(perm_denial_text(dec)))
+  if (!identical(dec$decision, "allow")) return(refuse(perm_refused(dec), perm_denial_text(dec)))
   call$input = dec$input %||% call$input
   call$approved_level = risk_level(dec$risk)
-  if (isTRUE(run$signal$aborted)) return(dispatch_aborted_result(run))
+  if (isTRUE(run$signal$aborted)) return(aborted())
   tokens = checkpoint_before(run, call, ctx)
   res = tool_execute_frame(run, call, ctx, st)
   res = checkpoint_after(run, call, ctx, tokens, res)
@@ -102,26 +111,20 @@ dispatch_steps = function(run, call, st = NULL) {
 }
 
 #' The `tool_call` hook chain of a call: the call with a `modify` decision's input, or with
-#' `blocked` (the denial text) when a hook blocks it
+#' `blocked` (the denial text) and `refused` (why it did not run) when a hook blocks it
 #' @noRd
 tool_call_hook = function(run, call, risk = NULL) {
   hk = run_emit(run, "tool_call", tool_name = call$name, tool_call_id = call$id, input = call$input,
                 nested = call$nested, parent_tool_call_id = call$parent_id, risk = risk)
   if (!is.list(hk)) return(call)
   if (identical(hk$decision, "block")) {
-    call$blocked = paste0("Tool execution was blocked: ",
-                          hk$reason %||% "a tool_call hook blocked it")
+    why = hk$reason %||% "a tool_call hook blocked it"
+    call$blocked = paste0("Tool execution was blocked: ", why)
+    call$refused = paste0("blocked by a hook: ", why)
   } else if (identical(hk$decision, "modify") && is.list(hk$input)) {
     call$input = hk$input
   }
   call
-}
-
-#' The error result of a call that the run's abort ended before it executed
-#' @noRd
-dispatch_aborted_result = function(run) {
-  tool_error(paste0("Tool call not executed: the run was aborted (",
-                    run$signal$reason %||% "user", ")."))
 }
 
 #' Execute a tool; the frame marks the running tool for run_current() (`.gptr_tool_run`)
@@ -187,8 +190,11 @@ tool_interrupted = function(run, call, st) {
     tool_error("Interrupted before the tool ran; the call was not executed.")
   } else {
     elapsed = reactor_now() - st$exec_t0
-    tool_error(paste0("Interrupted after ", format(round(elapsed, 1), nsmall = 1),
-                      " s; side effects may have occurred."))
+    res = tool_error(paste0("Interrupted after ", format(round(elapsed, 1), nsmall = 1),
+                            " s; side effects may have occurred."))
+    # the text states the time, so the console's row does not repeat it
+    res$details = list(interrupted = TRUE)
+    res
   }
   tryCatch(dispatch_finish(run, call, res, st), error = function(e) NULL)
   invisible(res)
@@ -213,6 +219,7 @@ dispatch_record = function(res, call) {
 #' Append the tool-result message and emit tool_execution_end, message_start and message_end
 #' The append and the `recorded` mark are one uninterruptible step (suspendInterrupts()).
 #' Duration is execution wall time: preparation and approval are excluded; unrun calls take zero.
+#' A refused call's end says why it did not run (`refused`).
 #' @noRd
 dispatch_finish = function(run, call, res, st, msg = tool_result_message(res, call)) {
   suspendInterrupts({
@@ -222,7 +229,7 @@ dispatch_finish = function(run, call, res, st, msg = tool_result_message(res, ca
   run_emit(run, "tool_execution_end", tool_call_id = call$id, tool_name = call$name,
            is_error = isTRUE(res$is_error),
            elapsed = if (is.null(st$exec_t0)) 0 else reactor_now() - st$exec_t0,
-           details = list(fields = names(res$details)))
+           details = list(fields = names(res$details)), refused = st$refused)
   run_emit(run, "message_start", role = "tool_result")
   run_emit(run, "message_end", role = "tool_result", message = msg)
   invisible(msg)
@@ -589,11 +596,13 @@ perm_decide = function(call, run) {
   perm_ask(call, run, out, risk)
 }
 
-#' A perm_check() result; `reason` is one string whatever a policy, hook or UI answered
+#' A perm_check() result; `reason` is one string whatever a policy, hook or UI answered;
+#' `feedback` the person's own text of a denial
 #' @noRd
-perm_result = function(decision, reason, input, risk = NULL, rule = NULL, how = NULL) {
+perm_result = function(decision, reason, input, risk = NULL, rule = NULL, how = NULL,
+                       feedback = NULL) {
   list(decision = decision, reason = perm_reason(reason), input = input, risk = risk, rule = rule,
-       how = how)
+       how = how, feedback = feedback)
 }
 
 #' A reason as one string: a character vector is joined with spaces, anything else is ""
@@ -650,9 +659,12 @@ perm_ask = function(call, run, out, risk) {
   if (!is.null(ui) && isTRUE(tryCatch(ui$has_ui(), error = function(e) FALSE))) {
     # a failing dialog or a non-list answer is no approval (04 section 10.2 row 22)
     ans = tryCatch(ui$permission(req), error = function(e) NULL)
-    if (!is.list(ans) || is.data.frame(ans)) ans = list(decision = "deny", feedback = NULL)
+    if (!is.list(ans) || is.data.frame(ans)) ans = list(decision = "deny")
+    # `feedback` is what the person typed, `reason` a denial the UI wrote itself
     fb = ans[["feedback"]]
-    if (!rlang::is_string(fb) || !nzchar(fb)) ans$feedback = NULL
+    if (!rlang::is_string(fb) || !nzchar(fb)) fb = NULL
+    why = ans[["reason"]]
+    if (!rlang::is_string(why) || !nzchar(why)) why = fb %||% "the user declined"
     if (identical(ans[["decision"]], "allow")) {
       # a `remember` answer is stored by P11's builtin:permissions, not here
       return(perm_result("allow", "approved by the user", call$input, risk, "user"))
@@ -665,8 +677,7 @@ perm_ask = function(call, run, out, risk) {
     # a UI may say what to do instead (P21's idle-tick answer: repeat the call later)
     how = ans[["how"]]
     if (!rlang::is_string(how) || !nzchar(how)) how = NULL
-    return(perm_result("deny", ans$feedback %||% "the user declined", call$input, risk, "user",
-                       how = how))
+    return(perm_result("deny", why, call$input, risk, "user", how = how, feedback = fb))
   }
   if (identical(snap$noninteractive_ask, "deny")) {
     return(perm_result("deny", "no one can approve this action in this run", call$input, risk,
@@ -737,7 +748,8 @@ perm_grant_control = function(run, risk) {
   invisible(fns)
 }
 
-#' The permission request record (04 section 7.11); `agent` says who asks (D-188)
+#' The permission request record (04 section 7.11); `agent` says who asks (D-188), `tool_call_id`
+#' which call (a nested member call its own, `<outer id>/<k>`)
 #' @noRd
 perm_request_record = function(call, run, out, risk, tier) {
   d = run_data(run)
@@ -747,8 +759,9 @@ perm_request_record = function(call, run, out, risk, tier) {
     NULL
   }
   rule = out$suggested_rule
-  list(tool = call$name, input = call$input, summary = perm_summary(call), risk = risk,
-       reason = perm_reason(out$reason), suggested_rule = if (rlang::is_string(rule)) rule,
+  list(tool = call$name, tool_call_id = call$id, input = call$input, summary = perm_summary(call),
+       risk = risk, reason = perm_reason(out$reason),
+       suggested_rule = if (rlang::is_string(rule)) rule,
        undo_note = if (rlang::is_string(note)) note, session = d$id, turn = d$turns,
        nested = isTRUE(call$nested), tier = tier, agent = agent_label(run))
 }
@@ -769,11 +782,24 @@ perm_summary = function(call) {
   if (nchar(txt) > 200L) paste0(substr(txt, 1L, 200L), "...") else txt
 }
 
-#' The text the model sees for a denial
+#' The text the model sees for a denial; the person's text is marked as theirs, because models
+#' read `Permission denied: <text>` as the harness's refusal and did not do what it said
 #' @noRd
 perm_denial_text = function(dec) {
+  if (rlang::is_string(dec$feedback)) {
+    return(paste0("The user declined this call and said: \"", dec$feedback, "\". This is the ",
+                  "user's own instruction: do that instead; any call it needs is approved ",
+                  "separately."))
+  }
   paste0("Permission denied: ", dec$reason %||% "not allowed", ". ",
          dec$how %||% "Explain what you need or choose another approach.")
+}
+
+#' Why a denied call did not run (its end's `refused`): the decision's reason, or the person's own
+#' text as `the user said: <text>`
+#' @noRd
+perm_refused = function(dec) {
+  if (rlang::is_string(dec$feedback)) paste0("the user said: ", dec$feedback) else dec$reason
 }
 
 #' Classify a call: the tool's `risk` function, the `risk.classify` service for `r` code (P11),

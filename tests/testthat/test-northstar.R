@@ -47,7 +47,9 @@ test_that("NS-1: the console clusters, runs !expr and switches mode without relo
   expect_identical(s$mode, "auto")
   expect_length(fake_requests(fake), 2L)
   expect_identical(sum(ui$log$method == "permission"), 1L)
-  expect_true(any(grepl("mode manual", out, fixed = TRUE)))
+  # the banner names the mode (Task 26 of P28: `gptr <version> - <model> - manual - ...`)
+  sep = console_style()$sep
+  expect_true(any(grepl(paste0(sep, "manual", sep), out, fixed = TRUE)))
 })
 
 test_that("NS-2: a programmatic call returns the session with $value and $usage", {

@@ -31,11 +31,35 @@ test_that("abort labels a redactor tail received after a pause without printing 
     run_abort(run, "user")
     run_abort(run, "user")
   })
-  expect_identical(utils::head(out, 3L), c("Hello", "[gptr] final received text:", "world"))
-  expect_identical(sum(out == "[gptr] final received text:"), 1L)
-  expect_identical(sum(out == "world"), 1L)
+  # the pause marks the cut; the redactor's tail follows under its label, dim in the console's words
+  # (review of Tasks 22-27), the aborted answer's end marked too
+  expect_identical(utils::head(out, 3L), c("Hello...", "received before the abort:", "world..."))
+  expect_identical(sum(out == "received before the abort:"), 1L)
+  expect_identical(sum(out == "world..."), 1L)
   expect_identical(msg_text(utils::tail(run$shell$messages, 1L)[[1L]]), "Hello world")
   expect_null(console_record(list(run = run$id)))
+})
+
+test_that("an abort's cut row is labelled once though no delta follows the menu (visual round 3)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  run = abort_stream_run()
+  out = utils::capture.output({
+    abort_stream_delta(run, "It adds a column to fuel, which changes")
+    # all of it reached the renderer, which holds the partial row
+    run_flush_deltas(run)
+    # the pause menu: its records paused, their last block a question's, then [a]
+    for (rec in as.list(console_state()$active)) {
+      rec$paused = TRUE
+      rec$last = "prompt"
+    }
+    cat(">> a\n")
+    run_abort(run, "user")
+  })
+  # the held row continues under the label, never as if the model answered after the abort
+  expect_identical(out[1:3], c(">> a", "received before the abort:",
+                               "It adds a column to fuel, which changes..."))
+  expect_identical(sum(out == "received before the abort:"), 1L)
 })
 
 test_that("continuing a pause never adds an abort-tail label", {
@@ -49,7 +73,7 @@ test_that("continuing a pause never adds an abort-tail label", {
     abort_stream_delta(run, " again.")
     run_abort(run, "user")
   })
-  expect_false(any(grepl("final received text", out, fixed = TRUE)))
+  expect_false(any(grepl("received before the abort", out, fixed = TRUE)))
   expect_identical(msg_text(utils::tail(run$shell$messages, 1L)[[1L]]), "Hello world again.")
 })
 
