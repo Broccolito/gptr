@@ -4499,16 +4499,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   145 each, and a 31 s delay fails naming the missing chevron, the child's output shown. `CI=true`
   `NOT_CRAN=true` `^console-interrupt$`: 30 of 30 PASS 145 (load 25-82, 16 cores), 10 of 10 PASS
   145 at load 254-465 (32 busy loops). Merged with P28 at ccaa2a06: 10 of 10 PASS 151, INFRA-03
-  run each time (no `SIGINT is ignored` skip); `^console-` PASS 3408; lint clean.
+  run each time (no `SIGINT is ignored` skip); `^console-` PASS 3408; lint clean. Merged with P28
+  at ecfad58c (d924d1bb), whose Task 89 made the steer's chevron waits `pty_asked()`: every
+  chevron wait is `pty_asked()`, the chevron of the locale; 5 of 5 PASS 151 in UTF-8, 3 of 3
+  PASS 136 SKIP 1 under `LC_ALL=C` (the skip `non utf8 locale` at line 151), INFRA-03 run each time.
 - Deviations: none. Open: none.
 
 ## Task CI-93 - The check fits CRAN's time budget (2026-10-25, #PR)
 - Policy: CRAN asks that a check take as little CPU time as possible, long tests made optional,
   and its incoming pretest gives a NOTE when the whole check passes 10 minutes (`Overall checktime
   ... > 10 min`): 600 s is the de facto budget. The maintainer asked that gptr be designed to it.
-- Measured: main's CRAN-mode lane (cran-mode: ubuntu-latest R-devel, `NOT_CRAN=false`,
-  `--no-manual`) checked 02e93fa in 301 s (job 120763739795: code checks 111 s, install 38 s,
-  tests 49 s, vignettes 19 s, examples 10 s). win-builder (Windows Server 2022, R 4.6.1) checked
+- Measured (elapsed): main's CRAN-mode lane (cran-mode: ubuntu-latest R-devel, `NOT_CRAN=false`,
+  `--no-manual`) checked 02e93fa in 301 s (job 120763739795: code checks 107 s, tests 48 s, install
+  36 s, vignettes 14 s, examples 10 s). win-builder (Windows Server 2022, R 4.6.1) checked
   6777610e in 631 s: code checks 238 s, tests 177 s, PDF manual 40 s, examples 28 s, HTML manual
   24 s, vignettes 17 s, incoming feasibility 13 s.
 - Change: (1) cran-mode takes CRAN's thresholds (`_R_CHECK_TEST_TIMING_CPU_TO_ELAPSED_THRESHOLD_`
@@ -4531,9 +4534,14 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Expected: if win-builder's tests shrink alike, about 75 s less, a check near 555 s, 45 s under
   the budget, with code checks (238 s) its largest part; cran-mode about 20 s less.
 - Tests: test-zzz.R's crashed-check guard covers the new job (`^zzz$` FAIL 2 before it, PASS 148
-  after); both workflows parse with `yaml::read_yaml()`; lint clean.
+  after); both workflows parse with `yaml::read_yaml()`; lint clean. At d924d1bb (P28 at ecfad58c
+  merged), the CRAN list from the installed tarball, `NOT_CRAN` unset: PASS 2326 SKIP 908 in
+  14.9 s in UTF-8; PASS 2312 SKIP 912 WARN 1 in 14.2 s under `LC_ALL=C`, the warning (`strings
+  not representable in native encoding`) from test-tool-read.R's UTF-8 BOM block, as on main at
+  02e93fa; `R CMD check --as-cran --no-manual` in CRAN mode Status OK in 139 s, `Running
+  'testthat.R' [14s/15s]`.
 - Deviations: D-240 (amended in place). Open: the 10 R files no CRAN test reaches, before or after
   the trim (artifact-registry, bridge-lang, console-jsonl, doc-export, doc-knitr, proc-rscript,
   provider-bedrock, s1-emulate, s1-ollama, tool-search); the Windows budget's calibration against
   win-builder once the new lane has run (a hosted runner is not win-builder, and its timed step
-  includes the build).
+  includes the build); that BOM block's warning in CRAN mode under `LC_ALL=C` on macOS.
