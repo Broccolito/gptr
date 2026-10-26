@@ -5308,3 +5308,53 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   Bedrock) the normaliser's events still follow each other after the flag; a transfer failure
   delivered in the iteration that set it ends `error`, not `aborted` (`on_fail()` checks only
   `st$finished`).
+
+## Task CI-98 - The writer prototype reports an early writer exit (2026-10-25, #84)
+- Red: PR #83 at 6e3bad83 (R/ and tests/ as on main b58d1e1b, whose Windows-check run 40234878533
+  passed), Windows-check run 40236997275, job 121300574990 (windows-latest oldrel-4, shard 1/4),
+  failed "owned writer prototype cancels a queued 4 MB write without a late exit"
+  (`test-proc-writer-prototype.R:32`): `writer-cancel  spawn /ready /queued /cancel` not complete,
+  no guard, 21.7 s of the case's 30; its witness held no result and a case failure of class
+  `gptr_error_invalid_argument`. Attempt 2 (job 121307986374) passed.
+- Rate: the block ran in 405 Windows jobs (R-CMD-check.yaml's whole-suite rows and
+  Windows-check.yaml's shard 1/4, since 2026-10-12). Its 40 failures in the shared suite
+  (2026-10-13 to 10-14) were the observer's resource bound, gone when a351c85a gave the native
+  files fresh R sessions. Since then it failed 1 of 339 (0.29%, 95% CI 0.05-1.7%; oldrel-4 1/169,
+  release 0/170), this job. The binary block failed the same way in job 118948395161 (release,
+  2026-10-20): phases spawn/ready/queued, `gptr_error_invalid_argument`, 2.3 s. That is 2 of the
+  1,356 writer cases in those jobs. Evidence (local, not committed): the job listings and logs.
+- Cause (the test transport, not the product): `wp_child_case()` started its poll timer id as
+  NULL, and only the last line of `poll_ack()` set it. When the first `poll_ack()`, 1 ms after the
+  input was queued, found the writer dead with nothing accepted, it took its `writer_failed`
+  branch and scheduled no timer, and `reactor_cancel(NULL)` raised (ids are a character vector):
+  in the cancel case inside the cancel callback, before `st$cancelled`, so the pump ran its 20 s
+  and the cancel after the pump raised again; in the other cases after the pump. The case child died
+  without a result. The failing case left 11 directories, as a writer that stops with an R error
+  or an interrupt does (12 when it is killed), so the writer ended through R's own exit before the
+  input existed; its stderr went with the case root.
+- Reproduced: on Windows, run 40245496947 (claude/ci98-writer-cancel-measure, main with traces,
+  never merged) stopped the writer after its ready file: an R error and a processx interrupt (6
+  times per lane each) and a kill (3) all gave CI's line in 21.3-22.1 s, the error and the
+  interrupt with 11 directories (3 of 24 with 14), the kill with 12. On macOS at b33fcabb, with
+  `stop()` after the ready file: the cancel block FAIL with CI's text in 22.4 s, the timeout case
+  the binary job's signature in 2.7 s; duplex and binary reported `writer_failed`, their writer
+  still alive at the first poll. The natural exit never came: 0 in 943 runs of native-07 through
+  R CMD BATCH (release 519, oldrel-4 424; 3,772 cases, run 40245496947) and 0 in 2,811 cancel
+  cases (run 40240516501).
+- Fix (test only, 12dfc6d3): the timer id starts as `character()`, which `reactor_cancel()` takes
+  as no id, so the case completes and the test fails on `writer_failed`. The result keeps the last
+  20 lines of the writer's stderr, which tell an R error (`Error in ...`) from an interrupt (an
+  empty line, then `Execution halted`); both exit with status 1.
+- Green: with the injected stop every case completes and reports `writer_failed` with the
+  writer's `Error in ...: injected writer exit after ready`: on macOS in 2.4-4.8 s, the cancel
+  block failing only on `writer_failed` (line 32); on Windows (run 40249408080, the fix plus the
+  injection, never merged) 3 runs of native-07 through R CMD BATCH per lane, 12 of 12 cases each in
+  1.4-3.7 s (release) and 1.8-3.9 s (oldrel-4). Without it: windows-by-file run 40249276416
+  (release) PASS 92 FAIL 0 in 21.1 s; native-07 through R CMD BATCH for 25 minutes, release 88 of
+  88 and oldrel-4 113 of 113 runs PASS (804 cases, the cancel case at most 4.7 s, the writer's
+  stderr always empty); on macOS the file 5 of 5 FAIL 0 and `^proc-` `[ FAIL 0 | WARN 0 | SKIP 11
+  | PASS 2375 ]` (each skip Windows only). Lint: the helper's 19 `object_usage_linter` notes, as on
+  main (testthat and bp_run() are outside a lone helper); R/ is unchanged.
+- Deviations: none. Open: why the writer exits early (2 of 1,356 Windows writer cases in CI, none
+  in 6,583 measured); a recurrence now fails on `writer_failed` in about 5 s, the writer's stderr
+  in the witness.
