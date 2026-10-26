@@ -41,13 +41,17 @@ amendment are in `DEVIATIONS.md`:
 - FIX-26: an HTTP stream checks the abort after each event and before a failure, so an abort inside
   a unit ends it `aborted` with what was emitted, and a failure after the flag ends `aborted` too
   (D-254 amended).
+- FIX-27 (#87): in auto and yolo a `system()`, `system2()`, `shell()` or `shell.exec()` call whose
+  command the code computes is refused before it runs, pointing the model to `peter$sh()`; only an
+  `r(fn:)` allow rule lifts it (D-262; D-251's nested-1 Open closed).
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
 replay of a piped turn equal to a recorded steer (FIX-16, FIX-22), a job's end time at its first
 look (FIX-15, FIX-23), the replay srcrefs and the refused console transcript export (FIX-13, FIX-24
-and FIX-25), and the abort inside a unit and before a failure (CI-97, FIX-26); of CI-93's other
-notes, CI-100 fixes the BOM block's warning under `LC_ALL=C`.
+and FIX-25), the abort inside a unit and before a failure (CI-97, FIX-26), and base `system()` with
+a computed command (FIX-18, FIX-27); of CI-93's other notes, CI-100 fixes the BOM block's warning
+under `LC_ALL=C`.
 
 Verified: each record's red and green runs on its branch, in UTF-8 and under `LC_ALL=C LANG=C`.
 On the merged code `556acb00`, locally on macOS:
@@ -85,8 +89,9 @@ and its man pages, the cheat sheet, NEWS, vignettes, `inst/WORDLIST` and `dev/`,
 
 Open (found, not fixed):
 
-- A shell command computed at run time and run through base `system()` escapes `sh:` rules; the gate
-  is advisory, as `?gptr_security` says (FIX-18; issue #87).
+- A computed command run through a function reached by a computed name (`get("system")(cmd)`),
+  `eval(parse())`, a sourced file, package code, `pipe()` or `processx::run()` still escapes `sh:`
+  rules in auto and yolo, and `system2()`'s `env` is never read (FIX-27).
 - A replayed script sends again a steer its run took after the script went on (a run sent to the
   background from the pause menu, a `gptr_wait(timeout =)` that returned before the run ended), and
   a `gptr_step(s, <n>)` that ended the run keeps the notes, so a later turn equal to one is still

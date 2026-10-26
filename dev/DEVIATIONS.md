@@ -7413,10 +7413,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   and then as tool `sh`, which no `r(sh:)` rule matches, so `cmd = "rm -rf build"; peter$sh(cmd)`
   ran in auto and yolo under `r(sh:rm *)`.
 - Open (nested-1): a computed command run through base `system()` or `system2()`
-  (`cmd = paste("rm", "-rf",
-  "build"); system(cmd)`) is one `dynamic` level-3 row that no `sh:` rule matches, so it still runs
-  in auto and yolo under a deny `r(sh:rm *)`; only nested `peter$sh` and `peter$bg` calls are
-  re-checked. The gate is advisory; `?gptr_security` names the limit. No code change.
+  (`cmd = paste("rm", "-rf", "build"); system(cmd)`) is one `dynamic` level-3 row that no `sh:` rule
+  matches, so it still runs in auto and yolo under a deny `r(sh:rm *)`; only nested `peter$sh` and
+  `peter$bg` calls are re-checked. The gate is advisory; `?gptr_security` names the limit. No code
+  change. Status 2026-10-26: closed by D-262 (FIX-27): auto and yolo refuse such a call.
 - Rule (sessions-22): the `gptr.frozen` entry records `mode`, the session's mode at the freeze
   (P07's and the fallback's), and a rebuild (`gptr_resume()`, console `/resume`, a replay cut) takes
   the last mode its active path records, a `gptr.frozen` `mode` or a `gptr.mode_change` `to` that is
@@ -7779,3 +7779,61 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   runs the whole plan", "the go-ahead the person sends runs the plan once, in the mode the menu
   chose".
   Evidence: progress/fixes.md FIX-21.
+
+## D-262 - FIX-27 Auto and yolo refuse a system() command the code computes (2026-10-26)
+- Rule: in auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` or
+  `shell.exec()` call whose command (`system2()`'s `args` too, `shell.exec()`'s file) the classifier
+  cannot fold to literals: a `dynamic` row of these functions whose call text is no `<fn>(): `
+  reading of a command (`perm_computed_cmd()`). The code is not evaluated; the model reads "system()
+  with a computed command is refused in auto mode: the permission rules cannot read it. Run the
+  command with peter$sh(), which checks it against them when it runs" (the function and the mode
+  named), and `peter$sh()` meets the deny and ask rules with its command when it runs (D-251
+  nested-1). `system2()` with computed `args` counts as computed (`system2("git", c("log", n))`). A
+  literal command is read and gated as before, table readings included: `system("ls | xargs rm")`,
+  `system('eval $X')` and `system(paste("rm", "-rf", "build"))` (an inline fold, so `r(sh:rm *)`
+  denies it) keep their rows and decisions. Plan, manual and edits are unchanged (deny, ask, ask).
+- Rule (allow): only an `r(fn:NAME,...)` (or `*(fn:...)`) allow rule lifts the refusal, matched
+  against the refused rows alone and covering all of them, as only `r(secret:NAME)` lifts the secret
+  guard: `r(fn:system)` lets `system(cmd); write.csv(x, "out.csv")` run in auto, while `r`,
+  `r(level<=3)`, `r(category:dynamic)` and `r(sh:*)` do not lift it, so a rule kept for manual mode
+  does not switch the refusal off. `rule_suggest()` offers no `[a]lways` rule for dynamic code and
+  an untrusted project contributes no allow rules (IC-52), so only a rule a person writes allows
+  such a call; it then runs unchecked by `sh:` rules. Deny and ask rules are unchanged.
+- Rule (shell.exec): `shell.exec()` of a file the code computes is one `dynamic` level-3 row,
+  `shell.exec(f) (a file the code computes)`, also through `lapply(fs, shell.exec)`; a literal file
+  keeps the table's level-3 `process` row. Formerly every `shell.exec()` was that `process` row.
+  risk-functions.csv's `shell.exec` note said that literal commands are classified with the command
+  table, which never held (`shell.exec` is no code argument); it now says that a file the code
+  computes is dynamic.
+- Formerly `cmd = paste("rm", "-rf", "build"); system(cmd)` ran in auto and yolo despite a deny
+  `r(sh:rm *)` (D-251 Open nested-1, FIX-18, issue #87).
+- Chosen over option 1 (maintainer, 2026-10-26), which binds run-time wrappers of `system()` and
+  `system2()` in the evaluation environment to check the command string when it runs. Option 2 is
+  simpler: one predicate in the gate, no wrappers and no run-time reparse of a command string. It
+  changes no evaluation: `R/eval-core.R` is untouched and nothing masks base functions in the user's
+  environment, often the global environment, so no copy-safety or `.GlobalEnv` question arises. It
+  is the same on every OS: one table-driven rule, with no Windows-only wrappers for `shell()` and
+  `shell.exec()` and no mirroring of how each OS's `system()` hands a string to a shell. It is
+  wider: it also covers `base::system(cmd)` and `do.call(system, list(cmd))`, which wrappers bound
+  by name miss. And it keeps one checked route, `peter$sh()` (nested-1).
+- Not covered (Open): a function reached by a computed name (`get("system")(cmd)` is only a
+  `<computed>` row); `eval(parse(text = ))`, `source()`, package code that calls `system()`,
+  `peter$knit` R chunks and `peter$script`; `pipe(cmd)`, `processx::run(cmd)` and
+  `data.table::fread(cmd = x)`, which give the same `dynamic` row (widening is one word in the
+  function vector, the maintainer's call); `system2()`'s `env`, pasted unquoted into the Unix
+  command line and never read (`system2("ls", env = "A=1; rm -rf build;")` is level 0), a separate
+  issue; in manual mode an allow `r(level<=3)` still lets a computed `system()` run without asking,
+  past a deny `sh:` rule (as before).
+- Accepted false refusals, each costing one round trip to `peter$sh()` or an `r(fn:)` rule:
+  `cmd = "ls"; system(cmd)` (names are not followed for code arguments),
+  `system2("git", c("log", n))`, `system2("ls", character())`, `do.call(system, list("ls"))`, a
+  function defined but not called (`f = function(x) system(x)`), and a literal unmodelled command
+  inside the user's own helper (the row `via g(): system(): xargs rm`), which is no `<fn>(): `
+  reading.
+- Contract-visible: 03 sections 6.8.1, 6.8.2 and 6.8.4; 04 sections 7.11 (`builtin_permissions`) and
+  15.9 IC-78; `?gptr_security`, `?gptr_permissions`, `?gptr_risk`; vignette("execution-model");
+  NEWS; risk-functions.csv's `shell.exec` note.
+- Tests: test-perm-gate.R "auto and yolo refuse system() with a computed command; peter$sh() meets
+  the rules", "only auto and yolo refuse a computed command; a literal one is gated as before";
+  test-perm-classify.R "shell.exec() of a file the code computes is a dynamic row (D-262)".
+  Evidence: progress/fixes.md FIX-27.
