@@ -94,14 +94,9 @@ local({
     .local_envir = testthat::teardown_env()
   )
   if (!identical(Sys.getenv("GPTR_LIVE_TESTS"), "true")) {
-    keys = c(
-      "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY",
-      "OPENROUTER_API_KEY", "GROQ_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY",
-      "TOGETHER_API_KEY", "XAI_API_KEY", "CEREBRAS_API_KEY", "FIREWORKS_API_KEY", "VLLM_API_KEY",
-      "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AWS_BEARER_TOKEN_BEDROCK",
-      "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
-      "TYPESAFE_API_KEY", "JEV_KEY", "JEV_API_KEY", "TYPESAFE_KEY"
-    )
+    # every variable that session start would register as a secret (secret_discover_env())
+    keys = names(Sys.getenv())
+    keys = keys[is_secret_name(keys)]
     withr::local_envvar(
       stats::setNames(rep("", length(keys)), keys),
       .local_envir = testthat::teardown_env()
