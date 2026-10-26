@@ -5901,7 +5901,7 @@ the driver, screens, events, transcripts and replays without a model are local, 
   what was emitted, for a normaliser that records a delta before it emits it (the `adp_*` helpers
   and the test adapter do).
 
-## Task CI-104 - Checks against the maintainer's earlier CRAN reviews, DESCRIPTION and README (2026-10-26, #PR)
+## Task CI-104 - Checks against the maintainer's earlier CRAN reviews, DESCRIPTION and README (2026-10-26, #90)
 - Why: before the 1.0 submission, the CRAN team's comments on the maintainer's earlier submissions
   (gptr, ggmugs, bolt4jr and kdps), collected on 2026-10-26 into a checklist of 15 points the
   reviewers raised (A1-A15) and 12 of their standard points (B1-B12), were checked on
@@ -5998,10 +5998,11 @@ the driver, screens, events, transcripts and replays without a model are local, 
   <https://ai.google.dev/gemini-api/docs> APIs, 'OpenAI'-compatible endpoints, local 'Ollama'
   <https://ollama.com> models and the 'Claude Code' and 'Codex' command line tools; decision
   models include 'Jev', hosted by 'TypeSafe AI' <https://docs.typesafe.ai/introduction>, and the
-  local 'Clef'. Top-level peter() calls can be recorded, with the code they ran, in 'R' scripts,
-  'R Markdown' and 'Quarto' documents or 'Jupyter' notebooks; a recorded script replays without a
-  model or keys, or reruns with another model." Gone: "used directly in if() and for()", the tool
-  and extension list, and "require the user's permission by default", which overstated the gate
+  local 'Clef'. For reproducible research, top-level peter() calls can be recorded, with the code
+  they ran, in 'R' scripts, 'R Markdown' and 'Quarto' documents or 'Jupyter' notebooks; with the
+  same data and packages, a recorded script replays without a model or keys, or reruns with
+  another model." (its last sentence as Fix 4 left it). Gone: "used directly in if() and for()", the
+  tool and extension list, and "require the user's permission by default", which overstated the gate
   (`cran-comments.md` states it exactly).
 - Fix 2 (`f4dc43fe`, merged by `08c2b2a7`): `README.Rmd` is rewritten and `README.md` rendered by
   `dev/release/precompute.R --readme`: 230 lines to 154 (`README.md` 274 to 178). The two folded
@@ -6018,6 +6019,9 @@ the driver, screens, events, transcripts and replays without a model are local, 
   full one; "OpenRouter, OpenAI-compatible endpoints" replaces "OpenRouter and other
   OpenAI-compatible APIs", which counted Anthropic and Gemini among them; the pillar-3 closing
   sentence is shorter.
+- Fix 4 (`bfc40d64`), the maintainer's direction for pillar 3: the Description's recording sentence
+  opens "For reproducible research" and names the condition a replay needs, "with the same data and
+  packages", as the README does.
 - Green, on the merged head `42f06453` (this record's commit changes only `dev/`, which
   `.Rbuildignore` drops): `R CMD check --as-cran` in CRAN mode (`NOT_CRAN` unset, CRAN's timing
   thresholds, both manuals) under `env -i` with only `HOME`, `PATH`, `LANG=en_US.UTF-8`, a
@@ -6029,7 +6033,10 @@ the driver, screens, events, transcripts and replays without a model are local, 
   error finding, 770 R blocks with 0 problems, no lints). No R or test file changed; the README's
   chunks lint clean, and `^(zzz|lint-rules)$` (DESCRIPTION's fields, the lint rules B1-B3 cite)
   FAIL 0 PASS 195 in UTF-8 and under `LC_ALL=C LANG=C`. `check-files.R readme` and
-  `precompute.R --readme` 0 problems.
+  `precompute.R --readme` 0 problems. On the final head `bfc40d64`: the same CRAN-mode check Status
+  OK with no NOTE in 130 s (tarball sha256 `a47ed096`), spelling clean, `test-description.R` and
+  `test-gptr-release.R` pass, and the incoming feasibility step with
+  `_R_CHECK_CRAN_INCOMING_REMOTE_=true` (spelling and URLs of the DESCRIPTION) OK in 14 s.
 - Deviations: none. Open: the six pages of session S3 methods (`print`, `format`, `str` and
   `summary` of `gptr_session`, `print` and `as.data.frame` of `gptr_session_summary`) have no
   examples; they are registered methods, not exports, but a reviewer may ask for some (B7).

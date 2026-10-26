@@ -19,7 +19,7 @@ amendment are in `DEVIATIONS.md`:
   reports a missing or corrupt `gptr.rdb`, the two errors of the report, both from the session.
 - CI-103: the release spelling check (Task 15) passes again, with US spelling in four places and 11
   words in `inst/WORDLIST`; it failed on `main` too.
-- CI-104 (after #88, on `claude/v1-polish`): the points of the maintainer's earlier CRAN reviews
+- CI-104 (#90): the points of the maintainer's earlier CRAN reviews
   (A1-A15) and the reviewers' standard points (B1-B12) are met, A7 not applicable and A15 the
   maintainer's, with no change needed; the Description is rewritten around the three pillars (the
   Title unchanged) and the README describes only the package and its setup, with no folded code
