@@ -74,6 +74,9 @@ Open (found, not fixed):
   stays, so a replay can stop at a later read of that binding (FIX-21).
 - A console transcript does not record the console's starting mode (`peter(mode = plan)`), so a
   live re-ask runs in the configured mode (FIX-21).
+- `gptr_wait()` on a waiting session, called from inside a run's tool, resumes it as a nested run
+  that inherits the outer run's safety record (it used to hang); the permission gate still asks
+  the person (FIX-21).
 - Replayed closures and `function` calls have no srcref where the agent's keep a `<gptr>` one of its
   code, so a replayed ggplot is 1,412 bytes smaller serialized and 768 bytes by `env_snap_size()`;
   an expression that names `peter()` still makes its objects with the document's srcrefs (FIX-24).

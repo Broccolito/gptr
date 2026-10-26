@@ -5595,14 +5595,15 @@ the driver, screens, events, transcripts and replays without a model are local, 
   driver restart; its screens above are from the live pane.
 
 ### L1 - An idle tick's first notice starts a row of its own below R's prompt
-- Commit `1842ffe9`. Red: `^agent-background$` with L1-L3's tests FAIL 7 PASS 219, L1's FAIL 1: the
-  output a park printed began with "Background session <id> is waiting for approval: r: v = 1.", not
-  a blank row.
+- Commit `1842ffe9`. Red: `^agent-background$` with the branch's final tests on 7e23ebd3 FAIL 10
+  PASS 218 (7 in the three new blocks, 2 in the edited cancel-notice tests and 1 in the
+  `bg_run_opts` test, each for the fixed cause), L1's FAIL 1: the output a park printed began with
+  "Background session <id> is waiting for approval: r: v = 1.", not a blank row.
 - Cause: a `later` callback prints where R's prompt left the cursor; only `bg_release()`'s notice
   began with a line feed (visual round 3).
 - Fix: `bg_callback()` writes one line feed before the first gptr notice (`gptr_message`) of an idle
   tick, which replaces the release notice's own; its test reads the row from the output.
-- Green: `^agent-background$` PASS 216. Lint clean.
+- Green: `^agent-background$` PASS 216, PASS 228 at the branch's head. Lint clean.
 - Deviations: none. Open: R draws no prompt again after a callback's output, so the person types on
   a row without `> ` (unchanged).
 
@@ -5662,8 +5663,9 @@ the driver, screens, events, transcripts and replays without a model are local, 
   "gptr_wait(gptr_last()) continues it."; `gptr_wait(b)` asked once; the transcript added the
   resumed block with `x1 = summary(fuel$mpg); x1` and its output; replays made x1 (3 of 3).
 - B3 (claude-cli 55 s, codex 87 s, ollama 68 s): the banner ended `!!gptr::gptr_wait(session) asks`;
-  the hello turn sent no console note; `!!gptr::gptr_wait(b)` sent it once, asked and made x4 (4
-  requests, 1 note each); the transcript recorded the block.
+  the hello turn sent no console note; `!!gptr::gptr_wait(b)` sent it once, asked and made x4 (1
+  note each; claude-cli 3 requests, codex and ollama 4, one of them a steer from a stray `y` the
+  driver typed); the transcript recorded the block.
 - P1, "Go ahead." typed (claude-cli auto 51 s, codex auto 66 s, ollama auto 72 s): one run, recorded
   as `s_<id> |> peter("Go ahead.")` with its code; replays wrote mean.txt for claude-cli and ollama.
 - P2 (claude-cli auto 49 s, codex manual 74 s, ollama edits 62 s), at `b44ad5bc`, the others at
@@ -5680,7 +5682,9 @@ the driver, screens, events, transcripts and replays without a model are local, 
   FIX-20 R29); a model `r` call that failed after an assignment is left out of its block while its
   binding stays, so codex's P1 block read `fuel_mpg_mean` before assigning it and its replay
   stopped; a console transcript does not record the console's starting mode (`peter(mode = plan)`),
-  so a live re-ask plans in the configured mode.
+  so a live re-ask plans in the configured mode; `gptr_wait()` on a waiting session, called from
+  inside a run's tool, now resumes it as a nested run that inherits the outer run's safety record
+  (it used to hang), and the permission gate still asks the person.
 
 ## FIX-22 - A replayed script runs its own turn equal to a recorded steer (2026-10-26, #88)
 - Red: FIX-16's open note under steer-doc-5. test-doc-replay.R "a replayed script runs its own
