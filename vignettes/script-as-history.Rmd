@@ -319,11 +319,12 @@ Export requires fresh completed records and no pending sidecar. Each argument of
 `peter()` call must be a quoted string, a number, `TRUE`, `FALSE` or `NULL` (not `NA` or a
 negative number). Any other argument is refused as a "mixed or non-literal Peter expression":
 a data object, as in `peter("Fit mpg on wt.", mtcars)`, a bare name such as `mode = auto` or
-`model = opus`, a call such as `.opts = list(max_turns = 4)`, or the session that a later
-`session |> peter("...")` statement continues, since R reads it as `peter(session, "...")`. A
-pipeline written as one statement, such as the first `session` above, is admitted. Write the
-value itself, as in `mode = "auto"`; editing an argument this way keeps its block fresh, so the
-block needs no new recording. Export also refuses computed or nested prompts, prompts that
+`model = opus`, or a call such as `.opts = list(max_turns = 4)`. A pipeline written as one
+statement, such as the first `session` above, is admitted, and so is a later
+`session |> peter("...")` that continues a session an earlier `peter()` statement assigned, as
+the later turns of a console transcript do. Write the value itself, as in `mode = "auto"`;
+editing an argument this way keeps its block fresh, so the block needs no new recording.
+Export also refuses computed or nested prompts, prompts that
 interpolate `{name}` values ("interpolated inputs need review"), mixed `peter()`/ordinary
 pipelines, shared-line statements, missing, stale or edited blocks and secret-marked records. A
 raw export refuses later ordinary code that reads a session handle, such as `session$value`

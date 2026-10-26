@@ -7693,3 +7693,17 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-provider-registry.R "an abort flag set during an event ends the stream before the next
   unit or the end"; test-provider-anthropic.R "end to end on the mock server: streaming, retry and
   abort (skip on CRAN)". Evidence: progress/fixes.md Task CI-97.
+
+## D-258 - FIX-25 gptr_export() exports a console transcript (2026-10-26)
+- Rule: `gptr_export()` admits a Peter-only pipeline that starts from a session handle an earlier
+  Peter statement of the document assigned: `s_<hex> |> peter("...")` after
+  `s_<hex> = peter("...")`, the later turns of a console transcript (IC-49), or the same layout in
+  a script. Formerly it was refused as "mixed or non-literal Peter expressions", so a console
+  transcript exported only while each session had one turn. A pipeline from any other name (a data
+  object piped in) stays refused. The raw format comments the statement and keeps its recorded R,
+  the Peter format keeps it active, as for every admitted call.
+- Contract-visible: `?gptr_export` details; vignette("script-as-history"), which named this
+  pipeline as refused. 03 and 04 do not list the calls an export admits.
+- Tests: test-doc-export.R "a console transcript exports like a script, its later turns piping the
+  handle" and the refusal list of "raw export refuses ambiguous calls and unresolved session
+  semantics". Evidence: progress/fixes.md FIX-25.

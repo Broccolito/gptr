@@ -6,9 +6,10 @@ doc_export_refuse = function(reason) {
   gptr_abort(paste0("Cannot export this history: ", reason, "."), "doc_export", reason = reason)
 }
 
-#' Count a literal Peter-only chain after R's native pipe rewrite; no argument is evaluated.
+#' Count a literal Peter-only chain after R's native pipe rewrite, which may start from one of the
+#' session `handles` (a console transcript's later turns); no argument is evaluated.
 #' @noRd
-doc_export_chain = function(expr, depth = 0L) {
+doc_export_chain = function(expr, handles = character(), depth = 0L) {
   if (!is.call(expr) || depth > doc_sidecar_bounds()$depth) return(0L)
   head = expr[[1L]]
   named = identical(head, as.name("peter")) ||
@@ -19,8 +20,9 @@ doc_export_chain = function(expr, depth = 0L) {
   for (i in seq_along(args)) {
     if (is.symbol(args[[i]]) && !nzchar(as.character(args[[i]]))) return(0L)
   }
-  inner = if (is.call(args[[1L]])) doc_export_chain(args[[1L]], depth + 1L) else 0L
-  rest = if (inner) args[-1L] else args
+  inner = if (is.call(args[[1L]])) doc_export_chain(args[[1L]], handles, depth + 1L) else 0L
+  handle = is.symbol(args[[1L]]) && as.character(args[[1L]]) %in% handles
+  rest = if (inner || handle) args[-1L] else args
   literal = vapply(rest, function(x) {
     is.null(x) || (is.atomic(x) && length(x) == 1L && !is.na(x))
   }, NA)
@@ -142,7 +144,7 @@ doc_export_lines = function(lines, format, path, target) {
       binding = as.character(expr[[2L]])
       expr = expr[[3L]]
     }
-    if (!identical(doc_export_chain(expr), as.integer(length(rows)))) {
+    if (!identical(doc_export_chain(expr, unlist(bound)), as.integer(length(rows)))) {
       doc_export_refuse("mixed or non-literal Peter expressions")
     }
     overlap = vapply(refs, function(r) r[1L] <= sr[3L] && r[3L] >= sr[1L], NA)
@@ -275,9 +277,10 @@ doc_export_lines = function(lines, format, path, target) {
 #' @param format `"r"` (default) or `"peter"`.
 #' @return Invisibly, the normalized destination path.
 #' @details Only bare or symbol-assigned literal Peter calls and Peter-only native pipelines
-#' are admitted. Distinct statements sharing a line (including semicolon-separated statements),
-#' mixed pipelines, nested or computed calls, pending writes, missing or edited blocks, secret
-#' markers and interpolated-input hashes are refused.
+#' are admitted; a pipeline may start from a session handle an earlier Peter statement assigned,
+#' as the later turns of a console transcript do. Distinct statements sharing a line (including
+#' semicolon-separated statements), mixed pipelines, nested or computed calls, pending writes,
+#' missing or edited blocks, secret markers and interpolated-input hashes are refused.
 #' Raw exports also refuse ordinary code that reads a session handle after its Peter statement
 #' and before ordinary code assigns that name again, and a function that names any session handle
 #' of the document, wherever it is defined, as it reads the name when called. The Peter format
