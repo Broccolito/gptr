@@ -432,7 +432,7 @@ rmarkdown::render("report.Rmd")</dt><dd>Render as usual; blocks become <code>gpt
           <dt>peter(q, replay = "live")</dt><dd>Modes: <code>"auto"</code> (default), <code>"replay"</code>, <code>"live"</code>, <code>"record"</code>. <code>"live"</code> re-asks the model under <code>gptr_source()</code>, knitr, an IDE or Jupyter; plain <code>source()</code> and <code>Rscript</code> replay a recorded call instead, with a warning.</dd>
         </dl>
         <h3>Export a recorded .R</h3>
-        <p>Export needs fresh blocks and <code>peter()</code> calls whose arguments are all quoted strings, numbers or <code>TRUE</code>/<code>FALSE</code> (write <code>mode = "auto"</code>): no data objects, sessions (<code>s |&gt; peter()</code>), <code>.opts</code> or <code>{name}</code> prompts.</p>
+        <p>Export needs fresh blocks and <code>peter()</code> calls whose arguments are all quoted strings, numbers or <code>TRUE</code>/<code>FALSE</code> (write <code>mode = "auto"</code>): no data objects, <code>.opts</code> or <code>{name}</code> prompts; <code>s |&gt; peter()</code> only continues an <code>s</code> an earlier <code>peter()</code> statement assigned.</p>
         <dl>
           <dt>gptr_export("analysis.R", "plain.R")</dt><dd>Plain R: recorded code runs, <code>peter()</code> calls become comments; later code reading <code>s</code> (<code>s$value</code>) is refused.</dd>
           <dt>gptr_export("analysis.R", "peter.R",
