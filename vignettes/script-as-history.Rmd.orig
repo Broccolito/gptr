@@ -124,6 +124,19 @@ continues its session. Other code typed at R's own `>` prompt is not recorded, s
 whose turns use objects made there fails on replay; create such inputs with `!code` in the
 `peter()` console.
 
+A console turn's block opens with `#< ` comment lines: what the console sent with the prompt,
+the head of each `@file` and the notes of earlier `!` lines. `gptr_source(replay = "live")`
+sends them again instead of reading the file, so a re-asked turn is the same request even after
+the file changed or was removed. Each block header and each direct R header names what that step
+created (`created=`). After each `/undo`, `/redo`, `/retry` and new `!` line, gptr reads the
+transcript from the top and turns off a direct R line that uses an object an undone turn, or a
+line that is off, created: each of its lines gets `#~ ` under
+`# direct R (no model; uses undone fit)`, and the console says which lines it turned off. A
+`/redo` turns them back on. `source()` then runs the transcript without error, while the objects
+stay in the session, as an undo removes only what the turn created. Names are read with
+`all.names()`: a column or formula term named like such an object can turn a line off, and a
+name reached through a string, as in `get("fit")`, is not seen.
+
 Recording also needs the agent's code to run. In the default `manual` mode, code that changes
 objects, such as storing `top` above, waits for approval. Nobody can approve under `Rscript`,
 or in `rmarkdown::render()` even from the console, so the run stops with

@@ -7779,3 +7779,52 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   runs the whole plan", "the go-ahead the person sends runs the plan once, in the mode the menu
   chose".
   Evidence: progress/fixes.md FIX-21.
+
+## D-264 - FIX-29 Transcripts record what a prompt was sent with and what each step created (2026-10-26)
+- Rule (`#<` lines, issue #85 R27): a console turn's block opens with the `user_ran` and
+  `user_files` context blocks its prompt was sent with, tags included, one `#< ` comment line per
+  line (an empty one `#<`): the `!code` notes and each `@file` as attached (at most 40 lines,
+  redacted with the `context` profile, or the one line of a binary, truncated or omitted file).
+  `prompt=` still hashes only the typed text, and `source()` reads the lines as comments. A call
+  that asks again for a recorded block (`replay = "live"`, a stale or undone block) gets those
+  blocks in `call$sent` from the `document` route, and the console's providers send them again as
+  the same context blocks without reading the file. Formerly `gptr_source(replay = "live")` sent
+  only the literal `@notes.md` text, so the re-ask was another request. A history reconstructed
+  from the document puts them before the turn's prompt; a raw `gptr_export()` leaves them out and
+  the Peter format keeps them. The format changes in place: no version key and no reader for
+  earlier transcripts (gptr 1.0 is unreleased).
+- Rule (`created=` and switched-off lines, R29): a block header names the objects its r calls
+  created (`created=`, the `created` rows of its objects fragments: what an undo removes), and a
+  direct R header those the evaluator's diff reports added, also for a line that failed. After
+  each rewind (`/undo`, `/redo`, `/retry`) and each line the console appends, the transcript is
+  read top to bottom: each block and direct R line makes its `created=` names, on or off (an
+  undone block; a line that failed or is off). A direct R line that uses (by `all.names()`) a
+  name whose last maker above it is off, other than a name it created itself, gets `#~ ` before
+  each line under `# direct R (no model; uses undone <names>)`, and goes back on when no such
+  name is left; a notice names the lines switched. The last maker decides, not "made only by an
+  undone step": a name an earlier live step made and a later off step made again was removed in
+  between, so `source()` would not have it. Formerly such a line ran under `source()` and stopped
+  it, as the undone turn's objects never existed there. A rewind still removes only what the turn
+  created, so the person's own objects stay.
+- Checks of the design: (a) the provider cannot rely on `call$doc` during a re-ask, which the
+  route leaves `NULL` when the answer may not be recorded (no consent, an undone block under
+  `"live"`); the route therefore keeps the parsed `#<` lines in a new call record binding,
+  `sent`, whatever the recording decision. (b) `doc_replay_steps()` still skips `#` lines; the
+  reconstruction takes the `#<` lines through `doc$sent` instead. (c) raw export drops `#<` lines,
+  Peter export keeps them. (d) the evaluator reports `added` names for a line that stopped at an
+  error (a parse error ran nothing and adds none).
+- Known limits: `all.names()` can match a column or formula term of the same name, which only
+  turns a line off, never breaks `source()`; a name reached through a string, as in
+  `get("fit")`, is not seen; a name holding a comma is split by `created=`.
+- Contract-visible: 04 section 15.3 IC-49, section 11.5 (header key `created`, the body's `#<`
+  lines, the transcript row) and section 7.8 (call record binding `sent`); `?gptr_doc`,
+  `?gptr_source`, `?gptr_export`; vignette("script-as-history").
+- Tests: test-doc-blocks.R "a block records what its prompt was sent with as #< lines and what it
+  created"; test-console-repl.R "a live re-ask sends the @file head and !code note the console
+  sent (IC-49)"; test-doc-replay.R "a reconstruction sends what the prompt was sent with, from its
+  #< lines (IC-49)", "a direct R line records what it created, also when it failed (IC-49)", "a
+  direct R line using a name an undone step or an off line made is switched off", "a rewind
+  switches dependent direct R lines off, says which, and a redo back on", "console /undo, /redo
+  and /retry keep the transcript sourceable (IC-49, D-264)", "a re-asked block sends its #< lines
+  again, also when it cannot be recorded"; test-doc-export.R "a raw export leaves out what a
+  prompt was sent with; the Peter format keeps it". Evidence: progress/fixes.md FIX-29.

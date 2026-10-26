@@ -37,7 +37,10 @@ them, so the functions and calls they make hold no part of the document, as at t
 runs as ordinary R. A call whose block is stale (its prompt or the values interpolated into it
 changed), or every call under \code{replay = "live"} (an undone block runs without being rewritten;
 \code{replay = "record"} regenerates it), asks the model again and rewrites its block in place, and
-the old block is skipped, which base \code{source()} cannot do.
+the old block is skipped, which base \code{source()} cannot do. A console turn is asked again with
+what the console sent with it, from its block's \verb{#< } lines (the \verb{@file} heads and \code{!} notes;
+see \code{\link[=gptr_doc]{gptr_doc()}}): the request is the same even when the file changed or is gone. Direct R
+lines a transcript turned off are comments and do not run.
 }
 \details{
 Replay executes the recorded R code, including its ordinary side effects. It does not

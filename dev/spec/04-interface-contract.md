@@ -2732,6 +2732,7 @@ compact_threshold(200000, max_output = 64000)
 | `nframe` | int(1) | `sys.nframe()` of the `peter()` frame |
 | `top_level` | lgl(1)\|NA | set by P15's locator (`NA` until then) |
 | `doc` | list\|NULL | document site set by the `document` route |
+| `sent` | named list\|NULL | the context blocks (`user_ran`, `user_files`) a re-asked block's `#< ` lines record, set by the `document` route (IC-49) |
 
 Functions (P08):
 
@@ -3900,6 +3901,7 @@ Values containing spaces are double-quoted with R escapes. Header keys, in this 
 | `session` | recommended | session id |
 | `turn` | recommended | turn number in the session |
 | `value` | optional | the name designated with `gptr_return()` (replay binds `$value` to it): a bare name as written, `.gptr_value_<block id>` for an expression the body assigns, else omitted (one name, never an expression) |
+| `created` | when any | the objects the turn's r calls created, comma separated (IC-49) |
 | `fork` | forks | `<parent session id>:<turn>` |
 | `plan` | when used | id of the session whose pending plan was consumed |
 | `status` | undone blocks | `undone` |
@@ -3907,7 +3909,8 @@ Values containing spaces are double-quoted with R escapes. Header keys, in this 
 | `kind` | team and fan-out blocks | `team` or `fanout` (IC-47) |
 | `children` | team and fan-out blocks | `"<name>:<session id>[:<value>],..."` (quoted); `<value>` is the child's `value=` name, written when it designated one (IC-47) |
 
-**Body**, in emission order: the code of each successful `r` call with `record = TRUE`, verbatim except that
+**Body**, in emission order: the `#< ` lines of the console's context blocks the prompt was sent with (IC-49);
+the code of each successful `r` call with `record = TRUE`, verbatim except that
 top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members are dropped, a top-level
 `gptr_return(<expression>)` (argument unnamed or `x`, called or piped, on any number of lines) becomes
 `.gptr_value_<block id> = (<expression>)` and top-level
@@ -3937,7 +3940,7 @@ statement's first line. Ownership: the run of blocks starting at the first non-b
 | `.Rmd` | a separate chunk `` ```{r gptr-<id>} `` directly after the owning chunk (fence and prefix copied), body with the markers, no `#>` lines |
 | `.qmd` | a chunk `` ```{r} `` whose first line is `#| label: gptr-<id>`, same body |
 | `.ipynb` | a code cell `{"cell_type": "code", "execution_count": null, "id": "gptr-<id>", "metadata": {"gptr": {"id", "model", "prompt", "date", "session", "turn", "value"}}, "outputs": [], "source": [...]}` after the calling cell; keys sorted; indentation copied from the file (Jupyter: 1 space); numbers kept as read (gptr writes no float of its own, so Jupyter's Python repr is preserved; D-158); only `source` and `metadata.gptr` change on rewrite; never written while the notebook is open: in Jupyter the block is shown as the cell output and kept pending until `gptr_doc(path, sync = TRUE)` (IC-50) |
-| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: the replay note (`# source() this file to replay ...`) and `library(gptr)` (at the top of every transcript, whatever its first block, IC-49), then per session a header comment after a blank line (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, or `none kept (gptr_init() keeps session logs in .gptr/)` when the log is in `tempdir()/gptr`, which R deletes at exit), then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output; slash commands as comments (`# /model opus`) |
+| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: the replay note (`# source() this file to replay ...`) and `library(gptr)` (at the top of every transcript, whatever its first block, IC-49), then per session a header comment after a blank line (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, or `none kept (gptr_init() keeps session logs in .gptr/)` when the log is in `tempdir()/gptr`, which R deletes at exit), then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output, the header ending `created=<names>` when they created objects; a line that failed, or uses what an undone step made, as `#~ ` lines under `# direct R (no model; <status>)` or `# direct R (no model; uses undone <names>)` (IC-49); slash commands as comments (`# /model opus`) |
 
 **Undone blocks** (G7 §3.8): header `status=undone`, every body line prefixed `#~ `; Rmd/qmd chunks get
 `eval=FALSE` (`#| eval: false`); ipynb `metadata.gptr.status = "undone"` plus `#~ ` source lines. A top-level System 1
@@ -4638,6 +4641,26 @@ A console transcript records every settled run; a run that ended `aborted`, `err
 `budget` gets a last `## Run: <status>` line and caches no S2 answer (a script document records only `idle`
 runs). P15 acceptance: a two-turn console session plus one menu steer produces a transcript that re-sources as one
 session.
+A console turn's block opens with what the console sent with the typed prompt, as `#< ` comment lines (FIX-29,
+D-264): the text of its `user_ran` block (the `!code` notes) and of its `user_files` block (each `@file` as
+attached: at most 40 lines redacted with the `context` profile, or the one line of a binary, truncated or omitted
+file), tags included, each line prefixed `#< ` and an empty one written `#<`. `prompt=` still hashes only the
+typed text. A call that asks again for a recorded block (`replay = "live"`, a stale or undone block) keeps those
+blocks in `call$sent`, recorded or not, and the console's `user_ran` and `user_files` providers send them again
+as the same context blocks; the file is not read, so the re-ask is the same request even when it changed or is
+gone. A history reconstructed from the document puts them before the prompt of the turn's user message. A raw
+`gptr_export()` leaves them out; the Peter format keeps them.
+Each block header names the objects its r calls created (`created=`: the `created` rows of the turn's objects
+fragments, what an undo removes), and each direct R header the objects the evaluator's diff reports added, also
+for a line that failed (`# direct R (no model) created=p`). After each rewind (`/undo`, `/redo`, `/retry`) and
+each line the console appends, the transcript is read top to bottom: each block and direct R line makes the
+names of its `created=` key, on or off (an undone block; a line that failed or is off); a direct R line that uses
+(by `all.names()`) a name whose last maker above it is off, other than one it created itself, is switched off,
+`#~ ` before each line under `# direct R (no model; uses undone <names>)`, and back on when no such name is left.
+A notice names the lines switched. `source()` stays a plain R run: lines that are off are comments. A rewind
+still removes only what the turn created, so the person's own objects stay. Known limits: `all.names()` can match
+a column or formula term of the same name (it only turns a line off, never breaks `source()`), and a name reached
+through a string, as in `get("fit")`, is not seen.
 
 **IC-50 Jupyter documents.** (req-11) With `front_end() == "jupyter"` gptr never writes the open notebook: the
 block is shown as the cell's output (a fenced R code block) and recorded as a pending `gptr.doc_block` entry

@@ -909,6 +909,7 @@ doc_on_console_direct = function(event, ctx) {
   doc_console_append(lines, ctx$session)
 }
 
+# a direct R line's header (doc_direct_header()): its reason and its key=value pairs
 doc_re_direct = "^# direct R \\(no model(?:; (.*?))?\\)(?: (.*))?$"
 # the first line of what the console appends after a direct R line (another one, a command, a
 # session header, a turn's statement or block), which ends that line's section
@@ -1075,6 +1076,18 @@ doc_console_held = function(s) {
 #' off, but `.opts = list(record = FALSE)` suppresses recording for that call. Binding does
 #' not reconstruct earlier unrecorded turns. A narrative summary or model-generated script
 #' draft needs review and execution checks before it can serve as a reproducible workflow.
+#'
+#' In a console transcript a turn's block opens with `#< ` comment lines holding what the
+#' console sent with the prompt: the head of each `@file` (at most 40 lines, redacted) and the
+#' notes of earlier `!` lines. Its header names the objects the turn created (`created=`), as the
+#' header of each direct R line does (`# direct R (no model) created=p`). After each `/undo`,
+#' `/redo`, `/retry` and `!` line the transcript is read again from the top: a direct R line that
+#' uses an object that an undone turn, or a line that is off, created is turned off (`#~ ` before
+#' each line, `# direct R (no model; uses undone fit)`) and back on when that turn returns, so
+#' `source()` runs the transcript without error. The console names the lines it turned off; the
+#' objects themselves stay in your session, as an undo removes only what the turn created. Names
+#' are found with [all.names()]: a column or formula term with the same name can turn a line off,
+#' and a name reached through a string, as in `get("fit")`, is not seen.
 #'
 #' @param path `NULL` to return the current binding, `FALSE` to remove it, or the path of an
 #'   `.R`, `.Rmd`, `.qmd` or `.ipynb` document.
@@ -1469,7 +1482,10 @@ doc_catalog_prune = function() {
 #' runs as ordinary R. A call whose block is stale (its prompt or the values interpolated into it
 #' changed), or every call under `replay = "live"` (an undone block runs without being rewritten;
 #' `replay = "record"` regenerates it), asks the model again and rewrites its block in place, and
-#' the old block is skipped, which base `source()` cannot do.
+#' the old block is skipped, which base `source()` cannot do. A console turn is asked again with
+#' what the console sent with it, from its block's `#< ` lines (the `@file` heads and `!` notes;
+#' see [gptr_doc()]): the request is the same even when the file changed or is gone. Direct R
+#' lines a transcript turned off are comments and do not run.
 #'
 #' Replay executes the recorded R code, including its ordinary side effects. It does not
 #' freeze package versions, supply external inputs or validate the analysis. This function

@@ -307,7 +307,9 @@ doc_export_lines = function(lines, format, path, target) {
 #' effects cannot be reconstructed. External files, objects and package versions must still
 #' be supplied. Remaining user code may use gptr or perform network and filesystem operations.
 #' Captured `#>` output is limited to twelve lines per block and eighty characters per line;
-#' outputs are comments. Encoding, line endings and the final newline follow the input file.
+#' outputs are comments. Raw R leaves out a console turn's `#< ` lines (what the console sent
+#' with its prompt, see [gptr_doc()]); the Peter format keeps them. Encoding, line endings and
+#' the final newline follow the input file.
 #' A UTF-8 byte order mark is preserved; source that exported file with
 #' `source(to, encoding = "UTF-8-BOM")`.
 #' @seealso [gptr_doc()], [gptr_source()], [gptr_blocks()]
