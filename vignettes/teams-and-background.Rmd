@@ -200,9 +200,9 @@ Other front ends have the support limits documented in `help("gptr-background", 
 do not infer support from the mere return of a session object.
 
 An approval or question at an idle tick parks the session as `waiting`, without performing
-the action. A later blocking call resumes it with a message saying that you are at the
-console, and the model repeats its request before the usual prompt. That extra request can
-use tokens. A waiting session has no active run for
+the action. `gptr_wait()` on the session resumes it with a message saying that you are at
+the console, and the model repeats its request before the usual prompt; other calls leave it
+waiting. That extra request can use tokens. A waiting session has no active run for
 `gptr_cancel()` to abort; inspect its status before choosing how to resume or stop jobs.
 
 ## Checkpoints, usage and durable history

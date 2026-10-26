@@ -24,7 +24,7 @@ sdk_queued = function(s) {
 sdk_check = function(s) {
   run = sdk_run_of(s)
   if (!is.null(run)) return(list(run = run))
-  # a waiting session continues only through the background sweep, which adds the console note
+  # a waiting session continues only in gptr_wait() (bg_continue()), which adds the console note
   if (identical(session_data(s)$status, "waiting") || !sdk_queued(s)) return(NULL)
   cur = run_current()
   safety = gateway_run_safety(cur)
@@ -192,6 +192,7 @@ gptr_wait = function(x, timeout = Inf) {
     r = sdk_launch(ss[[i]], chks[[i]], caller)
     if (!is.null(r)) runs = c(runs, list(r))
   }
+  if (!is.null(the$bg)) runs = c(runs, bg_continue(ss))
   until = sdk_until_settled(ss)
   if (!until()) {
     pump = function() sdk_pump(runs, until = until, timeout = timeout)
@@ -200,7 +201,7 @@ gptr_wait = function(x, timeout = Inf) {
     if (is.function(wait)) wait(ss, pump) else pump()
   }
   # a background session that settled in the wait is released now: no idle tick may follow (P21)
-  if (!is.null(the$bg)) bg_sweep(FALSE, FALSE)
+  if (!is.null(the$bg)) bg_sweep(FALSE)
   if (inherits(x, "gptr_session") && length(runs) && isTRUE(runs[[1L]]$settled)) {
     gateway_signal(x, runs[[1L]])
   }

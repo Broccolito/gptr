@@ -30,12 +30,6 @@ local_plan_kernel = function(.env = parent.frame()) {
       assign("mode", mode, envir = session_data(s))
       invisible(s)
     },
-    session_enqueue = function(s, text, as = c("steer", "follow_up"), source = "api_user",
-                               blocks = list()) {
-      d = session_data(s)
-      d$queue[[length(d$queue) + 1L]] = list(text = text, as = as[1L], source = source)
-      invisible(s)
-    },
     run_current = function() NULL,
     .env = .env
   )
@@ -268,7 +262,7 @@ test_that("a peter() call inside a loop body does not receive the plan (IC-56)",
   }
 })
 
-test_that("the execute menu follows the plan run: mode, tools, a queued go-ahead (6.8.5)", {
+test_that("the execute menu follows the plan run: mode, tools, nothing queued (6.8.5)", {
   root = local_project()
   local_plan_kernel()
   local_plan_store()
@@ -284,9 +278,9 @@ test_that("the execute menu follows the plan run: mode, tools, a queued go-ahead
   msgs = testthat::capture_messages(plan_on_agent_end(list(status = "idle"), ctx))
   expect_identical(st$log$method, "select")
   expect_identical(session_data(s)$mode, "auto")
-  expect_identical(session_data(s)$queue[[1L]], list(text = "Go ahead with the plan above.",
-                                          as = "follow_up", source = "pause_menu"))
-  expect_match(paste(msgs, collapse = ""), "gptr_wait(gptr_last())", fixed = TRUE)
+  # live (FIX-21): a queued go-ahead ran unrecorded, or after the person's own a second time
+  expect_length(session_data(s)$queue, 0L)
+  expect_match(paste(msgs, collapse = ""), "gptr_last() |> peter(\"Go ahead.\")", fixed = TRUE)
   expect_identical(vapply(session_data(s)$entries, function(e) e$data$status, ""),
                    c("pending", "used"))
   expect_false(exists(home_address(home), envir = plan_store(), inherits = FALSE))
@@ -307,8 +301,8 @@ test_that("the call the go-ahead notice names runs the whole plan", {
                                   fake_tool("read", path = "f.txt"), "Done."))
   msgs = testthat::capture_messages(peter("Create f.txt", model = fake, mode = "plan"))
   s = gptr_last()
-  hint = grep("runs the plan", msgs, value = TRUE, fixed = TRUE)
-  cmd = regmatches(hint, regexpr("[a-z_]+\\(gptr_last\\(\\)\\)", hint))
+  hint = grep("to run the plan", msgs, value = TRUE, fixed = TRUE)
+  cmd = regmatches(hint, regexpr("gptr_last\\(\\) [|]> peter\\(\"Go ahead.\"\\)", hint))
   expect_length(cmd, 1L)
   testthat::capture_messages(eval(parse(text = cmd)))
   expect_identical(s$status, "idle")
@@ -316,7 +310,7 @@ test_that("the call the go-ahead notice names runs the whole plan", {
   expect_true(file.exists(file.path(root, "f.txt")))
 })
 
-test_that("the go-ahead request tells the model the mode the menu chose", {
+test_that("the go-ahead the person sends runs the plan once, in the mode the menu chose", {
   skip_on_cran()
   local_project()
   local_plan_store()
@@ -324,8 +318,9 @@ test_that("the go-ahead request tells the model the mode the menu chose", {
   fake = local_fake_provider(list("<proposed_plan>1. write f.txt</proposed_plan>",
                                   fake_tool("write", path = "f.txt", content = "hi"), "Done."))
   s = peter("Create f.txt", model = fake, mode = "plan")
-  gptr_wait(s)
+  s |> peter("Go ahead with the plan above.")
   expect_identical(s$status, "idle")
+  expect_length(fake_requests(fake), 3L)
   msgs = fake_requests(fake)[[2L]]$messages
   last = msgs[[length(msgs)]]
   expect_identical(last$role, "user")

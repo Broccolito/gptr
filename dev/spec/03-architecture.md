@@ -1278,8 +1278,8 @@ prompt; programmatic calls re-signal the interrupt. While the menu waits streams
 `later` callbacks pump the reactor while the console is idle (timer polling every 50 ms; the pump is a no-op while
 the reactor is already on the stack [IC-57]; no `later_fd`, which LIKELY cannot watch processx pipes on Windows,
 inferred from its documentation and untested [15 verifier]). An ask raised by a background run never prompts from
-a callback: the session moves to status `waiting` and the question is shown at the next blocking gptr call, whose
-resumed run opens with a user message saying that the user is at the console (D-252). A SIGINT inside a later callback reaches the same
+a callback: the session moves to status `waiting` and the question is shown at its next `gptr_wait()`, whose
+resumed run opens with a user message saying that the user is at the console (D-252, D-261). A SIGINT inside a later callback reaches the same
 calling handler, so the pause menu works [G3 p6]. Piping into the running session steers it; `gptr_wait()`,
 `gptr_cancel()` and `gptr_jobs()` operate on it. R tools of background runs execute at idle ticks (the console
 is busy for their duration; `options(gptr.background_tools = "wait")` defers them to `gptr_wait()`). Under
@@ -1574,7 +1574,8 @@ a reference, R2) within the same R process and one hour receives it once as a `<
 "using the plan from session <id>" and the plan's step list printed before the first action, and its block header
 records `plan=<id>`; only a top-level call (not nested, not in a run, not in a loop body) may consume it, and any
 other `peter()` call in between discards it [IC-56]. Interactively the plan run ends
-with "Execute: [a]uto / [e]dits / [m]anual / [k]eep planning", which continues the same session. Choosing
+with "Execute: [a]uto / [e]dits / [m]anual / [k]eep planning", which continues the same session: an execute
+choice sets its mode, and its next prompt (`Go ahead.`) runs the plan as a recorded turn (D-261). Choosing
 to execute is what declares `edit` and `write` for a session frozen with the `readonly` preset; one that is
 not executed keeps `read` and `r` in every mode (D-251).
 `options(gptr.plan_handoff = FALSE)` disables the hand-off [P-C §9.4].

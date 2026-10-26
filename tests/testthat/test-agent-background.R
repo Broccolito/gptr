@@ -199,8 +199,10 @@ test_that("bg_run_opts() keeps the options a resumed run needs, never a frame or
   run = list(opts = list(max_turns = 5L, budget = list(tokens = 100), call = new.env(),
                          safety = list(can_prompt = TRUE), doc = list(path = "a.R"),
                          background = FALSE, timeout = 30))
+  # the document site too, so the resumed run writes the call's block (FIX-21)
   expect_identical(bg_run_opts(run), list(max_turns = 5L, budget = list(tokens = 100),
-                                          timeout = 30, background = TRUE))
+                                          doc = list(path = "a.R"), timeout = 30,
+                                          background = TRUE))
   expect_identical(bg_run_opts(list(opts = NULL)), list(background = TRUE))
 })
 
@@ -373,8 +375,10 @@ test_that("gptr_cancel() aborts a background session and releases its job", {
   expect_identical(s$status, "aborted")
   local_gptr_options(quiet = FALSE)
   # on a row of its own at R's prompt, in the console's words, named by its prompt (visual round 3)
-  expect_message(expect_true(bg_pump_until(function() !bg_has(s$id))),
-                 "^\nbackground session 'long task' aborted", class = "gptr_message_notice")
+  out = utils::capture.output(expect_message(expect_true(bg_pump_until(function() !bg_has(s$id))),
+                                             "^background session 'long task' aborted",
+                                             class = "gptr_message_notice"))
+  expect_identical(out, "")
   expect_false(s$id %in% gptr_jobs()$id)
 })
 
@@ -423,7 +427,7 @@ bg_capture_notices = function(fun) {
   log$m
 }
 
-test_that("an ask at an idle tick parks the run as waiting until a blocking pump", {
+test_that("an ask at an idle tick parks the run as waiting until gptr_wait()", {
   skip_on_cran()
   skip_if_not_installed("later")
   withr::defer(bg_shutdown())
@@ -440,8 +444,7 @@ test_that("an ask at an idle tick parks the run as waiting until a blocking pump
   expect_identical(jobs$status[jobs$id == s$id], "waiting")
   with_seed_preserved(for (i in 1:5) later::run_now(0.06))
   expect_identical(s$status, "waiting")
-  reactor_pump(until = function() !(s$status %in% c("running", "waiting")), slice_ms = 50L,
-               timeout = 20)
+  gptr_wait(s, timeout = 20)
   expect_identical(s$status, "idle")
   expect_identical(e$z, 3)
   expect_identical(ui$log$method, "permission")
@@ -457,8 +460,7 @@ bg_resume_requests = function(call) {
   fake = gptr_fake_provider(list(call, "done"))
   s = peter("do it", model = fake, mode = "manual", envir = new.env(), background = TRUE)
   expect_true(bg_pump_until(function() identical(s$status, "waiting")))
-  reactor_pump(until = function() !(s$status %in% c("running", "waiting")), slice_ms = 50L,
-               timeout = 20)
+  gptr_wait(s, timeout = 20)
   expect_identical(s$status, "idle")
   expect_length(session_data(s)$queue$steer, 0L)
   fake$log$requests[[2L]]$messages
@@ -554,6 +556,68 @@ test_that("parking prints one waiting notice naming the action", {
     bg_pump_until(function() identical(s$status, "waiting"))
   })
   expect_length(grep("is waiting for approval: r", notes, fixed = TRUE), 1L)
+})
+
+test_that("a notice at an idle tick starts a row of its own below R's prompt", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  local_scripted_ui(answers = list())
+  local_gptr_options(background_tools = "idle", record = "off", verbose = 0L, quiet = FALSE)
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "v = 1")), "done"))
+  s = peter("set v", model = fake, mode = "manual", envir = new.env(), background = TRUE)
+  # live (FIX-21): `>   Background session <id> is waiting for approval: ...`, on R's prompt row
+  out = utils::capture.output(bg_pump_until(function() identical(s$status, "waiting")))
+  expect_identical(out[1:2], c("", paste0("Background session ", s$id,
+                                           " is waiting for approval: r: v = 1.")))
+})
+
+test_that("only gptr_wait() continues a waiting session; another call leaves it waiting", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  ui = local_scripted_ui(answers = list("y"))
+  local_gptr_options(background_tools = "idle", record = "off", verbose = 0L)
+  reply = list(tool = "r", input = list(code = "z = 3"))
+  fake = gptr_fake_provider(list(reply, reply, "done"))
+  e = new.env()
+  s = peter("set z", model = fake, mode = "manual", envir = e, background = TRUE)
+  expect_true(bg_pump_until(function() identical(s$status, "waiting")))
+  # the park notice names gptr_wait(gptr_last())
+  expect_identical(gptr_last()$id, s$id)
+  # live (FIX-21): a console turn resumed it and ended first; it then parked again at R's prompt
+  slow = gptr_fake_provider(function(req) list(text = "one two three four", chunk = 4L, gap = 0.1))
+  peter("other", model = slow, envir = new.env())
+  expect_identical(s$status, "waiting")
+  expect_length(fake$log$requests, 1L)
+  expect_identical(nrow(ui$log), 0L)
+  gptr_wait(s)
+  expect_identical(s$status, "idle")
+  expect_identical(e$z, 3)
+  expect_identical(ui$log$method, "permission")
+})
+
+test_that("the run a parked session resumes records the block of the call that started it", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  x = local_doc_e2e(list(fake_tool("r", code = "z = 3"), fake_tool("r", code = "z = 3"),
+                         fake_text("Done.")))
+  local_gptr_options(unsafe_no_permissions = FALSE, background_tools = "idle")
+  local_scripted_ui(answers = list("y"))
+  f = file.path(x$root, "bg.R")
+  # the idle ticks of R's prompt between the lines, as when they are run one at a time
+  writeLines(c("s = peter(\"Set z.\", mode = manual, background = TRUE)",
+               "while (identical(s$status, \"running\")) later::run_now(0.05)",
+               "gptr_wait(s)"), f)
+  e = doc_e2e_source(f)
+  expect_identical(e$z, 3)
+  # live (FIX-21): the transcript kept `## Run: aborted` and no code
+  rec = readLines(f)
+  expect_true("z = 3" %in% rec)
+  e2 = doc_e2e_source(f)
+  expect_identical(e2$z, 3)
+  expect_length(fake_requests(x$fake), 3L)
 })
 
 test_that("a waiting session that cannot continue is aborted and released", {

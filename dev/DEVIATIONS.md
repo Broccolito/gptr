@@ -7742,3 +7742,40 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-doc-export.R "a console transcript exports like a script, its later turns piping the
   handle" and the refusal list of "raw export refuses ambiguous calls and unresolved session
   semantics". Evidence: progress/fixes.md FIX-25.
+
+## D-261 - FIX-21 Live bg-1 and plan-execute paths (2026-10-26)
+- Rule (waiting sessions): only `gptr_wait()` of a waiting background session continues it
+  (`bg_continue()` resumes it before the wait pumps, `bg_resume()` superseding the ask); the
+  background sweep never resumes one, so another `peter()` call or a console turn leaves it
+  waiting. Formerly any blocking pump resumed it: live, a console turn ended before the resumed run
+  asked, which then parked again at R's prompt, its console note and model request sent twice. The
+  park notice says `gptr_wait(gptr_last()) continues it.`, and the console's notice of waiting
+  sessions ends `!!gptr::gptr_wait(session) asks`. Amends D-252's resume point.
+- Rule (recording): the resumed run keeps the document site of the call that started the session
+  (`bg_run_opts()` keeps `doc`; P21 Task 3 left it out), so its end writes that call's block; a
+  console transcript adds it as `s_<id> |> peter("<prompt>")` after the parked run's
+  `## Run: aborted` block. Formerly the work done after the approval was in no document, and a
+  script re-sourced asked the model again.
+- Rule (/exit): `/exit` names `gptr_wait(gptr_last())` for a running background session only when
+  it is the console's own, which `/exit` returns; for another one the row ends with
+  `gptr_jobs() lists it`. Formerly the hint named the console's session for any of them.
+- Rule (plan execute): an execute choice of the plan menu sets the session's mode and marks the
+  plan used, and queues nothing; its notice asks for `Go ahead.` as the next prompt (at R's prompt
+  `gptr_last() |> peter("Go ahead.")`), a turn of its own that the document records and that
+  carries the new `<mode>`. Formerly it queued "Go ahead with the plan above." and named
+  `gptr_wait(gptr_last())`: live, that run was in no transcript ("This turn starts from queued
+  input ..."), the chat sent the hint as a prompt unless typed as `!` code, and a go-ahead the
+  person typed ran the queued one after it, one more request. Amends sessions-12 and sessions-13.
+- Contract-visible: 04 sections 7.21, 15.5 IC-57 and 15.10 (the console's notices, `/exit`); 03
+  sections 6.2 and 6.8.5; `?gptr-background`, `?peter` (`mode`),
+  vignette("teams-and-background").
+- Tests: test-agent-background.R "only gptr_wait() continues a waiting session; another call
+  leaves it waiting", "an ask at an idle tick parks the run as waiting until gptr_wait()", "the
+  run a parked session resumes records the block of the call that started it", "bg_run_opts()
+  keeps the options a resumed run needs, never a frame or a snapshot";
+  test-console-repl.R "background sessions that wait for approval are announced once (IC-57)";
+  test-console-commands.R "/exit, /quit and /q end the REPL"; test-perm-plan.R "the execute menu
+  follows the plan run: mode, tools, nothing queued (6.8.5)", "the call the go-ahead notice names
+  runs the whole plan", "the go-ahead the person sends runs the plan once, in the mode the menu
+  chose".
+  Evidence: progress/fixes.md FIX-21.

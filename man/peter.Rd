@@ -24,7 +24,9 @@ The plan a \code{plan} run proposes goes once, as a \verb{<plan>} block, to the 
 \code{peter()} call from the same environment, within an hour and in another mode, whatever that
 call asks: a script runs the plan with \code{peter("Go ahead.", mode = auto)}. Another \code{peter()}
 call first, or a next call inside a loop or a run, discards it;
-\code{options(gptr.plan_handoff = FALSE)} turns the hand-off off.}
+\code{options(gptr.plan_handoff = FALSE)} turns the hand-off off. Interactively a \code{plan} run then
+asks whether to execute the plan: a mode chosen there is the session's, and its next prompt,
+such as \verb{Go ahead.}, runs the plan.}
 
 \item{skills, plugins, extensions}{Names (bare or quoted) of skills to preload, plugins and
 extensions to enable for this session; \code{extensions} also takes \verb{function(gptr)} factories and
