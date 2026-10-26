@@ -7706,11 +7706,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (`bg_run_opts()` keeps `doc`; P21 Task 3 left it out), so its end writes that call's block, a
   console transcript's `## Run: aborted` block of the parked run replaced. Formerly the work done
   after the approval was in no document, and a script re-sourced asked the model again.
-- Contract-visible: 04 sections 7.21, 15.5 IC-57 and 15.10 (the console's notices); 03 section 6.2;
-  `?gptr-background`, vignette("teams-and-background").
+- Rule (/exit): `/exit` names `gptr_wait(gptr_last())` for a running background session only when
+  it is the console's own, which `/exit` returns; for another one the row ends with
+  `gptr_jobs() lists it`. Formerly the hint named the console's session for any of them.
+- Contract-visible: 04 sections 7.21, 15.5 IC-57 and 15.10 (the console's notices, `/exit`); 03
+  section 6.2; `?gptr-background`, vignette("teams-and-background").
 - Tests: test-agent-background.R "only gptr_wait() continues a waiting session; another call
   leaves it waiting", "an ask at an idle tick parks the run as waiting until gptr_wait()", "the
   run a parked session resumes records the block of the call that started it", "bg_run_opts()
   keeps the options a resumed run needs, never a frame or a snapshot";
-  test-console-repl.R "background sessions that wait for approval are announced once (IC-57)".
+  test-console-repl.R "background sessions that wait for approval are announced once (IC-57)";
+  test-console-commands.R "/exit, /quit and /q end the REPL".
   Evidence: progress/fixes.md FIX-21.
