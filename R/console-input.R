@@ -41,7 +41,7 @@ console_compose = function(state, chars, now, enter_kind, complete, paste = FALS
   if (length(key) && nchar(key) < nchar(x) && !grepl("\n", x, fixed = TRUE)) {
     text = console_compose(list(draft = draft), substr(x, 1L, nchar(x) - nchar(key)), now,
                            enter_kind, complete)
-    return(console_compose(text$state, key, now, enter_kind, complete))
+    return(console_compose(list(draft = text$state$draft), key, now, enter_kind, complete))
   }
   if (x %in% c("\033[A", "\033OA")) return(out(if (!nzchar(draft)) list(type = "take_back")))
   if (identical(x, "\t")) {
