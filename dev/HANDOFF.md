@@ -7,7 +7,7 @@ and D-261 and the D-254 amendment are in `DEVIATIONS.md`:
 
 - CI-99 (test only): `tests/testthat/setup.R` blanks every host variable that `is_secret_name()`
   accepts, in place of a fixed list of 23, so a host secret such as `CLAUDE_CODE_MESSAGING_TOKEN`
-  no longer enters the test vault.
+  no longer enters the test vault; on a host with none (R-hub's ubuntu-gcc12) it blanks nothing.
 - CI-100: an installed gptr in a C locale decodes invalid bytes as U+FFFD, not as the text
   `<U+FFFD>` with a warning: `replacement_sub()` makes its bytes per call, the BOM pattern is
   PCRE's, and a test keeps every non-ASCII string of unknown encoding out of the namespace.
@@ -104,7 +104,9 @@ Open (found, not fixed):
 - A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).
 - The macOS row's time grows with its serial pty tests (CI-96).
 - A `process_jsonl` line's events still follow the abort flag (its adapters check the signal
-  themselves, 04 section 8.1), and an `inprocess` generator keeps its two calls after it (FIX-26).
+  themselves, 04 section 8.1), and an `inprocess` generator keeps its two calls after it; the
+  partial of an abort inside a unit holds what was emitted only for a normaliser that records a
+  delta before it emits it (FIX-26).
 - Hosted CI on 2026-10-25: Ubuntu's apt mirror stalled twice; after setups of 30 and 19 minutes, two
   Ubuntu jobs reached their 45-minute limit in R CMD check, and both passed on a re-run.
 - CI-93's and FIX-20's other Open notes stay in `progress/fixes.md`.

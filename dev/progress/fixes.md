@@ -5383,6 +5383,13 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   of 6 runs on a `ps` memory sample refused (`access_denied`, the load flake of FIX-15 to FIX-17)
   and passed 14 of 14 alternating main's setup.R and this one (7 each, PASS 92, load 13-87). Lint
   of both files clean; R/ and man/ unchanged.
+- Follow-up `dd6e37ae`, from R-hub's ubuntu-gcc12 check on #88 (R CMD check: "Running the tests in
+  'tests/testthat.R' failed" after FAIL 0 PASS 2642): on a host with no secret-looking variable,
+  `withr::local_envvar()` (withr 3.0.3) given no names saved every variable under a missing name,
+  and its teardown stopped with `is.named(envs) is not TRUE`. Red: `^auth-secrets$` under `env -i`
+  (only `HOME`, `PATH`, `LANG`, `LC_ALL`, `TMPDIR`, `NOT_CRAN` and `R_LIBS_USER` set) PASS 310, then
+  that error, rc 1. Fix: setup.R blanks the vault only when a variable matches. Green: the same run
+  PASS 310, rc 0, and PASS 310 with the host's variables; lint clean.
 - Deviations: none. Open: an authenticated proxy variable (`HTTPS_PROXY` with a password) is not
   secret-looking, so discovery still registers its password as `HTTPS_PROXY_PASSWORD`.
 
