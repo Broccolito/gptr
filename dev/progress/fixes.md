@@ -5511,3 +5511,29 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   151 FAIL 0 in UTF-8 and under `LC_ALL=C LANG=C`; R/ and tests/ unchanged.
 - Deviations: none. Open: what slowed or stopped pak's subprocess on the reporting Mac, and what
   removed its loaded copy of gptr before `load_all()`, is not in the report.
+
+## FIX-23 - A background job's clock stops when its process ends (2026-10-26, #PR)
+- Red (2550d099): test-bridge-sh.R "a job's clock stops when the reactor or kill() sees it end,
+  not at the first look", at 7e23ebd3's R code `bridge-sh` FAIL 2 PASS 287 SKIP 2: a job whose end
+  was seen 0.5 s after its start, the reactor then pumped 2 s more, read `peter$jobs()` seconds 5
+  (bound 1.5); a job killed 2 s before the look, with no pump between, read 2 (bound 1.34). This
+  was FIX-15 tools-11's open item.
+- Cause: `bridge_job_status()` stamped `.ended` at the first look that saw the process dead, and
+  only a caller looked (`status()`, `print()`, `read()`, `wait()`, the two job tables); nothing
+  looked when the process ended or at `kill()`, so the run time ran to that later look.
+- Fix (ac8336ad): `bridge_job_new()` registers a reactor task that asks the status every 200 ms
+  of any pump and is removed once the job no longer runs; `bridge_job_kill()` asks it after the
+  stop. The stamp is unchanged, so the clock stops within a pump slice of the end whenever gptr
+  pumps (a `peter()` run, the console, `wait()`) and at `kill()`. While a job runs, every pump
+  wakes at least every 200 ms. Without the task the first expectation fails again (5 s), without
+  the look in `kill()` the second (3 s).
+- Green: `bridge-sh` PASS 289 SKIP 2, 3 of 3 runs at load 23-29 on 16 cores. The 11 files
+  `bridge-*`, `proc-supervise`, `copy-bridge`, `http-reactor*`, `compaction-wait` (its check for
+  reactor tasks an earlier test left), `lint-rules` and `arch-layers`: FAIL 0 SKIP 14 PASS 1631 in
+  UTF-8 and under `LC_ALL=C LANG=C`, the skips Windows or Python provisioning only. Lint clean;
+  `document()` leaves man/ unchanged.
+- Deviations: none (the contract does not define `seconds`). Open: with no pump and no `kill()`
+  between the end and the first look (a job left at the plain R prompt) the first look still
+  stamps, an upper bound. processx 3.9.0's `get_end_time()` gives the exact end (measured: 0.32 s
+  for `sleep 0.3` read 2 s later) but needs the processx floor raised from 3.8.0 (architecture
+  section 9.1), the maintainer's call.
