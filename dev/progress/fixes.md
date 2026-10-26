@@ -5358,3 +5358,65 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: none. Open: why the writer exits early (2 of 1,356 Windows writer cases in CI, none
   in 6,583 measured); a recurrence now fails on `writer_failed` in about 5 s, the writer's stderr
   in the witness.
+
+## Task CI-102 - Installs from GitHub work; the README names two session errors (2026-10-26, #PR)
+- Report: on a Mac with R 4.4 (arm64), in one R session, `pak::pak("Broccolito/gptr")` stopped in
+  pak's `remote()` with `Subprocess is busy or cannot start`, then `library(devtools); load_all()`
+  in a clone stopped in `ns_s3_methods(package)` with
+  `cannot open file '<lib>/gptr/R/gptr.rdb': No such file or directory`, `<lib>` the system library
+  `/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library`.
+- Measured: runs 40291788064 and 40292515157 on claude/ci102-install-measure (only a workflow,
+  never merged, deleted after), each case a fresh job installing main 7e23ebd3 with the job's token
+  as `GITHUB_PAT`; macos-latest R 4.4.3 and R 4.6.1, ubuntu-latest and windows-latest R 4.6.1;
+  pak 0.11.1, remotes 2.5.0, devtools 2.5.2, pkgload 1.5.3. `pak::pak()` after a fresh pak took
+  42-99 s, `remotes::install_github()` 40-62 s, `devtools::install_github()` with remotes installed
+  36-58 s, each followed by `library(gptr)` 1.0.0 at 7e23ebd3 with no load error: 12 of 12. A
+  clone, its Imports and `devtools::load_all()` (1.9-2.6 s): 4 of 4 (the ubuntu job's attempt 1
+  hung 14 minutes in setup-r and was cancelled). pak fetched the 11.57 MB tarball, packaged it in
+  1.9-16.8 s and built it in 19.1-37.1 s. Locally (R 4.6.1, temporary libraries and user
+  directories) `pak::pak("Broccolito/gptr", lib = <tmp>)` took 31.2 s and `load_all()` in a clone
+  1.5 s.
+- Replicated, both errors word for word (run 40291788064, job "one session", macos-latest R 4.4.3,
+  the system library, each scenario one `Rscript` session): CRAN's gptr 0.7.0, `library(gptr)`,
+  `remove.packages("gptr")`, `library(devtools); load_all()` gave the report's `load_all()` error;
+  from a directory whose `.Rprofile` sleeps 7 s, `pak::pak("Broccolito/gptr")` gave the report's
+  pak error after 5.4 s, and the same call under `PKG_SUBPROCESS_TIMEOUT=60000` installed gptr.
+  The likely sequence, CRAN's 0.7.0, `library(gptr)`, `pak::pak("Broccolito/gptr")` (62.6 s, pak
+  warning that gptr is loaded) and `load_all()`, installs 1.0.0, and `load_all()` then stops in
+  `ns_s3_methods(package)` with `lazy-load database '<lib>/gptr/R/gptr.rdb' is corrupt`. With
+  1.0.0 loaded, `pak::pak()` (9.1 s) and `load_all()` (3.6 s) pass. Locally the removal, the slow
+  profile and the likely sequence gave the same results, and a pak install interrupted 20 s in,
+  while building, kept the old copy; the next `pak::pak()` installed it with no error (the runner's
+  two interrupts came after pak, building from its cache, had finished). pak's first subprocess
+  call took 0.9-1.1 s in three fresh sessions on the runner and 1.2 s locally.
+- Cause (the session, not the repository): pak 0.11.1's `remote()` runs pak's work in a background
+  R process (a callr `r_session`, which sources the working directory's `.Rprofile`), restarts it
+  when it is busy or dead, and waits `PKG_SUBPROCESS_TIMEOUT` (5000 ms) for it to be ready; one
+  still starting then, or dead while starting, gives the message, so anything that slows or stops
+  a new R process on that Mac does it. gptr never runs in that process. pkgload's `unload()` reads
+  the loaded namespace's `.__S3MethodsTable__.` through its lazy-load promise: "cannot open file"
+  means the copy that session loaded was removed (by `remove.packages()`, or by an install that
+  removed it: on macOS pkgdepends deletes the old directory, then moves the new one in), "is
+  corrupt" that a new version replaced it. Restarting R before `load_all()` avoids either.
+- Repository checked: DESCRIPTION has no `Remotes` or `Config/*` field for installers, and neither
+  pak nor remotes builds the vignettes `VignetteBuilder` names; `.Rbuildignore` keeps `dev/` out of
+  the package; no path is longer than 85 characters. Of the load-time expressions only
+  `proc_sweep()` touches processes, and it signals only processes that carry the `GPTR_PROC_`
+  marker of a gptr parent that is gone, or a recorded child at its exact creation time; pak's and
+  callr's subprocesses carry no marker. Locally, four stale records naming pak's live subprocess
+  and a callr `r_session` (creation time unknown or 5 s off, parent gone) were deleted by the sweep
+  of `library(gptr)`, which killed neither; pak worked after.
+- Also found: devtools 2.5.0 deprecated `devtools::install_github()` and `install_deps()` for
+  `pak::pak()` and no longer installs remotes: without it both stop with
+  `The package "remotes" is required.` (run 40291788064, 8 of 8 jobs; run 40292515157 installs
+  remotes first).
+- Fix (README.Rmd and README.md, the latter rendered by `dev/release/precompute.R --readme`, its
+  unrelated session line restored): one sentence after the install chunk says that if pak stops
+  with `Subprocess is busy or cannot start`, or a later call reports a missing or corrupt
+  `gptr.rdb`, restart R and install again before loading gptr, or use
+  `remotes::install_github("Broccolito/gptr")`.
+- Green: `dev/release/check-files.R readme` 0 problems; `dev/release/tests` filtered to
+  readme|precompute|docs PASS 81; `^proc-supervise$` (the sweep's tests) with `NOT_CRAN=true` PASS
+  151 FAIL 0 in UTF-8 and under `LC_ALL=C LANG=C`; R/ and tests/ unchanged.
+- Deviations: none. Open: what slowed or stopped pak's subprocess on the reporting Mac, and what
+  removed its loaded copy of gptr before `load_all()`, is not in the report.
