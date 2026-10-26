@@ -7689,7 +7689,12 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   the reactor delivers in the same iteration reaches the normaliser: the partial message holds what
   was emitted before the flag, and a body ending in that iteration ends `aborted`, not `stop`.
   Formerly only the watch task checked, after every delivery of the iteration.
+- Amended by FIX-26 (2026-10-26): `stream_emit()` runs `stream_over()` after each event of an HTTP
+  stream, which covers the check before each unit, and the transfer's failure runs it first, as its
+  end does. An abort set during one event of a unit (an SSE event, a whole `stream = "raw"` chunk)
+  ends the stream before the unit's next event, so a unit that also holds the end no longer ends
+  `stop`, and a failure delivered after the flag ends `aborted`, not `error`.
 - Contract-visible: none.
-- Tests: test-provider-registry.R "an abort flag set during an event ends the stream before the next
-  unit or the end"; test-provider-anthropic.R "end to end on the mock server: streaming, retry and
-  abort (skip on CRAN)". Evidence: progress/fixes.md Task CI-97.
+- Tests: test-provider-registry.R "an abort flag ends the stream before the next event, unit, end or
+  failure"; test-provider-anthropic.R "end to end on the mock server: streaming, retry and abort
+  (skip on CRAN)". Evidence: progress/fixes.md Task CI-97, FIX-26.
