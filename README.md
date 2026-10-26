@@ -14,12 +14,12 @@ is called from (at the console, your workspace). It works on the objects
 already in memory, so you do not save data to a file for it or rerun a
 script to rebuild state. What the agent creates, such as a fitted model,
 is an ordinary R object that you and the next prompt can use. The model
-gets a bounded view (`?gptr_egress`): your prompt, a workspace listing,
-a short description of each object you pass (class, dimensions, column
-types, a few values) and the output of the code it runs. R computes on
-the full object. In a measured run, three read-only tool calls on a 4
-GiB vector kept R's memory peak at 4.2 GiB; code that modifies an object
-follows R's usual copy-on-modify rules.
+gets a bounded view (`?gptr_egress` has the full list), for example your
+prompt, a workspace listing, a short description of each object you pass
+(class, dimensions, column types, a few values) and the output of the
+code it runs. R computes on the full object. In a measured run, three
+read-only tool calls on a 4 GiB vector kept R's memory peak at 4.2 GiB;
+code that modifies an object follows R's usual copy-on-modify rules.
 
 ## System 1 and System 2
 
@@ -29,10 +29,10 @@ continues. System 1 models are typed decision models: they return an R
 vector with one answer per input (logical for a yes/no question,
 character for `choices`, numeric for `levels`) with the probabilities
 attached. `peter()` picks System 1 or System 2 from the model you pass.
-System 2 runs on Anthropic, OpenAI, Google Gemini, OpenRouter and other
-OpenAI-compatible APIs, Azure, Bedrock, the Claude Code and Codex CLIs,
-and local Ollama models. System 1 runs on TypeSafe AI's Jev, or on Clef
-and Clef Flash through a local Ollama server.
+System 2 runs on Anthropic, OpenAI, Google Gemini, OpenRouter,
+OpenAI-compatible endpoints, Azure, Bedrock, the Claude Code and Codex
+CLIs, and local Ollama models. System 1 runs on TypeSafe AI's Jev, or on
+Clef and Clef Flash through a local Ollama server.
 
 ## Sessions as runnable documents
 
@@ -45,10 +45,10 @@ the record, and it runs. Rerun it without a model or API key, ask again
 with your own model (`replay = "live"`), or turn a recorded `.R` file
 into an ordinary R script with `gptr_export()`. Records are plain files
 you own; there is no gptr server, account or central store. Commit one
-with your code or publish it with a paper: anyone can rerun it to
-reproduce the analysis, or re-ask it with their own model to replicate
-it. The record is the basis gptr provides for reproducible scientific
-computing and research.
+with your code and data or publish it with a paper: anyone with the same
+data and packages can rerun it to reproduce the analysis, or re-ask it
+with their own model to replicate it. This record is gptr's basis for
+reproducible scientific computing and research.
 
 ## Installation
 
