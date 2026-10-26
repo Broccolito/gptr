@@ -23,9 +23,9 @@ input), historical (a dated record, kept as written), code (a script or helper) 
 | Path | Holds | Status |
 |---|---|---|
 | `README.md` | This index. | current |
-| `PROGRESS.md` | Implementation status: the current checkpoint (PRs #78-#83, 2026-10-25), status table, milestone ledger M0-M5, resume log, execution and recording rules, delivery boundary. | current |
-| `HANDOFF.md` | Working handoff: checkpoints newest first, from PRs #78-#83 (2026-10-25) back to 2026-10-11, then an undated summary. | current |
-| `DEVIATIONS.md` | Decision and deviation log from D-001 on, in id order. D-194 to D-199 and D-217 to D-219 are unused. | current |
+| `PROGRESS.md` | Implementation status: the current checkpoint (PR #88, 2026-10-26), status table, milestone ledger M0-M5, resume log, execution and recording rules, delivery boundary. | current |
+| `HANDOFF.md` | Working handoff: checkpoints newest first, from PR #88 (2026-10-26) back to 2026-10-11, then an undated summary. | current |
+| `DEVIATIONS.md` | Decision and deviation log from D-001 on, in id order. D-194 to D-199, D-217 to D-219, D-256, D-259 and D-260 are unused. | current |
 | `TESTING_PLAN.md` | Validation ledger: live, native and Windows gate results per checkpoint, the rules for recording a case, and the P26 live dogfood matrix (2026-10-17). `.github/workflows/Plan-gates.yaml` and `ci/check-plans.py` name it, so do not move or rename it. | current |
 | `TEST_FIRST_USE.md` | How to test the first-use provider picker with isolated settings. | reference |
 | `reset-user-settings.R` | Helper for that test: previews by default, moves `settings.json` aside with `--apply`, restores with `--restore`; never deletes the backup or CLI credentials. | code |
@@ -69,7 +69,7 @@ Task evidence written during implementation: what ran, what passed, and the comm
 | Path | Holds | Status |
 |---|---|---|
 | `P01.md`..`P26.md`, `P28.md` | One log per plan: task evidence and plan acceptance. P27 is recorded in `HANDOFF.md` and `PROGRESS.md`. | historical |
-| `fixes.md` | Follow-up fixes made outside plan tasks: FIX-1..FIX-20, PERF-1 and PERF-2, and the hosted-CI rounds from CI-15 on. | current |
+| `fixes.md` | Follow-up fixes made outside plan tasks: FIX-1..FIX-26, PERF-1 and PERF-2, and the hosted-CI rounds from CI-15 on. | current |
 | `infra.md` | Hosted CI, tooling and Linux portability: rounds CI-1 to CI-20. | historical |
 | `simplicity-plan.md`, `simplicity.md` | The D-135 simplicity pass and `peter()` rename: the execution plan, then one section per package. | historical |
 | `rename-inventory.md`, `rename/rename.py` | The D-135 rename survey and the mechanical rename script. | historical |
