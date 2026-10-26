@@ -5358,3 +5358,32 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: none. Open: why the writer exits early (2 of 1,356 Windows writer cases in CI, none
   in 6,583 measured); a recurrence now fails on `writer_failed` in about 5 s, the writer's stderr
   in the witness.
+
+## FIX-22 - A replayed script runs its own turn equal to a recorded steer (2026-10-26, #PR)
+- Red: FIX-16's open note under steer-doc-5. test-doc-replay.R "a replayed script runs its own
+  turn whose text a block recorded as a steer", on 7e23ebd3's R code: `^doc-replay$` FAIL 3 PASS
+  858. Three scripts whose run took the pause menu's steer "Add a legend" (recorded as
+  `## Steer: Add a legend`): a plain call; a `background = TRUE` call and `gptr_wait(s)`; a
+  `.run = FALSE` call, `gptr_step(s, Inf)` and a second recorded turn. Each was given the new last
+  line `s |> peter("Add a legend")` and sourced again (auto): no request and no block, only the
+  notice "A steer this script sends is already recorded in the replayed block...".
+- Cause: steer-doc-5 kept every replayed block's steer and follow-up texts as the session's notes,
+  keyed by block, until a live run, and `route_continue()` drops a pipe into an idle replayed
+  session whose text equals one (`replay_note_take()`). A script sends a recorded steer only while
+  the block's run is going, which needs a call that returns before its run ends; after any other
+  block the pipe is a new turn.
+- Fix (04e3788f): `doc_replay_doc()` gives the replay functions `running` (`background = TRUE` or
+  `.run = FALSE`). `replay_notes_add(s, doc)` takes back the equal queued items as before, then
+  keeps the rest as the session's notes, one vector in place of an earlier block's, only when
+  `running`; `gptr_wait()` clears a session's notes, as a live run does. IC-55 amended.
+- Green: `^doc-replay$` FAIL 0 PASS 861; the case alone PASS 6, and FAIL 1 without the `gptr_wait()`
+  line (the background script) or with notes added to an earlier block's (the stepped script). The
+  neighbours (`doc-*`, `gptr-sdk`, `session-object`, `gptr-gateway`, `agent-background`,
+  `subagent-team`, `utils-text`, `arch-layers`, `lint-rules`): FAIL 0 SKIP 2 PASS 4714 in UTF-8 and
+  under `LC_ALL=C LANG=C` (7e23ebd3: FAIL 0 SKIP 2 PASS 4708; the skips need repr), steer-doc-5's
+  and -5b's recorded-steer scripts still making no request. Lint of the 5 changed files clean;
+  `document()` no diff.
+- Deviations: D-255 (amends D-249). Open: a run sent to the background from the pause menu, or a
+  `gptr_wait(timeout =)` that returned before its run ended, let the script go on while the run
+  took steers; such a steer is sent again on replay (a new turn, or a queued steer), as the
+  document does not record which statement sent a steer.
