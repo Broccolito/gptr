@@ -96,7 +96,7 @@ model's running `r` result.
 compatibility forms (such as ligatures and full-width letters, with stringi installed) and quote,
 dash and special-space variants. It then changes only the matched text, unless the match starts or
 ends inside a ligature or between two letters with combining accents on one line; those lines are
-rewritten in normalised form. The printed result names the normalisation and shows the diff.
+rewritten in normalized form. The printed result names the normalization and shows the diff.
 Review a write or edit before executing it. For example:
 
 

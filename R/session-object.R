@@ -275,7 +275,7 @@ final_text = function(path) {
 #' Sessions are changed only through `peter()` and the `gptr_*()` verbs, so `$<-` and `[[<-`
 #' signal `gptr_error_readonly`. A team's `text` joins its members' reports under
 #' `### <name> (<model>)` headings, where a member that did not finish says
-#' `(ended with status <status>)`; a fan-out's is the named chr of its children's texts, printed
+#' `(ended with status <status>)`; a fan-out's is a named vector of its children's texts, printed
 #' under the same headings; and `value` is the named list of their values, until the team or
 #' fan-out is continued with [peter()]: then `text` is its own answer and `value` its own value
 #' once a turn designates one, while each member's stay at `x$<name>$text` and
