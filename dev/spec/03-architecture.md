@@ -1282,7 +1282,7 @@ a callback: the session moves to status `waiting` and the question is shown at i
 resumed run opens with a user message saying that the user is at the console (D-252, D-261). A SIGINT inside a later callback reaches the same
 calling handler, so the pause menu works [G3 p6]. Piping into the running session steers it; `gptr_wait()`,
 `gptr_cancel()` and `gptr_jobs()` operate on it. R tools of background runs execute at idle ticks (the console
-is busy for their duration; `options(gptr.background_tools = "wait")` defers them to `gptr_wait()`). Under
+is busy for their duration; `options(gptr.background_tools = "wait")` defers them to the next blocking gptr call). Under
 Rscript there is no idle console: background runs progress only inside blocking gptr calls. Support matrix
 documented: terminal R verified [G3 t9]; RStudio, Positron, Jupyter and Windows consoles unverified. Requires
 `later`; never used in examples or CRAN tests.

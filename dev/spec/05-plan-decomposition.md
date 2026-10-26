@@ -853,7 +853,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   tool `render` functions and `renderer` records (IC-69, IC-71); approval displays are sanitised and list every
   flagged call (IC-53); the `console` route and the REPL use `gptr_can_prompt()` (IC-43); the pause-menu steer and
   follow-up enter the queue with `source = "pause_menu"` and are recorded as `## Steer:`/`## Follow-up:` lines by
-  P15 (IC-49, IC-55); asks of background runs are shown at the next blocking call (IC-57); `!expr` notes within
+  P15 (IC-49, IC-55); asks of background runs are shown at the session's next `gptr_wait()` (IC-57, D-261); `!expr` notes within
   300 tokens (IC-73); the `.stdin` connection closes on `/exit` and on exit (IC-59); `frontend` selectable by
   setting (IC-69).
 - **Owns.** The five R files and tests.
@@ -1164,7 +1164,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
 - **Scope.** `agent-background.R`: registration of a running session with a `later`-driven pump (50 ms timer
   polling, no `later_fd`; a no-op while the reactor is on the stack, IC-57), idle-tick execution of R tools
   (`gptr.background_tools = "idle" | "wait"`, with a notice when a tool changed user bindings at an idle tick),
-  asks moving the session to `waiting` until the next blocking gptr call (IC-57), the pause menu's
+  asks moving the session to `waiting` until its next `gptr_wait()` (IC-57, D-261), the pause menu's
   `[b]ackground` option, session rows in the job table that P04's `gptr_jobs()` lists (IC-36), cleanup in
   `.onUnload`; documentation of the support matrix and the experimental status.
 - **Owns.** `agent-background.R` and its test.

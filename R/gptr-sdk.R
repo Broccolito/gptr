@@ -151,7 +151,8 @@ gptr_step = function(s, turns = 1L) {
 #' Starts idle sessions that have queued input, then pumps until no session is running or
 #' waiting, or `timeout` seconds have passed. Every session's checks (egress, replay, its model's
 #' provider and key) pass before any is started, so a refusal starts none. On timeout the sessions
-#' keep their `running` status and no condition is raised.
+#' keep their `running` status and no condition is raised. A background session waiting for
+#' approval continues only here, and you are asked as usual (see [gptr-background]).
 #'
 #' `timeout` limits reactor polling; it does not interrupt R code. Request preparation
 #' and synchronous callbacks finish their current step before the deadline is checked
