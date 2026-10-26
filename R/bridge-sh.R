@@ -613,10 +613,13 @@ bridge_job_kill = function(job) {
     kill_all(job$.proc)
     job$.proc$wait(1000L)
   }
+  bridge_job_status(job)
   invisible(job)
 }
 
 #' The gptr_job environment (04 5.10), kept in both job tables; private fields start with a dot.
+#' A reactor task looks at its status every 200 ms of any pump, and kill() looks, so its clock
+#' stops when the process ended, not at a later first look.
 #' This frame holds no user object, so its closures keep none alive (architecture 6.4 rule R1).
 #' @noRd
 bridge_job_new = function(id, label, name, proc, out_f, err_f) {
@@ -638,6 +641,7 @@ bridge_job_new = function(id, label, name, proc, out_f, err_f) {
   class(job) = "gptr_job"
   bridge_state$jobs[[id]] = job
   job_add("bg", id, name, pid = job$pid, stop = job$kill, status = job$status)
+  reactor_task(function() if (bridge_job_status(job) == "running") 0.2 else FALSE)
   job
 }
 
