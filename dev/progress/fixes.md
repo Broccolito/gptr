@@ -5359,7 +5359,34 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   in 6,583 measured); a recurrence now fails on `writer_failed` in about 5 s, the writer's stderr
   in the witness.
 
-## Task CI-100 - An installed gptr decodes invalid bytes as U+FFFD in a C locale (2026-10-26, #PR)
+## Task CI-99 - The test setup blanks every secret-looking host variable (2026-10-26, #88)
+- Red: CI-87's open note. setup.R blanked a fixed list of 23 variables, so a host secret with
+  another name (Claude Code's `CLAUDE_CODE_MESSAGING_TOKEN`) stayed set, and each later `peter()`
+  block registered it in the process vault (`session_new()` calls `secret_discover_env()`). A new
+  block in `test-auth-secrets.R` runs that discovery in an empty vault and expects no registered
+  name to be a variable of the environment. With main's setup.R and a fake
+  `CLAUDE_CODE_MESSAGING_TOKEN` in the environment, `^auth-secrets$` FAIL 1 PASS 309
+  (`test-auth-secrets.R:105`, the name `CLAUDE_CODE_MESSAGING_TOKEN` registered).
+- Cause (the test setup, not the package): the list repeated part of the package's rule,
+  `is_secret_name()` (`R/auth-secrets.R`), which discovery applies to every variable.
+- Fix (test only, 7a22db54): setup.R blanks every variable of the host that `is_secret_name()`
+  accepts, in place of the list, under the same `GPTR_LIVE_TESTS` guard and through the same
+  `withr::local_envvar()` into the teardown environment, so the run ends with the host's values
+  (after `devtools::test()` the environment equals the one before but for pkgload's
+  `PKGLOAD_PARENT_TEMPDIR`, as on main). The list's `AZURE_OPENAI_ENDPOINT` is a base URL, not a
+  secret, and is no longer blanked, like `AWS_REGION` and the `_BASE_URL` variables; the tests
+  that read it set it. A listed name the host does not set now stays unset instead of empty.
+- Green (`NOT_CRAN=true`, the fake token set): `^auth-secrets$` PASS 310 in UTF-8, under
+  `LC_ALL=C LANG=C` and without the token. Full suite `.` under `LC_ALL=C`: FAIL 0 SKIP 100 PASS
+  38059 (31.6 min). In UTF-8: FAIL 1 SKIP 66 PASS 38256 (35.6 min, load 15-89), the writer-timeout
+  case of `test-proc-writer-prototype.R:20` past its 30 s deadline; that file alone then failed 2
+  of 6 runs on a `ps` memory sample refused (`access_denied`, the load flake of FIX-15 to FIX-17)
+  and passed 14 of 14 alternating main's setup.R and this one (7 each, PASS 92, load 13-87). Lint
+  of both files clean; R/ and man/ unchanged.
+- Deviations: none. Open: an authenticated proxy variable (`HTTPS_PROXY` with a password) is not
+  secret-looking, so discovery still registers its password as `HTTPS_PROXY_PASSWORD`.
+
+## Task CI-100 - An installed gptr decodes invalid bytes as U+FFFD in a C locale (2026-10-26, #88)
 - Red: seen once, never investigated: with gptr installed from its tarball, `NOT_CRAN=true` and
   `LC_ALL=C LANG=C` (macOS), test-tool-read.R "the streaming reader decides the encoding on whole
   characters and decodes late bytes" failed and "a final newline ends the last line, as
@@ -5406,7 +5433,7 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   UTF-8-only skip). Lint clean (5 files); `document()` no diff.
 - Deviations: none; read already shows invalid bytes as U+FFFD. Open: none.
 
-## Task CI-101 - The Windows stdin drain reads liveness before the ready file (2026-10-26, #PR)
+## Task CI-101 - The Windows stdin drain reads liveness before the ready file (2026-10-26, #88)
 - Question (CI-88's open note): `proc_writer_drain()`'s startup branch read the writer's `ready`
   file and, only when it was absent, the writer's liveness. Can that order misreport a writer that
   died at startup: a false ready, a hang, or a lost failure?
@@ -5450,7 +5477,7 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: none (no bound, field or class changed). Open: none for CI-88's note; CI-98's early
   writer exit as above.
 
-## Task CI-102 - Installs from GitHub work; the README names two session errors (2026-10-26, #PR)
+## Task CI-102 - Installs from GitHub work; the README names two session errors (2026-10-26, #88)
 - Report: on a Mac with R 4.4 (arm64), in one R session, `pak::pak("Broccolito/gptr")` stopped in
   pak's `remote()` with `Subprocess is busy or cannot start`, then `library(devtools); load_all()`
   in a clone stopped in `ns_s3_methods(package)` with
@@ -5512,215 +5539,7 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: none. Open: what slowed or stopped pak's subprocess on the reporting Mac, and what
   removed its loaded copy of gptr before `load_all()`, is not in the report.
 
-## FIX-23 - A background job's clock stops when its process ends (2026-10-26, #PR)
-- Red (2550d099): test-bridge-sh.R "a job's clock stops when the reactor or kill() sees it end,
-  not at the first look", at 7e23ebd3's R code `bridge-sh` FAIL 2 PASS 287 SKIP 2: a job whose end
-  was seen 0.5 s after its start, the reactor then pumped 2 s more, read `peter$jobs()` seconds 5
-  (bound 1.5); a job killed 2 s before the look, with no pump between, read 2 (bound 1.34). This
-  was FIX-15 tools-11's open item.
-- Cause: `bridge_job_status()` stamped `.ended` at the first look that saw the process dead, and
-  only a caller looked (`status()`, `print()`, `read()`, `wait()`, the two job tables); nothing
-  looked when the process ended or at `kill()`, so the run time ran to that later look.
-- Fix (ac8336ad): `bridge_job_new()` registers a reactor task that asks the status every 200 ms
-  of any pump and is removed once the job no longer runs; `bridge_job_kill()` asks it after the
-  stop. The stamp is unchanged, so the clock stops within a pump slice of the end whenever gptr
-  pumps (a `peter()` run, the console, `wait()`) and at `kill()`. While a job runs, every pump
-  wakes at least every 200 ms. Without the task the first expectation fails again (5 s), without
-  the look in `kill()` the second (3 s).
-- Green: `bridge-sh` PASS 289 SKIP 2, 3 of 3 runs at load 23-29 on 16 cores. The 11 files
-  `bridge-*`, `proc-supervise`, `copy-bridge`, `http-reactor*`, `compaction-wait` (its check for
-  reactor tasks an earlier test left), `lint-rules` and `arch-layers`: FAIL 0 SKIP 14 PASS 1631 in
-  UTF-8 and under `LC_ALL=C LANG=C`, the skips Windows or Python provisioning only. Lint clean;
-  `document()` leaves man/ unchanged.
-- Deviations: none (the contract does not define `seconds`). Open: with no pump and no `kill()`
-  between the end and the first look (a job left at the plain R prompt) the first look still
-  stamps, an upper bound. processx 3.9.0's `get_end_time()` gives the exact end (measured: 0.32 s
-  for `sleep 0.3` read 2 s later) but needs the processx floor raised from 3.8.0 (architecture
-  section 9.1), the maintainer's call.
-
-## FIX-25 - gptr_export() exports a console transcript (2026-10-26, #PR)
-- Red: FIX-13's open note. On main 7e23ebd3, test-doc-export.R "a console transcript exports like a
-  script, its later turns piping the handle" (a two-turn console session recorded with the fake
-  provider, `doc_command_args()` mocked to a console) errors at its first `gptr_export()`: "Cannot
-  export this history: mixed or non-literal Peter expressions."; `^doc-export$` FAIL 1 PASS 232, in
-  UTF-8 and under `LC_ALL=C LANG=C`. The transcript holds `s_<hex> = peter("set x")`, then
-  `s_<hex> |> peter("triple it")`, each with its fresh block (IC-49).
-- Cause: R reads the pipe as `peter(s_<hex>, "triple it")`. `doc_export_chain()` took a first
-  argument that is not a `peter()` call for an ordinary argument, and a name is not a literal, so
-  the statement was refused as a mixed pipeline. The same held for `session |> peter("...")` after
-  `session = peter("...")` in a script, which the script-as-history vignette named as refused; a
-  session's later turns exported only within the statement that started it.
-- Fix (78115cfd): `doc_export_chain(expr, handles)` takes a first operand that names one of
-  `handles` as the pipeline's start, and `doc_export_lines()` passes the names that earlier Peter
-  statements of the document assigned (`bound`). The raw format comments the statement and keeps
-  its recorded R, the Peter format keeps it active, as for a script pipeline. A pipeline from any
-  other name (a data object) stays refused. `?gptr_export` and the vignette (.Rmd and .Rmd.orig)
-  say so.
-- Test (f9363c21): the console test exports the raw format (both statements commented; sourced, it
-  gives `x` 2 and `y` 6 and binds no handle) and the Peter format (both calls active, the recorded
-  code commented), with no model request beyond the session's 4; the refusal list gains
-  `s = x |> peter("one")`.
-- Green: `^doc-export$` PASS 237; `^doc-(export|blocks)$` PASS 621; `^doc-` FAIL 0 SKIP 2 PASS 2779
-  (the skips: {repr} is not installed); `^(arch-layers|lint-rules)$` PASS 90; each in UTF-8 and
-  under `LC_ALL=C LANG=C`. A transcript with a menu steer, one with an errored run (`## Run: error`)
-  and one with a second session also export (scratch tests, not committed). Lint clean (both
-  touched R files); `document()` changes only `man/gptr_export.Rd`; the release self-test
-  `gptr-release` fails only where main does (spelling and cran-comments, FAIL 2), its
-  script-as-history check passing.
-- Deviations: D-258. Open: a console turn with a context object (`s_<hex> |> peter("...", df)`)
-  stays refused, as the same call in a script is; an exported transcript keeps its replay note,
-  which names the source transcript.
-
-## FIX-26 - An HTTP stream checks the abort after each event and before a failure (2026-10-26, #PR)
-- Why: CI-97 (D-254) left two cases open: inside one unit (an SSE event, a whole `stream = "raw"`
-  chunk) the normaliser's events still followed each other after the flag, and a transfer failure
-  delivered in the iteration that set it ended `error`. Both are defects: 04 section 8.1 leaves
-  the flag of an HTTP stream to the glue (only `inprocess` generators and `process_jsonl` adapters
-  must check it), and P05's glue rule, as D-254 states it, ends a stream aborted during an event
-  `aborted`, with what was emitted before the flag. A run was not affected (`run_abort()` records
-  the partial itself and closes the request, `run_on_event()` drops later events); a direct
-  `provider_stream()` caller got `error`, or `done` with `stop` when the unit held the end.
-- Red (4e30dbc0, the test on origin/main 7e23ebd3's code): CI-97's block in
-  test-provider-registry.R, now "an abort flag ends the stream before the next event, unit, end or
-  failure", gains two streams: the flag set outside the events after a chunk, then `on_fail()`;
-  the flag set on `start`, whose SSE event also carries a delta. `^provider-registry$` FAIL 5 PASS
-  748: the failure ended `error` (line 616) and its transfer was not cancelled (625); the `start`
-  stream emitted its `text_delta` and had not ended (622-624). A scratch block in
-  test-provider-bedrock.R (not committed) played one Bedrock body as one raw chunk through
-  `local_scripted_wire()` (messageStart, deltas `a` and `b`, contentBlockStop, messageStop,
-  metadata), the flag set on the first delta: events start, text_start, text_delta, text_delta,
-  text_end and done, `stop_reason` `stop`, text `ab`.
-- Cause: `on_fail()` checked only `st$finished`; `stream_over()` ran before each chunk, each unit
-  and the end, never between the events of one normaliser push.
-- Fix: (1) a639bf22: `on_fail()` runs `stream_over()` first, as `on_done()` does. (2) 827789ab:
-  `stream_emit()` runs `stream_over()` after each event of an HTTP stream, so an abort set during
-  an event ends the stream inside the push with the normaliser's partial message; the unit's later
-  events are dropped, as after any terminal event. The loop over a chunk's units checks
-  `st$finished` again: between two units only the normaliser runs, and it reaches the caller only
-  through an event (a retry hint sets `st$hold`).
-- Green: `^provider-registry$` FAIL 0 PASS 753; with fix 1 alone FAIL 4 (the `start` stream), with
-  fix 2 alone FAIL 2 (the failure). The Bedrock scratch: events start, text_start, text_delta and
-  error, `stop_reason` `aborted`, text `a`. Neighbours
-  `^(provider-|http-|reactor|agent-run|agent-loop|stream|s1-|prompt-compact)` (26 files,
-  `NOT_CRAN=true`, SIGINT at its default) `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 6338 ]` in UTF-8 and
-  `[ FAIL 0 | WARN 0 | SKIP 3 | PASS 6336 ]` under `LC_ALL=C LANG=C`, two skips Windows-only, the
-  third needing a UTF-8 locale. Lint clean (2 files); `document()` changes nothing.
-- Deviations: D-254 (amended in place); contract-visible none. Open: a `process_jsonl` line's
-  events still follow the flag (its adapters check the signal themselves, 04 section 8.1; the glue
-  checks each line, D-018), and an `inprocess` generator keeps its two calls after the flag. The
-  partial of an abort inside a unit is the normaliser's state after the event that set the flag:
-  what was emitted, for a normaliser that records a delta before it emits it (the `adp_*` helpers
-  and the test adapter do).
-
-## FIX-24 - A replayed block's objects hold no part of the document (2026-10-26, #PR)
-- Red: FIX-13's open note. `gptr_source()` parsed the document with its srcrefs (a
-  `srcfilecopy()` of its lines, parse data kept) and evaluated each expression as `exprs[i]`, as
-  `source(keep.source = TRUE)` does, so R ran it with the expression's srcref current: a call an
-  object captures with `sys.call()` (rlang's `current_call()`, a ggplot2 scale's `call`) carried
-  that srcref, and a closure or a `function` call the block's code made carried one too. Each holds
-  the srcfile, the whole document's lines and parse data. The agent's run (`eval_r()`) evaluates
-  `exprs[[i]]` of its own code, so the calls it captures carry none and its closures keep a
-  `<gptr>` srcref of that code. The new test-doc-replay.R block "a replayed block makes its objects
-  without the document's srcrefs (FIX-24)" records a block through `peter()` and the fake provider
-  and replays it: on main (7e23ebd3) `^doc-replay$` `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 861 ]` (the
-  replayed call's srcref, its 4,787 serialized bytes against the original's 44, the closure's
-  srcfile holding the document's text). Commit 98ccbec0.
-- Measured (scratch, not committed; main and the fix installed, ggplot2 4.0.3, R 4.6.1): an agent
-  block builds a ggplot with `scale_x_continuous(labels = function(x) paste0(x, " mpg"))` in a
-  document with a 3,000-character comment. On main the replayed scale's `call` has a srcref, the
-  plot serializes 1,374,052 bytes against the original's 1,361,803, and `env_snap_size()` says
-  151,784 against 138,576.
-- Cause: the srcrefs serve one purpose, locating a `peter()` call: `doc_site_srcref()` reads the
-  srcref of the call or of a calling frame (contract 7.15), and `plan_in_loop()` its parse data.
-  Evaluating every expression without them fails `^doc-replay$` FAIL 82 (no site: fresh blocks run
-  live, stale blocks run their old code).
-- Fix (4e0443ff): `gptr_source()` parses the lines again with `keep.source = FALSE` and evaluates
-  an expression that names `peter()` (`all.names()`) as before, every other from that parse; its
-  help says so in place of "like `source()` with `keep.source = TRUE`". A function that wraps
-  `peter()` keeps its srcref, so a call inside it is still nested in the document.
-- Green: `^doc-replay$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 864 ]`. The files that call
-  `gptr_source()` or read srcrefs,
-  `^(doc-|northstar|mcp-recording|injection-e2e|secrets-e2e|perm-plan|arch-layers|lint-rules)`:
-  `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 3367 ]` in UTF-8 and the same under `LC_ALL=C LANG=C` (both
-  skips need {repr}). Lint clean (2 files); `document()` changes only `man/gptr_source.Rd`. The
-  ggplot above: the replayed scale's `call` has no srcref, the plot serializes 1,360,391 bytes and
-  `env_snap_size()` says 137,808. A scratch document locates a `peter()` call in a function it
-  defines as nested there and a top-level one as top-level, as on main.
-- Deviations: D-257. Open: replayed closures and `function` calls have no srcref where the agent's
-  keep a `<gptr>` one of its code, so the replayed plot is 1,412 bytes smaller serialized and 768
-  bytes by `env_snap_size()` (its scale's `call` field, 1,064 against 1,832); `identical()` ignores
-  srcrefs, and such a function prints its deparsed code. An expression that names `peter()` still
-  makes its objects with the document's srcrefs.
-
-## FIX-22 - A replayed script runs its own turn equal to a recorded steer (2026-10-26, #PR)
-- Red: FIX-16's open note under steer-doc-5. test-doc-replay.R "a replayed script runs its own
-  turn whose text a block recorded as a steer", on 7e23ebd3's R code: `^doc-replay$` FAIL 3 PASS
-  858. Three scripts whose run took the pause menu's steer "Add a legend" (recorded as
-  `## Steer: Add a legend`): a plain call; a `background = TRUE` call and `gptr_wait(s)`; a
-  `.run = FALSE` call, `gptr_step(s, Inf)` and a second recorded turn. Each was given the new last
-  line `s |> peter("Add a legend")` and sourced again (auto): no request and no block, only the
-  notice "A steer this script sends is already recorded in the replayed block...". Then a
-  verifier's: the stepped script without the second turn, ending in `gptr_step(s, Inf)` or in
-  `gptr_step(s, 1)` and `gptr_step(s, Inf)`, still skipped the new turn on da9a8fcd, its
-  `replay_notes` still "Add a legend"; with those two scripts in the case, FAIL 2 PASS 873.
-- Cause: steer-doc-5 kept every replayed block's steer and follow-up texts as the session's notes,
-  keyed by block, until a live run, and `route_continue()` drops a pipe into an idle replayed
-  session whose text equals one (`replay_note_take()`). A script sends a recorded steer only while
-  the block's run is going, which needs a call that returns before its run ends; after any other
-  block the pipe is a new turn. Then only `gptr_wait()` cleared the notes, not `gptr_step()`.
-- Fix (04e3788f, 8c800f92): `doc_replay_doc()` gives the replay functions `running`
-  (`background = TRUE` or `.run = FALSE`). `replay_notes_add(s, doc)` takes back the equal queued
-  items as before, then keeps the rest as the session's notes, one vector in place of an earlier
-  block's, only when `running`; `gptr_wait()` and `gptr_step(turns = Inf)` clear a session's notes,
-  as a live run does, and a step of fewer turns keeps them, as the run may still take a steer sent
-  between steps. Replay leaves no run to settle (the replayed session is idle, nothing queued) and
-  the helpers both verbs share do not know `turns`, so each verb clears them, one line. IC-55
-  amended.
-- Green: `^doc-replay$` FAIL 0 PASS 875 (da9a8fcd: 861 and the 14 new); the case PASS 10, and FAIL
-  1 without the `gptr_wait()` line (the background script) or with notes added to an earlier
-  block's (the stepped script with a second turn). The guard "replaying a stepped script does not
-  send a steer sent between its steps again" (a `.run = FALSE` call, `gptr_step(s, 1)`,
-  `gptr_steer()`, `gptr_step(s, Inf)`) passes on da9a8fcd and gives FAIL 3 when every
-  `gptr_step()` clears the notes. The neighbours (`doc-*`, `gptr-sdk`, `session-object`,
-  `gptr-gateway`, `agent-background`, `subagent-team`, `utils-text`, `arch-layers`, `lint-rules`):
-  FAIL 0 SKIP 2 PASS 4728 in UTF-8 and under `LC_ALL=C LANG=C` (da9a8fcd: PASS 4714; 7e23ebd3: 4708;
-  the skips need repr), steer-doc-5's and -5b's recorded-steer scripts still making no request.
-  Lint of the changed R and test files clean; `document()` no diff.
-- Deviations: D-255 (amends D-249). Open: a run sent to the background from the pause menu, or a
-  `gptr_wait(timeout =)` that returned before its run ended, let the script go on while the run
-  took steers; such a steer is sent again on replay (a new turn, or a queued steer), as the
-  document does not record which statement sent a steer. A `gptr_step(s, <n>)` that ended the run
-  keeps the notes, so a later turn equal to one is still skipped: replay does not count the run's
-  model turns.
-
-## Task CI-99 - The test setup blanks every secret-looking host variable (2026-10-26, #PR)
-- Red: CI-87's open note. setup.R blanked a fixed list of 23 variables, so a host secret with
-  another name (Claude Code's `CLAUDE_CODE_MESSAGING_TOKEN`) stayed set, and each later `peter()`
-  block registered it in the process vault (`session_new()` calls `secret_discover_env()`). A new
-  block in `test-auth-secrets.R` runs that discovery in an empty vault and expects no registered
-  name to be a variable of the environment. With main's setup.R and a fake
-  `CLAUDE_CODE_MESSAGING_TOKEN` in the environment, `^auth-secrets$` FAIL 1 PASS 309
-  (`test-auth-secrets.R:105`, the name `CLAUDE_CODE_MESSAGING_TOKEN` registered).
-- Cause (the test setup, not the package): the list repeated part of the package's rule,
-  `is_secret_name()` (`R/auth-secrets.R`), which discovery applies to every variable.
-- Fix (test only, 7a22db54): setup.R blanks every variable of the host that `is_secret_name()`
-  accepts, in place of the list, under the same `GPTR_LIVE_TESTS` guard and through the same
-  `withr::local_envvar()` into the teardown environment, so the run ends with the host's values
-  (after `devtools::test()` the environment equals the one before but for pkgload's
-  `PKGLOAD_PARENT_TEMPDIR`, as on main). The list's `AZURE_OPENAI_ENDPOINT` is a base URL, not a
-  secret, and is no longer blanked, like `AWS_REGION` and the `_BASE_URL` variables; the tests
-  that read it set it. A listed name the host does not set now stays unset instead of empty.
-- Green (`NOT_CRAN=true`, the fake token set): `^auth-secrets$` PASS 310 in UTF-8, under
-  `LC_ALL=C LANG=C` and without the token. Full suite `.` under `LC_ALL=C`: FAIL 0 SKIP 100 PASS
-  38059 (31.6 min). In UTF-8: FAIL 1 SKIP 66 PASS 38256 (35.6 min, load 15-89), the writer-timeout
-  case of `test-proc-writer-prototype.R:20` past its 30 s deadline; that file alone then failed 2
-  of 6 runs on a `ps` memory sample refused (`access_denied`, the load flake of FIX-15 to FIX-17)
-  and passed 14 of 14 alternating main's setup.R and this one (7 each, PASS 92, load 13-87). Lint
-  of both files clean; R/ and man/ unchanged.
-- Deviations: none. Open: an authenticated proxy variable (`HTTPS_PROXY` with a password) is not
-  secret-looking, so discovery still registers its password as `HTTPS_PROXY_PASSWORD`.
-
-## FIX-21 - Live bg-1 and plan-execute paths (2026-10-26, #PR)
+## FIX-21 - Live bg-1 and plan-execute paths (2026-10-26, #88)
 Scope: the two paths the cheat-sheet review left unexercised (HANDOFF, Open), driven as a person
 would in terminal R (`R --vanilla`) in a private tmux server at 100x40, keys typed one at a time,
 gptr's settings in temporary R_USER_* folders and `gptr_doc("session.R", format = "transcript")`
@@ -5862,3 +5681,184 @@ the driver, screens, events, transcripts and replays without a model are local, 
   binding stays, so codex's P1 block read `fuel_mpg_mean` before assigning it and its replay
   stopped; a console transcript does not record the console's starting mode (`peter(mode = plan)`),
   so a live re-ask plans in the configured mode.
+
+## FIX-22 - A replayed script runs its own turn equal to a recorded steer (2026-10-26, #88)
+- Red: FIX-16's open note under steer-doc-5. test-doc-replay.R "a replayed script runs its own
+  turn whose text a block recorded as a steer", on 7e23ebd3's R code: `^doc-replay$` FAIL 3 PASS
+  858. Three scripts whose run took the pause menu's steer "Add a legend" (recorded as
+  `## Steer: Add a legend`): a plain call; a `background = TRUE` call and `gptr_wait(s)`; a
+  `.run = FALSE` call, `gptr_step(s, Inf)` and a second recorded turn. Each was given the new last
+  line `s |> peter("Add a legend")` and sourced again (auto): no request and no block, only the
+  notice "A steer this script sends is already recorded in the replayed block...". Then a
+  verifier's: the stepped script without the second turn, ending in `gptr_step(s, Inf)` or in
+  `gptr_step(s, 1)` and `gptr_step(s, Inf)`, still skipped the new turn on da9a8fcd, its
+  `replay_notes` still "Add a legend"; with those two scripts in the case, FAIL 2 PASS 873.
+- Cause: steer-doc-5 kept every replayed block's steer and follow-up texts as the session's notes,
+  keyed by block, until a live run, and `route_continue()` drops a pipe into an idle replayed
+  session whose text equals one (`replay_note_take()`). A script sends a recorded steer only while
+  the block's run is going, which needs a call that returns before its run ends; after any other
+  block the pipe is a new turn. Then only `gptr_wait()` cleared the notes, not `gptr_step()`.
+- Fix (04e3788f, 8c800f92): `doc_replay_doc()` gives the replay functions `running`
+  (`background = TRUE` or `.run = FALSE`). `replay_notes_add(s, doc)` takes back the equal queued
+  items as before, then keeps the rest as the session's notes, one vector in place of an earlier
+  block's, only when `running`; `gptr_wait()` and `gptr_step(turns = Inf)` clear a session's notes,
+  as a live run does, and a step of fewer turns keeps them, as the run may still take a steer sent
+  between steps. Replay leaves no run to settle (the replayed session is idle, nothing queued) and
+  the helpers both verbs share do not know `turns`, so each verb clears them, one line. IC-55
+  amended.
+- Green: `^doc-replay$` FAIL 0 PASS 875 (da9a8fcd: 861 and the 14 new); the case PASS 10, and FAIL
+  1 without the `gptr_wait()` line (the background script) or with notes added to an earlier
+  block's (the stepped script with a second turn). The guard "replaying a stepped script does not
+  send a steer sent between its steps again" (a `.run = FALSE` call, `gptr_step(s, 1)`,
+  `gptr_steer()`, `gptr_step(s, Inf)`) passes on da9a8fcd and gives FAIL 3 when every
+  `gptr_step()` clears the notes. The neighbours (`doc-*`, `gptr-sdk`, `session-object`,
+  `gptr-gateway`, `agent-background`, `subagent-team`, `utils-text`, `arch-layers`, `lint-rules`):
+  FAIL 0 SKIP 2 PASS 4728 in UTF-8 and under `LC_ALL=C LANG=C` (da9a8fcd: PASS 4714; 7e23ebd3: 4708;
+  the skips need repr), steer-doc-5's and -5b's recorded-steer scripts still making no request.
+  Lint of the changed R and test files clean; `document()` no diff.
+- Deviations: D-255 (amends D-249). Open: a run sent to the background from the pause menu, or a
+  `gptr_wait(timeout =)` that returned before its run ended, let the script go on while the run
+  took steers; such a steer is sent again on replay (a new turn, or a queued steer), as the
+  document does not record which statement sent a steer. A `gptr_step(s, <n>)` that ended the run
+  keeps the notes, so a later turn equal to one is still skipped: replay does not count the run's
+  model turns.
+
+## FIX-23 - A background job's clock stops when its process ends (2026-10-26, #88)
+- Red (2550d099): test-bridge-sh.R "a job's clock stops when the reactor or kill() sees it end,
+  not at the first look", at 7e23ebd3's R code `bridge-sh` FAIL 2 PASS 287 SKIP 2: a job whose end
+  was seen 0.5 s after its start, the reactor then pumped 2 s more, read `peter$jobs()` seconds 5
+  (bound 1.5); a job killed 2 s before the look, with no pump between, read 2 (bound 1.34). This
+  was FIX-15 tools-11's open item.
+- Cause: `bridge_job_status()` stamped `.ended` at the first look that saw the process dead, and
+  only a caller looked (`status()`, `print()`, `read()`, `wait()`, the two job tables); nothing
+  looked when the process ended or at `kill()`, so the run time ran to that later look.
+- Fix (ac8336ad): `bridge_job_new()` registers a reactor task that asks the status every 200 ms
+  of any pump and is removed once the job no longer runs; `bridge_job_kill()` asks it after the
+  stop. The stamp is unchanged, so the clock stops within a pump slice of the end whenever gptr
+  pumps (a `peter()` run, the console, `wait()`) and at `kill()`. While a job runs, every pump
+  wakes at least every 200 ms. Without the task the first expectation fails again (5 s), without
+  the look in `kill()` the second (3 s).
+- Green: `bridge-sh` PASS 289 SKIP 2, 3 of 3 runs at load 23-29 on 16 cores. The 11 files
+  `bridge-*`, `proc-supervise`, `copy-bridge`, `http-reactor*`, `compaction-wait` (its check for
+  reactor tasks an earlier test left), `lint-rules` and `arch-layers`: FAIL 0 SKIP 14 PASS 1631 in
+  UTF-8 and under `LC_ALL=C LANG=C`, the skips Windows or Python provisioning only. Lint clean;
+  `document()` leaves man/ unchanged.
+- Deviations: none (the contract does not define `seconds`). Open: with no pump and no `kill()`
+  between the end and the first look (a job left at the plain R prompt) the first look still
+  stamps, an upper bound. processx 3.9.0's `get_end_time()` gives the exact end (measured: 0.32 s
+  for `sleep 0.3` read 2 s later) but needs the processx floor raised from 3.8.0 (architecture
+  section 9.1), the maintainer's call.
+
+## FIX-24 - A replayed block's objects hold no part of the document (2026-10-26, #88)
+- Red: FIX-13's open note. `gptr_source()` parsed the document with its srcrefs (a
+  `srcfilecopy()` of its lines, parse data kept) and evaluated each expression as `exprs[i]`, as
+  `source(keep.source = TRUE)` does, so R ran it with the expression's srcref current: a call an
+  object captures with `sys.call()` (rlang's `current_call()`, a ggplot2 scale's `call`) carried
+  that srcref, and a closure or a `function` call the block's code made carried one too. Each holds
+  the srcfile, the whole document's lines and parse data. The agent's run (`eval_r()`) evaluates
+  `exprs[[i]]` of its own code, so the calls it captures carry none and its closures keep a
+  `<gptr>` srcref of that code. The new test-doc-replay.R block "a replayed block makes its objects
+  without the document's srcrefs (FIX-24)" records a block through `peter()` and the fake provider
+  and replays it: on main (7e23ebd3) `^doc-replay$` `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 861 ]` (the
+  replayed call's srcref, its 4,787 serialized bytes against the original's 44, the closure's
+  srcfile holding the document's text). Commit 98ccbec0.
+- Measured (scratch, not committed; main and the fix installed, ggplot2 4.0.3, R 4.6.1): an agent
+  block builds a ggplot with `scale_x_continuous(labels = function(x) paste0(x, " mpg"))` in a
+  document with a 3,000-character comment. On main the replayed scale's `call` has a srcref, the
+  plot serializes 1,374,052 bytes against the original's 1,361,803, and `env_snap_size()` says
+  151,784 against 138,576.
+- Cause: the srcrefs serve one purpose, locating a `peter()` call: `doc_site_srcref()` reads the
+  srcref of the call or of a calling frame (contract 7.15), and `plan_in_loop()` its parse data.
+  Evaluating every expression without them fails `^doc-replay$` FAIL 82 (no site: fresh blocks run
+  live, stale blocks run their old code).
+- Fix (4e0443ff): `gptr_source()` parses the lines again with `keep.source = FALSE` and evaluates
+  an expression that names `peter()` (`all.names()`) as before, every other from that parse; its
+  help says so in place of "like `source()` with `keep.source = TRUE`". A function that wraps
+  `peter()` keeps its srcref, so a call inside it is still nested in the document.
+- Green: `^doc-replay$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 864 ]`. The files that call
+  `gptr_source()` or read srcrefs,
+  `^(doc-|northstar|mcp-recording|injection-e2e|secrets-e2e|perm-plan|arch-layers|lint-rules)`:
+  `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 3367 ]` in UTF-8 and the same under `LC_ALL=C LANG=C` (both
+  skips need {repr}). Lint clean (2 files); `document()` changes only `man/gptr_source.Rd`. The
+  ggplot above: the replayed scale's `call` has no srcref, the plot serializes 1,360,391 bytes and
+  `env_snap_size()` says 137,808. A scratch document locates a `peter()` call in a function it
+  defines as nested there and a top-level one as top-level, as on main.
+- Deviations: D-257. Open: replayed closures and `function` calls have no srcref where the agent's
+  keep a `<gptr>` one of its code, so the replayed plot is 1,412 bytes smaller serialized and 768
+  bytes by `env_snap_size()` (its scale's `call` field, 1,064 against 1,832); `identical()` ignores
+  srcrefs, and such a function prints its deparsed code. An expression that names `peter()` still
+  makes its objects with the document's srcrefs.
+
+## FIX-25 - gptr_export() exports a console transcript (2026-10-26, #88)
+- Red: FIX-13's open note. On main 7e23ebd3, test-doc-export.R "a console transcript exports like a
+  script, its later turns piping the handle" (a two-turn console session recorded with the fake
+  provider, `doc_command_args()` mocked to a console) errors at its first `gptr_export()`: "Cannot
+  export this history: mixed or non-literal Peter expressions."; `^doc-export$` FAIL 1 PASS 232, in
+  UTF-8 and under `LC_ALL=C LANG=C`. The transcript holds `s_<hex> = peter("set x")`, then
+  `s_<hex> |> peter("triple it")`, each with its fresh block (IC-49).
+- Cause: R reads the pipe as `peter(s_<hex>, "triple it")`. `doc_export_chain()` took a first
+  argument that is not a `peter()` call for an ordinary argument, and a name is not a literal, so
+  the statement was refused as a mixed pipeline. The same held for `session |> peter("...")` after
+  `session = peter("...")` in a script, which the script-as-history vignette named as refused; a
+  session's later turns exported only within the statement that started it.
+- Fix (78115cfd): `doc_export_chain(expr, handles)` takes a first operand that names one of
+  `handles` as the pipeline's start, and `doc_export_lines()` passes the names that earlier Peter
+  statements of the document assigned (`bound`). The raw format comments the statement and keeps
+  its recorded R, the Peter format keeps it active, as for a script pipeline. A pipeline from any
+  other name (a data object) stays refused. `?gptr_export` and the vignette (.Rmd and .Rmd.orig)
+  say so.
+- Test (f9363c21): the console test exports the raw format (both statements commented; sourced, it
+  gives `x` 2 and `y` 6 and binds no handle) and the Peter format (both calls active, the recorded
+  code commented), with no model request beyond the session's 4; the refusal list gains
+  `s = x |> peter("one")`.
+- Green: `^doc-export$` PASS 237; `^doc-(export|blocks)$` PASS 621; `^doc-` FAIL 0 SKIP 2 PASS 2779
+  (the skips: {repr} is not installed); `^(arch-layers|lint-rules)$` PASS 90; each in UTF-8 and
+  under `LC_ALL=C LANG=C`. A transcript with a menu steer, one with an errored run (`## Run: error`)
+  and one with a second session also export (scratch tests, not committed). Lint clean (both
+  touched R files); `document()` changes only `man/gptr_export.Rd`; the release self-test
+  `gptr-release` fails only where main does (spelling and cran-comments, FAIL 2), its
+  script-as-history check passing.
+- Deviations: D-258. Open: a console turn with a context object (`s_<hex> |> peter("...", df)`)
+  stays refused, as the same call in a script is; an exported transcript keeps its replay note,
+  which names the source transcript.
+
+## FIX-26 - An HTTP stream checks the abort after each event and before a failure (2026-10-26, #88)
+- Why: CI-97 (D-254) left two cases open: inside one unit (an SSE event, a whole `stream = "raw"`
+  chunk) the normaliser's events still followed each other after the flag, and a transfer failure
+  delivered in the iteration that set it ended `error`. Both are defects: 04 section 8.1 leaves
+  the flag of an HTTP stream to the glue (only `inprocess` generators and `process_jsonl` adapters
+  must check it), and P05's glue rule, as D-254 states it, ends a stream aborted during an event
+  `aborted`, with what was emitted before the flag. A run was not affected (`run_abort()` records
+  the partial itself and closes the request, `run_on_event()` drops later events); a direct
+  `provider_stream()` caller got `error`, or `done` with `stop` when the unit held the end.
+- Red (4e30dbc0, the test on origin/main 7e23ebd3's code): CI-97's block in
+  test-provider-registry.R, now "an abort flag ends the stream before the next event, unit, end or
+  failure", gains two streams: the flag set outside the events after a chunk, then `on_fail()`;
+  the flag set on `start`, whose SSE event also carries a delta. `^provider-registry$` FAIL 5 PASS
+  748: the failure ended `error` (line 616) and its transfer was not cancelled (625); the `start`
+  stream emitted its `text_delta` and had not ended (622-624). A scratch block in
+  test-provider-bedrock.R (not committed) played one Bedrock body as one raw chunk through
+  `local_scripted_wire()` (messageStart, deltas `a` and `b`, contentBlockStop, messageStop,
+  metadata), the flag set on the first delta: events start, text_start, text_delta, text_delta,
+  text_end and done, `stop_reason` `stop`, text `ab`.
+- Cause: `on_fail()` checked only `st$finished`; `stream_over()` ran before each chunk, each unit
+  and the end, never between the events of one normaliser push.
+- Fix: (1) a639bf22: `on_fail()` runs `stream_over()` first, as `on_done()` does. (2) 827789ab:
+  `stream_emit()` runs `stream_over()` after each event of an HTTP stream, so an abort set during
+  an event ends the stream inside the push with the normaliser's partial message; the unit's later
+  events are dropped, as after any terminal event. The loop over a chunk's units checks
+  `st$finished` again: between two units only the normaliser runs, and it reaches the caller only
+  through an event (a retry hint sets `st$hold`).
+- Green: `^provider-registry$` FAIL 0 PASS 753; with fix 1 alone FAIL 4 (the `start` stream), with
+  fix 2 alone FAIL 2 (the failure). The Bedrock scratch: events start, text_start, text_delta and
+  error, `stop_reason` `aborted`, text `a`. Neighbours
+  `^(provider-|http-|reactor|agent-run|agent-loop|stream|s1-|prompt-compact)` (26 files,
+  `NOT_CRAN=true`, SIGINT at its default) `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 6338 ]` in UTF-8 and
+  `[ FAIL 0 | WARN 0 | SKIP 3 | PASS 6336 ]` under `LC_ALL=C LANG=C`, two skips Windows-only, the
+  third needing a UTF-8 locale. Lint clean (2 files); `document()` changes nothing.
+- Deviations: D-254 (amended in place); contract-visible none. Open: a `process_jsonl` line's
+  events still follow the flag (its adapters check the signal themselves, 04 section 8.1; the glue
+  checks each line, D-018), and an `inprocess` generator keeps its two calls after the flag. The
+  partial of an abort inside a unit is the normaliser's state after the event that set the flag:
+  what was emitted, for a normaliser that records a delta before it emits it (the `adp_*` helpers
+  and the test adapter do).
