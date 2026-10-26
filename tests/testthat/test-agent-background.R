@@ -373,8 +373,10 @@ test_that("gptr_cancel() aborts a background session and releases its job", {
   expect_identical(s$status, "aborted")
   local_gptr_options(quiet = FALSE)
   # on a row of its own at R's prompt, in the console's words, named by its prompt (visual round 3)
-  expect_message(expect_true(bg_pump_until(function() !bg_has(s$id))),
-                 "^\nbackground session 'long task' aborted", class = "gptr_message_notice")
+  out = utils::capture.output(expect_message(expect_true(bg_pump_until(function() !bg_has(s$id))),
+                                             "^background session 'long task' aborted",
+                                             class = "gptr_message_notice"))
+  expect_identical(out, "")
   expect_false(s$id %in% gptr_jobs()$id)
 })
 
@@ -554,6 +556,20 @@ test_that("parking prints one waiting notice naming the action", {
     bg_pump_until(function() identical(s$status, "waiting"))
   })
   expect_length(grep("is waiting for approval: r", notes, fixed = TRUE), 1L)
+})
+
+test_that("a notice at an idle tick starts a row of its own below R's prompt", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  local_scripted_ui(answers = list())
+  local_gptr_options(background_tools = "idle", record = "off", verbose = 0L, quiet = FALSE)
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "v = 1")), "done"))
+  s = peter("set v", model = fake, mode = "manual", envir = new.env(), background = TRUE)
+  # live (FIX-21): `>   Background session <id> is waiting for approval: ...`, on R's prompt row
+  out = utils::capture.output(bg_pump_until(function() identical(s$status, "waiting")))
+  expect_identical(out[1:2], c("", paste0("Background session ", s$id,
+                                           " is waiting for approval: r: v = 1.")))
 })
 
 test_that("a waiting session that cannot continue is aborted and released", {

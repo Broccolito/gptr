@@ -370,7 +370,7 @@ bg_stop = function(id) {
 }
 
 #' Forget a background session: UI wrappers, live handle, job row, strong reference; with
-#' `notice`, tell the idle console how it settled, on a row of its own after R's prompt, dim in the
+#' `notice`, tell the idle console how it settled (on a row of its own, bg_callback()), dim in the
 #' console's words, the session named by its first prompt: `background session '<prompt>' done`, or
 #' its status and reason
 #' @noRd
@@ -391,7 +391,7 @@ bg_release = function(id, notice = FALSE) {
     why = if (length(d$reason) && nzchar(d$reason)) paste0(sym$sep, bg_cut(d$reason, 120L))
     said = paste0("background session", if (nzchar(name %||% "")) paste0(" '", name, "'"), " ",
                   if (identical(d$status, "idle")) "done" else d$status, why)
-    gptr_inform(paste0("\n", sym$dim(said)), "notice")
+    gptr_inform(sym$dim(said), "notice")
   }
   invisible(TRUE)
 }
@@ -430,7 +430,8 @@ bg_guard = function(event, expr) {
 #' The later callback: an idle tick, or bookkeeping only while a reactor pump is on the stack
 #' (IC-57). It re-arms on exit, even after an interrupt, and guards tick and sweep separately, so
 #' a failing tick never skips the sweep that stops a run with a recorded ask. Waiting sessions
-#' resume only inside a blocking pump, outside an idle tick and while no tool executes
+#' resume only inside a blocking pump, outside an idle tick and while no tool executes. At an idle
+#' tick the cursor is on R's prompt row, so the tick's first notice starts a row of its own
 #' @noRd
 bg_callback = function() {
   st = bg_state()
@@ -440,9 +441,15 @@ bg_callback = function() {
   if (!is.null(pending)) pending()
   on.exit(bg_ensure_pump(), add = TRUE)
   idle = reactor_depth() == 0L
-  if (idle) bg_guard("tick", bg_tick())
-  resume = !idle && !bg_ticking() && is.null(run_current())
-  bg_guard("sweep", bg_sweep(idle, resume))
+  row = idle
+  withCallingHandlers({
+    if (idle) bg_guard("tick", bg_tick())
+    resume = !idle && !bg_ticking() && is.null(run_current())
+    bg_guard("sweep", bg_sweep(idle, resume))
+  }, gptr_message = function(m) {
+    if (row) cat("\n")
+    row <<- FALSE
+  })
   invisible(NULL)
 }
 
