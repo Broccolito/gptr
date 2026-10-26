@@ -97,7 +97,8 @@ local({
     # every variable that session start would register as a secret (secret_discover_env())
     keys = names(Sys.getenv())
     keys = keys[is_secret_name(keys)]
-    withr::local_envvar(
+    # given no names, withr 3.0.3 saves every variable and its teardown stops
+    if (length(keys)) withr::local_envvar(
       stats::setNames(rep("", length(keys)), keys),
       .local_envir = testthat::teardown_env()
     )
