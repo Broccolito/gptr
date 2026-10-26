@@ -1976,6 +1976,32 @@ test_that("gptr_source() skips a regenerated block's old code below a #line comm
   expect_null(getOption("gptr.replay"))
 })
 
+test_that("a replayed block makes its objects without the document's srcrefs (FIX-24)", {
+  # a ggplot-like object: a call captured with sys.call(), as rlang captures a scale's, and a
+  # closure, as a scale keeps its labels function
+  code = c("g = function() sys.call()", "p = list(call = g(), labels = function(x) x + 1)")
+  x = local_doc_e2e(list(fake_tool("r", code = paste(code, collapse = "\n")),
+                         fake_text("Made p.")))
+  f = file.path(x$root, "analysis.R")
+  writeLines(c("# FIX-24: a line only the document holds", "s = peter(\"Make p\")"), f)
+  first = new.env(parent = globalenv())
+  gptr_source(f, replay = "auto", envir = first)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+  again = new.env(parent = globalenv())
+  out = gptr_source(f, replay = "replay", envir = again)
+  expect_identical(out$action, "replayed")
+  expect_length(fake_requests(x$fake), 2L)
+  doc_text = function(obj) {
+    any(grepl("FIX-24", attr(attr(obj, "srcref"), "srcfile")$lines, fixed = TRUE))
+  }
+  expect_null(attr(first$p$call, "srcref"))
+  expect_null(attr(again$p$call, "srcref"))
+  expect_identical(length(serialize(again$p$call, NULL)), length(serialize(first$p$call, NULL)))
+  expect_false(doc_text(first$p$labels))
+  expect_false(doc_text(again$p$labels))
+  expect_identical(again$p$labels(1), 2)
+})
+
 # ---- end to end through peter() and the fake provider (05 P15 acceptance 2-6) --------------------
 
 # A peter() call built at run time, as the console and Jupyter evaluate it: the call carries no
