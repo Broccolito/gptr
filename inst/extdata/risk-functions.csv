@@ -531,7 +531,7 @@
 "base","setwd",2,"session","",""
 "base","shQuote",0,"read","",""
 "base","shell",3,"process","","literal commands are classified with risk-commands.csv"
-"base","shell.exec",3,"process","","literal commands are classified with risk-commands.csv"
+"base","shell.exec",3,"process","","a file the code computes is dynamic"
 "base","sign",0,"read","",""
 "base","signif",0,"read","",""
 "base","simpleCondition",0,"read","",""

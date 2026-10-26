@@ -2491,6 +2491,12 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
         }
       }
     }
+    if (name == "shell.exec") {
+      x = risk_arg(a, "file", 1L)
+      if (is.null(x) || !is.null(risk_fold(x))) return(FALSE)
+      add(ctx, paste0(label, " (a file the code computes)"), name, 3L, "dynamic")
+      return(TRUE)
+    }
     code = risk_code_args[[name]]
     if (!is.null(code) && (name != "run" || row$package == "processx")) {
       if (row$category == "process") add_tg("process", name)
