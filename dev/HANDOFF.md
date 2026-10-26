@@ -68,11 +68,15 @@ and its man pages, the cheat sheet, NEWS, vignettes, `inst/WORDLIST` and `dev/`,
 - Hosted CI: PR #88's 23 checks pass, the token benchmark on a re-run after Ubuntu's apt mirror
   stalled it, and so do main's three workflows on the merge `c0dd52b7`, R-CMD-check after the same
   re-run.
-- win-builder: the tarball built from `e1b6ca59` (sha256 `92c94f9e`) went to R-devel, R-release and
-  R-oldrelease on 2026-10-26. R-release (4.6.1) and R-oldrelease (4.5.3) built the Windows binary,
-  but their checks stopped inside "checking CRAN incoming feasibility" without a message (30 s and
-  91 s), a step that passes locally with network access in 15 s; both were resubmitted. R-devel has
-  not reported yet.
+- win-builder, with the tarball built from `e1b6ca59` (sha256 `92c94f9e`): R-release (4.6.1) and
+  R-oldrelease (4.5.3) give Status OK and no NOTE, the whole checks 501 s and 693 s. Their first
+  checks stopped inside "checking CRAN incoming feasibility" without a message (30 s and 91 s), on
+  win-builder's side: the re-runs passed that step in 12 s and 18 s, and it passes locally with
+  network access in 15 s. The R-devel queue did not run on 2026-10-26 (13 uploads waiting at 12:32,
+  gptr's among them), so R-devel on Windows is R-hub's check.
+- `pak::pak("Broccolito/gptr")` installs `main` (`c0dd52b7`) into the maintainer's R 4.6.1 user
+  library in 31 s; a fresh R loads it and runs `peter()` and `example(gptr_wait)` with the scripted
+  model.
 
 Open (found, not fixed):
 

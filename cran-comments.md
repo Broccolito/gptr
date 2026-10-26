@@ -91,8 +91,8 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   (`NOT_CRAN=false`, CRAN's timing thresholds), each failing on any NOTE and over its time
   budget: Ubuntu R-devel (480 s) and Windows release with both manuals (600 s).
 * R-hub: Windows R-devel and R-release, and Ubuntu R-devel with gcc 12.
-* win-builder: R-devel (2026-10-24 r90762), R-release (4.6.1) and R-oldrelease (4.5.3); the
-  whole check took 525 s, 516 s and 366 s.
+* win-builder: R-release (4.6.1) and R-oldrelease (4.5.3); the whole check took 501 s and 693 s.
+  Its R-devel queue did not run on 2026-10-26, so R-devel on Windows is the R-hub check above.
 
 ## R CMD check results
 
