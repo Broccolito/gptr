@@ -49,6 +49,10 @@ install.packages("gptr")
 pak::pak("Broccolito/gptr")
 ```
 
+If pak stops with `Subprocess is busy or cannot start`, or a later call reports a missing or
+corrupt `gptr.rdb`, restart R and install again before loading gptr, or use
+`remotes::install_github("Broccolito/gptr")`.
+
 This README documents gptr 1.0; the 0.7 API is different, so check that `packageVersion("gptr")`
 is at least 1.0.0. No model server or CLI is required for the offline examples below.
 
