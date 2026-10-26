@@ -1224,7 +1224,7 @@ test_that("a direct R line using a name an undone step or an off line made is sw
 
 test_that("a rewind switches dependent direct R lines off, says which, and a redo back on", {
   proj = local_project()
-  local_gptr_options(record = "auto")
+  local_gptr_options(record = "auto", quiet = FALSE)
   doc_project_transcript(".gptr/transcripts/t.R")
   t = file.path(proj, ".gptr", "transcripts", "t.R")
   dir.create(dirname(t), recursive = TRUE)
@@ -1255,6 +1255,7 @@ test_that("console /undo, /redo and /retry keep the transcript sourceable (IC-49
   x = local_doc_e2e(list(fake_tool("r", code = "dat = 1:3"), fake_text("Made dat."),
                          fake_tool("r", code = "fit = dat * 2"), fake_text("Made fit."),
                          fake_tool("r", code = "fit = dat * 3"), fake_text("Made it again.")))
+  local_gptr_options(quiet = FALSE)
   testthat::local_mocked_bindings(doc_command_args = function() "R")
   local_no_fd0()
   t = file.path(x$root, ".gptr", "transcripts", "t.R")

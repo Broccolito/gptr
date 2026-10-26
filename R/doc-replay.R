@@ -820,7 +820,8 @@ doc_ancestors = function(ents, id) {
 }
 
 #' session_tree: the blocks of turns a rewind abandoned become inert, the blocks of turns a redo
-#' brings back become live again, and console transcripts get a `# /rewind` line (G7 3.8, 4.4).
+#' brings back become live again, and console transcripts get a `# /rewind` line (G7 3.8, 4.4)
+#' and switch their direct R lines off or back on (doc_transcript_rescan()).
 #' Only records that wrote a live block choose blocks: the hook's own `undone` entries sit under
 #' the rewind target (P16 appends there), so a later branch from that target holds them, and
 #' entering that branch must not revive the block its turn never wrote.
@@ -877,16 +878,19 @@ doc_on_session_tree = function(event, ctx) {
                 " not restored (session log ", event$to %||% "start", ")")
   tdocs = unique(vapply(Filter(function(e) identical(field(e, "backend"), "transcript"), recs),
                         field, "", name = "doc"))
-  for (doc in tdocs[nzchar(tdocs)]) doc_transcript_append(doc_abs(doc), note, session = s)
+  for (doc in tdocs[nzchar(tdocs)]) {
+    doc_transcript_append(doc_abs(doc), note, session = s)
+    doc_transcript_rescan(doc_abs(doc), s)
+  }
   NULL
 }
 
 #' console:direct (P14, after the line ran): a direct R line (`!expr`) of the console enters the
 #' transcript under `# direct R (no model)` with its printed output as `#>` lines (IC-49,
-#' contract 11.5 transcript row). A line whose `status` is not "ok" (an error, interrupt or
-#' timeout; no status is a line that ran) is kept inert (`#~ `, no output) under
-#' `# direct R (no model; <status>)`, so the transcript still re-sources as one session (IC-49)
-#' and an interrupted computation does not run again
+#' contract 11.5 transcript row), the header naming what it created (`created=`). A line whose
+#' `status` is not "ok" (an error, interrupt or timeout; no status is a line that ran) is kept
+#' inert (`#~ `, no output) under `# direct R (no model; <status>)`, so the transcript still
+#' re-sources as one session (IC-49) and an interrupted computation does not run again
 #' @noRd
 doc_on_console_direct = function(event, ctx) {
   data = event$data %||% list()
@@ -894,14 +898,116 @@ doc_on_console_direct = function(event, ctx) {
   if (!length(code) || !nzchar(trimws(code))) return(NULL)
   code = strsplit(code, "\n", fixed = TRUE)[[1L]]
   st = data$status
+  created = as_utf8(as.character(data$created %||% character()))
   lines = if (is.null(st) || identical(st, "ok")) {
-    c("", "# direct R (no model)", code,
+    c("", doc_direct_header(NULL, created), code,
       doc_output_lines(as.character(data$output %||% character())))
   } else {
     named = rlang::is_string(st) && grepl("^[a-z_]{1,20}\\z", st, perl = TRUE)
-    c("", paste0("# direct R (no model; ", if (named) st else "failed", ")"), paste0("#~ ", code))
+    c("", doc_direct_header(if (named) st else "failed", created), paste0("#~ ", code))
   }
   doc_console_append(lines, ctx$session)
+}
+
+doc_re_direct = "^# direct R \\(no model(?:; (.*?))?\\)(?: (.*))?$"
+# the first line of what the console appends after a direct R line (another one, a command, a
+# session header, a turn's statement or block), which ends that line's section
+doc_re_entry = paste0("^(# (direct R \\(|/|gptr session |machine log: |>>> gptr:)|",
+                      "(#~ )?s_[0-9a-f]{6} (=|[|]>) peter\\()")
+
+#' The header of a direct R line: `# direct R (no model)`, `; <reason>` inside the parentheses (a
+#' status, `uses undone <names>`), then `created=<names>` when it created any
+#' @noRd
+doc_direct_header = function(reason = NULL, created = character()) {
+  kv = if (length(created)) {
+    paste0(" ", doc_format_kv(list(created = paste(created, collapse = ","))))
+  }
+  paste0("# direct R (no model", if (length(reason)) paste0("; ", reason), ")", kv)
+}
+
+#' The names of a `created=` value
+#' @noRd
+doc_created = function(value) {
+  if (!rlang::is_string(value)) return(character())
+  x = strsplit(value, ",", fixed = TRUE)[[1L]]
+  x[nzchar(x)]
+}
+
+#' A console transcript's direct R lines switched off or back on (IC-49, D-264): read top to
+#' bottom, each block and direct R line makes the names of its `created=` key, on or off (an
+#' undone block; a line that failed or is switched off); a direct R line that uses a name (by
+#' all.names()) whose last maker is off, other than one it created itself, is switched off, every
+#' line under its header prefixed `#~ `, and comes back on when no such name is left. Returns
+#' list(lines, changed), `changed` holding list(line, on, names) per header switched.
+#' @noRd
+doc_direct_switch = function(lines) {
+  blocks = doc_find_blocks(lines)
+  inside = logical(length(lines))
+  for (k in seq_len(nrow(blocks))) inside[blocks$start[k]:blocks$end[k]] = TRUE
+  m = regmatches(lines, regexec(doc_re_direct, lines, perl = TRUE))
+  heads = which(lengths(m) > 0L & !inside)
+  entry = inside | grepl(doc_re_entry, lines, perl = TRUE)
+  made = logical()
+  changed = list()
+  for (i in sort(c(blocks$start, heads))) {
+    k = match(i, blocks$start)
+    if (!is.na(k)) {
+      h = blocks$header[[k]]
+      made[doc_created(h$created)] = !identical(h$status, "undone")
+      next
+    }
+    created = doc_created(doc_parse_kv(m[[i]][3L])$created)
+    reason = m[[i]][2L]
+    off = startsWith(reason, "uses undone ")
+    if (nzchar(reason) && !off) {
+      made[created] = FALSE
+      next
+    }
+    end = i
+    while (end < length(lines) && !entry[end + 1L]) end = end + 1L
+    while (end > i && !nzchar(trimws(lines[end]))) end = end - 1L
+    seg = seq_len(end - i) + i
+    raw = if (off) sub("^#~ ", "", lines[seg]) else lines[seg]
+    uses = tryCatch(all.names(doc_parse_text(raw[!startsWith(raw, "#>")], keep_source = FALSE)),
+                    error = function(e) character())
+    bad = intersect(setdiff(as_utf8(uses), created), names(made)[!made])
+    on = !length(bad)
+    new = c(doc_direct_header(if (!on) paste("uses undone", paste(bad, collapse = ", ")),
+                              created),
+            if (on) raw else ifelse(nzchar(raw), paste0("#~ ", raw), raw))
+    if (!identical(new, lines[c(i, seg)])) {
+      lines[c(i, seg)] = new
+      changed[[length(changed) + 1L]] = list(line = i, on = on, names = bad)
+    }
+    made[created] = on
+  }
+  list(lines = lines, changed = changed)
+}
+
+#' Rescan a console transcript after an undo, redo or retry and after each direct R line it gets
+#' (doc_direct_switch()), under write consent and the `document_write` event (kind "inert"), and
+#' say which lines it switched; invisibly the switches, NULL when none
+#' @noRd
+doc_transcript_rescan = function(path, session = NULL) {
+  if (!file.exists(path) || !identical(doc_format_of(path), "r") ||
+      !doc_consent(path, ask = FALSE)) {
+    return(invisible(NULL))
+  }
+  changed = doc_rewrite(path, function(doc) {
+    res = doc_direct_switch(doc$lines)
+    if (!length(res$changed)) return(list(value = NULL))
+    ev = doc_event(path, "r", "inert", NULL, res$lines, session)
+    if (isTRUE(ev$block)) return(list(value = NULL))
+    list(lines = ev$lines %||% res$lines, value = res$changed)
+  })
+  if (!is.list(changed) || !length(changed)) return(invisible(NULL))
+  said = vapply(changed, function(ch) {
+    if (ch$on) return(paste0("line ", ch$line, " back on"))
+    paste0("line ", ch$line, " off (uses undone ", paste(ch$names, collapse = ", "), ")")
+  }, "")
+  gptr_inform(paste0("Direct R in ", doc_rel(path), ": ", paste(said, collapse = ", "), "."),
+              "notice")
+  invisible(changed)
 }
 
 #' console:command (P14): a slash command of the console enters the transcript as a comment
@@ -914,10 +1020,10 @@ doc_on_console_command = function(event, ctx) {
 }
 
 #' Append console lines to the console transcript target (an .R transcript; the writer redacts
-#' them with the persist profile under write consent); always NULL (notify channels). While
-#' `session` runs in the background (the pause menu's `[b]`), whose block is written when the run
-#' ends, they wait in its live handle until doc_on_agent_end() has written that block, so the
-#' record keeps the order typed
+#' them with the persist profile under write consent), then rescan it (doc_transcript_rescan());
+#' always NULL (notify channels). While `session` runs in the background (the pause menu's `[b]`),
+#' whose block is written when the run ends, they wait in its live handle until
+#' doc_on_agent_end() has written that block, so the record keeps the order typed
 #' @noRd
 doc_console_append = function(lines, session = NULL) {
   live = if (inherits(session, "gptr_session")) session_live(session)
@@ -928,6 +1034,7 @@ doc_console_append = function(lines, session = NULL) {
   target = doc_transcript_target(ask = FALSE)
   if (!is.null(target) && identical(doc_format_of(target), "r")) {
     doc_transcript_append(target, lines, session = session)
+    doc_transcript_rescan(target, session)
   }
   NULL
 }

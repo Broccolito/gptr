@@ -598,7 +598,8 @@ console_blocks = function() {
 #' shown on stderr, red, in the console margin at column 4 with what the code printed (eval_echo());
 #' there a block that showed anything ends with a blank row, as a command's output does. `!code`
 #' leaves a note for the next prompt. The `console:direct` channel tells transcript writers (P15)
-#' what ran. A gptr_wait() in the code waits through console_wait() (`.gptr_console_wait`).
+#' what ran and the objects it created (the evaluator's diff, also of a line that failed). A
+#' gptr_wait() in the code waits through console_wait() (`.gptr_console_wait`).
 #' @noRd
 repl_passthrough = function(rs, text) {
   noted = !startsWith(text, "!!")
@@ -635,7 +636,7 @@ repl_passthrough = function(rs, text) {
   }
   if (noted) rs$notes = utils::tail(c(rs$notes, repl_note(code, res)), 20L)
   data = list(code = code, output = as.character(unlist(res$outputs)), status = res$status,
-              noted = noted)
+              noted = noted, created = as.character(res$changes$objects$added))
   ev_dispatch("console:direct", list(data = data), session = rs$session)
   invisible(res$status)
 }
