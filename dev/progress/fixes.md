@@ -5900,3 +5900,139 @@ the driver, screens, events, transcripts and replays without a model are local, 
   partial of an abort inside a unit is the normaliser's state after the event that set the flag:
   what was emitted, for a normaliser that records a delta before it emits it (the `adp_*` helpers
   and the test adapter do).
+
+## Task CI-104 - Checks against the maintainer's earlier CRAN reviews, DESCRIPTION and README (2026-10-26, #PR)
+- Why: before the 1.0 submission, the CRAN team's comments on the maintainer's earlier submissions
+  (gptr, ggmugs, bolt4jr and kdps), collected on 2026-10-26 into a checklist of 15 points the
+  reviewers raised (A1-A15) and 12 of their standard points (B1-B12), were checked on
+  `9ce08838` and on the merged head. The maintainer also asked for a DESCRIPTION and README that
+  describe the package and its setup around three pillars (the live R session, System 1 and System
+  2, sessions as runnable documents), the README as minimal as possible: no folded code blocks,
+  minimal examples, the longer ones in the vignettes.
+- Audit result: no checklist item needed a change to code, Rd or tests, so `claude/polish-cran` has
+  no commit. Verdicts follow.
+- A1 (home filespace) and B9 (detritus): met. The CRAN-mode check below reports "checking for new
+  files in some other directories" (`_R_CHECK_THINGS_IN_OTHER_DIRS_`) and "checking for detritus in
+  the temp directory" OK; `tests/testthat/setup.R` points `HOME`, `R_USER_*_DIR` and `TMPDIR` at a
+  temporary directory, and examples write only under `tempdir()`.
+- A2 (writing by default): met. Of the path arguments of the 64 exports, `gptr_env(path = ".env")`
+  reads an existing file, `gptr_trust(path = ".")` names the project whose decision, when one is
+  given, goes to `tools::R_user_dir("gptr", "config")`, and `gptr_agent()`, `gptr_doc()` and
+  `gptr_scrub()` default to `NULL`; no function writes to a default path.
+- A3 (`\value`): met. All 66 Rd pages with a `\usage` have a `\value`; the other four
+  (`gptr-background`, `gptr_egress`, `gptr_options`, `gptr_security`) are topic pages.
+- A4 (`\dontrun`): met. No `\dontrun`, `\donttest` or `@examplesIf` in `man/` or `R/`; the visible
+  `if (interactive())` guards of `gptr_login()`, `gptr_logout()` and `gptr_mcp_serve()` are
+  explained in `cran-comments.md`.
+- A5 and B10 (Title and Description): met. The Title has 49 characters, is in title case
+  (`tools::toTitleCase()` leaves it) and has no period; the Description is four sentences and
+  opens with "Evaluates", not the Title, the name or "This package".
+- A6 (single quotes): met. Title and Description quote 'R', 'Anthropic', 'OpenAI', 'Google Gemini',
+  'Ollama', 'Claude Code', 'Codex', 'Jev', 'TypeSafe AI', 'Clef', 'R Markdown', 'Quarto' and
+  'Jupyter', and nothing else (`peter()` and "System 1" stay plain).
+- A7 (method references): not applicable. gptr implements no published method; System 1 and
+  System 2 name software roles (the README's "Why Peter?" says they imply nothing about human
+  cognition), and the why-peter vignette gives the history and its sources.
+- A8 and A9 (API references, URL form): met. The Description links the 'Anthropic', 'OpenAI',
+  'Google Gemini', 'Ollama' and 'TypeSafe AI' documentation in angle brackets, with no space after
+  `https:`.
+- A10 (valid URLs): met. `tools:::check_url_db()` on the URLs of the built package (DESCRIPTION 8,
+  `README.md` 8, the 14 built vignettes 74; 29 distinct; no Rd page or NEWS entry has one): 0
+  problems. Both track branches also fetched their URLs with curl: 200 each.
+- A11 and B11 (authors, license): met. Authors@R declares the maintainer (aut, cre, cph) and two
+  contributors (ctb) with `person()`; License is `Apache License (== 2.0)`, and
+  `Copyright: file inst/COPYRIGHTS` names the four MIT works (pi, models.dev, gitleaks and
+  system-one-adapter-python).
+- A12 and B8 (console output): met. Of the 29 `cat()` lines in `R/`, 20 are in print methods, 2
+  write a child process's stages to stderr, 2 are inside strings, 3 are the shared writers of
+  print methods and `gptr_inform()`, 1 queries the terminal and 1 starts a new row before a
+  background message. `gptr_inform()` signals a message condition: one line by default, none under
+  `suppressMessages()` or `options(gptr.quiet = TRUE)` (checked). `print()` and `writeLines()` to
+  stdout are in print methods, knitr output, the evaluator and `peter$` members inside a model's
+  `r` call.
+- A13 (spelling): met. `spelling::spell_check_package()` finds no errors, and so does the release
+  spelling check (Task 15); the new Description passes hunspell en_US and en_GB after CRAN's
+  incoming filter (aspell is not installed here). The README added GiB to `inst/WORDLIST`.
+- A14 (pretests): met locally: the CRAN-mode check below gives Status OK with no NOTE, and
+  `tools:::.check_package_CRAN_incoming(localOnly = TRUE)` on the built DESCRIPTION reports only the
+  Maintainer field, as it always does. win-builder's checks are the previous tarball's
+  (`cran-comments.md`).
+- A15 (process): the maintainer's, not the tree's: keep cran-submissions in CC when replying, and
+  do not submit again while a version is pending.
+- B1 (options, working directory, environment): met. Each `options()` set in `R/` is restored by
+  `on.exit()` or the evaluator's saved state (the Windows stdin writer, a child process, sets
+  `warn = 2` for itself); `par()` is only read; `setwd()` runs only in `gptr_rewind()`'s restore
+  of a checkpoint the user asked for; `Sys.setenv()` only in `auth-dotenv.R`, for `gptr_env()`,
+  whose job is to export the keys (`set_env = FALSE` keeps them in the vault). The lint rules of
+  `test-lint-rules.R` enforce the last.
+- B2 (global environment): met. No `.GlobalEnv` symbol in `R/` (lint rule) and no assignment there;
+  the only writes are to `.Random.seed` (`rng_swap()` for team and fan-out members, as
+  `cran-comments.md` says, and `with_seed_preserved()` around third-party code), each restoring
+  it. Model code runs in the environment the user passes, by default the caller's.
+- B3 (seeds): met. No `set.seed()`, `sample()`, `runif()` or `RNGkind()` call in `R/` (lint rule).
+- B4 (installs): met. `install.packages(` is in `R/` only inside three error messages; in tests
+  only behind `skip_on_cran()`, installing a local source tree into a temporary library
+  (`repos = NULL`); none in examples or vignettes, and no `installed.packages()` or remotes.
+- B5 (cores): met. No `detectCores()` or `mc.cores`; process pools are capped at two under
+  `R CMD check`, which ran with `_R_CHECK_LIMIT_CORES_=true` and both CPU-to-elapsed thresholds at
+  2.5 without a NOTE.
+- B6 (`TRUE` and `FALSE`): met. No `T` or `F` symbol in the 380 R and test files (parse data); the
+  default `T_and_F_symbol_linter` is on.
+- B7 (examples): met for the 64 exports: the release docs check requires examples on each export's
+  page, and they ran in the check below. The six pages of session S3 methods have none (Open).
+- B12 (network): met. Tests use the scripted model and recorded fixtures, and with `NOT_CRAN` unset
+  skip the tests that start a local server or worker; examples run in replay mode, where only
+  offline providers answer; live tests need `GPTR_LIVE_TESTS=true`.
+- Fix 1 (`1f4fdc8c`, merged by `703308db`): the Description is rewritten around the three pillars,
+  144 words without URLs (172 before); the Title stays "Language Model Agents Inside the Live 'R'
+  Session", so the three files that pin it (`test-zzz.R`, `dev/release/lib.R` and
+  `test-description.R`), `cran-comments.md` and `inst/WORDLIST` need no edit.
+  The new Description: "Evaluates model-written code in the calling environment of a running 'R'
+  session, so agents work on objects already in memory instead of reloading data from files or
+  rerunning scripts. One function, peter(), opens a chat in the console or, given a prompt, calls
+  either kind of model: typed decision models (System 1) return logical, character or numeric
+  vectors with probabilities, and conversational models (System 2) run as tool-using agents.
+  Conversational models come from the 'Anthropic'
+  <https://platform.claude.com/docs/en/api/overview>, 'OpenAI'
+  <https://developers.openai.com/api/reference/overview> and 'Google Gemini'
+  <https://ai.google.dev/gemini-api/docs> APIs, 'OpenAI'-compatible endpoints, local 'Ollama'
+  <https://ollama.com> models and the 'Claude Code' and 'Codex' command line tools; decision
+  models include 'Jev', hosted by 'TypeSafe AI' <https://docs.typesafe.ai/introduction>, and the
+  local 'Clef'. Top-level peter() calls can be recorded, with the code they ran, in 'R' scripts,
+  'R Markdown' and 'Quarto' documents or 'Jupyter' notebooks; a recorded script replays without a
+  model or keys, or reruns with another model." Gone: "used directly in if() and for()", the tool
+  and extension list, and "require the user's permission by default", which overstated the gate
+  (`cran-comments.md` states it exactly).
+- Fix 2 (`f4dc43fe`, merged by `08c2b2a7`): `README.Rmd` is rewritten and `README.md` rendered by
+  `dev/release/precompute.R --readme`: 230 lines to 154 (`README.md` 274 to 178). The two folded
+  `<details>` examples and 8 chunks become 4 chunks, all `eval = FALSE`, with no setup chunk:
+  install (2 lines), connect a model (2), a recorded session (5) and a System 1 call (4). Sections:
+  the pillars "Your live R session", "System 1 and System 2" and "Sessions as runnable documents",
+  then Installation, Connect a model (Ollama in one paragraph), A first session, Learn more, Why
+  Peter?, Upgrading from gptr 0.7.0, and License and acknowledgments. Large objects, the offline
+  System 1 demo, export, steering and the guide table are one linked line each under Learn more.
+  CI-102's install sentence stays; GiB joins `inst/WORDLIST`.
+- Fix 3 (`42f06453`), from the README review: a rerun reproduces the analysis for "anyone with the
+  same data and packages" (replay depends on the code's inputs, packages and side effects, as the
+  script-as-history vignette says); the model's view is a list of examples, `?gptr_egress` the
+  full one; "OpenRouter, OpenAI-compatible endpoints" replaces "OpenRouter and other
+  OpenAI-compatible APIs", which counted Anthropic and Gemini among them; the pillar-3 closing
+  sentence is shorter.
+- Green, on the merged head `42f06453` (this record's commit changes only `dev/`, which
+  `.Rbuildignore` drops): `R CMD check --as-cran` in CRAN mode (`NOT_CRAN` unset, CRAN's timing
+  thresholds, both manuals) under `env -i` with only `HOME`, `PATH`, `LANG=en_US.UTF-8`, a
+  `TMPDIR` from `mktemp -d`, `R_LIBS_USER` and the `_R_CHECK_` variables, on a `git archive` of the
+  head: Status OK with no NOTE in 132 s, the tests in 14 s (`testthat.R` [13s/14s]), INFO only for
+  'repr' and the installed size (7.9 Mb); tarball sha256 `c04890bc`.
+  `testthat::test_dir("dev/release/tests")` with `NOT_CRAN=true`: 14 files, 62 tests, FAIL 0 SKIP 0
+  PASS 290. `dev/ci/isolated-check.R document` leaves no diff; the plan checks pass (28 plans, no
+  error finding, 770 R blocks with 0 problems, no lints). No R or test file changed; the README's
+  chunks lint clean, and `^(zzz|lint-rules)$` (DESCRIPTION's fields, the lint rules B1-B3 cite)
+  FAIL 0 PASS 195 in UTF-8 and under `LC_ALL=C LANG=C`. `check-files.R readme` and
+  `precompute.R --readme` 0 problems.
+- Deviations: none. Open: the six pages of session S3 methods (`print`, `format`, `str` and
+  `summary` of `gptr_session`, `print` and `as.data.frame` of `gptr_session_summary`) have no
+  examples; they are registered methods, not exports, but a reviewer may ask for some (B7).
+  'TypeSafe AI' is quoted as a host, not as software or an API (A6's kdps comment); "hosted by
+  TypeSafe AI" is the fallback if a reviewer queries it. The README's 4 GiB figure is one
+  measured run (`dev/TESTING_PLAN.md`).
