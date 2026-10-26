@@ -976,8 +976,8 @@ repl_banner = function(rs) {
   console_write("")
 }
 
-#' A notice when background sessions wait for approval; P21 asks at the next blocking call
-#' (IC-57), dim in the banner's words. Said again only when their number changes.
+#' A notice when background sessions wait for approval; P21 asks at their gptr_wait() (IC-57), the
+#' chat's R code, dim in the banner's words. Said again only when their number changes.
 #' @noRd
 repl_waiting_notice = function(rs) {
   n = sum(job_list("session")$status == "waiting")
@@ -985,7 +985,7 @@ repl_waiting_notice = function(rs) {
     sym = console_style()
     console_notice(sym$dim(paste0(n, if (n == 1L) " background session waits" else
       " background sessions wait", " for approval", sym$sep,
-      "the next prompt or gptr_wait() asks")))
+      "!!gptr::gptr_wait(session) asks")))
   }
   rs$waiting = n
   invisible(NULL)

@@ -3046,7 +3046,7 @@ pcli_version(path)
 
 | Function | File | Contract | Consumers |
 |---|---|---|---|
-| `bg_register(s)` (service `bg.register`) | `agent-background.R` | requires later (`gptr_error_missing_package`); marks the run background, adds a `session` job, ensures the `later` pump (50 ms timer calling `reactor_pump(slice_ms = 0)`, a no-op while the reactor is on the stack, IC-57); R tools of background runs run at idle ticks (`gptr.background_tools = "idle"`) or wait for `gptr_wait()`; an ask moves the run to `waiting` and is shown at the next blocking gptr call, whose resumed run (always started by the sweep's `bg_resume()`, also when a message was piped in meanwhile) has a user steer as its input, which steers piped in meanwhile join and queued follow-ups follow when it would stop: "I am at the console now. Repeat the call that could not be approved (<summary>) with the same input; I will be asked to approve it.", or "I am at the console now; ask again." for a question (D-252); a tool that changed bindings at an idle tick prints one notice | P08, P14 (`[b]ackground`) |
+| `bg_register(s)` (service `bg.register`) | `agent-background.R` | requires later (`gptr_error_missing_package`); marks the run background, adds a `session` job, ensures the `later` pump (50 ms timer calling `reactor_pump(slice_ms = 0)`, a no-op while the reactor is on the stack, IC-57); R tools of background runs run at idle ticks (`gptr.background_tools = "idle"`) or wait for `gptr_wait()`; an ask moves the run to `waiting` and is shown at the session's next `gptr_wait()`, whose resumed run (always started by `bg_resume()`, also when a message was piped in meanwhile; another call or console turn leaves it waiting, D-261) has a user steer as its input, which steers piped in meanwhile join and queued follow-ups follow when it would stop: "I am at the console now. Repeat the call that could not be approved (<summary>) with the same input; I will be asked to approve it.", or "I am at the console now; ask again." for a question (D-252); a tool that changed bindings at an idle tick prints one notice | P08, P14 (`[b]ackground`) |
 
 Example calls:
 
@@ -4815,7 +4815,7 @@ step list before its first action.
 - The background pump is a no-op while the reactor is on the stack (depth > 0).
 - Asks raised outside a blocking gptr call (background runs, `gptr_mcp_serve()` at an idle console) never
   prompt from a `later` callback: a background run moves to status `waiting` (a notice; `gptr_jobs()` shows it)
-  and the ask is shown at the next `gptr_wait()`, `peter()` or console turn, whose resumed run opens with a user
+  and the ask is shown at the session's next `gptr_wait()` (D-261), whose resumed run opens with a user
   message saying that the user is at the console (D-252); a served request that needs approval
   is denied with how to allow it and a console notice. Non-interactively both are `blocked`/denied.
 - A background R tool that changed bindings in the user's environment at an idle tick prints one notice.
@@ -5600,7 +5600,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     until P28 Task 64) only when no status line said `aborted` (verbosity 0, or no run in the foreground). So do
     the REPL's other notices: `ctrl-c again leaves · /exit` at an idle Ctrl-C (the keys bold; `[gptr] press Ctrl-C
     again to leave gptr, or type /exit`), `interrupted`, `timed out` for `!` code, `<n> background session(s)
-    wait(s) for approval · the next prompt or gptr_wait() asks`, and in red `the queued message could not be
+    wait(s) for approval · !!gptr::gptr_wait(session) asks` (D-261), and in red `the queued message could not be
     delivered: <why>`, none tagged `[gptr]` (P28 Task 64, visual round 2). The composer's draft joins this list (Task 18). `console_unqueue()` -> `session_unqueue()` is a contract edge of the
     layering test (12.2). The pause menu's [b] ends no run in the foreground, so it settles the REPL's held lines
     and the draft itself (`console_background_settle()`, steering review): one such list after its `running in

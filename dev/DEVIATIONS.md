@@ -7693,3 +7693,18 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-provider-registry.R "an abort flag set during an event ends the stream before the next
   unit or the end"; test-provider-anthropic.R "end to end on the mock server: streaming, retry and
   abort (skip on CRAN)". Evidence: progress/fixes.md Task CI-97.
+
+## D-261 - FIX-21 Live bg-1 and plan-execute paths (2026-10-26)
+- Rule (waiting sessions): only `gptr_wait()` of a waiting background session continues it
+  (`bg_continue()` resumes it before the wait pumps, `bg_resume()` superseding the ask); the
+  background sweep never resumes one, so another `peter()` call or a console turn leaves it
+  waiting. Formerly any blocking pump resumed it: live, a console turn ended before the resumed run
+  asked, which then parked again at R's prompt, its console note and model request sent twice. The
+  park notice says `gptr_wait(gptr_last()) continues it.`, and the console's notice of waiting
+  sessions ends `!!gptr::gptr_wait(session) asks`. Amends D-252's resume point.
+- Contract-visible: 04 sections 7.21, 15.5 IC-57 and 15.10 (the console's notices); 03 section 6.2;
+  `?gptr-background`, vignette("teams-and-background").
+- Tests: test-agent-background.R "only gptr_wait() continues a waiting session; another call
+  leaves it waiting", "an ask at an idle tick parks the run as waiting until gptr_wait()";
+  test-console-repl.R "background sessions that wait for approval are announced once (IC-57)".
+  Evidence: progress/fixes.md FIX-21.

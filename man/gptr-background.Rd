@@ -30,9 +30,9 @@ only inside a blocking gptr call such as \code{gptr_wait()}.
 \item A background run never asks a question at the idle console. When it needs an
 approval or an answer at an idle tick, the action is not performed: the agent is told
 that the user will be asked, its run stops, and the session moves to status
-\code{"waiting"} with a notice. At your next \code{gptr_wait()}, \code{peter()} call or
-console turn the session continues with one more model request, which tells the agent
-that you are at the console; the agent repeats the call, and you are asked as usual. A
+\code{"waiting"} with a notice. \code{gptr_wait()} on the session continues it with one
+more model request, which tells the agent that you are at the console; the agent repeats
+the call, and you are asked as usual. Other calls and console turns leave it waiting. A
 message piped into a waiting session is delivered when it continues.
 \item \code{gptr_cancel()} stops a running background session. A waiting session has no
 run to cancel: \code{gptr_jobs(kill = TRUE)} stops it (together with every other job).
