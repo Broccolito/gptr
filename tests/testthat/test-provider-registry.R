@@ -583,18 +583,18 @@ test_that("setting the abort flag cancels the transfer and ends with an aborted 
   expect_equal(log$events[[length(log$events)]]$reason, "aborted")
 })
 
-test_that("an abort flag set during an event ends the stream before the next unit or the end", {
+test_that("an abort flag ends the stream before the next event, unit, end or failure", {
   r = local_mock_reactor()
   model = local_stream_adapter()
   signal = new.env()
   signal$reason = "user"
-  # the caller sets the flag on the first delta, before the watch task runs
-  open = function() {
+  # the caller sets the flag on an event of type `on`, before the watch task runs
+  open = function(on = "text_delta") {
     signal$aborted = FALSE
     log = local_stream_log()
     emit = function(ev) {
       log$emit(ev)
-      if (identical(ev$type, "text_delta")) signal$aborted = TRUE
+      if (identical(ev$type, on)) signal$aborted = TRUE
     }
     id = provider_stream(model, stream_context(), list(signal = signal), emit = emit,
                          done = log$finish)
@@ -606,12 +606,23 @@ test_that("an abort flag set during an event ends the stream before the next uni
   end = open()
   end$t$on_bytes(sse('{"t":"text","v":"a"}'))
   end$t$on_done(200L, list())
-  for (s in list(chunk, end)) {
+  # set outside the stream's events, the flag still comes before the transfer's failure
+  fail = open("none")
+  fail$t$on_bytes(sse('{"t":"text","v":"a"}'))
+  signal$aborted = TRUE
+  fail$t$on_fail(stream_condition("connection reset", "network"))
+  for (s in list(chunk, end, fail)) {
     expect_equal(s$types(), c("start", "text_delta", "error"))
     expect_equal(vapply(s$done, function(m) m$stop_reason, ""), "aborted")
     expect_equal(vapply(s$done, msg_text, ""), "a")
   }
-  expect_identical(r$cancelled, c("t1", "t2"))
+  # set on `start`, the flag stops the delta of the same SSE event
+  unit = open("start")
+  unit$t$on_bytes(sse('{"t":"text","v":"a"}'))
+  expect_equal(unit$types(), c("start", "error"))
+  expect_equal(vapply(unit$done, function(m) m$stop_reason, ""), "aborted")
+  expect_equal(vapply(unit$done, msg_text, ""), "")
+  expect_identical(r$cancelled, c("t1", "t2", "t3", "t4"))
 })
 
 test_that("a run that settles while its stream is open lets go of the stream", {

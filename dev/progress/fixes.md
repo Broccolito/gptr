@@ -5570,3 +5570,44 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: D-258. Open: a console turn with a context object (`s_<hex> |> peter("...", df)`)
   stays refused, as the same call in a script is; an exported transcript keeps its replay note,
   which names the source transcript.
+
+## FIX-26 - An HTTP stream checks the abort after each event and before a failure (2026-10-26, #PR)
+- Why: CI-97 (D-254) left two cases open: inside one unit (an SSE event, a whole `stream = "raw"`
+  chunk) the normaliser's events still followed each other after the flag, and a transfer failure
+  delivered in the iteration that set it ended `error`. Both are defects: 04 section 8.1 leaves
+  the flag of an HTTP stream to the glue (only `inprocess` generators and `process_jsonl` adapters
+  must check it), and P05's glue rule, as D-254 states it, ends a stream aborted during an event
+  `aborted`, with what was emitted before the flag. A run was not affected (`run_abort()` records
+  the partial itself and closes the request, `run_on_event()` drops later events); a direct
+  `provider_stream()` caller got `error`, or `done` with `stop` when the unit held the end.
+- Red (4e30dbc0, the test on origin/main 7e23ebd3's code): CI-97's block in
+  test-provider-registry.R, now "an abort flag ends the stream before the next event, unit, end or
+  failure", gains two streams: the flag set outside the events after a chunk, then `on_fail()`;
+  the flag set on `start`, whose SSE event also carries a delta. `^provider-registry$` FAIL 5 PASS
+  748: the failure ended `error` (line 616) and its transfer was not cancelled (625); the `start`
+  stream emitted its `text_delta` and had not ended (622-624). A scratch block in
+  test-provider-bedrock.R (not committed) played one Bedrock body as one raw chunk through
+  `local_scripted_wire()` (messageStart, deltas `a` and `b`, contentBlockStop, messageStop,
+  metadata), the flag set on the first delta: events start, text_start, text_delta, text_delta,
+  text_end and done, `stop_reason` `stop`, text `ab`.
+- Cause: `on_fail()` checked only `st$finished`; `stream_over()` ran before each chunk, each unit
+  and the end, never between the events of one normaliser push.
+- Fix: (1) a639bf22: `on_fail()` runs `stream_over()` first, as `on_done()` does. (2) 827789ab:
+  `stream_emit()` runs `stream_over()` after each event of an HTTP stream, so an abort set during
+  an event ends the stream inside the push with the normaliser's partial message; the unit's later
+  events are dropped, as after any terminal event. The loop over a chunk's units checks
+  `st$finished` again: between two units only the normaliser runs, and it reaches the caller only
+  through an event (a retry hint sets `st$hold`).
+- Green: `^provider-registry$` FAIL 0 PASS 753; with fix 1 alone FAIL 4 (the `start` stream), with
+  fix 2 alone FAIL 2 (the failure). The Bedrock scratch: events start, text_start, text_delta and
+  error, `stop_reason` `aborted`, text `a`. Neighbours
+  `^(provider-|http-|reactor|agent-run|agent-loop|stream|s1-|prompt-compact)` (26 files,
+  `NOT_CRAN=true`, SIGINT at its default) `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 6338 ]` in UTF-8 and
+  `[ FAIL 0 | WARN 0 | SKIP 3 | PASS 6336 ]` under `LC_ALL=C LANG=C`, two skips Windows-only, the
+  third needing a UTF-8 locale. Lint clean (2 files); `document()` changes nothing.
+- Deviations: D-254 (amended in place); contract-visible none. Open: a `process_jsonl` line's
+  events still follow the flag (its adapters check the signal themselves, 04 section 8.1; the glue
+  checks each line, D-018), and an `inprocess` generator keeps its two calls after the flag. The
+  partial of an abort inside a unit is the normaliser's state after the event that set the flag:
+  what was emitted, for a normaliser that records a delta before it emits it (the `adp_*` helpers
+  and the test adapter do).
