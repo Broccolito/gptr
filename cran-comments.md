@@ -69,13 +69,13 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   HTTP port and needs three suggested packages.
 * Tests use the scripted model and recorded wire fixtures. `tests/testthat/setup.R` points
   `HOME`, `R_USER_*_DIR` and `TMPDIR` at a temporary directory that is deleted afterwards,
-  blanks provider key variables and sets replay mode. With `NOT_CRAN` unset that directory is
-  under `tempdir()`, tests that start a local server (a mock provider, an MCP server or a Shiny
-  app) or gptr worker processes are skipped, and the suite needs no network. To keep the check
-  short, `tests/testthat.R` runs on CRAN a fixed list of 35 test files (the permission,
-  redaction and secret tests and files that reach all but 10 of the R files) without their
-  slowest blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take 13 s here
-  (`Running 'testthat.R' [12s/13s]` in the local check). Live provider tests run only when
+  blanks secret-looking variables such as provider keys and sets replay mode. With `NOT_CRAN`
+  unset that directory is under `tempdir()`, tests that start a local server (a mock provider, an
+  MCP server or a Shiny app) or gptr worker processes are skipped, and the suite needs no network.
+  To keep the check short, `tests/testthat.R` runs on CRAN a fixed list of 35 test files (the
+  permission, redaction and secret tests and files that reach all but 10 of the R files) without
+  their slowest blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take 14 s here
+  (`Running 'testthat.R' [13s/14s]` in the local check). Live provider tests run only when
   `GPTR_LIVE_TESTS` is `"true"`.
 * The 14 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
   the tarball); the shipped `.Rmd` files contain no code chunks, so building them runs no code.
@@ -83,7 +83,7 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 ## Test environments
 
-* Local: macOS 26.7 (aarch64), R 4.6.1: `R CMD check --as-cran` on the built tarball with
+* Local: macOS 26.7.1 (aarch64), R 4.6.1: `R CMD check --as-cran` on the built tarball with
   `NOT_CRAN` unset, including the PDF manual.
 * GitHub Actions, `R CMD check --as-cran`, each job failing on any warning: macOS (release),
   Windows (release, oldrel-4; four test shards each), Ubuntu (devel, release, oldrel-1,
@@ -91,8 +91,8 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   (`NOT_CRAN=false`, CRAN's timing thresholds), each failing on any NOTE and over its time
   budget: Ubuntu R-devel (480 s) and Windows release with both manuals (600 s).
 * R-hub: Windows R-devel and R-release, and Ubuntu R-devel with gcc 12.
-* win-builder: R-devel (2026-10-24 r90762), R-release (4.6.1) and R-oldrelease (4.5.3); the
-  whole check took 525 s, 516 s and 366 s.
+* win-builder: R-release (4.6.1) and R-oldrelease (4.5.3); the whole check took 501 s and 693 s.
+  Its R-devel queue did not run on 2026-10-26, so R-devel on Windows is the R-hub check above.
 
 ## R CMD check results
 
@@ -110,6 +110,6 @@ versions report the size as INFO; R 4.2 reports it as a NOTE.
 
 ## Reverse dependencies
 
-`tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on 2026-10-20:
+`tools::package_dependencies("gptr", reverse = TRUE, which = "all")` run on 2026-10-26:
 none.
 No package depends on, imports, links to or suggests gptr.

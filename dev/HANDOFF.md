@@ -19,6 +19,11 @@ amendment are in `DEVIATIONS.md`:
   reports a missing or corrupt `gptr.rdb`, the two errors of the report, both from the session.
 - CI-103: the release spelling check (Task 15) passes again, with US spelling in four places and 11
   words in `inst/WORDLIST`; it failed on `main` too.
+- CI-104 (#90): the points of the maintainer's earlier CRAN reviews
+  (A1-A15) and the reviewers' standard points (B1-B12) are met, A7 not applicable and A15 the
+  maintainer's, with no change needed; the Description is rewritten around the three pillars (the
+  Title unchanged) and the README describes only the package and its setup, with no folded code
+  blocks and four short chunks; the CRAN-mode check is Status OK with no NOTE.
 - FIX-21: the bg-1 and plan-execute paths, run live on claude-cli, codex and ollama, and the five
   defects found there fixed: an idle tick's first notice starts a row of its own; only
   `gptr_wait()` continues a waiting session; the resumed run records its call's block; `/exit` names
@@ -44,9 +49,8 @@ look (FIX-15, FIX-23), the replay srcrefs and the refused console transcript exp
 and FIX-25), and the abort inside a unit and before a failure (CI-97, FIX-26); of CI-93's other
 notes, CI-100 fixes the BOM block's warning under `LC_ALL=C`.
 
-Verified: each record's red and green runs on its branch, in UTF-8 and under `LC_ALL=C LANG=C`;
-on the merged code (`556acb00`; the later commits change only `dev/`), locally on macOS, with the
-hosted checks still to run on the PR:
+Verified: each record's red and green runs on its branch, in UTF-8 and under `LC_ALL=C LANG=C`.
+On the merged code `556acb00`, locally on macOS:
 
 - The neighbours of FIX-21 and FIX-22 (every `console-`, `agent-`, `perm-` and `doc-` file, with
   `gptr-sdk`, `gptr-gateway`, `session-object`, `tool-ask`, `injection-e2e`, `arch-layers`,
@@ -55,6 +59,29 @@ hosted checks still to run on the PR:
   installed, a UTF-8 locale needed, INFRA-03 only on CI).
 - Lint of the 29 R and test files changed against `main` clean; `document()` leaves no diff; the
   plan checks pass.
+
+On the final head `e1b6ca59`, whose later commits change `tests/testthat/setup.R`, roxygen text
+and its man pages, the cheat sheet, NEWS, vignettes, `inst/WORDLIST` and `dev/`, but no R code:
+
+- `R CMD check --as-cran` in CRAN mode (`NOT_CRAN` unset, CRAN's timing thresholds, both manuals)
+  under `env -i`, so no secret-looking variable is set: Status OK in 149 s, the tests in 14 s.
+- `dev/ci/isolated-check.R check`: 0 errors, 0 warnings, 0 notes, the full suite FAIL 0 SKIP 85
+  PASS 38228 (28 min). With a 153-character TMPDIR, 13 browser tests stop on the socket path's
+  length, as designed, and the Windows writer's bootstrap test goes over Rscript's limit (Open).
+- R-hub: Windows R-devel, Windows R-release and Ubuntu gcc 12 succeed; Ubuntu gcc 12 had failed
+  on `4bf18eaf`, which CI-99's follow-up fixed.
+- Hosted CI: PR #88's 23 checks pass, the token benchmark on a re-run after Ubuntu's apt mirror
+  stalled it, and so do main's three workflows on the merge `c0dd52b7`, R-CMD-check after the same
+  re-run.
+- win-builder, with the tarball built from `e1b6ca59` (sha256 `92c94f9e`): R-release (4.6.1) and
+  R-oldrelease (4.5.3) give Status OK and no NOTE, the whole checks 501 s and 693 s. Their first
+  checks stopped inside "checking CRAN incoming feasibility" without a message (30 s and 91 s), on
+  win-builder's side: the re-runs passed that step in 12 s and 18 s, and it passes locally with
+  network access in 15 s. The R-devel queue did not run on 2026-10-26 (13 uploads waiting at 12:32,
+  gptr's among them), so R-devel on Windows is R-hub's check.
+- `pak::pak("Broccolito/gptr")` installs `main` (`c0dd52b7`) into the maintainer's R 4.6.1 user
+  library in 31 s; a fresh R loads it and runs `peter()` and `example(gptr_wait)` with the scripted
+  model.
 
 Open (found, not fixed):
 
@@ -93,6 +120,10 @@ Open (found, not fixed):
   witness (CI-98, CI-101).
 - Windows setup sometimes times out downloading pak from r-lib.github.io (60 s); if it recurs, set
   `R_DEFAULT_INTERNET_TIMEOUT` in `Windows-check.yaml`.
+- The Windows stdin writer's bootstrap stays about 630 bytes under Rscript's 9998-byte `-e` limit
+  with ordinary paths; it embeds `.libPaths()` (compressed) and the temp path, so very long ones
+  (a 153-character TMPDIR with a long check library: 10,179 bytes) make the writer refuse to start
+  (`proc_writer_code_bytes()`; found by #88's CRAN gate).
 - What slowed or stopped pak's subprocess on the reporting Mac, and what removed its loaded copy of
   gptr before `load_all()`, is not in the report (CI-102).
 - No CRAN test reaches 10 R files: `artifact-registry`, `bridge-lang`, `console-jsonl`,
@@ -111,7 +142,9 @@ Open (found, not fixed):
   partial of an abort inside a unit holds what was emitted only for a normaliser that records a
   delta before it emits it (FIX-26).
 - Hosted CI on 2026-10-25: Ubuntu's apt mirror stalled twice; after setups of 30 and 19 minutes, two
-  Ubuntu jobs reached their 45-minute limit in R CMD check, and both passed on a re-run.
+  Ubuntu jobs reached their 45-minute limit in R CMD check, and both passed on a re-run. On
+  2026-10-26 (#88) it stalled the token benchmark's install until its 30-minute limit; the re-run
+  passed.
 - CI-93's and FIX-20's other Open notes stay in `progress/fixes.md`.
 
 Remaining: the CRAN submission and P25's live steps are the maintainer's.
