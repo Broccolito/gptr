@@ -2758,6 +2758,14 @@ test_that("replaying a background script does not send its pipe steer again", {
                    "## Steer: Also store e = a + 100.")
 })
 
+test_that("replaying a stepped script does not send a steer sent between its steps again", {
+  skip_on_cran()
+  x = local_doc_e2e(doc_bg_script)
+  doc_steer_replay(x, c("s = peter(\"Store a = 1.\", .run = FALSE)", "gptr_step(s, 1)",
+                        "gptr_steer(s, \"Also store e = a + 100.\")", "gptr_step(s, Inf)"),
+                   "## Steer: Also store e = a + 100.")
+})
+
 test_that("a steer left over from one run stays recorded once in the block that took it", {
   skip_on_cran()
   x = local_doc_e2e(function(request) {
@@ -2805,7 +2813,10 @@ test_that("a replayed script runs its own turn whose text a block recorded as a 
   scripts = list(sync = "s = peter(\"Plot mpg.\")",
                  background = c("s = peter(\"Plot mpg.\", background = TRUE)", "gptr_wait(s)"),
                  later = c("s = peter(\"Plot mpg.\", .run = FALSE)", "gptr_step(s, Inf)",
-                           "s |> peter(\"Plot hp.\")"))
+                           "s |> peter(\"Plot hp.\")"),
+                 step = c("s = peter(\"Plot mpg.\", .run = FALSE)", "gptr_step(s, Inf)"),
+                 steps = c("s = peter(\"Plot mpg.\", .run = FALSE)", "gptr_step(s, 1)",
+                           "gptr_step(s, Inf)"))
   for (k in names(scripts)) {
     f = file.path(x$root, paste0(k, ".R"))
     writeLines(scripts[[k]], f)

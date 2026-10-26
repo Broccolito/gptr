@@ -4795,9 +4795,9 @@ steer only a run it left going, so after any other replayed block an equal text 
 a steer for the next run (D-255). While the session is idle, `gptr_steer()` and a pipe into it drop a text equal
 to a note (as `doc_one_line()` writes it, either kind; the note is consumed) with one `notice`, "A steer this
 script sends is already recorded in the replayed block; it was not sent again.", so a replayed script does not
-send its recorded steers twice; `gptr_wait()` on the session and a live run clear the notes. A run that
-`gptr_step()` or `gptr_wait()` starts from queued input has no document site: under a `gptr_doc()` binding,
-outside replay mode, it informs one `notice` that its turn is not recorded.
+send its recorded steers twice; `gptr_wait()` or `gptr_step(turns = Inf)` on the session and a live run clear
+the notes. A run that `gptr_step()` or `gptr_wait()` starts from queued input has no document site: under a
+`gptr_doc()` binding, outside replay mode, it informs one `notice` that its turn is not recorded.
 P28 amends this item in §15.10 (D-242): a step boundary delivers every queued steer, each as its own message.
 
 **IC-56 Pending-plan hand-off.** (safe-19) The plan is handed only to the **next** `peter()` call of the same R

@@ -135,6 +135,8 @@ gptr_step = function(s, turns = 1L) {
     gptr_abort("`turns` must be a whole number of turns or Inf.", "invalid_argument",
                arg = "turns", expected = "an integer >= 1 or Inf")
   }
+  # stepping all turns ends a replayed run here, as gptr_wait() does (IC-55)
+  if (is.infinite(turns)) assign("replay_notes", NULL, envir = session_data(s))
   run = sdk_start(s, parent.frame())
   if (is.null(run)) return(invisible(s))
   counter = sdk_turn_counter(s)

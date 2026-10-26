@@ -1330,8 +1330,8 @@ replay_adopt = function(s, block, header, doc) {
 #' each equal item the script queued before the call that took it (a `withdraw` each). The rest
 #' become the session's notes, in place of an earlier block's, which replay_note_take() keeps from
 #' reaching the model twice; only a call that returns before its run ends (`doc$running`) keeps
-#' them, until gptr_wait() or a live run: a script steers only a run it left going. Each replay
-#' sets them anew (a script sourced again sends them again).
+#' them, until gptr_wait(), gptr_step(turns = Inf) or a live run: a script steers only a run it
+#' left going. Each replay sets them anew (a script sourced again sends them again).
 #' @noRd
 replay_notes_add = function(s, doc) {
   notes = Filter(function(st) st$type %in% c("steer", "follow_up"), doc$steps %||% list())
