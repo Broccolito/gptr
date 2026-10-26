@@ -87,3 +87,20 @@ test_that("read_utf8() and write_utf8() round-trip CRLF, BOM and missing final n
   expect_false(read_utf8(file.path(dir, "no_final.txt"))$final_newline)
   expect_error(read_utf8(file.path(dir, "missing.txt")), class = "gptr_error_invalid_argument")
 })
+
+# The lazy-load database of an installed package keeps a string of unknown encoding in the
+# installing session's encoding; a session in another locale (LC_ALL=C) translates it on load,
+# with a warning, so the read tool's iconv(sub =) wrote "<U+FFFD>" text for an invalid byte.
+test_that("the namespace holds no non-ASCII string of unknown encoding (CI-100)", {
+  skip_on_cran()
+  native = function(x) {
+    if (is.character(x)) {
+      return(any(Encoding(x) == "unknown" &
+                   grepl("[^\\x01-\\x7f]", x, perl = TRUE, useBytes = TRUE)))
+    }
+    if (is.function(x)) x = list(formals(x), body(x))
+    (is.call(x) || is.pairlist(x) || is.list(x)) && any(vapply(as.list(x), native, TRUE))
+  }
+  ns = asNamespace("gptr")
+  expect_identical(Filter(function(n) native(get(n, ns)), ls(ns, all.names = TRUE)), character())
+})

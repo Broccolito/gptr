@@ -465,7 +465,9 @@ stream_request_id = function(st, ev, type) {
   ev
 }
 
-#' Emit one event: at most one start, the request id, commit tracking, terminal detection
+#' Emit one event: at most one start, the request id, commit tracking, terminal detection; an
+#' HTTP normaliser need not read the abort flag (04 section 8.1), so its stream then runs
+#' stream_over(): an abort set during the event ends it before the next one (D-254)
 #' @noRd
 stream_emit = function(st, ev) {
   if (st$finished) return(invisible(NULL))
@@ -479,6 +481,7 @@ stream_emit = function(st, ev) {
   tryCatch(st$acc$push(ev), error = function(e) NULL)
   tryCatch(st$emit_cb(ev), error = function(e) stream_diagnostic("emit", e))
   if (type %in% c("done", "error")) stream_finish(st, ev[["message"]])
+  if (identical(st$transport, "http")) stream_over(st)
   invisible(NULL)
 }
 
@@ -810,8 +813,9 @@ stream_rate_sync = function(id) {
 #' HTTP transports (http_sse, http_ndjson, http_json): one transfer for the whole request
 #' A second on_headers() (a re-send) resets the normaliser and the splitter; a splitter failure
 #' ends the stream like a normaliser failure. `stream = "raw"` pushes each body chunk unsplit.
-#' Each chunk, unit and the body's end runs stream_over() first, as process_jsonl's lines do
-#' (D-018): an abort set during an event stops the input the reactor still holds (D-254).
+#' Each chunk and the body's end or failure runs stream_over() first, as process_jsonl's lines
+#' do (D-018), and stream_emit() runs it after each event: an abort set during an event stops
+#' the rest of the input the reactor holds (D-254).
 #' @noRd
 stream_http = function(st, adapter) {
   st$transport = "http"
@@ -851,7 +855,7 @@ stream_http = function(st, adapter) {
       list()
     })
     for (u in units) {
-      if (stream_over(st) || isTRUE(st$hold)) break
+      if (st$finished || isTRUE(st$hold)) break
       stream_push(st, if (identical(kind, "ndjson")) list(data = u) else u)
     }
   }
@@ -876,7 +880,7 @@ stream_http = function(st, adapter) {
     })
     if (ok) stream_normaliser_finish(st)
   }
-  on_fail = function(cnd) if (!st$finished) stream_normaliser_fail(st, cnd)
+  on_fail = function(cnd) if (!stream_over(st)) stream_normaliser_fail(st, cnd)
   on_retry = function(type, info) {
     if (!st$finished) stream_emit(st, do.call(ev_new, c(list(type), info)))
   }

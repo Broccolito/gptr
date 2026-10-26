@@ -95,6 +95,36 @@ test_that("raw export keeps the assignment a recorded gptr_return(<expression>) 
   expect_equal(get(hidden, envir = plain), coef(lm(mpg ~ wt, mtcars)))
 })
 
+test_that("a console transcript exports like a script, its later turns piping the handle", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "x = 2"), fake_text("Set."),
+                         fake_tool("r", code = "y = x * 3"), fake_text("Tripled.")))
+  # a console, not `Rscript <file>` (the test runner may be one)
+  testthat::local_mocked_bindings(doc_command_args = function() "R")
+  f = file.path(x$root, ".gptr", "transcripts", "console.R")
+  dir.create(dirname(f), recursive = TRUE)
+  gptr_doc(f, format = "transcript")
+  # calls built at run time, as the console evaluates them: no literal of this file locates them
+  e = new.env(parent = globalenv())
+  e$s = eval(as.call(list(as.name("peter"), paste("set", "x"))), e)
+  eval(as.call(list(as.name("peter"), as.name("s"), paste("triple", "it"))), e)
+  hex = substr(sub("^s", "", e$s$id), 1L, 6L)
+  calls = paste0("s_", hex, c(" = peter(\"set x\")", " |> peter(\"triple it\")"))
+  expect_true(all(calls %in% readLines(f)))
+  plain = file.path(x$root, "plain.R")
+  gptr_export(f, plain)
+  expect_true(all(paste0("# ", calls) %in% readLines(plain)))
+  r = new.env(parent = globalenv())
+  r$library = function(...) invisible(NULL)
+  source(plain, local = r)
+  expect_identical(c(r$x, r$y), c(2, 6))
+  expect_false(exists(paste0("s_", hex), r, inherits = FALSE))
+  peter = file.path(x$root, "peter.R")
+  gptr_export(f, peter, format = "peter")
+  expect_true(all(c(calls, "# x = 2", "# y = x * 3") %in% readLines(peter)))
+  expect_length(fake_requests(x$fake), 4L)
+})
+
 test_that("Peter export keeps calls active and recorded code inert exactly once", {
   local_project()
   body = c("hits = hits + 1L", "value = c(", "  2, 4", ")", "## Decision: Keep the data.",
@@ -206,7 +236,8 @@ test_that("raw export refuses ambiguous calls and unresolved session semantics",
   calls = c("before = 1; s = peter(\"one\"); after = 2",
             "s = peter(\"one\")$value", "s = peter(\"one\") |> identity()",
             "s = peter(paste0(\"o\", \"ne\"))", "s = list(peter(\"one\"))",
-            "if (TRUE) s = peter(\"one\")", "s = peter(\"one\", envir = globalenv())")
+            "if (TRUE) s = peter(\"one\")", "s = peter(\"one\", envir = globalenv())",
+            "s = x |> peter(\"one\")")
   target = file.path(getwd(), "refused.R")
   for (call in calls) {
     f = export_fixture(call = call)

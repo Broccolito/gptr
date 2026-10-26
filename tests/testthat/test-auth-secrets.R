@@ -98,6 +98,13 @@ test_that("ambient discovery registers secret-looking variables only, idempotent
   expect_length(secrets_state()$reg, 3L)
 })
 
+test_that("setup.R leaves no secret-looking host variable for ambient discovery", {
+  skip_if(identical(Sys.getenv("GPTR_LIVE_TESTS"), "true"))
+  local_vault()
+  secret_discover_env()
+  expect_identical(intersect(secret_registered_names(), names(Sys.getenv())), character())
+})
+
 test_that("new values emit secret_registered with names and counts, never values", {
   local_vault()
   seen = list()

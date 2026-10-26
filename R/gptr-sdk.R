@@ -24,7 +24,7 @@ sdk_queued = function(s) {
 sdk_check = function(s) {
   run = sdk_run_of(s)
   if (!is.null(run)) return(list(run = run))
-  # a waiting session continues only through the background sweep, which adds the console note
+  # a waiting session continues only in gptr_wait() (bg_continue()), which adds the console note
   if (identical(session_data(s)$status, "waiting") || !sdk_queued(s)) return(NULL)
   cur = run_current()
   safety = gateway_run_safety(cur)
@@ -135,6 +135,8 @@ gptr_step = function(s, turns = 1L) {
     gptr_abort("`turns` must be a whole number of turns or Inf.", "invalid_argument",
                arg = "turns", expected = "an integer >= 1 or Inf")
   }
+  # stepping all turns ends a replayed run here, as gptr_wait() does (IC-55)
+  if (is.infinite(turns)) assign("replay_notes", NULL, envir = session_data(s))
   run = sdk_start(s, parent.frame())
   if (is.null(run)) return(invisible(s))
   counter = sdk_turn_counter(s)
@@ -149,7 +151,8 @@ gptr_step = function(s, turns = 1L) {
 #' Starts idle sessions that have queued input, then pumps until no session is running or
 #' waiting, or `timeout` seconds have passed. Every session's checks (egress, replay, its model's
 #' provider and key) pass before any is started, so a refusal starts none. On timeout the sessions
-#' keep their `running` status and no condition is raised.
+#' keep their `running` status and no condition is raised. A background session waiting for
+#' approval continues only here, and you are asked as usual (see [gptr-background]).
 #'
 #' `timeout` limits reactor polling; it does not interrupt R code. Request preparation
 #' and synchronous callbacks finish their current step before the deadline is checked
@@ -173,6 +176,8 @@ gptr_wait = function(x, timeout = Inf) {
   ss = sdk_sessions(x)
   check_number(timeout, "timeout", min = 0)
   caller = parent.frame()
+  # a replayed run ends here, so a later text equal to one of its notes is the script's own (IC-55)
+  for (s in ss) assign("replay_notes", NULL, envir = session_data(s))
   # every session is checked before any is started, so a refusal (egress, replay) starts none
   chks = vector("list", length(ss))
   i = 0L
@@ -188,6 +193,7 @@ gptr_wait = function(x, timeout = Inf) {
     r = sdk_launch(ss[[i]], chks[[i]], caller)
     if (!is.null(r)) runs = c(runs, list(r))
   }
+  if (!is.null(the$bg)) runs = c(runs, bg_continue(ss))
   until = sdk_until_settled(ss)
   if (!until()) {
     pump = function() sdk_pump(runs, until = until, timeout = timeout)
@@ -196,7 +202,7 @@ gptr_wait = function(x, timeout = Inf) {
     if (is.function(wait)) wait(ss, pump) else pump()
   }
   # a background session that settled in the wait is released now: no idle tick may follow (P21)
-  if (!is.null(the$bg)) bg_sweep(FALSE, FALSE)
+  if (!is.null(the$bg)) bg_sweep(FALSE)
   if (inherits(x, "gptr_session") && length(runs) && isTRUE(runs[[1L]]$settled)) {
     gateway_signal(x, runs[[1L]])
   }

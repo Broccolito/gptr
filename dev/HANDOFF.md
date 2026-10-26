@@ -1,4 +1,122 @@
-## Current checkpoint — P28, CI-92..97, FIX-20 and the dev docs (PRs #78-#83), 2026-10-25
+## Current checkpoint — 1.0 pre-release fixes (PR #88), 2026-10-26
+
+PR #88 (branch `claude/v1-prerelease`) merges ten branches into `main` `7e23ebd3`, which since the
+PRs #78-#83 checkpoint also holds #84 (CI-98: the writer prototype reports an early writer exit),
+and adds CI-103 and the follow-ups that the PR's checks found. Each has its record in
+`progress/fixes.md`, in id order, and decisions D-255, D-257, D-258 and D-261 and the D-254
+amendment are in `DEVIATIONS.md`:
+
+- CI-99 (test only): `tests/testthat/setup.R` blanks every host variable that `is_secret_name()`
+  accepts, in place of a fixed list of 23, so a host secret such as `CLAUDE_CODE_MESSAGING_TOKEN`
+  no longer enters the test vault; on a host with none (R-hub's ubuntu-gcc12) it blanks nothing.
+- CI-100: an installed gptr in a C locale decodes invalid bytes as U+FFFD, not as the text
+  `<U+FFFD>` with a warning: `replacement_sub()` makes its bytes per call, the BOM pattern is
+  PCRE's, and a test keeps every non-ASCII string of unknown encoding out of the namespace.
+- CI-101: the Windows stdin drain reads the writer's and the child's liveness before the ready file,
+  so a writer that exits right after it fails delivery, not startup.
+- CI-102: installs from GitHub work (`pak::pak()`, remotes and devtools, 12 of 12 hosted jobs); the
+  README says to restart R when pak stops with `Subprocess is busy or cannot start` or a later call
+  reports a missing or corrupt `gptr.rdb`, the two errors of the report, both from the session.
+- CI-103: the release spelling check (Task 15) passes again, with US spelling in four places and 11
+  words in `inst/WORDLIST`; it failed on `main` too.
+- FIX-21: the bg-1 and plan-execute paths, run live on claude-cli, codex and ollama, and the five
+  defects found there fixed: an idle tick's first notice starts a row of its own; only
+  `gptr_wait()` continues a waiting session; the resumed run records its call's block; `/exit` names
+  `gptr_wait(gptr_last())` only for the console's own session; the execute menu sets the mode and
+  leaves `Go ahead.` to the next prompt (D-261, amends D-252).
+- FIX-22: a replayed script runs its own turn equal to a recorded steer: a block's notes stay only
+  when its call returns before its run ends, and `gptr_wait()` or `gptr_step(turns = Inf)` clears
+  them (D-255, IC-55).
+- FIX-23: a background job's clock stops when the reactor or `kill()` sees its process end, not at
+  the first status look.
+- FIX-24: `gptr_source()` evaluates an expression that names no `peter()` without the document's
+  srcrefs, so a replayed block's objects hold no part of the document (D-257).
+- FIX-25: `gptr_export()` exports a console transcript, whose later turns pipe the handle an
+  earlier Peter statement assigned (D-258).
+- FIX-26: an HTTP stream checks the abort after each event and before a failure, so an abort inside
+  a unit ends it `aborted` with what was emitted, and a failure after the flag ends `aborted` too
+  (D-254 amended).
+
+From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
+writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
+replay of a piped turn equal to a recorded steer (FIX-16, FIX-22), a job's end time at its first
+look (FIX-15, FIX-23), the replay srcrefs and the refused console transcript export (FIX-13, FIX-24
+and FIX-25), and the abort inside a unit and before a failure (CI-97, FIX-26); of CI-93's other
+notes, CI-100 fixes the BOM block's warning under `LC_ALL=C`.
+
+Verified: each record's red and green runs on its branch, in UTF-8 and under `LC_ALL=C LANG=C`;
+on the merged code (`556acb00`; the later commits change only `dev/`), locally on macOS, with the
+hosted checks still to run on the PR:
+
+- The neighbours of FIX-21 and FIX-22 (every `console-`, `agent-`, `perm-` and `doc-` file, with
+  `gptr-sdk`, `gptr-gateway`, `session-object`, `tool-ask`, `injection-e2e`, `arch-layers`,
+  `lint-rules` and `zzz`; `NOT_CRAN=true`, SIGINT at its default): FAIL 0 WARN 0 SKIP 3 PASS 10612
+  in UTF-8 and FAIL 0 WARN 0 SKIP 30 PASS 10434 under `LC_ALL=C LANG=C` (the skips: {repr} not
+  installed, a UTF-8 locale needed, INFRA-03 only on CI).
+- Lint of the 29 R and test files changed against `main` clean; `document()` leaves no diff; the
+  plan checks pass.
+
+Open (found, not fixed):
+
+- A shell command computed at run time and run through base `system()` escapes `sh:` rules; the gate
+  is advisory, as `?gptr_security` says (FIX-18; issue #87).
+- A replayed script sends again a steer its run took after the script went on (a run sent to the
+  background from the pause menu, a `gptr_wait(timeout =)` that returned before the run ended), and
+  a `gptr_step(s, <n>)` that ended the run keeps the notes, so a later turn equal to one is still
+  skipped (FIX-22).
+- A job that ends with no pump and no `kill()` before its first status look still gets its end time
+  at that look, an upper bound; processx 3.9.0's `get_end_time()` gives the exact end but needs the
+  processx floor raised from 3.8.0, the maintainer's call (FIX-23).
+- R draws no prompt again after a background callback's output, so the person types on a row
+  without `> ` (FIX-21 L1).
+- A console transcript repeats the call's prompt for the turn a parked session resumes, and the
+  console note it answered is not recorded (FIX-21 L3).
+- A direct R line that names a session by a variable bound at R's prompt (`!!gptr::gptr_wait(b)`)
+  stops the transcript's replay, which names it `s_<id>`, as FIX-20 R29 (FIX-21).
+- A model `r` call that failed after an assignment is left out of its block while its binding
+  stays, so a replay can stop at a later read of that binding (FIX-21).
+- A console transcript does not record the console's starting mode (`peter(mode = plan)`), so a
+  live re-ask runs in the configured mode (FIX-21).
+- `gptr_wait()` on a waiting session, called from inside a run's tool, resumes it as a nested run
+  that inherits the outer run's safety record (it used to hang); the permission gate still asks
+  the person (FIX-21).
+- Replayed closures and `function` calls have no srcref where the agent's keep a `<gptr>` one of its
+  code, so a replayed ggplot is 1,412 bytes smaller serialized and 768 bytes by `env_snap_size()`;
+  an expression that names `peter()` still makes its objects with the document's srcrefs (FIX-24).
+- `gptr_export()` refuses a console turn with a context object (`s_<hex> |> peter("...", df)`), as
+  in a script, and an exported transcript keeps its replay note, which names the source transcript
+  (FIX-25).
+- An authenticated proxy variable (`HTTPS_PROXY` with a password) is not secret-looking, so
+  discovery still registers its password as `HTTPS_PROXY_PASSWORD` (CI-99).
+- Why the Windows stdin writer exits early is not known (2 of 1,356 writer cases in CI, none in
+  6,583 measured); a recurrence fails on `writer_failed` in about 5 s, the writer's stderr in the
+  witness (CI-98, CI-101).
+- Windows setup sometimes times out downloading pak from r-lib.github.io (60 s); if it recurs, set
+  `R_DEFAULT_INTERNET_TIMEOUT` in `Windows-check.yaml`.
+- What slowed or stopped pak's subprocess on the reporting Mac, and what removed its loaded copy of
+  gptr before `load_all()`, is not in the report (CI-102).
+- No CRAN test reaches 10 R files: `artifact-registry`, `bridge-lang`, `console-jsonl`,
+  `doc-export`, `doc-knitr`, `proc-rscript`, `provider-bedrock`, `s1-emulate`, `s1-ollama` and
+  `tool-search` (CI-93).
+- A live re-ask (`gptr_source(replay = "live")`) does not resend an `@file`'s head, which the
+  transcript never records (FIX-20 R27; issue #85).
+- A `!code` line that uses an undone turn's object stays live in the transcript, so `source()` stops
+  there (FIX-20 R29; issue #85).
+- A paste still splits when a read comes more than about 145 ms late (IC-76's 0.2 s bound); only
+  bracketed paste could detect a paste without timing (CI-94; issue #86).
+- A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).
+- The macOS row's time grows with its serial pty tests (CI-96).
+- A `process_jsonl` line's events still follow the abort flag (its adapters check the signal
+  themselves, 04 section 8.1), and an `inprocess` generator keeps its two calls after it; the
+  partial of an abort inside a unit holds what was emitted only for a normaliser that records a
+  delta before it emits it (FIX-26).
+- Hosted CI on 2026-10-25: Ubuntu's apt mirror stalled twice; after setups of 30 and 19 minutes, two
+  Ubuntu jobs reached their 45-minute limit in R CMD check, and both passed on a re-run.
+- CI-93's and FIX-20's other Open notes stay in `progress/fixes.md`.
+
+Remaining: the CRAN submission and P25's live steps are the maintainer's.
+
+## Historical checkpoint — P28, CI-92..97, FIX-20 and the dev docs (PRs #78-#83), 2026-10-25
 
 `main` takes six PRs in this order, each brought up to date with `main` and its 14 required checks
 green before it merges (the ruleset is strict): #78, P28's Codex-style `peter()` console (plan

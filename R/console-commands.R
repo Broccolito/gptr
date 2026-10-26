@@ -214,19 +214,24 @@ cmd_help = function(args, ctx) {
 }
 
 #' /exit, /quit, /q: with background sessions still running it says so, dim in the banner's words,
-#' as their end is noticed at R's prompt (bg_release())
+#' as their end is noticed at R's prompt (bg_release()); `gptr_wait(gptr_last())` shows the
+#' console's own session, the one /exit returns, `gptr_jobs()` any other
 #' @noRd
 cmd_exit = function(args, ctx) {
   rs = console_repl_find()
   if (is.null(rs)) return("/exit works inside the gptr console.")
   rs$exit = TRUE
-  n = sum(job_list("session")$status == "running")
-  if (!n) return(NULL)
+  jobs = job_list("session")
+  ids = jobs$id[jobs$status == "running"]
+  if (!length(ids)) return(NULL)
   sym = console_style()
-  cli::ansi_string(sym$dim(if (n == 1L) {
+  own = !is.null(rs$session) && identical(ids, session_data(rs$session)$id)
+  cli::ansi_string(sym$dim(if (own) {
     paste0("1 background session still runs", sym$sep, "gptr_wait(gptr_last()) shows it")
+  } else if (length(ids) == 1L) {
+    paste0("1 background session still runs", sym$sep, "gptr_jobs() lists it")
   } else {
-    paste0(n, " background sessions still run", sym$sep, "gptr_jobs() lists them")
+    paste0(length(ids), " background sessions still run", sym$sep, "gptr_jobs() lists them")
   }))
 }
 

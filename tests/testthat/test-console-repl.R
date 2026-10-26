@@ -1135,8 +1135,9 @@ test_that("background sessions that wait for approval are announced once (IC-57)
     repl_waiting_notice(rs)
     repl_waiting_notice(rs)
   })
+  # live (FIX-21): the next prompt resumed it but ended before it asked
   expect_identical(out, paste("1 background session waits for approval -",
-                              "the next prompt or gptr_wait() asks"))
+                              "!!gptr::gptr_wait(session) asks"))
   expect_identical(rs$waiting, 1L)
 })
 

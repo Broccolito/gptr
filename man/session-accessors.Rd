@@ -43,7 +43,7 @@ The member's value; \code{names()} and \code{.DollarNames()} return the member n
 Sessions are changed only through \code{peter()} and the \verb{gptr_*()} verbs, so \verb{$<-} and \verb{[[<-}
 signal \code{gptr_error_readonly}. A team's \code{text} joins its members' reports under
 \verb{### <name> (<model>)} headings, where a member that did not finish says
-\verb{(ended with status <status>)}; a fan-out's is the named chr of its children's texts, printed
+\verb{(ended with status <status>)}; a fan-out's is a named vector of its children's texts, printed
 under the same headings; and \code{value} is the named list of their values, until the team or
 fan-out is continued with \code{\link[=peter]{peter()}}: then \code{text} is its own answer and \code{value} its own value
 once a turn designates one, while each member's stay at \verb{x$<name>$text} and

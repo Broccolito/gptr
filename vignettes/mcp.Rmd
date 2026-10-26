@@ -151,7 +151,7 @@ peter("Find normalization references using the catalog MCP server.")
 MCP tools called by model code pass gptr's permission policies. Server descriptions and results
 are external data. Read-only annotations lower risk only when the server's annotations are
 explicitly trusted; a server calling itself read-only is not a permission grant. To trust them,
-add `"trusted": true` to the server's entry in the user `mcp.json` (honoured nowhere else); the
+add `"trusted": true` to the server's entry in the user `mcp.json` (honored nowhere else); the
 `trusted` column of `gptr_mcp()` shows it.
 User calls to a `peter$` helper execute directly, so review their side effects yourself.
 

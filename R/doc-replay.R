@@ -265,8 +265,9 @@ doc_replay_no_value = function(site, block, code, s) {
 }
 
 #' What a replayed session reconstructs its history from (IC-46; P06's `doc` argument):
-#' list(path, format, template, code, output, text, steps); `code` and `output` are those of all
-#' the block's runs
+#' list(path, format, template, code, output, text, steps, running); `code` and `output` are those
+#' of all the block's runs; `running` is TRUE when the call returns before its run ends
+#' (`background = TRUE` or `.run = FALSE`), so the script may still steer it (IC-55)
 #' @noRd
 doc_replay_doc = function(site, call, block_id, text = NULL) {
   body = tryCatch(doc_block_get(site$format, doc_read(site$path)$lines, block_id)$body,
@@ -277,7 +278,7 @@ doc_replay_doc = function(site, call, block_id, text = NULL) {
        template = site$template %||% call$template %||% call$prompt,
        code = as.character(unlist(lapply(runs, function(st) st$code))),
        output = as.character(unlist(lapply(runs, function(st) st$output))), text = text,
-       steps = steps)
+       steps = steps, running = isTRUE(call$args$background) || !isTRUE(call$args$run))
 }
 
 #' A block body as ordered steps: each run of code with its `#>` output, list(type = "r", code,
@@ -1342,12 +1343,14 @@ doc_catalog_prune = function() {
 
 #' Source a history document, regenerating stale blocks without running the old code
 #'
-#' Evaluates `file` top-level expression by expression in `envir`, like [source()] with
-#' `keep.source = TRUE`. A `peter()` call whose block is fresh replays without calling a model
-#' and the block's code then runs as ordinary R. A call whose block is stale (its prompt or the
-#' values interpolated into it changed), or every call under `replay = "live"` (an undone block
-#' runs without being rewritten; `replay = "record"` regenerates it), asks the model again and
-#' rewrites its block in place, and the old block is skipped, which base `source()` cannot do.
+#' Evaluates `file` top-level expression by expression in `envir`, like [source()]. An expression
+#' that names `peter()` keeps its source references, which locate the call; the others run without
+#' them, so the functions and calls they make hold no part of the document, as at the console. A
+#' `peter()` call whose block is fresh replays without calling a model and the block's code then
+#' runs as ordinary R. A call whose block is stale (its prompt or the values interpolated into it
+#' changed), or every call under `replay = "live"` (an undone block runs without being rewritten;
+#' `replay = "record"` regenerates it), asks the model again and rewrites its block in place, and
+#' the old block is skipped, which base `source()` cannot do.
 #'
 #' Replay executes the recorded R code, including its ordinary side effects. It does not
 #' freeze package versions, supply external inputs or validate the analysis. This function
@@ -1390,6 +1393,9 @@ gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = 
   # string literal (a prompt included) into "<U+00E9>" text (IC-62)
   exprs = parse(text = doc$lines, keep.source = TRUE, srcfile = srcfile, encoding = "UTF-8")
   srcs = attr(exprs, "srcref")
+  # srcrefs only locate peter() calls (contract 7.15): the other expressions run from `bare`, so a
+  # closure or a call captured with sys.call() holds no part of the document
+  bare = parse(text = doc$lines, keep.source = FALSE, encoding = "UTF-8")
   blocks = doc_find_blocks(doc$lines)
   # The block of each expression, by its parsed lines (srcref fields 7 and 8, as the locator's
   # doc_site_srcref() reads them): fields 1 and 3 follow `#line` directives, and R's parser
@@ -1411,7 +1417,7 @@ gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = 
   for (i in seq_along(exprs)) {
     if (!is.na(owner[i]) && owner[i] %in% st$sources[[depth]]$skip) next
     if (echo) msg_verbatim(paste0("> ", as.character(srcs[[i]])))
-    eval(exprs[i], envir)
+    eval(if ("peter" %in% all.names(bare[[i]])) exprs[i] else bare[i], envir)
   }
   acts = st$sources[[depth]]$log
   # A stale block whose call ran live but was not rewritten (no write consent, a locked or

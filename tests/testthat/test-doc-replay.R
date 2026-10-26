@@ -1976,6 +1976,32 @@ test_that("gptr_source() skips a regenerated block's old code below a #line comm
   expect_null(getOption("gptr.replay"))
 })
 
+test_that("a replayed block makes its objects without the document's srcrefs (FIX-24)", {
+  # a ggplot-like object: a call captured with sys.call(), as rlang captures a scale's, and a
+  # closure, as a scale keeps its labels function
+  code = c("g = function() sys.call()", "p = list(call = g(), labels = function(x) x + 1)")
+  x = local_doc_e2e(list(fake_tool("r", code = paste(code, collapse = "\n")),
+                         fake_text("Made p.")))
+  f = file.path(x$root, "analysis.R")
+  writeLines(c("# FIX-24: a line only the document holds", "s = peter(\"Make p\")"), f)
+  first = new.env(parent = globalenv())
+  gptr_source(f, replay = "auto", envir = first)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+  again = new.env(parent = globalenv())
+  out = gptr_source(f, replay = "replay", envir = again)
+  expect_identical(out$action, "replayed")
+  expect_length(fake_requests(x$fake), 2L)
+  doc_text = function(obj) {
+    any(grepl("FIX-24", attr(attr(obj, "srcref"), "srcfile")$lines, fixed = TRUE))
+  }
+  expect_null(attr(first$p$call, "srcref"))
+  expect_null(attr(again$p$call, "srcref"))
+  expect_identical(length(serialize(again$p$call, NULL)), length(serialize(first$p$call, NULL)))
+  expect_false(doc_text(first$p$labels))
+  expect_false(doc_text(again$p$labels))
+  expect_identical(again$p$labels(1), 2)
+})
+
 # ---- end to end through peter() and the fake provider (05 P15 acceptance 2-6) --------------------
 
 # A peter() call built at run time, as the console and Jupyter evaluate it: the call carries no
@@ -2758,6 +2784,14 @@ test_that("replaying a background script does not send its pipe steer again", {
                    "## Steer: Also store e = a + 100.")
 })
 
+test_that("replaying a stepped script does not send a steer sent between its steps again", {
+  skip_on_cran()
+  x = local_doc_e2e(doc_bg_script)
+  doc_steer_replay(x, c("s = peter(\"Store a = 1.\", .run = FALSE)", "gptr_step(s, 1)",
+                        "gptr_steer(s, \"Also store e = a + 100.\")", "gptr_step(s, Inf)"),
+                   "## Steer: Also store e = a + 100.")
+})
+
 test_that("a steer left over from one run stays recorded once in the block that took it", {
   skip_on_cran()
   x = local_doc_e2e(function(request) {
@@ -2790,6 +2824,38 @@ test_that("a replayed script still sends a steer that its blocks did not record"
   local_gptr_options(replay = "replay")
   doc_e2e_source(f)
   expect_gt(length(fake_requests(x$fake)), n)
+})
+
+test_that("a replayed script runs its own turn whose text a block recorded as a steer", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  menu = new.env()
+  x = local_doc_e2e(function(request) {
+    if (!isTRUE(menu$steer)) return("Done.")
+    menu$steer = FALSE
+    session_enqueue(gptr_last(), "Add a legend", as = "steer", source = "pause_menu")
+    fake_tool("r", code = "p = 1")
+  })
+  scripts = list(sync = "s = peter(\"Plot mpg.\")",
+                 background = c("s = peter(\"Plot mpg.\", background = TRUE)", "gptr_wait(s)"),
+                 later = c("s = peter(\"Plot mpg.\", .run = FALSE)", "gptr_step(s, Inf)",
+                           "s |> peter(\"Plot hp.\")"),
+                 step = c("s = peter(\"Plot mpg.\", .run = FALSE)", "gptr_step(s, Inf)"),
+                 steps = c("s = peter(\"Plot mpg.\", .run = FALSE)", "gptr_step(s, 1)",
+                           "gptr_step(s, Inf)"))
+  for (k in names(scripts)) {
+    f = file.path(x$root, paste0(k, ".R"))
+    writeLines(scripts[[k]], f)
+    menu$steer = TRUE
+    doc_e2e_source(f)
+    expect_true("## Steer: Add a legend" %in% readLines(f), info = k)
+    writeLines(c(readLines(f), "s |> peter(\"Add a legend\")"), f)
+    # the new turn makes one request and records one block
+    counts = function() c(length(fake_requests(x$fake)), nrow(doc_find_blocks(readLines(f))))
+    n = counts()
+    doc_e2e_source(f)
+    expect_identical(counts(), n + 1L, info = k)
+  }
 })
 
 test_that("two values of an interpolated {gene} never replay each other's block (IC-45)", {

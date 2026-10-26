@@ -7689,7 +7689,93 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   the reactor delivers in the same iteration reaches the normaliser: the partial message holds what
   was emitted before the flag, and a body ending in that iteration ends `aborted`, not `stop`.
   Formerly only the watch task checked, after every delivery of the iteration.
+- Amended by FIX-26 (2026-10-26): `stream_emit()` runs `stream_over()` after each event of an HTTP
+  stream, which covers the check before each unit, and the transfer's failure runs it first, as its
+  end does. An abort set during one event of a unit (an SSE event, a whole `stream = "raw"` chunk)
+  ends the stream before the unit's next event, so a unit that also holds the end no longer ends
+  `stop`, and a failure delivered after the flag ends `aborted`, not `error`.
 - Contract-visible: none.
-- Tests: test-provider-registry.R "an abort flag set during an event ends the stream before the next
-  unit or the end"; test-provider-anthropic.R "end to end on the mock server: streaming, retry and
-  abort (skip on CRAN)". Evidence: progress/fixes.md Task CI-97.
+- Tests: test-provider-registry.R "an abort flag ends the stream before the next event, unit, end or
+  failure"; test-provider-anthropic.R "end to end on the mock server: streaming, retry and abort
+  (skip on CRAN)". Evidence: progress/fixes.md Task CI-97, FIX-26.
+
+## D-255 - FIX-22 A replayed script runs its own turn equal to a recorded steer (2026-10-26)
+- Rule: a replayed block's `## Steer:` and `## Follow-up:` texts take back the equal items already
+  queued, as before, and stay the session's notes, in place of an earlier block's, only when the
+  block's call returns before its run ends (`background = TRUE` or `.run = FALSE`); `gptr_wait()` or
+  `gptr_step(turns = Inf)` on the session clears them, as a live run does, and a step of fewer turns
+  keeps them. A script can steer only a run it left going, so after any other replayed block, or
+  once it waited the run out, a pipe or `gptr_steer()` with an equal text is the script's own: a new
+  turn runs and is recorded, a steer is queued for the next run. Formerly every replayed block kept
+  its notes, keyed by block, until a live run, so a new `s |> peter("<text>")` turn equal to a steer
+  the script did not send (the pause menu's, the console's) was skipped with the notice "A steer
+  this script sends is already recorded...". Amends D-249 (steer-doc-5, steer-doc-5b).
+- Contract-visible: 04 section 15.4 IC-55.
+- Tests: test-doc-replay.R "a replayed script runs its own turn whose text a block recorded as a
+  steer", "replaying a stepped script does not send a steer sent between its steps again";
+  test-session-object.R "a replayed block's notes take back queued items with one withdraw each
+  (D-242)" (`replay_notes_add(s, doc)`). Evidence: progress/fixes.md FIX-22.
+
+## D-257 - FIX-24 A replayed block's objects hold no part of the document (2026-10-26)
+- Rule: `gptr_source()` evaluates a top-level expression that names `peter()` (`all.names()`) with
+  the document's srcrefs, which locate its calls (contract 7.15), and every other expression from a
+  parse with `keep.source = FALSE`. The closures, `function` calls and calls captured with
+  `sys.call()` that those expressions make (a replayed block's code, the user's own code) have no
+  srcref, so they hold none of the document's lines or parse data, as the agent's run makes them;
+  such a function prints its deparsed code, and a traceback through them names no document line,
+  as under `Rscript`. A function that wraps `peter()` keeps its srcref, so its calls are still
+  nested in the document. Formerly every expression ran as under `source(keep.source = TRUE)`.
+- Contract-visible: `?gptr_source` (no longer "like `source()` with `keep.source = TRUE`").
+- Tests: test-doc-replay.R "a replayed block makes its objects without the document's srcrefs
+  (FIX-24)". Evidence: progress/fixes.md FIX-24.
+
+## D-258 - FIX-25 gptr_export() exports a console transcript (2026-10-26)
+- Rule: `gptr_export()` admits a Peter-only pipeline that starts from a session handle an earlier
+  Peter statement of the document assigned: `s_<hex> |> peter("...")` after
+  `s_<hex> = peter("...")`, the later turns of a console transcript (IC-49), or the same layout in
+  a script. Formerly it was refused as "mixed or non-literal Peter expressions", so a console
+  transcript exported only while each session had one turn. A pipeline from any other name (a data
+  object piped in) stays refused. The raw format comments the statement and keeps its recorded R,
+  the Peter format keeps it active, as for every admitted call.
+- Contract-visible: `?gptr_export` details; vignette("script-as-history"), which named this
+  pipeline as refused. 03 and 04 do not list the calls an export admits.
+- Tests: test-doc-export.R "a console transcript exports like a script, its later turns piping the
+  handle" and the refusal list of "raw export refuses ambiguous calls and unresolved session
+  semantics". Evidence: progress/fixes.md FIX-25.
+
+## D-261 - FIX-21 Live bg-1 and plan-execute paths (2026-10-26)
+- Rule (waiting sessions): only `gptr_wait()` of a waiting background session continues it
+  (`bg_continue()` resumes it before the wait pumps, `bg_resume()` superseding the ask); the
+  background sweep never resumes one, so another `peter()` call or a console turn leaves it
+  waiting. Formerly any blocking pump resumed it: live, a console turn ended before the resumed run
+  asked, which then parked again at R's prompt, its console note and model request sent twice. The
+  park notice says `gptr_wait(gptr_last()) continues it.`, and the console's notice of waiting
+  sessions ends `!!gptr::gptr_wait(session) asks`. Amends D-252's resume point.
+- Rule (recording): the resumed run keeps the document site of the call that started the session
+  (`bg_run_opts()` keeps `doc`; P21 Task 3 left it out), so its end writes that call's block; a
+  console transcript adds it as `s_<id> |> peter("<prompt>")` after the parked run's
+  `## Run: aborted` block. Formerly the work done after the approval was in no document, and a
+  script re-sourced asked the model again.
+- Rule (/exit): `/exit` names `gptr_wait(gptr_last())` for a running background session only when
+  it is the console's own, which `/exit` returns; for another one the row ends with
+  `gptr_jobs() lists it`. Formerly the hint named the console's session for any of them.
+- Rule (plan execute): an execute choice of the plan menu sets the session's mode and marks the
+  plan used, and queues nothing; its notice asks for `Go ahead.` as the next prompt (at R's prompt
+  `gptr_last() |> peter("Go ahead.")`), a turn of its own that the document records and that
+  carries the new `<mode>`. Formerly it queued "Go ahead with the plan above." and named
+  `gptr_wait(gptr_last())`: live, that run was in no transcript ("This turn starts from queued
+  input ..."), the chat sent the hint as a prompt unless typed as `!` code, and a go-ahead the
+  person typed ran the queued one after it, one more request. Amends sessions-12 and sessions-13.
+- Contract-visible: 04 sections 7.21, 15.5 IC-57 and 15.10 (the console's notices, `/exit`); 03
+  sections 6.2 and 6.8.5; `?gptr-background`, `?peter` (`mode`),
+  vignette("teams-and-background").
+- Tests: test-agent-background.R "only gptr_wait() continues a waiting session; another call
+  leaves it waiting", "an ask at an idle tick parks the run as waiting until gptr_wait()", "the
+  run a parked session resumes records the block of the call that started it", "bg_run_opts()
+  keeps the options a resumed run needs, never a frame or a snapshot";
+  test-console-repl.R "background sessions that wait for approval are announced once (IC-57)";
+  test-console-commands.R "/exit, /quit and /q end the REPL"; test-perm-plan.R "the execute menu
+  follows the plan run: mode, tools, nothing queued (6.8.5)", "the call the go-ahead notice names
+  runs the whole plan", "the go-ahead the person sends runs the plan once, in the mode the menu
+  chose".
+  Evidence: progress/fixes.md FIX-21.

@@ -3,7 +3,7 @@
 # peter(..., background = TRUE) returns a running session at once. A `later` timer pumps the
 # process reactor while the console is idle: one non-blocking reactor iteration per tick, and
 # nothing while a reactor pump is on the call stack (IC-57: reactor_depth() > 0). An ask at an idle
-# tick parks the session as `waiting`; the next blocking gptr call continues it and asks the user.
+# tick parks the session as `waiting`; gptr_wait() on it continues it and asks the user.
 
 #' Background sessions (experimental)
 #'
@@ -32,9 +32,9 @@
 #'   \item A background run never asks a question at the idle console. When it needs an
 #'     approval or an answer at an idle tick, the action is not performed: the agent is told
 #'     that the user will be asked, its run stops, and the session moves to status
-#'     \code{"waiting"} with a notice. At your next \code{gptr_wait()}, \code{peter()} call or
-#'     console turn the session continues with one more model request, which tells the agent
-#'     that you are at the console; the agent repeats the call, and you are asked as usual. A
+#'     \code{"waiting"} with a notice. \code{gptr_wait()} on the session continues it with one
+#'     more model request, which tells the agent that you are at the console; the agent repeats
+#'     the call, and you are asked as usual. Other calls and console turns leave it waiting. A
 #'     message piped into a waiting session is delivered when it continues.
 #'   \item \code{gptr_cancel()} stops a running background session. A waiting session has no
 #'     run to cancel: \code{gptr_jobs(kill = TRUE)} stops it (together with every other job).
@@ -308,13 +308,14 @@ bg_register = function(s) {
   invisible(s)
 }
 
-#' The run options (04 section 7.6) a resumed background run keeps; never `call` (the caller's
+#' The run options (04 section 7.6) a resumed background run keeps, the document site among them,
+#' so the resumed run writes the block of the call that started it; never `call` (the caller's
 #' frame, rule R2) or `safety` (snapshotted again at resume, IC-53)
 #' @noRd
 bg_run_opts = function(run) {
   o = run$opts[intersect(names(run$opts), c("max_turns", "budget", "returns", "context",
                                              "timeout", "preset", "tools", "root", "agent",
-                                             "depth"))]
+                                             "depth", "doc"))]
   o$background = TRUE
   o
 }
@@ -370,7 +371,7 @@ bg_stop = function(id) {
 }
 
 #' Forget a background session: UI wrappers, live handle, job row, strong reference; with
-#' `notice`, tell the idle console how it settled, on a row of its own after R's prompt, dim in the
+#' `notice`, tell the idle console how it settled (on a row of its own, bg_callback()), dim in the
 #' console's words, the session named by its first prompt: `background session '<prompt>' done`, or
 #' its status and reason
 #' @noRd
@@ -391,7 +392,7 @@ bg_release = function(id, notice = FALSE) {
     why = if (length(d$reason) && nzchar(d$reason)) paste0(sym$sep, bg_cut(d$reason, 120L))
     said = paste0("background session", if (nzchar(name %||% "")) paste0(" '", name, "'"), " ",
                   if (identical(d$status, "idle")) "done" else d$status, why)
-    gptr_inform(paste0("\n", sym$dim(said)), "notice")
+    gptr_inform(sym$dim(said), "notice")
   }
   invisible(TRUE)
 }
@@ -429,8 +430,8 @@ bg_guard = function(event, expr) {
 
 #' The later callback: an idle tick, or bookkeeping only while a reactor pump is on the stack
 #' (IC-57). It re-arms on exit, even after an interrupt, and guards tick and sweep separately, so
-#' a failing tick never skips the sweep that stops a run with a recorded ask. Waiting sessions
-#' resume only inside a blocking pump, outside an idle tick and while no tool executes
+#' a failing tick never skips the sweep that stops a run with a recorded ask. At an idle tick the
+#' cursor is on R's prompt row, so the tick's first notice starts a row of its own
 #' @noRd
 bg_callback = function() {
   st = bg_state()
@@ -440,9 +441,14 @@ bg_callback = function() {
   if (!is.null(pending)) pending()
   on.exit(bg_ensure_pump(), add = TRUE)
   idle = reactor_depth() == 0L
-  if (idle) bg_guard("tick", bg_tick())
-  resume = !idle && !bg_ticking() && is.null(run_current())
-  bg_guard("sweep", bg_sweep(idle, resume))
+  row = idle
+  withCallingHandlers({
+    if (idle) bg_guard("tick", bg_tick())
+    bg_guard("sweep", bg_sweep(idle))
+  }, gptr_message = function(m) {
+    if (row) cat("\n")
+    row <<- FALSE
+  })
   invisible(NULL)
 }
 
@@ -482,31 +488,37 @@ bg_tick = function() {
   invisible(TRUE)
 }
 
-#' Bookkeeping after a tick or inside a blocking pump: a new run on a waiting session (gptr_wait(),
-#' gptr_step() or bg_resume() started it) supersedes the ask; a run with a recorded ask, whichever
-#' run of the session asked, is stopped and its session parked; a waiting session resumes only
-#' with `resume`; any other session without a run is released
+#' Bookkeeping after a tick or inside a blocking pump: a run with a recorded ask, whichever run of
+#' the session asked, is stopped and its session parked; a waiting session waits for gptr_wait()
+#' (bg_continue()); any other session without a run is released
 #' @noRd
-bg_sweep = function(idle, resume) {
+bg_sweep = function(idle) {
   for (id in bg_ids()) {
     s = bg_get(id)
     live = session_live(s)
-    bg = live$background
     run = live$run
-    if (!is.null(run) && isTRUE(bg$waiting)) {
-      bg$ask = NULL
-      bg$waiting = FALSE
-      bg$run = run$id
-      live$background = bg
-    } else if (!is.null(run) && !is.null(bg$ask)) {
+    if (!is.null(run) && !is.null(live$background$ask)) {
       bg_park_session(s, run)
-    } else if (is.null(run) && isTRUE(bg$waiting) && identical(session_data(s)$status, "waiting")) {
-      if (resume) bg_resume(s)
-    } else if (is.null(run)) {
+    } else if (is.null(run) && !bg_waiting(s)) {
       bg_release(id, notice = idle)
     }
   }
   invisible(NULL)
+}
+
+#' Is `s` a parked background session (status `waiting`, IC-57)?
+#' @noRd
+bg_waiting = function(s) {
+  isTRUE(session_live(s)$background$waiting) && identical(session_data(s)$status, "waiting")
+}
+
+#' Continue the waiting sessions among `ss` (gptr_wait()); their resumed runs. Only a wait for the
+#' session continues it: another call could end before the resumed run asks, which then parks
+#' again at R's prompt
+#' @noRd
+bg_continue = function(ss) {
+  runs = lapply(Filter(bg_waiting, ss), bg_resume)
+  Filter(Negate(is.null), runs)
 }
 
 #' Stop the run that asked at an idle tick and park its session as `waiting` (IC-57, 04 section
@@ -527,26 +539,32 @@ bg_park_session = function(s, run) {
   d$status = "waiting"
   d$reason = paste0("waiting for ", label, ": ", ask$summary)
   gptr_inform(c(paste0("Background session ", d$id, " is ", d$reason, "."),
-                "It continues at your next gptr_wait(), peter() call or console turn."),
+                "gptr_wait(gptr_last()) continues it."),
               "notice")
   invisible(s)
 }
 
-#' Continue a waiting session inside a blocking gptr call: the run's input is a user steer that
-#' says the user is at the console, so steers piped in meanwhile join it and queued follow-ups
-#' come when it would stop, and the model repeats the denied (or blocked) call, which the gate
-#' asks the user about. A session that cannot continue is set to `aborted` and released (one
+#' Continue a waiting session: the run's input is a user steer that says the user is at the
+#' console, so steers piped in meanwhile join it and queued follow-ups come when it would stop,
+#' and the model repeats the denied (or blocked) call, which the gate asks the user about; the run
+#' supersedes the ask. A session that cannot continue is set to `aborted` and released (one
 #' diagnostic), never left waiting
 #' @noRd
 bg_resume = function(s) {
   d = session_data(s)
   live = session_live(s)
-  ask = live$background$ask
-  input = if (!is.null(ask)) {
-    msg_user(redact(bg_resume_text(ask), "context"), source = "steer")
+  bg = live$background
+  input = if (!is.null(bg$ask)) {
+    msg_user(redact(bg_resume_text(bg$ask), "context"), source = "steer")
   }
-  run = tryCatch(run_start(s, input, opts = live$background$opts), error = function(e) e)
-  if (!inherits(run, "error")) return(invisible(run))
+  run = tryCatch(run_start(s, input, opts = bg$opts), error = function(e) e)
+  if (!inherits(run, "error")) {
+    bg$ask = NULL
+    bg$waiting = FALSE
+    bg$run = run$id
+    live$background = bg
+    return(invisible(run))
+  }
   registry_diagnostic("builtin:background", "resume", class(run)[1L], conditionMessage(run))
   if (identical(d$status, "waiting")) {
     d$status = "aborted"

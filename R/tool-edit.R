@@ -360,7 +360,7 @@ edit_compute = function(abs, path, edits, replace_all = FALSE, src = edit_source
 #' Text of a computed edit for a diff: invalid bytes of a lossy file shown as U+FFFD
 #' @noRd
 edit_view = function(cp, x) {
-  if (cp$dec$lossy) utf8_mark(iconv(x, "UTF-8", "UTF-8", sub = replacement_sub)) else x
+  if (cp$dec$lossy) utf8_mark(iconv(x, "UTF-8", "UTF-8", sub = replacement_sub())) else x
 }
 
 #' Why a computed edit deviates from the literal request (none: character())

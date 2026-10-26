@@ -278,12 +278,19 @@ test_that("/exit, /quit and /q end the REPL", {
   }
   # a background session still running is named, in the banner's words (visual round 3: R's
   # prompt got its end notice 20 s later, unannounced)
+  s = peter("bg", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
   running = c("running", "idle")
-  local_mocked_bindings(job_list = function(kind = NULL) data.frame(status = running))
-  rs = repl_state(NULL, new.env())
+  local_mocked_bindings(job_list = function(kind = NULL) {
+    data.frame(id = c(s$id, "s0000000002"), status = running)
+  })
+  rs = repl_state(s, new.env())
   expect_identical(run_command(rs, "/exit")$out,
                    "1 background session still runs - gptr_wait(gptr_last()) shows it")
   expect_true(rs$exit)
+  # live (FIX-21): another session ran in the background, and gptr_last() was the console's
+  running = c("idle", "running")
+  expect_identical(run_command(rs, "/exit")$out,
+                   "1 background session still runs - gptr_jobs() lists it")
   running = c("running", "running")
   expect_identical(run_command(rs, "/exit")$out,
                    "2 background sessions still run - gptr_jobs() lists them")

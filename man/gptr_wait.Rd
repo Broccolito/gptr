@@ -18,7 +18,8 @@ gptr_wait(x, timeout = Inf)
 Starts idle sessions that have queued input, then pumps until no session is running or
 waiting, or \code{timeout} seconds have passed. Every session's checks (egress, replay, its model's
 provider and key) pass before any is started, so a refusal starts none. On timeout the sessions
-keep their \code{running} status and no condition is raised.
+keep their \code{running} status and no condition is raised. A background session waiting for
+approval continues only here, and you are asked as usual (see \link{gptr-background}).
 }
 \details{
 \code{timeout} limits reactor polling; it does not interrupt R code. Request preparation

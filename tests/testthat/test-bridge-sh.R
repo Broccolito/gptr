@@ -565,6 +565,24 @@ test_that("a finished or stopped job's seconds stop counting", {
   expect_identical(c(seconds(j), seconds(k)), before)
 })
 
+test_that("a job's clock stops when the reactor or kill() sees it end, not at the first look", {
+  skip_on_cran()
+  j = bridge_bg(r_cmd("invisible(0)"))
+  withr::defer(j$kill())
+  reactor_pump(until = function() !j$.proc$is_alive(), timeout = 20)
+  ended = reactor_now()
+  reactor_pump(timeout = 2)
+  k = bridge_bg(r_cmd("Sys.sleep(30)"))
+  withr::defer(k$kill())
+  k$kill()
+  killed = reactor_now()
+  Sys.sleep(2)
+  tab = bridge_jobs()
+  seconds = tab$seconds[match(c(j$id, k$id), tab$id)]
+  expect_lt(seconds[[1L]], ended - j$.started + 1)
+  expect_lt(seconds[[2L]], killed - k$.started + 1)
+})
+
 test_that("bg jobs are in gptr_jobs(), write() needs stdin and kill = TRUE stops them", {
   skip_on_cran()
   j = bridge_bg(r_cmd("Sys.sleep(30)"))

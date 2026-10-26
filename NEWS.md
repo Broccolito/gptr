@@ -175,7 +175,7 @@ works on the objects already in memory.
   can make it valid.
 * `gptr_init()` no longer writes `"mode": "manual"` and `"record": "ask"` into
   `.gptr/settings.json`, which overrode a user-level `mode = auto` or `record = "auto"` in every
-  initialised project. In a project made by an earlier build, delete those two keys from the file
+  initialized project. In a project made by an earlier build, delete those two keys from the file
   to let your user settings apply.
 * A trusted project's `mode` applies, so `gptr_config(mode = auto)` in a trusted project no longer
   saves a value that is silently ignored; an untrusted project still only tightens the mode, and

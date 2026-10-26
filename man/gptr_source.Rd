@@ -30,12 +30,14 @@ A stale block whose call ran but could not be rewritten (for example without wri
 is \code{ran} and keeps its status.
 }
 \description{
-Evaluates \code{file} top-level expression by expression in \code{envir}, like \code{\link[=source]{source()}} with
-\code{keep.source = TRUE}. A \code{peter()} call whose block is fresh replays without calling a model
-and the block's code then runs as ordinary R. A call whose block is stale (its prompt or the
-values interpolated into it changed), or every call under \code{replay = "live"} (an undone block
-runs without being rewritten; \code{replay = "record"} regenerates it), asks the model again and
-rewrites its block in place, and the old block is skipped, which base \code{source()} cannot do.
+Evaluates \code{file} top-level expression by expression in \code{envir}, like \code{\link[=source]{source()}}. An expression
+that names \code{peter()} keeps its source references, which locate the call; the others run without
+them, so the functions and calls they make hold no part of the document, as at the console. A
+\code{peter()} call whose block is fresh replays without calling a model and the block's code then
+runs as ordinary R. A call whose block is stale (its prompt or the values interpolated into it
+changed), or every call under \code{replay = "live"} (an undone block runs without being rewritten;
+\code{replay = "record"} regenerates it), asks the model again and rewrites its block in place, and
+the old block is skipped, which base \code{source()} cannot do.
 }
 \details{
 Replay executes the recorded R code, including its ordinary side effects. It does not
