@@ -7703,9 +7703,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   park notice says `gptr_wait(gptr_last()) continues it.`, and the console's notice of waiting
   sessions ends `!!gptr::gptr_wait(session) asks`. Amends D-252's resume point.
 - Rule (recording): the resumed run keeps the document site of the call that started the session
-  (`bg_run_opts()` keeps `doc`; P21 Task 3 left it out), so its end writes that call's block, a
-  console transcript's `## Run: aborted` block of the parked run replaced. Formerly the work done
-  after the approval was in no document, and a script re-sourced asked the model again.
+  (`bg_run_opts()` keeps `doc`; P21 Task 3 left it out), so its end writes that call's block; a
+  console transcript adds it as `s_<id> |> peter("<prompt>")` after the parked run's
+  `## Run: aborted` block. Formerly the work done after the approval was in no document, and a
+  script re-sourced asked the model again.
 - Rule (/exit): `/exit` names `gptr_wait(gptr_last())` for a running background session only when
   it is the console's own, which `/exit` returns; for another one the row ends with
   `gptr_jobs() lists it`. Formerly the hint named the console's session for any of them.

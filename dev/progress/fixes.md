@@ -5358,3 +5358,146 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: none. Open: why the writer exits early (2 of 1,356 Windows writer cases in CI, none
   in 6,583 measured); a recurrence now fails on `writer_failed` in about 5 s, the writer's stderr
   in the witness.
+
+## FIX-21 - Live bg-1 and plan-execute paths (2026-10-26, #PR)
+Scope: the two paths the cheat-sheet review left unexercised (HANDOFF, Open), driven as a person
+would in terminal R (`R --vanilla`) in a private tmux server at 100x40, keys typed one at a time,
+gptr's settings in temporary R_USER_* folders and `gptr_doc("session.R", format = "transcript")`
+bound, as `dev/dogfood/p28-console.R` sets up, on claude-cli (claude-sonnet-5-5), codex (gpt-6-sol)
+and `ollama/qwen3.8:27b`. bg-1: a manual-mode `r` call that needs approval, sent to the background
+by `background = TRUE` at R's prompt (B1) or the pause menu's `[b]` (B2, then `/exit`; B2b, then the
+chat's `!!gptr::gptr_wait(gptr::gptr_last())`), and a parked session followed by a console turn
+(B3). plan-execute: "Make a plan to save the mean of fuel$mpg to the file mean.txt in the current
+folder." in `peter(mode = plan)` (P1) and in `s = peter("...", mode = plan)` at R's prompt (P2),
+each execute choice on some route. First on 7e23ebd3, then on the branch, each in a private library;
+the driver, screens, events, transcripts and replays without a model are local, not committed.
+
+### Live runs on 7e23ebd3
+- B1 (claude-cli 78 s, codex 93 s, ollama 102 s), as ?gptr-background and the teams vignette say:
+  the first idle tick denied the `r` call and parked the session (`b$status` "waiting") with
+  "Background session <id> is waiting for approval: r: x1 = summary(fuel$mpg); x1." and "It
+  continues at your next gptr_wait(), peter() call or console turn."; `gptr_wait(b)` sent one
+  request ending with the user steer "I am at the console now. Repeat the call that could not be
+  approved (r: x1 = summary(fuel$mpg); x1) with the same input; I will be asked to approve it.",
+  each model repeated the call, `? Allow r?` came, and `y` ran it (x1 made, status idle). Not as
+  specified: the notice began on R's prompt row, `>   Background session ...` (claude-cli and codex:
+  their route's first-use notice; L1), and the transcript kept `## Run: aborted` and no code, so
+  replays without a model made no x1 (0 of 3; L3). At R's prompt `gptr_wait()` shows the ask and the
+  code's output but not the answer, as documented (it returns the session invisibly).
+- B2 (claude-cli 85 s, codex 105 s), B2b (claude-cli 47 s, codex 61 s, ollama 62 s): Ctrl-C in the
+  first request showed `? Paused` with `b background`; `b` printed
+  `in the background (experimental, ?"gptr-background")` and
+  `!!gptr::gptr_wait(gptr::gptr_last()) continues it here`, as ?peter and the sheet say. B2: `/exit`
+  said `1 background session still runs · gptr_wait(gptr_last()) shows it`, the idle tick parked it,
+  `gptr_wait(gptr_last())` asked as in B1, and the transcript again held only `## Run: aborted`.
+  B2b: the chat's wait asked inline, showed the answer and its status line, and the transcript
+  recorded the block.
+- B3 (claude-cli, codex): the banner said
+  `1 background session waits for approval · the next prompt or gptr_wait() asks`; "Reply with the
+  word hello and nothing else." sent the resumed request with the console note inside the turn, the
+  turn ended (`hello`, `done`) before the model repeated the call, and nothing asked. `/exit` said
+  `1 background session still runs · gptr_wait(gptr_last()) shows it`, naming the console's own idle
+  session (L4); at R's prompt the resumed run repeated the call at an idle tick and parked again,
+  and `gptr_wait(b)` sent the note a second time before it asked (claude-cli 4 requests, 2 notes;
+  L2).
+- P1 (claude-cli auto 56 s, codex manual 323 s, ollama edits 106 s) and P2 (claude-cli edits 51 s,
+  codex auto 87 s): the plan run ended with its `<proposed_plan>` block, `? Execute the plan?` and
+  `Execute: [a]uto / [e]dits / [m]anual / [k]eep planning`; a choice printed "Queued the go-ahead in
+  session <id> (mode <m>): gptr_wait(gptr_last()) runs the plan." and the prompt became the mode's.
+  In the chat that call goes to the model unless typed as `!gptr_wait(gptr_last())`; it (and P2's
+  `gptr_wait(gptr_last())`) printed "This turn starts from queued input, so it is not recorded in
+  the bound document.", then ran the plan, manual and edits asking for the `writeLines()` call, and
+  wrote mean.txt. The transcripts held the plan block and no code, and replays without a model wrote
+  no mean.txt (0 of 4; L5). Typing "Go ahead." instead (claude-cli, 54 s) ran the plan, then the
+  queued "Go ahead with the plan above." as a follow-up, a second request
+  (`## Follow-up: Go ahead with the plan above.`). Ollama's model called `peter()` in its plan-mode
+  `r` code; only the top-level run offered the menu, as specified. Codex P1m's folder was lost to a
+  driver restart; its screens above are from the live pane.
+
+### L1 - An idle tick's first notice starts a row of its own below R's prompt
+- Commit `1842ffe9`. Red: `^agent-background$` with L1-L3's tests FAIL 7 PASS 219, L1's FAIL 1: the
+  output a park printed began with "Background session <id> is waiting for approval: r: v = 1.", not
+  a blank row.
+- Cause: a `later` callback prints where R's prompt left the cursor; only `bg_release()`'s notice
+  began with a line feed (visual round 3).
+- Fix: `bg_callback()` writes one line feed before the first gptr notice (`gptr_message`) of an idle
+  tick, which replaces the release notice's own; its test reads the row from the output.
+- Green: `^agent-background$` PASS 216. Lint clean.
+- Deviations: none. Open: R draws no prompt again after a callback's output, so the person types on
+  a row without `> ` (unchanged).
+
+### L2 - Only gptr_wait() continues a waiting session
+- Commit `394940ed`. Red: FAIL 3: after a park, `peter("other")` on a fake that streams four words
+  at 0.1 s left the session `idle`, its fake asked 3 times and the UI once.
+- Cause: `bg_callback()` resumed every waiting session inside any pump at depth 1, but only a
+  `gptr_wait()` of that session pumps until the resumed run asks.
+- Fix: the sweep never resumes; `gptr_wait()` resumes its waiting sessions before it pumps
+  (`bg_continue()`, their runs among the pump's), and `bg_resume()` supersedes the ask (the sweep's
+  branch for it goes). The park notice ends "gptr_wait(gptr_last()) continues it." (the test checks
+  that `gptr_last()` is the parked session), the console's notice `!!gptr::gptr_wait(session) asks`.
+  Two tests that resumed through a bare `reactor_pump()` call `gptr_wait()`. ?gptr-background, the
+  teams vignette, 03 section 6.2 and 04 sections 7.21, 15.5 (IC-57) and 15.10 say so.
+- Green: `^(agent-background|gptr-sdk|console-repl)$` PASS 703. Lint clean; `document` changed
+  `gptr-background.Rd` only.
+- Deviations: D-261. Open: none.
+
+### L3 - The run a parked session resumes records its call's block
+- Commit `4ea59663`. Red: FAIL 3: a script `s = peter("Set z.", mode = manual, background = TRUE)`,
+  `later::run_now()` until it parked, `gptr_wait(s)` answered `y`: the file held no `z = 3`, and
+  sourcing it again made a fourth request and no `z`.
+- Cause: `bg_run_opts()` kept no `doc` (P21 Task 3's list), so the resumed run had no document site;
+  a script records only runs that end idle, a console transcript the parked run's aborted block.
+- Fix: `bg_run_opts()` keeps `doc`, so the resumed run writes the call's block: a script's statement
+  gets it, a console transcript adds `s_<id> |> peter("<prompt>")` with the code after the aborted
+  block. The options test expects `doc`.
+- Green: `^(agent-background|doc-replay|doc-formats)$` PASS 1345. Lint clean.
+- Deviations: D-261 (P21 Task 3's list). Open: the console transcript repeats the call's prompt for
+  the resumed turn; the console note it answered is not recorded.
+
+### L4 - /exit names gptr_wait(gptr_last()) only for the console's own session
+- Commit `c6caa12a`. Red: `^console-commands$` FAIL 1 PASS 172: with another session running,
+  `/exit` read `1 background session still runs - gptr_wait(gptr_last()) shows it`.
+- Fix: `cmd_exit()` names that call for the one running session that is the console's own, which
+  `/exit` returns; for another one the row ends `gptr_jobs() lists it`. 04 section 15.10.
+- Green: PASS 173. Lint clean.
+- Deviations: D-261. Open: none.
+
+### L5 - The execute menu sets the mode and leaves the go-ahead to the next prompt
+- Commit `b44ad5bc`. Red: `^perm-plan$` FAIL 6 PASS 120: after the menu the queue held the go-ahead
+  and the notice named `gptr_wait(gptr_last())`; `s |> peter("Go ahead with the plan above.")` made
+  a fourth request, the queued go-ahead's.
+- Cause: `plan_execute()` queued "Go ahead with the plan above." (sessions-12, sessions-13); a run
+  from the queue has no document site, and the queued item comes after a go-ahead the person sends.
+- Fix: `plan_execute()` queues nothing and renders no turn blocks; its notice reads "Session <id> is
+  in mode <m>: send Go ahead. to run the plan." and, on a row of its own,
+  `At R's prompt: gptr_last() |> peter("Go ahead.")` (one row wrapped inside the call at 100 columns
+  live). The pipe turn carries the new `<mode>` (04 section 7.6). `?peter` (`mode`) and 03 section
+  6.8.5 say so; the test kernel's `session_enqueue()` mock goes.
+- Green: PASS 126; `^(perm-plan|gptr-gateway|arch-layers|lint-rules|zzz)$` PASS 854. Lint clean;
+  `document` changed `peter.Rd` only.
+- Deviations: D-261 (amends sessions-12 and sessions-13). Open: none.
+
+### Live runs on the branch
+- B1 (claude-cli 74 s, codex 89 s, ollama 94 s): `> `, then the notices on rows of their own and
+  "gptr_wait(gptr_last()) continues it."; `gptr_wait(b)` asked once; the transcript added the
+  resumed block with `x1 = summary(fuel$mpg); x1` and its output; replays made x1 (3 of 3).
+- B3 (claude-cli 55 s, codex 87 s, ollama 68 s): the banner ended `!!gptr::gptr_wait(session) asks`;
+  the hello turn sent no console note; `!!gptr::gptr_wait(b)` sent it once, asked and made x4 (4
+  requests, 1 note each); the transcript recorded the block.
+- P1, "Go ahead." typed (claude-cli auto 51 s, codex auto 66 s, ollama auto 72 s): one run, recorded
+  as `s_<id> |> peter("Go ahead.")` with its code; replays wrote mean.txt for claude-cli and ollama.
+- P2 (claude-cli auto 49 s, codex manual 74 s, ollama edits 62 s), at `b44ad5bc`, the others at
+  `d6627acb` (L5 with the one-row notice): the two rows came, the typed
+  `gptr_last() |> peter("Go ahead.")` ran the plan, manual and edits asking once, and replays wrote
+  mean.txt (3 of 3).
+- Checks: neighbours (every `console-`, `agent-`, `perm-` and `doc-` file, with `gptr-sdk`,
+  `gptr-gateway`, `session-object`, `tool-ask`, `injection-e2e`, `arch-layers`, `lint-rules` and
+  `zzz`; NOT_CRAN=true, SIGINT at its default) at `b44ad5bc` FAIL 0 SKIP 3 PASS 10574 in UTF-8 and
+  FAIL 0 SKIP 30 PASS 10396 under `LC_ALL=C LANG=C`; the 10 changed R and test files lint clean;
+  `document` changes nothing more.
+- Open (found in passing, not fixed): a direct R line that names a session by a variable bound at
+  R's prompt (`!!gptr::gptr_wait(b)`) stops the transcript's replay, which names it `s_<id>` (as
+  FIX-20 R29); a model `r` call that failed after an assignment is left out of its block while its
+  binding stays, so codex's P1 block read `fuel_mpg_mean` before assigning it and its replay
+  stopped; a console transcript does not record the console's starting mode (`peter(mode = plan)`),
+  so a live re-ask plans in the configured mode.
