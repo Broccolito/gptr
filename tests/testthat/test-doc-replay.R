@@ -2792,6 +2792,35 @@ test_that("a replayed script still sends a steer that its blocks did not record"
   expect_gt(length(fake_requests(x$fake)), n)
 })
 
+test_that("a replayed script runs its own turn whose text a block recorded as a steer", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  menu = new.env()
+  x = local_doc_e2e(function(request) {
+    if (!isTRUE(menu$steer)) return("Done.")
+    menu$steer = FALSE
+    session_enqueue(gptr_last(), "Add a legend", as = "steer", source = "pause_menu")
+    fake_tool("r", code = "p = 1")
+  })
+  scripts = list(sync = "s = peter(\"Plot mpg.\")",
+                 background = c("s = peter(\"Plot mpg.\", background = TRUE)", "gptr_wait(s)"),
+                 later = c("s = peter(\"Plot mpg.\", .run = FALSE)", "gptr_step(s, Inf)",
+                           "s |> peter(\"Plot hp.\")"))
+  for (k in names(scripts)) {
+    f = file.path(x$root, paste0(k, ".R"))
+    writeLines(scripts[[k]], f)
+    menu$steer = TRUE
+    doc_e2e_source(f)
+    expect_true("## Steer: Add a legend" %in% readLines(f), info = k)
+    writeLines(c(readLines(f), "s |> peter(\"Add a legend\")"), f)
+    # the new turn makes one request and records one block
+    counts = function() c(length(fake_requests(x$fake)), nrow(doc_find_blocks(readLines(f))))
+    n = counts()
+    doc_e2e_source(f)
+    expect_identical(counts(), n + 1L, info = k)
+  }
+})
+
 test_that("two values of an interpolated {gene} never replay each other's block (IC-45)", {
   skip_on_cran()
   skip_if_not_installed("knitr")

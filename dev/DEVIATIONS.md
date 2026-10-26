@@ -7693,3 +7693,18 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-provider-registry.R "an abort flag set during an event ends the stream before the next
   unit or the end"; test-provider-anthropic.R "end to end on the mock server: streaming, retry and
   abort (skip on CRAN)". Evidence: progress/fixes.md Task CI-97.
+
+## D-255 - FIX-22 A replayed script runs its own turn equal to a recorded steer (2026-10-26)
+- Rule: a replayed block's `## Steer:` and `## Follow-up:` texts take back the equal items already
+  queued, as before, and stay the session's notes, in place of an earlier block's, only when the
+  block's call returns before its run ends (`background = TRUE` or `.run = FALSE`); `gptr_wait()` on
+  the session clears them, as a live run does. A script can steer only a run it left going, so after
+  any other replayed block a pipe or `gptr_steer()` with an equal text is the script's own: a new
+  turn runs and is recorded, a steer is queued for the next run. Formerly every replayed block kept
+  its notes, keyed by block, until a live run, so a new `s |> peter("<text>")` turn equal to a steer
+  the script did not send (the pause menu's, the console's) was skipped with the notice "A steer
+  this script sends is already recorded...". Amends D-249 (steer-doc-5, steer-doc-5b).
+- Contract-visible: 04 section 15.4 IC-55.
+- Tests: test-doc-replay.R "a replayed script runs its own turn whose text a block recorded as a
+  steer"; test-session-object.R "a replayed block's notes take back queued items with one withdraw
+  each (D-242)" (`replay_notes_add(s, doc)`). Evidence: progress/fixes.md FIX-22.

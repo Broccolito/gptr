@@ -173,6 +173,8 @@ gptr_wait = function(x, timeout = Inf) {
   ss = sdk_sessions(x)
   check_number(timeout, "timeout", min = 0)
   caller = parent.frame()
+  # a replayed run ends here, so a later text equal to one of its notes is the script's own (IC-55)
+  for (s in ss) assign("replay_notes", NULL, envir = session_data(s))
   # every session is checked before any is started, so a refusal (egress, replay) starts none
   chks = vector("list", length(ss))
   i = 0L
