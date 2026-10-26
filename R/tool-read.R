@@ -17,7 +17,9 @@ image_sniff_bytes = 4100L
 image_max_edge = 2000L
 image_max_b64 = 4.5 * 1024^2
 binary_sniff = 8000L
-replacement_sub = rawToChar(as.raw(c(0xEF, 0xBF, 0xBD)))
+# U+FFFD as native bytes for iconv(sub =), made per call: a namespace string of unknown encoding is
+# translated when the installed package loads in another locale, and iconv() then wrote "<U+FFFD>"
+replacement_sub = function() rawToChar(as.raw(c(0xEF, 0xBF, 0xBD)))
 bom_len = c("UTF-8" = 3L, "UTF-16LE" = 2L, "UTF-16BE" = 2L, "UTF-32LE" = 4L, "UTF-32BE" = 4L)
 bom_bytes = list("UTF-8" = as.raw(c(0xEF, 0xBB, 0xBF)), "UTF-16LE" = as.raw(c(0xFF, 0xFE)),
                  "UTF-16BE" = as.raw(c(0xFE, 0xFF)), "UTF-32LE" = as.raw(c(0xFF, 0xFE, 0, 0)),
@@ -100,7 +102,7 @@ decode_raw = function(b, fallback = c("CP1252", "latin1")) {
   if (nzchar(bom)) {
     body = b[-seq_len(bom_len[[bom]])]
     if (bom != "UTF-8") {
-      txt = iconv(list(body), from = bom, to = "UTF-8", sub = replacement_sub)
+      txt = iconv(list(body), from = bom, to = "UTF-8", sub = replacement_sub())
       return(list(text = as_utf8(txt), encoding = bom, bom = TRUE, lossy = FALSE))
     }
     b = body
@@ -121,7 +123,7 @@ decode_raw = function(b, fallback = c("CP1252", "latin1")) {
       if (!is.na(out)) return(list(text = as_utf8(out), encoding = enc, bom = FALSE, lossy = FALSE))
     }
   }
-  list(text = as_utf8(iconv(txt, "UTF-8", "UTF-8", sub = replacement_sub)), encoding = "UTF-8",
+  list(text = as_utf8(iconv(txt, "UTF-8", "UTF-8", sub = replacement_sub())), encoding = "UTF-8",
        bom = nzchar(bom), lossy = TRUE)
 }
 
@@ -469,7 +471,7 @@ read_decode_lines = function(txt, encoding, lossy) {
   utf8 = identical(encoding, "UTF-8")
   bad = utf8 && !validUTF8(txt)
   if (utf8) {
-    if (lossy || bad) txt = iconv(txt, "UTF-8", "UTF-8", sub = replacement_sub)
+    if (lossy || bad) txt = iconv(txt, "UTF-8", "UTF-8", sub = replacement_sub())
   } else {
     out = iconv(txt, encoding, "UTF-8")
     txt = if (is.na(out)) iconv(txt, "latin1", "UTF-8") else out

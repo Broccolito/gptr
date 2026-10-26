@@ -28,8 +28,8 @@ search_read_texts = function(files, sizes) {
     }
   }
   ok = !is.na(txt)
-  bom8 = which(ok & grepl("^\xef\xbb\xbf", txt, perl = TRUE, useBytes = TRUE))
-  if (length(bom8)) txt[bom8] = sub("^\xef\xbb\xbf", "", txt[bom8], perl = TRUE, useBytes = TRUE)
+  bom8 = which(ok & grepl("^\\xef\\xbb\\xbf", txt, perl = TRUE, useBytes = TRUE))
+  if (length(bom8)) txt[bom8] = sub("^\\xef\\xbb\\xbf", "", txt[bom8], perl = TRUE, useBytes = TRUE)
   for (k in which(ok & !validUTF8(txt))) txt[k] = decode_raw(charToRaw(txt[k]))$text
   cr = which(ok & grepl("\r", txt, fixed = TRUE, useBytes = TRUE))
   if (length(cr)) txt[cr] = gsub("\r\n", "\n", txt[cr], fixed = TRUE, useBytes = TRUE)

@@ -5358,3 +5358,50 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: none. Open: why the writer exits early (2 of 1,356 Windows writer cases in CI, none
   in 6,583 measured); a recurrence now fails on `writer_failed` in about 5 s, the writer's stderr
   in the witness.
+
+## Task CI-100 - An installed gptr decodes invalid bytes as U+FFFD in a C locale (2026-10-26, #PR)
+- Red: seen once, never investigated: with gptr installed from its tarball, `NOT_CRAN=true` and
+  `LC_ALL=C LANG=C` (macOS), test-tool-read.R "the streaming reader decides the encoding on whole
+  characters and decodes late bytes" failed and "a final newline ends the last line, as
+  readLines() counts (D-248)" warned; `devtools::test()` passed. Reproduced at origin/main
+  7e23ebd3: `R CMD build`, `R CMD INSTALL --install-tests` into a temporary library, then
+  `testthat::test_dir()` of its installed tests with `package = "gptr"`,
+  `load_package = "installed"` and `filter = "^tool-read$"`:
+  `[ FAIL 1 | WARN 1 | SKIP 0 | PASS 234 ]`. `w$lines` held the text `caf<U+FFFD>`, not U+FFFD
+  (`test-tool-read.R:345`), and the warning, "strings not representable in native encoding will
+  be translated to UTF-8", came from `decode_raw()`'s `iconv()` (`test-tool-read.R:87`). The same
+  library in UTF-8: PASS 235.
+- Cause (the product, so users were affected): `replacement_sub`, the bytes of U+FFFD for
+  `iconv(sub =)`, was a namespace string of unknown encoding. An installed package's lazy-load
+  database keeps such a string in the installing session's encoding (UTF-8); a session that cannot
+  represent it (C) translates it on load to marked UTF-8, with that warning, and `iconv()`
+  translates `sub` back to the native encoding, so each invalid byte became the eight characters
+  `<U+FFFD>`. In a C locale an installed gptr showed them in read, in grep's lines
+  (`search_read_texts()` decodes with `decode_raw()`), in edit's diff view (`edit_view()`) and in
+  the r tool's search texts (`search_utf8()`): `read_file()` of the bytes `caf` and 0xFF gave the
+  11 ASCII bytes `caf<U+FFFD>`, not `caf` and EF BF BD.
+  `load_all()` makes the string in the session itself, as native bytes, so the source tree passed
+  in every locale. Loading each of the 4,429 namespace objects in a C session warned twice: for
+  `replacement_sub` and for `search_read_texts()`, whose BOM pattern `"^\xef\xbb\xbf"` still
+  matched bytewise but warned on the first search (`test-tool-namespace.R:839`). The WARN 1 of
+  CI-95's CRAN list under `LC_ALL=C` is this warning (`test-tool-read.R:324`).
+- Fix: (1) 159ba8ce, test: test-utils-encoding.R "the namespace holds no non-ASCII string of
+  unknown encoding (CI-100)" walks every namespace object and each function's formals and body; at
+  main it names `replacement_sub` and `search_read_texts` (FAIL 1 in UTF-8 and under `LC_ALL=C`).
+  (2) f398c8b7: `replacement_sub()` makes the bytes per call, for the five `iconv()` calls in
+  tool-read.R, tool-edit.R and tool-namespace.R. (3) eaf99b73: the BOM pattern is PCRE's
+  `"^\\xef\\xbb\\xbf"`, as ext-plugins.R writes it. The two tool-read blocks are unchanged.
+- Green: the reproduction at the head `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 235 ]`. Installed
+  tool-read, tool-search, tool-edit, tool-namespace, tool-write and utils-encoding under
+  `LC_ALL=C`: main `[ FAIL 1 | WARN 2 | SKIP 1 | PASS 1074 ]` (warnings at `test-tool-edit.R:182`
+  and `test-tool-namespace.R:839`), head `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 1076 ]`; in UTF-8
+  main PASS 1079, head PASS 1080; the head installed under `LC_ALL=C` gives the same in both
+  locales. In a C session the head loads every object without a warning and `read_file()` gives EF
+  BF BD. The CRAN list against each installed tarball under `LC_ALL=C` (`NOT_CRAN`, `CI` and
+  `GITHUB_ACTIONS` unset): main `[ FAIL 0 | WARN 1 | SKIP 906 | PASS 2493 ]`, head WARN 0, 16.6
+  and 16.8 s. Source tree, the 12 files over the changed code (utils-encoding, utils-paths,
+  tool-read, tool-search, tool-edit, tool-namespace, tool-write, tool-walk, artifact-app,
+  auth-secrets, prompt-context, prompt-sections): `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 2647 ]` in
+  UTF-8, `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 2643 ]` under `LC_ALL=C` (a Windows-only and a
+  UTF-8-only skip). Lint clean (5 files); `document()` no diff.
+- Deviations: none; read already shows invalid bytes as U+FFFD. Open: none.
