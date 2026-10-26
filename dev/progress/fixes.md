@@ -5405,3 +5405,47 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   UTF-8, `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 2643 ]` under `LC_ALL=C` (a Windows-only and a
   UTF-8-only skip). Lint clean (5 files); `document()` no diff.
 - Deviations: none; read already shows invalid bytes as U+FFFD. Open: none.
+
+## Task CI-101 - The Windows stdin drain reads liveness before the ready file (2026-10-26, #PR)
+- Question (CI-88's open note): `proc_writer_drain()`'s startup branch read the writer's `ready`
+  file and, only when it was absent, the writer's liveness. Can that order misreport a writer that
+  died at startup: a false ready, a hang, or a lost failure?
+- Analysis: none of the three. `ready` comes only from the writer's own rename after its startup
+  validation, in a mailbox that is new for each marker (the parent refuses a `ready` that is not
+  empty or a changed mailbox), so a writer that died before it leaves none and is failed at the
+  first drain that reads it exited. A live writer without `ready` fails after
+  `gptr.stdin_timeout`, since `b$last` advances only on acknowledgements. A writer that exits after
+  `ready` has had no chunk published to it, so 0 accepted bytes is right. Every exit is a typed IO
+  failure that keeps the writer's exit status and step.
+- Cause (the product; the drain runs only on Windows): the misreport ran the other way. A writer
+  that published `ready` and exited between the parent's two reads (`ready` absent, then the
+  writer exited) failed as "The owned stdin writer failed during startup." with `writer_stage`
+  "startup", although its exit status names a step it reached after `ready`. When its child's exit
+  ended it (step `alive`), the child's exit, "The child exited before stdin was delivered.", went
+  unreported. The message shown is the same ("Could not deliver queued bytes through the stdin
+  writer."); `writer_cause` and `writer_stage` differ, and so does the stage the test witnesses
+  keep (`bp_case_failure()`). CI-98's event, a writer that exits right after its ready file and
+  before any input, could have been labelled startup in the package's writer.
+- Fix (ffd9fd45): the drain reads the writer's, then the child's liveness once, before the ready
+  file as before the acknowledgements (CI-88's rule), so a writer seen exited has published its
+  ready file too: the branch fails startup only for a writer that exited without one, and a writer
+  that exited after it reaches the delivery checks.
+- Test (0ccd54a9): test-proc-writer-runtime.R "a writer exiting right after its ready file fails
+  delivery, not startup" creates `ready` inside the mocked writer liveness read, which returns
+  FALSE, once with the child alive and once exited, and expects the delivery causes. It runs on
+  every platform.
+- Red: with main's R/ (7e23ebd3) `^proc-writer-runtime$` FAIL 4 PASS 702 SKIP 8 (`st$private`
+  FALSE and "The owned stdin writer failed during startup." in both cases). Green: PASS 706 SKIP
+  8; `^proc-` FAIL 0 SKIP 11 PASS 2381 in UTF-8 and under `LC_ALL=C LANG=C` (each skip Windows
+  only); `^(lint-rules|arch-layers)$` PASS 90; lint of the two files clean; `document()` no diff.
+  On Windows release at ffd9fd45 (windows-by-file): run 40291088044 (`^test-proc-writer`, 5 files)
+  1208 passed, none failed or skipped, test-proc-writer-runtime.R's 877 with the new test; run
+  40291091479 (`^test-proc-windows`) test-proc-windows-backpressure.R 258 passed.
+- CI-98: the order decides how an exit is reported, not why a writer exits. The prototype reads
+  no writer liveness before its first `poll_ack()`, which reads its acknowledgements before
+  liveness, but its writer exits normally only after `close`, which the parent sends once every
+  byte is acknowledged and read, so neither order fails a healthy case there. CI-98's writer
+  ended by itself (an R error or an interrupt) whatever the parent read first; its cause stays
+  open.
+- Deviations: none (no bound, field or class changed). Open: none for CI-88's note; CI-98's early
+  writer exit as above.
