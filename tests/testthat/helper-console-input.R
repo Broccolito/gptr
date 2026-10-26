@@ -121,7 +121,9 @@ skip_if_sigint_ignored = function() {
 }
 
 # Terminal R in a pty (80x24, TERM `term`, echo on as in a terminal unless `echo` is FALSE) that
-# loads gptr and sources `child`, the child's code (its options too). `send(x)` types; `wait(x)`
+# loads gptr and sources `child`, the child's code (its options too). `send(x)` types; `paste(x)`
+# pastes as a terminal with bracketed paste does: between `ESC [ 200 ~` and `ESC [ 201 ~` while the
+# child's last toggle (`raw` keeps its output as written) turned the mode on (D-263); `wait(x)`
 # reads until `x` is shown and consumes the output through it, so the next wait() looks after it;
 # `pending()` reads for 0.5 s and returns what followed, its escapes and a CR at a row's start (a
 # question's prompt clears its row, tty_question()) dropped; `all` keeps
@@ -151,16 +153,25 @@ local_pty_r = function(child, term = "xterm-256color", echo = TRUE, .env = paren
   pty = new.env(parent = emptyenv())
   pty$all = ""
   pty$out = ""
-  # GNU readline 8.1 and later wrap each prompt in bracketed-paste toggles (CSI ?2004h and l),
-  # which change nothing shown, so they are dropped, also when a read splits one
+  pty$raw = ""
+  # GNU readline 8.1 and later wrap each prompt in bracketed-paste toggles (CSI ?2004h and l), as a
+  # T console's call does (D-263); they change nothing shown, so they are dropped, also when a read
+  # splits one
   toggles = function(s) gsub("\033\\[\\?2004[hl]", "", s, perl = TRUE)
   read = function(ms) {
     p$poll_io(ms)
     x = p$read_output()
+    pty$raw = paste0(pty$raw, x)
     pty$all = toggles(paste0(pty$all, x))
     pty$out = toggles(paste0(pty$out, x))
   }
   pty$send = function(x) p$write_input(x)
+  pty$paste = function(x) {
+    read(0L)
+    m = regmatches(pty$raw, gregexpr("\033\\[\\?2004[hl]", pty$raw))[[1L]]
+    if (length(m) && endsWith(m[[length(m)]], "h")) x = paste0("\033[200~", x, "\033[201~")
+    p$write_input(x)
+  }
   pty$interrupt = function() p$interrupt()
   pty$wait = function(x, timeout = 30) {
     deadline = Sys.time() + timeout
