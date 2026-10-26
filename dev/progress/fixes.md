@@ -6043,3 +6043,58 @@ the driver, screens, events, transcripts and replays without a model are local, 
   'TypeSafe AI' is quoted as a host, not as software or an API (A6's kdps comment); "hosted by
   TypeSafe AI" is the fallback if a reviewer queries it. The README's 4 GiB figure is one
   measured run (`dev/TESTING_PLAN.md`).
+
+## FIX-29 - Transcripts record @file heads and the objects !code lines use (2026-10-26, #PR)
+- Why: issue #85, FIX-20 review items R27 and R29. R27: `gptr_source(replay = "live")` re-asked
+  a console turn with the literal `@notes.md` text, as the transcript never recorded the file head
+  (nor the `!code` notes) the console had sent, so the re-ask was another request. R29: a direct R
+  line that used an object an undone or retried turn created still ran under `source()`, which
+  stopped there because the object never existed. The maintainer's decisions of 2026-10-26: record
+  the content itself as `#< ` lines and send it again; record `created=` names and switch dependent
+  direct R lines off with `#~`; amend IC-49 in place, with no version key, migration or reader for
+  earlier transcripts (gptr 1.0 is unreleased).
+- Checks of the design, first: (a) the provider cannot rely on `ctx$input$call$doc` during a
+  re-ask: `doc_keep()` leaves it `NULL` when the answer may not be recorded (no consent, an undone
+  block under `"live"`). The route keeps the parsed `#<` lines in a new call record binding,
+  `call$sent`, whatever the recording decision. (b) `doc_replay_steps()` skips `#` lines, so a
+  history rebuilt from the document lacked the heads; `doc_replay_doc()` now passes them as
+  `doc$sent` to `replay_turn_append()`. (c) `gptr_export()` kept `#<` lines in both formats; raw
+  now drops them. (d) holds: `eval_r()` reports the names a line created before its error (probe:
+  `x1 = 1; y1 = 2; stop('boom')` gives `x1`, `y1`; a parse error runs nothing and adds none).
+- Red (4a7e68ec, the tests on origin/main 13a917ff's code): `^doc-(blocks|export)$` FAIL 5 PASS
+  623 (no `#<` lines or `created=` in a block, `doc_block_sent()` missing, the raw export kept the
+  `#<` lines); `^doc-replay$` FAIL 15 PASS 887 (no heads in a reconstruction, no `created=` on turn
+  or direct R headers, no switched lines and no notice; the console test's `source()` of the
+  transcript after `/undo` stopped at `p = fit + 1`, "object 'fit' not found"); `^console-repl$`
+  FAIL 2 PASS 367 (no `#<` lines; the re-ask request held the text block only).
+- Cause: the console's `user_ran` and `user_files` providers answered only the call the REPL was
+  sending (`rs$sending`), and nothing recorded what they sent; transcripts recorded no names, so
+  nothing could tell which direct R lines depended on an undone turn.
+- Fix: (1) 664daba4: `doc_turn_body()` collects the turn's first user message's `user_ran` and
+  `user_files` blocks and the `created` rows of its checkpoint entries; `doc_block_lines()` opens
+  the body with their `doc_sent_lines()` and sets `created=` (a new header key after `value`).
+  `doc_block_sent()` reads `#<` lines back (also under `#~`), `doc_route_run()` assigns them to
+  `call$sent`, the providers fall back to `ctx$input$call$sent`, and `replay_turn_append()` puts
+  `doc$sent` before the prompt. Raw export drops `#<` lines. (2) be7c637b: `repl_passthrough()`
+  sends `created` (the evaluator's `added`) on `console:direct`; `doc_direct_header()` writes it.
+  `doc_direct_switch()` reads a transcript top to bottom (last maker of each name on or off) and
+  switches direct R sections; `doc_transcript_rescan()` writes that under consent and the
+  `document_write` event (kind `inert`) and gives one notice, after each console append and after
+  each `session_tree` (`/undo`, `/redo`, `/retry`, rewinds). (3) 1a33fc17: `?gptr_doc`,
+  `?gptr_source`, `?gptr_export`, the script-as-history vignette (.Rmd and .Rmd.orig), 04 section
+  15.3 IC-49, section 11.5 and section 7.8; D-264.
+- Green: the neighbours `^(doc-|console-|gptr-|session-|ckpt-|copy-ckpt$)` (`NOT_CRAN=true`,
+  SIGINT at its default) `[ FAIL 0 | WARN 0 | SKIP 3 | PASS 10214 ]` in UTF-8 and
+  `[ FAIL 0 | WARN 0 | SKIP 30 | PASS 10036 ]` under `LC_ALL=C LANG=C`, the skips
+  locale-dependent, interactive-only or needing {repr}; the full suite under the heavy lock
+  `[ FAIL 0 | WARN 0 | SKIP 66 | PASS 38411 ]` in UTF-8, the skips Windows-only, live or optional
+  runtimes. Lint clean (11 files); `document()` changes only `gptr_doc.Rd`, `gptr_source.Rd` and
+  `gptr_export.Rd`. A scratch console session (make `dat`, `!m = mean(dat)`, make `fit`,
+  `!p = fit + 1`, `!q = p * m`, `/undo`, `/retry`) gives the transcript the tests assert: the
+  second block opens with the `#<` lines of the `m` note and its header names `created=fit`; after
+  `/undo` the `p` and `q` lines are off, `q` under `uses undone p, m` once `/retry` undid turn 1.
+- Deviations: D-264. Open: `/retry` sends the typed prompt again through the console, which reads
+  each `@file` again and sends only the notes pending now, as before; only a re-ask from the
+  document sends the recorded heads. Turn blocks are never switched: a turn after an undo cannot
+  have used what the undo removed. Known limits as D-264 states (`all.names()` matches, strings,
+  a name holding a comma).
