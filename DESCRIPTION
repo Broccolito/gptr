@@ -22,10 +22,11 @@ Description: Evaluates model-written code in the calling environment of a
     'OpenAI'-compatible endpoints, local 'Ollama' <https://ollama.com> models
     and the 'Claude Code' and 'Codex' command line tools; decision models
     include 'Jev', hosted by 'TypeSafe AI'
-    <https://docs.typesafe.ai/introduction>, and the local 'Clef'. Top-level
-    peter() calls can be recorded, with the code they ran, in 'R' scripts,
-    'R Markdown' and 'Quarto' documents or 'Jupyter' notebooks; a recorded
-    script replays without a model or keys, or reruns with another model.
+    <https://docs.typesafe.ai/introduction>, and the local 'Clef'. For
+    reproducible research, top-level peter() calls can be recorded, with the
+    code they ran, in 'R' scripts, 'R Markdown' and 'Quarto' documents or
+    'Jupyter' notebooks; with the same data and packages, a recorded script
+    replays without a model or keys, or reruns with another model.
 License: Apache License (== 2.0)
 URL: https://broccolito.github.io/gptr/,
     https://github.com/Broccolito/gptr
