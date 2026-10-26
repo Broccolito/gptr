@@ -1208,10 +1208,17 @@ proc_writer_drain = function(r, key, b) {
   st = proc_writer_start(b$p, b$limit)
   if (is.null(st)) return(FALSE)
   proc_writer_diagnostics(st)
+  # The writer's liveness is read first, then the child's, then the writer's ready file and
+  # acknowledgements, so a writer seen exited has published all of its own, and a child whose
+  # exit ended the writer is seen exited too. A child can consume the complete payload and exit
+  # before its writer next wakes. The published ACK proves pipe acceptance; neither process exit
+  # can undo that.
+  writer_alive = isTRUE(st$p$is_alive())
+  target_alive = b$p$is_alive()
   if (!st$private) {
     ready = file.path(st$dir, "ready")
     if (!file.exists(ready)) {
-      if (!isTRUE(st$p$is_alive())) {
+      if (!writer_alive) {
         gptr_abort("The owned stdin writer failed during startup.",
                    "io", operation = "write", path = NULL)
       }
@@ -1227,12 +1234,6 @@ proc_writer_drain = function(r, key, b) {
   if (!proc_writer_valid(st$dir, st$canonical, st$marker)) {
     gptr_abort("The owned stdin mailbox changed.", "io", operation = "write", path = NULL)
   }
-  # The writer's liveness is read first, then the child's, then the acknowledgements, so a writer
-  # seen exited has published all of its own, and a child whose exit ended the writer is seen
-  # exited too. A child can consume the complete payload and exit before its writer next wakes.
-  # The published ACK proves pipe acceptance; neither process exit can undo that.
-  writer_alive = isTRUE(st$p$is_alive())
-  target_alive = b$p$is_alive()
   proc_writer_ack(st, b)
   if (isFALSE(target_alive)) {
     if (b$pos >= length(b$bytes)) return(TRUE)
