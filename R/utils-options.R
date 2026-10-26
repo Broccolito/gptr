@@ -95,11 +95,16 @@ console_class = function() {
 }
 
 #' Mockable: the modes of the terminal R reads (`stty -g`), or set `modes` (such as "-echo"); NULL
-#' when stty fails (IC-76)
+#' when stty fails (IC-76). `paste` and `-paste` among `modes` are gptr's own, not stty's: they turn
+#' bracketed paste on (`ESC [ ? 2004 h`, written after stty) or off (`ESC [ ? 2004 l`, written
+#' before it), through the console writer (gptr_message_write()), never into a tool's output (D-263)
 #' @noRd
 tty_modes = function(modes = "-g") {
-  out = tryCatch(suppressWarnings(system2("stty", modes, stdout = TRUE, stderr = FALSE)),
+  bp = modes %in% c("paste", "-paste")
+  if ("-paste" %in% modes) gptr_message_write("\033[?2004l", gptr_message_stream("stdout"))
+  out = tryCatch(suppressWarnings(system2("stty", modes[!bp], stdout = TRUE, stderr = FALSE)),
                  error = function(e) NULL)
+  if ("paste" %in% modes) gptr_message_write("\033[?2004h", gptr_message_stream("stdout"))
   if (is.null(attr(out, "status"))) out
 }
 
@@ -109,7 +114,11 @@ tty_modes = function(modes = "-g") {
 #' that reads stdin waiting, never at an end of input); a D console turns the echo off and keeps
 #' what is typed at SIGINT (`-echo noflsh`; `keys` FALSE), so the pause menu's drain keeps a line
 #' being typed (policy_menu()). `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which
-#' also runs at q() (a finalizer, onexit); nothing is set when stty fails
+#' also runs at q() (a finalizer, onexit); nothing is set when stty fails. A T console's set also
+#' turns bracketed paste on (`paste`, D-263), and every return to the saved modes (tty_restore(),
+#' tty_question(), gptr_readline()) turns it off first, so readline never reads with it on: GNU
+#' readline 8.1+ toggles it around its own reads, older readline (CRAN macOS R's 5.2) and libedit
+#' would read the markers as text
 #' @noRd
 tty_call = function(keys) {
   saved = tty_modes()
@@ -118,7 +127,7 @@ tty_call = function(keys) {
   tty$saved = saved
   tty$keys = keys
   tty$set = if (keys) {
-    c("-icanon", "-echo", "-iexten", "-isig", "min", "1", "time", "0")
+    c("-icanon", "-echo", "-iexten", "-isig", "min", "1", "time", "0", "paste")
   } else {
     c("-echo", "noflsh")
   }
@@ -135,7 +144,7 @@ tty_restore = function(tty = the$tty) {
   saved = tty$saved
   if (is.null(saved)) return(invisible(NULL))
   tty$saved = NULL
-  tty_modes(saved)
+  tty_modes(c(saved, if ("paste" %in% tty$set) "-paste"))
   invisible(NULL)
 }
 
@@ -167,18 +176,20 @@ console_readline_tty = function() {
     isTRUE(capabilities("cledit")[["cledit"]]) && stdin_tty()
 }
 
-#' A console question of a terminal call reads in the saved modes from before its rows are written
-#' (`on` TRUE) until it returns (FALSE), so readline starts as soon as the person sees the question,
-#' never after a slow stty (D-243); gptr_readline() then switches nothing. Where readline reads the
-#' tty the echo stays off (`tty$quiet`) until gptr_readline() starts it, so a key typed while the
-#' rows are written is not echoed before the chevron and again by readline
+#' A console question of a terminal call reads in the saved modes (bracketed paste off first,
+#' D-263) from before its rows are written (`on` TRUE) until it returns (FALSE), so readline starts
+#' as soon as the person sees the question, never after a slow stty (D-243); gptr_readline() then
+#' switches nothing. Where readline reads the tty the echo stays off (`tty$quiet`) until
+#' gptr_readline() starts it, so a key typed while the rows are written is not echoed before the
+#' chevron and again by readline
 #' @noRd
 tty_question = function(on) {
   tty = the$tty
   if (is.null(tty$saved) || identical(isTRUE(tty$asking), on)) return(invisible(NULL))
   tty$asking = on
   tty$quiet = on && console_readline_tty()
-  tty_modes(if (on) c(tty$saved, if (tty$quiet) "-echo") else tty$set)
+  saved = c(tty$saved, if (tty$quiet) "-echo", if ("paste" %in% tty$set) "-paste")
+  tty_modes(if (on) saved else tty$set)
   invisible(NULL)
 }
 
@@ -260,11 +271,12 @@ gptr_readline = function(prompt = "", read = readline, hide = NULL) {
     gptr_message_write(paste0(text, "\n"), "stdout", margin = TRUE)
     prompt = paste0(pad, "> ")
   }
-  # readline() edits and echoes in the modes a console call saved (tty_call()); the call's after,
-  # unless a console question already reads in them (tty_question())
+  # readline() edits and echoes in the modes a console call saved (tty_call()), bracketed paste
+  # off first (D-263); the call's after, unless a console question (tty_question()) already reads
+  # in them
   tty = the$tty
   if (!is.null(tty$saved) && !isTRUE(tty$asking)) {
-    tty_modes(tty$saved)
+    tty_modes(c(tty$saved, if ("paste" %in% tty$set) "-paste"))
     on.exit(tty_modes(tty$set), add = TRUE)
   } else if (isTRUE(tty$quiet)) {
     # readline shows what it reads only where the echo is on as it starts; its prompt erases a key
