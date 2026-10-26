@@ -24,9 +24,10 @@ comments, so it is not executed a second time. User R and comments keep their so
 }
 \details{
 Only bare or symbol-assigned literal Peter calls and Peter-only native pipelines
-are admitted. Distinct statements sharing a line (including semicolon-separated statements),
-mixed pipelines, nested or computed calls, pending writes, missing or edited blocks, secret
-markers and interpolated-input hashes are refused.
+are admitted; a pipeline may start from a session handle an earlier Peter statement assigned,
+as the later turns of a console transcript do. Distinct statements sharing a line (including
+semicolon-separated statements), mixed pipelines, nested or computed calls, pending writes,
+missing or edited blocks, secret markers and interpolated-input hashes are refused.
 Raw exports also refuse ordinary code that reads a session handle after its Peter statement
 and before ordinary code assigns that name again, and a function that names any session handle
 of the document, wherever it is defined, as it reads the name when called. The Peter format

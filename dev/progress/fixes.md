@@ -5537,3 +5537,36 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   stamps, an upper bound. processx 3.9.0's `get_end_time()` gives the exact end (measured: 0.32 s
   for `sleep 0.3` read 2 s later) but needs the processx floor raised from 3.8.0 (architecture
   section 9.1), the maintainer's call.
+
+## FIX-25 - gptr_export() exports a console transcript (2026-10-26, #PR)
+- Red: FIX-13's open note. On main 7e23ebd3, test-doc-export.R "a console transcript exports like a
+  script, its later turns piping the handle" (a two-turn console session recorded with the fake
+  provider, `doc_command_args()` mocked to a console) errors at its first `gptr_export()`: "Cannot
+  export this history: mixed or non-literal Peter expressions."; `^doc-export$` FAIL 1 PASS 232, in
+  UTF-8 and under `LC_ALL=C LANG=C`. The transcript holds `s_<hex> = peter("set x")`, then
+  `s_<hex> |> peter("triple it")`, each with its fresh block (IC-49).
+- Cause: R reads the pipe as `peter(s_<hex>, "triple it")`. `doc_export_chain()` took a first
+  argument that is not a `peter()` call for an ordinary argument, and a name is not a literal, so
+  the statement was refused as a mixed pipeline. The same held for `session |> peter("...")` after
+  `session = peter("...")` in a script, which the script-as-history vignette named as refused; a
+  session's later turns exported only within the statement that started it.
+- Fix (78115cfd): `doc_export_chain(expr, handles)` takes a first operand that names one of
+  `handles` as the pipeline's start, and `doc_export_lines()` passes the names that earlier Peter
+  statements of the document assigned (`bound`). The raw format comments the statement and keeps
+  its recorded R, the Peter format keeps it active, as for a script pipeline. A pipeline from any
+  other name (a data object) stays refused. `?gptr_export` and the vignette (.Rmd and .Rmd.orig)
+  say so.
+- Test (f9363c21): the console test exports the raw format (both statements commented; sourced, it
+  gives `x` 2 and `y` 6 and binds no handle) and the Peter format (both calls active, the recorded
+  code commented), with no model request beyond the session's 4; the refusal list gains
+  `s = x |> peter("one")`.
+- Green: `^doc-export$` PASS 237; `^doc-(export|blocks)$` PASS 621; `^doc-` FAIL 0 SKIP 2 PASS 2779
+  (the skips: {repr} is not installed); `^(arch-layers|lint-rules)$` PASS 90; each in UTF-8 and
+  under `LC_ALL=C LANG=C`. A transcript with a menu steer, one with an errored run (`## Run: error`)
+  and one with a second session also export (scratch tests, not committed). Lint clean (both
+  touched R files); `document()` changes only `man/gptr_export.Rd`; the release self-test
+  `gptr-release` fails only where main does (spelling and cran-comments, FAIL 2), its
+  script-as-history check passing.
+- Deviations: D-258. Open: a console turn with a context object (`s_<hex> |> peter("...", df)`)
+  stays refused, as the same call in a script is; an exported transcript keeps its replay note,
+  which names the source transcript.
