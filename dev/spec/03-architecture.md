@@ -1459,7 +1459,7 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
 | 0 | **known** read-only R (level 0 means "known read-only", not "nothing flagged"), reads inside the project, namespace reads | allow | allow | allow | allow | allow |
 | 1 | new objects, reads outside the project, calls of unlisted functions from packages outside base/stats/utils/methods/graphics/grDevices/tools [IC-54] | only allowlisted read-only calls run, in a scratch child env (discarded); anything else and other tools deny | ask | ask | allow | allow |
 | 2 | overwriting objects, workspace file writes, network reads, reference mutation | deny | ask | allow `write`/`edit` inside the project, ask for R | allow | allow |
-| 3 | deletes inside the project or of computed paths, processes, installs, overwriting objects above `gptr.protect_size` (100 MB), dynamic code, secret reads, app launches | deny | ask | ask | allow (the secret guard still asks) | allow (secret reads too) |
+| 3 | deletes inside the project or of computed paths, processes, installs, overwriting objects above `gptr.protect_size` (100 MB), dynamic code, secret reads, app launches | deny | ask | ask | allow (the secret guard still asks; a computed `system()` command is refused, below) | allow (secret reads too; a computed `system()` command is refused) |
 | 4 | critical: `q()`, deleting home/root/project/top-level/drive roots or their parents, protected files or any path outside the project and R's session `tempdir()` (`/tmp` counts as outside) [IC-78], secret + network sink; the `control` category (gptr's own configuration exports, `options(gptr.*)`, control-plane files [IC-53, IC-54]) | deny | ask_human | ask_human | ask_human (blocked without a UI) | ask_human, except control rows other than `options(gptr.*)`, which run |
 
 `r` is classified per flagged call by `gptr_risk()` (tables in `inst/extdata/risk-functions.csv` and
@@ -1480,6 +1480,13 @@ a branch, loop or call adds its value (and, when first, the binding before the c
 computes or a loop that assigns the name makes it computed [D-211]. The classifier is advisory and documented as
 not a security boundary; in-process R cannot be sandboxed [18 §2.5].
 
+In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command
+(`system2()`'s `args` too, `shell.exec()`'s file) the classifier cannot fold to literals: a `dynamic` row of these
+functions whose call text is no `<fn>(): ` reading. Its reason tells the model to run the command with
+`peter$sh()`, whose command meets the deny and ask rules when it runs (6.8.4); the code is not evaluated. Only an
+`r(fn:...)` allow rule covering those rows, matched against them alone, lifts it; plan, manual and edits are
+unchanged and a literal command is read and gated as before [D-262].
+
 `yolo` [IC-78] is the loosest mode (plan < manual < edits < auto < yolo): only the person selects it (`peter(mode =)`,
 `/mode`, user or session settings, `options(gptr.mode)` outside a run); no project file sets it [D-250], nested
 calls and children only tighten. A delete keeps the category `file_delete` and a control target shows in its
@@ -1497,16 +1504,17 @@ policy the decision is ask, fail closed) -> for `ask` only, `permission_request`
 reviewer plugin may answer) -> the UI backend. `ask_human` (level 4, the secret guard, the control category and
 paths, first use of a CLI route, the egress acknowledgement) goes only to a UI whose `has_ui()` is true in the
 run's snapshot; a hook's allow is ignored with a diagnostic [IC-53]. In yolo the `mode` policy allows every
-call, `critical_guard` ignores control rows except `options(gptr.*)`, `secret_guard` asks only for
-secret-to-network flows, `protect_size` is skipped as in auto, and deny and ask rules still apply; any final
-allow grants the call's control exports their one-shot tokens [IC-53 item 3, IC-78]. The run snapshots the
-safety options
+call but a computed `system()` command (6.8.1), `critical_guard` ignores control rows except `options(gptr.*)`,
+`secret_guard` asks only for secret-to-network flows, `protect_size` is skipped as in auto, and deny and ask rules
+still apply; any final allow grants the call's control exports their one-shot tokens [IC-53 item 3, IC-78].
+The run snapshots the safety options
 (`gptr.ui`, `gptr.interactive`, the guards, `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode`) at its
 start, so model code cannot change them mid-run. A `modify` is re-classified and re-checked once. Built-in policies: `mode`,
 `rules` (grammar `tool(spec)`, e.g. `write(results/**)`, `r(fn:write.csv)`, `r(level<=1)`, `r(sh:git
 status*)`, `r(sql:select)`), `critical_guard`, `secret_guard`, `protect_size`. Allow rules never loosen plan
-and never pre-approve level 4; only `r(secret:NAME)` rules pre-approve the secret guard; project settings may
-only tighten, a trusted project's `mode` excepted [D-250]; no filter from any source disables
+and never pre-approve level 4; only `r(secret:NAME)` rules pre-approve the secret guard and only `r(fn:NAME)`
+rules lift the computed-command refusal (6.8.1); project settings may only tighten, a trusted project's `mode`
+excepted [D-250]; no filter from any source disables
 `builtin:permissions`, `builtin:plan` or the two guards, and inside a run filters that remove policies or hooks
 are refused [G1 §3.6; IC-53]. Every call made while a run is active inherits the running mode (only tightened)
 whatever its route, and the parent re-classifies every permission request forwarded by a worker (the worker
@@ -1555,6 +1563,8 @@ and the member's own classification of its actual input (`call_risk()`: a patch'
 at run time) is no higher either, it runs without a second prompt; otherwise it passes the gate [IC-78].
 The command of a `peter$sh()` or `peter$bg()` call meets the deny and ask rules first, whatever its level,
 as the literal call would; allow rules are not applied there, and an ask offers no `[a]lways` rule [D-251].
+Base `system()`, `system2()`, `shell()` and `shell.exec()` have no such re-check, so auto and yolo refuse them
+with a computed command (6.8.1) [D-262].
 Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
 
 #### 6.8.5 Non-interactive runs and plan mode (NS-12)

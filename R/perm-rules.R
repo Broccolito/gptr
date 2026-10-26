@@ -295,7 +295,9 @@ perm_control_guard = function(what) {
 #' (`r(sql:select)`) and `secret:NAME` (the only rule that pre-approves a guarded secret read);
 #' MCP tools by name (`mcp__github__*`). Deny rules win over ask rules, which win over allow
 #' rules. Allow rules never loosen plan mode and never pre-approve level-4 (critical or control)
-#' actions.
+#' actions. In `auto` and `yolo` mode only an `fn:` rule that names the function, such as
+#' `r(fn:system)`, lets `system()`, `system2()`, `shell()` or `shell.exec()` run a command the code
+#' computes, which those modes otherwise refuse (see [gptr_security]).
 #'
 #' Scopes: `"session"` is this R process; `"project"` is the user-level file
 #' \file{projects/<hash>.json} in `tools::R_user_dir("gptr", "config")`, personal and never

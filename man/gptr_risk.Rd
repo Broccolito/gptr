@@ -41,7 +41,8 @@ Paths are classified relative to \code{root} (\code{workspace}, \code{temp}, \co
 \code{control}, \code{instructions}, \code{critical}, \code{url}, \code{wildcard}, \code{unknown}). Calls of
 \code{peter$sh()}, \code{system()}, \code{system2()} and \code{processx::run()} with literal commands are
 classified with the command table (\code{inst/extdata/risk-commands.csv}), \code{peter$sql()} by its
-statements and \code{peter$py()} by a token scan. Plugins and users extend both tables with
+statements and \code{peter$py()} by a token scan. A command the code computes, or a \code{shell.exec()}
+file it computes, is a \code{dynamic} row at level 3. Plugins and users extend both tables with
 \code{risk_rule} records.
 }
 \examples{

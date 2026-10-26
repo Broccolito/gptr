@@ -82,7 +82,7 @@ it does not create a binding called `d` in a different evaluation environment.
 
 ``` r
 gptr_describe(work$d, budget = 60)
-#> [1] "<data.frame> 32 x 11, 7 KB"
+#> [1] "<data.frame> 32 x 11, 6.9 KB"
 #> [2] "  mpg:dbl cyl:dbl disp:dbl hp:dbl drat:dbl wt:dbl qsec:dbl vs:dbl am:dbl gear:dbl carb:dbl"
 ls(work)
 #> [1] "d"   "fit"
@@ -133,14 +133,14 @@ than assuming every object is a fully resident data frame.
 
 ``` r
 session$id
-#> [1] "sea6477697b"
+#> [1] "sb2829b3a98"
 session$model
 #> [1] "fake/fake-1"
 session$turns
 #> [1] 1
 gptr_usage(session)
 #>   group        requests  input  output  cache_read  cache_write  cost
-#> 1 sea6477697b  2         3343   20      0           0            0
+#> 1 sb2829b3a98  2         3301   20      0           0            0
 #>
 #> # 1 row
 #> 2 requests, 3.3k tokens in, $0.0000
@@ -165,17 +165,17 @@ unknown.
 session$history
 #>   turn  role         preview                   tools  tokens
 #> 1 1     user         Fit fuel economy agai...         8
-#> 2 1     assistant                              r      1683
+#> 2 1     assistant                              r      1662
 #> 3 1     tool_result  + fit <lm length 12>      r      5
-#> 4 1     assistant    The regression is ready.         1680
+#> 4 1     assistant    The regression is ready.         1659
 #> # 4 recorded messages
-#> idle . fake/fake-1 . 1 turn . 3.4k tokens . $0.0000 . sea6477697b
+#> idle . fake/fake-1 . 1 turn . 3.3k tokens . $0.0000 . sb2829b3a98
 as.data.frame(session$history)
 #>   turn        role                          preview tools tokens
 #> 1    1        user Fit fuel economy against weight.            8
-#> 2    1   assistant                                      r   1683
+#> 2    1   assistant                                      r   1662
 #> 3    1 tool_result             + fit <lm length 12>     r      5
-#> 4    1   assistant         The regression is ready.         1680
+#> 4    1   assistant         The regression is ready.         1659
 ```
 
 Without an initialized project workspace, session files use a temporary directory.
@@ -199,6 +199,9 @@ hour and in another mode, whatever that call asks: a script runs the plan with
 remain separate. `yolo`, which only you can select, also runs gptr's own configuration functions and
 secret reads; deleting protected files, files outside the project or the project itself,
 `options(gptr.*)` and sending a secret over the network still ask.
+In `auto` and `yolo`, a `system()` or `system2()` call whose command the code computes is refused:
+the model is told to run the command with `peter$sh()`, whose command the permission rules check
+when it runs.
 A permission gate is not an isolation boundary. External CLIs also have their own sandbox
 and tool controls; live R requests still pass through gptr's MCP gate. Use [Configuration](configuration.html)
 and `?gptr_security` to choose a mode and understand its limits.

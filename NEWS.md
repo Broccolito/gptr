@@ -47,7 +47,10 @@ works on the objects already in memory.
   input. A generative model can emulate them; emulated answers are marked as uncalibrated.
 * Permission modes `manual` (default), `edits`, `auto` and `plan`, rules with
   `gptr_permissions()`, and an advisory risk classifier, `gptr_risk()`. A permission question
-  without a person present stops the run with a classed condition.
+  without a person present stops the run with a classed condition. In `auto` and `yolo` mode,
+  `system()`, `system2()`, `shell()` and `shell.exec()` with a command the code computes are refused
+  unless an allow rule such as `r(fn:system)` names the function; the model is pointed to
+  `peter$sh()`, whose command the rules check when it runs.
 * Scripts and notebooks are the history: code the agent ran is recorded below each `peter()`
   call in `.R`, `.Rmd`, `.qmd` and `.ipynb` documents and replays without model calls
   (`gptr_doc()`, `gptr_source()`, `gptr_blocks()`, `gptr_cache()`). A console transcript also

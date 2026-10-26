@@ -32,7 +32,9 @@ absolute paths); for \code{r}, \code{level<=n}, \verb{fn:name,...} (every flagge
 (\code{r(sql:select)}) and \code{secret:NAME} (the only rule that pre-approves a guarded secret read);
 MCP tools by name (\verb{mcp__github__*}). Deny rules win over ask rules, which win over allow
 rules. Allow rules never loosen plan mode and never pre-approve level-4 (critical or control)
-actions.
+actions. In \code{auto} and \code{yolo} mode only an \verb{fn:} rule that names the function, such as
+\code{r(fn:system)}, lets \code{system()}, \code{system2()}, \code{shell()} or \code{shell.exec()} run a command the code
+computes, which those modes otherwise refuse (see \link{gptr_security}).
 }
 \details{
 Scopes: \code{"session"} is this R process; \code{"project"} is the user-level file

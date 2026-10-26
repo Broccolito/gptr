@@ -162,6 +162,9 @@ hour and in another mode, whatever that call asks: a script runs the plan with
 remain separate. `yolo`, which only you can select, also runs gptr's own configuration functions and
 secret reads; deleting protected files, files outside the project or the project itself,
 `options(gptr.*)` and sending a secret over the network still ask.
+In `auto` and `yolo`, a `system()` or `system2()` call whose command the code computes is refused:
+the model is told to run the command with `peter$sh()`, whose command the permission rules check
+when it runs.
 A permission gate is not an isolation boundary. External CLIs also have their own sandbox
 and tool controls; live R requests still pass through gptr's MCP gate. Use [Configuration](configuration.html)
 and `?gptr_security` to choose a mode and understand its limits.
