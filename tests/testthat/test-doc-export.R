@@ -153,6 +153,20 @@ test_that("Peter export keeps calls active and recorded code inert exactly once"
   expect_identical(export_read(f), bytes)
 })
 
+test_that("a raw export leaves out what a prompt was sent with; the Peter format keeps it", {
+  local_project()
+  sent = c("#< <user_files>", "#< <file path=\"notes.md\">", "#< hi", "#<", "#< </file>",
+           "#< </user_files>")
+  f = export_fixture(body = c(sent, "x = 1"))
+  raw = file.path(getwd(), "raw.R")
+  gptr_export(f, raw)
+  expect_false(any(grepl("^#<", readLines(raw))))
+  expect_true(all(c("# Recorded prompt: \"one\"", "x = 1") %in% readLines(raw)))
+  peter = file.path(getwd(), "peter.R")
+  gptr_export(f, peter, format = "peter")
+  expect_true(all(c(sent, "# x = 1") %in% readLines(peter)))
+})
+
 test_that("history export keeps quoted notes and UTF-8 output inert and bounded", {
   local_project()
   accent = intToUtf8(0xe9L)

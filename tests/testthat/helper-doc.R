@@ -57,7 +57,7 @@ doc_record = function(prompt, replay = NULL) {
 # An environment whose peter() stands in for the gateway: the call record as P08 builds it, the
 # document route first, then (when it passes) a scripted run that evaluates `code` in the
 # caller's frame as the agent's r call and writes the block through the agent_end hook, as the
-# real run does. `log` counts the runs and keeps the last run's site.
+# real run does. `log` counts the runs and keeps the last run's site and resent context.
 doc_stand_in = function(code = "n = 99", log = new.env()) {
   e = new.env()
   log$runs = 0L
@@ -70,6 +70,7 @@ doc_stand_in = function(code = "n = 99", log = new.env()) {
     }
     log$runs = log$runs + 1L
     log$site = call$doc
+    log$sent = call$sent
     eval(parse(text = code), call$envir)
     s = doc_test_session(list(doc_test_turn(code, prompt = prompt)))
     doc_on_agent_end(list(status = "idle", doc = call$doc, turns = 1L), list(session = s))

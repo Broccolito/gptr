@@ -686,6 +686,36 @@ test_that("a console turn is recorded in the transcript also when a script start
   expect_length(grep("^s_[0-9a-f]{6} [|]> peter\\(\"count the rows\"\\)$", rec), 1L)
 })
 
+test_that("a live re-ask sends the @file head and !code note the console sent (IC-49)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_text("Summarised."), fake_text("Summarised again.")))
+  write_atomic(file.path(x$root, "notes.md"), c("caf\u00e9 notes", "", "line three"))
+  testthat::local_mocked_bindings(doc_command_args = function() "R")
+  local_no_fd0()
+  local_console_blocks()
+  tr = file.path(x$root, ".gptr", "transcripts", "t.R")
+  dir.create(dirname(tr), recursive = TRUE)
+  local_doc_binding(tr, "transcript")
+  rs = repl_state(NULL, new.env(parent = globalenv()))
+  utils::capture.output(repl_passthrough(rs, "!x = 1:3; x"))
+  console_send(rs, "summarise @notes.md")
+  sent = c("user_ran", "user_files", "text")
+  first = last_user_blocks(fake_requests(x$fake)[[1L]])
+  expect_true(all(sent %in% names(first)))
+  rec = doc_read(tr)$lines
+  heads = paste0("#< ", c("<user_ran>", "> x = 1:3; x", "#> [1] 1 2 3", "</user_ran>",
+                          "<user_files>", "<file path=\"notes.md\">", "caf\u00e9 notes"))
+  expect_true(all(c(heads, "#<", "#< line three", "#< </file>", "#< </user_files>") %in% rec))
+  # the file is gone: the re-ask sends what the transcript recorded, not the file
+  unlink(file.path(x$root, "notes.md"))
+  e = new.env(parent = globalenv())
+  e$library = function(...) invisible(NULL)
+  out = gptr_source(tr, replay = "live", envir = e)
+  expect_identical(out$action, "regenerated")
+  expect_identical(last_user_blocks(fake_requests(x$fake)[[2L]])[sent], first[sent])
+  expect_identical(grep("^#<", doc_read(tr)$lines, value = TRUE), grep("^#<", rec, value = TRUE))
+})
+
 test_that("console_send() attaches @objects by name and @files as a block", {
   skip_on_cran()
   local_project(files = list("a.R" = "fit = lm(mpg ~ wt, data = mtcars)"))
