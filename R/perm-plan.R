@@ -208,10 +208,11 @@ plan_add_tools = function(s, ctx, mode) {
   invisible(NULL)
 }
 
-#' Leave plan mode in the same session: the mode, the plan marked used, and a follow-up that the
-#' session's NEXT run takes (P06 fixed this run's scratch overlay at its start, so the plan
-#' cannot execute inside it). A run started from the queue renders no turn context, so the
-#' go-ahead carries P07's turn blocks, among them the new `<mode>` (04 section 7.6).
+#' Leave plan mode in the same session: the mode, and the plan marked used; the session's next
+#' prompt runs it (P06 fixed this run's scratch overlay at its start, so the plan cannot execute
+#' inside it), a turn of its own that its document records and that carries the new `<mode>` (04
+#' section 7.6). Nothing is queued: a queued go-ahead started no recorded turn, and ran again after
+#' the person's own (FIX-21)
 #' @noRd
 plan_execute = function(s, mode, ctx) {
   d = session_data(s)
@@ -222,14 +223,8 @@ plan_execute = function(s, mode, ctx) {
   }
   session_append(s, list(type = "custom", custom_type = "gptr.plan",
                          data = list(text_hash = hash_sha256(d$plan), status = "used")))
-  text = "Go ahead with the plan above."
-  blocks = if (ext_service_has("context.turn")) {
-    ext_service_get("context.turn")(s, list(turn = as.integer(d$turns %||% 0L) + 1L,
-                                            prompt = text))
-  }
-  session_enqueue(s, text, as = "follow_up", source = "pause_menu", blocks = blocks %||% list())
-  gptr_inform(paste0("Queued the go-ahead in session ", d$id, " (mode ", mode, "): ",
-                     "gptr_wait(gptr_last()) runs the plan."), "plan_handoff")
+  gptr_inform(c(paste0("Session ", d$id, " is in mode ", mode, ": send Go ahead. to run the plan."),
+                "At R's prompt: gptr_last() |> peter(\"Go ahead.\")"), "plan_handoff")
   plan_add_tools(s, ctx, mode)
 }
 

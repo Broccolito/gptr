@@ -1574,7 +1574,8 @@ a reference, R2) within the same R process and one hour receives it once as a `<
 "using the plan from session <id>" and the plan's step list printed before the first action, and its block header
 records `plan=<id>`; only a top-level call (not nested, not in a run, not in a loop body) may consume it, and any
 other `peter()` call in between discards it [IC-56]. Interactively the plan run ends
-with "Execute: [a]uto / [e]dits / [m]anual / [k]eep planning", which continues the same session. Choosing
+with "Execute: [a]uto / [e]dits / [m]anual / [k]eep planning", which continues the same session: an execute
+choice sets its mode, and its next prompt (`Go ahead.`) runs the plan as a recorded turn (D-261). Choosing
 to execute is what declares `edit` and `write` for a session frozen with the `readonly` preset; one that is
 not executed keeps `read` and `r` in every mode (D-251).
 `options(gptr.plan_handoff = FALSE)` disables the hand-off [P-C §9.4].
