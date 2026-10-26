@@ -172,6 +172,27 @@ test_that("writer startup death fails IO before publishing any payload", {
   expect_identical(x$b$pos, 0L)
 })
 
+test_that("a writer exiting right after its ready file fails delivery, not startup", {
+  cause = function(target_alive) {
+    x = rw_local_state()
+    x$st$private = FALSE
+    x$st$pending = NULL
+    x$b$p$is_alive = function() target_alive
+    # The writer's ready file lands, and the writer exits, before its liveness read returns.
+    x$st$p$is_alive = function() {
+      file.create(file.path(x$st$dir, "ready"))
+      FALSE
+    }
+    testthat::local_mocked_bindings(proc_writer_start = function(...) x$st)
+    error = tryCatch(proc_writer_drain(NULL, "42", x$b), error = identity)
+    expect_true(x$st$private)
+    expect_false(any(startsWith(list.files(x$st$dir), "in-")))
+    conditionMessage(error)
+  }
+  expect_identical(cause(TRUE), "The owned stdin writer exited before delivery settled.")
+  expect_identical(cause(FALSE), "The child exited before stdin was delivered.")
+})
+
 test_that("writer refuses malformed readiness before publishing any payload", {
   x = rw_local_state()
   x$st$private = FALSE
