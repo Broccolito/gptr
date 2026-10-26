@@ -2012,12 +2012,14 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   prompt text; the body loses the opener's indentation and closes on a fence at least as long (CommonMark).
 - **Typing during an answer** [IC-76, D-185]: on a terminal (not `.stdin`, not Windows, interactive, a tty
   stdin; any front end), a reactor task of each prompt call reads what is typed while the call's session runs,
-  every 0.05 s: in a T console, in character mode (`stty -icanon -echo -iexten min 1 time 0`), the keys go to the
+  every 0.05 s: in a T console, in character mode (`stty -icanon -echo -iexten min 1 time 0`)
+  with bracketed paste on [D-263], the keys go to the
   composer, whose draft the live row shows (Up on an empty draft takes back the newest message waiting) [D-243],
   a draft starting with `/` or `!` after the hint `runs after this answer` and a leading `!` as the bold red shell
   glyph in the chevron's place (at the prompt's editor below, bold red after the prompt) [D-244];
   in a D console (TERM=dumb, Emacs) the complete lines. Enter steers (setting `type_ahead`: `"steer"`), or, with
-  `"follow_up"`, makes the next prompt, and Tab does the other [D-242]; one batch (a paste) is one message;
+  `"follow_up"`, makes the next prompt, and Tab does the other [D-242]; a paste (between
+  bracketed-paste markers, else one batch read on the polling beat) is one message [D-263];
   `/command` and `!code` lines wait for the next prompt, shown as follow-ups, in the order typed with them; after
   an interrupt they go to the console history, unsent [D-242]. The terminal does not echo during the call (modes
   restored after it, at `q()` too), so typed text shows on the live row (T) or on its dim queue line

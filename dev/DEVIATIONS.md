@@ -7779,3 +7779,62 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   runs the whole plan", "the go-ahead the person sends runs the plan once, in the mode the menu
   chose".
   Evidence: progress/fixes.md FIX-21.
+
+## D-263 - FIX-28 Bracketed paste decides a paste in a T console (2026-10-26)
+- Rule (mode): a T console's call turns bracketed paste on with its character mode. `tty_modes()`
+  takes the pseudo-modes `paste` and `-paste`, which write `ESC [ ? 2004 h` after stty and
+  `ESC [ ? 2004 l` before it, through the console writer, so never into a tool's output. Every
+  switch back to the saved modes (`tty_restore()`, also at `q()`; `tty_question(TRUE)`;
+  `gptr_readline()`) turns it off first, so readline never reads with it on (GNU readline 8.1+
+  toggles it around its own reads; CRAN macOS R's readline 5.2 and libedit would insert the
+  markers). The isig switches leave it on, so a paste made during in-process R code arrives
+  marked. D consoles, L consoles (Windows, RStudio, Positron, radian, R.app), Jupyter and pipes
+  never get it.
+- Rule (composer): `console_compose()` drops the markers and keeps the newlines between them in
+  the draft, leading blank lines dropped. `state$bracket` keeps a paste open across reads, a
+  sequence cut inside it held however late. A Tab or Up inside a paste never acts. In a batch with
+  markers only the text between them is a paste. The timing rule (IC-76, CI-94) stays for batches
+  without markers.
+- Rule (live row): a terminal mode's control alone (`ESC [ ? <n> h` or `l`) leaves the live row as
+  it is.
+- Windows: unchanged. No composer reads keys there (IC-76 scope: processx cannot poll a console
+  handle, and `console_class()` is "L"), gptr never writes the mode, Rterm and Rgui never enable
+  it, and Windows Terminal brackets only for an application that did, so no marker reaches R and
+  neither the markers nor the timing apply. The composer's rules are pure R; their tests run on
+  every OS, the pty tests skip on Windows.
+- Formerly: a read more than about 145 ms late (a CPU-starved session, or keys piled up during an
+  in-process tool) split a paste, its head sent at once as a steer and its last line left as the
+  draft; a paste ending in a newline was sent at once; short pastes on a late beat were at the
+  limit of what timing can tell from typing. Esc then Tab, or a cut sequence then Up, in one read
+  made `console_compose()` feed the held sequence to itself until the stack overflowed, and the
+  reactor dropped the typing task for the rest of the call; the key now acts.
+- Limits: control bytes inside a paste act as typed (Ctrl-C pauses, DEL, Ctrl-U and Ctrl-W edit;
+  xterm, kitty, VTE and Windows Terminal filter them). A paste whose end marker another reader
+  takes (a question asked mid-paste) stays open in the composer, so Enter adds lines until the
+  composer is emptied (Ctrl-C at the prompt's editor, an abort). An opening marker cut more than
+  50 ms after its Esc leaks `[200~` into the draft. A paste bracketed just before a hand-over's
+  `ESC [ ? 2004 l` reaches readline with its markers. R code or a process that a tool runs and that
+  reads the terminal gets the markers. A kill or a crash leaves the mode on (zsh, fish and bash
+  5.1+ reset it at their prompts, as does `reset`). The key loop is quadratic in a paste's size,
+  as before.
+- Amends IC-76 (04 section 15.10, the composer and typing) and D-243.
+- Contract-visible: 04 sections 7.1 (`tty_modes()`, `tty_call()`), 15.10 (IC-76 and its Limits,
+  the composer, typing while the agent works, the live row's writes); 03 "Typing during an
+  answer".
+- Tests: test-console-input.R "a bracketed paste is text: its newlines stay and its keys do not
+  act (D-263)", "a bracketed paste spans reads; its end marker is held however late (D-263)", "Esc
+  then Tab, or a cut sequence then Up, in one read is the key (FIX-28)", "a bracketed paste at the
+  prompt's editor stays in the draft until Enter (D-263)"; test-console-typing.R "tty_modes() turns
+  bracketed paste on after stty and off before it (D-263)", "a bracketed paste stays one draft
+  however late its reads (FIX-28, D-263)", "a terminal: a paste during an r call is one draft; no
+  marker shows (FIX-28)". Amended for the mode's place in the stty logs and the new state field:
+  test-console-input.R "an escape sequence cut short is held for 50 ms, then dropped", "a console
+  write clears the live row and redraws it after its whole lines (D-243)" and the three idle
+  editor blocks; test-console-typing.R "a T console's call reads keys in character mode; its modes
+  return after it (D-243)", "a terminal call's modes return after an interrupt, also one while
+  stty sets them", "a question during a terminal call reads with the saved modes, then the
+  call's", "a terminal call's question reads in the saved modes from before its rows (review)"
+  and "in-process R code runs with isig on, so Ctrl-C interrupts it (review)"; `local_pty_r()`
+  gains `raw` and `paste()`, a terminal that brackets pastes while the child's last toggle turned
+  the mode on.
+  Evidence: progress/fixes.md FIX-28.

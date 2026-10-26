@@ -6043,3 +6043,67 @@ the driver, screens, events, transcripts and replays without a model are local, 
   'TypeSafe AI' is quoted as a host, not as software or an API (A6's kdps comment); "hosted by
   TypeSafe AI" is the fallback if a reviewer queries it. The README's 4 GiB figure is one
   measured run (`dev/TESTING_PLAN.md`).
+
+## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #86)
+- Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
+  alone: a batch read on the polling beat, at most 0.2 s after the last read, holding more keys
+  than a person types since then. A read about 145 ms late (a CPU-starved session), or keys piled
+  up during an in-process tool, split a paste: its head went at once as a steer and its last line
+  stayed the draft; short pastes on a late beat were at the limit of what timing can tell from
+  fast typing.
+- Red (4dcf7fd6, the tests on main 13a917ff's code): `^console-(input|typing)$` FAIL 50 PASS 576
+  in UTF-8 and FAIL 41 SKIP 10 PASS 493 under `LC_ALL=C LANG=C` (each skip needs a UTF-8 locale).
+  The composer sent `ESC [ 200 ~ a CR b CR c CR ESC [ 201 ~` as the steer `a\nb\nc`, sent `x\np`
+  for `x` typed before a paste, sent `1~` when a paste's end marker was cut over two reads,
+  completed a pasted `@mt` and Tab to `@mtcars` and took back on an Up inside an open paste
+  (test-console-input.R:157-177); Esc then Tab, `ESC [` then Up, or `ESC O` then Tab in one read
+  failed with "node stack overflow" (183). The prompt's editor returned `note:a\nb` at once (785).
+  A paste read 2 s late was the steer `a\nb` and the draft `c` (test-console-typing.R:1113-1127).
+  The stty logs had no toggle (test-console-input.R:735-871, test-console-typing.R:710-959; at 750
+  the mock that interrupts on the call's modes never matched), a toggle cleared the live row
+  (test-console-input.R:627-633) and `tty_modes("paste")` wrote nothing
+  (test-console-typing.R:824, 825). The new pty block (1364, 1365, 1368): the paste made while the
+  r call slept was read 3 s late and split, `queued` seen once, no `REQ 1 [one/two/three]`.
+- Cause: gptr never turned bracketed paste on, so no terminal marked a paste, and the composer
+  would have dropped the markers as plain escapes; timing alone decided. Found on the way: the
+  split of a Tab or Up that ends a batch passed the state with its held sequence to the key's own
+  call, which prepended it again (`console-input.R:44`), so Esc then Tab in one read (or within
+  50 ms) recursed until the stack overflowed and the reactor dropped the typing task for the rest
+  of the call.
+- Fix: (1) ffa3cabc: the key's own call gets only the draft, so the held sequence is dropped and the
+  key acts. (2) cf3c99a3: `console_compose()` reads the markers: `state$bracket` keeps a paste open
+  across reads; between the markers newlines stay in the draft, a cut sequence is held however
+  late, and Tab and Up are text or dropped; in a batch with markers the keys outside them are
+  typed; the timing rule decides only batches without them. (3) 7e9abbea: `tty_modes()` takes the
+  pseudo-modes `paste` and `-paste` (`ESC [ ? 2004 h` after stty, `ESC [ ? 2004 l` before it,
+  through `gptr_message_write()`); `tty_call()` adds `paste` to a T console's set;
+  `tty_restore()`, `tty_question(TRUE)` and `gptr_readline()` add `-paste` before the saved modes;
+  a terminal mode's control alone leaves the live row as it is.
+- Green: `^console-(input|typing)$` (`NOT_CRAN=true`, SIGINT at its default) after (1) FAIL 49
+  PASS 578 in UTF-8 and FAIL 40 SKIP 10 PASS 495 under `LC_ALL=C LANG=C` (the overflow block
+  passes), after (2) FAIL 30 PASS 597 and FAIL 21 SKIP 10 PASS 514, after (3) FAIL 0 PASS 627 and
+  FAIL 0 SKIP 10 PASS 535. Neighbours
+  `^(console-|eval-|utils-conditions|gptr-config|agent-run|agent-loop|agent-dispatch|session-object|arch-layers)`
+  (31 files, `CI=true`, so INFRA-03's pipe-driven R runs: class L, no toggle):
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 6510 ]` in UTF-8 and
+  `[ FAIL 0 | WARN 0 | SKIP 29 | PASS 6315 ]` under `LC_ALL=C LANG=C` (each skip needs a UTF-8
+  locale). Lint clean (6 files); `document()` changes nothing. A scratch fuzz of 20,000 random
+  sequences of 1-4 marker-free batches (47,979 batches, held sequences cut at any point, `paste`
+  either way) against main's `console_compose()`: the same actions and `draft`, `esc` and `t`
+  wherever main returns, `bracket` always FALSE; main overflowed the stack in 893 sequences. One
+  bracketed paste of 1 MB (32,768 lines) takes 200 s in `console_compose()`; 100 KB and 200 KB
+  take 2.1 s and 8.3 s, as main's on-the-beat paste of the same text does: the key loop is
+  quadratic, as before. The pty blocks run macOS R's readline 5.2 here; Linux CI runs them with
+  GNU readline 8.x, the Windows shards run every other block.
+- Deviations: D-263 (amends IC-76, D-243). NEWS, the README, `?peter` and the vignette are
+  unchanged: "a block pasted there is one message" still holds. Open: control bytes inside a paste
+  act as typed (Ctrl-C pauses; DEL, Ctrl-U and Ctrl-W edit). A paste whose end marker another
+  reader takes (a question asked mid-paste, a run ending mid-paste, a pasted Ctrl-C whose rest the
+  pause menu reads) stays open in the composer until it is emptied. An opening marker cut more than
+  50 ms after its Esc leaks `[200~` into the draft. A paste bracketed just before a hand-over's
+  `ESC [ ? 2004 l` reaches readline with its markers (readline 8.1+ parses them; 5.2 and libedit
+  insert them). A tool's own `readline()`, `menu()` or `readLines(stdin())`, or a child process
+  reading the terminal, gets the markers. A kill or a crash leaves the mode on. A paste's trailing
+  newline stays in the draft and the message (`console_lines()` drops it on screen). The prompt's
+  editor drops a pasted Tab that ends a read inside a split paste. A 1 MB paste holds the console
+  for minutes (the quadratic key loop).

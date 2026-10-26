@@ -2304,8 +2304,8 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_opt(name)` | the option value or the §3.1 default (`NULL` for settings-backed options) | all |
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
-| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with the modes a console call saved (`the$tty$saved`, `tty_call()`), then sets the call's again (IC-76) | P11, P14, P26 |
-| `tty_call(keys)`, `tty_restore(tty = the$tty)`, `tty_question(on)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten -isig min 1 time 0` for a T console's composer (`keys`; Ctrl-C is a key it reads, `console_keys()` interrupting with `rlang::interrupt()` and the idle editor keeping the draft, as a SIGINT could be lost under load; opost stays on, `min 1` keeps a tool reading stdin waiting, never at an end of input; `tty_isig_on()` and `tty_isig_off()` turn isig on while `eval_open()`'s R code runs, so Ctrl-C interrupts it) or `-echo noflsh` for a D console (SIGINT leaves the line being typed for the pause menu's drain, P28 Task 58); `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails; `tty_question(TRUE)` switches to the saved modes before a console question's rows are written (`console_before_message(kind = "prompt")`, the pause menu), with `-echo` where readline reads the tty (`console_readline_tty()`, `tty$quiet`) until `gptr_readline()` turns the echo on as readline starts (readline shows what it reads only then) and begins its prompt with `\r\033[K`, which erases a key the terminal echoed in that moment, so a key typed while the rows are written is not echoed before the chevron and again by readline (P28 Tasks 48, 50) and `tty_question(FALSE)` back when it returns (`console_asked()`; the pause menu on every exit, its abort too, so a key typed while the run stops is not echoed, P28 Task 34), so readline starts as soon as the question shows, and `gptr_readline()` switches only outside such a question (review of Tasks 16-21) | P28 |
+| `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `paste` and `-paste` among `modes` are gptr's own (D-263): bracketed paste's `ESC [ ? 2004 h` after stty, `ESC [ ? 2004 l` before it, through `gptr_message_write()`, never into a tool's output; `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with the modes a console call saved (`the$tty$saved`, `tty_call()`; bracketed paste off first, D-263), then sets the call's again (IC-76) | P11, P14, P26 |
+| `tty_call(keys)`, `tty_restore(tty = the$tty)`, `tty_question(on)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten -isig min 1 time 0 paste` (bracketed paste on, D-263) for a T console's composer (`keys`; Ctrl-C is a key it reads, `console_keys()` interrupting with `rlang::interrupt()` and the idle editor keeping the draft, as a SIGINT could be lost under load; opost stays on, `min 1` keeps a tool reading stdin waiting, never at an end of input; `tty_isig_on()` and `tty_isig_off()` turn isig on while `eval_open()`'s R code runs, so Ctrl-C interrupts it) or `-echo noflsh` for a D console (SIGINT leaves the line being typed for the pause menu's drain, P28 Task 58); `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails; every switch to the saved modes (`tty_restore()`, `tty_question(TRUE)`, `gptr_readline()`) adds `-paste` where the call's set has `paste`, so readline never reads with the mode on, and `tty_isig_on()` and `tty_isig_off()` leave it on; `tty_question(TRUE)` switches to the saved modes before a console question's rows are written (`console_before_message(kind = "prompt")`, the pause menu), with `-echo` where readline reads the tty (`console_readline_tty()`, `tty$quiet`) until `gptr_readline()` turns the echo on as readline starts (readline shows what it reads only then) and begins its prompt with `\r\033[K`, which erases a key the terminal echoed in that moment, so a key typed while the rows are written is not echoed before the chevron and again by readline (P28 Tasks 48, 50) and `tty_question(FALSE)` back when it returns (`console_asked()`; the pause menu on every exit, its abort too, so a key typed while the run stops is not echoed, P28 Task 34), so readline starts as soon as the question shows, and `gptr_readline()` switches only outside such a question (review of Tasks 16-21) | P28 |
 | `tty_drain_mode()` | the modes to restore (`tty_modes()`; NULL when stty fails) after setting `stty -icanon min 0 time 0` on fd 0, the echo unchanged, so the partial line a canonical terminal holds can be read (mockable); the drain before a question restores them on exit (IC-76, D-243) | P28 |
 | `tty_query(query, ms = 1500)` | `chr(1)`: the terminal's answer to `query` (IC-82, P28 Task 25): `stty -icanon -echo min 0 time 0` on fd 0 (the saved modes restored on exit), `query` written to stdout, then fd 0 read until a DA1 reply (`ESC [ ? ... c`) arrives or `ms` milliseconds pass; `""` when stty fails (mockable); the T REPL's background probe (`repl_background()`) | P28 |
 | `tty_unreply(x)` | `chr`: `x` without OSC replies (`ESC ] ... BEL` or `ST`) and DA1's `ESC [ ? ... c`, so a terminal's late answer to the background probe is never typed text (IC-82; `repl_background()`, `console_compose()`) | P28 |
@@ -5294,6 +5294,7 @@ and pastes are kept in the console history.
 **IC-76 Typed lines steer a running console call** (P26 Task 3, D-185).
 P28 amends this item in §15.10 (D-242, D-243): a steer reaches the first step boundary and a follow-up
 is the next prompt, as D-242 states now; the notices and the follow-up delivery below are replaced.
+FIX-28 (D-263) adds bracketed paste to the composer there.
 - Scope: `repl_terminal(rs)`: not `.stdin`, not Windows (processx cannot poll a console handle),
   `gptr_is_interactive()` and `stdin_tty()`, so an IDE's Terminal tab qualifies while IDE consoles, R.app, RGui
   and Jupyter (no tty) do not; and not Positron's console (`front_end() != "positron"`, P28 visual review): ark's
@@ -5325,11 +5326,14 @@ is the next prompt, as D-242 states now; the notices and the follow-up delivery 
   them meanwhile. R's readline shows a line only while the terminal echoes, so `gptr_readline()` (approvals,
   choices, the pause menu, `gptr_confirm()`) reads with the saved modes and sets `-echo` again after the read.
 - The setting `type_ahead` (§11.2): `"steer"` (default) or `"follow_up"`; not a tighten key.
-- Limits: R code that a tool runs and that reads the console (`readline()`, `menu()`, `browser()`) reads without
-  echo; R ending during a call (`q()`, a crash or a kill) leaves the terminal without echo (`stty echo` or `reset`
-  restores it); a notice ends the streamed row, so the answer goes on in the row after it; a front end that keeps
-  the tty non-canonical during evaluation is unsupported (radian unverified); on the CLI routes a steer reaches the
-  model after the CLI's current response.
+- Limits: R code that a tool runs and that reads the console (`readline()`, `menu()`, `browser()`)
+  reads without echo; in a T console it, or a process a tool runs that reads the terminal, also gets
+  bracketed-paste markers (GNU readline 7+ parses them; readline 5.2, libedit and `readLines()` see
+  text); R ending during a call (a crash or a kill; `q()` restores the modes) leaves the terminal
+  without echo and, in a T console, with bracketed paste on (zsh, fish and bash 5.1+ turn it off at
+  their prompts; `reset` restores both); a notice ends the streamed row, so the answer goes on in
+  the row after it; a front end that keeps the tty non-canonical during evaluation is unsupported
+  (radian unverified); on the CLI routes a steer reaches the model after the CLI's current response.
 
 **IC-77 Console controls and the asking agent** (P26 Task 6).
 P28 amends this item in §15.10 (D-243, D-245): approvals ask under the call they gate, and the run
@@ -5610,37 +5614,47 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     the background` row and before the blank row, and an empty composer; queued steers stay for the run. A
     prompt to the REPL's session while it runs or waits in the background steers it (`route_continue()`), and
     once sent its queue line says so, `↳ steer · <text>` (`repl_turn()`).
-  - The composer's key machine (Task 16; pure, in `console-input.R`; Tasks 18-21 feed it the keys typed while
-    the agent works). `console_compose(state, chars, now, enter_kind, complete, paste = FALSE)` applies one read
-    batch (the text `conn_read_chars()` decodes) at time `now` to `state` (`list(draft, esc, t)`) and returns the
-    new state and at most one action: NULL, `list(type = "send", kind, text)`, `list(type = "take_back")` or
-    `list(type = "complete", candidates)`. Text is added at the draft's end; DEL and BS delete its last
-    character, Ctrl-U clears it and Ctrl-W deletes its last word; other control bytes and escape sequences (up
-    to their final byte, 0x40-0x7e) are dropped, so nothing moves a cursor. A sequence the batch ends in is held
-    until `now` passes its start by 50 ms, then dropped (a lone Esc). `\r` and `\r\n` read as `\n`: a batch
-    holding newlines sends the draft and its text up to the last newline as one message of the Enter kind
-    (`enter_kind`, the `type_ahead` setting), newlines kept, and the rest is the draft; a newline ends what the
-    edit keys reach. With `paste` (steering review) a batch with text after its last newline, not only edit
-    keys, is a paste: its newlines stay in the draft, leading blank lines dropped, and Enter later sends it as
-    one message, as at the idle prompt. `console_keys()` passes TRUE for a batch read on the polling beat, at
-    most 0.2 s after the reader's last read (`rd$polled`, empty reads included), that holds more keys than a
-    person types since that read, one in 30 ms plus one (P28 Task 32: a read late under load held Enter and the
-    next key, and the steer stayed in the draft); the idle editor always; the background probe never. A run's first read and
-    the keys piled up during an in-process tool keep the rule above (during a run a paste without a final
-    newline was split: its head went at once as a steer, its last line stayed the draft). A message starting
-    with `/` or `!` is always a follow-up, and a blank one is not sent. Two
-    keys act only as a batch of their own, or at the end of a batch without a newline, after its text (review of
-    Tasks 16-21: keys typed during an in-process tool arrive as one batch; elsewhere Tab is text and Up is
-    dropped), and `console_keys()` reads one that ends a batch right after a newline as its own batch, after the
-    message the newline sent (P28 Task 35: Enter and Up shared a late read and Up was dropped): Up (`ESC [ A`, `ESC O A`) on
-    an empty draft takes back the newest queued message; Tab on a trigger word completes and never sends, and on
-    any other draft sends the other kind. `console_trigger(line)` gives the trigger word at the line's end, or
-    NULL: the last word of a `!` or `!!` line, a word starting with `@` or `peter$`, or a first word starting
-    with `/`; a word ends at whitespace and readline's break characters, `!` among them (IC-81's completer takes
-    its word from it). `complete(draft, nchar(draft))` returns full words: their longest common prefix replaces
-    the word when it is longer, else two or more are listed (`complete(candidates)`); none does nothing.
+  - The composer's key machine (Task 16; pure, in `console-input.R`; Tasks 18-21 feed it the keys
+    typed while the agent works).
+    `console_compose(state, chars, now, enter_kind, complete, paste = FALSE)` applies one read batch
+    (the text `conn_read_chars()` decodes) at time `now` to `state` (`list(draft, esc, t, bracket)`)
+    and returns the new state and at most one action: NULL, `list(type = "send", kind, text)`,
+    `list(type = "take_back")` or `list(type = "complete", candidates)`. Text is added at the
+    draft's end; DEL and BS delete its last character, Ctrl-U clears it and Ctrl-W deletes its last
+    word; other control bytes and escape sequences (up to their final byte, 0x40-0x7e) are dropped,
+    so nothing moves a cursor. A sequence the batch ends in is held until `now` passes its start by
+    50 ms, then dropped (a lone Esc). `\r` and `\r\n` read as `\n`: a batch holding newlines sends
+    the draft and its text up to the last newline as one message of the Enter kind (`enter_kind`,
+    the `type_ahead` setting), newlines kept, and the rest is the draft; a newline ends what the
+    edit keys reach. With `paste` (steering review) a batch with text after its last newline, not
+    only edit keys, is a paste: its newlines stay in the draft, leading blank lines dropped, and
+    Enter later sends it as one message, as at the idle prompt. Text between bracketed-paste markers
+    (`ESC [ 200 ~`, `ESC [ 201 ~`, both dropped; D-263) is a paste the same way whatever `paste`
+    says: `bracket` keeps a paste open across batches, a sequence cut while it is open is held
+    without the 50 ms limit, and in a batch holding a marker only the text between markers is a
+    paste. For batches without markers (terminals that ignore the mode) `console_keys()` passes TRUE
+    for a batch read on the polling beat, at most 0.2 s after the reader's last read (`rd$polled`,
+    empty reads included), that holds more keys than a person types since that read, one in 30 ms
+    plus one (P28 Task 32: a read late under load held Enter and the next key, and the steer stayed
+    in the draft); the idle editor always; the background probe never. A run's first read and the
+    keys piled up during an in-process tool keep the rule above (during a run a paste without a
+    final newline was split: its head went at once as a steer, its last line stayed the draft). A
+    message starting with `/` or `!` is always a follow-up, and a blank one is not sent. Two keys
+    act only outside an open bracketed paste, as a batch of their own, or at the end of a batch
+    without a newline, after its text (review of Tasks 16-21: keys typed during an in-process tool
+    arrive as one batch; elsewhere Tab is text and Up is dropped), and `console_keys()` reads one
+    that ends a batch right after a newline as its own batch, after the message the newline sent
+    (P28 Task 35: Enter and Up shared a late read and Up was dropped): Up (`ESC [ A`, `ESC O A`) on
+    an empty draft takes back the newest queued message; Tab on a trigger word completes and never
+    sends, and on any other draft sends the other kind. `console_trigger(line)` gives the trigger
+    word at the line's end, or NULL: the last word of a `!` or `!!` line, a word starting with `@`
+    or `peter$`, or a first word starting with `/`; a word ends at whitespace and readline's break
+    characters, `!` among them (IC-81's completer takes its word from it).
+    `complete(draft, nchar(draft))` returns full words: their longest common prefix replaces the
+    word when it is longer, else two or more are listed (`complete(candidates)`); none does nothing.
   - Typing while the agent works (Task 18; T class). A T console's prompt call puts the terminal in character
-    mode (`tty_call()`, §7.1: `-icanon -echo -iexten min 1 time 0`, the saved modes back on return, error,
+    mode with bracketed paste on (D-263), off before every readline read (`tty_call()`, section 7.1:
+    `-icanon -echo -iexten min 1 time 0`, the saved modes back on return, error,
     interrupt and, by a finalizer, `q()`; only a kill or a crash leaves `stty sane` to the person); a D console
     keeps `-echo noflsh` and its lines (D-221; P28 Task 58), and radian, an L console, gets neither. `gptr_readline()` reads with the
     saved modes and sets the call's again after. `console_typed()` runs every 0.05 s; in T it reads fd 0
@@ -6171,8 +6185,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       input's colour there (review of Tasks 16-21). Static (no blink, no frames): drawn when a request
       starts, after a CLI tool event while the request waits, and once a second by a reactor task while the run
       renders (`console_render_on()`: none while a tool executes on the stack).
-    - Every console write (`gptr_message_write()`, at the sink the row was drawn at, `the$live_row$sinks`) first
-      clears the row (`\r\033[K`, or spaces and `\r`), then writes its text, then redraws the row once the text
+    - Every console write (`gptr_message_write()`, at the sink the row was drawn at,
+      `the$live_row$sinks`), except a terminal mode's control alone (`ESC [ ? <n> h` or `l`, D-263),
+      which shows nothing and leaves the row, first clears the row (`\r\033[K`, or spaces and `\r`),
+      then writes its text, then redraws the row once the text
       ends a line, where the row erases cleanly; where it is padded, or after a partial line, the row stays
       cleared until the run next waits, so no padding trails a transcript row. A question or a launched process
       (`console_before_message()` kinds `"prompt"` and NULL) clears it and its task draws it again (a T
