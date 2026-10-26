@@ -460,3 +460,74 @@ test_that("a modify decision is re-checked once and changes what the tool runs (
   expect_identical(e$x, 2)
   expect_identical(fake_requests(fake)[[2]]$last_results[[1]]$details$code, "x = 2")
 })
+
+test_that("auto and yolo refuse system() with a computed command; peter$sh() meets the rules", {
+  skip_on_cran()
+  root = local_project(files = list("build/a.o" = "x"))
+  build = file.path(root, "build", "a.o")
+  local_permission_rules()
+  cmd = "cmd = paste('rm', '-rf', 'build'); "
+  for (rule in c(FALSE, TRUE)) {
+    if (rule) gptr_permissions(deny = "r(sh:rm *)")
+    for (mode in c("auto", "yolo")) {
+      label = paste(mode, if (rule) "with r(sh:rm *)" else "without a rule")
+      script = list(fake_tool("r", code = paste0("ran = TRUE; ", cmd, "system(cmd)")))
+      # without a rule peter$sh() would rightly delete build/, so only the rule's turn tries it
+      if (rule) script = c(script, list(fake_tool("r", code = paste0(cmd, "peter$sh(cmd)"))))
+      fake = local_fake_provider(c(script, list("Done.")),
+                                 name = paste0("sys-", mode, "-", as.integer(rule)))
+      e = new.env()
+      peter("Clean up.", model = fake, mode = mode, envir = e)
+      req = fake_requests(fake)
+      txt = msg_text(req[[2]]$last_results[[1]])
+      expect_match(txt, paste0("system() with a computed command is refused in ", mode, " mode"),
+                   fixed = TRUE, label = label)
+      expect_match(txt, "peter$sh()", fixed = TRUE, label = label)
+      expect_false(exists("ran", envir = e, inherits = FALSE), label = label)
+      if (rule) {
+        expect_match(msg_text(req[[3]]$last_results[[1]]), "denied by the rule r(sh:rm *)",
+                     fixed = TRUE, label = label)
+      }
+      expect_true(file.exists(build), label = label)
+    }
+  }
+  gptr_permissions(allow = "r(fn:system)")
+  code = paste0("ran = TRUE; ", cmd, "if (FALSE) system(cmd)")
+  fake = local_fake_provider(list(fake_tool("r", code = code), "Done."), name = "sys-allowed")
+  e = new.env()
+  peter("Clean up.", model = fake, mode = "auto", envir = e)
+  expect_true(isTRUE(e$ran))
+})
+
+test_that("only auto and yolo refuse a computed command; a literal one is gated as before", {
+  root = local_project()
+  local_permission_rules()
+  decide = function(code) {
+    unname(vapply(session_modes, function(m) gate_decide(gate_r(code), gate_ctx(m)), ""))
+  }
+  for (code in c("cmd = paste('rm', '-rf', 'build'); system(cmd)", "base::system(cmd)",
+                 "system2('rm', a)", "system2(cmd, '-la')", "shell(cmd)", "shell.exec(f)",
+                 "do.call(system, list(cmd))", "lapply(cmds, system)",
+                 "f = function(x) system(x)")) {
+    expect_identical(decide(code), c("deny", "ask", "ask", "deny", "deny"), label = code)
+  }
+  for (code in c("system('ls')", "system2('ls', '-la')")) {
+    expect_identical(decide(code), rep("allow", 5L), label = code)
+  }
+  for (code in c("system('rm -rf build')", "system('ls | xargs rm')",
+                 "system('sleep 1', wait = FALSE)", "shell.exec('report.pdf')", "peter$sh(cmd)")) {
+    expect_identical(decide(code), c("deny", "ask", "ask", "allow", "allow"), label = code)
+  }
+  expect_identical(perm_policy_mode(gate_r("x = 1; system2(cmd)"), gate_ctx("yolo"))$reason,
+                   paste0("system2() with a computed command is refused in yolo mode: the ",
+                          "permission rules cannot read it. Run the command with peter$sh(), ",
+                          "which checks it against them when it runs"))
+  # only an fn: rule lifts the refusal; these allow in manual and edits as before
+  gptr_permissions(allow = c("r(level<=3)", "r(category:dynamic)", "r(sh:*)", "r(fn:system2)"))
+  expect_identical(decide("system(cmd)"), c("deny", "allow", "allow", "deny", "deny"))
+  gptr_permissions(allow = c("r(fn:system)", "r(fn:shell.exec)"), deny = "r(sh:rm *)")
+  for (code in c("system(cmd); write.csv(x, 'out.csv')", "shell.exec(f)")) {
+    expect_identical(decide(code)[4:5], c("allow", "allow"), label = code)
+  }
+  expect_identical(decide("system(cmd); system2(cmd)")[4:5], c("deny", "deny"))
+})
