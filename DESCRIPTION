@@ -9,26 +9,23 @@ Authors@R: c(
     person("Gianmarco", "Bellucci", , "Gianmarco.Bellucci@ucsf.edu", role = "ctb",
            comment = c("Testing", ORCID = "0000-0002-2635-1699"))
   )
-Description: Runs large language model agents inside the running 'R'
-    session, so that models inspect and modify objects that are already in
-    memory instead of re-running scripts from scratch. A single function,
-    peter(), opens an interactive chat in the console or, given a prompt,
-    runs the agent loop and returns a value that can be piped into further
-    prompts. Supports the 'Anthropic'
+Description: Evaluates model-written code in the calling environment of a
+    running 'R' session, so agents work on objects already in memory instead
+    of reloading data from files or rerunning scripts. One function, peter(),
+    opens a chat in the console or, given a prompt, calls either kind of
+    model: typed decision models (System 1) return logical, character or
+    numeric vectors with probabilities, and conversational models (System 2)
+    run as tool-using agents. Conversational models come from the 'Anthropic'
     <https://platform.claude.com/docs/en/api/overview>, 'OpenAI'
-    <https://developers.openai.com/api/reference/overview> and 'Google Gemini'
-    <https://ai.google.dev/gemini-api/docs> application programming
-    interfaces, 'OpenAI'-compatible endpoints, the 'Claude Code' and 'Codex'
-    command line tools, local 'Ollama' <https://ollama.com> conversational
-    models, and 'System One' typed-decision models such as 'Jev', 'Clef' and
-    'Clef Flash', whose typed yes/no, choice and score answers can be used
-    directly in if() and for() statements. Tools for reading, writing,
-    editing and searching files and for evaluating 'R' code are implemented
-    in 'R'; skills, extensions, Model Context Protocol ('MCP') servers,
-    sub-agents and 'shiny' apps are supported. Sessions are recorded as 'R'
-    scripts, 'R Markdown', 'Quarto' or 'Jupyter' documents that can be
-    re-run. Writing files and evaluating model-generated code require the
-    user's permission by default.
+    <https://developers.openai.com/api/reference/overview> and
+    'Google Gemini' <https://ai.google.dev/gemini-api/docs> APIs,
+    'OpenAI'-compatible endpoints, local 'Ollama' <https://ollama.com> models
+    and the 'Claude Code' and 'Codex' command line tools; decision models
+    include 'Jev', hosted by 'TypeSafe AI'
+    <https://docs.typesafe.ai/introduction>, and the local 'Clef'. Top-level
+    peter() calls can be recorded, with the code they ran, in 'R' scripts,
+    'R Markdown' and 'Quarto' documents or 'Jupyter' notebooks; a recorded
+    script replays without a model or keys, or reruns with another model.
 License: Apache License (== 2.0)
 URL: https://broccolito.github.io/gptr/,
     https://github.com/Broccolito/gptr
