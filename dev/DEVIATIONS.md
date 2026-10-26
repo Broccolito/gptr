@@ -7693,3 +7693,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-provider-registry.R "an abort flag set during an event ends the stream before the next
   unit or the end"; test-provider-anthropic.R "end to end on the mock server: streaming, retry and
   abort (skip on CRAN)". Evidence: progress/fixes.md Task CI-97.
+
+## D-257 - FIX-24 A replayed block's objects hold no part of the document (2026-10-26)
+- Rule: `gptr_source()` evaluates a top-level expression that names `peter()` (`all.names()`) with
+  the document's srcrefs, which locate its calls (contract 7.15), and every other expression from a
+  parse with `keep.source = FALSE`. The closures, `function` calls and calls captured with
+  `sys.call()` that those expressions make (a replayed block's code, the user's own code) have no
+  srcref, so they hold none of the document's lines or parse data, as the agent's run makes them;
+  such a function prints its deparsed code, and a traceback through them names no document line,
+  as under `Rscript`. A function that wraps `peter()` keeps its srcref, so its calls are still
+  nested in the document. Formerly every expression ran as under `source(keep.source = TRUE)`.
+- Contract-visible: `?gptr_source` (no longer "like `source()` with `keep.source = TRUE`").
+- Tests: test-doc-replay.R "a replayed block makes its objects without the document's srcrefs
+  (FIX-24)". Evidence: progress/fixes.md FIX-24.

@@ -5358,3 +5358,43 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: none. Open: why the writer exits early (2 of 1,356 Windows writer cases in CI, none
   in 6,583 measured); a recurrence now fails on `writer_failed` in about 5 s, the writer's stderr
   in the witness.
+
+## FIX-24 - A replayed block's objects hold no part of the document (2026-10-26, #PR)
+- Red: FIX-13's open note. `gptr_source()` parsed the document with its srcrefs (a
+  `srcfilecopy()` of its lines, parse data kept) and evaluated each expression as `exprs[i]`, as
+  `source(keep.source = TRUE)` does, so R ran it with the expression's srcref current: a call an
+  object captures with `sys.call()` (rlang's `current_call()`, a ggplot2 scale's `call`) carried
+  that srcref, and a closure or a `function` call the block's code made carried one too. Each holds
+  the srcfile, the whole document's lines and parse data. The agent's run (`eval_r()`) evaluates
+  `exprs[[i]]` of its own code, so the calls it captures carry none and its closures keep a
+  `<gptr>` srcref of that code. The new test-doc-replay.R block "a replayed block makes its objects
+  without the document's srcrefs (FIX-24)" records a block through `peter()` and the fake provider
+  and replays it: on main (7e23ebd3) `^doc-replay$` `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 861 ]` (the
+  replayed call's srcref, its 4,787 serialized bytes against the original's 44, the closure's
+  srcfile holding the document's text). Commit 98ccbec0.
+- Measured (scratch, not committed; main and the fix installed, ggplot2 4.0.3, R 4.6.1): an agent
+  block builds a ggplot with `scale_x_continuous(labels = function(x) paste0(x, " mpg"))` in a
+  document with a 3,000-character comment. On main the replayed scale's `call` has a srcref, the
+  plot serializes 1,374,052 bytes against the original's 1,361,803, and `env_snap_size()` says
+  151,784 against 138,576.
+- Cause: the srcrefs serve one purpose, locating a `peter()` call: `doc_site_srcref()` reads the
+  srcref of the call or of a calling frame (contract 7.15), and `plan_in_loop()` its parse data.
+  Evaluating every expression without them fails `^doc-replay$` FAIL 82 (no site: fresh blocks run
+  live, stale blocks run their old code).
+- Fix (4e0443ff): `gptr_source()` parses the lines again with `keep.source = FALSE` and evaluates
+  an expression that names `peter()` (`all.names()`) as before, every other from that parse; its
+  help says so in place of "like `source()` with `keep.source = TRUE`". A function that wraps
+  `peter()` keeps its srcref, so a call inside it is still nested in the document.
+- Green: `^doc-replay$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 864 ]`. The files that call
+  `gptr_source()` or read srcrefs,
+  `^(doc-|northstar|mcp-recording|injection-e2e|secrets-e2e|perm-plan|arch-layers|lint-rules)`:
+  `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 3367 ]` in UTF-8 and the same under `LC_ALL=C LANG=C` (both
+  skips need {repr}). Lint clean (2 files); `document()` changes only `man/gptr_source.Rd`. The
+  ggplot above: the replayed scale's `call` has no srcref, the plot serializes 1,360,391 bytes and
+  `env_snap_size()` says 137,808. A scratch document locates a `peter()` call in a function it
+  defines as nested there and a top-level one as top-level, as on main.
+- Deviations: D-257. Open: replayed closures and `function` calls have no srcref where the agent's
+  keep a `<gptr>` one of its code, so the replayed plot is 1,412 bytes smaller serialized and 768
+  bytes by `env_snap_size()` (its scale's `call` field, 1,064 against 1,832); `identical()` ignores
+  srcrefs, and such a function prints its deparsed code. An expression that names `peter()` still
+  makes its objects with the document's srcrefs.
