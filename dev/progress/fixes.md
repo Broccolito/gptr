@@ -5366,24 +5366,36 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   `## Steer: Add a legend`): a plain call; a `background = TRUE` call and `gptr_wait(s)`; a
   `.run = FALSE` call, `gptr_step(s, Inf)` and a second recorded turn. Each was given the new last
   line `s |> peter("Add a legend")` and sourced again (auto): no request and no block, only the
-  notice "A steer this script sends is already recorded in the replayed block...".
+  notice "A steer this script sends is already recorded in the replayed block...". Then a
+  verifier's: the stepped script without the second turn, ending in `gptr_step(s, Inf)` or in
+  `gptr_step(s, 1)` and `gptr_step(s, Inf)`, still skipped the new turn on da9a8fcd, its
+  `replay_notes` still "Add a legend"; with those two scripts in the case, FAIL 2 PASS 873.
 - Cause: steer-doc-5 kept every replayed block's steer and follow-up texts as the session's notes,
   keyed by block, until a live run, and `route_continue()` drops a pipe into an idle replayed
   session whose text equals one (`replay_note_take()`). A script sends a recorded steer only while
   the block's run is going, which needs a call that returns before its run ends; after any other
-  block the pipe is a new turn.
-- Fix (04e3788f): `doc_replay_doc()` gives the replay functions `running` (`background = TRUE` or
-  `.run = FALSE`). `replay_notes_add(s, doc)` takes back the equal queued items as before, then
-  keeps the rest as the session's notes, one vector in place of an earlier block's, only when
-  `running`; `gptr_wait()` clears a session's notes, as a live run does. IC-55 amended.
-- Green: `^doc-replay$` FAIL 0 PASS 861; the case alone PASS 6, and FAIL 1 without the `gptr_wait()`
-  line (the background script) or with notes added to an earlier block's (the stepped script). The
-  neighbours (`doc-*`, `gptr-sdk`, `session-object`, `gptr-gateway`, `agent-background`,
-  `subagent-team`, `utils-text`, `arch-layers`, `lint-rules`): FAIL 0 SKIP 2 PASS 4714 in UTF-8 and
-  under `LC_ALL=C LANG=C` (7e23ebd3: FAIL 0 SKIP 2 PASS 4708; the skips need repr), steer-doc-5's
-  and -5b's recorded-steer scripts still making no request. Lint of the 5 changed files clean;
-  `document()` no diff.
+  block the pipe is a new turn. Then only `gptr_wait()` cleared the notes, not `gptr_step()`.
+- Fix (04e3788f, 8c800f92): `doc_replay_doc()` gives the replay functions `running`
+  (`background = TRUE` or `.run = FALSE`). `replay_notes_add(s, doc)` takes back the equal queued
+  items as before, then keeps the rest as the session's notes, one vector in place of an earlier
+  block's, only when `running`; `gptr_wait()` and `gptr_step(turns = Inf)` clear a session's notes,
+  as a live run does, and a step of fewer turns keeps them, as the run may still take a steer sent
+  between steps. Replay leaves no run to settle (the replayed session is idle, nothing queued) and
+  the helpers both verbs share do not know `turns`, so each verb clears them, one line. IC-55
+  amended.
+- Green: `^doc-replay$` FAIL 0 PASS 875 (da9a8fcd: 861 and the 14 new); the case PASS 10, and FAIL
+  1 without the `gptr_wait()` line (the background script) or with notes added to an earlier
+  block's (the stepped script with a second turn). The guard "replaying a stepped script does not
+  send a steer sent between its steps again" (a `.run = FALSE` call, `gptr_step(s, 1)`,
+  `gptr_steer()`, `gptr_step(s, Inf)`) passes on da9a8fcd and gives FAIL 3 when every
+  `gptr_step()` clears the notes. The neighbours (`doc-*`, `gptr-sdk`, `session-object`,
+  `gptr-gateway`, `agent-background`, `subagent-team`, `utils-text`, `arch-layers`, `lint-rules`):
+  FAIL 0 SKIP 2 PASS 4728 in UTF-8 and under `LC_ALL=C LANG=C` (da9a8fcd: PASS 4714; 7e23ebd3: 4708;
+  the skips need repr), steer-doc-5's and -5b's recorded-steer scripts still making no request.
+  Lint of the changed R and test files clean; `document()` no diff.
 - Deviations: D-255 (amends D-249). Open: a run sent to the background from the pause menu, or a
   `gptr_wait(timeout =)` that returned before its run ended, let the script go on while the run
   took steers; such a steer is sent again on replay (a new turn, or a queued steer), as the
-  document does not record which statement sent a steer.
+  document does not record which statement sent a steer. A `gptr_step(s, <n>)` that ended the run
+  keeps the notes, so a later turn equal to one is still skipped: replay does not count the run's
+  model turns.
