@@ -5358,3 +5358,30 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: none. Open: why the writer exits early (2 of 1,356 Windows writer cases in CI, none
   in 6,583 measured); a recurrence now fails on `writer_failed` in about 5 s, the writer's stderr
   in the witness.
+
+## Task CI-99 - The test setup blanks every secret-looking host variable (2026-10-26, #PR)
+- Red: CI-87's open note. setup.R blanked a fixed list of 23 variables, so a host secret with
+  another name (Claude Code's `CLAUDE_CODE_MESSAGING_TOKEN`) stayed set, and each later `peter()`
+  block registered it in the process vault (`session_new()` calls `secret_discover_env()`). A new
+  block in `test-auth-secrets.R` runs that discovery in an empty vault and expects no registered
+  name to be a variable of the environment. With main's setup.R and a fake
+  `CLAUDE_CODE_MESSAGING_TOKEN` in the environment, `^auth-secrets$` FAIL 1 PASS 309
+  (`test-auth-secrets.R:105`, the name `CLAUDE_CODE_MESSAGING_TOKEN` registered).
+- Cause (the test setup, not the package): the list repeated part of the package's rule,
+  `is_secret_name()` (`R/auth-secrets.R`), which discovery applies to every variable.
+- Fix (test only, 7a22db54): setup.R blanks every variable of the host that `is_secret_name()`
+  accepts, in place of the list, under the same `GPTR_LIVE_TESTS` guard and through the same
+  `withr::local_envvar()` into the teardown environment, so the run ends with the host's values
+  (after `devtools::test()` the environment equals the one before but for pkgload's
+  `PKGLOAD_PARENT_TEMPDIR`, as on main). The list's `AZURE_OPENAI_ENDPOINT` is a base URL, not a
+  secret, and is no longer blanked, like `AWS_REGION` and the `_BASE_URL` variables; the tests
+  that read it set it. A listed name the host does not set now stays unset instead of empty.
+- Green (`NOT_CRAN=true`, the fake token set): `^auth-secrets$` PASS 310 in UTF-8, under
+  `LC_ALL=C LANG=C` and without the token. Full suite `.` under `LC_ALL=C`: FAIL 0 SKIP 100 PASS
+  38059 (31.6 min). In UTF-8: FAIL 1 SKIP 66 PASS 38256 (35.6 min, load 15-89), the writer-timeout
+  case of `test-proc-writer-prototype.R:20` past its 30 s deadline; that file alone then failed 2
+  of 6 runs on a `ps` memory sample refused (`access_denied`, the load flake of FIX-15 to FIX-17)
+  and passed 14 of 14 alternating main's setup.R and this one (7 each, PASS 92, load 13-87). Lint
+  of both files clean; R/ and man/ unchanged.
+- Deviations: none. Open: an authenticated proxy variable (`HTTPS_PROXY` with a password) is not
+  secret-looking, so discovery still registers its password as `HTTPS_PROXY_PASSWORD`.
