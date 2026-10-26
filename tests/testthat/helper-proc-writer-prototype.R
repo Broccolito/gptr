@@ -119,7 +119,7 @@ wp_child_case = function(case, root) {
   st$accepted = 0L
   st$last = fun("reactor_now")()
   st$error = NULL
-  st$timer = NULL
+  st$timer = character()
   st$close_sent = FALSE
   st$writer_failed = FALSE
   lines = sprintf("%05d %s", seq_len(40000L), strrep("x", 93L))
@@ -243,6 +243,7 @@ wp_child_case = function(case, root) {
     inner_dead = !fun("pid_alive")(record$pid, record$create_time),
     writer_dead = !fun("pid_alive")(writer_record$pid, writer_record$create_time),
     writer_failed = st$writer_failed,
+    writer_stderr = utils::tail(readLines(file.path(root, "writer-stderr.txt"), warn = FALSE), 20L),
     marker_removed = !file.exists(file.path(fun("proc_dir")(), paste0(record$marker, ".json"))),
     writer_marker_removed = !file.exists(file.path(fun("proc_dir")(),
       paste0(writer_record$marker, ".json"))))
