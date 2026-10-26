@@ -1257,8 +1257,8 @@ replay_key = function(block, child = NULL) if (is.null(child)) block else paste0
 
 #' Advance a piped session in place for a fresh recorded block (IC-46)
 #' A session rebuilt from its JSONL moves to the end of the block's turn (replay_seek()); one
-#' reconstructed from its document gains the block's turn from `doc` (replay_turn_append()). The
-#' block's steers become its notes each time it is replayed (replay_notes_add()). Records the
+#' reconstructed from its document gains the block's turn from `doc` (replay_turn_append()). Each
+#' replay sets the session's notes from the block's steers (replay_notes_add()). Records the
 #' block (replay_mark()) and returns the same object, so a replayed pipe chain keeps
 #' `identical(chain_result, first_result)`.
 #' @noRd
@@ -1277,7 +1277,7 @@ session_replay_apply = function(s, block, header, text = NULL, doc = NULL) {
       added = TRUE
     }
   }
-  replay_notes_add(s, block, doc)
+  replay_notes_add(s, doc)
   replay_mark(s, block, header, text, advance = !added)
   s
 }
@@ -1321,23 +1321,22 @@ replay_adopt = function(s, block, header, doc) {
     d$doc = list(path = doc$path, format = doc$format %||% NA_character_, site = NULL,
                  blocks = block)
   }
-  replay_notes_add(s, block, doc)
+  replay_notes_add(s, doc)
   replay_mark(s, block, header, doc$text, advance = FALSE)
   s
 }
 
-#' The texts of a replayed block's `## Steer:` and `## Follow-up:` lines (`doc$steps`) become the
-#' session's notes of that block, set anew each time the block is replayed (a script sourced again
-#' sends them again): replay_note_take() keeps them from reaching the model twice. A matching item
-#' the script queued before the call that took it is taken back now (a `withdraw` each).
+#' The texts of a replayed block's `## Steer:` and `## Follow-up:` lines (`doc$steps`) take back
+#' each equal item the script queued before the call that took it (a `withdraw` each). The rest
+#' become the session's notes, in place of an earlier block's, which replay_note_take() keeps from
+#' reaching the model twice; only a call that returns before its run ends (`doc$running`) keeps
+#' them, until gptr_wait(), gptr_step(turns = Inf) or a live run: a script steers only a run it
+#' left going. Each replay sets them anew (a script sourced again sends them again).
 #' @noRd
-replay_notes_add = function(s, block, doc) {
+replay_notes_add = function(s, doc) {
   notes = Filter(function(st) st$type %in% c("steer", "follow_up"), doc$steps %||% list())
-  if (!length(notes)) return(invisible(s))
   d = session_data(s)
-  kept = d$replay_notes %||% list()
-  kept[[block]] = vapply(notes, function(st) st$text, "")
-  d$replay_notes = kept
+  d$replay_notes = vapply(notes, function(st) st$text, "")
   for (which in c("steer", "follow_up")) {
     items = d$queue[[which]]
     taken = vapply(items, function(it) {
@@ -1346,6 +1345,7 @@ replay_notes_add = function(s, block, doc) {
     d$queue[[which]] = items[!taken]
     for (item in items[taken]) queue_emit(s, "withdraw", which, item)
   }
+  if (!isTRUE(doc$running)) d$replay_notes = NULL
   invisible(s)
 }
 
@@ -1357,11 +1357,9 @@ replay_note_take = function(s, text) {
   if (!length(d$replay_notes) || !identical(d$status, "idle") || !rlang::is_string(text)) {
     return(FALSE)
   }
-  text = doc_one_line(redact(as_utf8(text), "context"))
-  b = Position(function(v) text %in% v, d$replay_notes)
-  if (is.na(b)) return(FALSE)
-  v = d$replay_notes[[b]]
-  d$replay_notes[[b]] = v[-match(text, v)]
+  k = match(doc_one_line(redact(as_utf8(text), "context")), d$replay_notes)
+  if (is.na(k)) return(FALSE)
+  d$replay_notes = d$replay_notes[-k]
   gptr_inform(paste0("A steer this script sends is already recorded in the replayed block; it was ",
                      "not sent again."), "notice", .once = "replay_steer_recorded")
   TRUE

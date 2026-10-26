@@ -623,7 +623,7 @@ test_that("a replayed block's notes take back queued items with one withdraw eac
   session_enqueue(s, "use TPM", as = "steer", source = "api_user")
   session_enqueue(s, "then plot", as = "follow_up", source = "pipe")
   steps = list(list(type = "steer", text = "use TPM"), list(type = "follow_up", text = "then plot"))
-  replay_notes_add(s, "b1", list(steps = steps))
+  replay_notes_add(s, list(steps = steps))
   expect_identical(lapply(ev(s)[3:4], `[`, queue_fields), list(
     list(op = "withdraw", which = "steer", text = "use TPM", source = "api_user", steer = 0L,
          follow_up = 1L),

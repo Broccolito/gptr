@@ -7699,6 +7699,23 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   failure"; test-provider-anthropic.R "end to end on the mock server: streaming, retry and abort
   (skip on CRAN)". Evidence: progress/fixes.md Task CI-97, FIX-26.
 
+## D-255 - FIX-22 A replayed script runs its own turn equal to a recorded steer (2026-10-26)
+- Rule: a replayed block's `## Steer:` and `## Follow-up:` texts take back the equal items already
+  queued, as before, and stay the session's notes, in place of an earlier block's, only when the
+  block's call returns before its run ends (`background = TRUE` or `.run = FALSE`); `gptr_wait()` or
+  `gptr_step(turns = Inf)` on the session clears them, as a live run does, and a step of fewer turns
+  keeps them. A script can steer only a run it left going, so after any other replayed block, or
+  once it waited the run out, a pipe or `gptr_steer()` with an equal text is the script's own: a new
+  turn runs and is recorded, a steer is queued for the next run. Formerly every replayed block kept
+  its notes, keyed by block, until a live run, so a new `s |> peter("<text>")` turn equal to a steer
+  the script did not send (the pause menu's, the console's) was skipped with the notice "A steer
+  this script sends is already recorded...". Amends D-249 (steer-doc-5, steer-doc-5b).
+- Contract-visible: 04 section 15.4 IC-55.
+- Tests: test-doc-replay.R "a replayed script runs its own turn whose text a block recorded as a
+  steer", "replaying a stepped script does not send a steer sent between its steps again";
+  test-session-object.R "a replayed block's notes take back queued items with one withdraw each
+  (D-242)" (`replay_notes_add(s, doc)`). Evidence: progress/fixes.md FIX-22.
+
 ## D-257 - FIX-24 A replayed block's objects hold no part of the document (2026-10-26)
 - Rule: `gptr_source()` evaluates a top-level expression that names `peter()` (`all.names()`) with
   the document's srcrefs, which locate its calls (contract 7.15), and every other expression from a

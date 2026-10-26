@@ -265,8 +265,9 @@ doc_replay_no_value = function(site, block, code, s) {
 }
 
 #' What a replayed session reconstructs its history from (IC-46; P06's `doc` argument):
-#' list(path, format, template, code, output, text, steps); `code` and `output` are those of all
-#' the block's runs
+#' list(path, format, template, code, output, text, steps, running); `code` and `output` are those
+#' of all the block's runs; `running` is TRUE when the call returns before its run ends
+#' (`background = TRUE` or `.run = FALSE`), so the script may still steer it (IC-55)
 #' @noRd
 doc_replay_doc = function(site, call, block_id, text = NULL) {
   body = tryCatch(doc_block_get(site$format, doc_read(site$path)$lines, block_id)$body,
@@ -277,7 +278,7 @@ doc_replay_doc = function(site, call, block_id, text = NULL) {
        template = site$template %||% call$template %||% call$prompt,
        code = as.character(unlist(lapply(runs, function(st) st$code))),
        output = as.character(unlist(lapply(runs, function(st) st$output))), text = text,
-       steps = steps)
+       steps = steps, running = isTRUE(call$args$background) || !isTRUE(call$args$run))
 }
 
 #' A block body as ordered steps: each run of code with its `#>` output, list(type = "r", code,

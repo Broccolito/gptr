@@ -135,6 +135,8 @@ gptr_step = function(s, turns = 1L) {
     gptr_abort("`turns` must be a whole number of turns or Inf.", "invalid_argument",
                arg = "turns", expected = "an integer >= 1 or Inf")
   }
+  # stepping all turns ends a replayed run here, as gptr_wait() does (IC-55)
+  if (is.infinite(turns)) assign("replay_notes", NULL, envir = session_data(s))
   run = sdk_start(s, parent.frame())
   if (is.null(run)) return(invisible(s))
   counter = sdk_turn_counter(s)
@@ -173,6 +175,8 @@ gptr_wait = function(x, timeout = Inf) {
   ss = sdk_sessions(x)
   check_number(timeout, "timeout", min = 0)
   caller = parent.frame()
+  # a replayed run ends here, so a later text equal to one of its notes is the script's own (IC-55)
+  for (s in ss) assign("replay_notes", NULL, envir = session_data(s))
   # every session is checked before any is started, so a refusal (egress, replay) starts none
   chks = vector("list", length(ss))
   i = 0L
