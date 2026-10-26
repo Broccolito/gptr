@@ -810,8 +810,9 @@ stream_rate_sync = function(id) {
 #' HTTP transports (http_sse, http_ndjson, http_json): one transfer for the whole request
 #' A second on_headers() (a re-send) resets the normaliser and the splitter; a splitter failure
 #' ends the stream like a normaliser failure. `stream = "raw"` pushes each body chunk unsplit.
-#' Each chunk, unit and the body's end runs stream_over() first, as process_jsonl's lines do
-#' (D-018): an abort set during an event stops the input the reactor still holds (D-254).
+#' Each chunk, unit and the body's end or failure runs stream_over() first, as process_jsonl's
+#' lines do (D-018): an abort set during an event stops the input the reactor still holds
+#' (D-254).
 #' @noRd
 stream_http = function(st, adapter) {
   st$transport = "http"
@@ -876,7 +877,7 @@ stream_http = function(st, adapter) {
     })
     if (ok) stream_normaliser_finish(st)
   }
-  on_fail = function(cnd) if (!st$finished) stream_normaliser_fail(st, cnd)
+  on_fail = function(cnd) if (!stream_over(st)) stream_normaliser_fail(st, cnd)
   on_retry = function(type, info) {
     if (!st$finished) stream_emit(st, do.call(ev_new, c(list(type), info)))
   }
