@@ -7702,9 +7702,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   asked, which then parked again at R's prompt, its console note and model request sent twice. The
   park notice says `gptr_wait(gptr_last()) continues it.`, and the console's notice of waiting
   sessions ends `!!gptr::gptr_wait(session) asks`. Amends D-252's resume point.
+- Rule (recording): the resumed run keeps the document site of the call that started the session
+  (`bg_run_opts()` keeps `doc`; P21 Task 3 left it out), so its end writes that call's block, a
+  console transcript's `## Run: aborted` block of the parked run replaced. Formerly the work done
+  after the approval was in no document, and a script re-sourced asked the model again.
 - Contract-visible: 04 sections 7.21, 15.5 IC-57 and 15.10 (the console's notices); 03 section 6.2;
   `?gptr-background`, vignette("teams-and-background").
 - Tests: test-agent-background.R "only gptr_wait() continues a waiting session; another call
-  leaves it waiting", "an ask at an idle tick parks the run as waiting until gptr_wait()";
+  leaves it waiting", "an ask at an idle tick parks the run as waiting until gptr_wait()", "the
+  run a parked session resumes records the block of the call that started it", "bg_run_opts()
+  keeps the options a resumed run needs, never a frame or a snapshot";
   test-console-repl.R "background sessions that wait for approval are announced once (IC-57)".
   Evidence: progress/fixes.md FIX-21.

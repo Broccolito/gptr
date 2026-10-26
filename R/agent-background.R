@@ -308,13 +308,14 @@ bg_register = function(s) {
   invisible(s)
 }
 
-#' The run options (04 section 7.6) a resumed background run keeps; never `call` (the caller's
+#' The run options (04 section 7.6) a resumed background run keeps, the document site among them,
+#' so the resumed run writes the block of the call that started it; never `call` (the caller's
 #' frame, rule R2) or `safety` (snapshotted again at resume, IC-53)
 #' @noRd
 bg_run_opts = function(run) {
   o = run$opts[intersect(names(run$opts), c("max_turns", "budget", "returns", "context",
                                              "timeout", "preset", "tools", "root", "agent",
-                                             "depth"))]
+                                             "depth", "doc"))]
   o$background = TRUE
   o
 }

@@ -199,8 +199,10 @@ test_that("bg_run_opts() keeps the options a resumed run needs, never a frame or
   run = list(opts = list(max_turns = 5L, budget = list(tokens = 100), call = new.env(),
                          safety = list(can_prompt = TRUE), doc = list(path = "a.R"),
                          background = FALSE, timeout = 30))
+  # the document site too, so the resumed run writes the call's block (FIX-21)
   expect_identical(bg_run_opts(run), list(max_turns = 5L, budget = list(tokens = 100),
-                                          timeout = 30, background = TRUE))
+                                          doc = list(path = "a.R"), timeout = 30,
+                                          background = TRUE))
   expect_identical(bg_run_opts(list(opts = NULL)), list(background = TRUE))
 })
 
@@ -593,6 +595,29 @@ test_that("only gptr_wait() continues a waiting session; another call leaves it 
   expect_identical(s$status, "idle")
   expect_identical(e$z, 3)
   expect_identical(ui$log$method, "permission")
+})
+
+test_that("the run a parked session resumes records the block of the call that started it", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  x = local_doc_e2e(list(fake_tool("r", code = "z = 3"), fake_tool("r", code = "z = 3"),
+                         fake_text("Done.")))
+  local_gptr_options(unsafe_no_permissions = FALSE, background_tools = "idle")
+  local_scripted_ui(answers = list("y"))
+  f = file.path(x$root, "bg.R")
+  # the idle ticks of R's prompt between the lines, as when they are run one at a time
+  writeLines(c("s = peter(\"Set z.\", mode = manual, background = TRUE)",
+               "while (identical(s$status, \"running\")) later::run_now(0.05)",
+               "gptr_wait(s)"), f)
+  e = doc_e2e_source(f)
+  expect_identical(e$z, 3)
+  # live (FIX-21): the transcript kept `## Run: aborted` and no code
+  rec = readLines(f)
+  expect_true("z = 3" %in% rec)
+  e2 = doc_e2e_source(f)
+  expect_identical(e2$z, 3)
+  expect_length(fake_requests(x$fake), 3L)
 })
 
 test_that("a waiting session that cannot continue is aborted and released", {
