@@ -1,9 +1,10 @@
 ## Current checkpoint — 1.0 pre-release fixes (PR #88), 2026-10-26
 
 PR #88 (branch `claude/v1-prerelease`) merges ten branches into `main` `7e23ebd3`, which also
-holds PR #84 (CI-98: the writer prototype reports an early writer exit); CI-99..CI-102 and
-FIX-21..FIX-26 in [fixes](progress/fixes.md), in id order, decisions D-255, D-257, D-258 and D-261
-and the D-254 amendment in `DEVIATIONS.md`.
+holds PR #84 (CI-98: the writer prototype reports an early writer exit), and adds CI-103 and the
+follow-ups that the PR's checks found; CI-99..CI-103 and FIX-21..FIX-26 in
+[fixes](progress/fixes.md), in id order, decisions D-255, D-257, D-258 and D-261 and the D-254
+amendment in `DEVIATIONS.md`.
 
 | Status | Result |
 |---|---|
@@ -11,6 +12,7 @@ and the D-254 amendment in `DEVIATIONS.md`.
 | Fixed | CI-100: an installed gptr in a C locale decodes invalid bytes as U+FFFD, not as the text `<U+FFFD>` with a warning (`replacement_sub()` makes its bytes per call, the BOM pattern is PCRE's; a test keeps non-ASCII strings of unknown encoding out of the namespace). |
 | Fixed | CI-101: the Windows stdin drain reads the writer's and the child's liveness before the ready file, so a writer that exits right after it fails delivery, not startup. |
 | Documented | CI-102: installs from GitHub work (`pak::pak()`, remotes and devtools, 12 of 12 hosted jobs); the README says to restart R when pak stops with `Subprocess is busy or cannot start` or a later call reports a missing or corrupt `gptr.rdb`, the report's two errors, both from the session. |
+| Fixed, docs only | CI-103: the release spelling check (Task 15) passes again, with US spelling in four places and 11 words in `inst/WORDLIST`; it failed on `main` too. |
 | Fixed | FIX-21: the bg-1 and plan-execute paths run live on claude-cli, codex and ollama, and the five defects found there fixed: an idle tick's first notice starts a row of its own; only `gptr_wait()` continues a waiting session; the resumed run records its call's block; `/exit` names `gptr_wait(gptr_last())` only for the console's own session; the execute menu sets the mode and leaves `Go ahead.` to the next prompt (D-261, amends D-252). |
 | Fixed | FIX-22: a replayed script runs its own turn equal to a recorded steer; a block's notes stay only when its call returns before its run ends, and `gptr_wait()` or `gptr_step(turns = Inf)` clears them (D-255, IC-55). |
 | Fixed | FIX-23: a background job's clock stops when the reactor or `kill()` sees its process end, not at the first status look. |

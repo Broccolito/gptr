@@ -1,9 +1,10 @@
 ## Current checkpoint — 1.0 pre-release fixes (PR #88), 2026-10-26
 
 PR #88 (branch `claude/v1-prerelease`) merges ten branches into `main` `7e23ebd3`, which since the
-PRs #78-#83 checkpoint also holds #84 (CI-98: the writer prototype reports an early writer exit).
-Each branch has its record in `progress/fixes.md`, in id order, and decisions D-255, D-257, D-258
-and D-261 and the D-254 amendment are in `DEVIATIONS.md`:
+PRs #78-#83 checkpoint also holds #84 (CI-98: the writer prototype reports an early writer exit),
+and adds CI-103 and the follow-ups that the PR's checks found. Each has its record in
+`progress/fixes.md`, in id order, and decisions D-255, D-257, D-258 and D-261 and the D-254
+amendment are in `DEVIATIONS.md`:
 
 - CI-99 (test only): `tests/testthat/setup.R` blanks every host variable that `is_secret_name()`
   accepts, in place of a fixed list of 23, so a host secret such as `CLAUDE_CODE_MESSAGING_TOKEN`
@@ -16,6 +17,8 @@ and D-261 and the D-254 amendment are in `DEVIATIONS.md`:
 - CI-102: installs from GitHub work (`pak::pak()`, remotes and devtools, 12 of 12 hosted jobs); the
   README says to restart R when pak stops with `Subprocess is busy or cannot start` or a later call
   reports a missing or corrupt `gptr.rdb`, the two errors of the report, both from the session.
+- CI-103: the release spelling check (Task 15) passes again, with US spelling in four places and 11
+  words in `inst/WORDLIST`; it failed on `main` too.
 - FIX-21: the bg-1 and plan-execute paths, run live on claude-cli, codex and ollama, and the five
   defects found there fixed: an idle tick's first notice starts a row of its own; only
   `gptr_wait()` continues a waiting session; the resumed run records its call's block; `/exit` names

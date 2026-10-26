@@ -5546,6 +5546,21 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
 - Deviations: none. Open: what slowed or stopped pak's subprocess on the reporting Mac, and what
   removed its loaded copy of gptr before `load_all()`, is not in the report.
 
+## Task CI-103 - The release spelling check passes on the 1.0 tree (2026-10-26, #88)
+- Red: `dev/release/tests/test-gptr-release.R`, Task 15's check (no unknown words in the manual,
+  the vignettes, the release files and `cran-comments.md`), FAIL 2 on main `7e23ebd3` (as FIX-25's
+  record saw) and on #88: 13 words that came in after the WORDLIST's last change (2026-10-20),
+  `pak` from CI-102's README sentence, and `gcc` and `oldrelease` in `cran-comments.md`.
+- Cause: docs otherwise in US English (the README's "honors") gained "honoured" (mcp vignette),
+  "normalised" and "normalisation" (tools-and-artifacts vignette) and "initialised" (NEWS), and
+  `?session-accessors` "the named chr"; the rest are names and terms no one added to the list.
+- Fix (`43f9f5db`): US spelling in those places (each vignette and its `.orig`), "a named vector" in
+  `R/session-object.R`, and 11 words in `inst/WORDLIST`: Groq, MiniMax, Rterm, acknowledgement,
+  gcc, gpt, oldrelease, oss, pak, stringi and xAI.
+- Green: `testthat::test_dir("dev/release/tests")` passes every file, rc 0; `document()` changed
+  `session-accessors.Rd` only; lint clean.
+- Deviations: none. Open: none.
+
 ## FIX-21 - Live bg-1 and plan-execute paths (2026-10-26, #88)
 Scope: the two paths the cheat-sheet review left unexercised (HANDOFF, Open), driven as a person
 would in terminal R (`R --vanilla`) in a private tmux server at 100x40, keys typed one at a time,
@@ -5693,6 +5708,14 @@ the driver, screens, events, transcripts and replays without a model are local, 
   inside a run's tool, now resumes it as a nested run that inherits the outer run's safety record
   (it used to hang), and the permission gate still asks the person.
 
+### Follow-up on #88
+- Commit `bb7ddf3a`, from #88's docs review: `?gptr_wait` says that a waiting background session
+  continues only there; 05's P14 and P21 entries say that asks wait for the session's next
+  `gptr_wait()` (IC-57, D-261); 03 section 6.2 and 04 section 7.21 (`bg_register`) say that
+  `"wait"` holds R tools for the next blocking gptr call, as `?gptr-background` and the code do (a
+  script under `"wait"`: an unrelated foreground `peter()` ran the held tool). `document()` changed
+  `gptr_wait.Rd` only; lint clean; the plan checks pass.
+
 ## FIX-22 - A replayed script runs its own turn equal to a recorded steer (2026-10-26, #88)
 - Red: FIX-16's open note under steer-doc-5. test-doc-replay.R "a replayed script runs its own
   turn whose text a block recorded as a steer", on 7e23ebd3's R code: `^doc-replay$` FAIL 3 PASS
@@ -5829,6 +5852,10 @@ the driver, screens, events, transcripts and replays without a model are local, 
   touched R files); `document()` changes only `man/gptr_export.Rd`; the release self-test
   `gptr-release` fails only where main does (spelling and cran-comments, FAIL 2), its
   script-as-history check passing.
+- Follow-up `50e9cbbf`, from #88's docs review: the cheat sheet's export paragraph said that
+  sessions (`s |> peter()`) are refused; it now says that such a pipe continues only an `s` an
+  earlier `peter()` statement assigned, and the PDF is reprinted (two letter pages, the column one
+  line longer).
 - Deviations: D-258. Open: a console turn with a context object (`s_<hex> |> peter("...", df)`)
   stays refused, as the same call in a script is; an exported transcript keeps its replay note,
   which names the source transcript.
