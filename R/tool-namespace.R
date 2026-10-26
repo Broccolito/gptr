@@ -697,7 +697,7 @@ bm25_stem = function(term) {
 search_utf8 = function(x) {
   x = as_utf8(as.character(x))
   bad = which(!is.na(x) & !validUTF8(x))
-  if (length(bad)) x[bad] = as_utf8(iconv(x[bad], "UTF-8", "UTF-8", sub = replacement_sub))
+  if (length(bad)) x[bad] = as_utf8(iconv(x[bad], "UTF-8", "UTF-8", sub = replacement_sub()))
   x
 }
 
