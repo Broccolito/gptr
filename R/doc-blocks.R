@@ -14,13 +14,47 @@ doc_block_token = "@@GPTR_BLOCK@@"
 # what a recorded gptr_return(<expression>) assigns, and value= names (doc_rewrite_return())
 doc_value_name = paste0(".gptr_value_", doc_block_token)
 doc_header_keys = c("model", "date", "prompt", "sha", "call", "tokens", "cost", "session", "turn",
-                    "value", "fork", "plan", "status", "args", "kind", "children")
+                    "value", "created", "fork", "plan", "status", "args", "kind", "children")
 doc_quoted_keys = "children"
+# the context blocks the console sends with a typed prompt (its !code notes and @file heads),
+# which a block records as `#< ` lines (IC-49)
+doc_sent_kinds = c("user_ran", "user_files")
 
 #' A `## Steer:` or `## Follow-up:` line; a blank text leaves no trailing space for an editor to
 #' trim
 #' @noRd
 doc_steer_line = function(kind, text) sub(" $", "", paste0("## ", kind, ": ", doc_one_line(text)))
+
+#' The `#< ` lines of the context blocks a prompt was sent with (IC-49): each line of each block's
+#' text, an empty one as `#<`
+#' @noRd
+doc_sent_lines = function(texts) {
+  x = unlist(strsplit(as_utf8(as.character(texts)), "\n", fixed = TRUE))
+  out = paste0("#< ", x, recycle0 = TRUE)
+  out[!nzchar(x)] = "#<"
+  out
+}
+
+#' The context blocks a block's `#< ` lines record, also under `#~ `, as list(<kind> = <text
+#' inside its tags>): a block opens with its tag on the first line or after a closing tag, and
+#' ends with its own closing tag
+#' @noRd
+doc_block_sent = function(body) {
+  x = sub("^#~ ", "", as_utf8(as.character(body)))
+  x = sub("^#< ?", "", x[grepl("^#<( |$)", x)])
+  close = paste0("</", doc_sent_kinds, ">")
+  open = which(x %in% paste0("<", doc_sent_kinds, ">") & c(TRUE, utils::head(x, -1L) %in% close))
+  out = list()
+  for (k in seq_along(open)) {
+    seg = x[open[k]:(c(open[-1L] - 1L, length(x))[k])]
+    kind = gsub("[<>]", "", seg[1L])
+    n = length(seg)
+    if (n > 1L && identical(seg[n], paste0("</", kind, ">"))) {
+      out[[kind]] = paste(seg[-c(1L, n)], collapse = "\n")
+    }
+  }
+  out
+}
 
 #' A string literal that both R and JSON read back as `x` (Python's json.dumps(ensure_ascii =
 #' False)); non-ASCII characters are kept, which encodeString() escapes in a C locale
@@ -1206,7 +1240,8 @@ doc_nested_parts = function(body, kids) {
 
 #' Body lines, recorded code, value, plan facts, last assistant message, tokens and cost of one
 #' turn (tokens and cost are known only when every assistant message of the turn reports them,
-#' IC-74: missing usage stays unknown)
+#' IC-74: missing usage stays unknown), the texts of the console's context blocks its prompt was
+#' sent with (`sent`) and the objects its r calls created (`created`, what a rewind removes)
 #' @noRd
 doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
   results = list()
@@ -1216,7 +1251,8 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
   }
   out = list(body = character(), code = character(), secrets = FALSE, value = NULL,
              plan_path = NULL, plan_from = NULL, last = NULL, tokens = c(0, 0),
-             tokens_known = TRUE, cost = 0, cost_known = TRUE)
+             tokens_known = TRUE, cost = 0, cost_known = TRUE, sent = character(),
+             created = character())
   for (i in seq_along(ents)) {
     e = ents[[i]]
     m = e$message
@@ -1224,9 +1260,9 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
       out$body = c(out$body, doc_steer_line("Steer", m$origin_text %||% ""))
     } else if (identical(e$type, "message") && identical(m$role, "user")) {
       for (blk in m$content) {
-        if (identical(blk$type, "context") && identical(blk$kind, "plan")) {
-          out$plan_from = blk$attrs$from %||% out$plan_from
-        }
+        if (!identical(blk$type, "context")) next
+        if (identical(blk$kind, "plan")) out$plan_from = blk$attrs$from %||% out$plan_from
+        if (i == 1L && isTRUE(blk$kind %in% doc_sent_kinds)) out$sent = c(out$sent, blk$text)
       }
       if (i == 1L) next
       src = m$source %||% "prompt"
@@ -1244,6 +1280,13 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
         out$value = e$data$name
       }
       if (identical(ct, "gptr.plan")) out$plan_path = e$data$path %||% out$plan_path
+      if (identical(ct, "gptr.checkpoint")) {
+        rows = e$data$fragments$objects$objects
+        made = vapply(rows, function(r) {
+          if (identical(r$status, "created") && rlang::is_string(r$name)) r$name else ""
+        }, "")
+        out$created = union(out$created, made[nzchar(made)])
+      }
       if (identical(ct, "gptr.mcp_r")) {
         out = doc_turn_r(out, e$data, list(), with_out, plan_mode)
       }
@@ -1369,7 +1412,8 @@ doc_header_common = function(site, call_ordinal, model) {
 #' The lines of the block of a session turn (contract 7.15): chr with attributes `header` (named
 #' list of 11.5 keys), `session`, `answer` (final text) and `children` (S2 parts to cache). The
 #' header's `model` is the provider and model of the turn's last answer as recorded, so a local
-#' model keeps its tag (IC-74).
+#' model keeps its tag (IC-74). The body opens with the `#< ` lines of the console's context
+#' blocks the prompt was sent with, and `created=` names the objects the turn created (IC-49).
 #' @noRd
 doc_block_lines = function(session, turn, site, call_ordinal) {
   d = session_data(session)
@@ -1388,7 +1432,7 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
     fork = paste0(d$fork_of$id, ":", d$fork_of$turn %||% 0L)
     if (startsWith(d$home_label %||% "", "overlay of")) body = doc_wrap_local(body)
   }
-  body = redact(body, "persist")
+  body = redact(c(doc_sent_lines(tb$sent), body), "persist")
   last = tb$last
   model = if (!is.null(last)) paste0(last$provider, "/", last$model) else d$model
   header = doc_header_common(site, call_ordinal, model)
@@ -1399,6 +1443,7 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
   header$session = d$id
   header$turn = as.integer(turn)
   header$value = tb$value
+  header$created = if (length(tb$created)) paste(tb$created, collapse = ",")
   header$fork = fork
   header$plan = tb$plan_from
   children = doc_nested_parts(body, doc_turn_children(session, ents))

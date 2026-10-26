@@ -526,6 +526,7 @@ call_new = function(prompt = NULL, template = NULL, interp = character(), sessio
   call$nframe = nframe
   call$top_level = NA
   call$doc = NULL
+  call$sent = NULL
   call$hold = FALSE
   class(call) = "gptr_call"
   call

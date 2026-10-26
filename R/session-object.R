@@ -1387,7 +1387,7 @@ replay_model_parts = function(model) c(sub("/.*$", "", model), sub("^[^/]*/", ""
 
 #' Check the document fields of a replay before a session is built from them: `path`, `format`,
 #' `template` and `text` are one string or NULL, `code` and `output` character vectors or NULL,
-#' `steps` a list or NULL
+#' `steps` a list or NULL, `sent` a named list of strings or NULL
 #' @noRd
 replay_doc_check = function(doc) {
   check_list(doc, "doc", null = TRUE)
@@ -1396,6 +1396,8 @@ replay_doc_check = function(doc) {
   }
   for (f in c("code", "output")) check_strings(doc[[f]], paste0("doc$", f), null = TRUE)
   check_list(doc[["steps"]], "doc$steps", null = TRUE)
+  check_list(doc[["sent"]], "doc$sent", named = TRUE, null = TRUE)
+  for (k in names(doc[["sent"]])) check_string(doc$sent[[k]], paste0("doc$sent$", k), empty = TRUE)
   invisible(doc)
 }
 
@@ -1539,9 +1541,10 @@ replay_reconstruct = function(s, header, doc) {
   replay_turn_append(s, header, doc, if (is.na(turn) || turn < 1L) 1L else turn)
 }
 
-#' Append turn `turn` reconstructed from a document block: the template, then in body order each
-#' run of code as an `r` call with its `#>` lines as the result, each steer as the relay a live
-#' steer arrives as (which records back as the same `## Steer:` line), each follow-up as the user
+#' Append turn `turn` reconstructed from a document block: the template after the context blocks
+#' it was sent with (`doc$sent`, the block's `#< ` lines, IC-49), then in body order each run of
+#' code as an `r` call with its `#>` lines as the result, each steer as the relay a live steer
+#' arrives as (which records back as the same `## Steer:` line), each follow-up as the user
 #' message it was, after the earlier answer it followed; then the cached answer. `doc$steps` is
 #' doc_replay_steps(); without it, `doc$code` and `doc$output` are one run.
 #' @noRd
@@ -1553,8 +1556,9 @@ replay_turn_append = function(s, header, doc, turn) {
     session_append(s, entry_message(msg_assistant(content, api = "replay", provider = parts[[1L]],
                                                   model = parts[[2L]], ...)))
   }
-  session_append(s, entry_message(msg_user(doc$template %||% "(the prompt was not recorded)",
-                                           source = "replay")))
+  sent = lapply(names(doc$sent), function(k) block_context(k, doc$sent[[k]]))
+  prompt = block_text(doc$template %||% "(the prompt was not recorded)")
+  session_append(s, entry_message(msg_user(c(sent, list(prompt)), source = "replay")))
   steps = doc$steps %||% list(list(type = "r", code = doc$code, output = doc$output))
   k = 0L
   for (st in steps) {

@@ -405,8 +405,9 @@ repl_read_logical = function(rd, prompt) {
 # guard), shown as it runs; `!code` also leaves a note that the `user_ran` block adds to the next
 # prompt within 300 tokens (IC-73). `@file` mentions add the file's head to the `user_files`
 # block; `@object` mentions attach the object by name (P09's `attached` block describes it).
-# Both blocks answer only the gateway call that console_send() built: the call record's
-# `sys_call` is that call.
+# Both blocks answer the gateway call that console_send() built (the call record's `sys_call` is
+# that call), and a call that asks again for a recorded console turn, which sends what that turn
+# was sent with (`call$sent`, its block's `#< ` lines, IC-49).
 # ---------------------------------------------------------------------------------------------
 
 #' Escape an attribute value of a context tag
@@ -555,22 +556,26 @@ repl_sending = function(ctx) {
   rs
 }
 
-#' provide() of the `user_ran` context block: the pending `!expr` notes (taken once)
+#' provide() of the `user_ran` context block: the pending `!expr` notes (taken once), or for a
+#' call that asks again for a recorded turn the notes that turn was sent with
 #' @noRd
 console_notes_provide = function(ctx, budget) {
   rs = repl_sending(ctx)
-  if (is.null(rs) || !length(rs$notes)) return(NULL)
+  if (is.null(rs)) return(ctx$input$call$sent[["user_ran"]])
+  if (!length(rs$notes)) return(NULL)
   text = console_notes_text(rs$notes, budget)
   rs$notes = character()
   text
 }
 
 #' provide() of the `user_files` context block: the <file> blocks of the prompt's @files, which
-#' repl_mentions() fit to the block's budget (taken once)
+#' repl_mentions() fit to the block's budget (taken once), or for a call that asks again for a
+#' recorded turn the blocks that turn was sent with
 #' @noRd
 console_files_provide = function(ctx, budget) {
   rs = repl_sending(ctx)
-  if (is.null(rs) || !length(rs$files)) return(NULL)
+  if (is.null(rs)) return(ctx$input$call$sent[["user_files"]])
+  if (!length(rs$files)) return(NULL)
   text = paste(rs$files, collapse = "\n")
   rs$files = character()
   text

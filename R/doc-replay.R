@@ -264,21 +264,30 @@ doc_replay_no_value = function(site, block, code, s) {
               .once = paste0("doc_no_value:", path_key(site$path), ":", block$id))
 }
 
+#' The body of block `block_id` as the site's document holds it (character() when unreadable)
+#' @noRd
+doc_site_body = function(site, block_id = site$block$id) {
+  if (is.null(block_id)) return(character())
+  tryCatch(doc_block_get(site$format, doc_read(site$path)$lines, block_id)$body,
+           error = function(e) NULL) %||% character()
+}
+
 #' What a replayed session reconstructs its history from (IC-46; P06's `doc` argument):
-#' list(path, format, template, code, output, text, steps, running); `code` and `output` are those
-#' of all the block's runs; `running` is TRUE when the call returns before its run ends
-#' (`background = TRUE` or `.run = FALSE`), so the script may still steer it (IC-55)
+#' list(path, format, template, code, output, text, steps, sent, running); `code` and `output`
+#' are those of all the block's runs; `sent` the context blocks its `#< ` lines record (IC-49);
+#' `running` is TRUE when the call returns before its run ends (`background = TRUE` or `.run =
+#' FALSE`), so the script may still steer it (IC-55)
 #' @noRd
 doc_replay_doc = function(site, call, block_id, text = NULL) {
-  body = tryCatch(doc_block_get(site$format, doc_read(site$path)$lines, block_id)$body,
-                  error = function(e) NULL) %||% character()
+  body = doc_site_body(site, block_id)
   steps = doc_replay_steps(body)
   runs = Filter(function(st) identical(st$type, "r"), steps)
   list(path = site$path, format = site$format,
        template = site$template %||% call$template %||% call$prompt,
        code = as.character(unlist(lapply(runs, function(st) st$code))),
        output = as.character(unlist(lapply(runs, function(st) st$output))), text = text,
-       steps = steps, running = isTRUE(call$args$background) || !isTRUE(call$args$run))
+       steps = steps, sent = doc_block_sent(body),
+       running = isTRUE(call$args$background) || !isTRUE(call$args$run))
 }
 
 #' A block body as ordered steps: each run of code with its `#>` output, list(type = "r", code,
@@ -503,7 +512,9 @@ doc_keep = function(call, site, mode) {
 }
 
 #' The route's run(): replay a fresh block (no write consent needed), skip an undone one,
-#' regenerate a stale one, or pass with `call$doc` set when the call may be recorded (IC-45)
+#' regenerate a stale one, or pass with `call$doc` set when the call may be recorded (IC-45). A
+#' call that asks again for a recorded block gets in `call$sent` what that prompt was sent with
+#' (its `#< ` lines, which the console's context blocks send again, IC-49), recorded or not.
 #' @noRd
 doc_route_run = function(call) {
   site = call$doc
@@ -518,6 +529,7 @@ doc_route_run = function(call) {
     return(invisible(call$session))
   }
   if (identical(decision, "regenerate")) site = doc_skip_old(site)
+  assign("sent", doc_block_sent(doc_site_body(site)), envir = call)
   doc_keep(call, if (decision %in% c("record", "regenerate")) site, mode)
   route_pass()
 }
