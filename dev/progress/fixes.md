@@ -5309,7 +5309,7 @@ at `516ec73c`: FAIL 0 SKIP 3 PASS 8702.
   delivered in the iteration that set it ends `error`, not `aborted` (`on_fail()` checks only
   `st$finished`).
 
-## Task CI-98 - The writer prototype reports an early writer exit (2026-10-25, #PR)
+## Task CI-98 - The writer prototype reports an early writer exit (2026-10-25, #84)
 - Red: PR #83 at 6e3bad83 (R/ and tests/ as on main b58d1e1b, whose Windows-check run 40234878533
   passed), Windows-check run 40236997275, job 121300574990 (windows-latest oldrel-4, shard 1/4),
   failed "owned writer prototype cancels a queued 4 MB write without a late exit"
