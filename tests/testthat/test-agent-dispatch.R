@@ -856,6 +856,10 @@ test_that("input fields are matched exactly, never by a prefix", {
                    "touch a b.txt")
   expect_identical(perm_summary(list(name = "bg", input = list(cmd = list("sleep", "1")))),
                    "sleep 1")
+  # and its other inputs, which the command alone does not show (review round 2)
+  expect_identical(perm_summary(list(name = "sh", input = list(cmd = "sh", input = "rm -rf x",
+                                                               wd = "../o"))),
+                   "sh {\"input\":\"rm -rf x\",\"wd\":\"../o\"}")
   expect_match(perm_summary(list(name = "w", input = list(cmdx = "ls"))), "^\\{")
   expect_identical(perm_ask_questions(list(questions_old = list(list(question = "Q?")))),
                    character())

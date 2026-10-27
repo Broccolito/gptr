@@ -769,7 +769,7 @@ perm_request_record = function(call, run, out, risk, tier) {
 }
 
 #' The lines to show for a request: the code (at most 20 lines), a path, a command (a nested
-#' peter$sh() or peter$bg()), or the input as JSON
+#' peter$sh() or peter$bg()) followed by its other inputs as JSON, or the input as JSON
 #' @noRd
 perm_summary = function(call) {
   input = if (is.list(call$input)) call$input else list()
@@ -781,10 +781,16 @@ perm_summary = function(call) {
   }
   path = input[["path"]]
   if (is.character(path)) return(paste0("path: ", path))
+  json = function(x) {
+    txt = tryCatch(json_encode(x), error = function(e) "(input not shown)")
+    if (nchar(txt) > 200L) paste0(substr(txt, 1L, 200L), "...") else txt
+  }
   cmd = unlist(input[["cmd"]])
-  if (is.character(cmd) && length(cmd)) return(paste(cmd, collapse = " "))
-  txt = tryCatch(json_encode(call$input), error = function(e) "(input not shown)")
-  if (nchar(txt) > 200L) paste0(substr(txt, 1L, 200L), "...") else txt
+  if (is.character(cmd) && length(cmd)) {
+    rest = input[names(input) != "cmd"]
+    return(paste(c(cmd, if (length(rest)) json(rest)), collapse = " "))
+  }
+  json(call$input)
 }
 
 #' The text the model sees for a denial; the person's text is marked as theirs, because models
