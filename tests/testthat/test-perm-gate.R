@@ -411,6 +411,30 @@ test_that("a peter$sh() command is read as run in its wd (review round 3)", {
   expect_identical(sum(ui$log$method == "permission"), 2L)
 })
 
+test_that("a question an ask rule raises offers no [a]lways rule (review round 3)", {
+  skip_on_cran()
+  root = local_project()
+  local_permission_rules()
+  gptr_permissions(ask = c("r(sh:wc *)", "r(sh:rm *)"))
+  wc = "if (FALSE) system('wc -l notes.txt')"
+  rm = "if (FALSE) system('rm -f gone.txt')"
+  for (code in c(wc, rm)) {
+    d = perm_policy_rules(gate_r(code), gate_ctx("manual"))
+    expect_identical(d$decision, "ask", label = code)
+    expect_null(d$suggested_rule, label = code)
+  }
+  # level 0 in auto, where only the rule asks; level 3 in manual, where the mode asks too
+  ui = local_scripted_ui(list("a", "a"))
+  for (mode in c("auto", "manual")) {
+    code = if (mode == "auto") wc else rm
+    fake = local_fake_provider(list(fake_tool("r", code = code), "Done."),
+                               name = paste0("a-", mode))
+    peter("Count.", model = fake, mode = mode, envir = new.env())
+  }
+  expect_identical(sum(ui$log$method == "permission"), 2L)
+  expect_identical(perm_store()$allow, character())
+})
+
 test_that("the protect_size policy reads the run's snapshot, not the live option (IC-53)", {
   root = local_project()
   e = new.env()

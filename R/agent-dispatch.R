@@ -479,8 +479,6 @@ nested_rules = function(call, run) {
   dec = if (identical(out$decision, "deny")) {
     perm_result("deny", out$reason, call$input, lit$risk, out$rule)
   } else {
-    # an ask rule asks every time, so the question offers no [a]lways rule
-    out$suggested_rule = NULL
     perm_ask(call, run, out, lit$risk)
   }
   if (!identical(dec$decision, "allow")) dec
@@ -618,7 +616,8 @@ perm_reason = function(x) {
 perm_rank = function(decision) match(decision, perm_decisions)
 
 #' Combine every policy's opinion (ext_policy_decide(), fail closed): deny > ask_human > ask >
-#' modify > allow; no active `mode` policy means ask
+#' modify > allow; no active `mode` policy means ask. A question offers the rule of an `[a]lways`
+#' answer only when every policy that asks it does (an ask rule's question offers none)
 #' @noRd
 perm_policies = function(call, ctx, run, risk) {
   recs = registry_all_recs("policy", session = run$session)
@@ -628,7 +627,11 @@ perm_policies = function(call, ctx, run, risk) {
     res = ctx_with_source(ctx, r$source, function() ext_policy_decide(r$spec, call, ctx))
     if (is.null(res)) next
     if (!rlang::is_string(res[["rule"]])) res$rule = r$name
-    if (is.null(best) || perm_rank(res$decision) > perm_rank(best$decision)) best = res
+    if (is.null(best) || perm_rank(res$decision) > perm_rank(best$decision)) {
+      best = res
+    } else if (identical(res$decision, best$decision) && is.null(res$suggested_rule)) {
+      best$suggested_rule = NULL
+    }
   }
   has_mode = any(vapply(recs, function(r) identical(r$name, "mode"), NA))
   if (!has_mode && (is.null(best) || perm_rank(best$decision) < perm_rank("ask"))) {

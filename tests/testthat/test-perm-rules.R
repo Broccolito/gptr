@@ -180,6 +180,16 @@ test_that("deny and ask sh: rules match a read-only command; allow needs level 1
   expect_identical(m$allow, character())
 })
 
+test_that("an sh: glob ending ` *` also matches the command alone (review round 3)", {
+  root = local_project()
+  m = rule_match(list(deny = c("r(sh:sh *)", "r(sh:git log *)"), ask = "r(sh:cat *)"),
+                 r_call("peter$sh('sh', input = 'touch x'); peter$sh('cat'); peter$sh('git log')"))
+  expect_identical(c(m$deny, m$ask), c("r(sh:sh *)", "r(sh:git log *)", "r(sh:cat *)"))
+  m = rule_match(list(deny = c("r(sh:sh *)", "r(sh:git log *)")),
+                 r_call("peter$sh('shasum f'); peter$sh('git logs')"))
+  expect_identical(m$deny, character())
+})
+
 test_that("deny and ask sh: rules match a command inside a function the code calls (FIX-32)", {
   root = local_project()
   local_permission_rules()

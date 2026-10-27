@@ -97,7 +97,7 @@ rule_code_text = function(fl) {
 #'
 #' Allow rules with fn/category/sh/sql/secret match only when EVERY flagged call (level >= 1, with a
 #' function name) is covered; deny and ask rules match when ANY is, level 0 included (report 18
-#' section 3.7, D-267).
+#' section 3.7, D-267). An sh: glob ending ` *` also matches the command alone (`cat *`, `cat`).
 #' @noRd
 rule_hit = function(p, call, lst) {
   name = call$name %||% ""
@@ -120,7 +120,9 @@ rule_hit = function(p, call, lst) {
           drop = FALSE]
   text = rule_code_text(fl)
   hit = switch(p$kind, fn = fl$fn %in% p$value, category = fl$category %in% p$value,
-               sh = fl$fn %in% perm_shell_fns & grepl(risk_glob_re(p$value), text, perl = TRUE),
+               sh = fl$fn %in% perm_shell_fns &
+                 grepl(sub(" .*\\z", "( .*)?\\z", risk_glob_re(p$value), fixed = TRUE), text,
+                       perl = TRUE),
                sql = fl$fn %in% perm_sql_fns &
                  toupper(sub("\\s.*$", "", text)) %in% toupper(p$value))
   if (lst == "allow") nrow(fl) > 0L && all(hit) else any(hit)
@@ -296,7 +298,8 @@ perm_control_guard = function(what) {
 #' `tool(spec)`: a path glob for `read`, `write`, `edit`, `grep`, `find` and `ls`
 #' (`write(results/**)`, relative to the project root; `~/...` for the home; `//...` for other
 #' absolute paths); for `r`, `level<=n`, `fn:name,...` (every flagged function covered),
-#' `category:name,...`, `sh:<command glob>` (`r(sh:git push*)`), `sql:<keywords>`
+#' `category:name,...`, `sh:<command glob>` (`r(sh:git push*)`; a glob ending in ` *` also
+#' matches the command alone, so `r(sh:cat *)` covers `cat` too), `sql:<keywords>`
 #' (`r(sql:select)`) and `secret:NAME` (the only rule that pre-approves a guarded secret read);
 #' MCP tools by name (`mcp__github__*`). Deny rules win over ask rules, which win over allow
 #' rules. Deny and ask rules match any call that [gptr_risk()] flags, a read-only shell command

@@ -38,11 +38,13 @@ perm_is_control = function(call, risk) {
     ((call$name %||% "") %in% c("write", "edit") && identical(perm_path_class(call), "control"))
 }
 
-#' A policy decision; a question carries the rule an `[a]lways` answer would add (04 7.11)
+#' A policy decision; a question carries the rule an `[a]lways` answer would add (04 7.11), unless
+#' an ask rule (`rule`) asks it, as no allow rule wins over one
 #' @noRd
 perm_decision = function(decision, reason, call, rule = NULL) {
+  ask = decision %in% c("ask", "ask_human") && is.null(rule)
   list(decision = decision, reason = reason, rule = rule,
-       suggested_rule = if (decision %in% c("ask", "ask_human")) rule_suggest(call))
+       suggested_rule = if (ask) rule_suggest(call))
 }
 
 #' Edits mode approves write/edit inside the project and, as Claude Code's acceptEdits does,

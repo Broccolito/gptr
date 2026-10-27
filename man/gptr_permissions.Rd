@@ -28,7 +28,8 @@ Lists the permission rules in effect, or adds and removes rules. A rule is \code
 \code{tool(spec)}: a path glob for \code{read}, \code{write}, \code{edit}, \code{grep}, \code{find} and \code{ls}
 (\verb{write(results/**)}, relative to the project root; \verb{~/...} for the home; \verb{//...} for other
 absolute paths); for \code{r}, \code{level<=n}, \verb{fn:name,...} (every flagged function covered),
-\verb{category:name,...}, \verb{sh:<command glob>} (\verb{r(sh:git push*)}), \verb{sql:<keywords>}
+\verb{category:name,...}, \verb{sh:<command glob>} (\verb{r(sh:git push*)}; a glob ending in \verb{ *} also
+matches the command alone, so \verb{r(sh:cat *)} covers \code{cat} too), \verb{sql:<keywords>}
 (\code{r(sql:select)}) and \code{secret:NAME} (the only rule that pre-approves a guarded secret read);
 MCP tools by name (\verb{mcp__github__*}). Deny rules win over ask rules, which win over allow
 rules. Deny and ask rules match any call that \code{\link[=gptr_risk]{gptr_risk()}} flags, a read-only shell command
