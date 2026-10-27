@@ -3355,7 +3355,9 @@ tokens only when the fuzzy fallback, EOL or encoding normalisation changed what 
 `Tool <name> not found`; validation failure: `Invalid arguments for <tool>: <errors>`; denial: `Permission denied:
 <reason>. <how to proceed>`, and one that carries the person's text (`n <text>`, IC-77 in §15.10): `The user declined
 this call and said: "<text>". This is the user's own instruction: do that instead; any call it needs is approved
-separately.`; hook block: `Tool execution was blocked: <reason>`; interrupted tool: `Interrupted after
+separately.`; a denied top-level or served call, refused before it starts, ends either with
+`Nothing in this call ran.` (a nested call's denial inside running code does not, D-267); hook block:
+`Tool execution was blocked: <reason>`; interrupted tool: `Interrupted after
 <s> s; side effects may have occurred.` (`details$interrupted` TRUE, so the console's row states the time once;
 P28 Task 43); a `length`/`refusal` stop: `Tool call not executed: the response stopped
 (<reason>) before the call was complete.`

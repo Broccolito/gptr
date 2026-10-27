@@ -98,7 +98,9 @@ dispatch_steps = function(run, call, st = NULL) {
   if (isTRUE(run$signal$aborted)) return(aborted())
   dec = perm_check(call, run)
   call$risk = dec$risk
-  if (!identical(dec$decision, "allow")) return(refuse(perm_refused(dec), perm_denial_text(dec)))
+  if (!identical(dec$decision, "allow")) {
+    return(refuse(perm_refused(dec), paste(perm_denial_text(dec), "Nothing in this call ran.")))
+  }
   call$input = dec$input %||% call$input
   call$approved_level = risk_level(dec$risk)
   if (isTRUE(run$signal$aborted)) return(aborted())

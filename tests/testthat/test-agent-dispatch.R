@@ -501,13 +501,33 @@ test_that("the end of a refused call says why it did not run; an error's does no
   expect_null(ends[[2L]]$refused)
   expect_identical(msg_text(tool_results(s)[[1L]]),
                    paste0("Permission denied: denied by the rule r(fn:writeLines). Explain what ",
-                          "you need or choose another approach."))
+                          "you need or choose another approach. Nothing in this call ran."))
   local_permissive()
   local_tool("echo", function(input, ctx) "ran")
   local_hook("tool_call", function(event, ctx) list(decision = "block", reason = "held"))
   s = test_session()
   dispatch(s, list(tc("echo")))
   expect_identical(ev(s)[[1L]]$refused, "blocked by a hook: held")
+})
+
+test_that("a refused call says none of it ran; a nested denial mid-run does not (FIX-32)", {
+  skip_on_cran()
+  local_project()
+  local_permission_rules()
+  gptr_permissions(deny = "r(sh:rm *)")
+  fake = local_fake_provider(list(fake_tool("r", code = "x1 = 1; system(paste(cmd))"),
+                                  fake_tool("r", code = "x2 = 2; a = 'x'; peter$sh(c('rm', a))"),
+                                  "done"))
+  e = new.env()
+  peter("go", model = fake, envir = e, mode = "auto")
+  res = vapply(fake_requests(fake)[2:3], function(r) msg_text(r$last_results[[1L]]), "")
+  expect_true(endsWith(res[[1L]], paste0("refused in auto mode; use peter$sh(). Explain what ",
+                                         "you need or choose another approach. Nothing in this ",
+                                         "call ran.")))
+  expect_false(exists("x1", envir = e, inherits = FALSE))
+  expect_match(res[[2L]], "denied by the rule r(sh:rm *)", fixed = TRUE)
+  expect_false(grepl("Nothing in this call ran", res[[2L]], fixed = TRUE))
+  expect_identical(e$x2, 2)
 })
 
 test_that("the UI answers asks when the run's snapshot can prompt", {
@@ -557,7 +577,7 @@ test_that("a denial with the person's text tells the model it is theirs (cheat-s
   expect_identical(told(ui$answer),
                    paste0("The user declined this call and said: \"use the other file\". This is ",
                           "the user's own instruction: do that instead; any call it needs is ",
-                          "approved separately."))
+                          "approved separately. Nothing in this call ran."))
   expect_match(told(ui_answer("deny")), "^Permission denied: the user declined\\. ")
   # a denial gptr writes itself is a reason, never the person's words
   expect_match(told(ui_answer("deny", reason = "no valid answer was given at the approval prompt")),
