@@ -3,7 +3,7 @@
 # and the live row at the bottom.
 
 #' The composer's key machine (IC-76, D-243): the read batch `chars` (decoded text) applied at
-#' time `now` (seconds) to `state`, list(draft, esc, t) (list() to start)
+#' time `now` (seconds) to `state`, list(draft, esc, t, bracket) (list() to start)
 #'
 #' Text is added at the draft's end; DEL and BS delete its last character, Ctrl-U clears it and
 #' Ctrl-W deletes its last word. Other control bytes and escape sequences (up to their final byte)
@@ -11,40 +11,54 @@
 #' probe (tty_unreply()). A sequence the batch ends in is held in `esc` until `now` passes its start
 #' `t` by 50 ms, then dropped (a lone Esc). `\r` and `\r\n` read as `\n`; a batch holding newlines
 #' sends the draft and its text up to the last newline as one message, newlines kept (IC-76's paste
-#' rule), and keeps the rest as the draft; a newline ends what the edit keys reach. With `paste` (a
-#' batch read on the polling beat, too quick for a person to type a newline and more) a batch with
-#' text after its last newline is a paste: its newlines stay in the draft, leading blank lines
-#' dropped. A message goes as `enter_kind` (`"steer"` or `"follow_up"`), always as a follow-up when
-#' it starts with / or !, and not at all when blank. Two keys act only as a batch of their own or as
-#' the end of a batch without a newline (elsewhere Tab is text and Up is dropped): Up (`ESC [ A`,
-#' `ESC O A`) on an empty draft takes back the newest queued message; Tab on a trigger word
-#' (console_trigger()) completes it and never sends: `complete(line, end)` returns full words, whose
-#' longest common prefix replaces the word when longer, else two or more are listed. On any other
-#' draft Tab sends the other kind.
+#' rule), and keeps the rest as the draft; a newline ends what the edit keys reach. Text between
+#' `ESC [ 200 ~` and `ESC [ 201 ~` (bracketed paste, D-263; both dropped) is a paste whatever
+#' `paste` says: its newlines stay in the draft, leading blank lines dropped; a paste open at a
+#' batch's end (`bracket`) lasts into the next batches; a sequence cut inside it, or a marker cut at
+#' a batch's end, waits for its rest however late; in a batch holding a marker only the text between
+#' markers is a paste. With `paste` (a batch without markers read on the polling beat, too quick for
+#' a person to type a newline and more) a batch with text after its last newline is a paste the same
+#' way. A message goes as `enter_kind` (`"steer"` or `"follow_up"`), always as a follow-up when it
+#' starts with / or !, and not at all when blank. Two keys act only outside an open bracketed paste,
+#' as a batch of their own or as the end of a batch without a newline (elsewhere Tab is text and Up
+#' is dropped): Up (`ESC [ A`, `ESC O A`) on an empty draft takes back the newest queued message;
+#' Tab on a trigger word (console_trigger()) completes it and never sends: `complete(line, end)`
+#' returns full words, whose longest common prefix replaces the word when longer, else two or more
+#' are listed. On any other draft Tab sends the other kind.
 #' @return list(state, action), the action NULL, list(type = "send", kind, text),
 #'   list(type = "take_back") or list(type = "complete", candidates)
 #' @noRd
 console_compose = function(state, chars, now, enter_kind, complete, paste = FALSE) {
   draft = state$draft %||% ""
-  held = if (now - (state$t %||% now) <= 0.05) state$esc %||% "" else ""
+  bracket = isTRUE(state$bracket)
+  held = state$esc %||% ""
+  if (!bracket && now - (state$t %||% now) > 0.05 &&
+      !grepl("^\033\\[20[01]~", paste0(held, chars))) {
+    held = ""
+  }
   x = tty_unreply(paste0(held, gsub("\r\n?", "\n", chars)))
   out = function(action = NULL, esc = "", t = now) {
-    list(state = list(draft = draft, esc = esc, t = t), action = action)
+    list(state = list(draft = draft, esc = esc, t = t, bracket = bracket), action = action)
   }
   send = function(text, kind) {
     if (grepl("^\\s*[/!]", text)) kind = "follow_up"
     if (nzchar(trimws(text))) list(type = "send", kind = kind, text = text)
   }
+  # a bracketed paste (D-263) is open at the batch's end when its last marker opens one
+  marks = regmatches(x, gregexpr("\033\\[20[01]~", x))[[1L]]
+  open = if (length(marks)) marks[[length(marks)]] == "\033[200~" else bracket
   # a Tab or Up that ends a batch without a newline is the key after the batch's text, as keys
   # typed during an in-process tool arrive as one batch
   key = regmatches(x, regexpr("(\t|\033\\[A|\033OA)$", x))
-  if (length(key) && nchar(key) < nchar(x) && !grepl("\n", x, fixed = TRUE)) {
+  if (!open && length(key) && nchar(key) < nchar(x) && !grepl("\n", x, fixed = TRUE)) {
     text = console_compose(list(draft = draft), substr(x, 1L, nchar(x) - nchar(key)), now,
                            enter_kind, complete)
-    return(console_compose(text$state, key, now, enter_kind, complete))
+    return(console_compose(list(draft = text$state$draft), key, now, enter_kind, complete))
   }
-  if (x %in% c("\033[A", "\033OA")) return(out(if (!nzchar(draft)) list(type = "take_back")))
-  if (identical(x, "\t")) {
+  if (!open && x %in% c("\033[A", "\033OA")) {
+    return(out(if (!nzchar(draft)) list(type = "take_back")))
+  }
+  if (!open && identical(x, "\t")) {
     word = console_trigger(draft)
     if (is.null(word)) {
       action = send(draft, setdiff(c("steer", "follow_up"), enter_kind))
@@ -64,15 +78,18 @@ console_compose = function(state, chars, now, enter_kind, complete, paste = FALS
   keys = regmatches(x, gregexpr(paste0("\\x1b(\\[[\\x20-\\x3f]*[\\x40-\\x7e]?|O[\\x40-\\x7e]?|",
                                        "[\\x20-\\x7e])?|[\\x01-\\x1f\\x7f]|[^\\x01-\\x1f\\x7f]+"),
                                 x, perl = TRUE))[[1L]]
-  # a paste has text after its last newline, not only edit keys
+  # a paste on the beat has text after its last newline, not only edit keys; in a batch with
+  # markers only the text between them is a paste
   last = max(0L, which(keys == "\n"))
-  joined = paste && last > 0L &&
+  joined = paste && !length(marks) && !bracket && last > 0L &&
     any(!grepl("^[\\x01-\\x1f\\x7f]", keys[-seq_len(last)], perl = TRUE))
   lines = ""
   esc = ""
   for (i in seq_along(keys)) {
     k = keys[[i]]
-    if (k == "\n" && joined) {
+    if (k %in% c("\033[200~", "\033[201~")) {
+      bracket = k == "\033[200~"
+    } else if (k == "\n" && (joined || bracket)) {
       draft = if (nzchar(trimws(draft))) paste0(draft, "\n") else ""
     } else if (k == "\n") {
       lines = paste0(lines, draft, "\n")
@@ -124,12 +141,13 @@ console_trigger = function(line) {
 #' by its last key's read (`rd$read_at`, console_typed_chars()), not the reader's wait after it, and
 #' one there holding more keys than a person types since that read (one in 30 ms, plus one) is a
 #' paste to console_compose(); fewer were typed, as when a late read under load holds Enter and the
-#' next key. A Tab or Up that ends a batch right after a newline is a key of its own, after the
-#' message the newline sent (console_compose() acts once a batch), as when Enter and Up share a late
-#' read. Ctrl-C, a key in character mode (tty_call()), interrupts
-#' as SIGINT would, after the keys before it; the keys after it in the batch (a further Ctrl-C
-#' dropped) are the pause menu's answers (`rd$after_interrupt`, console_ahead()), and those it
-#' leaves are read here once it resumes, as if typed after it
+#' next key. Bracketed-paste markers decide first: this rule decides only a batch without them read
+#' while no paste they opened is open (console_compose(), D-263). A Tab or Up that ends a batch
+#' right after a newline is a key of its own, after the message the newline sent (console_compose()
+#' acts once a batch), as when Enter and Up share a late read. Ctrl-C, a key in character mode
+#' (tty_call()), interrupts as SIGINT would, after the keys before it; the keys after it in the
+#' batch (a further Ctrl-C dropped) are the pause menu's answers (`rd$after_interrupt`,
+#' console_ahead()), and those it leaves are read here once it resumes, as if typed after it
 #' @noRd
 console_keys = function(rd, s, chars) {
   # the first read of a run, or one after an in-process tool held the reactor, is off the beat

@@ -86,7 +86,8 @@ gptr_message_stream = function(stream = NULL) {
 #' (`margin`) keeps the console margin. Text written where the console's live row is shown (the
 #' sink it was drawn at, `the$live_row`, console_live()) clears the row first and, once it ends a
 #' line, redraws it where the row erases cleanly; where the row is padded with spaces it stays
-#' cleared until the run next waits (D-243).
+#' cleared until the run next waits (D-243). A terminal mode's control alone (`ESC [ ? <n> h` or
+#' `l`) shows nothing and leaves the live row as it is (D-263).
 #' @noRd
 gptr_message_write = function(text, stream, margin = FALSE, from = sys.nframe() - 1L) {
   k = from
@@ -101,7 +102,8 @@ gptr_message_write = function(text, stream, margin = FALSE, from = sys.nframe() 
     utils::flush.console()
   }
   row = the$live_row
-  shown = isTRUE(row$shown) && sink.number() == row$sinks
+  shown = isTRUE(row$shown) && sink.number() == row$sinks &&
+    !isTRUE(grepl("^\033\\[\\?[0-9;]*[hl]$", text, useBytes = TRUE))
   if (shown) row$clear(out)
   out(text, if (stream == "stderr") stderr() else stdout())
   if (shown) {

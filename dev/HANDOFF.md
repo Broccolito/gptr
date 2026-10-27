@@ -44,6 +44,9 @@ amendment are in `DEVIATIONS.md`:
 - FIX-27 (#87): in auto and yolo a `system()`, `system2()`, `shell()` or `shell.exec()` call whose
   command the code computes is refused before it runs, pointing the model to `peter$sh()`; only an
   `r(fn:)` allow rule lifts it (D-262; D-251's nested-1 Open closed).
+- FIX-28 (#86): a T console's call turns bracketed paste on in its own modes, so a paste is one
+  draft however late the composer reads it; timing stays for terminals without it (D-263, amends
+  IC-76).
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
@@ -138,8 +141,8 @@ Open (found, not fixed):
   transcript never records (FIX-20 R27; issue #85).
 - A `!code` line that uses an undone turn's object stays live in the transcript, so `source()` stops
   there (FIX-20 R29; issue #85).
-- A paste still splits when a read comes more than about 145 ms late (IC-76's 0.2 s bound); only
-  bracketed paste could detect a paste without timing (CI-94; issue #86).
+- In a terminal that ignores bracketed paste a paste still splits when a read comes more than
+  about 145 ms late (IC-76's 0.2 s bound; CI-94, FIX-28).
 - A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).
 - The macOS row's time grows with its serial pty tests (CI-96).
 - A `process_jsonl` line's events still follow the abort flag (its adapters check the signal
