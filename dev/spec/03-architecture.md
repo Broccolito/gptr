@@ -1461,7 +1461,7 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
 | 1 | new objects, reads outside the project, calls of unlisted functions from packages outside base/stats/utils/methods/graphics/grDevices/tools [IC-54] | only allowlisted read-only calls run, in a scratch child env (discarded); anything else and other tools deny | ask | ask | allow | allow |
 | 2 | overwriting objects, workspace file writes, network reads, reference mutation | deny | ask | allow `write`/`edit` inside the project, ask for R | allow | allow |
 | 3 | deletes inside the project or of computed paths, processes, installs, overwriting objects above `gptr.protect_size` (100 MB), dynamic code, secret reads, app launches | deny | ask | ask | allow (the secret guard still asks; a computed `system()` command is refused, below) | allow (secret reads too; a computed `system()` command is refused) |
-| 4 | critical: `q()`, deleting home/root/project/top-level/drive roots or their parents, protected files or any path outside the project and R's session `tempdir()` (`/tmp` counts as outside) [IC-78], secret + network sink; the `control` category (gptr's own configuration exports, `options(gptr.*)`, control-plane files [IC-53, IC-54]) | deny | ask_human | ask_human | ask_human (blocked without a UI) | ask_human, except control rows other than `options(gptr.*)`, which run |
+| 4 | critical: `q()` (denied in every mode and never asked, below), deleting home/root/project/top-level/drive roots or their parents, protected files or any path outside the project and R's session `tempdir()` (`/tmp` counts as outside) [IC-78], secret + network sink; the `control` category (gptr's own configuration exports, `options(gptr.*)`, control-plane files [IC-53, IC-54]) | deny | ask_human | ask_human | ask_human (blocked without a UI) | ask_human, except control rows other than `options(gptr.*)`, which run |
 
 `r` is classified per flagged call by `gptr_risk()` (tables in `inst/extdata/risk-functions.csv` and
 `risk-commands.csv`, extendable by additive `risk_rule` records; a shipped risky-package list (targets, usethis,
@@ -1490,8 +1490,9 @@ unchanged and a literal command is read and gated as before [D-262].
 
 In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never
 runs, such as `q()`, `readline()`, a read of standard input or a secret marker, with the guard's text less its
-"Nothing was evaluated." as its reason (the denial ends "Nothing in this call ran.", D-267), so no person is asked
-to approve code that cannot run; the guard stays the evaluator's backstop [D-269].
+leading "Not run: " and its "Nothing was evaluated." as its reason (the console's row says "not run" and the denial
+ends "Nothing in this call ran.", D-267), so no person is asked to approve code that cannot run; the guard stays the
+evaluator's backstop [D-269].
 
 `yolo` [IC-78] is the loosest mode (plan < manual < edits < auto < yolo): only the person selects it (`peter(mode =)`,
 `/mode`, user or session settings, `options(gptr.mode)` outside a run); no project file sets it [D-250], nested
@@ -1519,7 +1520,8 @@ The run snapshots the safety options
 start, so model code cannot change them mid-run. A `modify` is re-classified and re-checked once. Built-in policies: `mode`,
 `rules` (grammar `tool(spec)`, e.g. `write(results/**)`, `r(fn:write.csv)`, `r(level<=1)`,
 `r(sh:git push*)`, `r(sql:select)`), `critical_guard`, `secret_guard`, `protect_size`. Deny and ask rules match
-any flagged row, a read-only shell command included; an allow rule covers rows of level 1 and above [D-267].
+any flagged row, a read-only shell command included, and one read inside a function the code calls (its
+command without the `via f(): ` labels); an allow rule covers rows of level 1 and above [D-267].
 Allow rules never loosen plan
 and never pre-approve level 4; only `r(secret:NAME)` rules pre-approve the secret guard and only `r(fn:NAME)`
 rules lift the computed-command refusal (6.8.1); project settings may only tighten, a trusted project's `mode`
@@ -1573,7 +1575,9 @@ at run time) is no higher either, it runs without a second prompt; otherwise it 
 The command of a `peter$sh()` or `peter$bg()` call meets the deny and ask rules first, whatever its level,
 as the literal call would; allow rules are not applied there, and an ask offers no `[a]lways` rule [D-251].
 Base `system()`, `system2()`, `shell()` and `shell.exec()` have no such re-check, so auto and yolo refuse them
-with a computed command (6.8.1) [D-262].
+with a computed command (6.8.1) [D-262]. R served to the CLI routes or an MCP client binds the same marker, with
+the served call as the outer call, so its nested calls pass `dispatch_nested()` too; when no pump serves the
+request the idle gate decides each first, a `sh` or `bg` call as the literal call of its command [D-267].
 Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
 
 #### 6.8.5 Non-interactive runs and plan mode (NS-12)

@@ -7795,6 +7795,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   literal command is read and gated as before, table readings included: `system("ls | xargs rm")`,
   `system('eval $X')` and `system(paste("rm", "-rf", "build"))` (an inline fold, so `r(sh:rm *)`
   denies it) keep their rows and decisions. Plan, manual and edits are unchanged (deny, ask, ask).
+  Status 2026-10-27: the reason is shortened by D-267 ("<fn>() with a computed command is refused
+  in <mode> mode; use peter$sh()").
 - Rule (allow): only an `r(fn:NAME,...)` (or `*(fn:...)`) allow rule lifts the refusal, matched
   against the refused rows alone and covering all of them, as only `r(secret:NAME)` lifts the secret
   guard: `r(fn:system)` lets `system(cmd); write.csv(x, "out.csv")` run in auto, while `r`,
@@ -7832,7 +7834,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `system2("git", c("log", n))`, `system2("ls", character())`, `do.call(system, list("ls"))`, a
   function defined but not called (`f = function(x) system(x)`), and a literal unmodelled command
   inside the user's own helper (the row `via g(): system(): xargs rm`), which is no `<fn>(): `
-  reading.
+  reading. Status 2026-10-27: since D-267's review round such a row is read as the same command
+  written in the call is (the rules drop the `via g(): ` labels), so it is no longer refused.
 - Contract-visible: 03 sections 6.8.1, 6.8.2 and 6.8.4; 04 sections 7.11 (`builtin_permissions`) and
   15.9 IC-78; `?gptr_security`, `?gptr_permissions`, `?gptr_risk`; vignette("execution-model");
   NEWS; risk-functions.csv's `shell.exec` note.
@@ -7859,8 +7862,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `ESC [ 2 0`, `ESC [ 2 0 0`, `ESC [ 2 0 1`) while the reads after it may still complete it; once
   none can follow, its Esc is the Esc key, dropped, and the rest is typed. Readline's read at the
   prompt empties the composer, so a paste left open ends with its run. A Tab or Up inside a paste
-  never acts. In a batch with markers only the text between them is a paste. The timing rule (IC-76,
-  CI-94) stays for batches without markers.
+  never acts. In a batch with markers the text before them is typed, and a newline after a
+  paste's end in that batch stays in the draft too (review round 1 of FIX-28), so pasted text that
+  holds an end marker, which a terminal that does not filter pastes passes on, sends nothing: only
+  Enter in a later batch sends, and an Enter read with a paste is a newline of the draft. Formerly
+  the text after such a marker was typed, so its newline sent it, a `!` line as direct R at the
+  next prompt. A Ctrl-C byte inside a paste is pasted text (`console_keys()`), not the key that
+  pauses the run and leaves the bytes after it to answer the menu. The timing rule (IC-76, CI-94)
+  stays for batches without markers.
 - Rule (live row): a terminal mode's control alone (`ESC [ ? <n> h` or `l`) leaves the live row as
   it is.
 - Windows: unchanged. No composer reads keys there (IC-76 scope: processx cannot poll a console
@@ -7877,13 +7886,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   refinements an opening marker cut at two or more reads' ends leaked into the draft when a read
   that left it cut came more than 50 ms after its first cut, and once in-process code read through
   GNU readline 8.1+ the mode was off for the rest of the call.
-- Limits: control bytes inside a paste act as typed (Ctrl-C pauses, DEL, Ctrl-U and Ctrl-W edit;
-  xterm, kitty, VTE and Windows Terminal filter them). A paste whose end marker another reader takes
-  (a question asked mid-paste) stays open, so Enter only adds lines for the rest of its run and at
-  the prompt's editor, until an abort or a hand-over to readline (Ctrl-C there) empties the
-  composer. After a lone Esc a typed `[`, `[2`, `[20`, `[200` or `[201` waits for the next key, as
-  it may start a marker, and is lost where readline reads before one (the run ended with no draft,
-  or Ctrl-C or a cursor key handed the prompt's draft over). A paste bracketed just before a
+- Limits: other control bytes inside a paste act as typed (DEL, Ctrl-U and Ctrl-W edit the draft;
+  xterm, kitty, VTE and Windows Terminal filter them). A paste split across reads right after an
+  end marker its text holds sends at a newline of the next read. A paste whose end marker another
+  reader takes (a question asked mid-paste) stays open, so Enter only adds lines for the rest of its
+  run and at the prompt's editor, until an abort or a hand-over to readline (Ctrl-C there) empties
+  the composer. After a lone Esc a typed `[`, `[2`, `[20`, `[200` or `[201` waits for the next key,
+  as it may start a marker, and is lost where readline reads before one (the run ended with no
+  draft, or Ctrl-C or a cursor key handed the prompt's draft over). A paste bracketed just before a
   hand-over's `ESC [ ? 2004 l` reaches readline with its markers. R code or a process that a tool
   runs and that reads the terminal gets the markers. A read through GNU readline 8.1+ turns the mode
   off as it ends: one by code an r call evaluates until the outermost r call returns (a sub-agent
@@ -7921,7 +7931,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   probe, typed keys after a late start) and "an escape sequence cut short is held for 50 ms, then
   dropped" (a late rest typed), test-console-typing.R "in-process R code runs with isig on, so
   Ctrl-C interrupts it (review)" (`paste` after `-isig`) and "tty_modes() turns bracketed paste on
-  after stty and off before it (D-263)" (no stty for the pseudo-modes alone).
+  after stty and off before it (D-263)" (no stty for the pseudo-modes alone). Review round 1:
+  test-console-input.R "pasted text holding an end marker cannot send what follows it (review round
+  1)"; test-console-typing.R "a Ctrl-C byte inside a bracketed paste is pasted text, not the key
+  (review round 1)"; amended: test-console-input.R "a bracketed paste is text: its newlines stay and
+  its keys do not act (D-263)" (an Enter read with a paste stays in the draft).
   Evidence: progress/fixes.md FIX-28.
 
 ## D-264 - FIX-29 Transcripts record what a prompt was sent with and what steps created (2026-10-26)
@@ -7935,7 +7949,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   the same context blocks without reading the file. Formerly `gptr_source(replay = "live")` sent
   only the literal `@notes.md` text, so the re-ask was another request. A history reconstructed from
   the document puts them before the turn's prompt; a raw `gptr_export()` leaves them out and the
-  Peter format keeps them. The format changes in place: no version key and no reader for earlier
+  Peter format keeps them (status 2026-10-27: both formats leave them out since D-268). The format
+  changes in place: no version key and no reader for earlier
   transcripts (gptr 1.0 is unreleased). D-266 reads back only the run of these lines that opens a
   console turn's block.
 - Rule (`created=` and switched-off lines, R29): a block header names the objects its r calls
@@ -7950,14 +7965,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   undone step": a name an earlier live step made and a later off step made again was removed in
   between, so `source()` would not have it. Formerly such a line ran under `source()` and stopped
   it, as the undone turn's objects never existed there. A rewind still removes only what the turn
-  created, so the person's own objects stay.
+  created, so the person's own objects stay (status 2026-10-27: it also restores what the turn
+  changed since D-268).
 - Checks of the design: (a) the provider cannot rely on `call$doc` during a re-ask, which the
   route leaves `NULL` when the answer may not be recorded (no consent, an undone block under
   `"live"`); the route therefore keeps the parsed `#<` lines in a new call record binding,
   `sent`, whatever the recording decision. (b) `doc_replay_steps()` still skips `#` lines; the
   reconstruction takes the `#<` lines through `doc$sent` instead. (c) raw export drops `#<` lines,
-  Peter export keeps them. (d) the evaluator reports `added` names for a line that stopped at an
-  error (a parse error ran nothing and adds none).
+  Peter export keeps them (both drop them since D-268). (d) the evaluator reports `added` names for
+  a line that stopped at an error (a parse error ran nothing and adds none).
 - Known limits: turn blocks are never switched, so a later turn that uses an object made by a line
   that is off still stops `source()` (the rewind kept the object, so the turn ran in the session);
   `all.names()` can match a column or formula term of the same name, which turns a line off that did
@@ -7965,7 +7981,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   section runs to the next line the console writes for another entry (a direct R header, a
   `# /<name>` command line, a session header, a turn's statement or block), so lines written by hand
   right after it switch with it (a comment of its code shaped like such a line gets one more `#`,
-  D-266); a name holding a comma is split by `created=`; a non-ASCII name is matched only in a UTF-8
+  D-266); a name holding a comma is left out of `created=`, which would split it (review round 1 of
+  FIX-29: formerly `` `tmp,df` `` read back as `tmp` and `df` and switched off the person's own line
+  that used `df`), so a line using it is not switched; a non-ASCII name is matched only in a UTF-8
   locale. The `#<` lines are what was sent, so neither `gptr.doc_output_lines` nor the `doc` setting
   limits them.
 - Contract-visible: 04 section 15.3 IC-49, section 11.5 (header key `created`, the body's `#<`
@@ -7978,8 +7996,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   direct R line using a name an undone step or an off line made is switched off", "a rewind
   switches dependent direct R lines off, says which, and a redo back on", "console /undo, /redo
   and /retry keep the transcript sourceable (IC-49, D-264)", "a re-asked block sends its #< lines
-  again, also when it cannot be recorded"; test-doc-export.R "a raw export leaves out what a
-  prompt was sent with; the Peter format keeps it". Evidence: progress/fixes.md FIX-29.
+  again, also when it cannot be recorded"; test-doc-export.R "an export leaves out what a prompt
+  was sent with, in both formats (FIX-33 DOC-7)" (formerly "a raw export leaves out what a prompt
+  was sent with; the Peter format keeps it"). Evidence: progress/fixes.md FIX-29.
 
 ## D-265 - FIX-30 A console statement names the model and mode its re-ask needs (2026-10-26)
 - Rule: a console transcript statement `s_<hex> = peter(...)` or `s_<hex> |> peter(...)` ends,
@@ -8025,7 +8044,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   follow the re-asking machine's settings. A turn recorded in `auto` or `yolo` is re-asked in
   that mode: the transcript is R code the person chooses to run, like any script that calls
   `peter(mode = "yolo")` (D-250 is about project settings files, and blocks already run code
-  under plain `source()`). `/retry` still resends the typed prompt (FIX-29 Open).
+  under plain `source()`). `/retry` still resends the typed prompt (FIX-29 Open; status
+  2026-10-27: closed by D-268, which sends the undone turn's `!` notes again).
 - Contract-visible: 04 section 4.6 (`gptr.doc_block` keys `model` and `mode`), section 11.5 (the
   transcript row) and section 15.3 IC-49; 03 section 6.9.3; `?gptr_doc`, `?gptr_source`;
   vignette("script-as-history").
@@ -8096,8 +8116,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   console block (FIX-31)", "a comment in a direct R line shaped like another entry stays in its
   section (FIX-31)", "console /undo, /undo, /redo, /redo bring back both turns' blocks (FIX-31)";
   test-console-repl.R "a live re-ask never sends the turn's recorded code as context (FIX-31)";
-  test-doc-export.R "a raw export leaves out what a prompt was sent with; the Peter format keeps
-  it". Evidence: progress/fixes.md FIX-31.
+  test-doc-export.R "an export leaves out what a prompt was sent with, in both formats (FIX-33
+  DOC-7)". Evidence: progress/fixes.md FIX-31.
 
 ## D-267 - FIX-32 Permission findings from the live sessions (2026-10-27)
 - Rule (rules, PERM-1): a deny or ask rule with an `fn:`, `category:`, `sh:` or `sql:` spec matches
@@ -8111,7 +8131,23 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   list read only rows of level 1 or more, as 04's `rule_match` row wrote ("every flagged call
   (level >= 1)"); no user page said so, `?gptr_security` and FIX-27's refusal said that
   `peter$sh()` checks a command against the rules, and the page's example `r(sh:git status*)`
-  matched nothing as a deny or ask rule. The example is now `r(sh:git push*)`.
+  matched nothing as a deny or ask rule. The example is now `r(sh:git push*)`. A row read inside
+  a function the code calls keeps its `via f(): ` labels (`via build(): system(): touch out.txt`,
+  `via S3 method fmt.foo(): ...`); the rules read its command without them (`rule_code_text()`,
+  review round 1), so `r(sh:touch *)` denies `build()` as it denies the literal call. Formerly
+  only a leading `system(): ` was dropped, and such a call ran in auto and yolo past the rule.
+- Rule (served R, review round 1): R served to the claude-cli and codex routes or to an MCP client
+  (`mcp_serve_r()`) binds the r tool's marker (`gptr_r_call`) with the served call as the run's
+  tool call, so a nested `peter$sh()`, `peter$bg()` or other member call passes
+  `dispatch_nested()` as in the loop's `r`: the deny and ask rules on its command, the critical
+  guard, its own level. With no pump serving the request (IC-57) the idle gate (`mcp_gate_idle()`,
+  which asks nobody) decides each nested call first, a `sh` or `bg` call as the literal call of
+  its command (`mcp_nested_gate()`, the marker's `gate`). Formerly these calls ran as the person's
+  own: on those routes `peter$sh(c("cat", f))` printed a file past a deny `r(sh:cat *)`, and a
+  computed `rm -rf` outside the project ran in auto without the critical guard's question, which
+  FIX-27's refusal steers every model to (live with claude-cli and codex; already so on
+  origin/main 13a917ff). Images that `peter$plot()` or `peter$read()` attach in served R go with
+  its result, as in the r tool.
 - Rule (classifier, PERM-2): `system2()`'s `env` is read as the start of its command line, as
   Unix `system2()` pastes it, unquoted, before the command:
   `system2("ls", env = "A=1; rm -rf build;")` is read as `A=1; rm -rf build; ls` (level 3), and an
@@ -8156,7 +8192,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   test-perm-gate.R "only auto and yolo refuse a computed command; a literal one is gated as
   before"; test-agent-dispatch.R "a refused call says none of it ran; a nested denial mid-run does
   not (FIX-32)", "input fields are matched exactly, never by a prefix"; test-mcp-server.R "a served
-  r call evaluates in the session's environment with its mode (idle gate)"; test-prompt-text.R
+  r call evaluates in the session's environment with its mode (idle gate)", "a nested sh or bg
+  call in served R meets the rules and the critical guard (FIX-32)"; test-perm-rules.R "deny and
+  ask sh: rules match a command inside a function the code calls (FIX-32)"; test-prompt-text.R
   "r_session runs programs with peter$sh(), not system() or system2()"; test-perm-plan.R "in the
   console the go-ahead notice names no call for R's prompt (FIX-32)"; test-session-object.R "yolo
   is the loosest mode; entering it says once what still asks (IC-78)". Evidence: progress/fixes.md
@@ -8188,7 +8226,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (sha and line ends): `sha` ignores each line's trailing blanks and carriage return, and
   recorded code and direct R code lose a trailing carriage return as a read gives them back, so an
   editor's trim or CRLF model code leaves a block fresh and a CRLF comment such as `# /undo` is
-  escaped (FIX-31's open CR item).
+  escaped (FIX-31's open CR item). They are split into lines where the evaluator splits them
+  (`doc_split_lines()`, as `eval_parse()`: `\r\n` or a lone `\r` ends a line, review round 1), so
+  the escapes read the code R ran; formerly a lone `\r` stayed inside one line, the code did not
+  parse, no comment was escaped (a forged `## Steer:` line was written as is, a marker line left
+  the turn unrecorded) and `gptr_source()` of the document failed.
 - Rule (rescan): a direct R line's top-level `name = value` (or `<-`) makes `name` and reads only
   what `value` names, after the names the line made before; any other expression, an in-place
   change such as `fit$x = 1` included, uses every name it holds. A corrected line after a failed
@@ -8215,6 +8257,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (plan line): a block's `## Plan:` line names a plan file only when it is kept;
   without `.gptr/` it reads `## Plan: none kept (gptr_init() keeps plans in .gptr/)`, the rule of
   the transcript's machine-log line (`doc_kept()`).
+- Status 2026-10-27 (review round 1): `?gptr_source` says that `model` takes a model name or
+  reference string, not a provider spec object as `peter(model =)` does; NEWS says which model and
+  mode a turn that names none gets.
 - Contract-visible: 04 section 6.4 (`gptr_source()`'s `model`), section 11.5 (`sha`, the body, the
   plan line), section 15.3 IC-48 and IC-49; 03 section 4.3's signature; `?gptr_doc`,
   `?gptr_source`, `?gptr_export`; vignettes script-as-history and interactive-console; NEWS.md; the
@@ -8235,7 +8280,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (gate, PASTE-4): in every mode the `mode` policy denies `r` code that the evaluator's
   static guard refuses (`eval_guard()` on the call's code in `ctx$envir`: `q()`, `quit()`,
   `readline()`, `menu()` and the rest of `eval_guard_blocked`, a read of standard input, a secret
-  marker), with the guard's text as its reason less its "Nothing was evaluated." (the denial ends
+  marker), with the guard's text as its reason less its leading "Not run: " and its "Nothing was
+  evaluated." (review round 1: the console's row says "not run" before it, and the denial ends
   "Nothing in this call ran.", D-267), so no person is asked to approve code that never runs;
   `eval_run()` keeps the guard as the evaluator's backstop. Formerly `q()`, rated level 4,
   made the critical guard ask "Allow r?" in every mode, yolo included, and the evaluator then
@@ -8254,8 +8300,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (paste echo, PASTE-2): on a macOS terminal `rd$waiting()`'s look at fd 0 makes the BSD tty
   echo the pending rest of a paste again, its last line left on the cursor's row; in a T console it
   then erases that row (`\r\033[K`), so the paste hint at `peter>` and the re-ask at an approval are
-  not written after it and readline shows that line once. Not changed: the pause menu reads no
-  waiting lines, and there the echo comes at no fixed point (before the `not a key` row in the
+  not written after it and readline shows that line once. The pause menu's `? Steer` and
+  `? Follow-up` questions take the lines a paste left waiting as the text's later lines (review
+  round 1), so a block pasted there is one message; formerly they became the next `peter>` input,
+  a `!` line run as R without Enter. Not changed: the menu's key question reads no waiting lines,
+  and there the echo comes at no fixed point (before the `not a key` row in the
   lens's runs, before the next chevron in the writer's), so it would take an erase before that row
   and another in the next prompt for a paste at a menu.
 - Rule (crash advice, PASTE-3): `?peter` and vignette("interactive-console") advise `reset` after
@@ -8272,7 +8321,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `?peter`, `?gptr_security`, vignette("interactive-console"); NEWS; the yolo notice and the
   auto-mode prompt.
 - Tests: test-perm-gate.R "code the evaluator never runs is refused in every mode, no person asked
-  (FIX-34)"; test-console-input.R "a Tab after a bracketed paste in one read is the key: its
+  (FIX-34)" (the reason without "Not run: ", review round 1); test-console-interrupt.R "a block
+  pasted at the pause menu's steer question is one steer (review round 1)";
+  test-console-input.R "a Tab after a bracketed paste in one read is the key: its
   newlines are text (FIX-34)" and "a bracketed paste at the prompt's editor stays in the draft until
   Enter (D-263)"; test-console-repl.R "a macOS terminal's look at fd 0 erases the row its tty echoed
   a paste on (FIX-34)". Evidence: progress/fixes.md FIX-34.

@@ -6301,6 +6301,25 @@ the driver, screens, events, transcripts and replays without a model are local, 
   crash leaves the mode on. A paste's trailing newline stays in the draft and the message
   (`console_lines()` drops it on screen). The prompt's editor drops a pasted Tab that ends a read
   inside a split paste. A 1 MB paste holds the console for minutes (the quadratic key loop).
+- Review round 1 (the security verifier on `0768fb35`, in tmux with `paste-buffer -p -S`, which
+  passes a paste's bytes unfiltered as some terminals do): pasted text holding `ESC [ 201 ~` ended
+  the paste there and the newline after it sent the rest, so `\033[201~\n!file.create('X')\n`
+  ran `file.create()` at the next prompt as direct R with no Enter (manual mode, during a run), and
+  a pasted Ctrl-C opened the pause menu, whose answer the bytes after it gave (a steer queued, a
+  run aborted). Red, the tests on `0768fb35`'s code: test-console-input.R "pasted text holding an
+  end marker cannot send what follows it (review round 1)" and two amended cases of "a bracketed
+  paste is text: its newlines stay and its keys do not act (D-263)" FAIL 4; test-console-typing.R
+  "a Ctrl-C byte inside a bracketed paste is pasted text, not the key (review round 1)" interrupted
+  the test run. Fix: `console_compose()` keeps a newline after a paste's end in that batch in the
+  draft, so only Enter in a later batch sends (an Enter read with a paste, as under load, now
+  needs a second Enter; the case `/mode` pasted with Enter is amended likewise), and
+  `console_keys()` drops a Ctrl-C byte inside a paste before it looks for the key. Green:
+  `^(console-input|console-interrupt|console-typing)$` FAIL 0 SKIP 1 PASS 816. D-263 (Rule
+  (composer), Limits, Tests) and 04 sections 7.1 and 15.10 IC-76 say so; `?peter`, the console
+  vignette and NEWS say that a block pasted while peter works is one message where the terminal
+  supports bracketed paste. Open: a paste split across reads right after an end marker its text
+  holds still sends at a newline of the next read; DEL, Ctrl-U and Ctrl-W inside a paste still edit
+  the draft (D-263 Limits).
 
 ## FIX-29 - Transcripts record @file heads and the objects !code lines use (2026-10-26, #PR)
 - Why: issue #85, FIX-20 review items R27 and R29. R27: `gptr_source(replay = "live")` re-asked
@@ -6384,6 +6403,16 @@ the driver, screens, events, transcripts and replays without a model are local, 
   undone while its turn is live, so `source()` stops at the second turn's statement; origin/main
   13a917ff does the same (`doc_on_session_tree()`), a defect for its own issue. The other known
   limits as D-264 states.
+- Review round 1 (the security verifier): a name the model chose holding a comma,
+  `` `tmp,df` = 1 ``, was written `created=tmp,df`, which `doc_created()` reads as `tmp` and `df`;
+  after `/undo` the person's own `!print(nrow(df))`, whose `df` an earlier `!` line made and the
+  undo kept, was switched off and commented out on replay (IC-49 listed the split as a limit). Red:
+  test-doc-blocks.R "a block records what its prompt was sent with as #< lines and what it
+  created" (lines 795 and 796) and test-doc-replay.R "a direct R line records what it created,
+  also when it failed (IC-49)" (line 1210) FAIL 3 on `0768fb35`'s code. Fix: a block's and a direct
+  R line's `created=` leave out a name holding a comma, so a line that uses it is not switched.
+  Green: in the neighbour runs of FIX-34's review round. D-264's Known limits and IC-49 say so;
+  the verifier's piped console repro now keeps the line on.
 
 ## FIX-30 - A live re-ask of a console transcript keeps each turn's model and mode (2026-10-26, #PR)
 - Why: the maintainer's request of 2026-10-26, split out of issue #85 to keep #85 small.
@@ -6562,7 +6591,7 @@ the driver, screens, events, transcripts and replays without a model are local, 
   issue. `dev/PROGRESS.md` and `dev/HANDOFF.md` still list the double `/redo` defect as open under
   FIX-29; they are not edited here.
 
-## FIX-32 - Permission findings from the live sessions (2026-10-27, #92)
+## FIX-32 - Permission findings from the live sessions (2026-10-27, #PR)
 Scope: the permission findings of the live sessions with real models (Versa GPT-5.6 and Claude
 Opus 4.8, `ollama/qwen3.8:27b`, claude-cli and codex) on `claude/v1-fixes` (`66fc1782`, the code
 of FIX-27..FIX-31), each reproduced by an independent triager: PERM-1, PERM-2, PERM-4, PERM-6 to
@@ -6720,8 +6749,42 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
 - Deviations: D-267; D-262's Not covered item on `env` gains its status line. Open: PERM-9's child
   output on the frozen `r` row and PERM-4's code alternative (above); `standard_core` has 1 token
   of the prefix gate left, so the next prompt line needs a new IC-68 baseline.
+- Review round 1, deny and ask rules inside a function (the security verifier): `gptr_risk()`
+  reads a function the code calls and labels its rows (`via build(): system(): touch out.txt`,
+  `via S3 method fmt.foo(): ...`), and `rule_code_text()` dropped only a leading `system(): `, so
+  deny `r(sh:touch *)` let `build()` run in auto (live with GPT-5.6: `built.txt` was made, the
+  direct `system()` was denied) and ask `r(sh:git push*)` did not ask for `deploy()`, against
+  `?gptr_permissions`' "Deny and ask rules match any call that gptr_risk() flags". Red:
+  test-perm-rules.R "deny and ask sh: rules match a command inside a function the code calls
+  (FIX-32)" FAIL 2 on `0768fb35`'s code. Fix: `rule_code_text()` drops the `via f(): ` labels
+  first (lazily, so a function name may hold a colon), and a row that is no reading of a command
+  keeps its whole call, so `perm_computed_cmd()` still refuses a command a helper computes. As a
+  result a literal unmodelled command inside the person's helper, one of D-262's accepted false
+  refusals, is now read as the same command written in the call is. Green: `^perm-rules$` PASS
+  in the runs below.
+- Review round 1, `peter$` calls inside served R (the regressions verifier; already so on
+  `13a917ff`, but FIX-27's refusal now steers every model there): on the claude-cli and codex
+  routes `mcp_serve_r()` bound the running run but not the r tool's marker, so `peter$sh()`,
+  `peter$bg()` and the other members ran as the person's own calls. Live on `0768fb35`:
+  claude-cli and codex printed `report.txt` with `r = peter$sh(c("cat", f))` past a deny
+  `r(sh:cat *)`, ran `git status` past `r(sh:git *)`, and with claude-cli
+  `peter$sh(c("rm", "-rf", v))` deleted a folder outside the project in auto mode with no question,
+  while the direct routes denied or asked. Red: test-mcp-server.R "a nested sh or bg call in served
+  R meets the rules and the critical guard (FIX-32)" FAIL 12 on `0768fb35`'s code (both members
+  ran, pumped and idle, and deleted the test project's `build/`). Fix: `mcp_serve_r()` binds the
+  marker (`r_call_new()`, a contract edge of the layering test) and, with a run, makes the served
+  call the run's tool call with its approved level, so `dispatch_nested()` applies the rules, the
+  critical guard and the member's own level as in the loop; with no pump the marker carries the
+  idle gate (`mcp_nested_gate()`), which decides each nested call first, asks nobody, and reads a
+  `sh` or `bg` call as the literal call of its command. Images that `peter$plot()` or
+  `peter$read()` attach in served R go with its result, as in the r tool. Green: the mcp-server,
+  mcp-recording, arch-layers and tool-namespace files pass in this round's runs; the verifier's
+  offline repros on the fixed code deny `peter$sh(c(x, f))` in served R idle and during a run and
+  keep the folder (the run stops `blocked` without a person, as the loop's does). D-267, 03
+  section 6.8.4, 04 sections 7.11 (`rule_match`), 15.6 IC-57 and 15.9 IC-79 say so. D-262 gains
+  status lines for the reason D-267 shortened and for the helper's literal command.
 
-## FIX-33 - Transcript findings from the live sessions (2026-10-27, #92)
+## FIX-33 - Transcript findings from the live sessions (2026-10-27, #PR)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
 qwen3.8:27b; lenses doc, mm, all, perm and static), each reproduced by an independent triager: 19
 findings and FIX-31's carried CR item. 17 are fixed (DOC-3 in part, its rest stated) in 13 commits,
@@ -6934,8 +6997,28 @@ and green runs use `dev/ci/isolated-check.R test` with `NOT_CRAN=true` and SIGIN
   doc writer's listed scope, the one line of ALL-2). `dev/PROGRESS.md` and `dev/HANDOFF.md` still
   list as Open the notes FIX-33 closes (FIX-21's failed `r` call, FIX-25's context object, FIX-31's
   steer line and marker comment); they are not edited here.
+- Review round 1, a lone carriage return (the security verifier): `doc_code_clean()`,
+  `doc_ran_part()` and the direct R writer split code on `\n` only, while `eval_parse()` reads a
+  lone `\r` as a line end, so model code `"## Steer: FORGED-STEER\ny1 = 2\rz1 = 3"` ran and was
+  written with `y1 = 2\rz1 = 3` as one line: the code did not parse, `doc_comment_lines()` found no
+  comment, the forged steer was written as is, a `# <<< gptr:abcdef12` line left the turn
+  unrecorded ("markers malformed") and the transcript failed on replay, and `gptr_source()` of the
+  document failed ("unexpected invalid token"). Red: test-doc-blocks.R "an editor's trim and CRLF
+  model code leave a block fresh (FIX-33 DOC-5)" (lines 1147-1149) and "a call that stopped
+  part-way records the expressions that ran (FIX-33 PERM-5)" (line 684), and test-doc-replay.R "a
+  comment in a direct R line shaped like another entry stays in its section (FIX-31)" (lines 1312
+  and 1314) FAIL 6 on `0768fb35`'s code. Fix: the three split lines as the evaluator does
+  (`doc_split_lines()`: `\r\n` or a lone `\r` ends a line). Green: the verifier's repro writes
+  `### Steer:` and `## <<<` and `gptr_source()` replays the block. D-268 says so.
+- Review round 1, records (the docs verifier): `?gptr_source`'s `model` said "a model reference,
+  as `peter(model =)` takes it", but it takes a model name or reference string, not a provider
+  spec object (`gptr_fake_provider()` gave "`model` must be a single non-empty string"); NEWS now
+  says, as MM-1's record and D-268 claimed, that a turn naming no model or mode is asked with the
+  re-asking session's settings. D-264 gains status lines (both export formats drop the `#<` run,
+  a rewind also restores what a turn changed) and its and D-266's tests cite the test's current
+  name; D-265's `/retry` note is marked closed by D-268.
 
-## FIX-34 - Console findings from the live sessions (2026-10-27, #92)
+## FIX-34 - Console findings from the live sessions (2026-10-27, #PR)
 Scope: the console findings of the live sessions with real models on `claude/v1-fixes`
 (`66fc1782` and `809ad7e5`, the code of FIX-27..FIX-31), each reproduced by an independent
 triager: STATIC-3, STATIC-4 and MM-6, and the four findings of the bracketed-paste lens,
@@ -7103,3 +7186,57 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   `dev/release/check-docs.R` 0 problems; `dev/bench/tokens/run.R --check` OK.
 - Open: those of the three records. The console's not-run row still cuts a guard refusal's
   reason, and `dev/PROGRESS.md` and `dev/HANDOFF.md` still list as Open the notes FIX-33 closes.
+- Review round 1 (four verifiers on `0768fb35`: security, regressions, docs and CRAN, the last
+  with no finding): commits `502664e5` to `fbde4941` and this record, each test red on
+  `0768fb35`'s code first, `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`. FIX-28's, FIX-29's,
+  FIX-32's and FIX-33's items are in their records; FIX-34's and the merge's:
+  - The pause menu's `? Steer` and `? Follow-up` (security): in CRAN R for macOS the first line of
+    a pasted block was the text and the rest became the next `peter>` input at once, a `!` line run
+    as R without Enter. Red: test-console-interrupt.R "a block pasted at the pause menu's steer
+    question is one steer (review round 1)" FAIL 2. Fix: the lines the paste left waiting
+    (`rd$waiting()`) join the text, as at the prompt; "the pause menu and its text question say a
+    T console's draft is kept (review)" gives its stand-in reader a `waiting()`. D-269 says so.
+  - The guard's label (regressions F2, docs 9): the console's row read "not run · Not run: the
+    code calls or refers to q() ..." and the model "Permission denied: Not run: ...". Red:
+    test-perm-gate.R "code the evaluator never runs is refused in every mode, no person asked
+    (FIX-34)" FAIL 3. Fix: the mode policy drops the leading "Not run: " of each guard reason;
+    the row now reads "not run · the code calls or refers to q() ...". D-269, 03 section 6.8.1 and
+    04 section 7.11 say so.
+  - Records and docs (docs): 03 section 6.8.1's level-4 row says that `q()` is denied in every
+    mode and never asked; NEWS, `?peter` and the console vignette say that a last pasted line
+    without a newline waits for Enter at the next prompt and so answers a question, that a block
+    pasted while peter works is one message where the terminal supports bracketed paste, and that
+    elsewhere pasted lines arrive as typed lines do; vignette("execution-model") is knitted again
+    for the merged prompt (input 3305 tokens, the turns 1664 and 1661, 4, 2 and 2 more, as the
+    verifier measured; `13a917ff` gives the committed numbers). HANDOFF, PROGRESS and
+    `dev/README.md` name the checkpoint "PRs #88 and #90, FIX-27..FIX-34", their intros name
+    CI-104, FIX-27..FIX-34 and D-262..D-269 and their Verified parts this branch's runs; the Open
+    lists drop FIX-21's failed `r` call and keep only the open halves of FIX-25's and FIX-31's
+    notes, which the Closed lists now name, and add FIX-33's, FIX-34's and this round's open
+    items; FIX-32..FIX-34's headings say "#PR", as GitHub's #92 is another contributor's PR. The
+    docs verifier's optional README and cheat sheet wording is not taken: neither is wrong.
+  - Checks on `fbde4941` (the code of every fix; this record changes only `dev/`): the files whose
+    names start with `doc-`, `console-`, `perm`, `risk`, `rules`, `nested`, `bridge`, `gptr-`,
+    `session-`, `ckpt-`, `eval-`, `agent-`, `tool-`, `mcp-` or `arch-`, and `copy-ckpt`, FAIL 0
+    WARN 0 SKIP 16 PASS 17208 in UTF-8 and FAIL 0 WARN 0 SKIP 45 PASS 17010 under
+    `LC_ALL=C LANG=C` (the skips: Windows only, Python not configured or provisioned, macOS,
+    INFRA-03, {repr} not installed, and under C 29 that need a UTF-8 locale); the full suite `.` in
+    UTF-8 under the heavy lock FAIL 0 WARN 0 SKIP 66 PASS 38855 in 27 min at a load average of 12 to
+    22 (the skips: Windows only, live tests, Python not configured or provisioned, {repr} not
+    installed, keyring installed, macOS, INFRA-03 and the C-locale witness); `R CMD check --as-cran`
+    in CRAN mode under `env -i` (`HOME`, `PATH`, `LANG`, a short `TMPDIR`, `R_LIBS_USER` and CRAN's
+    `_R_CHECK_` timing variables) on a tarball built from a `git archive` of `fbde4941` (sha256
+    `034e3693`): Status OK with no NOTE, the tests in 16 s (`testthat.R` [13s/14s]), INFO only for
+    'repr' and the installed size (7.9 Mb). Lint of the 22 changed R, test and vignette files clean;
+    `document()` changes only `gptr_source.Rd` and `peter.Rd`, then nothing; `check-docs.R` 0
+    problems; the four plan checks pass; `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0
+    PASS 290; the spelling check clean; `dev/bench/tokens/run.R --check` OK. The verifiers' offline
+    repros on the fixed code (an installed copy of the working tree): `build()`, `deploy()` and the
+    S3 call are denied or asked; served `peter$sh(c(x, f))` is denied idle and during a run, and the
+    computed `rm -rf` outside the project stops the run `blocked` with the folder kept; the composer
+    keeps every forged-marker case in the draft; the lone-CR documents escape and replay; `q()`'s
+    row and text have no label; the piped console keeps `!print(nrow(df))` on after the `/undo`.
+  - Open: a paste split across reads right after an end marker its text holds (FIX-28). Not
+    tested: served R while a run that `gptr_step()` left in progress waits, where a nested call
+    meets the idle gate and then `dispatch_nested()`'s. Not run: Linux and Windows, and live
+    models (the fixes are tested offline; the verifiers' live repros were not repeated).

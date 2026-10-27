@@ -1,10 +1,12 @@
-## Current checkpoint — 1.0 pre-release fixes (PR #88), 2026-10-26
+## Current checkpoint — 1.0 pre-release fixes (PRs #88 and #90, FIX-27..FIX-34), 2026-10-27
 
 PR #88 (branch `claude/v1-prerelease`) merges ten branches into `main` `7e23ebd3`, which since the
 PRs #78-#83 checkpoint also holds #84 (CI-98: the writer prototype reports an early writer exit),
-and adds CI-103 and the follow-ups that the PR's checks found. Each has its record in
-`progress/fixes.md`, in id order, and decisions D-255, D-257, D-258 and D-261 and the D-254
-amendment are in `DEVIATIONS.md`:
+and adds CI-103 and the follow-ups that the PR's checks found. PR #90 adds CI-104 (`main`
+`13a917ff`), and the branch `claude/v1-fixes` from it, not yet a PR, adds FIX-27..FIX-34, merged
+and through one review round. Each has its record in `progress/fixes.md`, in id order, and
+decisions D-255, D-257, D-258, D-261 and D-262..D-269 and the D-254 amendment are in
+`DEVIATIONS.md`:
 
 - CI-99 (test only): `tests/testthat/setup.R` blanks every host variable that `is_secret_name()`
   accepts, in place of a fixed list of 23, so a host secret such as `CLAUDE_CODE_MESSAGING_TOKEN`
@@ -46,11 +48,13 @@ amendment are in `DEVIATIONS.md`:
   `r(fn:)` allow rule lifts it (D-262; D-251's nested-1 Open closed).
 - FIX-28 (#86): a T console's call turns bracketed paste on in its own modes, so a paste is one
   draft however late the composer reads it; timing stays for terminals without it (D-263, amends
-  IC-76).
+  IC-76); review round 1: a newline after a paste's end in its read stays in the draft, and a
+  pasted Ctrl-C is text.
 - FIX-29 (#85): a console turn's block records what its prompt was sent with as `#< ` lines, which
   a live re-ask sends again without reading the file; headers name what each step created
   (`created=`), and a direct R line that uses an undone step's object is switched off with `#~`
-  and back on after `/redo` (D-264, IC-49 amended in place).
+  and back on after `/redo` (D-264, IC-49 amended in place); review round 1: a name holding a
+  comma is left out of `created=`.
 - FIX-30: a console statement ends with `model = "..."` and `mode = "..."` when its turn ran with a
   model or mode the statement would not get without them (after `/model`, `/mode`, the plan menu,
   or in a console started as `peter(mode = plan)`), so a live re-ask asks each turn as it ran
@@ -59,28 +63,32 @@ amendment are in `DEVIATIONS.md`:
   is read back, and none from a document with malformed markers; recorded code that would extend
   the run gets one more `#` (`##<`), as does a comment line of `!` code shaped like a console line,
   and `/undo`, `/undo`, `/redo`, `/redo` brings back both blocks (D-266, D-264 amended).
-- FIX-32 (#92): the permission findings of the live sessions: deny and ask rules match a read-only
+- FIX-32 (#PR): the permission findings of the live sessions: deny and ask rules match a read-only
   command (`r(sh:cat *)` denies `peter$sh("cat f")`); `system2()`'s `env` is read as the start of
   its command; a refused call's text ends "Nothing in this call ran."; the computed-command refusal
   fits the console's row; the `<r_session>` line says "use peter$sh(); read $stdout."; a nested
   `peter$sh()` ask shows its command; the cheat sheet and the yolo notice name the refusal; the
   console's plan menu names no call for R's prompt; `?gptr_security` says that Codex's own shell
-  runs outside gptr's gate in every mode (D-267).
-- FIX-33 (#92): the transcript findings of the live sessions. Model code cannot write a steer,
+  runs outside gptr's gate in every mode (D-267); review round 1: the rules read a command run
+  inside a function the code calls, and `peter$` calls in R served to claude-cli, codex or an MCP
+  client meet the rules and the critical guard.
+- FIX-33 (#PR): the transcript findings of the live sessions. Model code cannot write a steer,
   follow-up or block marker line (one more `#`; only whole comment lines read back), a block that
   would still leave the markers malformed is not written and is named, `sha` ignores trailing
   blanks and carriage returns, a `!` line that assigns a name again stays on, code that made
   objects is recorded though its call failed part-way or said `record = false`, `gptr_export()`
   admits `@objects` and leaves out undone blocks and the `#< ` run, `/retry` sends its notes
   again, a plan line names no deleted file, and `gptr_source(model =)` re-asks with another model
-  (D-268); ALL-6 and PERM-8's transcript part are not fixed.
-- FIX-34 (#92): the console findings of the live sessions: a Tab after a multi-line bracketed
+  (D-268); ALL-6 and PERM-8's transcript part are not fixed; review round 1: a lone carriage
+  return in model code ends a line, as the evaluator reads it.
+- FIX-34 (#PR): the console findings of the live sessions: a Tab after a multi-line bracketed
   paste read with it sends it; an `@file` line that is not UTF-8 is read as CP1252 instead of
   dropping the prompt; `/model`'s switch names the full id a CLI's `default` runs; a macOS paste's
   echoed last line no longer shares the hint's or the re-ask's row (not at the pause menu); NEWS
   says a paste at a question is kept only in a macOS terminal; the docs advise `reset` after a
   crash; `r` code the evaluator never runs, such as `q()`, is refused without a question in every
-  mode (D-269).
+  mode (D-269); review round 1: a block pasted at the pause menu's steer or follow-up question is
+  one message, and a refusal's reason drops the guard's `Not run: `.
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
@@ -88,11 +96,32 @@ replay of a piped turn equal to a recorded steer (FIX-16, FIX-22), a job's end t
 look (FIX-15, FIX-23), the replay srcrefs and the refused console transcript export (FIX-13, FIX-24
 and FIX-25), the abort inside a unit and before a failure (CI-97, FIX-26), base `system()` with a
 computed command (FIX-18, FIX-27), and the live re-ask without the `@file` head and the `!code` line
-using an undone turn's object (FIX-20 R27 and R29, FIX-29); of CI-93's other notes, CI-100 fixes
-the BOM block's warning under `LC_ALL=C`.
+using an undone turn's object (FIX-20 R27 and R29, FIX-29), a model `r` call that failed after an
+assignment (FIX-21, FIX-33), a console turn's context object in an export (FIX-25, FIX-33) and a
+steer line or marker comment in recorded code (FIX-31, FIX-33); of CI-93's other notes, CI-100
+fixes the BOM block's warning under `LC_ALL=C`.
 
 Verified: each record's red and green runs on its branch, in UTF-8 and under `LC_ALL=C LANG=C`.
-On the merged code `556acb00`, locally on macOS:
+On `claude/v1-fixes`, locally on macOS, with `NOT_CRAN=true`, the SIGINT reset and a short
+`TMPDIR`:
+
+- The merge `0768fb35` (code `9f015596`): the neighbours (every `doc-`, `console-`, `perm`,
+  `risk`, `rules`, `nested`, `bridge`, `gptr-`, `session-`, `ckpt-`, `eval-`, `agent-` and
+  `tool-` file, and `copy-ckpt`) FAIL 0 WARN 0 SKIP 44 PASS 16095 under `LC_ALL=C LANG=C`; the
+  full suite in UTF-8 under the heavy lock FAIL 9 WARN 0 SKIP 66 PASS 38818 at a load average near
+  215, from three timing files that pass alone (PASS 1236). The review round's CRAN verifier on
+  `0768fb35`: `R CMD check --as-cran` in CRAN mode under `env -i` Status OK with no NOTE in 113 s
+  (tests 14 s), incoming feasibility with remote checks OK, `dev/ci/isolated-check.R check` 0
+  errors, 0 warnings, 0 notes (FAIL 0 SKIP 83 PASS 38716), the URL check 0 problems.
+- Review round 1, code `fbde4941`: the same neighbours with every `mcp-` and `arch-` file FAIL 0
+  WARN 0 SKIP 16 PASS 17208 in UTF-8 and FAIL 0 WARN 0 SKIP 45 PASS 17010 under
+  `LC_ALL=C LANG=C`; the full suite in UTF-8 under the heavy lock FAIL 0 WARN 0 SKIP 66 PASS 38855
+  (27 min); CRAN-mode `R CMD check --as-cran` under `env -i` Status OK with no NOTE (tests 16 s,
+  tarball sha256 `034e3693`); lint of the changed files clean, `document()` no diff, `check-docs.R`
+  0 problems, the four plan checks pass, `dev/release/tests` PASS 290, the spelling check clean,
+  `dev/bench/tokens/run.R --check` OK.
+
+For PR #88, on the merged code `556acb00`, locally on macOS:
 
 - The neighbours of FIX-21 and FIX-22 (every `console-`, `agent-`, `perm-` and `doc-` file, with
   `gptr-sdk`, `gptr-gateway`, `session-object`, `tool-ask`, `injection-e2e`, `arch-layers`,
@@ -145,17 +174,14 @@ Open (found, not fixed):
   console note it answered is not recorded (FIX-21 L3).
 - A direct R line that names a session by a variable bound at R's prompt (`!!gptr::gptr_wait(b)`)
   stops the transcript's replay, which names it `s_<id>`, as FIX-20 R29 (FIX-21).
-- A model `r` call that failed after an assignment is left out of its block while its binding
-  stays, so a replay can stop at a later read of that binding (FIX-21).
 - `gptr_wait()` on a waiting session, called from inside a run's tool, resumes it as a nested run
   that inherits the outer run's safety record (it used to hang); the permission gate still asks
   the person (FIX-21).
 - Replayed closures and `function` calls have no srcref where the agent's keep a `<gptr>` one of its
   code, so a replayed ggplot is 1,412 bytes smaller serialized and 768 bytes by `env_snap_size()`;
   an expression that names `peter()` still makes its objects with the document's srcrefs (FIX-24).
-- `gptr_export()` refuses a console turn with a context object (`s_<hex> |> peter("...", df)`), as
-  in a script, and an exported transcript keeps its replay note, which names the source transcript
-  (FIX-25).
+- An exported transcript keeps its replay note, which names the source transcript, and a refusal
+  names no line (FIX-25, FIX-33).
 - An authenticated proxy variable (`HTTPS_PROXY` with a password) is not secret-looking, so
   discovery still registers its password as `HTTPS_PROXY_PASSWORD` (CI-99).
 - Why the Windows stdin writer exits early is not known (2 of 1,356 writer cases in CI, none in
@@ -174,10 +200,21 @@ Open (found, not fixed):
   `tool-search` (CI-93).
 - A later console turn that uses an object made by a direct R line that is off still stops
   `source()`, as the undo kept the object (FIX-29).
-- A `## Steer:` or `## Follow-up:` line in recorded code reads back as a steer or follow-up; a line
-  of `!` code that reads as another entry's first line but is not a comment still ends its section;
-  a pasted comment shaped like a block marker, such as `# <<< gptr:abc123`, leaves the transcript's
-  markers malformed (FIX-31).
+- A line of `!` code that reads as another entry's first line but is not a comment still ends its
+  section (FIX-31); a marker line inside a multi-line string of `!` code leaves the transcript's
+  markers malformed, which the next block write names (FIX-33).
+- A direct R line that read an object a turn changed stays on after the undo and replays with the
+  restored value (FIX-33 DOC-3); a turn sent from outside the console is retried with the pending
+  notes only (DOC-6); artifact references without `.gptr/` name `tempdir()/gptr` (MM-4); code
+  recorded despite `record = false` has no `#>` output (ALL-3); claude-cli and codex blocks record
+  `model=claude-cli/default` and `codex/default` (ALL-6); a refused turn records an empty block
+  (PERM-8).
+- At the pause menu's key question a macOS paste's echoed last line still shares a row (FIX-34
+  PASTE-2); on macOS a two-line paste without a final newline answers a question with its first
+  line, as documented (PASTE-1); the console's not-run row cuts a guard refusal's long reason
+  (FIX-34's merge).
+- Pasted text holding a paste end marker, in a terminal that does not filter pastes, still sends at
+  a newline of the next read when a read ends right after that marker (FIX-28 review round 1).
 - In a terminal that ignores bracketed paste a paste still splits when a read comes more than
   about 145 ms late (IC-76's 0.2 s bound; CI-94, FIX-28).
 - A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).
