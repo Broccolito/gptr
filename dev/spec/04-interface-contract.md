@@ -5330,7 +5330,7 @@ FIX-28 (D-263) adds bracketed paste to the composer there.
   reads without echo; in a T console it, or a process a tool runs that reads the terminal, also gets
   bracketed-paste markers (GNU readline 7+ parses them; readline 5.2, libedit and `readLines()` see
   text); R ending during a call (a crash or a kill; `q()` restores the modes) leaves the terminal
-  without echo and, in a T console, with bracketed paste on (zsh, fish and bash 5.1+ turn it off at
+  without echo and, in a T console, with bracketed paste on (zsh, fish and bash 5.1+ reset it at
   their prompts; `reset` restores both); a notice ends the streamed row, so the answer goes on in
   the row after it; a front end that keeps the tty non-canonical during evaluation is unsupported
   (radian unverified); on the CLI routes a steer reaches the model after the CLI's current response.
@@ -5630,8 +5630,8 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     only edit keys, is a paste: its newlines stay in the draft, leading blank lines dropped, and
     Enter later sends it as one message, as at the idle prompt. Text between bracketed-paste markers
     (`ESC [ 200 ~`, `ESC [ 201 ~`, both dropped; D-263) is a paste the same way whatever `paste`
-    says: `bracket` keeps a paste open across batches, a sequence cut while it is open is held
-    without the 50 ms limit, and in a batch holding a marker only the text between markers is a
+    says: `bracket` keeps a paste open across batches, a sequence cut inside it, or a marker cut at
+    a batch's end, is held however late, and in a batch with markers only the text between them is a
     paste. For batches without markers (terminals that ignore the mode) `console_keys()` passes TRUE
     for a batch read on the polling beat, at most 0.2 s after the reader's last read (`rd$polled`,
     empty reads included), that holds more keys than a person types since that read, one in 30 ms
@@ -5669,7 +5669,9 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     next key. The live row (IC-82) shows the draft, or the newest message waiting, or the
     keys, and is drawn again on every key. A question's drain gives what waits on fd 0 to the composer, so a
     partial line stays the draft, never the history. A draft a run left after status `idle` or `max_turns` stays
-    in the composer for the next prompt (Task 21); after any other end it joins the kept list above.
+    in the composer for the next prompt (Task 21), and readline's read at a prompt empties the
+    composer, so a paste left open ends there (D-263); after any other end it joins the kept list
+    above.
   - A question waits for typing to pause (Task 19; T class). Before a console question draws its rows
     (`console_before_message(kind = "prompt")`), `console_ask_wait()` gives what waits on fd 0 to the composer
     (`console_typed()`) and, while the composer's last key (`rd$compose$t`) is under a second old, three while

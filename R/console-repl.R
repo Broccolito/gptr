@@ -100,9 +100,9 @@ readline_limit = function() {
 #' the lines a paste left after a block's closer, which the terminal reader returns first,
 #' unechoed (the terminal showed them); `typed`, the /command and !code lines and the follow-ups
 #' typed during an answer, which it returns next, in order, echoed after the prompt (IC-76,
-#' D-242); `compose`, the state of a T console's composer (console_compose(): its draft), whose
-#' draft a run left it then edits at the prompt (console_idle()), emptied once readline() reads
-#' there (an open bracketed paste ends with its run, D-263), the line sent echoed alike, on
+#' D-242); `compose`, the state of a T console's composer (console_compose(): its draft; emptied
+#' when readline() reads at the prompt, so a bracketed paste left open ends there, D-263), whose
+#' draft a run left it then edits at the prompt (console_idle()), the line sent echoed alike, on
 #' the input band (console_band()) as are readline()'s prompts in a T console (IC-82),
 #' `sent`, the kind of message queued last (policy_enqueue()), and `complete`, TRUE where the REPL
 #' completes after its trigger characters (repl_main(), IC-81): the console reader's readline()

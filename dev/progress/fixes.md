@@ -6095,15 +6095,37 @@ the driver, screens, events, transcripts and replays without a model are local, 
   take 2.1 s and 8.3 s, as main's on-the-beat paste of the same text does: the key loop is
   quadratic, as before. The pty blocks run macOS R's readline 5.2 here; Linux CI runs them with
   GNU readline 8.x, the Windows shards run every other block.
+- Review: r1 applied (tests first, 4fc4060f). Red on 096c6cd4's code: `^console-input$` FAIL 9
+  WARN 1 PASS 195 in UTF-8 and FAIL 7 SKIP 8 PASS 118 under `LC_ALL=C LANG=C`. (1) 9c04efa9: an
+  opening marker cut more than 50 ms before its rest leaked `0~` (`[200~` after a lone Esc) and sent
+  the paste's head as a steer (test-console-input.R:187, 188 for each cut); a held sequence now also
+  stays when the next batch starts with the rest of a marker, and a late key that completes none is
+  typed as before. (2) 322df23e: a run that ended with a paste open and no draft kept `bracket`, so
+  in the next run Enter only added lines (822); readline's read at the prompt now empties the
+  composer. (3) 92f8de06: the live row's toggle test warned `unable to translate` for text that is
+  not UTF-8 (644) and failed with `'length = 2' in coercion` for several strings at a padded
+  row (664); it reads bytes and takes anything but one toggle as text. (4) A paste whose end marker
+  never comes is pinned at the prompt's editor: Enter adds lines, Ctrl-C hands the draft over (as
+  built). Docs: 04 IC-76's Limits said the shells turn the mode off at their prompts, where they
+  turn it on while their editor reads (now "reset it"); D-263 says it reverses D-243's rejection of
+  bracketed paste, and D-243 is marked amended. Green: after (1) `^console-input$` FAIL 3 WARN 1
+  PASS 201; after (2) and (3) `^console-(input|typing)$` FAIL 0 PASS 643 in UTF-8 and FAIL 0 SKIP 10
+  PASS 548 under `LC_ALL=C LANG=C`; the 31 neighbour files above (`CI=true`)
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 6526 ]` in UTF-8 and
+  `[ FAIL 0 | WARN 0 | SKIP 29 | PASS 6328 ]` under `LC_ALL=C LANG=C`; the full suite (UTF-8,
+  `NOT_CRAN=true`) `[ FAIL 0 | WARN 0 | SKIP 66 | PASS 38402 ]`, each skip a Windows-only, live,
+  Python, keyring, repr, macOS, C-locale or INFRA-03 `CI` case. Lint clean (4 files); `document()`
+  changes nothing. Kept: PROGRESS.md's rows citing #86 (the status-record PR), this heading's #86
+  (the PR number replaces it), the user docs' `stty sane` (04 and D-263 name `reset`).
 - Deviations: D-263 (amends IC-76, D-243). NEWS, the README, `?peter` and the vignette are
   unchanged: "a block pasted there is one message" still holds. Open: control bytes inside a paste
-  act as typed (Ctrl-C pauses; DEL, Ctrl-U and Ctrl-W edit). A paste whose end marker another
-  reader takes (a question asked mid-paste, a run ending mid-paste, a pasted Ctrl-C whose rest the
-  pause menu reads) stays open in the composer until it is emptied. An opening marker cut more than
-  50 ms after its Esc leaks `[200~` into the draft. A paste bracketed just before a hand-over's
-  `ESC [ ? 2004 l` reaches readline with its markers (readline 8.1+ parses them; 5.2 and libedit
-  insert them). A tool's own `readline()`, `menu()` or `readLines(stdin())`, or a child process
-  reading the terminal, gets the markers. A kill or a crash leaves the mode on. A paste's trailing
-  newline stays in the draft and the message (`console_lines()` drops it on screen). The prompt's
-  editor drops a pasted Tab that ends a read inside a split paste. A 1 MB paste holds the console
-  for minutes (the quadratic key loop).
+  act as typed (Ctrl-C pauses; DEL, Ctrl-U and Ctrl-W edit). A paste whose end marker another reader
+  takes (a question asked mid-paste, a pasted Ctrl-C whose rest the pause menu reads) stays open in
+  the composer until an abort or readline's read at the prompt empties it. An opening marker cut at
+  two reads' ends, each more than 50 ms before the next, leaks into the draft. A paste bracketed
+  just before a hand-over's `ESC [ ? 2004 l` reaches readline with its markers (readline 8.1+ parses
+  them; 5.2 and libedit insert them). A tool's own `readline()`, `menu()` or `readLines(stdin())`,
+  or a child process reading the terminal, gets the markers. A kill or a crash leaves the mode on. A
+  paste's trailing newline stays in the draft and the message (`console_lines()` drops it on
+  screen). The prompt's editor drops a pasted Tab that ends a read inside a split paste. A 1 MB
+  paste holds the console for minutes (the quadratic key loop).
