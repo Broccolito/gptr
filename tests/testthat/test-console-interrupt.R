@@ -120,6 +120,35 @@ test_that("RStudio's console offers the pause menu; its s steers the run (steeri
   expect_identical(out[shown + 1L], "ack")
 })
 
+test_that("a block pasted at the pause menu's steer question is one steer (review round 1)", {
+  local_project()
+  local_gptr_options(unsafe_no_permissions = TRUE)
+  off = gptr_register(gptr_tool("slow", "Test tool slow", execute = function(input, ctx) {
+    fake_interrupt()
+    "slow done"
+  }))
+  withr::defer(off())
+  fake = local_fake_provider(list(fake_tool("slow"), "ack", "done"))
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  local_menu_answers(c("s", "use mpg"))
+  local_mocked_bindings(front_end = function() "rstudio")
+  # a macOS terminal hands the rest of a paste over as lines waiting after the answer
+  rd = new.env(parent = emptyenv())
+  rd$left = c("and gear", "!file.create('x')")
+  rd$waiting = function() {
+    x = rd$left
+    rd$left = character()
+    x
+  }
+  local_mocked_bindings(console_repl_find = function() list(reader = rd))
+  run = local_tracked(run_start(s, msg_user("go")), s)
+  notices(with_interrupt_policy(function() run_wait(run), list(run), mode = "repl"))
+  msgs = fake_requests(fake)[[2L]]$messages
+  expect_identical(msg_text(msgs[[length(msgs)]]), paste(
+    "The user sent this message while you were working: use mpg\nand gear\n!file.create('x')"))
+  expect_identical(rd$left, character())
+})
+
 test_that("an interrupt right behind the first still opens the pause menu (RStudio's Esc)", {
   skip_on_cran()
   skip_on_os("windows")
@@ -321,6 +350,7 @@ test_that("the pause menu and its text question say a T console's draft is kept 
   log = local_menu_answers(c("s", "use only mpg"))
   rd = new.env(parent = emptyenv())
   rd$compose = list(draft = "and colour by gear")
+  rd$waiting = function() character()
   local_mocked_bindings(console_repl_find = function() list(reader = rd))
   tty = the$tty
   the$tty = list(keys = TRUE)

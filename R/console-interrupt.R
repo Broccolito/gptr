@@ -169,7 +169,8 @@ console_ahead = function(rd, accept) {
 #' answers, also one typed before the chevron showed or with the Ctrl-C (console_ahead()), an empty
 #' answer continues, anything else is kept in the history, never sent, under a dim row that says
 #' so and names the keys (ui_reask()). `[s]` and `[f]` read their text at the chevron of their own
-#' question, `? Steer` or `? Follow-up`, and queue it as Enter and Tab do (policy_enqueue()), their
+#' question, `? Steer` or `? Follow-up` (a pasted block's later lines, which a macOS terminal leaves
+#' waiting, are part of it), and queue it as Enter and Tab do (policy_enqueue()), their
 #' queue line, without the text it shows under, right under it, as under any question. `[b]` closes
 #' the answer's cut row, then says in dim terms (console_terms()) that the run went to the
 #' background, the service's notice one of them, then lists what the REPL held for after the run as
@@ -238,6 +239,9 @@ policy_menu = function(cnd, pol) {
       ui_draft_kept()
       text = console_ask(function(x) TRUE)
       if (is.na(text)) return(invisible(NULL))
+      # a block pasted here is one message, as at the prompt: the lines a macOS terminal left
+      rd = console_repl_find()$reader
+      text = paste(c(text, if (!is.null(rd)) rd$waiting()), collapse = "\n")
       enqueue = function() {
         the$echoed = ""
         on.exit({
