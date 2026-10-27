@@ -17,17 +17,18 @@
 #' batch's end (`bracket`) lasts into the next batches; a sequence cut inside it waits for its rest
 #' however late, as does a marker's start (`ESC [`, `ESC [ 2`, `ESC [ 2 0`, `ESC [ 2 0 0`,
 #' `ESC [ 2 0 1`) while the batches after it may still complete it, and once they cannot its Esc is
-#' the Esc key, dropped, and the rest is typed; in a batch holding a marker only the text between
-#' markers is a paste. With `paste` (a batch without markers read on the polling beat, too quick for
-#' a person to type a newline and more) a batch with text after its last newline is a paste the same
-#' way. A message goes as `enter_kind` (`"steer"` or `"follow_up"`), always as a follow-up when it
-#' starts with / or !, and not at all when blank. Two keys act only outside an open bracketed paste,
-#' as a batch of their own or as the end of a batch without a newline outside a paste
-#' (console_unpasted(); elsewhere Tab is text and Up is dropped): Up (`ESC [ A`, `ESC O A`) on an
-#' empty draft takes back the newest queued message; Tab on a trigger word (console_trigger())
-#' completes it and never sends: `complete(line, end)` returns full words, whose longest common
-#' prefix replaces the word when longer, else two or more are listed. On any other draft Tab sends
-#' the other kind.
+#' the Esc key, dropped, and the rest is typed; in a batch holding a marker the text before the
+#' markers is typed, and a newline after a paste's end stays in the draft too, so pasted text that
+#' holds an end marker sends nothing: only Enter in a later batch sends. With `paste` (a batch
+#' without markers read on the polling beat, too quick for a person to type a newline and more) a
+#' batch with text after its last newline is a paste the same way. A message goes as `enter_kind`
+#' (`"steer"` or `"follow_up"`), always as a follow-up when it starts with / or !, and not at all
+#' when blank. Two keys act only outside an open bracketed paste, as a batch of their own or as the
+#' end of a batch without a newline outside a paste (console_unpasted(); elsewhere Tab is text and
+#' Up is dropped): Up (`ESC [ A`, `ESC O A`) on an empty draft takes back the newest queued
+#' message; Tab on a trigger word (console_trigger()) completes it and never sends:
+#' `complete(line, end)` returns full words, whose longest common prefix replaces the word when
+#' longer, else two or more are listed. On any other draft Tab sends the other kind.
 #' @return list(state, action), the action NULL, list(type = "send", kind, text),
 #'   list(type = "take_back") or list(type = "complete", candidates)
 #' @noRd
@@ -85,17 +86,19 @@ console_compose = function(state, chars, now, enter_kind, complete, paste = FALS
                                        "[\\x20-\\x7e])?|[\\x01-\\x1f\\x7f]|[^\\x01-\\x1f\\x7f]+"),
                                 x, perl = TRUE))[[1L]]
   # a paste on the beat has text after its last newline, not only edit keys; in a batch with
-  # markers only the text between them is a paste
+  # markers the text before them is typed, and a newline after a paste's end (`ended`) is text
   last = max(0L, which(keys == "\n"))
   joined = paste && !length(marks) && !bracket && last > 0L &&
     any(!grepl("^[\\x01-\\x1f\\x7f]", keys[-seq_len(last)], perl = TRUE))
   lines = ""
   esc = ""
+  ended = FALSE
   for (i in seq_along(keys)) {
     k = keys[[i]]
     if (k %in% c("\033[200~", "\033[201~")) {
       bracket = k == "\033[200~"
-    } else if (k == "\n" && (joined || bracket)) {
+      ended = ended || !bracket
+    } else if (k == "\n" && (joined || bracket || ended)) {
       draft = if (nzchar(trimws(draft))) paste0(draft, "\n") else ""
     } else if (k == "\n") {
       lines = paste0(lines, draft, "\n")
@@ -157,9 +160,10 @@ console_trigger = function(line) {
 #' while no paste they opened is open (console_compose(), D-263). A Tab or Up that ends a batch
 #' right after a newline is a key of its own, after the message the newline sent (console_compose()
 #' acts once a batch), as when Enter and Up share a late read. Ctrl-C, a key in character mode
-#' (tty_call()), interrupts as SIGINT would, after the keys before it; the keys after it in the
-#' batch (a further Ctrl-C dropped) are the pause menu's answers (`rd$after_interrupt`,
-#' console_ahead()), and those it leaves are read here once it resumes, as if typed after it
+#' (tty_call()), interrupts as SIGINT would, after the keys before it (inside a bracketed paste it
+#' is pasted text); the keys after it in the batch (a further Ctrl-C dropped) are the pause menu's
+#' answers (`rd$after_interrupt`, console_ahead()), and those it leaves are read here once it
+#' resumes, as if typed after it
 #' @noRd
 console_keys = function(rd, s, chars) {
   # the first read of a run, or one after an in-process tool held the reactor, is off the beat
@@ -168,6 +172,13 @@ console_keys = function(rd, s, chars) {
   paste = gap <= 0.2 && nchar(chars) > 1 + gap / 0.03
   rd$polled = now
   rd$read_at = NULL
+  # a Ctrl-C byte inside a bracketed paste is pasted text, which the composer drops (D-263)
+  open = isTRUE(rd$compose$bracket)
+  chars = paste0(if (open) "\033[200~", chars)
+  m = gregexpr("(?s)\033\\[200~.*?(\033\\[201~|\\z)", chars, perl = TRUE)
+  regmatches(chars, m) = lapply(regmatches(chars, m), gsub, pattern = "\003", replacement = "",
+                                fixed = TRUE)
+  if (open) chars = substring(chars, 7L)
   ctrl_c = regexpr("\003", chars, fixed = TRUE)
   if (ctrl_c > 0L) {
     after = gsub("\003", "", substring(chars, ctrl_c + 1L), fixed = TRUE)

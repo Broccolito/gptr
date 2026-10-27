@@ -148,16 +148,27 @@ test_that("a batch read on the polling beat that ends in text is a paste: one dr
 test_that("a bracketed paste is text: its newlines stay and its keys do not act (D-263)", {
   cases = list(
     list("\033[200~a\rb\rc\r\033[201~", "", "a\nb\nc\n", NULL),
-    list("\033[200~two\rlines\033[201~\r", "abc ", "", sent("steer", "abc two\nlines")),
+    list("\033[200~two\rlines\033[201~\r", "abc ", "abc two\nlines\n", NULL),
     list("x\r\033[200~p\rq\033[201~", "", "p\nq", sent("steer", "x")),
     list("\033[200~\r\rfoo\033[201~", "", "foo", NULL),
-    list("\033[200~/mode\033[201~\r", "", "", sent("follow_up", "/mode")),
-    # keys outside the markers are typed, also on the polling beat
-    list("\033[200~a\rb\033[201~\rc", "", "c", sent("steer", "a\nb")),
+    list("\033[200~/mode\033[201~\r", "", "/mode\n", NULL),
+    # keys before the markers are typed, also on the polling beat; a newline after a paste's
+    # end in its read is text, so only a later Enter sends
+    list("\033[200~a\rb\033[201~\rc", "", "a\nb\nc", NULL),
     list("\033[200~@mt\t", "", "@mt\t", NULL)
   )
   expect_keys(cases)
   expect_keys(cases, paste = TRUE)
+})
+
+test_that("pasted text holding an end marker cannot send what follows it (review round 1)", {
+  # a terminal that does not filter pastes lets the text hold the markers
+  expect_keys(list(
+    list("\033[200~\033[201~\r!file.create('X')\r\033[201~", "", "!file.create('X')\n", NULL),
+    list("\033[200~early\033[201~\rmore\r\033[200~x\033[201~", "", "early\nmore\nx", NULL)
+  ))
+  r = compose("\r", state = compose("\033[200~early\033[201~\rmore\033[201~")$state)
+  expect_identical(r$action, sent("steer", "early\nmore"))
 })
 
 test_that("a bracketed paste spans reads; its end marker is held however late (D-263)", {

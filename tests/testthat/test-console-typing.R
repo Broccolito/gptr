@@ -1159,6 +1159,26 @@ test_that("a bracketed paste stays one draft however late its reads (FIX-28, D-2
   expect_false(any(grepl("\033", steers(), fixed = TRUE)))
 })
 
+test_that("a Ctrl-C byte inside a bracketed paste is pasted text, not the key (review round 1)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$reader = console_reader()
+  rs$sending = quote(peter())
+  local_mocked_bindings(reactor_now = function() 0)
+  read = function(chars) {
+    .gptr_repl = rs
+    console_keys(rs$reader, s, chars)
+  }
+  utils::capture.output({
+    read("\033[200~etx\003s\rTEXT\r")
+    read("x\003a\r\033[201~")
+  })
+  expect_identical(rs$reader$compose$draft, "etxs\nTEXT\nxa\n")
+  expect_identical(rs$reader$after_interrupt %||% "", "")
+  expect_length(session_data(s)$queue$steer, 0L)
+})
+
 test_that("a draft a run left waits for the follow-ups, then continues at the prompt (D-243)", {
   skip_on_cran()
   local_console_test()
