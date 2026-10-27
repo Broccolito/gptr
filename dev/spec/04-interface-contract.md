@@ -3357,7 +3357,7 @@ tokens only when the fuzzy fallback, EOL or encoding normalisation changed what 
 `Tool <name> not found`; validation failure: `Invalid arguments for <tool>: <errors>`; denial: `Permission denied:
 <reason>. <how to proceed>`, and one that carries the person's text (`n <text>`, IC-77 in §15.10): `The user declined
 this call and said: "<text>". This is the user's own instruction: do that instead; any call it needs is approved
-separately.`; a denied top-level or served call, refused before it starts, ends either with
+separately.`; a denied top-level or served call, refused before it starts, ends with
 `Nothing in this call ran.` (a nested call's denial inside running code does not, D-267); hook block:
 `Tool execution was blocked: <reason>`; interrupted tool: `Interrupted after
 <s> s; side effects may have occurred.` (`details$interrupted` TRUE, so the console's row states the time once;
@@ -4903,8 +4903,8 @@ step list before its first action.
   and the ask is shown at the session's next `gptr_wait()` (D-261), whose resumed run opens with a user
   message saying that the user is at the console (D-252); a served request that needs approval
   is denied with how to allow it and a console notice, as is a nested `peter$` call of its R that needs
-  approval (`mcp_nested_gate()`: a `sh` or `bg` call as the literal call of its command; D-267). Non-interactively
-  both are `blocked`/denied.
+  approval (`mcp_nested_gate()`: a `sh` or `bg` call as the literal call of its command; D-267), without the
+  notice, which the served result would capture for the model. Non-interactively both are `blocked`/denied.
 - A background R tool that changed bindings in the user's environment at an idle tick prints one notice.
 - P04/P19 acceptance: an inline agent calls System 1 while a sibling has a queued tool; the sibling's tool starts
   only after the first evaluation returns.
@@ -5084,7 +5084,9 @@ document are exact.
   `workspace-write` exec gptr hashes the `control` files (IC-54) and refuses to load changed ones until the user
   confirms; the files checkpointer walks after each exec so `/undo` covers Codex's edits. On native Windows the
   sandbox is probed and the route falls back to `read-only` with a warning when it is not ready [08 line 2796].
-  The one-time notice says Codex runs its own shell inside its sandbox.
+  The one-time notice says Codex runs its own shell inside its sandbox; that shell runs in every mode outside
+  gptr's gate, rules and secret guard, and in plan, manual and edits its read-only sandbox still lets it read any
+  file the account can read (D-267).
 - Codex has no turn cap flag: gptr counts `turn.completed`/`item.completed` events and cancels at the cap; each
   exec has a wall-clock limit (`gptr.cli_turn_timeout`, 3600 s).
 - **Continuity**: a claude child resumes the CLI session (`--resume`), a Codex exec its thread (`exec resume`), and

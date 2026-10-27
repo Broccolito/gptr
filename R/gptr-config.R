@@ -1658,10 +1658,13 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' arguments and `env`) is not a string the classifier can read, such as
 #' `cmd = paste("rm", "-rf", "build"); system(cmd)`, is refused, and the model is told to run the
 #' command with `peter$sh()`; `manual` and `edits` ask. An allow rule such as `r(fn:system)` lets
-#' such calls run, unchecked by `sh:` rules. The refusal covers only calls the classifier resolves
-#' to these functions: a function reached by a computed name (`get("system")(cmd)`),
-#' `eval(parse())`, a sourced file, package code and other command runners such as `pipe()` or
-#' `processx::run()` still run a computed command unchecked. In `auto` and `yolo` mode a model can
+#' such calls run, unchecked by `sh:` rules. Neither the rules nor the refusal read what a shell
+#' reads when it runs: its standard input (`system("sh", input = cmd)`,
+#' `peter$sh("sh", input = cmd)`), variables it expands (`sh -c "$X"`, `eval $X`) or a script file.
+#' The refusal covers only calls the classifier resolves to these functions: a function reached by
+#' a computed name or passed as a value (`get("system")(cmd)`, `g(system)`), `eval(parse())`, a
+#' sourced file, package code and other command runners such as `pipe()` or `processx::run()`
+#' still run a computed command unchecked. In `auto` and `yolo` mode a model can
 #' delete or overwrite files and objects. Use them only in projects you can restore (version
 #' control, backups, [gptr_rewind()] for recent turns), and run untrusted prompts or untrusted
 #' projects in a disposable container or virtual machine.

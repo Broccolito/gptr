@@ -61,12 +61,12 @@ works on the objects already in memory.
 * A console transcript records what each prompt was sent with (the head of each `@file` and the
   notes of earlier `!` lines, as `#< ` lines) and, after `/model` or `/mode`, the model and mode
   a turn ran with, so `gptr_source(replay = "live")` sends each turn again with what it was sent
-  with and asks it on that model and in that mode (a turn that names none is asked with the
-  `model` and `mode` settings of the session that re-asks); code the model wrote is never sent
-  again as your context or your steer. A `!` line that uses an object of an undone turn is turned
-  off (`#~ `) and back on after `/redo`, so `source()` does not stop there, and `/retry` sends the
-  undone turn's `!` notes again. `gptr_export()` turns such a transcript into an ordinary R
-  script.
+  with and asks it on that model and in that mode (a turn that names none is asked with those its
+  session has from the turns before, else with the `model` and `mode` settings of the session
+  that re-asks); code the model wrote is never sent again as your context or your steer. A `!`
+  line that uses an object of an undone turn is turned off (`#~ `) and back on after `/redo`, so
+  `source()` does not stop there, and `/retry` sends the undone turn's `!` notes again.
+  `gptr_export()` turns such a transcript into an ordinary R script.
 * `gptr_init()` creates a `.gptr/` project workspace with the project instructions file
   `.gptr/vignette.Rmd`; `gptr_config()` and `gptr_trust()` manage settings and trust.
 * Checkpoints: `gptr_rewind()`, `gptr_checkpoints()` and `/undo` restore objects, files and the

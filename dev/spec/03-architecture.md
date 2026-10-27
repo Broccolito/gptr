@@ -1486,7 +1486,9 @@ In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` o
 `dynamic` row of these functions whose call text is no `<fn>(): ` reading. Its reason tells the model to run the command with
 `peter$sh()`, whose command meets the deny and ask rules when it runs (6.8.4); the code is not evaluated. Only an
 `r(fn:...)` allow rule covering those rows, matched against them alone, lifts it; plan, manual and edits are
-unchanged and a literal command is read and gated as before [D-262].
+unchanged and a literal command is read and gated as before. Neither the rules nor the refusal read what a shell
+reads when it runs (its standard input, variables it expands, a script file), and a function the classifier does
+not resolve to these (a computed name, one passed as a value) is not refused [D-262].
 
 In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never
 runs, such as `q()`, `readline()`, a read of standard input or a secret marker, with the guard's text less its
@@ -2575,7 +2577,9 @@ MCP (edits-mode approval and checkpoints apply); `auto` and `yolo` -> `workspace
 each exec (changed ones are not loaded until the user confirms) and a files-checkpointer walk after it so `/undo`
 covers Codex's edits; on native Windows the sandbox is probed and the route falls back to `read-only` with a warning
 when it is not ready [08 line 2796]; never bypass the sandbox. The one-time notice says Codex runs its own shell
-inside its sandbox. gptr counts Codex's turn events and cancels at the turn cap, with a wall-clock limit per exec.
+inside its sandbox; that shell runs in every mode outside gptr's gate, rules and secret guard, and in plan, manual
+and edits its read-only sandbox still lets it read any file the account can read (D-267). gptr counts Codex's turn
+events and cancels at the turn cap, with a wall-clock limit per exec.
 Codex's own steps (commands, without the shell's `-lc` wrapper [D-207], file changes, web searches) become
 informational tool events and its calls of gptr's tools are reported where they run, so each shows once; a reasoning
 item is a thinking block. Each whole block of a CLI route streams as one delta ending with a line end, so the console

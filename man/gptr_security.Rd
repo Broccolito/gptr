@@ -61,10 +61,13 @@ session. Deny and ask \verb{sh:} rules see a command computed at run time only i
 arguments and \code{env}) is not a string the classifier can read, such as
 \verb{cmd = paste("rm", "-rf", "build"); system(cmd)}, is refused, and the model is told to run the
 command with \code{peter$sh()}; \code{manual} and \code{edits} ask. An allow rule such as \code{r(fn:system)} lets
-such calls run, unchecked by \verb{sh:} rules. The refusal covers only calls the classifier resolves
-to these functions: a function reached by a computed name (\code{get("system")(cmd)}),
-\code{eval(parse())}, a sourced file, package code and other command runners such as \code{pipe()} or
-\code{processx::run()} still run a computed command unchecked. In \code{auto} and \code{yolo} mode a model can
+such calls run, unchecked by \verb{sh:} rules. Neither the rules nor the refusal read what a shell
+reads when it runs: its standard input (\code{system("sh", input = cmd)},
+\code{peter$sh("sh", input = cmd)}), variables it expands (\verb{sh -c "$X"}, \code{eval $X}) or a script file.
+The refusal covers only calls the classifier resolves to these functions: a function reached by
+a computed name or passed as a value (\code{get("system")(cmd)}, \code{g(system)}), \code{eval(parse())}, a
+sourced file, package code and other command runners such as \code{pipe()} or \code{processx::run()}
+still run a computed command unchecked. In \code{auto} and \code{yolo} mode a model can
 delete or overwrite files and objects. Use them only in projects you can restore (version
 control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run untrusted prompts or untrusted
 projects in a disposable container or virtual machine.
