@@ -1764,7 +1764,8 @@ doc_after_write = function(site, res, block_lines) {
     data = list(doc = rel, format = site$format, block = res$block_id, action = res$action,
                 prompt = header$prompt, sha = res$sha,
                 lines = if (length(res$lines)) I(as.integer(res$lines)) else NULL,
-                backend = res$backend)
+                backend = res$backend, model = site[["ran_with"]][["model"]],
+                mode = site[["ran_with"]][["mode"]])
     tryCatch(session_append(s, list(type = "custom", custom_type = "gptr.doc_block",
                                     data = data[!vapply(data, is.null, NA)])),
              error = function(e) NULL)

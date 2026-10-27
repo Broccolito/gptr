@@ -459,7 +459,8 @@ doc_touch = function(call, site, where, keep) {
 #' block), or a console call with a transcript target (asked once per project when a human can
 #' answer and the call could be recorded); never a call made from model code. Recovers a dead
 #' process's deferred writes for that document first (doc_touch()) and keeps the site in
-#' `call$doc` for run().
+#' `call$doc` for run(); a console site gets `default_model`, TRUE when the call starts a session
+#' naming no model by name (D-265).
 #' @noRd
 doc_route_match = function(call) {
   if (!is.null(run_current())) return(FALSE)
@@ -477,6 +478,9 @@ doc_route_match = function(call) {
   site = doc_touch(call, site, "route", function(s) {
     isTRUE(s$top_level) || !is.null(s$in_block)
   })
+  if (isTRUE(site$console)) {
+    site$default_model = is.null(call$session) && !rlang::is_string(call$ids$model)
+  }
   assign("doc", site, envir = call)
   TRUE
 }
@@ -792,6 +796,7 @@ doc_on_agent_end = function(event, ctx) {
     # without .gptr/ the log is in tempdir()/gptr, which R deletes at exit
     kept = !is.null(d$file) && !path_inside(d$file, file.path(tempdir(), "gptr"))
     site$session_file = if (kept) doc_rel(d$file)
+    site = doc_console_ran(s, site)
   }
   turn = if (d$kind %in% c("team", "fanout")) 1L else as.integer(event$turns %||% d$turns)
   lines = doc_block_lines(s, turn, site, site$ordinal %||% 1L)
@@ -801,6 +806,25 @@ doc_on_agent_end = function(event, ctx) {
   }
   doc_upsert(site, lines, block_id = site$block_id)
   NULL
+}
+
+#' The model reference (`provider/id[:thinking]`, a router without its level) and mode a console
+#' turn ended with (`ran_with`), and those its session's previous turn in the same transcript
+#' recorded on its `gptr.doc_block` entry (`ran_before`, NULL when none), which
+#' doc_console_statement() compares (D-265)
+#' @noRd
+doc_console_ran = function(s, site) {
+  d = session_data(s)
+  th = d$thinking
+  site$ran_with = c(model = if (is.null(th) || startsWith(d$model, "router:")) d$model else
+    paste0(d$model, ":", th), mode = d$mode)
+  rel = doc_rel(site$path)
+  prev = Find(function(e) {
+    identical(e$custom_type, "gptr.doc_block") && identical(e$data[["doc"]], rel) &&
+      rlang::is_string(e$data[["model"]]) && rlang::is_string(e$data[["mode"]])
+  }, doc_path_entries(s), right = TRUE)
+  site$ran_before = if (!is.null(prev)) c(model = prev$data[["model"]], mode = prev$data[["mode"]])
+  site
 }
 
 #' Ancestors (inclusive) of an entry id in a list of entries
