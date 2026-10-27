@@ -42,11 +42,12 @@ doc_export_pending = function(path) {
   any(doc_sidecar_exists(c(doc_sidecar_path(path), doc_sidecar_legacy_path(path))))
 }
 
-#' Preserve body code and ordinary notes, with a fixed readable bound on captured output; raw R
-#' leaves out the run of `#< ` lines that opens a body, what a console prompt was sent with (IC-49).
+#' Preserve body code and ordinary notes, with a fixed readable bound on captured output, without
+#' the run of `#< ` lines that opens a body, what a console prompt was sent with (IC-49), which no
+#' exported call sends.
 #' @noRd
 doc_export_body = function(body, format, indent = "") {
-  if (identical(format, "r")) body = body[seq_along(body) > doc_sent_n(body)]
+  body = body[seq_along(body) > doc_sent_n(body)]
   output = grepl("^[ \t]*#>", body)
   comment = grepl("^[ \t]*#", body)
   unsafe = comment & grepl("[[:cntrl:]]", body)
@@ -291,9 +292,12 @@ doc_export_lines = function(lines, format, path, target) {
 #' @return Invisibly, the normalized destination path.
 #' @details Only bare or symbol-assigned literal Peter calls and Peter-only native pipelines
 #' are admitted; a pipeline may start from a session handle an earlier Peter statement assigned,
-#' as the later turns of a console transcript do. Distinct statements sharing a line (including
-#' semicolon-separated statements), mixed pipelines, nested or computed calls, pending writes,
-#' missing or edited blocks, secret markers and interpolated-input hashes are refused.
+#' as the later turns of a console transcript do, and after its prompt a call may name objects
+#' without argument names, as a console turn's `@objects` are written. Distinct statements sharing
+#' a line (including semicolon-separated statements), mixed pipelines, nested or computed calls,
+#' pending writes, missing or edited blocks, secret markers and interpolated-input hashes are
+#' refused. An undone block that no statement owns, a console turn that `/undo` or `/retry` undid
+#' under its `#~ ` statement, is left out.
 #' Raw exports also refuse ordinary code that reads a session handle after its Peter statement
 #' and before ordinary code assigns that name again, and a function that names any session handle
 #' of the document, wherever it is defined, as it reads the name when called. The Peter format
@@ -318,9 +322,9 @@ doc_export_lines = function(lines, format, path, target) {
 #' effects cannot be reconstructed. External files, objects and package versions must still
 #' be supplied. Remaining user code may use gptr or perform network and filesystem operations.
 #' Captured `#>` output is limited to twelve lines per block and eighty characters per line;
-#' outputs are comments. Raw R leaves out a console turn's `#< ` lines (what the console sent
-#' with its prompt, see [gptr_doc()]); the Peter format keeps them. Encoding, line endings and
-#' the final newline follow the input file.
+#' outputs are comments. Neither format keeps a console turn's `#< ` lines (what the console sent
+#' with its prompt, see [gptr_doc()]), so an exported call is asked without them. Encoding, line
+#' endings and the final newline follow the input file.
 #' A UTF-8 byte order mark is preserved; source that exported file with
 #' `source(to, encoding = "UTF-8-BOM")`.
 #' @seealso [gptr_doc()], [gptr_source()], [gptr_blocks()]
