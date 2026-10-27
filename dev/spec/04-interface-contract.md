@@ -4646,20 +4646,22 @@ A console turn's block in an `.R` document opens with what the console sent with
 as `#< ` comment lines (FIX-29, D-264): the text of its `user_ran` block (the `!code` notes) and of
 its `user_files` block (each `@file` as attached: at most 40 lines redacted with the `context`
 profile, or the one line of a binary, truncated or omitted file), tags included, each line prefixed
-`#< ` and an empty one written `#<`; an `.Rmd` or `.qmd` document the console records into gets none
-(FIX-31, D-266). `prompt=` still hashes only the typed text. Only that run is read back: the `#< `
-lines that open the body of a block whose statement, the nearest non-blank line above it, is a
-console turn's (`s_<6 hex> = peter(` or `s_<6 hex> |> peter(`), under `#~ ` when the block is
-undone, holding the `user_ran` block, then the `user_files` block, each optional, and nothing else;
-any other run is not read. A recorded code line that would read as part of the run gets one more `#`
-(`##< `), in every format, so model code can neither extend nor forge it, also in a block a format
-error moves into the transcript; R reads the same comment, and `sha` is that of the lines as
-written. A call that asks again for a recorded block (`replay = "live"`, a stale or undone block)
-keeps those blocks in `call$sent`, recorded or not, and the console's `user_ran` and `user_files`
-providers send them again as the same context blocks; the file is not read, so the re-ask is the
-same request even when it changed or is gone. A history reconstructed from the document puts them
-before the prompt of the turn's user message. A raw `gptr_export()` leaves the run out; the Peter
-format keeps it.
+`#< ` and an empty one written `#<`; an `.Rmd`, `.qmd` or `.ipynb` document the console records into
+gets none (FIX-31, D-266). `prompt=` still hashes only the typed text. Only that run is read back:
+the lines starting `#<` that open the body of a block whose statement, the nearest non-blank line
+above it, is a console turn's (`s_<6 hex> = peter(` or `s_<6 hex> |> peter(`), under `#~ ` when the
+block is undone, in a document whose gptr markers are well formed, holding the `user_ran` block,
+then the `user_files` block, each optional, and nothing else; any other run is not read. The
+recorded code's leading lines that start with `#<` get one more `#` (`##<`), in every format, also
+in a block a format error moves into the transcript, so model code cannot extend the run (a read
+drops only a line's trailing carriage return, which keeps how it starts); R reads the same comments,
+and `sha` is that of the lines as written. Nor can model code forge a block with a run: a gptr
+marker in recorded code leaves the document's markers malformed. A call that asks again for a
+recorded block (`replay = "live"`, a stale or undone block) keeps those blocks in `call$sent`,
+recorded or not, and the console's `user_ran` and `user_files` providers send them again as the same
+context blocks; the file is not read, so the re-ask is the same request even when it changed or is
+gone. A history reconstructed from the document puts them before the prompt of the turn's user
+message. A raw `gptr_export()` leaves the run out; the Peter format keeps it.
 Each block header names the objects its r calls created (`created=`: the `created` rows of the
 turn's objects fragments, what an undo removes), and each direct R header the objects the
 evaluator's diff reports added, also for a line that failed (`# direct R (no model) created=p`).
