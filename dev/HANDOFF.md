@@ -55,6 +55,10 @@ amendment are in `DEVIATIONS.md`:
   model or mode the statement would not get without them (after `/model`, `/mode`, the plan menu,
   or in a console started as `peter(mode = plan)`), so a live re-ask asks each turn as it ran
   (D-265, IC-49 amended in place); this closes FIX-21's note on the console's starting mode.
+- FIX-31: only the run of lines starting `#<` that opens a console turn's block in an `.R` document
+  is read back, and none from a document with malformed markers; recorded code that would extend
+  the run gets one more `#` (`##<`), as does a comment line of `!` code shaped like a console line,
+  and `/undo`, `/undo`, `/redo`, `/redo` brings back both blocks (D-266, D-264 amended).
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
@@ -145,8 +149,11 @@ Open (found, not fixed):
   `doc-export`, `doc-knitr`, `proc-rscript`, `provider-bedrock`, `s1-emulate`, `s1-ollama` and
   `tool-search` (CI-93).
 - A later console turn that uses an object made by a direct R line that is off still stops
-  `source()`, as the undo kept the object; `/undo`, `/undo`, `/redo`, `/redo` leaves the first
-  turn's block undone while its turn is live, as on `main` (FIX-29).
+  `source()`, as the undo kept the object (FIX-29).
+- A `## Steer:` or `## Follow-up:` line in recorded code reads back as a steer or follow-up; a line
+  of `!` code that reads as another entry's first line but is not a comment still ends its section;
+  a pasted comment shaped like a block marker, such as `# <<< gptr:abc123`, leaves the transcript's
+  markers malformed (FIX-31).
 - In a terminal that ignores bracketed paste a paste still splits when a read comes more than
   about 145 ms late (IC-76's 0.2 s bound; CI-94, FIX-28).
 - A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).
