@@ -55,6 +55,11 @@ works on the objects already in memory.
   call in `.R`, `.Rmd`, `.qmd` and `.ipynb` documents and replays without model calls
   (`gptr_doc()`, `gptr_source()`, `gptr_blocks()`, `gptr_cache()`). A console transcript also
   records a run that was aborted or stopped by an error, marked `## Run: <status>`.
+* A console transcript records what each prompt was sent with (the head of each `@file` and the
+  notes of earlier `!` lines, as `#< ` lines) and, after `/model` or `/mode`, the model and mode
+  a turn ran with, so `gptr_source(replay = "live")` asks each turn again as it was asked; code
+  the model wrote is never sent again as your context. A `!` line that uses an object of an
+  undone turn is turned off (`#~ `) and back on after `/redo`, so `source()` does not stop there.
 * `gptr_init()` creates a `.gptr/` project workspace with the project instructions file
   `.gptr/vignette.Rmd`; `gptr_config()` and `gptr_trust()` manage settings and trust.
 * Checkpoints: `gptr_rewind()`, `gptr_checkpoints()` and `/undo` restore objects, files and the
@@ -86,9 +91,10 @@ works on the objects already in memory.
 * In a terminal, what you type while the agent works is a draft on the bottom row: Enter sends
   it as a steer, which the agent reads at its next step, and Tab as a follow-up, the next prompt
   (setting `type_ahead` swaps the two); Up takes back a message not yet delivered, and
-  `/command` and `!code` lines wait for the next prompt. A question waits for typing to pause
-  and keeps the draft. On the CLI routes a steer is sent after the CLI's answer. In RStudio and
-  R.app (Esc) and Positron (Ctrl-C) the pause menu steers.
+  `/command` and `!code` lines wait for the next prompt. A paste is one draft, however busy the
+  session, in a terminal that supports bracketed paste. A question waits for typing to pause and
+  keeps the draft. On the CLI routes a steer is sent after the CLI's answer. In RStudio and R.app
+  (Esc) and Positron (Ctrl-C) the pause menu steers.
 * A block pasted at the `peter>` prompt of a macOS terminal is sent as one message, and a line
   typed or pasted before a question (an approval, a choice or a yes/no confirmation) never
   answers it. A block pasted at an approval or a choice is kept in the console history, not read
