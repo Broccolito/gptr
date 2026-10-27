@@ -6128,6 +6128,21 @@ the driver, screens, events, transcripts and replays without a model are local, 
   setting to 7.0 and its default on to 8.1. R 4.5.0 with readline 8.2 (rocker/r-ver, no network)
   read a bracketed `abc` as `abc` with the setting off and on. This record's Open said 8.1+ and now
   says 7+. No code or test changed.
+- Final checks, on `50886401` (the commit of this item changes only `dev/`, which `.Rbuildignore`
+  drops): PROGRESS.md now lists FIX-28, and its Open row has HANDOFF.md's wording (r1 had kept
+  both for a status-record PR). `R CMD check --as-cran` in CRAN mode (`NOT_CRAN` unset, CRAN's
+  timing thresholds, both manuals) under `env -i` with only `HOME`, `PATH`, `LANG=en_US.UTF-8`, a
+  `TMPDIR` from `mktemp -d`, `R_LIBS_USER` and the `_R_CHECK_` variables, on a `git archive` of
+  the head: Status OK with no NOTE in 147 s, the tests in 18 s (`testthat.R` [13s/14s], FAIL 0
+  SKIP 901 PASS 2641), INFO only for 'repr' and the installed size (7.9 Mb); tarball sha256
+  `7e8731fb`. The tests of the changed files and their neighbours, the files whose names start
+  with `console-`, `eval-`, `utils-conditions`, `utils-options`, `gptr-config`, `agent-run`,
+  `agent-loop`, `agent-dispatch`, `session-object`, `arch-layers`, `lint-rules`, `doc-locate`,
+  `doc-replay`, `injection-e2e`, `northstar`, `s11-conformance` or `tool-ask` (39 files,
+  `NOT_CRAN=true` and `CI=true`, SIGINT at its default): FAIL 0 SKIP 0 PASS 8122 in UTF-8 and
+  FAIL 0 SKIP 29 PASS 7924 under `LC_ALL=C LANG=C` (the skips need a UTF-8 locale). Lint clean
+  (7 files); `document()` no diff; the plan checks pass (28 plans, no error finding, 770 R blocks
+  with 0 problems, no lints); `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290.
 - Deviations: D-263 (amends IC-76, D-243). NEWS, the README, `?peter` and the vignette are
   unchanged: "a block pasted there is one message" still holds. Open: control bytes inside a paste
   act as typed (Ctrl-C pauses; DEL, Ctrl-U and Ctrl-W edit). A paste whose end marker another reader
