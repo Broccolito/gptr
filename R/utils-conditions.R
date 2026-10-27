@@ -103,7 +103,7 @@ gptr_message_write = function(text, stream, margin = FALSE, from = sys.nframe() 
   }
   row = the$live_row
   shown = isTRUE(row$shown) && sink.number() == row$sinks &&
-    !grepl("^\033\\[\\?[0-9;]*[hl]$", text)
+    !isTRUE(grepl("^\033\\[\\?[0-9;]*[hl]$", text, useBytes = TRUE))
   if (shown) row$clear(out)
   out(text, if (stream == "stderr") stderr() else stdout())
   if (shown) {
