@@ -1670,9 +1670,11 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' sub-agent in a separate R process that starts from gptr's reduced child environment (it does
 #' not read your `~/.Renviron`), but that process runs under your user account with your file
 #' permissions: the worker backend is not an isolation boundary. Its permission requests are
-#' sent to your session and classified again there. On the `codex` route in `auto` and `yolo`
-#' mode, Codex's own shell changes and deletes files inside the project within Codex's sandbox,
-#' without passing gptr's gate. MCP servers, the `claude` and `codex` command-line tools, shell
+#' sent to your session and classified again there. On the `codex` route Codex's own shell runs
+#' commands in every mode without passing gptr's gate, rules or secret guard: in `plan`, `manual`
+#' and `edits` its sandbox is read-only, so it can still read any file your account can read, and
+#' in `auto` and `yolo` it also changes and deletes files inside the project within its sandbox.
+#' MCP servers, the `claude` and `codex` command-line tools, shell
 #' commands started with `peter$sh()` and Shiny artifacts are ordinary processes of your account
 #' as well; artifacts start without any registered secret and listen
 #' on the loopback interface, and each launch gets an access token in its address (on Windows

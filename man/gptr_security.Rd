@@ -75,9 +75,11 @@ Inline sub-agents run in your session and see its objects. The worker backend ru
 sub-agent in a separate R process that starts from gptr's reduced child environment (it does
 not read your \verb{~/.Renviron}), but that process runs under your user account with your file
 permissions: the worker backend is not an isolation boundary. Its permission requests are
-sent to your session and classified again there. On the \code{codex} route in \code{auto} and \code{yolo}
-mode, Codex's own shell changes and deletes files inside the project within Codex's sandbox,
-without passing gptr's gate. MCP servers, the \code{claude} and \code{codex} command-line tools, shell
+sent to your session and classified again there. On the \code{codex} route Codex's own shell runs
+commands in every mode without passing gptr's gate, rules or secret guard: in \code{plan}, \code{manual}
+and \code{edits} its sandbox is read-only, so it can still read any file your account can read, and
+in \code{auto} and \code{yolo} it also changes and deletes files inside the project within its sandbox.
+MCP servers, the \code{claude} and \code{codex} command-line tools, shell
 commands started with \code{peter$sh()} and Shiny artifacts are ordinary processes of your account
 as well; artifacts start without any registered secret and listen
 on the loopback interface, and each launch gets an access token in its address (on Windows
