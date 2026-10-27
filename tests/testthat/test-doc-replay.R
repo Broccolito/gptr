@@ -912,8 +912,7 @@ test_that("a rewind makes abandoned blocks inert and notes it in the console tra
                       list(session = s))
   expect_identical(readLines(f)[3], "#~ x = 1")
   expect_identical(utils::tail(readLines(t), 1),
-                   paste0("# /rewind: 1 items restored or removed, 1 not restored (session log ",
-                          root, ")"))
+                   "# /rewind: 1 item restored or removed, 1 not restored")
   ents = session_data(s)$entries
   expect_identical(ents[[length(ents)]]$data$action, "undone")
 })
@@ -1108,9 +1107,7 @@ test_that("a rewind and a redo of a console turn keep the transcript format of i
                                      block = "def456", action = "insert",
                                      backend = "transcript")))
   from = session_data(s)$leaf
-  note = function(to) {
-    paste0("# /rewind: 0 items restored or removed, 0 not restored (session log ", to, ")")
-  }
+  note = function(to) "# /rewind: 0 items restored or removed, 0 not restored"
   doc_on_session_tree(list(from = from, to = root, report = character()), list(session = s))
   tr = readLines(t)
   expect_identical(tr[3], "#~ s_ab12cd = peter(\"p\")")

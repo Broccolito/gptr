@@ -907,8 +907,10 @@ doc_on_session_tree = function(event, ctx) {
   mark(pick(setdiff(to, from)), FALSE)
   rep = as.character(event$report %||% character())
   bad = sum(grepl("not restored|conflict", rep))
-  note = paste0("# /rewind: ", length(rep) - bad, " items restored or removed, ", bad,
-                " not restored (session log ", event$to %||% "start", ")")
+  n = length(rep) - bad
+  # a console line (doc_re_entry), so it ends a direct R line's section
+  note = paste0("# /rewind: ", n, if (n == 1L) " item" else " items", " restored or removed, ",
+                bad, " not restored")
   tdocs = unique(vapply(Filter(function(e) identical(field(e, "backend"), "transcript"), recs),
                         field, "", name = "doc"))
   for (doc in tdocs[nzchar(tdocs)]) {

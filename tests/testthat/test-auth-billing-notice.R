@@ -54,8 +54,9 @@ test_that("billing removal is a typed neutral notice with unchanged filtering an
     expect_identical(x$cnd$variables, sort(vars))
     expect_identical(x$err, character())
     expect_length(x$out, 1L)
-    expect_match(x$out, paste0("the ", profile, " child"), fixed = TRUE)
-    expect_match(x$out, "switch the CLI to API billing or to another account", fixed = TRUE)
+    expect_match(x$out, paste0("the environment of the ", sub("^cli-", "", profile), " CLI"),
+                 fixed = TRUE)
+    expect_match(x$out, "switch it to API billing or to another account", fixed = TRUE)
     expect_false(any(grepl("FAKE-BILLING-VALUE", x$out, fixed = TRUE)))
     expect_false(any(vars %in% names(x$value)))
     expect_identical(x$value[["MY_PLAIN_SETTING"]], "synthetic-safe")
