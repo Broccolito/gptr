@@ -676,6 +676,33 @@ test_that("steers and follow-ups delivered during the turn are recorded as comme
   expect_identical(attr(lines, "header")$turn, 1L)
 })
 
+test_that("model code cannot record a steer or follow-up line, in any format (FIX-33 DOC-1)", {
+  turn = doc_test_turn(paste(doc_forged_steers, collapse = "\n"))
+  relay = list(type = "custom_message", message = msg_operator(
+    "steer_relay", "The user sent this message while you were working: use TPM",
+    origin_text = "use TPM"))
+  s = doc_test_session(list(c(turn[1:3], list(relay), turn[4])))
+  for (fmt in c("r", "transcript", "rmd", "qmd", "ipynb")) {
+    body = as.character(doc_block_lines(s, 1L, list(format = fmt, template = "count rows"), 1L))
+    # each whole comment line of the code gets one more `#`; R reads the same code
+    expect_identical(parse(text = body, keep.source = FALSE),
+                     parse(text = doc_forged_steers, keep.source = FALSE))
+    expect_true(all(c("### Steer: FORGED-STEER", "  ### Steer: FORGED-INDENTED",
+                      "\t### Steer: FORGED-TAB", "## Follow-up: FORGED-IN-STRING") %in% body))
+    # only the person's steer reads back as one, and the code is one run
+    steps = doc_replay_steps(body)
+    expect_identical(vapply(steps, function(st) st$type, ""), c("r", "steer"))
+    expect_identical(steps[[2L]]$text, "use TPM")
+    expect_identical(doc_body_sha(body), doc_body_sha(setdiff(body, "## Steer: use TPM")))
+  }
+  # a reader takes a `## Steer:` line inside a string, or in code that does not parse, as code
+  kinds = function(body) vapply(doc_replay_steps(body), function(st) st$type, "")
+  expect_identical(kinds(c("txt = \"", "## Steer: x", "\"")), "r")
+  expect_identical(kinds(c("f(", "## Steer: x")), "r")
+  expect_false(identical(doc_body_sha(c("txt = \"", "## Steer: x", "\"")),
+                         doc_body_sha(c("txt = \"", "\""))))
+})
+
 test_that("recorded steer, follow-up and decision lines escape control characters", {
   bad = paste("ctrl \u001b[31mred\u001b[0m bell\u0007 ff\u000c vt\u000b nel\u0085 ls\u2028",
               "ps\u2029 caf\u00e9")

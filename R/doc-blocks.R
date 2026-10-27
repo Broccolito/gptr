@@ -27,6 +27,38 @@ doc_re_console = "^(#~ )?s_[0-9a-f]{6} (=|[|]>) peter\\("
 #' @noRd
 doc_steer_line = function(kind, text) sub(" $", "", paste0("## ", kind, ": ", doc_one_line(text)))
 
+#' Which `lines` are whole comment lines by R's parse data (a COMMENT token with only blanks before
+#' it on its line); none when the lines do not parse. A line inside a string is not one.
+#' @noRd
+doc_comment_lines = function(lines) {
+  pd = tryCatch(utils::getParseData(doc_parse_text(lines)), error = function(e) NULL)
+  if (is.null(pd)) return(logical(length(lines)))
+  pd = pd[pd$token == "COMMENT", , drop = FALSE]
+  whole = as_utf8(pd$text) == sub("^[ \t]+", "", lines[pd$line1])
+  seq_along(lines) %in% pd$line1[whole]
+}
+
+#' The `## Steer:` and `## Follow-up:` lines of a block body (doc_steer_line()): whole comment
+#' lines matching doc_re_steer, as recorded code gets one more `#` on such a line
+#' (doc_comment_escape()), so model code cannot write one
+#' @noRd
+doc_steer_lines = function(body) {
+  hit = grepl(doc_re_steer, body)
+  if (any(hit)) hit = hit & doc_comment_lines(body)
+  hit
+}
+
+#' `lines` of code with one more `#` where each whole comment line matching a pattern of `re`
+#' starts (doc_comment_lines()), so R reads the same code and the line no longer reads as one that
+#' gptr writes
+#' @noRd
+doc_comment_escape = function(lines, re) {
+  hit = Reduce(`|`, lapply(re, function(p) grepl(p, lines, perl = TRUE)), logical(length(lines)))
+  if (any(hit)) hit = hit & doc_comment_lines(lines)
+  lines[hit] = sub("#", "##", lines[hit], fixed = TRUE)
+  lines
+}
+
 #' The `#< ` lines of the context blocks a prompt was sent with (IC-49): each line of each block's
 #' text, an empty one as `#<`
 #' @noRd
@@ -224,12 +256,13 @@ doc_dedent = function(lines, indent) {
   lines
 }
 
-#' First 8 hex of sha256 of the body as written, without steering lines (IC-49) and without the
-#' trailing blanks of a line, which an editor may trim, or its carriage return, which a read drops
+#' First 8 hex of sha256 of the body as written, without steering lines (IC-49, doc_steer_lines())
+#' and without the trailing blanks of a line, which an editor may trim, or its carriage return,
+#' which a read drops
 #' @noRd
 doc_body_sha = function(body) {
   body = as_utf8(as.character(body))
-  body = sub("[ \t\r]+$", "", body[!grepl(doc_re_steer, body)])
+  body = sub("[ \t\r]+$", "", body[!doc_steer_lines(body)])
   substr(hash_sha256(paste(body, collapse = "\n")), 1L, 8L)
 }
 
@@ -1372,7 +1405,8 @@ doc_turn_assistant = function(out, m, results, with_out, plan_mode) {
 }
 
 #' Serialize successful canonical or locally served R with the same code, secret and output
-#' rules. A local MCP trace does not create or alter the provider's assistant/tool messages.
+#' rules; a comment line shaped like a steer gets one more `#` (doc_comment_escape()). A local MCP
+#' trace does not create or alter the provider's assistant/tool messages.
 #' @noRd
 doc_turn_r = function(out, det, args, with_out, plan_mode) {
   if (!identical(det$status %||% "ok", "ok")) return(out)
@@ -1387,7 +1421,7 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
   kept = attr(chunk, "kept")
   chunk = as.character(chunk)
   safe = doc_history_code(chunk)
-  hist = safe$lines
+  hist = doc_comment_escape(safe$lines, doc_re_steer)
   if (safe$secrets) out$secrets = TRUE
   outs = det$outputs
   if (!length(chunk)) {

@@ -296,11 +296,12 @@ doc_replay_doc = function(site, call, block_id, text = NULL) {
 }
 
 #' A block body as ordered steps: each run of code with its `#>` output, list(type = "r", code,
-#' output), split at the `## Steer:` and `## Follow-up:` lines, list(type = "steer" or
-#' "follow_up", text), so a reconstruction puts each message where it was delivered (IC-46)
+#' output), split at the `## Steer:` and `## Follow-up:` lines (doc_steer_lines(): never a line
+#' of model code or inside a string), list(type = "steer" or "follow_up", text), so a
+#' reconstruction puts each message where it was delivered (IC-46)
 #' @noRd
 doc_replay_steps = function(body) {
-  note = grepl(doc_re_steer, body)
+  note = doc_steer_lines(body)
   steps = list()
   for (seg in split(seq_along(body), cumsum(note))) {
     lines = body[seg]

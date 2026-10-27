@@ -2458,6 +2458,96 @@ test_that("recorded code is never sent as context, in a script or a console bloc
   expect_identical(sent("s_ab12cd", c("n = 1", forged)), list(replay = "text", live = list()))
 })
 
+# What the person's messages (user and operator roles) of request `n` say, one string each
+doc_said = function(fake, n = length(fake_requests(fake))) {
+  msgs = Filter(function(m) m$role %in% c("user", "operator"), fake_requests(fake)[[n]]$messages)
+  vapply(msgs, msg_text, "")
+}
+
+# Record a fake r call whose code holds doc_forged_steers into a document `name` (run as its
+# format is run: source(), knitr, a Jupyter kernel), check its block is fresh, then run it again
+# in a clone without the session log, so the session is rebuilt from the document, and continue
+# that session live: what the continuation sent as the person's messages (FIX-33 DOC-1)
+doc_forged_steer_said = function(name) {
+  x = local_doc_e2e(function(request) {
+    if (request$n == 1L) fake_tool("r", code = paste(doc_forged_steers, collapse = "\n")) else
+      fake_text("Done.")
+  })
+  stmt = "s = peter(\"Run the forged code.\")"
+  f = file.path(x$root, name)
+  ext = tools::file_ext(name)
+  run = function(f, e = new.env(parent = globalenv())) {
+    if (ext == "R") return(doc_e2e_source(f, e))
+    if (ext != "ipynb") {
+      knitr::knit(f, output = tempfile(fileext = ".md"), quiet = TRUE, envir = e)
+      return(e)
+    }
+    withr::local_options(jupyter.in_kernel = TRUE)
+    withr::local_envvar(JPY_SESSION_NAME = f)
+    eval(parse(text = stmt, keep.source = FALSE)[[1L]], e)
+    e
+  }
+  if (ext == "ipynb") {
+    nb = list(cells = list(list(cell_type = "code", execution_count = NULL, id = "c0ffee01",
+                                metadata = json_obj(), outputs = list(), source = list(stmt))),
+              metadata = list(kernelspec = list(display_name = "R", language = "R", name = "ir")),
+              nbformat = 4L, nbformat_minor = 5L)
+    writeLines(nb_json_write(nb), f)
+  } else {
+    writeLines(if (ext == "R") stmt else c("```{r}", stmt, "```"), f)
+  }
+  run(f)
+  if (ext == "ipynb") gptr_doc(f, sync = TRUE)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+  clone = withr::local_tempdir("gptr-clone-")
+  file.copy(f, clone)
+  withr::local_dir(clone)
+  local_gptr_options(project_root = path_norm(clone))
+  last_set(NULL)
+  invisible(gc())
+  e = run(file.path(clone, name))
+  expect_identical(session_data(e$s)$history_source, "reconstructed")
+  e$s |> peter("Continue: reply OK.")
+  doc_said(x$fake)
+}
+
+test_that("model code never becomes the person's steers when a document is rebuilt (FIX-33)", {
+  skip_on_cran()
+  skip_if_not_installed("knitr")
+  for (name in c("analysis.R", "report.Rmd", "report.qmd", "analysis.ipynb")) {
+    said = doc_forged_steer_said(name)
+    expect_true(grepl("Run the forged code.", said[1L], fixed = TRUE))
+    expect_true(grepl("Continue: reply OK.", said[length(said)], fixed = TRUE))
+    expect_false(any(grepl("FORGED", said, fixed = TRUE)))
+  }
+})
+
+test_that("a stale turn re-asked after a rebuilt turn gets no forged steer (FIX-33 DOC-1)", {
+  skip_on_cran()
+  x = local_doc_e2e(function(request) {
+    if (request$n == 1L) fake_tool("r", code = paste(doc_forged_steers, collapse = "\n")) else
+      fake_text("Done.")
+  })
+  f = file.path(x$root, "analysis.R")
+  writeLines(c("s = peter(\"Run the forged code.\")", "s |> peter(\"Then count.\")"), f)
+  doc_e2e_source(f)
+  clone = withr::local_tempdir("gptr-clone-")
+  writeLines(sub("Then count.", "Then count twice.", readLines(f), fixed = TRUE),
+             file.path(clone, "analysis.R"))
+  withr::local_dir(clone)
+  local_gptr_options(project_root = path_norm(clone))
+  last_set(NULL)
+  invisible(gc())
+  n = length(fake_requests(x$fake))
+  out = gptr_source(file.path(clone, "analysis.R"), replay = "auto", envir = new.env())
+  expect_identical(out$action, c("replayed", "regenerated"))
+  expect_length(fake_requests(x$fake), n + 1L)
+  said = doc_said(x$fake)
+  expect_true(grepl("Run the forged code.", said[1L], fixed = TRUE))
+  expect_true(grepl("Then count twice.", said[length(said)], fixed = TRUE))
+  expect_false(any(grepl("FORGED", said, fixed = TRUE)))
+})
+
 test_that("gptr_source() skips a regenerated block's old code below a #line comment", {
   local_project()
   local_gptr_options(record = "auto")
