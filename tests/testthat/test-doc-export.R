@@ -125,6 +125,29 @@ test_that("a console transcript exports like a script, its later turns piping th
   expect_length(fake_requests(x$fake), 4L)
 })
 
+test_that("console statements naming model and mode export in both formats (D-265)", {
+  local_project()
+  calls = c("s_ab12cd = peter(\"one\", mode = \"plan\")",
+            "s_ab12cd |> peter(\"two\", model = \"fake2/fake2-1\")")
+  block = function(id, prompt, body, turn) {
+    doc_render_block(id, list(model = "fake/fake-1", prompt = prompt_hash(prompt),
+                              sha = doc_body_sha(body), session = "sab12cd3456", turn = turn),
+                     body)
+  }
+  f = file.path(getwd(), "history.R")
+  writeLines(c(calls[1L], block("abc123", "one", "x = 1", 1L),
+               calls[2L], block("def456", "two", "y = x + 1", 2L)), f, useBytes = TRUE)
+  raw = file.path(getwd(), "raw.R")
+  gptr_export(f, raw)
+  expect_true(all(c(paste0("# ", calls), "x = 1", "y = x + 1") %in% readLines(raw)))
+  r = new.env(parent = baseenv())
+  source(raw, local = r)
+  expect_identical(c(r$x, r$y), c(1, 2))
+  peter = file.path(getwd(), "peter.R")
+  gptr_export(f, peter, format = "peter")
+  expect_true(all(c(calls, "# x = 1", "# y = x + 1") %in% readLines(peter)))
+})
+
 test_that("Peter export keeps calls active and recorded code inert exactly once", {
   local_project()
   body = c("hits = hits + 1L", "value = c(", "  2, 4", ")", "## Decision: Keep the data.",
