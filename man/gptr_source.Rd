@@ -24,10 +24,11 @@ variable, then the \code{replay} setting, then \code{"auto"}.}
 
 \item{echo}{\code{TRUE} prints each expression before it is evaluated.}
 
-\item{model}{\code{NULL}, or a model reference, as \code{peter(model =)} takes it: every call the file
-asks again (each one under \code{replay = "live"}) uses it instead of the model it names or its
-session has, so a recorded analysis can be re-asked with your own model. A block that
-replays asks no model.}
+\item{model}{\code{NULL}, or a model name or reference string (\code{"sonnet"},
+\code{"anthropic/claude-sonnet-5-5"}, or one of a provider you registered), not a provider spec
+object: every call the file asks again (each one under \code{replay = "live"}) uses it instead of
+the model it names or its session has, so a recorded analysis can be re-asked with your own
+model. A block that replays asks no model.}
 }
 \value{
 Invisibly, the \code{gptr_blocks} listing of the file after the run with an extra column

@@ -61,9 +61,10 @@ works on the objects already in memory.
 * A console transcript records what each prompt was sent with (the head of each `@file` and the
   notes of earlier `!` lines, as `#< ` lines) and, after `/model` or `/mode`, the model and mode
   a turn ran with, so `gptr_source(replay = "live")` sends each turn again with what it was sent
-  with and asks it on that model and in that mode; code the model wrote is never sent again as
-  your context or your steer. A `!` line that uses an object of an undone turn is turned off
-  (`#~ `) and back on after `/redo`, so `source()` does not stop there, and `/retry` sends the
+  with and asks it on that model and in that mode (a turn that names none is asked with the
+  `model` and `mode` settings of the session that re-asks); code the model wrote is never sent
+  again as your context or your steer. A `!` line that uses an object of an undone turn is turned
+  off (`#~ `) and back on after `/redo`, so `source()` does not stop there, and `/retry` sends the
   undone turn's `!` notes again. `gptr_export()` turns such a transcript into an ordinary R
   script.
 * `gptr_init()` creates a `.gptr/` project workspace with the project instructions file
@@ -104,11 +105,12 @@ works on the objects already in memory.
   (Esc) and Positron (Ctrl-C) the pause menu steers.
 * A line typed or pasted before a question (an approval, a choice or a yes/no confirmation)
   never answers it. In a macOS terminal (CRAN's R) a block pasted at the `peter>` prompt is sent
-  as one message, pasted fences and `"""` blocks are read at once, and a block pasted at an
-  approval or a choice is kept in the console history, not read as the answer; a last pasted
-  line without a newline waits for Enter, so a two-line paste without a final newline answers
-  with its first line. Elsewhere a block pasted at a prompt or a question arrives one line at a
-  time.
+  as one message, pasted fences and `"""` blocks are read at once, a block pasted at an approval
+  or a choice is kept in the console history, not read as the answer, and one pasted at the
+  pause menu's steer or follow-up question is the whole message; a last pasted line without a
+  newline waits for Enter at the next prompt, so a two-line paste without a final newline answers
+  a question with its first line. Elsewhere a block pasted at a prompt or a question arrives one
+  line at a time, as typed lines do.
 * R in the Terminal tab of RStudio or Positron is treated as a terminal (completion, pause menu,
   interrupt key). Tab completes only after `@`, `!`, `!!`, `/` and `peter$`, never in plain
   text.

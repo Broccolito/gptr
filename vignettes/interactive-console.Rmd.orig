@@ -128,11 +128,13 @@ input limit; use an `@file` or a multiline prompt instead.
 
 In CRAN's R for macOS in a terminal a pasted block is one input: its lines join the first one
 and `... ` waits for Enter, where text you type is added. A pasted fence or `"""` block is read up
-to its closer at once, and a block pasted at an approval or a choice is kept in the console
-history and the question asked again. A last pasted line without a newline waits for Enter at
-the next prompt, so a two-line paste without a final newline answers with its first line.
-Homebrew or conda R, Linux terminals, RStudio, R.app, Positron and Windows deliver pasted lines
-one at a time, so wrap a multi-line paste in `"""` there. Lines typed, pasted or run from a
+to its closer at once, a block pasted at an approval or a choice is kept in the console history
+and the question asked again, and one pasted at the pause menu's `? Steer` or `? Follow-up` is
+the whole text. A last pasted line without a newline waits for Enter at the next prompt, so a
+two-line paste without a final newline answers a question with its first line. Homebrew or
+conda R, Linux terminals, RStudio, R.app, Positron and Windows deliver pasted lines one at a
+time, as typed lines (at a question the first one answers it), so wrap a multi-line paste in
+`"""` there. Lines typed, pasted or run from a
 script before a question appears (an approval, a choice) never answer it: while an answer runs
 they are queued for the agent as `type_ahead` says (a `/command` or `!code` line waits for the
 next prompt), otherwise they go to the console history. Answer after the prompt.
@@ -227,7 +229,8 @@ that pauses Peter, depend on the console:
 | Windows Rgui, Jupyter | the next input | none: the key stops the answer |
 
 In terminal R and an IDE's Terminal tab what you type is a draft on the bottom row, under the
-transcript, so it never mixes into the answer; a block pasted there is one message. The row also
+transcript, so it never mixes into the answer; a block pasted there is one message where the
+terminal supports bracketed paste. The row also
 shows what Peter is doing and how many messages are queued. Enter sends the draft as a steer,
 and it shows as your own line where the agent reads it. Tab sends it as a follow-up, which
 appears at the next `peter>` prompt. With `gptr_config(type_ahead = "follow_up", .scope =

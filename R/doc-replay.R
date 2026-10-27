@@ -1589,10 +1589,11 @@ doc_catalog_prune = function() {
 #'   variable, then the `replay` setting, then `"auto"`.
 #' @param envir Environment in which the expressions are evaluated.
 #' @param echo `TRUE` prints each expression before it is evaluated.
-#' @param model `NULL`, or a model reference, as `peter(model =)` takes it: every call the file
-#'   asks again (each one under `replay = "live"`) uses it instead of the model it names or its
-#'   session has, so a recorded analysis can be re-asked with your own model. A block that
-#'   replays asks no model.
+#' @param model `NULL`, or a model name or reference string (`"sonnet"`,
+#'   `"anthropic/claude-sonnet-5-5"`, or one of a provider you registered), not a provider spec
+#'   object: every call the file asks again (each one under `replay = "live"`) uses it instead of
+#'   the model it names or its session has, so a recorded analysis can be re-asked with your own
+#'   model. A block that replays asks no model.
 #' @return Invisibly, the `gptr_blocks` listing of the file after the run with an extra column
 #'   `action`: `replayed`, `regenerated`, `ran`, `skipped`, or `NA` for blocks no call touched.
 #'   A stale block whose call ran but could not be rewritten (for example without write consent)
