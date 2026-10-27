@@ -118,11 +118,14 @@ file with `gptr_doc()` makes that file the transcript (`format = "transcript"` o
 binding). A transcript holds what passes through gptr: each `peter()` call typed at the console
 and each prompt of the `peter()` console as `s_<id> = peter("prompt", <context names>)` with its
 block, the console's `!`, `!!` and fenced R lines under `# direct R (no model)`, and slash
-commands as comments. A run that was aborted or stopped early (an error, `max_turns`, a blocked
-call or the budget) is recorded too, with a last `## Run: <status>` line, and the next prompt
-continues its session. Other code typed at R's own `>` prompt is not recorded, so a transcript
-whose turns use objects made there fails on replay; create such inputs with `!code` in the
-`peter()` console.
+commands as comments. A statement also names `model = "..."` and `mode = "..."` when its turn
+ran on another model or in another mode than the statement would get without them (after
+`/model`, `/mode`, the plan menu, or in a console started as `peter(mode = plan)`), so
+`gptr_source(replay = "live")` asks each turn's model in its mode. A run that was aborted or
+stopped early (an error, `max_turns`, a blocked call or the budget) is recorded too, with a last
+`## Run: <status>` line, and the next prompt continues its session. Other code typed at R's own
+`>` prompt is not recorded, so a transcript whose turns use objects made there fails on replay;
+create such inputs with `!code` in the `peter()` console.
 
 A console turn's block opens with `#< ` comment lines: what the console sent with the prompt,
 the head of each `@file` and the notes of earlier `!` lines. `gptr_source(replay = "live")`

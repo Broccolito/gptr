@@ -643,7 +643,7 @@ has `type`, `id` (8 hex), `parentId` (id or `null` for the first entry), `timest
 | `gptr.frozen` | P07 | `{preset, t0, t1, toolsJson, toolNames, sections: [{name, tier, hash, tokens}], model, mode}`; first entry of every session, so resume reproduces the byte-exact prefix; `mode` is the session's mode at the freeze, the mode a rebuild starts from (D-251) |
 | `gptr.mode_change` | P06 | `{from, to, source}` |
 | `gptr.value` | P06 | `{turn, mode: "name"\|"copy"\|"box", name, address, class, bytes}` (never the value) |
-| `gptr.doc_block` | P15 | `{doc, format, block, action: "insert"\|"replace"\|"stale-regenerate"\|"undone", prompt, sha, lines: [from, to], backend: "file"\|"deferred"\|"rstudio"\|"positron"\|"vscode"\|"transcript"}` |
+| `gptr.doc_block` | P15 | `{doc, format, block, action: "insert"\|"replace"\|"stale-regenerate"\|"undone", prompt, sha, lines: [from, to], backend: "file"\|"deferred"\|"rstudio"\|"positron"\|"vscode"\|"transcript", model, mode}`; `model` and `mode`: a console turn's model reference (`provider/id[:thinking]`, `router:<name>`) and mode at the end of the turn, which the next statement of its session in that transcript is compared with (D-265); read with `[[` |
 | `gptr.replay` | P15 | `{doc, block, mode, turn, value}` (appended by `session_replay_apply()`/`session_replay_new()`, IC-46) |
 | `gptr.decision` | P13 | `{question, type, model, alias, n, summary, answers: [...] (at most 50), probs: [...], cached: int}` |
 | `gptr.checkpoint` | P16 | G7 §3.1 shape (object names, addresses, sizes, classes, capture mode; file paths, hashes, modes; state names; artifact `current` before/after); never values |
@@ -3940,7 +3940,7 @@ statement's first line. Ownership: the run of blocks starting at the first non-b
 | `.Rmd` | a separate chunk `` ```{r gptr-<id>} `` directly after the owning chunk (fence and prefix copied), body with the markers, no `#>` lines |
 | `.qmd` | a chunk `` ```{r} `` whose first line is `#| label: gptr-<id>`, same body |
 | `.ipynb` | a code cell `{"cell_type": "code", "execution_count": null, "id": "gptr-<id>", "metadata": {"gptr": {"id", "model", "prompt", "date", "session", "turn", "value"}}, "outputs": [], "source": [...]}` after the calling cell; keys sorted; indentation copied from the file (Jupyter: 1 space); numbers kept as read (gptr writes no float of its own, so Jupyter's Python repr is preserved; D-158); only `source` and `metadata.gptr` change on rewrite; never written while the notebook is open: in Jupyter the block is shown as the cell output and kept pending until `gptr_doc(path, sync = TRUE)` (IC-50) |
-| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: the replay note (`# source() this file to replay ...`) and `library(gptr)` (at the top of every transcript, whatever its first block, IC-49), then per session a header comment after a blank line (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, or `none kept (gptr_init() keeps session logs in .gptr/)` when the log is in `tempdir()/gptr`, which R deletes at exit), then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output, the header ending `created=<names>` when they created objects; a line that failed, or uses what an undone step made, as `#~ ` lines under `# direct R (no model; <status>)` or `# direct R (no model; uses undone <names>)` (IC-49); slash commands as comments (`# /model opus`) |
+| transcript | `.gptr/transcripts/gptr-session-<YYYYmmdd-HHMMSS>.R`: the replay note (`# source() this file to replay ...`) and `library(gptr)` (at the top of every transcript, whatever its first block, IC-49), then per session a header comment after a blank line (`# gptr session <id> -- started <time>`, `# machine log: <jsonl path>`, or `none kept (gptr_init() keeps session logs in .gptr/)` when the log is in `tempdir()/gptr`, which R deletes at exit), then the first prompt as `s_<6 hex> = peter("...")` and later prompts as `s_<6 hex> \|> peter("...")`, each ending, after the context names, with `model = "<model reference>"` and `mode = "<mode>"` string literals when the turn's differ from what the statement gets without them (D-265), each with its block (IC-49); direct R lines under `# direct R (no model)` with `#>` output, the header ending `created=<names>` when they created objects; a line that failed, or uses what an undone step made, as `#~ ` lines under `# direct R (no model; <status>)` or `# direct R (no model; uses undone <names>)` (IC-49); slash commands as comments (`# /model opus`) |
 
 **Undone blocks** (G7 §3.8): header `status=undone`, every body line prefixed `#~ `; Rmd/qmd chunks get
 `eval=FALSE` (`#| eval: false`); ipynb `metadata.gptr.status = "undone"` plus `#~ ` source lines. A top-level System 1
@@ -4623,7 +4623,13 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   `source()` and Rscript, and `$value` resolves `fit`.
 
 **IC-49 Console transcripts and steering in documents.** (req-8) The first REPL prompt of a session is recorded
-as `s_<6 hex of the session id> = peter("...")`, later REPL turns as `s_<hex> |> peter("...")`. Steers and
+as `s_<6 hex of the session id> = peter("...")`, later REPL turns as `s_<hex> |> peter("...")`. A
+statement ends with `model = "<model reference>"` and `mode = "<mode>"` (string literals, after the
+prompt and context names) when the turn's values at its end differ from what the statement gets
+without them: for an assignment, the `model` and `mode` settings, the model left out when the call
+started the session naming no model by name; for a pipe, the values its session's previous turn in
+that transcript recorded on its `gptr.doc_block` entry. `source()` and replay ignore them; a re-ask
+runs them (D-265). Steers and
 follow-ups delivered during a block's turn (pause menu, `gptr_steer()`, pipe into a running session, a line typed
 in a terminal console [IC-76]) are recorded
 inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`; a

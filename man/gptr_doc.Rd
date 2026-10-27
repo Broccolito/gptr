@@ -27,7 +27,14 @@ gptr writes agent blocks into it. Calls written in that document (run with \code
 \code{\link[=gptr_source]{gptr_source()}}, \code{Rscript}, knitr or Jupyter) get their blocks below them. Calls in no
 document (the console, \code{Rscript -e}, standard input) are appended to it, except to a notebook,
 as \verb{s_<id> = peter("prompt", <context names>)} (later turns of that session as
-\verb{s_<id> |> peter(...)}): your variable name and the other arguments are not recorded. A call in
+\verb{s_<id> |> peter(...)}). The statement ends with \code{model = "<provider/model>"} or
+\code{mode = "<mode>"} when its turn ran with a model or mode the statement would not get without
+them, as after \verb{/model}, \verb{/mode}, the plan menu or in a console started as \code{peter(mode = plan)}:
+for \code{=}, one other than the \code{model} and \code{mode} settings (the model is left out when the call
+started the session without naming one); for \verb{|>}, one other than the session's previous turn
+in the transcript. A model is written as its full reference (\code{model = opus} is recorded as
+\code{"anthropic/..."}). A model given as a provider object is not recorded on a session's first
+statement. Your variable name and the other arguments are not recorded. A call in
 another document is recorded only into that document, with its own consent; a run that cannot
 ask for it records nothing and says so once per document.
 Nothing is written until a block is recorded. \code{gptr_doc(FALSE)} removes the binding and

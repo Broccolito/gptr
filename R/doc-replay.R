@@ -1085,7 +1085,14 @@ doc_console_held = function(s) {
 #' [gptr_source()], `Rscript`, knitr or Jupyter) get their blocks below them. Calls in no
 #' document (the console, `Rscript -e`, standard input) are appended to it, except to a notebook,
 #' as `s_<id> = peter("prompt", <context names>)` (later turns of that session as
-#' `s_<id> |> peter(...)`): your variable name and the other arguments are not recorded. A call in
+#' `s_<id> |> peter(...)`). The statement ends with `model = "<provider/model>"` or
+#' `mode = "<mode>"` when its turn ran with a model or mode the statement would not get without
+#' them, as after `/model`, `/mode`, the plan menu or in a console started as `peter(mode = plan)`:
+#' for `=`, one other than the `model` and `mode` settings (the model is left out when the call
+#' started the session without naming one); for `|>`, one other than the session's previous turn
+#' in the transcript. A model is written as its full reference (`model = opus` is recorded as
+#' `"anthropic/..."`). A model given as a provider object is not recorded on a session's first
+#' statement. Your variable name and the other arguments are not recorded. A call in
 #' another document is recorded only into that document, with its own consent; a run that cannot
 #' ask for it records nothing and says so once per document.
 #' Nothing is written until a block is recorded. `gptr_doc(FALSE)` removes the binding and
@@ -1508,8 +1515,10 @@ doc_catalog_prune = function() {
 #' `replay = "record"` regenerates it), asks the model again and rewrites its block in place, and
 #' the old block is skipped, which base `source()` cannot do. A console turn is asked again with
 #' what the console sent with it, from its block's `#< ` lines (the `@file` heads and `!` notes;
-#' see [gptr_doc()]): the request is the same even when the file changed or is gone. Direct R
-#' lines a transcript turned off are comments and do not run.
+#' see [gptr_doc()]): the request is the same even when the file changed or is gone. It is asked
+#' with the model and in the mode its statement names, else those its session has from the turns
+#' before, so each console turn is asked as it ran; a turn recorded in `auto` or `yolo` is asked
+#' again in that mode. Direct R lines a transcript turned off are comments and do not run.
 #'
 #' Replay executes the recorded R code, including its ordinary side effects. It does not
 #' freeze package versions, supply external inputs or validate the analysis. This function
