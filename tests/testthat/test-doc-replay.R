@@ -1316,6 +1316,52 @@ test_that("console /undo, /redo and /retry keep the transcript sourceable (IC-49
   expect_length(fake_requests(x$fake), 6L)
 })
 
+test_that("console /undo, /undo, /redo, /redo bring back both turns' blocks (FIX-31)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "a = 1"), fake_text("Made a."),
+                         fake_tool("r", code = "b = a + 1"), fake_text("Made b."),
+                         fake_tool("r", code = "b = a + 2"), fake_text("Made b again.")))
+  testthat::local_mocked_bindings(doc_command_args = function() "R")
+  local_no_fd0()
+  t = file.path(x$root, ".gptr", "transcripts", "t.R")
+  dir.create(dirname(t), recursive = TRUE)
+  local_doc_binding(t, "transcript")
+  e = new.env(parent = globalenv())
+  rs = repl_state(NULL, e)
+  run = function(lines) {
+    for (line in lines) invisible(utils::capture.output(repl_dispatch(rs, line)))
+  }
+  status = function() {
+    vapply(doc_find_blocks(readLines(t))$header, function(h) h$status %||% "live", "")
+  }
+  # base source() replays the recorded turns: what it makes
+  sourced = function() {
+    r = new.env(parent = globalenv())
+    r$library = function(...) invisible(NULL)
+    source(t, local = r)
+    mget(c("a", "b"), envir = r)
+  }
+  run(c("make a", "make b"))
+  var = paste0("s_", substr(sub("^s", "", rs$session$id), 1L, 6L))
+  stmts = paste0(var, c(" = peter(\"make a\")", " |> peter(\"make b\")"))
+  run(c("/undo", "/undo"))
+  expect_identical(status(), c("undone", "undone"))
+  expect_true(all(paste0("#~ ", stmts) %in% readLines(t)))
+  run(c("/redo", "/redo"))
+  expect_identical(status(), c("live", "live"))
+  expect_true(all(stmts %in% readLines(t)))
+  expect_identical(mget(c("a", "b"), envir = e), list(a = 1, b = 2))
+  expect_identical(sourced(), list(a = 1, b = 2))
+  # /retry and rewinds still behave: the retried turn follows its undone block
+  run("/retry")
+  expect_identical(status(), c("live", "undone", "live"))
+  expect_identical(sourced(), list(a = 1, b = 3))
+  run(c("/undo", "/undo", "/redo", "/redo"))
+  expect_identical(status(), c("live", "undone", "live"))
+  expect_identical(sourced(), list(a = 1, b = 3))
+  expect_length(fake_requests(x$fake), 6L)
+})
+
 test_that("a console call asks nothing when it cannot be recorded (record off, replay mode)", {
   local_project()
   testthat::local_mocked_bindings(doc_command_args = function() "R")

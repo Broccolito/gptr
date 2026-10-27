@@ -829,7 +829,10 @@ doc_ancestors = function(ents, id) {
 #' and switch their direct R lines off or back on (doc_transcript_rescan()).
 #' Only records that wrote a live block choose blocks: the hook's own `undone` entries sit under
 #' the rewind target (P16 appends there), so a later branch from that target holds them, and
-#' entering that branch must not revive the block its turn never wrote.
+#' entering that branch must not revive the block its turn never wrote. A block that such a record
+#' on the target's path still holds stays live: the hook's own `replace` entries of a redo sit
+#' under its target too, so the next /redo, which leaves that branch for one that holds the
+#' block's own record, must not make it inert.
 #' The `gptr.doc_block` entries it appends keep the format the block was recorded with; their
 #' backend is `transcript` for a console transcript block, `deferred` or `pending` for the script
 #' this process runs under Rscript or the notebook open in its Jupyter kernel (doc_set_inert()
@@ -875,7 +878,9 @@ doc_on_session_tree = function(event, ctx) {
       }
     }
   }
-  mark(pick(setdiff(from, to)), TRUE)
+  key = function(es) vapply(es, function(e) paste0(field(e, "doc"), "\n", field(e, "block")), "")
+  gone = pick(setdiff(from, to))
+  mark(gone[!key(gone) %in% key(pick(to))], TRUE)
   mark(pick(setdiff(to, from)), FALSE)
   rep = as.character(event$report %||% character())
   bad = sum(grepl("not restored|conflict", rep))
