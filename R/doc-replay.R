@@ -983,10 +983,12 @@ doc_created = function(value) {
 
 #' A console transcript's direct R lines switched off or back on (IC-49, D-264): read top to
 #' bottom, each block and direct R line makes the names of its `created=` key, on or off (an
-#' undone block; a line that failed or is switched off); a direct R line that uses a name (by
-#' all.names()) whose last maker is off, other than one it created itself, is switched off, every
-#' line under its header prefixed `#~ `, and comes back on when no such name is left. Returns
-#' list(lines, changed), `changed` holding list(line, on, names) per header switched.
+#' undone block; a line that failed or is switched off), and a direct R line also the names its
+#' top-level `name = value` expressions assign; a direct R line that uses a name (by all.names(),
+#' of such an expression its value only) whose last maker is off, other than one it made before
+#' in the line, is switched off, every line under its header prefixed `#~ `, and comes back on when
+#' no such name is left. Returns list(lines, changed), `changed` holding list(line, on, names) per
+#' header switched.
 #' @noRd
 doc_direct_switch = function(lines) {
   blocks = doc_find_blocks(lines)
@@ -1016,9 +1018,18 @@ doc_direct_switch = function(lines) {
     while (end > i && !nzchar(trimws(lines[end]))) end = end - 1L
     seg = seq_len(end - i) + i
     raw = if (off) sub("^#~ ", "", lines[seg]) else lines[seg]
-    uses = tryCatch(all.names(doc_parse_text(raw[!startsWith(raw, "#>")], keep_source = FALSE)),
-                    error = function(e) character())
-    bad = intersect(setdiff(as_utf8(uses), created), names(made)[!made])
+    exprs = tryCatch(doc_parse_text(raw[!startsWith(raw, "#>")], keep_source = FALSE),
+                     error = function(e) NULL)
+    # a top-level `name = value` makes `name` and reads only its value
+    mine = created
+    uses = character()
+    for (ex in as.list(exprs)) {
+      set = is.call(ex) && length(ex) == 3L && is.symbol(ex[[2L]]) &&
+        (identical(ex[[1L]], as.name("=")) || identical(ex[[1L]], as.name("<-")))
+      uses = c(uses, setdiff(as_utf8(all.names(if (set) ex[[3L]] else ex)), mine))
+      if (set) mine = c(mine, as_utf8(as.character(ex[[2L]])))
+    }
+    bad = intersect(uses, names(made)[!made])
     on = !length(bad)
     new = c(doc_direct_header(if (!on) paste("uses undone", paste(bad, collapse = ", ")),
                               created),
@@ -1027,7 +1038,7 @@ doc_direct_switch = function(lines) {
       lines[c(i, seg)] = new
       changed[[length(changed) + 1L]] = list(line = i, on = on, names = bad)
     }
-    made[created] = on
+    made[mine] = on
   }
   list(lines = lines, changed = changed)
 }

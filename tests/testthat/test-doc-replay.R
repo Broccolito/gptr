@@ -1256,6 +1256,24 @@ test_that("a direct R line using a name an undone step or an off line made is sw
                      "#~ # /home/me/data is the input", "#~ z = z + fit", "# /model opus"))
 })
 
+test_that("a direct R line that assigns a name again makes it and does not use it (FIX-33)", {
+  failed = c("library(gptr)", "", "# direct R (no model; error) created=df",
+             "#~ df = read.csv(\"data.csv\"); df$x = log(df$y)")
+  line = function(code, created = NULL) {
+    c("", doc_direct_header(NULL, created), code)
+  }
+  # the corrected line makes df again, so it and the lines that use df stay on
+  ok = c(failed, line("df = read.csv(\"data.csv\"); df$x = log(df$y)"), line("n = nrow(df)", "n"),
+         line("df = 1; m = df + 1", "m"), line("if (TRUE) k = 3", "k"))
+  expect_identical(doc_direct_switch(ok)$lines, ok)
+  # a change in place, a value read from df, or an assignment that is not the whole line use it
+  for (code in c("df$x = 1", "df = f(df)", "m = df + 1", "q = df; df = 3", "if (TRUE) df = 3")) {
+    off = doc_direct_switch(c(failed, line(code)))
+    expect_identical(utils::tail(off$lines, 2L),
+                     c("# direct R (no model; uses undone df)", paste0("#~ ", code)))
+  }
+})
+
 test_that("a comment in a direct R line shaped like another entry stays in its section (FIX-31)", {
   proj = local_project()
   local_gptr_options(record = "auto")
@@ -1557,6 +1575,25 @@ test_that("a marker-shaped line in model or ! code never stops the recording (FI
   expect_false(attr(doc_find_blocks(tr), "malformed"))
   expect_identical(gptr_blocks(con$t)$status, rep("fresh", 4L))
   expect_identical(doc_source_lines(tr)$v9, 2)
+})
+
+test_that("an undo keeps a ! line that assigned what the turn made, and its users (FIX-33)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "fit = 1"), fake_text("Made fit.")))
+  local_gptr_options(quiet = FALSE)
+  con = doc_console_repl(x)
+  con$run("!df = data.frame(y = 1:3); df$x = lg(df$y)")
+  con$run("!df = data.frame(y = 1:3); df$x = log(df$y)")
+  con$run("!n = nrow(df)")
+  con$run("make fit")
+  con$run("!fit = 99")
+  con$run("!g = fit + 1")
+  con$run("/undo")
+  tr = readLines(con$t)
+  expect_false(any(grepl("uses undone", tr, fixed = TRUE)))
+  e = doc_source_lines(tr)
+  expect_identical(c(e$n, e$fit, e$g), c(3L, 99, 100))
+  expect_identical(c(con$rs$envir$fit, con$rs$envir$g), c(99, 100))
 })
 
 test_that("console /undo, /undo, /redo, /redo bring back both turns' blocks (FIX-31)", {
