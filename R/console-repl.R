@@ -408,8 +408,9 @@ repl_read_logical = function(rd, prompt) {
 # guard), shown as it runs; `!code` also leaves a note that the `user_ran` block adds to the next
 # prompt within 300 tokens (IC-73). `@file` mentions add the file's head to the `user_files`
 # block; `@object` mentions attach the object by name (P09's `attached` block describes it).
-# Both blocks answer only the gateway call that console_send() built: the call record's
-# `sys_call` is that call.
+# Both blocks answer the gateway call that console_send() built (the call record's `sys_call` is
+# that call), and a call that asks again for a recorded console turn, which sends what that turn
+# was sent with (`call$sent`, its block's `#< ` lines, IC-49).
 # ---------------------------------------------------------------------------------------------
 
 #' Escape an attribute value of a context tag
@@ -558,22 +559,26 @@ repl_sending = function(ctx) {
   rs
 }
 
-#' provide() of the `user_ran` context block: the pending `!expr` notes (taken once)
+#' provide() of the `user_ran` context block: the pending `!expr` notes (taken once), or for a
+#' call that asks again for a recorded turn the notes that turn was sent with
 #' @noRd
 console_notes_provide = function(ctx, budget) {
   rs = repl_sending(ctx)
-  if (is.null(rs) || !length(rs$notes)) return(NULL)
+  if (is.null(rs)) return(ctx$input$call$sent[["user_ran"]])
+  if (!length(rs$notes)) return(NULL)
   text = console_notes_text(rs$notes, budget)
   rs$notes = character()
   text
 }
 
 #' provide() of the `user_files` context block: the <file> blocks of the prompt's @files, which
-#' repl_mentions() fit to the block's budget (taken once)
+#' repl_mentions() fit to the block's budget (taken once), or for a call that asks again for a
+#' recorded turn the blocks that turn was sent with
 #' @noRd
 console_files_provide = function(ctx, budget) {
   rs = repl_sending(ctx)
-  if (is.null(rs) || !length(rs$files)) return(NULL)
+  if (is.null(rs)) return(ctx$input$call$sent[["user_files"]])
+  if (!length(rs$files)) return(NULL)
   text = paste(rs$files, collapse = "\n")
   rs$files = character()
   text
@@ -596,7 +601,8 @@ console_blocks = function() {
 #' shown on stderr, red, in the console margin at column 4 with what the code printed (eval_echo());
 #' there a block that showed anything ends with a blank row, as a command's output does. `!code`
 #' leaves a note for the next prompt. The `console:direct` channel tells transcript writers (P15)
-#' what ran. A gptr_wait() in the code waits through console_wait() (`.gptr_console_wait`).
+#' what ran and the objects it created (the evaluator's diff, also of a line that failed). A
+#' gptr_wait() in the code waits through console_wait() (`.gptr_console_wait`).
 #' @noRd
 repl_passthrough = function(rs, text) {
   noted = !startsWith(text, "!!")
@@ -633,7 +639,7 @@ repl_passthrough = function(rs, text) {
   }
   if (noted) rs$notes = utils::tail(c(rs$notes, repl_note(code, res)), 20L)
   data = list(code = code, output = as.character(unlist(res$outputs)), status = res$status,
-              noted = noted)
+              noted = noted, created = as.character(res$changes$objects$added))
   ev_dispatch("console:direct", list(data = data), session = rs$session)
   invisible(res$status)
 }

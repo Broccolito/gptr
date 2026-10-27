@@ -439,13 +439,27 @@ doc_r_upsert = function(text, site, lines, block_id) {
 
 #' The transcript statement of a console turn (IC-49): `s_<6 hex> = peter(...)` while this text
 #' holds no live assignment of the session (an undone one is `#~ ` inert), `s_<6 hex> |>
-#' peter(...)` afterwards
+#' peter(...)` afterwards; after the prompt and context names, `model = "<ref>"` and
+#' `mode = "<mode>"` where the turn's (`ran_with`) differ from what the statement gets without
+#' them (D-265): for an assignment the `model` and `mode` settings, the model kept when
+#' `default_model`; for a pipe `ran_before`, else the settings
 #' @noRd
 doc_console_statement = function(text, site) {
   var = paste0("s_", substr(sub("^s", "", site[["session_id"]] %||% "s000000"), 1L, 6L))
-  args = paste(c(doc_str_literal(site[["template"]] %||% ""), site[["context_labels"]]),
-               collapse = ", ")
   first = !any(startsWith(text, paste0(var, " = peter(")))
+  named = site[["ran_with"]]
+  if (length(named)) {
+    was = site[["ran_before"]]
+    if (first || is.null(was)) {
+      was = c(model = if (isTRUE(site[["default_model"]])) named[["model"]] else
+                setting_get("model") %||% "",
+              mode = setting_get("mode", default = "manual"))
+    }
+    named = named[named != was]
+  }
+  args = paste(c(doc_str_literal(site[["template"]] %||% ""), site[["context_labels"]],
+                 if (length(named)) paste0(names(named), " = ", doc_str_literal(named))),
+               collapse = ", ")
   if (first) paste0(var, " = peter(", args, ")") else paste0(var, " |> peter(", args, ")")
 }
 

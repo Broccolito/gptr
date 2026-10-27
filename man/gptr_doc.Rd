@@ -27,7 +27,14 @@ gptr writes agent blocks into it. Calls written in that document (run with \code
 \code{\link[=gptr_source]{gptr_source()}}, \code{Rscript}, knitr or Jupyter) get their blocks below them. Calls in no
 document (the console, \code{Rscript -e}, standard input) are appended to it, except to a notebook,
 as \verb{s_<id> = peter("prompt", <context names>)} (later turns of that session as
-\verb{s_<id> |> peter(...)}): your variable name and the other arguments are not recorded. A call in
+\verb{s_<id> |> peter(...)}). The statement ends with \code{model = "<provider/model>"} or
+\code{mode = "<mode>"} when its turn ran with a model or mode the statement would not get without
+them, as after \verb{/model}, \verb{/mode}, the plan menu or in a console started as \code{peter(mode = plan)}:
+for \code{=}, one other than the \code{model} and \code{mode} settings (the model is left out when the call
+started the session without naming one); for \verb{|>}, one other than the session's previous turn
+in the transcript. A model is written as its full reference (\code{model = opus} is recorded as
+\code{"anthropic/..."}). A model given as a provider object is not recorded on a session's first
+statement. Your variable name and the other arguments are not recorded. A call in
 another document is recorded only into that document, with its own consent; a run that cannot
 ask for it records nothing and says so once per document.
 Nothing is written until a block is recorded. \code{gptr_doc(FALSE)} removes the binding and
@@ -43,6 +50,19 @@ or functions do not. Binding supplies recording consent even when automatic reco
 off, but \code{.opts = list(record = FALSE)} suppresses recording for that call. Binding does
 not reconstruct earlier unrecorded turns. A narrative summary or model-generated script
 draft needs review and execution checks before it can serve as a reproducible workflow.
+
+In a console transcript a turn's block opens with \verb{#< } comment lines holding what the
+console sent with the prompt: the head of each \verb{@file} (at most 40 lines, redacted) and the
+notes of earlier \code{!} lines. Its header names the objects the turn created (\verb{created=}), as the
+header of each direct R line does (\verb{# direct R (no model) created=p}). After each \verb{/undo},
+\verb{/redo}, \verb{/retry} and \code{!} line the transcript is read again from the top: a direct R line that
+uses an object last created above it by an undone turn or by a line that is off is turned off
+(\verb{#~ } before each line, \verb{# direct R (no model; uses undone fit)}) and back on when that turn
+returns, so \code{source()} does not stop there. The console names the lines it turned off. The
+objects themselves stay in your session, as an undo removes only what the turn created, so a
+later turn that uses one still stops \code{source()}: turn blocks are never turned off. Names are
+found with \code{\link[=all.names]{all.names()}}: a column or formula term with the same name can turn a line off, and
+a name reached through a string, as in \code{get("fit")}, is not seen.
 }
 \section{Options}{
 

@@ -1710,9 +1710,10 @@ Calls nested in loops and functions have no block: they run live on re-source, o
 **Console transcripts.** An interactive session without a bound document asks once per project where to record
 (the IDE's active document, a new `.gptr/transcripts/gptr-session-<ts>.R`, or nowhere), remembered in the
 user-level project file and validated (inside the project, an R/Rmd/qmd/ipynb file, not a control path) [IC-52].
-The first prompt is recorded as `s_<hex> = peter("...")` and later prompts as `s_<hex> |> peter("...")`, so the
-transcript re-sources as one steered session (S-8) [IC-49]. Direct R lines (`!expr`) are recorded as
-`# direct R (no model)` with `#>` output.
+The first prompt is recorded as `s_<hex> = peter("...")` and later prompts as `s_<hex> |> peter("...")`; a
+statement also names `model = "<ref>"` and `mode = "<mode>"` when its turn ran with values the
+statement would not otherwise get (D-265), so the transcript re-sources as one steered session
+(S-8) [IC-49]. Direct R lines (`!expr`) are recorded as `# direct R (no model)` with `#>` output.
 
 **Caches.** S1: per element, key `sha256(canonical_json(salt, endpoint, model, question, type, criteria,
 input))` with a committed per-project salt, storing the salted input hash, the question's hash and the answer,

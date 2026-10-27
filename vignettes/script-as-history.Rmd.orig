@@ -118,11 +118,28 @@ file with `gptr_doc()` makes that file the transcript (`format = "transcript"` o
 binding). A transcript holds what passes through gptr: each `peter()` call typed at the console
 and each prompt of the `peter()` console as `s_<id> = peter("prompt", <context names>)` with its
 block, the console's `!`, `!!` and fenced R lines under `# direct R (no model)`, and slash
-commands as comments. A run that was aborted or stopped early (an error, `max_turns`, a blocked
-call or the budget) is recorded too, with a last `## Run: <status>` line, and the next prompt
-continues its session. Other code typed at R's own `>` prompt is not recorded, so a transcript
-whose turns use objects made there fails on replay; create such inputs with `!code` in the
-`peter()` console.
+commands as comments. A statement also names `model = "..."` and `mode = "..."` when its turn
+ran on another model or in another mode than the statement would get without them (after
+`/model`, `/mode`, the plan menu, or in a console started as `peter(mode = plan)`), so
+`gptr_source(replay = "live")` asks each turn's model in its mode. A run that was aborted or
+stopped early (an error, `max_turns`, a blocked call or the budget) is recorded too, with a last
+`## Run: <status>` line, and the next prompt continues its session. Other code typed at R's own
+`>` prompt is not recorded, so a transcript whose turns use objects made there fails on replay;
+create such inputs with `!code` in the `peter()` console.
+
+A console turn's block opens with `#< ` comment lines: what the console sent with the prompt,
+the head of each `@file` and the notes of earlier `!` lines. `gptr_source(replay = "live")`
+sends them again instead of reading the file, so a re-asked turn is the same request even after
+the file changed or was removed. Each block header and each direct R header names what that step
+created (`created=`). After each `/undo`, `/redo`, `/retry` and new `!` line, gptr reads the
+transcript from the top and turns off a direct R line that uses an object last created above it
+by an undone turn or by a line that is off: each of its lines gets `#~ ` under
+`# direct R (no model; uses undone fit)`, and the console says which lines it turned off. A
+`/redo` turns them back on. `source()` then does not stop at such a line. The objects stay in
+the session, as an undo removes only what the turn created, so a later turn that uses one still
+stops `source()`: turn blocks are never turned off. Names are read with `all.names()`: a column
+or formula term named like such an object can turn a line off, and a name reached through a
+string, as in `get("fit")`, is not seen.
 
 Recording also needs the agent's code to run. In the default `manual` mode, code that changes
 objects, such as storing `top` above, waits for approval. Nobody can approve under `Rscript`,

@@ -7904,3 +7904,123 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (review)"; `local_pty_r()` gains `raw` and `paste()`, a terminal that brackets pastes while the
   child's last toggle turned the mode on.
   Evidence: progress/fixes.md FIX-28.
+
+## D-264 - FIX-29 Transcripts record what a prompt was sent with and what steps created (2026-10-26)
+- Rule (`#<` lines, issue #85 R27): a console turn's block opens with the `user_ran` and
+  `user_files` context blocks its prompt was sent with, tags included, one `#< ` comment line per
+  line (an empty one `#<`): the `!code` notes and each `@file` as attached (at most 40 lines,
+  redacted with the `context` profile, or the one line of a binary, truncated or omitted file).
+  `prompt=` still hashes only the typed text, and `source()` reads the lines as comments. A call
+  that asks again for a recorded block (`replay = "live"`, a stale or undone block) gets those
+  blocks in `call$sent` from the `document` route, and the console's providers send them again as
+  the same context blocks without reading the file. Formerly `gptr_source(replay = "live")` sent
+  only the literal `@notes.md` text, so the re-ask was another request. A history reconstructed
+  from the document puts them before the turn's prompt; a raw `gptr_export()` leaves them out and
+  the Peter format keeps them. The format changes in place: no version key and no reader for
+  earlier transcripts (gptr 1.0 is unreleased).
+- Rule (`created=` and switched-off lines, R29): a block header names the objects its r calls
+  created (`created=`, the `created` rows of its objects fragments: what an undo removes), and a
+  direct R header those the evaluator's diff reports added, also for a line that failed. After
+  each rewind (`/undo`, `/redo`, `/retry`) and each line the console appends, the transcript is
+  read top to bottom: each block and direct R line makes its `created=` names, on or off (an
+  undone block; a line that failed or is off). A direct R line that uses (by `all.names()`) a
+  name whose last maker above it is off, other than a name it created itself, gets `#~ ` before
+  each line under `# direct R (no model; uses undone <names>)`, and goes back on when no such
+  name is left; a notice names the lines switched. The last maker decides, not "made only by an
+  undone step": a name an earlier live step made and a later off step made again was removed in
+  between, so `source()` would not have it. Formerly such a line ran under `source()` and stopped
+  it, as the undone turn's objects never existed there. A rewind still removes only what the turn
+  created, so the person's own objects stay.
+- Checks of the design: (a) the provider cannot rely on `call$doc` during a re-ask, which the
+  route leaves `NULL` when the answer may not be recorded (no consent, an undone block under
+  `"live"`); the route therefore keeps the parsed `#<` lines in a new call record binding,
+  `sent`, whatever the recording decision. (b) `doc_replay_steps()` still skips `#` lines; the
+  reconstruction takes the `#<` lines through `doc$sent` instead. (c) raw export drops `#<` lines,
+  Peter export keeps them. (d) the evaluator reports `added` names for a line that stopped at an
+  error (a parse error ran nothing and adds none).
+- Known limits: turn blocks are never switched, so a later turn that uses an object made by a
+  line that is off still stops `source()` (the rewind kept the object, so the turn ran in the
+  session); `all.names()` can match a column or formula term of the same name, which turns a line
+  off that did not need it; a name reached through a string, as in `get("fit")`, is not seen; a
+  direct R line's section runs to the next line the console writes for another entry (a direct R
+  header, a `# /<name>` command line, a session header, a turn's statement or block), so lines
+  written by hand right after it switch with it, and a comment in its code shaped like a command
+  line, such as `# /tmp is scratch`, ends it there and leaves the lines below on; a name holding a
+  comma is split by `created=`; a non-ASCII name is matched only in a UTF-8 locale. The `#<` lines
+  are what was sent, so neither `gptr.doc_output_lines` nor the `doc` setting limits them.
+- Contract-visible: 04 section 15.3 IC-49, section 11.5 (header key `created`, the body's `#<`
+  lines, the transcript row) and section 7.8 (call record binding `sent`); `?gptr_doc`,
+  `?gptr_source`, `?gptr_export`, `?gptr_security`; vignette("script-as-history").
+- Tests: test-doc-blocks.R "a block records what its prompt was sent with as #< lines and what it
+  created"; test-console-repl.R "a live re-ask sends the @file head and !code note the console
+  sent (IC-49)"; test-doc-replay.R "a reconstruction sends what the prompt was sent with, from its
+  #< lines (IC-49)", "a direct R line records what it created, also when it failed (IC-49)", "a
+  direct R line using a name an undone step or an off line made is switched off", "a rewind
+  switches dependent direct R lines off, says which, and a redo back on", "console /undo, /redo
+  and /retry keep the transcript sourceable (IC-49, D-264)", "a re-asked block sends its #< lines
+  again, also when it cannot be recorded"; test-doc-export.R "a raw export leaves out what a
+  prompt was sent with; the Peter format keeps it". Evidence: progress/fixes.md FIX-29.
+
+## D-265 - FIX-30 A console statement names the model and mode its re-ask needs (2026-10-26)
+- Rule: a console transcript statement `s_<hex> = peter(...)` or `s_<hex> |> peter(...)` ends,
+  after the prompt and the context names, with `model = "<model reference>"` and/or
+  `mode = "<mode>"`, string literals, when its turn ran with a model or mode the statement would
+  not get without them. A turn's values are its session's at the end of the turn: the model
+  reference `provider/id[:thinking]` (a router as `router:<name>`, with no level) and the mode.
+  An assignment (`=`), which a re-ask runs as a new session, is compared with the `model` and
+  `mode` settings as written; its model is left out when the call started the session without
+  naming a model by name (on the default, or on a provider or router object). A pipe (`|>`) is
+  compared with the values its session's previous turn in the same transcript recorded on its
+  `gptr.doc_block` entry (new keys `model` and `mode`), else with the settings. So `/model`,
+  `/mode`, the plan menu's choice and a console started as `peter(mode = plan)` appear on the
+  statement where they took effect, a switch followed by a switch back names nothing, plain turns
+  are written byte for byte as before, and the `# /model x` comment lines stay. Formerly every
+  re-ask used the configured model and mode for a session's first turn and the session's own
+  afterwards, so a `/model` switch or a console started as `peter(mode = plan)` was lost. The
+  format changes in place: no version key and no reader for earlier transcripts (gptr 1.0 is
+  unreleased). This closes FIX-21's open item "a console transcript does not record the console's
+  starting mode".
+- Why not the alternatives: (a) honouring the block header's `model=` and a header `mode=`:
+  `model=` is provenance, not the route (IC-74), a mode honoured from a header comment is hidden
+  permission state, and `gptr_export(format = "peter")` drops headers. (b) a fold over the
+  session path: chat sessions write no initial `model_change` (only `session_set_model()`,
+  `run_route()` and `session_record_initial_model()`, which only team sessions call, write one),
+  router choices append `model_change` entries with reason "router", and the model of
+  `gptr.frozen` has no thinking level; the fold would re-implement `rebuild_model()` and
+  `rebuild_mode()` outside the session layer. (c) comparing with the resolved default model:
+  `gateway_model_ref()` is L6, which arch-layers forbids in L4 document code. (d) sticky naming
+  (a statement names its values until they change): it parses earlier statements and writes more
+  arguments.
+- Known limits: values are taken at the end of a turn, so a switch during a run applies to the
+  whole re-ask. A model given as a provider object is not named on a session's first statement,
+  so it is re-asked on the default, as before; it is named by its reference on a re-assignment
+  after `/undo` or `/retry` of turn 1, or on a piped or forked session, and a re-ask must then
+  resolve it (`gptr_error_unknown_model` otherwise). Under an alias or unset `model` setting, the
+  first statement after `/clear` names the model (`/clear` carries the canonical route). Other
+  arguments are still not recorded: `.opts$thinking` on a first call, the budget, tools, skills
+  and `.opts`. A statement deleted or edited by hand is not accounted for. A replay reconstructed
+  from the document (no session log) does not apply the literals of fresh statements, so a stale
+  statement after them continues the reconstructed session's model (block 1's header `model=`)
+  in the setting mode, as before. Named models must resolve when re-asked; plain statements
+  follow the re-asking machine's settings. A turn recorded in `auto` or `yolo` is re-asked in
+  that mode: the transcript is R code the person chooses to run, like any script that calls
+  `peter(mode = "yolo")` (D-250 is about project settings files, and blocks already run code
+  under plain `source()`). `/retry` still resends the typed prompt (FIX-29 Open).
+- Contract-visible: 04 section 4.6 (`gptr.doc_block` keys `model` and `mode`), section 11.5 (the
+  transcript row) and section 15.3 IC-49; 03 section 6.9.3; `?gptr_doc`, `?gptr_source`;
+  vignette("script-as-history").
+- Tests: test-doc-formats.R "a console statement names the model and mode its turn ran with if
+  they differ (D-265)"; test-doc-replay.R "doc_console_ran() takes the turn's values and its
+  session's previous ones (D-265)", "after /model the transcript names the model and a live
+  re-ask asks it (D-265)", "a plan-mode console records mode = "plan" and re-asks in plan mode
+  (D-265)", "the plan menu's choice reaches the go-ahead statement (D-265)", "a turn after /undo
+  names the model the session kept (D-265)", "/retry of a plan console's first turn keeps
+  mode = "plan" (D-265)", "plain console turns stay plain, also after /clear (D-265)", "a fresh
+  console statement naming an unknown model replays without it (D-265)"; test-doc-export.R
+  "console statements naming model and mode export in both formats (D-265)". Four
+  test-doc-replay.R tests that drive agent_end on a `fake/fake-1` session in `auto` mode now set
+  those `model` and `mode` settings, as its first statement would otherwise rightly name both:
+  "console turns become one steered session in the transcript (IC-49)", "a console transcript
+  records a run that ended aborted, at max_turns or with an error", "direct R lines and slash
+  commands of the console enter the transcript" and "what the console records while its session
+  runs in the background follows its block". Evidence: progress/fixes.md FIX-30.

@@ -6253,3 +6253,165 @@ the driver, screens, events, transcripts and replays without a model are local, 
   the message (`console_lines()` drops it on screen). The prompt's editor drops a pasted Tab that
   ends a read inside a split paste. A 1 MB paste holds the console for minutes (the quadratic key
   loop).
+
+## FIX-29 - Transcripts record @file heads and the objects !code lines use (2026-10-26, #PR)
+- Why: issue #85, FIX-20 review items R27 and R29. R27: `gptr_source(replay = "live")` re-asked
+  a console turn with the literal `@notes.md` text, as the transcript never recorded the file head
+  (nor the `!code` notes) the console had sent, so the re-ask was another request. R29: a direct R
+  line that used an object an undone or retried turn created still ran under `source()`, which
+  stopped there because the object never existed. The maintainer's decisions of 2026-10-26: record
+  the content itself as `#< ` lines and send it again; record `created=` names and switch dependent
+  direct R lines off with `#~`; amend IC-49 in place, with no version key, migration or reader for
+  earlier transcripts (gptr 1.0 is unreleased).
+- Checks of the design, first: (a) the provider cannot rely on `ctx$input$call$doc` during a
+  re-ask: `doc_keep()` leaves it `NULL` when the answer may not be recorded (no consent, an undone
+  block under `"live"`). The route keeps the parsed `#<` lines in a new call record binding,
+  `call$sent`, whatever the recording decision. (b) `doc_replay_steps()` skips `#` lines, so a
+  history rebuilt from the document lacked the heads; `doc_replay_doc()` now passes them as
+  `doc$sent` to `replay_turn_append()`. (c) `gptr_export()` kept `#<` lines in both formats; raw
+  now drops them. (d) holds: `eval_r()` reports the names a line created before its error (probe:
+  `x1 = 1; y1 = 2; stop('boom')` gives `x1`, `y1`; a parse error runs nothing and adds none).
+- Red (4a7e68ec, the tests on origin/main 13a917ff's code): `^doc-(blocks|export)$` FAIL 5 PASS
+  623 (no `#<` lines or `created=` in a block, `doc_block_sent()` missing, the raw export kept the
+  `#<` lines); `^doc-replay$` FAIL 15 PASS 887 (no heads in a reconstruction, no `created=` on turn
+  or direct R headers, no switched lines and no notice; the console test's `source()` of the
+  transcript after `/undo` stopped at `p = fit + 1`, "object 'fit' not found"); `^console-repl$`
+  FAIL 2 PASS 367 (no `#<` lines; the re-ask request held the text block only).
+- Cause: the console's `user_ran` and `user_files` providers answered only the call the REPL was
+  sending (`rs$sending`), and nothing recorded what they sent; transcripts recorded no names, so
+  nothing could tell which direct R lines depended on an undone turn.
+- Fix: (1) 664daba4: `doc_turn_body()` collects the turn's first user message's `user_ran` and
+  `user_files` blocks and the `created` rows of its checkpoint entries; `doc_block_lines()` opens
+  the body with their `doc_sent_lines()` and sets `created=` (a new header key after `value`).
+  `doc_block_sent()` reads `#<` lines back (also under `#~`), `doc_route_run()` assigns them to
+  `call$sent`, the providers fall back to `ctx$input$call$sent`, and `replay_turn_append()` puts
+  `doc$sent` before the prompt. Raw export drops `#<` lines. (2) be7c637b: `repl_passthrough()`
+  sends `created` (the evaluator's `added`) on `console:direct`; `doc_direct_header()` writes it.
+  `doc_direct_switch()` reads a transcript top to bottom (last maker of each name on or off) and
+  switches direct R sections; `doc_transcript_rescan()` writes that under consent and the
+  `document_write` event (kind `inert`) and gives one notice, after each console append and after
+  each `session_tree` (`/undo`, `/redo`, `/retry`, rewinds). (3) 1a33fc17: `?gptr_doc`,
+  `?gptr_source`, `?gptr_export`, the script-as-history vignette (.Rmd and .Rmd.orig), 04 section
+  15.3 IC-49, section 11.5 and section 7.8; D-264.
+- Green: the neighbours `^(doc-|console-|gptr-|session-|ckpt-|copy-ckpt$)` (`NOT_CRAN=true`,
+  SIGINT at its default) `[ FAIL 0 | WARN 0 | SKIP 3 | PASS 10214 ]` in UTF-8 and
+  `[ FAIL 0 | WARN 0 | SKIP 30 | PASS 10036 ]` under `LC_ALL=C LANG=C`, the skips
+  locale-dependent, interactive-only or needing {repr}; the full suite under the heavy lock
+  `[ FAIL 0 | WARN 0 | SKIP 66 | PASS 38411 ]` in UTF-8, the skips Windows-only, live or optional
+  runtimes. Lint clean (11 files); `document()` changes only `gptr_doc.Rd`, `gptr_source.Rd` and
+  `gptr_export.Rd`. A scratch console session (make `dat`, `!m = mean(dat)`, make `fit`,
+  `!p = fit + 1`, `!q = p * m`, `/undo`, `/retry`) gives the transcript the tests assert: the
+  second block opens with the `#<` lines of the `m` note and its header names `created=fit`; after
+  `/undo` the `p` and `q` lines are off, `q` under `uses undone p, m` once `/retry` undid turn 1.
+- Review of 4ea0f60c (three verifiers). (1) 0f180e83 (low): `doc_block_sent()` took any opening
+  tag after a closing tag as a new block, so an `@file` whose head held `</user_files>` then
+  `<user_ran>`, or `</user_ran>` then `<user_files>`, was sent again cut short. The blocks now come
+  in their fixed order, each ending at the first closing tag that is the last line or comes before
+  a later kind's opening tag: a file may hold any tag, and each line of a `!` note starts `> ` or
+  `#> `. (2) 52a57634 (low): a direct R section ended at any `# /` line, so pasted code with a
+  comment such as `# /home/me/data is the input` went off only above it and `source()` stopped
+  below; a section now ends at a command line as the console writes it (`# /<name>`, then a space
+  or the line's end). Red (the new expectations on 4ea0f60c's code): `^doc-(blocks|replay)$`
+  FAIL 3 PASS 1328. Green: `^(doc-(blocks|export|replay)|console-repl)$` FAIL 0 PASS 1940; the
+  neighbours `[ FAIL 0 | WARN 0 | SKIP 3 | PASS 10217 ]` in UTF-8 and
+  `[ FAIL 0 | WARN 0 | SKIP 30 | PASS 10039 ]` under `LC_ALL=C LANG=C`; the release self-tests
+  PASS 290; lint clean (5 files); `document()` changes only `gptr_doc.Rd` and `gptr_security.Rd`.
+  (3) Docs (medium): `?gptr_doc`, the vignette and IC-49 said that `source()` runs the transcript
+  without error, and this record that a turn after an undo cannot use what the undo removed. A
+  later turn can use what a switched-off line made, which the undo keeps, so they now state that
+  limit, as Q2 switches direct R lines only. `?gptr_security` says that the `#<` lines keep
+  `@file` heads and `!` notes whatever `gptr.doc_output_lines` says; D-264 and IC-49 add the
+  section's extent, the comma and the non-UTF-8 locale limits.
+- Review of 79847601 (three verifiers), records only: D-264's heading is cut to 100 columns, and
+  D-264 and IC-49 add that a comment in a direct R line's code shaped like a command line, such
+  as `# /tmp is scratch`, ends its section, so the lines below stay on (the console writes
+  commands it does not know too, so the extent cannot test the name). A stale block's re-ask
+  keeps sending the block's `#<` lines with the edited prompt, as D-264 states.
+- Deviations: D-264. Open: `/retry` sends the typed prompt again through the console, which reads
+  each `@file` again and sends only the notes pending now, as before; only a re-ask from the
+  document sends the recorded heads. Turn blocks are never switched, so a later turn that uses an
+  object made by a direct R line that is off still stops `source()` (make `dat`,
+  `!m = mean(dat)`, `/undo`, then a turn running `y = m * 2`: "object 'm' not found"), as the
+  undo kept `m`. `/undo`, `/undo`, `/redo`, `/redo` over two turns leaves the first turn's block
+  undone while its turn is live, so `source()` stops at the second turn's statement; origin/main
+  13a917ff does the same (`doc_on_session_tree()`), a defect for its own issue. The other known
+  limits as D-264 states.
+
+## FIX-30 - A live re-ask of a console transcript keeps each turn's model and mode (2026-10-26, #PR)
+- Why: the maintainer's request of 2026-10-26, split out of issue #85 to keep #85 small.
+  `gptr_source(<transcript>, replay = "live")` re-asked every console turn with the configured
+  model and mode for a session's first turn and the session's own afterwards: a statement
+  recorded only the prompt and the @objects, and `/model` and `/mode` were comment lines, so a
+  turn after `/model x` went to the original model and a console started as `peter(mode = plan)`
+  re-asked in the configured mode. This closes FIX-21's open item ("a console transcript does not
+  record the console's starting mode (`peter(mode = plan)`)"). Built on FIX-29's branch head
+  4ea0f60c.
+- Checks of the design, first: (a) chat sessions write no initial `model_change`:
+  `entry_model_change()` is called only by `session_set_model()`, `run_route()` (router choices,
+  reason "router") and `session_record_initial_model()`, which only team sessions call
+  (subagent-team.R), so a fold over the path would miss a chat session's first `/model` switch
+  and name routed models. (b) a rewind moves only the leaf (ckpt-rewind.R), so `d$model` and
+  `d$mode` keep their values after `/undo`. (c) `doc_after_write()` runs only for insert, replace
+  and stale-regenerate writes, so an entry with values always means its statement was written; a
+  rewind's "undone" and a redo's "replace" entries carry none. (d) the documents `agent_end` hook
+  runs before the plan hook's execute menu, so a plan turn records "plan" and the go-ahead turn
+  sees the menu's choice (the plan-menu test). (e) the literal rule of `doc_export_chain()` (D-258)
+  admits `model = "..."` and `mode = "..."` (the export test); a bare `mode = plan` would be
+  refused, which is why both are written quoted. (f) a fresh block replays from its header without
+  resolving a model (IC-74), so plain `source()` still makes no request (the unknown-model test).
+- Red (c6efa2c4, the tests on 4ea0f60c's code): `^(doc-replay|doc-formats|doc-export)$`
+  `[ FAIL 20 | WARN 0 | SKIP 0 | PASS 1455 ]`. test-doc-formats.R: the statement ignored
+  `ran_with`, `ran_before` and `default_model` (7 expectations); test-doc-replay.R:
+  `doc_console_ran()` missing; after `/model fake2/fake2-1` the statement was a plain
+  `|> peter("set y")` and the `gptr.doc_block` entries had no `model` or `mode`; a plan console's
+  statements were plain and the live re-ask planned in auto, so block 1 had no `## Plan:` line;
+  after `/undo` the next turn named no model and its re-ask went to `fake` (requests fake 5,
+  fake2 4 instead of 4 and 6, `c1` not made); `/retry` of a plan turn wrote no `mode = "plan"`;
+  the plan menu's go-ahead statement was plain. The guards (plain turns after `/clear`, an unknown
+  model in a fresh statement, export of both formats) and the four tests given settings were
+  green. The tests' console helper binds `.gptr_repl` as `repl_main()` does; without it `/clear`
+  answers "/clear works inside the gptr console." and the next prompt continues the session.
+- Cause: `doc_console_statement()` wrote only the template and the context labels, and nothing
+  recorded which model or mode a console turn ran with.
+- Fix: 059b4d2b. (1) `doc_route_match()` gives a console site `default_model`, TRUE when the call
+  starts a session without naming a model by name (a plain first prompt, a spec-object model, an
+  R-prompt `peter("x")`); `/clear`'s carried string and every continuation are not exempt.
+  (2) `doc_console_ran()`, called by `doc_on_agent_end()` for a console site, sets `ran_with`, the
+  session's model reference (`provider/id[:thinking]`, a router as `router:<name>`) and mode at
+  the end of the turn, and `ran_before`, the values of the last `gptr.doc_block` entry on the
+  session's path for the same transcript that carries both (read with `[[`). (3)
+  `doc_after_write()` adds `ran_with`'s `model` and `mode` to the entry's data; other sites' NULLs
+  are dropped as before. (4) `doc_console_statement()` appends `model = "..."` and `mode = "..."`
+  for the values that differ from its base: for an assignment the `model` and `mode` settings,
+  the model kept when `default_model`; for a pipe `ran_before`, else the settings. A site without
+  `ran_with` writes today's statement; Rmd and qmd console targets get the same statement. Docs
+  b0b98ee8: `?gptr_doc`, `?gptr_source`, the script-as-history vignette (.Rmd and .Rmd.orig), 04
+  section 4.6, section 11.5 and section 15.3 IC-49, 03 section 6.9.3; D-265. No plan was edited,
+  so the cross-plan checks (which read only `dev/plan`) were not needed.
+- Green: the same filter `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1486 ]`. The neighbours
+  `^(doc-|console-|perm-plan|gptr-|session-|ckpt-|arch-layers|lint-rules|zzz)` (`NOT_CRAN=true`,
+  SIGINT at its default) `[ FAIL 0 | WARN 0 | SKIP 3 | PASS 10561 ]` in UTF-8 (an interactive-R
+  CI test and two needing {repr}) and `[ FAIL 0 | WARN 0 | SKIP 30 | PASS 10383 ]` under
+  `LC_ALL=C LANG=C` (27 more locale-dependent skips); the UTF-8 run was on 059b4d2b, and b0b98ee8
+  changes R code only in roxygen comments. The full suite under the heavy lock
+  `[ FAIL 4 | WARN 0 | SKIP 66 | PASS 38425 ]` in UTF-8, the skips Windows-only, live or optional
+  runtimes as for FIX-29; the 4 failures are two process tests' time bounds at a load average near
+  50 (test-proc-rscript-native.R: one sampling error; test-proc-writer-prototype.R: the duplex case
+  took 75 s against 60 s), and the two files alone at the same load give
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 224 ]`. No other test asserted a plain statement for a session
+  off its settings. Lint clean (6 files); `document()` changes only `gptr_doc.Rd` and
+  `gptr_source.Rd`. A scratch console session (`peter(.stdin = TRUE)` with two fake providers:
+  `set x`, `/model fake2/fake2-1`, `set y`, `/undo`, `/mode yolo`, `set z`) wrote
+  `s_<hex> = peter("set x")`, `#~ s_<hex> |> peter("set y", model = "fake2/fake2-1")` and
+  `s_<hex> |> peter("set z", model = "fake2/fake2-1", mode = "yolo")`; its live re-ask made `x` and
+  `z` with 2 more requests to each provider and skipped the undone turn.
+- Deviations: D-265. Open: as D-265 states. Values are taken at the end of a turn, so a switch
+  during a run applies to the whole re-ask. A spec-object model is not named on a session's first
+  statement and is re-asked on the default; it is named by its reference after `/undo` or
+  `/retry` of turn 1 or on a piped or forked session, and must then resolve. Under an alias or
+  unset `model` setting the first statement after `/clear` names the model. `.opts$thinking` on
+  a first call, the budget, tools, skills and `.opts` are not recorded; hand edits of statements
+  are not accounted for. A replay reconstructed from the document does not apply fresh
+  statements' literals, so a stale statement after them continues block 1's header model in the
+  setting mode. Plain statements follow the re-asking machine's settings; a turn recorded in
+  `auto` or `yolo` is re-asked in that mode. `/retry` still resends the typed prompt (FIX-29).

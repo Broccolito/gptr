@@ -52,7 +52,9 @@ verified execution or a complete session. Ordinary console input and \code{recor
 effects cannot be reconstructed. External files, objects and package versions must still
 be supplied. Remaining user code may use gptr or perform network and filesystem operations.
 Captured \verb{#>} output is limited to twelve lines per block and eighty characters per line;
-outputs are comments. Encoding, line endings and the final newline follow the input file.
+outputs are comments. Raw R leaves out a console turn's \verb{#< } lines (what the console sent
+with its prompt, see \code{\link[=gptr_doc]{gptr_doc()}}); the Peter format keeps them. Encoding, line endings and
+the final newline follow the input file.
 A UTF-8 byte order mark is preserved; source that exported file with
 \code{source(to, encoding = "UTF-8-BOM")}.
 }

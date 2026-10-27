@@ -714,6 +714,51 @@ test_that("a blank steer has no trailing space, and a steer line trimmed by hand
   expect_no_error(gptr_export(f, file.path(getwd(), "plain.R")))
 })
 
+test_that("a block records what its prompt was sent with as #< lines and what it created", {
+  ran = block_context("user_ran", paste0("The user ran this R code in the session (output as ",
+                                         "#> lines):\n> x = 1:3\n#> [1] 1 2 3"))
+  # a file whose lines hold a blank line and the block's own closing tag
+  files = block_context("user_files", paste0("<file path=\"notes.md\">\ncafé notes\n\n",
+                                             "</user_files>\n</file>"))
+  turn = doc_test_turn("fit = lm(mpg ~ wt, data = mtcars)", prompt = "summarise @notes.md")
+  turn[[1L]]$message = msg_user(list(block_context("environment", "R 4.6"), ran, files,
+                                     block_text("summarise @notes.md")))
+  objects = list(list(name = "fit", status = "created"), list(name = "cars", status = "changed"),
+                 list(name = "fit2", status = "created"))
+  cp = list(type = "custom", custom_type = "gptr.checkpoint",
+            data = list(tool_call_id = "call_1",
+                        fragments = list(objects = list(id = "f1", turn = 1L, objects = objects))))
+  s = doc_test_session(list(c(turn[1:2], list(cp), turn[3:4])))
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "summarise @notes.md"), 1L)
+  sent = c("#< <user_ran>", "#< The user ran this R code in the session (output as #> lines):",
+           "#< > x = 1:3", "#< #> [1] 1 2 3", "#< </user_ran>", "#< <user_files>",
+           "#< <file path=\"notes.md\">", "#< café notes", "#<", "#< </user_files>",
+           "#< </file>", "#< </user_files>")
+  expect_identical(as.character(lines), c(sent, "fit = lm(mpg ~ wt, data = mtcars)"))
+  expect_identical(attr(lines, "header")$created, "fit,fit2")
+  expect_match(doc_format_kv(attr(lines, "header")), " created=fit,fit2$")
+  # read back exactly, also from an undone block
+  back = list(user_ran = sub("^<user_ran>\n(.*)\n</user_ran>$", "\\1", ran$text),
+              user_files = sub("^<user_files>\n(.*)\n</user_files>$", "\\1", files$text))
+  expect_identical(doc_block_sent(lines), back)
+  expect_identical(doc_block_sent(paste0("#~ ", lines)), back)
+  expect_identical(block_context("user_files", back$user_files)$text, files$text)
+  expect_identical(doc_block_sent("x = 1"), list())
+  # a file may hold the blocks' tags in any order: it reads back whole, alone or after a note
+  tags = paste0("<file path=\"log.txt\">\n</user_files>\n<user_ran>\n</user_ran>\n",
+                "<user_files>\n</file>")
+  expect_identical(doc_block_sent(doc_sent_lines(block_context("user_files", tags)$text)),
+                   list(user_files = tags))
+  expect_identical(doc_block_sent(doc_sent_lines(c(ran$text,
+                                                   block_context("user_files", tags)$text))),
+                   list(user_ran = back$user_ran, user_files = tags))
+  # a prompt sent without them records neither
+  plain = doc_test_session(list(doc_test_turn("x = 1")))
+  lines = doc_block_lines(plain, 1L, list(format = "r", template = "count rows"), 1L)
+  expect_identical(as.character(lines), "x = 1")
+  expect_null(attr(lines, "header")$created)
+})
+
 test_that("secret markers become Sys.getenv() and an unreplayable one flags the block", {
   # entries are redacted at ingress (P06), so recorded code holds markers, never values
   s = doc_test_session(list(doc_test_turn("k = \"[secret:DOC_TEST_KEY]\"\nn = nchar(k)")))

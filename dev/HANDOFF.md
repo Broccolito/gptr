@@ -47,14 +47,23 @@ amendment are in `DEVIATIONS.md`:
 - FIX-28 (#86): a T console's call turns bracketed paste on in its own modes, so a paste is one
   draft however late the composer reads it; timing stays for terminals without it (D-263, amends
   IC-76).
+- FIX-29 (#85): a console turn's block records what its prompt was sent with as `#< ` lines, which
+  a live re-ask sends again without reading the file; headers name what each step created
+  (`created=`), and a direct R line that uses an undone step's object is switched off with `#~`
+  and back on after `/redo` (D-264, IC-49 amended in place).
+- FIX-30: a console statement ends with `model = "..."` and `mode = "..."` when its turn ran with a
+  model or mode the statement would not get without them (after `/model`, `/mode`, the plan menu,
+  or in a console started as `peter(mode = plan)`), so a live re-ask asks each turn as it ran
+  (D-265, IC-49 amended in place); this closes FIX-21's note on the console's starting mode.
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
 replay of a piped turn equal to a recorded steer (FIX-16, FIX-22), a job's end time at its first
 look (FIX-15, FIX-23), the replay srcrefs and the refused console transcript export (FIX-13, FIX-24
-and FIX-25), the abort inside a unit and before a failure (CI-97, FIX-26), and base `system()` with
-a computed command (FIX-18, FIX-27); of CI-93's other notes, CI-100 fixes the BOM block's warning
-under `LC_ALL=C`.
+and FIX-25), the abort inside a unit and before a failure (CI-97, FIX-26), base `system()` with a
+computed command (FIX-18, FIX-27), and the live re-ask without the `@file` head and the `!code` line
+using an undone turn's object (FIX-20 R27 and R29, FIX-29); of CI-93's other notes, CI-100 fixes
+the BOM block's warning under `LC_ALL=C`.
 
 Verified: each record's red and green runs on its branch, in UTF-8 and under `LC_ALL=C LANG=C`.
 On the merged code `556acb00`, locally on macOS:
@@ -110,8 +119,6 @@ Open (found, not fixed):
   stops the transcript's replay, which names it `s_<id>`, as FIX-20 R29 (FIX-21).
 - A model `r` call that failed after an assignment is left out of its block while its binding
   stays, so a replay can stop at a later read of that binding (FIX-21).
-- A console transcript does not record the console's starting mode (`peter(mode = plan)`), so a
-  live re-ask runs in the configured mode (FIX-21).
 - `gptr_wait()` on a waiting session, called from inside a run's tool, resumes it as a nested run
   that inherits the outer run's safety record (it used to hang); the permission gate still asks
   the person (FIX-21).
@@ -137,10 +144,9 @@ Open (found, not fixed):
 - No CRAN test reaches 10 R files: `artifact-registry`, `bridge-lang`, `console-jsonl`,
   `doc-export`, `doc-knitr`, `proc-rscript`, `provider-bedrock`, `s1-emulate`, `s1-ollama` and
   `tool-search` (CI-93).
-- A live re-ask (`gptr_source(replay = "live")`) does not resend an `@file`'s head, which the
-  transcript never records (FIX-20 R27; issue #85).
-- A `!code` line that uses an undone turn's object stays live in the transcript, so `source()` stops
-  there (FIX-20 R29; issue #85).
+- A later console turn that uses an object made by a direct R line that is off still stops
+  `source()`, as the undo kept the object; `/undo`, `/undo`, `/redo`, `/redo` leaves the first
+  turn's block undone while its turn is live, as on `main` (FIX-29).
 - In a terminal that ignores bracketed paste a paste still splits when a read comes more than
   about 145 ms late (IC-76's 0.2 s bound; CI-94, FIX-28).
 - A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).

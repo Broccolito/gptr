@@ -38,9 +38,11 @@ doc_export_pending = function(path) {
   any(doc_sidecar_exists(c(doc_sidecar_path(path), doc_sidecar_legacy_path(path))))
 }
 
-#' Preserve body code and ordinary notes, with a fixed readable bound on captured output.
+#' Preserve body code and ordinary notes, with a fixed readable bound on captured output; raw R
+#' leaves out the `#< ` lines of what a console prompt was sent with (IC-49).
 #' @noRd
 doc_export_body = function(body, format, indent = "") {
+  if (identical(format, "r")) body = body[!grepl("^[ \t]*#<( |$)", body)]
   output = grepl("^[ \t]*#>", body)
   comment = grepl("^[ \t]*#", body)
   unsafe = comment & grepl("[[:cntrl:]]", body)
@@ -305,7 +307,9 @@ doc_export_lines = function(lines, format, path, target) {
 #' effects cannot be reconstructed. External files, objects and package versions must still
 #' be supplied. Remaining user code may use gptr or perform network and filesystem operations.
 #' Captured `#>` output is limited to twelve lines per block and eighty characters per line;
-#' outputs are comments. Encoding, line endings and the final newline follow the input file.
+#' outputs are comments. Raw R leaves out a console turn's `#< ` lines (what the console sent
+#' with its prompt, see [gptr_doc()]); the Peter format keeps them. Encoding, line endings and
+#' the final newline follow the input file.
 #' A UTF-8 byte order mark is preserved; source that exported file with
 #' `source(to, encoding = "UTF-8-BOM")`.
 #' @seealso [gptr_doc()], [gptr_source()], [gptr_blocks()]
