@@ -96,7 +96,8 @@ readline_limit = function() {
 #'
 #' Returns an environment with `read(prompt = "", stream = "stdout", secret = FALSE)` -> chr(1), NA
 #' at the end of piped input; `waiting()` -> the lines a paste left on a macOS terminal (none
-#' elsewhere, IC-75); `close()`; `flag` (TRUE when a line reached the readline limit); `held`,
+#' elsewhere, IC-75), in a T console erasing the row where its look made the tty echo the rest;
+#' `close()`; `flag` (TRUE when a line reached the readline limit); `held`,
 #' the lines a paste left after a block's closer, which the terminal reader returns first,
 #' unechoed (the terminal showed them); `typed`, the /command and !code lines and the follow-ups
 #' typed during an answer, which it returns next, in order, echoed after the prompt (IC-76,
@@ -119,9 +120,15 @@ console_reader = function(stdin = FALSE, echo = stdin) {
   rd$fd = NULL
   rd$held = character()
   rd$typed = character()
-  # only a macOS terminal (BSD tty driver) hands a waiting paste over as complete lines
+  # only a macOS terminal (BSD tty driver) hands a waiting paste over as complete lines; the look
+  # makes it echo a paste's pending last line again, whose row a T console erases
   paste_tty = !isTRUE(stdin) && is_macos() && console_readline_tty()
-  rd$waiting = function() if (paste_tty) console_typed_lines(rd) else character()
+  rd$waiting = function() {
+    if (!paste_tty) return(character())
+    lines = console_typed_lines(rd)
+    if (console_class() == "T") console_cat("\r\033[K")
+    lines
+  }
   echo = isTRUE(echo)
   if (isTRUE(stdin)) {
     rd$con = console_stdin_open()

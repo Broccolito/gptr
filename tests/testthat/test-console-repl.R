@@ -253,6 +253,16 @@ test_that("the terminal reader looks at fd 0 only on a macOS readline terminal",
   expect_identical(console_reader(stdin = FALSE)$waiting(), character())
 })
 
+test_that("a macOS terminal's look at fd 0 erases the row its tty echoed a paste on (FIX-34)", {
+  local_mocked_bindings(console_typed_lines = function(rd) "pasted",
+                        console_readline_tty = function() TRUE, is_macos = function() TRUE,
+                        console_class = function() "T")
+  rd = console_reader(stdin = FALSE)
+  expect_identical(written(function() expect_identical(rd$waiting(), "pasted")), "\r\033[K")
+  local_mocked_bindings(console_class = function() "D")
+  expect_identical(written(function() expect_identical(rd$waiting(), "pasted")), "")
+})
+
 test_that("console_typed_lines() reads what fd 0 holds without blocking and never fails", {
   box = new.env(parent = emptyenv())
   box$chunks = c("line2\r\nline3\n", "\n  indented\r")

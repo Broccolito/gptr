@@ -5327,6 +5327,10 @@ and pastes are kept in the console history.
   input. It is not an R connection: it is dropped with the reader and never `close()`d, as closing it closes
   fd 0. Each poll waits at most 50 ms; it reads with `processx::conn_read_chars()` only
   (`conn_read_lines()` blocks on a chunk without a newline) and splits on `\r\n|\r|\n`.
+  The macOS look for waiting lines (`rd$waiting()`) makes the tty echo the pending rest of a
+  paste again, its last line left on the cursor's row, so in a T console it then erases that
+  row (`\r\033[K`; FIX-34): the hint or the re-asked question's row is not written after it,
+  and readline shows that line at the next read.
 - Stale answers, every front end: `gptr_readline()` records the seconds its `readline()` waited (timed with
   `proc.time()[["elapsed"]]`) in `the$readline_secs`; `readline_answer(prompt)` re-reads while an
   interactive answer arrived in under 0.1 s, at most 100 reads (an interactive R at the end of a pipe gets ""
