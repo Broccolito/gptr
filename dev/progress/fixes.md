@@ -6934,3 +6934,138 @@ and green runs use `dev/ci/isolated-check.R test` with `NOT_CRAN=true` and SIGIN
   doc writer's listed scope, the one line of ALL-2). `dev/PROGRESS.md` and `dev/HANDOFF.md` still
   list as Open the notes FIX-33 closes (FIX-21's failed `r` call, FIX-25's context object, FIX-31's
   steer line and marker comment); they are not edited here.
+
+## FIX-34 - Console findings from the live sessions (2026-10-27, #92)
+Scope: the console findings of the live sessions with real models on `claude/v1-fixes`
+(`66fc1782` and `809ad7e5`, the code of FIX-27..FIX-31), each reproduced by an independent
+triager: STATIC-3, STATIC-4 and MM-6, and the four findings of the bracketed-paste lens,
+PASTE-1 to PASTE-4 (PASTE-2 was not triaged and is reproduced here first). Branch
+`claude/v1-fix-console` from `809ad7e5`, seven commits, each test red on `809ad7e5`'s code first,
+`NOT_CRAN=true`, SIGINT at its default. STATIC-3, STATIC-4, MM-6, PASTE-3 and PASTE-4 are fixed,
+PASTE-2 in part and PASTE-1 in NEWS only.
+
+### STATIC-3 - A Tab after a multi-line bracketed paste in one read sends it
+- Commit `d9a56e34`. Red: `^console-input$` FAIL 6 PASS 216: a paste of two lines and Tab in one
+  batch, plain and on the polling beat, left the draft `summarise it\nin two lines\t` and no
+  action; a paste open since an earlier read whose end and Tab came in one batch left `three\t`;
+  at the prompt's editor `\033[200~a\rb\033[201~\t`, then Enter, returned `xa\nb\t`, as did the
+  same paste over two reads.
+- Cause: `console_compose()` read a Tab or Up at a batch's end as the key only in a batch without
+  a newline, and counted the newlines inside the markers; keys typed during an in-process `r`
+  call arrive as one batch, so the Tab fell to the key loop as text. The idle editor's Tab rule
+  had the same test.
+- Fix: `console_unpasted(x, bracket)` (R/console-input.R) drops the paste spans, a paste open
+  since an earlier read included, and both newline tests use it; the head of a split batch keeps
+  `bracket`. A newline typed outside the paste still makes the Tab text, and at the idle editor a
+  Tab off a trigger word still does nothing (the triager's version, without `bracket`, sent the
+  draft there when the paste had opened in an earlier read). 04 section 15.10 IC-76 says so.
+- Green: `^console-input$` PASS 222; `^console-typing$` PASS 452 (run alone: in the first run of
+  both, at a load average of about 220, the pty test "a paste during a run is one draft" missed its
+  draft row, a paste without a Tab that this change does not touch). Live on a build of the fix
+  (tmux 3.8, fake model, auto mode): a two-line paste and Tab during an `r` call's `Sys.sleep(8)`
+  ran as the next prompt once the call ended (`reply 3: summarise it|in two lines`).
+
+### STATIC-4 - An @file line that is not UTF-8 is read as CP1252
+- Commit `a904e8f4`. Red: `^console-repl$` FAIL 1 PASS 373: `repl_mentions("look at @lat.txt")`
+  of a file holding `caf`, 0xe9, a CP1252 quote pair and 0x81 stopped in `clean_terminal()` with
+  "input string 1 is invalid UTF-8", so the console printed `Error:` and sent nothing.
+- Cause: `repl_file_block()` (R/console-repl.R) read the head with
+  `readLines(encoding = "UTF-8")`, which only marks the bytes; `as_utf8()` keeps a marked
+  string, in a C locale too.
+- Fix: a line that is not valid UTF-8 is converted from CP1252, a byte CP1252 lacks shown as
+  `<81>`, as the read tool (`decode_raw()`) and `read_utf8()` fall back to CP1252, so the line
+  reads `café`, then CP1252's quotes and `<81>`. The triager's `iconv(sub = "byte")`, as short,
+  gave `caf<e9>` for the common case, an Excel CSV on Windows. Valid UTF-8 lines are unchanged.
+- Green: `^console-repl$` PASS 375 in UTF-8 and PASS 362 SKIP 4 under `LC_ALL=C LANG=C`.
+
+### MM-6 - /model's switch names the full id a CLI's default runs
+- Commit `daab2a8f`. Red: `^console-commands$` FAIL 5 PASS 170: the switch answered
+  `Model: claude-cli/default (from the next request)`, `codex/default` and, before the first
+  prompt, `claude-cli` and `fakeclaude/default` without the id the next `/model` showed.
+- Fix: both answers of `cmd_model()` (R/console-commands.R) use `cmd_model_label()`, as IC-79
+  says `/model` shows it:
+  `Model: claude-cli/default (claude-sonnet-5-5) (from the next request)`; other references are
+  unchanged. The tests mock `pcli_default_model()`.
+- Green: `^console-commands$` PASS 175.
+
+### PASTE-1 - NEWS says a paste at a question is kept only in a macOS terminal
+- Commit `914d7972`, NEWS only. The bullet said, with no platform, that a block pasted at an
+  approval or a choice is kept in the console history and not read as the answer. `?peter`, the
+  console vignette, IC-75 and D-220 say that this holds in CRAN's R for macOS in a terminal and
+  that there a two-line paste without a final newline answers with its first line; elsewhere
+  pasted lines arrive one at a time. The bullet now says the same.
+- Not changed: the triager's optional code, reading the waiting input in `tty_drain_mode()` so a
+  partial last line also marks a paste. That 50 ms read would also take a key typed just after
+  Enter for a pasted line and ask a typed answer again, and Linux keeps the limit either way, as
+  GNU readline hands the lines over one at a time (D-269).
+
+### PASTE-2 - A macOS paste's echoed last line no longer shares the notice's row
+- Reproduced first (no triage), in a tmux server of its own with the fake model, CRAN R 4.6.1 on
+  macOS, `lib-809ad7e5`: a paste of three lines without a final newline at `peter>` showed
+  `paste idle: gamma    (pasted: Enter sends it as one message)` and then
+  `... paste idle: gamma`; at `? Allow r?` the row
+  `paste at ask three    a pasted block is not an answer · kept in history ↑` and then
+  `› paste at ask three`; at the pause menu
+  `paste at pause two› paste at pause two` after the `not a key` row.
+- Cause: `rd$waiting()`'s look at fd 0 makes the BSD tty echo the pending rest of the paste
+  again, its last line left on the cursor's row, so the notice was written after it.
+- Commit `c10ca375`. Red: `^console-repl$` FAIL 1 PASS 378: a T console's `rd$waiting()` wrote
+  nothing. Fix: on a macOS terminal (the only place it reads) `rd$waiting()` erases that row
+  after its look in a T console (`\r\033[K`); a D console is unchanged. 04 section 15.9 IC-75.
+- Green: `^console-repl$` PASS 379; with `^console-ui$` PASS 681. Live on a build of the fix:
+  the hint and the approval's re-ask stand on rows of their own and the last line shows once, at
+  `... ` and at `› `.
+- Not fixed: the pause menu, which reads no waiting lines; there the echo comes at no fixed point
+  (before its `not a key` row in the lens's runs, before the next chevron here), so it would take
+  an erase before that row and another in the next prompt, for a paste at a menu (D-269).
+
+### PASTE-3 - After a crash `reset` restores the terminal, paste mode too
+- Commit `fc05b5af`, docs only. Since FIX-28 a kill or crash during a T console's call leaves
+  bracketed paste on, which `stty sane`, the advice of `?peter` and the console vignette (.Rmd and
+  .Rmd.orig), does not turn off: in sh or bash 3.2 every later paste showed `^[[200~...^[[201~`.
+  They now advise `reset`, as D-263 and 04 already did; 04 section 15.10's "leaves `stty sane` to
+  the person" says `reset`. Checked in tmux under `/bin/sh`: after `printf '\033[?2004h'` the
+  bracket flag is 1, after `stty sane` still 1, after `reset` 0. `document()` changes only
+  `peter.Rd`. The P28 plan's line is the plan's own record and is not edited.
+
+### PASTE-4 - Code the evaluator never runs is refused, not asked about
+- Commit `988dbad7`. Red: `^perm-gate$` FAIL 14 PASS 199: `q('no')` and `quit(save = 'no')` were
+  `ask_human` in manual, edits, auto and yolo and `x = readline('?')` was `ask` or `allow` (plan
+  already denied them); the yolo reason was "mode yolo"; a non-interactive auto run of a fake
+  model's `q('no')` stopped with "This action always needs a person to approve it: run it
+  interactively".
+- Cause: the classifier rates `q` and `quit` level 4, so the critical guard asked in every mode,
+  while `eval_guard()` refuses the code after the gate whatever the answer. The yolo notice, NEWS,
+  `?gptr_security` and the auto-mode prompt listed quitting R among what a person is asked about.
+- Fix: the `mode` policy (R/perm-gate.R, outside this writer's files; the hunk sits above
+  FIX-32's change) runs `eval_guard()` on an `r` call's code in `ctx$envir` and denies what it
+  refuses in every mode, with the guard's text as its reason; the model reads "Permission denied:
+  Not run: the code calls or refers to q(), which would end, pause or hang the user's R session.
+  ..." and the run goes on. A `q` the environment binds to data passes, as in the evaluator, and
+  `eval_run()` keeps the guard. The yolo notice (R/utils-options.R), NEWS, `?gptr_security`
+  (R/gptr-config.R) and the auto-mode prompt (R/prompt-text.R, with 03 section 7.4) drop quitting
+  R; NEWS and `?gptr_security` say that such code is refused without a question. 03 sections
+  6.8.1 and 6.8.2, 04 sections 7.11, 15.7 IC-67 and 15.9 IC-78; D-269.
+- Green: `^perm-gate$` PASS 214; `^(prompt-text|perm-gate|session-object|utils-options)$` PASS
+  972; `dev/bench/tokens/run.R --check` OK (the auto block is shorter). A piped console with the
+  fake model shows `not run · Not run: the code calls or refers to q(), which would end, pause…`
+  in manual and yolo, asks nothing and answers `done`.
+
+### Checks
+- On `988dbad7` (the code of every fix; the records commit changes only `dev/`), `NOT_CRAN=true`,
+  SIGINT at its default, a short `TMPDIR`: the files whose names start with `console-`, `perm-`,
+  `prompt-`, `bench-`, `agent-dispatch`, `eval-guard`, `eval-core`, `northstar`,
+  `session-object`, `utils-options`, `utils-text`, `gptr-config`, `injection-e2e`,
+  `secrets-e2e`, `mcp-server`, `arch-layers`, `lint-rules`, `tool-read`, `doc-replay`,
+  `doc-blocks` or `zzz`, and `tool-r` (48 files), FAIL 0 WARN 0 SKIP 1 PASS 10616 in UTF-8 and
+  FAIL 0 WARN 0 SKIP 30 PASS 10418 under `LC_ALL=C LANG=C` (the skips: INFRA-03's interactive
+  R, and under C 29 that need a UTF-8 locale). Lint clean (the 11 changed R and test files and
+  the console vignette); `document()` gives no diff once `peter.Rd` and `gptr_security.Rd` are
+  committed; `dev/release/check-docs.R` 0 problems; `testthat::test_dir("dev/release/tests")`
+  passes, NEWS included; `dev/bench/tokens/run.R --check` OK. No full suite or R CMD check was
+  run, so the heavy lock was not taken.
+- Deviations: D-269. Changes outside this writer's files: R/perm-gate.R (PASTE-4, a hunk above
+  FIX-32's change of the same function), R/utils-options.R's yolo notice, R/gptr-config.R
+  (`?gptr_security`), R/prompt-text.R and the ?peter text of R/console-repl.R, the console
+  vignette, NEWS, 03 and 04. Open: PASTE-2 at the pause menu, and on macOS a two-line paste
+  without a final newline still answers a question with its first line (both above, D-269).

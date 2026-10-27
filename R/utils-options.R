@@ -63,7 +63,7 @@ mode_notice = function(mode) {
   gptr_inform(paste0("Mode yolo: actions run without approval, including package installs, ",
                      "writes anywhere and gptr's own configuration functions. A person is still ",
                      "asked before deleting files outside the project or protected files (.git, ",
-                     ".env, keys), the project or home directory, rm(list = ls()), quitting R, ",
+                     ".env, keys), the project or home directory, rm(list = ls()), ",
                      "options(gptr.*) and sending a secret over the network. system(), ",
                      "system2(), shell() and shell.exec() calls with a command the code computes ",
                      "are refused; the model is pointed to peter$sh(). The classifier reads code; ",

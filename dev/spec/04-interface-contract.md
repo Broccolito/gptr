@@ -2841,7 +2841,7 @@ diff_lines(c("a", "b"), c("a", "c"))
 | `rule_parse(rule)` | `perm-rules.R` | `list(tool, kind = "any" \| "glob" \| "level" \| "fn" \| "category" \| "sh" \| "sql" \| "secret", value)` or `gptr_error_invalid_argument` | P11, P14 (`/permissions`) |
 | `rule_match(rules, call)` | `perm-rules.R` | `list(deny = chr, ask = chr, allow = chr)`: matched rules; allow `r(fn:..)`/`r(category:..)` match only if **every** flagged call (level >= 1) is covered; deny/ask match if **any** flagged row is, level 0 included (D-267) | P11 |
 | `rule_suggest(call)` | `perm-rules.R` | chr(1) rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`), or `NULL` (never for level 4) | P11, P14 |
-| `builtin_permissions(gptr)` | `perm-gate.R` | registers the policies `mode` (the mode x level table of §6.8.1 of `03`; in auto and yolo it denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command the code computes, a `dynamic` row that is no `<fn>(): ` reading, unless an `r(fn:)` allow rule covers those rows, D-262), `rules`, `critical_guard`, `secret_guard`, `protect_size` (IC-04) | P02 load |
+| `builtin_permissions(gptr)` | `perm-gate.R` | registers the policies `mode` (the mode x level table of §6.8.1 of `03`; in every mode it denies `r` code `eval_guard()` refuses, with the guard's text as its reason, D-269; in auto and yolo it denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command the code computes, a `dynamic` row that is no `<fn>(): ` reading, unless an `r(fn:)` allow rule covers those rows, D-262), `rules`, `critical_guard`, `secret_guard`, `protect_size` (IC-04) | P02 load |
 | `builtin_plan(gptr)` | `perm-plan.R` | registers the `plan` policy (writes denied, level-1 R allowed only because the run evaluates in the scratch overlay), the plan-mode `agent_end` hook (captures the last `<proposed_plan>...</proposed_plan>`, saves `<root>/plans/<YYYY-MM-DD>-<slug>.md`, sets `.d$plan`, stores the pending plan under `home_address(home)` with the time, appends `gptr.plan`, offers the execute menu interactively), the plan-mode allowlist check (only calls known to be read-only run, IC-54), and the `plan.pending` service (returns the plan once, only to the next top-level `peter()` call of the same process and environment within one hour; any other call in between discards it; IC-56) | P02 load |
 | `builtin_ui(gptr)` | `console-ui.R` | registers `ui` specs `console`, `none`, `scripted`, `rstudio` and the `ui.get` service (resolution from the run's snapshot of `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`, IC-43, IC-53); every display escapes control, bidi and zero-width characters and the one-line prompt shows the call's first line cut to the console width, `(+N more lines)`, a path tool's change from its input (IC-77 in §15.10) and at most 5 flagged calls, one per line (IC-53, D-187, D-222) | P02 load |
 | `builtin_ask(gptr)` | `tool-ask.R` | registers the `ask` direct tool (schema §9.2) with `available = function(ctx) ctx$has_ui()`; result text as 18 §3.6 (`The user answered:` lines; cancellation and non-interactive texts) | P02 load |
@@ -5125,7 +5125,9 @@ calls and suggests `GPTR_REPLAY=replay`.
   attaches 3 images.
 - `eval_guard()` flags the `q` and `quit` symbols in any position (as a value, a `FUN` argument, inside
   `match.fun`, `get`, `do.call`, `base::`) as level 4 [12 fact-check]; a value passes when the code assigns it
-  or the evaluation environment binds it to data (D-252).
+  or the evaluation environment binds it to data (D-252). The gate's `mode` policy runs the same guard on the
+  call's code in its evaluation environment (`ctx$envir`) and denies what it refuses in every mode, so no
+  person is asked to approve it (D-269).
 - No shipped prompt text or skill recommends `str()` (it leaves a sticky reference: every `str()` of a large
   object makes the next edit copy; re-verified); the texts recommend `peter$describe(x)`, `dim()`, `head()`. A P07
   test fails when any shipped section or skill mentions `str(`; the high-performance-r skill states the cost.
@@ -5355,6 +5357,10 @@ and pastes are kept in the console history.
   input. It is not an R connection: it is dropped with the reader and never `close()`d, as closing it closes
   fd 0. Each poll waits at most 50 ms; it reads with `processx::conn_read_chars()` only
   (`conn_read_lines()` blocks on a chunk without a newline) and splits on `\r\n|\r|\n`.
+  The macOS look for waiting lines (`rd$waiting()`) makes the tty echo the pending rest of a
+  paste again, its last line left on the cursor's row, so in a T console it then erases that
+  row (`\r\033[K`; FIX-34): the hint or the re-asked question's row is not written after it,
+  and readline shows that line at the next read.
 - Stale answers, every front end: `gptr_readline()` records the seconds its `readline()` waited (timed with
   `proc.time()[["elapsed"]]`) in `the$readline_secs`; `readline_answer(prompt)` re-reads while an
   interactive answer arrived in under 0.1 s, at most 100 reads (an interactive R at the end of a pipe gets ""
@@ -5468,10 +5474,11 @@ totals line names the model and the context left.
   children only tighten (IC-52, IC-53 item 4). A project value is compared with the default when the user's
   value is not a valid mode.
 - Gate: the `mode` policy allows every call but a computed `system()`-family command, which it denies as in auto
-  (7.11, D-262); `critical_guard` takes the level of the flagged rows that are not `control`, except
-  `options(gptr.*)`, which could switch the guard off, and asks a person at level 4 while the guard is on;
-  `secret_guard` asks only for secret-to-network flows; `protect_size` is skipped as in auto; deny and ask rules
-  still apply; allow rules never pre-approve level 4 (6.8.2).
+  (7.11, D-262), and `r` code the evaluator's guard refuses, denied in every mode (D-269);
+  `critical_guard` takes the level of the flagged rows that are not `control`, except `options(gptr.*)`, which
+  could switch the guard off, and asks a person at level 4 while the guard is on; `secret_guard` asks only for
+  secret-to-network flows; `protect_size` is skipped as in auto; deny and ask rules still apply; allow rules
+  never pre-approve level 4 (6.8.2).
 - Level 4 in every mode: deleting a path whose class is `outside` (beyond the project and R's session
   `tempdir()`; system temporary roots such as `/tmp` count as outside, so a run nobody can answer stops
   `blocked` there), `protected`, `control` or `critical`. A delete keeps the category `file_delete`; a control
@@ -5728,9 +5735,11 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     without a final newline was split: its head went at once as a steer, its last line stayed the
     draft). A message starting with `/` or `!` is always a follow-up, and a blank one is not sent.
     Two keys act only outside an open bracketed paste, as a batch of their own, or at the end of a
-    batch without a newline, after its text (review of Tasks 16-21: keys typed during an in-process
-    tool arrive as one batch; elsewhere Tab is text and Up is dropped), and `console_keys()` reads
-    one that ends a batch right after a newline as its own batch, after the message the newline sent
+    batch without a newline outside its pastes, after its text (review of Tasks 16-21: keys typed
+    during an in-process tool arrive as one batch; FIX-34: a pasted newline is text, so a Tab after
+    a multi-line paste in that batch sends it; elsewhere Tab is text and Up is dropped), and
+    `console_keys()` reads one that ends a batch right after a newline as its own batch, after the
+    message the newline sent
     (P28 Task 35: Enter and Up shared a late read and Up was dropped): Up (`ESC [ A`, `ESC O A`) on
     an empty draft takes back the newest queued message; Tab on a trigger word completes and never
     sends, and on any other draft sends the other kind. `console_trigger(line)` gives the trigger
@@ -5743,7 +5752,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     mode with bracketed paste on (D-263), off before every readline read and on again after
     in-process R code (`tty_call()`, section 7.1:
     `-icanon -echo -iexten min 1 time 0`, the saved modes back on return, error,
-    interrupt and, by a finalizer, `q()`; only a kill or a crash leaves `stty sane` to the person); a D console
+    interrupt and, by a finalizer, `q()`; only a kill or a crash leaves `reset` to the person); a D console
     keeps `-echo noflsh` and its lines (D-221; P28 Task 58), and radian, an L console, gets neither. `gptr_readline()` reads with the
     saved modes and sets the call's again after. `console_typed()` runs every 0.05 s; in T it reads fd 0
     (`console_typed_chars()`, the text `console_typed_lines()` splits into lines) into the composer,

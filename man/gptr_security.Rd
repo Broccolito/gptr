@@ -37,12 +37,13 @@ own configuration) and for reads of registered secrets; \code{yolo}, which only 
 project setting or model code in another mode cannot), also runs gptr's own configuration
 functions, writes to R startup files such as \verb{~/.Rprofile} (which can change gptr's options in
 the next R process) and secret reads without asking, and still asks before deleting protected
-files, files outside the project or the project itself, \code{rm(list = ls())}, quitting R,
-\verb{options(gptr.*)} and sending a secret over the network; \code{plan} changes nothing. In \code{auto} and
-\code{yolo} mode a \code{system()} or \code{system2()} call (on Windows also \code{shell()} or \code{shell.exec()}) whose
-command the code computes is refused (see below). When nobody can answer a question (Rscript,
-knitr, a scheduled job) the run stops with status \code{blocked} and a \code{gptr_error_permission}
-condition that says how to allow the action, unless you set
+files, files outside the project or the project itself, \code{rm(list = ls())}, \verb{options(gptr.*)}
+and sending a secret over the network; \code{plan} changes nothing. In every mode \code{r} code that calls
+\code{q()}, \code{readline()} or another function that would end, pause or hang your R session is refused
+without a question. In \code{auto} and \code{yolo} mode a \code{system()} or \code{system2()} call (on Windows also
+\code{shell()} or \code{shell.exec()}) whose command the code computes is refused (see below). When nobody
+can answer a question (Rscript, knitr, a scheduled job) the run stops with status \code{blocked} and
+a \code{gptr_error_permission} condition that says how to allow the action, unless you set
 \code{options(gptr.noninteractive_ask = "deny")}. Model code cannot switch the gate off or loosen it
 during a run: the safety options are copied when the run starts. Only the option
 \code{gptr.unsafe_no_permissions}, set by you outside a run, removes the gate, and it is meant for

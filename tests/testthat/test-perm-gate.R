@@ -93,10 +93,33 @@ test_that("allow rules never loosen plan or pre-approve level 4; deny rules win 
 
 test_that("the critical guard asks a person even in auto, unless switched off (IC-53)", {
   root = local_project()
-  expect_identical(gate_decide(gate_r("q('no')"), gate_ctx("auto")), "ask_human")
+  code = "unlink('/etc/gptr-old.csv')"
+  expect_identical(gate_decide(gate_r(code), gate_ctx("auto")), "ask_human")
   local_gptr_options(critical_guard = FALSE)
-  expect_identical(gate_decide(gate_r("q('no')"), gate_ctx("auto")), "allow")
-  expect_identical(gate_decide(gate_r("q('no')"), gate_ctx("manual")), "ask_human")
+  expect_identical(gate_decide(gate_r(code), gate_ctx("auto")), "allow")
+  expect_identical(gate_decide(gate_r(code), gate_ctx("manual")), "ask_human")
+})
+
+test_that("code the evaluator never runs is refused in every mode, no person asked (FIX-34)", {
+  root = local_project()
+  for (m in session_modes) {
+    for (code in c("q('no')", "quit(save = 'no')", "x = readline('?')")) {
+      expect_identical(gate_decide(gate_r(code), gate_ctx(m)), "deny", label = paste(m, code))
+    }
+  }
+  expect_match(perm_policy_mode(gate_r("q('no')"), gate_ctx("yolo"))$reason,
+               "^Not run: the code calls or refers to q\\(\\), which would end")
+  # `q` bound to data where the code runs is no call of q()
+  e = new.env()
+  e$q = c(0.1, 0.9)
+  expect_identical(gate_decide(gate_r("summary(q)", e), gate_ctx("manual", envir = e)), "allow")
+  # without a person, the model is told and the run goes on
+  withr::local_options(gptr.interactive = FALSE)
+  fake = local_fake_provider(list(fake_tool("r", code = "q('no')"), "Done."))
+  s = peter("Quit R.", model = fake, mode = "auto", envir = new.env())
+  expect_identical(s$status, "idle")
+  expect_match(msg_text(fake_requests(fake)[[2]]$last_results[[1]]),
+               "^Permission denied: Not run: the code calls or refers to q\\(\\)")
 })
 
 test_that("in auto a delete outside the project through a name asks a person (D-211)", {
@@ -136,7 +159,7 @@ test_that("yolo runs control, installs, writes anywhere and secret reads; level 
   expect_identical(gate_decide(gate_tool("write", ".gptr/settings.json", 2L), yolo), "allow")
   human = c("unlink('/etc/gptr-old.csv')", "system('rm -rf /etc/gptr-docs')",
             "unlink('.git', recursive = TRUE)", "unlink('.env')", "file.remove('~/.ssh/id_rsa')",
-            "unlink('.', recursive = TRUE)", "system('git clean -fdx')", "q('no')",
+            "unlink('.', recursive = TRUE)", "system('git clean -fdx')",
             "options(gptr.critical_guard = FALSE)", "options(gptr.unsafe_no_permissions = TRUE)")
   for (code in human) expect_identical(gate_decide(gate_r(code), yolo), "ask_human", label = code)
   for (m in c("manual", "auto")) {

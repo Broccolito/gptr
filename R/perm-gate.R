@@ -72,9 +72,11 @@ perm_computed_cmd = function(call) {
   if (!any(vapply(allow, function(r) rule_parse(r)$kind == "fn", NA))) fl$fn[1L]
 }
 
-#' Policy `mode`: the mode x level table with allow rules folded in; auto and yolo refuse a
-#' computed system command (D-262), and yolo allows everything else; control is the critical
-#' guard's, which asks a person in every other mode
+#' Policy `mode`: the mode x level table with allow rules folded in; r code the evaluator's guard
+#' never runs (eval_guard(): q(), readline(), standard input, a secret marker) is refused in every
+#' mode, so no person is asked to approve it (D-269); auto and yolo refuse a computed system
+#' command (D-262), and yolo allows everything else; control is the critical guard's, which asks a
+#' person in every other mode
 #' @noRd
 perm_policy_mode = function(call, ctx) {
   call$risk = risk_norm(call$risk, call$tool)
@@ -85,6 +87,12 @@ perm_policy_mode = function(call, ctx) {
     q = vapply(call$input$questions, function(x) x$question, "")
     return(perm_decision("ask_human", paste0("the ask tool needs a person to answer: ",
                                              paste(q, collapse = " | ")), call))
+  }
+  code = if (identical(call$name, "r")) call$input$code
+  parsed = if (rlang::is_string(code)) eval_parse(code)
+  if (is.expression(parsed)) {
+    guard = eval_guard(parsed, ctx$envir)$reason
+    if (!is.null(guard)) return(perm_decision("deny", sub("[.]$", "", guard), call))
   }
   fn = if (mode %in% c("auto", "yolo")) perm_computed_cmd(call)
   if (!is.null(fn)) {

@@ -256,7 +256,8 @@ Where an interrupt cannot be resumed (Windows' Rgui, Jupyter) the key stops the 
 \verb{/exit}, two consecutive interrupts at the prompt or the end of piped input return the session
 invisibly, so \code{session = peter()} keeps the conversation. In a terminal the chat reads keys with
 the terminal's echo off and restores it on return, on an error, at an interrupt and at \code{q()};
-if R is killed or crashes while peter works, type \verb{stty sane} and press Enter to get it back.
+if R is killed or crashes while peter works, type \code{reset} and press Enter to get the terminal
+back.
 
 Options: \code{gptr.verbose} (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 knitr and testthat, 1 under Rscript, 2 at the console), \code{gptr.max_turns_console}

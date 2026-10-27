@@ -74,6 +74,13 @@ amendment are in `DEVIATIONS.md`:
   admits `@objects` and leaves out undone blocks and the `#< ` run, `/retry` sends its notes
   again, a plan line names no deleted file, and `gptr_source(model =)` re-asks with another model
   (D-268); ALL-6 and PERM-8's transcript part are not fixed.
+- FIX-34 (#92): the console findings of the live sessions: a Tab after a multi-line bracketed
+  paste read with it sends it; an `@file` line that is not UTF-8 is read as CP1252 instead of
+  dropping the prompt; `/model`'s switch names the full id a CLI's `default` runs; a macOS paste's
+  echoed last line no longer shares the hint's or the re-ask's row (not at the pause menu); NEWS
+  says a paste at a question is kept only in a macOS terminal; the docs advise `reset` after a
+  crash; `r` code the evaluator never runs, such as `q()`, is refused without a question in every
+  mode (D-269).
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped

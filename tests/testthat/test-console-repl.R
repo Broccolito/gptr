@@ -253,6 +253,16 @@ test_that("the terminal reader looks at fd 0 only on a macOS readline terminal",
   expect_identical(console_reader(stdin = FALSE)$waiting(), character())
 })
 
+test_that("a macOS terminal's look at fd 0 erases the row its tty echoed a paste on (FIX-34)", {
+  local_mocked_bindings(console_typed_lines = function(rd) "pasted",
+                        console_readline_tty = function() TRUE, is_macos = function() TRUE,
+                        console_class = function() "T")
+  rd = console_reader(stdin = FALSE)
+  expect_identical(written(function() expect_identical(rd$waiting(), "pasted")), "\r\033[K")
+  local_mocked_bindings(console_class = function() "D")
+  expect_identical(written(function() expect_identical(rd$waiting(), "pasted")), "")
+})
+
 test_that("console_typed_lines() reads what fd 0 holds without blocking and never fails", {
   box = new.env(parent = emptyenv())
   box$chunks = c("line2\r\nline3\n", "\n  indented\r")
@@ -491,6 +501,17 @@ test_that("a binary @file is announced, not inlined", {
   men = repl_mentions("look at @blob.bin", new.env())
   expect_match(men$files, "binary=\"true\" bytes=\"3\"", fixed = TRUE)
   expect_identical(men$said, "@ blob.bin (binary, 3 bytes)")
+})
+
+test_that("an @file line that is not UTF-8 is read as CP1252, as the read tool reads it (FIX-34)", {
+  root = local_project()
+  bytes = c(charToRaw("caf"), as.raw(0xe9), charToRaw(" "), as.raw(0x93), charToRaw("q"),
+            as.raw(c(0x94, 0x81)), charToRaw("\ncafé in UTF-8\n"))
+  writeBin(bytes, file.path(root, "lat.txt"))
+  men = repl_mentions("look at @lat.txt", new.env())
+  expect_identical(men$files, paste0("<file path=\"lat.txt\">\ncafé “q”<81>\n",
+                                     "café in UTF-8\n</file>"))
+  expect_identical(men$said, "@ lat.txt (2 lines)")
 })
 
 test_that("a long @file is marked truncated even when the first cut line is blank", {

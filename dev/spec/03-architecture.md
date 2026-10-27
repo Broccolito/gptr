@@ -1488,6 +1488,10 @@ In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` o
 `r(fn:...)` allow rule covering those rows, matched against them alone, lifts it; plan, manual and edits are
 unchanged and a literal command is read and gated as before [D-262].
 
+In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never
+runs, such as `q()`, `readline()`, a read of standard input or a secret marker, with the guard's text as its
+reason, so no person is asked to approve code that cannot run; the guard stays the evaluator's backstop [D-269].
+
 `yolo` [IC-78] is the loosest mode (plan < manual < edits < auto < yolo): only the person selects it (`peter(mode =)`,
 `/mode`, user or session settings, `options(gptr.mode)` outside a run); no project file sets it [D-250], nested
 calls and children only tighten. A delete keeps the category `file_delete` and a control target shows in its
@@ -1505,9 +1509,10 @@ policy the decision is ask, fail closed) -> for `ask` only, `permission_request`
 reviewer plugin may answer) -> the UI backend. `ask_human` (level 4, the secret guard, the control category and
 paths, first use of a CLI route, the egress acknowledgement) goes only to a UI whose `has_ui()` is true in the
 run's snapshot; a hook's allow is ignored with a diagnostic [IC-53]. In yolo the `mode` policy allows every
-call but a computed `system()` command (6.8.1), `critical_guard` ignores control rows except `options(gptr.*)`,
-`secret_guard` asks only for secret-to-network flows, `protect_size` is skipped as in auto, and deny and ask rules
-still apply; any final allow grants the call's control exports their one-shot tokens [IC-53 item 3, IC-78].
+call but a computed `system()` command and code the evaluator's guard refuses (6.8.1), `critical_guard`
+ignores control rows except `options(gptr.*)`, `secret_guard` asks only for secret-to-network flows,
+`protect_size` is skipped as in auto, and deny and ask rules still apply; any final allow grants the call's
+control exports their one-shot tokens [IC-53 item 3, IC-78].
 The run snapshots the safety options
 (`gptr.ui`, `gptr.interactive`, the guards, `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode`) at its
 start, so model code cannot change them mid-run. A `modify` is re-classified and re-checked once. Built-in policies: `mode`,
@@ -2387,7 +2392,7 @@ Edits mode is on: file edits inside the project are applied without asking; R co
 </mode>
 
 <mode name="auto">
-Auto mode is on: actions run without approval, except critical ones such as quitting R or deleting the project. Keep going until the task is done; ask only if the request is ambiguous.
+Auto mode is on: actions run without approval, except critical ones such as deleting the project. Keep going until the task is done; ask only if the request is ambiguous.
 </mode>
 ```
 

@@ -1636,12 +1636,13 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' project setting or model code in another mode cannot), also runs gptr's own configuration
 #' functions, writes to R startup files such as `~/.Rprofile` (which can change gptr's options in
 #' the next R process) and secret reads without asking, and still asks before deleting protected
-#' files, files outside the project or the project itself, `rm(list = ls())`, quitting R,
-#' `options(gptr.*)` and sending a secret over the network; `plan` changes nothing. In `auto` and
-#' `yolo` mode a `system()` or `system2()` call (on Windows also `shell()` or `shell.exec()`) whose
-#' command the code computes is refused (see below). When nobody can answer a question (Rscript,
-#' knitr, a scheduled job) the run stops with status `blocked` and a `gptr_error_permission`
-#' condition that says how to allow the action, unless you set
+#' files, files outside the project or the project itself, `rm(list = ls())`, `options(gptr.*)`
+#' and sending a secret over the network; `plan` changes nothing. In every mode `r` code that calls
+#' `q()`, `readline()` or another function that would end, pause or hang your R session is refused
+#' without a question. In `auto` and `yolo` mode a `system()` or `system2()` call (on Windows also
+#' `shell()` or `shell.exec()`) whose command the code computes is refused (see below). When nobody
+#' can answer a question (Rscript, knitr, a scheduled job) the run stops with status `blocked` and
+#' a `gptr_error_permission` condition that says how to allow the action, unless you set
 #' `options(gptr.noninteractive_ask = "deny")`. Model code cannot switch the gate off or loosen it
 #' during a run: the safety options are copied when the run starts. Only the option
 #' `gptr.unsafe_no_permissions`, set by you outside a run, removes the gate, and it is meant for
