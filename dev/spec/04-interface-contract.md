@@ -4664,8 +4664,10 @@ turn created, so the person's own objects stay. Known limits: turn blocks are ne
 uses an object made by a line that is off (the object stayed in the session, so the turn ran) still stops
 `source()`; `all.names()` can match a column or formula term of the same name, which turns a line off that did not
 need it; a name reached through a string, as in `get("fit")`, is not seen; lines written by hand right after a
-direct R line switch with it; a name holding a comma is split by `created=`; a non-ASCII name is matched only in a
-UTF-8 locale. The `#<` lines are what was sent: neither `gptr.doc_output_lines` nor the `doc` setting limits them.
+direct R line switch with it, and a comment in its code shaped like a command line, such as `# /tmp is scratch`,
+ends its section there and leaves the lines below on; a name holding a comma is split by `created=`; a non-ASCII
+name is matched only in a UTF-8 locale. The `#<` lines are what was sent: neither `gptr.doc_output_lines` nor the
+`doc` setting limits them.
 
 **IC-50 Jupyter documents.** (req-11) With `front_end() == "jupyter"` gptr never writes the open notebook: the
 block is shown as the cell's output (a fenced R code block) and recorded as a pending `gptr.doc_block` entry

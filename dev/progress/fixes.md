@@ -6112,6 +6112,11 @@ the driver, screens, events, transcripts and replays without a model are local, 
   limit, as Q2 switches direct R lines only. `?gptr_security` says that the `#<` lines keep
   `@file` heads and `!` notes whatever `gptr.doc_output_lines` says; D-264 and IC-49 add the
   section's extent, the comma and the non-UTF-8 locale limits.
+- Review of 79847601 (three verifiers), records only: D-264's heading is cut to 100 columns, and
+  D-264 and IC-49 add that a comment in a direct R line's code shaped like a command line, such
+  as `# /tmp is scratch`, ends its section, so the lines below stay on (the console writes
+  commands it does not know too, so the extent cannot test the name). A stale block's re-ask
+  keeps sending the block's `#<` lines with the edited prompt, as D-264 states.
 - Deviations: D-264. Open: `/retry` sends the typed prompt again through the console, which reads
   each `@file` again and sends only the notes pending now, as before; only a re-ask from the
   document sends the recorded heads. Turn blocks are never switched, so a later turn that uses an

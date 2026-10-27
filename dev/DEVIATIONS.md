@@ -7780,7 +7780,7 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   chose".
   Evidence: progress/fixes.md FIX-21.
 
-## D-264 - FIX-29 Transcripts record what a prompt was sent with and what each step created (2026-10-26)
+## D-264 - FIX-29 Transcripts record what a prompt was sent with and what steps created (2026-10-26)
 - Rule (`#<` lines, issue #85 R27): a console turn's block opens with the `user_ran` and
   `user_files` context blocks its prompt was sent with, tags included, one `#< ` comment line per
   line (an empty one `#<`): the `!code` notes and each `@file` as attached (at most 40 lines,
@@ -7819,9 +7819,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   off that did not need it; a name reached through a string, as in `get("fit")`, is not seen; a
   direct R line's section runs to the next line the console writes for another entry (a direct R
   header, a `# /<name>` command line, a session header, a turn's statement or block), so lines
-  written by hand right after it switch with it; a name holding a comma is split by `created=`; a
-  non-ASCII name is matched only in a UTF-8 locale. The `#<` lines are what was sent, so neither
-  `gptr.doc_output_lines` nor the `doc` setting limits them.
+  written by hand right after it switch with it, and a comment in its code shaped like a command
+  line, such as `# /tmp is scratch`, ends it there and leaves the lines below on; a name holding a
+  comma is split by `created=`; a non-ASCII name is matched only in a UTF-8 locale. The `#<` lines
+  are what was sent, so neither `gptr.doc_output_lines` nor the `doc` setting limits them.
 - Contract-visible: 04 section 15.3 IC-49, section 11.5 (header key `created`, the body's `#<`
   lines, the transcript row) and section 7.8 (call record binding `sent`); `?gptr_doc`,
   `?gptr_source`, `?gptr_export`, `?gptr_security`; vignette("script-as-history").
