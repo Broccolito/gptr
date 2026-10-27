@@ -171,6 +171,19 @@ test_that("pasted text holding an end marker cannot send what follows it (review
   expect_identical(r$action, sent("steer", "early\nmore"))
 })
 
+test_that("a lone end marker ends a paste: the text before it is pasted (review round 3)", {
+  # the rest of a paste after a read that ended at an end marker its text holds, then the
+  # terminal's own end marker
+  expect_keys(list(
+    list("\r!file.create('X')\r\033[201~", "early", "early\n!file.create('X')\n", NULL),
+    list("\r!file.create('X')\r\033[201~", "", "!file.create('X')\n", NULL)
+  ))
+  r = compose("\r!cat(1)\r\033[201~", state = compose("\033[200~x\033[201~")$state, now = 1)
+  expect_null(r$action)
+  expect_identical(r$state$draft, "x\n!cat(1)\n")
+  expect_identical(compose("\r", state = r$state, now = 2)$action, sent("steer", "x\n!cat(1)\n"))
+})
+
 test_that("a bracketed paste spans reads; its end marker is held however late (D-263)", {
   r = compose("\033[A", state = compose("\033[200~", now = 0)$state, now = 1)
   expect_null(r$action)

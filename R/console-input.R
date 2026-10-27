@@ -18,10 +18,12 @@
 #' however late, as does a marker's start (`ESC [`, `ESC [ 2`, `ESC [ 2 0`, `ESC [ 2 0 0`,
 #' `ESC [ 2 0 1`) while the batches after it may still complete it, and once they cannot its Esc is
 #' the Esc key, dropped, and the rest is typed; in a batch holding a marker the text before the
-#' markers is typed, and a newline after a paste's end stays in the draft too, so pasted text that
-#' holds an end marker sends nothing: only Enter in a later batch sends. With `paste` (a batch
-#' without markers read on the polling beat, too quick for a person to type a newline and more) a
-#' batch with text after its last newline is a paste the same way. A message goes as `enter_kind`
+#' markers is typed, unless the first is an end marker (the rest of a paste whose text ended it
+#' early in an earlier batch, or whose start another reader took), and a newline after a paste's
+#' end stays in the draft too, so pasted text that holds an end marker sends nothing: only Enter in
+#' a later batch sends. With `paste` (a batch without markers read on the polling beat, too quick
+#' for a person to type a newline and more) a batch with text after its last newline is a paste the
+#' same way. A message goes as `enter_kind`
 #' (`"steer"` or `"follow_up"`), always as a follow-up when it starts with / or !, and not at all
 #' when blank. Two keys act only outside an open bracketed paste, as a batch of their own or as the
 #' end of a batch without a newline outside a paste (console_unpasted(); elsewhere Tab is text and
@@ -52,6 +54,9 @@ console_compose = function(state, chars, now, enter_kind, complete, paste = FALS
   }
   # a bracketed paste (D-263) is open at the batch's end when its last marker opens one
   marks = regmatches(x, gregexpr("\033\\[20[01]~", x))[[1L]]
+  # an end marker before any start ends a paste whose text ended it early in an earlier batch, or
+  # whose start another reader took: the text before it is pasted
+  if (length(marks) && marks[[1L]] == "\033[201~") bracket = TRUE
   open = if (length(marks)) marks[[length(marks)]] == "\033[200~" else bracket
   # a Tab or Up that ends a batch without a newline outside a paste is the key after the batch's
   # text, as keys typed during an in-process tool arrive as one batch
@@ -160,10 +165,11 @@ console_trigger = function(line) {
 #' while no paste they opened is open (console_compose(), D-263). A Tab or Up that ends a batch
 #' right after a newline is a key of its own, after the message the newline sent (console_compose()
 #' acts once a batch), as when Enter and Up share a late read. Ctrl-C, a key in character mode
-#' (tty_call()), interrupts as SIGINT would, after the keys before it (inside a bracketed paste it
-#' is pasted text); the keys after it in the batch (a further Ctrl-C dropped) are the pause menu's
-#' answers (`rd$after_interrupt`, console_ahead()), and those it leaves are read here once it
-#' resumes, as if typed after it
+#' (tty_call()), interrupts as SIGINT would, after the keys before it (in a batch holding a
+#' bracketed-paste marker, or read while a paste is open, it is pasted text, as the text after an
+#' early end marker is); the keys after it in the batch (a further Ctrl-C dropped) are the pause
+#' menu's answers (`rd$after_interrupt`, console_ahead()), and those it leaves are read here once
+#' it resumes, as if typed after it
 #' @noRd
 console_keys = function(rd, s, chars) {
   # the first read of a run, or one after an in-process tool held the reactor, is off the beat
@@ -172,13 +178,11 @@ console_keys = function(rd, s, chars) {
   paste = gap <= 0.2 && nchar(chars) > 1 + gap / 0.03
   rd$polled = now
   rd$read_at = NULL
-  # a Ctrl-C byte inside a bracketed paste is pasted text, which the composer drops (D-263)
-  open = isTRUE(rd$compose$bracket)
-  chars = paste0(if (open) "\033[200~", chars)
-  m = gregexpr("(?s)\033\\[200~.*?(\033\\[201~|\\z)", chars, perl = TRUE)
-  regmatches(chars, m) = lapply(regmatches(chars, m), gsub, pattern = "\003", replacement = "",
-                                fixed = TRUE)
-  if (open) chars = substring(chars, 7L)
+  # a batch holding a bracketed-paste marker, or read while a paste is open, holds no Ctrl-C key:
+  # its Ctrl-C bytes are pasted text, which the composer drops (D-263)
+  if (isTRUE(rd$compose$bracket) || grepl("\033\\[20[01]~", paste0(rd$compose$esc, chars))) {
+    chars = gsub("\003", "", chars, fixed = TRUE)
+  }
   ctrl_c = regexpr("\003", chars, fixed = TRUE)
   if (ctrl_c > 0L) {
     after = gsub("\003", "", substring(chars, ctrl_c + 1L), fixed = TRUE)

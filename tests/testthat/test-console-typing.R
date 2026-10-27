@@ -1179,6 +1179,37 @@ test_that("a Ctrl-C byte inside a bracketed paste is pasted text, not the key (r
   expect_length(session_data(s)$queue$steer, 0L)
 })
 
+test_that("a batch holding a paste marker holds no Ctrl-C key (review round 3)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$sending = quote(peter())
+  local_mocked_bindings(reactor_now = function() 0)
+  read = function(chars) {
+    .gptr_repl = rs
+    tryCatch({
+      console_keys(rs$reader, s, chars)
+      "read"
+    }, interrupt = function(e) "interrupted")
+  }
+  # pasted text that ends the paste early, then a Ctrl-C byte and the menu's answers; a paste's
+  # start cut at a read's end; the rest of a paste after a read that ended at an early end marker
+  pastes = list(list("\033[200~x\033[201~\003f\n!cat(1)\n\033[201~"),
+                list("\033[20", "0~x\003f\n!cat(1)\n\033[201~"),
+                list("\033[200~x\033[201~", "\003f\n!cat(1)\n\033[201~"))
+  for (keys in pastes) {
+    rs$reader = console_reader()
+    res = character()
+    utils::capture.output(for (k in keys) res = c(res, read(k)))
+    label = encodeString(paste(keys, collapse = " | "))
+    expect_identical(res, rep("read", length(keys)), label = label)
+    expect_identical(rs$reader$after_interrupt %||% "", "", label = label)
+    expect_identical(rs$reader$compose$draft, "xf\n!cat(1)\n", label = label)
+    expect_length(session_data(s)$queue$steer, 0L)
+    expect_length(rs$reader$typed, 0L)
+  }
+})
+
 test_that("a draft a run left waits for the follow-ups, then continues at the prompt (D-243)", {
   skip_on_cran()
   local_console_test()
