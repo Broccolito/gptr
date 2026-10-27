@@ -1526,6 +1526,39 @@ test_that("a fresh console statement naming an unknown model replays without it 
   expect_length(fake_requests(x$fake), 0L)
 })
 
+test_that("a marker-shaped line in model or ! code never stops the recording (FIX-33 DOC-2)", {
+  skip_on_cran()
+  expect_identical(doc_direct_code(c("x = 1", "# <<< gptr:abc123", "  # >>> gptr:abc124 m=1",
+                                     "s = \"", "# <<< gptr:abc125", "\"")),
+                   c("x = 1", "## <<< gptr:abc123", "  ## >>> gptr:abc124 m=1", "s = \"",
+                     "# <<< gptr:abc125", "\""))
+  x = local_doc_e2e(list(
+    fake_tool("r", code = "x9 = 1\n# >>> gptr:abc123\n  # <<< gptr:abc124\nx9"),
+    fake_text("Made x9."), fake_tool("r", code = "y9 = x9 + 1"), fake_text("Made y9."),
+    fake_tool("r", code = "w9 = 1"), fake_text("Made w9."),
+    fake_tool("r", code = "s9 = \"\n# >>> gptr:abc125\n\""), fake_text("Made s9."),
+    fake_tool("r", code = "v9 = 2"), fake_text("Made v9.")))
+  local_gptr_options(quiet = FALSE)
+  con = doc_console_repl(x)
+  con$run("make x9")
+  con$run("make y9")
+  con$run("!z9 = y9 + 1\n# <<< gptr:abc123\n  # >>> gptr:abc126")
+  con$run("make w9")
+  tr = readLines(con$t)
+  expect_false(attr(doc_find_blocks(tr), "malformed"))
+  expect_identical(gptr_blocks(con$t)$status, rep("fresh", 3L))
+  sourced = doc_source_lines(tr)
+  expect_identical(c(sourced$x9, sourced$y9, sourced$z9, sourced$w9), c(1, 2, 3, 1))
+  # a marker inside a string of model code costs only its own block, and the console says so
+  expect_message(con$run("make s9"),
+                 "gptr did not record this block into .gptr/transcripts/t.R", fixed = TRUE)
+  con$run("make v9")
+  tr = readLines(con$t)
+  expect_false(attr(doc_find_blocks(tr), "malformed"))
+  expect_identical(gptr_blocks(con$t)$status, rep("fresh", 4L))
+  expect_identical(doc_source_lines(tr)$v9, 2)
+})
+
 test_that("console /undo, /undo, /redo, /redo bring back both turns' blocks (FIX-31)", {
   skip_on_cran()
   x = local_doc_e2e(list(fake_tool("r", code = "a = 1"), fake_text("Made a."),

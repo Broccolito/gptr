@@ -1405,8 +1405,9 @@ doc_turn_assistant = function(out, m, results, with_out, plan_mode) {
 }
 
 #' Serialize successful canonical or locally served R with the same code, secret and output
-#' rules; a comment line shaped like a steer gets one more `#` (doc_comment_escape()). A local MCP
-#' trace does not create or alter the provider's assistant/tool messages.
+#' rules; a comment line shaped like a steer or a block marker gets one more `#`
+#' (doc_comment_escape()). A local MCP trace does not create or alter the provider's
+#' assistant/tool messages.
 #' @noRd
 doc_turn_r = function(out, det, args, with_out, plan_mode) {
   if (!identical(det$status %||% "ok", "ok")) return(out)
@@ -1421,7 +1422,7 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
   kept = attr(chunk, "kept")
   chunk = as.character(chunk)
   safe = doc_history_code(chunk)
-  hist = doc_comment_escape(safe$lines, doc_re_steer)
+  hist = doc_comment_escape(safe$lines, c(doc_re_steer, doc_re_open, doc_re_close))
   if (safe$secrets) out$secrets = TRUE
   outs = det$outputs
   if (!length(chunk)) {
@@ -1730,7 +1731,8 @@ doc_prepare = function(fmt, site, up, text, taken = character()) {
 
 #' Insert or replace a call's block through the site's backend (contract 7.15): checks write
 #' consent first (IC-45; otherwise nothing is written), passes `document_write` (fail closed,
-#' patchable), md5 conflict checks with re-locate and retry. `file` and `transcript` sites are
+#' patchable), md5 conflict checks with re-locate and retry; a block that could not be written
+#' anywhere is named once per document. `file` and `transcript` sites are
 #' written on disk here, `deferred` (Rscript) and `pending` (Jupyter) sites are queued by
 #' doc_pending_add() (IC-50, IC-51), the IDE backends go through the editor buffer
 #' (doc_ide_upsert()). Returns list(action, block_id, lines, backend) invisibly.
@@ -1758,7 +1760,13 @@ doc_upsert = function(site, block_lines, block_id = NULL) {
   ), error = function(e) {
     registry_diagnostic("builtin:documents", "document_write", class(e)[1L],
                         conditionMessage(e))
-    doc_upsert_fallback(site, up, backend)
+    res = doc_upsert_fallback(site, up, backend)
+    if (identical(res$action, "failed")) {
+      gptr_inform(paste0("gptr did not record this block into ", doc_rel(site$path), ": ",
+                         conditionMessage(e)), "notice",
+                  .once = paste0("doc_failed:", path_key(site$path)))
+    }
+    res
   })
   written = res$site %||% site
   res$site = NULL
@@ -1792,7 +1800,8 @@ doc_upsert_fallback = function(site, up, backend) {
   res
 }
 
-#' Disk upsert through doc_rewrite() (the document lock, md5 conflict checks, three attempts; IC-51)
+#' Disk upsert through doc_rewrite() (the document lock, md5 conflict checks, three attempts;
+#' IC-51); a block whose text would leave the markers malformed is a doc_write error
 #' @noRd
 doc_file_upsert = function(fmt, site, up) {
   path = site$path
@@ -1807,6 +1816,11 @@ doc_file_upsert = function(fmt, site, up) {
     if (!is.null(prep$skip)) return(list(value = res(prep$skip, prep$id)))
     new = fmt$upsert(doc$lines, site, prep$rendered, prep$id)
     if (identical(new, doc$lines)) return(list(value = res("unchanged", prep$id)))
+    # a marker line inside a string of the code would leave the markers malformed
+    if (isTRUE(attr(doc_find_blocks(new), "malformed"))) {
+      gptr_abort("The block would leave the document's gptr markers malformed.", "doc_write",
+                 path = path, reason = "malformed")
+    }
     b = doc_block_get(site$format, new, prep$id)
     list(lines = new, value = list(action = prep$action, block_id = prep$id, backend = backend,
                                    lines = c(b$start, b$end), sha = prep$sha,

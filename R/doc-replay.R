@@ -954,17 +954,13 @@ doc_re_entry = paste0("^(# (direct R \\(|/[^[:space:]/]+( |$)|gptr session |mach
                       ">>> gptr:)|", substring(doc_re_console, 2L), ")")
 
 #' The lines of a direct R line's code as a transcript records them: a comment line that reads as
-#' the first line of another entry (doc_re_entry), such as `# /tmp is scratch`, gets one more `#`,
-#' so the line's section runs on past it (doc_direct_switch()). R reads the same code; a line
-#' inside a string is kept as it is.
+#' the first line of another entry (doc_re_entry), such as `# /tmp is scratch`, so the line's
+#' section runs on past it (doc_direct_switch()), or as a block marker, so the markers stay well
+#' formed, gets one more `#` (doc_comment_escape()). R reads the same code; a line inside a string
+#' is kept as it is.
 #' @noRd
 doc_direct_code = function(code) {
-  hit = startsWith(code, "#") & grepl(doc_re_entry, code, perl = TRUE)
-  if (!any(hit)) return(code)
-  pd = tryCatch(utils::getParseData(doc_parse_text(code)), error = function(e) NULL)
-  hit = hit & seq_along(code) %in% pd$line1[pd$token == "COMMENT" & pd$col1 == 1L]
-  code[hit] = paste0("#", code[hit])
-  code
+  doc_comment_escape(code, c(doc_re_entry, doc_re_open, doc_re_close))
 }
 
 #' The header of a direct R line: `# direct R (no model)`, `; <reason>` inside the parentheses (a
