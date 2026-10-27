@@ -792,8 +792,9 @@ ckpt_cmd_run = function(s, turn = -1L, to = NULL, restore = "all", verb = "Rewou
   if (!is.null(err) || identical(lr$id, last)) return(err)
   text = d$editor_text
   if (length(text) && gptr_is_interactive()) console_history_add(text)
-  c(paste0(verb, " (", lr$restore, if (lr$partial) "); some items were not restored:" else ")."),
-    lr$report, if (length(text)) c("Undone prompt:", text))
+  end = if (!lr$partial) ")." else
+    paste0("); some items were not ", if (identical(verb, "Redone")) "redone" else "restored", ":")
+  c(paste0(verb, " (", lr$restore, end), lr$report, if (length(text)) c("Undone prompt:", text))
 }
 
 #' /undo: rewind the last turn; asks first when the preview finds items it cannot restore

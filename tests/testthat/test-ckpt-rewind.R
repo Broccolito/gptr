@@ -673,6 +673,19 @@ test_that("/undo, /redo, /rewind k and /checkpoints drive gptr_rewind()", {
   expect_identical(ckpt_cmd_undo("", list(session = NULL)), "There is no session to undo.")
 })
 
+test_that("/redo's heading says some items were not redone (review round 3)", {
+  local_project()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  item = "object fit2: not redone (it was not undone in this R process)"
+  local_mocked_bindings(gptr_rewind = function(s, ...) {
+    d = session_data(s)
+    d$last_rewind = list(id = "e9", restore = "all", partial = TRUE, report = item)
+    invisible(s)
+  })
+  expect_identical(ckpt_cmd_run(s, verb = "Redone"),
+                   c("Redone (all); some items were not redone:", item))
+})
+
 test_that("/undo asks first when the preview finds items it cannot restore", {
   skip_on_cran()
   local_project()

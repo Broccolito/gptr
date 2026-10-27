@@ -127,11 +127,12 @@ bridge_out_session = function() {
 }
 
 #' Emit bridge_call (04 10.4) into the running run, where P10 collects the digest into
-#' `details$bridge` (04 4.4), else at process level; `cmd` is redacted before it is cut
+#' `details$bridge` (04 4.4), else at process level; `cmd` is redacted before it is cut, and the
+#' digest is one line, as text the model chose (a job's name, an error) may hold a line end
 #' @noRd
 bridge_emit = function(payload) {
   payload$cmd = substr(redact_hook(paste(payload$cmd, collapse = " "), "persist"), 1L, 500L)
-  payload$digest = paste0("#> ", payload$digest)
+  payload$digest = paste0("#> ", as_utf8(gsub("[\r\n]+", " ", payload$digest, useBytes = TRUE)))
   run = run_current()
   if (is.null(run)) {
     ev_dispatch("bridge_call", do.call(ev_new, c("bridge_call", payload)))
