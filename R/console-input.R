@@ -22,11 +22,12 @@
 #' a person to type a newline and more) a batch with text after its last newline is a paste the same
 #' way. A message goes as `enter_kind` (`"steer"` or `"follow_up"`), always as a follow-up when it
 #' starts with / or !, and not at all when blank. Two keys act only outside an open bracketed paste,
-#' as a batch of their own or as the end of a batch without a newline (elsewhere Tab is text and Up
-#' is dropped): Up (`ESC [ A`, `ESC O A`) on an empty draft takes back the newest queued message;
-#' Tab on a trigger word (console_trigger()) completes it and never sends: `complete(line, end)`
-#' returns full words, whose longest common prefix replaces the word when longer, else two or more
-#' are listed. On any other draft Tab sends the other kind.
+#' as a batch of their own or as the end of a batch without a newline outside a paste
+#' (console_unpasted(); elsewhere Tab is text and Up is dropped): Up (`ESC [ A`, `ESC O A`) on an
+#' empty draft takes back the newest queued message; Tab on a trigger word (console_trigger())
+#' completes it and never sends: `complete(line, end)` returns full words, whose longest common
+#' prefix replaces the word when longer, else two or more are listed. On any other draft Tab sends
+#' the other kind.
 #' @return list(state, action), the action NULL, list(type = "send", kind, text),
 #'   list(type = "take_back") or list(type = "complete", candidates)
 #' @noRd
@@ -51,12 +52,13 @@ console_compose = function(state, chars, now, enter_kind, complete, paste = FALS
   # a bracketed paste (D-263) is open at the batch's end when its last marker opens one
   marks = regmatches(x, gregexpr("\033\\[20[01]~", x))[[1L]]
   open = if (length(marks)) marks[[length(marks)]] == "\033[200~" else bracket
-  # a Tab or Up that ends a batch without a newline is the key after the batch's text, as keys
-  # typed during an in-process tool arrive as one batch
+  # a Tab or Up that ends a batch without a newline outside a paste is the key after the batch's
+  # text, as keys typed during an in-process tool arrive as one batch
   key = regmatches(x, regexpr("(\t|\033\\[A|\033OA)$", x))
-  if (!open && length(key) && nchar(key) < nchar(x) && !grepl("\n", x, fixed = TRUE)) {
-    text = console_compose(list(draft = draft), substr(x, 1L, nchar(x) - nchar(key)), now,
-                           enter_kind, complete)
+  if (!open && length(key) && nchar(key) < nchar(x) &&
+        !grepl("\n", console_unpasted(x, bracket), fixed = TRUE)) {
+    text = console_compose(list(draft = draft, bracket = bracket),
+                           substr(x, 1L, nchar(x) - nchar(key)), now, enter_kind, complete)
     return(console_compose(list(draft = text$state$draft), key, now, enter_kind, complete))
   }
   if (!open && x %in% c("\033[A", "\033OA")) {
@@ -112,6 +114,12 @@ console_compose = function(state, chars, now, enter_kind, complete, paste = FALS
   }
   t = if (nzchar(esc) && length(keys) == 1L && nzchar(held)) state$t else now
   out(if (nzchar(lines)) send(sub("\n$", "", lines), enter_kind), esc, t)
+}
+
+#' The keys `x` outside bracketed pastes (D-263), with `bracket` after one open before them
+#' @noRd
+console_unpasted = function(x, bracket = FALSE) {
+  gsub("(?s)\033\\[200~.*?(\033\\[201~|\\z)", "", paste0(if (bracket) "\033[200~", x), perl = TRUE)
 }
 
 #' The text of keys `keys` once their edit keys act (console_compose()): the message they end, else
@@ -236,7 +244,8 @@ console_idle = function(rd, prompt) {
       hand = regexpr("\003|[\001\005]|\033(\\[([1478]~|[0-9;]*[CDHF])|O[CDHF])", keys, perl = TRUE)
       if (hand > 0L) keys = substr(keys, 1L, hand - 1L)
       # Tab off a trigger word does nothing here (the composer would send the other kind)
-      tab = endsWith(keys, "\t") && !grepl("[\r\n]", keys)
+      tab = endsWith(keys, "\t") &&
+        !grepl("[\r\n]", console_unpasted(keys, isTRUE(rd$compose$bracket)))
       if (tab && is.null(console_trigger(paste0(draft, sub("\t$", "", keys))))) {
         keys = sub("\t$", "", keys)
       }

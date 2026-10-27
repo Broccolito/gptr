@@ -222,6 +222,22 @@ test_that("Esc then Tab, or a cut sequence then Up, in one read is the key (FIX-
                    sent("follow_up", "x"))
 })
 
+test_that("a Tab after a bracketed paste in one read is the key: its newlines are text (FIX-34)", {
+  cases = list(
+    list("\033[200~summarise it\rin two lines\033[201~\t", "", "",
+         sent("follow_up", "summarise it\nin two lines")),
+    list("\033[200~@mt\rx\033[201~\t", "use ", "", sent("follow_up", "use @mt\nx")),
+    # a newline typed outside the paste still makes the Tab text
+    list("x\r\033[200~p\rq\033[201~\t", "", "p\nq\t", sent("steer", "x"))
+  )
+  expect_keys(cases)
+  expect_keys(cases, paste = TRUE)
+  # a paste open since an earlier read
+  r = compose("o\rthree\033[201~\t", state = compose("\033[200~one\rtw", now = 0)$state, now = 1)
+  expect_identical(r$action, sent("follow_up", "one\ntwo\nthree"))
+  expect_identical(r$state[c("draft", "bracket")], list(draft = "", bracket = FALSE))
+})
+
 test_that("/ and ! drafts are follow-ups, whatever the key", {
   expect_keys(list(
     list("\r", "/status", "", sent("follow_up", "/status")),
@@ -829,6 +845,11 @@ test_that("a bracketed paste at the prompt's editor stays in the draft until Ent
   expect_identical(r$x, "next")
   expect_identical(r$kept, "\"\"\"\nxa\n\n\n\"\"\"")
   expect_null(r$draft)
+  # a Tab after a paste, in its read or in a later one, does nothing here (FIX-34)
+  r = idle_read("x", list("\033[200~a\rb\033[201~\t", "\r"))
+  expect_identical(r$x, "xa\nb")
+  r = idle_read("x", list("\033[200~a\r", "b\rc\033[201~\t", "\r"))
+  expect_identical(r$x, "xa\nb\nc")
 })
 
 test_that("readline's read at the prompt starts the composer afresh (FIX-28)", {

@@ -5700,9 +5700,11 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     without a final newline was split: its head went at once as a steer, its last line stayed the
     draft). A message starting with `/` or `!` is always a follow-up, and a blank one is not sent.
     Two keys act only outside an open bracketed paste, as a batch of their own, or at the end of a
-    batch without a newline, after its text (review of Tasks 16-21: keys typed during an in-process
-    tool arrive as one batch; elsewhere Tab is text and Up is dropped), and `console_keys()` reads
-    one that ends a batch right after a newline as its own batch, after the message the newline sent
+    batch without a newline outside its pastes, after its text (review of Tasks 16-21: keys typed
+    during an in-process tool arrive as one batch; FIX-34: a pasted newline is text, so a Tab after
+    a multi-line paste in that batch sends it; elsewhere Tab is text and Up is dropped), and
+    `console_keys()` reads one that ends a batch right after a newline as its own batch, after the
+    message the newline sent
     (P28 Task 35: Enter and Up shared a late read and Up was dropped): Up (`ESC [ A`, `ESC O A`) on
     an empty draft takes back the newest queued message; Tab on a trigger word completes and never
     sends, and on any other draft sends the other kind. `console_trigger(line)` gives the trigger
