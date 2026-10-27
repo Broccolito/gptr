@@ -859,12 +859,9 @@ doc_inert_text = function(lines, fmt, ids, inert = TRUE, transcript = FALSE) {
     b = doc_block_get(fmt, lines, id)
     if (is.null(b)) next
     lines[b$start:b$end] = doc_inert_marker_lines(lines[b$start:b$end], inert)
-    if (transcript) {
-      p = b$start - 1L
-      while (p >= 1L && !nzchar(trimws(lines[p]))) p = p - 1L
-      if (p >= 1L && grepl("^(#~ )?s_[0-9a-f]{6} (=|\\|>) peter\\(", lines[p])) {
-        lines[p] = if (inert) sub("^(#~ )?", "#~ ", lines[p]) else sub("^#~ ", "", lines[p])
-      }
+    p = if (transcript) doc_console_stmt(lines, b$start) else NA
+    if (!is.na(p)) {
+      lines[p] = if (inert) sub("^(#~ )?", "#~ ", lines[p]) else sub("^#~ ", "", lines[p])
     }
     if (fmt %in% c("rmd", "qmd")) lines = doc_rmd_chunk_eval(lines, id, inert, fmt)
   }
