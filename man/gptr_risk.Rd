@@ -39,11 +39,11 @@ or the files \code{source()} reads: it decides when gptr asks you, it is not a s
 \details{
 Paths are classified relative to \code{root} (\code{workspace}, \code{temp}, \code{outside}, \code{protected},
 \code{control}, \code{instructions}, \code{critical}, \code{url}, \code{wildcard}, \code{unknown}). Calls of
-\code{peter$sh()}, \code{system()}, \code{system2()} and \code{processx::run()} with literal commands are
-classified with the command table (\code{inst/extdata/risk-commands.csv}), \code{peter$sql()} by its
-statements and \code{peter$py()} by a token scan. A command the code computes, or a \code{shell.exec()}
-file it computes, is a \code{dynamic} row at level 3. Plugins and users extend both tables with
-\code{risk_rule} records.
+\code{peter$sh()}, \code{system()}, \code{system2()} (its \code{env} as the start of the command line) and
+\code{processx::run()} with literal commands are classified with the command table
+(\code{inst/extdata/risk-commands.csv}), \code{peter$sql()} by its statements and \code{peter$py()} by a token
+scan. A command the code computes, or a \code{shell.exec()} file it computes, is a \code{dynamic} row at
+level 3. Plugins and users extend both tables with \code{risk_rule} records.
 }
 \examples{
 gptr_risk("unlink('data', recursive = TRUE)")$level

@@ -1654,7 +1654,7 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' session. Deny and ask `sh:` rules see a command computed at run time only in a `peter$sh()` or
 #' `peter$bg()` call, which checks the command when it runs. So in `auto` and `yolo` mode a
 #' `system()`, `system2()`, `shell()` or `shell.exec()` call whose command (for `system2()` also its
-#' arguments) is not a string the classifier can read, such as
+#' arguments and `env`) is not a string the classifier can read, such as
 #' `cmd = paste("rm", "-rf", "build"); system(cmd)`, is refused, and the model is told to run the
 #' command with `peter$sh()`; `manual` and `edits` ask. An allow rule such as `r(fn:system)` lets
 #' such calls run, unchecked by `sh:` rules. The refusal covers only calls the classifier resolves

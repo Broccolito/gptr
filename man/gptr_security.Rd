@@ -57,7 +57,7 @@ whose effects the classifier cannot see, and R has no sandbox for code that runs
 session. Deny and ask \verb{sh:} rules see a command computed at run time only in a \code{peter$sh()} or
 \code{peter$bg()} call, which checks the command when it runs. So in \code{auto} and \code{yolo} mode a
 \code{system()}, \code{system2()}, \code{shell()} or \code{shell.exec()} call whose command (for \code{system2()} also its
-arguments) is not a string the classifier can read, such as
+arguments and \code{env}) is not a string the classifier can read, such as
 \verb{cmd = paste("rm", "-rf", "build"); system(cmd)}, is refused, and the model is told to run the
 command with \code{peter$sh()}; \code{manual} and \code{edits} ask. An allow rule such as \code{r(fn:system)} lets
 such calls run, unchecked by \verb{sh:} rules. The refusal covers only calls the classifier resolves

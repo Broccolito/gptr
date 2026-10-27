@@ -1164,3 +1164,22 @@ test_that("shell.exec() of a file the code computes is a dynamic row (D-262)", {
   expect_false(r$dynamic)
   expect_identical(r$categories, "process")
 })
+
+test_that("system2()'s env is read as the start of its command line (FIX-32)", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  # Unix system2() pastes env unquoted before the command, so it is shell code
+  expect_identical(lv("system2('ls', env = 'A=1; touch /etc/x;')"), 3L)
+  expect_identical(lv("system2('ls', env = 'A=1; rm -rf build;')"), 3L)
+  expect_identical(lv("system2('ls', '-l', NULL, NULL, '', NULL, 'A=1; rm -rf build;')"), 3L)
+  r = gptr_risk("e = paste0('A=1; touch ', f, ';'); system2('ls', env = e)", root = root)
+  expect_true(r$dynamic)
+  expect_identical(r$flagged$fn, "system2")
+  expect_identical(perm_computed_cmd(list(name = "r", risk = r)), "system2")
+  m = rule_match(list(deny = "r(sh:rm *)"), list(name = "r", risk = gptr_risk(
+    "system2('ls', env = 'A=1; rm -rf build;')", root = root)))
+  expect_identical(m$deny, "r(sh:rm *)")
+  # neighbours: a known variable and no env keep the reading of the command alone
+  expect_identical(lv("system2('ls', '-l', env = 'LC_ALL=C')"), 0L)
+  expect_identical(lv("system2('ls', '-l')"), 0L)
+})
