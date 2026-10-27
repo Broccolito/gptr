@@ -118,8 +118,11 @@ test_that("code the evaluator never runs is refused in every mode, no person ask
   fake = local_fake_provider(list(fake_tool("r", code = "q('no')"), "Done."))
   s = peter("Quit R.", model = fake, mode = "auto", envir = new.env())
   expect_identical(s$status, "idle")
-  expect_match(msg_text(fake_requests(fake)[[2]]$last_results[[1]]),
-               "^Permission denied: Not run: the code calls or refers to q\\(\\)")
+  txt = msg_text(fake_requests(fake)[[2]]$last_results[[1]])
+  expect_match(txt, "^Permission denied: Not run: the code calls or refers to q\\(\\)")
+  # it says once that nothing ran: "Nothing in this call ran." (FIX-32)
+  expect_identical(lengths(regmatches(txt, gregexpr("Nothing", txt))), 1L)
+  expect_match(txt, "Nothing in this call ran.$")
 })
 
 test_that("in auto a delete outside the project through a name asks a person (D-211)", {

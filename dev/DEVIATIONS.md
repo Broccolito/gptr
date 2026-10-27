@@ -8235,8 +8235,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Rule (gate, PASTE-4): in every mode the `mode` policy denies `r` code that the evaluator's
   static guard refuses (`eval_guard()` on the call's code in `ctx$envir`: `q()`, `quit()`,
   `readline()`, `menu()` and the rest of `eval_guard_blocked`, a read of standard input, a secret
-  marker), with the guard's text as its reason, so no person is asked to approve code that never
-  runs; `eval_run()` keeps the guard as the evaluator's backstop. Formerly `q()`, rated level 4,
+  marker), with the guard's text as its reason less its "Nothing was evaluated." (the denial ends
+  "Nothing in this call ran.", D-267), so no person is asked to approve code that never runs;
+  `eval_run()` keeps the guard as the evaluator's backstop. Formerly `q()`, rated level 4,
   made the critical guard ask "Allow r?" in every mode, yolo included, and the evaluator then
   refused it whatever the answer; without a person the run stopped `blocked` with "This action
   always needs a person to approve it: run it interactively", and the yolo notice, NEWS,

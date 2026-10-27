@@ -1489,8 +1489,9 @@ In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` o
 unchanged and a literal command is read and gated as before [D-262].
 
 In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never
-runs, such as `q()`, `readline()`, a read of standard input or a secret marker, with the guard's text as its
-reason, so no person is asked to approve code that cannot run; the guard stays the evaluator's backstop [D-269].
+runs, such as `q()`, `readline()`, a read of standard input or a secret marker, with the guard's text less its
+"Nothing was evaluated." as its reason (the denial ends "Nothing in this call ran.", D-267), so no person is asked
+to approve code that cannot run; the guard stays the evaluator's backstop [D-269].
 
 `yolo` [IC-78] is the loosest mode (plan < manual < edits < auto < yolo): only the person selects it (`peter(mode =)`,
 `/mode`, user or session settings, `options(gptr.mode)` outside a run); no project file sets it [D-250], nested

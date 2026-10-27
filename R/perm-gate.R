@@ -92,7 +92,11 @@ perm_policy_mode = function(call, ctx) {
   parsed = if (rlang::is_string(code)) eval_parse(code)
   if (is.expression(parsed)) {
     guard = eval_guard(parsed, ctx$envir)$reason
-    if (!is.null(guard)) return(perm_decision("deny", sub("[.]$", "", guard), call))
+    if (!is.null(guard)) {
+      # the denial ends "Nothing in this call ran." (D-267)
+      guard = gsub(" Nothing was evaluated.", "", guard, fixed = TRUE)
+      return(perm_decision("deny", sub("[.]$", "", guard), call))
+    }
   }
   fn = if (mode %in% c("auto", "yolo")) perm_computed_cmd(call)
   if (!is.null(fn)) {
