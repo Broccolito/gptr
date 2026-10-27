@@ -45,6 +45,10 @@ amendment are in `DEVIATIONS.md`:
   a live re-ask sends again without reading the file; headers name what each step created
   (`created=`), and a direct R line that uses an undone step's object is switched off with `#~`
   and back on after `/redo` (D-264, IC-49 amended in place).
+- FIX-30: a console statement ends with `model = "..."` and `mode = "..."` when its turn ran with a
+  model or mode the statement would not get without them (after `/model`, `/mode`, the plan menu,
+  or in a console started as `peter(mode = plan)`), so a live re-ask asks each turn as it ran
+  (D-265, IC-49 amended in place); this closes FIX-21's note on the console's starting mode.
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
@@ -107,8 +111,6 @@ Open (found, not fixed):
   stops the transcript's replay, which names it `s_<id>`, as FIX-20 R29 (FIX-21).
 - A model `r` call that failed after an assignment is left out of its block while its binding
   stays, so a replay can stop at a later read of that binding (FIX-21).
-- A console transcript does not record the console's starting mode (`peter(mode = plan)`), so a
-  live re-ask runs in the configured mode (FIX-21).
 - `gptr_wait()` on a waiting session, called from inside a run's tool, resumes it as a nested run
   that inherits the outer run's safety record (it used to hang); the permission gate still asks
   the person (FIX-21).
