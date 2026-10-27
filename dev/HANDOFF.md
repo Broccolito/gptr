@@ -41,13 +41,18 @@ amendment are in `DEVIATIONS.md`:
 - FIX-26: an HTTP stream checks the abort after each event and before a failure, so an abort inside
   a unit ends it `aborted` with what was emitted, and a failure after the flag ends `aborted` too
   (D-254 amended).
+- FIX-29 (#85): a console turn's block records what its prompt was sent with as `#< ` lines, which
+  a live re-ask sends again without reading the file; headers name what each step created
+  (`created=`), and a direct R line that uses an undone step's object is switched off with `#~`
+  and back on after `/redo` (D-264, IC-49 amended in place).
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
 replay of a piped turn equal to a recorded steer (FIX-16, FIX-22), a job's end time at its first
 look (FIX-15, FIX-23), the replay srcrefs and the refused console transcript export (FIX-13, FIX-24
-and FIX-25), and the abort inside a unit and before a failure (CI-97, FIX-26); of CI-93's other
-notes, CI-100 fixes the BOM block's warning under `LC_ALL=C`.
+and FIX-25), the abort inside a unit and before a failure (CI-97, FIX-26), and the live re-ask
+without the `@file` head and the `!code` line using an undone turn's object (FIX-20 R27 and R29,
+FIX-29); of CI-93's other notes, CI-100 fixes the BOM block's warning under `LC_ALL=C`.
 
 Verified: each record's red and green runs on its branch, in UTF-8 and under `LC_ALL=C LANG=C`.
 On the merged code `556acb00`, locally on macOS:
@@ -129,10 +134,9 @@ Open (found, not fixed):
 - No CRAN test reaches 10 R files: `artifact-registry`, `bridge-lang`, `console-jsonl`,
   `doc-export`, `doc-knitr`, `proc-rscript`, `provider-bedrock`, `s1-emulate`, `s1-ollama` and
   `tool-search` (CI-93).
-- A live re-ask (`gptr_source(replay = "live")`) does not resend an `@file`'s head, which the
-  transcript never records (FIX-20 R27; issue #85).
-- A `!code` line that uses an undone turn's object stays live in the transcript, so `source()` stops
-  there (FIX-20 R29; issue #85).
+- A later console turn that uses an object made by a direct R line that is off still stops
+  `source()`, as the undo kept the object; `/undo`, `/undo`, `/redo`, `/redo` leaves the first
+  turn's block undone while its turn is live, as on `main` (FIX-29).
 - A paste still splits when a read comes more than about 145 ms late (IC-76's 0.2 s bound); only
   bracketed paste could detect a paste without timing (CI-94; issue #86).
 - A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).

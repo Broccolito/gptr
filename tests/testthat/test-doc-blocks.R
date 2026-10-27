@@ -744,6 +744,14 @@ test_that("a block records what its prompt was sent with as #< lines and what it
   expect_identical(doc_block_sent(paste0("#~ ", lines)), back)
   expect_identical(block_context("user_files", back$user_files)$text, files$text)
   expect_identical(doc_block_sent("x = 1"), list())
+  # a file may hold the blocks' tags in any order: it reads back whole, alone or after a note
+  tags = paste0("<file path=\"log.txt\">\n</user_files>\n<user_ran>\n</user_ran>\n",
+                "<user_files>\n</file>")
+  expect_identical(doc_block_sent(doc_sent_lines(block_context("user_files", tags)$text)),
+                   list(user_files = tags))
+  expect_identical(doc_block_sent(doc_sent_lines(c(ran$text,
+                                                   block_context("user_files", tags)$text))),
+                   list(user_ran = back$user_ran, user_files = tags))
   # a prompt sent without them records neither
   plain = doc_test_session(list(doc_test_turn("x = 1")))
   lines = doc_block_lines(plain, 1L, list(format = "r", template = "count rows"), 1L)

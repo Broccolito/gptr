@@ -1246,6 +1246,12 @@ test_that("a direct R line using a name an undone step or an off line made is sw
   again = c(undone$lines, "", "# direct R (no model) created=fit", "fit = dat * 3", "",
             "# direct R (no model) created=p", "p = fit + 1")
   expect_identical(doc_direct_switch(again)$lines, again)
+  # a comment in pasted code is part of the line; a command (`# /model opus`) ends it
+  pasted = c(undone$lines, "", "# direct R (no model) created=z", "z = fit * 2",
+             "# /home/me/data is the input", "z = z + fit", "# /model opus")
+  expect_identical(utils::tail(doc_direct_switch(pasted)$lines, 5L),
+                   c("# direct R (no model; uses undone fit) created=z", "#~ z = fit * 2",
+                     "#~ # /home/me/data is the input", "#~ z = z + fit", "# /model opus"))
 })
 
 test_that("a rewind switches dependent direct R lines off, says which, and a redo back on", {

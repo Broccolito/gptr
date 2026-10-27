@@ -935,10 +935,11 @@ doc_on_console_direct = function(event, ctx) {
 
 # a direct R line's header (doc_direct_header()): its reason and its key=value pairs
 doc_re_direct = "^# direct R \\(no model(?:; (.*?))?\\)(?: (.*))?$"
-# the first line of what the console appends after a direct R line (another one, a command, a
-# session header, a turn's statement or block), which ends that line's section
-doc_re_entry = paste0("^(# (direct R \\(|/|gptr session |machine log: |>>> gptr:)|",
-                      "(#~ )?s_[0-9a-f]{6} (=|[|]>) peter\\()")
+# the first line of what the console appends after a direct R line (another one, a command
+# `# /<name> ...`, a session header, a turn's statement or block), which ends that line's section;
+# a comment such as `# /home/me/data` in the line's code does not
+doc_re_entry = paste0("^(# (direct R \\(|/[^[:space:]/]+( |$)|gptr session |machine log: |",
+                      ">>> gptr:)|(#~ )?s_[0-9a-f]{6} (=|[|]>) peter\\()")
 
 #' The header of a direct R line: `# direct R (no model)`, `; <reason>` inside the parentheses (a
 #' status, `uses undone <names>`), then `created=<names>` when it created any
@@ -1113,12 +1114,13 @@ doc_console_held = function(s) {
 #' notes of earlier `!` lines. Its header names the objects the turn created (`created=`), as the
 #' header of each direct R line does (`# direct R (no model) created=p`). After each `/undo`,
 #' `/redo`, `/retry` and `!` line the transcript is read again from the top: a direct R line that
-#' uses an object that an undone turn, or a line that is off, created is turned off (`#~ ` before
-#' each line, `# direct R (no model; uses undone fit)`) and back on when that turn returns, so
-#' `source()` runs the transcript without error. The console names the lines it turned off; the
-#' objects themselves stay in your session, as an undo removes only what the turn created. Names
-#' are found with [all.names()]: a column or formula term with the same name can turn a line off,
-#' and a name reached through a string, as in `get("fit")`, is not seen.
+#' uses an object last created above it by an undone turn or by a line that is off is turned off
+#' (`#~ ` before each line, `# direct R (no model; uses undone fit)`) and back on when that turn
+#' returns, so `source()` does not stop there. The console names the lines it turned off. The
+#' objects themselves stay in your session, as an undo removes only what the turn created, so a
+#' later turn that uses one still stops `source()`: turn blocks are never turned off. Names are
+#' found with [all.names()]: a column or formula term with the same name can turn a line off, and
+#' a name reached through a string, as in `get("fit")`, is not seen.
 #'
 #' @param path `NULL` to return the current binding, `FALSE` to remove it, or the path of an
 #'   `.R`, `.Rmd`, `.qmd` or `.ipynb` document.

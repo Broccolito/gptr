@@ -132,13 +132,14 @@ the head of each `@file` and the notes of earlier `!` lines. `gptr_source(replay
 sends them again instead of reading the file, so a re-asked turn is the same request even after
 the file changed or was removed. Each block header and each direct R header names what that step
 created (`created=`). After each `/undo`, `/redo`, `/retry` and new `!` line, gptr reads the
-transcript from the top and turns off a direct R line that uses an object an undone turn, or a
-line that is off, created: each of its lines gets `#~ ` under
+transcript from the top and turns off a direct R line that uses an object last created above it
+by an undone turn or by a line that is off: each of its lines gets `#~ ` under
 `# direct R (no model; uses undone fit)`, and the console says which lines it turned off. A
-`/redo` turns them back on. `source()` then runs the transcript without error, while the objects
-stay in the session, as an undo removes only what the turn created. Names are read with
-`all.names()`: a column or formula term named like such an object can turn a line off, and a
-name reached through a string, as in `get("fit")`, is not seen.
+`/redo` turns them back on. `source()` then does not stop at such a line. The objects stay in
+the session, as an undo removes only what the turn created, so a later turn that uses one still
+stops `source()`: turn blocks are never turned off. Names are read with `all.names()`: a column
+or formula term named like such an object can turn a line off, and a name reached through a
+string, as in `get("fit")`, is not seen.
 
 Recording also needs the agent's code to run. In the default `manual` mode, code that changes
 objects, such as storing `top` above, waits for approval. Nobody can approve under `Rscript`,

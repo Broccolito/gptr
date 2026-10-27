@@ -56,12 +56,13 @@ console sent with the prompt: the head of each \verb{@file} (at most 40 lines, r
 notes of earlier \code{!} lines. Its header names the objects the turn created (\verb{created=}), as the
 header of each direct R line does (\verb{# direct R (no model) created=p}). After each \verb{/undo},
 \verb{/redo}, \verb{/retry} and \code{!} line the transcript is read again from the top: a direct R line that
-uses an object that an undone turn, or a line that is off, created is turned off (\verb{#~ } before
-each line, \verb{# direct R (no model; uses undone fit)}) and back on when that turn returns, so
-\code{source()} runs the transcript without error. The console names the lines it turned off; the
-objects themselves stay in your session, as an undo removes only what the turn created. Names
-are found with \code{\link[=all.names]{all.names()}}: a column or formula term with the same name can turn a line off,
-and a name reached through a string, as in \code{get("fit")}, is not seen.
+uses an object last created above it by an undone turn or by a line that is off is turned off
+(\verb{#~ } before each line, \verb{# direct R (no model; uses undone fit)}) and back on when that turn
+returns, so \code{source()} does not stop there. The console names the lines it turned off. The
+objects themselves stay in your session, as an undo removes only what the turn created, so a
+later turn that uses one still stops \code{source()}: turn blocks are never turned off. Names are
+found with \code{\link[=all.names]{all.names()}}: a column or formula term with the same name can turn a line off, and
+a name reached through a string, as in \code{get("fit")}, is not seen.
 }
 \section{Options}{
 
