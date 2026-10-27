@@ -95,10 +95,13 @@ works on the objects already in memory.
   session, in a terminal that supports bracketed paste. A question waits for typing to pause and
   keeps the draft. On the CLI routes a steer is sent after the CLI's answer. In RStudio and R.app
   (Esc) and Positron (Ctrl-C) the pause menu steers.
-* A block pasted at the `peter>` prompt of a macOS terminal is sent as one message, and a line
-  typed or pasted before a question (an approval, a choice or a yes/no confirmation) never
-  answers it. A block pasted at an approval or a choice is kept in the console history, not read
-  as the answer, and pasted fences and `"""` blocks are read at once.
+* A line typed or pasted before a question (an approval, a choice or a yes/no confirmation)
+  never answers it. In a macOS terminal (CRAN's R) a block pasted at the `peter>` prompt is sent
+  as one message, pasted fences and `"""` blocks are read at once, and a block pasted at an
+  approval or a choice is kept in the console history, not read as the answer; a last pasted
+  line without a newline waits for Enter, so a two-line paste without a final newline answers
+  with its first line. Elsewhere a block pasted at a prompt or a question arrives one line at a
+  time.
 * R in the Terminal tab of RStudio or Positron is treated as a terminal (completion, pause menu,
   interrupt key). Tab completes only after `@`, `!`, `!!`, `/` and `peter$`, never in plain
   text.
