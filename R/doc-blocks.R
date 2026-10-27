@@ -37,10 +37,11 @@ doc_sent_lines = function(texts) {
   out
 }
 
-#' The number of lines of the run of `#< ` lines that opens `body`
+#' The number of lines starting `#<` that open `body`: the same lines as written and as read back,
+#' which drops a line's trailing carriage return
 #' @noRd
 doc_sent_n = function(body) {
-  match(FALSE, grepl("^#<( |$)", body), nomatch = length(body) + 1L) - 1L
+  match(FALSE, startsWith(body, "#<"), nomatch = length(body) + 1L) - 1L
 }
 
 #' The line of the console statement that owns the block starting at line `start`: the nearest
@@ -54,14 +55,14 @@ doc_console_stmt = function(lines, start) {
 
 #' What block `b` (doc_block_get()) of a document's `text` records its prompt was sent with
 #' (IC-49), as list(<kind> = <text inside its tags>): only in an .R document, only for a block a
-#' console statement owns (doc_console_stmt()), and only from the run of `#< ` lines that opens
-#' its body, under `#~ ` when it is undone. doc_block_lines() writes that run and gives recorded
-#' code that would read as part of it one more `#`, so model code cannot extend or forge it, also
-#' in a block a format error moved into the console transcript (doc_upsert_fallback()). The run is
-#' the doc_sent_kinds blocks in that order, each optional, each from its opening tag to the first
-#' line holding its closing tag that ends the run or comes before a later kind's opening tag (a
-#' file's lines may hold any tag; each line of a `!` note starts `> ` or `#> `); any other run, as
-#' an edit can leave, gives list().
+#' console statement owns (doc_console_stmt()), and only from the run of lines that opens its body
+#' (doc_sent_n()), under `#~ ` when it is undone. doc_block_lines() writes that run and gives
+#' recorded code that would read as part of it one more `#`, so model code cannot extend or forge
+#' it, also in a block a format error moved into the console transcript (doc_upsert_fallback()).
+#' The run is the doc_sent_kinds blocks in that order, each optional, each from its opening tag to
+#' the first line holding its closing tag that ends the run or comes before a later kind's opening
+#' tag (a file's lines may hold any tag; each line of a `!` note starts `> ` or `#> `); any other
+#' run, as an edit can leave, gives list().
 #' @noRd
 doc_block_sent = function(format, text, b) {
   if (!isTRUE(format %in% c("r", "transcript")) || is.null(b) ||
