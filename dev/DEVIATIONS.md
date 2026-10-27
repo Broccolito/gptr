@@ -7848,15 +7848,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   switch back to the saved modes (`tty_restore()`, also at `q()`; `tty_question(TRUE)`;
   `gptr_readline()`) turns it off first, so readline never reads with it on (GNU readline 8.1+
   toggles it around its own reads; CRAN macOS R's readline 5.2 and libedit would insert the
-  markers). The isig switches leave it on, so a paste made during in-process R code arrives
-  marked. D consoles, L consoles (Windows, RStudio, Positron, radian, R.app), Jupyter and pipes
-  never get it.
+  markers). The isig switches leave it on, so a paste made during in-process R code arrives marked;
+  as GNU readline 8.1+ turns it off when a read ends, the end of an evaluation that turned isig on
+  turns it on again once its capture is lifted (`eval_restore()`), and `tty_modes()` runs no stty
+  for the pseudo-modes alone. D consoles, L consoles (Windows, RStudio, Positron, radian, R.app),
+  Jupyter and pipes never get it.
 - Rule (composer): `console_compose()` drops the markers and keeps the newlines between them in
   the draft, leading blank lines dropped. `state$bracket` keeps a paste open across reads; a
-  sequence cut inside it, or a marker cut at a read's end, is held however late. Readline's read at
-  the prompt empties the composer, so a paste left open ends with its run. A Tab or Up inside a
-  paste never acts. In a batch with markers only the text between them is a paste. The timing rule
-  (IC-76, CI-94) stays for batches without markers.
+  sequence cut inside it is held however late, as is a marker's start (`ESC [`, `ESC [ 2`,
+  `ESC [ 2 0`, `ESC [ 2 0 0`, `ESC [ 2 0 1`) while the reads after it may still complete it; once
+  none can follow, its Esc is the Esc key, dropped, and the rest is typed. Readline's read at the
+  prompt empties the composer, so a paste left open ends with its run. A Tab or Up inside a paste
+  never acts. In a batch with markers only the text between them is a paste. The timing rule (IC-76,
+  CI-94) stays for batches without markers.
 - Rule (live row): a terminal mode's control alone (`ESC [ ? <n> h` or `l`) leaves the live row as
   it is.
 - Windows: unchanged. No composer reads keys there (IC-76 scope: processx cannot poll a console
@@ -7869,17 +7873,25 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   draft; a paste ending in a newline was sent at once; short pastes on a late beat were at the
   limit of what timing can tell from typing. Esc then Tab, or a cut sequence then Up, in one read
   made `console_compose()` feed the held sequence to itself until the stack overflowed, and the
-  reactor dropped the typing task for the rest of the call; the key now acts.
+  reactor dropped the typing task for the rest of the call; the key now acts. Before FIX-28's
+  refinements an opening marker cut at two or more reads' ends leaked into the draft when a read
+  that left it cut came more than 50 ms after its first cut, and once in-process code read through
+  GNU readline 8.1+ the mode was off for the rest of the call.
 - Limits: control bytes inside a paste act as typed (Ctrl-C pauses, DEL, Ctrl-U and Ctrl-W edit;
   xterm, kitty, VTE and Windows Terminal filter them). A paste whose end marker another reader takes
   (a question asked mid-paste) stays open, so Enter only adds lines for the rest of its run and at
   the prompt's editor, until an abort or a hand-over to readline (Ctrl-C there) empties the
-  composer. An opening marker cut at two or more reads' ends leaks into the draft when a read that
-  leaves it cut comes more than 50 ms after its first cut. A paste bracketed just before a
+  composer. After a lone Esc a typed `[`, `[2`, `[20`, `[200` or `[201` waits for the next key, as
+  it may start a marker, and is lost where readline reads before one (the run ended with no draft,
+  or Ctrl-C or a cursor key handed the prompt's draft over). A paste bracketed just before a
   hand-over's `ESC [ ? 2004 l` reaches readline with its markers. R code or a process that a tool
-  runs and that reads the terminal gets the markers. A kill or a crash leaves the mode on (zsh, fish
-  and bash 5.1+ reset it at their prompts, as does `reset`). The key loop is quadratic in a paste's
-  size, as before.
+  runs and that reads the terminal gets the markers. A read through GNU readline 8.1+ turns the mode
+  off as it ends: one by code an r call evaluates until the outermost r call returns (a sub-agent
+  run from r code waits for it), one by other code during the call (a `gptr_tool()` function, a
+  hook) until the call next sets its modes (an r call's end, a question's answer); a paste made
+  meanwhile is decided by timing. A kill or a crash leaves the mode on (zsh, fish and bash 5.1+
+  reset it at their prompts, as does `reset`). The key loop is quadratic in a paste's size, as
+  before.
 - Amends IC-76 (04 section 15.10, the composer and typing) and D-243, whose steering review rejected
   bracketed paste for the terminal state it adds to every mode switch and question; that state stays
   in `tty_modes()`'s pseudo-modes.
@@ -7902,7 +7914,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   reads with the saved modes, then the call's", "a terminal call's question reads in the saved modes
   from before its rows (review)" and "in-process R code runs with isig on, so Ctrl-C interrupts it
   (review)"; `local_pty_r()` gains `raw` and `paste()`, a terminal that brackets pastes while the
-  child's last toggle turned the mode on.
+  child's last toggle turned the mode on. FIX-28's refinements: test-console-typing.R "after
+  in-process R code the toggle reaches the console, never the result (FIX-28)" and "a terminal:
+  after r code reads through readline a paste is one draft (FIX-28)"; amended: test-console-input.R
+  "a marker cut at a read's end joins its rest however late (D-263)" (a cut at every byte, the
+  probe, typed keys after a late start) and "an escape sequence cut short is held for 50 ms, then
+  dropped" (a late rest typed), test-console-typing.R "in-process R code runs with isig on, so
+  Ctrl-C interrupts it (review)" (`paste` after `-isig`) and "tty_modes() turns bracketed paste on
+  after stty and off before it (D-263)" (no stty for the pseudo-modes alone).
   Evidence: progress/fixes.md FIX-28.
 
 ## D-264 - FIX-29 Transcripts record what a prompt was sent with and what steps created (2026-10-26)

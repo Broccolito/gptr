@@ -6240,19 +6240,67 @@ the driver, screens, events, transcripts and replays without a model are local, 
   FAIL 0 SKIP 29 PASS 7924 under `LC_ALL=C LANG=C` (the skips need a UTF-8 locale). Lint clean
   (7 files); `document()` no diff; the plan checks pass (28 plans, no error finding, 770 R blocks
   with 0 problems, no lints); `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290.
+- Refinements (2026-10-27; tests first, on `claude/v1-fixes` with FIX-27..FIX-31 merged).
+  (a) b8177787: a marker cut right after its Esc leaked when its rest came more than 50 ms later.
+  Probe: `console_compose()` on `ESC`, then `[2` 1 s later, then `00~a` CR `b` 10 ms later sent the
+  steer `[200~a` and left the draft `b`. A held sequence that, with the reads after it, may still
+  start a marker (`ESC [`, `ESC [ 2`, `ESC [ 2 0`, `ESC [ 2 0 0`, `ESC [ 2 0 1`) is now held however
+  late; once none can follow, its Esc is the Esc key, dropped, and the rest is typed (Esc, then `[`
+  and `1, 2]` a second apart, is `[1, 2]`). A lone Esc with nothing after it, and every other
+  sequence, is dropped after 50 ms as before. The probe now leaves the draft `a\nb` in an open paste
+  and sends nothing. Red (the tests on 66fc1782's code): `^console-input$` FAIL 5 PASS 211 in UTF-8
+  and FAIL 5 SKIP 8 PASS 128 under `LC_ALL=C LANG=C` (test-console-input.R:197, a cut at every byte;
+  201, 203 and 204, the probe; 211, a late `[` typed at once); green FAIL 0 PASS 216 and FAIL 0
+  SKIP 8 PASS 133. A scratch fuzz against 66fc1782's `console_compose()`: of 20,000 sequences of 1-4
+  batches drawn from 17 pieces (cut sequences, `[`, digits, `~`, text, CR, Tab, Up, DEL) at gaps of
+  0.01 to 1 s, 958 part from it, each first at a read more than 50 ms after a held sequence began:
+  49 where it and the read may still start a marker (now held on), 909 where it alone could (now
+  typing its tail), none elsewhere; 944 end otherwise. Of 5,000 bracketed pastes cut at up to five
+  points, their reads up to 3 s apart, every one is one draft, where 66fc1782's composer leaked or
+  split 815. (b) 28b8149e: GNU readline 8.1+ writes `ESC [ ? 2004 l` as a read ends, so once code
+  that a T console's call evaluated read through R's readline the mode was off for the rest of the
+  call, and a late paste fell back to timing. `eval_restore()` now turns it on again
+  (`tty_modes("paste")`) once the evaluation's capture is lifted, so the toggle reaches the console,
+  never the tool's result; isig still goes off first. Only an evaluation that turned isig on (a T
+  call's outermost) writes it, so D and L consoles get none, and one that ends while readline reads
+  (a background run's tick at the prompt) has no call's modes and writes none. `tty_modes()` runs no
+  stty for the pseudo-modes alone. Red (the tests on b8177787's code): `^console-typing$` FAIL 6
+  PASS 446 in UTF-8 and FAIL 6 SKIP 2 PASS 434 under `LC_ALL=C LANG=C` (test-console-typing.R:835,
+  stty ran for `paste` alone; 969, no `paste` after `-isig`; 982, one toggle on the console of two;
+  the new pty block, 1440, 1441 and 1444: the paste made while the next r call slept was split,
+  `queued` seen once, no `REQ 1 [one/two/three]`); green FAIL 0 PASS 452 and FAIL 0 SKIP 2 PASS 440.
+  The pty child's function writes readline 8.1+'s `ESC [ ? 2004 l` after its `readline()`, so the
+  block is red on macOS R's readline 5.2 as well. In rocker/r-ver:4.5.0 (GNU readline 8.2,
+  `--network none`, `TERM=xterm`, R in a `script` pty, base R making the call's writes around a
+  `readline()`) the toggles come in this order: the prompt's `h`, its `l` after Enter, the call's
+  `h`, readline's `h`, `name? `, readline's `l` after Enter, the refinement's `h`, the call's `l`,
+  then `GOT abc`; none falls inside a read (with `TERM` unset readline writes none). Checks, on
+  28b8149e (the docs commit changes only `dev/`): the 39 neighbour files of the final checks above
+  (`NOT_CRAN=true`, `CI=true`, SIGINT at its default) FAIL 0 SKIP 0 PASS 8263 in UTF-8 and FAIL 0
+  SKIP 29 PASS 8065 under `LC_ALL=C LANG=C` (each skip needs a UTF-8 locale); lint clean (the 5
+  changed files and the package); `document()` changes nothing. Docs: D-263's Rules, Formerly,
+  Limits and Tests; 04 sections 7.1 (`tty_modes()`, `tty_call()`) and 15.10 (the composer, typing,
+  IC-76's Limits); the comments of `console_compose()`, `tty_modes()`, `tty_call()` and
+  `eval_open()`; and this record's Open, which said an opening marker cut at two or more reads' ends
+  leaks into the draft when a read that leaves it cut comes more than 50 ms after its first cut.
+  NEWS, the README, `?peter` and the vignettes state neither limit and are unchanged.
 - Deviations: D-263 (amends IC-76, D-243). NEWS, the README, `?peter` and the vignette are
   unchanged: "a block pasted there is one message" still holds. Open: control bytes inside a paste
   act as typed (Ctrl-C pauses; DEL, Ctrl-U and Ctrl-W edit). A paste whose end marker another reader
   takes (a question asked mid-paste, a pasted Ctrl-C whose rest the pause menu reads) stays open in
-  the composer until an abort or readline's read at the prompt empties it. An opening marker cut at
-  two or more reads' ends leaks into the draft when a read that leaves it cut comes more than 50 ms
-  after its first cut. A paste bracketed just before a hand-over's `ESC [ ? 2004 l` reaches readline
-  with its markers (GNU readline 7+ parses them; 5.2 and libedit insert them). A tool's own
+  the composer until an abort or readline's read at the prompt empties it. After a lone Esc a typed
+  `[`, `[2`, `[20`, `[200` or `[201` waits for the next key, as it may start a marker, and is lost
+  where readline reads before one (the run ended with no draft, or Ctrl-C or a cursor key handed the
+  prompt's draft over). A paste bracketed just before a hand-over's `ESC [ ? 2004 l` reaches
+  readline with its markers (GNU readline 7+ parses them; 5.2 and libedit insert them). A tool's own
   `readline()`, `menu()` or `readLines(stdin())`, or a child process reading the terminal, gets the
-  markers. A kill or a crash leaves the mode on. A paste's trailing newline stays in the draft and
-  the message (`console_lines()` drops it on screen). The prompt's editor drops a pasted Tab that
-  ends a read inside a split paste. A 1 MB paste holds the console for minutes (the quadratic key
-  loop).
+  markers. A read through GNU readline 8.1+ turns the mode off as it ends: one by code an r call
+  evaluates until the outermost r call returns (a sub-agent run from r code waits for it), one by
+  other code during the call (a `gptr_tool()` function, a hook) until the call next sets its modes
+  (an r call's end, a question's answer); a paste made meanwhile is decided by timing. A kill or a
+  crash leaves the mode on. A paste's trailing newline stays in the draft and the message
+  (`console_lines()` drops it on screen). The prompt's editor drops a pasted Tab that ends a read
+  inside a split paste. A 1 MB paste holds the console for minutes (the quadratic key loop).
 
 ## FIX-29 - Transcripts record @file heads and the objects !code lines use (2026-10-26, #PR)
 - Why: issue #85, FIX-20 review items R27 and R29. R27: `gptr_source(replay = "live")` re-asked
