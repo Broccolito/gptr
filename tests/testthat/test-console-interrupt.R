@@ -132,10 +132,14 @@ test_that("a block pasted at the pause menu's steer question is one steer (revie
   s = session_new("fake/fake-1", "auto", home = new.env())
   local_menu_answers(c("s", "use mpg"))
   local_mocked_bindings(front_end = function() "rstudio")
-  # a macOS terminal hands the rest of a paste over as lines waiting after the answer
+  # a macOS terminal hands the rest of a paste over as lines waiting after the answer; the key
+  # was typed, the steer pasted
   rd = new.env(parent = emptyenv())
   rd$left = c("and gear", "!file.create('x')")
+  rd$n = 0L
   rd$waiting = function() {
+    rd$n = rd$n + 1L
+    if (rd$n < 2L) return(character())
     x = rd$left
     rd$left = character()
     x
@@ -147,6 +151,46 @@ test_that("a block pasted at the pause menu's steer question is one steer (revie
   expect_identical(msg_text(msgs[[length(msgs)]]), paste(
     "The user sent this message while you were working: use mpg\nand gear\n!file.create('x')"))
   expect_identical(rd$left, character())
+})
+
+test_that("a block pasted at the pause menu's key question is no answer (review round 2)", {
+  local_project()
+  local_gptr_options(unsafe_no_permissions = TRUE)
+  off = gptr_register(gptr_tool("slow", "Test tool slow", execute = function(input, ctx) {
+    fake_interrupt()
+    "slow done"
+  }))
+  withr::defer(off())
+  fake = local_fake_provider(list(fake_tool("slow"), "done"))
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  log = local_menu_answers(c("s", "c"))
+  local_mocked_bindings(front_end = function() "rstudio")
+  rd = new.env(parent = emptyenv())
+  rd$left = "!file.create('x')"
+  rd$waiting = function() {
+    x = rd$left
+    rd$left = character()
+    x
+  }
+  kept = NULL
+  queued = character()
+  local_mocked_bindings(console_repl_find = function() list(reader = rd),
+                        gptr_is_interactive = function() TRUE,
+                        console_history_add = function(x) {
+                          kept <<- x
+                          TRUE
+                        },
+                        session_enqueue = function(s, text, ...) queued <<- c(queued, text))
+  run = local_tracked(run_start(s, msg_user("go")), s)
+  out = notices(with_interrupt_policy(function() run_wait(run), list(run), mode = "repl"))
+  # the paste is asked again and kept in the history, never a steer or a follow-up
+  expect_true(any(grepl("a pasted block is not an answer", out, fixed = TRUE)))
+  expect_identical(kept, "s\n!file.create('x')")
+  expect_length(log$prompts, 2L)
+  texts = vapply(fake_requests(fake)[[2L]]$messages, msg_text, "")
+  expect_false(any(grepl("file.create", texts, fixed = TRUE)))
+  expect_length(queued, 0L)
+  expect_identical(run$status, "idle")
 })
 
 test_that("an interrupt right behind the first still opens the pause menu (RStudio's Esc)", {
@@ -642,6 +686,7 @@ test_that("[b] keeps the REPL's held lines and draft in the history, not sent (s
   rd = new.env(parent = emptyenv())
   rd$typed = "summarise after"
   rd$compose = list(draft = "a draft")
+  rd$waiting = function() character()
   rs = new.env(parent = emptyenv())
   rs$reader = rd
   local_mocked_bindings(console_repl_prompt = function() rs, console_repl_find = function() rs)

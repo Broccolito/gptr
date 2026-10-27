@@ -225,9 +225,18 @@ policy_menu = function(cnd, pol) {
     console_asked()
     invokeRestart("resume")
   }
+  # the lines a macOS terminal left of a block pasted at a question (ui_console_read())
+  rd = console_repl_find()$reader
   repeat {
-    typed = if (rlang::is_string(ahead)) ahead else console_ask(answers)
+    asked = !rlang::is_string(ahead)
+    typed = if (asked) console_ask(answers) else ahead
     ahead = NULL
+    more = if (asked && !is.na(typed) && !is.null(rd)) rd$waiting()
+    if (length(more)) {
+      kept = gptr_is_interactive() && console_history_add(paste(c(typed, more), collapse = "\n"))
+      console_write(ui_reask("a pasted block is not an answer", k, kept))
+      next
+    }
     ans = tolower(trimws(typed))
     key = if (is.na(ans)) "a" else c("c", k, k)[match(ans, c("", k, keys))]
     if (identical(key, "c")) go()
@@ -239,8 +248,7 @@ policy_menu = function(cnd, pol) {
       ui_draft_kept()
       text = console_ask(function(x) TRUE)
       if (is.na(text)) return(invisible(NULL))
-      # a block pasted here is one message, as at the prompt: the lines a macOS terminal left
-      rd = console_repl_find()$reader
+      # a block pasted here is one message, as at the prompt
       text = paste(c(text, if (!is.null(rd)) rd$waiting()), collapse = "\n")
       enqueue = function() {
         the$echoed = ""
