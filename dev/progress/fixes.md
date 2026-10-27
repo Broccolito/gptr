@@ -6093,8 +6093,31 @@ the driver, screens, events, transcripts and replays without a model are local, 
   `!p = fit + 1`, `!q = p * m`, `/undo`, `/retry`) gives the transcript the tests assert: the
   second block opens with the `#<` lines of the `m` note and its header names `created=fit`; after
   `/undo` the `p` and `q` lines are off, `q` under `uses undone p, m` once `/retry` undid turn 1.
+- Review of 4ea0f60c (three verifiers). (1) 0f180e83 (low): `doc_block_sent()` took any opening
+  tag after a closing tag as a new block, so an `@file` whose head held `</user_files>` then
+  `<user_ran>`, or `</user_ran>` then `<user_files>`, was sent again cut short. The blocks now come
+  in their fixed order, each ending at the first closing tag that is the last line or comes before
+  a later kind's opening tag: a file may hold any tag, and each line of a `!` note starts `> ` or
+  `#> `. (2) 52a57634 (low): a direct R section ended at any `# /` line, so pasted code with a
+  comment such as `# /home/me/data is the input` went off only above it and `source()` stopped
+  below; a section now ends at a command line as the console writes it (`# /<name>`, then a space
+  or the line's end). Red (the new expectations on 4ea0f60c's code): `^doc-(blocks|replay)$`
+  FAIL 3 PASS 1328. Green: `^(doc-(blocks|export|replay)|console-repl)$` FAIL 0 PASS 1940; the
+  neighbours `[ FAIL 0 | WARN 0 | SKIP 3 | PASS 10217 ]` in UTF-8 and
+  `[ FAIL 0 | WARN 0 | SKIP 30 | PASS 10039 ]` under `LC_ALL=C LANG=C`; the release self-tests
+  PASS 290; lint clean (5 files); `document()` changes only `gptr_doc.Rd` and `gptr_security.Rd`.
+  (3) Docs (medium): `?gptr_doc`, the vignette and IC-49 said that `source()` runs the transcript
+  without error, and this record that a turn after an undo cannot use what the undo removed. A
+  later turn can use what a switched-off line made, which the undo keeps, so they now state that
+  limit, as Q2 switches direct R lines only. `?gptr_security` says that the `#<` lines keep
+  `@file` heads and `!` notes whatever `gptr.doc_output_lines` says; D-264 and IC-49 add the
+  section's extent, the comma and the non-UTF-8 locale limits.
 - Deviations: D-264. Open: `/retry` sends the typed prompt again through the console, which reads
   each `@file` again and sends only the notes pending now, as before; only a re-ask from the
-  document sends the recorded heads. Turn blocks are never switched: a turn after an undo cannot
-  have used what the undo removed. Known limits as D-264 states (`all.names()` matches, strings,
-  a name holding a comma).
+  document sends the recorded heads. Turn blocks are never switched, so a later turn that uses an
+  object made by a direct R line that is off still stops `source()` (make `dat`,
+  `!m = mean(dat)`, `/undo`, then a turn running `y = m * 2`: "object 'm' not found"), as the
+  undo kept `m`. `/undo`, `/undo`, `/redo`, `/redo` over two turns leaves the first turn's block
+  undone while its turn is live, so `source()` stops at the second turn's statement; origin/main
+  13a917ff does the same (`doc_on_session_tree()`), a defect for its own issue. The other known
+  limits as D-264 states.
