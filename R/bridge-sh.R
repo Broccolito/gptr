@@ -770,11 +770,18 @@ bridge_strings = function(description) {
 
 # ---- builtin:bridges -----------------------------------------------------------------------------
 
-#' Risk of peter$sh(): the command classifier on the actual command (G5 levels); passing a
-#' variable through to the child (an unnamed `env` element) reads a secret, level 3
+#' Risk of peter$sh(): the command classifier on the actual command (G5 levels), read as run in
+#' its `wd` (a `cd` before it); passing a variable through to the child (an unnamed `env` element)
+#' reads a secret, level 3
 #' @noRd
 bridge_risk_sh = function(input, ctx) {
-  r = bridge_risk(bridge_chr(input$cmd), "command")
+  cmd = bridge_chr(input$cmd)
+  wd = input$wd
+  if (rlang::is_string(wd) && !identical(wd, ".")) {
+    if (length(cmd) > 1L) cmd = paste(shQuote(cmd, "sh"), collapse = " ")
+    cmd = paste("cd", shQuote(wd, "sh"), "&&", cmd)
+  }
+  r = bridge_risk(cmd, "command")
   env = bridge_chr(input$env)
   if (all(nzchar(names(env) %||% character(length(env))))) return(r)
   list(level = max(3L, as.integer(r$level)), categories = unique(c(r$categories, "secret")),

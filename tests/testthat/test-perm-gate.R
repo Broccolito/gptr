@@ -388,6 +388,29 @@ test_that("deny and ask rules see the command a nested sh or bg call computes (6
   expect_identical(perm_store()$allow, character())
 })
 
+test_that("a peter$sh() command is read as run in its wd (review round 3)", {
+  skip_on_cran()
+  root = local_project()
+  # a directory beyond the project and the session's tempdir() is outside
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  dir.create(file.path(out, "build"))
+  writeLines("x", file.path(out, "build", "a.o"))
+  sh = registry_get("tool", "sh")
+  level = function(cmd, wd) as.integer(sh$risk(list(cmd = cmd, wd = wd), NULL)$level)
+  expect_identical(level(c("rm", "-rf", "build"), out), 4L)
+  expect_identical(level("rm -rf build", out), 4L)
+  expect_identical(level("rm -rf build", "."), 3L)
+  ui = local_scripted_ui(list("n", "n"))
+  for (mode in c("auto", "yolo")) {
+    code = paste0("peter$sh(c('rm', '-rf', 'build'), wd = ", deparse(out), ")")
+    fake = local_fake_provider(list(fake_tool("r", code = code), "Done."),
+                               name = paste0("wd-", mode))
+    peter("Clean up.", model = fake, mode = mode, envir = new.env())
+    expect_true(file.exists(file.path(out, "build", "a.o")), label = mode)
+  }
+  expect_identical(sum(ui$log$method == "permission"), 2L)
+})
+
 test_that("the protect_size policy reads the run's snapshot, not the live option (IC-53)", {
   root = local_project()
   e = new.env()
