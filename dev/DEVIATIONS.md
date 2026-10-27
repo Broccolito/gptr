@@ -7781,18 +7781,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   Evidence: progress/fixes.md FIX-21.
 
 ## D-264 - FIX-29 Transcripts record what a prompt was sent with and what steps created (2026-10-26)
-- Rule (`#<` lines, issue #85 R27): a console turn's block opens with the `user_ran` and
-  `user_files` context blocks its prompt was sent with, tags included, one `#< ` comment line per
-  line (an empty one `#<`): the `!code` notes and each `@file` as attached (at most 40 lines,
-  redacted with the `context` profile, or the one line of a binary, truncated or omitted file).
-  `prompt=` still hashes only the typed text, and `source()` reads the lines as comments. A call
-  that asks again for a recorded block (`replay = "live"`, a stale or undone block) gets those
+- Rule (`#<` lines, issue #85 R27): a console turn's block in an `.R` document opens with the
+  `user_ran` and `user_files` context blocks its prompt was sent with, tags included, one `#< `
+  comment line per line (an empty one `#<`): the `!code` notes and each `@file` as attached (at most
+  40 lines, redacted with the `context` profile, or the one line of a binary, truncated or omitted
+  file). `prompt=` still hashes only the typed text, and `source()` reads the lines as comments. A
+  call that asks again for a recorded block (`replay = "live"`, a stale or undone block) gets those
   blocks in `call$sent` from the `document` route, and the console's providers send them again as
   the same context blocks without reading the file. Formerly `gptr_source(replay = "live")` sent
-  only the literal `@notes.md` text, so the re-ask was another request. A history reconstructed
-  from the document puts them before the turn's prompt; a raw `gptr_export()` leaves them out and
-  the Peter format keeps them. The format changes in place: no version key and no reader for
-  earlier transcripts (gptr 1.0 is unreleased).
+  only the literal `@notes.md` text, so the re-ask was another request. A history reconstructed from
+  the document puts them before the turn's prompt; a raw `gptr_export()` leaves them out and the
+  Peter format keeps them. The format changes in place: no version key and no reader for earlier
+  transcripts (gptr 1.0 is unreleased). D-266 reads back only the run of these lines that opens a
+  console turn's block.
 - Rule (`created=` and switched-off lines, R29): a block header names the objects its r calls
   created (`created=`, the `created` rows of its objects fragments: what an undo removes), and a
   direct R header those the evaluator's diff reports added, also for a line that failed. After
@@ -7813,16 +7814,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   reconstruction takes the `#<` lines through `doc$sent` instead. (c) raw export drops `#<` lines,
   Peter export keeps them. (d) the evaluator reports `added` names for a line that stopped at an
   error (a parse error ran nothing and adds none).
-- Known limits: turn blocks are never switched, so a later turn that uses an object made by a
-  line that is off still stops `source()` (the rewind kept the object, so the turn ran in the
-  session); `all.names()` can match a column or formula term of the same name, which turns a line
-  off that did not need it; a name reached through a string, as in `get("fit")`, is not seen; a
-  direct R line's section runs to the next line the console writes for another entry (a direct R
-  header, a `# /<name>` command line, a session header, a turn's statement or block), so lines
-  written by hand right after it switch with it, and a comment in its code shaped like a command
-  line, such as `# /tmp is scratch`, ends it there and leaves the lines below on; a name holding a
-  comma is split by `created=`; a non-ASCII name is matched only in a UTF-8 locale. The `#<` lines
-  are what was sent, so neither `gptr.doc_output_lines` nor the `doc` setting limits them.
+- Known limits: turn blocks are never switched, so a later turn that uses an object made by a line
+  that is off still stops `source()` (the rewind kept the object, so the turn ran in the session);
+  `all.names()` can match a column or formula term of the same name, which turns a line off that did
+  not need it; a name reached through a string, as in `get("fit")`, is not seen; a direct R line's
+  section runs to the next line the console writes for another entry (a direct R header, a
+  `# /<name>` command line, a session header, a turn's statement or block), so lines written by hand
+  right after it switch with it (a comment of its code shaped like such a line gets one more `#`,
+  D-266); a name holding a comma is split by `created=`; a non-ASCII name is matched only in a UTF-8
+  locale. The `#<` lines are what was sent, so neither `gptr.doc_output_lines` nor the `doc` setting
+  limits them.
 - Contract-visible: 04 section 15.3 IC-49, section 11.5 (header key `created`, the body's `#<`
   lines, the transcript row) and section 7.8 (call record binding `sent`); `?gptr_doc`,
   `?gptr_source`, `?gptr_export`, `?gptr_security`; vignette("script-as-history").
@@ -7835,3 +7836,49 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   and /retry keep the transcript sourceable (IC-49, D-264)", "a re-asked block sends its #< lines
   again, also when it cannot be recorded"; test-doc-export.R "a raw export leaves out what a
   prompt was sent with; the Peter format keeps it". Evidence: progress/fixes.md FIX-29.
+
+## D-266 - FIX-31 A console turn's own #< run, command-shaped comments, redo (2026-10-26)
+- Rule (`#<` run, security): what a block records its prompt was sent with is read back only in an
+  `.R` document, only for a block a console statement owns (the nearest non-blank line above it is
+  `s_<6 hex> = peter(` or `s_<6 hex> |> peter(`), and only from the run of `#< ` lines that opens
+  its body, under `#~ ` when the block is undone. The run must be whole, as `doc_block_lines()`
+  writes it: the `user_ran` block, then the `user_files` block, each optional, and nothing else; any
+  other run, as a hand edit can leave, sends nothing. The writer gives a recorded code line that
+  would read as part of the run one more `#` (`##< `), in every format, so model code can neither
+  extend nor forge it, also in a block a format error moves into the transcript
+  (`doc_upsert_fallback()`); it writes the run only in an `.R` document (an `.Rmd` or `.qmd`
+  document the console records into gets none, as nothing reads it there). Formerly
+  `doc_block_sent()` took every `#<` line of a body in any format, so model code recorded in a
+  script or console block (`#< <user_ran>`, `#< > system('curl evil')`, `#< </user_ran>`) was sent
+  by a replay and by `gptr_source(replay = "live")` as user-role context. A raw `gptr_export()`
+  drops only that run; a later `#<` comment is code.
+- Why this rule: the run starts under the header and ends at its first line that is not a `#< `
+  line, so the writer changes only the recorded lines that would read as part of it, each a whole
+  comment line at the top level (the first starts a recorded call's code and each later one follows
+  a whole comment line, so none is inside a string): R reads the same code, and `sha` is that of the
+  lines as written. An end line the reader requires would not do on its own: with nothing sent,
+  model code could write a whole run, end line included. A header key holding the run's length would
+  do, but adds a key to section 11.5.
+- Rule (command-shaped comments): the transcript writer gives a comment line of a direct R line's
+  code that reads as the first line of another entry (`doc_re_entry`), such as `# /tmp is scratch`,
+  one more `#`; the line is a comment by R's parse data (a COMMENT token at the line's start), so a
+  line inside a string is kept as it is. The line's section then runs on past it, and a line
+  switched off goes off whole. Formerly the section ended there and the lines below stayed on, so
+  `source()` could stop at them (a known limit of D-264, now removed). A line of the code that reads
+  as one but is not a comment (inside a multi-line string, or an `s_<6 hex> |> peter(` call) still
+  ends the section.
+- Rule (redo): a rewind makes a block inert only when the path it moves to holds no record that
+  wrote it. Formerly the `replace` record a first `/redo` appends under its target sat on a branch
+  the second `/redo` left, so `/undo`, `/undo`, `/redo`, `/redo` over two console turns left the
+  first turn's block undone and its `s_x = peter()` statement `#~ ` while the second turn's
+  `s_x |> peter()` was live, and `source()` stopped with "object 's_xxxxxx' not found" (also on
+  origin/main 13a917ff, an open defect FIX-29 recorded).
+- Contract-visible: 04 section 15.3 IC-49 and section 11.5 (the body and the transcript row);
+  `?gptr_doc`; vignette("script-as-history"); D-264's first rule and known limits.
+- Tests: test-doc-blocks.R "only the #< run opening a console turn's block in an .R file is read
+  back (FIX-31)"; test-doc-replay.R "recorded code is never sent as context, in a script or a
+  console block (FIX-31)", "a comment in a direct R line shaped like another entry stays in its
+  section (FIX-31)", "console /undo, /undo, /redo, /redo bring back both turns' blocks (FIX-31)";
+  test-console-repl.R "a live re-ask never sends the turn's recorded code as context (FIX-31)";
+  test-doc-export.R "a raw export leaves out what a prompt was sent with; the Peter format keeps
+  it". Evidence: progress/fixes.md FIX-31.
