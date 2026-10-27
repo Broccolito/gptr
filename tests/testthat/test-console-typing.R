@@ -825,6 +825,14 @@ test_that("tty_modes() turns bracketed paste on after stty and off before it (D-
   expect_identical(written(function() tty_modes(c("SAVED", "-paste"))), "\033[?2004l")
   expect_identical(written(function() tty_modes("-g")), "")
   expect_null(tty_modes("-g"))
+  # alone they run no stty (a stub that answers when run; Windows has no sh to run it)
+  skip_on_os("windows")
+  bin = withr::local_tempdir()
+  writeLines(c("#!/bin/sh", "echo RAN"), file.path(bin, "stty"))
+  Sys.chmod(file.path(bin, "stty"), "0755")
+  withr::local_envvar(PATH = bin)
+  expect_identical(tty_modes("-g"), "RAN")
+  expect_identical(written(function() expect_null(tty_modes("paste"))), "\033[?2004h")
 })
 
 test_that("a T console's keys edit the draft on the live row; Enter steers (D-242, D-243)", {
@@ -956,7 +964,28 @@ test_that("in-process R code runs with isig on, so Ctrl-C interrupts it (review)
   fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "zz = 1")), "done"))
   tty = local_keys(function() "")
   typing_console(fake, c("go", "/exit"))
-  expect_identical(tty$log, c("-g", char_mode, "isig", "-isig", "SAVED", "-paste"))
+  # then bracketed paste is on again, which GNU readline 8.1+ turns off as a read of the code ends
+  # (FIX-28)
+  expect_identical(tty$log, c("-g", char_mode, "isig", "-isig", "paste", "SAVED", "-paste"))
+})
+
+test_that("after in-process R code the toggle reaches the console, never the result (FIX-28)", {
+  skip_on_cran()
+  local_console_test()
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "zz = 1")), "done"))
+  local_keys(function() "")
+  local_mocked_bindings(tty_modes = function(modes = "-g") {
+    if ("paste" %in% modes) cat("<paste on>\n")
+    if (identical(modes, "-g")) "SAVED"
+  })
+  res = typing_console(fake, c("go", "/exit"))
+  expect_identical(sum(grepl("<paste on>", res$out, fixed = TRUE)), 2L)
+  result = msg_text(last_message(fake_requests(fake)[[2L]]))
+  expect_false(grepl("paste on", result, fixed = TRUE))
+  # a D console's call writes none
+  local_live_console("D")
+  res = typing_console(fake, c("go", "/exit"))
+  expect_false(any(grepl("<paste on>", res$out, fixed = TRUE)))
 })
 
 test_that("Up takes back the newest message the person queued, of either kind (D-242)", {
@@ -1372,6 +1401,51 @@ test_that("a terminal: a paste during an r call is one draft; no marker shows (F
   expect_true(pty$wait("CHILD DONE"))
   expect_identical(c(pty$seen("200~"), pty$seen("201~"), pty$seen("REQ "), pty$seen(pty_reask())),
                    c(0L, 0L, 1L, 0L))
+})
+
+test_that("a terminal: after r code reads through readline a paste is one draft (FIX-28)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  pty = local_pty_r(c(
+    "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
+    "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
+    "ask = function() {",
+    "  x = readline('name? ')",
+    "  # as GNU readline 8.1+ does when its read ends (macOS R's readline 5.2 does not)",
+    "  system(\"printf '\\\\033[?2004l'\")",
+    "  x",
+    "}",
+    "fake = gptr_fake_provider(function(req) {",
+    "  if (req$n == 1L) return(list(text = 'run', tool = 'r', input = list(code = 'x = ask()')))",
+    "  if (req$n == 2L) {",
+    "    return(list(text = 'NAPPING', tool = 'r', input = list(code = 'Sys.sleep(3); zz = 1')))",
+    "  }",
+    "  if (req$n == 3L) return(list(text = 'second', delay = 4))",
+    "  ops = Filter(function(m) identical(m$role, 'operator'), req$messages)",
+    "  text = sub('^.*working: ', '', gptr:::msg_text(ops[[1L]]))",
+    "  paste0('REQ ', length(ops), ' [', gsub('\\n', '/', text), ']')",
+    "})",
+    "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
+  ), term = "xterm")
+  person = if (l10n_info()[["UTF-8"]]) "\u203a" else ">>"
+  expect_true(pty$wait("peter[auto]> ", timeout = 120))
+  pty$send("ONE\r")
+  expect_true(pty$wait("name? "))
+  pty$send("abc\r")
+  # GNU readline 8.1+ turned the mode off as its read ended and the call turned it on again as that
+  # r call returned, so a paste made while the next r call sleeps is bracketed (FIX-28)
+  expect_true(pty$wait("NAPPING"))
+  expect_true(pty$wait("keys show when r returns"))
+  pty$paste("one\rtwo\rthree")
+  expect_true(pty$wait(paste0(person, " one two three")))
+  expect_identical(pty$seen("queued"), 0L)
+  pty$send("\r")
+  expect_true(pty$wait("1 queued"))
+  expect_true(pty$wait("REQ 1 [one/two/three]"))
+  expect_true(pty$wait("peter[auto]> "))
+  pty$send("/exit\r")
+  expect_true(pty$wait("CHILD DONE"))
+  expect_identical(c(pty$seen("200~"), pty$seen("201~"), pty$seen("REQ ")), c(0L, 0L, 1L))
 })
 
 test_that("a terminal: during a sub-agent the row ticks and steers; its r call waits (review)", {

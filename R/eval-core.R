@@ -198,7 +198,8 @@ eval_run = function(st) {
 #' message sink in use is noted, so one the code leaves open is undone. Teed output is split to the
 #' console as R prints it, except in the console margin, where eval_echo() shows it (D-245); the
 #' evaluation's frame (`st$frame`) is where that display looks for the writer below it. During a T
-#' console's call isig is on while the code runs, so Ctrl-C interrupts it (tty_isig_on())
+#' console's call isig is on while the code runs, so Ctrl-C interrupts it (tty_isig_on()), and
+#' bracketed paste is turned on again after it (eval_restore())
 #' @noRd
 eval_open = function(st) {
   force(st)
@@ -680,7 +681,8 @@ eval_finish = function(st) {
 eval_restore = function(st) {
   if (isTRUE(st$restored)) return(invisible())
   st$restored = TRUE
-  tty_isig_off(st$tty)
+  tty = st$tty
+  tty_isig_off(tty)
   st$tty = NULL
   setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
   if (!is.null(st$hook)) {
@@ -701,6 +703,9 @@ eval_restore = function(st) {
     tryCatch(if (isOpen(st$con)) close(st$con), error = function(e) NULL)
     st$con = NULL
   }
+  # GNU readline 8.1+ turns bracketed paste off as a read of the code ends: on again, at the
+  # console now that the capture is lifted (D-263)
+  if (!is.null(tty$saved)) tty_modes("paste")
   if (!is.null(st$old_opts)) {
     host_width = Sys.getenv("RSTUDIO_CONSOLE_WIDTH", unset = "")
     if (!is.null(st$host_width) && !identical(host_width, st$host_width) &&

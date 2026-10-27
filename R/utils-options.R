@@ -95,15 +95,18 @@ console_class = function() {
 }
 
 #' Mockable: the modes of the terminal R reads (`stty -g`), or set `modes` (such as "-echo"); NULL
-#' when stty fails (IC-76). `paste` and `-paste` among `modes` are gptr's own, not stty's: they turn
-#' bracketed paste on (`ESC [ ? 2004 h`, written after stty) or off (`ESC [ ? 2004 l`, written
-#' before it), through the console writer (gptr_message_write()), never into a tool's output (D-263)
+#' when stty fails (IC-76). `paste` and `-paste` among `modes` are gptr's own, not stty's (alone
+#' they run no stty): they turn bracketed paste on (`ESC [ ? 2004 h`, written after stty) or off
+#' (`ESC [ ? 2004 l`, written before it), through the console writer (gptr_message_write()), never
+#' into a tool's output (D-263)
 #' @noRd
 tty_modes = function(modes = "-g") {
   bp = modes %in% c("paste", "-paste")
   if ("-paste" %in% modes) gptr_message_write("\033[?2004l", gptr_message_stream("stdout"))
-  out = tryCatch(suppressWarnings(system2("stty", modes[!bp], stdout = TRUE, stderr = FALSE)),
-                 error = function(e) NULL)
+  out = if (!all(bp)) {
+    tryCatch(suppressWarnings(system2("stty", modes[!bp], stdout = TRUE, stderr = FALSE)),
+             error = function(e) NULL)
+  }
   if ("paste" %in% modes) gptr_message_write("\033[?2004h", gptr_message_stream("stdout"))
   if (is.null(attr(out, "status"))) out
 }
@@ -118,7 +121,8 @@ tty_modes = function(modes = "-g") {
 #' turns bracketed paste on (`paste`, D-263), and every return to the saved modes (tty_restore(),
 #' tty_question(), gptr_readline()) turns it off first, so readline never reads with it on: GNU
 #' readline 8.1+ toggles it around its own reads, older readline (CRAN macOS R's 5.2) and libedit
-#' would read the markers as text
+#' would read the markers as text. In-process R code may read through readline, so the end of its
+#' evaluation turns it on again (eval_restore())
 #' @noRd
 tty_call = function(keys) {
   saved = tty_modes()
