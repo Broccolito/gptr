@@ -245,8 +245,8 @@ console_cli_default = function(ref) {
   if (isTRUE(api %in% c("cli-claude", "cli-codex"))) pcli_default_model(api)
 }
 
-#' A model reference as /model and /status show it: a built-in CLI's `default` with the full id
-#' the CLI gets (`claude-cli/default (claude-sonnet-5-5)`)
+#' A model reference as /model, its switch and /status show it: a built-in CLI's `default` with the
+#' full id the CLI gets (`claude-cli/default (claude-sonnet-5-5)`)
 #' @noRd
 cmd_model_label = function(ref) {
   id = console_cli_default(ref)
@@ -267,12 +267,12 @@ cmd_model = function(args, ctx) {
     session_set_model(s, args, reason = "user")
     # the choice also outlives /clear (a new session starts with it)
     if (!is.null(rs)) rs$model = args
-    return(paste0("Model: ", s$model, " (from the next request)"))
+    return(paste0("Model: ", cmd_model_label(s$model), " (from the next request)"))
   }
   if (is.null(rs)) return("There is no session to switch.")
   if (is.null(registry_get("router", args))) model_canonical(args, strict = TRUE)
   rs$model = args
-  paste0("Model: ", args, " (used from the first prompt)")
+  paste0("Model: ", cmd_model_label(args), " (used from the first prompt)")
 }
 
 #' `/mode [mode]`: on a session from the next turn; before the first prompt for that prompt

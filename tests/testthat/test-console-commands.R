@@ -316,13 +316,14 @@ test_that("/model and /mode before the first prompt set the first prompt's argum
 
 test_that("/model checks a reference before the first prompt; provider names resolve", {
   local_console_commands()
+  local_mocked_bindings(pcli_default_model = function(api) paste0(api, "-id"))
   rs = repl_state(NULL, new.env())
   bad = run_command(rs, "/model codex-clu")
   expect_match(paste(bad$err, collapse = "\n"), "Unknown model reference 'codex-clu'",
                fixed = TRUE)
   expect_null(rs$model)
   expect_identical(run_command(rs, "/model claude-cli")$out,
-                   "Model: claude-cli (used from the first prompt)")
+                   "Model: claude-cli (cli-claude-id) (used from the first prompt)")
   expect_identical(rs$model, "claude-cli")
   off = gptr_register(gptr_router("cheapest", route = function(request, ctx) "fake/fake-1"))
   withr::defer(off())
@@ -331,9 +332,9 @@ test_that("/model checks a reference before the first prompt; provider names res
   s = idle_session()
   rs2 = repl_state(s, new.env())
   expect_identical(run_command(rs2, "/model claude-code")$out,
-                   "Model: claude-cli/default (from the next request)")
+                   "Model: claude-cli/default (cli-claude-id) (from the next request)")
   expect_identical(run_command(rs2, "/model codex-cli")$out,
-                   "Model: codex/default (from the next request)")
+                   "Model: codex/default (cli-codex-id) (from the next request)")
 })
 
 test_that("/model and /status name the model a CLI's default runs (#44)", {
@@ -343,11 +344,14 @@ test_that("/model and /status name the model a CLI's default runs (#44)", {
   local_mocked_bindings(pcli_default_model = function(api) paste0(api, "-id"))
   shown = "fakeclaude/default (cli-claude-id)"
   rs = repl_state(NULL, new.env())
-  run_command(rs, "/model fakeclaude/default")
+  # the switch's answer names it too (FIX-34)
+  expect_identical(run_command(rs, "/model fakeclaude/default")$out,
+                   paste0("Model: ", shown, " (used from the first prompt)"))
   expect_identical(run_command(rs, "/model")$out, paste0("Model: ", shown))
   expect_true(paste0("model     ", shown) %in% run_command(rs, "/status")$out)
   rs$session = idle_session()
-  run_command(rs, "/model fakeclaude/default")
+  expect_identical(run_command(rs, "/model fakeclaude/default")$out,
+                   paste0("Model: ", shown, " (from the next request)"))
   expect_identical(run_command(rs, "/model")$out, paste0("Model: ", shown))
   expect_true(paste0("model     ", shown) %in% run_command(rs, "/status")$out)
   run_command(rs, "/model fakeclaude/claude-sonnet-5-5")
