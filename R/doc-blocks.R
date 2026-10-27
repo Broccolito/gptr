@@ -1387,9 +1387,10 @@ doc_turn_usage = function(out, u) {
   out
 }
 
-#' Add one assistant message (its successful recorded r calls) to a turn body. When every
-#' expression of a call was dropped, all its printed output belongs to dropped expressions and is
-#' dropped too, even from P10's flat output vector (IC-48)
+#' Add one assistant message (its recorded r calls; of a call that stopped part-way the
+#' expressions that ran, doc_ran_part()) to a turn body. When every expression of a call was
+#' dropped, all its printed output belongs to dropped expressions and is dropped too, even from
+#' P10's flat output vector (IC-48)
 #' @noRd
 doc_turn_assistant = function(out, m, results, with_out, plan_mode) {
   out$last = m
@@ -1397,11 +1398,31 @@ doc_turn_assistant = function(out, m, results, with_out, plan_mode) {
   for (b in m$content) {
     if (!identical(b$type, "tool_call") || !identical(b$name, "r")) next
     res = results[[b$id]]
-    if (is.null(res) || isTRUE(res$is_error)) next
+    if (is.null(res)) next
     det = res$details %||% list()
-    out = doc_turn_r(out, det, b$arguments, with_out, plan_mode)
+    if (isTRUE(res$is_error)) det = doc_ran_part(det)
+    if (!is.null(det)) out = doc_turn_r(out, det, b$arguments, with_out, plan_mode)
   }
   out
+}
+
+#' The details of an r call that stopped part-way (an error, interrupt or timeout) as those of a
+#' call that ran its first `n_done` top-level expressions, whose bindings stay: the code without
+#' the expressions after them (doc_drop_ranges()); NULL when none ran
+#' @noRd
+doc_ran_part = function(det) {
+  n = as.integer(det$n_done %||% 0L)
+  lines = sub("\r$", "", strsplit(as_utf8(paste(det$code %||% "", collapse = "\n")), "\n",
+                                  fixed = TRUE)[[1L]])
+  exprs = tryCatch(doc_parse_text(lines), error = function(e) NULL)
+  if (length(n) != 1L || is.na(n) || n < 1L || n > length(exprs)) return(NULL)
+  srcs = attr(exprs, "srcref")
+  ran = seq_along(exprs) <= n
+  if (!all(ran)) lines = doc_drop_ranges(lines, srcs[!ran], srcs[ran])
+  if (is.null(lines)) return(NULL)
+  det$code = paste(lines, collapse = "\n")
+  det$status = "ok"
+  det
 }
 
 #' Serialize successful canonical or locally served R with the same code, secret and output
@@ -1414,7 +1435,7 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
   # value= is one name (11.5): an expression's label is not; its recorded assignment names one
   named = rlang::is_string(det$value) && identical(make.names(det$value), det$value)
   if (!is.null(det$value)) out$value = if (named) det$value
-  if (plan_mode || isFALSE(det$record) || isFALSE(args$record)) return(out)
+  if (plan_mode || isFALSE(det$record %||% args$record)) return(out)
   chunk = doc_code_clean(det$code %||% args$code %||% "")
   if (!is.null(det$value) && !named && isTRUE(attr(chunk, "returned"))) {
     out$value = doc_value_name

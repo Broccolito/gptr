@@ -2618,6 +2618,21 @@ test_that("a stale turn re-asked after a rebuilt turn gets no forged steer (FIX-
   expect_false(any(grepl("FORGED", said, fixed = TRUE)))
 })
 
+test_that("what a call made is recorded although it failed after or said record = false (FIX-33)", {
+  x = local_doc_e2e(list(fake_tool("r", code = "csv = c(4, 5, 6)\ncat(list(1, 2:3))"),
+                         fake_tool("r", code = "out = sum(csv)", record = FALSE),
+                         fake_tool("r", code = "head(mtcars, 1)", record = FALSE),
+                         fake_tool("r", code = "total = out + 0"), fake_text("The total is 15.")))
+  f = file.path(x$root, "doc.R")
+  writeLines("s = peter(\"Sum the counts.\")", f)
+  doc_e2e_source(f)
+  tr = readLines(f)
+  expect_true(all(c("csv = c(4, 5, 6)", "out = sum(csv)", "total = out + 0") %in% tr))
+  expect_false(any(grepl("cat[(]list|head[(]mtcars", tr)))
+  local_gptr_options(replay = "replay")
+  expect_identical(doc_e2e_source(f)$total, 15)
+})
+
 test_that("gptr_source() skips a regenerated block's old code below a #line comment", {
   local_project()
   local_gptr_options(record = "auto")

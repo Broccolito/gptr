@@ -661,6 +661,23 @@ test_that("failed and unrecorded calls are left out and plan-mode turns give one
                    "## Plan: .gptr/plans/2026-09-29-tidy.md")
 })
 
+test_that("a call that stopped part-way records the expressions that ran (FIX-33 PERM-5)", {
+  part = function(code, n_done, outputs = list()) {
+    turn = doc_test_turn(code, status = "error", outputs = outputs)
+    turn[[3L]]$message$details$n_done = n_done
+    site = list(format = "r", template = "count rows")
+    as.character(doc_block_lines(doc_test_session(list(turn)), 1L, site, 1L))
+  }
+  expect_identical(part("# read\ncsv = 1:3\ncsv[1]\n# why\nstop('x')\nlater = 2", 2L,
+                        list(character(), "[1] 1")),
+                   c("# read", "csv = 1:3", "csv[1]", "# why", "#> [1] 1"))
+  expect_identical(part("a = 1; b = \"\u00e9\"; stop('x')", 2L), "a = 1; b = \"\u00e9\"")
+  expect_identical(part("f = function(x) {\n  x + 1\n}\nstop('x')", 1L),
+                   c("f = function(x) {", "  x + 1", "}"))
+  expect_identical(part("stop('x')", 0L), character())
+  expect_identical(part("x = (", 1L), character())
+})
+
 test_that("steers and follow-ups delivered during the turn are recorded as comment lines", {
   turn = doc_test_turn("x = 1")
   relay = list(type = "custom_message", message = msg_operator(
