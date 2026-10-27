@@ -1837,11 +1837,11 @@ risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "w
 #'
 #' Paths are classified relative to `root` (`workspace`, `temp`, `outside`, `protected`,
 #' `control`, `instructions`, `critical`, `url`, `wildcard`, `unknown`). Calls of
-#' `peter$sh()`, `system()`, `system2()` and `processx::run()` with literal commands are
-#' classified with the command table (`inst/extdata/risk-commands.csv`), `peter$sql()` by its
-#' statements and `peter$py()` by a token scan. A command the code computes, or a `shell.exec()`
-#' file it computes, is a `dynamic` row at level 3. Plugins and users extend both tables with
-#' `risk_rule` records.
+#' `peter$sh()`, `system()`, `system2()` (its `env` as the start of the command line) and
+#' `processx::run()` with literal commands are classified with the command table
+#' (`inst/extdata/risk-commands.csv`), `peter$sql()` by its statements and `peter$py()` by a token
+#' scan. A command the code computes, or a `shell.exec()` file it computes, is a `dynamic` row at
+#' level 3. Plugins and users extend both tables with `risk_rule` records.
 #'
 #' @param code R code: a character vector, a call or an expression.
 #' @param envir `NULL` or the environment the code would run in. When given, assignments to
@@ -2511,13 +2511,16 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       x = risk_fold(x)
       more = if (name %in% c("system2", "run")) risk_arg(a, "args", 2L)
       argv = if (!is.null(more)) risk_fold(more)
-      if (is.null(x) || (!is.null(more) && is.null(argv))) {
+      # Unix system2() pastes env, unquoted, before the command: it is shell code too
+      env = if (name == "system2") risk_arg(a, "env")
+      envs = if (!is.null(env)) risk_fold(env)
+      if (is.null(x) || (!is.null(more) && is.null(argv)) || (!is.null(env) && is.null(envs))) {
         add(ctx, paste0(label, " (code the code computes)"), name, max(3L, row$level), "dynamic")
         return(TRUE)
       }
       f = switch(code[3L], sql = risk_sql(paste(x, collapse = "\n"), root),
                  argv = risk_command(c(x, argv), root),
-                 risk_command(paste(c(x, argv), collapse = " "), root))
+                 risk_command(paste(c(envs, x, argv), collapse = " "), root))
       add_rows(f, ctx, name, paste0(name, "(): "))
       return(TRUE)
     }

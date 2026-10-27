@@ -259,7 +259,8 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
     if (!is.null(st)) st$refused = perm_refused(d) %||% "not allowed"
     d$how = paste0("To allow it, run it yourself at the R prompt or add a rule with ",
                    "gptr_permissions(allow = ...).")
-    return(gptr_tool_result(perm_denial_text(d), is_error = TRUE))
+    return(gptr_tool_result(paste(perm_denial_text(d), "Nothing in this call ran."),
+                            is_error = TRUE))
   }
   if (is.list(d$input)) call$input = d$input
   tokens = NULL

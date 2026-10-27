@@ -98,7 +98,9 @@ dispatch_steps = function(run, call, st = NULL) {
   if (isTRUE(run$signal$aborted)) return(aborted())
   dec = perm_check(call, run)
   call$risk = dec$risk
-  if (!identical(dec$decision, "allow")) return(refuse(perm_refused(dec), perm_denial_text(dec)))
+  if (!identical(dec$decision, "allow")) {
+    return(refuse(perm_refused(dec), paste(perm_denial_text(dec), "Nothing in this call ran.")))
+  }
   call$input = dec$input %||% call$input
   call$approved_level = risk_level(dec$risk)
   if (isTRUE(run$signal$aborted)) return(aborted())
@@ -766,7 +768,8 @@ perm_request_record = function(call, run, out, risk, tier) {
        nested = isTRUE(call$nested), tier = tier, agent = agent_label(run))
 }
 
-#' The lines to show for a request: the code (at most 20 lines), a path, or the input as JSON
+#' The lines to show for a request: the code (at most 20 lines), a path, a command (a nested
+#' peter$sh() or peter$bg()), or the input as JSON
 #' @noRd
 perm_summary = function(call) {
   input = if (is.list(call$input)) call$input else list()
@@ -778,6 +781,8 @@ perm_summary = function(call) {
   }
   path = input[["path"]]
   if (is.character(path)) return(paste0("path: ", path))
+  cmd = unlist(input[["cmd"]])
+  if (is.character(cmd) && length(cmd)) return(paste(cmd, collapse = " "))
   txt = tryCatch(json_encode(call$input), error = function(e) "(input not shown)")
   if (nchar(txt) > 200L) paste0(substr(txt, 1L, 200L), "...") else txt
 }

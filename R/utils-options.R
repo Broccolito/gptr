@@ -56,7 +56,7 @@ setting_get = function(key, session = NULL, default = NULL) {
 #' @noRd
 context_mode = function(opts) opts$context %||% setting_get("context", default = "summary")
 
-#' Say once per R process what yolo still asks for (IC-78)
+#' Say once per R process what yolo still asks for and refuses (IC-78, D-262)
 #' @noRd
 mode_notice = function(mode) {
   if (!identical(mode, "yolo")) return(invisible(NULL))
@@ -64,8 +64,10 @@ mode_notice = function(mode) {
                      "writes anywhere and gptr's own configuration functions. A person is still ",
                      "asked before deleting files outside the project or protected files (.git, ",
                      ".env, keys), the project or home directory, rm(list = ls()), quitting R, ",
-                     "options(gptr.*) and sending a secret over the network. The classifier ",
-                     "reads code; it is not a sandbox."), "notice", .once = "mode_yolo")
+                     "options(gptr.*) and sending a secret over the network. system(), ",
+                     "system2(), shell() and shell.exec() calls with a command the code computes ",
+                     "are refused; the model is pointed to peter$sh(). The classifier reads code; ",
+                     "it is not a sandbox."), "notice", .once = "mode_yolo")
 }
 
 #' Mockable wrapper of interactive()

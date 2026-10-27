@@ -59,6 +59,13 @@ amendment are in `DEVIATIONS.md`:
   is read back, and none from a document with malformed markers; recorded code that would extend
   the run gets one more `#` (`##<`), as does a comment line of `!` code shaped like a console line,
   and `/undo`, `/undo`, `/redo`, `/redo` brings back both blocks (D-266, D-264 amended).
+- FIX-32 (#92): the permission findings of the live sessions: deny and ask rules match a read-only
+  command (`r(sh:cat *)` denies `peter$sh("cat f")`); `system2()`'s `env` is read as the start of
+  its command; a refused call's text ends "Nothing in this call ran."; the computed-command refusal
+  fits the console's row; the `<r_session>` line says "use peter$sh(); read $stdout."; a nested
+  `peter$sh()` ask shows its command; the cheat sheet and the yolo notice name the refusal; the
+  console's plan menu names no call for R's prompt; `?gptr_security` says that Codex's own shell
+  runs outside gptr's gate in every mode (D-267).
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
@@ -107,7 +114,9 @@ Open (found, not fixed):
 
 - A computed command run through a function reached by a computed name (`get("system")(cmd)`),
   `eval(parse())`, a sourced file, package code, `pipe()` or `processx::run()` still escapes `sh:`
-  rules in auto and yolo, and `system2()`'s `env` is never read (FIX-27).
+  rules in auto and yolo (FIX-27; `system2()`'s `env` is read since FIX-32).
+- An approved `system()` child's output starts on the frozen `r` row; Codex's own shell is not
+  switched off in the read-only modes; the prefix gate leaves `standard_core` 1 token (FIX-32).
 - A replayed script sends again a steer its run took after the script went on (a run sent to the
   background from the pause menu, a `gptr_wait(timeout =)` that returned before the run ended), and
   a `gptr_step(s, <n>)` that ended the run keeps the notes, so a later turn equal to one is still

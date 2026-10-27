@@ -473,8 +473,8 @@ gptr_artifacts("survey-view", open = TRUE)</dt><dd>List apps by id; open, stop o
           <tr><td><code>plan</code></td><td>Read only; R runs in a scratch environment. Its plan goes once to your next <code>peter()</code> call (option <code>gptr.plan_handoff</code>)</td></tr>
           <tr><td><code>manual</code></td><td>Default: read-only actions run, others ask; with nobody to ask, the run stops</td></tr>
           <tr><td><code>edits</code></td><td>Also the write and edit tools in the project; R code that writes files (<code>write.csv()</code>) still asks</td></tr>
-          <tr><td><code>auto</code></td><td>All but critical actions, gptr settings and secret reads</td></tr>
-          <tr><td><code>yolo</code></td><td>Nearly all; critical actions still ask</td></tr>
+          <tr><td><code>auto</code></td><td>All but critical actions, gptr settings and secret reads; <code>system()</code> with a computed command is refused (use <code>peter$sh()</code>)</td></tr>
+          <tr><td><code>yolo</code></td><td>Nearly all; critical actions still ask, and a computed <code>system()</code> command is refused</td></tr>
         </table>
         <dl>
           <dt>gptr_permissions(deny = "r(sh:rm *)")</dt><dd>Rules: <code>deny</code> beats <code>ask</code> beats <code>allow</code>.</dd>

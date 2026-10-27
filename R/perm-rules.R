@@ -93,7 +93,8 @@ rule_code_text = function(fl) {
 #' Does one parsed rule match a call? `lst` is the list the rule came from.
 #'
 #' Allow rules with fn/category/sh/sql/secret match only when EVERY flagged call (level >= 1, with a
-#' function name) is covered; deny and ask rules match when ANY is (report 18 section 3.7).
+#' function name) is covered; deny and ask rules match when ANY is, level 0 included (report 18
+#' section 3.7, D-267).
 #' @noRd
 rule_hit = function(p, call, lst) {
   name = call$name %||% ""
@@ -112,7 +113,8 @@ rule_hit = function(p, call, lst) {
     read = sub("^secret_env(_registered)? ", "", fl$call[fl$level >= 1L])
     return(length(s) > 0L && all(c(s, read) %in% p$value))
   }
-  fl = fl[fl$level >= 1L & (p$kind == "category" | !is.na(fl$fn)), , drop = FALSE]
+  fl = fl[(lst != "allow" | fl$level >= 1L) & (p$kind == "category" | !is.na(fl$fn)), ,
+          drop = FALSE]
   text = rule_code_text(fl)
   hit = switch(p$kind, fn = fl$fn %in% p$value, category = fl$category %in% p$value,
                sh = fl$fn %in% perm_shell_fns & grepl(risk_glob_re(p$value), text, perl = TRUE),
@@ -291,13 +293,16 @@ perm_control_guard = function(what) {
 #' `tool(spec)`: a path glob for `read`, `write`, `edit`, `grep`, `find` and `ls`
 #' (`write(results/**)`, relative to the project root; `~/...` for the home; `//...` for other
 #' absolute paths); for `r`, `level<=n`, `fn:name,...` (every flagged function covered),
-#' `category:name,...`, `sh:<command glob>` (`r(sh:git status*)`), `sql:<keywords>`
+#' `category:name,...`, `sh:<command glob>` (`r(sh:git push*)`), `sql:<keywords>`
 #' (`r(sql:select)`) and `secret:NAME` (the only rule that pre-approves a guarded secret read);
 #' MCP tools by name (`mcp__github__*`). Deny rules win over ask rules, which win over allow
-#' rules. Allow rules never loosen plan mode and never pre-approve level-4 (critical or control)
-#' actions. In `auto` and `yolo` mode only an `fn:` rule that names the function, such as
-#' `r(fn:system)`, lets `system()`, `system2()`, `shell()` or `shell.exec()` run a command the code
-#' computes, which those modes otherwise refuse (see [gptr_security]).
+#' rules. Deny and ask rules match any call that [gptr_risk()] flags, a read-only shell command
+#' included (`r(sh:cat *)` denies `peter$sh("cat notes.txt")`); an R function it knows to be
+#' read-only, such as `readLines()`, is not flagged, so `fn:` rules never match it. Allow rules
+#' never loosen plan mode and never pre-approve level-4 (critical or control) actions. In `auto`
+#' and `yolo` mode only an `fn:` rule that names the function, such as `r(fn:system)`, lets
+#' `system()`, `system2()`, `shell()` or `shell.exec()` run a command the code computes, which
+#' those modes otherwise refuse (see [gptr_security]).
 #'
 #' Scopes: `"session"` is this R process; `"project"` is the user-level file
 #' \file{projects/<hash>.json} in `tools::R_user_dir("gptr", "config")`, personal and never

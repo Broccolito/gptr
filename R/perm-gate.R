@@ -89,9 +89,7 @@ perm_policy_mode = function(call, ctx) {
   fn = if (mode %in% c("auto", "yolo")) perm_computed_cmd(call)
   if (!is.null(fn)) {
     return(perm_decision("deny", paste0(fn, "() with a computed command is refused in ", mode,
-                                        " mode: the permission rules cannot read it. Run the ",
-                                        "command with peter$sh(), which checks it against them ",
-                                        "when it runs"), call))
+                                        " mode; use peter$sh()"), call))
   }
   if (identical(mode, "yolo")) return(perm_decision("allow", "mode yolo", call))
   if (perm_is_control(call, call$risk)) return(NULL)

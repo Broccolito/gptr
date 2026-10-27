@@ -55,7 +55,8 @@ test_that("a served r call evaluates in the session's environment with its mode 
   res = mcp_dispatch_local(r_call("a = 2", modern = FALSE), y$session)$result
   expect_true(res$isError)
   expect_match(res$content[[1L]]$text, "Permission denied", fixed = TRUE)
-  expect_match(res$content[[1L]]$text, "gptr_permissions(allow", fixed = TRUE)
+  expect_match(res$content[[1L]]$text, "gptr_permissions(allow = ...). Nothing in this call ran.",
+               fixed = TRUE)
   expect_false(exists("a", envir = y$envir, inherits = FALSE))
   rd = mcp_dispatch_local(mcp_test_msg("tools/call", list(name = "read",
                                                           arguments = list(path = "nope.txt"))),

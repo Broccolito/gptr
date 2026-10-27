@@ -518,10 +518,12 @@ test_that("only auto and yolo refuse a computed command; a literal one is gated 
                  "system('sleep 1', wait = FALSE)", "shell.exec('report.pdf')", "peter$sh(cmd)")) {
     expect_identical(decide(code), c("deny", "ask", "ask", "allow", "allow"), label = code)
   }
-  expect_identical(perm_policy_mode(gate_r("x = 1; system2(cmd)"), gate_ctx("yolo"))$reason,
-                   paste0("system2() with a computed command is refused in yolo mode: the ",
-                          "permission rules cannot read it. Run the command with peter$sh(), ",
-                          "which checks it against them when it runs"))
+  why = perm_policy_mode(gate_r("x = 1; shell.exec(f)"), gate_ctx("yolo"))$reason
+  expect_identical(why, paste0("shell.exec() with a computed command is refused in yolo mode; ",
+                               "use peter$sh()"))
+  # the console's one not-run row shows it whole at 100 columns (FIX-32)
+  row = console_result_lines(list(name = "r", refused = why), list(), 98L)
+  expect_match(row, "use peter$sh()", fixed = TRUE)
   # only an fn: rule lifts the refusal; these allow in manual and edits as before
   gptr_permissions(allow = c("r(level<=3)", "r(category:dynamic)", "r(sh:*)", "r(fn:system2)"))
   expect_identical(decide("system(cmd)"), c("deny", "allow", "allow", "deny", "deny"))

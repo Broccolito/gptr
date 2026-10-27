@@ -169,7 +169,9 @@ These calls run a child process. The built-in `claude-cli` route uses the Claude
 signed-in plan/OAuth authentication and refuses API-key billing. For API-key use, explicitly
 choose the direct `anthropic` provider. The Codex route uses the CLI's active authentication and
 billing. Live R access goes through gptr's MCP permission gate; Codex reaches it through a
-small R relay that gptr ships, so the route needs no extra package. Both routes get the tools
+small R relay that gptr ships, so the route needs no extra package. Codex's own shell does not
+pass that gate: it runs commands within Codex's sandbox, which can read any file your account
+can read (see `?gptr_security`). Both routes get the tools
 your session declares to every model, and the console shows their tool calls and the first
 line of each reasoning step while they run; Codex's answer arrives whole, since `codex exec`
 does not stream text. First use asks for an acknowledgment. gptr

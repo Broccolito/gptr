@@ -1654,7 +1654,7 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' session. Deny and ask `sh:` rules see a command computed at run time only in a `peter$sh()` or
 #' `peter$bg()` call, which checks the command when it runs. So in `auto` and `yolo` mode a
 #' `system()`, `system2()`, `shell()` or `shell.exec()` call whose command (for `system2()` also its
-#' arguments) is not a string the classifier can read, such as
+#' arguments and `env`) is not a string the classifier can read, such as
 #' `cmd = paste("rm", "-rf", "build"); system(cmd)`, is refused, and the model is told to run the
 #' command with `peter$sh()`; `manual` and `edits` ask. An allow rule such as `r(fn:system)` lets
 #' such calls run, unchecked by `sh:` rules. The refusal covers only calls the classifier resolves
@@ -1670,9 +1670,11 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' sub-agent in a separate R process that starts from gptr's reduced child environment (it does
 #' not read your `~/.Renviron`), but that process runs under your user account with your file
 #' permissions: the worker backend is not an isolation boundary. Its permission requests are
-#' sent to your session and classified again there. On the `codex` route in `auto` and `yolo`
-#' mode, Codex's own shell changes and deletes files inside the project within Codex's sandbox,
-#' without passing gptr's gate. MCP servers, the `claude` and `codex` command-line tools, shell
+#' sent to your session and classified again there. On the `codex` route Codex's own shell runs
+#' commands in every mode without passing gptr's gate, rules or secret guard: in `plan`, `manual`
+#' and `edits` its sandbox is read-only, so it can still read any file your account can read, and
+#' in `auto` and `yolo` it also changes and deletes files inside the project within its sandbox.
+#' MCP servers, the `claude` and `codex` command-line tools, shell
 #' commands started with `peter$sh()` and Shiny artifacts are ordinary processes of your account
 #' as well; artifacts start without any registered secret and listen
 #' on the loopback interface, and each launch gets an access token in its address (on Windows

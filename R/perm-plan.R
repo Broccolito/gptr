@@ -223,8 +223,12 @@ plan_execute = function(s, mode, ctx) {
   }
   session_append(s, list(type = "custom", custom_type = "gptr.plan",
                          data = list(text_hash = hash_sha256(d$plan), status = "used")))
-  gptr_inform(c(paste0("Session ", d$id, " is in mode ", mode, ": send Go ahead. to run the plan."),
-                "At R's prompt: gptr_last() |> peter(\"Go ahead.\")"), "plan_handoff")
+  msg = paste0("Session ", d$id, " is in mode ", mode, ": send Go ahead. to run the plan.")
+  # the console's prompt sends text to the model, so the call for R's prompt only outside it
+  if (is.null(console_eval_value(".gptr_repl"))) {
+    msg = c(msg, "At R's prompt: gptr_last() |> peter(\"Go ahead.\")")
+  }
+  gptr_inform(msg, "plan_handoff")
   plan_add_tools(s, ctx, mode)
 }
 

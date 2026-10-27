@@ -7826,7 +7826,7 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   function vector, the maintainer's call); `system2()`'s `env`, pasted unquoted into the Unix
   command line and never read (`system2("ls", env = "A=1; rm -rf build;")` is level 0), a separate
   issue; in manual mode an allow `r(level<=3)` still lets a computed `system()` run without asking,
-  past a deny `sh:` rule (as before).
+  past a deny `sh:` rule (as before). Status 2026-10-27: `env` is read since D-267 (FIX-32).
 - Accepted false refusals, each costing one round trip to `peter$sh()` or an `r(fn:)` rule:
   `cmd = "ls"; system(cmd)` (names are not followed for code arguments),
   `system2("git", c("log", n))`, `system2("ls", character())`, `do.call(system, list("ls"))`, a
@@ -8098,3 +8098,66 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   test-console-repl.R "a live re-ask never sends the turn's recorded code as context (FIX-31)";
   test-doc-export.R "a raw export leaves out what a prompt was sent with; the Peter format keeps
   it". Evidence: progress/fixes.md FIX-31.
+
+## D-267 - FIX-32 Permission findings from the live sessions (2026-10-27)
+- Rule (rules, PERM-1): a deny or ask rule with an `fn:`, `category:`, `sh:` or `sql:` spec matches
+  when it covers any flagged row of the call, level 0 included: `r(sh:cat *)` denies
+  `peter$sh("cat report.txt")`, its argv form, `system("cat report.txt")` and the same command
+  that a `peter$sh()` call computes, `r(sh:echo *)` denies `echo x >> f` (whose only row of level 1
+  or more is `redirect to f`), and an ask `r(sh:wc *)` asks for `wc -l f`. An allow rule still
+  matches only when it covers every row of level 1 or more: level 0 runs in every mode, so a call
+  of level-0 rows alone needs no allow rule. A known read-only R function such as `readLines()`
+  gets no flagged row, so `fn:` rules never match it (`?gptr_permissions` says so). Formerly every
+  list read only rows of level 1 or more, as 04's `rule_match` row wrote ("every flagged call
+  (level >= 1)"); no user page said so, `?gptr_security` and FIX-27's refusal said that
+  `peter$sh()` checks a command against the rules, and the page's example `r(sh:git status*)`
+  matched nothing as a deny or ask rule. The example is now `r(sh:git push*)`.
+- Rule (classifier, PERM-2): `system2()`'s `env` is read as the start of its command line, as
+  Unix `system2()` pastes it, unquoted, before the command:
+  `system2("ls", env = "A=1; rm -rf build;")` is read as `A=1; rm -rf build; ls` (level 3), and an
+  `env` that the classifier cannot fold to literals makes the call's `dynamic` row, which auto and
+  yolo refuse (D-262). On Windows `env` words follow the command as arguments; the Unix reading is
+  the higher one, so one rule holds on every OS. A literal `env = "LC_ALL=C"` stays level 0;
+  `env = "A=1"` is level 3, as `system("A=1 ls")` is (a variable the command table does not
+  model). This closes D-262's Not covered item on `env`.
+- Rule (texts, PERM-6 and PERM-8): the computed-command refusal reads "<fn>() with a computed
+  command is refused in <mode> mode; use peter$sh()", at most 77 characters, so the console's one
+  dim not-run row shows it whole at 100 columns; formerly it went on ": the permission rules cannot
+  read it. Run the command with peter$sh(), which checks it against them when it runs" (D-262),
+  and the row cut it before `peter$sh()` below about 190 columns. A denied top-level call and a
+  denied call served to a CLI route, refused before evaluation, end with "Nothing in this call
+  ran." after `Permission denied: <reason>. <how>` or the denial that carries the person's text; a
+  nested `peter$sh()` or `peter$bg()` denial inside running code, whose earlier lines ran, does
+  not.
+- Rule (prompt, PERM-7 and ALL-5): the `<r_session>` line reads "- system() and system2() children
+  read the user's terminal and you do not see their output: use peter$sh(); read $stdout." (29
+  o200k tokens, 2 more than D-253's line). The static prefixes are 1262/2380/2858/3001, within
+  architecture 12.7's prefix gate (standard_core 2335 + 2% leaves 1 token), so IC-68's totals stay;
+  the verdicts' longer lines (about 41 tokens) fail that gate.
+- Rule (console, PERM-9 and MM-7): a permission question's summary of a `cmd` input (a nested
+  `peter$sh()` or `peter$bg()`) is its words joined by spaces, not JSON. The plan menu's hand-off
+  notice adds `At R's prompt: gptr_last() |> peter("Go ahead.")` only when no console REPL state
+  (`.gptr_repl`) is on the call stack.
+- Not changed: (a) PERM-4's code alternative, `-c features.shell_tool=false` for Codex in the
+  read-only modes: IC-65 keeps Codex's own shell, and that key is not among the flags gptr's
+  capability probe checks; `?gptr_security` and vignette("language-models") now say that Codex's
+  shell runs in every mode outside gptr's gate, rules and secret guard. (b) PERM-9's second half:
+  an approved `system()` child writes to the terminal on the frozen `r` row, after IC-82's
+  `keys show when r returns` cue; ending or clearing the row before evaluation would drop the cue
+  or erase the child's last line. (c) PERM-8's transcript half (a refused turn records an empty
+  block) is the transcript writer's.
+- Contract-visible: 04 sections 6.2 (`gptr_permissions()`'s example), 7.11 (`rule_match`) and 9.2
+  (result texts); 03 sections 6.8.1, 6.8.2 and 7.3; `?gptr_permissions`, `?gptr_security`,
+  `?gptr_risk`; vignette("language-models"); the cheat sheet's auto and yolo rows and the yolo
+  notice (IC-78).
+- Tests: test-perm-rules.R "deny and ask sh: rules match a read-only command; allow needs level 1
+  (FIX-32)", "a deny sh: rule stops a read-only command, also one peter$sh() computes (FIX-32)";
+  test-perm-classify.R "system2()'s env is read as the start of its command line (FIX-32)";
+  test-perm-gate.R "only auto and yolo refuse a computed command; a literal one is gated as
+  before"; test-agent-dispatch.R "a refused call says none of it ran; a nested denial mid-run does
+  not (FIX-32)", "input fields are matched exactly, never by a prefix"; test-mcp-server.R "a served
+  r call evaluates in the session's environment with its mode (idle gate)"; test-prompt-text.R
+  "r_session runs programs with peter$sh(), not system() or system2()"; test-perm-plan.R "in the
+  console the go-ahead notice names no call for R's prompt (FIX-32)"; test-session-object.R "yolo
+  is the loosest mode; entering it says once what still asks (IC-78)". Evidence: progress/fixes.md
+  FIX-32.

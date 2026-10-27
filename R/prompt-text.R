@@ -82,7 +82,7 @@ prompt_text_table = list(
     "- To hand a result to the user's peter() call (a fitted model, a table), assign it and ",
     "call gptr_return(obj).\n",
     "- system() and system2() children read the user's terminal and you do not see their ",
-    "output: use peter$sh() instead.\n",
+    "output: use peter$sh(); read $stdout.\n",
     "- Never call q(), quit(), readline() or menu(), and do not install, update or remove ",
     "packages unless the user asked."
   ),

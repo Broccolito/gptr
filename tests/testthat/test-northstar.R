@@ -444,7 +444,7 @@ ns_expected_t0 = function() {
     paste0("- To hand a result to the user's peter() call (a fitted model, a table), ",
            "assign it and call gptr_return(obj)."),
     paste0("- system() and system2() children read the user's terminal and you do no",
-           "t see their output: use peter$sh() instead."),
+           "t see their output: use peter$sh(); read $stdout."),
     paste0("- Never call q(), quit(), readline() or menu(), and do not install, upda",
            "te or remove packages unless the user asked."),
     "</r_session>",

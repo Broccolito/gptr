@@ -46,11 +46,12 @@ works on the objects already in memory.
   their probabilities (`gptr_prob()`) that work inside `if`, `for` and `while`, one element per
   input. A generative model can emulate them; emulated answers are marked as uncalibrated.
 * Permission modes `manual` (default), `edits`, `auto` and `plan`, rules with
-  `gptr_permissions()`, and an advisory risk classifier, `gptr_risk()`. A permission question
-  without a person present stops the run with a classed condition. In `auto` and `yolo` mode,
-  `system()`, `system2()`, `shell()` and `shell.exec()` with a command the code computes are refused
-  unless an allow rule such as `r(fn:system)` names the function; the model is pointed to
-  `peter$sh()`, whose command the rules check when it runs.
+  `gptr_permissions()`, and an advisory risk classifier, `gptr_risk()`. Deny and ask rules also
+  match read-only shell commands, such as `r(sh:cat *)`. A permission question without a person
+  present stops the run with a classed condition. In `auto` and `yolo` mode, `system()`,
+  `system2()`, `shell()` and `shell.exec()` with a command the code computes (`system2()`'s `env`
+  included) are refused unless an allow rule such as `r(fn:system)` names the function; the model
+  is pointed to `peter$sh()`, whose command the rules check when it runs.
 * Scripts and notebooks are the history: code the agent ran is recorded below each `peter()`
   call in `.R`, `.Rmd`, `.qmd` and `.ipynb` documents and replays without model calls
   (`gptr_doc()`, `gptr_source()`, `gptr_blocks()`, `gptr_cache()`). A console transcript also
@@ -115,6 +116,7 @@ works on the objects already in memory.
 * Codex reaches the session through a base-R stdio relay, without 'httpuv', 'later' or
   'openssl', and both CLI routes get the session's full tool set. Codex reasoning and commands
   show as progress lines and Claude Code's calls of gptr's tools as tool lines while they run.
+  Codex's own shell runs within Codex's sandbox, outside gptr's permission gate.
 * `/model` and `model =` accept a provider name alone, such as `claude-cli` or `codex-cli`
   (its first model); `/model` checks the name before the first prompt. A model declared without
   tool calls says once that the session's tools are not sent.

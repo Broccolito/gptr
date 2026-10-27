@@ -521,6 +521,10 @@ test_that("yolo is the loosest mode; entering it says once what still asks (IC-7
   rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
   withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
   expect_message(test_session(mode = "yolo"), "not a sandbox", class = "gptr_message_notice")
+  # and what it refuses outright (FIX-32)
+  rm(list = "message:mode_yolo", envir = the$once)
+  expect_message(test_session(mode = "yolo"),
+                 "shell.exec() calls with a command the code computes are refused", fixed = TRUE)
   expect_no_message(session_set_mode(test_session(mode = "manual"), "yolo"))
   rm(list = "message:mode_yolo", envir = the$once)
   expect_message(session_set_mode(test_session(mode = "manual"), "yolo"), "not a sandbox",
