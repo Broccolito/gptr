@@ -1230,6 +1230,36 @@ test_that("a direct R line using a name an undone step or an off line made is sw
                      "#~ # /home/me/data is the input", "#~ z = z + fit", "# /model opus"))
 })
 
+test_that("a comment in a direct R line shaped like another entry stays in its section (FIX-31)", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  doc_project_transcript(".gptr/transcripts/t.R")
+  t = file.path(proj, ".gptr", "transcripts", "t.R")
+  dir.create(dirname(t), recursive = TRUE)
+  writeLines(doc_direct_fixture(t, undone = TRUE), t)
+  direct = function(code, created) {
+    doc_on_console_direct(list(data = list(code = paste(code, collapse = "\n"),
+                                           output = character(), status = "ok",
+                                           created = created)), list(session = NULL))
+  }
+  # the comments get one more `#`, so the whole line goes off with the undone fit it uses
+  code = c("z = fit * 2", "# /tmp is scratch", "z = z + fit", "# direct R (no model)",
+           "# gptr session s1", "#~ s_ab12cd = peter(\"x\")", "z")
+  direct(code, "z")
+  expect_identical(utils::tail(readLines(t), 8L),
+                   c("# direct R (no model; uses undone fit) created=z", "#~ z = fit * 2",
+                     "#~ ## /tmp is scratch", "#~ z = z + fit", "#~ ## direct R (no model)",
+                     "#~ ## gptr session s1", "#~ ##~ s_ab12cd = peter(\"x\")", "#~ z"))
+  e = doc_source_lines(readLines(t))
+  expect_false("z" %in% ls(e))
+  # R reads the same code; a line inside a string is kept as it is
+  code = c("msg = \"", "# /tmp is text", "\" # /tmp too", "# /tmp is scratch")
+  direct(code, "msg")
+  rec = utils::tail(readLines(t), 4L)
+  expect_identical(rec, c("msg = \"", "# /tmp is text", "\" # /tmp too", "## /tmp is scratch"))
+  expect_identical(parse(text = rec, keep.source = FALSE), parse(text = code, keep.source = FALSE))
+})
+
 test_that("a rewind switches dependent direct R lines off, says which, and a redo back on", {
   proj = local_project()
   local_gptr_options(record = "auto", quiet = FALSE)

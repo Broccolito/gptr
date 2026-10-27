@@ -897,16 +897,17 @@ doc_on_session_tree = function(event, ctx) {
 
 #' console:direct (P14, after the line ran): a direct R line (`!expr`) of the console enters the
 #' transcript under `# direct R (no model)` with its printed output as `#>` lines (IC-49,
-#' contract 11.5 transcript row), the header naming what it created (`created=`). A line whose
-#' `status` is not "ok" (an error, interrupt or timeout; no status is a line that ran) is kept
-#' inert (`#~ `, no output) under `# direct R (no model; <status>)`, so the transcript still
-#' re-sources as one session (IC-49) and an interrupted computation does not run again
+#' contract 11.5 transcript row), the header naming what it created (`created=`) and its code as
+#' doc_direct_code() records it. A line whose `status` is not "ok" (an error, interrupt or
+#' timeout; no status is a line that ran) is kept inert (`#~ `, no output) under
+#' `# direct R (no model; <status>)`, so the transcript still re-sources as one session (IC-49)
+#' and an interrupted computation does not run again
 #' @noRd
 doc_on_console_direct = function(event, ctx) {
   data = event$data %||% list()
   code = as_utf8(paste(as.character(data$code %||% character()), collapse = "\n"))
   if (!length(code) || !nzchar(trimws(code))) return(NULL)
-  code = strsplit(code, "\n", fixed = TRUE)[[1L]]
+  code = doc_direct_code(strsplit(code, "\n", fixed = TRUE)[[1L]])
   st = data$status
   created = as_utf8(as.character(data$created %||% character()))
   lines = if (is.null(st) || identical(st, "ok")) {
@@ -922,10 +923,23 @@ doc_on_console_direct = function(event, ctx) {
 # a direct R line's header (doc_direct_header()): its reason and its key=value pairs
 doc_re_direct = "^# direct R \\(no model(?:; (.*?))?\\)(?: (.*))?$"
 # the first line of what the console appends after a direct R line (another one, a command
-# `# /<name> ...`, a session header, a turn's statement or block), which ends that line's section;
-# a comment such as `# /home/me/data` in the line's code does not
+# `# /<name> ...`, a session header, a turn's statement or block), which ends that line's section
 doc_re_entry = paste0("^(# (direct R \\(|/[^[:space:]/]+( |$)|gptr session |machine log: |",
                       ">>> gptr:)|", substring(doc_re_console, 2L), ")")
+
+#' The lines of a direct R line's code as a transcript records them: a comment line that reads as
+#' the first line of another entry (doc_re_entry), such as `# /tmp is scratch`, gets one more `#`,
+#' so the line's section runs on past it (doc_direct_switch()). R reads the same code; a line
+#' inside a string is kept as it is.
+#' @noRd
+doc_direct_code = function(code) {
+  hit = startsWith(code, "#") & grepl(doc_re_entry, code, perl = TRUE)
+  if (!any(hit)) return(code)
+  pd = tryCatch(utils::getParseData(doc_parse_text(code)), error = function(e) NULL)
+  hit = hit & seq_along(code) %in% pd$line1[pd$token == "COMMENT" & pd$col1 == 1L]
+  code[hit] = paste0("#", code[hit])
+  code
+}
 
 #' The header of a direct R line: `# direct R (no model)`, `; <reason>` inside the parentheses (a
 #' status, `uses undone <names>`), then `created=<names>` when it created any
