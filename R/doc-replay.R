@@ -524,7 +524,8 @@ doc_keep = function(call, site, mode) {
 #' The route's run(): replay a fresh block (no write consent needed), skip an undone one,
 #' regenerate a stale one, or pass with `call$doc` set when the call may be recorded (IC-45). A
 #' call that asks again for a recorded block gets in `call$sent` what that prompt was sent with
-#' (its `#< ` lines, which the console's context blocks send again, IC-49), recorded or not.
+#' (its `#< ` lines, which the console's context blocks send again, IC-49), recorded or not, and
+#' a call it passes is asked with the model of gptr_source(model =) when that sources its file.
 #' @noRd
 doc_route_run = function(call) {
   site = call$doc
@@ -541,6 +542,8 @@ doc_route_run = function(call) {
   if (identical(decision, "regenerate")) site = doc_skip_old(site)
   assign("sent", doc_site_block(site)$sent, envir = call)
   doc_keep(call, if (decision %in% c("record", "regenerate")) site, mode)
+  model = doc_source_model(site$path)
+  if (!is.null(model)) call$ids$model = model
   route_pass()
 }
 
@@ -1557,7 +1560,9 @@ doc_catalog_prune = function() {
 #' see [gptr_doc()]): the request is the same even when the file changed or is gone. It is asked
 #' with the model and in the mode its statement names, else those its session has from the turns
 #' before, so each console turn is asked as it ran; a turn recorded in `auto` or `yolo` is asked
-#' again in that mode. Direct R lines a transcript turned off are comments and do not run.
+#' again in that mode. A named model must be available where the file is asked again; `model`
+#' asks every call with another one. Direct R lines a transcript turned off are comments and do
+#' not run.
 #'
 #' Replay executes the recorded R code, including its ordinary side effects. It does not
 #' freeze package versions, supply external inputs or validate the analysis. This function
@@ -1571,6 +1576,10 @@ doc_catalog_prune = function() {
 #'   variable, then the `replay` setting, then `"auto"`.
 #' @param envir Environment in which the expressions are evaluated.
 #' @param echo `TRUE` prints each expression before it is evaluated.
+#' @param model `NULL`, or a model reference, as `peter(model =)` takes it: every call the file
+#'   asks again (each one under `replay = "live"`) uses it instead of the model it names or its
+#'   session has, so a recorded analysis can be re-asked with your own model. A block that
+#'   replays asks no model.
 #' @return Invisibly, the `gptr_blocks` listing of the file after the run with an extra column
 #'   `action`: `replayed`, `regenerated`, `ran`, `skipped`, or `NA` for blocks no call touched.
 #'   A stale block whose call ran but could not be rewritten (for example without write consent)
@@ -1581,12 +1590,13 @@ doc_catalog_prune = function() {
 #' writeLines(c("x = 1", "y = x + 1"), f)
 #' gptr_source(f, replay = "replay", envir = new.env())
 gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(),
-                       echo = FALSE) {
+                       echo = FALSE, model = NULL) {
   scoped = !missing(replay)
   path = doc_file_arg(file, "r", "an existing .R file (knit .Rmd and .qmd documents)")
   replay = check_choice(replay, c("auto", "replay", "live", "record"), "replay")
   check_env(envir, "envir")
   check_flag(echo, "echo")
+  check_string(model, "model", null = TRUE)
   doc_recover(path)
   # A file that cannot be read, or is not valid UTF-8, is a bad `file` argument, not a failed
   # document write (contract 6.4 lists no doc_write here)
@@ -1612,7 +1622,7 @@ gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = 
     if (length(k)) blocks$id[k[1L]] else NA_character_
   }, "")
   st = doc_state()
-  depth = doc_source_push(path)
+  depth = doc_source_push(path, model)
   on.exit(doc_source_pop(depth), add = TRUE)
   # Only a given `replay` is scoped over the file: left missing, each call resolves its mode
   # through replay_mode() (gptr.replay > GPTR_REPLAY > settings > "auto"), so GPTR_REPLAY=replay

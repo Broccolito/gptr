@@ -1452,6 +1452,29 @@ test_that("after /model the transcript names the model and a live re-ask asks it
   expect_identical(grep("^s_", readLines(con$t), value = TRUE), calls)
 })
 
+test_that("gptr_source(model =) re-asks every call with another model (FIX-33 MM-2)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "x = 1"), fake_text("Set x."),
+                         fake_tool("r", code = "x = 1"), fake_text("Set x."),
+                         fake_tool("r", code = "y = 2"), fake_text("Set y.")))
+  f2 = local_fake_provider(list(fake_tool("r", code = "y = 2"), fake_text("Set y.")),
+                           name = "fake2")
+  con = doc_console_repl(x)
+  con$run("set x")
+  con$run("/model fake2/fake2-1")
+  con$run("set y")
+  expect_true(any(grepl("peter(\"set y\", model = \"fake2/fake2-1\")", readLines(con$t),
+                        fixed = TRUE)))
+  expect_identical(lengths(list(fake_requests(x$fake), fake_requests(f2))), c(2L, 2L))
+  e = new.env(parent = globalenv())
+  e$library = function(...) invisible(NULL)
+  out = gptr_source(con$t, replay = "live", envir = e, model = "fake/fake-1")
+  expect_identical(out$action, c("regenerated", "regenerated"))
+  expect_identical(c(e$x, e$y), c(1, 2))
+  expect_identical(lengths(list(fake_requests(x$fake), fake_requests(f2))), c(6L, 2L))
+  expect_error(gptr_source(con$t, model = 1), class = "gptr_error_invalid_argument")
+})
+
 test_that("a plan-mode console records mode = \"plan\" and re-asks in plan mode (D-265)", {
   skip_on_cran()
   x = local_doc_e2e(rep(list(fake_text("Plan:\n1. Load\n2. Fit"), fake_tool("r", code = "x = 1"),
