@@ -6113,6 +6113,20 @@ the driver, screens, events, transcripts and replays without a model are local, 
   `system()`, `shell()`, `shell.exec()` or `rm` on the fixed code (the refusal comes before
   evaluation, the allowed call is `if (FALSE) system(cmd)`, and the nested `peter$sh()` denial
   happens before any process starts), so none needs a Windows skip.
+- Final checks, on `b61f4349` (the commit of this item changes only `dev/`, which `.Rbuildignore`
+  drops): `R CMD check --as-cran` in CRAN mode (`NOT_CRAN` unset, CRAN's timing thresholds, both
+  manuals) under `env -i` with only `HOME`, `PATH`, `LANG=en_US.UTF-8`, a `TMPDIR` from
+  `mktemp -d`, `R_LIBS_USER` and the `_R_CHECK_` variables, on a `git archive` of the head: Status
+  OK with no NOTE in 141 s, the tests in 20 s (`testthat.R` [15s/16s], FAIL 0 SKIP 902 PASS 2676;
+  the end-to-end block skips on CRAN, the decision block runs), INFO only for 'repr' and the
+  installed size (7.9 Mb); tarball sha256 `d13ad61c`. The tests of the changed files and their
+  neighbours, the files whose names start with `perm-`, `agent-dispatch`, `injection-e2e`,
+  `mcp-server`, `s11-conformance`, `secrets-e2e`, `subagent-team`, `console-render`, `console-ui`,
+  `zzz` or `lint-rules`, and `gptr-config` (15 files): FAIL 0 SKIP 0 PASS 4384 in UTF-8 and FAIL 0
+  SKIP 9 PASS 4340 under `LC_ALL=C LANG=C` (the skips need a UTF-8 locale). Lint clean (the 6 files
+  and the vignette); `document()` no diff; `check-docs.R` 0 problems; the plan checks pass (28
+  plans, no error finding, 770 R blocks with 0 problems, no lints);
+  `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290.
 - Deviations: D-262; D-251's Open (nested-1) gains its status line, closed by D-262. Open: a
   function reached by a computed name (`get("system")(cmd)`, only a `<computed>` row),
   `eval(parse(text = ))`, `source()`, package code that calls `system()`, `peter$knit` R chunks and
