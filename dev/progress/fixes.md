@@ -6561,3 +6561,162 @@ the driver, screens, events, transcripts and replays without a model are local, 
   as `sha` is that of the lines as written; both are also on origin/main 13a917ff, each for its own
   issue. `dev/PROGRESS.md` and `dev/HANDOFF.md` still list the double `/redo` defect as open under
   FIX-29; they are not edited here.
+
+## FIX-32 - Permission findings from the live sessions (2026-10-27, #92)
+Scope: the permission findings of the live sessions with real models (Versa GPT-5.6 and Claude
+Opus 4.8, `ollama/qwen3.8:27b`, claude-cli and codex) on `claude/v1-fixes` (`66fc1782`, the code
+of FIX-27..FIX-31), each reproduced by an independent triager: PERM-1, PERM-2, PERM-4, PERM-6 to
+PERM-9, ALL-5, STATIC-5 and MM-7 (the refuted PERM-3, PERM-10, ALL-4, MM-3 and MM-5 are not
+touched). Branch `claude/v1-fix-perm` from `809ad7e5`, nine commits (PERM-7 and ALL-5 share one),
+each test red on `809ad7e5`'s code first, `NOT_CRAN=true`, SIGINT at its default. All ten are
+fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
+
+### PERM-1 - Deny and ask rules match a read-only command
+- Commit `95877082`. Red: `^perm-rules$` FAIL 9 PASS 161: deny and ask `r(sh:cat *)` matched none
+  of `peter$sh(c('cat', 'report.txt'))`, `peter$sh('cat report.txt')`,
+  `system('cat report.txt', intern = TRUE)` and `peter$sh('cat a.txt > b.txt')`; deny
+  `r(sh:git *)` and `r(sh:echo *)` and ask `r(sh:wc *)` matched none of `git status`,
+  `echo x >> f.txt` and `wc -l f.txt`; and a fake run printed `report.txt` past the deny rule, in
+  manual mode for the literal call and in auto mode for a command `peter$sh()` computes.
+- Cause: `rule_hit()` (R/perm-rules.R) kept only flagged rows of level 1 or more for every list:
+  `cat report.txt` is a level-0 `read` row, and `echo x >> f`'s only row of level 1 or more is
+  `redirect to f`, whose text does not start with `echo`. 04's `rule_match` row said so; no user
+  page did, and `?gptr_security` and FIX-27's refusal said that `peter$sh()` checks a command
+  against the rules.
+- Fix: deny and ask lists keep level-0 rows; an allow rule still needs every row of level 1 or
+  more covered (level 0 runs in every mode). `?gptr_permissions` says so and shows
+  `r(sh:git push*)` for `r(sh:git status*)`, which matched nothing as a deny or ask rule; 03
+  section 6.8.2 and 04 sections 6.2 and 7.11 follow. The finding's `deny r(fn:readLines)` stays
+  without effect: the classifier flags no row for an R function it knows to be read-only, so
+  `fn:` rules never match one, which the page now states.
+- Green: `^perm-` FAIL 0 PASS 1412. Lint clean; `document()` changes only `gptr_permissions.Rd`.
+
+### PERM-2 - system2()'s env is read as the start of its command line
+- Commit `715b977f`. Red: `^perm-classify$` FAIL 6 PASS 923:
+  `system2('ls', env = 'A=1; touch /etc/x;')`, `system2('ls', env = 'A=1; rm -rf build;')` and the
+  same `env` as the seventh positional argument were level 0;
+  `e = paste0(...); system2('ls', env = e)` was no `dynamic` row, so `perm_computed_cmd()` did not
+  refuse it; deny `r(sh:rm *)` did not match.
+- Cause: `by_args()` (R/perm-classify.R) read only `command` and `args`, while Unix `system2()`
+  pastes `env`, unquoted, before them into the line it hands to `sh`.
+- Fix: for `system2()` `by_args()` folds `env` and reads it before the command text; an `env` it
+  cannot fold is the existing `(code the code computes)` row, which auto and yolo refuse (D-262).
+  On Windows `env` words follow the command as arguments, so the Unix reading is the higher one
+  there too: one rule for every OS. `env = "LC_ALL=C"` and no `env` stay level 0;
+  `env = "A=1"` is level 3, as `system("A=1 ls")` is. `?gptr_security`, `?gptr_risk`, 03 section
+  6.8.1; D-262's Not covered item on `env` gains its status line.
+- Green: `^perm-` FAIL 0 PASS 1421. Lint clean; `document()` changes only `gptr_security.Rd` and
+  `gptr_risk.Rd`.
+
+### PERM-4 - Codex's own shell runs outside gptr's gate in every mode
+- Commit `e6475934`, docs only. The triager saw it live: in manual mode with deny `r(sh:ls *)`
+  Codex ran `ls -l data` as a `codex_shell` item with no permission event, and in plan mode read a
+  registered fake secret's file with `cut`; Codex's read-only sandbox (plan, manual, edits) still
+  reads any file the account can read. `?gptr_security` said only that in auto and yolo the shell
+  changes files without the gate, and vignette("language-models") that live R access goes through
+  the gate.
+- Fix: `?gptr_security` ("Sub-agents, workers and child processes") says that Codex's own shell
+  runs commands in every mode without gptr's gate, rules or secret guard, read-only in plan,
+  manual and edits and also writing in auto and yolo; the vignette (.Rmd and .Rmd.orig, a prose
+  paragraph) and the NEWS Codex bullet say that it runs outside the gate.
+- Not changed: the code alternative, `-c features.shell_tool=false` in the read-only modes,
+  checked by the triager on codex-cli 0.157.1. IC-65 keeps Codex's shell and the key is not among
+  the flags gptr's capability probe checks, so it is the maintainer's call (D-267).
+- Green: `document()` changes only `gptr_security.Rd`; `check-docs.R` 0 problems.
+
+### PERM-6 - A refused call tells the model none of it ran
+- Commit `14b53286`. Red: `^(agent-dispatch|mcp-server)$` FAIL 3 PASS 446: the denial of a
+  refused `x1 = 1; system(paste(cmd))` in auto mode, of a `writeLines()` call under deny
+  `r(fn:writeLines)` and of a served manual-mode call did not end "Nothing in this call ran."
+- Cause: the gate refuses before evaluation, but the text did not say so; live, GPT-5.6 and codex
+  then reported setup objects of the refused call as created ("Created objects: csv_files,
+  wc_cmd"), or used them in the next call.
+- Fix: the top-level denial (R/agent-dispatch.R) and a denied call served to a CLI route
+  (R/mcp-server.R, outside this writer's files: one line) add "Nothing in this call ran.", the
+  person's-text denial too. A nested `peter$sh()` or `peter$bg()` denial inside running code,
+  whose earlier lines ran, is unchanged (the new test checks both). Not in `dec$reason`, so the
+  console's not-run row is unchanged. 04 section 9.2.
+- Green: FAIL 0 PASS 449; the files whose names start with `agent-`, `mcp-`, `perm-`, `subagent-`,
+  `console-ui`, `console-render`, `injection`, `secrets-e2e` or `cli-` FAIL 0 SKIP 2 PASS 7086.
+
+### PERM-7, ALL-5 - The system() line says where peter$sh()'s output is
+- Commit `dea9130d`. Red: `^(prompt-text|northstar)$` FAIL 2 PASS 178 (the new line expected).
+- Cause: FIX-27 sends models to `peter$sh()`, whose result is a `gptr_cmd` list: live,
+  `cat(peter$sh(...))` failed with "argument 1 (type 'list') cannot be handled by 'cat'" in 12 of
+  50 scenarios that used it (10 of them Claude Opus 4.8), and `grep(..., x, value = TRUE)` with
+  "'names' attribute [8] must be the same length as the vector [1]", each costing a call.
+- Fix: the `<r_session>` line ends "use peter$sh(); read $stdout." (29 o200k tokens, 2 more), the
+  only text every model sees; 03 section 7.3 and the rendered `r_session` of
+  `prefix-baseline.json` follow. The verdicts' lines ("its result prints, and $stdout holds the
+  output as one string", 41 tokens) failed the prefix gate of `dev/bench/tokens/run.R --check`:
+  `standard_core` 2335 -> 2392 and `standard_all` 2813 -> 2870 against +2%, from the measured
+  2378 and 2856 on `809ad7e5`. With the short line they measure 1262/2380/2858/3001 and the check
+  passes, so IC-68's totals stay (1 token to spare on `standard_core`). No names method for
+  `gptr_cmd`: ALL-5's triager found that it makes `grep()` return the whole listing silently.
+- Green: the files whose names start with `prompt-`, `northstar`, `bench-`, `bridge-sh`,
+  `bridge-lang`, `tool-namespace`, and `tool-r` FAIL 0 SKIP 6 PASS 2267; `run.R --check` OK.
+
+### PERM-8 - A computed-command refusal fits the console's row
+- Commit `df21f82f`. Red: `^perm-gate$` FAIL 2 PASS 195: the reason was not "shell.exec() with a
+  computed command is refused in yolo mode; use peter$sh()", and `console_result_lines()` at 98
+  columns cut it before `peter$sh()`.
+- Cause: the FIX-27 reason (about 170 characters) put the action last, and the not-run row is one
+  dim row cut to the width (D-245), so below about 190 columns the person never saw it. The row
+  stays one row (ALL-4's wrap was refuted as that documented design).
+- Fix: the reason is "<fn>() with a computed command is refused in <mode> mode; use peter$sh()",
+  at most 77 characters; the model still reads "Permission denied: <reason>. Explain what you
+  need or choose another approach." (and PERM-6's sentence). No `r(fn:system)` in it: the model
+  is not pointed at its own rules, and the pages name the rule for the person.
+- Not changed: the finding's other half, a refused turn's empty transcript block, is the
+  transcript writer's; its triager found it to be the documented record of executed code.
+- Green: `^perm-gate$` PASS 197.
+
+### PERM-9 - A nested peter$sh() ask shows its command, not JSON
+- Commit `fc8c8009`. Red: `^agent-dispatch$` FAIL 2 PASS 274: `perm_summary()` of a `sh` call with
+  `cmd = c("touch", "a b.txt")` and of a `bg` call gave JSON.
+- Fix: `perm_summary()` (R/agent-dispatch.R) shows a `cmd` input's words joined by spaces, so the
+  console's question reads `sh  touch /private/tmp/.../perm-marker.txt`; other inputs keep JSON,
+  matched exactly (`cmdx` stays JSON).
+- Not fixed: an approved `system()` child's output starts on the frozen `r` row
+  (`r · keys show when r returnsFuel report`). A child writes to fd 1 past R; ending the row
+  before evaluation and clearing it on return erases the child's last line, and leaving it
+  undrawn drops IC-82's cue (its triager tried both). R/console-input.R is the console writer's,
+  and the prompt already steers models from `system()`.
+- Green: with `console-ui`, `console-render` and `agent-background` FAIL 0 PASS 1524.
+
+### STATIC-5 - The cheat sheet and the yolo notice name the computed-command refusal
+- Commit `717de853`. Red: `^session-object$` FAIL 1 PASS 582: the yolo notice did not name the
+  refusal.
+- Fix: the cheat sheet's auto row adds "`system()` with a computed command is refused (use
+  `peter$sh()`)" and its yolo row "and a computed `system()` command is refused"; the PDF is
+  printed again (`dev/release/cheatsheet-pdf.R`, still 2 pages, the panel ends above the
+  footer); `mode_notice()` (R/utils-options.R) adds "system(), system2(), shell() and
+  shell.exec() calls with a command the code computes are refused; the model is pointed to
+  peter$sh()." NEWS's permission-modes bullet already stated the refusal.
+- Green: with `console-commands`, `console-repl` and `utils-options` FAIL 0 PASS 1206.
+
+### MM-7 - The console's plan menu names no call for R's prompt
+- Commit `64d626e1`. Red: `^perm-plan$` FAIL 1 PASS 127: inside a frame binding `.gptr_repl`, as
+  `console_send()` binds it, the hand-off notice still printed
+  `At R's prompt: gptr_last() |> peter("Go ahead.")`, which the console would send to the model.
+- Fix: `plan_execute()` (R/perm-plan.R) adds that line only when `console_eval_value(".gptr_repl")`
+  finds no console REPL state; `console_repl_find()` is L5, which an L4 file may not call
+  (arch-layers), and `console_eval_value()` is the L0 frame walk.
+- Green: with `arch-layers` and `console-repl` FAIL 0 PASS 545.
+
+### Checks
+- On `e6475934` (the code of every fix; the later commits change only `NEWS.md` and `dev/`),
+  `NOT_CRAN=true`, SIGINT at its default: the files whose names start with `perm-`, `agent-`,
+  `mcp-`, `prompt-`, `northstar`, `bench-`, `bridge-`, `tool-namespace`, `session-object`,
+  `console-`, `arch-layers`, `lint-rules`, `gptr-config`, `utils-options`, `injection-e2e`,
+  `secrets-e2e`, `subagent-`, `cli-`, `s11-conformance` or `zzz`, and `tool-r` (66 files), FAIL 0
+  WARN 0 SKIP 15 PASS 13464 in UTF-8 and FAIL 0 WARN 0 SKIP 43 PASS 13272 under
+  `LC_ALL=C LANG=C` (the skips: Windows only, Python not configured or provisioned, macOS,
+  INFRA-03, and under C 28 that need a UTF-8 locale); `^(doc-|ckpt-)` FAIL 0 WARN 0 SKIP 2 PASS
+  3668 in both ({repr} is not installed). Lint clean (the 18 changed R and test files and the
+  vignette); `document()` no diff; `check-docs.R` 0 problems; on `b143f508`
+  `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290, NEWS included;
+  `dev/bench/tokens/run.R --check` OK.
+- Deviations: D-267; D-262's Not covered item on `env` gains its status line. Open: PERM-9's child
+  output on the frozen `r` row and PERM-4's code alternative (above); `standard_core` has 1 token
+  of the prefix gate left, so the next prompt line needs a new IC-68 baseline.
