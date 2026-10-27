@@ -82,6 +82,8 @@ test_that("an escape sequence cut short is held for 50 ms, then dropped", {
   expect_identical(csi$state$t, 0)
   r = compose("5C", state = csi$state, now = 0.045)
   expect_identical(r$state[c("draft", "esc")], list(draft = "abc", esc = ""))
+  # its rest at 1 s is typed, the sequence dropped
+  expect_identical(compose("5C", state = csi$state, now = 1)$state$draft, "abc5C")
   # at 60 ms a lone Esc is dropped: the next key is text, not part of a sequence
   r = compose("", state = esc$state, now = 0.06)
   expect_identical(r$state[c("draft", "esc")], list(draft = "abc", esc = ""))
@@ -188,9 +190,26 @@ test_that("a marker cut at a read's end joins its rest however late (D-263)", {
     expect_identical(r$state[c("draft", "esc", "bracket")],
                      list(draft = "xa\nb", esc = "", bracket = TRUE))
   }
-  # a late rest that completes no marker is typed, the sequence before it dropped
-  expect_identical(compose("[2", state = compose("\033", now = 0)$state, now = 1)$state$draft,
-                   "[2")
+  # cut at every byte, each read a second after the last: held while a marker may still follow
+  r = compose("\033", "x", now = 0)
+  for (i in 2:6) r = compose(substr("\033[200~", i, i), state = r$state, now = i)
+  r = compose("a\rb", state = r$state, now = 7)
+  expect_identical(r$state[c("draft", "esc", "bracket")],
+                   list(draft = "xa\nb", esc = "", bracket = TRUE))
+  # FIX-28's probe: cut after the Esc and after `[2`, read 1 s and 10 ms later
+  r = compose("[2", state = compose("\033", now = 0)$state, now = 1)
+  expect_identical(r$state[c("draft", "esc", "t")], list(draft = "", esc = "\033[2", t = 0))
+  r = compose("00~a\rb", state = r$state, now = 1.01)
+  expect_null(r$action)
+  expect_identical(r$state[c("draft", "esc", "bracket")],
+                   list(draft = "a\nb", esc = "", bracket = TRUE))
+  # once no marker can follow, a late start is a lone Esc, dropped, and keys typed
+  r = compose("[2", state = compose("\033", now = 0)$state, now = 1)
+  expect_identical(compose("x", state = r$state, now = 2)$state$draft, "[2x")
+  expect_identical(compose("\r", state = r$state, now = 2)$action, sent("steer", "[2"))
+  r = compose("[", state = compose("\033", "a", now = 0)$state, now = 1)
+  expect_identical(r$state[c("draft", "esc")], list(draft = "a", esc = "\033["))
+  expect_identical(compose("1, 2]", state = r$state, now = 2)$state$draft, "a[1, 2]")
 })
 
 test_that("Esc then Tab, or a cut sequence then Up, in one read is the key (FIX-28)", {

@@ -14,8 +14,10 @@
 #' rule), and keeps the rest as the draft; a newline ends what the edit keys reach. Text between
 #' `ESC [ 200 ~` and `ESC [ 201 ~` (bracketed paste, D-263; both dropped) is a paste whatever
 #' `paste` says: its newlines stay in the draft, leading blank lines dropped; a paste open at a
-#' batch's end (`bracket`) lasts into the next batches; a sequence cut inside it, or a marker cut at
-#' a batch's end, waits for its rest however late; in a batch holding a marker only the text between
+#' batch's end (`bracket`) lasts into the next batches; a sequence cut inside it waits for its rest
+#' however late, as does a marker's start (`ESC [`, `ESC [ 2`, `ESC [ 2 0`, `ESC [ 2 0 0`,
+#' `ESC [ 2 0 1`) while the batches after it may still complete it, and once they cannot its Esc is
+#' the Esc key, dropped, and the rest is typed; in a batch holding a marker only the text between
 #' markers is a paste. With `paste` (a batch without markers read on the polling beat, too quick for
 #' a person to type a newline and more) a batch with text after its last newline is a paste the same
 #' way. A message goes as `enter_kind` (`"steer"` or `"follow_up"`), always as a follow-up when it
@@ -32,9 +34,11 @@ console_compose = function(state, chars, now, enter_kind, complete, paste = FALS
   draft = state$draft %||% ""
   bracket = isTRUE(state$bracket)
   held = state$esc %||% ""
+  # a bracketed-paste marker's start (D-263), held however late while the reads may complete it
+  start = "^\033\\[(2(0[01]?)?)?$"
   if (!bracket && now - (state$t %||% now) > 0.05 &&
-      !grepl("^\033\\[20[01]~", paste0(held, chars))) {
-    held = ""
+      !grepl(paste0(start, "|^\033\\[20[01]~"), paste0(held, chars))) {
+    held = if (grepl(start, held)) substring(held, 2L) else ""
   }
   x = tty_unreply(paste0(held, gsub("\r\n?", "\n", chars)))
   out = function(action = NULL, esc = "", t = now) {
