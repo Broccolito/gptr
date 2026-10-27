@@ -851,6 +851,12 @@ test_that("input fields are matched exactly, never by a prefix", {
   call = list(name = "w", input = list(code_path = "R/a.R", pathway = "p", questionsx = list()))
   expect_identical(perm_summary(call),
                    "{\"code_path\":\"R/a.R\",\"pathway\":\"p\",\"questionsx\":[]}")
+  # a nested peter$sh() or peter$bg() ask shows its command, not JSON (FIX-32)
+  expect_identical(perm_summary(list(name = "sh", input = list(cmd = c("touch", "a b.txt")))),
+                   "touch a b.txt")
+  expect_identical(perm_summary(list(name = "bg", input = list(cmd = list("sleep", "1")))),
+                   "sleep 1")
+  expect_match(perm_summary(list(name = "w", input = list(cmdx = "ls"))), "^\\{")
   expect_identical(perm_ask_questions(list(questions_old = list(list(question = "Q?")))),
                    character())
   v = tool_validate(gptr_tool("t", "t", execute = function(input, ctx) NULL),
