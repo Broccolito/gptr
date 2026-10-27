@@ -157,10 +157,11 @@ test_that("a raw export leaves out what a prompt was sent with; the Peter format
   local_project()
   sent = c("#< <user_files>", "#< <file path=\"notes.md\">", "#< hi", "#<", "#< </file>",
            "#< </user_files>")
-  f = export_fixture(body = c(sent, "x = 1"))
+  # only the run that opens a console turn's block: a later `#<` comment is recorded code
+  f = export_fixture(call = "s_ab12cd = peter(\"one\")", body = c(sent, "x = 1", "#< x is one"))
   raw = file.path(getwd(), "raw.R")
   gptr_export(f, raw)
-  expect_false(any(grepl("^#<", readLines(raw))))
+  expect_identical(grep("^#<", readLines(raw), value = TRUE), "#< x is one")
   expect_true(all(c("# Recorded prompt: \"one\"", "x = 1") %in% readLines(raw)))
   peter = file.path(getwd(), "peter.R")
   gptr_export(f, peter, format = "peter")

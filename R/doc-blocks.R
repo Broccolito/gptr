@@ -19,6 +19,8 @@ doc_quoted_keys = "children"
 # the context blocks the console sends with a typed prompt (its !code notes and @file heads),
 # which a block records as `#< ` lines (IC-49)
 doc_sent_kinds = c("user_ran", "user_files")
+# a console turn's statement in a transcript, live or undone (IC-49)
+doc_re_console = "^(#~ )?s_[0-9a-f]{6} (=|[|]>) peter\\("
 
 #' A `## Steer:` or `## Follow-up:` line; a blank text leaves no trailing space for an editor to
 #' trim
@@ -35,14 +37,40 @@ doc_sent_lines = function(texts) {
   out
 }
 
-#' The context blocks a block's `#< ` lines record, also under `#~ `, as list(<kind> = <text
-#' inside its tags>): they come in doc_sent_kinds order, each from its opening tag to the first
-#' line holding its closing tag that is the last or followed by a later kind's opening tag (a
-#' file's lines may hold any tag; each line of a `!` note starts `> ` or `#> `)
+#' The number of lines of the run of `#< ` lines that opens `body`
 #' @noRd
-doc_block_sent = function(body) {
-  x = sub("^#~ ", "", as_utf8(as.character(body)))
-  x = sub("^#< ?", "", x[grepl("^#<( |$)", x)])
+doc_sent_n = function(body) {
+  match(FALSE, grepl("^#<( |$)", body), nomatch = length(body) + 1L) - 1L
+}
+
+#' The line of the console statement that owns the block starting at line `start`: the nearest
+#' non-blank line above it, when that is one (doc_re_console); else NA
+#' @noRd
+doc_console_stmt = function(lines, start) {
+  p = start - 1L
+  while (p >= 1L && !nzchar(trimws(lines[p]))) p = p - 1L
+  if (p >= 1L && grepl(doc_re_console, lines[p])) p else NA_integer_
+}
+
+#' What block `b` (doc_block_get()) of a document's `text` records its prompt was sent with
+#' (IC-49), as list(<kind> = <text inside its tags>): only in an .R document, only for a block a
+#' console statement owns (doc_console_stmt()), and only from the run of `#< ` lines that opens
+#' its body, under `#~ ` when it is undone. doc_block_lines() writes that run and gives recorded
+#' code that would read as part of it one more `#`, so model code cannot extend or forge it, also
+#' in a block a format error moved into the console transcript (doc_upsert_fallback()). The run is
+#' the doc_sent_kinds blocks in that order, each optional, each from its opening tag to the first
+#' line holding its closing tag that ends the run or comes before a later kind's opening tag (a
+#' file's lines may hold any tag; each line of a `!` note starts `> ` or `#> `); any other run, as
+#' an edit can leave, gives list().
+#' @noRd
+doc_block_sent = function(format, text, b) {
+  if (!isTRUE(format %in% c("r", "transcript")) || is.null(b) ||
+      is.na(doc_console_stmt(text, b$start))) {
+    return(list())
+  }
+  x = as_utf8(as.character(b$body))
+  if (identical(b$header[["status"]], "undone")) x = sub("^#~ ", "", x)
+  x = sub("^#< ?", "", x[seq_len(doc_sent_n(x))])
   out = list()
   for (k in seq_along(doc_sent_kinds)) {
     kind = doc_sent_kinds[k]
@@ -50,11 +78,11 @@ doc_block_sent = function(body) {
     nxt = c(x[-1L], NA)
     end = which(x == paste0("</", kind, ">") &
                   (is.na(nxt) | nxt %in% paste0("<", doc_sent_kinds[-seq_len(k)], ">")))[1L]
-    if (is.na(end)) break
+    if (is.na(end)) return(list())
     out[[kind]] = paste(x[seq_len(end - 2L) + 1L], collapse = "\n")
     x = x[-seq_len(end)]
   }
-  out
+  if (length(x)) list() else out
 }
 
 #' A string literal that both R and JSON read back as `x` (Python's json.dumps(ensure_ascii =
@@ -1413,8 +1441,10 @@ doc_header_common = function(site, call_ordinal, model) {
 #' The lines of the block of a session turn (contract 7.15): chr with attributes `header` (named
 #' list of 11.5 keys), `session`, `answer` (final text) and `children` (S2 parts to cache). The
 #' header's `model` is the provider and model of the turn's last answer as recorded, so a local
-#' model keeps its tag (IC-74). The body opens with the `#< ` lines of the console's context
-#' blocks the prompt was sent with, and `created=` names the objects the turn created (IC-49).
+#' model keeps its tag (IC-74). In an .R document the body opens with the `#< ` lines of the
+#' console's context blocks the prompt was sent with; in every format recorded code that would read
+#' as part of that run gets one more `#` (doc_block_sent()). `created=` names the objects the turn
+#' created (IC-49).
 #' @noRd
 doc_block_lines = function(session, turn, site, call_ordinal) {
   d = session_data(session)
@@ -1433,7 +1463,10 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
     fork = paste0(d$fork_of$id, ":", d$fork_of$turn %||% 0L)
     if (startsWith(d$home_label %||% "", "overlay of")) body = doc_wrap_local(body)
   }
-  body = redact(c(doc_sent_lines(tb$sent), body), "persist")
+  lead = seq_len(doc_sent_n(body))
+  body[lead] = paste0("#", body[lead])
+  if (fmt %in% c("r", "transcript")) body = c(doc_sent_lines(tb$sent), body)
+  body = redact(body, "persist")
   last = tb$last
   model = if (!is.null(last)) paste0(last$provider, "/", last$model) else d$model
   header = doc_header_common(site, call_ordinal, model)

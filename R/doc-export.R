@@ -39,10 +39,10 @@ doc_export_pending = function(path) {
 }
 
 #' Preserve body code and ordinary notes, with a fixed readable bound on captured output; raw R
-#' leaves out the `#< ` lines of what a console prompt was sent with (IC-49).
+#' leaves out the run of `#< ` lines that opens a body, what a console prompt was sent with (IC-49).
 #' @noRd
 doc_export_body = function(body, format, indent = "") {
-  if (identical(format, "r")) body = body[!grepl("^[ \t]*#<( |$)", body)]
+  if (identical(format, "r")) body = body[seq_along(body) > doc_sent_n(body)]
   output = grepl("^[ \t]*#>", body)
   comment = grepl("^[ \t]*#", body)
   unsafe = comment & grepl("[[:cntrl:]]", body)

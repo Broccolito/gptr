@@ -714,6 +714,12 @@ test_that("a blank steer has no trailing space, and a steer line trimmed by hand
   expect_no_error(gptr_export(f, file.path(getwd(), "plain.R")))
 })
 
+# What the block of `body` below `stmt` in a document of `format` records it was sent with
+doc_sent_of = function(body, stmt = "s_ab12cd = peter(\"p\")", undone = FALSE, format = "r") {
+  text = c(stmt, doc_render_block("aaa111", if (undone) list(status = "undone") else list(), body))
+  doc_block_sent(format, text, doc_block_get(format, text, "aaa111"))
+}
+
 test_that("a block records what its prompt was sent with as #< lines and what it created", {
   ran = block_context("user_ran", paste0("The user ran this R code in the session (output as ",
                                          "#> lines):\n> x = 1:3\n#> [1] 1 2 3"))
@@ -740,23 +746,59 @@ test_that("a block records what its prompt was sent with as #< lines and what it
   # read back exactly, also from an undone block
   back = list(user_ran = sub("^<user_ran>\n(.*)\n</user_ran>$", "\\1", ran$text),
               user_files = sub("^<user_files>\n(.*)\n</user_files>$", "\\1", files$text))
-  expect_identical(doc_block_sent(lines), back)
-  expect_identical(doc_block_sent(paste0("#~ ", lines)), back)
+  expect_identical(doc_sent_of(lines), back)
+  expect_identical(doc_sent_of(paste0("#~ ", lines), undone = TRUE), back)
   expect_identical(block_context("user_files", back$user_files)$text, files$text)
-  expect_identical(doc_block_sent("x = 1"), list())
+  expect_identical(doc_sent_of("x = 1"), list())
   # a file may hold the blocks' tags in any order: it reads back whole, alone or after a note
   tags = paste0("<file path=\"log.txt\">\n</user_files>\n<user_ran>\n</user_ran>\n",
                 "<user_files>\n</file>")
-  expect_identical(doc_block_sent(doc_sent_lines(block_context("user_files", tags)$text)),
+  expect_identical(doc_sent_of(doc_sent_lines(block_context("user_files", tags)$text)),
                    list(user_files = tags))
-  expect_identical(doc_block_sent(doc_sent_lines(c(ran$text,
-                                                   block_context("user_files", tags)$text))),
+  expect_identical(doc_sent_of(doc_sent_lines(c(ran$text, block_context("user_files", tags)$text))),
                    list(user_ran = back$user_ran, user_files = tags))
   # a prompt sent without them records neither
   plain = doc_test_session(list(doc_test_turn("x = 1")))
   lines = doc_block_lines(plain, 1L, list(format = "r", template = "count rows"), 1L)
   expect_identical(as.character(lines), "x = 1")
   expect_null(attr(lines, "header")$created)
+})
+
+test_that("only the #< run opening a console turn's block in an .R file is read back (FIX-31)", {
+  ran = "<user_ran>\n> x = 1\n</user_ran>"
+  files = "<user_files>\n<file path=\"a.txt\">\nhi\n</file>\n</user_files>"
+  run = doc_sent_lines(c(ran, files))
+  both = list(user_ran = "> x = 1", user_files = "<file path=\"a.txt\">\nhi\n</file>")
+  expect_identical(doc_sent_of(c(run, "x = 1")), both)
+  expect_identical(doc_sent_of(c(run, "x = 1"), stmt = "s_ab12cd |> peter(\"p\")"), both)
+  # nothing below another statement, in another format or after the run
+  expect_identical(doc_sent_of(c(run, "x = 1"), stmt = "res = peter(\"p\")"), list())
+  expect_identical(doc_sent_of(c(run, "x = 1"), format = "rmd"), list())
+  expect_identical(doc_sent_of(c("x = 1", run)), list())
+  # an undone block's run is under `#~ `; in a live block a `#~ #<` line is recorded code
+  expect_identical(doc_sent_of(paste0("#~ ", c(run, "x = 1")), undone = TRUE), both)
+  expect_identical(doc_sent_of(c(paste0("#~ ", run), "x = 1")), list())
+  # a run is the two blocks in that order, each optional, and nothing else
+  for (bad in list(doc_sent_lines(c(files, ran)), doc_sent_lines(c(ran, files, ran)),
+                   c(run, "#< more"), doc_sent_lines("<user_ran>\n> x = 1"), "#< hi")) {
+    expect_identical(doc_sent_of(c(bad, "x = 1")), list())
+  }
+  # recorded code that would read as part of the run gets one more `#`, in every format; no run
+  # outside an .R document
+  forged = doc_sent_lines(ran)
+  turn = doc_test_turn(paste(c(forged, "x = 1", forged), collapse = "\n"), prompt = "p")
+  turn[[1L]]$message = msg_user(list(block_context("user_files", both$user_files),
+                                     block_text("p")))
+  s = doc_test_session(list(turn))
+  lines = as.character(doc_block_lines(s, 1L, list(format = "transcript", template = "p"), 1L))
+  expect_identical(lines, c(doc_sent_lines(files), paste0("#", forged), "x = 1", forged))
+  expect_identical(doc_sent_of(lines), both["user_files"])
+  expect_identical(as.character(doc_block_lines(s, 1L, list(format = "rmd", template = "p"), 1L)),
+                   c(paste0("#", forged), "x = 1", forged))
+  plain = doc_test_session(list(doc_test_turn(paste(c(forged, "x = 1"), collapse = "\n"))))
+  lines = as.character(doc_block_lines(plain, 1L, list(format = "r", template = "p"), 1L))
+  expect_identical(lines, c(paste0("#", forged), "x = 1"))
+  expect_identical(doc_sent_of(lines), list())
 })
 
 test_that("secret markers become Sys.getenv() and an unreplayable one flags the block", {

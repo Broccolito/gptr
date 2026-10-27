@@ -264,12 +264,17 @@ doc_replay_no_value = function(site, block, code, s) {
               .once = paste0("doc_no_value:", path_key(site$path), ":", block$id))
 }
 
-#' The body of block `block_id` as the site's document holds it (character() when unreadable)
+#' Block `block_id` as the site's document holds it (doc_block_get()), with `sent`, what its
+#' prompt was sent with (doc_block_sent()); NULL when unreadable
 #' @noRd
-doc_site_body = function(site, block_id = site$block$id) {
-  if (is.null(block_id)) return(character())
-  tryCatch(doc_block_get(site$format, doc_read(site$path)$lines, block_id)$body,
-           error = function(e) NULL) %||% character()
+doc_site_block = function(site, block_id = site$block$id) {
+  if (is.null(block_id)) return(NULL)
+  tryCatch({
+    text = doc_read(site$path)$lines
+    b = doc_block_get(site$format, text, block_id)
+    if (!is.null(b)) b$sent = doc_block_sent(site$format, text, b)
+    b
+  }, error = function(e) NULL)
 }
 
 #' What a replayed session reconstructs its history from (IC-46; P06's `doc` argument):
@@ -279,14 +284,14 @@ doc_site_body = function(site, block_id = site$block$id) {
 #' FALSE`), so the script may still steer it (IC-55)
 #' @noRd
 doc_replay_doc = function(site, call, block_id, text = NULL) {
-  body = doc_site_body(site, block_id)
-  steps = doc_replay_steps(body)
+  b = doc_site_block(site, block_id)
+  steps = doc_replay_steps(b$body %||% character())
   runs = Filter(function(st) identical(st$type, "r"), steps)
   list(path = site$path, format = site$format,
        template = site$template %||% call$template %||% call$prompt,
        code = as.character(unlist(lapply(runs, function(st) st$code))),
        output = as.character(unlist(lapply(runs, function(st) st$output))), text = text,
-       steps = steps, sent = doc_block_sent(body),
+       steps = steps, sent = b$sent,
        running = isTRUE(call$args$background) || !isTRUE(call$args$run))
 }
 
@@ -529,7 +534,7 @@ doc_route_run = function(call) {
     return(invisible(call$session))
   }
   if (identical(decision, "regenerate")) site = doc_skip_old(site)
-  assign("sent", doc_block_sent(doc_site_body(site)), envir = call)
+  assign("sent", doc_site_block(site)$sent, envir = call)
   doc_keep(call, if (decision %in% c("record", "regenerate")) site, mode)
   route_pass()
 }
@@ -915,7 +920,7 @@ doc_re_direct = "^# direct R \\(no model(?:; (.*?))?\\)(?: (.*))?$"
 # `# /<name> ...`, a session header, a turn's statement or block), which ends that line's section;
 # a comment such as `# /home/me/data` in the line's code does not
 doc_re_entry = paste0("^(# (direct R \\(|/[^[:space:]/]+( |$)|gptr session |machine log: |",
-                      ">>> gptr:)|(#~ )?s_[0-9a-f]{6} (=|[|]>) peter\\()")
+                      ">>> gptr:)|", substring(doc_re_console, 2L), ")")
 
 #' The header of a direct R line: `# direct R (no model)`, `; <reason>` inside the parentheses (a
 #' status, `uses undone <names>`), then `created=<names>` when it created any
