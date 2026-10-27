@@ -67,10 +67,10 @@ doc_comment_escape = function(lines, re) {
 }
 
 #' The `#< ` lines of the context blocks a prompt was sent with (IC-49): each line of each block's
-#' text, an empty one as `#<`
+#' text, as R reads them (doc_split_lines()), an empty one as `#<`
 #' @noRd
 doc_sent_lines = function(texts) {
-  x = unlist(strsplit(as_utf8(as.character(texts)), "\n", fixed = TRUE))
+  x = unlist(lapply(as.character(texts), doc_split_lines))
   out = paste0("#< ", x, recycle0 = TRUE)
   out[!nzchar(x)] = "#<"
   out

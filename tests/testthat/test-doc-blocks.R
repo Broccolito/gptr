@@ -815,6 +815,15 @@ test_that("a block records what its prompt was sent with as #< lines and what it
   expect_null(attr(lines, "header")$created)
 })
 
+test_that("a lone carriage return in sent text ends a #< line, as R reads it (review round 3)", {
+  files = "<user_files>\n<file path=\"notes\rfile.create('X') #\">\nhi\n</file>\n</user_files>"
+  lines = doc_sent_lines(files)
+  expect_false(any(grepl("\r", lines, fixed = TRUE)))
+  expect_true(all(startsWith(doc_split_lines(paste(lines, collapse = "\n")), "#<")))
+  expect_identical(doc_sent_of(c(lines, "x = 1")),
+                   list(user_files = "<file path=\"notes\nfile.create('X') #\">\nhi\n</file>"))
+})
+
 test_that("only the #< run opening a console turn's block in an .R file is read back (FIX-31)", {
   ran = "<user_ran>\n> x = 1\n</user_ran>"
   files = "<user_files>\n<file path=\"a.txt\">\nhi\n</file>\n</user_files>"
