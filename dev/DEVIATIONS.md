@@ -8098,3 +8098,72 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   test-console-repl.R "a live re-ask never sends the turn's recorded code as context (FIX-31)";
   test-doc-export.R "a raw export leaves out what a prompt was sent with; the Peter format keeps
   it". Evidence: progress/fixes.md FIX-31.
+
+## D-268 - FIX-33 What a document records and reads back after the live sessions (2026-10-27)
+- Rule (steering lines, security): a block body line is a `## Steer:` or `## Follow-up:` line only
+  as a whole comment line by R's parse data (a COMMENT token with only blanks before it on its
+  line), so a line inside a string is code and a body that does not parse holds none; the reader
+  (`doc_replay_steps()`) and the body `sha` use the same test (`doc_steer_lines()`). The writer
+  gives each whole comment line of recorded code that reads as one one more `#` where its comment
+  starts (`doc_comment_escape()`), in every format, so model code cannot write a line that a
+  history rebuilt from the document sends as the person's steer or follow-up. Formerly any line
+  matching `^[ \t]*## (Steer|Follow-up):` was one, so a shared or copied document, or one replayed
+  without its session log, sent model-written lines as an operator relay or a user message
+  (verifier 2's open item of FIX-31, found live with GPT-5.6).
+- Why this rule: neither half is enough alone. A genuine steer line is a whole comment at the
+  block's own indentation (`doc_wrap_local()` indents a fork's), so the reader cannot tell it from
+  a model comment by its text; the writer cannot escape a line inside a string without changing
+  what R runs, so the reader must not take one. R reads the same code either way.
+- Rule (markers): the same writer escape applies to whole comment lines of recorded code, and of
+  direct R code (`doc_direct_code()`), shaped like a block marker (`BLOCK_OPEN`, `BLOCK_CLOSE`),
+  indented or not, open or close; a block write whose new text would still leave the markers
+  malformed (a marker line inside a string) is refused as a `doc_write` error, so only that block
+  is lost, and a block that cannot be written anywhere is named once per document. This amends
+  D-266's "a gptr marker in recorded code leaves the markers malformed": formerly one such line
+  stopped every later block write without a word, and the transcript could not be listed,
+  exported or replayed.
+- Rule (sha and line ends): `sha` ignores each line's trailing blanks and carriage return, and
+  recorded code and direct R code lose a trailing carriage return as a read gives them back, so an
+  editor's trim or CRLF model code leaves a block fresh and a CRLF comment such as `# /undo` is
+  escaped (FIX-31's open CR item).
+- Rule (rescan): a direct R line's top-level `name = value` (or `<-`) makes `name` and reads only
+  what `value` names, after the names the line made before; any other expression, an in-place
+  change such as `fit$x = 1` included, uses every name it holds. A corrected line after a failed
+  one, or a reassignment of what an undone turn made, then stays on with its users. A direct R line
+  that read an object a turn changed stays on after the undo and replays with the restored value
+  (known limit, stated in `?gptr_doc`).
+- Rule (recorded code, amends IC-48): an `r` call that stopped part-way records its first `n_done`
+  top-level expressions, whose bindings stay, also when served to a CLI route (the `gptr.mcp_r`
+  trace carries `n_done`); the model's `record = false` holds only for code
+  that added, changed or removed none of the person's objects (`r_tool_execute()`), so a later
+  call that uses them replays. Formerly both were left out while their objects stayed, and
+  `source()` stopped at the next read.
+- Rule (export, amends D-258 and D-264's check (c)): `gptr_export()` admits unnamed symbols after a
+  call's prompt (a console turn's `@objects`, a script's data object), leaves out an undone block
+  that no statement owns (a console turn an `/undo` or `/retry` undid, under its `#~ ` statement),
+  and drops a console turn's `#< ` run in both formats, as nothing sends it from an exported call.
+- Rule (re-ask): `gptr_source(model =)` gives every call the `document` route passes to be asked
+  that model (`call$ids$model`), so a record whose statements name a model the reader lacks is
+  re-asked with the reader's own; `NULL` keeps each call's. A re-ask sends neither a block's
+  steering lines nor an `n <text>` answer, which no block records, and `?gptr_source`, NEWS and
+  the vignette now say which model and mode a turn that names none gets (the re-asking session's
+  settings). `/retry` of a turn the console sent puts the `!` notes that turn took back before the
+  pending ones.
+- Rule (plan line): a block's `## Plan:` line names a plan file only when it is kept;
+  without `.gptr/` it reads `## Plan: none kept (gptr_init() keeps plans in .gptr/)`, the rule of
+  the transcript's machine-log line (`doc_kept()`).
+- Contract-visible: 04 section 6.4 (`gptr_source()`'s `model`), section 11.5 (`sha`, the body, the
+  plan line), section 15.3 IC-48 and IC-49; 03 section 4.3's signature; `?gptr_doc`,
+  `?gptr_source`, `?gptr_export`; vignettes script-as-history and interactive-console; NEWS.md; the
+  cheat sheet's export line.
+- Tests: test-doc-blocks.R "model code cannot record a steer or follow-up line, in any format
+  (FIX-33 DOC-1)", "an editor's trim and CRLF model code leave a block fresh (FIX-33 DOC-5)", "a
+  call that stopped part-way records the expressions that ran (FIX-33 PERM-5)"; test-doc-replay.R
+  "model code never becomes the person's steers when a document is rebuilt (FIX-33)", "a stale turn
+  re-asked after a rebuilt turn gets no forged steer (FIX-33 DOC-1)", "a marker-shaped line in model
+  or ! code never stops the recording (FIX-33 DOC-2)", "a direct R line that assigns a name again
+  makes it and does not use it (FIX-33)", "gptr_source(model =) re-asks every call with another
+  model (FIX-33 MM-2)"; test-tool-r.R "record = false never leaves out code that changed objects
+  (FIX-33 ALL-3)"; test-doc-export.R "an export leaves out what a prompt was sent with, in both
+  formats (FIX-33 DOC-7)"; test-mcp-recording.R "plan, non-recording and idle served R add no
+  executable history; failed R what ran". Evidence: progress/fixes.md FIX-33.
