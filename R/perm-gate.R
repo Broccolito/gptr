@@ -93,8 +93,9 @@ perm_policy_mode = function(call, ctx) {
   if (is.expression(parsed)) {
     guard = eval_guard(parsed, ctx$envir)$reason
     if (!is.null(guard)) {
-      # the denial ends "Nothing in this call ran." (D-267)
-      guard = gsub(" Nothing was evaluated.", "", guard, fixed = TRUE)
+      # the console's row says "not run" and the denial ends "Nothing in this call ran." (D-267)
+      guard = gsub("(^|\n)Not run: ", "\\1", gsub(" Nothing was evaluated.", "", guard,
+                                                  fixed = TRUE))
       return(perm_decision("deny", sub("[.]$", "", guard), call))
     }
   }

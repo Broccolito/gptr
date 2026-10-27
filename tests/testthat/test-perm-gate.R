@@ -107,8 +107,14 @@ test_that("code the evaluator never runs is refused in every mode, no person ask
       expect_identical(gate_decide(gate_r(code), gate_ctx(m)), "deny", label = paste(m, code))
     }
   }
+  # the console's row says "not run" before the reason, so the reason does not (review round 1)
   expect_match(perm_policy_mode(gate_r("q('no')"), gate_ctx("yolo"))$reason,
-               "^Not run: the code calls or refers to q\\(\\), which would end")
+               "^the code calls or refers to q\\(\\), which would end")
+  guard = perm_policy_mode(gate_r("q(); readLines(stdin())"), gate_ctx("auto"))$reason
+  expect_identical(guard, paste(
+    "the code calls or refers to q(), which would end, pause or hang the user's R session.",
+    "Use the ask tool to talk to the user.\nthe code reads standard input, which would hang the",
+    "user's R session"))
   # `q` bound to data where the code runs is no call of q()
   e = new.env()
   e$q = c(0.1, 0.9)
@@ -119,7 +125,7 @@ test_that("code the evaluator never runs is refused in every mode, no person ask
   s = peter("Quit R.", model = fake, mode = "auto", envir = new.env())
   expect_identical(s$status, "idle")
   txt = msg_text(fake_requests(fake)[[2]]$last_results[[1]])
-  expect_match(txt, "^Permission denied: Not run: the code calls or refers to q\\(\\)")
+  expect_match(txt, "^Permission denied: the code calls or refers to q\\(\\)")
   # it says once that nothing ran: "Nothing in this call ran." (FIX-32)
   expect_identical(lengths(regmatches(txt, gregexpr("Nothing", txt))), 1L)
   expect_match(txt, "Nothing in this call ran.$")
