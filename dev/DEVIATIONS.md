@@ -8098,3 +8098,47 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   test-console-repl.R "a live re-ask never sends the turn's recorded code as context (FIX-31)";
   test-doc-export.R "a raw export leaves out what a prompt was sent with; the Peter format keeps
   it". Evidence: progress/fixes.md FIX-31.
+## D-269 - FIX-34 Console findings from the live sessions (2026-10-27)
+- Rule (gate, PASTE-4): in every mode the `mode` policy denies `r` code that the evaluator's
+  static guard refuses (`eval_guard()` on the call's code in `ctx$envir`: `q()`, `quit()`,
+  `readline()`, `menu()` and the rest of `eval_guard_blocked`, a read of standard input, a secret
+  marker), with the guard's text as its reason, so no person is asked to approve code that never
+  runs; `eval_run()` keeps the guard as the evaluator's backstop. Formerly `q()`, rated level 4,
+  made the critical guard ask "Allow r?" in every mode, yolo included, and the evaluator then
+  refused it whatever the answer; without a person the run stopped `blocked` with "This action
+  always needs a person to approve it: run it interactively", and the yolo notice, NEWS,
+  `?gptr_security` and the auto-mode prompt listed quitting R among what a person is asked about.
+  They now leave it out, and NEWS and `?gptr_security` say that such code is refused without a
+  question. `risk-functions.csv` keeps `q` and `quit` at level 4, so `gptr_risk()` still reports
+  them as critical. A `q` the evaluation environment binds to data passes, as in the evaluator
+  (D-252).
+- Rule (composer, STATIC-3): the Tab or Up that ends a key batch acts as the key when the batch
+  holds no newline outside its bracketed pastes, a paste open since an earlier read included
+  (`console_unpasted()`); the idle editor's Tab rule uses the same test. Formerly a newline inside
+  the markers counted, so a multi-line paste and Tab read together after an in-process r call left
+  the Tab in the draft as text.
+- Rule (paste echo, PASTE-2): on a macOS terminal `rd$waiting()`'s look at fd 0 makes the BSD tty
+  echo the pending rest of a paste again, its last line left on the cursor's row; in a T console it
+  then erases that row (`\r\033[K`), so the paste hint at `peter>` and the re-ask at an approval are
+  not written after it and readline shows that line once. Not changed: the pause menu reads no
+  waiting lines, and there the echo comes at no fixed point (before the `not a key` row in the
+  lens's runs, before the next chevron in the writer's), so it would take an erase before that row
+  and another in the next prompt for a paste at a menu.
+- Rule (crash advice, PASTE-3): `?peter` and vignette("interactive-console") advise `reset` after
+  R is killed or crashes while peter works, which restores the echo and turns bracketed paste off,
+  as D-263 and 04 section 15.10 already said; `stty sane` leaves the mode on.
+- Not changed (PASTE-1): on macOS a two-line paste without a final newline still answers a
+  question with its first line, as IC-75, D-220, `?peter` and the vignette state; only NEWS, which
+  left that out and named no platform, is corrected. Its triager's alternative reads the waiting
+  input in `tty_drain_mode()` so a partial last line also marks a paste, but that 50 ms read would
+  also take a key typed just after Enter as a pasted line and re-ask a typed answer, and Linux,
+  where GNU readline hands the lines over one at a time, keeps the limit either way.
+- Contract-visible: 03 sections 6.8.1, 6.8.2 and 7.4 (the auto-mode block); 04 sections 7.11
+  (`builtin_permissions`), 15.7 IC-67 (`eval_guard()`), 15.9 IC-75 and IC-78 and 15.10 IC-76;
+  `?peter`, `?gptr_security`, vignette("interactive-console"); NEWS; the yolo notice and the
+  auto-mode prompt.
+- Tests: test-perm-gate.R "code the evaluator never runs is refused in every mode, no person asked
+  (FIX-34)"; test-console-input.R "a Tab after a bracketed paste in one read is the key: its
+  newlines are text (FIX-34)" and "a bracketed paste at the prompt's editor stays in the draft until
+  Enter (D-263)"; test-console-repl.R "a macOS terminal's look at fd 0 erases the row its tty echoed
+  a paste on (FIX-34)". Evidence: progress/fixes.md FIX-34.
