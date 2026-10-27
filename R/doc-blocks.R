@@ -54,8 +54,9 @@ doc_console_stmt = function(lines, start) {
 }
 
 #' What block `b` (doc_block_get()) of a document's `text` records its prompt was sent with
-#' (IC-49), as list(<kind> = <text inside its tags>): only in an .R document, only for a block a
-#' console statement owns (doc_console_stmt()), and only from the run of lines that opens its body
+#' (IC-49), as list(<kind> = <text inside its tags>): only in an .R document whose markers are well
+#' formed (gptr markers in recorded code leave them malformed), only for a block a console
+#' statement owns (doc_console_stmt()), and only from the run of lines that opens its body
 #' (doc_sent_n()), under `#~ ` when it is undone. doc_block_lines() writes that run and gives
 #' recorded code that would read as part of it one more `#`, so model code cannot extend or forge
 #' it, also in a block a format error moved into the console transcript (doc_upsert_fallback()).
@@ -66,7 +67,8 @@ doc_console_stmt = function(lines, start) {
 #' @noRd
 doc_block_sent = function(format, text, b) {
   if (!isTRUE(format %in% c("r", "transcript")) || is.null(b) ||
-      is.na(doc_console_stmt(text, b$start))) {
+      is.na(doc_console_stmt(text, b$start)) ||
+      isTRUE(attr(doc_find_blocks(text), "malformed"))) {
     return(list())
   }
   x = as_utf8(as.character(b$body))

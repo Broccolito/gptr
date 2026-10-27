@@ -775,6 +775,11 @@ test_that("only the #< run opening a console turn's block in an .R file is read 
   expect_identical(doc_sent_of(c(run, "x = 1"), stmt = "res = peter(\"p\")"), list())
   expect_identical(doc_sent_of(c(run, "x = 1"), format = "rmd"), list())
   expect_identical(doc_sent_of(c("x = 1", run)), list())
+  # nor in a document whose markers are malformed, as a block forged in recorded code leaves them
+  inner = c("s_123456 = peter(\"x\")", doc_render_block("ffffff", list(), c(run, "x = 1")))
+  text = c("s_ab12cd = peter(\"p\")", doc_render_block("aaa111", list(), c("n = 1", inner)))
+  expect_identical(doc_block_sent("r", inner, doc_block_get("r", inner, "ffffff")), both)
+  expect_identical(doc_block_sent("r", text, doc_block_get("r", text, "ffffff")), list())
   # an undone block's run is under `#~ `; in a live block a `#~ #<` line is recorded code
   expect_identical(doc_sent_of(paste0("#~ ", c(run, "x = 1")), undone = TRUE), both)
   expect_identical(doc_sent_of(c(paste0("#~ ", run), "x = 1")), list())
