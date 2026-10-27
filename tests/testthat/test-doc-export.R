@@ -380,6 +380,25 @@ test_that("history export rejects missing stale edited undone and secret-marked 
   expect_false(file.exists(target))
 })
 
+test_that("recorded peter$ member calls export; a nested Peter call is refused (review round 2)", {
+  local_project()
+  for (format in c("r", "peter")) {
+    f = export_fixture(body = "x = peter$sh(c(\"echo\", \"hi\"))$stdout")
+    target = file.path(getwd(), paste0("member-", format, ".R"))
+    gptr_export(f, target, format = format)
+    expect_true(any(grepl("x = peter$sh(c(\"echo\", \"hi\"))$stdout", readLines(target),
+                          fixed = TRUE)))
+  }
+  target = file.path(getwd(), "refused.R")
+  for (body in c("y = peter(\"again\")", "f = peter", "x |> peter(\"more\")",
+                 "peter$sh(gptr_return(1))")) {
+    f = export_fixture(body = body)
+    expect_error(gptr_export(f, target), "unresolved control calls",
+                 class = "gptr_error_doc_export")
+    expect_false(file.exists(target))
+  }
+})
+
 test_that("export never evaluates input or recovers pending writes", {
   local_project()
   f = export_fixture(body = "stop(\"would execute\")", before = "stop(\"user side effect\")")

@@ -34,6 +34,17 @@ doc_export_chain = function(expr, handles = character(), depth = 0L) {
   1L + inner
 }
 
+#' The names in code, less each `peter$<member>`: a member call runs as ordinary R, a nested Peter
+#' call does not
+#' @noRd
+doc_export_names = function(e) {
+  if (is.call(e) && identical(e[[1L]], as.name("$")) && identical(e[[2L]], as.name("peter"))) {
+    return(character())
+  }
+  if (is.symbol(e)) return(as.character(e))
+  if (is.recursive(e)) unlist(lapply(as.list(e), doc_export_names)) else character()
+}
+
 #' Read-only pending-write admission: exporting must not recover or discard pending records.
 #' @noRd
 doc_export_pending = function(path) {
@@ -191,7 +202,7 @@ doc_export_lines = function(lines, format, path, target) {
       if (!is.null(h[["args"]])) doc_export_refuse("interpolated inputs need review")
       if (any(grepl(doc_secret_flag, body, fixed = TRUE))) doc_export_refuse("secret-marked record")
       code = tryCatch(doc_parse_text(body, keep_source = FALSE), error = function(e) NULL)
-      if (is.null(code) || any(all.names(code) %in% c("peter", "gptr_return"))) {
+      if (is.null(code) || any(doc_export_names(code) %in% c("peter", "gptr_return"))) {
         doc_export_refuse("unresolved control calls in recorded code")
       }
       indent = if (separate) {
@@ -256,7 +267,7 @@ doc_export_lines = function(lines, format, path, target) {
       edits[[length(edits) + 1L]] = list(start = sr[1L], end = sr[3L], lines = stmt)
       next
     }
-    if ("peter" %in% all.names(expr)) doc_export_refuse("unresolved Peter references")
+    if ("peter" %in% doc_export_names(expr)) doc_export_refuse("unresolved Peter references")
     set = NULL
     if (is.call(expr) && as.character(expr[[1L]])[1L] %in% c("=", "<-") && length(expr) == 3L &&
         is.symbol(expr[[2L]])) {
@@ -297,7 +308,8 @@ doc_export_lines = function(lines, format, path, target) {
 #' a line (including semicolon-separated statements), mixed pipelines, nested or computed calls,
 #' pending writes, missing or edited blocks, secret markers and interpolated-input hashes are
 #' refused. An undone block that no statement owns, a console turn that `/undo` or `/retry` undid
-#' under its `#~ ` statement, is left out.
+#' under its `#~ ` statement, is left out. Code that calls a `peter$` member, such as
+#' `peter$sh()`, exports as ordinary R; code that calls `peter()` is refused.
 #' Raw exports also refuse ordinary code that reads a session handle after its Peter statement
 #' and before ordinary code assigns that name again, and a function that names any session handle
 #' of the document, wherever it is defined, as it reads the name when called. The Peter format
