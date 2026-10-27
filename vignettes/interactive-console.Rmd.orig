@@ -286,8 +286,8 @@ still occupy the same R process while they execute.
 At the chat prompt, one interrupt prints a hint; two consecutive interrupts leave the chat.
 Where an interrupt cannot be resumed (Windows' Rgui, Jupyter) the key stops the answer instead.
 In a terminal the chat reads keys with the echo off and restores it when it returns, on an
-error, at an interrupt and at `q()`. If R is killed or crashes while Peter works, type
-`stty sane` and press Enter to get the echo back.
+error, at an interrupt and at `q()`. If R is killed or crashes while Peter works, type `reset`
+and press Enter to get the terminal back, its echo and its paste mode.
 
 The equivalent session verbs work from R:
 

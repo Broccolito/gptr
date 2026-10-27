@@ -1399,7 +1399,8 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' `/exit`, two consecutive interrupts at the prompt or the end of piped input return the session
 #' invisibly, so `session = peter()` keeps the conversation. In a terminal the chat reads keys with
 #' the terminal's echo off and restores it on return, on an error, at an interrupt and at `q()`;
-#' if R is killed or crashes while peter works, type `stty sane` and press Enter to get it back.
+#' if R is killed or crashes while peter works, type `reset` and press Enter to get the terminal
+#' back.
 #'
 #' Options: `gptr.verbose` (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 #' knitr and testthat, 1 under Rscript, 2 at the console), `gptr.max_turns_console`

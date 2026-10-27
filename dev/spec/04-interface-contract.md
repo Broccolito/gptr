@@ -5721,7 +5721,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     mode with bracketed paste on (D-263), off before every readline read and on again after
     in-process R code (`tty_call()`, section 7.1:
     `-icanon -echo -iexten min 1 time 0`, the saved modes back on return, error,
-    interrupt and, by a finalizer, `q()`; only a kill or a crash leaves `stty sane` to the person); a D console
+    interrupt and, by a finalizer, `q()`; only a kill or a crash leaves `reset` to the person); a D console
     keeps `-echo noflsh` and its lines (D-221; P28 Task 58), and radian, an L console, gets neither. `gptr_readline()` reads with the
     saved modes and sets the call's again after. `console_typed()` runs every 0.05 s; in T it reads fd 0
     (`console_typed_chars()`, the text `console_typed_lines()` splits into lines) into the composer,
