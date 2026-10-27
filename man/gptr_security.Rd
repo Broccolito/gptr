@@ -65,7 +65,8 @@ such calls run, unchecked by \verb{sh:} rules. Neither the rules nor the refusal
 reads when it runs: its standard input (\code{system("sh", input = cmd)},
 \code{peter$sh("sh", input = cmd)}), variables it expands (\verb{sh -c "$X"}, \code{eval $X}) or a script file.
 The refusal covers only calls the classifier resolves to these functions: a function reached by
-a computed name or passed as a value (\code{get("system")(cmd)}, \code{g(system)}), \code{eval(parse())}, a
+a computed name or through a list or an environment (\code{get("system")(cmd)},
+\code{baseenv()$system(cmd)}) or handed to a function of your own (\code{g(system)}), \code{eval(parse())}, a
 sourced file, package code and other command runners such as \code{pipe()} or \code{processx::run()}
 still run a computed command unchecked. In \code{auto} and \code{yolo} mode a model can
 delete or overwrite files and objects. Use them only in projects you can restore (version

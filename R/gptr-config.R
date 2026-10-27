@@ -1662,7 +1662,8 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' reads when it runs: its standard input (`system("sh", input = cmd)`,
 #' `peter$sh("sh", input = cmd)`), variables it expands (`sh -c "$X"`, `eval $X`) or a script file.
 #' The refusal covers only calls the classifier resolves to these functions: a function reached by
-#' a computed name or passed as a value (`get("system")(cmd)`, `g(system)`), `eval(parse())`, a
+#' a computed name or through a list or an environment (`get("system")(cmd)`,
+#' `baseenv()$system(cmd)`) or handed to a function of your own (`g(system)`), `eval(parse())`, a
 #' sourced file, package code and other command runners such as `pipe()` or `processx::run()`
 #' still run a computed command unchecked. In `auto` and `yolo` mode a model can
 #' delete or overwrite files and objects. Use them only in projects you can restore (version

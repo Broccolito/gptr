@@ -42,13 +42,14 @@ script, R Markdown, Quarto or Jupyter file with `gptr_doc()`, and gptr
 writes the R code the agent ran below each prompt, under a header with
 the model, date, tokens and hashes of the prompt and code. The file is
 the record, and it runs. Rerun it without a model or API key, ask again
-with your own model (`replay = "live"`), or turn a recorded `.R` file
-into an ordinary R script with `gptr_export()`. Records are plain files
-you own; there is no gptr server, account or central store. Commit one
-with your code and data or publish it with a paper: anyone with the same
-data and packages can rerun it to reproduce the analysis, or re-ask it
-with their own model to replicate it. This record is gptr's basis for
-reproducible scientific computing and research.
+(`replay = "live"`; `model =` picks your own model), or turn a recorded
+`.R` file into an ordinary R script with `gptr_export()`. Records are
+plain files you own; there is no gptr server, account or central store.
+Commit one with your code and data or publish it with a paper: anyone
+with the same data and packages can rerun it to reproduce the analysis,
+or re-ask it with their own model (`gptr_source(model =)`) to replicate
+it. This record is gptr's basis for reproducible scientific computing
+and research.
 
 ## Installation
 

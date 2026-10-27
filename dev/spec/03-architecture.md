@@ -1488,7 +1488,8 @@ In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` o
 `r(fn:...)` allow rule covering those rows, matched against them alone, lifts it; plan, manual and edits are
 unchanged and a literal command is read and gated as before. Neither the rules nor the refusal read what a shell
 reads when it runs (its standard input, variables it expands, a script file), and a function the classifier does
-not resolve to these (a computed name, one passed as a value) is not refused [D-262].
+not resolve to these (a computed name, one reached through a list or an environment or handed to a function of
+the user's own) is not refused [D-262].
 
 In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never
 runs, such as `q()`, `readline()`, a read of standard input or a secret marker, with the guard's text less its
@@ -1523,7 +1524,9 @@ start, so model code cannot change them mid-run. A `modify` is re-classified and
 `rules` (grammar `tool(spec)`, e.g. `write(results/**)`, `r(fn:write.csv)`, `r(level<=1)`,
 `r(sh:git push*)`, `r(sql:select)`), `critical_guard`, `secret_guard`, `protect_size`. Deny and ask rules match
 any flagged row, a read-only shell command included, and one read inside a function the code calls (its
-command without the `via f(): ` labels); an allow rule covers rows of level 1 and above [D-267].
+command without the `via f(): ` labels); an allow rule covers rows of level 1 and above [D-267]. An `sh:` glob
+ending in ` *` also matches the command alone (`r(sh:cat *)` covers `cat`), and a question an ask rule asks offers
+no `[a]lways` rule, as no allow rule wins over an ask rule [D-267].
 Allow rules never loosen plan
 and never pre-approve level 4; only `r(secret:NAME)` rules pre-approve the secret guard and only `r(fn:NAME)`
 rules lift the computed-command refusal (6.8.1); project settings may only tighten, a trusted project's `mode`
@@ -1573,7 +1576,8 @@ refusal whose reason (not the person's text) tells the model that no valid answe
 A `peter$...` call made while an `r` evaluation runs enters `dispatch_nested()`: if the static analysis of the
 outer code listed the same function at a level no higher than the level the user approved for the outer call,
 and the member's own classification of its actual input (`call_risk()`: a patch's Delete File, a command computed
-at run time) is no higher either, it runs without a second prompt; otherwise it passes the gate [IC-78].
+at run time, a `peter$sh()` command read as run in its `wd` [D-262]) is no higher either, it runs without a second
+prompt; otherwise it passes the gate [IC-78].
 The command of a `peter$sh()` or `peter$bg()` call meets the deny and ask rules first, whatever its level,
 as the literal call would; allow rules are not applied there, and an ask offers no `[a]lways` rule [D-251].
 Base `system()`, `system2()`, `shell()` and `shell.exec()` have no such re-check, so auto and yolo refuse them
