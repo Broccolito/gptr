@@ -14,24 +14,28 @@
 #' rule), and keeps the rest as the draft; a newline ends what the edit keys reach. Text between
 #' `ESC [ 200 ~` and `ESC [ 201 ~` (bracketed paste, D-263; both dropped) is a paste whatever
 #' `paste` says: its newlines stay in the draft, leading blank lines dropped; a paste open at a
-#' batch's end (`bracket`) lasts into the next batches, a sequence cut inside it held however late,
-#' and in a batch holding a marker only the text between markers is a paste. With `paste` (a batch
-#' without markers read on the polling beat, too quick for a person to type a newline and more) a
-#' batch with text after its last newline is a paste the same way. A message goes as `enter_kind`
-#' (`"steer"` or `"follow_up"`), always as a follow-up when it starts with / or !, and not at all
-#' when blank. Two keys act only outside an open bracketed paste, as a batch of their own or as the
-#' end of a batch without a newline (elsewhere Tab is text and Up is dropped): Up (`ESC [ A`,
-#' `ESC O A`) on an empty draft takes back the newest queued message; Tab on a trigger word
-#' (console_trigger()) completes it and never sends: `complete(line, end)` returns full words, whose
-#' longest common prefix replaces the word when longer, else two or more are listed. On any other
-#' draft Tab sends the other kind.
+#' batch's end (`bracket`) lasts into the next batches; a sequence cut inside it, or a marker cut at
+#' a batch's end, waits for its rest however late; in a batch holding a marker only the text between
+#' markers is a paste. With `paste` (a batch without markers read on the polling beat, too quick for
+#' a person to type a newline and more) a batch with text after its last newline is a paste the same
+#' way. A message goes as `enter_kind` (`"steer"` or `"follow_up"`), always as a follow-up when it
+#' starts with / or !, and not at all when blank. Two keys act only outside an open bracketed paste,
+#' as a batch of their own or as the end of a batch without a newline (elsewhere Tab is text and Up
+#' is dropped): Up (`ESC [ A`, `ESC O A`) on an empty draft takes back the newest queued message;
+#' Tab on a trigger word (console_trigger()) completes it and never sends: `complete(line, end)`
+#' returns full words, whose longest common prefix replaces the word when longer, else two or more
+#' are listed. On any other draft Tab sends the other kind.
 #' @return list(state, action), the action NULL, list(type = "send", kind, text),
 #'   list(type = "take_back") or list(type = "complete", candidates)
 #' @noRd
 console_compose = function(state, chars, now, enter_kind, complete, paste = FALSE) {
   draft = state$draft %||% ""
   bracket = isTRUE(state$bracket)
-  held = if (bracket || now - (state$t %||% now) <= 0.05) state$esc %||% "" else ""
+  held = state$esc %||% ""
+  if (!bracket && now - (state$t %||% now) > 0.05 &&
+      !grepl("^\033\\[20[01]~", paste0(held, chars))) {
+    held = ""
+  }
   x = tty_unreply(paste0(held, gsub("\r\n?", "\n", chars)))
   out = function(action = NULL, esc = "", t = now) {
     list(state = list(draft = draft, esc = esc, t = t, bracket = bracket), action = action)
