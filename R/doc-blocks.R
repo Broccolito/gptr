@@ -1355,7 +1355,9 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
         out$created = union(out$created, made[nzchar(made)])
       }
       if (identical(ct, "gptr.mcp_r")) {
-        out = doc_turn_r(out, e$data, list(), with_out, plan_mode)
+        det = e$data
+        if (!identical(det$status %||% "ok", "ok")) det = doc_ran_part(det)
+        if (!is.null(det)) out = doc_turn_r(out, det, list(), with_out, plan_mode)
       }
     }
   }

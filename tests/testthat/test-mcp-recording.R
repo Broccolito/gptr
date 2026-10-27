@@ -113,7 +113,7 @@ test_that("served gptr_return(<expression>) records the block's hidden value, wh
   expect_length(fake_requests(fake), 2L)
 })
 
-test_that("failed, plan, non-recording and idle served R do not add executable history", {
+test_that("plan, non-recording and idle served R add no executable history; failed R what ran", {
   skip_on_cran()
   root = local_project()
   local_gptr_options(record = "auto", replay = "auto", mode = "auto")
@@ -133,15 +133,18 @@ test_that("failed, plan, non-recording and idle served R do not add executable h
     writeLines(line, path)
     work = new.env(parent = globalenv())
     gptr_source(path, replay = "record", envir = work)
-    expect_length(mcp_record_entries(work$res), 0L)
-    expect_false(any(readLines(path) %in% c("partial = 1", "scratch = 1", "unrecorded = 1")),
-                 info = nm)
+    # a call that stopped part-way records the expressions that ran (FIX-33 PERM-5)
+    failed = identical(nm, "failed")
+    expect_length(mcp_record_entries(work$res), as.integer(failed))
+    expect_identical("partial = 1" %in% readLines(path), failed, info = nm)
+    expect_false(any(readLines(path) %in% c("scratch = 1", "unrecorded = 1")), info = nm)
+    expect_false(any(grepl("not successful", readLines(path), fixed = TRUE)), info = nm)
     if (identical(nm, "plan")) expect_false(exists("scratch", envir = work, inherits = FALSE))
     # Once settled, the same session's standalone server retains no automatic recording.
     before = readLines(path)
     msg = mcp_test_msg("tools/call", list(name = "r", arguments = list(code = "idle = 2")))
     mcp_dispatch_local(msg, work$res)
-    expect_length(mcp_record_entries(work$res), 0L)
+    expect_length(mcp_record_entries(work$res), as.integer(failed))
     expect_identical(readLines(path), before, info = nm)
   }
 })
