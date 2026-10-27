@@ -165,6 +165,39 @@ test_that("sh: rules read the command of a background job", {
   expect_identical(m$allow, character())
 })
 
+test_that("deny and ask sh: rules match a read-only command; allow needs level 1 (FIX-32)", {
+  root = local_project()
+  for (code in c("peter$sh(c('cat', 'report.txt'))", "peter$sh('cat report.txt')",
+                 "system('cat report.txt', intern = TRUE)", "peter$sh('cat a.txt > b.txt')")) {
+    m = rule_match(list(deny = "r(sh:cat *)", ask = "r(sh:cat *)"), r_call(code))
+    expect_identical(c(m$deny, m$ask), rep("r(sh:cat *)", 2L), label = code)
+  }
+  m = rule_match(list(deny = c("r(sh:git *)", "r(sh:echo *)"), ask = "r(sh:wc *)"),
+                 r_call("peter$sh('git status'); system('echo x >> f.txt'); system('wc -l f.txt')"))
+  expect_identical(c(m$deny, m$ask), c("r(sh:git *)", "r(sh:echo *)", "r(sh:wc *)"))
+  # level-0 rows run in every mode, so an allow rule still needs a row of level 1 or more
+  m = rule_match(list(allow = "r(sh:git status*)"), r_call("peter$sh('git status')"))
+  expect_identical(m$allow, character())
+})
+
+test_that("a deny sh: rule stops a read-only command, also one peter$sh() computes (FIX-32)", {
+  skip_on_cran()
+  root = local_project(files = list("report.txt" = "secret plans"))
+  local_permission_rules()
+  gptr_permissions(deny = "r(sh:cat *)")
+  # manual mode runs the literal call (level 0) and auto mode the computed one (level 3)
+  codes = c(manual = "peter$sh(c('cat', 'report.txt'))",
+            auto = "f = 'report.txt'; peter$sh(c('cat', f))")
+  for (mode in names(codes)) {
+    fake = local_fake_provider(list(fake_tool("r", code = codes[[mode]]), "Done."),
+                               name = paste0("cat-", mode))
+    peter("Show it.", model = fake, mode = mode, envir = new.env())
+    txt = msg_text(fake_requests(fake)[[2]]$last_results[[1]])
+    expect_match(txt, "denied by the rule r(sh:cat *)", fixed = TRUE, label = mode)
+    expect_false(grepl("secret plans", txt, fixed = TRUE), label = mode)
+  }
+})
+
 test_that("gptr_permissions() adds, lists and removes session rules (6.2)", {
   root = local_project()
   local_permission_rules()

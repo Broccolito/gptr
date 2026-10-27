@@ -1510,8 +1510,10 @@ still apply; any final allow grants the call's control exports their one-shot to
 The run snapshots the safety options
 (`gptr.ui`, `gptr.interactive`, the guards, `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode`) at its
 start, so model code cannot change them mid-run. A `modify` is re-classified and re-checked once. Built-in policies: `mode`,
-`rules` (grammar `tool(spec)`, e.g. `write(results/**)`, `r(fn:write.csv)`, `r(level<=1)`, `r(sh:git
-status*)`, `r(sql:select)`), `critical_guard`, `secret_guard`, `protect_size`. Allow rules never loosen plan
+`rules` (grammar `tool(spec)`, e.g. `write(results/**)`, `r(fn:write.csv)`, `r(level<=1)`,
+`r(sh:git push*)`, `r(sql:select)`), `critical_guard`, `secret_guard`, `protect_size`. Deny and ask rules match
+any flagged row, a read-only shell command included; an allow rule covers rows of level 1 and above [D-267].
+Allow rules never loosen plan
 and never pre-approve level 4; only `r(secret:NAME)` rules pre-approve the secret guard and only `r(fn:NAME)`
 rules lift the computed-command refusal (6.8.1); project settings may only tighten, a trusted project's `mode`
 excepted [D-250]; no filter from any source disables

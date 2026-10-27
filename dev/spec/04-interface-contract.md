@@ -1386,7 +1386,7 @@ gptr_permissions(allow = NULL, ask = NULL, deny = NULL, remove = NULL,
 
 With no rule arguments: returns a `gptr_permissions` data frame of all rules in effect (session, project
 `settings.json`, the user-level project file, user). With `allow`/`ask`/`deny` (chr of rules in the §6.8.2 grammar
-of `03`, e.g. `"write(results/**)"`, `"r(fn:write.csv,saveRDS)"`, `"r(level<=1)"`, `"r(sh:git status*)"`,
+of `03`, e.g. `"write(results/**)"`, `"r(fn:write.csv,saveRDS)"`, `"r(level<=1)"`, `"r(sh:git push*)"`,
 `"r(sql:select)"`, `"mcp__github__*"`) adds them; `remove` removes matching rules. `scope`: `"session"` = this R
 process; `"project"` = the user-level project file `R_user_dir("gptr", "config")/projects/<hash>.json` (personal,
 never in the project tree, IC-52); `"user"` = the user settings file. Called from model code during a run it is a
@@ -2837,7 +2837,7 @@ diff_lines(c("a", "b"), c("a", "c"))
 | `gptr_risk()` (service `risk.classify`) | `perm-classify.R` | §6.6; `kind = "command"` uses `inst/extdata/risk-commands.csv` (G5 levels), `"sql"` and `"python"` keyword classifiers; tables are data (`risk_table(kind)`) extendable by plugins through `setting` specs | P10 (through the service), P22, P23 |
 | `code_targets(code)` | `perm-classify.R` | the one parse walk shared by the classifier and the checkpointer [G7 §3.4]: `list(assign, modify, byref, remove, super, files, unknown, process, calls = df(fn, package, line))` (chr each, never evaluating) | P11, P16 |
 | `rule_parse(rule)` | `perm-rules.R` | `list(tool, kind = "any" \| "glob" \| "level" \| "fn" \| "category" \| "sh" \| "sql" \| "secret", value)` or `gptr_error_invalid_argument` | P11, P14 (`/permissions`) |
-| `rule_match(rules, call)` | `perm-rules.R` | `list(deny = chr, ask = chr, allow = chr)`: matched rules; allow `r(fn:..)`/`r(category:..)` match only if **every** flagged call (level >= 1) is covered; deny/ask match if **any** is | P11 |
+| `rule_match(rules, call)` | `perm-rules.R` | `list(deny = chr, ask = chr, allow = chr)`: matched rules; allow `r(fn:..)`/`r(category:..)` match only if **every** flagged call (level >= 1) is covered; deny/ask match if **any** flagged row is, level 0 included (D-267) | P11 |
 | `rule_suggest(call)` | `perm-rules.R` | chr(1) rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`), or `NULL` (never for level 4) | P11, P14 |
 | `builtin_permissions(gptr)` | `perm-gate.R` | registers the policies `mode` (the mode x level table of §6.8.1 of `03`; in auto and yolo it denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command the code computes, a `dynamic` row that is no `<fn>(): ` reading, unless an `r(fn:)` allow rule covers those rows, D-262), `rules`, `critical_guard`, `secret_guard`, `protect_size` (IC-04) | P02 load |
 | `builtin_plan(gptr)` | `perm-plan.R` | registers the `plan` policy (writes denied, level-1 R allowed only because the run evaluates in the scratch overlay), the plan-mode `agent_end` hook (captures the last `<proposed_plan>...</proposed_plan>`, saves `<root>/plans/<YYYY-MM-DD>-<slug>.md`, sets `.d$plan`, stores the pending plan under `home_address(home)` with the time, appends `gptr.plan`, offers the execute menu interactively), the plan-mode allowlist check (only calls known to be read-only run, IC-54), and the `plan.pending` service (returns the plan once, only to the next top-level `peter()` call of the same process and environment within one hour; any other call in between discards it; IC-56) | P02 load |

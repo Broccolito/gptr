@@ -28,13 +28,16 @@ Lists the permission rules in effect, or adds and removes rules. A rule is \code
 \code{tool(spec)}: a path glob for \code{read}, \code{write}, \code{edit}, \code{grep}, \code{find} and \code{ls}
 (\verb{write(results/**)}, relative to the project root; \verb{~/...} for the home; \verb{//...} for other
 absolute paths); for \code{r}, \code{level<=n}, \verb{fn:name,...} (every flagged function covered),
-\verb{category:name,...}, \verb{sh:<command glob>} (\verb{r(sh:git status*)}), \verb{sql:<keywords>}
+\verb{category:name,...}, \verb{sh:<command glob>} (\verb{r(sh:git push*)}), \verb{sql:<keywords>}
 (\code{r(sql:select)}) and \code{secret:NAME} (the only rule that pre-approves a guarded secret read);
 MCP tools by name (\verb{mcp__github__*}). Deny rules win over ask rules, which win over allow
-rules. Allow rules never loosen plan mode and never pre-approve level-4 (critical or control)
-actions. In \code{auto} and \code{yolo} mode only an \verb{fn:} rule that names the function, such as
-\code{r(fn:system)}, lets \code{system()}, \code{system2()}, \code{shell()} or \code{shell.exec()} run a command the code
-computes, which those modes otherwise refuse (see \link{gptr_security}).
+rules. Deny and ask rules match any call that \code{\link[=gptr_risk]{gptr_risk()}} flags, a read-only shell command
+included (\verb{r(sh:cat *)} denies \code{peter$sh("cat notes.txt")}); an R function it knows to be
+read-only, such as \code{readLines()}, is not flagged, so \verb{fn:} rules never match it. Allow rules
+never loosen plan mode and never pre-approve level-4 (critical or control) actions. In \code{auto}
+and \code{yolo} mode only an \verb{fn:} rule that names the function, such as \code{r(fn:system)}, lets
+\code{system()}, \code{system2()}, \code{shell()} or \code{shell.exec()} run a command the code computes, which
+those modes otherwise refuse (see \link{gptr_security}).
 }
 \details{
 Scopes: \code{"session"} is this R process; \code{"project"} is the user-level file
