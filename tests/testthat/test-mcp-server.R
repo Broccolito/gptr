@@ -413,11 +413,14 @@ test_that("a nested sh or bg call in served R meets the rules and the critical g
             "x = peter$sh(paste('echo', 'hi'))$stdout")
   seen = serve_in_run(function(event, ctx) serve(ctx$session))
   idle = local_served_session("auto")
+  local_gptr_options(quiet = FALSE)
   out = serve(idle$session)
   expect_identical(ui$log$method, "permission")
   expect_identical(vapply(c(seen$out, out), function(r) r$isError, NA),
                    c(TRUE, FALSE, TRUE, FALSE))
   expect_match(out[[1L]]$content[[1L]]$text, "nobody can approve it", fixed = TRUE)
+  # the denial tells the model; the console notice for the person is not in its result (round 2)
+  expect_false(grepl("An MCP client asked", out[[1L]]$content[[1L]]$text, fixed = TRUE))
   expect_identical(trimws(c(seen$envir$x, idle$envir$x)), c("hi", "hi"))
 })
 

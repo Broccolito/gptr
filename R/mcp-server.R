@@ -150,10 +150,10 @@ mcp_serve_envir = function(target, run, mode) {
 }
 
 #' Gate a served call when no pump runs (an idle console): the policies alone decide; whatever
-#' needs approval is denied with how to allow it and a console notice, never prompted from a
-#' callback (IC-57)
+#' needs approval is denied with how to allow it and, with `notice`, a console notice, never
+#' prompted from a callback (IC-57)
 #' @noRd
-mcp_gate_idle = function(call, ctx, sid = NULL) {
+mcp_gate_idle = function(call, ctx, sid = NULL, notice = TRUE) {
   if (isTRUE(gptr_opt("unsafe_no_permissions"))) {
     return(list(decision = "allow", reason = "gptr.unsafe_no_permissions is set"))
   }
@@ -165,9 +165,11 @@ mcp_gate_idle = function(call, ctx, sid = NULL) {
     if (!is.null(d) && !identical(d$decision, "allow")) ask = ask %||% d
   }
   if (is.null(ask)) return(list(decision = "allow", reason = ""))
-  gptr_inform(paste0("An MCP client asked for ", call$name, ", which needs your approval; it ",
-                     "was refused. Allow it with gptr_permissions(allow = ...) or run it ",
-                     "yourself."), "notice")
+  if (notice) {
+    gptr_inform(paste0("An MCP client asked for ", call$name, ", which needs your approval; it ",
+                       "was refused. Allow it with gptr_permissions(allow = ...) or run it ",
+                       "yourself."), "notice")
+  }
   list(decision = "deny",
        reason = paste0(if (nzchar(ask$reason)) ask$reason else "this needs approval",
                        "; nobody can approve it while gptr serves requests in the background"))
@@ -351,7 +353,8 @@ mcp_nested_gate = function(name, input, ctx, sid = NULL) {
     list(name = name, input = input, tool = spec, nested = TRUE,
          risk = if (is.function(spec$risk)) spec$risk(input, ctx))
   }
-  d = mcp_gate_idle(call, ctx, sid)
+  # no console notice: the served result captures it, and the denial tells the model
+  d = mcp_gate_idle(call, ctx, sid, notice = FALSE)
   if (!identical(d$decision, "allow")) {
     gptr_abort(perm_denial_text(d), "tool", tool = name, status = "denied")
   }
