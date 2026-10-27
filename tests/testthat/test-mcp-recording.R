@@ -158,7 +158,7 @@ test_that("a native execution trace belongs only to its still-active document ow
   live = session_live(owner)
   live$run = run
   evaluate = function(target) {
-    mcp_serve_r(list(code = "x = 1"), own_env, run, target)
+    mcp_serve_r(list(input = list(code = "x = 1")), own_env, run, target)
   }
   evaluate(other)
   expect_length(mcp_record_entries(other), 0L)

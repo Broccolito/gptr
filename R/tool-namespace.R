@@ -330,7 +330,8 @@ ns_member_flags = function(spec) {
        prepare = prepare)
 }
 
-#' A `gptr_member` closure for a tool spec (7.10): inside `r` dispatch_nested() first, else `fun`
+#' A `gptr_member` closure for a tool spec (7.10): inside `r` dispatch_nested() first (after the
+#' marker's `gate`, which served R that no pump serves has, mcp_serve_r()), else `fun`
 #' (P02's spec_tool_fun() for an execute-only spec). Arguments reach `fun` as promises through a
 #' call of symbols, never a list; the body and the `member_fun` symbol (dot-prefixed past any
 #' formal) are built so no argument can shadow them.
@@ -353,6 +354,7 @@ member_closure = function(spec) {
     rc = ns_r_call()
     if (!is.null(rc)) {
       input = flags$prepare(ns_collect_input(frame, arg_names, flags$gate_only))
+      if (is.function(rc$gate)) rc$gate(tool_name, input)
       value = dispatch_nested(tool_name, input, rc$ctx)
       if (!flags$gate_only) return(if (flags$visible) value else invisible(value))
     }

@@ -390,6 +390,37 @@ test_that("a served call asks a person only while a pump runs (IC-57)", {
   expect_identical(seen$perm, 1L)
 })
 
+test_that("a nested sh or bg call in served R meets the rules and the critical guard (FIX-32)", {
+  skip_on_cran()
+  root = local_project(files = list("build/a.o" = "x"))
+  local_permission_rules()
+  gptr_permissions(deny = "r(sh:rm *)")
+  codes = paste0("cmd = paste('rm', '-rf', 'build'); peter$", c("sh", "bg"), "(cmd)")
+  serve = function(target) lapply(codes, function(x) mcp_dispatch_local(r_call(x), target)$result)
+  # served while the run's pump runs (the CLI routes), and to an idle session
+  res = c(serve_in_run(function(event, ctx) serve(ctx$session))$out,
+          serve(local_served_session("auto")$session))
+  for (r in res) {
+    expect_true(r$isError)
+    expect_match(r$content[[1L]]$text, "denied by the rule r(sh:rm *)", fixed = TRUE)
+  }
+  expect_true(file.exists(file.path(root, "build", "a.o")))
+  # a computed command outside the project needs a person: asked while the pump runs, refused
+  # when idle; one no rule or guard stops runs
+  gptr_permissions(remove = "r(sh:rm *)")
+  ui = local_scripted_ui(list("n"))
+  codes = c("x = '/gptr-none'; peter$sh(c('rm', '-rf', x))",
+            "x = peter$sh(paste('echo', 'hi'))$stdout")
+  seen = serve_in_run(function(event, ctx) serve(ctx$session))
+  idle = local_served_session("auto")
+  out = serve(idle$session)
+  expect_identical(ui$log$method, "permission")
+  expect_identical(vapply(c(seen$out, out), function(r) r$isError, NA),
+                   c(TRUE, FALSE, TRUE, FALSE))
+  expect_match(out[[1L]]$content[[1L]]$text, "nobody can approve it", fixed = TRUE)
+  expect_identical(trimws(c(seen$envir$x, idle$envir$x)), c("hi", "hi"))
+})
+
 test_that("inside a running session the claude route gates through perm_check once", {
   probe = gptr_tool("probe", "Calls the MCP dispatcher the way the claude adapter does.",
                     parameters = list(type = "object",
