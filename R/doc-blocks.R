@@ -48,6 +48,13 @@ doc_steer_lines = function(body) {
   hit
 }
 
+#' The lines of `text`, which `\r\n` or a lone `\r` ends as `\n` does, as R's evaluator reads
+#' them (eval_parse())
+#' @noRd
+doc_split_lines = function(text) {
+  strsplit(gsub("\r\n?", "\n", as_utf8(text)), "\n", fixed = TRUE)[[1L]]
+}
+
 #' `lines` of code with one more `#` where each whole comment line matching a pattern of `re`
 #' starts (doc_comment_lines()), so R reads the same code and the line no longer reads as one that
 #' gptr writes
@@ -1058,10 +1065,10 @@ doc_rewrite_return = function(lines) {
 #' not parse to the kept expressions leaves the code as written. Attributes `kept`: one logical
 #' per top-level expression (NULL when the code does not parse; such code is kept as written);
 #' `returned`: the hidden name holds the code's designated value (doc_rewrite_return()). Lines
-#' lose a trailing carriage return, as a read of the document does.
+#' end where the evaluator's do (doc_split_lines()), without carriage returns.
 #' @noRd
 doc_code_clean = function(code) {
-  lines = sub("\r$", "", strsplit(as_utf8(paste(code, collapse = "\n")), "\n", fixed = TRUE)[[1L]])
+  lines = doc_split_lines(paste(code, collapse = "\n"))
   if (!length(lines)) return(character())
   exprs = tryCatch(doc_parse_text(lines), error = function(e) NULL)
   kept = NULL
@@ -1352,7 +1359,8 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
         made = vapply(rows, function(r) {
           if (identical(r$status, "created") && rlang::is_string(r$name)) r$name else ""
         }, "")
-        out$created = union(out$created, made[nzchar(made)])
+        # a name holding a comma would read back as two (doc_created()): it is left out
+        out$created = union(out$created, made[nzchar(made) & !grepl(",", made, fixed = TRUE)])
       }
       if (identical(ct, "gptr.mcp_r")) {
         det = e$data
@@ -1414,8 +1422,7 @@ doc_turn_assistant = function(out, m, results, with_out, plan_mode) {
 #' @noRd
 doc_ran_part = function(det) {
   n = as.integer(det$n_done %||% 0L)
-  lines = sub("\r$", "", strsplit(as_utf8(paste(det$code %||% "", collapse = "\n")), "\n",
-                                  fixed = TRUE)[[1L]])
+  lines = doc_split_lines(paste(det$code %||% "", collapse = "\n"))
   exprs = tryCatch(doc_parse_text(lines), error = function(e) NULL)
   if (length(n) != 1L || is.na(n) || n < 1L || n > length(exprs)) return(NULL)
   srcs = attr(exprs, "srcref")

@@ -1204,11 +1204,14 @@ test_that("a direct R line records what it created, also when it failed (IC-49)"
   direct(list(code = "m = 1; n = 2", output = character(), status = "ok", created = c("m", "n")))
   direct(list(code = "r = 1; stop(\"boom\")", output = character(), status = "error",
               created = "r"))
-  direct(list(code = "my var = 1", output = character(), status = "ok", created = "my var"))
+  # a name holding a comma would read back as two (doc_created()): it is left out
+  direct(list(code = "my var = 1; `tmp,df` = 2", output = character(), status = "ok",
+              created = c("my var", "tmp,df")))
   expect_identical(utils::tail(readLines(t), 8L),
                    c("# direct R (no model) created=m,n", "m = 1; n = 2",
                      "", "# direct R (no model; error) created=r", "#~ r = 1; stop(\"boom\")",
-                     "", "# direct R (no model) created=\"my var\"", "my var = 1"))
+                     "", "# direct R (no model) created=\"my var\"",
+                     "my var = 1; `tmp,df` = 2"))
 })
 
 test_that("a direct R line using a name an undone step or an off line made is switched off", {
@@ -1304,6 +1307,10 @@ test_that("a comment in a direct R line shaped like another entry stays in its s
   direct(c("w = 1\r", "# /undo\r", "w\r"), "w")
   expect_identical(utils::tail(readLines(t), 4L),
                    c("# direct R (no model) created=w", "w = 1", "## /undo", "w"))
+  # a lone one ends a line, as the evaluator reads it
+  direct("v = 1\r# /undo\rv", "v")
+  expect_identical(utils::tail(readLines(t), 4L),
+                   c("# direct R (no model) created=v", "v = 1", "## /undo", "v"))
   expect_false(grepl("\r", rawToChar(readBin(t, "raw", file.size(t))), fixed = TRUE))
 })
 
