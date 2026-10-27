@@ -83,11 +83,14 @@ rule_call_path = function(call) {
   paste0("/", rel)
 }
 
-#' The shell or SQL text of flagged rows: the call without the `fn(): ` of R's code arguments
+#' The shell or SQL text of flagged rows: the call without the `via f(): ` labels of the functions
+#' read on the way and the `fn(): ` of R's code arguments; a row that is no reading of a command
+#' keeps its whole call
 #' @noRd
 rule_code_text = function(fl) {
+  call = sub("^(via .*?\\(\\): )+", "", fl$call, perl = TRUE)
   pre = paste0(fl$fn, "(): ")
-  ifelse(startsWith(fl$call, pre), substring(fl$call, nchar(pre) + 1L), fl$call)
+  ifelse(startsWith(call, pre), substring(call, nchar(pre) + 1L), fl$call)
 }
 
 #' Does one parsed rule match a call? `lst` is the list the rule came from.

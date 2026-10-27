@@ -180,6 +180,23 @@ test_that("deny and ask sh: rules match a read-only command; allow needs level 1
   expect_identical(m$allow, character())
 })
 
+test_that("deny and ask sh: rules match a command inside a function the code calls (FIX-32)", {
+  root = local_project()
+  local_permission_rules()
+  # the person's own functions, as made at the console
+  e = new.env(parent = globalenv())
+  eval(parse(text = c("build = function() system('touch out.txt')",
+                      "fmt = function(x) UseMethod('fmt')",
+                      "fmt.foo = function(x) system('git push origin main')",
+                      "clean = function(d) system(paste('rm -rf', d))")), e)
+  m = rule_match(list(deny = "r(sh:touch *)", ask = "r(sh:git push*)"),
+                 r_call("build(); fmt(structure(1, class = 'foo'))", e))
+  expect_identical(c(m$deny, m$ask), c("r(sh:touch *)", "r(sh:git push*)"))
+  expect_identical(rule_suggest(r_call("build()", e)), "r(sh:touch out.txt*)")
+  # a command the function computes is still refused in auto and yolo (D-262)
+  expect_identical(perm_computed_cmd(r_call("clean('build')", e)), "system")
+})
+
 test_that("a deny sh: rule stops a read-only command, also one peter$sh() computes (FIX-32)", {
   skip_on_cran()
   root = local_project(files = list("report.txt" = "secret plans"))
