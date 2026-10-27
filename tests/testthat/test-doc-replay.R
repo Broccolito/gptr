@@ -1284,6 +1284,12 @@ test_that("a comment in a direct R line shaped like another entry stays in its s
   rec = utils::tail(readLines(t), 4L)
   expect_identical(rec, c("msg = \"", "# /tmp is text", "\" # /tmp too", "## /tmp is scratch"))
   expect_identical(parse(text = rec, keep.source = FALSE), parse(text = code, keep.source = FALSE))
+  # code with CRLF line ends is recorded as a read gives it back, without the carriage returns,
+  # so `# /undo` is escaped too and never reads back as a command (FIX-33)
+  direct(c("w = 1\r", "# /undo\r", "w\r"), "w")
+  expect_identical(utils::tail(readLines(t), 4L),
+                   c("# direct R (no model) created=w", "w = 1", "## /undo", "w"))
+  expect_false(grepl("\r", rawToChar(readBin(t, "raw", file.size(t))), fixed = TRUE))
 })
 
 test_that("a rewind switches dependent direct R lines off, says which, and a redo back on", {

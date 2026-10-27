@@ -922,7 +922,8 @@ doc_on_session_tree = function(event, ctx) {
 #' console:direct (P14, after the line ran): a direct R line (`!expr`) of the console enters the
 #' transcript under `# direct R (no model)` with its printed output as `#>` lines (IC-49,
 #' contract 11.5 transcript row), the header naming what it created (`created=`) and its code as
-#' doc_direct_code() records it. A line whose `status` is not "ok" (an error, interrupt or
+#' doc_direct_code() records it, each line without a trailing carriage return, as a read gives it
+#' back. A line whose `status` is not "ok" (an error, interrupt or
 #' timeout; no status is a line that ran) is kept inert (`#~ `, no output) under
 #' `# direct R (no model; <status>)`, so the transcript still re-sources as one session (IC-49)
 #' and an interrupted computation does not run again
@@ -931,7 +932,7 @@ doc_on_console_direct = function(event, ctx) {
   data = event$data %||% list()
   code = as_utf8(paste(as.character(data$code %||% character()), collapse = "\n"))
   if (!length(code) || !nzchar(trimws(code))) return(NULL)
-  code = doc_direct_code(strsplit(code, "\n", fixed = TRUE)[[1L]])
+  code = doc_direct_code(sub("\r$", "", strsplit(code, "\n", fixed = TRUE)[[1L]]))
   st = data$status
   created = as_utf8(as.character(data$created %||% character()))
   lines = if (is.null(st) || identical(st, "ok")) {

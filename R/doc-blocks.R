@@ -224,11 +224,12 @@ doc_dedent = function(lines, indent) {
   lines
 }
 
-#' First 8 hex of sha256 of the body as written, without steering lines (IC-49)
+#' First 8 hex of sha256 of the body as written, without steering lines (IC-49) and without the
+#' trailing blanks of a line, which an editor may trim, or its carriage return, which a read drops
 #' @noRd
 doc_body_sha = function(body) {
   body = as_utf8(as.character(body))
-  body = body[!grepl(doc_re_steer, body)]
+  body = sub("[ \t\r]+$", "", body[!grepl(doc_re_steer, body)])
   substr(hash_sha256(paste(body, collapse = "\n")), 1L, 8L)
 }
 
@@ -1023,10 +1024,11 @@ doc_rewrite_return = function(lines) {
 #' doc_parse_text() parses it (IC-62; parse data kept under sys.source()); a cut whose result does
 #' not parse to the kept expressions leaves the code as written. Attributes `kept`: one logical
 #' per top-level expression (NULL when the code does not parse; such code is kept as written);
-#' `returned`: the hidden name holds the code's designated value (doc_rewrite_return()).
+#' `returned`: the hidden name holds the code's designated value (doc_rewrite_return()). Lines
+#' lose a trailing carriage return, as a read of the document does.
 #' @noRd
 doc_code_clean = function(code) {
-  lines = strsplit(as_utf8(paste(code, collapse = "\n")), "\n", fixed = TRUE)[[1L]]
+  lines = sub("\r$", "", strsplit(as_utf8(paste(code, collapse = "\n")), "\n", fixed = TRUE)[[1L]])
   if (!length(lines)) return(character())
   exprs = tryCatch(doc_parse_text(lines), error = function(e) NULL)
   kept = NULL

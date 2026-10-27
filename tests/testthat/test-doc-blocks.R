@@ -1071,6 +1071,28 @@ test_that("doc_upsert() writes nothing without consent and inserts, replaces and
   expect_identical(nrow(doc_find_blocks(readLines(f))), 1L)
 })
 
+test_that("an editor's trim and CRLF model code leave a block fresh (FIX-33 DOC-5)", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  write = function(code, outputs = character()) {
+    writeLines(c("library(gptr)", "peter(\"count rows\")"), f)
+    s = doc_test_session(list(doc_test_turn(code, outputs = outputs)))
+    doc_upsert(doc_file_site(f), doc_block_lines(s, 1L, doc_file_site(f), 1L))
+    readLines(f)
+  }
+  # printed output ends in blanks; an editor that trims trailing whitespace keeps the block fresh
+  txt = write("coef(fit)", outputs = c("(Intercept)          wt ", "  37.285126   -5.344472 "))
+  expect_true(any(grepl(" $", txt)))
+  writeLines(sub("[ \t]+$", "", txt), f)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+  # model code with CRLF line ends is written without carriage returns and reads back fresh
+  txt = write("b = 1 + 1\r\nc9 = b + 1\r\nc9")
+  expect_false(grepl("\r", rawToChar(readBin(f, "raw", file.size(f))), fixed = TRUE))
+  expect_true(all(c("b = 1 + 1", "c9 = b + 1", "c9") %in% txt))
+  expect_identical(gptr_blocks(f)$status, "fresh")
+})
+
 test_that("only gptr's own lines take the block id; steer text and model code keep the token", {
   local_project()
   local_gptr_options(record = "auto")
