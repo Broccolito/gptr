@@ -1,5 +1,5 @@
 dcf_of = function(...) {
-  fields = list(Package = "gptr", Title = "Language Model Agents Inside the Live 'R' Session",
+  fields = list(Package = "gptr", Title = "Language Model Agents in Live 'R' Sessions",
                 Version = "1.0.0", Depends = "R (>= 4.2.0)",
                 Imports = "jsonlite, curl, processx, callr, rlang, cli, yaml, ps",
                 Suggests = "testthat (>= 3.2.0), withr, knitr, rmarkdown",
