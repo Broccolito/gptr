@@ -7829,6 +7829,12 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   command line and never read (`system2("ls", env = "A=1; rm -rf build;")` is level 0), a separate
   issue; in manual mode an allow `r(level<=3)` still lets a computed `system()` run without asking,
   past a deny `sh:` rule (as before). Status 2026-10-27: `env` is read since D-267 (FIX-32).
+  Status 2026-10-27 (review round 2): `?gptr_security` and 03 section 6.8.1 also name what a shell
+  reads when it runs, which neither the rules nor the refusal read: its standard input
+  (`system("sh", input = cmd)`, `peter$sh("sh", input = cmd)`, `printf '...' | sh`), variables it
+  expands (`sh -c "$X"`, `eval $X`) and a script file; and a function passed as a value
+  (`g(system)`, `for (f in list(system)) f(cmd)`, `baseenv()$system(cmd)`). A reading of `input`
+  alone would leave the other ways open.
 - Accepted false refusals, each costing one round trip to `peter$sh()` or an `r(fn:)` rule:
   `cmd = "ls"; system(cmd)` (names are not followed for code arguments),
   `system2("git", c("log", n))`, `system2("ls", character())`, `do.call(system, list("ls"))`, a
@@ -8147,7 +8153,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   computed `rm -rf` outside the project ran in auto without the critical guard's question, which
   FIX-27's refusal steers every model to (live with claude-cli and codex; already so on
   origin/main 13a917ff). Images that `peter$plot()` or `peter$read()` attach in served R go with
-  its result, as in the r tool.
+  its result, as in the r tool. Status 2026-10-27 (review round 2): the idle gate writes no console
+  notice for a nested call, as the served result captured it for the model (naming the `r` tool);
+  the denial tells the model.
 - Rule (classifier, PERM-2): `system2()`'s `env` is read as the start of its command line, as
   Unix `system2()` pastes it, unquoted, before the command:
   `system2("ls", env = "A=1; rm -rf build;")` is read as `A=1; rm -rf build; ls` (level 3), and an
@@ -8171,13 +8179,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   architecture 12.7's prefix gate (standard_core 2335 + 2% leaves 1 token), so IC-68's totals stay;
   the verdicts' longer lines (about 41 tokens) fail that gate.
 - Rule (console, PERM-9 and MM-7): a permission question's summary of a `cmd` input (a nested
-  `peter$sh()` or `peter$bg()`) is its words joined by spaces, not JSON. The plan menu's hand-off
+  `peter$sh()` or `peter$bg()`) is its words joined by spaces, not JSON, followed by its other
+  inputs as JSON (review round 2: `sh {"input":"rm -rf x"}`; the words alone hid a shell's
+  standard input, `env` and `wd`, which the JSON showed before). The plan menu's hand-off
   notice adds `At R's prompt: gptr_last() |> peter("Go ahead.")` only when no console REPL state
   (`.gptr_repl`) is on the call stack.
 - Not changed: (a) PERM-4's code alternative, `-c features.shell_tool=false` for Codex in the
   read-only modes: IC-65 keeps Codex's own shell, and that key is not among the flags gptr's
   capability probe checks; `?gptr_security` and vignette("language-models") now say that Codex's
-  shell runs in every mode outside gptr's gate, rules and secret guard. (b) PERM-9's second half:
+  shell runs in every mode outside gptr's gate, rules and secret guard, and since review round 2
+  03 section 8.3 and 04 section 15.6 IC-65 do. (b) PERM-9's second half:
   an approved `system()` child writes to the terminal on the frozen `r` row, after IC-82's
   `keys show when r returns` cue; ending or clearing the row before evaluation would drop the cue
   or erase the child's last line. (c) PERM-8's transcript half (a refused turn records an empty
@@ -8251,15 +8262,22 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   that model (`call$ids$model`), so a record whose statements name a model the reader lacks is
   re-asked with the reader's own; `NULL` keeps each call's. A re-ask sends neither a block's
   steering lines nor an `n <text>` answer, which no block records, and `?gptr_source`, NEWS and
-  the vignette now say which model and mode a turn that names none gets (the re-asking session's
-  settings). `/retry` of a turn the console sent puts the `!` notes that turn took back before the
-  pending ones.
+  the vignette now say which model and mode a turn that names none gets (its session's from the
+  turns before, else the re-asking session's settings). `/retry` of a turn the console sent puts
+  the `!` notes that turn took back before the pending ones.
 - Rule (plan line): a block's `## Plan:` line names a plan file only when it is kept;
   without `.gptr/` it reads `## Plan: none kept (gptr_init() keeps plans in .gptr/)`, the rule of
   the transcript's machine-log line (`doc_kept()`).
 - Status 2026-10-27 (review round 1): `?gptr_source` says that `model` takes a model name or
   reference string, not a provider spec object as `peter(model =)` does; NEWS says which model and
   mode a turn that names none gets.
+- Status 2026-10-27 (review round 2): NEWS and the script-as-history vignette say, as
+  `?gptr_source` did, that a turn naming no model or mode is asked with those its session has from
+  the turns before, else with the re-asking session's settings (they said the latter of every such
+  turn). `gptr_export()` exports code that calls a `peter$` member
+  (`x = peter$sh(c("echo", "hi"))$stdout`), which runs as ordinary R, and refuses any other
+  `peter` or `gptr_return` name (`doc_export_names()`); formerly `all.names()` refused every
+  console transcript whose code used `peter$sh()`, where FIX-27's refusal sends models.
 - Contract-visible: 04 section 6.4 (`gptr_source()`'s `model`), section 11.5 (`sha`, the body, the
   plan line), section 15.3 IC-48 and IC-49; 03 section 4.3's signature; `?gptr_doc`,
   `?gptr_source`, `?gptr_export`; vignettes script-as-history and interactive-console; NEWS.md; the
@@ -8273,7 +8291,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   makes it and does not use it (FIX-33)", "gptr_source(model =) re-asks every call with another
   model (FIX-33 MM-2)"; test-tool-r.R "record = false never leaves out code that changed objects
   (FIX-33 ALL-3)"; test-doc-export.R "an export leaves out what a prompt was sent with, in both
-  formats (FIX-33 DOC-7)"; test-mcp-recording.R "plan, non-recording and idle served R add no
+  formats (FIX-33 DOC-7)", "recorded peter$ member calls export; a nested Peter call is refused
+  (review round 2)"; test-mcp-recording.R "plan, non-recording and idle served R add no
   executable history; failed R what ran". Evidence: progress/fixes.md FIX-33.
 
 ## D-269 - FIX-34 Console findings from the live sessions (2026-10-27)
@@ -8306,7 +8325,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   a `!` line run as R without Enter. Not changed: the menu's key question reads no waiting lines,
   and there the echo comes at no fixed point (before the `not a key` row in the
   lens's runs, before the next chevron in the writer's), so it would take an erase before that row
-  and another in the next prompt for a paste at a menu.
+  and another in the next prompt for a paste at a menu. Status 2026-10-27 (review round 2): the key
+  question reads them (`rd$waiting()` after an answer it asked for): a block pasted there is asked
+  again as at an approval ("a pasted block is not an answer", the whole block kept in the
+  history), so nothing of it is a key, a steer or a follow-up; formerly its first line answered
+  (`s`), its second became the steer, and a `!` line later in it ran as R at the next prompt.
 - Rule (crash advice, PASTE-3): `?peter` and vignette("interactive-console") advise `reset` after
   R is killed or crashes while peter works, which restores the echo and turns bracketed paste off,
   as D-263 and 04 section 15.10 already said; `stty sane` leaves the mode on.
@@ -8322,7 +8345,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   auto-mode prompt.
 - Tests: test-perm-gate.R "code the evaluator never runs is refused in every mode, no person asked
   (FIX-34)" (the reason without "Not run: ", review round 1); test-console-interrupt.R "a block
-  pasted at the pause menu's steer question is one steer (review round 1)";
+  pasted at the pause menu's steer question is one steer (review round 1)", "a block pasted at the
+  pause menu's key question is no answer (review round 2)";
   test-console-input.R "a Tab after a bracketed paste in one read is the key: its
   newlines are text (FIX-34)" and "a bracketed paste at the prompt's editor stays in the draft until
   Enter (D-263)"; test-console-repl.R "a macOS terminal's look at fd 0 erases the row its tty echoed

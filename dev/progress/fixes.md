@@ -6140,6 +6140,28 @@ the driver, screens, events, transcripts and replays without a model are local, 
   function defined but not called, a literal unmodelled command inside the user's own helper) cost
   one round trip each. Whether live models take the `peter$sh()` route after the refusal (the modes
   prompt says not to work around a denial) is seen only live; no live run was made.
+- Review round 2 (the security verifier on `15fd6066`, offline with the fake provider in auto and
+  yolo, a marker file under `tempdir()`): `?gptr_security` said that `peter$sh()` checks the command
+  when it runs and listed what the refusal does not cover, but three ways were in neither. A
+  shell's standard input is not read: with deny `r(sh:echo *)`, `peter$sh("sh", input = cmd)`,
+  `peter$sh('sh -c "$X"', env = c(X = cmd))`, `system("sh", input = "echo hi > f")`,
+  `system2("sh", input = ...)` and `system('printf "echo hi > f" | sh')` wrote the marker, and with
+  no rule a computed `system("sh", input = cmd)` ran (the security verifier's F1). A literal command
+  whose shell computes what runs (`Sys.setenv(MYC = cmd); system('sh -c "$MYC"')`, `eval $MYC`, a
+  script the code wrote, `xargs sh -c`) runs, which D-262 accepts as table readings (F2). A
+  function passed as a value (`g = function(h) h(cmd); g(system)`,
+  `for (f in list(system)) f(cmd)`, `list(s = system)$s(cmd)`, `baseenv()$system(cmd)`) runs, its
+  row `h(cmd)` or `<computed>`, never `system` (F3). Fix, docs only (F1's alternative, F2's and
+  F3's fix):
+  `?gptr_security` says that neither the rules nor the refusal read what a shell reads when it runs,
+  its standard input, variables it expands or a script file, and that a function passed as a value
+  (`g(system)`) is not refused; 03 section 6.8.1 and a D-262 status line say so. Not done: reading
+  `input` as command text when the program is a shell, in `by_args()`, `risk_member_flags()`,
+  `bridge_risk_sh()` (an L4 file that reaches the classifier only through its service) and both
+  nested gates, which would close one of several equal ways the page must name anyway; and
+  `use_value()` on every bare `system` argument, which would refuse `x$system` and still miss
+  `baseenv()[["system"]]`. Red, green: none (wording); `document()` changes only
+  `gptr_security.Rd`.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #86)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
@@ -6783,6 +6805,32 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
   keep the folder (the run stops `blocked` without a person, as the loop's does). D-267, 03
   section 6.8.4, 04 sections 7.11 (`rule_match`), 15.6 IC-57 and 15.9 IC-79 say so. D-262 gains
   status lines for the reason D-267 shortened and for the helper's literal command.
+- Review round 2, a nested ask's other inputs (the security verifier, F4; a regression of PERM-9):
+  `perm_summary()` showed only a `cmd` input's words, so an ask rule or the critical guard on
+  `peter$sh("sh", input = x)` asked `sh` without its standard input, and `wd` and `env` went
+  unshown, where the JSON before PERM-9 showed them. Red: test-agent-dispatch.R "input fields are
+  matched exactly, never by a prefix" FAIL 1 on `15fd6066`'s code (`sh`). Fix: the words are
+  followed by the other inputs as JSON on the same line (`sh {"input":"rm -rf x","wd":"../o"}`),
+  cut at 200 characters as before. Green: in the runs below. D-267 says so.
+- Review round 2, the idle gate's notice in served R (the regressions verifier, 3; new in
+  `ab10c2dc`): a nested call that `mcp_nested_gate()` refused wrote `mcp_gate_idle()`'s console
+  notice, "An MCP client asked for r, which needs your approval; it was refused. ...", inside the
+  evaluation, which captured it into the served result, so the model read advice meant for the
+  person, naming the `r` tool, and the person saw none. Red: test-mcp-server.R "a nested sh or bg
+  call in served R meets the rules and the critical guard (FIX-32)", its idle half now with
+  `quiet = FALSE` (the test setup's `gptr.quiet` hid the notice), FAIL 1 on `15fd6066`'s code. Fix:
+  `mcp_gate_idle()` takes `notice`, which `mcp_nested_gate()` sets to `FALSE`; the denial tells the
+  model, and a served top-level call's notice is unchanged. Green: in the runs below; the
+  verifier's `idle.R` on an installed copy of the fixed tree: in auto and yolo the result of the
+  nested `rm -rf` outside the project starts "Error: Permission denied: a critical action (level
+  4)" and the folder is kept, where `lib-15fd6066`'s started with the notice. 04 section 15.5
+  IC-57 and D-267 say so.
+- Review round 2, records (the docs verifier, F2 and F3): 04 section 9.2's result texts read "ends
+  either with `Nothing in this call ran.`" (PERM-6), now "ends with"; 04 section 15.6 IC-65's
+  sandbox mapping and 03 section 8.3 said only that the notice names Codex's own shell, and now add
+  that it runs in every mode outside gptr's gate, rules and secret guard and in plan, manual and
+  edits can still read any file the account can read (PERM-4, D-267). The first-use notice
+  (R/cli-common.R) keeps its text, which the verifier left optional.
 
 ## FIX-33 - Transcript findings from the live sessions (2026-10-27, #PR)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
@@ -7017,6 +7065,27 @@ and green runs use `dev/ci/isolated-check.R test` with `NOT_CRAN=true` and SIGIN
   re-asking session's settings. D-264 gains status lines (both export formats drop the `#<` run,
   a rewind also restores what a turn changed) and its and D-266's tests cite the test's current
   name; D-265's `/retry` note is marked closed by D-268.
+- Review round 2, `peter$` member calls in an export (the regressions verifier, 2; already so on
+  `13a917ff`, but FIX-27's refusal now sends models to `peter$sh()`): `gptr_export()` refused, in
+  both formats, every block whose recorded code calls a `peter$` member ("unresolved control calls
+  in recorded code"), as `all.names()` of `peter$sh(x)` holds `peter`, against NEWS's
+  "`gptr_export()` turns such a transcript into an ordinary R script"; the verifier's live
+  claude-cli transcript was refused. Red: test-doc-export.R "recorded peter$ member calls export;
+  a nested Peter call is refused (review round 2)" ERROR 1 on `15fd6066`'s code. Fix:
+  `doc_export_names()` gives the names of code less each `peter$<member>`, which runs as ordinary
+  R; the block check (`peter`, `gptr_return`) and the ordinary-code check (`peter`) use it, so
+  `peter()`, `x |> peter()`, `f = peter` and a `gptr_return()` inside a member call stay refused.
+  `?gptr_export` says so. Green: in the runs below; a piped console whose fake ran
+  `x = peter$sh(c('echo', 'hi')); x$stdout` exports in both formats on an installed copy of the
+  fixed tree (refused on `lib-15fd6066`), and the raw export, sourced in a fresh R, gives `"hi\n"`.
+  D-268 says so.
+- Review round 2, records (the docs verifier, F1): NEWS and the script-as-history vignette (.Rmd
+  and .Rmd.orig) said that a turn naming no model or mode is asked with the re-asking session's
+  settings, but after a `/model` such a turn has its session's (the verifier's live re-ask sent
+  `set z`, which names none, to `fake2`). They now say, as `?gptr_source` does, that it is asked
+  with those its session has from the turns before, else with the re-asking session's settings;
+  HANDOFF's and PROGRESS's FIX-30 lines ("asks each turn as it ran") and D-268's rule say the
+  same. MM-1's record and round 1's records bullet above stay as what those commits did.
 
 ## FIX-34 - Console findings from the live sessions (2026-10-27, #PR)
 Scope: the console findings of the live sessions with real models on `claude/v1-fixes`
@@ -7240,3 +7309,61 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     tested: served R while a run that `gptr_step()` left in progress waits, where a nested call
     meets the idle gate and then `dispatch_nested()`'s. Not run: Linux and Windows, and live
     models (the fixes are tested offline; the verifiers' live repros were not repeated).
+- Review round 2 (four verifiers on `15fd6066`: security, regressions, docs and CRAN, the last
+  with no finding): commits `23d68810` to `c03c72db` and this record, each test red on
+  `15fd6066`'s code first, `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`. FIX-27's, FIX-32's
+  and FIX-33's items are in their records; FIX-34's and the checkpoint's:
+  - The pause menu's key question (regressions, 1): in CRAN R for macOS a block pasted at
+    `? Paused` was read a line at a time, its first line the key (`s`), its second the steer's
+    text, and a `!` line in it a follow-up that ran as R at the next prompt with no question,
+    against NEWS, `?peter` and the console vignette. Red: test-console-interrupt.R "a block pasted
+    at the pause menu's key question is no answer (review round 2)" FAIL 3 on `15fd6066`'s code
+    (no re-ask, nothing kept, the next answer and the pasted line queued as the steer). Fix: after
+    an answer it asked for, `policy_menu()` reads the lines a paste left waiting (`rd$waiting()`),
+    as `ui_console_read()` does at an approval; with any, the whole block goes to the console
+    history and the key is asked again ("a pasted block is not an answer", with the keys). Round
+    1's steer test has its stand-in reader hand the paste over at the steer question only, and the
+    `[b]` test's reader gains a `waiting()`. Green: the four changed test files FAIL 0 SKIP 1 PASS
+    867 in UTF-8; live in tmux 3.8 with CRAN R 4.6.1 and the fake model (a copy of the verifier's
+    harness, scenario PE2, on an installed copy of the fixed tree), a paste of
+    `s\n!file.create('PASTE-RAN-6')\n` and one of `f\nsecond line\n` at `? Paused` each showed
+    `a pasted block is not an answer · kept in history ↑ · s, f, c, a or b`, `c` went on, no file
+    was made and nothing was queued; on `lib-15fd6066` the `!` line was a follow-up that ran
+    (`[1] TRUE`, the file made), `second line` was the next prompt and each `c` a steer. D-269 says
+    so.
+  - Records (docs F4 and F5): HANDOFF's and PROGRESS's Open lists add FIX-28's DEL, Ctrl-U and
+    Ctrl-W item. The round 1 CRAN verifier's run on `0768fb35`, which they cite:
+    `R CMD check --as-cran` in CRAN mode under `env -i` Status OK with no NOTE in 113 s (tests
+    14 s), incoming feasibility with remote checks OK, `dev/ci/isolated-check.R check` 0 errors,
+    0 warnings, 0 notes (FAIL 0 SKIP 83 PASS 38716), the URL check 0 problems. Round 2's on
+    `15fd6066`: Status OK with no NOTE in 114 s (`testthat.R` [14s/15s], FAIL 0 SKIP 906 PASS
+    2723), incoming feasibility OK, `isolated-check.R check` 0 errors, 0 warnings, 0 notes (FAIL 0
+    SKIP 83 PASS 38745, 24 min 37 s), `dev/release/tests` PASS 290, the URL check 0 problems in 90
+    rows. Not taken: the docs verifier's optional README, cheat sheet and shorter `q()` reason
+    (nothing wrong; the cut reason stays Open).
+  - Checks on `c03c72db` (the code of every fix; this record changes only `dev/`): the neighbours
+    (every `doc-`, `console-`, `perm`, `risk`, `rules`, `nested`, `bridge`, `gptr-`, `session-`,
+    `ckpt-`, `eval-`, `agent-`, `tool-`, `mcp-` and `arch-` file, and `copy-ckpt`) FAIL 0 WARN 0
+    SKIP 45 PASS 17028 under `LC_ALL=C LANG=C` (the skips: Windows only, Python not configured or
+    provisioned, macOS, INFRA-03, {repr} not installed, and 29 that need a UTF-8 locale); the full
+    suite `.` in UTF-8 under the heavy lock, on a `git archive` of `c03c72db`, FAIL 1 WARN 0 SKIP
+    66 PASS 38873 in 29 min at a load average of 17 to 64, the one test-artifact-app.R:522's
+    headless browser cleanup ("did not finish cleanup"), a file this round does not touch: alone,
+    `^artifact-(registry|app)$` gives FAIL 1 at a load average near 88 and FAIL 0 PASS 707 near
+    22; `R CMD check --as-cran` in CRAN mode under `env -i` (`HOME`, `PATH`, `LANG`, a
+    short `TMPDIR`, `R_LIBS_USER` and CRAN's `_R_CHECK_` timing variables) on a tarball built
+    from that archive (sha256 `154723ba`): Status OK with no NOTE, the tests in 16 s (`testthat.R`
+    [13s/14s]), INFO only for 'repr' and the installed size (7.9 Mb). Lint of the 9 changed R and
+    test files clean (the script-as-history vignette's one lint, `mode = auto` at its line 407,
+    is from `2fcc6269`); `document()` changes only `gptr_export.Rd` and `gptr_security.Rd`, then
+    nothing; `check-docs.R` 0 problems; `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0
+    PASS 290; the spelling check clean; `fmt.py` on copies of the records changes nothing and
+    `lintfmt.py` shows only the baseline. No plan and no prompt text changed, so the plan checks
+    and `dev/bench/tokens/run.R --check` were not run. The verifiers' offline repros on an
+    installed copy of the fixed tree: the idle served `rm -rf` result carries no notice and the
+    folder is kept; a piped console's `peter$sh()` transcript exports in both formats and its raw
+    export runs.
+  - Open: unchanged by this round but for the items its records add (FIX-27's ways a shell reads
+    what runs and a function passed as a value, now documented). Not run: Linux and Windows, and
+    live models (the fixes are tested offline and, for the pause menu, in tmux with the fake
+    model).
