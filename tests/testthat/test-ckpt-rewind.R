@@ -660,7 +660,7 @@ test_that("/undo, /redo, /rewind k and /checkpoints drive gptr_rewind()", {
   expect_true("second prompt" %in% out)
   expect_identical(e$x, 1)
   out = ckpt_cmd_redo("", ctx)
-  expect_match(out[1L], "^Rewound")
+  expect_match(out[1L], "^Redone \\(all\\)")
   expect_identical(e$x, 2)
   expect_identical(ckpt_cmd_redo("", ctx), "Nothing to redo.")
   out = ckpt_cmd_rewind("0", ctx)

@@ -100,12 +100,16 @@ gptr_blocks("analysis.R")
 gptr_doc(FALSE)
 ```
 
-A missing block makes a model request, and the executed code is recorded below the call.
+A missing block makes a model request, and the executed code is recorded below the call: of
+an `r` call that stopped part-way, the expressions that ran, and code that changed your objects
+even where the model passed `record = false`, which leaves out only inspection.
  The header identifies the block, model, date and prompt hash; the body hash identifies
 its recorded code. `## Decision:` retains a model-supplied note, and `#>` retains bounded
 output. A note is a model explanation, not proof that the code is correct. `## Steer:` and
 `## Follow-up:` lines keep what was sent while the call ran. A replayed session's history
 includes them, and a `gptr_steer()` or pipe statement that sends one again is not sent twice.
+A comment line of the model's code that reads as one, or as a block marker, is recorded with one
+more `#`, so it never becomes your steer or ends its block.
 
 The document must be writable, and recording needs consent. `gptr_doc(path)` supplies that
 consent explicitly; `record = "off"` prevents automatic recording into discovered documents.
@@ -121,7 +125,9 @@ block, the console's `!`, `!!` and fenced R lines under `# direct R (no model)`,
 commands as comments. A statement also names `model = "..."` and `mode = "..."` when its turn
 ran on another model or in another mode than the statement would get without them (after
 `/model`, `/mode`, the plan menu, or in a console started as `peter(mode = plan)`), so
-`gptr_source(replay = "live")` asks each turn's model in its mode. A run that was aborted or
+`gptr_source(replay = "live")` asks those turns with that model and mode; the others use the
+`model` and `mode` settings of the session that re-asks. A named model must be available there;
+`gptr_source(model =)` asks every turn with your own. A run that was aborted or
 stopped early (an error, `max_turns`, a blocked call or the budget) is recorded too, with a last
 `## Run: <status>` line, and the next prompt continues its session. Other code typed at R's own
 `>` prompt is not recorded, so a transcript whose turns use objects made there fails on replay;
@@ -131,16 +137,23 @@ A console turn's block opens with `#< ` comment lines: what the console sent wit
 the head of each `@file` and the notes of earlier `!` lines. `gptr_source(replay = "live")`
 sends them again instead of reading the file, so a re-asked turn is the same request even after
 the file changed or was removed. Only these lines at the top of the block count: a line of the
-model's code that looks like one is recorded as `##< `, so it is never sent as your context.
+model's code that looks like one is recorded as `##< `, so it is never sent as your context. A
+re-ask does not send the turn's `## Steer:` and `## Follow-up:` lines or the text of an approval
+answered `n <text>`, and the new block does not keep them: put what the turn needs in its prompt.
 Each block header and each direct R header names what that step created (`created=`). After each
 `/undo`, `/redo`, `/retry` and new `!` line, gptr reads the transcript from the top and turns
 off a direct R line that uses an object last created above it by an undone turn or by a line
-that is off: each of its lines gets `#~ ` under `# direct R (no model; uses undone fit)`, and
+that is off (a whole `fit = ...` makes `fit` again and is no use of it): each of its lines gets
+`#~ ` under `# direct R (no model; uses undone fit)`, and
 the console says which lines it turned off. A `/redo` turns them back on. `source()` then does
 not stop at such a line. A comment in `!` code that looks like a console line, such as
-`# /tmp is scratch`, is recorded with one more `#`, so it goes off with its line. The objects
-stay in the session, as an undo removes only what the turn created, so a later turn that uses
-one still stops `source()`: turn blocks are never turned off. Names are read with `all.names()`:
+`# /tmp is scratch`, is recorded with one more `#`, so it goes off with its line, and so is one
+that looks like a block marker, so the transcript keeps recording; a block whose code holds a
+marker line inside a string is not written, and the console says so. Your own objects stay in
+the session: an undo removes what the turn created and restores what it changed. So a later turn
+that uses an object of a line that is off still stops `source()`, as turn blocks are never
+turned off, and a direct R line that read an object the turn changed (`n = nrow(dat)` after the
+turn cut `dat`) stays on and replays with the restored value. Names are read with `all.names()`:
 a column or formula term named like such an object can turn a line off, and a name reached
 through a string, as in `get("fit")`, is not seen.
 
@@ -315,8 +328,9 @@ Each block keeps at most twelve output lines and eighty characters per output li
 
 Export requires fresh completed records and no pending sidecar. Each argument of an exported
 `peter()` call must be a quoted string, a number, `TRUE`, `FALSE` or `NULL` (not `NA` or a
-negative number). Any other argument is refused as a "mixed or non-literal Peter expression":
-a data object, as in `peter("Fit mpg on wt.", mtcars)`, a bare name such as `mode = auto` or
+negative number), or after the prompt an object without an argument name, as in
+`peter("Fit mpg on wt.", mtcars)` or a console turn's `@fit`. Any other argument is refused as a
+"mixed or non-literal Peter expression": a bare name such as `mode = auto` or
 `model = opus`, or a call such as `.opts = list(max_turns = 4)`. A pipeline written as one
 statement, such as the first `session` above, is admitted, and so is a later
 `session |> peter("...")` that continues a session an earlier `peter()` statement assigned, as
@@ -324,7 +338,9 @@ the later turns of a console transcript do. Write the value itself, as in `mode 
 editing an argument this way keeps its block fresh, so the block needs no new recording.
 Export also refuses computed or nested prompts, prompts that
 interpolate `{name}` values ("interpolated inputs need review"), mixed `peter()`/ordinary
-pipelines, shared-line statements, missing, stale or edited blocks and secret-marked records. A
+pipelines, shared-line statements, missing, stale or edited blocks and secret-marked records; it
+leaves out the block of a console turn that `/undo` or `/retry` undid, and in both formats the
+`#< ` lines a turn was sent with, so an exported call is asked without them. A
 raw export refuses later ordinary code that reads a session handle, such as `session$value`
 or `session$text`, and a function that names one, wherever it is defined; put needed results in
 ordinary R objects, or retain the `format = "peter"` output. Earlier unrecorded console input is not

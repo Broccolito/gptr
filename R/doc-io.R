@@ -7,10 +7,10 @@
 
 #' Push a gptr_source() frame (document key, blocks to skip, action log); returns its depth
 #' @noRd
-doc_source_push = function(path) {
+doc_source_push = function(path, model = NULL) {
   st = doc_state()
   st$sources[[length(st$sources) + 1L]] = list(key = path_key(path), skip = character(),
-                                               log = list())
+                                               log = list(), model = model)
   length(st$sources)
 }
 
@@ -20,6 +20,15 @@ doc_source_pop = function(depth) {
   st = doc_state()
   st$sources = st$sources[seq_len(depth - 1L)]
   invisible(NULL)
+}
+
+#' The model gptr_source(model =) gave the innermost gptr_source() frame when it sources `path`,
+#' else NULL
+#' @noRd
+doc_source_model = function(path) {
+  st = doc_state()
+  n = length(st$sources)
+  if (n && identical(st$sources[[n]]$key, path_key(path))) st$sources[[n]]$model
 }
 
 #' Record a block action in the innermost gptr_source() frame when it sources `path`

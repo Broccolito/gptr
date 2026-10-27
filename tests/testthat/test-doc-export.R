@@ -176,7 +176,7 @@ test_that("Peter export keeps calls active and recorded code inert exactly once"
   expect_identical(export_read(f), bytes)
 })
 
-test_that("a raw export leaves out what a prompt was sent with; the Peter format keeps it", {
+test_that("an export leaves out what a prompt was sent with, in both formats (FIX-33 DOC-7)", {
   local_project()
   sent = c("#< <user_files>", "#< <file path=\"notes.md\">", "#< hi", "#<", "#< </file>",
            "#< </user_files>")
@@ -186,9 +186,11 @@ test_that("a raw export leaves out what a prompt was sent with; the Peter format
   gptr_export(f, raw)
   expect_identical(grep("^#<", readLines(raw), value = TRUE), "#< x is one")
   expect_true(all(c("# Recorded prompt: \"one\"", "x = 1") %in% readLines(raw)))
+  # nothing sends them from an exported call, which is asked without them
   peter = file.path(getwd(), "peter.R")
   gptr_export(f, peter, format = "peter")
-  expect_true(all(c(sent, "# x = 1") %in% readLines(peter)))
+  expect_identical(grep("^#<", readLines(peter), value = TRUE), "#< x is one")
+  expect_true(all(c("s_ab12cd = peter(\"one\")", "# x = 1") %in% readLines(peter)))
 })
 
 test_that("history export keeps quoted notes and UTF-8 output inert and bounded", {
@@ -271,6 +273,10 @@ test_that("raw export refuses ambiguous calls and unresolved session semantics",
   local_project()
   expect_identical(doc_export_chain(str2lang("peter(\"one\", )")), 0L)
   expect_identical(doc_export_chain(str2lang("peter(, \"one\")")), 0L)
+  # a console turn's @objects are unnamed names after the prompt (FIX-33); nothing else is
+  expect_identical(doc_export_chain(str2lang("peter(\"one\", fit, dat)")), 1L)
+  expect_identical(doc_export_chain(str2lang("peter(fit, \"one\")")), 0L)
+  expect_identical(doc_export_chain(str2lang("peter(\"one\", mode = auto)")), 0L)
   calls = c("before = 1; s = peter(\"one\"); after = 2",
             "s = peter(\"one\")$value", "s = peter(\"one\") |> identity()",
             "s = peter(paste0(\"o\", \"ne\"))", "s = list(peter(\"one\"))",

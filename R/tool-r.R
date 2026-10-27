@@ -144,7 +144,8 @@ r_tool_result = function(code, record, note, res, fmt, rc, session, n_values) {
 }
 
 #' The r tool's execute: evaluate `code` in the run's evaluation environment; only a depth-0 run
-#' tees its output to the person (a sub-agent's stays in its result, D-188)
+#' tees its output to the person (a sub-agent's stays in its result, D-188). `record = false` holds
+#' only for code that added, changed or removed none of the user's objects.
 #' Copy safety R2, R3, R8: the environment is bound only while the call runs, no closure or
 #' tryCatch(), the value is never kept; `gptr_r_call` holds the ctx and collectors only.
 #' @noRd
@@ -178,6 +179,8 @@ r_tool_execute = function(input, ctx) {
   res = evaluate(code, envir, timeout = timeout, budget_tokens = budget, rng = opts$rng_state,
                  record = record, tee = gptr_has_human() && !isTRUE(run$depth > 0L))
   envir = NULL
+  # record = false is for inspection: code that changed the user's objects is history (IC-48)
+  if (!identical(mode, "plan") && length(unlist(res$changes$objects))) record = TRUE
   # images attached by peter$plot() and peter$read() count against the budget too (IC-67)
   res$images = c(res$images, gptr_r_call$images)
   fmt = format_eval_result(res, budget)

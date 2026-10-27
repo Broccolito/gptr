@@ -1537,12 +1537,14 @@ gptr_doc(FALSE)
 #### `gptr_source()` — P15, `doc-replay.R` [stable]
 
 ```r
-gptr_source(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(), echo = FALSE)
+gptr_source(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(), echo = FALSE,
+            model = NULL)
 ```
 
 Sources `file` top-level expression by expression in `envir` so that stale or live blocks regenerate without
 executing the old block (which base `source()` cannot do [14 §4.4.2]); fresh blocks replay (their code runs as
-ordinary R). Returns `invisible(<gptr_blocks>)` with an extra `action` column (`replayed`, `regenerated`, `ran`,
+ordinary R). `model` (`NULL` or a model reference): every call of the file the `document` route passes to be
+asked (`call$ids$model`) uses it instead of the model it names or its session has (FIX-33, D-268). Returns `invisible(<gptr_blocks>)` with an extra `action` column (`replayed`, `regenerated`, `ran`,
 `skipped`). Conditions: `invalid_argument`, `not_recorded`, `stale_block` (replay mode), plus whatever the sourced
 code signals. Side effects: those of the sourced code; document writes for regenerated blocks. Copy-safety:
 [R1][R2].
@@ -2934,7 +2936,7 @@ policy(function() session_run(s, msg_user("go"), list()), list(), mode = "call")
 | `builtin_documents(gptr)` | `doc-formats.R` | registers `doc_format` specs `r`, `rmd`, `qmd`, `ipynb`, `transcript`; the route `document` (order 50); the `documents` prompt section (IC-68); an `agent_end` hook that renders and writes the block when `run$opts$doc` is set; a `session_tree` hook that makes undone blocks inert; the services `doc.site`, `doc.edit`, `doc.s1_block` and `doc.replay` (owned by `builtin:documents`, so filtering it removes them, IC-34, IC-47) | P02 load |
 | `doc_locate(call)` | `doc-locate.R` | a site `list(kind = "srcref" \| "source_frame" \| "knitr" \| "quarto" \| "jupyter" \| "rscript" \| "ide" \| "console", path, format, stmt = int(2) \| NULL, expr = call \| NULL, occurrence = int(1), ordinal = int(1), backend = chr(1), top_level = lgl(1), in_block = chr(1) \| NULL (the agent block whose body holds the statement, IC-47), ide_id = chr(1) \| NULL, defer = lgl(1))` using the precedence of §6.9.3 of `03`; `source()` frames are read inside `tryCatch` only when `gptr.doc_source_frames` is `TRUE`; paths compared with `path_key()` | P15 |
 | `doc_decide(site, prompt_hash, args_hash, mode)` | `doc-replay.R` | `"replay"`, `"run"`, `"regenerate"`, `"skip"` (undone), or signals `not_recorded`/`stale_block` per the table of 14 §4.4.2 plus the undone row of G7 §3.8; a block is fresh only when both hashes match (IC-45); block-nested calls replay from S2 (IC-47) | P15 |
-| `doc_block_lines(session, turn, site, call_ordinal)` | `doc-blocks.R` | chr lines of a block in the §11.5 grammar for the site's format (code of successful `record = TRUE` `r` calls from `details$code` minus top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members, with top-level `gptr_return(<expression>)` rewritten to `.gptr_value_<block id> = (<expression>)` and top-level `<-` to `=` where safe; `#>` outputs from `details$outputs`; `## Decision:`, `## Steer:` and `## Follow-up:` lines; bridge digests; artifact paths; redacted with `code_for_history()` and `persist`; IC-48, IC-49); team and fan-out blocks per IC-47; plan-mode turns give one `## Plan:` line | P15 |
+| `doc_block_lines(session, turn, site, call_ordinal)` | `doc-blocks.R` | chr lines of a block in the §11.5 grammar for the site's format (code of the `r` calls that ran and are recorded, IC-48, from `details$code` minus top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members, with top-level `gptr_return(<expression>)` rewritten to `.gptr_value_<block id> = (<expression>)` and top-level `<-` to `=` where safe; `#>` outputs from `details$outputs`; `## Decision:`, `## Steer:` and `## Follow-up:` lines; bridge digests; artifact paths; redacted with `code_for_history()` and `persist`; IC-48, IC-49); team and fan-out blocks per IC-47; plan-mode turns give one `## Plan:` line | P15 |
 | `doc_upsert(site, block_lines, block_id = NULL)` | `doc-blocks.R` | checks write consent (IC-45; otherwise nothing is written), then idempotent insert/replace of the owned block through the site's backend, passing the `document_write` event (fail closed, patchable) first; md5 conflict check with re-locate and retry (3 times, then warning `doc_conflict`); deferred under Rscript through the sidecar of IC-51; never writes an open notebook (IC-50); returns `list(action, block_id, lines, backend)` and appends `gptr.doc_block`; caches child texts in S2 (IC-47) | P15, P16 |
 | `prompt_hash(template)`, `args_hash(interp)` | `doc-blocks.R` | 12 hex of sha256 of the normalised template (trimws, CRLF -> LF, whitespace around newlines removed); 8 hex of sha256 of the sorted interpolated `name=value` pairs, `NULL` without interpolation (IC-45) | P15 |
 | `s2_get(key)`, `s2_put(key, record)` | `doc-replay.R` | the S2 answer cache (§11.9) | P15 |
@@ -3896,7 +3898,7 @@ Values containing spaces are double-quoted with R escapes. Header keys, in this 
 | `model` | yes | canonical `provider/id` that produced the code (System 1: the physical model) |
 | `date` | yes | `YYYY-MM-DD` of the last (re)generation |
 | `prompt` | yes | `prompt_hash()` of the prompt template (12 hex) |
-| `sha` | recommended | first 8 hex of sha256 of the body lines as last written (user-edit detection) |
+| `sha` | recommended | first 8 hex of sha256 of the body lines as last written, without steering lines and each line's trailing blanks and carriage return (user-edit detection; FIX-33) |
 | `call` | when > 1 | ordinal of the `peter()` call within the statement (pipelines) |
 | `tokens` | optional | `<input>/<output>` of the turn |
 | `cost` | optional | USD, plain number; written whenever the turn's cost is known (`0` for a free route), omitted when unknown (IC-74) |
@@ -3913,17 +3915,20 @@ Values containing spaces are double-quoted with R escapes. Header keys, in this 
 
 **Body**, in emission order: in an `.R` document, the `#< ` lines of the console's context blocks the prompt
 was sent with (IC-49);
-the code of each successful `r` call with `record = TRUE`, verbatim except that
+the code of each `r` call that ran, of one that stopped part-way its top-level expressions that completed,
+unless it changed no object and the model passed `record = false` (IC-48), verbatim except that
 top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members are dropped, a top-level
 `gptr_return(<expression>)` (argument unnamed or `x`, called or piped, on any number of lines) becomes
 `.gptr_value_<block id> = (<expression>)` and top-level
-`<-` is rewritten to `=` where safe (IC-48); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
+`<-` is rewritten to `=` where safe (IC-48), and a whole comment line that reads as a steering line or a block marker
+gets one more `#` (IC-49); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
 (excluded from `prompt` and `sha`, IC-49); after each such call that printed something, its output as `#> ` lines (at most `gptr.doc_output_lines` lines, else the setting `doc$output_lines`, of 76
 characters, then `#> ... (N more lines)` counting every line not shown), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
 (`#> sh git status --porcelain: exit 0, 6 lines`); artifact references (`#> [app] .gptr/artifacts/<id>/app.R`,
 `#> [plot] <path>`); a block whose code needed a secret gets `# gptr: block needs secrets that are not recorded`.
-Code passes `code_for_history()` (literal secrets -> `Sys.getenv("NAME")`). Failed executions and plan-mode code
-are not recorded (a plan-mode turn gives one `## Plan: <plans path>` line). Overlay-fork turns are wrapped
+Code passes `code_for_history()` (literal secrets -> `Sys.getenv("NAME")`). Calls that ran nothing and plan-mode
+code are not recorded (a plan-mode turn gives one `## Plan: <plans path>` line, `## Plan: none kept (gptr_init()
+keeps plans in .gptr/)` when the plan is in `tempdir()/gptr`, which R deletes at exit; FIX-33). Overlay-fork turns are wrapped
 `local({ ... }, envir = gptr_resume(block = "<block id>")$envir)` (IC-46). Team and fan-out blocks hold one
 `## Agent <name> (<model>): <first line>` line per child and, for children with exports or a designated value, the
 child's code wrapped `local({ ... }, envir = gptr_resume(block = "<id>", child = "<name>")$envir)` plus one
@@ -4618,7 +4623,13 @@ are always context objects (documented). `.opts$images` (req-36): a list of PNG/
   for `out`, `plot`, `help`, `search`, `describe`; with a document bound (when `r` has `record`), the `<r_session>`
   text tells the model to use them only with `record = false` (D-248).
 - Plan-mode runs never record code (`record` forced `FALSE`); their block holds one `## Plan: <plans path>`
-  comment.
+  comment (`none kept ...` without `.gptr/`, §11.5).
+- An `r` call that stopped part-way (an error, interrupt or timeout) records its first `n_done` top-level
+  expressions, whose bindings stay, cut with `doc_drop_ranges()`; one that completed none records nothing.
+  R served to a CLI route appends its `gptr.mcp_r` trace for such a call too, with `n_done`.
+  The model's `record = false` holds only for code that added, changed or removed none of the person's
+  objects: `r_tool_execute()` sets `details$record` to `TRUE` otherwise (outside plan mode), and
+  `doc_turn_r()` reads `details$record` before the call's argument (FIX-33, D-268).
 - S-9 best effort: `doc_block_lines()` rewrites `<-` to `=` for `LEFT_ASSIGN` tokens whose assignment is a
   top-level expression of the chunk or a direct child of a `{` expression list, never inside call arguments;
   `->`, `<<-` and `%>%` are left alone.
@@ -4637,6 +4648,11 @@ follow-ups delivered during a block's turn (pause menu, `gptr_steer()`, pipe int
 in a terminal console [IC-76]) are recorded
 inside that block as `## Steer: <text>` / `## Follow-up: <text>` lines, excluded from the prompt hash and `sha`; a
 blank text is written `## Steer:` without the trailing space, and a line is steering with or without it.
+A line is steering only as a whole comment line by R's parse data (a COMMENT token with only blanks before it), so
+a line inside a string is code and a body that does not parse holds none; a whole comment line of recorded code
+that reads as one, or as a gptr block marker (`BLOCK_OPEN`, `BLOCK_CLOSE`), gets one more `#` where its comment
+starts, in every format, so model code cannot write a steer or end its block, and R reads the same code
+(FIX-33, D-268).
 A REPL turn is a console turn whatever started the console: a sourced script, an `Rscript` file or the editor's
 buffer holding the `peter()` statement that started it locates none of its turns (P28 Task 29: the REPL marks
 its gateway calls `gptr_console`, and `doc_locate()` runs no finder for them).
@@ -4663,29 +4679,39 @@ then the `user_files` block, each optional, and nothing else; any other run is n
 recorded code's leading lines that start with `#<` get one more `#` (`##<`), in every format, also
 in a block a format error moves into the transcript, so model code cannot extend the run (a read
 drops only a line's trailing carriage return, which keeps how it starts); R reads the same comments,
-and `sha` is that of the lines as written. Nor can model code forge a block with a run: a gptr
-marker in recorded code leaves the document's markers malformed. A call that asks again for a
+and `sha` is that of the lines as written. Nor can model code forge a block with a run: a marker
+comment line of recorded code gets one more `#`, and a block whose text would still leave the
+document's markers malformed (a marker line inside a string) is not written; a block that cannot be
+written anywhere is named once per document (FIX-33). A call that asks again for a
 recorded block (`replay = "live"`, a stale or undone block) keeps those blocks in `call$sent`,
 recorded or not, and the console's `user_ran` and `user_files` providers send them again as the same
 context blocks; the file is not read, so the re-ask is the same request even when it changed or is
-gone. A history reconstructed from the document puts them before the prompt of the turn's user
-message. A raw `gptr_export()` leaves the run out; the Peter format keeps it.
+gone. A re-ask sends neither the block's `## Steer:` and `## Follow-up:` lines nor the text of an
+approval answered `n <text>`, which no block records, and the rewritten block does not keep them;
+`/retry` of a turn the console sent puts the `!` notes that turn took back before the pending ones
+(FIX-33). A history reconstructed from the document puts them before the prompt of the turn's user
+message. `gptr_export()` leaves the run out in both formats, admits a console turn's context names
+(unnamed symbols after the prompt) and leaves out an undone block that no statement owns (FIX-33).
 Each block header names the objects its r calls created (`created=`: the `created` rows of the
 turn's objects fragments, what an undo removes), and each direct R header the objects the
 evaluator's diff reports added, also for a line that failed (`# direct R (no model) created=p`).
 After each rewind (`/undo`, `/redo`, `/retry`) and each line the console appends, the transcript is
 read top to bottom: each block and direct R line makes the names of its `created=` key, on or off
-(an undone block; a line that failed or is off); a direct R line that uses (by `all.names()`) a name
-whose last maker above it is off, other than one it created itself, is switched off, `#~ ` before
-each line under `# direct R (no model; uses undone <names>)`, and back on when no such name is left.
+(an undone block; a line that failed or is off), and a direct R line also the names its top-level
+`name = value` expressions assign; a direct R line that uses (by `all.names()`, of such an
+expression its value only) a name whose last maker above it is off, other than one it made before in
+the line, is switched off, `#~ ` before each line under `# direct R (no model; uses undone <names>)`,
+and back on when no such name is left (FIX-33: a reassignment is no use).
 A rewind makes a block undone only when the path it moves to holds no record that wrote the block
 (FIX-31). A direct R line's section runs from its header to the next line the console writes for
 another entry (a direct R header, a `# /<name>` command line, a session header, a turn's statement
-or block); a comment line of its code that reads as one, such as `# /tmp is scratch`, is written
-with one more `#` (FIX-31). A notice names the lines switched. `source()` stays a plain R run: lines
-that are off are comments. A rewind still removes only what the turn created, so the person's own
-objects stay. Known limits: turn blocks are never switched, so a later turn that uses an object made
-by a line that is off (the object stayed in the session, so the turn ran) still stops `source()`;
+or block); a comment line of its code that reads as one, such as `# /tmp is scratch`, or as a block
+marker is written with one more `#` (FIX-31, FIX-33). A notice names the lines switched. `source()`
+stays a plain R run: lines that are off are comments. A rewind removes what the turn created and
+restores what it changed, so the person's own objects stay. Known limits: turn blocks are never
+switched, so a later turn that uses an object made by a line that is off (the object stayed in the
+session, so the turn ran) still stops `source()`; a direct R line that read an object the turn
+changed stays on and replays with the restored value;
 `all.names()` can match a column or formula term of the same name, which turns a line off that did
 not need it; a name reached through a string, as in `get("fit")`, is not seen; lines written by hand
 right after a direct R line switch with it, and a line of its code that reads as another entry's

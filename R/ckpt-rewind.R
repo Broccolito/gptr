@@ -775,11 +775,11 @@ ckpt_turn_counts = function(cps, ck) {
        disk_mb = mb("disk"))
 }
 
-#' Run gptr_rewind() for a command: the report lines, or the error's message (the partial
-#' warning is muffled: the report lists the items). The undone prompt also goes to the console
-#' history, so Up recalls it (readline() cannot pre-fill)
+#' Run gptr_rewind() for a command: the report lines under `verb` (what the command did), or the
+#' error's message (the partial warning is muffled: the report lists the items). The undone prompt
+#' also goes to the console history, so Up recalls it (readline() cannot pre-fill)
 #' @noRd
-ckpt_cmd_run = function(s, turn = -1L, to = NULL, restore = "all") {
+ckpt_cmd_run = function(s, turn = -1L, to = NULL, restore = "all", verb = "Rewound") {
   d = session_data(s)
   last = d$last_rewind$id
   err = tryCatch(withCallingHandlers({
@@ -792,7 +792,7 @@ ckpt_cmd_run = function(s, turn = -1L, to = NULL, restore = "all") {
   if (!is.null(err) || identical(lr$id, last)) return(err)
   text = d$editor_text
   if (length(text) && gptr_is_interactive()) console_history_add(text)
-  c(paste0("Rewound (", lr$restore, if (lr$partial) "); some items were not restored:" else ")."),
+  c(paste0(verb, " (", lr$restore, if (lr$partial) "); some items were not restored:" else ")."),
     lr$report, if (length(text)) c("Undone prompt:", text))
 }
 
@@ -843,7 +843,7 @@ ckpt_cmd_redo = function(args, ctx) {
   if (is.null(s)) return("There is no session to redo.")
   tgt = ckpt_redo_target(ckpt_tree(session_data(s)))
   if (is.null(tgt)) return("Nothing to redo.")
-  ckpt_cmd_run(s, to = tgt$to, restore = tgt$restore)
+  ckpt_cmd_run(s, to = tgt$to, restore = tgt$restore, verb = "Redone")
 }
 
 #' /rewind k keeps turns 1..k; /rewind alone offers the turns and what to restore in a menu

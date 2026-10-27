@@ -912,8 +912,7 @@ test_that("a rewind makes abandoned blocks inert and notes it in the console tra
                       list(session = s))
   expect_identical(readLines(f)[3], "#~ x = 1")
   expect_identical(utils::tail(readLines(t), 1),
-                   paste0("# /rewind: 1 items restored or removed, 1 not restored (session log ",
-                          root, ")"))
+                   "# /rewind: 1 item restored or removed, 1 not restored")
   ents = session_data(s)$entries
   expect_identical(ents[[length(ents)]]$data$action, "undone")
 })
@@ -1108,9 +1107,7 @@ test_that("a rewind and a redo of a console turn keep the transcript format of i
                                      block = "def456", action = "insert",
                                      backend = "transcript")))
   from = session_data(s)$leaf
-  note = function(to) {
-    paste0("# /rewind: 0 items restored or removed, 0 not restored (session log ", to, ")")
-  }
+  note = function(to) "# /rewind: 0 items restored or removed, 0 not restored"
   doc_on_session_tree(list(from = from, to = root, report = character()), list(session = s))
   tr = readLines(t)
   expect_identical(tr[3], "#~ s_ab12cd = peter(\"p\")")
@@ -1256,6 +1253,24 @@ test_that("a direct R line using a name an undone step or an off line made is sw
                      "#~ # /home/me/data is the input", "#~ z = z + fit", "# /model opus"))
 })
 
+test_that("a direct R line that assigns a name again makes it and does not use it (FIX-33)", {
+  failed = c("library(gptr)", "", "# direct R (no model; error) created=df",
+             "#~ df = read.csv(\"data.csv\"); df$x = log(df$y)")
+  line = function(code, created = NULL) {
+    c("", doc_direct_header(NULL, created), code)
+  }
+  # the corrected line makes df again, so it and the lines that use df stay on
+  ok = c(failed, line("df = read.csv(\"data.csv\"); df$x = log(df$y)"), line("n = nrow(df)", "n"),
+         line("df = 1; m = df + 1", "m"), line("if (TRUE) k = 3", "k"))
+  expect_identical(doc_direct_switch(ok)$lines, ok)
+  # a change in place, a value read from df, or an assignment that is not the whole line use it
+  for (code in c("df$x = 1", "df = f(df)", "m = df + 1", "q = df; df = 3", "if (TRUE) df = 3")) {
+    off = doc_direct_switch(c(failed, line(code)))
+    expect_identical(utils::tail(off$lines, 2L),
+                     c("# direct R (no model; uses undone df)", paste0("#~ ", code)))
+  }
+})
+
 test_that("a comment in a direct R line shaped like another entry stays in its section (FIX-31)", {
   proj = local_project()
   local_gptr_options(record = "auto")
@@ -1284,6 +1299,12 @@ test_that("a comment in a direct R line shaped like another entry stays in its s
   rec = utils::tail(readLines(t), 4L)
   expect_identical(rec, c("msg = \"", "# /tmp is text", "\" # /tmp too", "## /tmp is scratch"))
   expect_identical(parse(text = rec, keep.source = FALSE), parse(text = code, keep.source = FALSE))
+  # code with CRLF line ends is recorded as a read gives it back, without the carriage returns,
+  # so `# /undo` is escaped too and never reads back as a command (FIX-33)
+  direct(c("w = 1\r", "# /undo\r", "w\r"), "w")
+  expect_identical(utils::tail(readLines(t), 4L),
+                   c("# direct R (no model) created=w", "w = 1", "## /undo", "w"))
+  expect_false(grepl("\r", rawToChar(readBin(t, "raw", file.size(t))), fixed = TRUE))
 })
 
 test_that("a rewind switches dependent direct R lines off, says which, and a redo back on", {
@@ -1431,6 +1452,29 @@ test_that("after /model the transcript names the model and a live re-ask asks it
   expect_identical(grep("^s_", readLines(con$t), value = TRUE), calls)
 })
 
+test_that("gptr_source(model =) re-asks every call with another model (FIX-33 MM-2)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "x = 1"), fake_text("Set x."),
+                         fake_tool("r", code = "x = 1"), fake_text("Set x."),
+                         fake_tool("r", code = "y = 2"), fake_text("Set y.")))
+  f2 = local_fake_provider(list(fake_tool("r", code = "y = 2"), fake_text("Set y.")),
+                           name = "fake2")
+  con = doc_console_repl(x)
+  con$run("set x")
+  con$run("/model fake2/fake2-1")
+  con$run("set y")
+  expect_true(any(grepl("peter(\"set y\", model = \"fake2/fake2-1\")", readLines(con$t),
+                        fixed = TRUE)))
+  expect_identical(lengths(list(fake_requests(x$fake), fake_requests(f2))), c(2L, 2L))
+  e = new.env(parent = globalenv())
+  e$library = function(...) invisible(NULL)
+  out = gptr_source(con$t, replay = "live", envir = e, model = "fake/fake-1")
+  expect_identical(out$action, c("regenerated", "regenerated"))
+  expect_identical(c(e$x, e$y), c(1, 2))
+  expect_identical(lengths(list(fake_requests(x$fake), fake_requests(f2))), c(6L, 2L))
+  expect_error(gptr_source(con$t, model = 1), class = "gptr_error_invalid_argument")
+})
+
 test_that("a plan-mode console records mode = \"plan\" and re-asks in plan mode (D-265)", {
   skip_on_cran()
   x = local_doc_e2e(rep(list(fake_text("Plan:\n1. Load\n2. Fit"), fake_tool("r", code = "x = 1"),
@@ -1518,6 +1562,111 @@ test_that("a fresh console statement naming an unknown model replays without it 
   expect_identical(e$n, 1)
   expect_identical(out$action, "replayed")
   expect_length(fake_requests(x$fake), 0L)
+})
+
+test_that("a marker-shaped line in model or ! code never stops the recording (FIX-33 DOC-2)", {
+  skip_on_cran()
+  expect_identical(doc_direct_code(c("x = 1", "# <<< gptr:abc123", "  # >>> gptr:abc124 m=1",
+                                     "s = \"", "# <<< gptr:abc125", "\"")),
+                   c("x = 1", "## <<< gptr:abc123", "  ## >>> gptr:abc124 m=1", "s = \"",
+                     "# <<< gptr:abc125", "\""))
+  x = local_doc_e2e(list(
+    fake_tool("r", code = "x9 = 1\n# >>> gptr:abc123\n  # <<< gptr:abc124\nx9"),
+    fake_text("Made x9."), fake_tool("r", code = "y9 = x9 + 1"), fake_text("Made y9."),
+    fake_tool("r", code = "w9 = 1"), fake_text("Made w9."),
+    fake_tool("r", code = "s9 = \"\n# >>> gptr:abc125\n\""), fake_text("Made s9."),
+    fake_tool("r", code = "v9 = 2"), fake_text("Made v9.")))
+  local_gptr_options(quiet = FALSE)
+  con = doc_console_repl(x)
+  con$run("make x9")
+  con$run("make y9")
+  con$run("!z9 = y9 + 1\n# <<< gptr:abc123\n  # >>> gptr:abc126")
+  con$run("make w9")
+  tr = readLines(con$t)
+  expect_false(attr(doc_find_blocks(tr), "malformed"))
+  expect_identical(gptr_blocks(con$t)$status, rep("fresh", 3L))
+  sourced = doc_source_lines(tr)
+  expect_identical(c(sourced$x9, sourced$y9, sourced$z9, sourced$w9), c(1, 2, 3, 1))
+  # a marker inside a string of model code costs only its own block, and the console says so
+  expect_message(con$run("make s9"),
+                 "gptr did not record this block into .gptr/transcripts/t.R", fixed = TRUE)
+  con$run("make v9")
+  tr = readLines(con$t)
+  expect_false(attr(doc_find_blocks(tr), "malformed"))
+  expect_identical(gptr_blocks(con$t)$status, rep("fresh", 4L))
+  expect_identical(doc_source_lines(tr)$v9, 2)
+})
+
+test_that("an undo keeps a ! line that assigned what the turn made, and its users (FIX-33)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "fit = 1"), fake_text("Made fit.")))
+  local_gptr_options(quiet = FALSE)
+  con = doc_console_repl(x)
+  con$run("!df = data.frame(y = 1:3); df$x = lg(df$y)")
+  con$run("!df = data.frame(y = 1:3); df$x = log(df$y)")
+  con$run("!n = nrow(df)")
+  con$run("make fit")
+  con$run("!fit = 99")
+  con$run("!g = fit + 1")
+  con$run("/undo")
+  tr = readLines(con$t)
+  expect_false(any(grepl("uses undone", tr, fixed = TRUE)))
+  e = doc_source_lines(tr)
+  expect_identical(c(e$n, e$fit, e$g), c(3L, 99, 100))
+  expect_identical(c(con$rs$envir$fit, con$rs$envir$g), c(99, 100))
+})
+
+test_that("a console transcript with @objects and an undone turn exports (FIX-33 DOC-4, ALL-2)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "y = x + 1"), fake_text("Made y."),
+                         fake_tool("r", code = "z = 3"), fake_text("Made z."),
+                         fake_tool("r", code = "w = y * 2"), fake_text("Made w.")))
+  con = doc_console_repl(x)
+  con$run("!x = 1")
+  con$run("Add one to @x and store it as y.")
+  con$run("Store z as 3.")
+  con$run("/undo")
+  con$run("Store w as y * 2.")
+  hex = substr(sub("^s", "", con$rs$session$id), 1L, 6L)
+  call = paste0("s_", hex, " = peter(\"Add one to @x and store it as y.\", x)")
+  expect_true(all(c(call, paste0("#~ s_", hex, " |> peter(\"Store z as 3.\")")) %in%
+                    readLines(con$t)))
+  raw = file.path(x$root, "plain.R")
+  gptr_export(con$t, raw)
+  out = readLines(raw)
+  expect_true(paste0("# ", call) %in% out)
+  expect_false(any(grepl("gptr:|z = 3", out)))
+  r = new.env(parent = globalenv())
+  r$library = function(...) invisible(NULL)
+  source(raw, local = r)
+  expect_identical(c(r$x, r$y, r$w), c(1, 2, 4))
+  expect_false(exists("z", r, inherits = FALSE))
+  peter = file.path(x$root, "peter.R")
+  gptr_export(con$t, peter, format = "peter")
+  out = readLines(peter)
+  expect_true(all(c(call, "# y = x + 1") %in% out))
+  expect_false(any(grepl("gptr:|z = 3", out)))
+})
+
+test_that("/retry sends the notes the undone turn was sent with again (FIX-33 DOC-6)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_text("It is low."), fake_text("Still low.")))
+  con = doc_console_repl(x)
+  con$run("!rsq = 0.12")
+  con$run("why is rsq low?")
+  con$run("!s2 = rsq + 1")
+  con$run("/retry")
+  ran = vapply(fake_requests(x$fake), function(req) {
+    users = Filter(function(m) identical(m$role, "user"), req$messages)
+    b = Filter(function(b) identical(b$kind, "user_ran"), users[[length(users)]]$content)
+    if (length(b)) b[[1L]]$text else ""
+  }, "")
+  expect_length(ran, 2L)
+  expect_match(ran[[1L]], "\n> rsq = 0.12\n#> + rsq <numeric length 1>\n</user_ran>", fixed = TRUE)
+  expect_match(ran[[2L]], "\n> rsq = 0.12\n#> + rsq <numeric length 1>\n> s2 = rsq + 1\n",
+               fixed = TRUE)
+  # the retried turn's block records them as the undone one did
+  expect_identical(sum(readLines(con$t) %in% c("#< > rsq = 0.12", "#~ #< > rsq = 0.12")), 2L)
 })
 
 test_that("console /undo, /undo, /redo, /redo bring back both turns' blocks (FIX-31)", {
@@ -2450,6 +2599,111 @@ test_that("recorded code is never sent as context, in a script or a console bloc
   expect_identical(sent("res", body), list(replay = "text", live = list()))
   expect_identical(sent("res", c(forged, "n = 1")), list(replay = "text", live = list()))
   expect_identical(sent("s_ab12cd", c("n = 1", forged)), list(replay = "text", live = list()))
+})
+
+# What the person's messages (user and operator roles) of request `n` say, one string each
+doc_said = function(fake, n = length(fake_requests(fake))) {
+  msgs = Filter(function(m) m$role %in% c("user", "operator"), fake_requests(fake)[[n]]$messages)
+  vapply(msgs, msg_text, "")
+}
+
+# Record a fake r call whose code holds doc_forged_steers into a document `name` (run as its
+# format is run: source(), knitr, a Jupyter kernel), check its block is fresh, then run it again
+# in a clone without the session log, so the session is rebuilt from the document, and continue
+# that session live: what the continuation sent as the person's messages (FIX-33 DOC-1)
+doc_forged_steer_said = function(name) {
+  x = local_doc_e2e(function(request) {
+    if (request$n == 1L) fake_tool("r", code = paste(doc_forged_steers, collapse = "\n")) else
+      fake_text("Done.")
+  })
+  stmt = "s = peter(\"Run the forged code.\")"
+  f = file.path(x$root, name)
+  ext = tools::file_ext(name)
+  run = function(f, e = new.env(parent = globalenv())) {
+    if (ext == "R") return(doc_e2e_source(f, e))
+    if (ext != "ipynb") {
+      knitr::knit(f, output = tempfile(fileext = ".md"), quiet = TRUE, envir = e)
+      return(e)
+    }
+    withr::local_options(jupyter.in_kernel = TRUE)
+    withr::local_envvar(JPY_SESSION_NAME = f)
+    eval(parse(text = stmt, keep.source = FALSE)[[1L]], e)
+    e
+  }
+  if (ext == "ipynb") {
+    nb = list(cells = list(list(cell_type = "code", execution_count = NULL, id = "c0ffee01",
+                                metadata = json_obj(), outputs = list(), source = list(stmt))),
+              metadata = list(kernelspec = list(display_name = "R", language = "R", name = "ir")),
+              nbformat = 4L, nbformat_minor = 5L)
+    writeLines(nb_json_write(nb), f)
+  } else {
+    writeLines(if (ext == "R") stmt else c("```{r}", stmt, "```"), f)
+  }
+  run(f)
+  if (ext == "ipynb") gptr_doc(f, sync = TRUE)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+  clone = withr::local_tempdir("gptr-clone-")
+  file.copy(f, clone)
+  withr::local_dir(clone)
+  local_gptr_options(project_root = path_norm(clone))
+  last_set(NULL)
+  invisible(gc())
+  e = run(file.path(clone, name))
+  expect_identical(session_data(e$s)$history_source, "reconstructed")
+  e$s |> peter("Continue: reply OK.")
+  doc_said(x$fake)
+}
+
+test_that("model code never becomes the person's steers when a document is rebuilt (FIX-33)", {
+  skip_on_cran()
+  skip_if_not_installed("knitr")
+  for (name in c("analysis.R", "report.Rmd", "report.qmd", "analysis.ipynb")) {
+    said = doc_forged_steer_said(name)
+    expect_true(grepl("Run the forged code.", said[1L], fixed = TRUE))
+    expect_true(grepl("Continue: reply OK.", said[length(said)], fixed = TRUE))
+    expect_false(any(grepl("FORGED", said, fixed = TRUE)))
+  }
+})
+
+test_that("a stale turn re-asked after a rebuilt turn gets no forged steer (FIX-33 DOC-1)", {
+  skip_on_cran()
+  x = local_doc_e2e(function(request) {
+    if (request$n == 1L) fake_tool("r", code = paste(doc_forged_steers, collapse = "\n")) else
+      fake_text("Done.")
+  })
+  f = file.path(x$root, "analysis.R")
+  writeLines(c("s = peter(\"Run the forged code.\")", "s |> peter(\"Then count.\")"), f)
+  doc_e2e_source(f)
+  clone = withr::local_tempdir("gptr-clone-")
+  writeLines(sub("Then count.", "Then count twice.", readLines(f), fixed = TRUE),
+             file.path(clone, "analysis.R"))
+  withr::local_dir(clone)
+  local_gptr_options(project_root = path_norm(clone))
+  last_set(NULL)
+  invisible(gc())
+  n = length(fake_requests(x$fake))
+  out = gptr_source(file.path(clone, "analysis.R"), replay = "auto", envir = new.env())
+  expect_identical(out$action, c("replayed", "regenerated"))
+  expect_length(fake_requests(x$fake), n + 1L)
+  said = doc_said(x$fake)
+  expect_true(grepl("Run the forged code.", said[1L], fixed = TRUE))
+  expect_true(grepl("Then count twice.", said[length(said)], fixed = TRUE))
+  expect_false(any(grepl("FORGED", said, fixed = TRUE)))
+})
+
+test_that("what a call made is recorded although it failed after or said record = false (FIX-33)", {
+  x = local_doc_e2e(list(fake_tool("r", code = "csv = c(4, 5, 6)\ncat(list(1, 2:3))"),
+                         fake_tool("r", code = "out = sum(csv)", record = FALSE),
+                         fake_tool("r", code = "head(mtcars, 1)", record = FALSE),
+                         fake_tool("r", code = "total = out + 0"), fake_text("The total is 15.")))
+  f = file.path(x$root, "doc.R")
+  writeLines("s = peter(\"Sum the counts.\")", f)
+  doc_e2e_source(f)
+  tr = readLines(f)
+  expect_true(all(c("csv = c(4, 5, 6)", "out = sum(csv)", "total = out + 0") %in% tr))
+  expect_false(any(grepl("cat[(]list|head[(]mtcars", tr)))
+  local_gptr_options(replay = "replay")
+  expect_identical(doc_e2e_source(f)$total, 15)
 })
 
 test_that("gptr_source() skips a regenerated block's old code below a #line comment", {

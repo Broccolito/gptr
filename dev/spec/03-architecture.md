@@ -775,7 +775,8 @@ permission gate; httpuv, later and openssl in Suggests) and returns a handle wit
 
 ```r
 gptr_doc(path = NULL, format = NULL, sync = FALSE)
-gptr_source(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(), echo = FALSE)
+gptr_source(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(), echo = FALSE,
+            model = NULL)
 gptr_blocks(file)
 gptr_cache(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tmp"))
 gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)

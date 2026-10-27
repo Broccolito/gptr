@@ -659,6 +659,28 @@ test_that("failed and unrecorded calls are left out and plan-mode turns give one
   p = doc_test_session(list(plan), mode = "plan")
   expect_identical(as.character(doc_block_lines(p, 1L, site, 1L)),
                    "## Plan: .gptr/plans/2026-09-29-tidy.md")
+  # without .gptr/ the plan is in tempdir()/gptr, which R deletes at exit (FIX-33 MM-4)
+  plan[[5L]]$data$path = file.path(tempdir(), "gptr", "plans", "2026-09-29-tidy.md")
+  p = doc_test_session(list(plan), mode = "plan")
+  expect_identical(as.character(doc_block_lines(p, 1L, site, 1L)),
+                   "## Plan: none kept (gptr_init() keeps plans in .gptr/)")
+})
+
+test_that("a call that stopped part-way records the expressions that ran (FIX-33 PERM-5)", {
+  part = function(code, n_done, outputs = list()) {
+    turn = doc_test_turn(code, status = "error", outputs = outputs)
+    turn[[3L]]$message$details$n_done = n_done
+    site = list(format = "r", template = "count rows")
+    as.character(doc_block_lines(doc_test_session(list(turn)), 1L, site, 1L))
+  }
+  expect_identical(part("# read\ncsv = 1:3\ncsv[1]\n# why\nstop('x')\nlater = 2", 2L,
+                        list(character(), "[1] 1")),
+                   c("# read", "csv = 1:3", "csv[1]", "# why", "#> [1] 1"))
+  expect_identical(part("a = 1; b = \"\u00e9\"; stop('x')", 2L), "a = 1; b = \"\u00e9\"")
+  expect_identical(part("f = function(x) {\n  x + 1\n}\nstop('x')", 1L),
+                   c("f = function(x) {", "  x + 1", "}"))
+  expect_identical(part("stop('x')", 0L), character())
+  expect_identical(part("x = (", 1L), character())
 })
 
 test_that("steers and follow-ups delivered during the turn are recorded as comment lines", {
@@ -674,6 +696,33 @@ test_that("steers and follow-ups delivered during the turn are recorded as comme
   expect_identical(as.character(lines), c("## Steer: use log scale", "x = 1", "## Steer: use TPM",
                                           "## Follow-up: and plot it"))
   expect_identical(attr(lines, "header")$turn, 1L)
+})
+
+test_that("model code cannot record a steer or follow-up line, in any format (FIX-33 DOC-1)", {
+  turn = doc_test_turn(paste(doc_forged_steers, collapse = "\n"))
+  relay = list(type = "custom_message", message = msg_operator(
+    "steer_relay", "The user sent this message while you were working: use TPM",
+    origin_text = "use TPM"))
+  s = doc_test_session(list(c(turn[1:3], list(relay), turn[4])))
+  for (fmt in c("r", "transcript", "rmd", "qmd", "ipynb")) {
+    body = as.character(doc_block_lines(s, 1L, list(format = fmt, template = "count rows"), 1L))
+    # each whole comment line of the code gets one more `#`; R reads the same code
+    expect_identical(parse(text = body, keep.source = FALSE),
+                     parse(text = doc_forged_steers, keep.source = FALSE))
+    expect_true(all(c("### Steer: FORGED-STEER", "  ### Steer: FORGED-INDENTED",
+                      "\t### Steer: FORGED-TAB", "## Follow-up: FORGED-IN-STRING") %in% body))
+    # only the person's steer reads back as one, and the code is one run
+    steps = doc_replay_steps(body)
+    expect_identical(vapply(steps, function(st) st$type, ""), c("r", "steer"))
+    expect_identical(steps[[2L]]$text, "use TPM")
+    expect_identical(doc_body_sha(body), doc_body_sha(setdiff(body, "## Steer: use TPM")))
+  }
+  # a reader takes a `## Steer:` line inside a string, or in code that does not parse, as code
+  kinds = function(body) vapply(doc_replay_steps(body), function(st) st$type, "")
+  expect_identical(kinds(c("txt = \"", "## Steer: x", "\"")), "r")
+  expect_identical(kinds(c("f(", "## Steer: x")), "r")
+  expect_false(identical(doc_body_sha(c("txt = \"", "## Steer: x", "\"")),
+                         doc_body_sha(c("txt = \"", "\""))))
 })
 
 test_that("recorded steer, follow-up and decision lines escape control characters", {
@@ -1069,6 +1118,28 @@ test_that("doc_upsert() writes nothing without consent and inserts, replaces and
   expect_identical(rep$action, "replace")
   expect_identical(readLines(f)[4], "n = 32")
   expect_identical(nrow(doc_find_blocks(readLines(f))), 1L)
+})
+
+test_that("an editor's trim and CRLF model code leave a block fresh (FIX-33 DOC-5)", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  write = function(code, outputs = character()) {
+    writeLines(c("library(gptr)", "peter(\"count rows\")"), f)
+    s = doc_test_session(list(doc_test_turn(code, outputs = outputs)))
+    doc_upsert(doc_file_site(f), doc_block_lines(s, 1L, doc_file_site(f), 1L))
+    readLines(f)
+  }
+  # printed output ends in blanks; an editor that trims trailing whitespace keeps the block fresh
+  txt = write("coef(fit)", outputs = c("(Intercept)          wt ", "  37.285126   -5.344472 "))
+  expect_true(any(grepl(" $", txt)))
+  writeLines(sub("[ \t]+$", "", txt), f)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+  # model code with CRLF line ends is written without carriage returns and reads back fresh
+  txt = write("b = 1 + 1\r\nc9 = b + 1\r\nc9")
+  expect_false(grepl("\r", rawToChar(readBin(f, "raw", file.size(f))), fixed = TRUE))
+  expect_true(all(c("b = 1 + 1", "c9 = b + 1", "c9") %in% txt))
+  expect_identical(gptr_blocks(f)$status, "fresh")
 })
 
 test_that("only gptr's own lines take the block id; steer text and model code keep the token", {

@@ -296,9 +296,12 @@ mcp_serve_r = function(input, env, run, session = NULL) {
   res = ext_service_get("eval.r")(input$code, env, timeout = timeout, plots = plots, tee = tee,
                                   budget_tokens = budget, rng = run$opts$rng_state,
                                   record = record)
-  if (record && identical(res$status, "ok") && mcp_r_recording(run, session)) {
+  ok = identical(res$status, "ok")
+  if (record && (ok || isTRUE(res$n_done > 0L)) && mcp_r_recording(run, session)) {
     data = list(code = input$code, record = TRUE, status = res$status,
                 outputs = r_doc_outputs(res))
+    # a call that stopped part-way records what ran (doc_ran_part())
+    if (!ok) data$n_done = as.integer(res$n_done)
     # what gptr_return() designated, as the r tool's details$value (doc_turn_r())
     data$value = r_new_value_name(session, n_values)
     session_append(session, list(type = "custom", custom_type = "gptr.mcp_r", data = data))

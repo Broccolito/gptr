@@ -66,6 +66,14 @@ amendment are in `DEVIATIONS.md`:
   `peter$sh()` ask shows its command; the cheat sheet and the yolo notice name the refusal; the
   console's plan menu names no call for R's prompt; `?gptr_security` says that Codex's own shell
   runs outside gptr's gate in every mode (D-267).
+- FIX-33 (#92): the transcript findings of the live sessions. Model code cannot write a steer,
+  follow-up or block marker line (one more `#`; only whole comment lines read back), a block that
+  would still leave the markers malformed is not written and is named, `sha` ignores trailing
+  blanks and carriage returns, a `!` line that assigns a name again stays on, code that made
+  objects is recorded though its call failed part-way or said `record = false`, `gptr_export()`
+  admits `@objects` and leaves out undone blocks and the `#< ` run, `/retry` sends its notes
+  again, a plan line names no deleted file, and `gptr_source(model =)` re-asks with another model
+  (D-268); ALL-6 and PERM-8's transcript part are not fixed.
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped

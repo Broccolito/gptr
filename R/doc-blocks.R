@@ -27,6 +27,38 @@ doc_re_console = "^(#~ )?s_[0-9a-f]{6} (=|[|]>) peter\\("
 #' @noRd
 doc_steer_line = function(kind, text) sub(" $", "", paste0("## ", kind, ": ", doc_one_line(text)))
 
+#' Which `lines` are whole comment lines by R's parse data (a COMMENT token with only blanks before
+#' it on its line); none when the lines do not parse. A line inside a string is not one.
+#' @noRd
+doc_comment_lines = function(lines) {
+  pd = tryCatch(utils::getParseData(doc_parse_text(lines)), error = function(e) NULL)
+  if (is.null(pd)) return(logical(length(lines)))
+  pd = pd[pd$token == "COMMENT", , drop = FALSE]
+  whole = as_utf8(pd$text) == sub("^[ \t]+", "", lines[pd$line1])
+  seq_along(lines) %in% pd$line1[whole]
+}
+
+#' The `## Steer:` and `## Follow-up:` lines of a block body (doc_steer_line()): whole comment
+#' lines matching doc_re_steer, as recorded code gets one more `#` on such a line
+#' (doc_comment_escape()), so model code cannot write one
+#' @noRd
+doc_steer_lines = function(body) {
+  hit = grepl(doc_re_steer, body)
+  if (any(hit)) hit = hit & doc_comment_lines(body)
+  hit
+}
+
+#' `lines` of code with one more `#` where each whole comment line matching a pattern of `re`
+#' starts (doc_comment_lines()), so R reads the same code and the line no longer reads as one that
+#' gptr writes
+#' @noRd
+doc_comment_escape = function(lines, re) {
+  hit = Reduce(`|`, lapply(re, function(p) grepl(p, lines, perl = TRUE)), logical(length(lines)))
+  if (any(hit)) hit = hit & doc_comment_lines(lines)
+  lines[hit] = sub("#", "##", lines[hit], fixed = TRUE)
+  lines
+}
+
 #' The `#< ` lines of the context blocks a prompt was sent with (IC-49): each line of each block's
 #' text, an empty one as `#<`
 #' @noRd
@@ -224,11 +256,13 @@ doc_dedent = function(lines, indent) {
   lines
 }
 
-#' First 8 hex of sha256 of the body as written, without steering lines (IC-49)
+#' First 8 hex of sha256 of the body as written, without steering lines (IC-49, doc_steer_lines())
+#' and without the trailing blanks of a line, which an editor may trim, or its carriage return,
+#' which a read drops
 #' @noRd
 doc_body_sha = function(body) {
   body = as_utf8(as.character(body))
-  body = body[!grepl(doc_re_steer, body)]
+  body = sub("[ \t\r]+$", "", body[!doc_steer_lines(body)])
   substr(hash_sha256(paste(body, collapse = "\n")), 1L, 8L)
 }
 
@@ -1023,10 +1057,11 @@ doc_rewrite_return = function(lines) {
 #' doc_parse_text() parses it (IC-62; parse data kept under sys.source()); a cut whose result does
 #' not parse to the kept expressions leaves the code as written. Attributes `kept`: one logical
 #' per top-level expression (NULL when the code does not parse; such code is kept as written);
-#' `returned`: the hidden name holds the code's designated value (doc_rewrite_return()).
+#' `returned`: the hidden name holds the code's designated value (doc_rewrite_return()). Lines
+#' lose a trailing carriage return, as a read of the document does.
 #' @noRd
 doc_code_clean = function(code) {
-  lines = strsplit(as_utf8(paste(code, collapse = "\n")), "\n", fixed = TRUE)[[1L]]
+  lines = sub("\r$", "", strsplit(as_utf8(paste(code, collapse = "\n")), "\n", fixed = TRUE)[[1L]])
   if (!length(lines)) return(character())
   exprs = tryCatch(doc_parse_text(lines), error = function(e) NULL)
   kept = NULL
@@ -1320,7 +1355,9 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
         out$created = union(out$created, made[nzchar(made)])
       }
       if (identical(ct, "gptr.mcp_r")) {
-        out = doc_turn_r(out, e$data, list(), with_out, plan_mode)
+        det = e$data
+        if (!identical(det$status %||% "ok", "ok")) det = doc_ran_part(det)
+        if (!is.null(det)) out = doc_turn_r(out, det, list(), with_out, plan_mode)
       }
     }
   }
@@ -1352,9 +1389,10 @@ doc_turn_usage = function(out, u) {
   out
 }
 
-#' Add one assistant message (its successful recorded r calls) to a turn body. When every
-#' expression of a call was dropped, all its printed output belongs to dropped expressions and is
-#' dropped too, even from P10's flat output vector (IC-48)
+#' Add one assistant message (its recorded r calls; of a call that stopped part-way the
+#' expressions that ran, doc_ran_part()) to a turn body. When every expression of a call was
+#' dropped, all its printed output belongs to dropped expressions and is dropped too, even from
+#' P10's flat output vector (IC-48)
 #' @noRd
 doc_turn_assistant = function(out, m, results, with_out, plan_mode) {
   out$last = m
@@ -1362,22 +1400,44 @@ doc_turn_assistant = function(out, m, results, with_out, plan_mode) {
   for (b in m$content) {
     if (!identical(b$type, "tool_call") || !identical(b$name, "r")) next
     res = results[[b$id]]
-    if (is.null(res) || isTRUE(res$is_error)) next
+    if (is.null(res)) next
     det = res$details %||% list()
-    out = doc_turn_r(out, det, b$arguments, with_out, plan_mode)
+    if (isTRUE(res$is_error)) det = doc_ran_part(det)
+    if (!is.null(det)) out = doc_turn_r(out, det, b$arguments, with_out, plan_mode)
   }
   out
 }
 
+#' The details of an r call that stopped part-way (an error, interrupt or timeout) as those of a
+#' call that ran its first `n_done` top-level expressions, whose bindings stay: the code without
+#' the expressions after them (doc_drop_ranges()); NULL when none ran
+#' @noRd
+doc_ran_part = function(det) {
+  n = as.integer(det$n_done %||% 0L)
+  lines = sub("\r$", "", strsplit(as_utf8(paste(det$code %||% "", collapse = "\n")), "\n",
+                                  fixed = TRUE)[[1L]])
+  exprs = tryCatch(doc_parse_text(lines), error = function(e) NULL)
+  if (length(n) != 1L || is.na(n) || n < 1L || n > length(exprs)) return(NULL)
+  srcs = attr(exprs, "srcref")
+  ran = seq_along(exprs) <= n
+  if (!all(ran)) lines = doc_drop_ranges(lines, srcs[!ran], srcs[ran])
+  if (is.null(lines)) return(NULL)
+  det$code = paste(lines, collapse = "\n")
+  det$status = "ok"
+  det
+}
+
 #' Serialize successful canonical or locally served R with the same code, secret and output
-#' rules. A local MCP trace does not create or alter the provider's assistant/tool messages.
+#' rules; a comment line shaped like a steer or a block marker gets one more `#`
+#' (doc_comment_escape()). A local MCP trace does not create or alter the provider's
+#' assistant/tool messages.
 #' @noRd
 doc_turn_r = function(out, det, args, with_out, plan_mode) {
   if (!identical(det$status %||% "ok", "ok")) return(out)
   # value= is one name (11.5): an expression's label is not; its recorded assignment names one
   named = rlang::is_string(det$value) && identical(make.names(det$value), det$value)
   if (!is.null(det$value)) out$value = if (named) det$value
-  if (plan_mode || isFALSE(det$record) || isFALSE(args$record)) return(out)
+  if (plan_mode || isFALSE(det$record %||% args$record)) return(out)
   chunk = doc_code_clean(det$code %||% args$code %||% "")
   if (!is.null(det$value) && !named && isTRUE(attr(chunk, "returned"))) {
     out$value = doc_value_name
@@ -1385,7 +1445,7 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
   kept = attr(chunk, "kept")
   chunk = as.character(chunk)
   safe = doc_history_code(chunk)
-  hist = safe$lines
+  hist = doc_comment_escape(safe$lines, c(doc_re_steer, doc_re_open, doc_re_close))
   if (safe$secrets) out$secrets = TRUE
   outs = det$outputs
   if (!length(chunk)) {
@@ -1441,6 +1501,13 @@ doc_header_common = function(site, call_ordinal, model) {
        args = site$args_hash)
 }
 
+#' Does `path`, a session log or plan, outlast this R process? Without .gptr/ they are in
+#' tempdir()/gptr, which R deletes at exit, so a document must not name them
+#' @noRd
+doc_kept = function(path) {
+  !is.null(path) && !path_inside(doc_abs(path), file.path(tempdir(), "gptr"))
+}
+
 #' The lines of the block of a session turn (contract 7.15): chr with attributes `header` (named
 #' list of 11.5 keys), `session`, `answer` (final text) and `children` (S2 parts to cache). The
 #' header's `model` is the provider and model of the turn's last answer as recorded, so a local
@@ -1459,7 +1526,11 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
   plan_mode = identical(d$mode, "plan")
   tb = doc_turn_body(ents, with_out = with_out, plan_mode = plan_mode)
   body = tb$body
-  if (plan_mode) body = paste0("## Plan: ", tb$plan_path %||% "none")
+  if (plan_mode) {
+    plan = if (is.null(tb$plan_path) || doc_kept(tb$plan_path)) tb$plan_path else
+      "none kept (gptr_init() keeps plans in .gptr/)"
+    body = paste0("## Plan: ", plan %||% "none")
+  }
   if (tb$secrets) body = c(doc_secret_flag, body)
   fork = NULL
   if (!is.null(d$fork_of)) {
@@ -1694,7 +1765,8 @@ doc_prepare = function(fmt, site, up, text, taken = character()) {
 
 #' Insert or replace a call's block through the site's backend (contract 7.15): checks write
 #' consent first (IC-45; otherwise nothing is written), passes `document_write` (fail closed,
-#' patchable), md5 conflict checks with re-locate and retry. `file` and `transcript` sites are
+#' patchable), md5 conflict checks with re-locate and retry; a block that could not be written
+#' anywhere is named once per document. `file` and `transcript` sites are
 #' written on disk here, `deferred` (Rscript) and `pending` (Jupyter) sites are queued by
 #' doc_pending_add() (IC-50, IC-51), the IDE backends go through the editor buffer
 #' (doc_ide_upsert()). Returns list(action, block_id, lines, backend) invisibly.
@@ -1722,7 +1794,13 @@ doc_upsert = function(site, block_lines, block_id = NULL) {
   ), error = function(e) {
     registry_diagnostic("builtin:documents", "document_write", class(e)[1L],
                         conditionMessage(e))
-    doc_upsert_fallback(site, up, backend)
+    res = doc_upsert_fallback(site, up, backend)
+    if (identical(res$action, "failed")) {
+      gptr_inform(paste0("gptr did not record this block into ", doc_rel(site$path), ": ",
+                         conditionMessage(e)), "notice",
+                  .once = paste0("doc_failed:", path_key(site$path)))
+    }
+    res
   })
   written = res$site %||% site
   res$site = NULL
@@ -1756,7 +1834,8 @@ doc_upsert_fallback = function(site, up, backend) {
   res
 }
 
-#' Disk upsert through doc_rewrite() (the document lock, md5 conflict checks, three attempts; IC-51)
+#' Disk upsert through doc_rewrite() (the document lock, md5 conflict checks, three attempts;
+#' IC-51); a block whose text would leave the markers malformed is a doc_write error
 #' @noRd
 doc_file_upsert = function(fmt, site, up) {
   path = site$path
@@ -1771,6 +1850,11 @@ doc_file_upsert = function(fmt, site, up) {
     if (!is.null(prep$skip)) return(list(value = res(prep$skip, prep$id)))
     new = fmt$upsert(doc$lines, site, prep$rendered, prep$id)
     if (identical(new, doc$lines)) return(list(value = res("unchanged", prep$id)))
+    # a marker line inside a string of the code would leave the markers malformed
+    if (isTRUE(attr(doc_find_blocks(new), "malformed"))) {
+      gptr_abort("The block would leave the document's gptr markers malformed.", "doc_write",
+                 path = path, reason = "malformed")
+    }
     b = doc_block_get(site$format, new, prep$id)
     list(lines = new, value = list(action = prep$action, block_id = prep$id, backend = backend,
                                    lines = c(b$start, b$end), sha = prep$sha,
