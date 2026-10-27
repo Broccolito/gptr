@@ -7069,3 +7069,37 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   (`?gptr_security`), R/prompt-text.R and the ?peter text of R/console-repl.R, the console
   vignette, NEWS, 03 and 04. Open: PASTE-2 at the pause menu, and on macOS a two-line paste
   without a final newline still answers a question with its first line (both above, D-269).
+
+### Merge of FIX-32, FIX-33 and FIX-34
+- Merged into `claude/v1-fixes` (`809ad7e5`) with `git merge --no-ff` in the order FIX-32
+  (`6ddc12da`), FIX-33 (`1768d3e9`) and FIX-34 (`7b3d3a18`). The records conflicted at each
+  merge, as each writer appended: the three records here, D-267, D-268 and D-269 (already in
+  record order, so no id changed), and one HANDOFF bullet and one PROGRESS row each; all are kept
+  in id order. R/utils-options.R's yolo notice conflicted (FIX-32 adds the computed-command
+  refusal, FIX-34 drops quitting R) and keeps both. `perm_policy_mode()`, which FIX-32 and FIX-34
+  both change, and R/mcp-server.R, which FIX-32 and FIX-33 both change, merged cleanly and read
+  right; NEWS.md repeats no bullet.
+- `1c274e0b`: merged, the model read a `q()` refusal as "Permission denied: Not run: ... Nothing
+  was evaluated. Use the ask tool to talk to the user. Explain what you need or choose another
+  approach. Nothing in this call ran.", the guard's sentence and FIX-32's. Red: `^perm-gate$` FAIL
+  1 PASS 216 (the text says "Nothing" twice). The `mode` policy drops the guard's "Nothing was
+  evaluated." from its reason; green PASS 217. D-269, 03 section 6.8.1 and 04 section 7.11's
+  `builtin_permissions` row say so.
+- `9f015596`: the cheat sheet PDF is rebuilt with `dev/release/cheatsheet-pdf.R`, as FIX-33
+  changed the page's export line after FIX-32's rebuild; still 2 pages, the panel above the
+  footer.
+- Checks, with `NOT_CRAN=true`, the SIGINT reset and a short `TMPDIR`. On `7b3d3a18`: the
+  neighbours (files whose names start with `doc-`, `console-`, `perm`, `risk`, `rules`, `nested`,
+  `bridge`, `gptr-`, `session-`, `ckpt-`, `eval-`, `agent-` or `tool-`, and `copy-ckpt`) FAIL 1
+  WARN 0 SKIP 15 PASS 16290 in UTF-8, where `test-bridge-lang.R:221`'s `pgrep -f "sleep 999"` saw
+  the sleep of the C run going on at the same time (the file alone FAIL 0 SKIP 4 PASS 115), and
+  FAIL 0 WARN 0 SKIP 44 PASS 16093 under `LC_ALL=C LANG=C`. On `9f015596`, the code of the merged
+  head: the full suite `.` in UTF-8 under the heavy lock FAIL 9 WARN 0 SKIP 66 PASS 38818 at a
+  load average near 215 (console-typing's paste after an `r` call 2, proc-windows-backpressure's
+  cold writer 6 at its 2 s timeout, artifact-app's browser cleanup 1), and those three files
+  alone FAIL 0 PASS 1236; the neighbours under C FAIL 0 WARN 0 SKIP 44 PASS 16095. Lint of the 42
+  R, test and vignette files the branches changed is clean; `document()` gives no diff; the four
+  plan checks pass; `testthat::test_dir("dev/release/tests")` PASS 290;
+  `dev/release/check-docs.R` 0 problems; `dev/bench/tokens/run.R --check` OK.
+- Open: those of the three records. The console's not-run row still cuts a guard refusal's
+  reason, and `dev/PROGRESS.md` and `dev/HANDOFF.md` still list as Open the notes FIX-33 closes.
