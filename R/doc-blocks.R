@@ -36,22 +36,23 @@ doc_sent_lines = function(texts) {
 }
 
 #' The context blocks a block's `#< ` lines record, also under `#~ `, as list(<kind> = <text
-#' inside its tags>): a block opens with its tag on the first line or after a closing tag, and
-#' ends with its own closing tag
+#' inside its tags>): they come in doc_sent_kinds order, each from its opening tag to the first
+#' line holding its closing tag that is the last or followed by a later kind's opening tag (a
+#' file's lines may hold any tag; each line of a `!` note starts `> ` or `#> `)
 #' @noRd
 doc_block_sent = function(body) {
   x = sub("^#~ ", "", as_utf8(as.character(body)))
   x = sub("^#< ?", "", x[grepl("^#<( |$)", x)])
-  close = paste0("</", doc_sent_kinds, ">")
-  open = which(x %in% paste0("<", doc_sent_kinds, ">") & c(TRUE, utils::head(x, -1L) %in% close))
   out = list()
-  for (k in seq_along(open)) {
-    seg = x[open[k]:(c(open[-1L] - 1L, length(x))[k])]
-    kind = gsub("[<>]", "", seg[1L])
-    n = length(seg)
-    if (n > 1L && identical(seg[n], paste0("</", kind, ">"))) {
-      out[[kind]] = paste(seg[-c(1L, n)], collapse = "\n")
-    }
+  for (k in seq_along(doc_sent_kinds)) {
+    kind = doc_sent_kinds[k]
+    if (!identical(x[1L], paste0("<", kind, ">"))) next
+    nxt = c(x[-1L], NA)
+    end = which(x == paste0("</", kind, ">") &
+                  (is.na(nxt) | nxt %in% paste0("<", doc_sent_kinds[-seq_len(k)], ">")))[1L]
+    if (is.na(end)) break
+    out[[kind]] = paste(x[seq_len(end - 2L) + 1L], collapse = "\n")
+    x = x[-seq_len(end)]
   }
   out
 }
