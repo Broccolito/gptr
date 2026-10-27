@@ -52,14 +52,19 @@ works on the objects already in memory.
   unless an allow rule such as `r(fn:system)` names the function; the model is pointed to
   `peter$sh()`, whose command the rules check when it runs.
 * Scripts and notebooks are the history: code the agent ran is recorded below each `peter()`
-  call in `.R`, `.Rmd`, `.qmd` and `.ipynb` documents and replays without model calls
-  (`gptr_doc()`, `gptr_source()`, `gptr_blocks()`, `gptr_cache()`). A console transcript also
-  records a run that was aborted or stopped by an error, marked `## Run: <status>`.
+  call in `.R`, `.Rmd`, `.qmd` and `.ipynb` documents, also what a call ran before it failed,
+  and replays without model calls (`gptr_doc()`, `gptr_source()`, `gptr_blocks()`,
+  `gptr_cache()`); `gptr_source(model =)` asks a recorded analysis again with another model. A
+  console transcript also records a run that was aborted or stopped by an error, marked
+  `## Run: <status>`.
 * A console transcript records what each prompt was sent with (the head of each `@file` and the
   notes of earlier `!` lines, as `#< ` lines) and, after `/model` or `/mode`, the model and mode
-  a turn ran with, so `gptr_source(replay = "live")` asks each turn again as it was asked; code
-  the model wrote is never sent again as your context. A `!` line that uses an object of an
-  undone turn is turned off (`#~ `) and back on after `/redo`, so `source()` does not stop there.
+  a turn ran with, so `gptr_source(replay = "live")` sends each turn again with what it was sent
+  with and asks it on that model and in that mode; code the model wrote is never sent again as
+  your context or your steer. A `!` line that uses an object of an undone turn is turned off
+  (`#~ `) and back on after `/redo`, so `source()` does not stop there, and `/retry` sends the
+  undone turn's `!` notes again. `gptr_export()` turns such a transcript into an ordinary R
+  script.
 * `gptr_init()` creates a `.gptr/` project workspace with the project instructions file
   `.gptr/vignette.Rmd`; `gptr_config()` and `gptr_trust()` manage settings and trust.
 * Checkpoints: `gptr_rewind()`, `gptr_checkpoints()` and `/undo` restore objects, files and the

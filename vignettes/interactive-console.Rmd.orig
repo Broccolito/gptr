@@ -182,7 +182,7 @@ commands available in the current session, including any supplied by plugins or 
 | `/mcp` | List MCP servers. |
 | `/permissions` | Show the permission rules. |
 | `/permissions allow|ask|deny|remove <rule>` | Change a rule for this R process, for example `/permissions allow r(fn:saveRDS)`. |
-| `/retry` | Undo the last turn and send its recovered prompt again; may make a model request. |
+| `/retry` | Undo the last turn and send its recovered prompt again, with the `!` notes it was sent with; may make a model request. |
 | `/undo` | Undo the last turn's restorable objects, files and conversation. |
 | `/redo` | Redo what the last rewind undid. |
 | `/rewind [k]` | Offer a rewind menu, or retain turns 1 through `k`. |

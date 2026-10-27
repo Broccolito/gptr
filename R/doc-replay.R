@@ -1140,27 +1140,36 @@ doc_console_held = function(s) {
 #' `tools::R_user_dir("gptr", "cache")`, so any R process of the same user can apply them.
 #'
 #' Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
-#' or functions do not. Binding supplies recording consent even when automatic recording is
-#' off, but `.opts = list(record = FALSE)` suppresses recording for that call. Binding does
-#' not reconstruct earlier unrecorded turns. A narrative summary or model-generated script
-#' draft needs review and execution checks before it can serve as a reproducible workflow.
+#' or functions do not. A block records the R code the agent ran: of a call that stopped part-way,
+#' the expressions that ran, and code that changed your objects even where the model passed
+#' `record = false`, which leaves out only inspection. Binding supplies recording consent even
+#' when automatic recording is off, but `.opts = list(record = FALSE)` suppresses recording for
+#' that call. Binding does not reconstruct earlier unrecorded turns. A narrative summary or
+#' model-generated script draft needs review and execution checks before it can serve as a
+#' reproducible workflow.
 #'
 #' In a console transcript (an `.R` file) a turn's block opens with `#< ` comment lines holding what
 #' the console sent with the prompt: the head of each `@file` (at most 40 lines, redacted) and the
 #' notes of earlier `!` lines. Only that run, under the turn's `s_<hex>` statement, is sent again,
 #' and none from a transcript whose gptr markers are malformed; a line of recorded code that would
-#' continue the run gets one more `#` (`##< `), so code the model wrote is never sent as your
-#' context. The block's header names the objects the turn created (`created=`), as the header of
+#' continue the run gets one more `#` (`##< `). In every format a whole comment line of recorded
+#' code that reads as a `## Steer:` or `## Follow-up:` line or as a block marker gets one more `#`
+#' too, so code the model wrote is never sent as your context or your steer and never ends its
+#' block. The block's header names the objects the turn created (`created=`), as the header of
 #' each direct R line does (`# direct R (no model) created=p`), and a comment line of `!` code that
-#' reads as a console line, such as `# /tmp is scratch`, gets one more `#`. After each `/undo`,
-#' `/redo`, `/retry` and `!` line the transcript is read again from the top: a direct R line that
-#' uses an object last created above it by an undone turn or by a line that is off is turned off
-#' (`#~ ` before each line, `# direct R (no model; uses undone fit)`) and back on when that turn
-#' returns, so `source()` does not stop there. The console names the lines it turned off. The
-#' objects themselves stay in your session, as an undo removes only what the turn created, so a
-#' later turn that uses one still stops `source()`: turn blocks are never turned off. Names are
-#' found with [all.names()]: a column or formula term with the same name can turn a line off, and a
-#' name reached through a string, as in `get("fit")`, is not seen.
+#' reads as a console line, such as `# /tmp is scratch`, or as a block marker gets one more `#`. A
+#' block whose code holds a marker line inside a string is not written, and gptr says so. After
+#' each `/undo`, `/redo`, `/retry` and `!` line the transcript is read again from the top: a direct
+#' R line that uses an object last created above it by an undone turn or by a line that is off is
+#' turned off (`#~ ` before each line, `# direct R (no model; uses undone fit)`) and back on when
+#' that turn returns, so `source()` does not stop there; a whole `fit = <value>` makes `fit` and
+#' uses only what `<value>` names. The console names the lines it turned off. Your own objects
+#' stay in your session: an undo removes what the turn created and restores what it changed. So a
+#' later turn that uses an object of a line that is off still stops `source()`, as turn blocks are
+#' never turned off, and a direct R line that read an object the turn changed, such as
+#' `n = nrow(dat)` after the turn cut `dat`, stays on and replays with the restored value. Names
+#' are found with [all.names()]: a column or formula term with the same name can turn a line off,
+#' and a name reached through a string, as in `get("fit")`, is not seen.
 #'
 #' @param path `NULL` to return the current binding, `FALSE` to remove it, or the path of an
 #'   `.R`, `.Rmd`, `.qmd` or `.ipynb` document.
@@ -1559,10 +1568,12 @@ doc_catalog_prune = function() {
 #' what the console sent with it, from its block's `#< ` lines (the `@file` heads and `!` notes;
 #' see [gptr_doc()]): the request is the same even when the file changed or is gone. It is asked
 #' with the model and in the mode its statement names, else those its session has from the turns
-#' before, so each console turn is asked as it ran; a turn recorded in `auto` or `yolo` is asked
-#' again in that mode. A named model must be available where the file is asked again; `model`
-#' asks every call with another one. Direct R lines a transcript turned off are comments and do
-#' not run.
+#' before, else the `model` and `mode` settings of the session that re-asks: a statement names
+#' them only where they differed from what it gets without them (see [gptr_doc()]). A named model
+#' must be available there; `model` asks every call with another one. A re-ask does not send the
+#' `## Steer:` and `## Follow-up:` lines of a turn or the text of an approval answered `n <text>`,
+#' and the new block does not keep them. Direct R lines a transcript turned off are comments and
+#' do not run.
 #'
 #' Replay executes the recorded R code, including its ordinary side effects. It does not
 #' freeze package versions, supply external inputs or validate the analysis. This function

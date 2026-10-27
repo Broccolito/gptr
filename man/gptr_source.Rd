@@ -8,7 +8,8 @@ gptr_source(
   file,
   replay = getOption("gptr.replay", "auto"),
   envir = parent.frame(),
-  echo = FALSE
+  echo = FALSE,
+  model = NULL
 )
 }
 \arguments{
@@ -22,6 +23,11 @@ variable, then the \code{replay} setting, then \code{"auto"}.}
 \item{envir}{Environment in which the expressions are evaluated.}
 
 \item{echo}{\code{TRUE} prints each expression before it is evaluated.}
+
+\item{model}{\code{NULL}, or a model reference, as \code{peter(model =)} takes it: every call the file
+asks again (each one under \code{replay = "live"}) uses it instead of the model it names or its
+session has, so a recorded analysis can be re-asked with your own model. A block that
+replays asks no model.}
 }
 \value{
 Invisibly, the \code{gptr_blocks} listing of the file after the run with an extra column
@@ -41,8 +47,12 @@ the old block is skipped, which base \code{source()} cannot do. A console turn i
 what the console sent with it, from its block's \verb{#< } lines (the \verb{@file} heads and \code{!} notes;
 see \code{\link[=gptr_doc]{gptr_doc()}}): the request is the same even when the file changed or is gone. It is asked
 with the model and in the mode its statement names, else those its session has from the turns
-before, so each console turn is asked as it ran; a turn recorded in \code{auto} or \code{yolo} is asked
-again in that mode. Direct R lines a transcript turned off are comments and do not run.
+before, else the \code{model} and \code{mode} settings of the session that re-asks: a statement names
+them only where they differed from what it gets without them (see \code{\link[=gptr_doc]{gptr_doc()}}). A named model
+must be available there; \code{model} asks every call with another one. A re-ask does not send the
+\verb{## Steer:} and \verb{## Follow-up:} lines of a turn or the text of an approval answered \verb{n <text>},
+and the new block does not keep them. Direct R lines a transcript turned off are comments and
+do not run.
 }
 \details{
 Replay executes the recorded R code, including its ordinary side effects. It does not
