@@ -7,7 +7,8 @@ doc_export_refuse = function(reason) {
 }
 
 #' Count a literal Peter-only chain after R's native pipe rewrite, which may start from one of the
-#' session `handles` (a console transcript's later turns); no argument is evaluated.
+#' session `handles` (a console transcript's later turns); after the prompt an argument may also be
+#' an unnamed object name (a console turn's @objects); no argument is evaluated.
 #' @noRd
 doc_export_chain = function(expr, handles = character(), depth = 0L) {
   if (!is.call(expr) || depth > doc_sidecar_bounds()$depth) return(0L)
@@ -23,8 +24,11 @@ doc_export_chain = function(expr, handles = character(), depth = 0L) {
   inner = if (is.call(args[[1L]])) doc_export_chain(args[[1L]], handles, depth + 1L) else 0L
   handle = is.symbol(args[[1L]]) && as.character(args[[1L]]) %in% handles
   rest = if (inner || handle) args[-1L] else args
-  literal = vapply(rest, function(x) {
-    is.null(x) || (is.atomic(x) && length(x) == 1L && !is.na(x))
+  named = nzchar(names(rest) %||% character(length(rest)))
+  literal = vapply(seq_along(rest), function(i) {
+    x = rest[[i]]
+    is.null(x) || (is.atomic(x) && length(x) == 1L && !is.na(x)) ||
+      (i > 1L && is.symbol(x) && !named[i])
   }, NA)
   if (!all(literal) || !any(vapply(rest, is.character, NA))) return(0L)
   1L + inner
@@ -213,7 +217,14 @@ doc_export_lines = function(lines, format, path, target) {
                                         lines = paste0("# ", lines[sr[1L]:sr[3L]]))
     }
   }
-  if (length(claimed) != nrow(blocks)) doc_export_refuse("unowned recorded blocks")
+  # an undone block no statement owns (a console turn's, under its `#~ ` statement) is left out
+  for (i in setdiff(seq_len(nrow(blocks)), claimed)) {
+    if (!identical(blocks$header[[i]][["status"]], "undone")) {
+      doc_export_refuse("unowned recorded blocks")
+    }
+    edits[[length(edits) + 1L]] = list(start = blocks$start[i], end = blocks$end[i],
+                                       lines = character())
+  }
   # A session handle is live from its peter() statement until ordinary code assigns the name; a
   # function reads names when it is called, so one naming any handle of the document is refused.
   live = character()

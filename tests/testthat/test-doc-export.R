@@ -271,6 +271,10 @@ test_that("raw export refuses ambiguous calls and unresolved session semantics",
   local_project()
   expect_identical(doc_export_chain(str2lang("peter(\"one\", )")), 0L)
   expect_identical(doc_export_chain(str2lang("peter(, \"one\")")), 0L)
+  # a console turn's @objects are unnamed names after the prompt (FIX-33); nothing else is
+  expect_identical(doc_export_chain(str2lang("peter(\"one\", fit, dat)")), 1L)
+  expect_identical(doc_export_chain(str2lang("peter(fit, \"one\")")), 0L)
+  expect_identical(doc_export_chain(str2lang("peter(\"one\", mode = auto)")), 0L)
   calls = c("before = 1; s = peter(\"one\"); after = 2",
             "s = peter(\"one\")$value", "s = peter(\"one\") |> identity()",
             "s = peter(paste0(\"o\", \"ne\"))", "s = list(peter(\"one\"))",

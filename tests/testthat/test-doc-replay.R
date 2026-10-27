@@ -1596,6 +1596,38 @@ test_that("an undo keeps a ! line that assigned what the turn made, and its user
   expect_identical(c(con$rs$envir$fit, con$rs$envir$g), c(99, 100))
 })
 
+test_that("a console transcript with @objects and an undone turn exports (FIX-33 DOC-4, ALL-2)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "y = x + 1"), fake_text("Made y."),
+                         fake_tool("r", code = "z = 3"), fake_text("Made z."),
+                         fake_tool("r", code = "w = y * 2"), fake_text("Made w.")))
+  con = doc_console_repl(x)
+  con$run("!x = 1")
+  con$run("Add one to @x and store it as y.")
+  con$run("Store z as 3.")
+  con$run("/undo")
+  con$run("Store w as y * 2.")
+  hex = substr(sub("^s", "", con$rs$session$id), 1L, 6L)
+  call = paste0("s_", hex, " = peter(\"Add one to @x and store it as y.\", x)")
+  expect_true(all(c(call, paste0("#~ s_", hex, " |> peter(\"Store z as 3.\")")) %in%
+                    readLines(con$t)))
+  raw = file.path(x$root, "plain.R")
+  gptr_export(con$t, raw)
+  out = readLines(raw)
+  expect_true(paste0("# ", call) %in% out)
+  expect_false(any(grepl("gptr:|z = 3", out)))
+  r = new.env(parent = globalenv())
+  r$library = function(...) invisible(NULL)
+  source(raw, local = r)
+  expect_identical(c(r$x, r$y, r$w), c(1, 2, 4))
+  expect_false(exists("z", r, inherits = FALSE))
+  peter = file.path(x$root, "peter.R")
+  gptr_export(con$t, peter, format = "peter")
+  out = readLines(peter)
+  expect_true(all(c(call, "# y = x + 1") %in% out))
+  expect_false(any(grepl("gptr:|z = 3", out)))
+})
+
 test_that("console /undo, /undo, /redo, /redo bring back both turns' blocks (FIX-31)", {
   skip_on_cran()
   x = local_doc_e2e(list(fake_tool("r", code = "a = 1"), fake_text("Made a."),
