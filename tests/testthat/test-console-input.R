@@ -180,6 +180,19 @@ test_that("a bracketed paste spans reads; its end marker is held however late (D
   expect_identical(compose("x", state = r$state, now = 21.1)$state$draft, "x")
 })
 
+test_that("a marker cut at a read's end joins its rest however late (D-263)", {
+  for (cut in c("\033", "\033[", "\033[20")) {
+    rest = paste0(substring("\033[200~", nchar(cut) + 1L), "a\rb")
+    r = compose(rest, state = compose(cut, "x", now = 0)$state, now = 1)
+    expect_null(r$action)
+    expect_identical(r$state[c("draft", "esc", "bracket")],
+                     list(draft = "xa\nb", esc = "", bracket = TRUE))
+  }
+  # a late rest that completes no marker is typed, the sequence before it dropped
+  expect_identical(compose("[2", state = compose("\033", now = 0)$state, now = 1)$state$draft,
+                   "[2")
+})
+
 test_that("Esc then Tab, or a cut sequence then Up, in one read is the key (FIX-28)", {
   expect_keys(list(
     list("\033\t", "use base", "", sent("follow_up", "use base")),
@@ -627,6 +640,8 @@ test_that("a console write clears the live row and redraws it after its whole li
   expect_identical(writes("\033[?2004h"), "\033[?2004h")
   expect_true(the$live_row$shown)
   expect_true(the$live_row$on)
+  # bytes that are not UTF-8 are written as they are, with no warning
+  expect_no_warning(writes("\xff\n"))
   expect_identical(writes("  a notice\n"), paste0("\r\033[K", "  a notice\n", row))
   expect_true(the$live_row$shown)
   # a partial line leaves the row cleared until the run next waits
@@ -641,6 +656,12 @@ test_that("a console write clears the live row and redraws it after its whole li
   the$live_row$sinks = sink.number() + 1L
   draw()
   expect_identical(writes("  one\n", "  two\n"),
+                   paste0("\r", strrep(" ", 39L), "\r  one\n  two\n"))
+  expect_false(the$live_row$on)
+  # so does one write of several strings
+  the$live_row$on = TRUE
+  draw()
+  expect_identical(writes(c("  one\n", "  two\n")),
                    paste0("\r", strrep(" ", 39L), "\r  one\n  two\n"))
   expect_false(the$live_row$on)
   # text written into another sink (a capture in the agent's code) leaves the row alone
@@ -784,6 +805,21 @@ test_that("a bracketed paste at the prompt's editor stays in the draft until Ent
   r = idle_read("note:", list("\033[200~a\rb\r\033[201~", " c\r"))
   expect_identical(r$x, "note:a\nb\n c")
   expect_identical(r$stty, c("-g", keys_mode, "SAVED -paste"))
+  # one whose end marker never comes keeps Enter adding lines; Ctrl-C hands the draft over
+  r = idle_read("x", list("\033[200~a\r", "\r", ctrl_c), "next")
+  expect_identical(r$x, "next")
+  expect_identical(r$kept, "\"\"\"\nxa\n\n\n\"\"\"")
+  expect_null(r$draft)
+})
+
+test_that("readline's read at the prompt starts the composer afresh (FIX-28)", {
+  # a run ended with a paste open and no draft: its next run's Enter steers again
+  local_readline("next")
+  rd = console_reader()
+  rd$compose = compose("\033[200~\r", now = 0)$state
+  expect_true(rd$compose$bracket)
+  written(function() expect_identical(rd$read("peter> "), "next"))
+  expect_null(rd$compose)
 })
 
 test_that("an emptied draft hands over to readline at the same prompt; Ctrl-C keeps it first", {
