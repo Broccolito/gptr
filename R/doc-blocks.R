@@ -1499,6 +1499,13 @@ doc_header_common = function(site, call_ordinal, model) {
        args = site$args_hash)
 }
 
+#' Does `path`, a session log or plan, outlast this R process? Without .gptr/ they are in
+#' tempdir()/gptr, which R deletes at exit, so a document must not name them
+#' @noRd
+doc_kept = function(path) {
+  !is.null(path) && !path_inside(doc_abs(path), file.path(tempdir(), "gptr"))
+}
+
 #' The lines of the block of a session turn (contract 7.15): chr with attributes `header` (named
 #' list of 11.5 keys), `session`, `answer` (final text) and `children` (S2 parts to cache). The
 #' header's `model` is the provider and model of the turn's last answer as recorded, so a local
@@ -1517,7 +1524,11 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
   plan_mode = identical(d$mode, "plan")
   tb = doc_turn_body(ents, with_out = with_out, plan_mode = plan_mode)
   body = tb$body
-  if (plan_mode) body = paste0("## Plan: ", tb$plan_path %||% "none")
+  if (plan_mode) {
+    plan = if (is.null(tb$plan_path) || doc_kept(tb$plan_path)) tb$plan_path else
+      "none kept (gptr_init() keeps plans in .gptr/)"
+    body = paste0("## Plan: ", plan %||% "none")
+  }
   if (tb$secrets) body = c(doc_secret_flag, body)
   fork = NULL
   if (!is.null(d$fork_of)) {

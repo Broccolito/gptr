@@ -799,9 +799,7 @@ doc_on_agent_end = function(event, ctx) {
   d = session_data(s)
   if (isTRUE(site$console)) {
     site$session_id = d$id
-    # without .gptr/ the log is in tempdir()/gptr, which R deletes at exit
-    kept = !is.null(d$file) && !path_inside(d$file, file.path(tempdir(), "gptr"))
-    site$session_file = if (kept) doc_rel(d$file)
+    site$session_file = if (doc_kept(d$file)) doc_rel(d$file)
     site = doc_console_ran(s, site)
   }
   turn = if (d$kind %in% c("team", "fanout")) 1L else as.integer(event$turns %||% d$turns)

@@ -659,6 +659,11 @@ test_that("failed and unrecorded calls are left out and plan-mode turns give one
   p = doc_test_session(list(plan), mode = "plan")
   expect_identical(as.character(doc_block_lines(p, 1L, site, 1L)),
                    "## Plan: .gptr/plans/2026-09-29-tidy.md")
+  # without .gptr/ the plan is in tempdir()/gptr, which R deletes at exit (FIX-33 MM-4)
+  plan[[5L]]$data$path = file.path(tempdir(), "gptr", "plans", "2026-09-29-tidy.md")
+  p = doc_test_session(list(plan), mode = "plan")
+  expect_identical(as.character(doc_block_lines(p, 1L, site, 1L)),
+                   "## Plan: none kept (gptr_init() keeps plans in .gptr/)")
 })
 
 test_that("a call that stopped part-way records the expressions that ran (FIX-33 PERM-5)", {
