@@ -7813,12 +7813,18 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   reconstruction takes the `#<` lines through `doc$sent` instead. (c) raw export drops `#<` lines,
   Peter export keeps them. (d) the evaluator reports `added` names for a line that stopped at an
   error (a parse error ran nothing and adds none).
-- Known limits: `all.names()` can match a column or formula term of the same name, which only
-  turns a line off, never breaks `source()`; a name reached through a string, as in
-  `get("fit")`, is not seen; a name holding a comma is split by `created=`.
+- Known limits: turn blocks are never switched, so a later turn that uses an object made by a
+  line that is off still stops `source()` (the rewind kept the object, so the turn ran in the
+  session); `all.names()` can match a column or formula term of the same name, which turns a line
+  off that did not need it; a name reached through a string, as in `get("fit")`, is not seen; a
+  direct R line's section runs to the next line the console writes for another entry (a direct R
+  header, a `# /<name>` command line, a session header, a turn's statement or block), so lines
+  written by hand right after it switch with it; a name holding a comma is split by `created=`; a
+  non-ASCII name is matched only in a UTF-8 locale. The `#<` lines are what was sent, so neither
+  `gptr.doc_output_lines` nor the `doc` setting limits them.
 - Contract-visible: 04 section 15.3 IC-49, section 11.5 (header key `created`, the body's `#<`
   lines, the transcript row) and section 7.8 (call record binding `sent`); `?gptr_doc`,
-  `?gptr_source`, `?gptr_export`; vignette("script-as-history").
+  `?gptr_source`, `?gptr_export`, `?gptr_security`; vignette("script-as-history").
 - Tests: test-doc-blocks.R "a block records what its prompt was sent with as #< lines and what it
   created"; test-console-repl.R "a live re-ask sends the @file head and !code note the console
   sent (IC-49)"; test-doc-replay.R "a reconstruction sends what the prompt was sent with, from its

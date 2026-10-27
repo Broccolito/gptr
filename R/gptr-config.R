@@ -1707,7 +1707,10 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' - `.gptr/plans/` (plans proposed in `plan` mode) and the `app.R` of each artifact are
 #'   committed by default; they can quote data values the model saw.
 #' - Documents you record into keep the model's code and up to `gptr.doc_output_lines` lines of
-#'   printed output per step, which can contain data values. Review them before sharing.
+#'   printed output per step, which can contain data values. A console turn's block also keeps,
+#'   as `#< ` lines, what its prompt was sent with, whatever that option says: the head of each
+#'   `@file` (up to 40 lines) and the `!` code notes with their printed output. Review them before
+#'   sharing.
 #'
 #' @section Local servers:
 #' [gptr_mcp_serve()] exposes the live session to other agents over HTTP on `127.0.0.1` only,

@@ -4657,10 +4657,15 @@ each line the console appends, the transcript is read top to bottom: each block 
 names of its `created=` key, on or off (an undone block; a line that failed or is off); a direct R line that uses
 (by `all.names()`) a name whose last maker above it is off, other than one it created itself, is switched off,
 `#~ ` before each line under `# direct R (no model; uses undone <names>)`, and back on when no such name is left.
-A notice names the lines switched. `source()` stays a plain R run: lines that are off are comments. A rewind
-still removes only what the turn created, so the person's own objects stay. Known limits: `all.names()` can match
-a column or formula term of the same name (it only turns a line off, never breaks `source()`), and a name reached
-through a string, as in `get("fit")`, is not seen.
+A direct R line's section runs from its header to the next line the console writes for another entry (a direct R
+header, a `# /<name>` command line, a session header, a turn's statement or block). A notice names the lines
+switched. `source()` stays a plain R run: lines that are off are comments. A rewind still removes only what the
+turn created, so the person's own objects stay. Known limits: turn blocks are never switched, so a later turn that
+uses an object made by a line that is off (the object stayed in the session, so the turn ran) still stops
+`source()`; `all.names()` can match a column or formula term of the same name, which turns a line off that did not
+need it; a name reached through a string, as in `get("fit")`, is not seen; lines written by hand right after a
+direct R line switch with it; a name holding a comma is split by `created=`; a non-ASCII name is matched only in a
+UTF-8 locale. The `#<` lines are what was sent: neither `gptr.doc_output_lines` nor the `doc` setting limits them.
 
 **IC-50 Jupyter documents.** (req-11) With `front_end() == "jupyter"` gptr never writes the open notebook: the
 block is shown as the cell's output (a fenced R code block) and recorded as a pending `gptr.doc_block` entry

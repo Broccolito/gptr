@@ -119,7 +119,10 @@ committing.
 \item \verb{.gptr/plans/} (plans proposed in \code{plan} mode) and the \code{app.R} of each artifact are
 committed by default; they can quote data values the model saw.
 \item Documents you record into keep the model's code and up to \code{gptr.doc_output_lines} lines of
-printed output per step, which can contain data values. Review them before sharing.
+printed output per step, which can contain data values. A console turn's block also keeps,
+as \verb{#< } lines, what its prompt was sent with, whatever that option says: the head of each
+\verb{@file} (up to 40 lines) and the \code{!} code notes with their printed output. Review them before
+sharing.
 }
 }
 
