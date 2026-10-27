@@ -911,10 +911,11 @@ doc_on_console_direct = function(event, ctx) {
 
 # a direct R line's header (doc_direct_header()): its reason and its key=value pairs
 doc_re_direct = "^# direct R \\(no model(?:; (.*?))?\\)(?: (.*))?$"
-# the first line of what the console appends after a direct R line (another one, a command, a
-# session header, a turn's statement or block), which ends that line's section
-doc_re_entry = paste0("^(# (direct R \\(|/|gptr session |machine log: |>>> gptr:)|",
-                      "(#~ )?s_[0-9a-f]{6} (=|[|]>) peter\\()")
+# the first line of what the console appends after a direct R line (another one, a command
+# `# /<name> ...`, a session header, a turn's statement or block), which ends that line's section;
+# a comment such as `# /home/me/data` in the line's code does not
+doc_re_entry = paste0("^(# (direct R \\(|/[^[:space:]/]+( |$)|gptr session |machine log: |",
+                      ">>> gptr:)|(#~ )?s_[0-9a-f]{6} (=|[|]>) peter\\()")
 
 #' The header of a direct R line: `# direct R (no model)`, `; <reason>` inside the parentheses (a
 #' status, `uses undone <names>`), then `created=<names>` when it created any
