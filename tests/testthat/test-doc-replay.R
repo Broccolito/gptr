@@ -1628,6 +1628,27 @@ test_that("a console transcript with @objects and an undone turn exports (FIX-33
   expect_false(any(grepl("gptr:|z = 3", out)))
 })
 
+test_that("/retry sends the notes the undone turn was sent with again (FIX-33 DOC-6)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_text("It is low."), fake_text("Still low.")))
+  con = doc_console_repl(x)
+  con$run("!rsq = 0.12")
+  con$run("why is rsq low?")
+  con$run("!s2 = rsq + 1")
+  con$run("/retry")
+  ran = vapply(fake_requests(x$fake), function(req) {
+    users = Filter(function(m) identical(m$role, "user"), req$messages)
+    b = Filter(function(b) identical(b$kind, "user_ran"), users[[length(users)]]$content)
+    if (length(b)) b[[1L]]$text else ""
+  }, "")
+  expect_length(ran, 2L)
+  expect_match(ran[[1L]], "\n> rsq = 0.12\n#> + rsq <numeric length 1>\n</user_ran>", fixed = TRUE)
+  expect_match(ran[[2L]], "\n> rsq = 0.12\n#> + rsq <numeric length 1>\n> s2 = rsq + 1\n",
+               fixed = TRUE)
+  # the retried turn's block records them as the undone one did
+  expect_identical(sum(readLines(con$t) %in% c("#< > rsq = 0.12", "#~ #< > rsq = 0.12")), 2L)
+})
+
 test_that("console /undo, /undo, /redo, /redo bring back both turns' blocks (FIX-31)", {
   skip_on_cran()
   x = local_doc_e2e(list(fake_tool("r", code = "a = 1"), fake_text("Made a."),

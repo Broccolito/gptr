@@ -563,7 +563,7 @@ cmd_permissions = function(args, ctx) {
 }
 
 #' /retry: undo the last turn (gptr_rewind(), P16) and send its prompt again, with the skills it
-#' preloaded
+#' preloaded and the `!` notes it was sent with (before those pending now) when the console sent it
 #' @noRd
 cmd_retry = function(args, ctx) {
   s = ctx$session
@@ -571,6 +571,9 @@ cmd_retry = function(args, ctx) {
   f = ns_fun("gptr_rewind")
   if (is.null(f)) return("/retry needs gptr_rewind(), which is not available.")
   before = s$last_rewind
+  rs = console_repl_find()
+  sent = rs$sent
+  turns = s$turns
   f(s, turn = -1L)
   # a session_before_tree handler may cancel the rewind; editor_text is then a stale prompt
   if (identical(s$last_rewind, before)) return("The last turn was not undone.")
@@ -578,7 +581,9 @@ cmd_retry = function(args, ctx) {
   if (!rlang::is_string(prompt) || !nzchar(prompt)) {
     return("The last prompt could not be recovered.")
   }
-  rs = console_repl_find()
-  if (!is.null(rs)) rs$next_skills = s$last_rewind$skills
+  if (!is.null(rs)) {
+    rs$next_skills = s$last_rewind$skills
+    if (identical(c(sent$id, sent$turns), c(s$id, turns))) rs$notes = c(sent$notes, rs$notes)
+  }
   list(prompt = prompt)
 }

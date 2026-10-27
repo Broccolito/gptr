@@ -868,6 +868,7 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
   on.exit(console_call_release(rs), add = TRUE)
   cl = console_call(rs, text, men)
   rs$sending = cl
+  notes = rs$notes
   before = gptr::gptr_last()
   res = console_reading(rs, function() {
     tryCatch(list(status = "ok", value = eval(cl, envir = rs$mask)),
@@ -891,7 +892,11 @@ console_send = function(rs, text, men = repl_mentions(text, repl_eval_env(rs))) 
     last = gptr::gptr_last()
     if (inherits(last, "gptr_session") && !identical(last, before)) s = last
   }
-  if (!is.null(s)) rs$session = s
+  if (!is.null(s)) {
+    rs$session = s
+    # the notes this turn took, which /retry sends again (cmd_retry())
+    rs$sent = list(id = s$id, turns = s$turns, notes = if (!length(rs$notes)) notes)
+  }
   if (identical(res$status, "interrupt") && !is.null(rs$session)) console_abort_stray(rs$session)
   res
 }
