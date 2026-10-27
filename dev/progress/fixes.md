@@ -6117,15 +6117,27 @@ the driver, screens, events, transcripts and replays without a model are local, 
   Python, keyring, repr, macOS, C-locale or INFRA-03 `CI` case. Lint clean (4 files); `document()`
   changes nothing. Kept: PROGRESS.md's rows citing #86 (the status-record PR), this heading's #86
   (the PR number replaces it), the user docs' `stty sane` (04 and D-263 name `reset`).
+- Review: r2 applied (docs). D-263's Limits and this record's Open said an opening marker cut at two
+  reads' ends leaks when each read is more than 50 ms before the next; it leaks when a read that
+  leaves it cut comes more than 50 ms after its first cut, as the held part keeps that cut's time.
+  Probed with `console_compose()`: cut after `ESC` and `ESC [ 2`, reads at 0, 1 and 1.01 s leak
+  `[200~` and reads at 0, 0.01 and 2 s leak nothing; cut after `ESC`, `ESC [` and `ESC [ 2`, reads
+  at 0, 0.03, 0.06 and 0.07 s leak `200~`. Both now say so. Kept: 04 IC-76's "GNU readline 7+ parses
+  them" (a note asked for 8.1+). Readline's manual says `enable-bracketed-paste` configures the
+  terminal and the `bracketed-paste-begin` binding is assigned by default; its CHANGES date the
+  setting to 7.0 and its default on to 8.1. R 4.5.0 with readline 8.2 (rocker/r-ver, no network)
+  read a bracketed `abc` as `abc` with the setting off and on. This record's Open said 8.1+ and now
+  says 7+. No code or test changed.
 - Deviations: D-263 (amends IC-76, D-243). NEWS, the README, `?peter` and the vignette are
   unchanged: "a block pasted there is one message" still holds. Open: control bytes inside a paste
   act as typed (Ctrl-C pauses; DEL, Ctrl-U and Ctrl-W edit). A paste whose end marker another reader
   takes (a question asked mid-paste, a pasted Ctrl-C whose rest the pause menu reads) stays open in
   the composer until an abort or readline's read at the prompt empties it. An opening marker cut at
-  two reads' ends, each more than 50 ms before the next, leaks into the draft. A paste bracketed
-  just before a hand-over's `ESC [ ? 2004 l` reaches readline with its markers (readline 8.1+ parses
-  them; 5.2 and libedit insert them). A tool's own `readline()`, `menu()` or `readLines(stdin())`,
-  or a child process reading the terminal, gets the markers. A kill or a crash leaves the mode on. A
-  paste's trailing newline stays in the draft and the message (`console_lines()` drops it on
-  screen). The prompt's editor drops a pasted Tab that ends a read inside a split paste. A 1 MB
-  paste holds the console for minutes (the quadratic key loop).
+  two or more reads' ends leaks into the draft when a read that leaves it cut comes more than 50 ms
+  after its first cut. A paste bracketed just before a hand-over's `ESC [ ? 2004 l` reaches readline
+  with its markers (GNU readline 7+ parses them; 5.2 and libedit insert them). A tool's own
+  `readline()`, `menu()` or `readLines(stdin())`, or a child process reading the terminal, gets the
+  markers. A kill or a crash leaves the mode on. A paste's trailing newline stays in the draft and
+  the message (`console_lines()` drops it on screen). The prompt's editor drops a pasted Tab that
+  ends a read inside a split paste. A 1 MB paste holds the console for minutes (the quadratic key
+  loop).

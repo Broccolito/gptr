@@ -7816,11 +7816,12 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   xterm, kitty, VTE and Windows Terminal filter them). A paste whose end marker another reader takes
   (a question asked mid-paste) stays open, so Enter only adds lines for the rest of its run and at
   the prompt's editor, until an abort or a hand-over to readline (Ctrl-C there) empties the
-  composer. An opening marker cut at two reads' ends, each more than 50 ms before the next, leaks
-  into the draft. A paste bracketed just before a hand-over's `ESC [ ? 2004 l` reaches readline with
-  its markers. R code or a process that a tool runs and that reads the terminal gets the markers. A
-  kill or a crash leaves the mode on (zsh, fish and bash 5.1+ reset it at their prompts, as does
-  `reset`). The key loop is quadratic in a paste's size, as before.
+  composer. An opening marker cut at two or more reads' ends leaks into the draft when a read that
+  leaves it cut comes more than 50 ms after its first cut. A paste bracketed just before a
+  hand-over's `ESC [ ? 2004 l` reaches readline with its markers. R code or a process that a tool
+  runs and that reads the terminal gets the markers. A kill or a crash leaves the mode on (zsh, fish
+  and bash 5.1+ reset it at their prompts, as does `reset`). The key loop is quadratic in a paste's
+  size, as before.
 - Amends IC-76 (04 section 15.10, the composer and typing) and D-243, whose steering review rejected
   bracketed paste for the terminal state it adds to every mode switch and question; that state stays
   in `tty_modes()`'s pseudo-modes.
