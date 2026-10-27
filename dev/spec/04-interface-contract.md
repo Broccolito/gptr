@@ -2838,7 +2838,7 @@ diff_lines(c("a", "b"), c("a", "c"))
 | `rule_parse(rule)` | `perm-rules.R` | `list(tool, kind = "any" \| "glob" \| "level" \| "fn" \| "category" \| "sh" \| "sql" \| "secret", value)` or `gptr_error_invalid_argument` | P11, P14 (`/permissions`) |
 | `rule_match(rules, call)` | `perm-rules.R` | `list(deny = chr, ask = chr, allow = chr)`: matched rules; allow `r(fn:..)`/`r(category:..)` match only if **every** flagged call (level >= 1) is covered; deny/ask match if **any** is | P11 |
 | `rule_suggest(call)` | `perm-rules.R` | chr(1) rule covering exactly the flagged calls (`r(fn:FindNeighbors,FindClusters)`), or `NULL` (never for level 4) | P11, P14 |
-| `builtin_permissions(gptr)` | `perm-gate.R` | registers the policies `mode` (the mode x level table of §6.8.1 of `03`), `rules`, `critical_guard`, `secret_guard`, `protect_size` (IC-04) | P02 load |
+| `builtin_permissions(gptr)` | `perm-gate.R` | registers the policies `mode` (the mode x level table of §6.8.1 of `03`; in auto and yolo it denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command the code computes, a `dynamic` row that is no `<fn>(): ` reading, unless an `r(fn:)` allow rule covers those rows, D-262), `rules`, `critical_guard`, `secret_guard`, `protect_size` (IC-04) | P02 load |
 | `builtin_plan(gptr)` | `perm-plan.R` | registers the `plan` policy (writes denied, level-1 R allowed only because the run evaluates in the scratch overlay), the plan-mode `agent_end` hook (captures the last `<proposed_plan>...</proposed_plan>`, saves `<root>/plans/<YYYY-MM-DD>-<slug>.md`, sets `.d$plan`, stores the pending plan under `home_address(home)` with the time, appends `gptr.plan`, offers the execute menu interactively), the plan-mode allowlist check (only calls known to be read-only run, IC-54), and the `plan.pending` service (returns the plan once, only to the next top-level `peter()` call of the same process and environment within one hour; any other call in between discards it; IC-56) | P02 load |
 | `builtin_ui(gptr)` | `console-ui.R` | registers `ui` specs `console`, `none`, `scripted`, `rstudio` and the `ui.get` service (resolution from the run's snapshot of `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`, IC-43, IC-53); every display escapes control, bidi and zero-width characters and the one-line prompt shows the call's first line cut to the console width, `(+N more lines)`, a path tool's change from its input (IC-77 in §15.10) and at most 5 flagged calls, one per line (IC-53, D-187, D-222) | P02 load |
 | `builtin_ask(gptr)` | `tool-ask.R` | registers the `ask` direct tool (schema §9.2) with `available = function(ctx) ctx$has_ui()`; result text as 18 §3.6 (`The user answered:` lines; cancellation and non-interactive texts) | P02 load |
@@ -5379,10 +5379,11 @@ totals line names the model and the context left.
   specs accept it; no project file sets it (an untrusted one only tightens the mode, D-250), nested calls and
   children only tighten (IC-52, IC-53 item 4). A project value is compared with the default when the user's
   value is not a valid mode.
-- Gate: the `mode` policy allows every call; `critical_guard` takes the level of the flagged rows that are not
-  `control`, except `options(gptr.*)`, which could switch the guard off, and asks a person at level 4 while the
-  guard is on; `secret_guard` asks only for secret-to-network flows; `protect_size` is skipped as in auto; deny
-  and ask rules still apply; allow rules never pre-approve level 4 (6.8.2).
+- Gate: the `mode` policy allows every call but a computed `system()`-family command, which it denies as in auto
+  (7.11, D-262); `critical_guard` takes the level of the flagged rows that are not `control`, except
+  `options(gptr.*)`, which could switch the guard off, and asks a person at level 4 while the guard is on;
+  `secret_guard` asks only for secret-to-network flows; `protect_size` is skipped as in auto; deny and ask rules
+  still apply; allow rules never pre-approve level 4 (6.8.2).
 - Level 4 in every mode: deleting a path whose class is `outside` (beyond the project and R's session
   `tempdir()`; system temporary roots such as `/tmp` count as outside, so a run nobody can answer stops
   `blocked` there), `protected`, `control` or `critical`. A delete keeps the category `file_delete`; a control

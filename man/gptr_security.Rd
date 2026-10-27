@@ -38,11 +38,13 @@ project setting or model code in another mode cannot), also runs gptr's own conf
 functions, writes to R startup files such as \verb{~/.Rprofile} (which can change gptr's options in
 the next R process) and secret reads without asking, and still asks before deleting protected
 files, files outside the project or the project itself, \code{rm(list = ls())}, quitting R,
-\verb{options(gptr.*)} and sending a secret over the network; \code{plan} changes nothing. When nobody
-can answer a question (Rscript, knitr, a scheduled job) the run stops with status \code{blocked}
-and a \code{gptr_error_permission} condition that says how to allow the action, unless you set
-\code{options(gptr.noninteractive_ask = "deny")}. Model code cannot switch the gate off or loosen
-it during a run: the safety options are copied when the run starts. Only the option
+\verb{options(gptr.*)} and sending a secret over the network; \code{plan} changes nothing. In \code{auto} and
+\code{yolo} mode a \code{system()} or \code{system2()} call (on Windows also \code{shell()} or \code{shell.exec()}) whose
+command the code computes is refused (see below). When nobody can answer a question (Rscript,
+knitr, a scheduled job) the run stops with status \code{blocked} and a \code{gptr_error_permission}
+condition that says how to allow the action, unless you set
+\code{options(gptr.noninteractive_ask = "deny")}. Model code cannot switch the gate off or loosen it
+during a run: the safety options are copied when the run starts. Only the option
 \code{gptr.unsafe_no_permissions}, set by you outside a run, removes the gate, and it is meant for
 disposable sandboxes.
 }
@@ -53,11 +55,18 @@ The risk levels come from a static classifier (\code{\link[=gptr_risk]{gptr_risk
 security boundary: R code can compute function names, call compiled code or load packages
 whose effects the classifier cannot see, and R has no sandbox for code that runs inside your
 session. Deny and ask \verb{sh:} rules see a command computed at run time only in a \code{peter$sh()} or
-\code{peter$bg()} call, so \verb{cmd = paste("rm", "-rf", "build"); system(cmd)} runs in \code{auto} and
-\code{yolo} mode despite a deny rule \verb{r(sh:rm *)}. In \code{auto} and \code{yolo} mode a model can delete or
-overwrite files and objects. Use them only in projects you can restore (version control,
-backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run untrusted prompts or untrusted projects in
-a disposable container or virtual machine.
+\code{peter$bg()} call, which checks the command when it runs. So in \code{auto} and \code{yolo} mode a
+\code{system()}, \code{system2()}, \code{shell()} or \code{shell.exec()} call whose command (for \code{system2()} also its
+arguments) is not a string the classifier can read, such as
+\verb{cmd = paste("rm", "-rf", "build"); system(cmd)}, is refused, and the model is told to run the
+command with \code{peter$sh()}; \code{manual} and \code{edits} ask. An allow rule such as \code{r(fn:system)} lets
+such calls run, unchecked by \verb{sh:} rules. The refusal covers only calls the classifier resolves
+to these functions: a function reached by a computed name (\code{get("system")(cmd)}),
+\code{eval(parse())}, a sourced file, package code and other command runners such as \code{pipe()} or
+\code{processx::run()} still run a computed command unchecked. In \code{auto} and \code{yolo} mode a model can
+delete or overwrite files and objects. Use them only in projects you can restore (version
+control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run untrusted prompts or untrusted
+projects in a disposable container or virtual machine.
 }
 
 \section{Sub-agents, workers and child processes}{

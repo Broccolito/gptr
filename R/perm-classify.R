@@ -1839,7 +1839,8 @@ risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "w
 #' `control`, `instructions`, `critical`, `url`, `wildcard`, `unknown`). Calls of
 #' `peter$sh()`, `system()`, `system2()` and `processx::run()` with literal commands are
 #' classified with the command table (`inst/extdata/risk-commands.csv`), `peter$sql()` by its
-#' statements and `peter$py()` by a token scan. Plugins and users extend both tables with
+#' statements and `peter$py()` by a token scan. A command the code computes, or a `shell.exec()`
+#' file it computes, is a `dynamic` row at level 3. Plugins and users extend both tables with
 #' `risk_rule` records.
 #'
 #' @param code R code: a character vector, a call or an expression.
@@ -2490,6 +2491,12 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
           add_path(list(x), "file_write", 2L, ctx, label, name)
         }
       }
+    }
+    if (name == "shell.exec") {
+      x = risk_arg(a, "file", 1L)
+      if (is.null(x) || !is.null(risk_fold(x))) return(FALSE)
+      add(ctx, paste0(label, " (a file the code computes)"), name, 3L, "dynamic")
+      return(TRUE)
     }
     code = risk_code_args[[name]]
     if (!is.null(code) && (name != "run" || row$package == "processx")) {

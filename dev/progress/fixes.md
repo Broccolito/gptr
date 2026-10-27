@@ -6043,3 +6043,100 @@ the driver, screens, events, transcripts and replays without a model are local, 
   'TypeSafe AI' is quoted as a host, not as software or an API (A6's kdps comment); "hosted by
   TypeSafe AI" is the fallback if a reviewer queries it. The README's 4 GiB figure is one
   measured run (`dev/TESTING_PLAN.md`).
+
+## FIX-27 - Auto and yolo refuse a system() command the code computes (2026-10-26, #87)
+- Why: issue #87 and FIX-18's Open (D-251 nested-1): a command built at run time and run through
+  base `system()` (`cmd = paste("rm", "-rf", "build"); system(cmd)`) ran in auto and yolo despite a
+  deny `r(sh:rm *)`, and in a fake run `build/` was deleted in both modes; only nested `peter$sh()`
+  and `peter$bg()` calls meet the rules with their actual command. On 2026-10-26 the maintainer
+  chose option 2, to refuse such a call in auto and yolo unless a rule allows it and point the model
+  to `peter$sh()`, over option 1, run-time wrappers of `system()` and `system2()` bound in the
+  evaluation environment; D-262 gives the reasons.
+- Red (7dc1cf7b, the tests on main 13a917ff's code): `^perm-(gate|classify)$` FAIL 32 PASS 1084,
+  `NOT_CRAN=true`, SIGINT at its default. test-perm-classify.R "shell.exec() of a file the code
+  computes is a dynamic row (D-262)" fails 4 times (line 1159): `shell.exec(f)`,
+  `shell.exec(file = f)`, `base::shell.exec(paste0(d, '.bat'))` and `lapply(fs, shell.exec)` are not
+  dynamic. test-perm-gate.R "auto and yolo refuse system() with a computed command; peter$sh() meets
+  the rules" fails 16 times, 4 for each mode with and without `r(sh:rm *)`: no refusal text (line
+  483), no `peter$sh()` pointer (485), `ran` set, so the code ran (486), and `build/a.o` gone (491;
+  the first run, auto without a rule, deleted it). "only auto and yolo refuse a computed command; a
+  literal one is gated as before" fails 12 times: the 9 computed forms are allowed in auto and yolo
+  (512), the `system2()` reason is missing (521), `system(cmd)` with the allow rules `r(level<=3)`,
+  `r(category:dynamic)`, `r(sh:*)` and `r(fn:system2)` runs in auto and yolo (527), and so does
+  `system(cmd); system2(cmd)` with `r(fn:system)` (532).
+- Cause: `by_args()` turns a command it cannot fold to literals into one `dynamic` level-3 row whose
+  text is the deparsed call (`system(cmd) (code the code computes)`); `sh:` rules read only the
+  `<fn>(): ` rows of a literal command, so no `sh:` glob matches it, and the `mode` policy allows
+  level 3 in auto and every call in yolo. `shell.exec()`'s file was never read: every call was the
+  table's level-3 `process` row, a computed file included.
+- Fix (9333785c): `perm_computed_cmd()` (perm-gate.R) takes the `dynamic` rows of `system()`,
+  `system2()`, `shell()` and `shell.exec()` that are no reading of a command
+  (`rule_code_text(fl) == fl$call`) and returns the first function unless an `r(fn:)` allow rule
+  covers them all, matched against those rows alone (a separate `risk_new()` record, so the call,
+  which `perm_is_control()` reads later, is unchanged); in auto and yolo `perm_policy_mode()` then
+  denies, before yolo's allow, with "<fn>() with a computed command is refused in <mode> mode: the
+  permission rules cannot read it. Run the command with peter$sh(), which checks it against them
+  when it runs". The refusal takes the existing path (`perm_policies()`, where deny ranks highest
+  and the `mode` policy's reason comes first, then `perm_decide()` and `perm_denial_text()`), so the
+  code is not evaluated; gptr_mcp_serve clients and worker-forwarded requests meet the same policy.
+  `by_args()` gains a `shell.exec` branch: a file `risk_fold()` cannot reduce to literals is the
+  `dynamic` row `shell.exec(f) (a file the code computes)`, a literal file keeps the `process` row;
+  risk-functions.csv's `shell.exec` note is corrected. No OS branch: the rule reads the classifier's
+  rows, which are the same on every OS (on Windows `shell()` and `shell.exec()` resolve to base and
+  their formals are matched; elsewhere the call is read as written).
+- Docs (bf70c1ab): `?gptr_security` ("Permission modes"; "What the gate cannot do", which said such
+  a call runs despite the rule), `?gptr_permissions`, `?gptr_risk`, vignette("execution-model")
+  (.Rmd.orig and the re-knit .Rmd), NEWS, 03 sections 6.8.1, 6.8.2 and 6.8.4, 04 sections 7.11
+  (`builtin_permissions`) and 15.9 IC-78. Unchanged on purpose: `R/eval-core.R` (option 1 rejected),
+  `R/bridge-sh.R` and `nested_rules()`; `R/prompt-text.R`, whose `r_session` line already sends
+  programs to `peter$sh()` and whose text the token baselines pin, while the refusal itself names
+  `peter$sh()`; the cheat sheet, whose mode rows are summaries that point to `?gptr_security` (no
+  reprint); `?peter`, `mode_notice()` (it lists what yolo asks; a refusal is no ask), README,
+  `cran-comments.md` and the plans.
+- Green: `^perm-(gate|classify|rules|plan)$` FAIL 0 PASS 1402 in UTF-8 and under `LC_ALL=C LANG=C`;
+  the neighbours, the files whose names start with `agent-dispatch`, `bridge-`, `mcp-server`,
+  `injection-e2e`, `northstar`, `prompt-text`, `ckpt-files`, `gptr-gateway`, `tool-r`,
+  `arch-layers`, `lint-rules`, `auth-secrets`, `secrets-e2e` or `zzz` (18 files), FAIL 0 SKIP 12
+  PASS 3067 in UTF-8 and under `LC_ALL=C LANG=C` (the skips: Python not configured or provisioned,
+  Windows only); `^(zzz|lint-rules|doc-|gptr-config$)` FAIL 0 SKIP 2 PASS 3616 in both ({repr} is
+  not installed); the full suite `.` under the heavy lock FAIL 0 WARN 0 SKIP 66 PASS 38397 in UTF-8
+  (31 min; the skips: Windows only 37, live 12, Python 11, {repr} 2 and four others). Lint clean
+  (the 6 changed R and test files). `document()` changes only `man/gptr_security.Rd`,
+  `man/gptr_permissions.Rd` and `man/gptr_risk.Rd`, and a second run nothing;
+  `precompute.R execution-model` 0 problems, changing only `execution-model.Rmd` (the new sentence,
+  and the token counts and session id that the current prompt gives); `check-docs.R` 0 problems;
+  `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290, the spelling check included. A
+  probe of 31 forms on the fixed code gives the decisions of the tests, also for
+  `system(cmd, intern = TRUE)`, `rlang::exec(system, cmd)`, `match.fun("system")(cmd)`,
+  `quote(system(cmd))` and `eval(quote(system(cmd)))` (refused) and
+  `system2("rm", c("-rf", "build"))` (read, so `r(sh:rm *)` denies it in every mode). No test runs
+  `system()`, `shell()`, `shell.exec()` or `rm` on the fixed code (the refusal comes before
+  evaluation, the allowed call is `if (FALSE) system(cmd)`, and the nested `peter$sh()` denial
+  happens before any process starts), so none needs a Windows skip.
+- Final checks, on `b61f4349` (the commit of this item changes only `dev/`, which `.Rbuildignore`
+  drops): `R CMD check --as-cran` in CRAN mode (`NOT_CRAN` unset, CRAN's timing thresholds, both
+  manuals) under `env -i` with only `HOME`, `PATH`, `LANG=en_US.UTF-8`, a `TMPDIR` from
+  `mktemp -d`, `R_LIBS_USER` and the `_R_CHECK_` variables, on a `git archive` of the head: Status
+  OK with no NOTE in 141 s, the tests in 20 s (`testthat.R` [15s/16s], FAIL 0 SKIP 902 PASS 2676;
+  the end-to-end block skips on CRAN, the decision block runs), INFO only for 'repr' and the
+  installed size (7.9 Mb); tarball sha256 `d13ad61c`. The tests of the changed files and their
+  neighbours, the files whose names start with `perm-`, `agent-dispatch`, `injection-e2e`,
+  `mcp-server`, `s11-conformance`, `secrets-e2e`, `subagent-team`, `console-render`, `console-ui`,
+  `zzz` or `lint-rules`, and `gptr-config` (15 files): FAIL 0 SKIP 0 PASS 4384 in UTF-8 and FAIL 0
+  SKIP 9 PASS 4340 under `LC_ALL=C LANG=C` (the skips need a UTF-8 locale). Lint clean (the 6 files
+  and the vignette); `document()` no diff; `check-docs.R` 0 problems; the plan checks pass (28
+  plans, no error finding, 770 R blocks with 0 problems, no lints);
+  `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290.
+- Deviations: D-262; D-251's Open (nested-1) gains its status line, closed by D-262. Open: a
+  function reached by a computed name (`get("system")(cmd)`, only a `<computed>` row),
+  `eval(parse(text = ))`, `source()`, package code that calls `system()`, `peter$knit` R chunks and
+  `peter$script` still run a computed command unchecked; `pipe(cmd)`, `processx::run(cmd)` and
+  `data.table::fread(cmd = x)` give the same `dynamic` row and are not refused (adding them is one
+  word in the function vector, the maintainer's call); `system2()`'s `env`, pasted unquoted into the
+  Unix command line, is never read (`system2("ls", env = "A=1; rm -rf build;")` is level 0), worth
+  an issue of its own; in manual mode an allow `r(level<=3)` still lets a computed `system()` run
+  without asking past a deny `sh:` rule (as before). The accepted false refusals
+  (`cmd = "ls"; system(cmd)`, `system2("git", c("log", n))`, `do.call(system, list("ls"))`, a
+  function defined but not called, a literal unmodelled command inside the user's own helper) cost
+  one round trip each. Whether live models take the `peter$sh()` route after the refusal (the modes
+  prompt says not to work around a denial) is seen only live; no live run was made.

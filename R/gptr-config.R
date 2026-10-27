@@ -1637,11 +1637,13 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' functions, writes to R startup files such as `~/.Rprofile` (which can change gptr's options in
 #' the next R process) and secret reads without asking, and still asks before deleting protected
 #' files, files outside the project or the project itself, `rm(list = ls())`, quitting R,
-#' `options(gptr.*)` and sending a secret over the network; `plan` changes nothing. When nobody
-#' can answer a question (Rscript, knitr, a scheduled job) the run stops with status `blocked`
-#' and a `gptr_error_permission` condition that says how to allow the action, unless you set
-#' `options(gptr.noninteractive_ask = "deny")`. Model code cannot switch the gate off or loosen
-#' it during a run: the safety options are copied when the run starts. Only the option
+#' `options(gptr.*)` and sending a secret over the network; `plan` changes nothing. In `auto` and
+#' `yolo` mode a `system()` or `system2()` call (on Windows also `shell()` or `shell.exec()`) whose
+#' command the code computes is refused (see below). When nobody can answer a question (Rscript,
+#' knitr, a scheduled job) the run stops with status `blocked` and a `gptr_error_permission`
+#' condition that says how to allow the action, unless you set
+#' `options(gptr.noninteractive_ask = "deny")`. Model code cannot switch the gate off or loosen it
+#' during a run: the safety options are copied when the run starts. Only the option
 #' `gptr.unsafe_no_permissions`, set by you outside a run, removes the gate, and it is meant for
 #' disposable sandboxes.
 #'
@@ -1650,11 +1652,18 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' security boundary: R code can compute function names, call compiled code or load packages
 #' whose effects the classifier cannot see, and R has no sandbox for code that runs inside your
 #' session. Deny and ask `sh:` rules see a command computed at run time only in a `peter$sh()` or
-#' `peter$bg()` call, so `cmd = paste("rm", "-rf", "build"); system(cmd)` runs in `auto` and
-#' `yolo` mode despite a deny rule `r(sh:rm *)`. In `auto` and `yolo` mode a model can delete or
-#' overwrite files and objects. Use them only in projects you can restore (version control,
-#' backups, [gptr_rewind()] for recent turns), and run untrusted prompts or untrusted projects in
-#' a disposable container or virtual machine.
+#' `peter$bg()` call, which checks the command when it runs. So in `auto` and `yolo` mode a
+#' `system()`, `system2()`, `shell()` or `shell.exec()` call whose command (for `system2()` also its
+#' arguments) is not a string the classifier can read, such as
+#' `cmd = paste("rm", "-rf", "build"); system(cmd)`, is refused, and the model is told to run the
+#' command with `peter$sh()`; `manual` and `edits` ask. An allow rule such as `r(fn:system)` lets
+#' such calls run, unchecked by `sh:` rules. The refusal covers only calls the classifier resolves
+#' to these functions: a function reached by a computed name (`get("system")(cmd)`),
+#' `eval(parse())`, a sourced file, package code and other command runners such as `pipe()` or
+#' `processx::run()` still run a computed command unchecked. In `auto` and `yolo` mode a model can
+#' delete or overwrite files and objects. Use them only in projects you can restore (version
+#' control, backups, [gptr_rewind()] for recent turns), and run untrusted prompts or untrusted
+#' projects in a disposable container or virtual machine.
 #'
 #' @section Sub-agents, workers and child processes:
 #' Inline sub-agents run in your session and see its objects. The worker backend runs a

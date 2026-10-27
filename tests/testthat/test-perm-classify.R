@@ -1151,3 +1151,16 @@ test_that("the code text of a long call chain is deparsed (CI-82)", {
   withr::local_options(expressions = 1000L)
   expect_match(risk_code_text(chain)[1L], "^[(f1)]+$")
 })
+
+test_that("shell.exec() of a file the code computes is a dynamic row (D-262)", {
+  for (code in c("shell.exec(f)", "shell.exec(file = f)", "base::shell.exec(paste0(d, '.bat'))",
+                 "lapply(fs, shell.exec)")) {
+    r = gptr_risk(code)
+    expect_true(r$dynamic, label = code)
+    expect_identical(r$flagged$fn, "shell.exec", label = code)
+    expect_identical(r$level, 3L, label = code)
+  }
+  r = gptr_risk("shell.exec('report.pdf')")
+  expect_false(r$dynamic)
+  expect_identical(r$categories, "process")
+})

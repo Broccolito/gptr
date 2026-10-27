@@ -59,8 +59,22 @@ perm_edits_ok = function(call, risk) {
           fl$category == "file_write" & fl$path_class %in% c("workspace", "temp"))
 }
 
-#' Policy `mode`: the mode x level table with allow rules folded in; yolo allows everything;
-#' control is the critical guard's, which asks a person in every other mode
+#' The first of system(), system2(), shell() and shell.exec() whose command the code computes
+#' (a `dynamic` row that is no reading of a command), unless an `r(fn:)` allow rule covers all
+#' such rows (D-262); NULL when there is none
+#' @noRd
+perm_computed_cmd = function(call) {
+  fl = call$risk$flagged
+  fl = fl[fl$fn %in% c("system", "system2", "shell", "shell.exec") & fl$category == "dynamic" &
+            rule_code_text(fl) == fl$call, , drop = FALSE]
+  if (!nrow(fl)) return(NULL)
+  allow = rule_match(perm_rules_effective(), list(name = call$name, risk = risk_new(fl)))$allow
+  if (!any(vapply(allow, function(r) rule_parse(r)$kind == "fn", NA))) fl$fn[1L]
+}
+
+#' Policy `mode`: the mode x level table with allow rules folded in; auto and yolo refuse a
+#' computed system command (D-262), and yolo allows everything else; control is the critical
+#' guard's, which asks a person in every other mode
 #' @noRd
 perm_policy_mode = function(call, ctx) {
   call$risk = risk_norm(call$risk, call$tool)
@@ -71,6 +85,13 @@ perm_policy_mode = function(call, ctx) {
     q = vapply(call$input$questions, function(x) x$question, "")
     return(perm_decision("ask_human", paste0("the ask tool needs a person to answer: ",
                                              paste(q, collapse = " | ")), call))
+  }
+  fn = if (mode %in% c("auto", "yolo")) perm_computed_cmd(call)
+  if (!is.null(fn)) {
+    return(perm_decision("deny", paste0(fn, "() with a computed command is refused in ", mode,
+                                        " mode: the permission rules cannot read it. Run the ",
+                                        "command with peter$sh(), which checks it against them ",
+                                        "when it runs"), call))
   }
   if (identical(mode, "yolo")) return(perm_decision("allow", "mode yolo", call))
   if (perm_is_control(call, call$risk)) return(NULL)
