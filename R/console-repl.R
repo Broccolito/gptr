@@ -423,10 +423,11 @@ attr_escape = function(x) {
 #' @noRd
 console_files_budget = 2000L
 
-#' The <file> block of an @file mention: the first 40 lines of a text file (redacted with the
-#' `context` profile) that fit `room` tokens, marked truncated when cut, or a one-line note for a
-#' binary file (report 18 section 4.3) or one without room; attr "said" names what it holds
-#' (`2 lines`, `first 40 lines`, `binary, 3 bytes`, `not attached, over the size limit`)
+#' The <file> block of an @file mention: the first 40 lines of a text file (a line that is not
+#' UTF-8 read as CP1252, a byte it lacks as `<xx>`; redacted with the `context` profile) that fit
+#' `room` tokens, marked truncated when cut, or a one-line note for a binary file (report 18
+#' section 4.3) or one without room; attr "said" names what it holds (`2 lines`, `first 40 lines`,
+#' `binary, 3 bytes`, `not attached, over the size limit`)
 #' @noRd
 repl_file_block = function(path, shown, max_lines = 40L, room = Inf) {
   file = paste0("<file path=\"", attr_escape(shown), "\"")
@@ -437,6 +438,8 @@ repl_file_block = function(path, shown, max_lines = 40L, room = Inf) {
                      said = paste0("binary, ", bytes, " bytes")))
   }
   x = readLines(path, n = max_lines + 1L, warn = FALSE, encoding = "UTF-8")
+  bad = !validUTF8(x)
+  x[bad] = iconv(x[bad], "CP1252", "UTF-8", sub = "byte")
   more = length(x) > max_lines
   x = redact(clean_terminal(utils::head(x, max_lines)), profile = "context")
   tag = function(cut) paste0(file, if (cut) " truncated=\"true\"", ">")

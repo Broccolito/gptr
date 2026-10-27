@@ -493,6 +493,17 @@ test_that("a binary @file is announced, not inlined", {
   expect_identical(men$said, "@ blob.bin (binary, 3 bytes)")
 })
 
+test_that("an @file line that is not UTF-8 is read as CP1252, as the read tool reads it (FIX-34)", {
+  root = local_project()
+  bytes = c(charToRaw("caf"), as.raw(0xe9), charToRaw(" "), as.raw(0x93), charToRaw("q"),
+            as.raw(c(0x94, 0x81)), charToRaw("\ncafé in UTF-8\n"))
+  writeBin(bytes, file.path(root, "lat.txt"))
+  men = repl_mentions("look at @lat.txt", new.env())
+  expect_identical(men$files, paste0("<file path=\"lat.txt\">\ncafé “q”<81>\n",
+                                     "café in UTF-8\n</file>"))
+  expect_identical(men$said, "@ lat.txt (2 lines)")
+})
+
 test_that("a long @file is marked truncated even when the first cut line is blank", {
   skip_on_cran()
   root = local_project(files = list("long.R" = c(paste0("l", 1:40), "", paste0("m", 1:10))))
