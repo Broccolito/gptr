@@ -1,6 +1,6 @@
 # Recursive peter: `gptr_coach()` and in-memory harnesses
 
-Status: proposed design, revision 4, 2026-10-28. Not accepted: no contract entries and no code yet.
+Status: accepted and implemented in P29 (dev/plan/P29-gptr-coach.md), 2026-10-28.
 Sources: Harness² (Xu et al. 2026, arXiv 2610.14224; github.com/google-research/harness2 at
 `1cfe254`) and gptr at `13a917ff`. Every gptr name cited below was checked against that commit;
 names marked **NEW** do not exist yet. Twelve research reviews and nine critical reviews shaped

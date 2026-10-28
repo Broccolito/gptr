@@ -60,6 +60,43 @@ works on the objects already in memory.
   providers.
 * Skills, prompt templates, agent files, extensions and plugins in R packages, all on one
   versioned extension API (`gptr_register()`, `gptr_spec()` and the spec constructors).
+* `gptr_tailor()` makes a harness: a function you call exactly like `peter()` that carries
+  `peter()` arguments you fix (such as `mode`, `model`, `tools` or `extensions`), your own hard
+  rules, and coaching: a note added to peter's instructions, skills peter can open, a review that
+  asks peter to check its work before it stops, and rules. It calls no model. Share a harness
+  with `saveRDS()` and load one with `gptr_tailor(readRDS(file))`; `dir =` writes it out as
+  files to read.
+* `gptr_coach()` improves a harness's coaching by running your task: the harness does the task,
+  two coaches propose new coaching, each proposal does the task, a third coach combines them, and
+  the result does the task once more. Code keeps the new coaching only when that last run ended
+  normally, delivered what the first one did, took no riskier kind of action and passed your own
+  `check`. `k` (1 to 5) asks for more coaching: with `strategy = "parallel"` it runs `k` of each
+  side by side, and when more than one result passes, a blind judge picks one; with
+  `"sequential"` it runs `k` rounds, each building on the one before. Every session runs
+  unattended in its own R process with copies of your objects. It works on API keys and on
+  Claude Code and Codex plans (on a plan, at most two sessions at once, and it stops at a plan
+  limit). A call such as `h = gptr_coach(...)` in a script or notebook is recorded as the
+  coaching it produced and replays without a model, a key or any process.
+* A skill can carry its own text: `gptr_spec("skill", name, description = ..., text = ...)`
+  needs no `SKILL.md` file. A skill registered for a call, by an extension or a harness, stays in
+  that session.
+* Hard rules as data, in `gptr_tailor(peter, rules = list(never = ..., require = ...))` and in
+  coaching: a `never` rule, such as `r(category:install)`, refuses every matching call in every
+  mode, sub-agents included; a `require` rule names a call that must happen before peter
+  finishes, such as saving results with `write.csv()`, and gptr reminds peter at most twice and
+  reports a requirement still missing. Rules read the code before it runs, so a name or path the
+  code computes can slip past them.
+* Your own policies bind sub-agents: a policy you pass with `extensions =` also applies to every
+  session the run starts (a `peter()` call from the agent's code, team members, fan-out children
+  and workers). A nested `peter$sh()`, `peter$write()` or `peter$edit()` whose command or path
+  the agent's code computes meets every deny and ask rule, and the strictest answer wins.
+* A weekly or model-family limit on a Claude or ChatGPT plan is no longer retried, and reaching
+  any plan limit on the `claude-cli` or `codex` route signals `gptr_error_plan_limit`, with the
+  time the limit resets when the CLI says it.
+* `.opts$returns` now works on Claude Code (`claude-cli`): gptr asks for the reply's shape at
+  the end of the prompt and checks the reply itself.
+* An extension factory with a `gptr_key` attribute (a string) loads once per session, so
+  passing it again when you continue the session does not load it twice.
 * MCP: a client for both protocol eras (`gptr_mcp()`, `gptr_mcp_add()`) that exposes server
   tools as R functions, and `gptr_mcp_serve()`, which serves the live session to other agents.
 * Artifacts are Shiny apps launched in the background from the live session

@@ -7779,3 +7779,139 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   runs the whole plan", "the go-ahead the person sends runs the plan once, in the mode the menu
   chose".
   Evidence: progress/fixes.md FIX-21.
+
+## D-262 - P29 Names: gptr_tailor() and gptr_coach(); a harness is class gptr_harness (2026-10-28)
+- Rule: the two new exports are `gptr_tailor()`, which builds a harness by hand, and `gptr_coach()`, which
+  improves a harness's coaching by running the task; both keep the `gptr_` prefix (D-28 unchanged), and `peter()`
+  stays the single gateway (S-1). The object both return is a harness: a function of class
+  `c("gptr_harness", "function")`, called exactly like `peter()`. The starting harness of `gptr_coach()` is
+  `harness =`, and no argument of `gptr_coach()` shares a name with one of `peter()`'s.
+- Contract-visible: 04 sections 14.1 and 15.11 IC-83, IC-84; 03 sections 3.2, 4.4 and 6.19.
+- Tests: test-gptr-tailor.R "gptr_tailor() returns a harness built on peter (08 3.1)"; test-gptr-coach.R
+  "Harness2's demo: the coach writes the fix, which is kept (4 runs, 3 coaches)". Evidence: progress/P29.md
+  Tasks 6 and 9.
+
+## D-263 - P29 Codex coaching with a reduced tool set is a supported route; the live test decides (2026-10-28)
+- Rule: runs, coaches and the judge may use Codex on a ChatGPT plan with Codex's own tools switched off
+  (`pcli_codex_off`, `pcli_codex_confine`), a run acting only through gptr's tools over the relay and a coach with
+  none (IC-88). Whether the ChatGPT-plan backend accepts the reduced tool set and the strict `--output-schema` is
+  decided by the live test. A refused request ends the session with Codex's own error by name ("Codex reported an
+  error: <its text>", class `provider`, or `plan_limit` for a usage limit); gptr never falls back to Codex's own
+  shell.
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-codex.R "a confined exec is ephemeral, read-only, without Codex's own tools, and hooked", "a step
+  outside gptr's tools stops a confined exec at once"; live: pending. Evidence: progress/P29.md Task 5.
+
+## D-264 - P29 Coached Codex runs act without Codex's own shell (2026-10-28)
+- Rule: accepted. A run on Codex acts only through gptr's tools: `r` runs R code and `peter$sh()` reaches the shell
+  through `r`, both risk-checked, fenced and tallied. Any other Codex step fails the session
+  (`gptr_error_cli_check`), and each denial in the hook's log counts as a refused step. The live calibration (08
+  P29h) measures how well runs do this way; the checks are not traded for quality.
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-codex.R "a confined run reports each hook denial as a refused step and still completes".
+  Evidence: progress/P29.md Task 5.
+
+## D-265 - P29 Codex coaching sessions keep no logs: --ephemeral and history.persistence none (2026-10-28)
+- Rule: every confined exec passes `--ephemeral` and `-c history.persistence="none"` (in `pcli_codex_confine`, so
+  the preflight's `codex features list` runs with it too) and is never resumed: a follow-up (a coach's retry, a
+  review reminder) is a fresh exec that carries gptr's instructions and the whole history. A live test is to look
+  for a canary from the prompt among the files changed under `CODEX_HOME`, by name and match count only; if Codex
+  still writes the prompt, 08 honest limit 7 says so.
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-codex.R "under a coaching role build() never resumes and sends the whole history"; the Codex
+  canary live test is open (progress/P29.md). Evidence: progress/P29.md Task 5.
+
+## D-266 - P29 Plan CLIs are checked against a minimum version, never an exact list (2026-10-28)
+- Rule: `pcli_coach_min` is claude 2.1.296 and codex-cli 0.157.1, the oldest versions coaching was tested with.
+  `pcli_coach_preflight()` refuses an older CLI (`gptr_error_model_refused`, reason `cli_version`), runs a newer
+  one with a one-time notice, and caches a passing preflight per CLI path and version. Claude Code updates itself
+  and gptr ships through CRAN, so an exact list would refuse coaching after every update; the per-session checks,
+  which fail closed, protect a newer CLI.
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-common.R "a plan CLI's preflight runs once per path and version; a newer one gets a notice".
+  Evidence: progress/P29.md Task 5.
+
+## D-267 - P29 A coaching run's result is plain JSON, never readRDS() (2026-10-28)
+- Rule: a coaching child writes its result as JSON (`plain_encode()`); the parent reads it with `json_decode()`,
+  caps its size (64 MiB), depth (20), lengths (1e6) and values (1e5), rejects unknown keys and types, and rebuilds
+  only logical, integer, double, character, factor, Date, POSIXct, data frame and list values (`plain_decode()`),
+  anything else arriving as its printed summary. It never calls `readRDS()` or `jsonlite::unserializeJSON()` on a
+  child's output. Reason: an `.rds` file can hold a promise, and before R 4.4 one crafted so that `readRDS()`
+  returns it runs any code when touched (CVE-2024-27322); R 4.4 refuses such a promise only at the top level of the
+  file, and on every version `readRDS()` can load packages the file names and return functions and active
+  bindings that run code. So coaching works on every supported R version (4.2 and later). The job still goes from
+  parent to child as an `.rds` spec in a private 0700 folder (the trusted direction).
+- Contract-visible: 04 section 15.11 IC-86.
+- Tests: test-gptr-child.R "plain data round-trips exactly (08 section 3.3)", "closures, environments, S4 and other
+  classes travel as printed summaries", "the parent refuses unknown keys, types, classes and sizes". Evidence:
+  progress/P29.md Task 7.
+
+## D-268 - P29 The coaching child reuses the worker's helpers through contract edges (2026-10-28)
+- Rule: `R/gptr-child.R` (area `gptr`, L6) starts each job through a new `child` entry of `proc_rscript()` beside
+  `worker_main()` and reuses P19's helpers instead of copying them: `subagent_schedule()`, `subagent_limit()`,
+  `worker_registry()`, `worker_registry_apply()`, `worker_spec_revive()` and `worker_key_provider()`, with P11's
+  `perm_rules_effective()`; `R/gptr-tailor.R` uses P11's `rule_hit()`, `rule_glob_re()` and `risk_table()` and
+  P10's `walk_tree()`. These 11 calls are contract edges of the layering test (`arch_contract_edges()`). The
+  worker's reader of its child's stdout is not reused: the child entry has its own line reader (`child_line()`),
+  because model code can print to that stream.
+- Contract-visible: 04 sections 12.2 and 15.11 IC-86; 03 section 3.2 (128 files).
+- Tests: test-arch-layers.R "the layer table lists the files of architecture section 3.2"; test-proc-rscript.R
+  "the coaching child entry loads the installed namespace as a worker does (P29)". Evidence: progress/P29.md
+  Tasks 7 and 9.
+
+## D-269 - P29 Policies of ancestor sessions bind every sub-agent (2026-10-28)
+- Rule: a session's policies include the rank-0 policies of every ancestor session (`registry_all_recs()` through
+  `registry_session_ancestors()`, which follows `parent_id` with the lookup `session-live.R` installs), and
+  `worker_registry()` ships those of the sessions' ancestors to a worker. So a person's `extensions =` policy and a
+  harness's `coaching` and `harness_rules` policies bind a nested `peter()` from model code, team members, fan-out
+  children, inline sub-agents and workers. Other kinds stay in their session.
+- Rule (every `peter()` call): `nested_rules()` asks every policy named `rules`, `coaching` or `harness_rules`
+  (`perm_strictest()`, the strictest answer wins, allow answers are never applied) about a nested `sh`, `bg`,
+  `write` or `edit` call. Formerly it asked only the first `rules` record, and only for `sh` and `bg`, so the
+  deny and ask rules never saw the actual path of a nested write or edit that the outer approval covered.
+- Contract-visible: 04 sections 7.6 (`dispatch_nested()`) and 15.11 IC-89; 03 section 6.8.4.
+- Tests: test-ext-registry.R "a session meets the rank-0 policies of its ancestors, and no other kind (08 3.2)";
+  test-agent-dispatch.R "a person's extensions = policy binds every session started under theirs", "nested sh,
+  write and edit calls meet every rules-like policy; the strictest wins"; test-subagent-worker.R "the worker
+  registry ships the rank-0 policies of the sessions' ancestors (08 3.2)". Evidence: progress/P29.md Task 3.
+
+## D-270 - P29 Nested computed commands meet the coaching fence (2026-10-28)
+- Rule: `nested_rules()` also asks a coaching child's `fence` policy, so a nested `sh`, `bg`, `write` or `edit`
+  call whose command or path the outer code computes at run time (`cmd = paste('R CMD', toupper('install'), 'x');
+  peter$sh(cmd)`) meets the fence as the literal call would. The fence (`child_fence_why()`) denies writes and
+  edits outside the child's temporary folder, code gptr cannot read, installs, R child processes, `setwd()` away
+  from the folder, file targets outside it, and reads of the CLI login files and `find-generic-password`. It still
+  fences only what the classifier sees (08 honest limit 1).
+- Contract-visible: 04 sections 7.6 and 15.11 IC-86, IC-89; 03 section 6.8.4.
+- Tests: test-agent-dispatch.R "nested sh, write and edit calls meet every rules-like policy; the strictest wins"
+  (the fence case); test-gptr-child.R "the fence denies writes outside, setwd away, installs and other R
+  processes", "the fence denies reading the CLI login files and the keychain (08 3.7)". Evidence: progress/P29.md
+  Task 9.
+
+## D-271 - P29 Plan limits are never retried; paid usage credits stop coaching (2026-10-28)
+- Rule (every `peter()` call): `run_retryable()` never retries `plan_limit`, `cli_check` or `model_refused`, nor a
+  plan's weekly or model-family limit named in text ("You've hit your Opus limit"); before, only the session limit
+  was excluded. On Claude Code a rejected `rate_limit_event` or such a result text ends the turn as
+  `gptr_error_plan_limit` (`reason = "limit"`, `resets_at`); on Codex an error naming a usage limit, empty credits
+  or a spend cap does, with the time Codex quotes.
+- Rule (coaching): in a coaching child a Claude session that starts drawing on paid usage credits
+  (`isUsingOverage`, or `errorCode` `credits_required`) is stopped at once (`reason = "overage"`). `gptr_coach()`
+  then starts nothing new (that plan's queued jobs end `skipped`), returns the starting harness with decision
+  `stopped` and the reason `stopped at <stage>: plan limit, resets at <time>`, records no block, and never waits for
+  a reset or resumes.
+- Contract-visible: 04 sections 2.2 and 15.11 IC-84, IC-86, IC-88.
+- Tests: test-agent-run.R "weekly and model-family plan limits and gptr's refusals are never retried";
+  test-cli-claude.R "a plan limit ends the turn with plan_limit and when the limit resets", "a plan limit through
+  peter() is not retried and signals gptr_error_plan_limit"; test-cli-codex.R "a Codex plan limit ends the exec as a
+  plan limit with its quoted reset time"; test-gptr-coach.R "a plan limit stops the call with the starting harness
+  and a record". Evidence: progress/P29.md Tasks 5 and 9.
+
+## D-272 - P29 Claude Code honours .opts$returns through the returns instruction (2026-10-28)
+- Rule (every `peter()` call): on the claude-cli route a request with `.opts$returns` ends its user line with
+  gptr's returns instruction (`adp_returns_instruction()`, P12; `pcli_claude_build()`), in every call, not only in
+  coaching. Formerly the route ignored the schema. The CLI has no native structured output, so gptr still reads and
+  validates the reply itself; a coach reply that fails gets one retry (IC-84).
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-claude.R "the claude route asks for `returns` at the end of the user line"; test-live-cli.R "a
+  claude coach has no tools, answers in one turn and saves nothing" (live, pending). Evidence: progress/P29.md
+  Task 5.

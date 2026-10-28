@@ -249,6 +249,8 @@ counts (`[ FAIL 0 | WARN 0 | SKIP n | PASS m ]`), and anything left open.
 
 ## Decisions taken during planning (recorded as D-262 onward at integration)
 
+Recorded as D-262..D-272 in dev/DEVIATIONS.md.
+
 - **D-262 Names.** `gptr_tailor()` and `gptr_coach()`, so that both keep the `gptr_` prefix
   (D-28 unchanged). The object class stays `gptr_harness`, because the object is a harness.
 - **D-263 Codex reduced tool set.** We recommend Codex with its shell off and gptr's tools as a
