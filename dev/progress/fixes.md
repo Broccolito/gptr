@@ -6180,6 +6180,13 @@ the driver, screens, events, transcripts and replays without a model are local, 
   environment (`get("system")(cmd)`, `baseenv()$system(cmd)`) or handed to a function of your own
   (`g(system)`), as do 03 section 6.8.1, HANDOFF and PROGRESS. D-262, 03 section 6.8.4 and 04
   section 9.4's `sh` row say so.
+- Review round 4, records (the docs verifier on `0aa55320`, R4D-6): the Open lists of HANDOFF and
+  PROGRESS named only the escapes in auto and yolo and had dropped this record's item that in
+  manual mode an allow `r(level<=3)` still lets a computed `system()` run without asking past a
+  deny `sh:` rule. Still so: a scratch gate test (deleted) with allow `r(level<=3)` and deny
+  `r(sh:rm *)` decides `cmd = paste('rm', '-rf', 'build'); system(cmd)` deny, allow, allow, deny,
+  deny in plan, manual, edits, auto and yolo (with no rule manual and edits ask) and the literal
+  `system('rm -rf build')` deny in all five. Both lists carry the item again, for manual and edits.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #86)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
@@ -6859,7 +6866,7 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
   mcp-recording, arch-layers and tool-namespace files pass in this round's runs; the verifier's
   offline repros on the fixed code deny `peter$sh(c(x, f))` in served R idle and during a run and
   keep the folder (the run stops `blocked` without a person, as the loop's does). D-267, 03
-  section 6.8.4, 04 sections 7.11 (`rule_match`), 15.6 IC-57 and 15.9 IC-79 say so. D-262 gains
+  section 6.8.4, 04 sections 7.11 (`rule_match`), 15.5 IC-57 and 15.9 IC-79 say so. D-262 gains
   status lines for the reason D-267 shortened and for the helper's literal command.
 - Review round 2, a nested ask's other inputs (the security verifier, F4; a regression of PERM-9):
   `perm_summary()` showed only a `cmd` input's words, so an ask rule or the critical guard on
@@ -6907,6 +6914,9 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
   a glob's trailing ` *` optional (`^cat( .*)?\z`), so `r(sh:git log *)` matches `git log` but not
   `git logs`. `?gptr_permissions`, 03 section 6.8.2, 04 section 7.11's `rule_match` row and D-267
   say so.
+- Review round 4, records (the docs verifier on `0aa55320`, R4D-3): round 1's line named IC-57's
+  section as 15.6; IC-57 is in 04 section 15.5, as round 2 says, and the line is corrected in place.
+  The vignette sentence this record's deny and ask rules made one-sided is in CI-105's round 4.
 
 ## FIX-33 - Transcript findings from the live sessions (2026-10-27, #PR)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
@@ -7647,3 +7657,34 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   `_R_CHECK_CRAN_INCOMING_REMOTE_=true` on that tarball ("checking CRAN incoming feasibility ...
   [3s/18s] OK"): Status OK with no NOTE in 112 s.
 - Deviations: D-270 (the Title; P01, P25 and 05 keep the old one). Open: none new.
+- Review round 4 (the docs verifier on `0aa55320`, R4D-1 and R4D-5; the regressions verifier, R4-3):
+  three README sentences, the first also in a vignette, were wrong or short; each keeps the
+  contributor's wording but for the smallest change. (1) The manual-mode sentence brought in rules
+  and let them only allow: since FIX-32 a deny or ask rule also stops a read-only command, and an
+  allow rule never approves a level-4 action, so this record's "states the default, where no rule is
+  set" did not hold. A scratch gate test in manual mode (deleted): `peter$sh('cat notes.txt')`
+  allow, deny under `r(sh:cat *)`, ask under an ask rule; `system('rm -f gone.txt')` ask, allow
+  under `r(sh:rm *)`, deny with a deny `r(sh:rm *)` too; `unlink('/etc/gptr-old.csv')` ask_human
+  under `r(level<=4)`; `readLines('notes.txt')` allow under a deny `r(fn:readLines)`, which never
+  matches it. It now reads "actions classified as read-only run directly and actions classified as
+  changes ask for approval, unless a permission rule applies; an allow rule never approves a
+  critical action." The interactive-console vignette's "known read-only actions and actions covered
+  by existing allow rules run directly" takes the same clause in `.Rmd.orig` and `.Rmd`
+  (`8c9d6be8`). Not changed: the cheat sheet's manual row and execution-model's sentence describe
+  the mode alone and name no rule, as the auto and yolo rows and sentences beside them do (a deny
+  rule stops an auto action too), so the PDF is not rebuilt; getting-started's "a change needs
+  approval unless an allow rule already permits it" holds as written. (2) "Why Peter?" named neither
+  Backus-Naur form nor what Wason's research has to do with System 1 and System 2, the rationale
+  CLAUDE.md keeps in the README and `?peter`: it now reads "Peter Naur's work on readable language
+  definitions (Backus-Naur form)" and "on reasoning, which inspired gptr's System 1 and System 2",
+  as the cheat sheet and the why-peter vignette say; `?peter` (R/gptr-gateway.R), which named
+  Backus-Naur form but not System 1 and System 2, takes "and inspired gptr's System 1 and System 2"
+  (`818e9ad0`). (3) `vignette("getting-started", package = "gptr")` followed the GitHub route, which
+  builds no vignettes: `R CMD INSTALL` of a `git archive` of `0aa55320` installs 0 vignettes and the
+  call warns "vignette 'getting-started' not found". It now reads "With a CRAN install, open it in R
+  with ...", the audit's point this record did not take (`bd79ed9e`). Red, green: none (wording).
+  `precompute.R --readme` 0 problems, README.md changing only in the three paragraphs; `document()`
+  changes only `peter.Rd` and then leaves no diff; `dev/release/tests` with `NOT_CRAN=true` FAIL 0
+  SKIP 0 PASS 290; `^(zzz|gptr-gateway|lint-rules)$` FAIL 0 SKIP 0 PASS 684 in UTF-8 and under
+  `LC_ALL=C LANG=C`; `check-docs.R` and `check-files.R all --release` 0 problems; the spelling check
+  and the lint of R/gptr-gateway.R clean.

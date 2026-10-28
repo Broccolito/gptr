@@ -55,8 +55,8 @@
 #' `vignette("interactive-console", package = "gptr")`.
 #'
 #' The name honors Peter Cathcart Wason, whose research with Jonathan Evans distinguished
-#' processes underlying reasoning and introspection, and Peter Naur of the Backus-Naur form,
-#' in the spirit of
+#' processes underlying reasoning and introspection and inspired gptr's System 1 and System 2,
+#' and Peter Naur of the Backus-Naur form, in the spirit of
 #' recording sessions as readable, replayable documents. A user object named `peter` hides the
 #' gateway; call `gptr::peter()` then.
 #'

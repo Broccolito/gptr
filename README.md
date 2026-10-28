@@ -119,9 +119,9 @@ and [Data sent to
 providers](https://broccolito.github.io/gptr/reference/gptr_egress.html).
 
 In the default `manual` mode, actions classified as read-only run
-directly; actions classified as changes ask for approval unless an
-existing rule allows them. The check is advisory and provides no
-sandbox; see [Security
+directly and actions classified as changes ask for approval, unless a
+permission rule applies; an allow rule never approves a critical action.
+The check is advisory and provides no sandbox; see [Security
 considerations](https://broccolito.github.io/gptr/reference/gptr_security.html)
 or `?gptr_security` in R.
 
@@ -194,8 +194,9 @@ for scores, uncertainty, calibration and a complete offline example.
 
 Start with [Getting
 started](https://broccolito.github.io/gptr/articles/getting-started.html);
-its examples run offline with a scripted `gptr_fake_provider()`. In R,
-open it with `vignette("getting-started", package = "gptr")`.
+its examples run offline with a scripted `gptr_fake_provider()`. With a
+CRAN install, open it in R with
+`vignette("getting-started", package = "gptr")`.
 
 - [Interactive
   console](https://broccolito.github.io/gptr/articles/interactive-console.html):
@@ -208,8 +209,9 @@ open it with `vignette("getting-started", package = "gptr")`.
 
 ## Why Peter?
 
-The name honors Peter Naur's work on readable language definitions and
-Peter Cathcart Wason's research with Jonathan Evans on reasoning. In
+The name honors Peter Naur's work on readable language definitions
+(Backus-Naur form) and Peter Cathcart Wason's research with Jonathan
+Evans on reasoning, which inspired gptr's System 1 and System 2. In
 Naur's spirit, gptr records sessions as runnable documents. System 1 and
 System 2 name software roles in gptr; they imply nothing about human
 cognition. See [Why
