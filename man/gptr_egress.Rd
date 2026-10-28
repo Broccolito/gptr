@@ -39,7 +39,7 @@ your machine.
 
 Registered secrets, and their URL-encoded, JSON-escaped and base64 forms, are replaced by
 markers before anything is sent; a copy the code changes in another way, such as reversed or
-cut, is not recognised.
+cut, is not recognized.
 }
 
 \section{Limiting automatic context}{
