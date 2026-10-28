@@ -368,6 +368,59 @@ test_that("auto asks before withr moves gptr's config folder for the session (FI
   expect_false(file.exists(file.path(root, "x.txt")))
 })
 
+test_that("auto asks before a named or part-named argument moves the folder (FIX-36 round 3)", {
+  root = local_project(trust = TRUE)
+  vars = c("R_USER_CONFIG_DIR", "XDG_CONFIG_HOME", "HOME")
+  before = Sys.getenv(vars, unset = NA, names = TRUE)
+  withr::local_envvar(before)
+  cfg = tools::R_user_dir("gptr", "config")
+  d = deparse(withr::local_tempdir())
+  codes = c(
+    paste0("withr::local_envvar(.n = list(R_USER_CONFIG_DIR = ", d, "), .local_envir = new.env())"),
+    paste0("withr::local_envvar(.ne = c(HOME = ", d, "), .local_envir = new.env())"),
+    paste0("withr::local_envvar(. = list(R_USER_CONFIG_DIR = ", d, "), .local_envir = new.env())"),
+    paste0("withr::with_envvar(code = file.create('x.txt'), n = c(R_USER_CONFIG_DIR = ", d, "))"),
+    "Sys.unsetenv(x = 'R_USER_CONFIG_DIR')", "Sys.unsetenv(x = c('MY_VAR', 'XDG_CONFIG_HOME'))")
+  for (code in codes) {
+    expect_identical(gate_decide(gate_r(code), gate_ctx("auto")), "ask_human", label = code)
+  }
+  skip_on_cran()
+  ui = local_scripted_ui(as.list(rep("n", length(codes))))
+  fake = local_fake_provider(c(lapply(codes, function(x) fake_tool("r", code = x)), "Done."))
+  peter("Keep the settings elsewhere.", model = fake, mode = "auto", envir = new.env())
+  expect_identical(sum(ui$log$method == "permission"), length(codes))
+  expect_identical(Sys.getenv(vars, unset = NA, names = TRUE), before)
+  expect_identical(tools::R_user_dir("gptr", "config"), cfg)
+  expect_false(file.exists(file.path(root, "x.txt")))
+})
+
+test_that("auto asks before a helper the code or the run binds names the folder (FIX-36 round 4)", {
+  root = local_project(trust = TRUE)
+  vars = c("R_USER_CONFIG_DIR", "XDG_CONFIG_HOME", "HOME")
+  before = Sys.getenv(vars, unset = NA, names = TRUE)
+  withr::local_envvar(before)
+  cfg = tools::R_user_dir("gptr", "config")
+  d = deparse(withr::local_tempdir())
+  codes = c(
+    "paste0 = function(...) 'R_USER_CONFIG_DIR'; Sys.unsetenv(x = paste0('T', 'Z'))",
+    paste0("c = function(...) list(R_USER_CONFIG_DIR = ", d, "); ",
+           "withr::local_envvar(c(TZ = 'UTC'), .local_envir = new.env())"),
+    paste0("list = function(...) base::list(HOME = ", d, "); ",
+           "withr::local_envvar(.new = list(TZ = 'UTC'), .local_envir = new.env())"))
+  for (code in codes) {
+    expect_identical(gate_decide(gate_r(code), gate_ctx("auto")), "ask_human", label = code)
+  }
+  skip_on_cran()
+  # the last turn's paste0() is the one the turn before it bound in the run's environment
+  turns = c(codes, "paste0 = function(...) 'XDG_CONFIG_HOME'", "Sys.unsetenv(paste0('T', 'Z'))")
+  ui = local_scripted_ui(as.list(rep("n", length(codes) + 1L)))
+  fake = local_fake_provider(c(lapply(turns, function(x) fake_tool("r", code = x)), "Done."))
+  peter("Keep the settings elsewhere.", model = fake, mode = "auto", envir = new.env())
+  expect_identical(sum(ui$log$method == "permission"), length(codes) + 1L)
+  expect_identical(Sys.getenv(vars, unset = NA, names = TRUE), before)
+  expect_identical(tools::R_user_dir("gptr", "config"), cfg)
+})
+
 test_that("a nested auto run started by yolo model code asks before a protected delete", {
   skip_on_cran()
   root = local_project(files = list(".ssh/id_rsa" = "KEY"), trust = TRUE)

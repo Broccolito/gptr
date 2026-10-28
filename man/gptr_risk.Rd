@@ -43,7 +43,10 @@ Paths are classified relative to \code{root} (\code{workspace}, \code{temp}, \co
 \code{processx::run()} with literal commands are classified with the command table
 (\code{inst/extdata/risk-commands.csv}), \code{peter$sql()} by its statements and \code{peter$py()} by a token
 scan. A command the code computes, or a \code{shell.exec()} file it computes, is a \code{dynamic} row at
-level 3. Plugins and users extend both tables with \code{risk_rule} records.
+level 3. A path, command or variable name built with \code{c()}, \code{list()}, \code{paste0()},
+\code{file.path()} or another helper of base R counts as one the code computes when the code assigns
+that helper's name, or when the helper found from \code{envir} (the global environment when \code{NULL})
+is not base R's. Plugins and users extend both tables with \code{risk_rule} records.
 }
 \examples{
 gptr_risk("unlink('data', recursive = TRUE)")$level

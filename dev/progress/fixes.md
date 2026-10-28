@@ -8472,3 +8472,134 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   help text), which `inst/WORDLIST` now holds. HANDOFF's and PROGRESS's Open lists gain this
   record's items and round 4's FIX-27 limits. Not run: `R CMD check`, Linux and Windows hosts,
   R 4.2 and R-devel, live models.
+- Review round 3 (an independent coverage check on `fe873436`, its gaps G1 and G2; commits
+  `deedb226` (tests), `78596911` (fix) and this record, each test red on `fe873436`'s code first,
+  `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`). The check ran 244 forms with Python off
+  and 58 Python and other forms through the classifier, the gate in auto, yolo and manual, and a
+  `peter()` run whose scripted person answers no: two kinds still moved the config folder in auto
+  with no question, while `?gptr_options`, `?gptr_security`, NEWS and D-272 say the classifier
+  reads them.
+  - Part names (G1, round 2's code): R matches part of a formal's name to it, and `.new` sits
+    before `...` in `withr::local_envvar(.new = list(), ..., action, .local_envir)`, while
+    `withr::with_envvar(new, code, action)` has no `...`. The branch found `.new` and `new` by
+    exact name only (`risk_arg()` of the arguments as written) and read `.n` as a variable's name,
+    so `withr::local_envvar(.n = list(R_USER_CONFIG_DIR = d), .local_envir = new.env())`,
+    `(.ne = c(HOME = d))`, `(. = list(R_USER_CONFIG_DIR = d))` and
+    `withr::with_envvar(code = f(), n = c(R_USER_CONFIG_DIR = d))` were level 2 `session`.
+  - `Sys.unsetenv(x = )` (G2, round 1's code): the branch read the values of unnamed arguments
+    only and took a named argument's name as a variable's, right for `Sys.setenv()` and wrong for
+    `Sys.unsetenv(x)`, so `Sys.unsetenv(x = "R_USER_CONFIG_DIR")` and
+    `Sys.unsetenv(x = c("MY_VAR", "XDG_CONFIG_HOME"))` were level 2 `session`.
+  - Red: test-perm-classify.R "a variable setter's arguments are matched as R matches them
+    (FIX-36 review round 3)" and test-perm-gate.R "auto asks before a named or part-named argument
+    moves the folder (FIX-36 round 3)": `^perm-(gate|classify)$` FAIL 24 PASS 1420 on
+    `fe873436`'s code in UTF-8 and under `LC_ALL=C LANG=C` (six control forms are level 2, line
+    677, and `withr::with_envvar(f(), n = c(LANG = "C"))` is level 4, 679, with withr loaded and
+    again as if it were not; auto allows the six gate forms, 385; the run asks 0 of 6 times, 391,
+    the variables change, 392, the config folder moves, 393, and `x.txt` is made, 394).
+  - Fix (`78596911`), one rule: the branch reads the four calls' arguments as R matches them
+    (exactly, then in part before `...`, then by position) through `risk_args()`'s
+    `match.call()`, to withr's own formals when withr is loaded and else to its formals written in
+    the branch (withr 3.0.3's), so classifying never loads withr. `Sys.unsetenv()`'s `x` is read
+    as values, never names, and a call R cannot match is level 4 `control` ("names the code
+    computes"), as a name it cannot read is. An exact `.new` wins over a part name, as in R
+    (`withr::local_envvar(.n = "1", .new = c(HOME = d))` asks), which the check's smaller diff, a
+    prefix test of the names as written, would have missed. No OS or R-version branch.
+    `withr::with_envvar(f(), n = c(LANG = "C"))` goes from level 4 to 2: R passes the `c()` as
+    `new`, where the branch had read `f()` as `new`.
+  - Green: `^perm-(gate|classify)$` FAIL 0 PASS 1444 in UTF-8;
+    `^(perm|risk|rules|gptr-config|py|knit|bridge-lang)` (7 files) FAIL 0 WARN 0 SKIP 4 PASS 2623
+    in UTF-8 and then under `LC_ALL=C LANG=C`; the neighbours (every `perm`, `nested`, `bridge`,
+    `gptr-config`, `agent-`, `tool-`, `session-`, `py`, `knit`, `mcp-`, `auth-secrets`, `secrets`,
+    `injection` and `eval-core` file; 39 files) FAIL 0 WARN 0 SKIP 13 PASS 9359 in UTF-8 and FAIL
+    0 WARN 0 SKIP 15 PASS 9345 under `LC_ALL=C LANG=C`. Lint of the 3 changed R and test files is
+    clean, and `document()` changes nothing. A probe of 81 forms on `fe873436`'s code and the
+    fix's, each with withr loaded (`load_all()`) and not (installed in a scratch library): only the
+    six gap forms, three more of their kind (`withr::with_envvar(code = f(), ne = list(HOME = d))`,
+    `nm = "HOME"; Sys.unsetenv(x = nm)`, `Sys.unsetenv(x = nms)`) and the `with_envvar()` form
+    above change, and with withr not loaded the fix gives the same 81 results.
+    `withr::local_envvar(TZ = "UTC")`, `withr::with_envvar(c(LANG = "C"), f())`,
+    `Sys.unsetenv("LC_ALL")`, `Sys.unsetenv(x = "LC_ALL")` and `Sys.setenv(TZ = )` stay level 2,
+    and every `withr` and `Sys.` form of the earlier rounds keeps its level. Not run:
+    `R CMD check`, the full suite, Linux and Windows hosts, R 4.2 and R-devel, live models.
+  - Docs: none changed; `?gptr_options`, `?gptr_security`, NEWS and D-272 state the rule, which
+    the code now follows.
+  - Tests (review round 3): test-perm-classify.R "a variable setter's arguments are matched as R
+    matches them (FIX-36 review round 3)"; test-perm-gate.R "auto asks before a named or
+    part-named argument moves the folder (FIX-36 round 3)".
+- Review round 4 (the verifier of round 3 on `c7a43360`, its findings 1 to 3; commits `7f74341e`
+  and `7353b47a` (tests), `b5419966` (fix), `bd7c43b6` (docs) and this record, each test red first,
+  `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`). The verifier ran 142 forms and 27 more
+  through the classifier, the gate in auto, yolo and manual, and a `peter()` run whose person
+  answers no, with withr loaded and not: G1 and G2 are closed, and three things were wrong.
+  - Round 3's Fix bullet (finding 3): it says that
+    `withr::local_envvar(.n = "1", .new = c(HOME = d))` asks and that the check's smaller diff, a
+    prefix test of the names as written, would have missed it. That diff takes `"1"` as `.new`,
+    which is no `c()` or `list()`, so it too reads the call as one whose names the code computes,
+    level 4 `control`, and the test row pinned nothing (`deedb226`'s message says it pins an exact
+    `.new`). What the smaller diff misses is `.n = c(TZ = "UTC"), .new = c(HOME = d)` and
+    `.n = list(TZ = "UTC"), .new = list(HOME = d)`, level 2 with it and 4 with the fix and on
+    `fe873436`, as R passes the exact `.new` and sends `.n` into `...`; it also reads
+    `.n = "1", .new = c(TZ = "UTC")` as level 4, where the fix reads 2. Test (`7f74341e`): the row
+    gives way to the first two, and the third joins the ordinary rows. Red, with the smaller diff
+    applied to `fe873436`: `^perm-classify$` FAIL 6 PASS 1133 in UTF-8 and under
+    `LC_ALL=C LANG=C` (line 680 four times, 682 twice); green on round 3's code, FAIL 0 PASS 1139.
+  - A helper the code or the session binds (finding 2, every round's code): `risk_fold()` folded
+    `c()`, `paste0()`, `file.path()` and its other helpers as base R's, and the variable branch
+    read a `c()` or `list()` passed as withr's `.new` or `new` by its element names, even where
+    the code defines its own helper first. So `paste0 = function(...) "R_USER_CONFIG_DIR"` and
+    then `Sys.unsetenv(x = paste0("T", "Z"))`, or a `c()` or `list()` of the code's own handed to
+    `withr::local_envvar()`, were level 2 `session` and moved the config folder in auto unasked,
+    and after `paste0 = function(...) "rm -rf ~"` the call `system(paste0("ls"))` was level 1. A
+    turn that binds such a helper in the run's environment did the same for the next turn. Red:
+    test-perm-classify.R "a helper the code or the session binds is one the code computes (FIX-36
+    round 4)" and test-perm-gate.R "auto asks before a helper the code or the run binds names the
+    folder (FIX-36 round 4)": `^perm-(gate|classify)$` FAIL 17 PASS 1454 on round 3's code in
+    UTF-8 and under `LC_ALL=C LANG=C` (six forms are level 2 or 3, line 704; `system()` and
+    `peter$sh()` of a redefined `paste0()` are level 1, 710 twice; a `setwd()` to a redefined
+    `file.path()` is level 2, 712; two forms with the helper in `envir` are level 2, 720 twice;
+    auto allows three forms, 411; a run asks 0 of 4 times, 419, the variables change, 420, and
+    the config folder moves, 421).
+  - Fix (`b5419966`), one rule: `risk_scan()` works out once which of `risk_base_helpers` (the
+    helpers `risk_fold()` folds, and `list()`) the code assigns (`risk_bound()`'s `fun` and `val`)
+    or the environment the code would run in holds as other than base R's (`risk_fn_where()`; the
+    global environment when `envir` is `NULL`), passes that set to the body of a user function it
+    reads and to `risk_member_flags()`, and `risk_fold()` folds no call of one, nor does the
+    withr branch read one as `c()` or `list()`. So a variable name built with such a helper is one
+    the classifier cannot read (level 4 `control`), a command a level-3 `dynamic` row (which auto
+    and yolo refuse for `system()`), and a `setwd()` directory one the code computes (level 4). A
+    name bound to a value that is no function stays base R's, as R passes over it
+    (`c = "x"; Sys.unsetenv(c("TZ"))` stays level 2). `?gptr_risk`, `?gptr_security` and 03
+    section 6.8.1 say so. No OS or R-version branch.
+  - Docs (finding 1, round 2's text): `?gptr_security`'s list of what the classifier does not read
+    and D-272's Open list named only `Sys.setenv()` reached by a computed name, through a list or
+    an environment, or handed to another function, while the same forms of `Sys.unsetenv()`,
+    `withr::local_envvar()` and `withr::with_envvar()` are unread too. The page (`bd7c43b6`) names
+    all four, with one example of each kind, each measured on the fix: `get("Sys.unsetenv")`,
+    `baseenv()$Sys.setenv`, `asNamespace("withr")$local_envvar` and
+    `identity(withr::local_envvar)` level 3, `assign("f", Sys.unsetenv)` 2,
+    `with(list(f = withr::with_envvar), ...)` 1.
+  - Green: `^perm-(gate|classify)$` FAIL 0 PASS 1471 in UTF-8;
+    `^(perm|risk|rules|gptr-config|py|knit|bridge-lang)` (7 files) FAIL 0 WARN 0 SKIP 4 PASS 2650
+    in UTF-8 and then under `LC_ALL=C LANG=C`, on the fix and again on the docs; round 3's 39
+    neighbours FAIL 0 WARN 0 SKIP 13 PASS 9386 in UTF-8 and FAIL 0 WARN 0 SKIP 15 PASS 9372 under
+    `LC_ALL=C LANG=C` (round 3's counts and the 27 new expectations). Lint of the 4 changed R and
+    test files is clean, `document()` changes nothing more, `check-docs.R` finds 0 problems and
+    `spelling::spell_check_package()` none.
+  - Probe: the verifier's probe (classifier and gate in auto, yolo and manual, no run) on round 3's
+    code and the fix, each loaded with `load_all()`: of its 142 forms and the 34 of its other row
+    files only its four helper forms change, from level 2 `session` to 4 `control` (auto `allow` to
+    `ask_human`). Of 23 forms of mine, the seven helper forms change as the tests say, and
+    `tempfile = function() "~/.Rprofile"` before `writeLines("x", tempfile())` goes from level 1
+    to 2 (a write the code computes); the six unread examples above,
+    `getExportedValue("withr", "local_envvar")` and
+    `utils::getFromNamespace("with_envvar", "withr")` stay level 3 or lower, and seven ordinary
+    forms keep their level (among them a loop variable named `file` beside `file.path()`, a formal
+    named `c` and `file.path(tempdir(), "m.csv")`). The fix gives the same results under
+    `LC_ALL=C LANG=C` for the 142, the four and my 23. Not run: the probe with withr not loaded
+    (the rule reads no withr formals), `R CMD check`, the full suite, Linux and Windows hosts,
+    R 4.2 and R-devel, live models.
+- Tests (review round 4): test-perm-classify.R "a variable setter's arguments are matched as R
+  matches them (FIX-36 review round 3)" (its rows of an exact `.new` beside a part name), "a helper
+  the code or the session binds is one the code computes (FIX-36 round 4)"; test-perm-gate.R "auto
+  asks before a helper the code or the run binds names the folder (FIX-36 round 4)".

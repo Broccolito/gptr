@@ -656,6 +656,81 @@ test_that("withr's variable setters are read as Sys.setenv() is (FIX-36 review r
   }
 })
 
+test_that("a variable setter's arguments are matched as R matches them (FIX-36 review round 3)", {
+  root = local_project()
+  # part of `.new`'s or `new`'s name, Sys.unsetenv()'s x, and `.new` exactly beside a part of
+  # it, which R then passes in `...` (a list or c() there is a value, not the variables)
+  control = c(
+    "withr::local_envvar(.n = list(R_USER_CONFIG_DIR = 'elsewhere'), .local_envir = new.env())",
+    "withr::local_envvar(.ne = c(HOME = 'elsewhere'), .local_envir = globalenv())",
+    "withr::local_envvar(. = list(R_USER_CONFIG_DIR = 'elsewhere'), .local_envir = globalenv())",
+    "withr::with_envvar(code = f(), n = c(R_USER_CONFIG_DIR = 'elsewhere'))",
+    "withr::local_envvar(.n = c(TZ = 'UTC'), .new = c(HOME = 'elsewhere'))",
+    "withr::local_envvar(.n = list(TZ = 'UTC'), .new = list(HOME = 'elsewhere'))",
+    "Sys.unsetenv(x = 'R_USER_CONFIG_DIR')", "Sys.unsetenv(x = c('MY_VAR', 'XDG_CONFIG_HOME'))")
+  ordinary = c("withr::local_envvar(TZ = 'UTC')", "withr::with_envvar(c(LANG = 'C'), f())",
+               "withr::local_envvar(.n = list(TZ = 'UTC'))",
+               "withr::local_envvar(.n = '1', .new = c(TZ = 'UTC'))",
+               "withr::with_envvar(f(), n = c(LANG = 'C'))",
+               "withr::local_envvar(.new = list(my_var = '1'), new.env())",
+               "Sys.unsetenv('LC_ALL')", "Sys.unsetenv(x = 'LC_ALL')", "Sys.setenv(TZ = )")
+  check = function() {
+    for (code in control) {
+      r = gptr_risk(code, root = root)
+      expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
+    }
+    for (code in ordinary) expect_identical(gptr_risk(code, root = root)$level, 2L, label = code)
+  }
+  check()
+  # with withr not loaded, by its formals as the classifier writes them
+  matched = risk_args
+  local_mocked_bindings(risk_args = function(e, fn, pkg) {
+    if (!missing(pkg) && identical(pkg, "withr")) as.list(e)[-1L] else matched(e, fn, pkg)
+  })
+  check()
+})
+
+test_that("a helper the code or the session binds is one the code computes (FIX-36 round 4)", {
+  root = local_project()
+  # c(), list() or paste0() of the code's own, also in a function defined before it
+  control = c(
+    "c = function(...) list(R_USER_CONFIG_DIR = 'x'); withr::local_envvar(c(TZ = 'UTC'))",
+    "list = function(...) base::list(HOME = 'x'); withr::local_envvar(.new = list(TZ = 'UTC'))",
+    "paste0 = function(...) 'R_USER_CONFIG_DIR'; Sys.unsetenv(x = paste0('T', 'Z'))",
+    "c = function(...) 'XDG_CONFIG_HOME'; Sys.unsetenv(c('TZ'))", "c = list; Sys.unsetenv(c('TZ'))",
+    "f = function() Sys.unsetenv(x = paste0('T', 'Z')); paste0 = function(...) 'HOME'; f()")
+  for (code in control) {
+    r = gptr_risk(code, root = root)
+    expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
+  }
+  # the same rule for a command and a directory
+  for (code in c("paste0 = function(...) 'rm -rf ~'; system(paste0('ls'))",
+                 "paste0 = function(...) 'rm -rf ~'; peter$sh(paste0('ls'))")) {
+    r = gptr_risk(code, root = root)
+    expect_identical(list(r$level, "dynamic" %in% r$categories), list(3L, TRUE), label = code)
+  }
+  expect_identical(gptr_risk("file.path = function(...) '..'; setwd(file.path('data'))",
+                             root = root)$level, 4L)
+  # a helper the session holds as a function of its own
+  e = new.env()
+  e$paste0 = function(...) "R_USER_CONFIG_DIR"
+  e$c = function(...) list(HOME = "x")
+  for (code in c("Sys.unsetenv(x = paste0('T', 'Z'))", "withr::local_envvar(c(TZ = 'UTC'))")) {
+    r = gptr_risk(code, envir = e, root = root)
+    expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
+  }
+  # base's helpers, and a name bound to a value that is no function, which R passes over
+  for (code in c("Sys.unsetenv(x = paste0('T', 'Z'))", "withr::local_envvar(c(TZ = 'UTC'))",
+                 "c = 'x'; Sys.unsetenv(c('TZ'))", "setwd(file.path('data'))")) {
+    expect_identical(gptr_risk(code, root = root)$level, 2L, label = code)
+  }
+  e = new.env()
+  e$paste0 = "x"
+  expect_identical(gptr_risk("Sys.unsetenv(x = paste0('T', 'Z'))", envir = e, root = root)$level,
+                   2L)
+  expect_identical(gptr_risk("system(paste0('ls'))", root = root)$level, 0L)
+})
+
 test_that("a delete keeps file_delete, a control target shows in path_class (IC-78)", {
   root = local_project()
   r = gptr_risk("unlink('.git', recursive = TRUE)", root = root)
