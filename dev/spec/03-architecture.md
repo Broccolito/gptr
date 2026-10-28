@@ -1491,11 +1491,12 @@ name makes it computed [D-211]. A call of one of these helpers (or of a `list()`
 code assigns, or that the environment the code would run in holds as other than base R's, is one the code computes,
 for a path, a command or a variable name [D-272]. R's working directory is held the same way, from `getwd()` when
 the code is read: `setwd()` and `withr::local_dir()` move it, `withr::with_dir()`, `xfun::in_dir()` and a move in a
-function body leave one the code computes; `getwd()` reads it and `setwd()` returns the one before, so at the code's
-top level `owd = setwd("data"); ...; setwd(owd)` stays in the project [D-262]. The classifier is advisory and
-documented as not a security boundary; in-process R cannot be sandboxed [18 §2.5]. It reads code as written and does
-not run it, so code that builds a call, a name, a path or a command at run time, or reaches a function by another
-name, is read only as far as it can see; every form this section names as not read or not followed is of that kind.
+function body leave one the code computes; `getwd()` reads it and `setwd()` returns the one before, both read as the
+helpers above are, so at the code's top level `owd = setwd("data"); ...; setwd(owd)` stays in the project [D-262].
+The classifier is advisory and documented as not a security boundary; in-process R cannot be sandboxed [18 §2.5]. It
+reads code as written and does not run it, so code that builds a call, a name, a path or a command at run time, or
+reaches a function by another name, is read only as far as it can see; every form this section names as not read or
+not followed is of that kind.
 
 In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command
 (`system2()`'s `args` and `env` too [D-267], `shell.exec()`'s file) the classifier cannot fold to literals: a
