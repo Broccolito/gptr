@@ -2432,7 +2432,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   # its value, and the binding before the code when it comes first; a loop that assigns a name
   # makes it computed. Code in a function body does not read them (it may bind the name). So
   # for R's working directory (`wd`), which a move in a branch or a function body adds to.
-  known = structure(list(), wd = wd)
+  known = structure(list(), wd = wd, wd0 = wd)
   kn = function(ctx) if (!ctx$def) known
   bound = risk_bound(exprs)
   # A helper the code binds (to a function or a value it computes), or the session holds as
@@ -2688,6 +2688,12 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       # R is then in the directory setwd() and local_dir() move to; in or after with_dir() and
       # in_dir() in one the code computes
       wd = attr(known, "wd")
+      # after a move, a relative directory is one in the directory R is in (one the code computes
+      # when that is); before any, it is read in the project, as every relative path is
+      rel = if (length(v)) !is_abs_path(v) & !is_drive_rel(v) & !startsWith(v, "~")
+      if (any(rel) && !identical(wd, attr(known, "wd0"))) {
+        v = if (!anyNA(wd)) unique(c(v[!rel], as.vector(outer(wd, v[rel], file.path))))
+      }
       attr(known, "owd") <<- wd
       to = if (name %in% c("setwd", "local_dir") && length(v)) v else NA_character_
       attr(known, "wd") <<- if (ctx$seq) to else unique(c(wd, to))
