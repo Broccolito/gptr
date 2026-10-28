@@ -581,6 +581,40 @@ test_that("a variable that moves gptr's config folder or the home is control (FI
   expect_identical(flags_level(risk_python("import os; os.environ['HOME']", root)), 2L)
 })
 
+test_that("a control name in any case, unread, or set from a file is control (review round 1)", {
+  root = local_project()
+  control = c(
+    # Windows names are case-insensitive
+    "Sys.setenv(appdata = 'elsewhere')", "Sys.setenv(Home = 'elsewhere')",
+    "Sys.unsetenv('userprofile')", "Sys.setenv(openai_base_url = 'http://x.test')",
+    "Sys.setenv(gptr_replay = '1')",
+    # a name the classifier cannot read: computed, or in a list another function passes on
+    "n = 'HOME'; Sys.unsetenv(n)", "Sys.unsetenv(nms)",
+    "do.call(Sys.setenv, list(R_USER_CONFIG_DIR = 'elsewhere'))",
+    "do.call('Sys.setenv', list(TZ = 'UTC'))", "rlang::exec(Sys.setenv, HOME = 'elsewhere')",
+    "invisible(Map(Sys.setenv, XDG_CONFIG_HOME = 'elsewhere'))",
+    "f = Sys.setenv; f(HOME = 'elsewhere')",
+    # variables read from a file
+    "readRenviron('vars.env')", "dotenv::load_dot_env('vars.env')")
+  for (code in control) {
+    r = gptr_risk(code, root = root)
+    expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
+  }
+  for (code in c("import os\nos.environ['appdata'] = 'elsewhere'",
+                 "import os\nos.environ.pop('Home')")) {
+    f = risk_python(code, root)
+    expect_identical(list(flags_level(f), "control" %in% f$category), list(4L, TRUE),
+                     label = code)
+  }
+  # a name held in a name the code assigns is read; other names stay level 2 in any case
+  for (code in c("n = 'TZ'; Sys.unsetenv(n)", "Sys.setenv(java_home = '/opt/java')",
+                 "Sys.setenv(tz = 'UTC')")) {
+    expect_identical(gptr_risk(code, root = root)$level, 2L, label = code)
+  }
+  py = "import os\nos.environ['TZ'] = 'Europe/Zürich'"
+  expect_identical(flags_level(risk_python(py, root)), 3L)
+})
+
 test_that("a delete keeps file_delete, a control target shows in path_class (IC-78)", {
   root = local_project()
   r = gptr_risk("unlink('.git', recursive = TRUE)", root = root)
