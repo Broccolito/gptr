@@ -1,11 +1,11 @@
-## Current checkpoint — 1.0 pre-release fixes (PRs #88 and #90, FIX-27..FIX-34), 2026-10-27
+## Current checkpoint — 1.0 pre-release fixes (PRs #88 and #90, FIX-27..FIX-36), 2026-10-27
 
 PR #88 (branch `claude/v1-prerelease`) merges ten branches into `main` `7e23ebd3`, which since the
 PRs #78-#83 checkpoint also holds #84 (CI-98: the writer prototype reports an early writer exit),
 and adds CI-103 and the follow-ups that the PR's checks found. PR #90 adds CI-104 (`main`
-`13a917ff`), and the branch `claude/v1-fixes` from it, not yet a PR, adds FIX-27..FIX-34, merged
-and through three review rounds, and CI-105 (contributor PR #92). Each has its record in
-`progress/fixes.md`, in id order, and decisions D-255, D-257, D-258, D-261 and D-262..D-270 and
+`13a917ff`), and the branch `claude/v1-fixes` from it, not yet a PR, adds FIX-27..FIX-34, merged and
+through three review rounds, CI-105 (contributor PR #92), and FIX-35 and FIX-36. Each has its record
+in `progress/fixes.md`, in id order, and decisions D-255, D-257, D-258, D-261 and D-262..D-272 and
 the D-254 amendment are in `DEVIATIONS.md`:
 
 - CI-99 (test only): `tests/testthat/setup.R` blanks every host variable that `is_secret_name()`
