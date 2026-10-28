@@ -1241,3 +1241,26 @@ test_that("moving R's working directory out of the project is level 4 (review ro
     expect_identical(lv(code), 2L, label = code)
   }
 })
+
+test_that("a Windows wd is placed as Windows places it, on every OS (review round 4)", {
+  root = "C:/Users/x y/proj"
+  local_mocked_bindings(is_windows = function() TRUE, is_macos = function() FALSE)
+  # path_norm() as on Windows for paths that do not exist here: absolute, "/", lexical
+  local_mocked_bindings(path_norm = function(path) {
+    vapply(gsub("\\", "/", path, fixed = TRUE), function(p) {
+      path_lexical(if (is_abs_path(p)) p else file.path(root, p))
+    }, "", USE.NAMES = FALSE)
+  }, user_home = function() "C:/Users/x y")
+  withr::local_options(gptr.project_root = root)
+  sh = registry_get("tool", "sh")
+  level = function(cmd, wd) as.integer(sh$risk(list(cmd = cmd, wd = wd), NULL)$level)
+  # sh's reading of a backslash (`C:\Users` is `C:Users`) never makes a drive-relative path
+  for (wd in c("C:\\Users\\x y\\proj\\sub", "c:\\users\\x y\\proj\\sub", "C:/Users/x y/proj")) {
+    expect_identical(level(c("rm", "-rf", "build"), wd), 3L, label = wd)
+    expect_identical(level("ls", wd), 0L, label = wd)
+  }
+  for (wd in c("C:\\Users\\x y\\other", "D:other", "..\\other", "\\\\server\\share\\dir")) {
+    expect_identical(level(c("rm", "-rf", "build"), wd), 4L, label = wd)
+    expect_identical(level("ls", wd), 1L, label = wd)
+  }
+})

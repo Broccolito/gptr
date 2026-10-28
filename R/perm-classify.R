@@ -1534,8 +1534,9 @@ risk_literal_scan = function(pieces, root, dirs = root, depth = 0L) {
 }
 
 #' Classify a command run from the directories `dirs`: argv (length > 1) or one command line with
-#' shell syntax; a line with a backslash is also read with sh's escapes dropped (the higher
-#' reading counts); the text it does not run is read from the directories it moves to
+#' shell syntax; a line with a backslash is also read as sh reads it, its escapes dropped and a
+#' word that starts with a drive letter relative (`C:\x` is `./C:x`, never drive-relative; the
+#' higher reading counts); the text it does not run is read from the directories it moves to
 #' @noRd
 risk_command = function(cmd, root = project_root(), dirs = root) {
   cmd = as_utf8(as.character(cmd))
@@ -1553,7 +1554,8 @@ risk_command = function(cmd, root = project_root(), dirs = root) {
     hidden = attr(f, "hidden")
     moved = attr(f, "dirs")
     if (grepl("\\", text, fixed = TRUE)) {
-      g = risk_cmd_line(gsub("\\\\(.)", "\\1", text, perl = TRUE), root, dirs = dirs)
+      sh = gsub("(^|[\\s'\"=])(?=[A-Za-z]:)", "\\1./", text, perl = TRUE)
+      g = risk_cmd_line(gsub("\\\\(.)", "\\1", sh, perl = TRUE), root, dirs = dirs)
       f = risk_flags_bind(f, g)
       hidden = c(hidden, attr(g, "hidden"))
       moved = unique(c(moved, attr(g, "dirs")))
