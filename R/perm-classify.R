@@ -2237,7 +2237,8 @@ risk_path_exprs = function(a, arg) {
 
 #' A path expression built from literals and the names in `known` (each name's folded values,
 #' NA for one the code computes), folded; NULL when the code computes it, "" for the console
-#' (tempdir() and tempfile() are this session's)
+#' (tempdir() and tempfile() are this session's; getwd() is where the code has moved R to and
+#' setwd() returns where it was, `known`'s attributes `wd` and `owd`)
 #' @noRd
 risk_fold = function(x, known = NULL) {
   if (is.character(x)) return(x)
@@ -2249,6 +2250,10 @@ risk_fold = function(x, known = NULL) {
   fn = as.character(x[[1L]])
   a = as.list(x)[-1L]
   if (fn %in% c("stdout", "stderr")) return("")
+  if (fn %in% c("getwd", "setwd")) {
+    v = attr(known, if (fn == "getwd") "wd" else "owd", exact = TRUE)
+    return(if (!anyNA(v)) v)
+  }
   if (fn == "tempdir") return(tempdir())
   if (fn == "tempfile") {
     dir = risk_fold(risk_arg(risk_args(x, fn, "base"), "tmpdir", 2L, default = TRUE), known)
@@ -2360,7 +2365,7 @@ risk_bound = function(exprs) {
 #' The one parse walk (IC-31): list(flags, targets, sizes, calls, values); `values` names the
 #' functions used as values (in a function slot or an assignment), whose arguments it cannot see
 #' @noRd
-risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
+risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd = getwd()) {
   on.exit(assign("envir", NULL), add = TRUE)
   flags = list()
   sizes = numeric()
@@ -2373,8 +2378,9 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
   # straight-line assignment replaces them (the code stops at its first error) unless the code
   # assigns the name with <<- (a function may do so later); one in a branch, loop or call adds
   # its value, and the binding before the code when it comes first; a loop that assigns a name
-  # makes it computed. Code in a function body does not read them (it may bind the name).
-  known = list()
+  # makes it computed. Code in a function body does not read them (it may bind the name). So
+  # for R's working directory (`wd`), which a move in a branch or a function body adds to.
+  known = structure(list(), wd = wd)
   kn = function(ctx) if (!ctx$def) known
   bound = risk_bound(exprs)
   env_names = NULL
@@ -2407,7 +2413,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
   # A user function's code, read one level deeper (FALSE when too deep).
   read_user = function(code, label, ctx) {
     if (depth <= 0L) return(FALSE)
-    s = risk_scan(as.expression(list(code)), envir, root, depth - 1L)
+    s = risk_scan(as.expression(list(code)), envir, root, depth - 1L,
+                  attr(kn(ctx), "wd") %||% NA_character_)
     add_rows(s$flags, ctx, prefix = label)
     TRUE
   }
@@ -2620,6 +2627,12 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       # out of the project, the paths the gate places in it name files elsewhere
       v = risk_fold(risk_arg(a, if (name %in% c("setwd", "in_dir")) "dir" else "new", 1L),
                     kn(ctx))
+      # R is then in the directory setwd() and local_dir() move to; in or after with_dir() and
+      # in_dir() in one the code computes
+      wd = attr(known, "wd")
+      attr(known, "owd") <<- wd
+      to = if (name %in% c("setwd", "local_dir") && length(v)) v else NA_character_
+      attr(known, "wd") <<- if (ctx$seq) to else unique(c(wd, to))
       pc = if (!length(v)) "unknown" else risk_cmd_worst(vapply(v, risk_path_cls, "", "read", root))
       if (pc %in% c("workspace", "temp")) return(FALSE)
       add(ctx, paste0(label, if (!length(v)) " (a directory the code computes)" else
