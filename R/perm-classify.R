@@ -2288,6 +2288,19 @@ risk_fold = function(x, known = NULL, masked = NULL) {
     v = known[[as.character(x)]]
     return(if (!anyNA(v)) v)
   }
+  # withr's local_tempdir() and local_tempfile() name a path in `tmpdir` as tempfile() does (its
+  # formals as written here, whether withr is loaded or not)
+  h = if (is.call(x)) risk_head(x[[1L]])
+  if (identical(h$pkg, "withr") && h$name %in% c("local_tempdir", "local_tempfile")) {
+    a = risk_args(x, if (h$name == "local_tempdir") {
+      function(pattern, tmpdir, fileext, .local_envir, clean) NULL
+    } else {
+      function(new, lines, envir, .local_envir, pattern, tmpdir, fileext) NULL
+    })
+    if (is.null(attr(a, "formals"))) return(NULL)
+    dir = if (is.null(a[["tmpdir"]])) tempdir() else risk_fold(a[["tmpdir"]], known, masked)
+    return(if (!is.null(dir)) file.path(dir, "file"))
+  }
   if (!is.call(x) || !is.symbol(x[[1L]])) return(NULL)
   fn = as.character(x[[1L]])
   if (fn %in% masked) return(NULL)
