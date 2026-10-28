@@ -2866,11 +2866,13 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       a = c(as.list(a[[1L]]), a[-1L])
     }
     if (r$name %in% risk_quoting_funs) inner$quote = TRUE
-    # eval(quote(x)) runs x, as evalq(x) does
+    # eval(quote(x)) runs x, as evalq(x) does (also base::quote())
     if (r$name %in% c("eval", "eval_bare", "eval_tidy")) {
       for (i in seq_along(a)) {
-        if (is.call(a[[i]]) && identical(a[[i]][[1L]], as.name("quote")) &&
-            length(a[[i]]) == 2L) a[i] = list(a[[i]][[2L]])
+        h = if (is.call(a[[i]]) && length(a[[i]]) == 2L) a[[i]][[1L]]
+        if (identical(h, quote(quote)) || identical(h, quote(base::quote))) {
+          a[i] = list(a[[i]][[2L]])
+        }
       }
     }
     inner$away = ctx$away || r$name %in% risk_unknown_funs
