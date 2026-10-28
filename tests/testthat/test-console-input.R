@@ -897,7 +897,8 @@ test_that("a Ctrl-C or cursor key inside a paste at the prompt's editor is text 
       keys
     }
   }
-  r = idle_read("a", list("\033[200~b\r", later(1, "\003c"), later(3.5, "\003")), "next")
+  # (were it dropped, the zz after it would join the draft)
+  r = idle_read("a", list("\033[200~b\r", later(1, "\003c"), later(3.5, "\003zz")), "next")
   expect_identical(r$kept, "\"\"\"\nab\nc\n\"\"\"")
   expect_identical(r$x, "next")
 })
