@@ -1272,6 +1272,10 @@ test_that("processx::run()'s wd is read as peter$sh()'s (review round 4)", {
   rm = "processx::run('rm', c('-rf', 'build')"
   expect_identical(lv(paste0(rm, ", wd = ", deparse(out), ")")), 4L)
   expect_identical(lv(paste0("processx::run('ls', wd = ", deparse(out), ")")), 1L)
+  # a name the code gives a literal directory is read in each directory it may hold (round 5)
+  expect_identical(lv(paste0("d = ", deparse(out), "; ", rm, ", wd = d)")), 4L)
+  expect_identical(lv(paste0("d = 'sub'; if (x) d = ", deparse(out), "; ", rm, ", wd = d)")), 4L)
+  expect_identical(lv(paste0("d = 'sub'; ", rm, ", wd = d)")), 3L)
   # neighbours: in the project, or with no wd or one the code computes, as before
   for (wd in c("", ", wd = 'sub'", ", wd = '.'", ", wd = d")) {
     expect_identical(lv(paste0(rm, wd, ")")), 3L, label = wd)

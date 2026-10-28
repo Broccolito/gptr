@@ -2538,12 +2538,15 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
         add(ctx, paste0(label, " (code the code computes)"), name, max(3L, row$level), "dynamic")
         return(TRUE)
       }
-      # processx::run() runs its command in `wd`, read as peter$sh()'s (a computed one is not)
-      wd = if (name == "run") risk_fold(risk_arg(a, "wd"))
-      f = switch(code[3L], sql = risk_sql(paste(x, collapse = "\n"), root),
-                 argv = risk_command(cmd_in_wd(c(x, argv), wd), root),
-                 risk_command(paste(c(envs, x, argv), collapse = " "), root))
-      add_rows(f, ctx, name, paste0(name, "(): "))
+      # processx::run() runs its command in `wd`, read as peter$sh()'s in each directory a name
+      # may hold; one the code computes is read as the project
+      wds = if (name == "run") risk_fold(risk_arg(a, "wd"), kn(ctx))
+      for (wd in if (length(wds)) as.list(wds) else list(NULL)) {
+        f = switch(code[3L], sql = risk_sql(paste(x, collapse = "\n"), root),
+                   argv = risk_command(cmd_in_wd(c(x, argv), wd), root),
+                   risk_command(paste(c(envs, x, argv), collapse = " "), root))
+        add_rows(f, ctx, name, paste0(name, "(): "))
+      }
       return(TRUE)
     }
     if (name == "options") {
