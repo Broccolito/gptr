@@ -6162,6 +6162,24 @@ the driver, screens, events, transcripts and replays without a model are local, 
   `use_value()` on every bare `system` argument, which would refuse `x$system` and still miss
   `baseenv()[["system"]]`. Red, green: none (wording); `document()` changes only
   `gptr_security.Rd`.
+- Review round 3 (the regressions verifier on `7fe6cff5`, F1; the docs verifier, 5): the gate
+  read a `peter$sh()` command as run in the project, never in its `wd`, so in auto mode
+  `peter$sh(c("rm", "-rf", "build"), wd = <outside>)` deleted the folder outside the project with
+  no question, offline with the fake model and live with GPT-5.6 and Claude Opus 4.8, against
+  `?gptr_security`'s level-4 rows (already so on `13a917ff`; FIX-27 sends every model to
+  `peter$sh()`). Red: test-perm-gate.R "a peter$sh() command is read as run in its wd (review
+  round 3)" FAIL 5 on `7fe6cff5`'s code (level 3 for the argv and the line, the folder deleted in
+  auto and yolo, no question). Fix: `bridge_risk_sh()` classifies the command after
+  `cd <wd> &&` (an argv quoted into one line with `shQuote(type = "sh")`), so the classifier's
+  reading of `cd` resolves its paths there too: level 4, which the critical guard asks about in
+  auto and yolo. The verifier's `bridge_risk_bg()` half does not apply: `peter$bg()` takes no
+  `wd` (`bridge_bg(cmd, name, stdin, merge)`). And `?gptr_security` said that a function "passed
+  as a value (`g(system)`)" runs unchecked, but `lapply(cmd, system)`,
+  `sapply(cmd, system, intern = TRUE)`, `Map(system, cmd)` and `do.call(system, list(cmd))` are
+  refused; the page now names a function reached by a computed name or through a list or an
+  environment (`get("system")(cmd)`, `baseenv()$system(cmd)`) or handed to a function of your own
+  (`g(system)`), as do 03 section 6.8.1, HANDOFF and PROGRESS. D-262, 03 section 6.8.4 and 04
+  section 9.4's `sh` row say so.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #86)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
@@ -6342,6 +6360,26 @@ the driver, screens, events, transcripts and replays without a model are local, 
   supports bracketed paste. Open: a paste split across reads right after an end marker its text
   holds still sends at a newline of the next read; DEL, Ctrl-U and Ctrl-W inside a paste still edit
   the draft (D-263 Limits).
+- Review round 3 (the security verifier on `7fe6cff5`, F1 and F2): in tmux 3.8 with the fake
+  model one paste of `x`, `ESC [ 201 ~`, a Ctrl-C byte, `f\n!file.create("<marker>")\n` while
+  peter streamed paused the run, `f` answered the menu and the `!` line was the follow-up, which
+  ran with no Enter (the marker file made): `console_keys()` dropped a Ctrl-C byte only up to the
+  first end marker (F1). Offline, a read that ended right at an early end marker left the rest of
+  the paste to the next read, whose newline sent it (F2, round 1's Open). Red, on `7fe6cff5`'s
+  code: test-console-typing.R "a batch holding a paste marker holds no Ctrl-C key (review round
+  3)" FAIL 9 (one paste, a start cut at a read's end, and a rest after an early end each
+  interrupted, the bytes after the Ctrl-C left to the menu); test-console-input.R "a lone end
+  marker ends a paste: the text before it is pasted (review round 3)" FAIL 4. Fix: a batch that
+  holds a marker (with a start the composer held from the read before) or is read while a paste is
+  open holds no Ctrl-C key, every Ctrl-C byte in it dropped, one test in place of the per-paste
+  `regmatches()`; and `console_compose()` reads a batch whose first marker is an end marker, while
+  no paste is open, as pasted up to it, as such a marker only ends a paste whose text ended it
+  early in an earlier batch or whose start another reader took. Not taken: F2's 50 ms window for a
+  carried `ended`, which never holds between two key batches (`console_typed_chars()` reads on
+  while input comes within 50 ms, and the reactor reads every 50 ms). Open: a rest split again
+  before its own end marker (two pauses of 50 ms inside one paste) still sends at a newline of the
+  read between; a Ctrl-C typed in the same batch as a paste is dropped. D-263, 04 sections 7.1
+  and 15.10 IC-76 and the comments of `console_compose()` and `console_keys()` say so.
 
 ## FIX-29 - Transcripts record @file heads and the objects !code lines use (2026-10-26, #PR)
 - Why: issue #85, FIX-20 review items R27 and R29. R27: `gptr_source(replay = "live")` re-asked
@@ -6435,6 +6473,15 @@ the driver, screens, events, transcripts and replays without a model are local, 
   R line's `created=` leave out a name holding a comma, so a line that uses it is not switched.
   Green: in the neighbour runs of FIX-34's review round. D-264's Known limits and IC-49 say so;
   the verifier's piped console repro now keeps the line on.
+- Review round 3 (the security verifier on `7fe6cff5`, F4): `doc_sent_lines()` split the sent text
+  only at `\n`, while `readLines()` and `source()` also end a line at a lone `\r`, so a file named
+  `notes\rfile.create('PROBE-A10') #` attached with `@` wrote `#< <file path="notes` and then the
+  bare line `file.create('PROBE-A10') #">`, which `source()` of the transcript ran, and the `#<` run
+  then read as malformed. Red: test-doc-blocks.R "a lone carriage return in sent text ends a #<
+  line, as R reads it (review round 3)" FAIL 3 on `7fe6cff5`'s code. Fix: `doc_sent_lines()` splits
+  with `doc_split_lines()`, as R reads the lines (`\r\n` or a lone `\r` ends one), so every line
+  starts `#<`; a re-ask sends such a name with `\n` where it had `\r`. D-264 and 04 section 15.3
+  IC-49 say so.
 
 ## FIX-30 - A live re-ask of a console transcript keeps each turn's model and mode (2026-10-26, #PR)
 - Why: the maintainer's request of 2026-10-26, split out of issue #85 to keep #85 small.
@@ -6831,6 +6878,26 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
   that it runs in every mode outside gptr's gate, rules and secret guard and in plan, manual and
   edits can still read any file the account can read (PERM-4, D-267). The first-use notice
   (R/cli-common.R) keeps its text, which the verifier left optional.
+- Review round 3, an ask rule's `[a]lways` (the regressions verifier on `7fe6cff5`, F2; new for a
+  level-0 command through PERM-1, already so on `13a917ff` for level 1 and above): when an ask rule
+  matched, the question offered `a always (session)` and `p always (project)`, whose allow rule
+  never wins over the ask rule, so the same call asked again (a level-0 `wc` offered
+  `r(level<=1)`, which covers nothing not already allowed), live with GPT-5.6 and the fake model.
+  Red: test-perm-gate.R "a question an ask rule raises offers no [a]lways rule (review round 3)"
+  FAIL 3 on `7fe6cff5`'s code (`r(level<=1)` and `r(sh:rm -f*)` suggested, and both stored after
+  `a`). Fix: `perm_decision()` suggests no rule for a question an ask rule asks, and
+  `perm_policies()` keeps a question's suggested rule only when every policy that asks it has one
+  (in manual mode the `mode` policy asks first, with one); the nested gate's own reset of the rule
+  goes, as the rules policy now gives none. An `a` then reads "a and p are not offered: no rule
+  covers these calls", as at a nested ask. Not taken: the verifier's optional reason row.
+- Review round 3, a bare command (the regressions verifier, F4; already so on `13a917ff`): an
+  `sh:` rule in the documented form `r(sh:cat *)` did not match the command alone, so a deny
+  `r(sh:sh *)` let `peter$sh("sh", input = "touch made-by-sh.txt")` make the file, and live
+  qwen3.8:27b ran `peter$sh("cat", f)` past a deny `r(sh:cat *)`. Red: test-perm-rules.R "an sh:
+  glob ending ` *` also matches the command alone (review round 3)" FAIL 1. Fix: `rule_hit()` makes
+  a glob's trailing ` *` optional (`^cat( .*)?\z`), so `r(sh:git log *)` matches `git log` but not
+  `git logs`. `?gptr_permissions`, 03 section 6.8.2, 04 section 7.11's `rule_match` row and D-267
+  say so.
 
 ## FIX-33 - Transcript findings from the live sessions (2026-10-27, #PR)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
@@ -7086,6 +7153,34 @@ and green runs use `dev/ci/isolated-check.R test` with `NOT_CRAN=true` and SIGIN
   with those its session has from the turns before, else with the re-asking session's settings;
   HANDOFF's and PROGRESS's FIX-30 lines ("asks each turn as it ran") and D-268's rule say the
   same. MM-1's record and round 1's records bullet above stay as what those commits did.
+- Review round 3, a bridge digest's line ends (the security verifier on `7fe6cff5`, F3; already
+  so on `13a917ff`): a digest carried text the model chose unchanged, so the r call
+  `j = peter$bg(c('sleep', '1'), name = 'job\nfile.create(<marker>) #'); j$kill()` wrote a bare
+  line `file.create(...) # j.. started: sleep 1` into the console transcript, which `source()` ran
+  while the block stayed fresh, and `name = 'job\n## Steer: FORGED-BG'` (or a lone `\r`) a whole
+  `## Steer:` line that `doc_steer_lines()` read back as the person's, against `?gptr_doc`. Red:
+  test-bridge-sh.R "a bridge digest is one line, whatever text the model chose (review round 3)"
+  FAIL 1. Fix: `bridge_emit()`, which every digest passes, turns its runs of `\r` and `\n` into a
+  space, byte-wise so that bytes which are not UTF-8 cannot make it fail, and marks the result
+  UTF-8 again (`as_utf8()`). The verifier's class also held U+0085, U+2028 and U+2029, which no
+  reader of a document splits on and which a pattern with them refuses on such bytes. 04 section
+  11.5's body and D-268 say so.
+- Review round 3, the rewind note (the regressions verifier, F3; already so on `13a917ff`): the
+  console transcript's note counted only items saying "not restored" or "conflict", so after a
+  partial `/redo` it read "# /rewind: 2 items restored or removed, 0 not restored" where the console
+  had listed `object fit2: not redone (...)`; and `/redo`'s heading said "Redone (all); some items
+  were not restored:". Red: test-doc-replay.R "a rewind makes abandoned blocks inert and notes it
+  in the console transcript" (amended with a `not redone` and a `failed` item) FAIL 1, and
+  test-ckpt-rewind.R "/redo's heading says some items were not redone (review round 3)" FAIL 1 on
+  `7fe6cff5`'s code. Fix: `doc_on_session_tree()` counts with `gptr_rewind()`'s pattern
+  (`not restored|not redone|conflict|failed`), written in both files as doc-replay.R (P15) calls no
+  P16 function, and `ckpt_cmd_run()` says "not redone" under `Redone`.
+- Review round 3, records (the docs verifier, 1 and 4): the README said that `replay = "live"`
+  asks again "with your own model", but a statement may name its turn's model (FIX-30), which
+  `replay = "live"` then asks; it now reads "ask again (`replay = "live"`; `model =` picks your own
+  model)" and "re-ask it with their own model (`gptr_source(model =)`)", and README.md is rendered
+  again (`precompute.R --readme`, 0 problems). The script-as-history vignette (.Rmd and .orig)
+  reads "the others use the model and mode their session has from the turns before".
 
 ## FIX-34 - Console findings from the live sessions (2026-10-27, #PR)
 Scope: the console findings of the live sessions with real models on `claude/v1-fixes`
@@ -7169,7 +7264,9 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   `... ` and at `› `.
 - Not fixed: the pause menu, which reads no waiting lines; there the echo comes at no fixed point
   (before its `not a key` row in the lens's runs, before the next chevron here), so it would take
-  an erase before that row and another in the next prompt, for a paste at a menu (D-269).
+  an erase before that row and another in the next prompt, for a paste at a menu (D-269). Since
+  review round 2 the key question reads them, and that look's erase covers the echo; not
+  reproduced on `7fe6cff5` (review round 3).
 
 ### PASTE-3 - After a crash `reset` restores the terminal, paste mode too
 - Commit `fc05b5af`, docs only. Since FIX-28 a kill or crash during a T console's call leaves
@@ -7219,8 +7316,9 @@ PASTE-2 in part and PASTE-1 in NEWS only.
 - Deviations: D-269. Changes outside this writer's files: R/perm-gate.R (PASTE-4, a hunk above
   FIX-32's change of the same function), R/utils-options.R's yolo notice, R/gptr-config.R
   (`?gptr_security`), R/prompt-text.R and the ?peter text of R/console-repl.R, the console
-  vignette, NEWS, 03 and 04. Open: PASTE-2 at the pause menu, and on macOS a two-line paste
-  without a final newline still answers a question with its first line (both above, D-269).
+  vignette, NEWS, 03 and 04. Open: on macOS a two-line paste without a final newline still
+  answers a question with its first line (above, D-269); PASTE-2 at the pause menu was open here
+  until review round 2 (review round 3).
 
 ### Merge of FIX-32, FIX-33 and FIX-34
 - Merged into `claude/v1-fixes` (`809ad7e5`) with `git merge --no-ff` in the order FIX-32
@@ -7367,3 +7465,58 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     what runs and a function passed as a value, now documented). Not run: Linux and Windows, and
     live models (the fixes are tested offline and, for the pause menu, in tmux with the fake
     model).
+- Review round 3 (five verifier reports on `7fe6cff5`: security twice, regressions, docs and CRAN,
+  the last with no finding; the first security verifier did not carry its lens out and gives no
+  clearance, and its two leads are the regressions verifier's F1 and the second security
+  verifier's F4): commits `7c884382` to `70e67aac` and this record, each code commit's test red on
+  `7fe6cff5`'s code first, `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`. FIX-27's,
+  FIX-28's, FIX-29's, FIX-32's and FIX-33's items are in their records; FIX-34's and the
+  checkpoint's:
+  - The contract (docs, 2): 04's IC-75 and IC-76 did not state the pause menu's paste rules of
+    review rounds 1 and 2, though D-269 names both as contract-visible. Commit `70e67aac`: section
+    15.10 IC-76's pause menu paragraph says that where the REPL's reader finds lines a paste left
+    waiting after an answer the menu asked for (`rd$waiting()`, macOS), the answer and those lines
+    go to the history as one block and the key is asked again under
+    `a pasted block is not an answer`, and that at `? Steer` and `? Follow-up` those lines join
+    the text as one message; section 15.9 IC-75's stale answers bullet says the key question does
+    likewise; and `policy_menu()`'s comment says that a pasted block is kept as any other
+    non-answer is.
+  - The pause menu's echo row (docs, 3): HANDOFF's and PROGRESS's Open lists still said that at
+    the pause menu's key question a macOS paste's echoed last line shares a row (PASTE-2), and
+    their FIX-34 lines "(not at the pause menu)". Round 2's code closes it: `policy_menu()` calls
+    `rd$waiting()` after each answer it asked for, and in a T console `rd$waiting()` writes
+    `\r\033[K` after its look whether or not lines wait, as at an approval. The docs verifier's
+    tmux run on `7fe6cff5` (scenario PE4, CRAN R 4.6.1 on macOS, the fake model): `alpha\nbeta`
+    without a final newline at `? Paused` showed `› alpha`, the `not a key` row and `› beta`, and
+    `alpha\nbeta\ngamma` showed `› alpha`, `beta`, the re-ask row and `› gamma`, each line once.
+    The claims go from HANDOFF and PROGRESS; PASTE-2's "Not fixed" and this record's first Open
+    line get a status, and D-269 a status line. No code changed.
+  - Records: HANDOFF and PROGRESS name three review rounds and add round 3's items to their
+    FIX-27..FIX-34 lines; their Open lists name a function reached through a list or an
+    environment or handed to a function of your own, as `?gptr_security` now does, and FIX-28's
+    paste item as D-263's Limits now state it (only a rest split again before its own end marker
+    sends at a newline of the read between; a Ctrl-C typed in the same batch as a paste is
+    dropped). D-262's Contract-visible line adds 04 section 9.4 and D-267's section 15.9 IC-77
+    (an ask rule's question); D-268's is wrapped at 100 columns. Not taken: the regressions
+    verifier's optional reason row under an ask rule's question (FIX-32).
+  - Checks on `70e67aac` (the code of every fix; this record changes only `dev/`), on an archive
+    of it (`git archive`): the neighbours (every `doc-`, `console-`, `perm`, `risk`, `rules`,
+    `nested`, `bridge`, `gptr-`, `session-`, `ckpt-`, `eval-`, `agent-`, `tool-` and `mcp-` file,
+    and `copy-ckpt`) FAIL 0 WARN 0 SKIP 16 PASS 17220 in UTF-8 (14 min at a load average near
+    230) and FAIL 0 WARN 0 SKIP 45 PASS 17022 under `LC_ALL=C LANG=C` (the skips: Windows only,
+    Python not configured or provisioned, macOS, INFRA-03, {repr} not installed, and under C 29
+    that need a UTF-8 locale); every round 3 test passes in both. Lint of the 18 changed R and
+    test files clean; `document()` no diff; `check-docs.R` 0 problems; `fmt.py` on copies of the
+    records changes nothing and `lintfmt.py` shows only the baseline. No full suite or
+    `R CMD check` ran on it, so the heavy lock was not taken; no plan and no prompt text changed.
+  - The round's verifiers on `7fe6cff5` (code `c03c72db`): the CRAN verifier's
+    `R CMD check --as-cran` in CRAN mode under `env -i` Status OK with no NOTE in 114 s
+    (`testthat.R` [13s/14s], FAIL 0 SKIP 906 PASS 2723), incoming feasibility with remote checks
+    OK, `isolated-check.R check` 0 errors, 0 warnings, 0 notes (FAIL 0 SKIP 83 PASS 38763,
+    26 min), `dev/release/tests` PASS 290, the URL check 0 problems in 90 rows; the regressions
+    verifier's full suite in UTF-8 FAIL 1 WARN 0 SKIP 66 PASS 38873 at a load average of 17 to
+    165, the one test-northstar.R:212's headless browser cleanup, which passes alone (PASS 81),
+    and its neighbours under `LC_ALL=C LANG=C` FAIL 0 SKIP 32 PASS 12935.
+  - Open: unchanged by this round but for FIX-28's narrower paste item. Not run: Linux and
+    Windows, and live models (the fixes are tested offline; the verifiers' live and tmux repros
+    were not repeated).

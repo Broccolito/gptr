@@ -4,7 +4,7 @@ PR #88 (branch `claude/v1-prerelease`) merges ten branches into `main` `7e23ebd3
 PRs #78-#83 checkpoint also holds #84 (CI-98: the writer prototype reports an early writer exit),
 and adds CI-103 and the follow-ups that the PR's checks found. PR #90 adds CI-104 (`main`
 `13a917ff`), and the branch `claude/v1-fixes` from it, not yet a PR, adds FIX-27..FIX-34, merged
-and through two review rounds. Each has its record in `progress/fixes.md`, in id order, and
+and through three review rounds. Each has its record in `progress/fixes.md`, in id order, and
 decisions D-255, D-257, D-258, D-261 and D-262..D-269 and the D-254 amendment are in
 `DEVIATIONS.md`:
 
@@ -46,17 +46,23 @@ decisions D-255, D-257, D-258, D-261 and D-262..D-269 and the D-254 amendment ar
 - FIX-27 (#87): in auto and yolo a `system()`, `system2()`, `shell()` or `shell.exec()` call whose
   command the code computes is refused before it runs, pointing the model to `peter$sh()`; only an
   `r(fn:)` allow rule lifts it (D-262; D-251's nested-1 Open closed); review round 2:
-  `?gptr_security` names what a shell reads when it runs and a function passed as a value among
-  what the rules and the refusal do not read.
+  `?gptr_security` names what a shell reads when it runs and the functions the refusal does not
+  resolve among what the rules and the refusal do not read; review round 3: a `peter$sh()` command
+  is read as run in its `wd`, so a delete outside the project through `wd` asks in auto and yolo,
+  and the page names those functions as one reached by a computed name or through a list or an
+  environment or handed to a function of your own, as `lapply(cmd, system)` is refused.
 - FIX-28 (#86): a T console's call turns bracketed paste on in its own modes, so a paste is one
   draft however late the composer reads it; timing stays for terminals without it (D-263, amends
   IC-76); review round 1: a newline after a paste's end in its read stays in the draft, and a
-  pasted Ctrl-C is text.
+  pasted Ctrl-C is text; review round 3: a key batch that holds a paste marker, or is read while a
+  paste is open, holds no Ctrl-C key, and an end marker read with no paste open ends one, the text
+  before it pasted.
 - FIX-29 (#85): a console turn's block records what its prompt was sent with as `#< ` lines, which
   a live re-ask sends again without reading the file; headers name what each step created
   (`created=`), and a direct R line that uses an undone step's object is switched off with `#~`
   and back on after `/redo` (D-264, IC-49 amended in place); review round 1: a name holding a
-  comma is left out of `created=`.
+  comma is left out of `created=`; review round 3: a lone carriage return in the text a prompt was
+  sent with ends a `#<` line, as R reads it.
 - FIX-30: a console statement ends with `model = "..."` and `mode = "..."` when its turn ran with a
   model or mode the statement would not get without them (after `/model`, `/mode`, the plan menu,
   or in a console started as `peter(mode = plan)`), so a live re-ask asks each turn on the model
@@ -75,7 +81,9 @@ decisions D-255, D-257, D-258, D-261 and D-262..D-269 and the D-254 amendment ar
   runs outside gptr's gate in every mode (D-267); review round 1: the rules read a command run
   inside a function the code calls, and `peter$` calls in R served to claude-cli, codex or an MCP
   client meet the rules and the critical guard; review round 2: a nested `peter$sh()` ask shows its
-  other inputs, and the idle gate's notice stays out of served R's result.
+  other inputs, and the idle gate's notice stays out of served R's result; review round 3: a
+  question an ask rule asks offers no `[a]lways` rule, and an `sh:` glob ending in ` *` also
+  matches the command alone (`r(sh:sh *)` denies `peter$sh("sh", input = cmd)`).
 - FIX-33 (#PR): the transcript findings of the live sessions. Model code cannot write a steer,
   follow-up or block marker line (one more `#`; only whole comment lines read back), a block that
   would still leave the markers malformed is not written and is named, `sha` ignores trailing
@@ -86,16 +94,19 @@ decisions D-255, D-257, D-258, D-261 and D-262..D-269 and the D-254 amendment ar
   (D-268); ALL-6 and PERM-8's transcript part are not fixed; review round 1: a lone carriage
   return in model code ends a line, as the evaluator reads it; review round 2: `gptr_export()`
   exports code that calls `peter$sh()`, and NEWS and the vignette say that a turn naming no model
-  or mode gets its session's.
+  or mode gets its session's; review round 3: a bridge digest is one line, so a job name the model
+  chose writes no steer or R line, the rewind note counts what was not redone and `/redo` says so,
+  and the README says that `model =` picks your own model for a live re-ask.
 - FIX-34 (#PR): the console findings of the live sessions: a Tab after a multi-line bracketed
   paste read with it sends it; an `@file` line that is not UTF-8 is read as CP1252 instead of
   dropping the prompt; `/model`'s switch names the full id a CLI's `default` runs; a macOS paste's
-  echoed last line no longer shares the hint's or the re-ask's row (not at the pause menu); NEWS
-  says a paste at a question is kept only in a macOS terminal; the docs advise `reset` after a
-  crash; `r` code the evaluator never runs, such as `q()`, is refused without a question in every
-  mode (D-269); review round 1: a block pasted at the pause menu's steer or follow-up question is
-  one message, and a refusal's reason drops the guard's `Not run: `; review round 2: a block pasted
-  at its key question is asked again, not read as a key.
+  echoed last line no longer shares the hint's or the re-ask's row; NEWS says a paste at a
+  question is kept only in a macOS terminal; the docs advise `reset` after a crash; `r` code the
+  evaluator never runs, such as `q()`, is refused without a question in every mode (D-269); review
+  round 1: a block pasted at the pause menu's steer or follow-up question is one message, and a
+  refusal's reason drops the guard's `Not run: `; review round 2: a block pasted at its key
+  question is asked again, not read as a key, and its echoed last line no longer shares a row
+  there either; review round 3: 04's IC-75 and IC-76 state the pause menu's paste rules.
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
@@ -135,6 +146,12 @@ On `claude/v1-fixes`, locally on macOS, with `NOT_CRAN=true`, the SIGINT reset a
   problems, `dev/release/tests` PASS 290, the spelling check clean. The round's CRAN verifier on
   `15fd6066`: Status OK with no NOTE in 114 s, incoming feasibility OK, `isolated-check.R check`
   0 errors, 0 warnings, 0 notes (FAIL 0 SKIP 83 PASS 38745), the URL check 0 problems.
+- Review round 3, code `70e67aac`: the same neighbours without `arch-` FAIL 0 WARN 0 SKIP 16
+  PASS 17220 in UTF-8 and FAIL 0 WARN 0 SKIP 45 PASS 17022 under `LC_ALL=C LANG=C`; lint of the 18
+  changed R and test files clean, `document()` no diff, `check-docs.R` 0 problems; no full suite or
+  `R CMD check` ran on it. The round's CRAN verifier on `7fe6cff5` (code `c03c72db`): Status OK
+  with no NOTE in 114 s, incoming feasibility OK, `isolated-check.R check` 0 errors, 0 warnings, 0
+  notes (FAIL 0 SKIP 83 PASS 38763), the URL check 0 problems.
 
 For PR #88, on the merged code `556acb00`, locally on macOS:
 
@@ -171,11 +188,12 @@ and its man pages, the cheat sheet, NEWS, vignettes, `inst/WORDLIST` and `dev/`,
 
 Open (found, not fixed):
 
-- A computed command run through a function reached by a computed name (`get("system")(cmd)`) or
-  passed as a value (`g(system)`), `eval(parse())`, a sourced file, package code, `pipe()` or
-  `processx::run()` still escapes `sh:` rules in auto and yolo, and neither the rules nor the
-  refusal read what a shell reads when it runs (its standard input, variables it expands, a script
-  file), as `?gptr_security` says (FIX-27; `system2()`'s `env` is read since FIX-32).
+- A computed command run through a function reached by a computed name or through a list or an
+  environment (`get("system")(cmd)`, `baseenv()$system(cmd)`) or handed to a function of your own
+  (`g(system)`), `eval(parse())`, a sourced file, package code, `pipe()` or `processx::run()`
+  still escapes `sh:` rules in auto and yolo, and neither the rules nor the refusal read what a
+  shell reads when it runs (its standard input, variables it expands, a script file), as
+  `?gptr_security` says (FIX-27; `system2()`'s `env` is read since FIX-32).
 - An approved `system()` child's output starts on the frozen `r` row; Codex's own shell is not
   switched off in the read-only modes; the prefix gate leaves `standard_core` 1 token (FIX-32).
 - A replayed script sends again a steer its run took after the script went on (a run sent to the
@@ -226,13 +244,14 @@ Open (found, not fixed):
   recorded despite `record = false` has no `#>` output (ALL-3); claude-cli and codex blocks record
   `model=claude-cli/default` and `codex/default` (ALL-6); a refused turn records an empty block
   (PERM-8).
-- At the pause menu's key question a macOS paste's echoed last line still shares a row (FIX-34
-  PASTE-2); on macOS a two-line paste without a final newline answers a question with its first
-  line, as documented (PASTE-1); the console's not-run row cuts a guard refusal's long reason
+- On macOS a two-line paste without a final newline answers a question with its first line, as
+  documented (FIX-34 PASTE-1); the console's not-run row cuts a guard refusal's long reason
   (FIX-34's merge).
 - Pasted text holding a paste end marker, in a terminal that does not filter pastes, still sends at
-  a newline of the next read when a read ends right after that marker, and DEL, Ctrl-U and Ctrl-W
-  inside a paste still edit the draft there (FIX-28 review round 1, D-263 Limits).
+  a newline of a read between when a read ends right after that marker and the rest is split again
+  before the paste's own end marker (two pauses of 50 ms inside one paste); a Ctrl-C typed in the
+  same batch as a paste is dropped; and DEL, Ctrl-U and Ctrl-W inside a paste still edit the draft
+  there (FIX-28 review rounds 1 and 3, D-263 Limits).
 - In a terminal that ignores bracketed paste a paste still splits when a read comes more than
   about 145 ms late (IC-76's 0.2 s bound; CI-94, FIX-28).
 - A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).
