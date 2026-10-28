@@ -495,6 +495,19 @@ test_that("@mentions: files become <file> blocks, bound names become objects", {
   expect_identical(repl_mentions("hello there", e)$said, character())
 })
 
+test_that("an @name holds letters, marks and digits of any script, in C too (review round 5)", {
+  root = local_project()
+  # café.csv, noël.R as macOS may keep it (e and a combining U+0308) and a name with an
+  # Arabic-Indic digit, made as list.files() gives them, unmarked UTF-8
+  name = c("acc/café.csv", "noël.R", "数据٣.txt")
+  dir.create(file.path(root, "acc"))
+  for (n in os_bytes(name)) writeLines("x", file.path(root, n))
+  # the prompt as the console reads it (as_utf8()); punctuation of any script ends a name
+  text = paste0("Compare @", name[[1L]], "， @", name[[2L]], " and @", name[[3L]], ".")
+  men = repl_mentions(as_utf8(text), new.env())
+  expect_identical(men$said, as_utf8(paste0("@ ", name, " (1 line)")))
+})
+
 test_that("a binary @file is announced, not inlined", {
   root = local_project()
   writeBin(as.raw(c(0x50, 0x00, 0x01)), file.path(root, "blob.bin"))

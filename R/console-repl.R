@@ -480,26 +480,30 @@ console_objects = function(env, all = TRUE) {
 }
 
 #' Resolve @mentions, words starting with @ (readline's word breaks before it, as for completion,
-#' so an e-mail address stays text): files (relative to the working directory or the project root,
-#' or absolute/home paths) become <file> blocks, in order within the `user_files` budget;
-#' syntactic names bound in `env` become context objects passed by name. `said` names what each
-#' mention resolved to, in order (D-244): `@ notes.md (2 lines)`, `@ fit (lm)` or `@ tbl
-#' (data.frame, 32 x 11)` (its class and dimensions), or `@ fit2 not found, sent as text` (`is a
-#' folder` for a directory), each `@ ` and the name
+#' so an e-mail address stays text) followed by a quoted name or by letters, marks and digits of
+#' any script and `_ . / ~ -`, not ending in a dot (`text` is marked UTF-8, as_utf8(), so they are
+#' read as characters; a name Tab completes in any script reads whole): files (relative to the
+#' working directory or the project root, or absolute/home paths) become <file> blocks, in order
+#' within the `user_files` budget; syntactic names bound in `env` become context objects passed by
+#' name. `said` names what each mention resolved to, in order (D-244): `@ notes.md (2 lines)`,
+#' `@ fit (lm)` or `@ tbl (data.frame, 32 x 11)` (its class and dimensions), or `@ fit2 not found,
+#' sent as text` (`is a folder` for a directory), each `@ ` and the name
 #' @noRd
 repl_mentions = function(text, env) {
-  pattern = "(?<![^\\s\"'\\\\`><=%;,|&{()}!])@(\"[^\"]+\"|[A-Za-z0-9_./~-]*[A-Za-z0-9_/~-])"
+  pattern = paste0("(?<![^\\s\"'\\\\`><=%;,|&{()}!])@(\"[^\"]+\"|",
+                   "[\\p{L}\\p{M}\\p{N}_./~-]*[\\p{L}\\p{M}\\p{N}_/~-])")
   toks = regmatches(text, gregexpr(pattern, text, perl = TRUE))[[1L]]
   files = character()
   objects = character()
   said = character()
   for (t in unique(toks)) {
     nm = gsub("^@\"?|\"$", "", t)
-    cand = unique(c(path.expand(nm), file.path(project_root(), nm)))
+    # the file system gets unmarked bytes in a C locale, which cannot translate a marked name
+    cand = fs_path(unique(c(path.expand(fs_path(nm)), file.path(project_root(), nm))))
     dir = path_info(cand)$isdir
     hit = cand[dir %in% FALSE]
     if (length(hit)) {
-      shown = path_rel(hit[[1L]])
+      shown = as_utf8(path_rel(hit[[1L]]))
       # the line feed that joins the blocks counts too
       block = repl_file_block(hit[[1L]], shown,
                               room = console_files_budget - est_tokens(c(files, ""), "code"))
