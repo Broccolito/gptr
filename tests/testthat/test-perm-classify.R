@@ -1371,6 +1371,37 @@ test_that("a Windows wd is placed as Windows places it, on every OS (review roun
   }
 })
 
+test_that("a drive root is outside the project as R 4.2 on Windows places paths (review round 5)", {
+  root = "D:/a/_temp/RtmpABC/gptr-project-1"
+  local_mocked_bindings(is_windows = function() TRUE, is_macos = function() FALSE)
+  # path_norm() as R 4.2 on GitHub's runner, the working directory the project: "/" is the current
+  # drive's root; R < 4.4's dirname("//x") is "." and basename("//x") "\\x", so a UNC path whose
+  # server does not exist lands in the working directory; the rest lexical
+  local_mocked_bindings(path_norm = function(path) {
+    vapply(gsub("\\", "/", path, fixed = TRUE), function(p) {
+      if (identical(p, "/")) return("D:/")
+      if (startsWith(p, "//")) return(paste0(root, "/\\\\", substring(p, 3L)))
+      path_lexical(if (is_abs_path(p)) p else file.path(root, p))
+    }, "", USE.NAMES = FALSE)
+  }, user_home = function() "C:/Users/runneradmin")
+  withr::local_options(gptr.project_root = root)
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (code in c("setwd('/')", "setwd('\\\\')", "setwd('D:/')", "setwd('D:\\\\')", "setwd('C:/')",
+                 "setwd('D:/a')", "withr::with_dir('/', unlink('x'))", "withr::local_dir('/')")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  # neighbours: the project, a folder in it, tempdir(), and deletes in the project and tempdir()
+  win = function(p) gsub("/", "\\\\", p)
+  for (code in c("setwd('sub')", "setwd('.')", "setwd(tempdir())",
+                 paste0("setwd(", deparse(win(file.path(root, "sub"))), ")"))) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  expect_identical(lv(paste0("unlink(", deparse(win(file.path(root, "x"))), ")")), 3L)
+  expect_identical(lv(paste0("unlink(", deparse(win(file.path(tempdir(), "x"))), ")")), 1L)
+  expect_identical(lv("list.files('/')"), 1L)
+  expect_identical(lv("list.files('.')"), 0L)
+})
+
 test_that("processx::run()'s wd is read as peter$sh()'s (review round 4)", {
   root = local_project()
   out = withr::local_tempdir(tmpdir = dirname(tempdir()))
