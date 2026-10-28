@@ -1,12 +1,12 @@
-## Current checkpoint — 1.0 pre-release fixes (PRs #88, #90 and #93, FIX-27..FIX-36), 2026-10-27
+## Current checkpoint — 1.0 pre-release fixes (PRs #88, #90 and #93, FIX-27..FIX-36), 2026-10-28
 
 PR #88 (branch `claude/v1-prerelease`) merges ten branches into `main` `7e23ebd3`, which since the
 PRs #78-#83 checkpoint also holds #84 (CI-98: the writer prototype reports an early writer exit),
 and adds CI-103 and the follow-ups that the PR's checks found. PR #90 adds CI-104 (`main`
 `13a917ff`), and the branch `claude/v1-fixes` from it, PR #93, adds FIX-27..FIX-34, merged and
-through five review rounds, CI-105 (contributor PR #92), and FIX-35 and FIX-36. Each has its record
+through six review rounds, CI-105 (contributor PR #92), and FIX-35 and FIX-36. Each has its record
 in `progress/fixes.md`, in id order, and decisions D-255, D-257, D-258, D-261 and D-262..D-272 and
-the D-254 amendment are in `DEVIATIONS.md`:
+the amendments of D-188, D-233, D-243, D-244, D-251 and D-254 are in `DEVIATIONS.md`:
 
 - CI-99 (test only): `tests/testthat/setup.R` blanks every host variable that `is_secret_name()`
   accepts, in place of a fixed list of 23, so a host secret such as `CLAUDE_CODE_MESSAGING_TOKEN`
@@ -67,7 +67,23 @@ the D-254 amendment are in `DEVIATIONS.md`:
   and `withr::with_dir()` to a directory outside the project and `tempdir()`, or one the code
   computes, are level 4; a drive-relative path (`D:x`) is outside on every OS; `processx::run()`'s
   `wd` is read as `peter$sh()`'s unless the code computes it; `?gptr_security` names what stays
-  unread (another interpreter's code, a path the shell computes, an escaped `sh -c` word).
+  unread (another interpreter's code, a path the shell computes, an escaped `sh -c` word); review
+  rounds 5 and 6: `cmd /c` and `pwsh -Command` run every word after them, `env -C` and `--chdir=`
+  are read as a `cd`, `callr::run()` and `sys::exec_*()` as `processx::run()`, `eval(quote(x))` as
+  `x`, a link to a path outside the project (`file.symlink()`, `file.link()`, `Sys.junction()`,
+  `fs::link_create()`) is level 4, and `getwd()` and the directory `setwd()` returns are where the
+  code moved R, so `owd = setwd("data"); ...; setwd(owd)` stays level 2; a drive root or UNC path is
+  outside on Windows R 4.2; review round 6 (gate): a relative `setwd()` or `withr::local_dir()`
+  directory after a move is read in the directory R is in, so `setwd("data"); ...; setwd("..")` is
+  level 2 again; a function body and `local()` bind their own names, so the save-and-restore idiom
+  stays in the project there too; `withr::local_tempdir()` and `withr::local_tempfile()` are folded
+  as `tempfile()` is; a `cd`, `env -C`, `git -C` or `wd` directory is one the shell computes only
+  when the shell expands or globs its word; Python's `chdir()` is read as `setwd()` is, a relative
+  one placed where an earlier `os.chdir()` of a literal on a line with no indentation, no `:` and no
+  bracket left open moved R (any other `chdir()` may not have run); the evaluator's guard refuses
+  `eval(quote(q()))`, `do.call(eval, list(quote(q())))` and `rlang::exec(eval, quote(q()))` as
+  `q()`; fs's copies and moves write their `new_path`; `setwd(here::here())` stays level 4, a
+  directory the code computes.
 - FIX-28 (#93, issue #86): a T console's call turns bracketed paste on in its own modes, so a paste
   is one draft however late the composer reads it; timing stays for terminals without it (D-263,
   amends IC-76); review round 1: a newline after a paste's end in its read stays in the draft, and a
@@ -75,13 +91,21 @@ the D-254 amendment are in `DEVIATIONS.md`:
   paste is open, holds no Ctrl-C key, and an end marker read with no paste open ends one, the text
   before it pasted; review round 4: a Ctrl-C byte in the read after such a batch, on the polling
   beat with no empty read between, is pasted text too, so a Ctrl-C byte in a paste split again
-  before its own end marker pauses the run only after a stall of more than about 0.1 s.
+  before its own end marker pauses the run only after a stall of more than about 0.1 s; review
+  round 6: an open paste holds no Ctrl-C key only until 2 s after its last read, so a paste whose
+  end marker a question took no longer keeps Ctrl-C from pausing the run, and at the prompt's editor
+  a Ctrl-C byte or a cursor key inside a paste is text, no longer handing the draft over and
+  dropping the rest of the paste.
 - FIX-29 (#93, issue #85): a console turn's block records what its prompt was sent with as `#< `
   lines, which a live re-ask sends again without reading the file; headers name what each step
   created (`created=`), and a direct R line that uses an undone step's object is switched off with
   `#~` and back on after `/redo` (D-264, IC-49 amended in place); review round 1: a name holding a
   comma is left out of `created=`; review round 3: a lone carriage return in the text a prompt was
-  sent with ends a `#<` line, as R reads it.
+  sent with ends a `#<` line, as R reads it; review round 6: a `!code` note is split at a lone
+  carriage return too, so the `#<` run holds the lines it was sent with and a live re-ask sends the
+  same `user_ran` and `user_files` blocks; a header value holding a control character (C0, DEL or
+  C1) is quoted, which writes it as a Unicode escape, and printed output, bridge digests and the
+  names of `uses undone <names>` write control, bidi and zero-width characters as `<U+XXXX>`.
 - FIX-30 (#93): a console statement ends with `model = "..."` and `mode = "..."` when its turn ran
   with a model or mode the statement would not get without them (after `/model`, `/mode`, the plan
   menu, or in a console started as `peter(mode = plan)`), so a live re-ask asks each turn on the
@@ -104,7 +128,23 @@ the D-254 amendment are in `DEVIATIONS.md`:
   question an ask rule asks offers no `[a]lways` rule, and an `sh:` glob ending in ` *` also
   matches the command alone (`r(sh:sh *)` denies `peter$sh("sh", input = cmd)`); review round 4: an
   `a` or `p` typed at an ask rule's question says which rule asks, escaped, and idle served R reads
-  a nested `peter$sh()` in its `wd`.
+  a nested `peter$sh()` in its `wd`; review rounds 5 and 6: a registered secret handed to a child
+  through the `env` of `peter$sh()` or `peter$script()` asks as a read does, a permission question
+  shows it as its marker, and idle served R meets the same guard; review round 6 (the secret
+  writer): reading a registered secret asks in auto through a .env or .Renviron file or one
+  gptr_env() loaded, a `$NAME` read of a registered name in a command line or Python, `Sys.getenv()`
+  of a variable the code only sets to strings and a name in any letter case; `peter$sh()`,
+  `peter$bg()` and `peter$script()` sending a secret over the network ask in yolo; an
+  `r(secret:NAME)` deny or ask rule stops a member's `env` hand-over in the loop, in served R during
+  a run and for `peter$script()`; no permission question or blocked condition shows a registered
+  secret, and the console shows the model output it indents, and its warnings, redacted; its
+  verification: `Sys.getenv()` of a variable none of whose strings names a secret is a computed name
+  (level 3) again, so a function's argument or data mask that shadows a string binding no longer
+  reads as level 1 (yolo had sent such a value over the network with no question); a key the
+  environment finds again keeps its `gptr_env()` file, so reading that file asks in a run; a .env
+  file is `.env`, `.env.<suffix>`, `<name>.env` or `.Renviron`, read in R only by a function that
+  reads text; code that starts a process and holds a string naming a network program counts as a
+  network sink; a nested ask rule is asked in the call's one question.
 - FIX-33 (#93): the transcript findings of the live sessions. Model code cannot write a steer,
   follow-up or block marker line (one more `#`; only whole comment lines read back), a block that
   would still leave the markers malformed is not written and is named, `sha` ignores trailing
@@ -117,7 +157,10 @@ the D-254 amendment are in `DEVIATIONS.md`:
   exports code that calls `peter$sh()`, and NEWS and the vignette say that a turn naming no model
   or mode gets its session's; review round 3: a bridge digest is one line, so a job name the model
   chose writes no steer or R line, the rewind note counts what was not redone and `/redo` says so,
-  and the README says that `model =` picks your own model for a live re-ask.
+  and the README says that `model =` picks your own model for a live re-ask; review round 6: a block
+  main recorded before FIX-33 is fresh again by its untrimmed `sha`, so a live re-ask regenerates
+  it, and a lone carriage return ends a line of printed output and of a document read back, as
+  `source()` reads it; output that is not valid UTF-8 is recorded with `<xx>` bytes.
 - FIX-34 (#93): the console findings of the live sessions: a Tab after a multi-line bracketed
   paste read with it sends it; an `@file` line that is not UTF-8 is read as CP1252 instead of
   dropping the prompt; `/model`'s switch names the full id a CLI's `default` runs; a macOS paste's
@@ -131,7 +174,10 @@ the D-254 amendment are in `DEVIATIONS.md`:
   round 4: completion offers no name holding a control character (C0 or C1), and readline no longer
   completes a `!` line's string as a file name itself; `@` completion no longer fails in a folder
   whose first name is not ASCII; an `@file` line's bytes CP1252 lacks read as `<xx>`, and
-  `raw_to_utf8()` reads them as `?`, on every platform.
+  `raw_to_utf8()` reads them as `?`, on every platform; review round 5: an `@name` is read in any
+  script's letters, and one nothing has is read as its leading ASCII run; review round 6: a quoted
+  `@` name too long for a path is sent as text, and R no longer prints it raw, escapes included, in
+  a warning.
 - FIX-35 (#93): the owned headless browser's close waits up to 2 s for the helpers it recorded to
   exit, then, if any still runs, signals every recorded helper (one already gone reads "dead") and
   waits for them in the rest of its 10 s deadline, so a Chrome renderer the scheduler starves under
@@ -144,8 +190,15 @@ the D-254 amendment are in `DEVIATIONS.md`:
   home, and with them the control paths (D-272); review round 1: in any letter case, also a name
   the classifier cannot read (`do.call(Sys.setenv, ...)`), `readRenviron()` and
   `dotenv::load_dot_env()`; review round 2: also `peter$knit("python", code)`'s code and
-  `withr::local_envvar()` and `withr::with_envvar()`. Not covered: the variable changes the Open
-  list names.
+  `withr::local_envvar()` and `withr::with_envvar()`; review rounds 3 to 6: part names (`.n =`),
+  helpers the code binds, a variable a registered provider reads and the names the claude and codex
+  CLIs keep, a Python subscript read to its closing bracket and a name it cannot read are control;
+  review round 6 (gate): `do.call()` of a `list()` or `c()` written out and `rlang::exec()` are read
+  as the call they make, so `do.call(Sys.setenv, list(TZ = "UTC"))` is level 2 and the names passed
+  to a setter handed to `lapply()`, `Map()`, `do.call()` or another function the classifier knows
+  calls it (such as `sapply()` or `purrr::map()`) are level 4 `control`, as `?gptr_security` now
+  says; Python code is read as Python joins a line ending in a backslash outside a comment and a
+  parenthesised `os.environ`. Not covered: the variable changes the Open list names.
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
@@ -216,6 +269,18 @@ On `claude/v1-fixes`, locally on macOS, with `NOT_CRAN=true`, the SIGINT reset a
   FAIL 0 WARN 0 SKIP 66 PASS 39692 (31 min); lint of the 19 R and test files changed since
   `fe873436` clean, `document()` no diff, `check-docs.R` 0 problems, the four plan checks pass,
   `dev/release/tests` PASS 290 and the spelling check clean; no `R CMD check` ran.
+- Review round 6, the merge of `claude/v1-fix-gate6` (with `claude/v1-fix-win6`),
+  `claude/v1-fix-secret6`, `claude/v1-fix-console6` and `claude/v1-fix-trans6` (`909350e6`), with
+  the docs lens's two vignette sentences (`0c3e7f2f`), on `0c3e7f2f`: every `perm`, `risk`, `rules`,
+  `nested`, `bridge`, `mcp-`, `gptr-config`, `agent-`, `tool-`, `session-`, `py`, `knit`, `secrets`,
+  `auth-`, `console-`, `doc-`, `utils-`, `eval-` and `zzz` file FAIL 0 WARN 0 SKIP 52 PASS 18600
+  under `LC_ALL=C LANG=C`; the full suite in UTF-8 under the heavy lock FAIL 0 WARN 0 SKIP 66
+  PASS 40105 (30 min); ten of the changed test files against the installed package FAIL 0 PASS 4563
+  in UTF-8 and FAIL 0 SKIP 12 PASS 4467 under `LC_ALL=C LANG=C`; lint of the 34 R and test files
+  changed since `3cd3b146` clean, `document()` no diff, `check-docs.R` 0 problems, the four plan
+  checks pass, `dev/release/tests` PASS 290 and the spelling check clean; no `R CMD check` ran. Two
+  of the four final verdicts (gate6's and secret6's) left open items, not fixed here and recorded in
+  `progress/open-findings.md`.
 
 For PR #88, on the merged code `556acb00`, locally on macOS:
 
@@ -263,18 +328,23 @@ Open (found, not fixed):
 - The classifier places paths in the project but does not follow the working directory changed
   other than by `setwd()`, `withr::local_dir()`, `withr::with_dir()` or `xfun::in_dir()`
   (`usethis::local_project()`, `get("setwd")`, the `wd` of `callr::r()`), nor read the code
-  another interpreter runs (`Rscript -e`, `perl -e`, `node -e`), a path the shell computes
-  (`rm "$f"` in a loop, `xargs rm`), a code word handed to `sh -c` or `bash -c` whose spaces are
-  escaped with a backslash or written `$IFS` (`sh -c rm\ -f\ file`; reading it needs a tokenizer
-  of its own), `env` with `-C` in a cluster of short options (`env -iC DIR`) or an abbreviated
-  `--chdir`, `eval()` of a quote reached otherwise (`eval(bquote())`, a quoted call held in a
-  name) or the command of `processx::process$new()`: each is level 3 or lower, which auto and yolo
-  run whatever it deletes, as `?gptr_security` says. A `processx::run()` `wd` the code computes is
-  read as the project (FIX-27 review rounds 4 and 5).
-- The save-and-restore idiom inside a function body or `local()`, where a name the code assigns
-  is not followed (D-211), still asks in auto and yolo; after `setwd(tempdir())` relative paths
-  are still placed in the project root; vignette("execution-model") does not list moving the
-  working directory out of the project among what yolo asks (FIX-27 review round 5).
+  another interpreter runs (`Rscript -e`, `perl -e`, `node -e`, `pwsh -CommandWithArgs` or `-cwa`),
+  a path the shell computes (`rm "$f"` in a loop, `xargs rm`), a code word handed to `sh -c` or
+  `bash -c` whose spaces are escaped with a backslash or written `$IFS` (`sh -c rm\ -f\ file`;
+  reading it needs a tokenizer of its own), `env` with `-C` in a cluster of short options
+  (`env -iC DIR`) or an abbreviated `--chdir`, `eval()` of a quote reached otherwise
+  (`eval(bquote())`, a quoted call held in a name) or the command of `processx::process$new()`: each
+  is level 3 or lower, which auto and yolo run whatever it deletes, as `?gptr_security` says. A
+  `processx::run()` `wd` the code computes is read as the project (FIX-27 review rounds 4 and 5).
+- The save-and-restore idiom with its directory saved in a branch, a loop or another call's argument
+  (`if (p) owd = setwd("data")`, `tryCatch(finally = setwd(owd))`), and `setwd(here::here())`, still
+  ask in auto and yolo (level 4, documented); after `setwd(tempdir())` a relative `setwd()` target
+  is read in `tempdir()`, but other relative paths are still placed in the project root (FIX-27
+  review rounds 5 and 6).
+- `file.rename()` and `fs::file_move()` remove their source, which is not read as a delete (a move
+  of a file outside the project into it is level 2); the maintainer's call (FIX-27 review round 6).
+- After `withr::with_dir()` or `xfun::in_dir()` a relative `setwd()` target counts as a directory
+  the code computes (level 4) (FIX-27 review round 6).
 - In a project inside a protected folder (`.git`, `.claude` or `.aws`) every directory is
   protected, so `setwd('.')` and `setwd('sub')` are level 4 there, as before round 5: the
   maintainer's call (FIX-27 review round 5).
@@ -286,7 +356,14 @@ Open (found, not fixed):
   switched off in the read-only modes; the prefix gate leaves `standard_core` 1 token (FIX-32). A
   registered secret handed to a child through `env` asks each time in auto, and twice in manual,
   unless the code also reads it by name; the idle gate does not take the level 3 of an ordinary
-  variable passed through (FIX-32 review round 5).
+  variable passed through (FIX-32 review round 5). A `$NAME` of a registered name in a `peter$sh()`
+  or `peter$bg()` command asks in auto although their children start without registered secrets;
+  output the console does not indent (a console that cannot redraw a line, or `gptr.verbose`
+  below 2) shows a secret model code prints, on the screen only; a network program name the code
+  computes is not read for the secret-to-network question (FIX-32 review round 6). A command line or
+  Python that only mentions `.env` (for example `echo .env >> .gitignore`, or a comment) asks in
+  auto as a read; code that reads a secret, starts a process and names a network program in any
+  string (a `message()` that says `curl`) asks in yolo (FIX-32 review round 6 verification).
 - A replayed script sends again a steer its run took after the script went on (a run sent to the
   background from the pause menu, a `gptr_wait(timeout =)` that returned before the run ended), and
   a `gptr_step(s, <n>)` that ended the run keeps the notes, so a later turn equal to one is still
@@ -326,6 +403,10 @@ Open (found, not fixed):
   `tool-search` (CI-93).
 - A later console turn that uses an object made by a direct R line that is off still stops
   `source()`, as the undo kept the object (FIX-29).
+- A console statement names the model and mode of a turn only as D-265 states: a switch during a run
+  applies to the whole re-ask, a model given as a provider object is not named on a session's first
+  statement, `.opts$thinking`, the budget, tools, skills and `.opts` are not recorded, and a turn
+  recorded in auto or yolo is re-asked in that mode (FIX-30).
 - A line of `!` code that reads as another entry's first line but is not a comment still ends its
   section (FIX-31); a marker line inside a multi-line string of `!` code leaves the transcript's
   markers malformed, which the next block write names (FIX-33).
@@ -344,12 +425,15 @@ Open (found, not fixed):
   (FIX-34 review round 5).
 - Pasted text holding a paste end marker, in a terminal that does not filter pastes, still sends at
   a newline of a read between when a read ends right after that marker and the rest is split again
-  before the paste's own end marker (two pauses of 50 ms inside one paste); a Ctrl-C typed in the
-  same batch as a paste, or within about 0.1 s of its read (at most 0.2 s on the polling beat), is
-  dropped, while after a longer pause inside a split paste a Ctrl-C byte in the read between is
-  still the key, which pauses the run and lets the bytes after it answer the menu; and DEL, Ctrl-U
-  and Ctrl-W inside a paste still edit the draft there (FIX-28 review rounds 1, 3 and 4, D-263
-  Limits).
+  before the paste's own end marker (two pauses of 50 ms inside one paste), and a message sent there
+  that starts with `!` or `/` runs as R or as a command at the next prompt with no Enter; a Ctrl-C
+  typed in the same batch as a paste, or within about 0.1 s of its read (at most 0.2 s on the
+  polling beat), or within 2 s of the last read of a paste left open (one whose end marker a
+  question took), is dropped, while after a longer pause inside a split paste a Ctrl-C byte in the
+  read between, or a pasted one that reaches the reader more than 2 s after a paste's last read, is
+  the key, which pauses the run and lets the bytes after it answer the menu; a paste left open makes
+  Enter only add lines until the run ends; and DEL, Ctrl-U and Ctrl-W inside a paste still edit the
+  draft there (FIX-28 review rounds 1, 3, 4 and 6, D-263 Limits).
 - In a terminal that ignores bracketed paste a paste still splits when a read comes more than
   about 145 ms late (IC-76's 0.2 s bound; CI-94, FIX-28).
 - A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).
@@ -359,13 +443,14 @@ Open (found, not fixed):
 - Variable changes the classifier does not read, each level 3 or lower, which auto runs, as
   `?gptr_security` says: code in a file R runs (`source()`, `sys.source()`,
   `eval(parse(file = ))`); `Sys.setenv()`, `Sys.unsetenv()`, `withr::local_envvar()` or
-  `withr::with_envvar()` reached by a computed name, through a list or an environment, or handed
-  to another function (`get("Sys.unsetenv")`, `baseenv()$Sys.setenv`,
+  `withr::with_envvar()` reached by a computed name, through a list or an environment, or handed to
+  a function the classifier does not know calls it (`get("Sys.unsetenv")`, `baseenv()$Sys.setenv`,
   `asNamespace("withr")$local_envvar`, `with(list(f = withr::with_envvar), ...)`,
   `assign("f", Sys.unsetenv)`, `identity(withr::local_envvar)`); a Python write that reaches
-  `os.environ` by another name (`e = os.environ`, `getattr(os, "environ")`) or through `ctypes`,
-  or that passes `os.environ.update()` a mapping the code computes or keyword names not all in
-  upper case; Python run through 'reticulate' (FIX-36, D-272).
+  `os.environ` by another name (`e = os.environ`, `getattr(os, "environ")`) or through `ctypes`, or
+  that passes `os.environ.update()` a mapping the code computes, a mapping whose names are not plain
+  string literals (`{'\x48OME': d}`, `{'H' 'OME': d}`) or keyword names not all in upper case;
+  Python run through 'reticulate' (FIX-36, D-272).
 - The macOS row's time grows with its serial pty tests (CI-96).
 - A `process_jsonl` line's events still follow the abort flag (its adapters check the signal
   themselves, 04 section 8.1), and an `inprocess` generator keeps its two calls after it; the

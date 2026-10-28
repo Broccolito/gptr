@@ -9105,6 +9105,79 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   `git archive` of `a10ccec3`, whose R code `1e0c58e2` leaves alone) FAIL 0 PASS 235 in UTF-8 and
   FAIL 0 SKIP 8 PASS 152 under C; its lint clean. Not run: Linux and Windows, R 4.2 and R-devel,
   the full suite and `R CMD check`.
+- Review round 6, the merge (`claude/v1-fixes` on `3cd3b146` merges the round's fix branches
+  `claude/v1-fix-gate6` (from `claude/v1-fix-win6`, whose Windows test fixes it holds),
+  `claude/v1-fix-secret6`, `claude/v1-fix-console6` and `claude/v1-fix-trans6`, in that order, as
+  `70a4c65d`, `fa119f43`, `b7c0b3e7` and `909350e6`): gate6, secret6 and console6 merged clean;
+  trans6's one conflict was the end of FIX-29 in this file, where console6's T6-1 bullet and
+  trans6's T6-4 bullet and its two recheck bullets were each appended: both kept whole, console6's
+  first. gate6 and secret6 both change R/perm-classify.R, in different functions (gate6
+  `risk_scan()`, `risk_fold()`, `risk_python()`, `risk_cmd_line()`, `risk_cmd_simple()` and
+  `risk_cd_word()`; secret6 `risk_classify_r()`, `risk_new()`, `risk_secret_rows()` and
+  `risk_net_progs`), and `?gptr_security`'s text in R/gptr-config.R, in different paragraphs. Each
+  merged R, Rd, spec and record file was diffed against both parents: each side's change is there as
+  it was on its branch, and `document()` after the last merge leaves no diff. The branches' final
+  verdicts:
+  - gate6 (`2b81f2c7`): ok=false, one open regression of `b6f22118` (R6-GATE-5's scope change):
+    `d = 'data'; local({ assign('d', <outside>, inherits = TRUE) }); setwd(d)` and its
+    `envir = globalenv()`, `envir = parent.frame()`, `pos = 1` and `eval(envir =)` forms read 2 or 3
+    (4 before round 6), so auto and yolo move R out of the project unasked. On the merged code the
+    first form still reads 2 (a `gptr_risk()` probe of the installed merge).
+  - secret6 (`37988717`): ok=false, with open items: a command line's `$NAME` or `.env` read is no
+    source for the secret-to-network question, so yolo sends such a value over the network unasked,
+    where `?gptr_security` says it asks (medium, as on `3cd3b146`); the redacted request and
+    condition keep the key in their flags' `hidden` attribute; an idle served `peter$script()` meets
+    no `script` rule (a regression of `ec95f836`); `?gptr_security`'s list of secret reads has no
+    caveat for a read through `do.call()` or `lapply()` or of a copy; two test gaps and a record
+    sentence. On the merged code gate6's reading of `do.call()` and `rlang::exec()` as the call they
+    make has `x = do.call(readLines, list('.env'))` and `x = rlang::exec(readLines, '.env')` ask in
+    auto (level 3, `secret`), while `x = lapply('.env', readLines)` stays level 1 (the same probe).
+  - console6 (`4ba8514c`) and trans6 (`2decce4a`): ok; trans6's verifier left two notes (a
+    `uses undone` name holding `) ` leaks a `created=` into the header's key=value part, and control
+    characters inside the model's own code are kept, as the code must run as written).
+  - Not fixed here: the maintainer paused the verify-and-fix loop, so the open items of these final
+    verdicts are recorded in `dev/progress/open-findings.md`, for the one comprehensive review and
+    fix before the CRAN submission.
+  - The docs lens's R6-D5 and R6-D6 (`0c3e7f2f`): getting-started's manual-mode sentence says a
+    permission rule applies and an allow rule never approves a critical action, and
+    execution-model's list of what yolo still asks names moving the working directory out of the
+    project and `rm(list = ls())`, in each `.Rmd.orig` and `.Rmd` (`precompute.R --check` of the two
+    0 problems).
+  - Records (this commit): HANDOFF's and PROGRESS's intros say six review rounds, and their FIX-27,
+    FIX-28, FIX-29, FIX-32, FIX-33, FIX-34 and FIX-36 lines and Open lists take each fix writer's
+    round 6 sentences (gate6's with its round 2 changes, secret6's with its verification's, trans6's
+    round 2 text in place of its first); the Open item on the restore idiom inside a function body
+    or `local()` (FIX-27 round 5) is closed by gate6 and replaced by its residuals. The docs lens's
+    R6-D1 to R6-D4 and R6-D6's Open part, with these adaptations: R6-D1's index lines are
+    `dev/README.md`'s 25 and 26; R6-D2 also names D-188, whose status secret6's R6-SS-8 adds; of
+    R6-D3's four Open items (d), a deny `r(secret:NAME)` rule not stopping an `env` hand-over in the
+    loop, is not added, as secret6's R6-SS-3 fixes it; R6-D4's clauses come before each fix
+    writer's, which FIX-27, FIX-32 and FIX-36 name by writer (gate, the secret writer); R6-D6 drops
+    the vignette clause with the item the gate writer replaces. Also adapted: the gate writer's
+    D-272 phrase, "handed to a function the classifier does not know calls it", keeps the examples,
+    as `?gptr_security` does, in both Open lists (the writer named PROGRESS's); FIX-29's two round 6
+    clauses are one; PROGRESS's Open row writes the HANDOFF items' inner `; ` as `, `, as the row
+    does elsewhere.
+  - Checks on this commit (`909350e6`'s code; `0c3e7f2f` changes two vignette sentences and this
+    commit only `dev/`), locally on macOS, with `NOT_CRAN=true`, the SIGINT reset and a short
+    `TMPDIR`: the files whose names start with `perm`, `risk`, `rules`, `nested`, `bridge`, `mcp-`,
+    `gptr-config`, `agent-`, `tool-`, `session-`, `py`, `knit`, `secrets`, `auth-`, `console-`,
+    `doc-`, `utils-`, `eval-` or `zzz` (88 files) FAIL 0 WARN 0 SKIP 52 PASS 18600 under
+    `LC_ALL=C LANG=C` (14 min); the full suite in UTF-8 under the heavy lock FAIL 0 WARN 0 SKIP 66
+    PASS 40105 (30 min; the two ran at once, at load averages of about 9 to 30); the ten test files
+    `risk-forms`, `perm-classify`, `eval-guard`, `auth-secrets`, `perm-gate`, `mcp-server`,
+    `console-input`, `console-repl`, `doc-blocks` and `doc-io` against the installed package
+    (`R CMD INSTALL` of a `git archive` of `909350e6` into a scratch library, then
+    `testthat::test_dir(load_package = "installed")` on a copy of the tests, with user state
+    isolated as `isolated-check.R` does) FAIL 0 WARN 0 SKIP 0 PASS 4563 in UTF-8 and FAIL 0 WARN 0
+    SKIP 12 PASS 4467 under `LC_ALL=C LANG=C`; lint of the 34 R and test files changed since
+    `3cd3b146` clean; `document()` no diff; `check-docs.R` 0 problems;
+    `spelling::spell_check_package()` clean; `dev/release/tests` FAIL 0 PASS 290 in UTF-8 and under
+    `LC_ALL=C LANG=C`; the four plan checks pass (with the development library on `R_LIBS_USER`; a
+    first run without it failed the index step, whose findings then named testthat's and other
+    packages' functions as undefined); `fmt.py` on copies of the records changes nothing and
+    `lintfmt.py` shows only the baseline. No test failed, so no merge needed a fix. Not run:
+    `R CMD check`, Linux and Windows hosts, R 4.2 and R-devel, live models.
 
 ## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #93)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
