@@ -1387,7 +1387,9 @@ without `capabilities("profmem")`.
 - **Classifier secret guard.** Reading a registered key, dumping the environment (`Sys.getenv()`,
   `env`/`printenv`) or touching the vault is level 3 with a guard that asks even in `auto` and denies without
   a UI; a secret source plus a network sink in one evaluation (or through a tainted variable later) is level
-  4; a literal `[secret:` marker in code is rejected before evaluation with a `Sys.getenv()` hint.
+  4; a literal `[secret:` marker in code is rejected before evaluation with a `Sys.getenv()` hint. A registered
+  key handed to a child through the `env` of `peter$sh()` or `peter$script()`, by its name or in a value the
+  redactor finds it in, is the same guarded read, which the nested gate sees at run time (6.8.4) [D-267].
 - **Test.** `test-secrets-e2e.R` pushes fake keys through print, message, warning, a spill-sized dump,
   `Sys.setenv`, a worker, an MCP child (stderr), an artifact log, a CLI stand-in, a 401 echo, a wrong-origin send
   and a redirect to a second origin, then greps every sink including deferred-write sidecars and worker spec and
@@ -1546,7 +1548,8 @@ command without the `via f(): ` labels); an allow rule covers rows of level 1 an
 ending in ` *` also matches the command alone (`r(sh:cat *)` covers `cat`), and a question an ask rule asks offers
 no `[a]lways` rule, as no allow rule wins over an ask rule [D-267].
 Allow rules never loosen plan
-and never pre-approve level 4; only `r(secret:NAME)` rules pre-approve the secret guard and only `r(fn:NAME)`
+and never pre-approve level 4; only `r(secret:NAME)` rules pre-approve the secret guard, in `r` code
+[D-267], and only `r(fn:NAME)`
 rules lift the computed-command refusal (6.8.1); project settings may only tighten, a trusted project's `mode`
 excepted [D-250]; no filter from any source disables
 `builtin:permissions`, `builtin:plan` or the two guards, and inside a run filters that remove policies or hooks
@@ -1595,14 +1598,15 @@ A `peter$...` call made while an `r` evaluation runs enters `dispatch_nested()`:
 outer code listed the same function at a level no higher than the level the user approved for the outer call,
 and the member's own classification of its actual input (`call_risk()`: a patch's Delete File, a command computed
 at run time, a `peter$sh()` command read as run in its `wd` [D-262]) is no higher either, it runs without a second
-prompt; otherwise it passes the gate [IC-78].
+prompt; otherwise it passes the gate [IC-78]. So does a call that reads a registered secret the outer call's
+analysis did not show, such as one the `env` of `peter$sh()` or `peter$script()` hands a child [D-267].
 The command of a `peter$sh()` or `peter$bg()` call meets the deny and ask rules first, whatever its level,
 as the literal call would; allow rules are not applied there, and an ask offers no `[a]lways` rule [D-251].
 Base `system()`, `system2()`, `shell()` and `shell.exec()` have no such re-check, so auto and yolo refuse them
 with a computed command (6.8.1) [D-262]. R served to the CLI routes or an MCP client binds the same marker, with
 the served call as the outer call, so its nested calls pass `dispatch_nested()` too; when no pump serves the
-request the idle gate decides each first, a `sh` or `bg` call as the literal call of its command run in its `wd`
-[D-267].
+request the idle gate decides each first, a `sh` or `bg` call as the literal call of its command run in its `wd`,
+with the registered secrets its `env` hands the child [D-267].
 Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
 
 #### 6.8.5 Non-interactive runs and plan mode (NS-12)

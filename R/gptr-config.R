@@ -1734,9 +1734,11 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' as `[secret:ANTHROPIC_API_KEY]`. Values are redacted before anything is written or sent: the
 #' session files, documents, caches, spill files, wire logs and the output of child processes.
 #' gptr never reads the credential files of other tools. Reading a registered secret from model
-#' code asks even in `auto` mode. A key registered after it already appeared in a file (for
-#' example pasted into a prompt) can be removed from the files with [gptr_scrub()]; run
-#' `gptr_scrub(error = TRUE)` before committing to fail when any registered secret remains.
+#' code asks even in `auto` mode. So does handing one to a child process through the `env` of
+#' `peter$sh()` or `peter$script()`, by its name or in a value; no rule pre-approves that. A key
+#' registered after it already appeared in a file (for example pasted into a prompt) can be
+#' removed from the files with [gptr_scrub()]; run `gptr_scrub(error = TRUE)` before committing to
+#' fail when any registered secret remains.
 #'
 #' @section Data at rest and protected health information (PHI):
 #' gptr keeps what it needs to resume and replay work. Review what you commit when the data are

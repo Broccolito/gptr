@@ -88,7 +88,9 @@ works on the objects already in memory.
   (`gptr_artifacts()`).
 * Secrets are kept in a private vault and redacted everywhere; `gptr_login()` signs in to
   providers and MCP servers, `gptr_env()` loads `.env` files (including the `jev-key` alias) and
-  `gptr_scrub()` cleans files that captured a key.
+  `gptr_scrub()` cleans files that captured a key. Model code that reads a registered key, or
+  hands one to a child process through the `env` of `peter$sh()` or `peter$script()`, asks in
+  `auto` mode too.
 * Token accounting and budgets: `gptr_usage()`, `gptr_prompt()`, `gptr_describe()` and the
   `budget` argument.
 * Background sessions (`background = TRUE`) are experimental.
