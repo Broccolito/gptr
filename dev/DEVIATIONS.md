@@ -6269,6 +6269,12 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   name is read whole. Contract-visible: the console vignette. Tests: test-console-repl.R "an @name
   nothing has is read as its leading ASCII run (round 5 merge)". Evidence: progress/fixes.md
   FIX-34's merge.
+- Status 2026-10-28 (review round 5, the final merge): `fs_path()`, which hands the mention's
+  candidate paths to the file system as unmarked UTF-8 in a non-UTF-8 Unix locale, is in
+  `utils-encoding.R` (L0), beside `os_bytes()`, not P10's `tool-walk.R`, an L4 service the console
+  (L5) may not call: from round 5 `repl_mentions()` called it there, which the layering test
+  refused. Contract-visible: 03 section 3.2 (the file's row). Tests: test-arch-layers.R. Evidence:
+  progress/fixes.md FIX-34's final merge.
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Rule (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input

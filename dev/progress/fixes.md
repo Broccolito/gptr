@@ -7504,9 +7504,9 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
   no other row is flagged, so idle `peter$sh("whoami", env = "NAME")` ran in auto with the key
   where the loop asks once. The idle gate now decides the literal call (still with the member's
   secrets, so a deny `r(secret:NAME)` rule stops the hand-over as before) and then, when the guard
-  stands, the member call itself, which no rule for `r` code covers; a secret the served call's own
-  analysis guards drops the member's guard, as `dispatch_nested()` does. 03 section 6.8.4, 04
-  section 15.5 IC-57 and D-267's status say so.
+  stands, the member call itself, which no rule for `r` code covers; the member's guard is dropped
+  when the served call's own analysis guards every secret handed over, as `dispatch_nested()` does.
+  03 section 6.8.4, 04 section 15.5 IC-57 and D-267's status say so.
   - Red: test-mcp-server.R "an r(secret:) rule covers an idle served hand-over if the code reads it
     (round 6)" FAIL 3 on `b2ed7033`'s code (the hand-over ran: no error, no refusal, `x` set). Its
     rows for code that reads the secret first and for a deny rule in yolo pass there; the deny rows
@@ -8476,6 +8476,39 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     changed.
   - Not changed: the checkpoint lines of FIX-27, FIX-32 and FIX-34 name no round 5 change, nor
     FIX-36's its rounds 3 to 5. Not run: Linux and Windows, R 4.2 and R-devel, live models.
+- Review round 5, the final merge (`claude/v1-fixes` on `b2ed7033` merges `claude/v1-fix-class6`
+  and `claude/v1-fix-cons6`, in that order, as `332316d2` and `8e549ad6`; both merged clean, the
+  record appends in this file and DEVIATIONS each kept whole). The verifiers passed cons6 and left
+  one docs item in class6.
+  - Class6's docs item (`a889b0a6`): 03 section 6.8.4 said the idle gate decides a served
+    hand-over's member call when the served call's own analysis guards other secrets or none, and
+    FIX-32's review round 6 bullet that a secret that analysis guards drops the member's guard. The
+    code (`mcp_nested_gate()`, as `dispatch_nested()`) drops it only when that analysis guards
+    every secret handed over: under `r(secret:A,B)`, code that reads A and B and hands over A runs,
+    and code that reads A and hands over A and B is refused. 03 now says so and FIX-32's line is
+    corrected in place; `?gptr_security`, `?gptr_permissions` and D-267's status already did. The
+    verifier's note on a 123-column line of 04 section 15.5 IC-57: wrapped (`5daf940e`).
+  - The layering test (class6's record above notes it failing on `b2ed7033`, outside its set):
+    test-arch-layers.R "internal calls respect the layer table and the kernel SDK (IC-33)" failed
+    on every merge since round 5's console5 (`67233b5b`), whose `repl_mentions()` (console-repl.R,
+    L5) calls `fs_path()`, then in tool-walk.R, an L4 service only L4 files may call. Red:
+    `^arch-layers$` FAIL 1 PASS 43 on `5daf940e`, PASS 44 on `fe873436` (a detached worktree).
+    Fix (`4d2aff09`): `fs_path()` moves unchanged to utils-encoding.R (L0), beside `os_bytes()`;
+    03 section 3.2 names it in that file's row and D-244's status says so. Green:
+    `^(arch-layers|lint-rules|utils-encoding|tool-walk)$` FAIL 0 PASS 206 in UTF-8 and FAIL 0
+    SKIP 1 PASS 202 under `LC_ALL=C LANG=C`.
+  - Checks on `4d2aff09`'s code (the records commit changes only `dev/`), locally on macOS, with
+    `NOT_CRAN=true`, the SIGINT reset and a short `TMPDIR`: the files whose names start with
+    `perm`, `risk`, `rules`, `nested`, `bridge`, `mcp-`, `gptr-config`, `agent-`, `tool-`,
+    `session-`, `py`, `knit`, `secrets`, `auth-`, `console-`, `doc-`, `utils-`, `artifact-`,
+    `proc-` or `zzz` FAIL 0 WARN 0 SKIP 61 PASS 23098 under `LC_ALL=C LANG=C` (16 min); the full
+    suite in UTF-8 under the heavy lock FAIL 0 WARN 0 SKIP 66 PASS 39692 (31 min, at load averages
+    of 27 to 146); lint of the 19 R and test files changed since `fe873436` and of the console
+    vignette clean; `document()` no diff; `check-docs.R` 0 problems;
+    `spelling::spell_check_package()` clean; `dev/release/tests` FAIL 0 PASS 290 in UTF-8 and under
+    `LC_ALL=C LANG=C`; the four plan checks pass; `fmt.py` on copies of the records changes nothing
+    and `lintfmt.py` shows only the baseline. Not run: `R CMD check`, Linux and Windows hosts, R 4.2
+    and R-devel, live models.
 
 ## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #93)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`

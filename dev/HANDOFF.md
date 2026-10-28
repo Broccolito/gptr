@@ -208,7 +208,14 @@ On `claude/v1-fixes`, locally on macOS, with `NOT_CRAN=true`, the SIGINT reset a
 - Review round 5, the merge of `claude/v1-fix-win42`, `claude/v1-fix-env3`, `claude/v1-fix-gate5`,
   `claude/v1-fix-secret5`, `claude/v1-fix-console5` and `claude/v1-fix-docs5` (`112f1a57`), with
   `getwd()` and `setwd()` read as D-272's helpers (`d84ccfd6`), and of its fix branches
-  `claude/v1-fix-cons6` and `claude/v1-fix-class6`: the counts are the final merger's.
+  `claude/v1-fix-class6` and `claude/v1-fix-cons6` (`8e549ad6`), with `fs_path()` an L0 helper
+  the console may call (`4d2aff09`), on `4d2aff09`'s code: every `perm`, `risk`, `rules`,
+  `nested`, `bridge`, `mcp-`, `gptr-config`, `agent-`, `tool-`, `session-`, `py`, `knit`,
+  `secrets`, `auth-`, `console-`, `doc-`, `utils-`, `artifact-`, `proc-` and `zzz` file FAIL 0
+  WARN 0 SKIP 61 PASS 23098 under `LC_ALL=C LANG=C`; the full suite in UTF-8 under the heavy lock
+  FAIL 0 WARN 0 SKIP 66 PASS 39692 (31 min); lint of the 19 R and test files changed since
+  `fe873436` clean, `document()` no diff, `check-docs.R` 0 problems, the four plan checks pass,
+  `dev/release/tests` PASS 290 and the spelling check clean; no `R CMD check` ran.
 
 For PR #88, on the merged code `556acb00`, locally on macOS:
 
