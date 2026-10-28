@@ -286,6 +286,43 @@ test_that("in yolo a control export runs without a person; options(gptr.*) asks 
   expect_false(isFALSE(getOption("gptr.critical_guard")))
 })
 
+test_that("auto asks before model code moves gptr's config folder or the home (FIX-36)", {
+  root = local_project(trust = TRUE)
+  vars = c("R_USER_CONFIG_DIR", "XDG_CONFIG_HOME", "APPDATA", "HOME", "USERPROFILE")
+  before = Sys.getenv(vars, unset = NA, names = TRUE)
+  withr::local_envvar(before)
+  codes = c(sprintf("Sys.setenv(%s = 'elsewhere')", vars), "Sys.unsetenv('HOME')",
+            "Sys.unsetenv(c('XDG_CONFIG_HOME', 'APPDATA'))",
+            sprintf("peter$py(\"import os\\nos.environ['%s'] = 'elsewhere'\")", vars),
+            "Sys.setenv(home = 'elsewhere')", "n = 'HOME'; Sys.unsetenv(n)",
+            "do.call(Sys.setenv, list(R_USER_CONFIG_DIR = 'elsewhere'))",
+            "readRenviron('vars.env')",
+            "peter$py(\"import os\\nos.environ['appdata'] = 'elsewhere'\")")
+  # yolo runs control rows other than options(gptr.*), as it runs gptr's configuration functions
+  for (code in codes) {
+    expect_identical(gate_decide(gate_r(code), gate_ctx("auto")), "ask_human", label = code)
+    expect_identical(gate_decide(gate_r(code), gate_ctx("yolo")), "allow", label = code)
+  }
+  # a person who answers no keeps the folder where it is
+  skip_on_cran()
+  cfg = tools::R_user_dir("gptr", "config")
+  d = withr::local_tempdir()
+  f = file.path(d, "vars.env")
+  writeLines(paste0("R_USER_CONFIG_DIR=", d), f)
+  ui = local_scripted_ui(list("n", "n", "n", "n", "n"))
+  fake = local_fake_provider(list(
+    fake_tool("r", code = paste0("Sys.setenv(R_USER_CONFIG_DIR = ", deparse(d), ")")),
+    fake_tool("r", code = paste0("Sys.setenv(HOME = ", deparse(d), ")")),
+    fake_tool("r", code = "Sys.unsetenv('XDG_CONFIG_HOME')"),
+    fake_tool("r", code = paste0("do.call(Sys.setenv, list(R_USER_CONFIG_DIR = ", deparse(d),
+                                 "))")),
+    fake_tool("r", code = paste0("readRenviron(", deparse(f), ")")), "Done."))
+  peter("Keep the settings elsewhere.", model = fake, mode = "auto", envir = new.env())
+  expect_identical(sum(ui$log$method == "permission"), 5L)
+  expect_identical(Sys.getenv(vars, unset = NA, names = TRUE), before)
+  expect_identical(tools::R_user_dir("gptr", "config"), cfg)
+})
+
 test_that("a nested auto run started by yolo model code asks before a protected delete", {
   skip_on_cran()
   root = local_project(files = list(".ssh/id_rsa" = "KEY"), trust = TRUE)

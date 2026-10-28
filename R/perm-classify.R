@@ -1741,9 +1741,7 @@ risk_python = function(code, root = project_root()) {
   lits = substr(m, 2L, nchar(m) - 1L)
   ids = regmatches(code, gregexpr("\\b[A-Z][A-Z0-9_]+\\b", code, perl = TRUE))[[1L]]
   if (any(f$category == "session" & f$level == 3L) &&
-      (any(c(lits, ids) %in% risk_control_env |
-             grepl(risk_control_env_re, c(lits, ids), perl = TRUE)) ||
-         grepl("environb?\\.clear\\(", code))) {
+      (any(risk_control_name(c(lits, ids))) || grepl("environb?\\.clear\\(", code))) {
     f = risk_flags_bind(f, risk_flags_row("control", "py", 4L, "control"))
   }
   wr = f$category[f$category %in% c("file_write", "file_delete")]
@@ -1762,8 +1760,19 @@ risk_control_env = c("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "G
                      "TOGETHER_API_KEY", "XAI_API_KEY", "CEREBRAS_API_KEY", "FIREWORKS_API_KEY",
                      "VLLM_API_KEY", "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT",
                      "AWS_BEARER_TOKEN_BEDROCK", "TYPESAFE_API_KEY", "R_ENVIRON_USER",
-                     "R_PROFILE_USER", "R_ENVIRON", "R_PROFILE")
+                     "R_PROFILE_USER", "R_ENVIRON", "R_PROFILE",
+                     # they move gptr's config folder (tools::R_user_dir()) or the home that
+                     # user_home() reads, and with them the control paths (D-272)
+                     "R_USER_CONFIG_DIR", "XDG_CONFIG_HOME", "APPDATA", "HOME", "USERPROFILE")
 risk_control_env_re = "^GPTR_|_BASE_URL\\z"
+
+#' Which of `x` names a control variable, in any case: Windows names are case-insensitive, and
+#' Python upper-cases them there (D-272)
+#' @noRd
+risk_control_name = function(x) {
+  x = toupper(x)
+  x %in% risk_control_env | grepl(risk_control_env_re, x, perl = TRUE)
+}
 
 # ---- the R classifier (03 section 6.8.1, D-132) ---------------------------------------------
 
@@ -2535,12 +2544,13 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       return(TRUE)
     }
     if (name %in% c("Sys.setenv", "Sys.unsetenv")) {
-      vals = lapply(w[!nzchar(nms)], risk_fold)
+      vals = lapply(w[!nzchar(nms)], risk_fold, kn(ctx))
       keys = c(nms[nzchar(nms)], unlist(vals))
-      if (any(keys %in% risk_control_env | grepl(risk_control_env_re, keys, perl = TRUE))) {
+      if (any(risk_control_name(keys))) {
         add(ctx, label, name, 4L, "control")
       } else if (any(vapply(vals, is.null, logical(1)))) {
-        add(ctx, paste0(label, " (names the code computes)"), name, 3L, "dynamic")
+        # a name the classifier cannot read may be one of them (D-272)
+        add(ctx, paste0(label, " (names the code computes)"), name, 4L, "control")
       } else {
         add(ctx, label, name, 2L, "session")
       }

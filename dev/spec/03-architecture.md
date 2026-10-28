@@ -1468,18 +1468,21 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
 devtools, renv, pak, remotes, fs, gert, git2r, gh, googledrive, pins, `aws.*`, `paws.*`, DBI write verbs, httr/
 httr2/curl request performers) is at least level 2 [18 §2.5 and §7 item 1; IC-54]); gptr's own exports that change
 harness state (`gptr_config`, `gptr_permissions`, `gptr_trust`, `gptr_register`, `gptr_on`, `gptr_mcp_add`, ...)
-are level 4 `control` and also check `run_current()` [IC-53]; writes to control-plane paths (`.gptr/settings*.json`,
-`mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `agents/`, the user config directory, `.Rprofile`,
-`Makevars`, git hooks) are level 4 and to instruction files (`AGENTS.md`, `CLAUDE.md`, `vignette.Rmd`, skills,
-prompts) level 3 [IC-54]; `peter$sh/script/bg` by the command classifier; `peter$py`/`sql`
-by token and keyword classifiers [G5 §5]; MCP tools by server annotations (untrusted unless the server is
-trusted: `readOnlyHint` 0, `destructiveHint = FALSE` 2, none 3); nested `peter()` inherits and only tightens;
-`ask` is level 0. Outside function bodies, a path held in a name the code assigns is folded (literals through
-`c()`, `file.path()`, `paste()`, `paste0()`, `normalizePath()`, `path.expand()`, `tempfile()`), the worst value
-counting: a straight-line assignment replaces the name's values unless the code also assigns it with `<<-`, one in
-a branch, loop or call adds its value (and, when first, the binding before the code), and a value the code
-computes or a loop that assigns the name makes it computed [D-211]. The classifier is advisory and documented as
-not a security boundary; in-process R cannot be sandboxed [18 §2.5].
+are level 4 `control` and also check `run_current()` [IC-53], as are `Sys.setenv()`/`Sys.unsetenv()` and a Python
+`os.environ` write of a provider key, `GPTR_*`, `*_BASE_URL`, R's startup variables or a variable that moves the user
+config directory or the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in any
+letter case, `Sys.setenv()`/`Sys.unsetenv()` of a name the classifier cannot read, `readRenviron()` and
+`dotenv::load_dot_env()` [D-272]; writes to control-plane paths (`.gptr/settings*.json`, `mcp.json`, `extensions/`,
+`plugins/`, `SYSTEM.md`, `agents/`, the user config directory, `.Rprofile`, `Makevars`, git hooks) are level 4 and
+to instruction files (`AGENTS.md`, `CLAUDE.md`, `vignette.Rmd`, skills, prompts) level 3 [IC-54]; `peter$sh/script/bg`
+by the command classifier; `peter$py`/`sql` by token and keyword classifiers [G5 §5]; MCP tools by server
+annotations (untrusted unless the server is trusted: `readOnlyHint` 0, `destructiveHint = FALSE` 2, none 3); nested
+`peter()` inherits and only tightens; `ask` is level 0. Outside function bodies, a path held in a name the code
+assigns is folded (literals through `c()`, `file.path()`, `paste()`, `paste0()`, `normalizePath()`, `path.expand()`,
+`tempfile()`), the worst value counting: a straight-line assignment replaces the name's values unless the code also
+assigns it with `<<-`, one in a branch, loop or call adds its value (and, when first, the binding before the code),
+and a value the code computes or a loop that assigns the name makes it computed [D-211]. The classifier is advisory
+and documented as not a security boundary; in-process R cannot be sandboxed [18 §2.5].
 
 In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command
 (`system2()`'s `args` and `env` too [D-267], `shell.exec()`'s file) the classifier cannot fold to literals: a
