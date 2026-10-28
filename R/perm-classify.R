@@ -1309,10 +1309,13 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
              has("^(-1|-?0|-?\\$\\{?PPID\\}?|(?i:r|rterm|rgui|rsession|r\\.exe|rscript)|-u)\\z")) {
     add(4L, "critical")
   } else if (p %in% risk_cmd_interpreters) {
-    # cmd (/c, /k, /r) and PowerShell (-c, -Command) run every word after the option, in any case
+    # cmd (/c, /k, /r) and PowerShell (-Command, -EncodedCommand or any abbreviation, after - or
+    # /) run every word after the option, in any case
     joins = p %in% c("cmd", "pwsh", "powershell")
+    o = sub("^/", "-", tolower(a))
     k = match(TRUE, if (joins) {
-      tolower(a) %in% c("-c", "-k", "-r", "-command", "-e", "-ec", "-encodedcommand")
+      o %in% c("-k", "-r", "-ec") | nchar(o) > 1L &
+        (startsWith("-command", o) | startsWith("-encodedcommand", o))
     } else {
       a %in% c("-c", "-e", "-E", "--eval")
     }, nomatch = 0L)
