@@ -4813,10 +4813,11 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    `gptr_mcp_remove`, `gptr_mcp_serve`, `gptr_login`, `gptr_logout`, `gptr_doc`, `gptr_cache` (prune, clear),
    `gptr_scrub` (`dry_run = FALSE`), and `gptr_resume`, `gptr_fork`, `gptr_steer`, `gptr_cancel`, `gptr_rewind`
    on a session other than the running one; `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` and
-   `withr::local_envvar()`/`withr::with_envvar()` of `GPTR_*`, `*_BASE_URL`, provider key or R startup names
-   (`R_ENVIRON_USER`, `R_PROFILE_USER`, `R_ENVIRON`, `R_PROFILE`) or of a variable that moves the user config
-   directory or the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in any
-   letter case, or of a name the classifier cannot read, `readRenviron()`, `dotenv::load_dot_env()` (D-272),
+   `withr::local_envvar()`/`withr::with_envvar()` of `GPTR_*`, `*_BASE_URL` or R startup names (`R_ENVIRON_USER`,
+   `R_PROFILE_USER`, `R_ENVIRON`, `R_PROFILE`), of a variable a registered provider reads (its `auth` names and
+   `compat$base_url_env`, such as `AWS_REGION`, and the `bedrock-converse` key pair) or of a variable that moves the
+   user config directory or the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in
+   any letter case, or of a name the classifier cannot read, `readRenviron()`, `dotenv::load_dot_env()` (D-272),
    `setHook()`, `assignInNamespace()`. These exports also check `run_current()`: called from model code during a
    run they signal `gptr_error_permission` unless the dispatcher approved exactly that call through an
    `ask_human` (a one-shot token on the run). `perm_check()` grants the token on any final allow (IC-78); outside
@@ -5510,9 +5511,12 @@ totals line names the model and the context left.
   target shows in `path_class`. The edit tool's `*** Delete File:` is level 4 where an `unlink()` of the same
   path is, with the category `file_delete`, so in yolo a control path written by the same patch does not hide
   it; called as `peter$edit()` from `r` code it passes the gate at that level too (`dispatch_nested()` gates a
-  member at its own risk of the actual input). Computed paths stay level 3. `setwd()`, `withr::local_dir()`
-  and `withr::with_dir()` to a directory outside the project and `tempdir()`, or to one the code computes, are a
-  level-4 `session` row, which yolo's critical guard counts (D-262, review round 4).
+  member at its own risk of the actual input). Computed paths stay level 3. `setwd()`, `withr::local_dir()`,
+  `withr::with_dir()` and `xfun::in_dir()` to a directory outside the project and `tempdir()`, or to one the code
+  computes, are a level-4 `session` row, which yolo's critical guard counts (D-262, review round 4); `getwd()` and
+  `setwd()`'s value are the directory the code has moved R to, so the save-and-restore idiom stays in the
+  project, and a link `file.symlink()`, `file.link()` or `Sys.junction()` makes to a path outside the project is
+  level 4 (review round 5).
 - `perm_check()` grants the one-shot control tokens on any final allow (IC-53 item 3).
 - The model's `<mode name="yolo">` block reuses auto's text. Entering yolo (a session, `/mode`, a console start)
   shows a one-time `gptr_message_notice` that lists what still asks and says the classifier is not a sandbox.
