@@ -1775,8 +1775,18 @@ risk_python = function(code, root = project_root(), dirs = root) {
                                    code_nc, perl = TRUE))[[1L]]
   lits = substr(m, 2L, nchar(m) - 1L)
   ids = regmatches(code, gregexpr("\\b[A-Z][A-Z0-9_]+\\b", code, perl = TRUE))[[1L]]
+  # the name an environment write gives (a subscript, or the first argument of putenv(),
+  # unsetenv(), setdefault(), pop() and the item methods): one that is not a plain string literal
+  # (an escape, adjacent literals, a name the code computes) may be a control variable (D-272)
+  keys = regmatches(code_nc, gregexpr(paste0(
+    "environb?\\s*\\[\\K[^]]*(?=\\]\\s*(:[^=\n]*)?[-+*/|&]?=[^=])|",
+    "\\bdel\\s+[\\w.]*environb?\\s*\\[\\K[^]]*|",
+    "(\\b(putenv|unsetenv)|environb?\\.(setdefault|pop|__setitem__|__delitem__))\\s*\\(\\K[^,)]*"
+  ), code_nc, perl = TRUE))[[1L]]
+  plain = grepl("^\\s*[bBrRuU]{0,2}('[^'\\\\\n]*'|\"[^\"\\\\\n]*\")\\s*\\z", keys, perl = TRUE)
   if (any(f$category == "session" & f$level == 3L) &&
-      (any(risk_control_name(c(lits, ids))) || grepl("environb?\\.clear\\(", code))) {
+      (any(risk_control_name(c(lits, ids))) || grepl("environb?\\.clear\\(", code) ||
+         !all(plain))) {
     f = risk_flags_bind(f, risk_flags_row("control", "py", 4L, "control"))
   }
   wr = f$category[f$category %in% c("file_write", "file_delete")]
