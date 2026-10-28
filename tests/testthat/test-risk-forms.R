@@ -253,3 +253,26 @@ test_that("the yolo notice names moving the working directory out of the project
   expect_message(mode_notice("yolo"), "moving the working directory out of the project",
                  class = "gptr_message_notice")
 })
+
+test_that("Sys.junction() writes its `to` on every host, with R's formals or as written (round 6)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  check = function() {
+    for (code in c("Sys.junction('sub', '.git/hooks/x')", "Sys.junction('sub', '~/.Rprofile')",
+                   "Sys.junction(to = '.gptr/agents', from = 'sub')")) {
+      r = gptr_risk(code, root = root)
+      expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
+    }
+    expect_identical(lv(paste0("Sys.junction('sub', ", deparse(file.path(out, "x")), ")")), 3L)
+    expect_identical(lv(paste0("Sys.junction(", deparse(out), ", 'lnk')")), 4L)
+    expect_identical(lv("Sys.junction('sub', 'lnk')"), 2L)
+  }
+  check()
+  # with R's formals, as on Windows, where the function exists
+  matched = risk_args
+  local_mocked_bindings(risk_args = function(e, fn, pkg) {
+    matched(e, if (identical(fn, "Sys.junction")) function(from, to) NULL else fn, pkg)
+  })
+  check()
+})

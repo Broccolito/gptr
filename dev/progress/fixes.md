@@ -6426,8 +6426,9 @@ the driver, screens, events, transcripts and replays without a model are local, 
     `evalq(x)` (formerly quoted, so level 2 at most); `xfun::in_dir()` gets a row and the
     `with_dir` branch; and `file.symlink()`, `file.link()` and `Sys.junction()` of a path whose
     class is not workspace, temp or console are a `file_delete` row at the level a delete of that
-    class has, 4 outside the project, as `ln`'s source is. `Sys.junction()`'s path argument is
-    `link`, not `to`, which matched nothing where the function exists (Windows).
+    class has, 4 outside the project, as `ln`'s source is. It also renamed `Sys.junction()`'s
+    path argument `link`, no formal of R's `Sys.junction(from, to)`, so on Windows its written
+    path went unread; review round 6 put `to` back.
   - The working directory (R5-REG-2, `096f259e`): `risk_scan()` holds R's working directory as a
     name's paths, in `known`'s attributes: from `getwd()` when it reads the code, moved by `setwd()`
     and `withr::local_dir()` to the folded target (a straight-line move replaces it, one in a
