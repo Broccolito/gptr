@@ -76,9 +76,9 @@ that supports tool calls. Select an installed model, for example:
 gptr_config(model = "ollama/qwen3:1.7b", .scope = "session")
 ```
 
-gptr does not install Ollama or download models. Local-only inference is
-on by default; a workflow remains local only when every model and tool
-it uses is local.
+gptr does not install Ollama or download models. Local-only Ollama
+inference is on by default; a workflow remains local only when every
+model and tool it uses is local.
 
 The first interactive use of a remote provider asks you to acknowledge
 the data it receives. See [Language
@@ -208,9 +208,10 @@ open it with `vignette("getting-started", package = "gptr")`.
 ## Why Peter?
 
 The name honors Peter Naur's work on readable language definitions and
-Peter Cathcart Wason's research with Jonathan Evans on reasoning. System
-1 and System 2 name software roles in gptr; they imply nothing about
-human cognition. See [Why
+Peter Cathcart Wason's research with Jonathan Evans on reasoning. In
+Naur's spirit, gptr records sessions as runnable documents. System 1 and
+System 2 name software roles in gptr; they imply nothing about human
+cognition. See [Why
 Peter?](https://broccolito.github.io/gptr/articles/why-peter.html) for
 the history and sources.
 
