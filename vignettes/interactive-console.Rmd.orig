@@ -196,9 +196,10 @@ on restoration.
 
 ## Approve changes
 
-In `manual`, known read-only actions and actions covered by existing allow rules run directly;
-other changes ask for approval under the call they gate, and you type the answer on the row
-below. The question lists the flagged calls, riskiest first (at most five; `?` shows all), and
+In `manual`, known read-only actions run directly and changes ask for approval under the call
+they gate, unless a permission rule applies (an allow rule never approves a critical action); you
+type the answer on the row below. The question lists the flagged calls, riskiest first (at most
+five; `?` shows all), and
 offers `y` for this action, `a` for a session rule covering them when one can be written (`p` for
 the same rule in this project), `n` to deny, and `?` for details. `n <text>` (or `no, <text>`)
 denies the action and gives the agent your text as its instruction. A sub-agent's question names

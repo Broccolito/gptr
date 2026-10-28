@@ -119,9 +119,9 @@ and [Data sent to
 providers](https://broccolito.github.io/gptr/reference/gptr_egress.html).
 
 In the default `manual` mode, actions classified as read-only run
-directly; actions classified as changes ask for approval unless an
-existing rule allows them. The check is advisory and provides no
-sandbox; see [Security
+directly and actions classified as changes ask for approval, unless a
+permission rule applies; an allow rule never approves a critical action.
+The check is advisory and provides no sandbox; see [Security
 considerations](https://broccolito.github.io/gptr/reference/gptr_security.html)
 or `?gptr_security` in R.
 
