@@ -38,7 +38,10 @@ test_that("cmd /c and PowerShell -Command run every word after them (review roun
                 paste("cmd /k del", f), paste("cmd /r del", f), paste("CMD /S /C del", f),
                 paste("pwsh -NoProfile -Command Remove-Item", f),
                 paste("powershell -command Remove-Item -Recurse", out),
-                paste("pwsh -c Remove-Item", f))) {
+                paste("pwsh -c Remove-Item", f),
+                # PowerShell takes any abbreviation of -Command, after - or /
+                paste("pwsh -Comm Remove-Item", f), paste("powershell -co Remove-Item", f),
+                paste("pwsh /Command Remove-Item", f))) {
     expect_identical(lv(paste0("system(", deparse(cmd), ")")), 4L, label = cmd)
   }
   expect_identical(lv(paste0("processx::run('cmd', c('/c', 'del', ", deparse(f), "))")), 4L)
@@ -49,6 +52,7 @@ test_that("cmd /c and PowerShell -Command run every word after them (review roun
   expect_identical(lv("system('cmd /c del marker.txt')"), 3L)
   expect_identical(lv("system('cmd /c dir')"), 3L)
   expect_identical(lv(paste("system('sh -c ls", f, "')")), 3L)
+  expect_identical(lv("system('pwsh -NoProfile -File x.ps1')"), 3L)
 })
 
 test_that("callr::run() and sys::exec_*() are read as processx::run() is (review round 5)", {
@@ -77,6 +81,7 @@ test_that("eval(quote(x)) is read as x, and xfun::in_dir() as with_dir() (review
   o = deparse(out)
   for (code in c(paste0("eval(quote(setwd(", o, ")))"),
                  paste0("rlang::eval_bare(quote(setwd(", o, ")))"),
+                 paste0("eval(base::quote(setwd(", o, ")))"),
                  paste0("base::eval(envir = e, quote(unlink(", deparse(file.path(out, "m")), ")))"),
                  paste0("rlang::eval_tidy(quote(withr::local_dir(", o, ")))"),
                  paste0("xfun::in_dir(", o, ", unlink('marker.txt'))"), "xfun::in_dir(d, x)")) {
@@ -106,6 +111,17 @@ test_that("env -C runs its command in that directory, read as a cd (review round
   # neighbours: in the project as before
   expect_identical(level("env -C sub rm -f marker.txt"), 3L)
   expect_identical(level("env -C sub ls"), 0L)
+  # `~` and $HOME there are the home directory, as after a cd (a home outside tempdir())
+  home = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  withr::local_envvar(HOME = home, USERPROFILE = home)
+  dir.create(file.path(home, "other"))
+  for (cmd in c("env -C ~/other rm -f m", "env -C ~ rm -f m", "env -C $HOME rm -f m",
+                "env -C ${HOME}/other rm -f m", "git -C ~/other rm -f m", "git -C ~ rm -f m",
+                "cd ~/other && rm -f m")) {
+    expect_identical(level(cmd), 4L, label = cmd)
+  }
+  # neighbours: a directory the shell computes reads as a cd to it does
+  expect_identical(level("env -C \"$X\" rm -f m"), level("cd \"$X\" && rm -f m"))
 })
 
 test_that("a Python variable name it cannot read in an environment write is control (round 5)", {
@@ -115,15 +131,22 @@ test_that("a Python variable name it cannot read in an environment write is cont
                  "os.environ['H'\n  'OME'] = d", "os.environb[b'\\x48OME'] = b'd'",
                  "os.environ['\\N{LATIN CAPITAL LETTER H}OME'] = d", "os.putenv('H' 'OME', d)",
                  "k = 'HO' + 'ME'\nos.environ[k] = d", "del os.environ[k]",
-                 "os.environ.pop(k, None)", "os.environ[f'{k}'] = d", "os.unsetenv(k)")) {
+                 "os.environ.pop(k, None)", "os.environ[f'{k}'] = d", "os.unsetenv(k)",
+                 # a subscript is read to its closing bracket, and every augmented assignment
+                 "os.environ[keys[0]] = d", "os.environ[d['k']] = v", "os.environ[a[b[0]]] = v",
+                 "os.environ['HOME' if ']' else 'TZ'] = v", "del os.environ[a[b[0]]]",
+                 "os.environ[k] %= v", "os.environ[k] **= v")) {
     expect_identical(py(paste0("import os\n", code)), 4L, label = code)
   }
   # neighbours: a plain literal name that controls nothing, and reads, as before
   for (code in c("os.environ['TZ'] = 'UTC'", "os.environ[\"TZ\"] = 'UTC'",
-                 "os.environ.update(TZ = 'UTC')", "os.putenv(b'TZ', b'UTC')")) {
+                 "os.environ.update(TZ = 'UTC')", "os.putenv(b'TZ', b'UTC')",
+                 "os.environ['a]b'] = 'UTC'", "os.environ['TZ'] = d[0]", "os.environ['TZ'] %= v")) {
     expect_identical(py(paste0("import os\n", code)), 3L, label = code)
   }
   expect_identical(py("import os\nx = os.environ[k]"), 2L)
+  expect_identical(py("import os\nx = os.environ[keys[0]]"), 2L)
+  expect_identical(py("import os\nok = os.environ[keys[0]] == d"), 2L)
 })
 
 test_that("a link to a path outside the project is level 4, as ln's (review round 5)", {
@@ -136,13 +159,16 @@ test_that("a link to a path outside the project is level 4, as ln's (review roun
                  paste0("file.link(", deparse(file.path(out, "a")), ", 'lnk')"),
                  paste0("Sys.junction(", o, ", 'lnk')"),
                  paste0("file.symlink(to = 'lnk', from = ", o, ")"),
-                 paste0("d = ", o, "; file.symlink(d, 'lnk')"))) {
+                 paste0("d = ", o, "; file.symlink(d, 'lnk')"),
+                 paste0("fs::link_create(", o, ", 'lnk')"),
+                 paste0("fs::link_create(new_path = 'lnk', path = ", o, ")"))) {
     expect_identical(lv(code), 4L, label = code)
   }
   expect_identical(lv(paste0("system('ln -s ", out, " lnk')")), 4L)
   # neighbours: a link to a path in the project or the session's tempdir() is a write
   for (code in c("file.symlink('sub', 'lnk')", "file.symlink(tempdir(), 'lnk')",
-                 "file.link('sub/a', 'b')")) {
+                 "file.link('sub/a', 'b')", "fs::link_create('sub', 'lnk')",
+                 "fs::link_create(tempdir(), 'lnk')")) {
     expect_identical(lv(code), 2L, label = code)
   }
 })
