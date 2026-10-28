@@ -63,6 +63,7 @@ arch_layer_table = function() {
     "gptr-config.R", "L6", "P08",
     "gptr-tailor.R", "L6", "P29",
     "gptr-child.R", "L6", "P29",
+    "gptr-coach.R", "L6", "P29",
     "eval-core.R", "L4 svc", "P09",
     "eval-plots.R", "L4 svc", "P09",
     "eval-guard.R", "L4 svc", "P09",
@@ -171,10 +172,13 @@ arch_kernel_sdk = function() {
 # prompt_model()'s record (IC-77, D-245); P19's team and fan-out routes refuse the System 1
 # arguments with P08's route_refuse_s1_args() (section 6.1.1 step 5, D-250); P29's coaching
 # children (gptr-child.R) are scheduled, registered and revived with P19's worker helpers and
-# carry the person's rules from P11 (section 3.2, IC-86)
+# carry the person's rules from P11 (section 3.2, IC-86), and a harness's rules (gptr-tailor.R)
+# match calls with P11's rule_hit() and rule_glob_re(), are checked against P11's risk tables and
+# find a made file with P10's bounded walk_tree() (08 section 3.2)
 arch_contract_edges = function() {
   gptr_child = c("subagent_schedule", "subagent_limit", "worker_registry", "worker_registry_apply",
-                 "worker_spec_revive", "worker_key_provider", "perm_rules_effective")
+                 "worker_spec_revive", "worker_key_provider", "perm_rules_effective",
+                 "rule_hit", "rule_glob_re", "risk_table", "walk_tree")
   data.frame(
     caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp",
                     "console", "console", "console", "console", "console", "subagent",

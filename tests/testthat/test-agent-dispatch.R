@@ -1068,6 +1068,12 @@ test_that("nested sh, write and edit calls meet every rules-like policy; the str
     gptr$register(gptr_policy("harness_rules", function(call, ctx) {
       if (identical(call$input$path, "notes.md")) list(decision = "deny", reason = "your rule")
     }))
+    # a coaching child's fence (P29, D-270)
+    gptr$register(gptr_policy("fence", function(call, ctx) {
+      if (grepl("INSTALL", call$input$code %||% "", fixed = TRUE)) {
+        list(decision = "deny", reason = "fenced")
+      }
+    }))
   }
   cases = list(
     # the person's deny rule holds against the coaching policy's allow
@@ -1076,7 +1082,8 @@ test_that("nested sh, write and edit calls meet every rules-like policy; the str
     c("cmd = paste('echo', 'hi'); peter$bg(cmd)", "coached"),
     c("p = paste0('secret', '.txt'); peter$write(p, 'x')", "denied by the rule write(secret.txt)"),
     c("p = paste0('notes', '.md'); peter$edit(p, list(list(oldText = 'a', newText = 'b')))",
-      "your rule"))
+      "your rule"),
+    c("cmd = paste('R CMD', toupper('install'), 'x.tar.gz'); peter$sh(cmd)", "fenced"))
   for (i in seq_along(cases)) {
     fake = local_fake_provider(list(fake_tool("r", code = cases[[i]][[1L]]), "Done."),
                                name = paste0("nest", i))

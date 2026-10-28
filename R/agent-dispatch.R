@@ -459,14 +459,14 @@ dispatch_nested = function(name, input, ctx) {
 }
 
 #' Deny and ask rules on the actual input of a nested sh, bg, write or edit call, which the outer
-#' call's static reading cannot see when the code computes it: the `rules`, `coaching` and
-#' `harness_rules` policies decide as for the literal call (a shell command as the `r` code that
-#' runs it), the strictest answer winning. Allow answers are not applied: the nested gate never
+#' call's static reading cannot see when the code computes it: the `rules`, `coaching`,
+#' `harness_rules` and coaching children's `fence` policies decide as for the literal call (a shell
+#' command as the `r` code that runs it), the strictest answer winning. Allow answers are not applied: the nested gate never
 #' loosens.
 #' @return NULL, or perm_check()'s denial.
 #' @noRd
 nested_rules = function(call, run) {
-  recs = Filter(function(r) r$name %in% c("rules", "coaching", "harness_rules"),
+  recs = Filter(function(r) r$name %in% c("rules", "coaching", "harness_rules", "fence"),
                 registry_all_recs("policy", session = run$session))
   if (!length(recs) || isTRUE(run$opts$safety$unsafe_no_permissions)) return(NULL)
   ctx = run_ctx(run)

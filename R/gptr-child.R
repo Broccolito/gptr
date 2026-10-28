@@ -170,8 +170,9 @@ plain_numbers = function(node, type, len) {
 #' schema, budget, direction)`: `spec` a harness spec, `prompt` the interpolated prompt, `objects`
 #' a named list, `args` resolved peter() arguments, `model` a reference or a provider spec,
 #' `schema` a coach's reply schema, `direction` "final" (default) or "start" (the safe reading of
-#' the run's report). Children run on the worker pool, at most two at once per plan account; once
-#' a plan reports its limit, its later jobs are not started (status `skipped`). Interrupting
+#' the run's report); a coach's `surface`, `base` and `rules_allowed` are read by
+#' coach_child_reply(). Children run on the worker pool, at most two at once per plan account;
+#' once a plan reports its limit, its later jobs are not started (status `skipped`). Interrupting
 #' this call kills every child.
 #' @param jobs A list of jobs.
 #' @param max_active At most this many children at once (default subagent_limit("worker")).
@@ -557,7 +558,11 @@ child_main = function(spec_path, result_path, out = NULL) {
   env = new.env(parent = globalenv())
   list2env(job$objects %||% list(), envir = env)
   out = tryCatch(eval(child_call(job, run), env), error = function(e) e)
+  # a coach's reply is checked here, so its one retry is a follow-up in the same session
+  reply = if (!run && !is.null(job$base)) coach_child_reply(job, out, env)
+  if (!is.null(reply)) out = reply$out
   res = child_outcome(job, out, env, cs, dir, before)
+  if (!is.null(reply) && identical(res$status, "idle")) res$value = reply$value
   write_atomic(result_path, json_encode(plain_encode(res)))
   invisible(res$status)
 }
@@ -607,10 +612,11 @@ child_call = function(job, run) {
   as.call(c(list(fn, job$prompt), lapply(names(job$objects), as.name), args))
 }
 
-#' The `fence` policy of a coaching child (08 section 3.3): denies writes and edits outside the
-#' child's temporary folder (which holds its scratch folder), R code whose classified file
-#' targets lie outside it, a setwd() away from it, installs, and R child processes whose code
-#' gptr cannot read. It fences only what the classifier sees.
+#' The `fence` policy of a coaching child (08 sections 3.3 and 3.7): denies writes and edits
+#' outside the child's temporary folder (which holds its scratch folder), R code whose classified
+#' file targets lie outside it, a setwd() away from it, installs, R child processes whose code gptr
+#' cannot read, and reads of a CLI's login file or of the macOS keychain. It fences only what the
+#' classifier sees.
 #' @noRd
 child_fence = function(call, ctx) {
   why = child_fence_why(call)
@@ -621,6 +627,8 @@ child_fence = function(call, ctx) {
 #' @noRd
 child_fence_why = function(call) {
   name = call$name %||% ""
+  login = "it does not read the login of Claude Code or Codex"
+  if (name %in% c("read", "grep", "edit") && child_login(call$input$path)) return(login)
   if (name %in% c("write", "edit")) {
     p = call$input$path
     if (rlang::is_string(p) && !child_inside(p)) return("it writes only inside its scratch folder")
@@ -630,6 +638,9 @@ child_fence_why = function(call) {
   fl = call$risk$flagged
   if (!is.data.frame(fl)) return("it runs only code gptr can read")
   fl = fl[fl$level >= 1L, , drop = FALSE]
+  if (child_login(fl$path) || any(grepl("find-generic-password", fl$call, fixed = TRUE))) {
+    return(login)
+  }
   if ("install" %in% fl$category) return("it installs nothing")
   callr = c("r", "r_bg", "r_session", "r_vanilla", "rcmd", "rcmd_bg", "rscript")
   prog = "(^|[\\s/\\\\:\"'])(R|Rscript)(\\.exe)?([\\s\"']|$)"
@@ -654,6 +665,19 @@ child_inside = function(path) {
   isTRUE(tryCatch(path_inside(path_norm(path), path_norm(tempdir())), error = function(e) FALSE))
 }
 
+#' Does a path name a CLI login file (.credentials.json in CLAUDE_CONFIG_DIR, auth.json in
+#' CODEX_HOME; by default ~/.claude and ~/.codex) or a folder that holds one?
+#' @noRd
+child_login = function(paths) {
+  dirs = Sys.getenv(c("CLAUDE_CONFIG_DIR", "CODEX_HOME"))
+  login = file.path(ifelse(nzchar(dirs), dirs, c("~/.claude", "~/.codex")),
+                    c(".credentials.json", "auth.json"))
+  paths = as.character(unlist(paths))
+  any(vapply(paths[!is.na(paths) & nzchar(paths)], function(p) {
+    isTRUE(tryCatch(any(path_inside(login, p)), error = function(e) FALSE))
+  }, NA))
+}
+
 #' Write one event line for the parent (a broken pipe is left to the parent watch)
 #' @noRd
 child_emit = function(cs, obj) {
@@ -676,14 +700,15 @@ child_seen = function(cs, event) {
 }
 
 #' The `tool_execution_end` hook: a call that ran streams its risk level, a refused one its
-#' refusal
+#' refusal. A call that met a require rule of its harness is left out of the risk unless it is of
+#' level 3 or above, which no require pattern names (coaching_pattern())
 #' @noRd
 child_ended = function(cs, event) {
   cs$calls = cs$calls + 1L
   id = as.character(event$tool_call_id)
   if (is.null(event$refused)) {
     lv = get0(id, envir = cs$levels, inherits = FALSE)
-    if (!is.null(lv)) {
+    if (!is.null(lv) && (lv >= 3L || !child_met(event))) {
       cs$risk = max(cs$risk, lv)
       child_emit(cs, list(gptr_coach = "risk", level = lv))
     }
@@ -694,6 +719,15 @@ child_ended = function(cs, event) {
     child_emit(cs, c(list(gptr_coach = "refusal"), as.list(row)))
   }
   NULL
+}
+
+#' Did a call meet a require rule? The finish hook adds the call's id to its run's `require_met`
+#' (harness_finish_hooks())
+#' @noRd
+child_met = function(event) {
+  s = session_by_id(event$session)
+  run = if (!is.null(s)) session_live(s)$run
+  isTRUE(as.character(event$tool_call_id) %in% run$require_met)
 }
 
 #' The result of a finished job (08 section 3.3); a coach's reply is discarded when its session

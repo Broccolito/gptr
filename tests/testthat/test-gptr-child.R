@@ -373,3 +373,48 @@ test_that("interrupting coach_run_jobs() kills every child", {
   for (h in box$handles) expect_false(ps::ps_is_running(h))
   expect_length(worker_rows(), 0L)
 })
+
+test_that("the fence denies reading the CLI login files and the keychain (08 3.7)", {
+  cfg = path_norm(withr::local_tempdir())
+  withr::local_envvar(CLAUDE_CONFIG_DIR = cfg, CODEX_HOME = "")
+  claude = file.path(cfg, ".credentials.json")
+  writeLines("{}", claude)
+  fence = function(name, input) {
+    risk = if (identical(name, "r")) gptr_risk(input$code)
+    child_fence(list(name = name, input = input, risk = risk), NULL)$decision %||% "allow"
+  }
+  r = function(code) fence("r", list(code = code))
+  expect_identical(fence("read", list(path = claude)), "deny")
+  expect_identical(fence("grep", list(pattern = "token", path = cfg)), "deny")
+  expect_identical(fence("read", list(path = file.path(cfg, "settings.json"))), "allow")
+  expect_identical(r(sprintf("x = readLines('%s')", claude)), "deny")
+  # CODEX_HOME unset: its default under the home folder
+  expect_identical(r("x = jsonlite::read_json('~/.codex/auth.json')"), "deny")
+  expect_identical(r("system('cat ~/.codex/auth.json')"), "deny")
+  expect_identical(r("x = system('security find-generic-password -s x -w', intern = TRUE)"),
+                   "deny")
+  expect_identical(r("peter$sh('security find-generic-password -s x -w')"), "deny")
+  expect_identical(r("x = readLines('notes.txt')"), "allow")
+})
+
+test_that("a call that met a require rule does not raise the run's reported risk", {
+  skip_on_cran()
+  local_project()
+  rules = list(require = list(list(id = "saved", any = "r(fn:saveRDS)", text = "Save it.")))
+  spec = harness_spec(gptr_tailor(peter, coaching = list(rules = rules)))
+  script = function(name) {
+    gptr_fake_provider(list(fake_tool("r", code = "x = 1"),
+                            fake_tool("r", code = "saveRDS(x, 'x.rds')"), "Done."), name = name)
+  }
+  job = list(id = "q", role = "run", prompt = "Save x.", args = list(mode = "auto"))
+  met = child_local(c(job, list(spec = spec, model = script("tallyfake"))))
+  expect_identical(met$res$status, "idle")
+  expect_identical(met$res$risk, 1L)
+  expect_identical(met$res$unmet, character())
+  levels = vapply(met$lines[child_events(met$lines) == "risk"], function(l) json_decode(l)$level,
+                  1L, USE.NAMES = FALSE)
+  expect_identical(levels, 1L)
+  plain = child_local(c(job, list(spec = harness_spec(gptr_tailor(peter)),
+                                  model = script("tallyfake2"))))
+  expect_identical(plain$res$risk, 2L)
+})
