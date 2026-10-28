@@ -8442,19 +8442,28 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   so after such a failure every later session check of the R session was HTTP-only and only the
   unload retried the cleanup. A call made while another frame of `artifact_browser()` constructs
   its browser would now close that owner, and the outer frame raises "The cached headless browser
-  changed during construction."; gptr makes no such call (the readiness pump runs no tool).
+  changed during construction."; gptr makes no such call (the readiness pump runs no tool). The
+  cost: while the retry keeps failing, each call runs that close before it raises, up to the
+  close's 10 s deadline and longer when F2's walks are slow (the closes that timed out in FIX-35's
+  runs took 14.2 to 43.4 s), where formerly it raised at once.
 - Why: under load the macOS scheduler starves an orphaned Chrome renderer (parent 1, state RN,
-  priority 4, the background band Chrome sets for an idle renderer) for 20-170 s after the browser
-  stops, past the shared 10 s close deadline. In each of the 13 close failures the round 4 flake
-  investigation logged (test-artifact-app.R, an open-and-close driver and a probe, under extra
-  load) the marker tree was empty and readable and one recorded renderer lived on under parent 1
-  (12 runnable at priority 4, one exiting); 0 of 170 closes failed at a load average below 100 and
-  13 of 50 (26%) under 16 to 32 busy loops (16 cores), and a 30 s deadline would still have missed
-  11 of the 13. Killing the recorded helpers still running after 2 s gave 0 failures in 28 closes
-  at a load average of 315 to 376 (Fisher p = 0.003), each lingering helper gone within 0.1 s of
-  the kill. FIX-35's own measurement under 32 and 16 busy loops: 0 of 40 closes of the fix failed
-  (load average 103 to 362), 9 of them killing one helper, gone within 0.085 s, against 4 of 11
-  closes of the base in alternate blocks (p = 0.0013).
+  priority 4, the background band Chrome sets for an idle renderer) after the browser stops, past
+  the shared 10 s close deadline. The round 4 flake investigation's logs (test-artifact-app.R, an
+  open-and-close driver and a probe) hold 13 such failures from 12 closes, one line being a
+  close's retry 120 s later. In each the marker tree was empty and readable and a recorded
+  renderer, runnable at priority 4, lived on under parent 1, in one beside an exiting helper. The
+  families settled 20.6 to 169.5 s after the SIGTERM, so a 30 s deadline would still have missed
+  8 of the 12 closes. The failures came at a load average of 163 to 371: 11 of the 49 closes under
+  16 or 32 busy loops (16 cores, 22%) and 1 of the other 212, under another agent's check at 206;
+  none of the 116 closes logged below 100 failed. Killing the recorded helpers still running after
+  the 2 s grace gave 0 failures in 28 closes under 32 busy loops at a load average of 315 to 385
+  (Fisher p = 0.004 against the 11 of 49), each lingering helper gone within 0.1 s of the kill.
+  FIX-35's own measurement under 32 and 16 busy loops, the fix and the base in alternate blocks:
+  none of the fix's 40 closes (load average 103 to 362) ran out `release()`'s deadline or ended
+  "did not finish cleanup", 9 of them killing one helper, gone within 0.085 s, though 3 ended
+  "close timed out" before `release()` waited (F2); 4 of the base's 11 closes ran out that
+  deadline, 3 with "did not finish cleanup" and one behind its check's page-load timeout (Fisher
+  p = 0.0013).
 - Not changed: at a load average of 260 and more the process-table walks of the close
   (`proc_children()`, `proc_tree()`) can take 12-28 s (at 280 and more in that investigation) and
   use up the deadline by themselves; in FIX-35's runs 4 of 33 closes under 32 busy loops ended
