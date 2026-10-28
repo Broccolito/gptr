@@ -6261,6 +6261,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   15.10 name no character set). Tests: test-console-repl.R "an @name holds letters, marks and
   digits of any script, in C too (review round 5)"; test-console-completion.R "the @ name Tab
   completes is read whole, so its file is attached (review round 5)".
+- Status 2026-10-28 (review round 5, the merge): an unquoted @mention's name that no file or
+  object has is read as its leading run of ASCII letters, digits and `_ . / ~ -`, not ending in a
+  dot (the name read before round 5), when a file or object has that, as text in a script written
+  without spaces runs on after a name: `@df` and then Chinese with no space attaches `df` again,
+  and `@x²` the object `x`. Otherwise the whole name is reported, a folder or not found; a quoted
+  name is read whole. Contract-visible: the console vignette. Tests: test-console-repl.R "an @name
+  nothing has is read as its leading ASCII run (round 5 merge)". Evidence: progress/fixes.md
+  FIX-34's merge.
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Rule (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input
