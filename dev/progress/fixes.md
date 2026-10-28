@@ -7668,8 +7668,9 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     CI-104, FIX-27..FIX-34 and D-262..D-269 and their Verified parts this branch's runs; the Open
     lists drop FIX-21's failed `r` call and keep only the open halves of FIX-25's and FIX-31's
     notes, which the Closed lists now name, and add FIX-33's, FIX-34's and this round's open
-    items; FIX-32..FIX-34's headings say "#PR", as GitHub's #92 is another contributor's PR. The
-    docs verifier's optional README and cheat sheet wording is not taken: neither is wrong.
+    items; FIX-32..FIX-34's headings said "#PR" until `15553922` filled them with #93, as
+    GitHub's #92 is another contributor's PR. The docs verifier's optional README and cheat sheet
+    wording is not taken: neither is wrong.
   - Checks on `fbde4941` (the code of every fix; this record changes only `dev/`): the files whose
     names start with `doc-`, `console-`, `perm`, `risk`, `rules`, `nested`, `bridge`, `gptr-`,
     `session-`, `ckpt-`, `eval-`, `agent-`, `tool-`, `mcp-` or `arch-`, and `copy-ckpt`, FAIL 0
@@ -7916,7 +7917,7 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     heavy lock was not taken; no plan and no prompt text changed.
   - Not changed (note N3, for whoever merges): `dev/HANDOFF.md` and `dev/PROGRESS.md` still
     describe the twice-split paste without round 4's Ctrl-C change and name no round 4, and the
-    `#PR` placeholders stay.
+    `#PR` placeholders stay (until `15553922`).
   - Open: FIX-28's paste item as round 4 left it, with the drop now at most 0.2 s after a paste's
     read; under `quotes = FALSE` a `!` line's string completes nothing. Not run: Linux and Windows,
     R 4.2 and R-devel, and live models or tmux (the fixes are tested offline).
