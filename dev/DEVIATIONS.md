@@ -7924,6 +7924,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   command at run time, or reaches a function by another name, is read only as far as the
   classifier sees. The yolo notice and NEWS name moving the working directory out of the project.
   Tests: test-risk-forms.R (review round 5). Evidence: progress/fixes.md FIX-27.
+- Status 2026-10-28 (review round 5 verification): `env -C` and `git -C` read `~` and `$HOME` as
+  the home directory, as a `cd` does, through helpers the `cd` reading shares (formerly placed in
+  the project, so `env -C ~/other rm -f x` was level 3 where `cd ~/other && rm -f x` is 4); a
+  directory the shell computes is one the code computes for both. PowerShell's `-Command` and
+  `-EncodedCommand` are read in any abbreviation, after `-` or `/` (formerly `pwsh -Comm` was level
+  3 `process`); `eval(base::quote(x))` reads `x`; and `fs::link_create()` writes `new_path` and
+  its source is read as `file.symlink()`'s, so a link to a path outside the project is level 4.
+  Still not read, each level 3 or lower: `env` with `-C` in a cluster of short options or an
+  abbreviated `--chdir`. Tests: test-risk-forms.R (review round 5). Evidence: progress/fixes.md
+  FIX-27.
 
 ## D-263 - FIX-28 Bracketed paste decides a paste in a T console (2026-10-26)
 - Rule (mode): a T console's call turns bracketed paste on with its character mode. `tty_modes()`
@@ -8648,3 +8658,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `?gptr_options`, `?gptr_security`. Tests: test-risk-forms.R "a variable a registered provider
   reads is control (review round 5)", "a Python variable name it cannot read in an environment
   write is control (round 5)". Evidence: progress/fixes.md FIX-36.
+- Status 2026-10-28 (review round 5 verification): a Python environment subscript is read to its
+  matching bracket, over lines, with strings and nested brackets read whole, so a write whose
+  subscript holds brackets (`os.environ[keys[0]] = d`), formerly not seen as a write (level 2), is
+  `control`; every augmented operator (`%=`, `**=`) assigns; and a name that only ends in
+  `environ` (`my_environ`) is not read as `os.environ` (since round 5 its write through a computed
+  key was level 4). Tests: test-risk-forms.R "a Python variable name it cannot read in an
+  environment write is control (round 5)". Evidence: progress/fixes.md FIX-36.

@@ -6415,7 +6415,7 @@ the driver, screens, events, transcripts and replays without a model are local, 
     `?gptr_security` and 03 section 6.8.1 also state the class each unread form belongs to: code
     that builds a call, a name, a path or a command at run time, or reaches a function by another
     name, is read only as far as the classifier sees (`382cb83f`, `e2c1f63c`).
-  - Green: Green: `^risk-forms$` FAIL 0 PASS 130 in UTF-8 and under `LC_ALL=C LANG=C`.
+  - Green: `^risk-forms$` FAIL 0 PASS 130 in UTF-8 and under `LC_ALL=C LANG=C`.
     Checks on `8c069500`'s code (the records commit changes only `dev/`): the 45 files of
     `^(perm|risk|rules|nested|bridge|mcp-|gptr-config|agent-|tool-|session-|py|knit|secrets|auth-)`
     FAIL 0 WARN 0 SKIP 16 PASS 10002 in UTF-8 (355 s) and under `LC_ALL=C LANG=C` (340 s; the
@@ -6431,6 +6431,45 @@ the driver, screens, events, transcripts and replays without a model are local, 
     `?gptr_security` names (above); and after `setwd(tempdir())`, relative paths are still placed
     in the project root (round 4's item 6). vignette("execution-model") does not yet list moving
     the working directory among what yolo asks (outside this branch's files).
+- Review round 5 verification, the gate writer's items (the verifier on `0997616d`; branch
+  `claude/v1-fix-gate5`, each test red on `0997616d`'s code first, `NOT_CRAN=true`, the SIGINT
+  reset, a short `TMPDIR`): finding F1 here, F2 in FIX-36's record, F3 (two doubled "Green" labels
+  in round 5's records, mended) and three of the verifier's optional notes, each a general rule.
+  - Red: test-risk-forms.R (`9b73c92d`) on `0997616d`'s code, `^risk-forms$` FAIL 21 PASS 138 in
+    UTF-8 and under `LC_ALL=C LANG=C`; this record's share: `env -C` and `git -C` 6, PowerShell 3,
+    `eval(base::quote())` 1 and `fs::link_create()` 3.
+  - `env -C ~` (F1, `d4f194c4`): `move()`, which `git -C` and `env -C` share, placed a relative
+    directory in the project without reading `~` or `$HOME`, so `env -C ~/other rm -f x`,
+    `env -C $HOME rm -f x` and `git -C ~ rm -f x` deleted in the project by its reading (level 3)
+    where `cd ~/other && rm -f x` is 4, and with a HOME outside `tempdir()` the verifier's auto run
+    deleted `~/sib/marker.txt` with no question. The `cd` branch and `move()` now share
+    `risk_cd_word()` (`~` and `$HOME` are the home) and `risk_cd_dirs()` (a directory the shell
+    computes is NA), so these forms are level 4, as after a `cd`. Offline with the fake model in
+    auto and a HOME outside `tempdir()`, `peter$sh("env -C ~/sib rm -f marker.txt")` and its
+    `$HOME` form now ask once, as the `cd` form does, and the file survives.
+  - Optional notes taken: PowerShell takes any abbreviation of `-Command` and `-EncodedCommand`,
+    after `-` or `/`, so `pwsh -Comm` and `powershell -co` are read as `-c` is (`601fc79a`;
+    formerly level 3 `process`); `eval(base::quote(x))` reads `x`, as `eval(quote(x))` does
+    (`c9264095`); and `fs::link_create(path, new_path)`, whose row named the source `path` as the
+    written path, writes `new_path` and has its source read as `file.symlink()`'s (`949fcd7c`), so
+    a link to a folder outside the project is 4 (formerly 3) and `fs::link_create(tempdir(), "x")`
+    is 2 (formerly a level-4 write of the session's temporary directory). `?gptr_security`, 03
+    section 6.8.1 and 04 name it beside `file.symlink()` (`8f9f57d1`).
+  - Green on `765bbda3`'s code (the records commit changes only `dev/`): `^risk-forms$` FAIL 0
+    PASS 163 in UTF-8 and under `LC_ALL=C LANG=C`; the verifier's set (round 5's 45 files and the
+    `console-commands`, `console-repl`, `utils-options`, `arch-layers` and `lint-rules` files)
+    FAIL 0 WARN 0 SKIP 16 PASS 10758 in UTF-8 (376 s) and FAIL 0 WARN 0 SKIP 20 PASS 10745 under
+    `LC_ALL=C LANG=C` (367 s; the 4 more skips need a UTF-8 locale), the verifier's counts plus
+    the 33 new expectations. Lint of `R/perm-classify.R`, `R/gptr-config.R` and
+    test-risk-forms.R clean; `document()` changes `gptr_security.Rd`, and a second run nothing;
+    `check-docs.R` 0 problems; spelling clean; `testthat::test_dir("dev/release/tests")` FAIL 0
+    SKIP 0 PASS 290. Not run: the full suite, `R CMD check`, Linux and Windows hosts, R 4.2 and
+    R-devel, live models.
+  - Open, each level 3 or lower, which auto and yolo run: `env` with `-C` in a cluster of short
+    options (`env -iC DIR`) or an abbreviated `--chdir`; `eval()` of a quote reached otherwise
+    (`eval(bquote())`, a quoted call held in a name); `getwd` or `setwd` shadowed by a function the
+    code defines, the class `?gptr_security` states, as for `tempdir()` and `file.path()`; and
+    round 5's limits above.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #93)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
@@ -8506,4 +8545,24 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   - Not changed: `CODEX_HOME` and `RETICULATE_PYTHON` (level 2) stay ordinary variables; no
     provider reads them, `CODEX_HOME` places only the Codex MCP configuration gptr imports on
     request (D-14), and `HOME` above it is control already.
-  - Green: Green and checks: FIX-27's review round 5 above, which ran them once for both.
+  - Green and checks: FIX-27's review round 5 above, which ran them once for both.
+- Review round 5 verification (the verifier on `0997616d`, finding F2 and its note on names that
+  end in `environ`; branch `claude/v1-fix-gate5`, each test red first).
+  - Red: FIX-36's share of FAIL 21 in test-risk-forms.R (`9b73c92d`) is Python subscripts 8: six
+    writes the docs call `control` and two neighbours that write a plain name.
+  - Python subscripts (F2, `06660dfc`): the session rule and the name capture stopped at the first
+    `]`, so a write whose subscript holds brackets (`os.environ[keys[0]] = d`,
+    `os.environ[d['k']] = v`) was not seen as a write (level 2), although `?gptr_security`,
+    `?gptr_options` and 03 say a name that is not a plain string literal is `control`; nor were
+    `%=` and `**=` assignments. A subscript is now read to its matching bracket, over lines, with
+    strings and nested brackets read whole (`risk_py_sub`), and every augmented operator assigns.
+    So those writes are level 4 `control`; `os.environ['a]b'] = x` and `os.environ['TZ'] %= v`
+    are 3, and reads through such a subscript stay 2. The docs hold as written.
+  - Names that end in `environ` (the verifier's note, `765bbda3`): the rules had no word boundary
+    before `environ`, so a dict such as `my_environ` was read as `os.environ`, and since round 5
+    its write through a computed key (`my_environ[k] = 1`, `del`, `pop()`, `clear()`) was level 4
+    `control`, which asks in auto (level 3 before round 5). Red: test-risk-forms.R (`0c42dbc9`)
+    on `8f9f57d1`'s code FAIL 4, each row compared with the same code on a dict named `d`. With a
+    boundary these read as that code does; `os.environ`, a bare `environ` and `posix.environ` read
+    as before, and another alias of `os.environ` stays as `?gptr_security` names it.
+  - Green and checks: FIX-27's review round 5 verification above.
