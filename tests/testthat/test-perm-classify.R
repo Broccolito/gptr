@@ -551,6 +551,36 @@ test_that("gptr's own configuration is the control category, level 4 (IC-53, IC-
   expect_identical(gptr_risk("writeLines('x', 'AGENTS.md')", root = root)$level, 3L)
 })
 
+test_that("a variable that moves gptr's config folder or the home is control (FIX-36)", {
+  root = local_project()
+  for (v in c("R_USER_CONFIG_DIR", "XDG_CONFIG_HOME", "APPDATA", "HOME", "USERPROFILE")) {
+    for (code in c(sprintf("Sys.setenv(%s = 'elsewhere')", v), sprintf("Sys.unsetenv('%s')", v),
+                   sprintf("Sys.setenv(TZ = 'UTC', %s = 'elsewhere')", v),
+                   sprintf("Sys.unsetenv(c('MY_VAR', '%s'))", v))) {
+      r = gptr_risk(code, root = root)
+      expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
+    }
+    # Python in the persistent session shares the R process's environment
+    for (code in c(sprintf("import os\nos.environ['%s'] = 'elsewhere'", v),
+                   sprintf("import os\nos.environ.update(%s='elsewhere')", v),
+                   sprintf("import os\nos.environ.pop('%s')", v),
+                   sprintf("import os\nos.putenv('%s', 'elsewhere')", v))) {
+      f = risk_python(code, root)
+      expect_identical(list(flags_level(f), "control" %in% f$category), list(4L, TRUE),
+                       label = code)
+    }
+  }
+  # other variables stay session changes: one that ends in HOME, the cache folder's, and reads
+  for (code in c("Sys.setenv(TZ = 'UTC')", "Sys.setenv(LANG = 'en_US.UTF-8')",
+                 "Sys.setenv(MY_VAR = '1')", "Sys.setenv(JAVA_HOME = '/opt/java')",
+                 "Sys.setenv(OMP_NUM_THREADS = '1')", "Sys.unsetenv('LC_ALL')",
+                 "Sys.setenv(R_USER_CACHE_DIR = 'elsewhere')")) {
+    expect_identical(gptr_risk(code, root = root)$level, 2L, label = code)
+  }
+  expect_identical(flags_level(risk_python("import os\nos.environ['TZ'] = 'UTC'", root)), 3L)
+  expect_identical(flags_level(risk_python("import os; os.environ['HOME']", root)), 2L)
+})
+
 test_that("a delete keeps file_delete, a control target shows in path_class (IC-78)", {
   root = local_project()
   r = gptr_risk("unlink('.git', recursive = TRUE)", root = root)
