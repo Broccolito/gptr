@@ -658,16 +658,19 @@ test_that("withr's variable setters are read as Sys.setenv() is (FIX-36 review r
 
 test_that("a variable setter's arguments are matched as R matches them (FIX-36 review round 3)", {
   root = local_project()
-  # part of `.new`'s or `new`'s name, `.new` exactly before a part of it, Sys.unsetenv()'s x
+  # part of `.new`'s or `new`'s name, Sys.unsetenv()'s x, and `.new` exactly beside a part of
+  # it, which R then passes in `...` (a list or c() there is a value, not the variables)
   control = c(
     "withr::local_envvar(.n = list(R_USER_CONFIG_DIR = 'elsewhere'), .local_envir = new.env())",
     "withr::local_envvar(.ne = c(HOME = 'elsewhere'), .local_envir = globalenv())",
     "withr::local_envvar(. = list(R_USER_CONFIG_DIR = 'elsewhere'), .local_envir = globalenv())",
     "withr::with_envvar(code = f(), n = c(R_USER_CONFIG_DIR = 'elsewhere'))",
-    "withr::local_envvar(.n = '1', .new = c(HOME = 'elsewhere'))",
+    "withr::local_envvar(.n = c(TZ = 'UTC'), .new = c(HOME = 'elsewhere'))",
+    "withr::local_envvar(.n = list(TZ = 'UTC'), .new = list(HOME = 'elsewhere'))",
     "Sys.unsetenv(x = 'R_USER_CONFIG_DIR')", "Sys.unsetenv(x = c('MY_VAR', 'XDG_CONFIG_HOME'))")
   ordinary = c("withr::local_envvar(TZ = 'UTC')", "withr::with_envvar(c(LANG = 'C'), f())",
                "withr::local_envvar(.n = list(TZ = 'UTC'))",
+               "withr::local_envvar(.n = '1', .new = c(TZ = 'UTC'))",
                "withr::with_envvar(f(), n = c(LANG = 'C'))",
                "withr::local_envvar(.new = list(my_var = '1'), new.env())",
                "Sys.unsetenv('LC_ALL')", "Sys.unsetenv(x = 'LC_ALL')", "Sys.setenv(TZ = )")
