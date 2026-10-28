@@ -2365,7 +2365,7 @@ eol = "\n" | "\r\n", bom = lgl(1), encoding = chr(1), final_newline = lgl(1))`, 
 | `save_rds(object, file, compress = FALSE, refhook = NULL)` [R7][leaf] | `saveRDS(object, file, ascii = FALSE, compress = compress, refhook = refhook)`; the only `saveRDS` of user data | P16, P19, P23 |
 | `serialize_leaf(object, xdr = TRUE)` [R7][leaf] | `serialize(object, NULL, ascii = FALSE, xdr = xdr)` | P16 |
 | `path_norm(path)`, `path_rel(path, root = project_root())` | normalised absolute / root-relative paths (symlink-safe: the deepest existing ancestor is resolved) | P10, P11, P15, P16 |
-| `path_class(path, root = project_root())` | chr: `workspace`, `temp`, `outside`, `protected`, `control` (level 4, IC-54), `instructions` (level 3, IC-54), `critical`, `url`, `wildcard`, `unknown` [18 §3.8] | P10, P11, P16 |
+| `path_class(path, root = project_root())` | chr: `workspace`, `temp`, `outside`, `protected`, `control` (level 4, IC-54), `instructions` (level 3, IC-54), `critical`, `url`, `wildcard`, `unknown` [18 §3.8]; a drive-relative path (`D:x`) is `outside` on every OS (D-262) | P10, P11, P16 |
 
 **`utils-text.R`**
 
@@ -3484,7 +3484,7 @@ the remaining `r` budget when called inside `r`.
 | `describe` | P10 | `peter$describe(x, budget = 150L)` | `gptr_describe(x, budget)`; `record = FALSE` | 0 |
 | `plot` | P10 | `peter$plot(which = NULL, width = 1000L, height = 700L)` | attaches the current device's plot (or stored plot `which`, IC-67) at that size to the running `r` result (about 900 tokens); `invisible(NULL)`; `record = FALSE` | 0 |
 | `out` | P10 (only owner, IC-36) | `peter$out(id, stream = c("stdout", "stderr"), lines = NULL)` | chr (the stored full text from the session store, the process store or the spill file, or `lines` of it); `record = FALSE` | 0 |
-| `sh` | P22 | `peter$sh(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE, check = FALSE, max_tokens = NULL)` (`cmd` chr: length > 1 = argv without a shell; length 1 = a command line through `shell_resolve()` when it has shell syntax) | `gptr_cmd` | command classifier (G5 levels), the command read as run in `wd` (a `cd` before it; FIX-27 review round 3); computed commands 3 |
+| `sh` | P22 | `peter$sh(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE, check = FALSE, max_tokens = NULL)` (`cmd` chr: length > 1 = argv without a shell; length 1 = a command line through `shell_resolve()` when it has shell syntax) | `gptr_cmd` | command classifier (G5 levels), the command read as run in `wd` (a `cd` before it, whose target it reads, and the code a shell or Python runs there; FIX-27 review rounds 3 and 4); computed commands 3 |
 | `script` | P22 | `peter$script(path, args = character(), interpreter = NULL, ...)` | `gptr_cmd` | 3 |
 | `bg` | P22 | `peter$bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)` | `gptr_job` (added to the job table) | 3, or the command classifier's level when higher (D-251); computed commands 3 |
 | `jobs` | P22 | `peter$jobs(kill = FALSE)` | df of `bg` jobs | 0 (kill: 3) |
@@ -4905,8 +4905,9 @@ step list before its first action.
   and the ask is shown at the session's next `gptr_wait()` (D-261), whose resumed run opens with a user
   message saying that the user is at the console (D-252); a served request that needs approval
   is denied with how to allow it and a console notice, as is a nested `peter$` call of its R that needs
-  approval (`mcp_nested_gate()`: a `sh` or `bg` call as the literal call of its command; D-267), without the
-  notice, which the served result would capture for the model. Non-interactively both are `blocked`/denied.
+  approval (`mcp_nested_gate()`: a `sh` or `bg` call as the literal call of its command run in its `wd`;
+  D-267), without the notice, which the served result would capture for the model. Non-interactively both
+  are `blocked`/denied.
 - A background R tool that changed bindings in the user's environment at an idle tick prints one notice.
 - P04/P19 acceptance: an inline agent calls System 1 while a sibling has a queued tool; the sibling's tool starts
   only after the first evaluation returns.
@@ -5493,7 +5494,9 @@ totals line names the model and the context left.
   target shows in `path_class`. The edit tool's `*** Delete File:` is level 4 where an `unlink()` of the same
   path is, with the category `file_delete`, so in yolo a control path written by the same patch does not hide
   it; called as `peter$edit()` from `r` code it passes the gate at that level too (`dispatch_nested()` gates a
-  member at its own risk of the actual input). Computed paths stay level 3.
+  member at its own risk of the actual input). Computed paths stay level 3. `setwd()`, `withr::local_dir()`
+  and `withr::with_dir()` to a directory outside the project and `tempdir()`, or to one the code computes, are a
+  level-4 `session` row, which yolo's critical guard counts (D-262, review round 4).
 - `perm_check()` grants the one-shot control tokens on any final allow (IC-53 item 3).
 - The model's `<mode name="yolo">` block reuses auto's text. Entering yolo (a session, `/mode`, a console start)
   shows a one-time `gptr_message_notice` that lists what still asks and says the classifier is not a sandbox.

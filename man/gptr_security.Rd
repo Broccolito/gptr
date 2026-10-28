@@ -32,20 +32,21 @@ including a change to a file or an object, asks first with a one-line prompt. Th
 is advisory, not a security boundary (see below). \code{edits} also allows file edits inside the
 project and still asks before R code that is not known to be read-only; \code{auto}
 asks only for level-4 actions (for example deleting the project directory or a file outside the
-project, where a system temporary directory such as \verb{/tmp} counts as outside, or changing gptr's
-own configuration) and for reads of registered secrets; \code{yolo}, which only you can select (a
-project setting or model code in another mode cannot), also runs gptr's own configuration
-functions, writes to R startup files such as \verb{~/.Rprofile} (which can change gptr's options in
-the next R process) and secret reads without asking, and still asks before deleting protected
-files, files outside the project or the project itself, \code{rm(list = ls())}, \verb{options(gptr.*)}
-and sending a secret over the network; \code{plan} changes nothing. In every mode \code{r} code that calls
-\code{q()}, \code{readline()} or another function that would end, pause or hang your R session is refused
-without a question. In \code{auto} and \code{yolo} mode a \code{system()} or \code{system2()} call (on Windows also
-\code{shell()} or \code{shell.exec()}) whose command the code computes is refused (see below). When nobody
-can answer a question (Rscript, knitr, a scheduled job) the run stops with status \code{blocked} and
-a \code{gptr_error_permission} condition that says how to allow the action, unless you set
-\code{options(gptr.noninteractive_ask = "deny")}. Model code cannot switch the gate off or loosen it
-during a run: the safety options are copied when the run starts. Only the option
+project, where a system temporary directory such as \verb{/tmp} counts as outside, moving R's working
+directory out of the project, or changing gptr's own configuration) and for reads of registered
+secrets; \code{yolo}, which only you can select (a project setting or model code in another mode
+cannot), also runs gptr's own configuration functions, writes to R startup files such as
+\verb{~/.Rprofile} (which can change gptr's options in the next R process) and secret reads without
+asking, and still asks before deleting protected files, files outside the project or the
+project itself, moving the working directory out of the project, \code{rm(list = ls())},
+\verb{options(gptr.*)} and sending a secret over the network; \code{plan} changes nothing. In every mode
+\code{r} code that calls \code{q()}, \code{readline()} or another function that would end, pause or hang your R
+session is refused without a question. In \code{auto} and \code{yolo} mode a \code{system()} or \code{system2()}
+call (on Windows also \code{shell()} or \code{shell.exec()}) whose command the code computes is refused
+(see below). When nobody can answer a question (Rscript, knitr, a scheduled job) the run stops
+with status \code{blocked} and a \code{gptr_error_permission} condition that says how to allow the action,
+unless you set \code{options(gptr.noninteractive_ask = "deny")}. Model code cannot switch the gate
+off or loosen it during a run: the safety options are copied when the run starts. Only the option
 \code{gptr.unsafe_no_permissions}, set by you outside a run, removes the gate, and it is meant for
 disposable sandboxes.
 }
@@ -68,10 +69,23 @@ The refusal covers only calls the classifier resolves to these functions: a func
 a computed name or through a list or an environment (\code{get("system")(cmd)},
 \code{baseenv()$system(cmd)}) or handed to a function of your own (\code{g(system)}), \code{eval(parse())}, a
 sourced file, package code and other command runners such as \code{pipe()} or \code{processx::run()}
-still run a computed command unchecked. In \code{auto} and \code{yolo} mode a model can
-delete or overwrite files and objects. Use them only in projects you can restore (version
-control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run untrusted prompts or untrusted
-projects in a disposable container or virtual machine.
+still run a computed command unchecked.
+
+Paths are placed in the project: a relative path in R code is read in the project directory,
+and a command in the directory it runs in (after a \code{cd}, or the \code{wd} of \code{peter$sh()}), the code
+a shell or Python runs there (\code{sh -c}, \code{python3 -c}) included; running a command in a directory
+outside the project reads that directory, so \code{manual} asks. \code{setwd()}, \code{withr::local_dir()} and
+\code{withr::with_dir()} to a directory outside the project and R's session temporary directory, or
+to one the code computes, are level 4, because a relative path would then name a file outside
+the project. A drive-relative path such as \code{D:data} counts as outside on every OS. The
+classifier does not follow the working directory changed in other ways (such as
+\code{usethis::local_project()}), nor read the code another interpreter runs (\code{Rscript -e},
+\code{perl -e}, \code{node -e}) or a path the shell computes (\verb{rm "$f"} in a loop, \verb{xargs rm}): such a
+command is level 3, which \code{auto} and \code{yolo} run without a question whatever it deletes.
+
+In \code{auto} and \code{yolo} mode a model can delete or overwrite files and objects. Use them only in
+projects you can restore (version control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run
+untrusted prompts or untrusted projects in a disposable container or virtual machine.
 }
 
 \section{Sub-agents, workers and child processes}{

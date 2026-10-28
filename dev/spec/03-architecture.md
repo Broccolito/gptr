@@ -1458,10 +1458,10 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
 | Level | Meaning (classifier) | plan | manual (default) | edits | auto | yolo [IC-78] |
 |---|---|---|---|---|---|---|
 | 0 | **known** read-only R (level 0 means "known read-only", not "nothing flagged"), reads inside the project, namespace reads | allow | allow | allow | allow | allow |
-| 1 | new objects, reads outside the project, calls of unlisted functions from packages outside base/stats/utils/methods/graphics/grDevices/tools [IC-54] | only allowlisted read-only calls run, in a scratch child env (discarded); anything else and other tools deny | ask | ask | allow | allow |
+| 1 | new objects, reads outside the project (a command run in a directory outside it reads that directory [D-262]), calls of unlisted functions from packages outside base/stats/utils/methods/graphics/grDevices/tools [IC-54] | only allowlisted read-only calls run, in a scratch child env (discarded); anything else and other tools deny | ask | ask | allow | allow |
 | 2 | overwriting objects, workspace file writes, network reads, reference mutation | deny | ask | allow `write`/`edit` inside the project, ask for R | allow | allow |
 | 3 | deletes inside the project or of computed paths, processes, installs, overwriting objects above `gptr.protect_size` (100 MB), dynamic code, secret reads, app launches | deny | ask | ask | allow (the secret guard still asks; a computed `system()` command is refused, below) | allow (secret reads too; a computed `system()` command is refused) |
-| 4 | critical: `q()` (denied in every mode and never asked, below), deleting home/root/project/top-level/drive roots or their parents, protected files or any path outside the project and R's session `tempdir()` (`/tmp` counts as outside) [IC-78], secret + network sink; the `control` category (gptr's own configuration exports, `options(gptr.*)`, control-plane files [IC-53, IC-54]) | deny | ask_human | ask_human | ask_human (blocked without a UI) | ask_human, except control rows other than `options(gptr.*)`, which run |
+| 4 | critical: `q()` (denied in every mode and never asked, below), deleting home/root/project/top-level/drive roots or their parents, protected files or any path outside the project and R's session `tempdir()` (`/tmp` counts as outside) [IC-78], `setwd()`, `withr::local_dir()` or `withr::with_dir()` to a directory outside the project and `tempdir()` or one the code computes (`session`) [D-262], secret + network sink; the `control` category (gptr's own configuration exports, `options(gptr.*)`, control-plane files [IC-53, IC-54]) | deny | ask_human | ask_human | ask_human (blocked without a UI) | ask_human, except control rows other than `options(gptr.*)`, which run |
 
 `r` is classified per flagged call by `gptr_risk()` (tables in `inst/extdata/risk-functions.csv` and
 `risk-commands.csv`, extendable by additive `risk_rule` records; a shipped risky-package list (targets, usethis,
@@ -1490,6 +1490,18 @@ unchanged and a literal command is read and gated as before. Neither the rules n
 reads when it runs (its standard input, variables it expands, a script file), and a function the classifier does
 not resolve to these (a computed name, one reached through a list or an environment or handed to a function of
 the user's own) is not refused [D-262].
+
+Paths are placed in the project [D-262]: a relative path in R code is read in the project root, and a command in
+the directories it runs in (each `cd` target, a `peter$sh()` call's `wd` read as a `cd` before it), the code a shell
+or Python runs there (`sh -c`, `python3 -c`, the literal scan) included; a `cd` target is read as `git -C`'s
+directory is (level 1 outside the project, 3 for a secret directory). A drive-relative path (`D:x`, under drive D's
+own current directory on Windows) is `outside` on every OS, and the second reading of a line with a backslash (sh's)
+places a word that starts with a drive letter as a relative one, as sh does. Since a relative path would then name a
+file outside the project, `setwd()`, `withr::local_dir()` and `withr::with_dir()` to a directory outside the
+project and `tempdir()`, or to one the code computes, are a level-4 `session` row, which the critical guard asks
+about in auto and yolo. Not followed: the working directory changed in other ways (`usethis::local_project()`), the
+code another interpreter runs (`Rscript -e`, `perl -e`) and a path the shell computes (`rm "$f"`, `xargs rm`), all
+level 3.
 
 In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never
 runs, such as `q()`, `readline()`, a read of standard input or a secret marker, with the guard's text less its
@@ -1583,7 +1595,8 @@ as the literal call would; allow rules are not applied there, and an ask offers 
 Base `system()`, `system2()`, `shell()` and `shell.exec()` have no such re-check, so auto and yolo refuse them
 with a computed command (6.8.1) [D-262]. R served to the CLI routes or an MCP client binds the same marker, with
 the served call as the outer call, so its nested calls pass `dispatch_nested()` too; when no pump serves the
-request the idle gate decides each first, a `sh` or `bg` call as the literal call of its command [D-267].
+request the idle gate decides each first, a `sh` or `bg` call as the literal call of its command run in its `wd`
+[D-267].
 Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
 
 #### 6.8.5 Non-interactive runs and plan mode (NS-12)
