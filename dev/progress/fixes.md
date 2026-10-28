@@ -8931,9 +8931,10 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
     read through a computed name keep their levels, 3 and 2). `?gptr_security` no longer names a
     Python name the code computes as unread; it names `os.environ.update()` of a mapping the code
     computes or of keyword names not all in upper case (the first lens's wording point).
-  - Not changed: `CODEX_HOME` and `RETICULATE_PYTHON` (level 2) stay ordinary variables; no
-    provider reads them, `CODEX_HOME` places only the Codex MCP configuration gptr imports on
-    request (D-14), and `HOME` above it is control already.
+  - Not changed: `CODEX_HOME` and `RETICULATE_PYTHON` (level 2) stay ordinary variables. No
+    provider reads `RETICULATE_PYTHON`; this line also said none reads `CODEX_HOME`, but the
+    `codex` provider's child CLI reads its login there (its child environment keeps it), so review
+    round 6 made it control with the other names the `cli-claude` and `cli-codex` profiles keep.
   - Green and checks: FIX-27's review round 5 above, which ran them once for both.
 - Review round 5 verification (the verifier on `0997616d`, finding F2 and its note on names that
   end in `environ`; branch `claude/v1-fix-gate5`, each test red first).

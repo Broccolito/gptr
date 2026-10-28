@@ -659,7 +659,8 @@ s3_register = function(generic, class, method = NULL) {
 #'   settings, permission rules, trust decisions and credentials, and your home directory.
 #'   Setting or unsetting one of them from model code changes gptr's own configuration, as does
 #'   a variable a registered provider reads (its key or base-URL variable, such as `AWS_REGION`
-#'   for Bedrock), a `GPTR_*` or `*_BASE_URL` variable, `R_ENVIRON_USER`, `R_PROFILE_USER`,
+#'   for Bedrock, or a login or folder variable of the `claude` or `codex` command-line tool, such
+#'   as `CODEX_HOME`), a `GPTR_*` or `*_BASE_URL` variable, `R_ENVIRON_USER`, `R_PROFILE_USER`,
 #'   `R_ENVIRON` or `R_PROFILE`, whatever the letter case. Every mode but `yolo` asks you first,
 #'   `auto` included, before `Sys.setenv()`, `Sys.unsetenv()`, `withr::local_envvar()` or
 #'   `withr::with_envvar()` of such a name or of a name the classifier cannot read, before

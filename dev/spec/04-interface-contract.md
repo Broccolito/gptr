@@ -4816,8 +4816,9 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    on a session other than the running one; `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` and
    `withr::local_envvar()`/`withr::with_envvar()` of `GPTR_*`, `*_BASE_URL` or R startup names (`R_ENVIRON_USER`,
    `R_PROFILE_USER`, `R_ENVIRON`, `R_PROFILE`), of a variable a registered provider reads (its `auth` names and
-   `compat$base_url_env`, such as `AWS_REGION`, and the `bedrock-converse` key pair) or of a variable that moves the
-   user config directory or the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in
+   `compat$base_url_env`, such as `AWS_REGION`, the `bedrock-converse` key pair, and the names the `cli-claude` and
+   `cli-codex` child environments keep, such as `CODEX_HOME`) or of a variable that moves the user config directory
+   or the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in
    any letter case, or of a name the classifier cannot read, `readRenviron()`, `dotenv::load_dot_env()` (D-272),
    `setHook()`, `assignInNamespace()`. These exports also check `run_current()`: called from model code during a
    run they signal `gptr_error_permission` unless the dispatcher approved exactly that call through an

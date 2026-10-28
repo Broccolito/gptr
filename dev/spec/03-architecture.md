@@ -1472,8 +1472,9 @@ httr2/curl request performers) is at least level 2 [18 §2.5 and §7 item 1; IC-
 harness state (`gptr_config`, `gptr_permissions`, `gptr_trust`, `gptr_register`, `gptr_on`, `gptr_mcp_add`, ...)
 are level 4 `control` and also check `run_current()` [IC-53], as are `Sys.setenv()`/`Sys.unsetenv()`,
 `withr::local_envvar()`/`withr::with_envvar()` and a Python `os.environ` write of a variable a registered provider
-reads (its `auth` names and `compat$base_url_env`, so `AWS_REGION` for Bedrock, and the `bedrock-converse` key pair),
-`GPTR_*`, `*_BASE_URL`, R's startup variables or a variable that moves the user config directory or the home
+reads (its `auth` names and `compat$base_url_env`, so `AWS_REGION` for Bedrock, the `bedrock-converse` key pair, and
+the names the `cli-claude` and `cli-codex` child environments keep, such as `CODEX_HOME`), `GPTR_*`, `*_BASE_URL`,
+R's startup variables or a variable that moves the user config directory or the home
 (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in any letter case, those four R functions
 with a name the classifier cannot read, a Python write whose name (a subscript, the first argument of `putenv()`,
 `unsetenv()`, `pop()`) is not a plain string literal, `readRenviron()` and `dotenv::load_dot_env()` [D-272]; writes

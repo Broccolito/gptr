@@ -1827,9 +1827,10 @@ risk_python = function(code, root = project_root(), dirs = root) {
 }
 
 #' The variables that configure gptr (D-272): a variable a registered provider reads (its keys and
-#' base-URL variables, and the key pair a `bedrock-converse` provider signs with), R's startup
-#' variables, and those that move gptr's config folder (tools::R_user_dir()) or the home that
-#' user_home() reads, and with them the control paths
+#' base-URL variables, the key pair a `bedrock-converse` provider signs with, and the login and
+#' folder variables the claude and codex CLIs' child environments keep), R's startup variables,
+#' and those that move gptr's config folder (tools::R_user_dir()) or the home that user_home()
+#' reads, and with them the control paths
 #' @noRd
 risk_control_env = function() {
   vars = lapply(registry_all("provider"), function(p) {
@@ -1837,9 +1838,10 @@ risk_control_env = function() {
     c(if (is.function(a)) attr(a, "gptr_optional_auth", exact = TRUE) else a,
       p[["compat"]][["base_url_env"]])
   })
-  toupper(c(unlist(vars), "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
-            "R_ENVIRON_USER", "R_PROFILE_USER", "R_ENVIRON", "R_PROFILE", "R_USER_CONFIG_DIR",
-            "XDG_CONFIG_HOME", "APPDATA", "HOME", "USERPROFILE"))
+  cli = lapply(c("cli-claude", "cli-codex"), function(x) child_env_profile(x)$keep)
+  toupper(c(unlist(vars), unlist(cli), "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+            "AWS_SESSION_TOKEN", "R_ENVIRON_USER", "R_PROFILE_USER", "R_ENVIRON", "R_PROFILE",
+            "R_USER_CONFIG_DIR", "XDG_CONFIG_HOME", "APPDATA", "HOME", "USERPROFILE"))
 }
 risk_control_env_re = "^GPTR_|_BASE_URL\\z"
 

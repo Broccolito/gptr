@@ -217,7 +217,8 @@ provider keys: read at the first use of a provider; see \code{\link[=gptr_env]{g
 settings, permission rules, trust decisions and credentials, and your home directory.
 Setting or unsetting one of them from model code changes gptr's own configuration, as does
 a variable a registered provider reads (its key or base-URL variable, such as \code{AWS_REGION}
-for Bedrock), a \verb{GPTR_*} or \verb{*_BASE_URL} variable, \code{R_ENVIRON_USER}, \code{R_PROFILE_USER},
+for Bedrock, or a login or folder variable of the \code{claude} or \code{codex} command-line tool, such
+as \code{CODEX_HOME}), a \verb{GPTR_*} or \verb{*_BASE_URL} variable, \code{R_ENVIRON_USER}, \code{R_PROFILE_USER},
 \code{R_ENVIRON} or \code{R_PROFILE}, whatever the letter case. Every mode but \code{yolo} asks you first,
 \code{auto} included, before \code{Sys.setenv()}, \code{Sys.unsetenv()}, \code{withr::local_envvar()} or
 \code{withr::with_envvar()} of such a name or of a name the classifier cannot read, before

@@ -296,3 +296,19 @@ test_that("sys::exec_*()'s std_out and std_err are files it writes, as processx'
   expect_identical(lv("sys::exec_wait('ls', std_out = TRUE)"), lv("processx::run('ls')"))
   expect_identical(lv("sys::exec_wait('ls', std_out = FALSE)"), lv("processx::run('ls')"))
 })
+
+test_that("a variable the claude and codex CLIs keep is control, as a provider's key (round 6)", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)
+  py = function(code) gptr_risk(paste0("peter$py(", deparse(code), ")"), root = root)$level
+  for (v in c("CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "codex_home")) {
+    r = lv(paste0("Sys.setenv(", v, " = 'x')"))
+    expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = v)
+    expect_identical(lv(paste0("Sys.unsetenv('", v, "')"))$level, 4L, label = v)
+    expect_identical(py(paste0("import os\nos.environ['", v, "'] = 'x'")), 4L, label = v)
+  }
+  # neighbours: a variable no provider reads stays a session change
+  for (v in c("RETICULATE_PYTHON", "CODEX_NOTE", "TZ")) {
+    expect_identical(lv(paste0("Sys.setenv(", v, " = 'x')"))$level, 2L, label = v)
+  }
+})

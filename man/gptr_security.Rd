@@ -52,7 +52,8 @@ disposable sandboxes.
 
 Changing gptr's own configuration includes model code that sets or unsets an environment
 variable gptr reads as configuration: a key or base-URL variable of a provider gptr has
-registered (such as \code{AWS_REGION}, which places Bedrock's endpoint), or one that moves its
+registered (such as \code{AWS_REGION}, which places Bedrock's endpoint), a login or folder variable
+of the \code{claude} or \code{codex} command-line tool (such as \code{CODEX_HOME}), or one that moves its
 configuration folder or your home directory, such as \code{HOME}; \link{gptr_options} lists them. The
 classifier reads such a change in \code{Sys.setenv()}, \code{Sys.unsetenv()}, \code{withr::local_envvar()} and
 \code{withr::with_envvar()}, where a name it cannot read counts as one (also one built with \code{paste0()}
