@@ -144,10 +144,11 @@ as \verb{[secret:ANTHROPIC_API_KEY]}. Values are redacted before anything is wri
 session files, documents, caches, spill files, wire logs and the output of child processes.
 gptr never reads the credential files of other tools. Reading a registered secret from model
 code asks even in \code{auto} mode. So does handing one to a child process through the \code{env} of
-\code{peter$sh()} or \code{peter$script()}, by its name or in a value; no rule pre-approves that. A key
-registered after it already appeared in a file (for example pasted into a prompt) can be
-removed from the files with \code{\link[=gptr_scrub]{gptr_scrub()}}; run \code{gptr_scrub(error = TRUE)} before committing to
-fail when any registered secret remains.
+\code{peter$sh()} or \code{peter$script()}, by its name or in a value, unless the same code reads that
+secret by name: the question for that read, or an \code{r(secret:NAME)} rule allowing it, covers
+the hand-over too. A key registered after it already appeared in a file (for example pasted
+into a prompt) can be removed from the files with \code{\link[=gptr_scrub]{gptr_scrub()}}; run
+\code{gptr_scrub(error = TRUE)} before committing to fail when any registered secret remains.
 }
 
 \section{Data at rest and protected health information (PHI)}{

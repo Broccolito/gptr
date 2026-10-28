@@ -303,11 +303,12 @@ perm_control_guard = function(what) {
 #' `category:name,...`, `sh:<command glob>` (`r(sh:git push*)`; a glob ending in ` *` also
 #' matches the command alone, so `r(sh:cat *)` covers `cat` too), `sql:<keywords>`
 #' (`r(sql:select)`) and `secret:NAME` (the only rule that pre-approves a guarded secret read, in
-#' `r` code; none pre-approves a secret handed to a child through the `env` of `peter$sh()` or
-#' `peter$script()`); MCP tools by name (`mcp__github__*`). Deny rules win over ask rules, which win
-#' over allow rules. Deny and ask rules match any call that [gptr_risk()] flags, a read-only shell
-#' command included (`r(sh:cat *)` denies `peter$sh("cat notes.txt")`); an R function it knows to be
-#' read-only, such as `readLines()`, is not flagged, so `fn:` rules never match it. Allow rules
+#' `r` code; it covers a secret handed to a child through the `env` of `peter$sh()` or
+#' `peter$script()` only when the same code reads that secret by name); MCP tools by name
+#' (`mcp__github__*`). Deny rules win over ask rules, which win over allow rules. Deny and ask
+#' rules match any call that [gptr_risk()] flags, a read-only shell command included
+#' (`r(sh:cat *)` denies `peter$sh("cat notes.txt")`); an R function it knows to be read-only,
+#' such as `readLines()`, is not flagged, so `fn:` rules never match it. Allow rules
 #' never loosen plan mode and never pre-approve level-4 (critical or control) actions. In `auto` and
 #' `yolo` mode only an `fn:` rule that names the function, such as `r(fn:system)`, lets `system()`,
 #' `system2()`, `shell()` or `shell.exec()` run a command the code computes, which those modes

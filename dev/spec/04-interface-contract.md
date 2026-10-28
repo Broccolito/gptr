@@ -2851,7 +2851,8 @@ Choice labels and details escape line feeds, and all other control/bidi/zero-wid
 retained. Permission approval displays keep the separate IC-53 escaping rules.
 
 **Permission request record** (argument of `ui$permission()` and payload of `permission_request`):
-`list(tool = chr(1), input = named list, summary = chr (the lines to show: code preview, paths), risk =
+`list(tool = chr(1), input = named list, summary = chr (the lines to show: code preview, paths, a nested
+command and its other inputs, redacted, D-267), risk =
 <gptr_risk> | NULL, reason = chr(1), suggested_rule = chr(1) | NULL, no_rule = chr(1) | NULL (why
 a question offers no `suggested_rule`: the reason of the ask rule that asks it, FIX-32 review round
 4), undo_note = chr(1) | NULL (from the
@@ -4831,13 +4832,16 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    returning allow for an `ask_human` is ignored with a diagnostic. In yolo (IC-78) control rows other than
    `options(gptr.*)` and secret reads do not reach `ask_human`.
 7. A `modify` decision is re-classified and re-checked once; a second `modify` denies. Only `r(secret:NAME)`
-   rules pre-approve the secret guard, in `r` code: none pre-approves a registered secret that the `env` of
-   `peter$sh()` or `peter$script()` hands a child (D-267).
+   rules pre-approve the secret guard, in `r` code: a registered secret that the `env` of `peter$sh()` or
+   `peter$script()` hands a child is covered only when the same code reads it by name, as the question for that
+   read covers it (D-267).
 8. Approval displays (console, rstudio dialogs, worker-forwarded requests) escape C0/C1 controls except TAB and
    bidi and zero-width characters as `<U+XXXX>`; the one-line prompt names who asks (IC-77), the tool and the
    call's first line, cut to the console width before `(+N more lines)` (an absolute path inside the project
    relative to it), then the flagged calls one per line, highest level first, each cut to the console width, at
    most 5, then `(+N more; ? shows all)`; `[a]`/`[p]` are offered only with a `suggested_rule` (D-187, D-222).
+   A nested call's command and a tool's other inputs shown as JSON are redacted, so a secret that `env` hands a
+   child shows as its marker (D-267).
    A flag has one shape in the ask and in the `?` view, `[<level> <category>] <call>` (`ui_flags()`), its
    backticked names inline code as in an answer and an object's `<class, size>` the mention line's `(class,
    size)` (P28 Task 49: the ask showed the Markdown and angle brackets and `?` another shape, `[2] file_write
