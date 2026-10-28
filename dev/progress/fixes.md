@@ -6363,6 +6363,36 @@ the driver, screens, events, transcripts and replays without a model are local, 
   `old = setwd(x); setwd(old)` asks in auto and yolo, a directory the code computes, which
   `?gptr_security` says in general. (6) After `setwd(tempdir())`, which is allowed, relative paths
   are still placed in the project root.
+- Review round 5 (Windows R 4.2 CI): PR #93's Windows check on `8903fdb1` (run 40653501206) passed
+  every R-release job and failed oldrel-4 (R 4.2.3) shard 4 with three failures, all round 4's
+  R4-SEC-3 rows: `setwd('/')` read 2, not 4, in "report 18's 101 cases get their levels" and in
+  "moving R's working directory out of the project is level 4 (review round 4)", and
+  `withr::with_dir('/', unlink('x'))` 3, not 4. Cause: `risk_target()` read a directory classed
+  `critical` (a drive root, `/`, home, the project, `tempdir()`) as its child `file.path(p, "x")`,
+  which for `/` is `//x`, on Windows a UNC path. R before 4.4 on Windows turns a leading `//` into
+  `\\` in `dirname()` and `basename()` and then splits only at `/`, so `dirname("//x")` is `.` and
+  `basename("//x")` is `\\x` (src/main/util.c of R 4.2.3, 4.3.0 and 4.3.3; R 4.4.0 rewrote both,
+  and there `dirname("//x")` is `\\` and `basename("//x")` `x`), and `path_norm_one()`, climbing to
+  the deepest existing ancestor, joined `\\x` to the working directory. In the tests that is the
+  project, so `/` read as `workspace`: the gate let `setwd('/')` pass at level 2, `unlink('x')`
+  kept its 3, and `list.files('/')` read 0, not 1. `normalizePath()` is not the cause: R 4.2.3 and
+  4.6.1 give the current drive's root for `/` (src/gnuwin32/extra.c), and `D:/`, `D:\` and `\`
+  normalise alike on both. Sure from the sources and from the three levels matching exactly; not
+  run on a Windows R 4.2 host. Red: test-perm-classify.R "a drive root is outside the project as
+  R 4.2 on Windows places paths (review round 5)" (`is_windows()` true; `path_norm()` as R 4.2 on
+  the runner: `/` is `D:/`, a `//` path lands in the working directory, the rest lexical) FAIL 5 on
+  `fe873436`'s code (`setwd('/')`, `setwd('\\')` and `withr::local_dir('/')` 2, the `with_dir()`
+  delete 3, `list.files('/')` 0). Fix (`c8a7c00d`): a directory read whole is `workspace` inside
+  the project, `temp` inside `tempdir()` and `outside` otherwise, by `path_inside()`, with no child
+  path; no other level changes. Green: `^perm-classify$` FAIL 0 PASS 1121;
+  `^(perm|risk|rules|utils-paths|bridge|tool-|mcp-)` FAIL 0 SKIP 14 PASS 5164 in UTF-8 and under
+  `LC_ALL=C LANG=C`; lint clean (the 2 changed files); `document()` no diff. Not run here: Windows
+  hosts and R 4.2, which only PR #93's oldrel-4 check proves. Not changed, the maintainer's call:
+  on R before 4.4 on Windows `path_norm()` of a UNC path whose server or share does not answer
+  still lands in the working directory, so there (read from the sources)
+  `unlink("//host/share/f")` reads 3, not 4, and `setwd("//host/share")` 2; a climb that splits
+  at `/` itself would close it, but no red test is possible on this host (base R's `dirname()`
+  cannot be mocked).
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #93)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
