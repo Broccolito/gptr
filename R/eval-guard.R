@@ -213,6 +213,14 @@ eval_guard_walk = function(e, acc, scope = character()) {
     nm = if (is.symbol(v) && fname %in% names(eval_guard_fun_arg)) as.character(v) else ""
     if (nm %in% c("q", "quit") && !(nm %in% scope)) acc$strings = c(acc$strings, nm)
   }
+  # eval(quote(x)) runs x, as the classifier reads it (also base::quote())
+  if (fname %in% c("eval", "eval_bare", "eval_tidy")) {
+    for (i in seq_along(e)[-1L]) {
+      el = e[[i]]
+      h = if (!missing(el) && is.call(el) && length(el) == 2L) el[[1L]]
+      if (identical(h, quote(quote)) || identical(h, quote(base::quote))) e[i] = list(el[[2L]])
+    }
+  }
   indirect = fname %in% eval_guard_indirect
   lhs_symbol = fname %in% eval_guard_assign_ops && length(e) >= 2L && is.symbol(e[[2L]])
   start = if (lhs_symbol) 3L else 2L
