@@ -8317,7 +8317,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   code and then for the secret, as a nested call above the approved level does. Status 2026-10-28
   (review round 5 verification): the question shows a nested call's command and its other inputs
   redacted (`perm_summary()`, `ui_request_change()`), so a secret handed over in `env` shows as its
-  marker; formerly they showed raw, the key in clear.
+  marker; formerly they showed raw, the key in clear. Status 2026-10-28 (review round 6, V5-1): the
+  idle gate reads a nested `sh` or `bg` call as the literal call of its command with the member's
+  secrets (for the rules), and then, when the hand-over meets the secret guard and the served
+  call's own analysis did not guard the same secrets, the member call itself, as
+  `dispatch_nested()` does. Formerly it merged the member's guard into the literal `r` call, which
+  an `r(secret:NAME)` allow rule covered when the command was level 0, so idle served
+  `peter$sh("whoami", env = "NAME")` handed the child the key in auto with no question, where the
+  loop asks once. Tests: test-mcp-server.R "an r(secret:) rule covers an idle served hand-over if
+  the code reads it (round 6)".
 - Rule (classifier, PERM-2): `system2()`'s `env` is read as the start of its command line, as
   Unix `system2()` pastes it, unquoted, before the command:
   `system2("ls", env = "A=1; rm -rf build;")` is read as `A=1; rm -rf build; ls` (level 3), and an
