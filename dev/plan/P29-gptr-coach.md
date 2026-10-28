@@ -43,7 +43,7 @@ restored. Plan-specific rules:
 | `R/provider-registry.R` (`provider_stream()` gate only) | T4 |
 | `R/cli-claude.R`, `R/cli-codex.R`, `R/cli-common.R`, `R/auth-childenv.R`, `R/agent-run.R` (`run_retryable()` only), `inst/gptr/codex_hook.R` | T5 |
 | `R/gptr-tailor.R` (new) | T6, then T10 |
-| `R/proc-coach.R` (new), `R/proc-rscript.R` | T7 |
+| `R/gptr-child.R` (new), `R/proc-rscript.R`, `R/mcp-server.R` (blocked runs only) | T7 |
 | `R/doc-*.R`, `R/env-history.R` | T8 |
 | `R/gptr-coach.R` (new) | T9, then T11 |
 | docs, `NEWS.md`, `_pkgdown.yml`, `dev/spec/0[34]-*.md`, `dev/DEVIATIONS.md`, `dev/progress/P29.md` | integrator |
@@ -95,7 +95,8 @@ so in its report.
    - `coaching_hash(coaching)` returns 8 hex characters; empty coaching has one constant hash.
    - The rewritten call carries attribute `gptr_harness = list(fn, hash, call)`.
 8. **Child runner (T7).**
-   - `coach_run_jobs(jobs, max_active)` runs each job in its own R process through the new
+   - `coach_run_jobs(jobs, max_active)` (in `R/gptr-child.R`, area `gptr`, layer L6, so it may call
+     the worker helpers and the harness code) runs each job in its own R process through the new
      `child` bootstrap entry. It returns one plain-data result per job, in order.
    - Each job is `list(id, role = "run" | "coach" | "judge", spec, prompt, objects, args, model,
      schema)`. `spec` is a harness spec; `objects` is a named list; `args` are resolved `peter()`
@@ -179,7 +180,7 @@ counts (`[ FAIL 0 | WARN 0 | SKIP n | PASS m ]`), and anything left open.
   - the control row and `session_control_check()`.
 
   Until T10 lands, a `rules` surface and `gptr_tailor(rules =)` are refused with a named reason.
-- **T7 Child runner and JSON transport** (08 section 3.3; P29c). Interface 8:
+- **T7 Child runner and JSON transport** (08 section 3.3; P29c). Interface 8, in `R/gptr-child.R`:
   - the `child` bootstrap entry, reusing the worker's spawn, kill, cleanup, registry snapshot and
     fake revival;
   - the run folder and project root;
@@ -232,6 +233,19 @@ counts (`[ FAIL 0 | WARN 0 | SKIP n | PASS m ]`), and anything left open.
   - the full suite, lint, and `devtools::check(args = c("--as-cran", "--no-manual"))`;
   - live tests on an API key (Bedrock Claude), a Claude Code plan and a Codex plan;
   - an adversarial review, then the PR.
+
+## Wave 1 results that later tasks build on (2026-10-28)
+
+- `skill.body` service: `function(name, session = NULL)`; a text skill returns `text` and `dir = NULL`.
+  A session skill reaches only that session (not its sub-agents).
+- New files need a row in `tests/testthat/helper-arch.R` and in 03 section 3.2: `gptr-tailor.R`,
+  `gptr-coach.R` and `gptr-child.R` are area `gptr`, layer L6 (P29). Files of one area may call
+  each other.
+- `coach_cli_env(kind)` returns the set login variables. Pass only token-bearing ones
+  (`CLAUDE_CODE_OAUTH_TOKEN`) and unset them in run children; path variables (`CLAUDE_CONFIG_DIR`,
+  `CODEX_HOME`) stay set, because the adapters resolve files through them.
+- The Claude adapter cannot see `run$blocked`; T7 makes the MCP gate refuse every further call of a
+  blocked run at once (`R/mcp-server.R`), so a blocked run ends quickly.
 
 ## Decisions taken during planning (recorded as D-262 onward at integration)
 
