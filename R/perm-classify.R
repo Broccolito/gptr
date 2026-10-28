@@ -1791,9 +1791,10 @@ risk_python = function(code, root = project_root(), dirs = root) {
     return(risk_flags_bind(f, risk_flags_row("not modelled: bytes that are not UTF-8", "py",
                                              3L, "dynamic")))
   }
-  # read as Python reads it: a backslash at a line's end joins the next line, and a name in
-  # grouping parentheses, `(os.environ)`, is the name
-  code = gsub("\\\\\r?\n", "", code, perl = TRUE)
+  # read as Python reads it: a backslash at a line's end outside a comment joins the next line,
+  # and a name in grouping parentheses, `(os.environ)`, is the name
+  code = gsub("(?m)^((?:[^'\"#\n]|'[^'\n]*'|\"[^\"\n]*\")*(?:'[^'\n]*|\"[^\"\n]*)?)\\\\\r?\n",
+              "\\1", code, perl = TRUE)
   code = gsub("(?<![\\w.)\\]])\\(\\s*((?:\\w+\\s*\\.\\s*)*environb?)\\s*\\)", "\\1", code,
               perl = TRUE)
   for (r in risk_py_rules) {
