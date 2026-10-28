@@ -225,6 +225,14 @@ mcp_serve_exec = function(target, name, args, id, schema, st = NULL) {
                             is_error = TRUE))
   }
   run = live$run
+  # a run blocked on an approval nobody can give acts no further (08 section 3.7): a CLI's turn
+  # would otherwise go on calling tools until it ends
+  if (!is.null(run$blocked)) {
+    if (!is.null(st)) st$refused = "the run is blocked on an approval nobody can give"
+    return(gptr_tool_result(paste0("Not run: this run stopped because `", run$blocked$tool,
+                                   "` needs approval and nobody can give it in this run; no ",
+                                   "further tool call runs."), is_error = TRUE))
+  }
   ctx = live$ctx
   sid = session_data(s)$id
   spec = registry_get("tool", name, session = sid)

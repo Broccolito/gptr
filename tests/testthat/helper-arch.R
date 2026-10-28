@@ -61,6 +61,8 @@ arch_layer_table = function() {
     "gptr-capture.R", "L6", "P08",
     "gptr-sdk.R", "L6", "P08",
     "gptr-config.R", "L6", "P08",
+    "gptr-tailor.R", "L6", "P29",
+    "gptr-child.R", "L6", "P29",
     "eval-core.R", "L4 svc", "P09",
     "eval-plots.R", "L4 svc", "P09",
     "eval-guard.R", "L4 svc", "P09",
@@ -167,15 +169,20 @@ arch_kernel_sdk = function() {
 # console takes back the person's queued steers with session_unqueue() (section 7.6, D-242), and its
 # run status and /context measure the context left against P07's compact_threshold() of
 # prompt_model()'s record (IC-77, D-245); P19's team and fan-out routes refuse the System 1
-# arguments with P08's route_refuse_s1_args() (section 6.1.1 step 5, D-250)
+# arguments with P08's route_refuse_s1_args() (section 6.1.1 step 5, D-250); P29's coaching
+# children (gptr-child.R) are scheduled, registered and revived with P19's worker helpers and
+# carry the person's rules from P11 (section 3.2, IC-86)
 arch_contract_edges = function() {
+  gptr_child = c("subagent_schedule", "subagent_limit", "worker_registry", "worker_registry_apply",
+                 "worker_spec_revive", "worker_key_provider", "perm_rules_effective")
   data.frame(
     caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp",
-                    "console", "console", "console", "console", "console", "subagent"),
+                    "console", "console", "console", "console", "console", "subagent",
+                    rep("gptr", length(gptr_child))),
     callee = c("code_targets", "session_new", "session_new", "tool_call_hook", "tool_run",
                "tool_execute_frame", "checkpoint_before", "checkpoint_after", "perm_denial_text",
                "perm_refused", "model_canonical", "pcli_default_model", "session_unqueue",
-               "compact_threshold", "prompt_model", "route_refuse_s1_args")
+               "compact_threshold", "prompt_model", "route_refuse_s1_args", gptr_child)
   )
 }
 
