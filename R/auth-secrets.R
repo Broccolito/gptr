@@ -442,7 +442,7 @@ scan_secret_path_re = paste0(
   "/proc/(self|[0-9]+)/environ"
 )
 scan_env_file_re = "(^|[/\\\\])([^/\\\\]*\\.env(\\.[A-Za-z0-9_-]+)?|\\.Renviron)$"
-scan_read_funs = c("readLines","readRDS", "readChar", "readBin", "scan", "file", "read.table",
+scan_read_funs = c("readLines", "readRDS", "readChar", "readBin", "scan", "file", "read.table",
                    "read.csv", "read.delim", "readRenviron", "fromJSON", "read_json", "read_yaml",
                    "yaml.load_file", "fread", "read_csv", "read_lines", "read_file", "vroom",
                    "read.dcf", "source", "sys.source", "load_dot_env", "file.show", "read")
@@ -461,6 +461,7 @@ scan_net_pkgs = c("", "httr2", "httr", "curl", "utils", "base", "gh", "blastula"
 scan_ns_funs = c("getFromNamespace", "asNamespace", "getNamespace", "loadNamespace")
 scan_proc_funs = c("system", "system2", "shell", "run", "process", "r_bg", "r", "run_process",
                    "exec_wait")
+scan_member_funs = c("sh", "bg", "script")
 scan_dump_cmds = c("env", "printenv", "set", "export", "declare", "Get-ChildItem", "gci", "cat",
                    "type")
 
@@ -579,6 +580,7 @@ secret_scan = function(code, tainted = character()) {
   assigned = character()
   uses = character()
   net = FALSE
+  handed = FALSE
   if (grepl("[secret:", code, fixed = TRUE)) add("marker", "[secret:")
   exprs = tryCatch(parse(text = code, keep.source = FALSE), error = function(e) NULL)
   binds = scan_bindings(exprs)
@@ -656,10 +658,17 @@ secret_scan = function(code, tainted = character()) {
       dumps = any(tolower(lits) %in% tolower(scan_dump_cmds)) ||
         any(grepl(dump_re, lits, perl = TRUE, ignore.case = TRUE))
       if (dumps) add("env_dump_process", fn)
+    }
+    # peter's members start processes too; a registered name their `env` passes is a secret sent
+    if (fn %in% c(scan_proc_funs, scan_member_funs) && length(lits)) {
       net_re = paste0("(^|[[:space:];|&(/\\\\'\"])",
                        "(curl|wget|nc|ncat|scp|ssh|Invoke-WebRequest|iwr)",
                        "(?:\\.exe)?([[:space:];|&)'\"]|$)")
       if (any(grepl(net_re, lits, perl = TRUE, ignore.case = TRUE))) net <<- TRUE
+    }
+    if (fn %in% scan_member_funs &&
+          any(toupper(scan_strings(args[["env"]])) %in% toupper(registered))) {
+      handed <<- TRUE
     }
     if (fn %in% scan_net_funs && pkg %in% scan_net_pkgs) net <<- TRUE
     if (fn == "Sys.setenv") add("env_write", paste(names(args), collapse = ","))
@@ -672,8 +681,8 @@ secret_scan = function(code, tainted = character()) {
   sources = intersect(rules, c("env_dump", "secret_env", "secret_env_registered", "env_dynamic",
                                "secret_file", "keyring", "vault_access", "env_dump_process"))
   taint_hit = length(intersect(uses, tainted)) > 0L
-  if (net && (length(sources) || taint_hit)) {
-    add(if (length(sources)) "secret_to_network" else "tainted_to_network", "network")
+  if (net && (length(sources) || handed || taint_hit)) {
+    add(if (length(sources) || handed) "secret_to_network" else "tainted_to_network", "network")
   }
   if (!length(found)) {
     findings = data.frame(rule = character(), name = character(), level = integer(),

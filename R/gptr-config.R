@@ -1638,7 +1638,8 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `~/.Rprofile` (which can change gptr's options in the next R process) and secret reads without
 #' asking, and still asks before deleting protected files, files outside the project or the
 #' project itself, moving the working directory out of the project, `rm(list = ls())`,
-#' `options(gptr.*)` and sending a secret over the network; `plan` changes nothing. In every mode
+#' `options(gptr.*)` and sending a secret over the network (see Secrets below); `plan` changes
+#' nothing. In every mode
 #' `r` code that calls `q()`, `readline()` or another function that would end, pause or hang your R
 #' session is refused without a question. In `auto` and `yolo` mode a `system()` or `system2()`
 #' call (on Windows also `shell()` or `shell.exec()`) whose command the code computes is refused
@@ -1771,7 +1772,12 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' the question for that read, or an `r(secret:NAME)` rule allowing it, covers the hand-over too.
 #' A name the code computes when it runs (with `paste0()`, through `get()` or `do.call()`, as a
 #' function's argument, or in a variable it sets otherwise) is read at level 3, which `auto` runs
-#' without asking. A key registered after it already appeared in a file (for example pasted
+#' without asking. Sending a secret over the network asks in every mode, `yolo` included: code
+#' that reads a secret, here or in an earlier call, or hands one to a child through `env`, and
+#' calls an R network function such as `download.file()` or `httr2::req_perform()`, or passes a
+#' string naming a network program such as `curl`, `wget` or `ssh` to `system()`, `system2()`,
+#' `processx::run()`, `peter$sh()`, `peter$bg()` or `peter$script()`; a program name the code
+#' computes is not read. A key registered after it already appeared in a file (for example pasted
 #' into a prompt) can be removed from the files with [gptr_scrub()]; run
 #' `gptr_scrub(error = TRUE)` before committing to fail when any registered secret remains.
 #'

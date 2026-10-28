@@ -39,7 +39,8 @@ cannot), also runs gptr's own configuration functions, writes to R startup files
 \verb{~/.Rprofile} (which can change gptr's options in the next R process) and secret reads without
 asking, and still asks before deleting protected files, files outside the project or the
 project itself, moving the working directory out of the project, \code{rm(list = ls())},
-\verb{options(gptr.*)} and sending a secret over the network; \code{plan} changes nothing. In every mode
+\verb{options(gptr.*)} and sending a secret over the network (see Secrets below); \code{plan} changes
+nothing. In every mode
 \code{r} code that calls \code{q()}, \code{readline()} or another function that would end, pause or hang your R
 session is refused without a question. In \code{auto} and \code{yolo} mode a \code{system()} or \code{system2()}
 call (on Windows also \code{shell()} or \code{shell.exec()}) whose command the code computes is refused
@@ -180,7 +181,12 @@ or \code{peter$script()}, by its name or in a value, unless the same code reads 
 the question for that read, or an \code{r(secret:NAME)} rule allowing it, covers the hand-over too.
 A name the code computes when it runs (with \code{paste0()}, through \code{get()} or \code{do.call()}, as a
 function's argument, or in a variable it sets otherwise) is read at level 3, which \code{auto} runs
-without asking. A key registered after it already appeared in a file (for example pasted
+without asking. Sending a secret over the network asks in every mode, \code{yolo} included: code
+that reads a secret, here or in an earlier call, or hands one to a child through \code{env}, and
+calls an R network function such as \code{download.file()} or \code{httr2::req_perform()}, or passes a
+string naming a network program such as \code{curl}, \code{wget} or \code{ssh} to \code{system()}, \code{system2()},
+\code{processx::run()}, \code{peter$sh()}, \code{peter$bg()} or \code{peter$script()}; a program name the code
+computes is not read. A key registered after it already appeared in a file (for example pasted
 into a prompt) can be removed from the files with \code{\link[=gptr_scrub]{gptr_scrub()}}; run
 \code{gptr_scrub(error = TRUE)} before committing to fail when any registered secret remains.
 }

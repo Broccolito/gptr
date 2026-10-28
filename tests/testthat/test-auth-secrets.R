@@ -413,6 +413,29 @@ test_that("shell network sinks and container assignments preserve secret taint",
                                tainted = second$assigned)$level, 4L)
 })
 
+test_that("peter's sh, bg and script members are read by the network check (review round 6)", {
+  local_vault()
+  secret_register("FAKEregistered012345", "TEST_API_KEY", "test")
+  v = "v = Sys.getenv('TEST_API_KEY'); "
+  sends = c(paste0(v, "peter$sh(c('curl', '-s', '-H', paste0('X-K: ', v), 'http://127.0.0.1:9/'))"),
+            paste0(v, "peter$bg(c('wget', '-q', paste0('http://127.0.0.1:9/?k=', v)))"),
+            paste0("peter$sh(paste0('curl -s -H \"X-K: ', Sys.getenv('TEST_API_KEY'), ",
+                   "'\" http://127.0.0.1:9/'))"),
+            paste0(v, "peter$script('get.sh', args = c('curl', v))"),
+            "peter$sh(c('curl', '-s', 'http://127.0.0.1:9/'), env = 'test_api_key')")
+  for (code in sends) {
+    scan = secret_scan(code)
+    expect_identical(scan$level, 4L, label = code)
+    expect_true("secret_to_network" %in% scan$findings$rule, label = code)
+  }
+  # no network program, or no secret: as before
+  expect_identical(secret_scan(paste0(v, "peter$sh(c('wc', '-c'), input = v)"))$level, 3L)
+  for (code in c("peter$sh(c('curl', '-s', 'http://127.0.0.1:9/'))",
+                 "peter$sh(c('cat', 'a.txt'))", "peter$sh('env', env = 'HOME')")) {
+    expect_lt(secret_scan(code)$level, 3L, label = code)
+  }
+})
+
 test_that("named assign arguments preserve the actual tainted target", {
   local_vault()
   secret_register("FAKEregistered012345", "TEST_API_KEY", "test")
