@@ -2310,9 +2310,10 @@ risk_fold = function(x, known = NULL, masked = NULL) {
   parts = lapply(a, risk_fold, known, masked)
   if (any(vapply(parts, is.null, logical(1)))) return(NULL)
   v = tryCatch(unname(do.call(fn, parts, envir = baseenv())), error = function(e) NULL)
-  # a part's values may be a name's several values, which the fold cannot tell from a vector, so a
-  # collapse is also read as each value
-  if (length(v) && startsWith(fn, "paste") && !is.null(parts[["collapse"]])) {
+  # a part's values may be the several values a name or R's working directory may hold, which the
+  # fold cannot tell from a vector, so a collapse of one is also read as each value
+  alt = length(all.vars(x)) || any(c("getwd", "setwd") %in% all.names(x))
+  if (length(v) && startsWith(fn, "paste") && !is.null(parts[["collapse"]]) && alt) {
     parts$collapse = NULL
     v = unique(c(v, do.call(fn, parts, envir = baseenv())))
   }

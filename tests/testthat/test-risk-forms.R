@@ -343,6 +343,17 @@ test_that("paste(), paste0() and file.path() are folded with their arguments as 
   expect_identical(lv(paste0("unlink(paste0(", deparse(out), ", collapse = '/x'))")), 4L)
   d = paste0("d = 'x'; if (p) d = ", deparse(out), "; ")
   expect_identical(lv(paste0(d, "unlink(paste0(d, collapse = ''))")), lv(paste0(d, "unlink(d)")))
+  # a collapse of literals is only R's value (round 7)
+  for (cmd in c("python3", "R", "bash")) {
+    expect_identical(lv(paste0("system(paste(c('", cmd, "', '--version'), collapse = ' '))")),
+                     lv(paste0("system('", cmd, " --version')")), label = cmd)
+  }
+  expect_identical(lv("processx::run(paste(c('python3', '--version'), collapse = ' '))"),
+                   lv("processx::run('python3 --version')"))
+  # while R's working directory, as a name, may hold several values
+  w = "if (p) setwd('sub'); "
+  expect_identical(lv(paste0(w, "unlink(paste0(getwd(), collapse = ''))")),
+                   lv(paste0(w, "unlink(getwd())")))
   # neighbours: as before
   for (code in c("Sys.unsetenv(x = paste0('T', 'Z'))", "Sys.unsetenv(paste('T', 'Z', sep = ''))",
                  "Sys.unsetenv(c(a = 'TZ'))", "Sys.unsetenv(paste0(c('T', 'Z'), collapse = ''))",
