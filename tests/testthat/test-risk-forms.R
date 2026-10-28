@@ -147,6 +147,11 @@ test_that("a Python variable name it cannot read in an environment write is cont
   expect_identical(py("import os\nx = os.environ[k]"), 2L)
   expect_identical(py("import os\nx = os.environ[keys[0]]"), 2L)
   expect_identical(py("import os\nok = os.environ[keys[0]] == d"), 2L)
+  # a name that only ends in environ is not os.environ
+  for (code in c("my_environ[k] = 1", "del my_environ[k]", "my_environ.pop(k)",
+                 "my_environ.clear()")) {
+    expect_identical(py(code), py(sub("my_environ", "d", code, fixed = TRUE)), label = code)
+  }
 })
 
 test_that("a link to a path outside the project is level 4, as ln's (review round 5)", {
