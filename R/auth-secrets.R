@@ -444,7 +444,8 @@ scan_secret_path_re = paste0(
   "(^|[/\\\\])(\\.ssh|\\.aws|\\.codex|\\.claude|\\.gnupg|\\.docker|\\.kube|gcloud)([/\\\\]|$)|",
   "/proc/(self|[0-9]+)/environ"
 )
-scan_env_file_re = "(^|[/\\\\])([^/\\\\]*\\.env(\\.[A-Za-z0-9_-]+)?|\\.Renviron)$"
+# A .env file by its name: `.env`, `.env.<suffix>`, `<name>.env` or `.Renviron` (not `x.env.csv`)
+scan_env_file_re = "(^|[/\\\\])(\\.env(\\.[A-Za-z0-9_-]+)?|[^/\\\\]+\\.env|\\.Renviron)$"
 scan_read_funs = c("readLines", "readRDS", "readChar", "readBin", "scan", "file", "read.table",
                    "read.csv", "read.delim", "readRenviron", "fromJSON", "read_json", "read_yaml",
                    "yaml.load_file", "fread", "read_csv", "read_lines", "read_file", "vroom",

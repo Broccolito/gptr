@@ -406,6 +406,14 @@ test_that("a name bound from a string and a .env file are guarded reads (review 
     expect_identical(scan$level, 3L, label = code)
     expect_identical(secret_scan(paste0(code, send))$level, 4L, label = code)
   }
+  # a .env file by its name: `.env`, `.env.<suffix>` or `<name>.env`, not a name that only holds
+  # `.env.` (verification of review round 6)
+  for (code in c("readLines('dune.env')", "readLines('config/.env.local')")) {
+    expect_true(secret_scan(code)$guard, label = code)
+  }
+  for (code in c("read.csv('doubs.env.csv')", "readLines('out/results.env.txt')")) {
+    expect_false(secret_scan(code)$guard, label = code)
+  }
 })
 
 test_that("shell network sinks and container assignments preserve secret taint", {

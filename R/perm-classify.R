@@ -440,14 +440,16 @@ risk_secret_rows = function(text, fn) {
 }
 
 #' The guarded secret reads of flagged rows (G6): a `secret: $NAME` row of a registered name, in
-#' any case (its `secrets`), and a secret row whose path is a .env or .Renviron file or one
-#' gptr_env() loaded (P03's scan_env_file())
+#' any case (its `secrets`), and a read of a .env or .Renviron file or of one gptr_env() loaded
+#' (P03's scan_env_file()): a text's `secret: <path>` row, or an R call of a function that reads a
+#' file's text (P03's scan_read_funs), not one such as file.exists() that reads none
 #' @noRd
 risk_secret_guard = function(fl) {
   sec = fl[fl$category %in% "secret" & !is.na(fl$path), , drop = FALSE]
   reg = secret_registered_names()
   s = reg[toupper(reg) %in% toupper(sec$path[grepl("secret: $", sec$call, fixed = TRUE)])]
-  list(guard = length(s) > 0L || any(scan_env_file(sec$path)), secrets = s)
+  read = grepl("secret: ", sec$call, fixed = TRUE) | sec$fn %in% scan_read_funs
+  list(guard = length(s) > 0L || any(scan_env_file(sec$path[read])), secrets = s)
 }
 
 #' A secret read and a network sink in one text: level 4 (P03's secret_to_network)

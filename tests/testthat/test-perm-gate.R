@@ -308,6 +308,11 @@ test_that("auto asks before code reads a secret by .env, a shell's $NAME or a na
   expect_identical(gate_decide(shell, gate_ctx("auto")), "allow")
   expect_identical(gate_decide(gate_r(reads[[1L]]), gate_ctx("auto")), "ask_human")
   gptr_permissions(remove = "r(secret:R6_FAKE_KEY)")
+  # code that names a .env file without reading its text runs (verification of review round 6)
+  for (code in c("x = file.exists('.env')", "x = file.info('.env')$size",
+                 "x = read.csv('doubs.env.csv')")) {
+    expect_identical(gate_decide(gate_r(code), gate_ctx("auto")), "allow", label = code)
+  }
   # in the loop, also a command the code computes for peter$sh() or peter$bg(), and the file
   # gptr_env() loaded after the session finds its key in the environment (verification)
   ui = local_scripted_ui(as.list(rep("n", 6L)))
