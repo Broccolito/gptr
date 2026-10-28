@@ -252,6 +252,20 @@ test_that("registry_session_drop() removes only that session's records", {
   expect_false(is.null(registry_get("command", "theirs", session = "s2")))
 })
 
+test_that("a session meets the rank-0 policies of its ancestors, and no other kind (08 3.2)", {
+  local_registry()
+  old = the$registry_session_parent
+  withr::defer(registry_session_parent_set(old))
+  registry_session_parent_set(function(id) switch(id, s3 = "s2", s2 = "s1", NULL))
+  registry_add(gptr_policy("top", function(call, ctx) NULL), "session", 0L, session = "s1")
+  registry_add(gptr_policy("other", function(call, ctx) NULL), "session", 0L, session = "s9")
+  registry_add(cmd("top_cmd"), "session", 0L, session = "s1")
+  expect_identical(registry_session_ancestors("s3"), c("s2", "s1"))
+  expect_named(registry_all("policy", session = "s3"), "top")
+  expect_named(registry_all("policy", session = "s9"), "other")
+  expect_null(registry_get("command", "top_cmd", session = "s3"))
+})
+
 test_that("registry_recs() skips ids whose record is gone (FIX-1)", {
   reg = local_registry()
   kept = registry_add(cmd("kept"), "user", 3L)

@@ -96,8 +96,17 @@ live_entries_all = function() {
   lapply(live_all(), function(s) session_data(s)$entries %||% list())
 }
 
+#' The parent id of the live session with this id, or NULL: the callback of the registry's
+#' ancestor walk (08 section 3.2), installed by this layer because the registry is L0
+#' @noRd
+session_parent_id = function(id) {
+  s = session_by_id(id)
+  if (is.null(s)) NULL else session_data(s)$parent_id
+}
+
 on_load(secret_live_entries_set(live_entries_all))
 on_load(registry_session_owner_set(session_by_id))
+on_load(registry_session_parent_set(session_parent_id))
 
 #' Remember the most recently active session (a strong reference, IC-71)
 #' @noRd

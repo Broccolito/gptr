@@ -1014,3 +1014,77 @@ test_that("a blocked call's hint names where its mode came from (finding 16)", {
   expect_false(grepl("run interactively", how, fixed = TRUE))
   expect_match(how, "knitting cannot ask", fixed = TRUE)
 })
+
+# --------------------------------------------------------------- policies reach sub-agents (08 3.2)
+
+# An extension whose policy denies r code that assigns `touched`
+no_touch = function(gptr) {
+  gptr$register(gptr_policy("no_touch", function(call, ctx) {
+    if (grepl("touched", call$input$code %||% "", fixed = TRUE)) {
+      list(decision = "deny", reason = "no touching")
+    }
+  }))
+}
+
+test_that("a person's extensions = policy binds every session started under theirs", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(mode = "auto", model = "fake/fake-1")
+  local_fake_provider(function(request) {
+    if (length(request$last_results)) return("done")
+    if (!identical(request$last_user, "outer")) return(fake_tool("r", code = "touched = 1"))
+    fake_tool("r", code = paste0("nest = peter('inner')\n",
+                                 "rev = peter('inner', agents = list(a = agent(system = 'Do.')))\n",
+                                 "fan = peter('inner', list(p = 1), parallel = 1)"))
+  })
+  e = new.env()
+  s = peter("outer", envir = e, extensions = no_touch)
+  # an inline sub-agent whose parent is the person's session itself
+  h = subagent_start(list(agent = gptr_agent("b", description = "d", model = "fake/fake-1"),
+                          prompt = "inner", parent = s, base = new.env()), NULL)
+  expect_true(run_wait(list(h$run), timeout = 30))
+  for (x in list(e$nest, e$rev$a, e$fan$p, h$session)) {
+    expect_match(msg_text(tool_results(x)[[1L]]), "no touching", fixed = TRUE)
+    expect_false(exists("touched", envir = x$envir, inherits = FALSE))
+  }
+})
+
+test_that("nested sh, write and edit calls meet every rules-like policy; the strictest wins", {
+  skip_on_cran()
+  root = local_project(files = list("notes.md" = "a"))
+  local_gptr_options(mode = "auto", model = "fake/fake-1")
+  local_permission_rules()
+  gptr_permissions(deny = c("r(sh:rm *)", "write(secret.txt)"), ask = "r(sh:echo *)")
+  ui = local_scripted_ui()
+  # stand-ins for the coaching and harness_rules policies of a harness
+  rules_like = function(gptr) {
+    gptr$register(gptr_policy("coaching", function(call, ctx) {
+      if (grepl("echo", call$input$code %||% "", fixed = TRUE)) {
+        list(decision = "deny", reason = "coached")
+      } else {
+        list(decision = "allow", reason = "fine")
+      }
+    }))
+    gptr$register(gptr_policy("harness_rules", function(call, ctx) {
+      if (identical(call$input$path, "notes.md")) list(decision = "deny", reason = "your rule")
+    }))
+  }
+  cases = list(
+    # the person's deny rule holds against the coaching policy's allow
+    c("cmd = paste('rm', '-rf', 'build'); peter$sh(cmd)", "denied by the rule r(sh:rm *)"),
+    # a coaching deny beats the person's ask rule: nobody is asked
+    c("cmd = paste('echo', 'hi'); peter$bg(cmd)", "coached"),
+    c("p = paste0('secret', '.txt'); peter$write(p, 'x')", "denied by the rule write(secret.txt)"),
+    c("p = paste0('notes', '.md'); peter$edit(p, list(list(oldText = 'a', newText = 'b')))",
+      "your rule"))
+  for (i in seq_along(cases)) {
+    fake = local_fake_provider(list(fake_tool("r", code = cases[[i]][[1L]]), "Done."),
+                               name = paste0("nest", i))
+    s = peter("Go.", model = fake, envir = new.env(), extensions = rules_like)
+    expect_match(msg_text(tool_results(s)[[1L]]), cases[[i]][[2L]], fixed = TRUE,
+                 label = cases[[i]][[1L]])
+  }
+  expect_false(file.exists(file.path(root, "secret.txt")))
+  expect_identical(readLines(file.path(root, "notes.md")), "a")
+  expect_identical(sum(ui$log$method == "permission"), 0L)
+})
