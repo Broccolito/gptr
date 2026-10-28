@@ -1692,26 +1692,26 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `sys::exec_wait()`, `sys::exec_internal()` or `sys::exec_background()`, not when it is given to
 #' `processx::process$new()`, which is level 3.
 #'
-#' Paths are placed in the project: a relative path in R code is read in the project directory,
-#' and a command in the directory it runs in (after a `cd` or `env -C`, or the `wd` of
-#' `peter$sh()` or `processx::run()`), the code a shell or Python runs there (`sh -c`, `cmd /c`,
-#' `pwsh -Command`, `python3 -c`) included; running a command in a directory outside the project
-#' reads that directory, so `manual` asks. `setwd()`, `withr::local_dir()`, `withr::with_dir()` and
+#' Paths are placed in the project: a relative path in R code is read in the project directory, and
+#' a command in the directory it runs in (after a `cd` or `env -C`, or the `wd` of `peter$sh()` or
+#' `processx::run()`), the code a shell or Python runs there (`sh -c`, `cmd /c`, `pwsh -Command`,
+#' `python3 -c`) included; running a command in a directory outside the project reads that
+#' directory, so `manual` asks. `setwd()`, `withr::local_dir()`, `withr::with_dir()` and
 #' `xfun::in_dir()` to a directory outside the project and R's session temporary directory, or to
 #' one the code computes, are level 4, because a relative path would then name a file outside the
 #' project, and so are `file.symlink()`, `file.link()` and `Sys.junction()` of a path outside the
-#' project, as `ln` of one is. `getwd()` and the directory `setwd()` returns are read as the one
-#' the code has moved R to, starting from R's working directory when the classifier reads the
-#' code, so `owd = setwd("data"); ...; setwd(owd)` stays in the project. A drive-relative path
-#' such as `D:data` counts as outside on every OS. The classifier does not follow the working
-#' directory changed in other ways (such as `usethis::local_project()`, `get("setwd")` or the `wd`
-#' of `callr::r()`), nor read the code another interpreter runs
-#' (`Rscript -e`, `perl -e`, `node -e`), a path the shell computes (`rm "$f"` in a loop,
-#' `xargs rm`) or code handed to `sh -c` or `bash -c` as one word whose spaces are escaped with a
-#' backslash or written `$IFS` (`sh -c rm\ -f\ file`): such a command is level 3, which `auto` and
-#' `yolo` run without a question whatever it deletes. The `wd` of `processx::run()` is read when
-#' the call, or a name the code assigns, holds it as a string; a `wd` the code computes is read as
-#' the project directory.
+#' project, as `ln` of one is. `getwd()` and the directory `setwd()` returns are read as the one the
+#' code has moved R to, starting from R's working directory when the classifier reads the code, so
+#' at the top level of the code `owd = setwd("data"); ...; setwd(owd)` stays in the project. A
+#' drive-relative path such as `D:data` counts as outside on every OS. The classifier does not
+#' follow the working directory changed in other ways (such as `usethis::local_project()`,
+#' `get("setwd")` or the `wd` of `callr::r()`), nor read the code another interpreter runs
+#' (`Rscript -e`, `perl -e`, `node -e`), a path the shell computes (`rm "$f"` in a loop, `xargs rm`)
+#' or code handed to `sh -c` or `bash -c` as one word whose spaces are escaped with a backslash or
+#' written `$IFS` (`sh -c rm\ -f\ file`): such a command is level 3, which `auto` and `yolo` run
+#' without a question whatever it deletes. The `wd` of `processx::run()` is read when the call, or a
+#' name the code assigns, holds it as a string; a `wd` the code computes is read as the project
+#' directory.
 #'
 #' In `auto` and `yolo` mode a model can delete or overwrite files and objects. Use them only in
 #' projects you can restore (version control, backups, [gptr_rewind()] for recent turns), and run
