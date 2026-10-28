@@ -62,6 +62,15 @@ test_that("raw_to_utf8() strips a BOM and falls back to CP1252", {
   expect_identical(raw_to_utf8(raw(0)), "")
 })
 
+test_that("raw_to_utf8() reads a byte CP1252 lacks as ? where iconv() maps it too (FIX-34)", {
+  gap = c(charToRaw("a"), as.raw(c(0x81, 0x8d, 0x8f, 0x90, 0x9d, 0x93)), charToRaw("b"))
+  # Windows' iconv() reads each as a C1 control; win_iconv() (helper-locale.R) does so in its place
+  decode = raw_to_utf8
+  environment(decode) = list2env(list(iconv = win_iconv), parent = environment(raw_to_utf8))
+  expect_identical(raw_to_utf8(gap), "a?????\u201cb")
+  expect_identical(decode(gap), "a?????\u201cb")
+})
+
 test_that("read_utf8() and write_utf8() round-trip CRLF, BOM and missing final newlines", {
   dir = withr::local_tempdir()
   cases = list(

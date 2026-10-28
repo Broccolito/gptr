@@ -519,15 +519,7 @@ test_that("the bytes CP1252 lacks read as <xx> where iconv() maps them, as on Wi
   writeBin(c(charToRaw("a"), as.raw(c(0x81, 0x8d, 0x8f, 0x90, 0x9d, 0x93)), charToRaw("b\n")),
            file.path(root, "gap.txt"))
   # Windows' iconv() reads each as the C1 control of its code (U+0081, ...), where macOS's and
-  # glibc's refuse it; a byte-wise stand-in that does so runs in place of iconv()
-  win_iconv = function(x, from, to, sub = NA) {
-    one = function(b) {
-      s = iconv(rawToChar(b), from, to)
-      if (is.na(s)) iconv(rawToChar(b), "latin1", to) else s
-    }
-    vapply(x, function(s) paste(vapply(charToRaw(s), one, ""), collapse = ""), "",
-           USE.NAMES = FALSE)
-  }
+  # glibc's refuse it; win_iconv() (helper-locale.R) does so in place of iconv()
   block = repl_file_block
   environment(block) = list2env(list(iconv = win_iconv), parent = environment(repl_file_block))
   want = "<file path=\"gap.txt\">\na<81><8d><8f><90><9d>“b\n</file>"

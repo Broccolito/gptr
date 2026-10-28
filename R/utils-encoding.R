@@ -83,6 +83,11 @@ raw_to_utf8 = function(x, fallback = "CP1252") {
     Encoding(text) = "UTF-8"
     return(text)
   }
+  # the five bytes CP1252 lacks become `?` first, as Windows' iconv() reads them as C1 controls
+  if (identical(fallback, "CP1252")) {
+    x[x %in% as.raw(c(0x81, 0x8d, 0x8f, 0x90, 0x9d))] = as.raw(0x3f)
+    text = rawToChar(x)
+  }
   out = iconv(text, from = fallback, to = "UTF-8", sub = "?")
   if (is.na(out)) out = iconv(text, from = "latin1", to = "UTF-8", sub = "?")
   Encoding(out) = "UTF-8"
