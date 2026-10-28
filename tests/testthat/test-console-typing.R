@@ -1210,6 +1210,42 @@ test_that("a batch holding a paste marker holds no Ctrl-C key (review round 3)",
   }
 })
 
+test_that("a read right after a paste's marker holds no Ctrl-C key (review round 4)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$sending = quote(peter())
+  local_mocked_bindings(reactor_now = function() 0)
+  read = function(chars) {
+    .gptr_repl = rs
+    tryCatch({
+      console_keys(rs$reader, s, chars)
+      "read"
+    }, interrupt = function(e) "interrupted")
+  }
+  # a paste whose text ends it early, split right after that marker and again before its own end
+  # marker (twice in the second case), each read on the beat after the one before; the reads
+  # between send at their newline, as D-263's Limits say, a steer the model reads
+  pastes = list(list("\033[200~x\033[201~", "\003f\n!cat(1)\n", "\033[201~"),
+                list("\033[200~x\033[201~", "y\003", "\003f\n!cat(1)\n", "\033[201~"))
+  for (keys in pastes) {
+    rs$reader = console_reader()
+    res = character()
+    utils::capture.output(for (k in keys) res = c(res, read(k)))
+    label = encodeString(paste(keys, collapse = " | "))
+    expect_identical(res, rep("read", length(keys)), label = label)
+    expect_identical(rs$reader$after_interrupt %||% "", "", label = label)
+    expect_length(rs$reader$typed, 0L)
+  }
+  steers = vapply(session_data(s)$queue$steer, function(it) it$text, "")
+  expect_identical(steers, c("xf\n!cat(1)", "xyf\n!cat(1)"))
+  # an empty read between ends the paste's reads: a Ctrl-C read after it is the key
+  rs$reader = console_reader()
+  res = character()
+  utils::capture.output(for (k in c("\033[200~x\033[201~", "", "\003")) res = c(res, read(k)))
+  expect_identical(res, c("read", "read", "interrupted"))
+})
+
 test_that("a draft a run left waits for the follow-ups, then continues at the prompt (D-243)", {
   skip_on_cran()
   local_console_test()
