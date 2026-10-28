@@ -7943,6 +7943,12 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   Still not read, each level 3 or lower: `env` with `-C` in a cluster of short options or an
   abbreviated `--chdir`. Tests: test-risk-forms.R (review round 5). Evidence: progress/fixes.md
   FIX-27.
+- Status 2026-10-28 (review round 5, the merge): `getwd()` and `setwd()` are read as D-272's
+  helpers are, so a call of either that the code assigns, or that the environment the code would
+  run in holds as other than base R's, is one the code computes: `getwd = function() "~"` and then
+  `setwd(getwd())` is level 4 (2 on the merged branches, which read it as R's working directory).
+  Contract-visible: 03 section 6.8.1. Tests: test-risk-forms.R "a getwd() or setwd() the code or
+  the session binds is one the code computes (merge)". Evidence: progress/fixes.md FIX-34's merge.
 
 ## D-263 - FIX-28 Bracketed paste decides a paste in a T console (2026-10-26)
 - Rule (mode): a T console's call turns bracketed paste on with its character mode. `tty_modes()`

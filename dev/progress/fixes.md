@@ -8298,6 +8298,44 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   `check-docs.R` 0 problems, `spelling::spell_check_package()` clean and
   `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290, in UTF-8 and under
   `LC_ALL=C LANG=C`; `document()` no diff. No rule changes.
+- Review round 5, the merge (`claude/v1-fixes` on `fe873436` merges the round's
+  `claude/v1-fix-win42`, `claude/v1-fix-env3`, `claude/v1-fix-gate5`, `claude/v1-fix-secret5`,
+  `claude/v1-fix-console5` and `claude/v1-fix-docs5`, in that order, as `488b1d7c`, `ec63ba8c`,
+  `d02f829c`, `4a983a71`, `d439ab5d` and `112f1a57`): win42, env3, secret5 and console5 merged
+  clean, env3's `risk_scan()` and `risk_fold()` beside win42's `risk_target()` and
+  `path_norm_one()`. The gate5 merge's conflicts: R/perm-classify.R, where env3 gave `risk_fold()`
+  a `masked` argument and made each fold in `risk_scan()` its local `fold()`, and gate5 gave
+  `risk_scan()` a `wd` argument and changed some of the same lines: the merge keeps both
+  (`risk_scan(..., wd = getwd(), masked = NULL)`, `read_user()` passing both, gate5's argv
+  runners' and `in_dir` lines through `fold()`); `?gptr_security`'s paragraph on variables (env3's
+  helper clause and four setters, gate5's Python names), written as both, and
+  `gptr_security.Rd` by `document()`; 03 section 6.8.1's paragraph, both sentences; and record
+  appends in fixes.md and DEVIATIONS, each side kept whole in round order (FIX-27: win42's round 5,
+  gate5's round 5 and its verification, win42's round 6; FIX-36 and D-272: env3's rounds 3 and 4,
+  then gate5's round 5). The docs5 merge's conflicts were record appends in fixes.md (this
+  subsection's two round 5 bullets and the end of FIX-36), each kept in round order. Each merged
+  R file was diffed against both parents: each side's change is there as it was, apart from the
+  lines above. gate5's link reading keeps `risk_fold()`: there a source the code computes gives no
+  row, so folding a helper the code binds is the reading that asks more.
+  - A merged rule read against both sides: gate5's `risk_fold()` reads `getwd()` and `setwd()` as
+    R's working directory, and env3's rule reads a helper the code or the session binds as one the
+    code computes, but `getwd` and `setwd` were not among `risk_base_helpers`, so on the merged
+    code `getwd = function() '~'; setwd(getwd())` was level 2 (FIX-27's round 5 Open item, "`getwd`
+    or `setwd` shadowed by a function the code defines"). Red: test-risk-forms.R "a getwd() or
+    setwd() the code or the session binds is one the code computes (merge)" (`b77a59b7`) FAIL 5
+    PASS 166 on `112f1a57`'s code: four forms the code binds and one the session binds, each 2,
+    not 4. Fix (`d84ccfd6`): `getwd` and `setwd` join `risk_base_helpers`; 03 section 6.8.1 says
+    so (`f4a7b21b`), as D-262's status does. Green: `^(risk-forms|perm-classify)$` FAIL 0
+    PASS 1372 in UTF-8 and under `LC_ALL=C LANG=C`.
+  - Checks on `f4a7b21b` (the records commit changes only `dev/`): `document()` changes nothing
+    after the last merge, as after the gate5 merge, whose Rd it wrote; lint of the 17 R and test
+    files changed since `fe873436` clean; `fmt.py` on copies of the records changes nothing and
+    `lintfmt.py` shows only the baseline; the 84 files whose names start with `perm`, `risk`,
+    `rules`, `nested`, `bridge`, `mcp-`, `gptr-config`, `agent-`, `tool-`, `session-`, `py`,
+    `knit`, `secrets`, `auth-`, `console-`, `doc-`, `utils-` or `zzz` FAIL 0 WARN 0 SKIP 20
+    PASS 17739 in UTF-8 (14 min, at load averages of 26 to 47). Not run here: those files under
+    `LC_ALL=C LANG=C`, the full suite and `R CMD check` (the next step's), Linux and Windows
+    hosts, R 4.2 and R-devel, live models.
 
 ## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #93)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
