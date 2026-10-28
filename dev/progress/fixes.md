@@ -6434,7 +6434,8 @@ the driver, screens, events, transcripts and replays without a model are local, 
     and `withr::local_dir()` to the folded target (a straight-line move replaces it, one in a
     branch, a call or a function body adds its value), one the code computes in or after
     `withr::with_dir()` and `xfun::in_dir()`. `risk_fold()` reads `getwd()` as it and `setwd()`
-    as the one before the last move; a user function's code starts from the caller's. So the
+    as the one before the last move; a user function's code reads both as ones the code computes,
+    as any function body does (review round 6; this line said it starts from the caller's). So the
     restore idiom, `owd = getwd(); ...; setwd(owd)`, `setwd(file.path(getwd(), "data"))` and
     GPT-5.6's form are level 2 again, `setwd(<unknown object>)` stays 4, and
     `setwd(tempdir()); setwd(file.path(getwd(), ".."))` is 4, read from where the code moved.

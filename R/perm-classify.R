@@ -2458,8 +2458,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   # A user function's code, read one level deeper (FALSE when too deep).
   read_user = function(code, label, ctx) {
     if (depth <= 0L) return(FALSE)
-    s = risk_scan(as.expression(list(code)), envir, root, depth - 1L,
-                  attr(kn(ctx), "wd") %||% NA_character_, masked)
+    s = risk_scan(as.expression(list(code)), envir, root, depth - 1L, masked = masked)
     add_rows(s$flags, ctx, prefix = label)
     TRUE
   }
