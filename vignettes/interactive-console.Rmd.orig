@@ -77,7 +77,9 @@ model and mode.
 ## Enter prompts, objects and your own R
 
 Ask in ordinary language. `@x` attaches a visible R object by name, and `@analysis.R` adds the
-beginning of a text file. Quote a path containing spaces as `@"analysis notes.txt"`.
+beginning of a text file. A path of letters and digits in any script, `.`, `_`, `-`, `~` and
+`/` needs no quotes; quote any other path, such as `@"analysis notes.txt"` (Tab leaves the
+quotes to you).
 A mention is a word that starts with `@`, so `me@example.org` stays text.
 Files take precedence when a mention matches both a file and an object. A file mention sends
 at most its first 40 lines, and the files of one prompt share about 2,000 tokens; binary files

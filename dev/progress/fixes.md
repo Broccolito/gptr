@@ -8231,6 +8231,54 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     baseline. No full suite or `R CMD check` ran, so the heavy lock was not taken.
   - Open: none new. Not run: Windows (the stand-in gives Windows' `iconv()` reading), Linux, R
     before 4.6 and R-devel, and live models.
+- Review round 5, the console writer's item (verifiers on `fe873436`; branch
+  `claude/v1-fix-console5`), the regressions verifier's R5-REG-3 (low):
+  - Since round 4's ordering (`45a869ba`) Tab completes `@acc/caf` to `@acc/café.csv`, but
+    `repl_mentions()` read an unquoted name as `[A-Za-z0-9_./~-]`, so the line read `@acc/caf`,
+    said `@ acc/caf not found, sent as text` and attached nothing (on `13a917ff` Tab offered
+    nothing there and the line read the same). Under `LC_ALL=C LANG=C`, and in macOS's
+    `en_US.ISO8859-1` (a stand-in for a Windows code page), even `@"acc/café.csv"` was not
+    found: the console's text is marked UTF-8 (`as_utf8()`), and `path.expand()` and
+    `file.info()` there cannot translate a marked non-ASCII name. Red: test-console-repl.R "an
+    @name holds letters, marks and digits of any script, in C too (review round 5)" and
+    test-console-completion.R "the @ name Tab completes is read whole, so its file is attached
+    (review round 5)", `^console-(repl|completion)$` on `fe873436`'s code: FAIL 2 PASS 586 in
+    UTF-8 and FAIL 2 SKIP 5 PASS 572 under `LC_ALL=C LANG=C`.
+  - Fix, commit `67233b5b`, the verifier's second fix, so a typed and a completed name follow one
+    rule: an unquoted name is letters, marks and digits of any script (`\p{L}\p{M}\p{N}`, read as
+    characters since the text is marked UTF-8) with `_ . / ~ -`, not ending in a dot. The marks
+    read a name as macOS may keep it (NFD: `noe` and U+0308), and punctuation of any script
+    still ends a name (U+FF0C, a fullwidth comma). The candidate paths reach the file system
+    through `fs_path()`, unmarked in a non-UTF-8 Unix locale, and the shown path is marked UTF-8
+    again for the `<file>` tag and the mention line. The pattern alone left both tests red under
+    C (`not found`, with 4 warnings "unable to translate"). A probe of `repl_mentions()` and
+    `console_complete()`: typed, quoted and completed, `@acc/café.csv` attaches in UTF-8, C and
+    `en_US.ISO8859-1` (on `fe873436`, only the quoted form in UTF-8). The console vignette (.Rmd
+    and .Rmd.orig) says which names need no quotes and that Tab leaves the quotes to you; a status
+    line of D-244. Green: `^console-(repl|completion)$` PASS 588 in UTF-8 and PASS 574 SKIP 5
+    under `LC_ALL=C LANG=C`.
+  - Not changed: Tab still writes a name holding a space or other punctuation without quotes,
+    which the mention does not read whole, as before. Quoting it, the verifier's first fix, would
+    end the word: a second Tab on a quoted folder would send the composer's draft instead of
+    completing inside it, and the common head of quoted names leaves an open quote that no Tab
+    completes, so it needs `console_trigger()` to read a quoted word. An ASCII mention written
+    straight before a word in another script, such as `@tbl` and then Chinese with no space, now
+    reads as one name, not found; a space after the name keeps it. Two limits stay as R sets
+    them: in a UTF-8 locale a file name that is not valid UTF-8 (a Latin-1 name on Linux) is
+    offered, but R's regular expressions read no mention in a line holding it (with a warning);
+    Rgui and Rterm in a code page hold only its characters, so a name outside the page can be
+    neither typed nor completed into the line (inferred, not run).
+  - Checks on `67233b5b`, `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`: the files whose
+    names start with `console-` or `repl` FAIL 0 WARN 0 SKIP 1 PASS 3630 in UTF-8 and FAIL 0 WARN
+    0 SKIP 29 PASS 3445 under `LC_ALL=C LANG=C`, at load averages of 37 to 85 (the skips: INFRA-03,
+    and under C 28 that need a UTF-8 locale). Lint of the 3 changed R and test files and the
+    console vignette clean; `document()` no diff (the comments are `@noRd`);
+    `dev/release/check-docs.R` 0 problems, the spelling check clean and
+    `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290; `fmt.py` on copies of the
+    records changes nothing and `lintfmt.py` shows only the baseline. No full suite or
+    `R CMD check` ran, so the heavy lock was not taken; no plan, contract or prompt text changed.
+  - Open: what Not changed names. Not run: Linux and Windows, R 4.2 and R-devel, and live models
+    or tmux (the fix is tested offline; the verifier's tmux repro was not repeated).
 
 ## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #93)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`

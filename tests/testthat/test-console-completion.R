@@ -354,6 +354,17 @@ test_that("@ completes a folder whose first name is not ASCII (round 4 merge)", 
   expect_identical(console_complete("look at @acc/"), c("@acc/b/", paste0("@acc/", cafe)))
 })
 
+test_that("the @ name Tab completes is read whole, so its file is attached (review round 5)", {
+  .gptr_repl = local_completing_repl()
+  withr::local_options(gptr.project_root = getwd())
+  cafe = os_bytes("café.csv")
+  dir.create("acc")
+  writeLines("a,b", file.path("acc", cafe))
+  line = paste("Summarise", console_complete("Summarise @acc/caf"))
+  expect_identical(repl_mentions(as_utf8(line), new.env())$said,
+                   as_utf8(paste0("@ acc/", cafe, " (1 line)")))
+})
+
 test_that("a ! line's string never goes to readline's file completion (round 4 verification)", {
   .gptr_repl = local_completing_repl()
   settings = utils::rc.settings()

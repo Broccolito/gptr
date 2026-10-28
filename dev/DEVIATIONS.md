@@ -6252,6 +6252,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   function` went to RStudio's engine, whose popup took Enter. Contract-visible: 03 section 6.17, 04
   section 15.10 IC-81. Tests: test-console-completion.R "RStudio's console completes only the
   triggers; its editor gets RStudio's own (IC-81)".
+- Status 2026-10-28 (FIX-34 review round 5): an unquoted @mention's name is letters, marks and
+  digits of any script with `_ . / ~ -`, not ending in a dot (it was ASCII letters and digits),
+  so a non-ASCII name Tab completes since round 4 reads whole, as it does typed; formerly
+  `@acc/café.csv` read `@acc/caf`, not found. In a non-UTF-8 Unix locale the name reaches the file
+  system as unmarked UTF-8, so under C such a name is found, quoted or not (it never was). Tab
+  still writes no quotes. Contract-visible: the console vignette (03 section 6.17 and 04 section
+  15.10 name no character set). Tests: test-console-repl.R "an @name holds letters, marks and
+  digits of any script, in C too (review round 5)"; test-console-completion.R "the @ name Tab
+  completes is read whole, so its file is attached (review round 5)".
 
 ## D-245 - P28 the console output vocabulary (2026-10-21)
 - Rule (P28 Tasks 8-11, 25, 26): glyphs from the logo's cursor shapes, the logo palette, the input
