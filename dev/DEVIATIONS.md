@@ -8260,12 +8260,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `bridge_risk_env()` makes that a guarded read of the secret, as `Sys.getenv()` of its name is;
   `dispatch_nested()` passes the gate for a secret the outer call's analysis did not show; the idle
   gate adds the member's secrets to the literal call it reads. It asks in every mode but yolo, which
-  runs it as it runs secret reads, and no rule pre-approves it: an allow `secret:` rule covers `r`
-  code only, and the question offers no `[a]lways` rule. Formerly an unnamed `env` element was
-  level 3 `secret` without the guard and a value was not read, so auto and yolo ran the child with
-  the key and no question, idle or not (also on `13a917ff`). An ordinary `env` is unchanged. In
-  manual mode such a call asks twice, for the code and then for the secret, as a nested call above
-  the approved level does.
+  runs it as it runs secret reads, unless the same code reads that secret by name: the question for
+  that read, or an `r(secret:NAME)` rule allowing that code, covers the hand-over too. No rule
+  allows the member itself: an allow `secret:` rule covers `r` code only, and the question offers no
+  `[a]lways` rule. Formerly an unnamed `env` element was level 3 `secret` without the guard and a
+  value was not read, so auto and yolo ran the child with the key and no question, idle or not (also
+  on `13a917ff`). An ordinary `env` is unchanged. In manual mode such a call asks twice, for the
+  code and then for the secret, as a nested call above the approved level does. Status 2026-10-28
+  (review round 5 verification): the question shows a nested call's command and its other inputs
+  redacted (`perm_summary()`, `ui_request_change()`), so a secret handed over in `env` shows as its
+  marker; formerly they showed raw, the key in clear.
 - Rule (classifier, PERM-2): `system2()`'s `env` is read as the start of its command line, as
   Unix `system2()` pastes it, unquoted, before the command:
   `system2("ls", env = "A=1; rm -rf build;")` is read as `A=1; rm -rf build; ls` (level 3), and an
@@ -8310,7 +8314,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `?gptr_risk`; vignette("language-models"); the cheat sheet's auto and yolo rows and the yolo
   notice (IC-78). Review round 4: 03 section 6.8.4 and 04 section 15.5 IC-57 (the idle gate's `wd`).
   Review round 5: 03 sections 6.5, 6.8.2 and 6.8.4, 04 sections 7.6, 15.4 IC-53 item 7, 15.5 IC-57
-  and 15.9 IC-79, `?gptr_security`, `?gptr_permissions` and NEWS (the secret guard on `env`).
+  and 15.9 IC-79, `?gptr_security`, `?gptr_permissions` and NEWS (the secret guard on `env`); its
+  verification: 04 section 7.11 (the request record's `summary`) and IC-53 items 7 and 8.
 - Tests: test-perm-rules.R "deny and ask sh: rules match a read-only command; allow needs level 1
   (FIX-32)", "a deny sh: rule stops a read-only command, also one peter$sh() computes (FIX-32)";
   test-perm-classify.R "system2()'s env is read as the start of its command line (FIX-32)";
@@ -8332,7 +8337,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   secret meets the secret guard (review round 5)", "a secret handed to a child through env asks as
   a secret read does (review round 5)", test-perm-gate.R "a member handing a child a registered
   secret meets the guard; no rule allows it", test-mcp-server.R "served R meets the secret guard
-  when env hands a child a secret (review round 5)". Evidence: progress/fixes.md FIX-32.
+  when env hands a child a secret (review round 5)"; its verification: test-bridge-sh.R "the
+  question for a secret in env shows its marker, never its value (review round 5)". Evidence:
+  progress/fixes.md FIX-32.
 
 ## D-268 - FIX-33 What a document records and reads back after the live sessions (2026-10-27)
 - Rule (steering lines, security): a block body line is a `## Steer:` or `## Follow-up:` line only

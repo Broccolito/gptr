@@ -7214,12 +7214,48 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
   - Docs: `?gptr_security` (Secrets), `?gptr_permissions` (`secret:NAME`), NEWS's secrets
     bullet; 03 sections 6.5, 6.8.2 and 6.8.4; 04 sections 7.6 (`dispatch_nested()`), 15.4 IC-53
     item 7, 15.5 IC-57 and 15.9 IC-79; D-267's served-R rule.
-  - Costs, recorded rather than changed: no rule pre-approves the hand-over, so a key that auto's
+  - Costs, recorded rather than changed: no rule pre-approves the member itself (code that also
+    reads the secret by name covers it; see the verification bullet below), so a key that auto's
     work passes to a child (`env = "GITHUB_TOKEN"`, which `secret_discover_env()` registers at the
     session's start) asks each time, unless the session is in yolo or `gptr.secret_guard` is
     `FALSE`; in manual mode such a call asks twice, for the code and then for the secret, as a
     nested call above the approved level does; the idle gate takes the secrets of `env` but not
     the level 3 of an ordinary variable passed through, which the loop's nested gate reads.
+- Review round 5 verification (the verifier on `b2fa96cd`: R5-SEC-3 fixed as reported, three
+  findings). F1 (low, docs): the docs said no rule pre-approves handing a secret to a child, but
+  `dispatch_nested()` asks no second question when the outer call's risk guarded the same secrets,
+  so code that also reads the secret by name is covered by the question for that read, or by an
+  `r(secret:NAME)` rule allowing that code (which it does when the read is the code's only flagged
+  call, as beside `git status`). F2 (low to medium, display): the question the fix added printed the
+  key in clear, because `perm_summary()` showed a nested command and its other inputs as raw JSON
+  (the call line and the `?` view) and `ui_request_change()` a script's `env` (the change rows). F3
+  (low, coverage): no test failed with `bridge_env_secrets()`'s name arm removed or made
+  case-sensitive, and that arm alone guards a key shorter than `gptr.redact_min_chars`, which leaves
+  no literal to scan. Commits `1afca89f` (F2 test), `284cf46f` (F2 fix), `db3eb98c` (F1 and F3
+  tests), `036cafdf` (docs) and this record; `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`.
+  - Red: test-bridge-sh.R "the question for a secret in env shows its marker, never its value
+    (review round 5)" FAIL 3 on `b2fa96cd`'s code (no marker for the key in the command or in a
+    script's change row, and the key itself in the lines). F3's new expectations in "an env that
+    hands a child a registered secret meets the secret guard (review round 5)" FAIL 4 with the name
+    arm removed and FAIL 2 with it case-sensitive. F1 is docs only: its expectations in "a secret
+    handed to a child through env asks as a secret read does (review round 5)" pass on `b2fa96cd`
+    and pin what the docs now say. Each of the three redactions reverted alone fails `^bridge-sh$`:
+    the command FAIL 2, the summary's JSON FAIL 1, the change rows FAIL 2.
+  - Fix: `perm_summary()` passes a nested command and its JSON through `redact()` with the `context`
+    profile, the JSON before its 200-character cut so that the cut never leaves part of a key, and
+    `ui_request_change()` its JSON row, so the question shows `[secret:R5_FAKE_KEY]` for the key in
+    the command and in `env`. The `context` profile is the one the console's tool output lines use
+    (R/console-repl.R).
+  - Green: `^(bridge-sh|perm-gate|mcp-server|arch-layers|console-ui)$` FAIL 0 SKIP 2 PASS 1223; the
+    44 neighbour files of round 5 plus every `console-` file and `arch-layers` (67 files, in four
+    chunks run one after the other) FAIL 0 WARN 0 SKIP 17 PASS 13630 in UTF-8, and FAIL 0 WARN 0
+    SKIP 45 PASS 13445 under `LC_ALL=C LANG=C`, the difference being the console files' UTF-8 skips.
+    Lint of the 5 changed R and test files is clean; a second `document()` changes nothing;
+    `check-docs.R` 0 problems; `spelling::spell_check_package()` clean.
+  - Docs: `?gptr_security` (Secrets) and `?gptr_permissions` (`secret:NAME`) say when code that
+    reads the secret by name covers its hand-over; 04 sections 7.11 (the request record's `summary`)
+    and 15.4 IC-53 items 7 and 8; D-267's status line, corrected in place, and a status line for the
+    redacted question.
 
 ## FIX-33 - Transcript findings from the live sessions (2026-10-27, #93)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
