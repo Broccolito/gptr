@@ -1086,6 +1086,18 @@ test_that("the claude route asks for `returns` at the end of the user line", {
   pcli_untrack("s0123456789")
 })
 
+test_that("the CLI's own plugins pass the coaching check; an installed one does not", {
+  # the three plugins claude 2.1.296 always lists, as its init line gives them
+  own = lapply(c("cc-plugin-agents-md", "cc-plugin-telemetry", "cc-plugin-plugin-authoring"),
+               function(p) list(name = p, path = "builtin", source = paste0(p, "@builtin")))
+  expect_null(pcli_claude_init_check(coach_init(plugins = own), coach = TRUE))
+  expect_null(pcli_claude_init_check(coach_init(plugins = own, tools = list("mcp__gptr__r"),
+                                                mcp_servers = gptr_server), coach = FALSE))
+  mine = c(own, list(list(name = "x", path = "/home/me/.claude/plugins/x", source = "x@m")))
+  expect_identical(pcli_claude_init_check(coach_init(plugins = mine), coach = TRUE),
+                   "it loaded plugins")
+})
+
 test_that("an init line that breaks a coaching check ends the session and stops the CLI", {
   skip_on_cran()
   stopped = local_stop_count()

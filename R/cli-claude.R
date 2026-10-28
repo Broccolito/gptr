@@ -356,8 +356,9 @@ pcli_claude_tool_uses = function(obj) {
 }
 
 #' Why an init line fails the coaching checks (08 section 3.7), or NULL: a coach has no tool and
-#' no MCP server, a run only gptr's tools and server, and neither loads plugins, skills, slash
-#' commands or auto memory
+#' no MCP server, a run only gptr's tools and server, and neither loads an installed plugin, skills,
+#' slash commands or auto memory. The CLI's own plugins (`path` "builtin", 2.1.296 lists three)
+#' always load and add no tool, skill or command, so they pass.
 #' @noRd
 pcli_claude_init_check = function(obj, coach) {
   servers = obj[["mcp_servers"]] %||% list()
@@ -371,7 +372,9 @@ pcli_claude_init_check = function(obj, coach) {
   if (!identical(named, if (coach) character() else "gptr")) {
     return(paste("it connected the MCP servers", toString(named)))
   }
-  for (k in c("plugins", "skills", "slash_commands")) {
+  plugins = Filter(function(x) !is.list(x) || !identical(x[["path"]], "builtin"), obj[["plugins"]])
+  if (length(plugins)) return("it loaded plugins")
+  for (k in c("skills", "slash_commands")) {
     if (length(obj[[k]])) return(paste("it loaded", k))
   }
   mem = obj[["memory_paths"]]
