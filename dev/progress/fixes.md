@@ -8610,6 +8610,23 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   - Open: those of FIX-28's and FIX-29's round 6 bullets. Not run: Linux and Windows, R 4.2 and
     R-devel, and live models or tmux (the fixes are tested offline; the verifiers' live repros
     were not repeated).
+- Review round 6 verification (an independent verifier on `a10ccec3`, the console writer's
+  items): every item holds. The verifier ran the three changed test files with `devtools::test()`
+  and against the installed package, in UTF-8 and under `LC_ALL=C LANG=C`, the `console-` and
+  `repl` neighbours, a mutation of each fix, and live in tmux with the fake model SC-1's paste
+  left open (Ctrl-C pauses, the draft is kept, `a` aborts) and SC-3's pasted Ctrl-C at the
+  prompt's editor (the draft keeps the rest of the paste, one Enter sends it, nothing runs). One
+  low finding, F-1, a test gap: the editor test's last case ended its keys at the Ctrl-C read 3.5 s
+  after a paste left open, so the editor kept the draft whether that Ctrl-C handed over or was
+  dropped, and `console_idle()` reading the paste as open for good (`isTRUE(rd$compose$bracket)`,
+  the wedge SC-1 was about) still passed. Fix, commit `1e0c58e2`, test only: `zz` after that
+  Ctrl-C, which joins the draft only when the Ctrl-C is dropped. With that mutation
+  `^console-input$` FAIL 1 PASS 234 (kept `ab`, `czz`); on the code FAIL 0 PASS 235.
+  `^console-(input|typing|repl)$` FAIL 0 PASS 1112 in UTF-8 and FAIL 0 SKIP 14 PASS 1004 under
+  `LC_ALL=C LANG=C`; test-console-input.R against the installed package (`R CMD INSTALL` of a
+  `git archive` of `a10ccec3`, whose R code `1e0c58e2` leaves alone) FAIL 0 PASS 235 in UTF-8 and
+  FAIL 0 SKIP 8 PASS 152 under C; its lint clean. Not run: Linux and Windows, R 4.2 and R-devel,
+  the full suite and `R CMD check`.
 
 ## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #93)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
