@@ -1721,6 +1721,13 @@ risk_sql = function(query, root = project_root()) {
   risk_secret_sink(f)
 }
 
+# A Python subscript's text to its closing bracket (over lines, strings and nested brackets read
+# whole), and an assignment to it (an annotation, any augmented operator)
+risk_py_str = "'(?:[^'\\\\\n]|\\\\.)*'|\"(?:[^\"\\\\\n]|\\\\.)*\""
+risk_py_sub = paste0("(?:[^]['\"]|", risk_py_str, "|(\\[(?:[^]['\"]|", risk_py_str,
+                     "|(?-1))*\\]))*")
+risk_py_set = "\\s*(:[^=\n]*)?(\\*\\*|//|>>|<<|[-+*/%@&|^])?=[^=]"
+
 # Python token rules: level, category (also the row's call text) and PCRE.
 risk_py_rules = list(
   list(3L, "process", paste0("\\b(subprocess|os\\.(system|popen|exec\\w*|spawn\\w*|",
@@ -1758,7 +1765,7 @@ risk_py_rules = list(
                                  "\\b(remove\\w*|unlink|rmdir|rename\\w*|replace|makedirs|mkdir|",
                                  "symlink|link|chmod|chown|l?ch\\w+|truncate|\\*)\\b")),
   list(2L, "secret", "os\\.environ|getenv\\("),
-  list(3L, "session", paste0("environb?\\s*(\\[[^]]*\\]\\s*(:[^=\n]*)?[-+*/|&]?=[^=]|\\|=)|",
+  list(3L, "session", paste0("environb?\\s*(\\[", risk_py_sub, "\\]", risk_py_set, "|\\|=)|",
                              "\\bdel\\s+[\\w.]*environb?\\s*\\[|",
                              "environb?\\.(update|setdefault|pop|clear|popitem|__setitem__|",
                              "__delitem__)\\(|\\b(putenv|unsetenv)\\s*\\(")),
@@ -1792,8 +1799,8 @@ risk_python = function(code, root = project_root(), dirs = root) {
   # unsetenv(), setdefault(), pop() and the item methods): one that is not a plain string literal
   # (an escape, adjacent literals, a name the code computes) may be a control variable (D-272)
   keys = regmatches(code_nc, gregexpr(paste0(
-    "environb?\\s*\\[\\K[^]]*(?=\\]\\s*(:[^=\n]*)?[-+*/|&]?=[^=])|",
-    "\\bdel\\s+[\\w.]*environb?\\s*\\[\\K[^]]*|",
+    "environb?\\s*\\[\\K", risk_py_sub, "(?=\\]", risk_py_set, ")|",
+    "\\bdel\\s+[\\w.]*environb?\\s*\\[\\K", risk_py_sub, "|",
     "(\\b(putenv|unsetenv)|environb?\\.(setdefault|pop|__setitem__|__delitem__))\\s*\\(\\K[^,)]*"
   ), code_nc, perl = TRUE))[[1L]]
   plain = grepl("^\\s*[bBrRuU]{0,2}('[^'\\\\\n]*'|\"[^\"\\\\\n]*\")\\s*\\z", keys, perl = TRUE)
