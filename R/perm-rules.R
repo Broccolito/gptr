@@ -304,10 +304,11 @@ perm_control_guard = function(what) {
 #' absolute paths); for `r`, `level<=n`, `fn:name,...` (every flagged function covered),
 #' `category:name,...`, `sh:<command glob>` (`r(sh:git push*)`; a glob ending in ` *` also
 #' matches the command alone, so `r(sh:cat *)` covers `cat` too), `sql:<keywords>`
-#' (`r(sql:select)`) and `secret:NAME` (the only rule that pre-approves a guarded secret read, in
-#' `r` code; it covers a secret handed to a child through the `env` of `peter$sh()` or
-#' `peter$script()` only when the same code reads that secret by name, while a deny or ask
-#' `secret:NAME` rule meets every such hand-over); MCP tools by name
+#' (`r(sql:select)`) and `secret:NAME` (the only rule that pre-approves a guarded secret read: an
+#' allow rule covers `r` code only when every call it flags reads one of the named secrets by name,
+#' with `Sys.getenv()` or a shell's `$NAME`; it covers a secret handed to a child through the `env`
+#' of `peter$sh()` or `peter$script()` only when the same code reads that secret by name, while a
+#' deny or ask `secret:NAME` rule meets every such hand-over); MCP tools by name
 #' (`mcp__github__*`). Deny rules win over ask rules, which win over allow rules. Deny and ask
 #' rules match any call that [gptr_risk()] flags, a read-only shell command included
 #' (`r(sh:cat *)` denies `peter$sh("cat notes.txt")`); an R function it knows to be read-only,

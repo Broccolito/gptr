@@ -30,10 +30,11 @@ Lists the permission rules in effect, or adds and removes rules. A rule is \code
 absolute paths); for \code{r}, \code{level<=n}, \verb{fn:name,...} (every flagged function covered),
 \verb{category:name,...}, \verb{sh:<command glob>} (\verb{r(sh:git push*)}; a glob ending in \verb{ *} also
 matches the command alone, so \verb{r(sh:cat *)} covers \code{cat} too), \verb{sql:<keywords>}
-(\code{r(sql:select)}) and \code{secret:NAME} (the only rule that pre-approves a guarded secret read, in
-\code{r} code; it covers a secret handed to a child through the \code{env} of \code{peter$sh()} or
-\code{peter$script()} only when the same code reads that secret by name, while a deny or ask
-\code{secret:NAME} rule meets every such hand-over); MCP tools by name
+(\code{r(sql:select)}) and \code{secret:NAME} (the only rule that pre-approves a guarded secret read: an
+allow rule covers \code{r} code only when every call it flags reads one of the named secrets by name,
+with \code{Sys.getenv()} or a shell's \verb{$NAME}; it covers a secret handed to a child through the \code{env}
+of \code{peter$sh()} or \code{peter$script()} only when the same code reads that secret by name, while a
+deny or ask \code{secret:NAME} rule meets every such hand-over); MCP tools by name
 (\verb{mcp__github__*}). Deny rules win over ask rules, which win over allow rules. Deny and ask
 rules match any call that \code{\link[=gptr_risk]{gptr_risk()}} flags, a read-only shell command included
 (\verb{r(sh:cat *)} denies \code{peter$sh("cat notes.txt")}); an R function it knows to be read-only,

@@ -81,6 +81,18 @@ test_that("r(secret:NAME) is the only allow rule that covers a registered secret
   expect_identical(rule_match(list(allow = "r(secret:OPENAI_API_KEY)"), call)$allow,
                    "r(secret:OPENAI_API_KEY)")
   expect_identical(rule_match(list(allow = "r(secret:OTHER)"), call)$allow, character())
+  # only when every other flagged call reads a named secret by name (review round 6)
+  local_vault()
+  secret_register("sk-test-0000-r6r6", "R6_FAKE_KEY")
+  allow = list(allow = "r(secret:R6_FAKE_KEY)")
+  for (code in c("x = Sys.getenv('R6_FAKE_KEY')", "x = system('echo $R6_FAKE_KEY', intern = TRUE)",
+                 "x = c(Sys.getenv('R6_FAKE_KEY'), system('echo ${R6_FAKE_KEY}', intern = 1))")) {
+    expect_identical(rule_match(allow, r_call(code))$allow, allow$allow, label = code)
+  }
+  for (code in c("x = Sys.getenv('R6_FAKE_KEY'); writeLines('hi', 'out.txt')",
+                 "x = Sys.getenv('R6_FAKE_KEY'); y = readLines('.env')")) {
+    expect_identical(rule_match(allow, r_call(code))$allow, character(), label = code)
+  }
 })
 
 test_that("rule_suggest() covers exactly the flagged calls, never level 4 or control (7.11)", {

@@ -4834,7 +4834,8 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    returning allow for an `ask_human` is ignored with a diagnostic. In yolo (IC-78) control rows other than
    `options(gptr.*)` and secret reads do not reach `ask_human`.
 7. A `modify` decision is re-classified and re-checked once; a second `modify` denies. Only `r(secret:NAME)`
-   rules pre-approve the secret guard, in `r` code: a registered secret that the `env` of `peter$sh()` or
+   rules pre-approve the secret guard, in `r` code every flagged call of which reads one of the named secrets by
+   name (`Sys.getenv()`, a shell's `$NAME`; review round 6): a registered secret that the `env` of `peter$sh()` or
    `peter$script()` hands a child is covered only when the same code reads it by name, as the question for that
    read covers it (D-267). The guard meets `Sys.getenv()` of a registered name in any letter case or through a
    variable the code only sets to strings, a `$NAME` of one in a command line or Python's `os.environ`, an
