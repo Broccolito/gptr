@@ -276,3 +276,23 @@ test_that("Sys.junction() writes its `to` on every host, with R's formals or as 
   })
   check()
 })
+
+test_that("sys::exec_*()'s std_out and std_err are files it writes, as processx's (round 6)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (f in c(file.path(out, "x"), "~/.Rprofile", ".git/config", "x.txt")) {
+    px = c(lv(paste0("processx::run('ls', stdout = ", deparse(f), ")")),
+           lv(paste0("processx::run('ls', stderr = ", deparse(f), ")")))
+    for (fn in c("sys::exec_wait", "sys::exec_background")) {
+      sx = c(lv(paste0(fn, "('ls', std_out = ", deparse(f), ")")),
+             lv(paste0(fn, "('ls', std_err = ", deparse(f), ")")))
+      expect_identical(sx, px, label = paste(fn, f))
+    }
+  }
+  expect_identical(lv(paste0("sys::exec_wait('ls', std_out = ", deparse(file.path(out, "x")), ")")),
+                   3L)
+  # neighbours: output to R's console or a connection writes no file
+  expect_identical(lv("sys::exec_wait('ls', std_out = TRUE)"), lv("processx::run('ls')"))
+  expect_identical(lv("sys::exec_wait('ls', std_out = FALSE)"), lv("processx::run('ls')"))
+})
