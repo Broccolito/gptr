@@ -3894,8 +3894,9 @@ BLOCK_CLOSE = ^([ \t]*)# <<< gptr:([0-9a-z]{6,16})[ \t]*$
 HEADER_KV   = ([A-Za-z_][A-Za-z0-9_.]*)=("([^"\\]|\\.)*"|[^ \t]+)
 ```
 
-Values containing spaces or control characters are double-quoted with R escapes (a control character as a
-Unicode escape; FIX-29 review round 6). Header keys, in this order when present:
+Values containing spaces or control characters (C0, DEL and C1) are double-quoted with R escapes
+(a control character as a Unicode escape; FIX-29 review round 6). Header keys, in this order when
+present:
 
 | Key | Required | Meaning |
 |---|---|---|
@@ -4708,7 +4709,8 @@ read top to bottom: each block and direct R line makes the names of its `created
 `name = value` expressions assign; a direct R line that uses (by `all.names()`, of such an
 expression its value only) a name whose last maker above it is off, other than one it made before in
 the line, is switched off, `#~ ` before each line under `# direct R (no model; uses undone <names>)`,
-and back on when no such name is left (FIX-33: a reassignment is no use).
+and back on when no such name is left (FIX-33: a reassignment is no use); the names are written as
+output is (`<U+XXXX>`; FIX-29 review round 6).
 A rewind makes a block undone only when the path it moves to holds no record that wrote the block
 (FIX-31). A direct R line's section runs from its header to the next line the console writes for
 another entry (a direct R header, a `# /<name>` command line, a session header, a turn's statement

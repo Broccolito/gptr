@@ -8156,6 +8156,12 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   sequence into the transcript; printed output and bridge digests write control, bidi and zero-width
   characters as `<U+XXXX>`, as steer lines do (T6-4). Test: test-doc-blocks.R "control characters in
   output, names and digests are escaped (review round 6)".
+- Status 2026-10-28 (review round 6 recheck): "control character" in a header value means C0, DEL
+  and C1 (U+0080 to U+009F, which holds the 8-bit CSI and OSC), as `ui_escape()` counts them, and
+  the names of `uses undone <names>`, in the header and in the notice, are written as output is
+  (`<U+XXXX>`). Tests: test-doc-blocks.R "a header value escapes C1 controls and DEL too (review
+  round 6)"; test-doc-replay.R "the undone names a direct R line uses are written escaped (review
+  round 6)".
 - Contract-visible: 04 section 15.3 IC-49, section 11.5 (header key `created`, the body's `#<`
   lines, the transcript row) and section 7.8 (call record binding `sent`); `?gptr_doc`,
   `?gptr_source`, `?gptr_export`, `?gptr_security`; vignette("script-as-history").
@@ -8523,6 +8529,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   recorded before FIX-33 reads fresh by its untrimmed sha (review round 6)", "a carriage return in
   printed output ends a #> line, as R reads it (review round 6)"; test-doc-io.R "a lone carriage
   return ends a line, as source() reads it (review round 6)".
+- Status 2026-10-28 (review round 6 recheck): output that is not valid UTF-8 is written with each
+  invalid byte as `<xx>` (`console_utf8()`) before it is split, in every locale; the split stopped
+  on it in a UTF-8 locale. Test: test-doc-blocks.R "a carriage return in printed output ends a #>
+  line, as R reads it (review round 6)".
 - Contract-visible: 04 section 6.4 (`gptr_source()`'s `model`), section 11.5 (`sha`, the body, the
   plan line, one-line bridge digests), section 15.3 IC-48 and IC-49; 03 section 4.3's signature;
   `?gptr_doc`, `?gptr_source`, `?gptr_export`; vignettes script-as-history and interactive-console;

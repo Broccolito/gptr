@@ -6951,6 +6951,31 @@ the driver, screens, events, transcripts and replays without a model are local, 
   which `doc_str_literal()` leaves as Python's JSON writer does and which starts no terminal
   sequence, and its bidi and zero-width characters, as it keeps all non-ASCII text. The checks are
   in FIX-33's review round 6 bullet. D-264 and 04 section 11.5 say so.
+- Review round 6 recheck, C1 controls and DEL in a header value (the verifier of `b4498055`, low):
+  `doc_format_kv()` quoted a value only for a C0 control, so a `created=` name holding U+009D and
+  U+009C, the 8-bit OSC and ST that xterm honours, or a DEL was written raw, while output lines
+  escape the same characters through `ui_escape()`; `5977ea34`'s message ("a block records no raw
+  control character") and the bullet above claimed more than the fix did. Red: test-doc-blocks.R
+  "a header value escapes C1 controls and DEL too (review round 6)", `^doc-blocks$` FAIL 2 PASS 485
+  on `b4498055`'s code. Fix (commit `e3cc6858`): a value holding any control character
+  (`doc_re_ctl`: C0, DEL or C1, as `ui_escape()` counts them) is quoted, and
+  `doc_str_literal(v, doc_re_ctl)` writes each one as a Unicode escape that R and JSON read back
+  exactly; `doc_str_literal()`'s default class stays C0, so `.ipynb` output still equals Python's
+  `json.dumps()`. Green: `^doc-blocks$` PASS 487 in UTF-8 and under `LC_ALL=C LANG=C`; the
+  document holds no C0, DEL or C1 character other than its line ends and a tab. Not changed: a
+  header value keeps U+2028 and U+2029, which end no line for R and start no terminal sequence, as
+  output lines keep them, and its bidi and zero-width characters, as it keeps all non-ASCII text;
+  an output line keeps a tab. D-264 and 04 section 11.5 say so.
+- Review round 6 recheck, the names of `uses undone` (the verifier of `b4498055`, note; new in
+  FIX-29): the header `# direct R (no model; uses undone <names>)` and the notice that says which
+  lines a rescan switched wrote the names as they are, so a name the model made holding ESC, BEL or
+  a line break, which the person then used in a `!` line (backquotes read escapes), put a terminal
+  sequence into the transcript, or left `)` on a line of its own as code. Red: test-doc-replay.R
+  "the undone names a direct R line uses are written escaped (review round 6)", `^doc-replay$`
+  FAIL 3 PASS 1065 on `bf619da7`'s code. Fix (commit `010dabfa`): the names pass through
+  `ui_escape()`, and the switch still reads only the reason's `uses undone ` prefix. Green:
+  `^doc-replay$` PASS 1068 in UTF-8 and under `LC_ALL=C LANG=C`. The checks are in FIX-33's review
+  round 6 recheck bullet. D-264 and 04 section 15.3 IC-49 say so.
 
 ## FIX-30 - A live re-ask of a console transcript keeps each turn's model and mode (2026-10-26, #93)
 - Why: the maintainer's request of 2026-10-26, split out of issue #85 to keep #85 small.
@@ -7882,6 +7907,29 @@ and green runs use `dev/ci/isolated-check.R test` with `NOT_CRAN=true` and SIGIN
   test-doc-io.R against `R CMD INSTALL` of the tree
   (`testthat::test_dir(load_package = "installed")`, as R CMD check runs them) PASS 1193 in both
   locales. Lint clean (4 files); `document()` changes nothing.
+- Review round 6 recheck, output that is not valid UTF-8 (the verifier of `b4498055`, note; a
+  regression of T6-2): `doc_split_lines()`'s `gsub()` stops on text that is not valid UTF-8 in a
+  UTF-8 locale, so since `7fd767b9` such output from an evaluator other than `eval_r()`, which
+  cleans its own, left the turn's block unrecorded (a registry diagnostic), where `3cd3b146` wrote
+  `#> NA` with a warning. Red: test-doc-blocks.R "a carriage return in printed output ends a #>
+  line, as R reads it (review round 6)", its new expectation, `^doc-blocks$` FAIL 1 WARN 1 PASS 484
+  in UTF-8 on `e3cc6858`'s code (PASS 488 under `LC_ALL=C LANG=C`, which wrote `<ff>` already).
+  Fix (commit `bf619da7`): `doc_output_lines()` passes the output through `console_utf8()` before
+  it splits it, so each invalid byte is written `<xx>` in every locale. Green: `^doc-blocks$`
+  PASS 488 in UTF-8 and under `LC_ALL=C LANG=C`. D-268 says so.
+- Review round 6 recheck, checks on `010dabfa` (the code of the three recheck commits, here and in
+  FIX-29's bullets): `^(doc-|source|replay|transcript|gptr-source|export)`
+  `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 3132 ]` in UTF-8 and under `LC_ALL=C LANG=C`, the skips {repr}
+  not installed; the files whose tests write or read transcripts (`console-repl`, `tool-r`,
+  `northstar`, `utils-options`, `utils-text`, `mcp-recording`, `injection-e2e`, `secrets-e2e`,
+  `bridge-sh`, `ckpt-rewind`, `arch-layers` and `lint-rules`, one filter of exact names)
+  `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 1699 ]` in UTF-8 and `[ FAIL 0 | WARN 0 | SKIP 6 | PASS 1686 ]`
+  under `LC_ALL=C LANG=C`, the skips Windows-only or needing a UTF-8 locale; test-doc-blocks.R and
+  test-doc-replay.R against `R CMD INSTALL` of the tree
+  (`testthat::test_dir(load_package = "installed")`, `fs` not loaded) PASS 1556 in both locales.
+  Header values formatted on `b4498055` and here are byte-identical for ordinary, non-ASCII, blank,
+  quoted and tab-holding values; `.ipynb` strings are unchanged. Lint clean (4 files);
+  `document()` changes nothing.
 
 ## FIX-34 - Console findings from the live sessions (2026-10-27, #93)
 Scope: the console findings of the live sessions with real models on `claude/v1-fixes`
