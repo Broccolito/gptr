@@ -1143,11 +1143,26 @@ provider_ready = function(model, provider, safety = NULL, prepare = FALSE) {
   provider_preflight(model, provider, safety)
 }
 
+#' The process's model gate (08 section 3.3): NULL, or a function of the resolved model record
+#' @noRd
+the$model_gate = NULL
+
+#' Call the model gate, when one is set, with the resolved model record; the gate may abort with
+#' class gptr_error_model_refused (08 section 3.3)
+#' @noRd
+model_gate_check = function(model) {
+  gate = the$model_gate
+  if (is.function(gate)) gate(model)
+  invisible(NULL)
+}
+
 #' Start one model request on the reactor (contract sections 7.5 and 8.4)
-#' Refusals (model type, adapter, disabled provider, preflight IC-74, key) signal before anything
-#' starts; later failures end the stream with an `error` event, and `done(msg)` runs once.
+#' Refusals (model gate, model type, adapter, disabled provider, preflight IC-74, key) signal
+#' before anything starts; later failures end the stream with an `error` event, and `done(msg)`
+#' runs once.
 #' @noRd
 provider_stream = function(model, context, opts, emit, done, run = NULL) {
+  model_gate_check(model)
   opts = opts %||% list()
   session = opts[["session"]] %||% (if (is.environment(run)) run[["session"]] else NULL)
   scoped = function(kind, name) {

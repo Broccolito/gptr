@@ -1086,6 +1086,90 @@ test_that("an aborted inprocess stream ends with stop_reason aborted", {
   expect_equal(log$done[[1]]$stop_reason, "aborted")
 })
 
+# ---- provider_stream(): the model gate (08 section 3.3, P29 interface 5) ---------------------
+
+# the$model_gate set for the calling test and restored when it ends
+local_model_gate = function(gate, .env = parent.frame()) {
+  old = the$model_gate
+  the$model_gate = gate
+  withr::defer({
+    the$model_gate = old
+  }, envir = .env)
+}
+
+# A gate that counts its calls, keeps the model it saw and refuses every model
+refusing_gate = function(seen) {
+  seen$n = 0L
+  function(model) {
+    seen$n = seen$n + 1L
+    seen$model = model
+    gptr_abort(paste0("Model ", model$ref, " is refused in this test."), "model_refused")
+  }
+}
+
+test_that("a model gate sees the resolved model record; without one nothing changes", {
+  fake = local_fake_provider(list("one", "two"))
+  model = model_resolve("fake/fake-1")
+  local_model_gate(NULL)
+  log = local_stream_log()
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  expect_true(reactor_pump(until = function() length(log$done) > 0L, timeout = 5))
+  expect_equal(msg_text(log$done[[1]]), "one")
+  seen = new.env()
+  local_model_gate(function(model) {
+    seen$model = model
+    "ignored"
+  })
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  expect_true(reactor_pump(until = function() length(log$done) > 1L, timeout = 5))
+  expect_identical(seen$model, model)
+  expect_equal(msg_text(log$done[[2]]), "two")
+  expect_length(fake_requests(fake), 2L)
+})
+
+test_that("a gate that aborts stops provider_stream() before any request", {
+  fake = local_fake_provider(list("never sent"))
+  seen = new.env()
+  local_model_gate(refusing_gate(seen))
+  log = local_stream_log()
+  err = expect_error(provider_stream(model_resolve("fake/fake-1"), stream_context(), list(),
+                                     emit = log$emit, done = log$finish),
+                     class = "gptr_error_model_refused")
+  expect_match(conditionMessage(err), "fake/fake-1", fixed = TRUE)
+  expect_identical(seen$n, 1L)
+  expect_length(fake_requests(fake), 0L)
+  expect_length(log$events, 0L)
+  expect_length(log$done, 0L)
+})
+
+test_that("a gate that aborts stops a chat run before any request", {
+  local_gw()
+  local_gptr_options(interactive = FALSE, record = "off")
+  fake = local_fake_provider(list("never sent"))
+  seen = new.env()
+  local_model_gate(refusing_gate(seen))
+  expect_error(peter("go", model = fake, envir = new.env()), class = "gptr_error_model_refused")
+  expect_gte(seen$n, 1L)
+  expect_identical(seen$model$ref, "fake/fake-1")
+  expect_length(fake_requests(fake), 0L)
+})
+
+test_that("a gate that aborts stops an emulated System 1 call before any request", {
+  local_project(gptr = FALSE)
+  local_gptr_options(quiet = TRUE)
+  chat = local_fake_provider(list(list(json = list(answers = list(answer = 0.8)))), name = "emu")
+  seen = new.env()
+  local_model_gate(refusing_gate(seen))
+  q = list(answer = s1_question("Ok?", "x")$wire)
+  expect_error(s1_emulate(model_resolve("emu/emu-1"), list(list(x = "a")), q),
+               class = "gptr_error_model_refused")
+  expect_error(s1_emulate_classify(model_resolve("emu/emu-1"), list(x = "a"), q, list()),
+               class = "gptr_error_model_refused")
+  expect_identical(seen$n, 2L)
+  expect_identical(seen$model$ref, "emu/emu-1")
+  expect_length(fake_requests(chat), 0L)
+})
+
 # ---- provider_stream(): process_jsonl on scripted process functions -------------------------
 
 # Additions to the plan's helper: reactor_cancel() of a watcher id it handed out acts as P04's
