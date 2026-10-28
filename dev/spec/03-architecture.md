@@ -1496,7 +1496,8 @@ helpers above are, so at the code's top level `owd = setwd("data"); ...; setwd(o
 The classifier is advisory and documented as not a security boundary; in-process R cannot be sandboxed [18 §2.5]. It
 reads code as written and does not run it, so code that builds a call, a name, a path or a command at run time, or
 reaches a function by another name, is read only as far as it can see; every form this section names as not read or
-not followed is of that kind.
+not followed is of that kind, or is code in a file or a package, code another interpreter runs, or a call or
+argument the classifier has no rule for.
 
 In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command
 (`system2()`'s `args` and `env` too [D-267], `shell.exec()`'s file) the classifier cannot fold to literals: a

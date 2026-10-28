@@ -79,11 +79,12 @@ security boundary: R code can compute function names, call compiled code or load
 whose effects the classifier cannot see, and R has no sandbox for code that runs inside your
 session. The classifier reads code as written and does not run it, so code that builds a call,
 a name, a path or a command at run time, or reaches a function by another name, is read only
-as far as the classifier can see; each form this page names as not read is of that kind. Deny
-and ask \verb{sh:} rules see a command computed at run time only in a \code{peter$sh()} or
-\code{peter$bg()} call, which checks the command when it runs. So in \code{auto} and \code{yolo} mode a
-\code{system()}, \code{system2()}, \code{shell()} or \code{shell.exec()} call whose command (for \code{system2()} also its
-arguments and \code{env}) is not a string the classifier can read, such as
+as far as the classifier can see. Each form this page names as not read is of that kind, or is
+code in a file or a package, code another interpreter runs, or a call or argument the
+classifier has no rule for. Deny and ask \verb{sh:} rules see a command computed at run time only in
+a \code{peter$sh()} or \code{peter$bg()} call, which checks the command when it runs. So in \code{auto} and
+\code{yolo} mode a \code{system()}, \code{system2()}, \code{shell()} or \code{shell.exec()} call whose command (for
+\code{system2()} also its arguments and \code{env}) is not a string the classifier can read, such as
 \verb{cmd = paste("rm", "-rf", "build"); system(cmd)}, is refused, and the model is told to run the
 command with \code{peter$sh()}; \code{manual} and \code{edits} ask. An allow rule such as \code{r(fn:system)} lets
 such calls run, unchecked by \verb{sh:} rules. Neither the rules nor the refusal read what a shell
