@@ -1775,15 +1775,21 @@ risk_python = function(code, root = project_root(), dirs = root) {
   risk_secret_sink(f)
 }
 
-risk_control_env = c("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY",
-                     "OPENROUTER_API_KEY", "GROQ_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY",
-                     "TOGETHER_API_KEY", "XAI_API_KEY", "CEREBRAS_API_KEY", "FIREWORKS_API_KEY",
-                     "VLLM_API_KEY", "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT",
-                     "AWS_BEARER_TOKEN_BEDROCK", "TYPESAFE_API_KEY", "R_ENVIRON_USER",
-                     "R_PROFILE_USER", "R_ENVIRON", "R_PROFILE",
-                     # they move gptr's config folder (tools::R_user_dir()) or the home that
-                     # user_home() reads, and with them the control paths (D-272)
-                     "R_USER_CONFIG_DIR", "XDG_CONFIG_HOME", "APPDATA", "HOME", "USERPROFILE")
+#' The variables that configure gptr (D-272): a variable a registered provider reads (its keys and
+#' base-URL variables, and the key pair a `bedrock-converse` provider signs with), R's startup
+#' variables, and those that move gptr's config folder (tools::R_user_dir()) or the home that
+#' user_home() reads, and with them the control paths
+#' @noRd
+risk_control_env = function() {
+  vars = lapply(registry_all("provider"), function(p) {
+    a = p[["auth"]]
+    c(if (is.function(a)) attr(a, "gptr_optional_auth", exact = TRUE) else a,
+      p[["compat"]][["base_url_env"]])
+  })
+  toupper(c(unlist(vars), "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+            "R_ENVIRON_USER", "R_PROFILE_USER", "R_ENVIRON", "R_PROFILE", "R_USER_CONFIG_DIR",
+            "XDG_CONFIG_HOME", "APPDATA", "HOME", "USERPROFILE"))
+}
 risk_control_env_re = "^GPTR_|_BASE_URL\\z"
 
 #' Which of `x` names a control variable, in any case: Windows names are case-insensitive, and
@@ -1791,7 +1797,7 @@ risk_control_env_re = "^GPTR_|_BASE_URL\\z"
 #' @noRd
 risk_control_name = function(x) {
   x = toupper(x)
-  x %in% risk_control_env | grepl(risk_control_env_re, x, perl = TRUE)
+  x %in% risk_control_env() | grepl(risk_control_env_re, x, perl = TRUE)
 }
 
 # ---- the R classifier (03 section 6.8.1, D-132) ---------------------------------------------
