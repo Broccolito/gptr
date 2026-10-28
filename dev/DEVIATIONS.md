@@ -6153,7 +6153,12 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   source, so a file named `bang\n!file.create('M')` is not offered; formerly Tab and Enter on
   `@ban` sent `!file.create('M')` as a `!` line, which ran. 04 section 15.10 IC-81 says so; test:
   test-console-completion.R "no completion holds a line end or another control character (review
-  round 4)".
+  round 4)". Status 2026-10-27 (round 4 verification): `console_completer()` sets `fileName`
+  FALSE again after `console_complete()`, so a string on a `!` line never goes to readline's own
+  file-name completion, which no filter reaches; under `rc.settings(quotes = FALSE)` it completes
+  nothing at the prompt, as the composer's Tab gave, where readline formerly offered every name.
+  Test: test-console-completion.R "a ! line's string never goes to readline's file completion
+  (round 4 verification)".
 - Task 23: RStudio's console and Windows' Rgui and Rterm complete only after the trigger characters
   too. `console_completes()` decides where: R's own Unix readline on a tty, RStudio's console,
   Windows' Rgui and Rterm (utils' `.win32consoleCompletion()` calls the custom completer); not
@@ -7937,7 +7942,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   that byte is still the key, and the bytes after it answer the menu. An empty read ends the
   chain, so a Ctrl-C typed after a pause is the key; one typed within about 0.1 s of a paste's end
   is dropped, as one typed in the same batch already was. 04 sections 7.1 (`tty_call()`), 15.9
-  (IC-76's Limits) and 15.10 (IC-76, typing while the agent works) say so.
+  (IC-76's Limits) and 15.10 (IC-76, typing while the agent works) say so. Status 2026-10-27
+  (round 4 verification): only a batch on the polling beat (at most 0.2 s after the read before
+  it) carries the drop, so a Ctrl-C read later, as after a reactor an in-process tool held, is the
+  key; formerly the chain held until an empty read, however late.
 - Amends IC-76 (04 section 15.10, the composer and typing) and D-243, whose steering review rejected
   bracketed paste for the terminal state it adds to every mode switch and question; that state stays
   in `tty_modes()`'s pseudo-modes.
@@ -7975,7 +7983,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   test-console-input.R "a lone end marker ends a paste: the text before it is pasted (review round
   3)"; test-console-typing.R "a batch holding a paste marker holds no Ctrl-C key (review round 3)".
   Review round 4: test-console-typing.R "a read right after a paste's marker holds no Ctrl-C key
-  (review round 4)". Evidence: progress/fixes.md FIX-28.
+  (review round 4)", "a read off the beat after a paste's marker holds a Ctrl-C key (round 4
+  verification)". Evidence: progress/fixes.md FIX-28.
 
 ## D-264 - FIX-29 Transcripts record what a prompt was sent with and what steps created (2026-10-26)
 - Rule (`#<` lines, issue #85 R27): a console turn's block in an `.R` document opens with the
@@ -8191,7 +8200,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   another policy's rule, and the request record carries it (04 section 7.11). Formerly it read "no
   rule covers these calls", also at a nested call's ask, while the `?` view named the ask rule (in
   auto) or the mode (in manual); "no rule covers these calls" stays where no rule can cover the
-  calls.
+  calls. Status 2026-10-27 (round 4 verification): `ui_no_rule()` escapes the rule's text, as the
+  `?` view escapes the same reason (04 section 15.4 IC-53 item 8); formerly a rule holding an ESC,
+  which `rule_parse()` accepts, wrote its sequence raw into the hint and its wrapped row.
 - Rule (served R, review round 1): R served to the claude-cli and codex routes or to an MCP client
   (`mcp_serve_r()`) binds the r tool's marker (`gptr_r_call`) with the served call as the run's
   tool call, so a nested `peter$sh()`, `peter$bg()` or other member call passes
@@ -8264,7 +8275,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   test-perm-rules.R "an sh: glob ending ` *` also matches the command alone (review round 3)",
   test-perm-gate.R "a question an ask rule raises offers no [a]lways rule (review round 3)";
   review round 4: test-perm-gate.R "an ask rule's question says why it offers no [a]lways rule
-  (review round 4)". Evidence: progress/fixes.md FIX-32.
+  (review round 4)", test-console-ui.R "a and p's reason shows an ask rule's text escaped (review
+  round 4 verification)". Evidence: progress/fixes.md FIX-32.
 
 ## D-268 - FIX-33 What a document records and reads back after the live sessions (2026-10-27)
 - Rule (steering lines, security): a block body line is a `## Steer:` or `## Follow-up:` line only
