@@ -540,12 +540,13 @@ mention_kind = function(nm, env) {
 }
 
 #' The note an `!expr` leaves for the next prompt: the code and its output as #> lines
-#' (redacted with the `context` profile)
+#' (redacted with the `context` profile). Lines end as R reads them, a lone carriage return ending
+#' one too, as a transcript records the note (`#<` lines, D-264), so every piece has its prefix
 #' @noRd
 repl_note = function(code, res) {
-  out = strsplit(format_eval_result(res, 300L)$text, "\n", fixed = TRUE)[[1L]]
-  note = paste(c(paste0("> ", strsplit(code, "\n", fixed = TRUE)[[1L]]),
-                 if (length(out)) paste0("#> ", out)), collapse = "\n")
+  lines = function(x) strsplit(gsub("\r\n?", "\n", x), "\n", fixed = TRUE)[[1L]]
+  out = lines(format_eval_result(res, 300L)$text)
+  note = paste(c(paste0("> ", lines(code)), if (length(out)) paste0("#> ", out)), collapse = "\n")
   redact(note, profile = "context")
 }
 
