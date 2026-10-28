@@ -272,7 +272,7 @@ test_that("commands follow the classifier standard (D-061)", {
     list(3L, "declare -i n=2"), list(3L, "nice -n \"$N\" ls"), list(3L, "tar czf x.tgz ."),
     list(3L, "docker build ."), list(3L, "pip install -e ."),
     list(3L, "Get-Content notes.txt,.Renviron"), list(3L, "xargs rm -rf <<< '~'"),
-    list(3L, "rm -rf ${X:-~}"), list(3L, "$RM -rf ~"), list(3L, "find . -name '*.log' -delete"),
+    list(4L, "rm -rf ${X:-~}"), list(3L, "$RM -rf ~"), list(3L, "find . -name '*.log' -delete"),
     list(3L, "find . -name '*.o' -exec rm {} +"), list(4L, "rm -rf ~"), list(4L, "rm -rf ."),
     list(4L, "rm -rf *"), list(4L, "rm -rf .gptr"), list(4L, "git clean -fdx"),
     list(4L, "x=~; rm -rf $x"), list(4L, "rm -rf $PWD"), list(4L, "\\rm -rf ~"),
@@ -1182,4 +1182,23 @@ test_that("system2()'s env is read as the start of its command line (FIX-32)", {
   # neighbours: a known variable and no env keep the reading of the command alone
   expect_identical(lv("system2('ls', '-l', env = 'LC_ALL=C')"), 0L)
   expect_identical(lv("system2('ls', '-l')"), 0L)
+})
+
+test_that("a drive-relative path is outside the project on every OS (review round 4)", {
+  root = local_project()
+  # `D:other` names a folder under drive D's own current folder on Windows: nothing can place it
+  for (p in c("D:other", "d:x/y.csv", "C:build", "C:")) {
+    expect_identical(path_class(p, root), "outside", label = p)
+  }
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv("unlink('D:build', recursive = TRUE)"), 4L)
+  expect_identical(lv("system('cd D:other && rm -rf build')"), 4L)
+  sh = registry_get("tool", "sh")
+  for (wd in c("D:other", "C:sub\\dir")) {
+    r = sh$risk(list(cmd = c("rm", "-rf", "build"), wd = wd), NULL)
+    expect_identical(as.integer(r$level), 4L, label = wd)
+  }
+  # neighbours: a path in the project keeps its class and level
+  expect_identical(path_class("build/a.o", root), "workspace")
+  expect_identical(lv("unlink('build', recursive = TRUE)"), 3L)
 })
