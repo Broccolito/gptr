@@ -5475,7 +5475,7 @@ totals line names the model and the context left.
    tool executes (`console_before_message(tools = TRUE)`).
 2. Who asks: the request record's `agent` (§7.11). The one-line prompt starts
    `  sub-agent <agent> > <tool>  <code>`, the detail view `  sub-agent <agent> wants to use`;
-   an `ask_human` request adds `     asks in every mode: <reason>`; a sub-agent's `ask` question
+   an `ask_human` request adds `     asks even in auto mode: <reason>`; a sub-agent's `ask` question
    starts `sub-agent <agent> asks: ` and its budget question `sub-agent <agent>: `.
 3. Invalid answers: `a`/`p` where nothing can be remembered (level 4, control, the `ask` tool, no
    `suggested_rule`, as for a question an ask rule asks: `perm_policies()` keeps a question's
@@ -5960,7 +5960,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     envelope (`patch`, or carried in `edits`) as its own lines, `+` rows of a write's `content`, another tool's other
     fields as JSON, then `    (+N more lines; ? shows more)`; any other input shape shows the call line alone. Before,
     an edit's change showed only after `y` and a write's content never (cheat-sheet review). The flagged
-    rows and `asks in every mode: <reason>` follow, dim at column 4 (later flagged rows under the first's text),
+    rows and `asks even in auto mode: <reason>` follow, dim at column 4 (later flagged rows under the first's text),
     then the question `  ? Allow r?` (`?` blue, the question bold)
     and, under its text, the keys row `    y yes · a always (session) · p always (project) · n no · ? more` (the
     keys bold, what they do dim; `a` and `p` only with a `suggested_rule`). The keys row is 68 columns whatever the

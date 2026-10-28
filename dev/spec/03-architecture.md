@@ -1595,7 +1595,7 @@ styled and cut as a result's diff, `-` rows of each edit's old text, `+` rows of
 content, `@@` between edits, a patch envelope as its own lines, another tool's other fields as JSON (dim), then
 `(+N more lines; ? shows more)` [cheat-sheet review]. Then come, dim at column 4, the flagged calls one per
 line (highest level first, each cut to the width, at most 5, then `(+N more; ? shows all)`) and an `ask_human`
-request's `asks in every mode: <reason>`, then the question `  ? Allow r?` (`?` blue, the question bold), and under its text the
+request's `asks even in auto mode: <reason>`, then the question `  ? Allow r?` (`?` blue, the question bold), and under its text the
 keys, `    y yes · a always (session) · p always (project) · n no · ? more` (the keys bold, what they do dim; 68
 columns whatever the tool or who asks, wrapped between the options in a narrower console), with C0/C1 controls,
 bidi and zero-width characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. The answer is read after

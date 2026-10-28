@@ -973,9 +973,10 @@ test_that("a sub-agent's prompt and detail view name it; ask_human says why (D-1
                    "  sub-agent alpha wants to use r")
   expect_match(ui_permission_detail(req)[1L], "^  peter wants to use r")
   crit = ui_request("q('no')", tier = "ask_human")
+  # true of every ask_human question: yolo runs secret reads without one (review round 6)
   expect_identical(utils::tail(ui_permission_lines(crit), 3L)[1L],
-                   paste0("    asks in every mode: ", crit$reason))
-  expect_false(any(grepl("every mode", ui_permission_lines(req), fixed = TRUE)))
+                   paste0("    asks even in auto mode: ", crit$reason))
+  expect_false(any(grepl("every mode|even in auto", ui_permission_lines(req))))
 })
 
 test_that("nested calls with the same prompt are told apart by their number (#36)", {
