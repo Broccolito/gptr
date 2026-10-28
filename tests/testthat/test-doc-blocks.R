@@ -1161,6 +1161,23 @@ test_that("an editor's trim and CRLF model code leave a block fresh (FIX-33 DOC-
   }
 })
 
+test_that("a block recorded before FIX-33 reads fresh by its untrimmed sha (review round 6)", {
+  local_project()
+  # the README's second block as main (13a917ff) recorded it: its printed lines end in blanks, and
+  # its sha is that of the body as written
+  body = c("summary(resid(fit))", "#>    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. ",
+           "#> -4.5432 -2.3647 -0.1252  0.0000  1.4096  6.8727 ")
+  h = list(model = "fake/fake-1", date = "2026-10-28", prompt = "9213c370e015", sha = "238961b3",
+           tokens = "3830/12", cost = "0", session = "s7fcce500ad", turn = "2")
+  stmt = "s_7fcce5 |> peter(\"Summarize the residuals in fit.\")"
+  f = file.path(getwd(), "analysis.R")
+  writeLines(c(stmt, doc_render_block("0089da", h, body)), f)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+  # an edit still makes it user-edited
+  writeLines(c(stmt, doc_render_block("0089da", h, c(body[1L], "fit = NULL", body[-1L]))), f)
+  expect_identical(gptr_blocks(f)$status, "user-edited")
+})
+
 test_that("only gptr's own lines take the block id; steer text and model code keep the token", {
   local_project()
   local_gptr_options(record = "auto")

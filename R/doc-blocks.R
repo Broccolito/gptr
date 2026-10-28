@@ -265,11 +265,13 @@ doc_dedent = function(lines, indent) {
 
 #' First 8 hex of sha256 of the body as written, without steering lines (IC-49, doc_steer_lines())
 #' and without the trailing blanks of a line, which an editor may trim, or its carriage return,
-#' which a read drops
+#' which a read drops. `legacy = TRUE` gives the hash written before FIX-33 (D-268): without each
+#' line matching doc_re_steer, nothing trimmed
 #' @noRd
-doc_body_sha = function(body) {
+doc_body_sha = function(body, legacy = FALSE) {
   body = as_utf8(as.character(body))
-  body = sub("[ \t\r]+$", "", body[!doc_steer_lines(body)])
+  body = if (legacy) body[!grepl(doc_re_steer, body)] else
+    sub("[ \t\r]+$", "", body[!doc_steer_lines(body)])
   substr(hash_sha256(paste(body, collapse = "\n")), 1L, 8L)
 }
 
@@ -295,13 +297,17 @@ args_hash = function(interp) {
   substr(hash_sha256(paste(x, collapse = "\n")), 1L, 8L)
 }
 
-#' Status of a block: undone > user-edited (sha) > stale (prompt or args) > fresh. With
-#' `ph = NULL` only undone and user-edited are detected. Header keys are matched exactly.
+#' Status of a block: undone > user-edited (sha, also as written before FIX-33) > stale (prompt or
+#' args) > fresh. With `ph = NULL` only undone and user-edited are detected. Header keys are
+#' matched exactly.
 #' @noRd
 doc_block_status = function(header, body, ph = NULL, ah = NULL) {
   if (identical(header[["status"]], "undone")) return("undone")
   sha = header[["sha"]]
-  if (!is.null(sha) && !identical(sha, doc_body_sha(body))) return("user-edited")
+  if (!is.null(sha) && !identical(sha, doc_body_sha(body)) &&
+      !identical(sha, doc_body_sha(body, legacy = TRUE))) {
+    return("user-edited")
+  }
   if (!is.null(ph)) {
     if (!identical(header[["prompt"]], ph)) return("stale")
     if (!identical(header[["args"]] %||% "", ah %||% "")) return("stale")
