@@ -7635,9 +7635,10 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   - The test STATIC-4 added said the line reads "as the read tool reads it", which no platform
     gives: the read tool decides one encoding per file, and with a byte CP1252 lacks it reads the
     whole file as latin1 off Windows (on macOS STATIC-4's file read `café`, U+0093, `q`, U+0094,
-    U+0081 and `cafÃ© in UTF-8`) and as CP1252 with U+0081 on Windows. It is now named "an @file
-    line that is not UTF-8 is read as CP1252, a byte it lacks as <xx> (FIX-34)". The read tool is
-    not changed: its edit and write tools encode back to the encoding it decided.
+    U+0081 and `cafÃ© in UTF-8`) and as CP1252 with U+0081 on Windows (inferred from Windows'
+    iconv). It is now named "an @file line that is not UTF-8 is read as CP1252, a byte it lacks as
+    <xx> (FIX-34)". The read tool is not changed: its edit and write tools encode back to the
+    encoding it decided.
   - Checks on `89b60208` (this record changes only `dev/`), `NOT_CRAN=true`, the SIGINT reset, a
     short `TMPDIR`: the changed test files and their neighbours (every `console-`, `doc-`,
     `tool-read`, `utils-` and `read` file) FAIL 0 WARN 0 SKIP 4 PASS 7551 in UTF-8 and FAIL 0 WARN
@@ -7657,9 +7658,9 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   - Open: `raw_to_utf8()` (R/utils-encoding.R, not changed here), which reads .env files and,
     through `read_utf8()`, artifact logs and metadata, still turns a byte CP1252 lacks into `?` off
     Windows and into its C1 control on Windows. Not run: Windows (the stand-in gives the result
-    Windows gave in CI; the next Windows run proves the fix there) and R before 4.6. The fix needs
-    `gsub(useBytes = TRUE)` to leave the result of a UTF-8-marked input unmarked, as R 4.6 does and
-    R 4.3.0's NEWS implies for earlier R, since `iconv()` gives `NA` for a `bytes`-marked string.
+    Windows gave in CI; the next Windows run proves the fix there) and R before 4.6. The fix does
+    not depend on how `gsub(useBytes = TRUE)` marks its result, because `iconv(from = "CP1252")`
+    ignores a string's declared encoding (checked on R 4.6.1 with a `bytes`-marked string).
 - Review round 4, the console writer's items (verifiers on `0aa55320`; branch
   `claude/v1-fix-console4`): FIX-28's R4-SEC-4 and FIX-32's R4-1 are in their records; FIX-34's
   and the checks:
