@@ -8254,7 +8254,18 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `peter$sh()` as run in its `wd` (the literal call of `cmd_in_wd()`'s line, the helper
   `bridge_risk_sh()` uses), so idle served `peter$sh(c("rm", "-rf", "build"), wd = <outside>)` is
   refused at level 4 in auto and yolo; formerly it read the command alone, level 3, and ran (also on
-  `13a917ff`).
+  `13a917ff`). Status 2026-10-28 (review round 5, R5-SEC-3): the secret guard also meets a nested
+  `peter$sh()` or `peter$script()` whose `env` hands its child a registered secret, by its name (in
+  any case, as `child_env()` matches names) or in a value the redactor finds it in.
+  `bridge_risk_env()` makes that a guarded read of the secret, as `Sys.getenv()` of its name is;
+  `dispatch_nested()` passes the gate for a secret the outer call's analysis did not show; the idle
+  gate adds the member's secrets to the literal call it reads. It asks in every mode but yolo, which
+  runs it as it runs secret reads, and no rule pre-approves it: an allow `secret:` rule covers `r`
+  code only, and the question offers no `[a]lways` rule. Formerly an unnamed `env` element was
+  level 3 `secret` without the guard and a value was not read, so auto and yolo ran the child with
+  the key and no question, idle or not (also on `13a917ff`). An ordinary `env` is unchanged. In
+  manual mode such a call asks twice, for the code and then for the secret, as a nested call above
+  the approved level does.
 - Rule (classifier, PERM-2): `system2()`'s `env` is read as the start of its command line, as
   Unix `system2()` pastes it, unquoted, before the command:
   `system2("ls", env = "A=1; rm -rf build;")` is read as `A=1; rm -rf build; ls` (level 3), and an
@@ -8298,6 +8309,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   03 sections 6.8.1, 6.8.2 and 7.3; `?gptr_permissions`, `?gptr_security`,
   `?gptr_risk`; vignette("language-models"); the cheat sheet's auto and yolo rows and the yolo
   notice (IC-78). Review round 4: 03 section 6.8.4 and 04 section 15.5 IC-57 (the idle gate's `wd`).
+  Review round 5: 03 sections 6.5, 6.8.2 and 6.8.4, 04 sections 7.6, 15.4 IC-53 item 7, 15.5 IC-57
+  and 15.9 IC-79, `?gptr_security`, `?gptr_permissions` and NEWS (the secret guard on `env`).
 - Tests: test-perm-rules.R "deny and ask sh: rules match a read-only command; allow needs level 1
   (FIX-32)", "a deny sh: rule stops a read-only command, also one peter$sh() computes (FIX-32)";
   test-perm-classify.R "system2()'s env is read as the start of its command line (FIX-32)";
@@ -8315,7 +8328,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   review round 4: test-perm-gate.R "an ask rule's question says why it offers no [a]lways rule
   (review round 4)", test-console-ui.R "a and p's reason shows an ask rule's text escaped (review
   round 4 verification)", test-mcp-server.R "idle served R reads a nested sh call as run in its
-  wd (review round 4)". Evidence: progress/fixes.md FIX-32.
+  wd (review round 4)"; review round 5: test-bridge-sh.R "an env that hands a child a registered
+  secret meets the secret guard (review round 5)", "a secret handed to a child through env asks as
+  a secret read does (review round 5)", test-perm-gate.R "a member handing a child a registered
+  secret meets the guard; no rule allows it", test-mcp-server.R "served R meets the secret guard
+  when env hands a child a secret (review round 5)". Evidence: progress/fixes.md FIX-32.
 
 ## D-268 - FIX-33 What a document records and reads back after the live sessions (2026-10-27)
 - Rule (steering lines, security): a block body line is a `## Steer:` or `## Follow-up:` line only

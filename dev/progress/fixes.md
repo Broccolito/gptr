@@ -7168,6 +7168,58 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
   always rule would not stop it". Green: the test PASS 3 alone; round 4's test-perm-gate.R test
   PASS 2; and the checks in FIX-34's verification bullet. D-267 and 04 section 15.9 IC-77 item 3
   say so.
+- Review round 5, the secret guard on `env` (the security verifier on `fe873436`, R5-SEC-3,
+  medium; not a regression of the branch): `bridge_risk_sh()` gave an unnamed `env` element level
+  3 `secret` without the `secret_guard` flag that `perm_policy_secret()` reads, and did not read a
+  value set; `peter$script()`'s risk did not read `env` at all; the nested gate re-checks a call
+  only above the outer call's approved level; and `mcp_nested_gate()` built its literal call from
+  `cmd` and `wd` alone. So with a fake key `sk-test-0000` registered as `R5_FAKE_KEY`, the
+  verifier's `peter$sh(c('sh', '-c', 'env | grep -c sk-test'), env = 'R5_FAKE_KEY')` ran in auto
+  and yolo with no question and the child read the key, in the loop and in idle served R, while
+  `?gptr_security` says that reading a registered secret asks in auto. Commits `5f2cde4a` (tests),
+  `f42cc673` (fix), `db7acae8` (docs) and this record, each test red on `fe873436`'s code first,
+  `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`.
+  - Red: `^bridge-sh$` FAIL 28: test-bridge-sh.R "an env that hands a child a registered secret
+    meets the secret guard (review round 5)" fails 21 times (no guard and no secret named for the
+    name in either case, a variable holding the key, a value set and a value in a list, for
+    `peter$sh()` and `peter$script()`, and a value set left `peter$sh()` at level 0), and "a secret
+    handed to a child through env asks as a secret read does (review round 5)" 7 times (auto asked
+    nothing for the name, for a value the code read by a computed name or where an `a` would be
+    typed, manual asked once, and the child got the key); `^perm-gate$` FAIL 4
+    (test-perm-gate.R "a member handing a child a registered secret meets the guard; no rule
+    allows it": auto allowed both members, also past `r(secret:)`, `*(secret:)` and `sh` rules);
+    `^mcp-server$` FAIL 7 (test-mcp-server.R "served R meets the secret guard when env hands a
+    child a secret (review round 5)": nothing asked while the run's pump served the call, and idle
+    served R ran the child).
+  - Fix: `bridge_env_secrets()` names the registered secrets an `env` hands the child: one an
+    unnamed element names, in any case, as `child_env()` passes it, and one whose literal the
+    redactor finds in a value the child gets, set or passed through (`secrets_state()`, which
+    `child_env()`'s own filter reads; the vault is not read). `bridge_risk_env()`, now the end of
+    the risks of `peter$sh()` and `peter$script()`, gives such a call `secret_guard` and
+    `secrets`, as `Sys.getenv()` of the name has. `dispatch_nested()` (R/agent-dispatch.R,
+    outside this writer's functions) passes the gate when the member's risk guards a secret the
+    outer call's risk did not, so `peter$sh(cmd, env = c(K = Sys.getenv('R5_FAKE_KEY')))` asks
+    once, for the code. `mcp_nested_gate()` adds the member's `secret_guard` and `secrets` to the
+    literal call it classifies. In R/perm-rules.R, outside this writer's functions,
+    `rule_suggest()` offers no rule for a tool call that reads a secret, since an `sh` allow rule
+    does not stop the guard, and `rule_hit()` lets an allow `secret:` rule cover `r` code only: a
+    tool's risk has no flagged call to cover, so `*(secret:R5_FAKE_KEY)` would have allowed in
+    manual mode any nested `peter$sh()` that hands that key over. `peter$bg()` takes no `env`.
+  - Green: the three tests and `^arch-layers$` FAIL 0 SKIP 2 PASS 907; the neighbours (every
+    `perm`, `risk`, `rules`, `nested`, `bridge`, `mcp-`, `gptr-config`, `agent-`, `tool-`,
+    `session-`, `py`, `knit`, `secrets` and `auth-` file; 44 files) FAIL 0 WARN 0 SKIP 16 PASS
+    9947 in UTF-8 and the same under `LC_ALL=C LANG=C`. Lint of the 7 changed R and test files is
+    clean; a second `document()` changes nothing; `check-docs.R` 0 problems;
+    `spelling::spell_check_package()` clean.
+  - Docs: `?gptr_security` (Secrets), `?gptr_permissions` (`secret:NAME`), NEWS's secrets
+    bullet; 03 sections 6.5, 6.8.2 and 6.8.4; 04 sections 7.6 (`dispatch_nested()`), 15.4 IC-53
+    item 7, 15.5 IC-57 and 15.9 IC-79; D-267's served-R rule.
+  - Costs, recorded rather than changed: no rule pre-approves the hand-over, so a key that auto's
+    work passes to a child (`env = "GITHUB_TOKEN"`, which `secret_discover_env()` registers at the
+    session's start) asks each time, unless the session is in yolo or `gptr.secret_guard` is
+    `FALSE`; in manual mode such a call asks twice, for the code and then for the secret, as a
+    nested call above the approved level does; the idle gate takes the secrets of `env` but not
+    the level 3 of an ordinary variable passed through, which the loop's nested gate reads.
 
 ## FIX-33 - Transcript findings from the live sessions (2026-10-27, #93)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
