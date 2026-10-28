@@ -6350,6 +6350,19 @@ the driver, screens, events, transcripts and replays without a model are local, 
   `bash -c` as one word whose spaces are escaped with a backslash or written `$IFS`
   (`sh -c rm\ -f\ file`)", level 3, which auto and yolo run without a question; 03 section 6.8.1's
   "Not followed" sentence and D-262's status say the same.
+- Review round 4, the merge, the rest: its conflicts were record appends in fixes.md (the end of
+  this record and of FIX-32's round 4) and DEVIATIONS.md (D-267's Tests line), each side kept and
+  the round's bullets in round order; the R, man, csv, spec and test files merged clean, the two
+  branches' edits of `?gptr_security` and of `by_args()` side by side (`setwd()` above
+  `Sys.setenv()`). Not changed, the fixes' verifier's lower findings: (2) test-perm-classify.R "a
+  command run in a directory outside the project reads it (review round 4)" writes the raw
+  `tempfile()` path into R code, whose backslashes on Windows (`\U`) stop the parse, so its `cd`
+  line may read 0 there, not 1; it has not run on Windows, and the Open lists name it. (3) The yolo
+  notice, NEWS and vignette("execution-model") do not list moving the working directory out of the
+  project among what yolo asks, as round 4's docs bullet chose. (4) The restore idiom
+  `old = setwd(x); setwd(old)` asks in auto and yolo, a directory the code computes, which
+  `?gptr_security` says in general. (6) After `setwd(tempdir())`, which is allowed, relative paths
+  are still placed in the project root.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #93)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
@@ -8383,3 +8396,16 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   (FIX-36 review round 2)"; test-perm-gate.R "auto asks before peter$knit()'s python moves gptr's
   config folder (FIX-36 round 2)", "auto asks before withr moves gptr's config folder for the
   session (FIX-36 round 2)".
+- Review round 2, checks on `8903fdb1` (`de2212c6`'s code; `8903fdb1` adds three words to
+  `inst/WORDLIST`): every `perm`, `risk`, `rules`, `nested`, `bridge`, `mcp-`, `gptr-config`,
+  `agent-`, `tool-`, `session-`, `py`, `knit`, `console-`, `doc-`, `artifact-`, `proc-`, `auth-`,
+  `utils-` and `zzz` file FAIL 0 WARN 0 SKIP 61 PASS 22614 under `LC_ALL=C LANG=C` (16 min); the
+  full suite in UTF-8 under the heavy lock FAIL 0 WARN 0 SKIP 66 PASS 39246 (33 min, with no
+  headless browser cleanup failure, FIX-35's subject). Lint of the 10 R and test files changed
+  since `51b2bdff` clean; `document()` no diff; `check-docs.R` 0 problems; the four plan checks
+  pass; `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290 and
+  `spelling::spell_check_package()` clean after `8903fdb1`: on `51b2bdff` both failed on
+  "reticulate", "unsets" and "unsetting" in `?gptr_security`, `?gptr_options` and NEWS (FIX-36's
+  help text), which `inst/WORDLIST` now holds. HANDOFF's and PROGRESS's Open lists gain this
+  record's items and round 4's FIX-27 limits. Not run: `R CMD check`, Linux and Windows hosts,
+  R 4.2 and R-devel, live models.

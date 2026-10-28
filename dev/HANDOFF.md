@@ -186,6 +186,17 @@ On `claude/v1-fixes`, locally on macOS, with `NOT_CRAN=true`, the SIGINT reset a
   with no NOTE in 114 s, incoming feasibility OK, `isolated-check.R check` 0 errors, 0 warnings, 0
   notes (FAIL 0 SKIP 83 PASS 38763), the URL check 0 problems.
 
+- Review round 4, the merge of `claude/v1-fix-gate` (`f5e527ac`) and FIX-36's review round 2,
+  on `8903fdb1` (`de2212c6`'s code; the last commit changes only `inst/WORDLIST`): every `perm`,
+  `risk`, `rules`, `nested`, `bridge`, `mcp-`, `gptr-config`, `agent-`, `tool-`, `session-`, `py`,
+  `knit`, `console-`, `doc-`, `artifact-`, `proc-`, `auth-`, `utils-` and `zzz` file FAIL 0 WARN 0
+  SKIP 61 PASS 22614 under `LC_ALL=C LANG=C`; the full suite in UTF-8 under the heavy lock FAIL 0
+  WARN 0 SKIP 66 PASS 39246 (33 min, with no headless browser cleanup failure); lint of the 10 R
+  and test files changed since `51b2bdff` clean, `document()` no diff, `check-docs.R` 0 problems,
+  the four plan checks pass, `dev/release/tests` PASS 290 and the spelling check clean once
+  `inst/WORDLIST` takes "reticulate", "unsets" and "unsetting" (FIX-36's help text failed both on
+  `51b2bdff`); no `R CMD check` ran.
+
 For PR #88, on the merged code `556acb00`, locally on macOS:
 
 - The neighbours of FIX-21 and FIX-22 (every `console-`, `agent-`, `perm-` and `doc-` file, with
@@ -229,6 +240,19 @@ Open (found, not fixed):
   `?gptr_security` says; in manual and edits an allow rule such as `r(level<=3)` still lets a
   computed `system()` run without asking past a deny `sh:` rule, as before (FIX-27; `system2()`'s
   `env` is read since FIX-32).
+- The classifier places paths in the project but does not follow the working directory changed
+  other than by `setwd()`, `withr::local_dir()` or `withr::with_dir()`
+  (`usethis::local_project()`), nor read the code another interpreter runs (`Rscript -e`,
+  `perl -e`, `node -e`), a path the shell computes (`rm "$f"` in a loop, `xargs rm`) or a code
+  word handed to `sh -c` or `bash -c` whose spaces are escaped with a backslash or written `$IFS`
+  (`sh -c rm\ -f\ file`; reading it needs a tokenizer of its own): each is level 3, which auto and
+  yolo run whatever it deletes, as `?gptr_security` says. A `processx::run()` `wd` the code
+  computes is read as the project, and `callr::run()` and `sys::exec_wait()` have no row, so a
+  command through them is a level-1 `unlisted` row, never read (FIX-27 review round 4).
+- test-perm-classify.R "a command run in a directory outside the project reads it (review round
+  4)" writes the raw `tempfile()` path into R code, whose backslashes on Windows (`\U`) stop the
+  parse, so its `cd` line may read 0 there, not 1; it has not run on Windows (FIX-27 review round
+  4, the fixes' verifier).
 - An approved `system()` child's output starts on the frozen `r` row; Codex's own shell is not
   switched off in the read-only modes; the prefix gate leaves `standard_core` 1 token (FIX-32).
 - A replayed script sends again a steer its run took after the script went on (a run sent to the
@@ -293,6 +317,14 @@ Open (found, not fixed):
 - At a load average of 260 and more the owned browser close's process-table walks
   (`proc_children()`, `proc_tree()`) can take 12-28 s and use up its 10 s deadline: 4 of 33
   closes under 32 busy loops ended "close timed out" (FIX-35 F2).
+- Variable changes the classifier does not read, each level 3 or lower, which auto runs, as
+  `?gptr_security` says: code in a file R runs (`source()`, `sys.source()`,
+  `eval(parse(file = ))`); `Sys.setenv()` reached by a computed name, through a list or an
+  environment, or handed to another function (`get("Sys.setenv")`, `baseenv()$Sys.setenv`,
+  `with(list(f = Sys.setenv), ...)`, `assign("f", Sys.setenv)`, `identity(Sys.setenv)`); a Python
+  write whose name the code computes, that reaches `os.environ` by another name (`e = os.environ`,
+  `getattr(os, "environ")`) or through `ctypes`, or that passes `os.environ.update()` lower-case
+  keyword names; Python run through 'reticulate' (FIX-36, D-272).
 - The macOS row's time grows with its serial pty tests (CI-96).
 - A `process_jsonl` line's events still follow the abort flag (its adapters check the signal
   themselves, 04 section 8.1), and an `inprocess` generator keeps its two calls after it; the
