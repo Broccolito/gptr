@@ -1659,14 +1659,17 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `withr::with_envvar()`, where a name it cannot read counts as one (also one built with `paste0()`
 #' or another helper of base R whose bare name the code binds with `=`, `<-` or `<<-`, as a
 #' function's argument or as a `for` variable, or that your session holds as other than base
-#' R's), in `readRenviron()` and `dotenv::load_dot_env()`, and in an
+#' R's, and the names `lapply()`, `Map()` or `do.call()` pass to a setter handed to them;
+#' `do.call()` of a `list()` or `c()` written out and `rlang::exec()` are read as the call they
+#' make, so `do.call(Sys.setenv, list(TZ = "UTC"))` is `Sys.setenv(TZ = "UTC")`), in
+#' `readRenviron()` and `dotenv::load_dot_env()`, and in an
 #' `os.environ` write in the code of `peter$py()` or `peter$knit("python", code)` that names one in
 #' a string or an upper-case word, or whose name (a subscript, or the first argument of
 #' `putenv()`, `unsetenv()` or `pop()`) is not a plain string literal. It does not read code in a
 #' file R runs (`source()`, `sys.source()`, `eval(parse(file = ))`); `Sys.setenv()`,
 #' `Sys.unsetenv()`, `withr::local_envvar()` or `withr::with_envvar()` reached by a computed name,
-#' through a list or an environment, or handed to another function (`get("Sys.unsetenv")`,
-#' `baseenv()$Sys.setenv`, `asNamespace("withr")$local_envvar`,
+#' through a list or an environment, or handed to a function the classifier does not know calls it
+#' (`get("Sys.unsetenv")`, `baseenv()$Sys.setenv`, `asNamespace("withr")$local_envvar`,
 #' `with(list(f = withr::with_envvar), ...)`, `assign("f", Sys.unsetenv)`,
 #' `identity(withr::local_envvar)`); a name built with a helper the code binds otherwise (with
 #' `assign()`, `delayedAssign()`, `makeActiveBinding()`, `list2env()` or `attach()`, in a list
@@ -1709,22 +1712,34 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `processx::run()`), the code a shell or Python runs there (`sh -c`, `cmd /c`, `pwsh -Command`,
 #' `python3 -c`) included; running a command in a directory outside the project reads that
 #' directory, so `manual` asks. `setwd()`, `withr::local_dir()`, `withr::with_dir()` and
-#' `xfun::in_dir()` to a directory outside the project and R's session temporary directory, or to
-#' one the code computes, are level 4, because a relative path would then name a file outside the
-#' project, and so are `file.symlink()`, `file.link()`, `Sys.junction()` and `fs::link_create()` of
-#' a path outside the project, as `ln` of one is. `getwd()` and the directory `setwd()` returns are
-#' read as the one the code has moved R to, starting from R's working directory when the classifier
-#' reads the code, so at the top level of the code `owd = setwd("data"); ...; setwd(owd)` stays in
-#' the project. A drive-relative path such as `D:data` counts as outside on every OS. The classifier
-#' does not follow the working directory changed in other ways (such as `usethis::local_project()`,
-#' `get("setwd")`, the `wd` of `callr::r()`, or `env` given `-C` among other short options,
-#' `env -iC DIR`, or as an abbreviated `--chdir`, `env --chd=DIR`), nor read the code another
-#' interpreter runs (`Rscript -e`, `perl -e`, `node -e`, `pwsh -CommandWithArgs` or `-cwa`), a path
-#' the shell computes (`rm "$f"` in a loop, `xargs rm`) or code handed to `sh -c` or `bash -c` as
-#' one word whose spaces are escaped with a backslash or written `$IFS` (`sh -c rm\ -f\ file`):
-#' such a command is level 3, which `auto` and `yolo` run without a question whatever it deletes.
-#' The `wd` of `processx::run()` is read when the call, or a name the code assigns, holds it as a
-#' string; a `wd` the code computes is read as the project directory.
+#' `xfun::in_dir()` to a directory outside the project and R's session temporary directory (which
+#' `tempdir()`, `tempfile()`, `withr::local_tempdir()` and `withr::local_tempfile()` name), or to
+#' one the code computes (such as `here::here("data")`, whose root is the 'here' package's, not
+#' gptr's), are level 4, because a relative path would then name a file outside the project, and
+#' so are `file.symlink()`, `file.link()`, `Sys.junction()` and `fs::link_create()` of a path
+#' outside the project, as `ln` of one is; `chdir()` in the code of `peter$py()` or
+#' `peter$knit("python", code)` (`os.chdir()`, `os.fchdir()`, `contextlib.chdir()`), which moves
+#' R's working directory too, is read as `setwd()` is. After the code has moved R, a relative
+#' directory given to these functions is read in the directory R is in, so
+#' `setwd("data"); ...; setwd("..")` returns to the project; before any move it is read in the
+#' project. `getwd()` and the directory `setwd()` returns are read as the one the code has moved R
+#' to, starting from R's working directory when the classifier reads the code. A function body and
+#' the code of `local()` are read as code of their own: the names they assign are followed, a
+#' function's other names count as ones the code computes, and R starts where the code started or
+#' has moved it to. So `owd = setwd("data"); ...; setwd(owd)` stays in the project at the top level
+#' of the code, in a function (with `on.exit(setwd(owd))`) and in `local()`; a directory saved in a
+#' branch, a loop or another call's argument (`if (p) owd = setwd("data")`, or `setwd(owd)` in
+#' `tryCatch(finally = )`), and a relative one after `withr::with_dir()` or `xfun::in_dir()`, count
+#' as ones the code computes. A drive-relative path such as `D:data` counts as outside on every OS.
+#' The classifier does not follow the working directory changed in other ways (such as
+#' `usethis::local_project()`, `get("setwd")`, the `wd` of `callr::r()`, or `env` given `-C` among
+#' other short options, `env -iC DIR`, or as an abbreviated `--chdir`, `env --chd=DIR`), nor read
+#' the code another interpreter runs (`Rscript -e`, `perl -e`, `node -e`, `pwsh -CommandWithArgs` or
+#' `-cwa`), a path the shell computes (`rm "$f"` in a loop, `xargs rm`) or code handed to `sh -c` or
+#' `bash -c` as one word whose spaces are escaped with a backslash or written `$IFS`
+#' (`sh -c rm\ -f\ file`): such a command is level 3, which `auto` and `yolo` run without a question
+#' whatever it deletes. The `wd` of `processx::run()` is read when the call, or a name the code
+#' assigns, holds it as a string; a `wd` the code computes is read as the project directory.
 #'
 #' In `auto` and `yolo` mode a model can delete or overwrite files and objects. Use them only in
 #' projects you can restore (version control, backups, [gptr_rewind()] for recent turns), and run
