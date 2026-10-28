@@ -1656,8 +1656,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' configuration folder or your home directory, such as `HOME`; [gptr_options] lists them. The
 #' classifier reads such a change in `Sys.setenv()`, `Sys.unsetenv()`, `withr::local_envvar()` and
 #' `withr::with_envvar()`, where a name it cannot read counts as one (also one built with `paste0()`
-#' or another helper of base R that the code replaces with `=`, `<-` or `<<-`, or that your session
-#' holds as other than base R's), in `readRenviron()` and `dotenv::load_dot_env()`, and in an
+#' or another helper of base R that the code binds with `=`, `<-` or `<<-`, as a function's
+#' argument or as a `for` variable, or that your session holds as other than base R's), in
+#' `readRenviron()` and `dotenv::load_dot_env()`, and in an
 #' `os.environ` write in the code of `peter$py()` or `peter$knit("python", code)` that names one in
 #' a string or an upper-case word, or whose name (a subscript, or the first argument of
 #' `putenv()`, `unsetenv()` or `pop()`) is not a plain string literal. It does not read code in a

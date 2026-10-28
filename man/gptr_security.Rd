@@ -57,8 +57,9 @@ of the \code{claude} or \code{codex} command-line tool (such as \code{CODEX_HOME
 configuration folder or your home directory, such as \code{HOME}; \link{gptr_options} lists them. The
 classifier reads such a change in \code{Sys.setenv()}, \code{Sys.unsetenv()}, \code{withr::local_envvar()} and
 \code{withr::with_envvar()}, where a name it cannot read counts as one (also one built with \code{paste0()}
-or another helper of base R that the code replaces with \code{=}, \verb{<-} or \verb{<<-}, or that your session
-holds as other than base R's), in \code{readRenviron()} and \code{dotenv::load_dot_env()}, and in an
+or another helper of base R that the code binds with \code{=}, \verb{<-} or \verb{<<-}, as a function's
+argument or as a \code{for} variable, or that your session holds as other than base R's), in
+\code{readRenviron()} and \code{dotenv::load_dot_env()}, and in an
 \code{os.environ} write in the code of \code{peter$py()} or \code{peter$knit("python", code)} that names one in
 a string or an upper-case word, or whose name (a subscript, or the first argument of
 \code{putenv()}, \code{unsetenv()} or \code{pop()}) is not a plain string literal. It does not read code in a

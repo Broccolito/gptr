@@ -45,12 +45,12 @@ Paths are classified relative to \code{root} (\code{workspace}, \code{temp}, \co
 (\code{inst/extdata/risk-commands.csv}), \code{peter$sql()} by its statements and \code{peter$py()} by a token
 scan. A command the code computes, or a \code{shell.exec()} file it computes, is a \code{dynamic} row at
 level 3. A path, command or variable name built with \code{c()}, \code{list()}, \code{paste0()},
-\code{file.path()} or another helper of base R counts as one the code computes when the code assigns
-that helper's name with \code{=}, \verb{<-} or \verb{<<-}, or when the helper found from \code{envir} (the global
-environment when \code{NULL}) is not base R's; a helper the code binds otherwise (with \code{assign()},
-\code{delayedAssign()}, \code{makeActiveBinding()}, \code{list2env()} or \code{attach()}, or in a list given to
-\code{with()} or \code{within()}) is read as base R's. Plugins and users extend both tables with
-\code{risk_rule} records.
+\code{file.path()} or another helper of base R counts as one the code computes when the code binds
+that helper's name with \code{=}, \verb{<-} or \verb{<<-}, as a function's argument or as a \code{for} variable, or
+when the helper found from \code{envir} (the global environment when \code{NULL}) is not base R's; a
+helper the code binds otherwise (with \code{assign()}, \code{delayedAssign()}, \code{makeActiveBinding()},
+\code{list2env()} or \code{attach()}, or in a list given to \code{with()} or \code{within()}) is read as base R's.
+Plugins and users extend both tables with \code{risk_rule} records.
 }
 \examples{
 gptr_risk("unlink('data', recursive = TRUE)")$level

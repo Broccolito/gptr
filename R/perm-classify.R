@@ -1933,12 +1933,12 @@ risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "w
 #' (`inst/extdata/risk-commands.csv`), `peter$sql()` by its statements and `peter$py()` by a token
 #' scan. A command the code computes, or a `shell.exec()` file it computes, is a `dynamic` row at
 #' level 3. A path, command or variable name built with `c()`, `list()`, `paste0()`,
-#' `file.path()` or another helper of base R counts as one the code computes when the code assigns
-#' that helper's name with `=`, `<-` or `<<-`, or when the helper found from `envir` (the global
-#' environment when `NULL`) is not base R's; a helper the code binds otherwise (with `assign()`,
-#' `delayedAssign()`, `makeActiveBinding()`, `list2env()` or `attach()`, or in a list given to
-#' `with()` or `within()`) is read as base R's. Plugins and users extend both tables with
-#' `risk_rule` records.
+#' `file.path()` or another helper of base R counts as one the code computes when the code binds
+#' that helper's name with `=`, `<-` or `<<-`, as a function's argument or as a `for` variable, or
+#' when the helper found from `envir` (the global environment when `NULL`) is not base R's; a
+#' helper the code binds otherwise (with `assign()`, `delayedAssign()`, `makeActiveBinding()`,
+#' `list2env()` or `attach()`, or in a list given to `with()` or `within()`) is read as base R's.
+#' Plugins and users extend both tables with `risk_rule` records.
 #'
 #' @param code R code: a character vector, a call or an expression.
 #' @param envir `NULL` or the environment the code would run in. When given, assignments to
