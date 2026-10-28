@@ -1699,12 +1699,12 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' directory, so `manual` asks. `setwd()`, `withr::local_dir()`, `withr::with_dir()` and
 #' `xfun::in_dir()` to a directory outside the project and R's session temporary directory, or to
 #' one the code computes, are level 4, because a relative path would then name a file outside the
-#' project, and so are `file.symlink()`, `file.link()` and `Sys.junction()` of a path outside the
-#' project, as `ln` of one is. `getwd()` and the directory `setwd()` returns are read as the one the
-#' code has moved R to, starting from R's working directory when the classifier reads the code, so
-#' at the top level of the code `owd = setwd("data"); ...; setwd(owd)` stays in the project. A
-#' drive-relative path such as `D:data` counts as outside on every OS. The classifier does not
-#' follow the working directory changed in other ways (such as `usethis::local_project()`,
+#' project, and so are `file.symlink()`, `file.link()`, `Sys.junction()` and `fs::link_create()` of
+#' a path outside the project, as `ln` of one is. `getwd()` and the directory `setwd()` returns are
+#' read as the one the code has moved R to, starting from R's working directory when the classifier
+#' reads the code, so at the top level of the code `owd = setwd("data"); ...; setwd(owd)` stays in
+#' the project. A drive-relative path such as `D:data` counts as outside on every OS. The classifier
+#' does not follow the working directory changed in other ways (such as `usethis::local_project()`,
 #' `get("setwd")` or the `wd` of `callr::r()`), nor read the code another interpreter runs
 #' (`Rscript -e`, `perl -e`, `node -e`), a path the shell computes (`rm "$f"` in a loop, `xargs rm`)
 #' or code handed to `sh -c` or `bash -c` as one word whose spaces are escaped with a backslash or

@@ -1461,7 +1461,7 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
 | 1 | new objects, reads outside the project (a command run in a directory outside it reads that directory [D-262]), calls of unlisted functions from packages outside base/stats/utils/methods/graphics/grDevices/tools [IC-54] | only allowlisted read-only calls run, in a scratch child env (discarded); anything else and other tools deny | ask | ask | allow | allow |
 | 2 | overwriting objects, workspace file writes, network reads, reference mutation | deny | ask | allow `write`/`edit` inside the project, ask for R | allow | allow |
 | 3 | deletes inside the project or of computed paths, processes, installs, overwriting objects above `gptr.protect_size` (100 MB), dynamic code, secret reads, app launches | deny | ask | ask | allow (the secret guard still asks; a computed `system()` command is refused, below) | allow (secret reads too; a computed `system()` command is refused) |
-| 4 | critical: `q()` (denied in every mode and never asked, below), deleting home/root/project/top-level/drive roots or their parents, protected files or any path outside the project and R's session `tempdir()` (`/tmp` counts as outside) [IC-78], `setwd()`, `withr::local_dir()`, `withr::with_dir()` or `xfun::in_dir()` to a directory outside the project and `tempdir()` or one the code computes (`session`), a link to a path outside the project (`file.symlink()`, `file.link()`, `Sys.junction()`, `ln`) [D-262], secret + network sink; the `control` category (gptr's own configuration exports, `options(gptr.*)`, control-plane files [IC-53, IC-54]) | deny | ask_human | ask_human | ask_human (blocked without a UI) | ask_human, except control rows other than `options(gptr.*)`, which run |
+| 4 | critical: `q()` (denied in every mode and never asked, below), deleting home/root/project/top-level/drive roots or their parents, protected files or any path outside the project and R's session `tempdir()` (`/tmp` counts as outside) [IC-78], `setwd()`, `withr::local_dir()`, `withr::with_dir()` or `xfun::in_dir()` to a directory outside the project and `tempdir()` or one the code computes (`session`), a link to a path outside the project (`file.symlink()`, `file.link()`, `Sys.junction()`, `fs::link_create()`, `ln`) [D-262], secret + network sink; the `control` category (gptr's own configuration exports, `options(gptr.*)`, control-plane files [IC-53, IC-54]) | deny | ask_human | ask_human | ask_human (blocked without a UI) | ask_human, except control rows other than `options(gptr.*)`, which run |
 
 `r` is classified per flagged call by `gptr_risk()` (tables in `inst/extdata/risk-functions.csv` and
 `risk-commands.csv`, extendable by additive `risk_rule` records; a shipped risky-package list (targets, usethis,
@@ -1515,8 +1515,9 @@ second reading of a line with a backslash (sh's) places a word that starts with 
 sh does. Since a relative path would then name a file outside the project, `setwd()`, `withr::local_dir()`,
 `withr::with_dir()` and `xfun::in_dir()` to a directory outside the project and `tempdir()`, or to one the code
 computes, are a level-4 `session` row, which the critical guard asks about in auto and yolo; a link `file.symlink()`,
-`file.link()` or `Sys.junction()` makes to a path outside the project is a level-4 `file_delete` row, as `ln`'s
-source is. `eval()`, `rlang::eval_bare()` and `rlang::eval_tidy()` of `quote(x)` read `x`, as `evalq(x)` does. Not
+`file.link()`, `Sys.junction()` or `fs::link_create()` makes to a path outside the project is a level-4
+`file_delete` row, as `ln`'s source is.
+`eval()`, `rlang::eval_bare()` and `rlang::eval_tidy()` of `quote(x)` read `x`, as `evalq(x)` does. Not
 followed: the working directory changed in other ways (`usethis::local_project()`, `get("setwd")`, the `wd` of
 `callr::r()`), the code another interpreter runs (`Rscript -e`, `perl -e`), the command of `processx::process$new()`,
 a path the shell computes (`rm "$f"`, `xargs rm`) and code handed to `sh -c` as one word whose spaces are escaped

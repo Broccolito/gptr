@@ -5515,8 +5515,8 @@ totals line names the model and the context left.
   `withr::with_dir()` and `xfun::in_dir()` to a directory outside the project and `tempdir()`, or to one the code
   computes, are a level-4 `session` row, which yolo's critical guard counts (D-262, review round 4); `getwd()` and
   `setwd()`'s value are the directory the code has moved R to, so the save-and-restore idiom stays in the
-  project, and a link `file.symlink()`, `file.link()` or `Sys.junction()` makes to a path outside the project is
-  level 4 (review round 5).
+  project, and a link `file.symlink()`, `file.link()`, `Sys.junction()` or `fs::link_create()` makes to a path
+  outside the project is level 4 (review round 5).
 - `perm_check()` grants the one-shot control tokens on any final allow (IC-53 item 3).
 - The model's `<mode name="yolo">` block reuses auto's text. Entering yolo (a session, `/mode`, a console start)
   shows a one-time `gptr_message_notice` that lists what still asks and says the classifier is not a sandbox.

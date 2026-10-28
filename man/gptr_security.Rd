@@ -102,12 +102,12 @@ a command in the directory it runs in (after a \code{cd} or \code{env -C}, or th
 directory, so \code{manual} asks. \code{setwd()}, \code{withr::local_dir()}, \code{withr::with_dir()} and
 \code{xfun::in_dir()} to a directory outside the project and R's session temporary directory, or to
 one the code computes, are level 4, because a relative path would then name a file outside the
-project, and so are \code{file.symlink()}, \code{file.link()} and \code{Sys.junction()} of a path outside the
-project, as \code{ln} of one is. \code{getwd()} and the directory \code{setwd()} returns are read as the one the
-code has moved R to, starting from R's working directory when the classifier reads the code, so
-at the top level of the code \verb{owd = setwd("data"); ...; setwd(owd)} stays in the project. A
-drive-relative path such as \code{D:data} counts as outside on every OS. The classifier does not
-follow the working directory changed in other ways (such as \code{usethis::local_project()},
+project, and so are \code{file.symlink()}, \code{file.link()}, \code{Sys.junction()} and \code{fs::link_create()} of
+a path outside the project, as \code{ln} of one is. \code{getwd()} and the directory \code{setwd()} returns are
+read as the one the code has moved R to, starting from R's working directory when the classifier
+reads the code, so at the top level of the code \verb{owd = setwd("data"); ...; setwd(owd)} stays in
+the project. A drive-relative path such as \code{D:data} counts as outside on every OS. The classifier
+does not follow the working directory changed in other ways (such as \code{usethis::local_project()},
 \code{get("setwd")} or the \code{wd} of \code{callr::r()}), nor read the code another interpreter runs
 (\code{Rscript -e}, \code{perl -e}, \code{node -e}), a path the shell computes (\verb{rm "$f"} in a loop, \verb{xargs rm})
 or code handed to \code{sh -c} or \code{bash -c} as one word whose spaces are escaped with a backslash or
