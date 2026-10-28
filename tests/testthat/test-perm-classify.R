@@ -1371,6 +1371,103 @@ test_that("a Windows wd is placed as Windows places it, on every OS (review roun
   }
 })
 
+test_that("a drive root is outside the project as R 4.2 on Windows places paths (review round 5)", {
+  root = "D:/a/_temp/RtmpABC/gptr-project-1"
+  local_mocked_bindings(is_windows = function() TRUE, is_macos = function() FALSE)
+  # path_norm() as R 4.2 on GitHub's runner, the working directory the project: "/x" is on the
+  # current drive; R < 4.4's dirname("//x") is "." and basename("//x") "\\x", so a UNC path whose
+  # server does not exist lands in the working directory; the rest lexical
+  local_mocked_bindings(path_norm = function(path) {
+    vapply(gsub("\\", "/", path, fixed = TRUE), function(p) {
+      if (grepl("^/(?!/)", p, perl = TRUE)) p = paste0("D:", p)
+      if (startsWith(p, "//")) return(paste0(root, "/\\\\", substring(p, 3L)))
+      path_lexical(if (is_abs_path(p)) p else file.path(root, p))
+    }, "", USE.NAMES = FALSE)
+  }, user_home = function() "C:/Users/runneradmin")
+  withr::local_options(gptr.project_root = root)
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (code in c("setwd('/')", "setwd('\\\\')", "setwd('D:/')", "setwd('D:\\\\')", "setwd('C:/')",
+                 "setwd('D:/a')", "withr::with_dir('/', unlink('x'))", "withr::local_dir('/')")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  # neighbours: the project, a folder in it, tempdir(), and deletes in the project and tempdir()
+  win = function(p) gsub("/", "\\\\", p)
+  for (code in c("setwd('sub')", "setwd('.')", "setwd(tempdir())",
+                 paste0("setwd(", deparse(win(file.path(root, "sub"))), ")"))) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  expect_identical(lv(paste0("unlink(", deparse(win(file.path(root, "x"))), ")")), 3L)
+  expect_identical(lv(paste0("unlink(", deparse(win(file.path(tempdir(), "x"))), ")")), 1L)
+  expect_identical(lv("list.files('/')"), 1L)
+  expect_identical(lv("list.files('.')"), 0L)
+})
+
+test_that("a project in a protected folder reads its root as its folders (review round 6)", {
+  # every path under .git or .claude is protected (Claude Code's worktrees live in
+  # .claude/worktrees), the project's root read whole too, as before review round 5; a read
+  # under .claude is also a secret path's (3)
+  base = withr::local_tempdir()
+  for (dirs in list(c(".git", "proj"), c(".claude", "worktrees", "proj"))) {
+    root = do.call(file.path, as.list(c(base, dirs)))
+    dir.create(file.path(root, "sub"), recursive = TRUE)
+    root = path_norm(root)
+    withr::local_dir(root)
+    withr::local_options(gptr.project_root = root)
+    lv = function(code) gptr_risk(code, root = root)$level
+    for (code in c("list.files('.')", "list.files()", "system('ls .')")) {
+      expect_identical(lv(code), if (dirs[[1L]] == ".git") 2L else 3L, label = code)
+      expect_identical(lv(code), lv("list.files('sub')"), label = code)
+    }
+    expect_identical(lv("setwd('.')"), lv("setwd('sub')"))
+    expect_identical(lv("withr::local_dir('.')"), lv("withr::local_dir('sub')"))
+  }
+})
+
+test_that("a UNC path is outside the project as R 4.2 on Windows places it (review round 6)", {
+  root = local_project()
+  dir.create(file.path(root, "sub"))
+  local_mocked_bindings(is_windows = function() TRUE, is_macos = function() FALSE)
+  # path_norm_one() with R 4.2's Win32 dirname() and basename() (src/main/util.c: a leading "//"
+  # becomes "\\", then only "/" splits, so dirname("//host") is "."), no UNC server answering,
+  # and normalizePath() giving a UNC path back as GetFullPathNameW() does
+  unc = function(x) startsWith(gsub("\\", "/", x, fixed = TRUE), "//")
+  fix = function(x) {
+    x = gsub("\\", "/", x, fixed = TRUE)
+    if (startsWith(x, "//")) paste0("\\\\", substring(x, 3L)) else x
+  }
+  trim = function(x) {
+    while (nchar(x) > 1L && endsWith(x, "/") &&
+             (nchar(x) > 3L || substr(x, nchar(x) - 1L, nchar(x) - 1L) != ":")) {
+      x = substr(x, 1L, nchar(x) - 1L)
+    }
+    x
+  }
+  win = new.env(parent = environment(path_norm_one))
+  win$basename = function(path) sub("^.*/", "", sub("/+$", "", fix(path)))
+  win$dirname = function(path) {
+    x = trim(fix(path))
+    i = regexpr("/[^/]*$", x)
+    if (i < 0L) "." else trim(substr(x, 1L, i))
+  }
+  win$file.exists = function(path) !unc(path) && file.exists(path)
+  win$normalizePath = function(path, ...) if (unc(path)) fix(path) else normalizePath(path, ...)
+  norm = path_norm_one
+  environment(norm) = win
+  local_mocked_bindings(path_norm_one = norm)
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (code in c("setwd('//host/share')", "setwd('\\\\\\\\host\\\\share')", "setwd('//x')",
+                 "unlink('//host/share/f')", "file.remove('//host/share/f')",
+                 "withr::with_dir('//host/share', unlink('x'))", "system('rm //host/share/f')")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  expect_identical(lv("readLines('//host/share/f')"), 1L)
+  expect_identical(lv("writeLines('x', '//host/share/f')"), 3L)
+  # neighbours: the project and tempdir()
+  for (code in c("setwd('sub')", "setwd(tempdir())")) expect_identical(lv(code), 2L, label = code)
+  expect_identical(lv("unlink('x')"), 3L)
+  expect_identical(lv("readLines('x')"), 0L)
+})
+
 test_that("processx::run()'s wd is read as peter$sh()'s (review round 4)", {
   root = local_project()
   out = withr::local_tempdir(tmpdir = dirname(tempdir()))

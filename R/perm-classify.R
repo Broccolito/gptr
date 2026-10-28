@@ -367,7 +367,9 @@ risk_target = function(w, op, root, dirs = root) {
       pc = "control"
     }
     if (identical(op, "read") && identical(pc, "critical")) {
-      pc = risk_path_class(file.path(p, "x"), root)
+      # a directory read whole has its files' class; the child is joined with one "/", as
+      # file.path("/", "x") is "//x", a UNC path on Windows
+      pc = risk_path_class(paste0(sub("[/\\\\]+\\z", "", p, perl = TRUE), "/x"), root)
     }
     lv = risk_op_level(pc, op)
     sec = identical(op, "read") && !is.na(p) &&
