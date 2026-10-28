@@ -602,6 +602,16 @@ test_that("a request and a blocked run's condition carry its flagged rows redact
     expect_false(any(grepl("sk-test-0000-r6", unlist(risk), fixed = TRUE)))
   }
   expect_false(grepl("sk-test-0000-r6", err$action, fixed = TRUE))
+  # the summary the condition's `action` carries is redacted in each of its forms: code lines, a
+  # path, a command and other inputs as JSON (verification of review round 6)
+  inputs = list(list(code = "x = nchar('sk-test-0000-r6')"), list(path = "d/sk-test-0000-r6.txt"),
+                list(cmd = c("echo", "sk-test-0000-r6"), env = "R6_FAKE_KEY"),
+                list(text = "sk-test-0000-r6"))
+  for (input in inputs) {
+    shown = perm_summary(list(name = "r", input = input))
+    expect_false(any(grepl("sk-test-0000-r6", shown, fixed = TRUE)), label = names(input)[1L])
+    expect_true(any(grepl("[secret:R6_FAKE_KEY]", shown, fixed = TRUE)), label = names(input)[1L])
+  }
 })
 
 test_that("the UI answers asks when the run's snapshot can prompt", {
