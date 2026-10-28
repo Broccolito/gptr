@@ -168,17 +168,32 @@ test_that("a link to a path outside the project is level 4, as ln's (review roun
                  paste0("file.link(", deparse(file.path(out, "a")), ", 'lnk')"),
                  paste0("Sys.junction(", o, ", 'lnk')"),
                  paste0("file.symlink(to = 'lnk', from = ", o, ")"),
-                 paste0("d = ", o, "; file.symlink(d, 'lnk')"),
-                 paste0("fs::link_create(", o, ", 'lnk')"),
-                 paste0("fs::link_create(new_path = 'lnk', path = ", o, ")"))) {
+                 paste0("d = ", o, "; file.symlink(d, 'lnk')"))) {
     expect_identical(lv(code), 4L, label = code)
   }
   expect_identical(lv(paste0("system('ln -s ", out, " lnk')")), 4L)
   # neighbours: a link to a path in the project or the session's tempdir() is a write
   for (code in c("file.symlink('sub', 'lnk')", "file.symlink(tempdir(), 'lnk')",
-                 "file.link('sub/a', 'b')", "fs::link_create('sub', 'lnk')",
-                 "fs::link_create(tempdir(), 'lnk')")) {
+                 "file.link('sub/a', 'b')")) {
     expect_identical(lv(code), 2L, label = code)
+  }
+  # fs::link_create() as R matches it while fs is loaded, and as written while it is not, where
+  # each unnamed argument may be the path it writes (so new_path is named beside tempdir())
+  matched = risk_args
+  for (fs_loaded in c(TRUE, FALSE)) {
+    local_mocked_bindings(risk_args = function(e, fn, pkg) {
+      if (!identical(fn, "link_create")) return(matched(e, fn, pkg))
+      matched(e, if (fs_loaded) function(path, new_path, symbolic = TRUE) NULL else fn,
+              if (fs_loaded) pkg else NA)
+    })
+    for (code in c(paste0("fs::link_create(", o, ", 'lnk')"),
+                   paste0("fs::link_create(new_path = 'lnk', path = ", o, ")"))) {
+      expect_identical(lv(code), 4L, label = paste(code, "with fs loaded", fs_loaded))
+    }
+    for (code in c("fs::link_create('sub', 'lnk')",
+                   "fs::link_create(tempdir(), new_path = 'lnk')")) {
+      expect_identical(lv(code), 2L, label = paste(code, "with fs loaded", fs_loaded))
+    }
   }
 })
 
