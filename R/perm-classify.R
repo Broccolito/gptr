@@ -1827,10 +1827,10 @@ risk_python = function(code, root = project_root(), dirs = root) {
 }
 
 #' The variables that configure gptr (D-272): a variable a registered provider reads (its keys and
-#' base-URL variables, the key pair a `bedrock-converse` provider signs with, and the login and
-#' folder variables the claude and codex CLIs' child environments keep), R's startup variables,
-#' and those that move gptr's config folder (tools::R_user_dir()) or the home that user_home()
-#' reads, and with them the control paths
+#' base-URL variables, the key pair a `bedrock-converse` provider signs with, and the variables the
+#' claude and codex CLIs' child environments keep: login, folder, Git Bash path), R's startup
+#' variables, and those that move gptr's config folder (tools::R_user_dir()) or the home that
+#' user_home() reads, and with them the control paths
 #' @noRd
 risk_control_env = function() {
   vars = lapply(registry_all("provider"), function(p) {

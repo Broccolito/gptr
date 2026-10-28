@@ -1651,9 +1651,10 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #'
 #' Changing gptr's own configuration includes model code that sets or unsets an environment
 #' variable gptr reads as configuration: a key or base-URL variable of a provider gptr has
-#' registered (such as `AWS_REGION`, which places Bedrock's endpoint), a login or folder variable
-#' of the `claude` or `codex` command-line tool (such as `CODEX_HOME`), or one that moves its
-#' configuration folder or your home directory, such as `HOME`; [gptr_options] lists them. The
+#' registered (such as `AWS_REGION`, which places Bedrock's endpoint), a variable gptr keeps for
+#' the `claude` or `codex` command-line tool (its login, its folder or the path of Git Bash, such
+#' as `CODEX_HOME`), or one that moves its configuration folder or your home directory, such as
+#' `HOME`; [gptr_options] lists them. The
 #' classifier reads such a change in `Sys.setenv()`, `Sys.unsetenv()`, `withr::local_envvar()` and
 #' `withr::with_envvar()`, where a name it cannot read counts as one (also one built with `paste0()`
 #' or another helper of base R whose bare name the code binds with `=`, `<-` or `<<-`, as a
