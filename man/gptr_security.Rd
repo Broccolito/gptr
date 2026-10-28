@@ -168,11 +168,19 @@ pull, gptr asks again.
 Keys are held in a private vault and appear in sessions, logs and errors only as markers such
 as \verb{[secret:ANTHROPIC_API_KEY]}. Values are redacted before anything is written or sent: the
 session files, documents, caches, spill files, wire logs and the output of child processes.
+Their URL-encoded, JSON-escaped and base64 forms are redacted too; a copy the code changes in
+another way, such as reversed or cut, is no longer recognised and is not redacted.
 gptr never reads the credential files of other tools. Reading a registered secret from model
-code asks even in \code{auto} mode. So does handing one to a child process through the \code{env} of
-\code{peter$sh()} or \code{peter$script()}, by its name or in a value, unless the same code reads that
-secret by name: the question for that read, or an \code{r(secret:NAME)} rule allowing it, covers
-the hand-over too. A key registered after it already appeared in a file (for example pasted
+code asks even in \code{auto} mode: \code{Sys.getenv()} of its name in any letter case, or of a variable
+the code only ever sets to strings; \verb{$NAME} or \verb{$\{NAME\}} in a command line (\code{system()},
+\code{processx::run()}, \code{peter$sh()} and the others above) and \code{os.environ} or \code{getenv()} in
+Python; an environment dump; and a read of a \code{.env} or \code{.Renviron} file or of a file
+\code{\link[=gptr_env]{gptr_env()}} loaded. So does handing one to a child process through the \code{env} of \code{peter$sh()}
+or \code{peter$script()}, by its name or in a value, unless the same code reads that secret by name:
+the question for that read, or an \code{r(secret:NAME)} rule allowing it, covers the hand-over too.
+A name the code computes when it runs (with \code{paste0()}, through \code{get()} or \code{do.call()}, as a
+function's argument, or in a variable it sets otherwise) is read at level 3, which \code{auto} runs
+without asking. A key registered after it already appeared in a file (for example pasted
 into a prompt) can be removed from the files with \code{\link[=gptr_scrub]{gptr_scrub()}}; run
 \code{gptr_scrub(error = TRUE)} before committing to fail when any registered secret remains.
 }

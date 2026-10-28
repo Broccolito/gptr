@@ -449,7 +449,8 @@ test_that("served R meets the secret guard when env hands a child a secret (revi
   local_vault()
   withr::local_envvar(R5_FAKE_KEY = "sk-test-0000")
   secret_register("sk-test-0000", "R5_FAKE_KEY")
-  child = deparse1(c(rscript_path(), "-e", "cat(nzchar(Sys.getenv('R5_FAKE_KEY')))"))
+  # the child builds the name: naming it would read the secret by name (review round 6)
+  child = deparse1(c(rscript_path(), "-e", "cat(nzchar(Sys.getenv(paste0('R5_FAKE', '_KEY'))))"))
   code = function(env) paste0("x = peter$sh(", child, ", env = ", env, ")$stdout")
   serve = function(target, env) mcp_dispatch_local(r_call(code(env)), target)$result
   # served while the run's pump runs (a person answers) and to an idle session (nobody can)

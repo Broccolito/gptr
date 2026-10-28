@@ -584,7 +584,7 @@ s3_register = function(generic, class, method = NULL) {
 #'   to answer); `"deny"` returns a denial to the model.
 #' - `gptr.critical_guard` (logical, `TRUE`): level-4 actions ask even in `auto` mode.
 #' - `gptr.secret_guard` (logical, `TRUE`): reads of registered secrets ask even in `auto`
-#'   mode.
+#'   mode; [gptr_security] lists the reads.
 #' - `gptr.protect_size` (bytes, `1e8`): overwriting a larger object is a level-3 action.
 #' - `gptr.plan_handoff` (logical, `TRUE`): hand the plan a `plan` run proposes, once, to the next
 #'   top-level `peter()` call from the same environment, within an hour and in another mode;

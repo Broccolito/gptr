@@ -274,6 +274,51 @@ test_that("a member handing a child a registered secret meets the guard; no rule
   expect_identical(gate_decide(ok, gate_ctx("auto")), "allow")
 })
 
+test_that("auto asks before code reads a secret by .env, a shell's $NAME or a name (round 6)", {
+  skip_on_cran()
+  local_project(files = list(".env" = "R6_FAKE_KEY=sk-test-0000-r6"))
+  local_permission_rules()
+  local_vault()
+  withr::local_envvar(R6_FAKE_KEY = NA)
+  gptr_env(".env", quiet = TRUE)
+  reads = c("x = readLines('.env')", "x = peter$sh(c('cat', '.env'))$stdout",
+            "x = processx::run('sh', c('-c', 'echo $R6_FAKE_KEY'))$stdout",
+            "x = system('echo ${R6_FAKE_KEY}', intern = TRUE)",
+            "x = peter$py('import os; print(os.environ[\"R6_FAKE_KEY\"])')",
+            "n = 'R6_FAKE_KEY'; x = Sys.getenv(n)", "x = Sys.getenv('r6_fake_key')")
+  for (code in reads) {
+    expect_identical(gate_decide(gate_r(code), gate_ctx("auto")), "ask_human", label = code)
+    expect_identical(gate_decide(gate_r(code), gate_ctx("yolo")), "allow", label = code)
+  }
+  # a command a member gets (its own risk, as a nested call is gated), by name in any case
+  for (cmd in c("cat .env", "echo $r6_fake_key", "printf %s ${R6_FAKE_KEY}")) {
+    r = risk_classify(cmd, kind = "command")
+    expect_true(r$secret_guard, label = cmd)
+    expect_identical(r$secrets, if (grepl("$", cmd, fixed = TRUE)) "R6_FAKE_KEY" else character(),
+                     label = cmd)
+  }
+  expect_false(risk_classify("echo $HOME; cat notes.txt", kind = "command")$secret_guard)
+  # the question for a read by name offers the r(secret:) rule, and that rule allows the read
+  shell = gate_r(reads[[4L]])
+  expect_identical(perm_policy_secret(shell, gate_ctx("auto"))$suggested_rule,
+                   "r(secret:R6_FAKE_KEY)")
+  gptr_permissions(allow = "r(secret:R6_FAKE_KEY)")
+  expect_identical(gate_decide(shell, gate_ctx("auto")), "allow")
+  expect_identical(gate_decide(gate_r(reads[[1L]]), gate_ctx("auto")), "ask_human")
+  gptr_permissions(remove = "r(secret:R6_FAKE_KEY)")
+  # in the loop, also a command the code computes for peter$sh() or peter$bg()
+  ui = local_scripted_ui(as.list(rep("n", 5L)))
+  codes = c(reads[c(1L, 2L, 6L)], "cmd = paste('cat', '.env'); x = peter$sh(cmd)$stdout",
+            "cmd = paste('cat', '.env'); x = peter$bg(cmd)")
+  for (code in codes) {
+    fake = local_fake_provider(list(fake_tool("r", code = code), fake_text("done")))
+    e = new.env()
+    peter("read it", model = fake, envir = e, mode = "auto")
+    expect_null(e$x)
+  }
+  expect_identical(sum(ui$log$method == "permission"), 5L)
+})
+
 test_that("a value read from a secret may not leave over the network (G6 taint)", {
   root = local_project()
   ctx = gate_ctx("auto")

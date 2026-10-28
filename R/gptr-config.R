@@ -1759,11 +1759,19 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' Keys are held in a private vault and appear in sessions, logs and errors only as markers such
 #' as `[secret:ANTHROPIC_API_KEY]`. Values are redacted before anything is written or sent: the
 #' session files, documents, caches, spill files, wire logs and the output of child processes.
+#' Their URL-encoded, JSON-escaped and base64 forms are redacted too; a copy the code changes in
+#' another way, such as reversed or cut, is no longer recognised and is not redacted.
 #' gptr never reads the credential files of other tools. Reading a registered secret from model
-#' code asks even in `auto` mode. So does handing one to a child process through the `env` of
-#' `peter$sh()` or `peter$script()`, by its name or in a value, unless the same code reads that
-#' secret by name: the question for that read, or an `r(secret:NAME)` rule allowing it, covers
-#' the hand-over too. A key registered after it already appeared in a file (for example pasted
+#' code asks even in `auto` mode: `Sys.getenv()` of its name in any letter case, or of a variable
+#' the code only ever sets to strings; `$NAME` or `${NAME}` in a command line (`system()`,
+#' `processx::run()`, `peter$sh()` and the others above) and `os.environ` or `getenv()` in
+#' Python; an environment dump; and a read of a `.env` or `.Renviron` file or of a file
+#' [gptr_env()] loaded. So does handing one to a child process through the `env` of `peter$sh()`
+#' or `peter$script()`, by its name or in a value, unless the same code reads that secret by name:
+#' the question for that read, or an `r(secret:NAME)` rule allowing it, covers the hand-over too.
+#' A name the code computes when it runs (with `paste0()`, through `get()` or `do.call()`, as a
+#' function's argument, or in a variable it sets otherwise) is read at level 3, which `auto` runs
+#' without asking. A key registered after it already appeared in a file (for example pasted
 #' into a prompt) can be removed from the files with [gptr_scrub()]; run
 #' `gptr_scrub(error = TRUE)` before committing to fail when any registered secret remains.
 #'
@@ -1833,7 +1841,9 @@ NULL
 #' `gptr.s1_state_max` characters). Do not ask System 1 questions about data that may not leave
 #' your machine.
 #'
-#' Registered secrets are replaced by markers before anything is sent.
+#' Registered secrets, and their URL-encoded, JSON-escaped and base64 forms, are replaced by
+#' markers before anything is sent; a copy the code changes in another way, such as reversed or
+#' cut, is not recognised.
 #'
 #' @section Limiting automatic context:
 #' `.opts = list(context = "names")` sends workspace object names, the workspace changes and

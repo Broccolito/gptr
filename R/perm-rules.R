@@ -98,7 +98,8 @@ rule_code_text = function(fl) {
 #' Allow rules with fn/category/sh/sql/secret match only when EVERY flagged call (level >= 1, with a
 #' function name) is covered; deny and ask rules match when ANY is, level 0 included (report 18
 #' section 3.7, D-267). An sh: glob ending ` *` also matches the command alone (`cat *`, `cat`).
-#' An allow secret: rule covers r code only: a tool's risk lists no flagged call to cover.
+#' An allow secret: rule covers r code only, whose every flagged call reads a named secret by name
+#' (`Sys.getenv()` or a shell's `$NAME`): a tool's risk lists no flagged call to cover.
 #' @noRd
 rule_hit = function(p, call, lst) {
   name = call$name %||% ""
@@ -114,7 +115,8 @@ rule_hit = function(p, call, lst) {
   if (p$kind == "secret") {
     s = risk$secrets
     if (lst != "allow") return(any(s %in% p$value))
-    read = sub("^secret_env(_registered)? ", "", fl$call[fl$level >= 1L])
+    read = sub("^secret_env(_registered)? |^secret: [$]", "",
+               rule_code_text(fl[fl$level >= 1L, , drop = FALSE]))
     return(name == "r" && length(s) > 0L && all(c(s, read) %in% p$value))
   }
   fl = fl[(lst != "allow" | fl$level >= 1L) & (p$kind == "category" | !is.na(fl$fn)), ,
