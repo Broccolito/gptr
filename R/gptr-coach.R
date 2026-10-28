@@ -27,7 +27,9 @@
 #'
 #' @param ... What you would give the harness: the prompt, your objects, and any [peter()]
 #'   arguments such as `mode`, `model`, `budget` or `tools`. They apply to every run of this call
-#'   and are not kept in the result; `budget` also caps each coach session.
+#'   and are not kept in the result; `budget` also caps each coach session. Each run is one
+#'   unattended session, so `parallel`, `choices`, `levels`, `threshold`, `min_confidence`,
+#'   `uncertain`, `background`, `.run`, `.stdin` and `envir` are refused.
 #' @param harness The harness to start from: `peter` or a harness.
 #' @param check `NULL` or your own test of a good result: a function of `r`, a list with `text`,
 #'   `status`, `value` and `objects` of the final run, that returns `TRUE` or `FALSE`. It runs in
@@ -91,6 +93,11 @@ gptr_coach = function(..., harness = peter, check = NULL, coach = NULL, k = 1L,
                   sys_call = sc, nframe = nf)
   on.exit(call_release(call), add = TRUE)
   call$start_hash = coaching_hash(start$coaching)
+  run_model = task$args$model %||% start$args$model
+  # replay mode lets every model of the call answer, as replay_guard() lets peter()'s
+  call$offline = all(vapply(list(run_model, coach %||% run_model), function(m) {
+    isTRUE(tryCatch(replay_guard(m, mode = "replay"), gptr_error = function(e) FALSE))
+  }, NA))
   d = if (ext_service_has("doc.coach")) ext_service_get("doc.coach")(call) else list()
   if (identical(d$action, "replay")) return(d$harness)
   n = c(run = k * (2L + length(focus)), coach = k * (1L + length(focus)), judge = k > 1L)
@@ -108,7 +115,8 @@ gptr_coach = function(..., harness = peter, check = NULL, coach = NULL, k = 1L,
                how_to_allow = "set options(gptr.unsafe_no_permissions = FALSE)")
   }
   args = task$args[setdiff(names(task$args), c("prompt", "model"))]
-  models = coach_models(task$args$model %||% start$args$model, coach)
+  coach_args_check(args, start)
+  models = coach_models(run_model, coach)
   # the judge's labels are shuffled by a seed drawn from the call, never from R's RNG
   x = list(start = start, task = task, args = args, models = models, check = check, focus = focus,
            surface = surface, n = n, k = k, strategy = strategy,
@@ -231,7 +239,12 @@ coach_task = function(sc, caller, ...) {
   nms = ...names() %||% rep("", n)
   nms[is.na(nms)] = ""
   pa = nzchar(nms) & nms %in% harness_formals()
-  args = do.call(harness_resolve_args, c(list(caller), exprs[pa]), envir = caller)
+  # an identifier resolves in `caller`, as peter() resolves it; any other argument is its own
+  # promise's value, as peter() reads it, so dots a wrapper passes on keep their frames
+  given = exprs[pa]
+  ids = c("model", "mode", "skills", "plugins", "extensions", "tools", "agents")
+  for (j in which(!names(given) %in% ids)) given[j] = list(...elt(which(pa)[j]))
+  args = do.call(harness_resolve_args, c(list(caller), given), envir = caller)
   keep = which(!pa)
   a = as.list(sc)[-1L]
   an = names(a) %||% rep("", length(a))
@@ -291,6 +304,30 @@ coach_models = function(run, coach) {
   replay_guard(run)
   replay_guard(coach)
   list(run = run, coach = coach, kinds = kinds)
+}
+
+#' Refuses the task's peter() arguments that a run, one unattended session in another R process,
+#' cannot use, and checks the rest as peter() does before anything starts: values through
+#' gateway_args(), tool names through prompt_tools_check() unless an extension, a plugin or an
+#' MCP server of the run's own session could add the tool
+#' @noRd
+coach_args_check = function(args, start) {
+  no = intersect(c(".run", "background", ".stdin", "envir", "parallel", "choices", "levels",
+                   "threshold", "min_confidence", "uncertain"), c(names(start$args), names(args)))
+  if (length(no)) {
+    gptr_abort(paste0("gptr_coach() runs your task as one unattended session in another R ",
+                      "process, so it does not take `", no[[1L]], " =`."), "invalid_argument",
+               arg = no[[1L]], expected = "peter() arguments of one unattended session")
+  }
+  gateway_args(NULL, NULL, NULL, 0.5, NULL, NULL, FALSE, args$budget, args$replay,
+               args$.opts %||% list(), TRUE, FALSE)
+  tools = gateway_list(ident_combine(list(start$args$tools, args$tools)))
+  adds = c(start$args[c("extensions", "plugins")], args[c("extensions", "plugins")])
+  if (all(vapply(tools, is.character, NA)) && all(vapply(adds, is.null, NA))) {
+    known = grep("^[+-]?mcp__", unlist(tools), value = TRUE, invert = TRUE)
+    prompt_tools_check(gateway_tool_mods(known), NULL)
+  }
+  invisible(TRUE)
 }
 
 #' The usual data-egress question for a model (as peter() asks it), outside any run
@@ -398,6 +435,8 @@ coach_loop = function(x) {
     }
     jobs = Filter(Negate(is.null), jobs)
     res = if (length(jobs)) coach_run_jobs(jobs) else list()
+    coach_charge(res)
+    coach_plan_merge(res)
     for (i in seq_along(jobs)) {
       st$results[[jobs[[i]]$id]] = c(list(role = jobs[[i]]$role), res[[i]])
     }
@@ -421,9 +460,20 @@ coach_loop = function(x) {
                "permission", action = "gptr_coach", tool = "gptr_coach", risk = 4L,
                how_to_allow = "pass mode = \"auto\" to gptr_coach()")
   }
+  r1 = s0[[1L]]
+  if (all(vapply(s0, function(r) identical(r$status, "error") || !isTRUE(r$turns > 0), NA))) {
+    why = if (rlang::is_string(r1$error)) r1$error else if (isTRUE(r1$turns > 0)) {
+      "it ended with an error."
+    } else {
+      "it took no turns."
+    }
+    gptr_abort(c(paste0("The starting run failed, so gptr did not coach: ", why),
+                 "Run the task once with peter() to see what it needs."),
+               "invalid_argument", arg = "...", expected = "a task its starting run can do")
+  }
   coach_projection(x, s0)
-  task = coach_first_user(s0[[1L]]$transcript)
-  if (!nzchar(task)) task = x$task$prompt
+  task = if (rlang::is_string(r1$first_user) && nzchar(r1$first_user)) r1$first_user else
+    x$task$prompt
   window = coach_window(x$models$coach)
   runs = function(ids, clip) {
     unlist(lapply(ids, function(id) coach_run_text(id, st$results[[id]], clip)))
@@ -475,8 +525,8 @@ coach_loop = function(x) {
     }))
     if (!is.null(why)) return(out("stopped", why))
     # a composer keeps only rules its base or a candidate it was shown (all probed) holds
-    rules = unique(c(coach_rule_texts(base$rules), unlist(lapply(st$candidates, function(cand) {
-      coach_rule_texts(cand$coaching$rules)
+    rules = unique(c(coach_rule_keys(base$rules), unlist(lapply(st$candidates, function(cand) {
+      coach_rule_keys(cand$coaching$rules)
     }))))
     p = coach_fit(function(clip) {
       coach_prompt(x, base, c(coach_texts$common, coach_texts$composer), x$surface, task,
@@ -579,6 +629,45 @@ coach_passes = function(final, starts, check) {
                                   if (!is.null(check)) "; check TRUE"))
 }
 
+#' Charges the usage rows of a stage's results, each checked by usage_rows_check() (a result is
+#' untrusted) and each request once, to the session of the run this call is part of, else to the
+#' session-less log, so gptr_usage() shows what coaching spent (08 section 3.3)
+#' @noRd
+coach_charge = function(res) {
+  ok = function(u) tryCatch(usage_rows_check(u, "usage"), gptr_error = function(e) NULL)
+  rows = do.call(rbind, c(list(usage_empty()), lapply(res, function(r) ok(r$usage))))
+  run = run_current()
+  had = if (is.null(run)) usage_log()$request_id else session_data(run$shell)$usage$request_id
+  rows = rows[!duplicated(rows$request_id) & !rows$request_id %in% had, , drop = FALSE]
+  if (!nrow(rows)) return(invisible(NULL))
+  if (is.null(run)) usage_log_append(rows) else usage_add(run$shell, rows)
+  invisible(NULL)
+}
+
+#' Keeps the plan readings of a stage's results that are newer than this process's (08 section
+#' 3.7), for gptr's own plan routes only, rebuilt from checked fields (a result is untrusted) with
+#' the utilisations at most 1
+#' @noRd
+coach_plan_merge = function(res) {
+  for (r in res) for (p in intersect(names(r$plan), c("claude-cli", "codex"))) {
+    rd = r$plan[[p]]
+    at = if (is.list(rd)) rd$time
+    if (!inherits(at, "POSIXct") || length(at) != 1L || !is.finite(at) || at > Sys.time() ||
+          isTRUE(at <= (pcli_cache$plan %||% list())[[p]]$time)) {
+      next
+    }
+    chr = function(k) pcli_chr(rd[[k]]) %||% NA_character_
+    unit = function(k) min(pcli_num(rd[[k]]), 1)
+    over = if (isTRUE(rd$overage) || isFALSE(rd$overage)) rd$overage else NA
+    pcli_cache$plan[[p]] = list(status = chr("status"), type = chr("type"),
+                                resets_at = pcli_num(rd$resets_at), five_hour = unit("five_hour"),
+                                seven_day = unit("seven_day"), overage = over,
+                                overage_status = chr("overage_status"),
+                                error_code = chr("error_code"), time = at)
+  }
+  invisible(NULL)
+}
+
 #' After the starting runs, on a plan route, the projected tokens of the whole call (08 3.7)
 #' @noRd
 coach_projection = function(x, starts) {
@@ -670,13 +759,6 @@ coach_judge_prompt = function(task, finals, labels, clip) {
 #' @noRd
 coach_quote = function(x) gsub("<(/?)evidence", "<\\1quoted-evidence", x, ignore.case = TRUE)
 
-#' The first message of a run's transcript (the task with its object descriptions), or ""
-#' @noRd
-coach_first_user = function(transcript) {
-  if (!rlang::is_string(transcript) || !startsWith(transcript, "## user\n")) return("")
-  sub("(?s)\n\n## .*$", "", substring(transcript, 9L), perl = TRUE)
-}
-
 #' The context window of a model in tokens (Inf when unknown)
 #' @noRd
 coach_window = function(model) {
@@ -715,13 +797,14 @@ coach_schema = function() {
            notes = str), "notes")
 }
 
-#' The text of each rule of a coaching's rules: a `never` rule's `rule`, a `require` rule's `any`
-#' or `made` pattern
+#' Each rule of a validated coaching's rules as JSON of its kind and its content apart from the
+#' prose (`why`, `id`, `text`): rules with one key enforce the same thing
 #' @noRd
-coach_rule_texts = function(rules) {
-  one = function(r, keys) paste(unlist(r[keys]), collapse = " ")
-  c(vapply(rules$never %||% list(), one, "", keys = "rule"),
-    vapply(rules$require %||% list(), one, "", keys = c("any", "made")))
+coach_rule_keys = function(rules) {
+  c(vapply(rules$never %||% list(), function(r) json_encode(list(never = r$rule)), ""),
+    vapply(rules$require %||% list(), function(r) {
+      json_encode(list(require = r[intersect(c("any", "made", "contains"), names(r))]))
+    }, ""))
 }
 
 # ---- the coach's reply, in its child (08 section 3.4) --------------------------------------------
@@ -775,7 +858,7 @@ coach_reply_read = function(job, s) {
   if (inherits(co, "error")) {
     return(list(notes = notes, reply = v, problems = conditionMessage(co)))
   }
-  extra = setdiff(coach_rule_texts(co$rules), job$rules_allowed)
+  extra = setdiff(coach_rule_keys(co$rules), job$rules_allowed)
   if (!is.null(job$rules_allowed) && length(extra)) {
     return(list(notes = notes, reply = v, problems = paste0(
       "The coaching adds a rule that no candidate proposed: ", extra[[1L]], ".")))
@@ -788,10 +871,7 @@ coach_reply_read = function(job, s) {
 #' @noRd
 coach_budget_left = function(budget, s) {
   if (is.null(budget)) return(NULL)
-  u = session_usage_rows(s)
-  cols = c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h")
-  used = list(tokens = sum(unlist(u[cols]), na.rm = TRUE), cost = sum(u$cost, na.rm = TRUE),
-              turns = nrow(u))
+  used = usage_used(session_usage_rows(s))
   for (k in intersect(names(budget), names(used))) budget[[k]] = budget[[k]] - used[[k]]
   if (any(unlist(budget[intersect(names(budget), names(used))]) <= 0)) FALSE else budget
 }

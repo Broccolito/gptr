@@ -18,7 +18,9 @@ gptr_coach(
 \arguments{
 \item{...}{What you would give the harness: the prompt, your objects, and any \code{\link[=peter]{peter()}}
 arguments such as \code{mode}, \code{model}, \code{budget} or \code{tools}. They apply to every run of this call
-and are not kept in the result; \code{budget} also caps each coach session.}
+and are not kept in the result; \code{budget} also caps each coach session. Each run is one
+unattended session, so \code{parallel}, \code{choices}, \code{levels}, \code{threshold}, \code{min_confidence},
+\code{uncertain}, \code{background}, \code{.run}, \code{.stdin} and \code{envir} are refused.}
 
 \item{harness}{The harness to start from: \code{peter} or a harness.}
 

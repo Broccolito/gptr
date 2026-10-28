@@ -8,7 +8,8 @@ local_coach_children = function(limit = character(), .env = parent.frame()) {
   log = new.env(parent = emptyenv())
   log$jobs = list()
   log$calls = list()
-  testthat::local_mocked_bindings(coach_run_jobs = function(jobs, max_active = NULL) {
+  local_coach_log(.env)
+  testthat::local_mocked_bindings(coach_run_jobs = function(jobs) {
     log$jobs = c(log$jobs, jobs)
     log$calls = c(log$calls, list(vapply(jobs, function(j) j$id, "", USE.NAMES = FALSE)))
     lapply(jobs, function(job) {
@@ -28,6 +29,17 @@ local_coach_children = function(limit = character(), .env = parent.frame()) {
     })
   }, .env = .env)
   log
+}
+
+# Coaching charges its usage rows to the session-less log and merges plan readings: both are put
+# back when the test ends
+local_coach_log = function(.env = parent.frame()) {
+  log = the$s1_log
+  plan = pcli_cache$plan
+  withr::defer({
+    assign("s1_log", log, envir = the)
+    assign("plan", plan, envir = pcli_cache)
+  }, envir = .env)
 }
 
 # A solver that averages `x` and is wrong (NA) unless its instructions mention na.rm; `fixed` is
@@ -244,6 +256,17 @@ test_that("every refusal comes before anything starts", {
   con = textConnection("x")
   withr::defer(close(con))
   refused("invalid_argument", con, regexp = "cannot be sent")
+  # peter() arguments an unattended run cannot use, and those peter() would refuse
+  unusable = list(.run = FALSE, background = TRUE, .stdin = TRUE, envir = new.env(),
+                  parallel = 2L, choices = c("a", "b"), levels = c("low", "high"),
+                  threshold = 0.4, min_confidence = 0.5, uncertain = "stop")
+  for (nm in names(unusable)) {
+    do.call(refused, c(list("invalid_argument", regexp = paste0("`", nm, " =`")), unusable[nm]))
+  }
+  refused("invalid_argument", tools = c("r", "nosuchtool"), regexp = "'nosuchtool'")
+  refused("invalid_argument", budget = list(dollars = 1), regexp = "Unknown budget field")
+  refused("invalid_argument", harness = gptr_tailor(peter, background = TRUE),
+          regexp = "`background =`")
   expect_error(gptr_coach(x, model = solver), class = "gptr_error_invalid_argument")
   withr::with_options(list(gptr.unsafe_no_permissions = TRUE),
                       refused("permission", regexp = "unsafe_no_permissions"))
@@ -264,7 +287,23 @@ test_that("a domain coach cannot write rules and the composer cannot add one", {
   expect_match(domain$problems, "rules", fixed = TRUE)
   composer = h$report$results$compose1$value
   expect_true(composer$fell_back)
-  expect_match(composer$problems, "no candidate proposed: r(category:install)", fixed = TRUE)
+  expect_match(composer$problems, 'no candidate proposed: {"never":"r(category:install)"}',
+               fixed = TRUE)
+  # a rule is its kind and its whole content: a never rule turned into a require, or a require
+  # that gains a condition, is a new rule; other prose and another id are not
+  proposed = paste0('{"rules": {"never": [{"rule": "r(fn:write.csv)", "why": "No files."}], ',
+                    '"require": [{"id": "avg", "any": "r(fn:mean)", "text": "Average."}]}, ',
+                    '"note": "Use na.rm.", "notes": "x"}')
+  composed = function(require) {
+    reply = paste0('{"rules": {"require": [', require, ']}, "notes": "x"}')
+    coach_demo(coach = coach_fake(procedure = proposed, composer = reply),
+               check = NULL)$report$results$compose1$value
+  }
+  flipped = composed('{"id": "csv", "any": "r(fn:write.csv)", "text": "Write it."}')
+  expect_match(flipped$problems, '{"require":{"any":"r(fn:write.csv)"}}', fixed = TRUE)
+  narrowed = composed('{"id": "avg", "any": "r(fn:mean)", "contains": "wave3", "text": "Average."}')
+  expect_match(narrowed$problems, '"contains":"wave3"', fixed = TRUE)
+  expect_false(composed('{"id": "mean-first", "any": "r(fn:mean)", "text": "Mean."}')$fell_back)
 })
 
 test_that("a plan limit stops the call with the starting harness and a record", {
@@ -322,7 +361,7 @@ test_that("a recorded coaching call replays from its block with no process", {
   expect_identical(coaching_hash(e$mean_peter$coaching), hash)
 })
 
-# ---- k > 1 and sequential (coach_run_jobs() stubbed) ---------------------------------------------
+# ---- coach_run_jobs() stubbed: k > 1, sequential, the parent's own checks ------------------------
 
 # coach_run_jobs() stubbed: `answer(job)` gives the fields of each job's result; `log` keeps the
 # job ids of each stage and every job
@@ -330,7 +369,8 @@ local_coach_stub = function(answer, .env = parent.frame()) {
   log = new.env(parent = emptyenv())
   log$jobs = list()
   log$calls = list()
-  testthat::local_mocked_bindings(coach_run_jobs = function(jobs, max_active = NULL) {
+  local_coach_log(.env)
+  testthat::local_mocked_bindings(coach_run_jobs = function(jobs) {
     log$jobs = c(log$jobs, jobs)
     log$calls = c(log$calls, list(vapply(jobs, function(j) j$id, "", USE.NAMES = FALSE)))
     lapply(jobs, function(job) do.call(child_result_new, c(list(job$id), answer(job))))
@@ -528,33 +568,140 @@ test_that("the judge runs as a tool-less session whose value is its label", {
                    list(status = "idle", value = list(label = "B")))
 })
 
-# ---- real child processes (skipped on CRAN; gptr must be installed for Rscript children) ------
-
-# Children load gptr with loadNamespace(): under R CMD check the installed package is on the
-# library path; from a source tree it is installed once per R session into a temporary library
-local_worker_lib = function(.env = parent.frame()) {
-  testthat::skip_on_cran()
-  path = getNamespaceInfo(asNamespace("gptr"), "path")
-  if (!file.exists(file.path(path, "R", "aaa-state.R"))) return(invisible(NULL))
-  lib = file.path(tempdir(), "gptr-worker-lib")
-  if (!file.exists(file.path(lib, "gptr", "DESCRIPTION"))) {
-    dir.create(lib, showWarnings = FALSE, recursive = TRUE)
-    cmd = sprintf(paste0("install.packages('%s', lib = '%s', repos = NULL, type = 'source', ",
-                         "INSTALL_opts = c('--no-docs', '--no-multiarch', '--no-test-load'))"),
-                  normalizePath(path, winslash = "/"), normalizePath(lib, winslash = "/"))
-    res = processx::run(rscript_path(), c("--vanilla", "-e", cmd), error_on_status = FALSE,
-                        timeout = 600)
-    if (!file.exists(file.path(lib, "gptr", "DESCRIPTION"))) {
-      testthat::skip(paste("could not install gptr for worker children:", res$stderr))
-    }
+test_that("starting runs that all failed or took no turns stop the call before any coach", {
+  local_project()
+  failed = function(job) {
+    if (identical(job$id, "start1")) return(list(error = "`tools =` names 'nosuch'."))
+    list(status = "idle", turns = 0L)
   }
-  withr::local_libpaths(lib, action = "prefix", .local_envir = .env)
-  invisible(lib)
+  log = local_coach_stub(failed)
+  expect_error(coach_k(k = 2L), "did not coach: `tools =` names 'nosuch'.",
+               class = "gptr_error_invalid_argument")
+  expect_identical(log$calls, list(c("start1", "start2")))
+  log = local_coach_stub(function(job) list(status = "idle", turns = 0L))
+  expect_error(coach_k(), "did not coach: it took no turns", class = "gptr_error_invalid_argument")
+  # one starting run that worked is evidence enough
+  answer = coach_answer()
+  log = local_coach_stub(function(job) if (identical(job$id, "start1")) list() else answer(job))
+  expect_identical(coach_k(k = 2L)$record$decision, "kept")
+})
+
+test_that("tool names only a run's session can know are left to the run", {
+  start = harness_spec(peter)
+  expect_invisible(coach_args_check(list(tools = c("r", "-sh", "readonly")), start))
+  expect_invisible(coach_args_check(list(tools = "mcp__srv__lookup"), start))
+  expect_invisible(coach_args_check(list(tools = "mine", extensions = function(gptr) NULL), start))
+})
+
+test_that("the coaches and the judge see the starting run's whole first message as the task", {
+  local_project()
+  task = "Average x.\n\n## Rules\n- keep the column names\n\nx: a numeric vector of length 3"
+  answer = coach_answer(judge = judge_picks("compose2"))
+  log = local_coach_stub(function(job) {
+    c(answer(job), if (job$id == "start1") list(first_user = task))
+  })
+  coach_k(k = 2L)
+  for (id in c("proc1", "compose2", "judge")) {
+    expect_match(job_by_id(log, id)$prompt, paste0("# The task\n", task, "\n#"), fixed = TRUE)
+  }
+})
+
+test_that("peter() arguments are taken from their own frames when gptr_coach() is wrapped", {
+  local_project()
+  log = local_coach_stub(coach_answer())
+  wrap = function(...) gptr_coach(...)
+  use = function() {
+    lim = list(turns = 3)
+    x = c(1, NA, 3)
+    wrap("Average x.", x, model = coach_solver(), mode = "auto", coach = coach_fake(), budget = lim)
+  }
+  use()
+  expect_identical(job_by_id(log, "start1")$args$budget, list(turns = 3))
+})
+
+# A usage row of request `id`
+usage_of = function(id, cost = 0.5) {
+  usage_conform(data.frame(request_id = id, session = "s0000000001", agent = "main",
+                           provider = "fake", model = "fake-1", route = "api", input = 100,
+                           output = 10, cost = cost, started = Sys.time(), estimated = FALSE))
 }
+
+test_that("coaching spend reaches gptr_usage(), each request once", {
+  local_project()
+  answer = coach_answer()
+  log = local_coach_stub(function(job) {
+    id = if (startsWith(job$id, "probe")) "q-probe" else paste0("q-", job$id)
+    c(answer(job), list(usage = usage_of(id)))
+  })
+  requests = function() attr(gptr_usage(), "totals")[["requests"]]
+  before = requests()
+  coach_k()
+  expect_identical(requests() - before, 6)
+  added = utils::tail(usage_log()$request_id, 6L)
+  expect_setequal(added, paste0("q-", c("start1", "proc1", "dom1", "probe", "compose1", "final1")))
+})
+
+test_that("inside a run, coaching spend is charged to the run's session; a forged row is not", {
+  local_project()
+  s = peter("Hi.", model = gptr_fake_provider(list("Hello.")))
+  run = list(shell = s)
+  testthat::local_mocked_bindings(run_current = function() run)
+  n = nrow(session_data(s)$usage)
+  coach_charge(list(list(usage = usage_of("q-a")), list(usage = usage_of("q-a")),
+                    list(usage = data.frame(input = "x")), list(usage = NULL)))
+  coach_charge(list(list(usage = usage_of("q-a"))))
+  u = session_data(s)$usage
+  expect_identical(nrow(u), n + 1L)
+  expect_identical(u$request_id[[nrow(u)]], "q-a")
+})
+
+test_that("plan readings from the runs reach this session when newer, checked and clipped", {
+  local_project()
+  now = Sys.time()
+  reading = function(at, five) {
+    list(`claude-cli` = list(status = "allowed", five_hour = five, seven_day = 0.2, time = at),
+         elsewhere = list(five_hour = 0.1, time = at))
+  }
+  answer = coach_answer()
+  log = local_coach_stub(function(job) {
+    plan = switch(job$id, start1 = reading(now - 60, 1.7), final1 = reading(now - 120, 0.9),
+                  `probe-dom1` = list(`claude-cli` = list(five_hour = "x", time = "today")))
+    c(answer(job), list(plan = plan))
+  })
+  pcli_cache$plan = NULL
+  coach_k()
+  rd = pcli_cache$plan$`claude-cli`
+  expect_identical(names(pcli_cache$plan), "claude-cli")
+  expect_identical(rd[c("status", "five_hour", "seven_day", "time")],
+                   list(status = "allowed", five_hour = 1, seven_day = 0.2, time = now - 60))
+})
+
+test_that("the call record tells the document route whether every model is offline", {
+  local_project()
+  log = local_coach_stub(coach_answer())
+  seen = new.env()
+  real = ext_service_get
+  testthat::local_mocked_bindings(ext_service_get = function(name) {
+    if (!identical(name, "doc.coach")) return(real(name))
+    function(call) {
+      seen$offline = c(seen$offline, call$offline)
+      list(action = "replay", harness = peter)
+    }
+  })
+  x = c(1, NA, 3)
+  for (coach in list(coach_fake(), "anthropic/claude-sonnet-5-5")) {
+    gptr_coach("Average x.", x, model = coach_solver(), mode = "auto", coach = coach)
+  }
+  expect_identical(seen$offline, c(TRUE, FALSE))
+  expect_length(log$jobs, 0L)
+})
+
+# ---- real child processes (skipped on CRAN; gptr must be installed for Rscript children) ------
 
 test_that("the demo in real processes, at most two at once, leaves no child behind", {
   local_worker_lib()
   local_project()
+  local_coach_log()
   local_gptr_options(subagents.max_workers = 2L)
   h = coach_demo()
   expect_identical(h$record$decision, "kept")
