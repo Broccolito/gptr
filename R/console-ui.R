@@ -77,7 +77,7 @@ ui_answer_norm = function(ans, request) {
 
 #' Why an approval of this request cannot become a rule (IC-77 item 3), else NULL: never for
 #' level 4, control or the ask tool, nor without a suggested rule, where a policy that asks it
-#' without one says why (`no_rule`, an ask rule's reason)
+#' without one says why (`no_rule`, an ask rule's reason, escaped as the `?` view's reason is)
 #' @noRd
 ui_no_rule = function(request) {
   risk = request$risk
@@ -87,7 +87,7 @@ ui_no_rule = function(request) {
   }
   if (rlang::is_string(request$suggested_rule)) return(NULL)
   if (rlang::is_string(request$no_rule)) {
-    return(paste0(request$no_rule, "; an always rule would not stop it"))
+    return(paste0(ui_escape(request$no_rule), "; an always rule would not stop it"))
   }
   "no rule covers these calls"
 }
