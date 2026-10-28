@@ -9,14 +9,6 @@ walk_default_prune = c(".git/", "node_modules/", ".Rproj.user/", "renv/library/"
 walk_ignore_files = c(".gitignore", ".ignore", ".gptrignore")
 walk_max_entries = 500000L
 
-#' Path handed to base file-system functions: UTF-8 bytes without a mark in non-UTF-8 Unix locales
-#' (a marked non-ASCII path fails there with "unable to translate"; report 01 E4)
-#' @noRd
-fs_path = function(p) {
-  if (.Platform$OS.type != "windows" && !isTRUE(l10n_info()[["UTF-8"]])) Encoding(p) = "unknown"
-  p
-}
-
 #' Resolve a model- or user-supplied path to an absolute, normalised path (Pi resolveToCwd; report
 #' 11 section 2.8): Unicode spaces become " ", one leading "@" is dropped, file:// URLs are decoded,
 #' Git-Bash and WSL drive paths are rewritten on Windows, "~" is expanded (only "~", "~/", "~\\").

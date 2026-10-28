@@ -58,6 +58,14 @@ os_bytes = function(x) {
   x
 }
 
+#' Path handed to base file-system functions: UTF-8 bytes without a mark in non-UTF-8 Unix locales
+#' (a marked non-ASCII path fails there with "unable to translate"; report 01 E4)
+#' @noRd
+fs_path = function(p) {
+  if (.Platform$OS.type != "windows" && !isTRUE(l10n_info()[["UTF-8"]])) Encoding(p) = "unknown"
+  p
+}
+
 #' Parse R text so that parse-data columns and getParseText() (which cuts source lines with
 #' substr()) count the same unit (IC-62). In a UTF-8 locale marked UTF-8 is parsed: nothing is
 #' translated and both count characters. Elsewhere the parser would translate marked text to the
