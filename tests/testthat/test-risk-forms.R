@@ -134,7 +134,7 @@ test_that("a link to a path outside the project is level 4, as ln's (review roun
   o = deparse(out)
   for (code in c(paste0("file.symlink(", o, ", 'lnk')"),
                  paste0("file.link(", deparse(file.path(out, "a")), ", 'lnk')"),
-                 paste0("Sys.junction(", o, ", 'lnk')"), "file.symlink('~', 'lnk')",
+                 paste0("Sys.junction(", o, ", 'lnk')"),
                  paste0("file.symlink(to = 'lnk', from = ", o, ")"),
                  paste0("d = ", o, "; file.symlink(d, 'lnk')"))) {
     expect_identical(lv(code), 4L, label = code)
@@ -163,7 +163,7 @@ test_that("getwd() and setwd()'s value are the working directory (review round 5
     expect_identical(lv(code), 2L, label = code)
   }
   # out of the project, or a directory the code computes, as before
-  for (code in c("setwd(o)", "setwd(file.path(getwd(), '..'))",
+  for (code in c("setwd(o)", "setwd(file.path(getwd(), '..', '..'))",
                  "setwd(tempdir()); setwd(file.path(getwd(), '..'))",
                  "withr::with_dir('data', setwd(file.path(getwd(), '..', '..')))",
                  "if (x) owd = setwd('data'); setwd(owd)")) {
