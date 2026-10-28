@@ -7963,6 +7963,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   Tests: test-risk-forms.R "Sys.junction() writes its `to`, with R's formals or as written, on
   any host (round 6)", "sys::exec_*()'s std_out and std_err are files it writes, as processx's
   (round 6)". Evidence: progress/fixes.md FIX-27.
+- Status 2026-10-28 (review round 6 verification): a function written as sys's `std_out` or
+  `std_err` is a callback, not a file it writes (round 6 read it as a level 2 file write, which
+  manual and edits asked); its code is read as any function's, and a name there stays a file the
+  code computes, level 2. Tests: test-risk-forms.R "sys::exec_*()'s std_out and std_err are files
+  it writes, as processx's (round 6)". Evidence: progress/fixes.md FIX-27.
 
 ## D-263 - FIX-28 Bracketed paste decides a paste in a T console (2026-10-26)
 - Rule (mode): a T console's call turns bracketed paste on with its character mode. `tty_modes()`
@@ -8774,3 +8779,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   claude and codex CLIs keep is control, as a provider's key (round 6)", "paste(), paste0() and
   file.path() are folded with their arguments as R passes them". Evidence: progress/fixes.md
   FIX-36.
+- Status 2026-10-28 (review round 6 verification): a `collapse` in `paste()` or `paste0()` is
+  also read as each value only when a part holds a name or R's working directory (round 6 did so
+  for literals too, which made `system(paste(c("python3", "--version"), collapse = " "))` level 3
+  instead of 0). The rule of round 4 counts a helper's bare name; a helper assigned into an
+  environment (`e$paste0 = f`, `.GlobalEnv[["paste0"]] = f`) is read as base R's, level 2 for such
+  a variable name, as `?gptr_security`, `?gptr_risk` and 03 section 6.8.1 now say.
+  `?gptr_options` and `?gptr_security` call round 6's CLI names the variables gptr keeps for the
+  `claude` or `codex` tool (its login, its folder or the path of Git Bash). Contract-visible: 03
+  section 6.8.1; `?gptr_options`, `?gptr_security`, `?gptr_risk`. Tests: test-risk-forms.R
+  "paste(), paste0() and file.path() are folded with their arguments as R passes them".
+  Evidence: progress/fixes.md FIX-36.

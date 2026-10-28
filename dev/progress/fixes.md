@@ -6581,6 +6581,27 @@ the driver, screens, events, transcripts and replays without a model are local, 
     (console-repl.R) calls `fs_path` (tool-walk.R), an edge from round 5's console merge that this
     branch does not touch. Not run: the full suite, `R CMD check`, Linux and Windows hosts, R 4.2
     and R-devel, live models.
+- Review round 6 verification, the class writer's items (the verifier on `66ad036e`, its
+  findings 1 to 4; branch `claude/v1-fix-class6`, each test red on `66ad036e`'s code first).
+  FIX-36's review round 6 verification bullet holds findings 2 to 4.
+  - Red: test-risk-forms.R on `66ad036e`'s code, `^risk-forms$` FAIL 8 PASS 228 in UTF-8 and
+    under `LC_ALL=C LANG=C`; this record's share: sys's callbacks 4.
+  - sys's callbacks (finding 1, `5dfd775e`): round 6 read every `std_out` and `std_err` of a
+    runner as a file, and sys also takes a callback there, so
+    `sys::exec_wait("ls", std_out = function(x) cat(rawToChar(x)))`, its `\(x)` form and
+    `sys::exec_background()`'s went from 0 to a level 2 file write, which manual and edits ask
+    and plan refuses. A function written there is no file now; its code is still read as any
+    function's, so a callback that deletes `~/.Rprofile` stays 4. A name there stays a file the
+    code computes, level 2 as a name given to `processx::run()`'s `stdout` is (`std_out = print`,
+    or a name the code binds to a function): a name may hold a path as well as a callback.
+  - Green on `d7e6aca6`'s code (the records commit changes only `dev/`):
+    `^(perm|risk|rules|nested|bridge|mcp-|gptr-config|agent-|tool-|session-|py|knit|secrets|auth-)`
+    FAIL 0 WARN 0 SKIP 16 PASS 10314 in UTF-8 (322 s) and the same under `LC_ALL=C LANG=C`
+    (337 s); `^(risk-forms|perm-classify)$` PASS 1437. Lint of the 3 changed R files and the
+    changed test file clean; `document()` no diff; `check-docs.R` 0 problems; spelling clean;
+    fmt.py leaves copies of the changed records unchanged and lintfmt.py shows its baseline
+    (fixes.md 1, HANDOFF 3, PROGRESS 1, DEVIATIONS 0). Not run: the full suite, `R CMD check`,
+    Linux and Windows hosts, R 4.2 and R-devel, live models.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #93)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
@@ -9067,3 +9088,31 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
     count; reading the others would need each binder's arguments matched and `with()`'s scope, not
     one small rule.
   - Green and checks: FIX-27's review round 6 above.
+- Review round 6 verification, the class writer's items (the verifier on `66ad036e`, its
+  findings 2 to 4; branch `claude/v1-fix-class6`).
+  - Red: this record's share of FAIL 8 (FIX-27's review round 6 verification): the literal
+    collapse 4.
+  - The literal collapse (finding 2, `10046f9e`): `af045d67` read a collapse as each uncollapsed
+    value for literals too, and a folded command's values are joined into one line, so
+    `system(paste(c("python3", "--version"), collapse = " "))` read as
+    `python3 --version python3 --version`, level 3 where R runs `python3 --version` (0 before
+    round 6), and `R --version`, `bash --version` and the `processx::run()` form the same. The
+    values are now added only when a part holds a name or R's working directory, which may hold
+    several: the branch delete of `paste0(d, collapse = "")` stays 4, and after a move in a
+    branch `unlink(paste0(getwd(), collapse = ""))` stays as `unlink(getwd())` is (4; 2 for a
+    mutant that adds them for names only). 03 section 6.8.1 says which collapse.
+  - Helpers assigned into an environment (finding 3, `8e3daa43`, documented): `risk_bound()`
+    takes a replacement call's root, so `e$paste0 = f` binds `e`, and a later `paste0()` is read
+    as base R's: `Sys.unsetenv(x = paste0("T", "Z"))` is level 2, which auto runs, after
+    `e$paste0`, `globalenv()[["paste0"]]` or `.GlobalEnv$paste0` is set to return a control name,
+    and so is `setwd(file.path("data"))` after `.GlobalEnv$file.path = function(...) ".."`.
+    Reading such an assignment as a binding would mask `c()` for each `x$c = ...` on a list or a
+    data frame. `?gptr_security`, `?gptr_risk` and 03 section 6.8.1 now say the rule counts a
+    helper's bare name and name this binder with the others; `paste0 = f` and `paste0 <<- f`
+    stay 4.
+  - The CLI variables' wording (finding 4, `59553f7a`): `?gptr_options`, `?gptr_security` and
+    `risk_control_env()`'s comment called the names round 6 added a login or folder variable of
+    the `claude` or `codex` tool, and `CLAUDE_CODE_GIT_BASH_PATH` is the path of Git Bash. They
+    now say a variable gptr keeps for the tool (its login, its folder or the path of Git Bash), as
+    03 and 04 already did.
+  - Green and checks: FIX-27's review round 6 verification above.
