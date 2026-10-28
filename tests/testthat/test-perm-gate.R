@@ -418,8 +418,10 @@ test_that("code a shell or Python runs is read in the directory the line moved t
   writeLines("x", file.path(out, "marker.txt"))
   sh = registry_get("tool", "sh")
   level = function(cmd, wd = ".") as.integer(sh$risk(list(cmd = cmd, wd = wd), NULL)$level)
+  # the last two are read by only one of the two readings, the -c parse or the literal scan
   cmds = list(c("sh", "-c", "rm -f marker.txt"), "sh -c 'rm -f marker.txt'",
-              "bash -c 'rm -f marker.txt'", "python3 -c 'import os; os.remove(\"marker.txt\")'")
+              "bash -c 'rm -f marker.txt'", "python3 -c 'import os; os.remove(\"marker.txt\")'",
+              "sh -c 'timeout 5 rm -f marker.txt'", "echo 'rm -f marker.txt' | sh")
   for (cmd in cmds) {
     expect_identical(level(cmd, out), 4L, label = paste(cmd, collapse = " "))
     expect_identical(level(cmd), 3L, label = paste(cmd, collapse = " "))

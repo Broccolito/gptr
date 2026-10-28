@@ -1193,6 +1193,7 @@ test_that("a drive-relative path is outside the project on every OS (review roun
   lv = function(code) gptr_risk(code, root = root)$level
   expect_identical(lv("unlink('D:build', recursive = TRUE)"), 4L)
   expect_identical(lv("system('cd D:other && rm -rf build')"), 4L)
+  expect_identical(lv("system('git -C D:other rm -r build')"), 4L)
   sh = registry_get("tool", "sh")
   for (wd in c("D:other", "C:sub\\dir")) {
     r = sh$risk(list(cmd = c("rm", "-rf", "build"), wd = wd), NULL)
