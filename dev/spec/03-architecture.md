@@ -1626,13 +1626,15 @@ and the member's own classification of its actual input (`call_risk()`: a patch'
 at run time, a `peter$sh()` command read as run in its `wd` [D-262]) is no higher either, it runs without a second
 prompt; otherwise it passes the gate [IC-78]. So does a call that reads a registered secret the outer call's
 analysis did not show, such as one the `env` of `peter$sh()` or `peter$script()` hands a child [D-267].
-The command of a `peter$sh()` or `peter$bg()` call meets the deny and ask rules first, whatever its level,
-as the literal call would; allow rules are not applied there, and an ask offers no `[a]lways` rule [D-251].
+The command of a `peter$sh()` or `peter$bg()` call, or the path of a `peter$script()` call, meets the deny and
+ask rules first, whatever its level, as the literal call would, with the registered secrets its `env` hands the
+child, so an `r(secret:NAME)` deny or ask rule stops the hand-over [D-267]; allow rules are not applied there,
+and an ask offers no `[a]lways` rule [D-251].
 Base `system()`, `system2()`, `shell()` and `shell.exec()` have no such re-check, so auto and yolo refuse them
 with a computed command (6.8.1) [D-262]. R served to the CLI routes or an MCP client binds the same marker, with
 the served call as the outer call, so its nested calls pass `dispatch_nested()` too; when no pump serves the
-request the idle gate decides each first, a `sh` or `bg` call as the literal call of its command run in its `wd`,
-with the registered secrets its `env` hands the child, and then, when that hand-over meets the secret guard and
+request the idle gate decides each first, a `sh` or `bg` call as the literal call of its command run in its `wd`
+and a `script` call as that of its path, with the registered secrets its `env` hands the child, and then, when that hand-over meets the secret guard and
 the served call's own analysis does not guard every secret handed over, the member call itself, which no
 `r(secret:)` rule covers [D-267].
 Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].

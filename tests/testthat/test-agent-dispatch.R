@@ -530,6 +530,44 @@ test_that("a refused call says none of it ran; a nested denial mid-run does not 
   expect_identical(e$x2, 2)
 })
 
+test_that("an r(secret:) deny or ask rule stops a member handing a child the secret (round 6)", {
+  skip_on_cran()
+  local_project(files = list(s.sh = "whoami"))
+  local_permission_rules()
+  local_vault()
+  withr::local_envvar(R6_FAKE_KEY = "sk-test-0000-r6")
+  secret_register("sk-test-0000-r6", "R6_FAKE_KEY")
+  # commands that do not read the secret by name: only the hand-over meets the rule
+  calls = c("peter$sh('whoami', env = 'R6_FAKE_KEY')$stdout",
+            "peter$script('s.sh', env = 'R6_FAKE_KEY')$stdout")
+  run = function(code, mode, answers = list()) {
+    ui = local_scripted_ui(answers)
+    fake = local_fake_provider(list(fake_tool("r", code = paste("x =", code)), "done"))
+    e = new.env()
+    peter("go", model = fake, envir = e, mode = mode)
+    list(x = e$x, asked = sum(ui$log$method == "permission"),
+         text = msg_text(fake_requests(fake)[[2L]]$last_results[[1L]]))
+  }
+  gptr_permissions(deny = "r(secret:R6_FAKE_KEY)")
+  for (code in calls) {
+    for (case in list(list("yolo", list()), list("auto", list()), list("manual", list("y")))) {
+      res = run(code, case[[1L]], case[[2L]])
+      label = paste(case[[1L]], code)
+      expect_null(res$x)
+      expect_identical(res$asked, length(case[[2L]]), label = label)
+      expect_match(res$text, "denied by the rule r(secret:R6_FAKE_KEY)", fixed = TRUE,
+                   label = label)
+    }
+  }
+  gptr_permissions(remove = "r(secret:R6_FAKE_KEY)")
+  gptr_permissions(ask = "r(secret:R6_FAKE_KEY)")
+  for (code in calls) {
+    res = run(code, "yolo", list("n"))
+    expect_null(res$x)
+    expect_identical(res$asked, 1L, label = code)
+  }
+})
+
 test_that("the UI answers asks when the run's snapshot can prompt", {
   local_gptr_options(interactive = TRUE)
   ui = new.env()

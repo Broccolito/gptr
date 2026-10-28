@@ -502,6 +502,29 @@ test_that("an r(secret:) rule covers an idle served hand-over if the code reads 
   expect_null(yolo$envir$z)
 })
 
+test_that("a deny r(secret:) rule stops a served hand-over in a run and in a script (round 6)", {
+  skip_on_cran()
+  local_project(files = list(s.sh = "whoami"))
+  local_vault()
+  local_permission_rules()
+  withr::local_envvar(R6_FAKE_KEY = "sk-test-0000-r6")
+  secret_register("sk-test-0000-r6", "R6_FAKE_KEY")
+  gptr_permissions(deny = "r(secret:R6_FAKE_KEY)")
+  serve = function(target, code) mcp_dispatch_local(r_call(code), target)$result
+  codes = c("x = peter$sh('whoami', env = 'R6_FAKE_KEY')$stdout",
+            "x = peter$script('s.sh', env = 'R6_FAKE_KEY')$stdout")
+  # served while the run's pump runs (a person could answer), and to an idle yolo session
+  seen = serve_in_run(function(event, ctx) lapply(codes, function(x) serve(ctx$session, x)))
+  yolo = local_served_session("yolo")
+  res = c(seen$out, lapply(codes, function(x) serve(yolo$session, x)))
+  for (r in res) {
+    expect_true(r$isError)
+    expect_match(r$content[[1L]]$text, "denied by the rule r(secret:R6_FAKE_KEY)", fixed = TRUE)
+  }
+  expect_null(seen$envir$x)
+  expect_null(yolo$envir$x)
+})
+
 test_that("inside a running session the claude route gates through perm_check once", {
   probe = gptr_tool("probe", "Calls the MCP dispatcher the way the claude adapter does.",
                     parameters = list(type = "object",
