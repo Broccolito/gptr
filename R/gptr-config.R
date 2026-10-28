@@ -1653,12 +1653,13 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' variable gptr reads as configuration, such as a provider key, or one that moves its
 #' configuration folder or your home directory, such as `HOME`; [gptr_options] lists them. The
 #' classifier reads such a change in `Sys.setenv()`, `Sys.unsetenv()`, `withr::local_envvar()` and
-#' `withr::with_envvar()`, where a name it cannot read counts as one, in `readRenviron()` and
-#' `dotenv::load_dot_env()`, and in an `os.environ` write in the code of `peter$py()` or
-#' `peter$knit("python", code)` that names one in a string or an upper-case word. It does not read
-#' code in a file R runs (`source()`, `sys.source()`, `eval(parse(file = ))`); `Sys.setenv()`
-#' reached by a computed name, through a list or an environment, or handed to another function
-#' (`get("Sys.setenv")`, `baseenv()$Sys.setenv`, `with(list(f = Sys.setenv), ...)`,
+#' `withr::with_envvar()`, where a name it cannot read counts as one (also one built with
+#' `paste0()` or another helper of base R that the code or your session replaces), in
+#' `readRenviron()` and `dotenv::load_dot_env()`, and in an `os.environ` write in the code of
+#' `peter$py()` or `peter$knit("python", code)` that names one in a string or an upper-case word.
+#' It does not read code in a file R runs (`source()`, `sys.source()`, `eval(parse(file = ))`);
+#' `Sys.setenv()` reached by a computed name, through a list or an environment, or handed to
+#' another function (`get("Sys.setenv")`, `baseenv()$Sys.setenv`, `with(list(f = Sys.setenv), ...)`,
 #' `assign("f", Sys.setenv)`, `identity(Sys.setenv)`); a Python write whose name the code
 #' computes, that reaches `os.environ` by another name (`e = os.environ`, `getattr(os, "environ")`)
 #' or through `ctypes`, or that passes `os.environ.update()` lower-case keyword names (on Windows

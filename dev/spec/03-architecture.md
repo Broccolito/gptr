@@ -1482,8 +1482,10 @@ Outside function bodies, a path held in a name the code assigns is folded (liter
 `paste()`, `paste0()`, `normalizePath()`, `path.expand()`, `tempfile()`), the worst value counting: a straight-line
 assignment replaces the name's values unless the code also assigns it with `<<-`, one in a branch, loop or call adds
 its value (and, when first, the binding before the code), and a value the code computes or a loop that assigns the
-name makes it computed [D-211]. The classifier is advisory and documented as not a security boundary; in-process R
-cannot be sandboxed [18 §2.5].
+name makes it computed [D-211]. A call of one of these helpers (or of a `list()` holding withr's variables) that the
+code assigns, or that the environment the code would run in holds as other than base R's, is one the code computes,
+for a path, a command or a variable name [D-272]. The classifier is advisory and documented as not a security
+boundary; in-process R cannot be sandboxed [18 §2.5].
 
 In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command
 (`system2()`'s `args` and `env` too [D-267], `shell.exec()`'s file) the classifier cannot fold to literals: a
