@@ -165,7 +165,9 @@ test_that("gptr_coach() on a Codex plan leaves no prompt in CODEX_HOME (D-265)",
   after = files()
   changed = names(after)[!after %in% before]
   holds = vapply(changed, function(f) {
-    b = tryCatch(readBin(f, "raw", n = file.size(f)), error = function(e) raw())
+    # Codex removes some temporary files between the listing and this read
+    b = if (file.exists(f)) tryCatch(readBin(f, "raw", n = file.size(f)), error = function(e) raw())
+    if (is.null(b)) b = raw()
     length(grepRaw(canary, b, fixed = TRUE)) > 0L
   }, NA, USE.NAMES = FALSE)
   message("D-265: ", length(changed), " file(s) under CODEX_HOME changed during gptr_coach(), ",
