@@ -1648,6 +1648,10 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `gptr.unsafe_no_permissions`, set by you outside a run, removes the gate, and it is meant for
 #' disposable sandboxes.
 #'
+#' Changing gptr's own configuration includes model code that sets or unsets an environment
+#' variable gptr reads as configuration, such as a provider key, or one that moves its
+#' configuration folder or your home directory, such as `HOME`; [gptr_options] lists them.
+#'
 #' @section What the gate cannot do:
 #' The risk levels come from a static classifier ([gptr_risk()]). It is advisory and it is not a
 #' security boundary: R code can compute function names, call compiled code or load packages

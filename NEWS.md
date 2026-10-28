@@ -52,6 +52,9 @@ works on the objects already in memory.
   `system2()`, `shell()` and `shell.exec()` with a command the code computes (`system2()`'s `env`
   included) are refused unless an allow rule such as `r(fn:system)` names the function; the model
   is pointed to `peter$sh()`, whose command the rules check when it runs.
+* gptr asks before model code sets or unsets `R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME` or `HOME`
+  (on Windows also `APPDATA` or `USERPROFILE`), which move its configuration folder or your
+  home, in `auto` mode too, as it does for a provider key.
 * Scripts and notebooks are the history: code the agent ran is recorded below each `peter()`
   call in `.R`, `.Rmd`, `.qmd` and `.ipynb` documents, also what a call ran before it failed,
   and replays without model calls (`gptr_doc()`, `gptr_source()`, `gptr_blocks()`,

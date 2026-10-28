@@ -48,6 +48,10 @@ a \code{gptr_error_permission} condition that says how to allow the action, unle
 during a run: the safety options are copied when the run starts. Only the option
 \code{gptr.unsafe_no_permissions}, set by you outside a run, removes the gate, and it is meant for
 disposable sandboxes.
+
+Changing gptr's own configuration includes model code that sets or unsets an environment
+variable gptr reads as configuration, such as a provider key, or one that moves its
+configuration folder or your home directory, such as \code{HOME}; \link{gptr_options} lists them.
 }
 
 \section{What the gate cannot do}{
