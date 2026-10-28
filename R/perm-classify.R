@@ -367,10 +367,9 @@ risk_target = function(w, op, root, dirs = root) {
       pc = "control"
     }
     if (identical(op, "read") && identical(pc, "critical")) {
-      # a directory read whole: the project's or tempdir()'s files, else outside (a drive root,
-      # "/" or home), never a child path (file.path("/", "x") is a UNC path on Windows)
-      pc = if (path_inside(p, root)) "workspace" else
-        if (path_inside(p, tempdir())) "temp" else "outside"
+      # a directory read whole has its files' class; the child is joined with one "/", as
+      # file.path("/", "x") is "//x", a UNC path on Windows
+      pc = risk_path_class(paste0(sub("[/\\\\]+\\z", "", p, perl = TRUE), "/x"), root)
     }
     lv = risk_op_level(pc, op)
     sec = identical(op, "read") && !is.na(p) &&

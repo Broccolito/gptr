@@ -1374,12 +1374,12 @@ test_that("a Windows wd is placed as Windows places it, on every OS (review roun
 test_that("a drive root is outside the project as R 4.2 on Windows places paths (review round 5)", {
   root = "D:/a/_temp/RtmpABC/gptr-project-1"
   local_mocked_bindings(is_windows = function() TRUE, is_macos = function() FALSE)
-  # path_norm() as R 4.2 on GitHub's runner, the working directory the project: "/" is the current
-  # drive's root; R < 4.4's dirname("//x") is "." and basename("//x") "\\x", so a UNC path whose
+  # path_norm() as R 4.2 on GitHub's runner, the working directory the project: "/x" is on the
+  # current drive; R < 4.4's dirname("//x") is "." and basename("//x") "\\x", so a UNC path whose
   # server does not exist lands in the working directory; the rest lexical
   local_mocked_bindings(path_norm = function(path) {
     vapply(gsub("\\", "/", path, fixed = TRUE), function(p) {
-      if (identical(p, "/")) return("D:/")
+      if (grepl("^/(?!/)", p, perl = TRUE)) p = paste0("D:", p)
       if (startsWith(p, "//")) return(paste0(root, "/\\\\", substring(p, 3L)))
       path_lexical(if (is_abs_path(p)) p else file.path(root, p))
     }, "", USE.NAMES = FALSE)
@@ -1400,6 +1400,27 @@ test_that("a drive root is outside the project as R 4.2 on Windows places paths 
   expect_identical(lv(paste0("unlink(", deparse(win(file.path(tempdir(), "x"))), ")")), 1L)
   expect_identical(lv("list.files('/')"), 1L)
   expect_identical(lv("list.files('.')"), 0L)
+})
+
+test_that("a project in a protected folder reads its root as its folders (review round 6)", {
+  # every path under .git or .claude is protected (Claude Code's worktrees live in
+  # .claude/worktrees), the project's root read whole too, as before review round 5; a read
+  # under .claude is also a secret path's (3)
+  base = withr::local_tempdir()
+  for (dirs in list(c(".git", "proj"), c(".claude", "worktrees", "proj"))) {
+    root = do.call(file.path, as.list(c(base, dirs)))
+    dir.create(file.path(root, "sub"), recursive = TRUE)
+    root = path_norm(root)
+    withr::local_dir(root)
+    withr::local_options(gptr.project_root = root)
+    lv = function(code) gptr_risk(code, root = root)$level
+    for (code in c("list.files('.')", "list.files()", "system('ls .')")) {
+      expect_identical(lv(code), if (dirs[[1L]] == ".git") 2L else 3L, label = code)
+      expect_identical(lv(code), lv("list.files('sub')"), label = code)
+    }
+    expect_identical(lv("setwd('.')"), lv("setwd('sub')"))
+    expect_identical(lv("withr::local_dir('.')"), lv("withr::local_dir('sub')"))
+  }
 })
 
 test_that("processx::run()'s wd is read as peter$sh()'s (review round 4)", {
