@@ -3,11 +3,13 @@
 Everything needed to build gptr 1.0. The folder is excluded from the package build
 (`.Rbuildignore`).
 
-The harness computes on objects already loaded in the running R session and reuses named
-results across turns. Model requests receive bounded descriptions and tool output; worker
-backends, checkpoints and file-backed objects have separate transfer or storage costs. The
-[user README](../README.md) and [execution guide](../vignettes/execution-model.Rmd.orig)
-explain these boundaries. Track current validation in [TESTING_PLAN.md](TESTING_PLAN.md).
+gptr runs language model agents in an existing R session, where generated code can inspect and
+modify objects already in memory and reuse named results across turns. R computes on the full
+objects, while the model receives size-limited descriptions, previews and tool output that may
+include data values; worker backends, checkpoints and file-backed objects have separate transfer
+or storage costs. The [user README](../README.md) and
+[execution guide](../vignettes/execution-model.Rmd.orig) explain these boundaries. Track current
+validation in [TESTING_PLAN.md](TESTING_PLAN.md).
 
 Historical machine snapshots in the plans and research may differ from your environment. Keep any
 current machine inventory in `LOCAL_SETUP.md` (ignored; not distributed with the repository).

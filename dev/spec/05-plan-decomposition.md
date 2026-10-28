@@ -145,8 +145,8 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   provider-neutral message and event model, the fake provider and the shared test infrastructure, on a CI
   matrix that mirrors CRAN's.
 - **Scope.**
-  - Rewrite `DESCRIPTION`: Package gptr, Version 0.99.0.9000, Title "Language Model Agents Inside the Live 'R'
-    Session", one-paragraph Description per 13 §3 (software names single-quoted), `Authors@R` with the current
+  - Rewrite `DESCRIPTION`: Package gptr, Version 0.99.0.9000, Title "Language Model Agents in Live 'R'
+    Sessions", one-paragraph Description per 13 §3 (software names single-quoted), `Authors@R` with the current
     maintainer in roles `aut`, `cre`, `cph` plus `person("Mario", "Zechner", role = c("ctb", "cph"), comment =
     "Author of 'pi' (MIT), from which tool texts and templates are derived")`, `Copyright: file inst/COPYRIGHTS`,
     `URL`, `BugReports`, `Language: en-US`, `License: Apache License (== 2.0)` (no `LICENSE`
