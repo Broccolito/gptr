@@ -2506,6 +2506,28 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     !is.null(r) && !r$name %in% bound$val && !is.null(risk_lookup(r$name, r$pkg))
   }
 
+  # The call do.call(f, list(...)) (or c(...), base R's list() or c()) or rlang::exec(f, ...)
+  # makes of a function written out (literal_fun()) that the code does not bind; else NULL
+  direct_call = function(e, r) {
+    pkg = if (r$name == "exec") "rlang" else "base"
+    if (r$name %in% bound$all || !identical(risk_lookup(r$name, r$pkg)$package, pkg)) return(NULL)
+    a = risk_args(e, r$name, pkg)
+    f = risk_arg(a, if (pkg == "rlang") ".fn" else "what")
+    args = if (pkg == "rlang") a[["..."]] else risk_arg(a, "args")
+    if (pkg == "base") {
+      lst = is.call(args) && isTRUE(risk_head(args[[1L]])$name %in% setdiff(c("c", "list"), masked))
+      if (!lst) return(NULL)
+      args = as.list(args)[-1L]
+    }
+    if (is.character(f) && length(f) == 1L && !is.na(f) && nzchar(f)) {
+      f = as.name(f)
+    } else if (!literal_fun(f)) {
+      return(NULL)
+    }
+    if (is.symbol(f) && as.character(f) %in% bound$all) return(NULL)
+    as.call(c(f, args))
+  }
+
   # A function used by name: called with `e`, or (e = NULL) a value another function calls,
   # read as a call whose arguments the code computes.
   use_fun = function(name, pkg, e, ctx) {
@@ -2879,6 +2901,10 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
         identical(e[[1L]][[1L]], as.name(":::"))) {
       add(ctx, paste0(text(e), " (reaches gptr's internals)"), r$name, 4L, "control")
     }
+    # do.call() and rlang::exec() of a function and arguments written out are that call, read in
+    # their place, as a pipe and eval(quote()) are
+    direct = if (r$name %in% c("do.call", "exec")) direct_call(e, r)
+    if (!is.null(direct)) return(walk(direct, ctx))
     if (r$how == "computed") {
       add(ctx, paste("calls a function the code computes:", text(e[[1L]])), "<computed>", 3L,
           "dynamic")
