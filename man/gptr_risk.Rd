@@ -24,7 +24,9 @@ A \code{gptr_risk} object: a list with \code{level} (integer 0-4), \code{label},
 \code{flagged} (a data frame with columns \code{call}, \code{fn}, \code{level}, \code{category}, \code{path},
 \code{path_class}), \code{paths}, \code{secret}, \code{secret_guard}, \code{assigned}, \code{dynamic}, and the additive
 fields \code{sizes} (bytes of overwritten objects, by name), \code{secrets} (guarded secret names),
-\code{kind} and \code{parse_error}.
+\code{kind}, \code{parse_error}, \code{calls} (every function the code calls, including through the
+functions it reads in \code{envir}) and \code{targets} (\code{files}: the files the code writes, deletes
+or downloads to, as permission rules see paths).
 }
 \description{
 \code{gptr_risk()} is the advisory static classifier behind gptr's permission prompts. It reads

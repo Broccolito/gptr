@@ -31,8 +31,9 @@ is \code{ran} and keeps its status.
 }
 \description{
 Evaluates \code{file} top-level expression by expression in \code{envir}, like \code{\link[=source]{source()}}. An expression
-that names \code{peter()} keeps its source references, which locate the call; the others run without
-them, so the functions and calls they make hold no part of the document, as at the console. A
+that names \code{peter()} or \code{gptr_coach()}, or calls a harness bound in \code{envir}, keeps its source
+references, which locate the call; the others run without them, so the functions and calls
+they make hold no part of the document, as at the console. A
 \code{peter()} call whose block is fresh replays without calling a model and the block's code then
 runs as ordinary R. A call whose block is stale (its prompt or the values interpolated into it
 changed), or every call under \code{replay = "live"} (an undone block runs without being rewritten;
