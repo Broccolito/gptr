@@ -1659,7 +1659,8 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `withr::with_envvar()`, where a name it cannot read counts as one (also one built with `paste0()`
 #' or another helper of base R whose bare name the code binds with `=`, `<-` or `<<-`, as a
 #' function's argument or as a `for` variable, or that your session holds as other than base
-#' R's, and the names `lapply()`, `Map()` or `do.call()` pass to a setter handed to them;
+#' R's, and the names passed to a setter handed to `lapply()`, `Map()`, `do.call()` or another
+#' function the classifier knows calls it, such as `sapply()` or `purrr::map()`;
 #' `do.call()` of a `list()` or `c()` written out and `rlang::exec()` are read as the call they
 #' make, so `do.call(Sys.setenv, list(TZ = "UTC"))` is `Sys.setenv(TZ = "UTC")`), in
 #' `readRenviron()` and `dotenv::load_dot_env()`, and in an
@@ -1721,16 +1722,20 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `peter$knit("python", code)` (`os.chdir()`, `os.fchdir()`, `contextlib.chdir()`), which moves
 #' R's working directory too, is read as `setwd()` is. After the code has moved R, a relative
 #' directory given to these functions is read in the directory R is in, so
-#' `setwd("data"); ...; setwd("..")` returns to the project; before any move it is read in the
-#' project. `getwd()` and the directory `setwd()` returns are read as the one the code has moved R
-#' to, starting from R's working directory when the classifier reads the code. A function body and
-#' the code of `local()` are read as code of their own: the names they assign are followed, a
-#' function's other names count as ones the code computes, and R starts where the code started or
-#' has moved it to. So `owd = setwd("data"); ...; setwd(owd)` stays in the project at the top level
-#' of the code, in a function (with `on.exit(setwd(owd))`) and in `local()`; a directory saved in a
-#' branch, a loop or another call's argument (`if (p) owd = setwd("data")`, or `setwd(owd)` in
-#' `tryCatch(finally = )`), and a relative one after `withr::with_dir()` or `xfun::in_dir()`, count
-#' as ones the code computes. A drive-relative path such as `D:data` counts as outside on every OS.
+#' `setwd("data"); ...; setwd("..")` returns to the project, as do `os.chdir("data")` and
+#' `os.chdir("..")` in Python when each is a statement of its own on a line with no indentation, no
+#' `:` and no bracket left open, in code with no triple-quoted string (after any other `chdir()` a
+#' relative directory is read both in the directory R was in and in the one that `chdir()` names);
+#' before any move it is read in the project. `getwd()` and the directory `setwd()` returns are read
+#' as the one the code has moved R to, starting from R's working directory when the classifier reads
+#' the code. A function body and the code of `local()` are read as code of their own: the names they
+#' assign are followed, a function's other names count as ones the code computes, and R starts where
+#' the code started or has moved it to. So `owd = setwd("data"); ...; setwd(owd)` stays in the
+#' project at the top level of the code, in a function (with `on.exit(setwd(owd))`) and in
+#' `local()`; a directory saved in a branch, a loop or another call's argument
+#' (`if (p) owd = setwd("data")`, or `setwd(owd)` in `tryCatch(finally = )`), and a relative one
+#' after `withr::with_dir()` or `xfun::in_dir()`, count as ones the code computes. A drive-relative
+#' path such as `D:data` counts as outside on every OS.
 #' The classifier does not follow the working directory changed in other ways (such as
 #' `usethis::local_project()`, `get("setwd")`, the `wd` of `callr::r()`, or `env` given `-C` among
 #' other short options, `env -iC DIR`, or as an abbreviated `--chdir`, `env --chd=DIR`), nor read

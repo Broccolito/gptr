@@ -60,7 +60,8 @@ classifier reads such a change in \code{Sys.setenv()}, \code{Sys.unsetenv()}, \c
 \code{withr::with_envvar()}, where a name it cannot read counts as one (also one built with \code{paste0()}
 or another helper of base R whose bare name the code binds with \code{=}, \verb{<-} or \verb{<<-}, as a
 function's argument or as a \code{for} variable, or that your session holds as other than base
-R's, and the names \code{lapply()}, \code{Map()} or \code{do.call()} pass to a setter handed to them;
+R's, and the names passed to a setter handed to \code{lapply()}, \code{Map()}, \code{do.call()} or another
+function the classifier knows calls it, such as \code{sapply()} or \code{purrr::map()};
 \code{do.call()} of a \code{list()} or \code{c()} written out and \code{rlang::exec()} are read as the call they
 make, so \code{do.call(Sys.setenv, list(TZ = "UTC"))} is \code{Sys.setenv(TZ = "UTC")}), in
 \code{readRenviron()} and \code{dotenv::load_dot_env()}, and in an
@@ -124,16 +125,20 @@ outside the project, as \code{ln} of one is; \code{chdir()} in the code of \code
 \code{peter$knit("python", code)} (\code{os.chdir()}, \code{os.fchdir()}, \code{contextlib.chdir()}), which moves
 R's working directory too, is read as \code{setwd()} is. After the code has moved R, a relative
 directory given to these functions is read in the directory R is in, so
-\verb{setwd("data"); ...; setwd("..")} returns to the project; before any move it is read in the
-project. \code{getwd()} and the directory \code{setwd()} returns are read as the one the code has moved R
-to, starting from R's working directory when the classifier reads the code. A function body and
-the code of \code{local()} are read as code of their own: the names they assign are followed, a
-function's other names count as ones the code computes, and R starts where the code started or
-has moved it to. So \verb{owd = setwd("data"); ...; setwd(owd)} stays in the project at the top level
-of the code, in a function (with \code{on.exit(setwd(owd))}) and in \code{local()}; a directory saved in a
-branch, a loop or another call's argument (\code{if (p) owd = setwd("data")}, or \code{setwd(owd)} in
-\code{tryCatch(finally = )}), and a relative one after \code{withr::with_dir()} or \code{xfun::in_dir()}, count
-as ones the code computes. A drive-relative path such as \code{D:data} counts as outside on every OS.
+\verb{setwd("data"); ...; setwd("..")} returns to the project, as do \code{os.chdir("data")} and
+\code{os.chdir("..")} in Python when each is a statement of its own on a line with no indentation, no
+\code{:} and no bracket left open, in code with no triple-quoted string (after any other \code{chdir()} a
+relative directory is read both in the directory R was in and in the one that \code{chdir()} names);
+before any move it is read in the project. \code{getwd()} and the directory \code{setwd()} returns are read
+as the one the code has moved R to, starting from R's working directory when the classifier reads
+the code. A function body and the code of \code{local()} are read as code of their own: the names they
+assign are followed, a function's other names count as ones the code computes, and R starts where
+the code started or has moved it to. So \verb{owd = setwd("data"); ...; setwd(owd)} stays in the
+project at the top level of the code, in a function (with \code{on.exit(setwd(owd))}) and in
+\code{local()}; a directory saved in a branch, a loop or another call's argument
+(\code{if (p) owd = setwd("data")}, or \code{setwd(owd)} in \code{tryCatch(finally = )}), and a relative one
+after \code{withr::with_dir()} or \code{xfun::in_dir()}, count as ones the code computes. A drive-relative
+path such as \code{D:data} counts as outside on every OS.
 The classifier does not follow the working directory changed in other ways (such as
 \code{usethis::local_project()}, \code{get("setwd")}, the \code{wd} of \code{callr::r()}, or \code{env} given \code{-C} among
 other short options, \verb{env -iC DIR}, or as an abbreviated \code{--chdir}, \code{env --chd=DIR}), nor read
