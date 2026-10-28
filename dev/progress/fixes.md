@@ -6602,6 +6602,48 @@ the driver, screens, events, transcripts and replays without a model are local, 
     fmt.py leaves copies of the changed records unchanged and lintfmt.py shows its baseline
     (fixes.md 1, HANDOFF 3, PROGRESS 1, DEVIATIONS 0). Not run: the full suite, `R CMD check`,
     Linux and Windows hosts, R 4.2 and R-devel, live models.
+- Review round 6 (Windows CI): PR #93's Windows check on `3cd3b146` (run 40716225723) failed
+  shard 1/4 on R-release and on oldrel-4 (R 4.2) with the same two failures, both in round 5's
+  test-risk-forms.R; every other job passed (Windows' CRAN mode does not run that file). Branch
+  `claude/v1-fix-win6` from `3cd3b146`; both are test fixes, the product's levels stand.
+  - `env -C <dir> ls` (:110) read 3, not 1. R spells the test's `withr::local_tempdir()` there
+    with backslashes (`D:/a/_temp\file...`), `risk_command()` also reads such a line as sh does,
+    and `risk_sh_gate()` rates an unquoted backslash escape 3, as one it does not model. On
+    Windows `peter$sh()` runs the line in Git Bash when it is installed (`shell_resolve_os()`),
+    which drops the backslashes, so the command does not run where it is written; 3 is stricter
+    than the 1 of reading a directory outside the project, and the `rm` rows stay 4. The test
+    writes the directory with `/` (`path_norm()`) and pins Windows' spelling at 3 on every host
+    (`6e43b975`).
+  - `fs::link_create(tempdir(), 'lnk')` (:177) read 4, not 2, and not because of Windows. fs is
+    no gptr dependency, and `risk_args()` matches a call to its package's formals only while
+    that namespace is loaded, else reads it as written, where each unnamed argument may be the
+    path written (`risk_path_exprs()`): `tempdir()` itself is `critical`, so the write is 4. The
+    file fails so on any OS without fs: against the installed package on macOS in a fresh
+    process, fs unloaded, it fails at :177:5 with 4 and nothing else. The full suites on Linux
+    and macOS passed, so an earlier file loads fs there; shard 1, whose levels are the unloaded
+    reading's, loads it in no file before this one. 4 is stricter than the documented 2: the
+    test gives `link_create()` fs's formals and none on every host (a mocked `risk_args()`, as
+    round 6 does for `Sys.junction()`) and names `new_path` beside `tempdir()` (`60427c7e`).
+  - Red on this Mac, the stand-ins in the test: `^risk-forms$` FAIL 2 PASS 239 with Windows'
+    spelling expected at 1 and the positional neighbour (:114 read 3, :195 "with fs loaded
+    FALSE" 4, CI's values). A scratch harness with `is_windows()` true, `tempdir()` as
+    `D:\a\_temp\Rtmp...`, the withr path as `D:/a/_temp\file...` and a `path_norm_one()` that
+    maps `D:/a/_temp` onto a real directory, as Windows' `normalizePath()` resolves it, gave
+    CI's levels for the old lines (3; 4 with fs unloaded, 2 with it loaded) and 1, 3, 4 and 2
+    for the new ones in both states.
+  - Green on `60427c7e`'s code (the records commit changes only `dev/`):
+    `^(risk-forms|perm-classify|perm-gate|bridge-sh|utils-paths)$` FAIL 0 WARN 0 SKIP 3 PASS 2278
+    in UTF-8 and the same under `LC_ALL=C LANG=C`; test-risk-forms.R against the installed
+    package with fs unloaded passes. Lint of the changed test file clean; `document()` no diff;
+    fmt.py leaves a copy of fixes.md unchanged and lintfmt.py shows its baseline (fixes.md 1,
+    HANDOFF 3, PROGRESS 1, DEVIATIONS 0).
+  - Not changed, found on the way, the maintainer's call: while fs is not loaded an abbreviated
+    argument name is not matched, so `fs::link_create(p = <outside>, n = 'lnk')` reads 2, where
+    `?gptr_security` says 4 and a session with fs loaded reads 4, and so for each row of a
+    package whose namespace is not loaded.
+  - Not run here: Windows hosts and R 4.2. Only PR #93's Windows check proves that shard 1
+    passes, that is that the runner's directory with `/` reads 1 and the file passes there
+    without fs.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #93)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
