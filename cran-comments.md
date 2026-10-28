@@ -56,14 +56,18 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 ## Examples, tests and vignettes
 
-* Every example runs offline and without keys, and each takes about a second at most. Examples
-  that run a session use the exported scripted model `gptr_fake_provider()`; the only scripted
-  model that runs R code (`?gptr_rewind`) evaluates it in a new environment, and every file an
-  example writes is under `tempdir()`. While `R CMD check` runs the examples, every model call
-  without its own `replay =` argument runs in replay mode, where only offline providers answer; no
-  example passes another value, so no example can reach a model server, remote or local.
-* No example uses `\dontrun{}`, `\donttest{}` or `@examplesIf`. Only two pages keep their
-  examples inside visible `if` guards: `gptr_login()` and `gptr_logout()` under
+* Every example runs offline and without keys, and each takes about a second at most, apart from
+  the one in `\donttest{}` (next point). Examples that run a session use the exported scripted
+  model `gptr_fake_provider()`; scripted models that run R code evaluate it in a new environment
+  (`?gptr_rewind`) or in separate R processes (`?gptr_coach`), and every file an example writes,
+  including the records of the processes it starts, is under `tempdir()`. While `R CMD check`
+  runs the examples, every model call without its own `replay =` argument runs in replay mode,
+  where only offline providers answer; no example passes another value, so no example can reach a
+  model server, remote or local.
+* No example uses `\dontrun{}` or `@examplesIf`, and one uses `\donttest{}`: `gptr_coach()`
+  coaches one scripted model with another, which starts seven R processes and takes several
+  seconds, so its call sits in `\donttest{}`; it still runs offline and without keys. Only two
+  pages keep their examples inside visible `if` guards: `gptr_login()` and `gptr_logout()` under
   `if (interactive())`, because a person enters a key or completes an OAuth sign-in, and
   `gptr_mcp_serve()` under `if (interactive() && ...)`, because it opens a listening loopback
   HTTP port and needs three suggested packages.

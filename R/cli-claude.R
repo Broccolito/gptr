@@ -528,8 +528,7 @@ pcli_claude_rate = function(obj, s, role) {
 #' else NA; NULL when neither the event nor such a text shows a session, weekly or model limit
 #' @noRd
 pcli_claude_limit = function(s, texts) {
-  hit = grep("hit (?:the session|your(?! rate)[^\\n]{0,40}?) limit\\b", texts, perl = TRUE,
-             ignore.case = TRUE, value = TRUE)
+  hit = grep(plan_limit_pattern, texts, perl = TRUE, ignore.case = TRUE, value = TRUE)
   if (!length(hit) && is.null(s$limit_at)) return(NULL)
   at = s$limit_at %||% NA_character_
   if (is.na(at) && length(hit)) {

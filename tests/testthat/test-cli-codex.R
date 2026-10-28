@@ -1662,6 +1662,37 @@ test_that("the hook command in the argv runs through the shell and logs its star
   expect_identical(json_decode(readLines(file.path(dir, "hook.log")))$event, "start")
 })
 
+test_that("on Windows the hook command holds no quote: short paths, or a refusal", {
+  short = c("C:\\PROGRA~1\\R\\bin\\Rscript.exe", "C:\\R\\gptr\\CODEX_~1.R", "C:\\T\\GPTR-C~1",
+            "C:\\R\\lib")
+  local_mocked_bindings(pcli_is_windows = function() TRUE,
+                        pcli_cmd_paths = function(paths) if (length(paths) == 4L) short)
+  hook = codex_hook_command(pcli_codex_hooks("coach", "C:/Users/Jane Doe/T/gptr-codex-1"),
+                            "PreToolUse")
+  expect_identical(hook, paste(short[[1L]], "--vanilla", short[[2L]], "coach",
+                               file.path(short[[3L]], "hook.log"), short[[4L]]))
+  local_mocked_bindings(pcli_cmd_paths = function(paths) NULL)
+  expect_error(pcli_codex_hooks("run", "C:/Users/Jane Doe/T/gptr-codex-1"),
+               "no short (8.3) name", fixed = TRUE, class = "gptr_error_model_refused")
+})
+
+test_that("on Windows the hook command runs through cmd.exe and logs its start", {
+  skip_on_cran()
+  skip_if_not(pcli_is_windows())
+  dir = withr::local_tempdir(pattern = "a dir ")
+  withr::local_envvar(CODEX_HOME = withr::local_tempdir())
+  if (is.null(pcli_cmd_paths(dir))) skip("this volume gives no short (8.3) names")
+  cmd = codex_hook_command(pcli_codex_args("gpt-5.5", "/w", "read-only", dir, role = "coach"),
+                           "SessionStart")
+  expect_false(grepl("\"", cmd, fixed = TRUE))
+  inp = tempfile("hook-in-")
+  writeLines(json_encode(list(hook_event_name = "SessionStart", source = "startup")), inp)
+  res = processx::run(Sys.getenv("COMSPEC", "cmd.exe"), c("/d", "/c", cmd), stdin = inp,
+                      error_on_status = FALSE)
+  expect_identical(res$status, 0L)
+  expect_identical(json_decode(readLines(file.path(dir, "hook.log")))$event, "start")
+})
+
 test_that("a confined coach keeps its reply: bypass warning, hook start, one message", {
   skip_on_cran()
   c1 = local_confined("coach")

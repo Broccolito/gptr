@@ -73,16 +73,35 @@ pcli_codex_args = function(model_id, wd, sandbox, relay, resume = NULL, role = N
 #' gptr's hook (inst/gptr/codex_hook.R) for SessionStart, which writes the start line, and
 #' PreToolUse, which allows only gptr's tools in a run and nothing for a coach; its log is in the
 #' exec's private folder. The command runs through Codex's shell (`$SHELL -lc`, cmd.exe on
-#' Windows); the bypass flag runs it without Codex's persisted hook trust (08 3.7).
+#' Windows, which mangles a line holding more than two quotes, so there it has none: short
+#' paths); the bypass flag runs it without Codex's persisted hook trust (08 3.7).
 #' @noRd
 pcli_codex_hooks = function(role, dir) {
   hook = system.file("gptr", "codex_hook.R", package = "gptr", mustWork = TRUE)
-  argv = c(rscript_path(), "--vanilla", hook, role, file.path(dir, "hook.log"),
-           dirname(system.file(package = "jsonlite")))
-  cmd = paste(shQuote(argv, if (pcli_is_windows()) "cmd" else "sh"), collapse = " ")
+  paths = c(rscript_path(), hook, dir, dirname(system.file(package = "jsonlite")))
+  win = pcli_is_windows()
+  if (win) {
+    paths = pcli_cmd_paths(paths) %||%
+      gptr_abort(paste0("gptr cannot coach on Codex here: cmd.exe runs gptr's hook, and a path ",
+                        "it needs (R, an R library or the session's temporary folder) holds a ",
+                        "space or a sign cmd.exe reads and has no short (8.3) name. Move it to ",
+                        "a path without them, or set TMPDIR to one."),
+                 "model_refused", reason = "cli_preflight", cli = "codex")
+  }
+  argv = c(paths[[1L]], "--vanilla", paths[[2L]], role, file.path(paths[[3L]], "hook.log"),
+           paths[[4L]])
+  cmd = paste(if (win) argv else shQuote(argv, "sh"), collapse = " ")
   value = paste0("=[{hooks=[{type=\"command\",command=", pcli_toml(cmd), ",timeout=30}]}]")
   c("-c", paste0("hooks.SessionStart", value), "-c", paste0("hooks.PreToolUse", value),
     "--dangerously-bypass-hook-trust")
+}
+
+#' Windows paths that an unquoted cmd.exe line keeps whole: their short (8.3) names with
+#' backslashes, or NULL when one still holds anything but letters, digits and `_.:\~-`
+#' @noRd
+pcli_cmd_paths = function(paths) {
+  short = chartr("/", "\\", utils::shortPathName(paths))
+  if (all(grepl("^[A-Za-z0-9_.:\\\\~-]+$", short))) short
 }
 
 #' The Codex home of the CLI's child environment: its CODEX_HOME, else ~/.codex
@@ -682,7 +701,7 @@ pcli_codex_hook_log = function(dir) {
 #' warning proves the hook flag took effect, the hook's start line that the hook ran; a coach
 #' must have no denial and exactly one message. A run's denials are reported as refused steps.
 #' @noRd
-pcli_codex_checks = function(s) {
+pcli_codex_coach_check = function(s) {
   role = s$state$codex_role
   if (is.null(role)) return(NULL)
   if (!isTRUE(s$bypass)) {
@@ -756,7 +775,7 @@ pcli_codex_item = function(s, item) {
 #' terminal (the verified driver of 08 5.1 records it and decides at `turn.failed` or the exit).
 #' Fields are read only with the JSON types of 08 3.9; anything else is ignored or unknown.
 #' A confined exec (08 3.7) is stopped at the first item outside gptr's tools, and its completed
-#' turn is kept only when pcli_codex_checks() passes.
+#' turn is kept only when pcli_codex_coach_check() passes.
 #' @noRd
 pcli_codex_event = function(obj, s) {
   type = pcli_chr(obj[["type"]]) %||% ""
@@ -781,7 +800,7 @@ pcli_codex_event = function(obj, s) {
     pcli_codex_item(s, item)
   } else if (identical(type, "turn.completed")) {
     usage = pcli_codex_usage(obj[["usage"]], s$state)
-    why = pcli_codex_checks(s)
+    why = pcli_codex_coach_check(s)
     if (!is.null(why)) return(pcli_codex_error(s, "cli_check", why, usage = usage))
     pcli_codex_end(s, function() pcli_done(s, usage, "stop", "completed"))
   } else if (identical(type, "turn.failed")) {

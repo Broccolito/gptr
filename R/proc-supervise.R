@@ -161,10 +161,15 @@ proc_self = function() {
   je$self
 }
 
-#' The tree-marker directory, `R_user_dir("gptr", "cache")/procs`
+#' The tree-marker directory, `R_user_dir("gptr", "cache")/procs`; `tempdir()/gptr-procs` while
+#' R CMD check runs examples, which may write only there (tests redirect R_user_dir themselves)
 #' @noRd
 proc_dir = function(create = FALSE) {
-  d = file.path(gptr_user_dir("cache", create = create), "procs")
+  d = if (check_running() && !is_testthat()) {
+    file.path(tempdir(), "gptr-procs")
+  } else {
+    file.path(gptr_user_dir("cache", create = create), "procs")
+  }
   if (create && !dir.exists(d)) dir.create(d, recursive = TRUE, showWarnings = FALSE)
   d
 }

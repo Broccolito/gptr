@@ -66,6 +66,19 @@ test_that("child-process pools are capped at 2 under R CMD check", {
   expect_identical(proc_pool_cap(8L), 8L)
 })
 
+test_that("proc_dir() stays in tempdir() while R CMD check runs the examples", {
+  local_proc_state()
+  withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr", TESTTHAT = NA)
+  d = proc_dir(create = TRUE)
+  withr::defer(unlink(d, recursive = TRUE))
+  expect_identical(d, file.path(tempdir(), "gptr-procs"))
+  expect_true(dir.exists(d))
+  expect_false(dir.exists(tools::R_user_dir("gptr", "cache")))
+  # tests keep R_user_dir, which setup.R redirects, so processes of one test share it
+  withr::local_envvar(TESTTHAT = "true")
+  expect_identical(proc_dir(), file.path(tools::R_user_dir("gptr", "cache"), "procs"))
+})
+
 test_that("proc_mark() records a marker file that kill_all() releases", {
   local_proc_state()
   skip_on_cran()
