@@ -502,8 +502,10 @@ repl_mentions = function(text, env) {
     nm = gsub("^@\"?|\"$", "", t)
     run = regmatches(t, regexpr("^@[A-Za-z0-9_./~-]*[A-Za-z0-9_/~-]", t, perl = TRUE))
     for (n in unique(c(nm, substring(run, 2L)))) {
-      # the file system gets unmarked bytes in a C locale, which cannot translate a marked name
-      cand = fs_path(unique(c(path.expand(fs_path(n)), file.path(project_root(), n))))
+      # the file system gets unmarked bytes in a C locale, which cannot translate a marked name; a
+      # name too long for a path names no file (R's warning would print it raw)
+      home = tryCatch(path.expand(fs_path(n)), warning = function(w) NULL)
+      cand = fs_path(unique(c(home, file.path(project_root(), n))))
       dir = path_info(cand)$isdir
       if (identical(n, nm)) folder = any(dir %in% TRUE)
       hit = cand[dir %in% FALSE]
@@ -538,12 +540,13 @@ mention_kind = function(nm, env) {
 }
 
 #' The note an `!expr` leaves for the next prompt: the code and its output as #> lines
-#' (redacted with the `context` profile)
+#' (redacted with the `context` profile). Lines end as R reads them, a lone carriage return ending
+#' one too, as a transcript records the note (`#<` lines, D-264), so every piece has its prefix
 #' @noRd
 repl_note = function(code, res) {
-  out = strsplit(format_eval_result(res, 300L)$text, "\n", fixed = TRUE)[[1L]]
-  note = paste(c(paste0("> ", strsplit(code, "\n", fixed = TRUE)[[1L]]),
-                 if (length(out)) paste0("#> ", out)), collapse = "\n")
+  lines = function(x) strsplit(gsub("\r\n?", "\n", x), "\n", fixed = TRUE)[[1L]]
+  out = lines(format_eval_result(res, 300L)$text)
+  note = paste(c(paste0("> ", lines(code)), if (length(out)) paste0("#> ", out)), collapse = "\n")
   redact(note, profile = "context")
 }
 

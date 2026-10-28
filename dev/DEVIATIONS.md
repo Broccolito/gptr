@@ -8062,10 +8062,13 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Limits: other control bytes inside a paste act as typed (DEL, Ctrl-U and Ctrl-W edit the draft;
   xterm, kitty, VTE and Windows Terminal filter them). A paste split across reads right after an
   end marker its text holds, and again before its own end marker, sends at a newline of the read
-  between (since review round 3 only then; a split needs 50 ms without input). A Ctrl-C typed in
-  the same batch as a paste is dropped. A paste whose end marker another
-  reader takes (a question asked mid-paste) stays open, so Enter only adds lines for the rest of its
-  run and at the prompt's editor, until an abort or a hand-over to readline (Ctrl-C there) empties
+  between (since review round 3 only then; a split needs 50 ms without input), and a message sent
+  there that starts with `!` or `/` is a follow-up, so it runs as R or as a command at the next
+  prompt with no Enter (review round 6). A Ctrl-C typed in the same batch as a paste is dropped. A
+  paste whose end marker another reader takes (a question asked mid-paste) stays open, so Enter
+  only adds lines for the rest of its run and at the prompt's editor, until an abort (since review
+  round 6 a Ctrl-C read more than 2 s after the paste's last read pauses the run, and the pause
+  menu aborts it) or a hand-over to readline (Ctrl-C there) empties
   the composer. After a lone Esc a typed `[`, `[2`, `[20`, `[200` or `[201` waits for the next key,
   as it may start a marker, and is lost where readline reads before one (the run ended with no
   draft, or Ctrl-C or a cursor key handed the prompt's draft over). A paste bracketed just before a
@@ -8087,7 +8090,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (IC-76's Limits) and 15.10 (IC-76, typing while the agent works) say so. Status 2026-10-27
   (round 4 verification): only a batch on the polling beat (at most 0.2 s after the read before
   it) carries the drop, so a Ctrl-C read later, as after a reactor an in-process tool held, is the
-  key; formerly the chain held until an empty read, however late.
+  key; formerly the chain held until an empty read, however late. Status 2026-10-28 (review round
+  6): an open paste holds no Ctrl-C key only until 2 s after its last read (`console_paste_open()`),
+  so in a paste whose end marker a question took a Ctrl-C read later is the key again, and the
+  bytes after it in its read answer the pause menu; formerly every Ctrl-C byte was dropped while
+  the paste was open, however late, so the rest of the run could be neither paused nor stopped
+  (SC-1, a regression of FIX-28). A Ctrl-C byte in the rest of a paste that reaches the reader more
+  than 2 s after the paste's last read (a terminal that stalls mid-paste, or a reactor held that
+  long) is the key too, as it is after a paste's end since round 4's verification. At the prompt's
+  editor a Ctrl-C byte or a cursor key (Ctrl-A, Ctrl-E, Left, Right, Home, End) inside a paste, in
+  the same window, is text the composer drops (`console_unpasted()` blanks the pasted keys, so the
+  editor's search sees only the others); formerly it handed the draft over and the rest of the
+  paste was lost (SC-3). 04 sections 7.1 (`tty_call()`), 15.9 (IC-76's Limits) and 15.10 (IC-76,
+  typing while the agent works, the idle editor) say so.
 - Amends IC-76 (04 section 15.10, the composer and typing) and D-243, whose steering review rejected
   bracketed paste for the terminal state it adds to every mode switch and question; that state stays
   in `tty_modes()`'s pseudo-modes.
@@ -8126,7 +8141,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   3)"; test-console-typing.R "a batch holding a paste marker holds no Ctrl-C key (review round 3)".
   Review round 4: test-console-typing.R "a read right after a paste's marker holds no Ctrl-C key
   (review round 4)", "a read off the beat after a paste's marker holds a Ctrl-C key (round 4
-  verification)". Evidence: progress/fixes.md FIX-28.
+  verification)". Review round 6: test-console-typing.R "an open paste holds no Ctrl-C key for 2 s
+  after its last read (review round 6)"; test-console-input.R "a Ctrl-C or cursor key inside a
+  paste at the prompt's editor is text (review round 6)". Evidence: progress/fixes.md FIX-28.
 
 ## D-264 - FIX-29 Transcripts record what a prompt was sent with and what steps created (2026-10-26)
 - Rule (`#<` lines, issue #85 R27): a console turn's block in an `.R` document opens with the

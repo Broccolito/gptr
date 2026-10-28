@@ -124,10 +124,23 @@ console_compose = function(state, chars, now, enter_kind, complete, paste = FALS
   out(if (nzchar(lines)) send(sub("\n$", "", lines), enter_kind), esc, t)
 }
 
-#' The keys `x` outside bracketed pastes (D-263), with `bracket` after one open before them
+#' Is a bracketed paste (D-263) open in the composer's state `state` at time `now`, its last read at
+#' most 2 s before? Later its Ctrl-C byte is the key again, as a paste whose end marker another
+#' reader took (a question asked mid-paste) never ends (console_keys(), console_idle())
+#' @noRd
+console_paste_open = function(state, now) {
+  isTRUE(state$bracket) && now - (state$t %||% now) <= 2
+}
+
+#' The keys `x` outside bracketed pastes (D-263), with `bracket` after one open before them: each
+#' pasted character, the markers too, is a blank, so a key found in them is where it is in `x`
 #' @noRd
 console_unpasted = function(x, bracket = FALSE) {
-  gsub("(?s)\033\\[200~.*?(\033\\[201~|\\z)", "", paste0(if (bracket) "\033[200~", x), perl = TRUE)
+  y = paste0(if (bracket) "\033[200~", x)
+  m = gregexpr("(?s)\033\\[200~.*?(\033\\[201~|\\z)", y, perl = TRUE)
+  n = attr(m[[1L]], "match.length")
+  regmatches(y, m) = list(strrep(" ", n[n > 0L]))
+  substring(y, if (bracket) 7L else 1L)
 }
 
 #' The text of keys `keys` once their edit keys act (console_compose()): the message they end, else
@@ -166,9 +179,10 @@ console_trigger = function(line) {
 #' right after a newline is a key of its own, after the message the newline sent (console_compose()
 #' acts once a batch), as when Enter and Up share a late read. Ctrl-C, a key in character mode
 #' (tty_call()), interrupts as SIGINT would, after the keys before it (in a batch holding a
-#' bracketed-paste marker, read while a paste is open, or read on the beat right after such a batch
-#' with no empty read between, `rd$compose$pasted`, it is pasted text, as the text after an early
-#' end marker is); the keys after it in the batch (a further Ctrl-C dropped) are the pause
+#' bracketed-paste marker, read while a paste is open up to 2 s after its last read, or read on the
+#' beat right after such a batch with no empty read between, `rd$compose$pasted`, it is pasted
+#' text, as the text after an early end marker is); the keys after it in the batch (a further
+#' Ctrl-C dropped) are the pause
 #' menu's answers (`rd$after_interrupt`, console_ahead()), and those it leaves are read here once
 #' it resumes, as if typed after it
 #' @noRd
@@ -179,11 +193,11 @@ console_keys = function(rd, s, chars) {
   paste = gap <= 0.2 && nchar(chars) > 1 + gap / 0.03
   rd$polled = now
   rd$read_at = NULL
-  # a batch holding a bracketed-paste marker, read while a paste is open, or read on the beat right
-  # after such a batch with no empty read between (the rest of a paste whose text ended it early,
-  # split again) holds no Ctrl-C key: its Ctrl-C bytes are pasted text, which the composer drops
-  # (D-263)
-  pasted = nzchar(chars) && (isTRUE(rd$compose$bracket) ||
+  # a batch holding a bracketed-paste marker, read while a paste is open (up to 2 s after its last
+  # read, console_paste_open()), or read on the beat right after such a batch with no empty read
+  # between (the rest of a paste whose text ended it early, split again) holds no Ctrl-C key: its
+  # Ctrl-C bytes are pasted text, which the composer drops (D-263)
+  pasted = nzchar(chars) && (console_paste_open(rd$compose, now) ||
                                (isTRUE(rd$compose$pasted) && gap <= 0.2) ||
                                grepl("\033\\[20[01]~", paste0(rd$compose$esc, chars)))
   if (pasted) chars = gsub("\003", "", chars, fixed = TRUE)
@@ -235,10 +249,11 @@ console_keys = function(rd, s, chars) {
 #' completes (console_complete()), several candidates listed on a dim row at column 2 above the
 #' prompt's row, as readline lists them. Once the
 #' draft is empty, at Ctrl-C, at a cursor key (Left, Right, Home, End, Ctrl-A, Ctrl-E: readline's
-#' editing, where Up recalls the draft) or when nothing is read, a draft left goes to the console
-#' history (console_keep()) and NULL is returned, so readline() reads at the same prompt; where R's
-#' readline reads the tty the call's modes stay (`rd$handed`) until the reader calls it, so a key
-#' typed in between is not echoed before its prompt
+#' editing, where Up recalls the draft; both outside a bracketed paste, which is open up to 2 s
+#' after its last read, console_paste_open()) or when nothing is read, a draft left goes to the
+#' console history (console_keep()) and NULL is returned, so readline() reads at the same prompt;
+#' where R's readline reads the tty the call's modes stay (`rd$handed`) until the reader calls it,
+#' so a key typed in between is not echoed before its prompt
 #' @noRd
 console_idle = function(rd, prompt) {
   sym = console_style()
@@ -259,9 +274,12 @@ console_idle = function(rd, prompt) {
                          if (nzchar(sym$band)) "\033[0m"))
       keys = console_typed_chars(rd, -1L)
       if (!nzchar(keys)) break
+      now = reactor_now()
       # Ctrl-C (a key in character mode), and a cursor key only readline edits with, hand the draft
-      # over after the keys before them
-      hand = regexpr("\003|[\001\005]|\033(\\[([1478]~|[0-9;]*[CDHF])|O[CDHF])", keys, perl = TRUE)
+      # over after the keys before them; inside a bracketed paste they are text (D-263), as in a
+      # run up to 2 s after its last read (console_paste_open())
+      hand = regexpr("\003|[\001\005]|\033(\\[([1478]~|[0-9;]*[CDHF])|O[CDHF])",
+                     console_unpasted(keys, console_paste_open(rd$compose, now)), perl = TRUE)
       if (hand > 0L) keys = substr(keys, 1L, hand - 1L)
       # Tab off a trigger word does nothing here (the composer would send the other kind)
       tab = endsWith(keys, "\t") &&
@@ -271,7 +289,7 @@ console_idle = function(rd, prompt) {
       }
       if (nzchar(keys)) {
         # a read here starts at its first key, so a newline with text after it came as a paste
-        res = console_compose(rd$compose, keys, reactor_now(), "steer", console_complete, TRUE)
+        res = console_compose(rd$compose, keys, now, "steer", console_complete, TRUE)
         rd$compose = res$state
         if (identical(res$action$type, "send")) {
           line = res$action$text

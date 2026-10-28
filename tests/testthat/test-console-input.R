@@ -876,6 +876,33 @@ test_that("a bracketed paste at the prompt's editor stays in the draft until Ent
   expect_identical(r$x, "xa\nb\nc")
 })
 
+test_that("a Ctrl-C or cursor key inside a paste at the prompt's editor is text (review round 6)", {
+  # a paste holding a Ctrl-C byte keeps all its text, and Enter sends it as one message
+  r = idle_read("a", list("\033[200~b\003c\r!cat(1)\r\033[201~", "\r"), "next")
+  expect_identical(r$x, "abc\n!cat(1)\n")
+  expect_identical(r$kept, character())
+  # a cursor key in it is dropped as a paste's escapes are, also in a later read of the paste
+  r = idle_read("a", list("\033[200~b\001c\033[D", "d\005\033[201~", "\r"), "next")
+  expect_identical(r$x, "abcd")
+  # outside the paste, in its read, the key hands the draft over
+  r = idle_read("a", list("\033[200~b\033[201~\003c"), "next")
+  expect_identical(r$kept, "ab")
+  expect_identical(r$x, "next")
+  # in a paste left open, a Ctrl-C read more than 2 s after its last read hands over, as in a run
+  now = 0
+  local_mocked_bindings(reactor_now = function() now)
+  later = function(t, keys) {
+    function() {
+      now <<- t
+      keys
+    }
+  }
+  # (were it dropped, the zz after it would join the draft)
+  r = idle_read("a", list("\033[200~b\r", later(1, "\003c"), later(3.5, "\003zz")), "next")
+  expect_identical(r$kept, "\"\"\"\nab\nc\n\"\"\"")
+  expect_identical(r$x, "next")
+})
+
 test_that("readline's read at the prompt starts the composer afresh (FIX-28)", {
   # a run ended with a paste open and no draft: its next run's Enter steers again
   local_readline("next")

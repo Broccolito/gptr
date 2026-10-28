@@ -1280,6 +1280,41 @@ test_that("a read off the beat after a paste's marker holds a Ctrl-C key (round 
   expect_identical(res, c("read", "read"))
 })
 
+test_that("an open paste holds no Ctrl-C key for 2 s after its last read (review round 6)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$sending = quote(peter())
+  now = 0
+  local_mocked_bindings(reactor_now = function() now)
+  read = function(t, chars) {
+    now <<- t
+    .gptr_repl = rs
+    tryCatch({
+      console_keys(rs$reader, s, chars)
+      "read"
+    }, interrupt = function(e) "interrupted")
+  }
+  # a paste whose end marker another reader took (a question asked mid-paste) stays open: a Ctrl-C
+  # byte read within 2 s of its last read is pasted text, one read later is the key, which pauses
+  # the run, with the reader polling in between or not
+  for (polls in c(TRUE, FALSE)) {
+    rs$reader = console_reader()
+    res = character()
+    utils::capture.output({
+      res = read(0, "\033[200~pasted head\r")
+      if (polls) for (t in seq(0.1, 1.9, by = 0.1)) read(t, "")
+      res = c(res, read(1.95, "\003x"))
+      if (polls) for (t in seq(2, 4.5, by = 0.1)) read(t, "")
+      res = c(res, read(60, "\003"))
+    })
+    expect_identical(res, c("read", "read", "interrupted"), info = paste("polls:", polls))
+    expect_true(rs$reader$compose$bracket)
+    expect_identical(rs$reader$compose$draft, "pasted head\nx", info = paste("polls:", polls))
+    expect_length(session_data(s)$queue$steer, 0L)
+  }
+})
+
 test_that("a draft a run left waits for the follow-ups, then continues at the prompt (D-243)", {
   skip_on_cran()
   local_console_test()
