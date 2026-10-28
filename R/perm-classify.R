@@ -2604,9 +2604,22 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       }
       return(TRUE)
     }
-    if (name %in% c("setwd", "local_dir", "with_dir")) {
+    if (name %in% c("file.symlink", "file.link", "Sys.junction")) {
+      # a link to a path outside the project names it from inside (setwd()'s reading), so a
+      # delete through it is one outside the project
+      v = risk_fold(risk_arg(a, "from", 1L), kn(ctx))
+      pcs = vapply(v[nzchar(v)], risk_path_cls, "", "read", root)
+      pc = risk_cmd_worst(pcs)
+      if (length(pc) && !pc %in% c("workspace", "temp", "console")) {
+        add(ctx, paste0(label, " (links outside the project)"), name, risk_op_level(pc, "delete"),
+            "file_delete", names(pcs)[match(pc, pcs)], pc)
+      }
+      return(FALSE)
+    }
+    if (name %in% c("setwd", "local_dir", "with_dir", "in_dir")) {
       # out of the project, the paths the gate places in it name files elsewhere
-      v = risk_fold(risk_arg(a, if (name == "setwd") "dir" else "new", 1L), kn(ctx))
+      v = risk_fold(risk_arg(a, if (name %in% c("setwd", "in_dir")) "dir" else "new", 1L),
+                    kn(ctx))
       pc = if (!length(v)) "unknown" else risk_cmd_worst(vapply(v, risk_path_cls, "", "read", root))
       if (pc %in% c("workspace", "temp")) return(FALSE)
       add(ctx, paste0(label, if (!length(v)) " (a directory the code computes)" else
@@ -2816,6 +2829,13 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       a = c(as.list(a[[1L]]), a[-1L])
     }
     if (r$name %in% risk_quoting_funs) inner$quote = TRUE
+    # eval(quote(x)) runs x, as evalq(x) does
+    if (r$name %in% c("eval", "eval_bare", "eval_tidy")) {
+      for (i in seq_along(a)) {
+        if (is.call(a[[i]]) && identical(a[[i]][[1L]], as.name("quote")) &&
+            length(a[[i]]) == 2L) a[i] = list(a[[i]][[2L]])
+      }
+    }
     inner$away = ctx$away || r$name %in% risk_unknown_funs
     for (i in seq_along(a)) if (!identical(a[[i]], quote(expr = ))) walk(a[[i]], inner)
     # after the value is walked, so a use of the name inside it sees the earlier value
