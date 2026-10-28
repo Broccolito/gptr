@@ -950,6 +950,22 @@ risk_pieces = function(x) {
            unlist(strsplit(x, "[\\s;{}\"'=,]+", perl = TRUE))))
 }
 
+#' The directory a cd, `git -C` or `env -C` names, `~` and $HOME read as the home directory
+#' @noRd
+risk_cd_word = function(t) {
+  sub("^~(?=/|\\z)", user_home(), sub("^\\$(HOME\\b|\\{HOME\\})", "~", t, perl = TRUE),
+      perl = TRUE)
+}
+
+#' `dirs` and the directory a cd moves to from them (risk_cd_word()): NA for one the shell
+#' computes, a relative one in the first directory
+#' @noRd
+risk_cd_dirs = function(dirs, t) {
+  unique(c(dirs, if (grepl("[$`*?[]", t) || identical(t, "-")) NA_character_ else
+    if (is_abs_path(t) || is_drive_rel(t)) t else
+      file.path(sub("/\\z", "", dirs[!is.na(dirs)][1L], perl = TRUE), t)))
+}
+
 #' Classify one simple command run from the directories `dirs`; `dyn` and `quoted` come from
 #' risk_sh_tokens() (an argv is quoted throughout)
 #' @noRd
@@ -981,10 +997,10 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
   }
   # a directory the command runs in (git -C, env -C): read as a cd is, and its words there
   move = function(dir) {
+    dir = risk_cd_word(dir)
     tg = risk_target(dir, "read", root, dirs)
     if (tg$level > 0L) add(tg$level, if (tg$secret) "secret" else "read", dir, tg$pc)
-    dirs <<- unique(c(dirs, if (is_abs_path(dir) || is_drive_rel(dir)) dir else
-      file.path(root, dir)))
+    dirs <<- risk_cd_dirs(dirs, dir)
   }
   # level-4 rows of the command a later word starts (what an unread program may run)
   later = function(x, d) {
@@ -1489,17 +1505,14 @@ risk_cmd_line = function(cmd, root, scan = FALSE, dirs = root) {
     if (tolower(head %if_na% "") %in% c("cd", "pushd", "chdir", "set-location")) {
       i = match(head, w)
       t = w[-seq_len(i)][!grepl("^-.", w[-seq_len(i)])][1L] %if_na% "~"
-      t = sub("^~(?=/|\\z)", user_home(), sub("^\\$(HOME\\b|\\{HOME\\})", "~", t, perl = TRUE),
-              perl = TRUE)
+      t = risk_cd_word(t)
       # what runs there reads it, as `ls` does with no operand (git -C's reading)
       tg = risk_target(t, "read", root, dirs)
       if (tg$level > 0L) {
         f = risk_flags_bind(f, risk_flags_row(paste(head, t), head, tg$level,
                                               if (tg$secret) "secret" else "read", t, tg$pc))
       }
-      dirs = unique(c(dirs, if (grepl("[$`*?[]", t) || identical(t, "-")) NA_character_ else
-        if (is_abs_path(t) || is_drive_rel(t)) t else
-          file.path(sub("/\\z", "", dirs[!is.na(dirs)][1L], perl = TRUE), t)))
+      dirs = risk_cd_dirs(dirs, t)
       next
     }
     if (scan && (is.na(head) || !risk_cmd_known(head))) next
