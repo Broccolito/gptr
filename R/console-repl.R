@@ -502,8 +502,10 @@ repl_mentions = function(text, env) {
     nm = gsub("^@\"?|\"$", "", t)
     run = regmatches(t, regexpr("^@[A-Za-z0-9_./~-]*[A-Za-z0-9_/~-]", t, perl = TRUE))
     for (n in unique(c(nm, substring(run, 2L)))) {
-      # the file system gets unmarked bytes in a C locale, which cannot translate a marked name
-      cand = fs_path(unique(c(path.expand(fs_path(n)), file.path(project_root(), n))))
+      # the file system gets unmarked bytes in a C locale, which cannot translate a marked name; a
+      # name too long for a path names no file (R's warning would print it raw)
+      home = tryCatch(path.expand(fs_path(n)), warning = function(w) NULL)
+      cand = fs_path(unique(c(home, file.path(project_root(), n))))
       dir = path_info(cand)$isdir
       if (identical(n, nm)) folder = any(dir %in% TRUE)
       hit = cand[dir %in% FALSE]

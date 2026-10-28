@@ -523,6 +523,17 @@ test_that("an @name nothing has is read as its leading ASCII run (round 5 merge)
                                        "@ df的数据 not found, sent as text")))
 })
 
+test_that("an @name too long for a path names no file, and R warns with none (review round 6)", {
+  local_project()
+  # R's warning that a path is too long would print the name raw, its escape included
+  name = paste0("\033[2J", strrep("a", 5000L))
+  men = NULL
+  expect_no_warning({
+    men = repl_mentions(paste0("look at @\"", name, "\" now"), new.env())
+  })
+  expect_identical(men$said, paste0("@ ", name, " not found, sent as text"))
+})
+
 test_that("a binary @file is announced, not inlined", {
   root = local_project()
   writeBin(as.raw(c(0x50, 0x00, 0x01)), file.path(root, "blob.bin"))
