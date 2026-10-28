@@ -6745,6 +6745,66 @@ the driver, screens, events, transcripts and replays without a model are local, 
   - Open, each documented: the save-and-restore idiom in a branch, a loop or another call's
     argument, and `setwd(here::here())`, ask in auto and yolo (level 4); a relative literal of
     Python's `chdir()` after another is read from where the code starts.
+- Review round 6 verification of the gate writer's items (the gate verifier on `ca2b0d8c`, findings
+  2 and 3 and its notes; FIX-36's bullet of the same name holds findings 1 and 4; branch
+  `claude/v1-fix-gate6`, each test red on `ca2b0d8c`'s code first, `NOT_CRAN=true`, the SIGINT
+  reset, a short `TMPDIR`).
+  - Red: test-risk-forms.R (`212519af`) on `ca2b0d8c`'s code, `^risk-forms$` FAIL 13 PASS 399 in
+    UTF-8 and under `LC_ALL=C LANG=C`; this record's share: a relative `chdir()` after a move 4,
+    `do.call()` and `rlang::exec()` of `eval()` 5.
+  - A relative Python `chdir()` after a move (finding 2, `ba2333bf`): `risk_python()` read every
+    relative `chdir()` literal from where the code starts, so `os.chdir('data')`, then
+    `os.chdir('..')` read 4 and asked in auto and yolo, while `?gptr_security` said it is read as
+    `setwd()` is (level 1 on `2bb1fcc1`, not read at all). A literal is now placed in each directory
+    R may be in. An `os.chdir()` of a literal moves R there when it is a statement of its own on a
+    line with no indentation, no `:` and no bracket left open, in code with no triple-quoted string:
+    only then does it run whenever the code after it runs. Any other `chdir()` (in a branch, a block
+    or a function, in an expression, `contextlib.chdir()`, a bare `chdir()` an import names) adds
+    its directory to where R may be, and one the code computes makes a later relative directory one
+    too. The round trip, on lines or after `;`, reads 2; `os.chdir('data')` then `os.chdir('../..')`
+    and the branch, block, function, expression, bracket and string forms stay 4. Offline with the
+    fake model, Python 3 through 'reticulate' and a scripted UI that answers nothing, auto and yolo
+    run the round trip unasked and R ends where it started. The Open item above, that a relative
+    literal of Python's `chdir()` after another is read from where the code starts, is closed.
+  - `do.call()` and `rlang::exec()` of `eval()` (finding 3, `1f6d7cdd`, `R/eval-guard.R`): since
+    `e97a7f5b` and `b355c1ca` the classifier read `do.call(eval, list(quote(q())))` and
+    `rlang::exec(eval, quote(q()))` as `q()`, level 4, but the evaluator's guard unwrapped only a
+    direct `eval(quote())`, so these asked a person to approve `q()` and
+    `x = do.call(eval, list(quote(readline('?'))))` (level 3) ran `readline()` in auto and yolo. The
+    guard now also walks the call that `do.call()` of a `list()` or `c()` written out, or
+    `rlang::exec()`, makes of a function given as a name, `pkg::name` or a string, so these are
+    refused in every mode as `q()` and `readline()` are; `do.call(rbind, list(a, b))`,
+    `do.call(eval, list(quote(x + 1)))` and `do.call(eval, quote_list)` are not. Offline, auto and
+    yolo refuse both `readline()` forms and the run goes on. The same reading refuses
+    `do.call(readLines, list('stdin'))` and `rlang::exec(readLines)`, reads of standard input.
+  - Docs: `?gptr_security` (`3f211148`), 03 section 6.8.1 and 04's `eval_guard()` bullet
+    (`0690ee06`).
+  - Mutation: each fix reverted alone on the head, `^risk-forms$`: `0771e8d3` FAIL 4 (the joins test
+    3, the `chdir()` test 1), `ba2333bf` FAIL 4 (the after-a-move test) and `1f6d7cdd` FAIL 5 (the
+    guard test's forms 4 and its offline run 1).
+  - Green on `1f6d7cdd`'s code (the docs and records commits change no R code):
+    `^(perm|risk|rules|nested|bridge|mcp-|gptr-config|agent-|tool-|session-|py|knit|secrets|auth-)`
+    with the `eval-` files FAIL 0 WARN 0 SKIP 16 PASS 11069 in UTF-8 (357 s) and FAIL 0 WARN 0 SKIP
+    18 PASS 11055 under `LC_ALL=C LANG=C` (357 s); `^(ckpt|plan|arch-layers|lint-rules)` with the
+    console-commands, console-repl, utils-options, utils-paths and doc-knitr files FAIL 0 WARN 0
+    SKIP 1 PASS 1667 in UTF-8 and FAIL 0 WARN 0 SKIP 5 PASS 1654 under `LC_ALL=C LANG=C`; on
+    `0690ee06`, the files that read the help pages with the changed ones,
+    `^(gptr-config|s1-types|agent-background|arch-layers|risk-forms|perm-classify|eval-guard)$`,
+    FAIL 0 WARN 0 SKIP 0 PASS 2871 in both locales. Against the installed package (`R CMD INSTALL`
+    of a git archive into a scratch library, `testthat::test_dir(load_package = "installed")`),
+    `^(risk-forms|perm-classify|eval-guard)$` FAIL 0 SKIP 0 PASS 1764 in both locales, fs not loaded
+    before or after. Lint of the 3 changed R files and the changed test file clean; `document()` no
+    diff; `check-docs.R` 0 problems; spelling clean; `testthat::test_dir("dev/release/tests")` FAIL
+    0 SKIP 0 PASS 290; fmt.py leaves copies of the changed records unchanged and lintfmt.py shows
+    its baseline (fixes.md 1, HANDOFF 3, PROGRESS 1, DEVIATIONS 0); `git merge-tree` with the
+    secret6, console6, trans6, class6 and cons6 branches' tips reports no conflict. Not run: the
+    full suite, `R CMD check`, Linux and Windows hosts, R 4.2 and R-devel, live models.
+  - The verifier's notes, not changed: `withr::with_dir("data", x); setwd("sub")` and
+    `xfun::in_dir()`'s like it stay 4 (documented in round 6); inside `local()`,
+    `list2env(..., globalenv())` reads 3 as `assign(envir = globalenv())` does at the top level;
+    and, on every build, `eval(bquote(q()))` and `eval(expression(q()))` are level 3, code that
+    builds a call, and `file.copy("~/.ssh/id_rsa", "data/k")` is level 2, as a copy's source is not
+    read as a secret read.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #93)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
@@ -9375,3 +9435,24 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
     verifier's patch, with that guard added. The forms are level 4 `control`; `os.environ['TZ']`
     writes, reads and ordinary continued lines read as before.
   - Green and checks: FIX-27's review round 6, the gate writer's items, above.
+- Review round 6 verification of the gate writer's items (the gate verifier on `ca2b0d8c`, findings
+  1 and 4; branch `claude/v1-fix-gate6`, each test red on `ca2b0d8c`'s code first).
+  - Red: this record's share of FAIL 13 (FIX-27's bullet of the same name): Python's joins 4.
+  - A backslash at the end of a Python comment (finding 1, `0771e8d3`, a regression of `091d59b5`):
+    `risk_python()` joined every backslash at a line's end, but Python never continues a comment, so
+    the line after `# note \` runs as code; joined, it sat in the comment `code_nc` strips, and an
+    `os.environ` write or `chdir()` there went unread (`# note \<newline>os.environ[k] = d` read 3,
+    which auto ran: offline it changed `R_USER_CONFIG_DIR` through 'reticulate'; 4 on `2bb1fcc1`).
+    Only a backslash outside a comment joins now, in or out of a string, as Python joins it: the
+    verifier's patch, with a string left open at the line's end joined too, so
+    `os.environ['HO\<newline>ME'] = d` stays 4. The comment forms read 4 again and offline auto
+    asks; `os.environ\<newline>['HOME'] = d`, the parenthesised, `update()` and `putenv()` forms,
+    `os.environ \<newline> [k] = d` and `x = '#' + \<newline>os.environ[k]` read as before.
+  - The setter's callers (finding 4, docs): `?gptr_security`, 03 section 6.8.1 and D-272 named only
+    `lapply()`, `Map()` and `do.call()` as passing names the classifier cannot read to a setter,
+    though `sapply()`, `vapply()`, `mapply()`, `Filter()`, `Reduce()`, `purrr::map()`,
+    `purrr::walk()` and the other functions it knows call a function (`risk_slot_names`,
+    `risk_hof_args`) do so too (level 4 `control`). They now name another function the classifier
+    knows calls it, such as `sapply()` or `purrr::map()`; `identity(Sys.setenv)` stays level 0, a
+    function it does not know calls one.
+  - Green and checks: FIX-27's bullet of the same name.

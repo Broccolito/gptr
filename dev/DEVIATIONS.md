@@ -8844,3 +8844,12 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   list written out and rlang::exec() are read as the call (round 6)", "Python code is read as Python
   joins its lines and names (review round 6)"; test-perm-classify.R's round 1 row. Evidence:
   progress/fixes.md FIX-36.
+- Status 2026-10-28 (review round 6, the gate verifier): Python code is read as Python joins it
+  outside a comment only: a backslash at the end of a comment joins nothing, as Python never
+  continues one, so `# note \<newline>os.environ[k] = d` is `control` again (the round 6 line above
+  joined every backslash, making it level 3 `session`, which auto ran). The names passed to a
+  setter handed to `lapply()`, `Map()`, `do.call()` or another function the classifier knows calls
+  it, such as `sapply()` or `purrr::map()`, are ones it cannot read, level 4 `control`; the round 6
+  line above and `?gptr_security` named only the first three. Contract-visible: 03 section 6.8.1;
+  `?gptr_security`. Tests: test-risk-forms.R "Python code is read as Python joins its lines and
+  names (review round 6)". Evidence: progress/fixes.md FIX-36.
