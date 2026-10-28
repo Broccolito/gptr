@@ -112,7 +112,7 @@ test_that("a claude run in the coaching role acts only through gptr's tools", {
 
 skip_codex_preflight = function() {
   refused = tryCatch(coach_model_kind("codex/default"), gptr_error_model_refused = identity)
-  skip_if(inherits(refused, "condition"), conditionMessage(refused))
+  if (inherits(refused, "condition")) skip(conditionMessage(refused))
 }
 
 test_that("a codex coach has no tools and answers through the strict reply schema", {

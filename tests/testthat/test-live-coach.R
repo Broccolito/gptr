@@ -89,7 +89,7 @@ local_coach_plan = function(cli, model, .env = parent.frame()) {
   skip_if_not(identical(pcli_login_status(cli), "signed in"),
               paste("the", cli, "CLI is not signed in"))
   refused = tryCatch(coach_model_kind(model), gptr_error_model_refused = identity)
-  skip_if(inherits(refused, "condition"), conditionMessage(refused))
+  if (inherits(refused, "condition")) skip(conditionMessage(refused))
   local_gw(.env = .env)
   local_coach_route(model, .env)
 }
