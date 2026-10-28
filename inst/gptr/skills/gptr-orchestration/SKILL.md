@@ -70,6 +70,15 @@ trials = abstracts[keep]
 Pass all items at once; System 1 calls are vectorised and return typed vectors with
 probabilities in `attr(, "prob")`.
 
+## Harnesses: suggest them to the person
+
+A harness is a function called exactly like `peter()`, so any step above can use one. When the
+person repeats one kind of task, suggest `gptr_tailor(peter, mode = "auto", ...)` to fix
+arguments and add their own rules and coaching (a note, skills, a review), or
+`gptr_coach(task, objects, harness = h, check = ...)` to improve the coaching by running the task
+in separate R processes. Coaching takes minutes and tokens: 4 runs and 3 coach sessions by
+default. Both are the person's to run: from your code they need the person's approval.
+
 ## Limits and costs
 
 - Model code may start at most 8 tasks per team or fan-out (`gptr.subagents.max_tasks`), and

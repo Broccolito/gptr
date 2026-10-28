@@ -176,6 +176,11 @@ does not stream text. First use asks for an acknowledgment. gptr
 checks required CLI flags and rejects incompatible versions. The Claude plan route is experimental and opt-in; review `?gptr_security`
 and the provider's terms before choosing it.
 
+`gptr_coach()` can run its sessions on either route, so a plan with no API key is enough to
+coach a harness. On a plan it runs at most two sessions at once. When a plan limit is reached,
+it starts nothing new and returns your starting harness. See
+[Harnesses and coaching](tailor-and-coach.html).
+
 ### Local Ollama models
 
 Run Ollama separately and install the model you intend to use. Discover the installed models,

@@ -106,6 +106,22 @@ gptr_prob(is_rct)
 
 `is_rct` is a logical vector, one answer per abstract, so `abstracts[is_rct]` keeps the trials.
 
+## A peter of your own
+
+`gptr_tailor()` builds a harness, a function you call exactly like `peter()`, with fixed
+arguments, your own hard rules and coaching (a note, skills, a review). `gptr_coach()` improves
+the coaching by running your task in separate R processes and keeps a change only when the new
+run passes gptr's checks and your `check`. Rules and coaching never loosen permission checks.
+
+```{r, eval = FALSE}
+auto_peter = gptr_tailor(peter, mode = "auto")
+slope_peter = gptr_coach("Regress mpg on wt in mtcars; store the slope as b.", mtcars,
+                         harness = auto_peter, check = function(r) is.numeric(r$objects$b))
+slope_peter("Regress mpg on hp in mtcars; store the slope as b.", mtcars)
+saveRDS(slope_peter, "slope_peter.rds")
+slope_peter = gptr_tailor(readRDS("slope_peter.rds"))  # load and check it in a later session
+```
+
 ## Learn more
 
 Start with `vignette("getting-started", package = "gptr")`; its examples run offline with
@@ -119,6 +135,8 @@ Start with `vignette("getting-started", package = "gptr")`; its examples run off
   scores, thresholds and probabilities, with an offline demo.
 - [Script as history](https://broccolito.github.io/gptr/articles/script-as-history.html):
   recording, replay and export.
+- [Harnesses and coaching](https://broccolito.github.io/gptr/articles/tailor-and-coach.html):
+  your own peter, improved by running your task.
 - [Interactive console](https://broccolito.github.io/gptr/articles/interactive-console.html):
   the chat, steering and slash commands.
 

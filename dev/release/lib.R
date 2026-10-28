@@ -95,7 +95,8 @@ rel_article_groups = function() {
   list(
     "Get started" = c("getting-started", "why-peter"),
     "Ask Peter" = c("language-models", "system-one", "interactive-console", "configuration"),
-    "Build workflows" = c("script-as-history", "teams-and-background", "tools-and-artifacts"),
+    "Build workflows" = c("script-as-history", "teams-and-background", "tailor-and-coach",
+                          "tools-and-artifacts"),
     "Extend gptr" = c("skills-and-plugins", "mcp", "extending-gptr"),
     "Understand execution" = c("execution-model", "token-efficiency")
   )
