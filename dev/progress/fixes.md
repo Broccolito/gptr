@@ -6506,21 +6506,21 @@ the driver, screens, events, transcripts and replays without a model are local, 
   found two more things. (A) Round 5's "no other level changes" was wrong: classing a directory
   read whole by `path_inside()` dropped the class the project's own path gives its files. In a
   project under `.git`, `.claude` or `.aws` (Claude Code's worktrees live in `.claude/worktrees`)
-  `list.files('.')`, `list.files()` and `system('ls .')` read 0 where `list.files('sub')` read 2,
-  and `setwd('.')` and `withr::local_dir('.')` 2 where `setwd('sub')` read 4. Red: "a project in
-  a protected folder reads its root as its folders (review round 6)" FAIL 10 on `5e1c35e7`. Fix
-  (`a57a3b9e`): the child stand-in is back, joined with one `/`, so `/` gives `/x`, not the UNC
-  path `//x`; round 5's test now maps `/x` to `D:/x`, as Windows does. (B) Round 5's UNC residual
-  is fixed, and its "no red test is possible" was too strong: a copy of `path_norm_one()` whose
-  enclosing environment defines R 4.2's Win32 `dirname()` and `basename()` (src/main/util.c), a
-  `file.exists()` no UNC server answers and `normalizePath()` as `GetFullPathNameW()` gives it
-  reproduces the bug on any host. Red: "a UNC path is outside the project as R 4.2 on Windows
-  places it (review round 6)" FAIL 9 on `a57a3b9e`: `setwd('//host/share')`,
-  `setwd('\\host\share')` and `setwd('//x')` read 2, `unlink()`, `file.remove()`, the
-  `with_dir()` delete and `system('rm //host/share/f')` 3, `readLines()` 0 and `writeLines()` 2,
-  where R 4.4 reads 4, 4, 1 and 3. Fix (`f53f86d5`): on Windows `path_norm_one()` climbs a UNC
-  path no higher than its share (`//host/share`, `//host`) and writes the leading `\\` of
-  `dirname()` as `//`; POSIX is unchanged. Green: `^perm-classify$` FAIL 0 PASS 1150 (the same
+  `list.files('.')`, `list.files()` and `system('ls .')` read 0 where `list.files('sub')` read 2 (3
+  under `.claude` and `.aws`), and `setwd('.')` and `withr::local_dir('.')` 2 where `setwd('sub')`
+  read 4. Red: "a project in a protected folder reads its root as its folders (review round 6)"
+  FAIL 10 on `5e1c35e7`. Fix (`a57a3b9e`): the child stand-in is back, joined with one `/`, so `/`
+  gives `/x`, not the UNC path `//x`; round 5's test now maps `/x` to `D:/x`, as Windows does. (B)
+  Round 5's UNC residual is fixed, and its "no red test is possible" was too strong: a copy of
+  `path_norm_one()` whose enclosing environment defines R 4.2's Win32 `dirname()` and `basename()`
+  (src/main/util.c), a `file.exists()` no UNC server answers and `normalizePath()` as
+  `GetFullPathNameW()` gives it reproduces the bug on any host. Red: "a UNC path is outside the
+  project as R 4.2 on Windows places it (review round 6)" FAIL 9 on `a57a3b9e`:
+  `setwd('//host/share')`, `setwd('\\host\share')` and `setwd('//x')` read 2, `unlink()`,
+  `file.remove()`, the `with_dir()` delete and `system('rm //host/share/f')` 3, `readLines()` 0 and
+  `writeLines()` 2, where R 4.4 reads 4, 4, 1 and 3. Fix (`f53f86d5`): on Windows `path_norm_one()`
+  climbs a UNC path no higher than its share (`//host/share`, `//host`) and writes the leading `\\`
+  of `dirname()` as `//`; POSIX is unchanged. Green: `^perm-classify$` FAIL 0 PASS 1150 (the same
   test file on the code of `fe873436` FAIL 14, of `5e1c35e7` FAIL 19);
   `^(perm|risk|rules|utils-paths|bridge|tool-|mcp-)` FAIL 0 SKIP 14 PASS 5193 in UTF-8 and under
   `LC_ALL=C LANG=C`; the 15 other files that call the classifier or mock `is_windows()` FAIL 0
@@ -8426,6 +8426,56 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     PASS 17739 in UTF-8 (14 min, at load averages of 26 to 47). Not run here: those files under
     `LC_ALL=C LANG=C`, the full suite and `R CMD check` (the next step's), Linux and Windows
     hosts, R 4.2 and R-devel, live models.
+- Review round 5, the merge's residuals, the console and records items (the merge's verifiers on
+  `b2ed7033`; branch `claude/v1-fix-cons6` from it, beside `claude/v1-fix-class6`, which has the
+  classifier's and the security pages' items; each test red on `b2ed7033`'s code first,
+  `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`):
+  - C1, an `@` name before text written without spaces: since console5's `67233b5b` an unquoted
+    name takes letters of any script, so text of a script written without spaces runs on into it.
+    `请分析 @df的数据` and `@df的数据` attached the data frame `df` on `fe873436` and then said
+    `@ df的数据 not found, sent as text`, and `@x²` read `x²`, not `x` (U+00B2 is a digit to
+    `\p{N}`). Red: test-console-repl.R "an @name nothing has is read as its leading ASCII run
+    (round 5 merge)", `^console-repl$` FAIL 2 PASS 382 in UTF-8 and FAIL 2 SKIP 4 PASS 369 under
+    `LC_ALL=C LANG=C`. Fix (`33a2b374`), one rule: an unquoted name no file or object has is read
+    as its leading run of ASCII letters, digits and `_ . / ~ -`, not ending in a dot, the name the
+    rule before round 5 read, when a file or object has that; otherwise the mention reports the
+    whole name, a folder or not found. A quoted name is read whole, as before. So `@df的数据`
+    attaches `df`, `@notes.txt的内容` the file and `@x²` the object `x`, while `@zz的数据` and
+    `@"df的数据"` are not found. The console vignette (.Rmd and .Rmd.orig) says so in one
+    sentence; a status line of D-244. Green: `^console-repl$` FAIL 0 PASS 384 in UTF-8 and FAIL 0
+    SKIP 4 PASS 371 under C, console5's test of `café`, a combining mark and an Arabic-Indic digit
+    among them. Console5's "Not changed" line on a name written straight before another script's
+    text no longer holds.
+  - R1, a record (`5ff7c47a`): win42's round 6 bullet in FIX-27 said that `list.files('sub')` read
+    2 in a project under `.git`, `.claude` or `.aws`; that holds under `.git`, and it reads 3 under
+    `.claude` and `.aws` (a probe of `gptr_risk()` on `b2ed7033`'s code: 2, 3 and 3, with
+    `list.files('.')` the same and `setwd('sub')` 4 in all three). The bullet says so.
+  - R2, the checkpoint (`4ae8303e`): HANDOFF's and PROGRESS's intros said four review rounds and
+    now say five; their Verified parts name round 5's merged branches and its fix branches, the
+    counts left to the final merger. Their Open lists named only `Sys.setenv()` as unread when
+    reached by a computed name, through a list or an environment, or handed to another function,
+    and a Python write whose name the code computes, which round 5 reads; they now name the four
+    setters and the Python forms as `?gptr_security` does, and FIX-36's lines point to that list.
+    They no longer say that `callr::run()` and `sys::exec_wait()` have no row (round 5 added
+    them), and they add round 5's Open items: the forms not read (`processx::process$new()`,
+    `get("setwd")`, the `wd` of `callr::r()`, `env -iC DIR`, an abbreviated `--chdir`,
+    `eval(bquote())`), the restore idiom inside a function body or `local()`, relative paths after
+    `setwd(tempdir())`, vignette("execution-model") on moving the working directory, the
+    protected-folder `setwd()` levels as the maintainer's call, the cost of handing a secret to a
+    child (FIX-32) and the `@` name limits (FIX-34).
+  - R3: the merge's own note above names the six branches and the post-merge fix `d84ccfd6`; this
+    bullet records the residuals' fixes on this branch.
+  - Checks on this record's commit (whose code is `33a2b374`'s): the files whose names start with
+    `console-` or `repl` FAIL 0 WARN 0 SKIP 1 PASS 3632 in UTF-8 and FAIL 0 WARN 0 SKIP 29
+    PASS 3447 under `LC_ALL=C LANG=C`, at load averages of about 40 to 85 (the skips: INFRA-03,
+    and under C those that need a UTF-8 locale); lint of R/console-repl.R, test-console-repl.R and
+    the console vignette clean; `document()` no diff (the comment is `@noRd`);
+    `dev/release/check-docs.R` 0 problems and `spelling::spell_check_package()` clean; `fmt.py`
+    on copies of the records changes nothing and `lintfmt.py` shows only the baseline. No full
+    suite or `R CMD check` ran, so the heavy lock was not taken; no plan, contract or prompt text
+    changed.
+  - Not changed: the checkpoint lines of FIX-27, FIX-32 and FIX-34 name no round 5 change, nor
+    FIX-36's its rounds 3 to 5. Not run: Linux and Windows, R 4.2 and R-devel, live models.
 
 ## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #93)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`

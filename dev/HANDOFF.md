@@ -4,7 +4,7 @@ PR #88 (branch `claude/v1-prerelease`) merges ten branches into `main` `7e23ebd3
 PRs #78-#83 checkpoint also holds #84 (CI-98: the writer prototype reports an early writer exit),
 and adds CI-103 and the follow-ups that the PR's checks found. PR #90 adds CI-104 (`main`
 `13a917ff`), and the branch `claude/v1-fixes` from it, PR #93, adds FIX-27..FIX-34, merged and
-through four review rounds, CI-105 (contributor PR #92), and FIX-35 and FIX-36. Each has its record
+through five review rounds, CI-105 (contributor PR #92), and FIX-35 and FIX-36. Each has its record
 in `progress/fixes.md`, in id order, and decisions D-255, D-257, D-258, D-261 and D-262..D-272 and
 the D-254 amendment are in `DEVIATIONS.md`:
 
@@ -144,14 +144,8 @@ the D-254 amendment are in `DEVIATIONS.md`:
   home, and with them the control paths (D-272); review round 1: in any letter case, also a name
   the classifier cannot read (`do.call(Sys.setenv, ...)`), `readRenviron()` and
   `dotenv::load_dot_env()`; review round 2: also `peter$knit("python", code)`'s code and
-  `withr::local_envvar()` and `withr::with_envvar()`. Not covered, level 3 or lower: code in a file
-  R runs (`source()`, `sys.source()`, `eval(parse(file = ))`); `Sys.setenv()` reached by a
-  computed name, through a list or an environment, or handed to another function
-  (`get("Sys.setenv")`, `baseenv()$Sys.setenv`, `with(list(f = Sys.setenv), ...)`,
-  `assign("f", Sys.setenv)`, `identity(Sys.setenv)`); a Python write whose name the code computes,
-  that reaches `os.environ` by another name (`e = os.environ`, `getattr(os, "environ")`) or
-  through `ctypes`, or that passes `os.environ.update()` lower-case keyword names; Python run
-  through 'reticulate'.
+  `withr::local_envvar()` and `withr::with_envvar()`. Not covered: the variable changes the Open
+  list names.
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
@@ -211,6 +205,10 @@ On `claude/v1-fixes`, locally on macOS, with `NOT_CRAN=true`, the SIGINT reset a
   the four plan checks pass, `dev/release/tests` PASS 290 and the spelling check clean once
   `inst/WORDLIST` takes "reticulate", "unsets" and "unsetting" (FIX-36's help text failed both on
   `51b2bdff`); no `R CMD check` ran.
+- Review round 5, the merge of `claude/v1-fix-win42`, `claude/v1-fix-env3`, `claude/v1-fix-gate5`,
+  `claude/v1-fix-secret5`, `claude/v1-fix-console5` and `claude/v1-fix-docs5` (`112f1a57`), with
+  `getwd()` and `setwd()` read as D-272's helpers (`d84ccfd6`), and of its fix branches
+  `claude/v1-fix-cons6` and `claude/v1-fix-class6`: the counts are the final merger's.
 
 For PR #88, on the merged code `556acb00`, locally on macOS:
 
@@ -256,20 +254,32 @@ Open (found, not fixed):
   computed `system()` run without asking past a deny `sh:` rule, as before (FIX-27; `system2()`'s
   `env` is read since FIX-32).
 - The classifier places paths in the project but does not follow the working directory changed
-  other than by `setwd()`, `withr::local_dir()` or `withr::with_dir()`
-  (`usethis::local_project()`), nor read the code another interpreter runs (`Rscript -e`,
-  `perl -e`, `node -e`), a path the shell computes (`rm "$f"` in a loop, `xargs rm`) or a code
-  word handed to `sh -c` or `bash -c` whose spaces are escaped with a backslash or written `$IFS`
-  (`sh -c rm\ -f\ file`; reading it needs a tokenizer of its own): each is level 3, which auto and
-  yolo run whatever it deletes, as `?gptr_security` says. A `processx::run()` `wd` the code
-  computes is read as the project, and `callr::run()` and `sys::exec_wait()` have no row, so a
-  command through them is a level-1 `unlisted` row, never read (FIX-27 review round 4).
+  other than by `setwd()`, `withr::local_dir()`, `withr::with_dir()` or `xfun::in_dir()`
+  (`usethis::local_project()`, `get("setwd")`, the `wd` of `callr::r()`), nor read the code
+  another interpreter runs (`Rscript -e`, `perl -e`, `node -e`), a path the shell computes
+  (`rm "$f"` in a loop, `xargs rm`), a code word handed to `sh -c` or `bash -c` whose spaces are
+  escaped with a backslash or written `$IFS` (`sh -c rm\ -f\ file`; reading it needs a tokenizer
+  of its own), `env` with `-C` in a cluster of short options (`env -iC DIR`) or an abbreviated
+  `--chdir`, `eval()` of a quote reached otherwise (`eval(bquote())`, a quoted call held in a
+  name) or the command of `processx::process$new()`: each is level 3 or lower, which auto and yolo
+  run whatever it deletes, as `?gptr_security` says. A `processx::run()` `wd` the code computes is
+  read as the project (FIX-27 review rounds 4 and 5).
+- The save-and-restore idiom inside a function body or `local()`, where a name the code assigns
+  is not followed (D-211), still asks in auto and yolo; after `setwd(tempdir())` relative paths
+  are still placed in the project root; vignette("execution-model") does not list moving the
+  working directory out of the project among what yolo asks (FIX-27 review round 5).
+- In a project inside a protected folder (`.git`, `.claude` or `.aws`) every directory is
+  protected, so `setwd('.')` and `setwd('sub')` are level 4 there, as before round 5: the
+  maintainer's call (FIX-27 review round 5).
 - test-perm-classify.R "a command run in a directory outside the project reads it (review round
   4)" writes the raw `tempfile()` path into R code, whose backslashes on Windows (`\U`) stop the
   parse, so its `cd` line may read 0 there, not 1; it has not run on Windows (FIX-27 review round
   4, the fixes' verifier).
 - An approved `system()` child's output starts on the frozen `r` row; Codex's own shell is not
-  switched off in the read-only modes; the prefix gate leaves `standard_core` 1 token (FIX-32).
+  switched off in the read-only modes; the prefix gate leaves `standard_core` 1 token (FIX-32). A
+  registered secret handed to a child through `env` asks each time in auto, and twice in manual,
+  unless the code also reads it by name; the idle gate does not take the level 3 of an ordinary
+  variable passed through (FIX-32 review round 5).
 - A replayed script sends again a steer its run took after the script went on (a run sent to the
   background from the pause menu, a `gptr_wait(timeout =)` that returned before the run ended), and
   a `gptr_step(s, <n>)` that ended the run keeps the notes, so a later turn equal to one is still
@@ -321,6 +331,10 @@ Open (found, not fixed):
 - On macOS a two-line paste without a final newline answers a question with its first line, as
   documented (FIX-34 PASTE-1); the console's not-run row cuts a guard refusal's long reason
   (FIX-34's merge).
+- Tab writes an `@` name holding a space or other punctuation without quotes, which the mention
+  does not read whole; in a UTF-8 locale R's regular expressions read no mention in a line holding
+  a file name that is not valid UTF-8, and Rgui and Rterm in a code page hold only its characters
+  (FIX-34 review round 5).
 - Pasted text holding a paste end marker, in a terminal that does not filter pastes, still sends at
   a newline of a read between when a read ends right after that marker and the rest is split again
   before the paste's own end marker (two pauses of 50 ms inside one paste); a Ctrl-C typed in the
@@ -337,12 +351,14 @@ Open (found, not fixed):
   closes under 32 busy loops ended "close timed out" (FIX-35 F2).
 - Variable changes the classifier does not read, each level 3 or lower, which auto runs, as
   `?gptr_security` says: code in a file R runs (`source()`, `sys.source()`,
-  `eval(parse(file = ))`); `Sys.setenv()` reached by a computed name, through a list or an
-  environment, or handed to another function (`get("Sys.setenv")`, `baseenv()$Sys.setenv`,
-  `with(list(f = Sys.setenv), ...)`, `assign("f", Sys.setenv)`, `identity(Sys.setenv)`); a Python
-  write whose name the code computes, that reaches `os.environ` by another name (`e = os.environ`,
-  `getattr(os, "environ")`) or through `ctypes`, or that passes `os.environ.update()` lower-case
-  keyword names; Python run through 'reticulate' (FIX-36, D-272).
+  `eval(parse(file = ))`); `Sys.setenv()`, `Sys.unsetenv()`, `withr::local_envvar()` or
+  `withr::with_envvar()` reached by a computed name, through a list or an environment, or handed
+  to another function (`get("Sys.unsetenv")`, `baseenv()$Sys.setenv`,
+  `asNamespace("withr")$local_envvar`, `with(list(f = withr::with_envvar), ...)`,
+  `assign("f", Sys.unsetenv)`, `identity(withr::local_envvar)`); a Python write that reaches
+  `os.environ` by another name (`e = os.environ`, `getattr(os, "environ")`) or through `ctypes`,
+  or that passes `os.environ.update()` a mapping the code computes or keyword names not all in
+  upper case; Python run through 'reticulate' (FIX-36, D-272).
 - The macOS row's time grows with its serial pty tests (CI-96).
 - A `process_jsonl` line's events still follow the abort flag (its adapters check the signal
   themselves, 04 section 8.1), and an `inprocess` generator keeps its two calls after it; the

@@ -508,6 +508,21 @@ test_that("an @name holds letters, marks and digits of any script, in C too (rev
   expect_identical(men$said, as_utf8(paste0("@ ", name, " (1 line)")))
 })
 
+test_that("an @name nothing has is read as its leading ASCII run (round 5 merge)", {
+  local_project(files = list("notes.txt" = "x"))
+  e = new.env()
+  e$df = data.frame(a = 1:2)
+  e$x = 1
+  # Chinese is written without spaces, so the text after a name runs on into it; a quoted name
+  # and a name whose run names nothing are reported whole
+  text = "@df的数据 请分析 @notes.txt的内容, @x² @zz的数据 @\"df的数据\""
+  men = repl_mentions(as_utf8(text), e)
+  expect_identical(men$objects, c("df", "x"))
+  expect_identical(men$said, as_utf8(c("@ df (data.frame, 2 x 1)", "@ notes.txt (1 line)",
+                                       "@ x (numeric)", "@ zz的数据 not found, sent as text",
+                                       "@ df的数据 not found, sent as text")))
+})
+
 test_that("a binary @file is announced, not inlined", {
   root = local_project()
   writeBin(as.raw(c(0x50, 0x00, 0x01)), file.path(root, "blob.bin"))
