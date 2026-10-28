@@ -408,9 +408,9 @@ checkpoint_after = function(run, call, ctx, tokens, res) {
 #' Nested `peter$...` calls made while an `r` evaluation runs (04 section 7.6)
 #' A member listed by the outer call's analysis at or below its approved level, whose own risk of
 #' its actual input (call_risk(): a patch's Delete File, a computed command) is not above that
-#' level either, runs without a second prompt; others pass perm_check(). The command of a sh or bg
-#' call meets the deny and ask rules first, whatever its level. Recorded in `details$nested` (at
-#' most 20).
+#' level either and reads no registered secret the outer call's did not, runs without a second
+#' prompt; others pass perm_check(). The command of a sh or bg call meets the deny and ask rules
+#' first, whatever its level. Recorded in `details$nested` (at most 20).
 #' @noRd
 dispatch_nested = function(name, input, ctx) {
   check_string(name, "name")
@@ -445,8 +445,10 @@ dispatch_nested = function(name, input, ctx) {
     gptr_abort(perm_denial_text(dec), "tool", tool = name, status = "denied")
   }
   level = nested_listed_level(outer, name)
-  own = risk_level(call_risk(call, ctx, run))
-  if (is.null(level) || max(level, own) > call$outer_level) {
+  own = call_risk(call, ctx, run)
+  secret = isTRUE(own$secret_guard) &&
+    !(isTRUE(outer$risk$secret_guard) && all(own$secrets %in% outer$risk$secrets))
+  if (is.null(level) || max(level, risk_level(own)) > call$outer_level || secret) {
     dec = perm_check(call, run)
     level = risk_level(dec$risk)
     if (!identical(dec$decision, "allow")) {

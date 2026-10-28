@@ -340,19 +340,20 @@ mcp_serve_r = function(call, env, run, session = NULL, ctx = NULL) {
 
 #' The idle gate (mcp_gate_idle(), which asks nobody) of a nested `peter$` call in served R that no
 #' pump serves (IC-57): a sh or bg call as the literal call of its command run in its `wd`
-#' (cmd_in_wd(), as the member's own risk reads it), as the static gate reads one, any other with
-#' its tool's risk of its input; signals the denial
+#' (cmd_in_wd(), as the member's own risk reads it), as the static gate reads one, with the
+#' registered secrets its `env` hands the child (the member's own risk), any other with its tool's
+#' risk of its input; signals the denial
 #' @noRd
 mcp_nested_gate = function(name, input, ctx, sid = NULL) {
-  call = if (name %in% c("sh", "bg")) {
+  spec = registry_get("tool", name, session = sid)
+  call = list(name = name, input = input, tool = spec, nested = TRUE,
+              risk = if (is.function(spec$risk)) spec$risk(input, ctx))
+  if (name %in% c("sh", "bg")) {
     code = paste0("peter$", name, "(", deparse1(cmd_in_wd(unlist(input$cmd), input$wd)), ")")
-    list(name = "r", input = list(code = code),
-         risk = ext_service_get("risk.classify")(code, envir = NULL, root = project_root(),
-                                                 kind = "r"))
-  } else {
-    spec = registry_get("tool", name, session = sid)
-    list(name = name, input = input, tool = spec, nested = TRUE,
-         risk = if (is.function(spec$risk)) spec$risk(input, ctx))
+    risk = ext_service_get("risk.classify")(code, envir = NULL, root = project_root(), kind = "r")
+    risk$secret_guard = isTRUE(risk$secret_guard) || isTRUE(call$risk$secret_guard)
+    risk$secrets = unique(c(risk$secrets, call$risk$secrets))
+    call = list(name = "r", input = list(code = code), risk = risk)
   }
   # no console notice: the served result captures it, and the denial tells the model
   d = mcp_gate_idle(call, ctx, sid, notice = FALSE)
