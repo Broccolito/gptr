@@ -323,9 +323,8 @@ test_that("paste(), paste0() and file.path() are folded with their arguments as 
                  "nm = paste('R_USER_CONFIG_DIR', collapse = 'x'); Sys.unsetenv(nm)",
                  "Sys.unsetenv(file.path('XDG_CONFIG_HOME', fsep = ''))",
                  "Sys.unsetenv(file.path('R_USER', 'CONFIG_DIR', fsep = '_'))",
-                 # a value with several elements, collapsed, is one the code computes
-                 "n = 'TZ'; if (p) n = 'R_USER_CONFIG_DIR'; Sys.unsetenv(paste(n, collapse = ''))",
-                 "Sys.unsetenv(paste0(c('T', 'Z'), collapse = ''))")) {
+                 # a collapse is also read as each value a name may hold
+                 "n = 'TZ'; if (p) n = 'XDG_CONFIG_HOME'; Sys.unsetenv(paste(n, collapse = ''))")) {
     r = gptr_risk(code, root = root)
     expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
   }
@@ -333,9 +332,11 @@ test_that("paste(), paste0() and file.path() are folded with their arguments as 
                    lv("system('ls; rm -rf build')"))
   expect_identical(lv("setwd(paste0('../..', collapse = 'x'))"), 4L)
   expect_identical(lv(paste0("unlink(paste0(", deparse(out), ", collapse = '/x'))")), 4L)
+  d = paste0("d = 'x'; if (p) d = ", deparse(out), "; ")
+  expect_identical(lv(paste0(d, "unlink(paste0(d, collapse = ''))")), lv(paste0(d, "unlink(d)")))
   # neighbours: as before
   for (code in c("Sys.unsetenv(x = paste0('T', 'Z'))", "Sys.unsetenv(paste('T', 'Z', sep = ''))",
-                 "Sys.unsetenv(c(a = 'TZ'))", "Sys.unsetenv(paste0('T', 'Z', collapse = ''))",
+                 "Sys.unsetenv(c(a = 'TZ'))", "Sys.unsetenv(paste0(c('T', 'Z'), collapse = ''))",
                  "setwd(file.path('data', 'sub'))")) {
     expect_identical(lv(code), 2L, label = code)
   }

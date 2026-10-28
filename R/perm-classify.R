@@ -2306,14 +2306,17 @@ risk_fold = function(x, known = NULL, masked = NULL) {
                file = , gzfile = , bzfile = , xzfile = "description")
   if (!is.null(arg)) return(risk_fold(risk_arg(risk_args(x, fn, "base"), arg, 1L), known, masked))
   if (!fn %in% c("c", "file.path", "paste0", "paste")) return()
-  # every argument as R passes it (paste0()'s `sep` is a part, `collapse` and `fsep` join them);
-  # a collapse of a name with several values is one the code computes
+  # every argument as R passes it (paste0()'s `sep` is a part, `collapse` and `fsep` join them)
   parts = lapply(a, risk_fold, known, masked)
-  if (any(vapply(parts, is.null, logical(1))) ||
-      (startsWith(fn, "paste") && !is.null(parts[["collapse"]]) && any(lengths(parts) > 1L))) {
-    return(NULL)
+  if (any(vapply(parts, is.null, logical(1)))) return(NULL)
+  v = tryCatch(unname(do.call(fn, parts, envir = baseenv())), error = function(e) NULL)
+  # a part's values may be a name's several values, which the fold cannot tell from a vector, so a
+  # collapse is also read as each value
+  if (length(v) && startsWith(fn, "paste") && !is.null(parts[["collapse"]])) {
+    parts$collapse = NULL
+    v = unique(c(v, do.call(fn, parts, envir = baseenv())))
   }
-  tryCatch(unname(do.call(fn, parts, envir = baseenv())), error = function(e) NULL)
+  v
 }
 
 #' The class of one literal path read, written or deleted by a call of `category`
