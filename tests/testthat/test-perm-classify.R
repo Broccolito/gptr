@@ -1202,3 +1202,22 @@ test_that("a drive-relative path is outside the project on every OS (review roun
   expect_identical(path_class("build/a.o", root), "workspace")
   expect_identical(lv("unlink('build', recursive = TRUE)"), 3L)
 })
+
+test_that("a command run in a directory outside the project reads it (review round 4)", {
+  root = local_project()
+  dir.create(file.path(root, "sub"))
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  sh = registry_get("tool", "sh")
+  level = function(cmd, wd = ".") as.integer(sh$risk(list(cmd = cmd, wd = wd), NULL)$level)
+  for (cmd in c("ls", "du", "tree", "grep -r x", "git status", "echo hi")) {
+    expect_identical(level(cmd, out), 1L, label = cmd)
+    # neighbours: run in the project or the session's tempdir() it reads nothing outside
+    expect_identical(level(cmd), 0L, label = cmd)
+    expect_identical(level(cmd, "sub"), 0L, label = cmd)
+    expect_identical(level(cmd, tempdir()), 0L, label = cmd)
+  }
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv(paste0("system('cd ", out, " && ls')")), 1L)
+  expect_identical(lv("system('cd sub && ls')"), 0L)
+  expect_identical(lv("system('cd ~/.ssh && ls')"), 3L)
+})

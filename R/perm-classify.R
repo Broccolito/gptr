@@ -1475,6 +1475,12 @@ risk_cmd_line = function(cmd, root, scan = FALSE, dirs = root) {
       t = w[-seq_len(i)][!grepl("^-.", w[-seq_len(i)])][1L] %if_na% "~"
       t = sub("^~(?=/|\\z)", user_home(), sub("^\\$(HOME\\b|\\{HOME\\})", "~", t, perl = TRUE),
               perl = TRUE)
+      # what runs there reads it, as `ls` does with no operand (git -C's reading)
+      tg = risk_target(t, "read", root, dirs)
+      if (tg$level > 0L) {
+        f = risk_flags_bind(f, risk_flags_row(paste(head, t), head, tg$level,
+                                              if (tg$secret) "secret" else "read", t, tg$pc))
+      }
       dirs = unique(c(dirs, if (grepl("[$`*?[]", t) || identical(t, "-")) NA_character_ else
         if (is_abs_path(t) || is_drive_rel(t)) t else
           file.path(sub("/\\z", "", dirs[!is.na(dirs)][1L], perl = TRUE), t)))
