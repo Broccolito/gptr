@@ -81,6 +81,43 @@ test_that("the parent refuses unknown keys, types, classes and sizes", {
   expect_error(child_read(path), class = "gptr_error_untrusted")
 })
 
+test_that("a result whose fields have the wrong shape is refused, as a forged one is", {
+  path = withr::local_tempfile(fileext = ".json")
+  read = function(...) {
+    writeLines(json_encode(plain_encode(child_result_new("a", status = "idle", risk = 0L, ...))),
+               path)
+    child_read(path)
+  }
+  expect_identical(read(text = "ok", turns = 2L)$turns, 2L)
+  bad = list(list(text = c("a", "b")), list(text = 1), list(turns = 1.5), list(turns = c(1L, 2L)),
+             list(usage = data.frame(input = "x", output = 1, cost = 0)), list(usage = "x"),
+             list(objects = list(1, 2)), list(objects = "x"), list(unmet = 1), list(refusals = "x"),
+             list(limit = "3pm"), list(transcript = c("a", "b")), list(first_user = 1),
+             list(error = c("a", "b")), list(files = "x"), list(checks = 1))
+  for (b in bad) {
+    expect_error(do.call(read, b), "has the wrong shape", class = "gptr_error_untrusted",
+                 label = names(b))
+  }
+})
+
+test_that("a value too large or deep for the reader travels as its summary (08 section 3.3)", {
+  deep = Reduce(function(x, i) list(x), seq_len(25L), 1)
+  wide = lapply(seq_len(60000L), function(i) list(i))
+  res = plain_rt(child_result_new("a", status = "idle", text = "kept",
+                                  value = as.list(seq_len(150000L)),
+                                  objects = list(deep = deep, wide = wide)))
+  expect_identical(res$text, "kept")
+  expect_match(res$value, "^<list>")
+  # nested down to the reader's depth, counted from the result (deep sits at depth 2)
+  inner = res$objects$deep
+  for (i in seq_len(17L)) inner = inner[[1L]]
+  expect_type(inner, "list")
+  expect_match(inner[[1L]], "^<list>")
+  # the values of one result stay within the reader's count
+  expect_identical(res$objects$wide[[1L]], list(1L))
+  expect_type(res$objects$wide[[60000L]], "character")
+})
+
 test_that("a report is read in the safe direction (08 section 3.3)", {
   stream = function(...) {
     st = new.env(parent = emptyenv())
@@ -145,7 +182,11 @@ test_that("a run's child gets the person's rules anchored to their project, opti
   expect_identical(rule_match(rules, call)$deny, paste0("write(/", root, "/data/**)"))
 })
 
-test_that("the fence denies writes outside, setwd away, installs and other R processes", {
+test_that("the fence denies writes outside, moving away from the folder, installs, R processes", {
+  # the run's folder is the project root and the working folder, as in child_main()
+  run = path_norm(withr::local_tempdir())
+  withr::local_options(gptr.project_root = run)
+  withr::local_dir(run)
   out = path_norm(file.path(dirname(tempdir()), "gptr-fence.csv"))
   inside = path_norm(file.path(tempdir(), "gptr-fence.csv"))
   fence = function(name, input) {
@@ -160,15 +201,38 @@ test_that("the fence denies writes outside, setwd away, installs and other R pro
   expect_identical(r(sprintf("write.csv(mtcars, '%s')", out)), "deny")
   expect_identical(r(sprintf("peter$write('%s', 'x')", out)), "deny")
   expect_identical(r(sprintf("write.csv(mtcars, '%s')", inside)), "allow")
+  expect_identical(r("write.csv(mtcars, 'sub/x.csv')"), "allow")
   expect_identical(r(sprintf("x = read.csv('%s')", out)), "allow")
-  expect_identical(r(sprintf("setwd('%s')", dirname(out))), "deny")
-  expect_identical(r(sprintf("setwd('%s')", path_norm(tempdir()))), "allow")
+  # a change of working folder is allowed only to the run's folder, written out
+  expect_identical(r(sprintf("setwd('%s')", run)), "allow")
+  for (to in c(dirname(out), path_norm(tempdir()), file.path(run, "sub"), "..", ".")) {
+    expect_identical(r(sprintf("setwd('%s')", to)), "deny", label = to)
+  }
   expect_identical(r("setwd(d)"), "deny")
+  expect_identical(r("setwd('..'); setwd('..'); writeLines('escaped', 'pwn-setwd.txt')"), "deny")
+  expect_identical(r("do.call('setwd', list('..'))"), "deny")
+  expect_identical(r("f = function() setwd('..'); f()"), "deny")
+  expect_identical(r("withr::with_dir('/tmp', writeLines('x', 'pwn.txt'))"), "deny")
+  expect_identical(r(sprintf("withr::with_dir(code = '%s', new = '/tmp')", run)), "deny")
+  expect_identical(r("withr::local_dir('/tmp'); writeLines('x', 'pwn.txt')"), "deny")
+  expect_identical(r("system('cd .. && cd .. && echo x > pwn')"), "deny")
+  expect_identical(r("peter$sh('cd /tmp && echo x > pwn')"), "deny")
+  expect_identical(r("system2('sh', c('-c', 'pushd /tmp; echo x > pwn'))"), "deny")
+  expect_identical(r("system(\"sh -c 'cd /tmp && echo x > pwn'\")"), "deny")
+  expect_identical(r("go = 'cd ..'; system(paste(go, '&& echo x > pwn'))"), "deny")
+  expect_identical(r("peter$sh('echo x > pwn', wd = '/tmp')"), "deny")
+  expect_identical(r(sprintf("peter$sh('cd %s && echo x > pwn')", run)), "allow")
+  # a value that merely spells a shell word is no command where shells tell case apart
+  expect_identical(r("n = sum(dx == 'CD')"), if (is_windows()) "deny" else "allow")
   expect_identical(r("install.packages('x')"), "deny")
   expect_identical(r("system('R CMD INSTALL pkg')"), "deny")
   expect_identical(r("peter$sh('R CMD INSTALL .')"), "deny")
   expect_identical(r("system('Rscript -e 1')"), "deny")
   expect_identical(r("callr::r(function() 1)"), "deny")
+  # neither R code nor a script call shows which interpreter peter$script() starts
+  expect_identical(r("peter$script('x.R')"), "deny")
+  expect_identical(r("peter[['script']]('x.py')"), "deny")
+  expect_identical(fence("script", list(path = "x.sh")), "deny")
   expect_identical(r("system('python x.py')"), "allow")
   expect_identical(r("m = mean(1:3)"), "allow")
 })
@@ -213,6 +277,73 @@ test_that("a run's child: a fresh folder, the fence in the run and its sub-agent
   expect_null(the$model_gate)
   expect_null(the$coach_role)
   expect_false("fence" %in% names(registry_all("policy")))
+})
+
+test_that("a run's child runs no R script and keeps its shell commands in its folder", {
+  skip_on_cran()
+  local_project()
+  out = path_norm(file.path(dirname(tempdir()), "gptr-child-script.txt"))
+  withr::defer(unlink(out))
+  far = path_norm(dirname(tempdir()))
+  fake = gptr_fake_provider(list(
+    fake_tool("r", code = sprintf("writeLines(%s, 'x.R')",
+                                  deparse1(sprintf("writeLines('x', '%s')", out)))),
+    fake_tool("r", code = "peter$script('x.R')"),
+    # computed calls are judged on their actual input, even when a literal call lists the member
+    fake_tool("r", code = "f = peter$script; f('x.R')"),
+    fake_tool("r", code = sprintf(paste0("peter$sh('true'); a = list('echo x > %s', '%s'); ",
+                                         "names(a) = c('', paste0('w', 'd')); ",
+                                         "do.call(peter$sh, a)"), basename(out), far)),
+    "done"), name = "scriptfake")
+  res = child_local(list(id = "s", role = "run", prompt = "Run it.", args = list(mode = "auto"),
+                         model = fake))$res
+  expect_identical(res$status, "idle")
+  expect_false(file.exists(out))
+  expect_identical(nrow(res$refusals), 1L)
+  expect_gte(lengths(regmatches(res$transcript, gregexpr("fence", res$transcript))), 3L)
+})
+
+test_that("a value without a label R can use is bound under a name of its own", {
+  skip_on_cran()
+  local_project()
+  expect_identical(child_bind(c("..2", "x", "X..2", "...")), c("X..2.1", "x", "X..2", "X..."))
+  # do.call(gptr_coach, list("Average it.", c(1, NA, 3))) labels the vector `..2`
+  fake = gptr_fake_provider(list(fake_tool("r", code = "m = mean(X..2, na.rm = TRUE)"),
+                                 "done"), name = "dotfake")
+  res = child_local(list(id = "d", role = "run", prompt = "Average it.",
+                         objects = list("..2" = c(1, NA, 3)), args = list(mode = "auto"),
+                         model = fake))$res
+  expect_identical(res$status, "idle")
+  expect_identical(res$objects, list(m = 2))
+  expect_match(res$first_user, "<attached name=\"..2\">", fixed = TRUE)
+})
+
+test_that("a run's result holds its first user message on its own", {
+  skip_on_cran()
+  local_project()
+  prompt = "Clean the survey.\n\n## Rules\n- keep the column names"
+  fake = gptr_fake_provider(list("## assistant\ndone"), name = "taskfake")
+  res = child_local(list(id = "t", role = "run", prompt = prompt, model = fake))$res
+  expect_match(res$first_user, prompt, fixed = TRUE)
+  expect_false(grepl("done", res$first_user, fixed = TRUE))
+  expect_false(startsWith(res$first_user, "## user"))
+})
+
+test_that("a run's result too large for the parent keeps all but its value and objects", {
+  skip_on_cran()
+  local_project()
+  testthat::local_mocked_bindings(plain_max = utils::modifyList(plain_max, list(bytes = 60000)))
+  fake = gptr_fake_provider(list(fake_tool("r", code = "big = strrep('x', 1e5); gptr_return(big)"),
+                                 "kept text"), name = "bigfake")
+  res = child_local(list(id = "b", role = "run", prompt = "Make it big.",
+                         args = list(mode = "auto"), model = fake))$res
+  expect_identical(res$status, "idle")
+  expect_identical(res$text, "kept text")
+  expect_s3_class(res$usage, "data.frame")
+  expect_match(res$transcript, "## assistant", fixed = TRUE)
+  expect_match(res$value, "^<character>")
+  expect_lt(nchar(res$value), 3000L)
+  expect_match(res$objects$big, "^<character>")
 })
 
 test_that("a run that needs approval ends blocked", {
@@ -275,28 +406,6 @@ test_that("a coach's child has no tool and answers in its schema; a tool call vo
 
 # ---- real child processes (skipped on CRAN; gptr must be installed for Rscript children) ------
 
-# Children load gptr with loadNamespace(): under R CMD check the installed package is on the
-# library path; from a source tree it is installed once per R session into a temporary library
-local_worker_lib = function(.env = parent.frame()) {
-  testthat::skip_on_cran()
-  path = getNamespaceInfo(asNamespace("gptr"), "path")
-  if (!file.exists(file.path(path, "R", "aaa-state.R"))) return(invisible(NULL))
-  lib = file.path(tempdir(), "gptr-worker-lib")
-  if (!file.exists(file.path(lib, "gptr", "DESCRIPTION"))) {
-    dir.create(lib, showWarnings = FALSE, recursive = TRUE)
-    cmd = sprintf(paste0("install.packages('%s', lib = '%s', repos = NULL, type = 'source', ",
-                         "INSTALL_opts = c('--no-docs', '--no-multiarch', '--no-test-load'))"),
-                  normalizePath(path, winslash = "/"), normalizePath(lib, winslash = "/"))
-    res = processx::run(rscript_path(), c("--vanilla", "-e", cmd), error_on_status = FALSE,
-                        timeout = 600)
-    if (!file.exists(file.path(lib, "gptr", "DESCRIPTION"))) {
-      testthat::skip(paste("could not install gptr for worker children:", res$stderr))
-    }
-  }
-  withr::local_libpaths(lib, action = "prefix", .local_envir = .env)
-  invisible(lib)
-}
-
 worker_rows = function() {
   jobs = gptr_jobs()
   jobs$pid[jobs$kind == "worker"]
@@ -312,7 +421,8 @@ test_that("a run and a coach each run in their own process and return plain data
          args = list(mode = "auto"), model = run_fake),
     list(id = "coach", role = "coach", prompt = "Coach.", schema = coach_schema,
          model = gptr_fake_provider(list('{"note": "use mean()"}'), name = "coachfake")))
-  res = coach_run_jobs(jobs, max_active = 2L)
+  local_gptr_options(subagents.max_workers = 2L)
+  res = coach_run_jobs(jobs)
   expect_identical(vapply(res, function(r) r$id, ""), c("run", "coach"))
   expect_identical(res[[1L]]$status, "idle")
   expect_identical(res[[1L]]$text, "the mean is 2")
@@ -324,7 +434,7 @@ test_that("a run and a coach each run in their own process and return plain data
   expect_length(worker_rows(), 0L)
 })
 
-test_that("at most max_active children run; a forged stream line is read in the safe direction", {
+test_that("at most max_workers children run; a forged stream line is read in the safe direction", {
   local_worker_lib()
   skip_on_os("windows")
   local_project()
@@ -342,8 +452,8 @@ test_that("at most max_active children run; a forged stream line is read in the 
     0.05
   })
   withr::defer(reactor_cancel(task))
-  res = coach_run_jobs(list(job("s", "start"), job("f", "final"), job("x", "final")),
-                       max_active = 2L)
+  local_gptr_options(subagents.max_workers = 2L)
+  res = coach_run_jobs(list(job("s", "start"), job("f", "final"), job("x", "final")))
   expect_identical(box$peak, 2L)
   expect_identical(vapply(res, function(r) r$status, ""), rep("idle", 3L))
   expect_lt(res[[1L]]$risk, 4L)
@@ -365,8 +475,9 @@ test_that("interrupting coach_run_jobs() kills every child", {
   })
   withr::defer(reactor_cancel(task))
   # the console's interrupt policy says that the call was aborted
+  local_gptr_options(subagents.max_workers = 2L)
   utils::capture.output({
-    got = tryCatch(coach_run_jobs(jobs, max_active = 2L), interrupt = function(e) "interrupted")
+    got = tryCatch(coach_run_jobs(jobs), interrupt = function(e) "interrupted")
   })
   expect_identical(got, "interrupted")
   expect_length(box$handles, 2L)

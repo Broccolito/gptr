@@ -406,9 +406,9 @@ checkpoint_after = function(run, call, ctx, tokens, res) {
 #' Nested `peter$...` calls made while an `r` evaluation runs (04 section 7.6)
 #' A member listed by the outer call's analysis at or below its approved level, whose own risk of
 #' its actual input (call_risk(): a patch's Delete File, a computed command) is not above that
-#' level either, runs without a second prompt; others pass perm_check(). The command of a sh or bg
-#' call meets the deny and ask rules first, whatever its level. Recorded in `details$nested` (at
-#' most 20).
+#' level either, runs without a second prompt; others pass perm_check(). The input of a sh, bg,
+#' script, write or edit call meets the deny and ask rules first, whatever its level
+#' (nested_rules()). Recorded in `details$nested` (at most 20).
 #' @noRd
 dispatch_nested = function(name, input, ctx) {
   check_string(name, "name")
@@ -437,7 +437,7 @@ dispatch_nested = function(name, input, ctx) {
     nested_record(run, outer$id, name, tool_error("blocked"), NA_integer_)
     gptr_abort(call$blocked, "tool", tool = name, status = "blocked")
   }
-  dec = if (name %in% c("sh", "bg", "write", "edit")) nested_rules(call, run)
+  dec = if (name %in% c("sh", "bg", "script", "write", "edit")) nested_rules(call, run)
   if (!is.null(dec)) {
     nested_record(run, outer$id, name, tool_error(dec$reason), risk_level(dec$risk))
     gptr_abort(perm_denial_text(dec), "tool", tool = name, status = "denied")
@@ -458,11 +458,11 @@ dispatch_nested = function(name, input, ctx) {
   nested_value(res, name)
 }
 
-#' Deny and ask rules on the actual input of a nested sh, bg, write or edit call, which the outer
-#' call's static reading cannot see when the code computes it: the `rules`, `coaching`,
+#' Deny and ask rules on the actual input of a nested sh, bg, script, write or edit call, which the
+#' outer call's static reading cannot see when the code computes it: the `rules`, `coaching`,
 #' `harness_rules` and coaching children's `fence` policies decide as for the literal call (a shell
-#' command as the `r` code that runs it), the strictest answer winning. Allow answers are not
-#' applied: the nested gate never loosens.
+#' command, with its working folder, as the `r` code that runs it), the strictest answer winning.
+#' Allow answers are not applied: the nested gate never loosens.
 #' @return NULL, or perm_check()'s denial.
 #' @noRd
 nested_rules = function(call, run) {
@@ -472,7 +472,9 @@ nested_rules = function(call, run) {
   ctx = run_ctx(run)
   lit = call
   if (call$name %in% c("sh", "bg")) {
-    code = paste0("peter$", call$name, "(", deparse1(unlist(call$input$cmd)), ")")
+    wd = call$input$wd
+    code = paste0("peter$", call$name, "(", deparse1(unlist(call$input$cmd)),
+                  if (!is.null(wd)) paste0(", wd = ", deparse1(wd)), ")")
     lit = list(name = "r", input = list(code = code))
   }
   lit$risk = call_risk(lit, ctx, run)

@@ -1049,7 +1049,7 @@ test_that("a person's extensions = policy binds every session started under thei
   }
 })
 
-test_that("nested sh, write and edit calls meet every rules-like policy; the strictest wins", {
+test_that("nested sh, bg, script, write and edit calls meet every rules-like policy", {
   skip_on_cran()
   root = local_project(files = list("notes.md" = "a"))
   local_gptr_options(mode = "auto", model = "fake/fake-1")
@@ -1068,9 +1068,10 @@ test_that("nested sh, write and edit calls meet every rules-like policy; the str
     gptr$register(gptr_policy("harness_rules", function(call, ctx) {
       if (identical(call$input$path, "notes.md")) list(decision = "deny", reason = "your rule")
     }))
-    # a coaching child's fence (P29, D-270)
+    # a coaching child's fence (P29, D-270); a nested sh call's working folder is in its code
     gptr$register(gptr_policy("fence", function(call, ctx) {
-      if (grepl("INSTALL", call$input$code %||% "", fixed = TRUE)) {
+      if (grepl("INSTALL|wd = \"", call$input$code %||% "") ||
+            identical(call$input$path, "x.R")) {
         list(decision = "deny", reason = "fenced")
       }
     }))
@@ -1083,7 +1084,11 @@ test_that("nested sh, write and edit calls meet every rules-like policy; the str
     c("p = paste0('secret', '.txt'); peter$write(p, 'x')", "denied by the rule write(secret.txt)"),
     c("p = paste0('notes', '.md'); peter$edit(p, list(list(oldText = 'a', newText = 'b')))",
       "your rule"),
-    c("cmd = paste('R CMD', toupper('install'), 'x.tar.gz'); peter$sh(cmd)", "fenced"))
+    c("cmd = paste('R CMD', toupper('install'), 'x.tar.gz'); peter$sh(cmd)", "fenced"),
+    c("cmd = paste('true'); peter$sh(cmd, wd = '.')", "fenced"),
+    # the literal call lists peter$script at the outer call's level: the computed one is still
+    # judged on its actual input
+    c("writeLines('cat(1)', 'x.R'); f = peter$script; f('x.R'); peter$script('y.R')", "fenced"))
   for (i in seq_along(cases)) {
     fake = local_fake_provider(list(fake_tool("r", code = cases[[i]][[1L]]), "Done."),
                                name = paste0("nest", i))

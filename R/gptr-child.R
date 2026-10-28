@@ -9,21 +9,37 @@
 plain_types = c("logical", "integer", "double", "character", "factor", "Date", "POSIXct",
                 "data.frame", "list", "summary")
 plain_keys = c("type", "len", "data", "na", "names", "dim", "levels", "tz", "nrow")
-# nesting depth, elements of one value, values of one result, characters of a summary
-plain_max = list(depth = 20L, len = 1e6, nodes = 1e5, summary = 2000L)
+# nesting depth, elements of one value, values of one result, characters of a summary, bytes of
+# a result file
+plain_max = list(depth = 20L, len = 1e6, nodes = 1e5, summary = 2000L, bytes = 64 * 2^20)
 
 #' A value as plain JSON-ready data (08 section 3.3): `{type, len, data, na, names, dim, levels,
 #' tz, nrow}`. Numbers are base64 of little-endian writeBin(), so they stay exact (NA, NaN, -0);
-#' anything else, or a value nested or sized beyond plain_max, is its printed summary.
+#' anything else, or a value nested or sized beyond plain_max, is its printed summary. Depth and
+#' values count from the first call, as plain_decode() counts them: a value may use `max` values
+#' less one for each later sibling, so a list of many values ends in summaries.
 #' @noRd
-plain_encode = function(x, depth = 0L) {
+plain_encode = function(x, depth = 0L, max = plain_max$nodes,
+                        seen = new.env(parent = emptyenv())) {
   if (is.null(x)) return(NULL)
-  if (depth > plain_max$depth || length(x) > plain_max$len || isS4(x)) return(plain_summary(x))
+  n0 = seen$n %||% 0L
+  seen$n = n0 + 1L
+  if (depth >= plain_max$depth || n0 + 1L + (if (is.list(x)) length(x) else 0L) > max ||
+        length(x) > plain_max$len || isS4(x)) {
+    return(plain_summary(x))
+  }
+  each = function(v) {
+    Map(plain_encode, unname(v), max = max - (length(v) - seq_along(v)),
+        MoreArgs = list(depth = depth + 1L, seen = seen))
+  }
   if (is.data.frame(x)) {
-    cols = lapply(unclass(x), plain_encode, depth = depth + 1L)
-    if (any(vapply(cols, function(c) identical(c$type, "summary"), NA))) return(plain_summary(x))
+    cols = each(unclass(x))
+    if (any(vapply(cols, function(c) identical(c$type, "summary"), NA))) {
+      seen$n = n0 + 1L
+      return(plain_summary(x))
+    }
     return(list(type = "data.frame", len = length(x), nrow = nrow(x), names = I(names(x)),
-                data = unname(cols)))
+                data = cols))
   }
   type = if (is.null(oldClass(x))) {
     intersect(typeof(x), c("logical", "integer", "double", "character", "list"))
@@ -35,7 +51,7 @@ plain_encode = function(x, depth = 0L) {
   if (!length(type)) return(plain_summary(x))
   out = list(type = type, len = length(x), data = switch(type,
     character = I(replace(as.character(x), is.na(x), "")),
-    list = lapply(unname(x), plain_encode, depth = depth + 1L),
+    list = each(x),
     plain_bin(if (is.double(x)) as.double(x) else as.integer(x))))
   if (type == "character" && anyNA(x)) out$na = I(which(is.na(as.character(x))))
   if (!is.null(names(x))) out$names = I(replace(names(x), is.na(names(x)), ""))
@@ -175,14 +191,12 @@ plain_numbers = function(node, type, len) {
 #' once a plan reports its limit, its later jobs are not started (status `skipped`). Interrupting
 #' this call kills every child.
 #' @param jobs A list of jobs.
-#' @param max_active At most this many children at once (default subagent_limit("worker")).
 #' @return One plain-data result per job, in order: `list(id, status, reason, text, turns,
 #'   usage, value, objects, transcript, risk, refusals, unmet, files, plan, limit, checks,
 #'   error)`.
 #' @noRd
-coach_run_jobs = function(jobs, max_active = NULL) {
+coach_run_jobs = function(jobs) {
   check_list(jobs, "jobs")
-  check_number(max_active, "max_active", min = 1, int = TRUE, null = TRUE)
   for (job in jobs) child_job_check(job)
   ctx = new.env(parent = emptyenv())
   ctx$jobs = jobs
@@ -198,7 +212,7 @@ coach_run_jobs = function(jobs, max_active = NULL) {
     force(ix)
     list(pool = "worker", start = function() child_lane(ctx, ix))
   })
-  subagent_schedule(items, max_total = max_active %||% subagent_limit("worker"))
+  subagent_schedule(items, max_total = subagent_limit("worker"))
   ctx$out
 }
 
@@ -355,19 +369,33 @@ child_exit = function(ctx, ln, st, status) {
 }
 
 #' A child's result file, read with json_decode() and rebuilt by plain_decode() within a size
-#' cap; NULL when there is none
+#' cap, each field in the shape the parent reads it in; NULL when there is none
 #' @noRd
 child_read = function(path) {
   size = file.size(path)
   if (is.na(size)) return(NULL)
-  if (size > 64 * 2^20) plain_bad("it is larger than 64 MiB")
+  if (size > plain_max$bytes) plain_bad("it is larger than 64 MiB")
   res = plain_decode(rawToChar(readBin(path, "raw", n = size)))
   out = child_result_new("")
-  if (!is.list(res) || is.null(names(res)) || !all(names(res) %in% names(out)) ||
-        !rlang::is_string(res$status) || !is.numeric(res$risk) || !isTRUE(res$risk %in% 0:4)) {
+  if (!is.list(res) || is.null(names(res)) || !all(names(res) %in% names(out))) {
     plain_bad("it does not have the shape of a result")
   }
   out[names(res)] = res
+  str = function(x) rlang::is_string(x)
+  opt = function(f) function(x) is.null(x) || f(x)
+  cols = c("input", "output", "cost")
+  shapes = list(
+    status = str, text = str, transcript = str, first_user = str, reason = opt(str),
+    error = opt(str), refusals = is.list, unmet = is.character, checks = is.character,
+    files = opt(is.data.frame), limit = opt(is.list),
+    turns = function(x) rlang::is_scalar_integerish(x, finite = TRUE) && x >= 0,
+    risk = function(x) rlang::is_scalar_integerish(x) && x %in% 0:4,
+    usage = opt(function(x) {
+      is.data.frame(x) && all(cols %in% names(x)) && all(vapply(x[cols], is.numeric, NA))
+    }),
+    objects = function(x) is.list(x) && all(nzchar(names(x) %||% rep("", length(x)))))
+  ok = vapply(names(shapes), function(k) isTRUE(shapes[[k]](out[[k]])), NA)
+  if (!all(ok)) plain_bad(paste0("its `", names(ok)[!ok][[1L]], "` has the wrong shape"))
   out
 }
 
@@ -395,13 +423,14 @@ child_refusals = function(x = NULL) {
              reason = as.character(x$reason))
 }
 
-#' A result with every field, `status` "error" unless given
+#' A result with every field, `status` "error" unless given; the value and the objects come last,
+#' so that plain_encode() keeps the other fields whole
 #' @noRd
 child_result_new = function(id, ...) {
   out = list(id = id, status = "error", reason = NULL, text = "", turns = 0L, usage = NULL,
-             value = NULL, objects = list(), transcript = "", risk = 0L,
-             refusals = child_refusals(), unmet = character(), files = NULL, plan = NULL,
-             limit = NULL, checks = character(), error = NULL)
+             transcript = "", first_user = "", risk = 0L, refusals = child_refusals(),
+             unmet = character(), files = NULL, plan = NULL, limit = NULL, checks = character(),
+             error = NULL, value = NULL, objects = list())
   dots = list(...)
   out[names(dots)] = dots
   out
@@ -556,15 +585,36 @@ child_main = function(spec_path, result_path, out = NULL) {
   })
   on.exit(reactor_cancel(task), add = TRUE)
   env = new.env(parent = globalenv())
-  list2env(job$objects %||% list(), envir = env)
+  objects = job$objects %||% list()
+  names(objects) = child_bind(names(objects))
+  list2env(objects, envir = env)
   out = tryCatch(eval(child_call(job, run), env), error = function(e) e)
   # a coach's reply is checked here, so its one retry is a follow-up in the same session
   reply = if (!run && !is.null(job$base)) coach_child_reply(job, out, env)
   if (!is.null(reply)) out = reply$out
-  res = child_outcome(job, out, env, cs, dir, before)
+  res = child_outcome(job, out, env, objects, cs, dir, before)
   if (!is.null(reply) && identical(res$status, "idle")) res$value = reply$value
-  write_atomic(result_path, json_encode(plain_encode(res)))
+  json = json_encode(plain_encode(res))
+  if (nchar(json, "bytes") > plain_max$bytes) {
+    # too large for the parent to read: the value and each object travel as their summaries
+    shown = function(v) if (!is.null(v)) plain_summary(v)$data
+    res$value = shown(res$value)
+    res$objects = lapply(res$objects, shown)
+    json = json_encode(plain_encode(res))
+  }
+  write_atomic(result_path, json)
   invisible(res$status)
+}
+
+#' The names a job's objects are bound under in its child: their labels, but a label R cannot
+#' use as a symbol (`..2`, which do.call() gives a value, `...` or "") gets a name of its own;
+#' child_call() passes such an object under its label
+#' @noRd
+child_bind = function(labels) {
+  labels = labels %||% character()
+  bad = grepl("^([.][.]([.]|[0-9]+))?$", labels)
+  labels[bad] = utils::tail(make.unique(c(labels, paste0("X", labels[bad]))), sum(bad))
+  labels
 }
 
 #' Register the child's process-wide records (user, rank 3, before the person's records, which
@@ -609,14 +659,19 @@ child_call = function(job, run) {
   }
   args$.opts = opts
   fn = if (!run || is.null(job$spec$id)) peter else harness_from_spec(job$spec)
-  as.call(c(list(fn, job$prompt), lapply(names(job$objects), as.name), args))
+  labels = names(job$objects) %||% character()
+  bind = child_bind(labels)
+  objects = stats::setNames(lapply(bind, as.name), ifelse(bind == labels, "", labels))
+  as.call(c(list(fn, job$prompt), objects, args))
 }
 
 #' The `fence` policy of a coaching child (08 sections 3.3 and 3.7): denies writes and edits
 #' outside the child's temporary folder (which holds its scratch folder), R code whose classified
-#' file targets lie outside it, a setwd() away from it, installs, R child processes whose code gptr
-#' cannot read, and reads of a CLI's login file or of the macOS keychain. It fences only what the
-#' classifier sees.
+#' file targets lie outside it, a change of working folder to anywhere but the scratch folder
+#' itself (child_dirs()), installs, R child processes whose code gptr cannot read (and
+#' peter$script(), whose interpreter may be R), and reads of a CLI's login file or of the macOS
+#' keychain. The working folder never moves, so the targets the classifier resolves from it hold.
+#' It fences only what the classifier sees.
 #' @noRd
 child_fence = function(call, ctx) {
   why = child_fence_why(call)
@@ -628,12 +683,16 @@ child_fence = function(call, ctx) {
 child_fence_why = function(call) {
   name = call$name %||% ""
   login = "it does not read the login of Claude Code or Codex"
+  stay = "it stays in its scratch folder"
+  script = "it runs no script with peter$script(), which may start R with code gptr cannot read"
+  if (!is.null(call$input$wd) && !child_home(call$input$wd)) return(stay)
   if (name %in% c("read", "grep", "edit") && child_login(call$input$path)) return(login)
   if (name %in% c("write", "edit")) {
     p = call$input$path
     if (rlang::is_string(p) && !child_inside(p)) return("it writes only inside its scratch folder")
     return(NULL)
   }
+  if (identical(name, "script")) return(script)
   if (!identical(name, "r")) return(NULL)
   fl = call$risk$flagged
   if (!is.data.frame(fl)) return("it runs only code gptr can read")
@@ -642,21 +701,86 @@ child_fence_why = function(call) {
     return(login)
   }
   if ("install" %in% fl$category) return("it installs nothing")
+  if ("peter$script" %in% fl$fn) return(script)
   callr = c("r", "r_bg", "r_session", "r_vanilla", "rcmd", "rcmd_bg", "rscript")
   prog = "(^|[\\s/\\\\:\"'])(R|Rscript)(\\.exe)?([\\s\"']|$)"
   rproc = fl$category %in% c("process", "dynamic") &
     (fl$fn %in% callr | grepl(prog, fl$call, perl = TRUE, ignore.case = TRUE))
   if (any(rproc)) return("it starts no other R process, whose code gptr cannot read")
-  for (cl in fl$call[fl$fn %in% "setwd"]) {
-    to = tryCatch(str2lang(cl)[[2L]], error = function(e) NULL)
-    if (!rlang::is_string(to) || !child_inside(to)) return("it stays in its scratch folder")
-  }
+  code = tryCatch(parse(text = paste(unlist(call$input$code), collapse = "\n"),
+                        keep.source = FALSE), error = function(e) NULL)
+  if (!all(vapply(child_dirs(code), child_home, NA))) return(stay)
   files = as.character(unlist(call$risk$targets$files))
-  # rule_call_path() writes an absolute path as "//path" (Unix) or "/C:/path" (Windows)
+  # rule_call_path() writes an absolute path as "//path" (Unix) or "/C:/path" (Windows), and
+  # one inside the run's folder relative to it
   files = sub("^/(/|[A-Za-z]:)", "\\1", files)
+  rel = !grepl("^([/\\\\~]|[A-Za-z]:)", files)
+  files[rel] = file.path(project_root(), files[rel])
   out = files[!vapply(files, child_inside, NA)]
   if (length(out)) return(paste0("it writes only inside its scratch folder, not to ", out[[1L]]))
   NULL
+}
+
+# R's directory changers, each with the argument that names the folder
+child_chdir = c(setwd = "dir", with_dir = "new", local_dir = "new", in_dir = "dir")
+
+#' The folders R code moves to, each as written or NA when computed: the folder of setwd() and of
+#' withr's and xfun's directory changers (NA when one is passed on or named as text), every
+#' `wd =` argument (peter$sh(), processx), and where each cd, pushd, chdir or Set-Location in the
+#' code's strings goes
+#' @noRd
+child_dirs = function(e) {
+  lit = function(x) if (rlang::is_string(x)) x else NA_character_
+  if (is.character(e)) {
+    cd = tryCatch(unlist(lapply(e[!is.na(e)], child_cd)), error = function(err) NA_character_)
+    return(c(cd, if (any(e %in% names(child_chdir))) NA_character_))
+  }
+  if (is.symbol(e)) return(if (as.character(e) %in% names(child_chdir)) NA_character_)
+  if (!is.call(e) && !is.pairlist(e) && !is.expression(e)) return(character())
+  parts = as.list(e)
+  out = character()
+  if (is.call(e)) {
+    fn = e[[1L]]
+    if (is.call(fn) && (identical(fn[[1L]], quote(`::`)) || identical(fn[[1L]], quote(`:::`)))) {
+      fn = fn[[3L]]
+    }
+    arg = if (is.symbol(fn)) unname(child_chdir[as.character(fn)]) else NA_character_
+    if (!is.na(arg)) {
+      # the folder argument as R matches it: by its name, else the first unnamed one
+      sig = function(...) NULL
+      formals(sig) = c(stats::setNames(alist(x = ), arg), alist(... = ))
+      out = lit(tryCatch(as.list(match.call(sig, e))[[arg]], error = function(err) NULL))
+      parts = parts[-1L]
+    }
+    if ("wd" %in% names(parts)) out = c(out, lit(parts[["wd"]]))
+  }
+  c(out, unlist(lapply(parts, child_dirs)))
+}
+
+#' Where the cd, pushd, chdir or Set-Location commands of a text go ("~" without a folder). Each
+#' piece between shell separators or quotes is read as a command after leading keywords, wrappers
+#' and assignments, so a cd inside `sh -c '...'` counts too; the names fold case only on
+#' Windows, whose shells do
+#' @noRd
+child_cd = function(cmd) {
+  out = character()
+  lead = "^((then|do|else|!|builtin|command|exec|env|sudo|nohup|time|[A-Za-z_]\\w*=\\S*)\\s+)*"
+  for (s in sub(lead, "", trimws(strsplit(cmd, "[;&|\n(){}`'\"]")[[1L]]), perl = TRUE)) {
+    w = strsplit(s, "\\s+")[[1L]]
+    if (length(w) && (if (is_windows()) tolower(w[[1L]]) else w[[1L]]) %in%
+          c("cd", "pushd", "chdir", "set-location")) {
+      to = w[-1L][!grepl("^-.", w[-1L])][1L]
+      out = c(out, if (is.na(to)) "~" else to)
+    }
+  }
+  out
+}
+
+#' Is a folder the run's own folder (the project root), written as an absolute path?
+#' @noRd
+child_home = function(path) {
+  rlang::is_string(path) && is_abs_path(path) &&
+    isTRUE(tryCatch(path_key(path) == path_key(project_root()), error = function(e) FALSE))
 }
 
 #' Is a path inside this process's temporary folder?
@@ -733,10 +857,11 @@ child_met = function(event) {
 #' The result of a finished job (08 section 3.3); a coach's reply is discarded when its session
 #' froze a tool or used one
 #' @noRd
-child_outcome = function(job, out, env, cs, dir, before) {
+child_outcome = function(job, out, env, objects, cs, dir, before) {
   s = if (inherits(out, "gptr_session")) out else if (inherits(out, "condition")) out$session
   err = if (inherits(out, "condition")) out
   d = if (inherits(s, "gptr_session")) session_data(s)
+  first = if (!is.null(d)) Find(function(m) identical(m$role, "user"), s$messages)
   unmet = unique(as.character(unlist(lapply(d$entries, function(e) {
     if (identical(e$type, "custom") && identical(e$custom_type, "gptr.unmet")) e$data$ids
   }))))
@@ -749,8 +874,9 @@ child_outcome = function(job, out, env, cs, dir, before) {
     text = if (is.null(d) || is.na(d$last_text)) "" else d$last_text, turns = d$turns %||% 0L,
     usage = if (!is.null(d)) session_usage_rows(s),
     value = if (!is.null(d)) tryCatch(session_value_get(s), error = function(e) NULL),
-    objects = child_objects(env, job$objects),
+    objects = child_objects(env, objects),
     transcript = if (is.null(d)) "" else child_clip(child_transcript(s$messages), 50000L),
+    first_user = if (is.null(first)) "" else child_clip(child_text(first), 50000L),
     risk = cs$risk, refusals = cs$refusals, unmet = unmet, files = child_files(dir, before),
     plan = pcli_cache$plan, limit = limit,
     checks = if (inherits(err, "gptr_error_cli_check")) conditionMessage(err) else character(),
@@ -795,20 +921,26 @@ child_files = function(dir, before) {
   data.frame(path = substring(now, nchar(dir) + 2L), bytes = file.size(now), text = text)
 }
 
-#' A conversation as text: each message under its role, tool calls with their arguments
+#' A conversation as text: each message under its role
 #' @noRd
 child_transcript = function(msgs) {
   parts = vapply(msgs, function(m) {
-    body = vapply(m$content %||% list(), function(b) {
-      switch(b$type %||% "", text = , context = b$text %||% "", image = "[image]",
-             tool_call = paste0("[tool call ", b$name, "] ",
-                                json_encode(b$arguments %||% json_obj())), "")
-    }, "")
     who = if (identical(m$role, "tool_result")) paste0("tool result (", m$tool_name, ")") else
       m$role
-    paste0("## ", who, "\n", paste(body[nzchar(body)], collapse = "\n"))
+    paste0("## ", who, "\n", child_text(m))
   }, "")
   paste(parts, collapse = "\n\n")
+}
+
+#' One message as text: its text, images as [image], tool calls with their arguments
+#' @noRd
+child_text = function(m) {
+  body = vapply(m$content %||% list(), function(b) {
+    switch(b$type %||% "", text = , context = b$text %||% "", image = "[image]",
+           tool_call = paste0("[tool call ", b$name, "] ",
+                              json_encode(b$arguments %||% json_obj())), "")
+  }, "")
+  paste(body[nzchar(body)], collapse = "\n")
 }
 
 #' Clip a text to `n` characters, saying how much was left out
