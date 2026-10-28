@@ -1814,11 +1814,24 @@ risk_python = function(code, root = project_root(), dirs = root) {
     "\\bdel\\s+(?:[\\w.]*\\.)?environb?\\s*\\[\\K", risk_py_sub, "|",
     "\\b(putenv|unsetenv|environb?\\.(setdefault|pop|__setitem__|__delitem__))\\s*\\(\\K[^,)]*"
   ), code_nc, perl = TRUE))[[1L]]
-  plain = grepl("^\\s*[bBrRuU]{0,2}('[^'\\\\\n]*'|\"[^\"\\\\\n]*\")\\s*\\z", keys, perl = TRUE)
+  lit_re = "^\\s*[bBrRuU]{0,2}('[^'\\\\\n]*'|\"[^\"\\\\\n]*\")\\s*\\z"
   if (any(f$category == "session" & f$level == 3L) &&
       (any(risk_control_name(c(lits, ids))) || grepl("\\benvironb?\\.clear\\(", code) ||
-         !all(plain))) {
+         !all(grepl(lit_re, keys, perl = TRUE)))) {
     f = risk_flags_bind(f, risk_flags_row("control", "py", 4L, "control"))
+  }
+  # chdir() (os.chdir(), os.fchdir(), contextlib.chdir()) moves R's working directory too, as
+  # Python runs in R's process: read as setwd() is, a directory that is no plain string literal
+  # one the code computes
+  for (t in regmatches(code_nc, gregexpr("\\bf?chdir\\s*\\(\\K[^)]*", code_nc,
+                                         perl = TRUE))[[1L]]) {
+    d = if (grepl(lit_re, t, perl = TRUE)) {
+      gsub("^\\s*\\w*['\"]|['\"]\\s*\\z", "", t, perl = TRUE)
+    }
+    pc = if (is.null(d)) "unknown" else risk_target(d, "read", root, dirs)$pc
+    f = risk_flags_bind(f, risk_flags_row(paste0("chdir(", trimws(t), ")"), "py",
+                                          if (pc %in% c("workspace", "temp")) 2L else 4L,
+                                          "session", d %||% NA_character_, pc))
   }
   wr = f$category[f$category %in% c("file_write", "file_delete")]
   f = risk_literal_rows(lits, f, "py", root, if (length(wr)) wr[1L] else "read", dirs = dirs)
