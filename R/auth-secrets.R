@@ -233,6 +233,9 @@ secret_register = function(value, name, source = "user", active = TRUE, origin =
     id = paste0(base_id, "-", collision)
   }
   old = st$reg[[id]]
+  # finding a value in the environment again (a session start) keeps where it came from: the
+  # file gptr_env() loaded it from stays a secret file, and loading it again supersedes it
+  if (identical(source, "environment") && !is.null(old)) source = old$source
   n_chars = nchar(value, allowNA = TRUE)
   if (is.na(n_chars)) n_chars = nchar(value, type = "bytes")
   entry = list(id = id, name = name, source = source, fp = fp, active = active,
