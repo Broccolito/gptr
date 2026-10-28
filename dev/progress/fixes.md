@@ -7576,3 +7576,87 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   `_R_CHECK_CRAN_INCOMING_REMOTE_=true` on that tarball ("checking CRAN incoming feasibility ...
   [3s/18s] OK"): Status OK with no NOTE in 112 s.
 - Deviations: D-270 (the Title; P01, P25 and 05 keep the old one). Open: none new.
+
+## FIX-35 - The owned headless browser's close under load (2026-10-27, #PR)
+Scope: the full suite's failures of the owned headless browser's cleanup on `claude/v1-fixes`
+(test-artifact-app.R on `9f015596` and on `c03c72db`, "The owned headless browser family did not
+finish cleanup.", and test-northstar.R:212 in review round 3's verifier run, each recorded as a
+file that passes alone), diagnosed by the round 4 flake investigator: F1 and F2 from instrumented
+copies under extra load, F3 from the code. Branch `claude/v1-fix-browser` from `0aa55320`, three
+commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at its default, a short
+`TMPDIR`. F1 and F3 are fixed; F2 is Open.
+
+### F1 - A renderer starved under load outlasts the close deadline
+- Cause: `owner$close()` sends SIGTERM to the browser alone, and its helpers exit by themselves
+  once it is gone. Under load the macOS scheduler left an orphaned renderer (parent 1, state RN,
+  priority 4, the background band Chrome sets for an idle renderer) unscheduled for 20-170 s, past
+  `artifact_browser_close()`'s shared 10 s deadline. Each of the 13 close failures the
+  investigation logged (test-artifact-app.R, an open-and-close driver and a probe, under extra
+  load) had an empty, readable marker tree and one recorded renderer alive (12 runnable at
+  priority 4, one exiting). Rates: 0 of 170 closes at a load average below 100, 13 of 50 (26%)
+  under 16 to 32 busy loops (16 cores); a 30 s deadline would still have missed 11 of the 13. A
+  copy that killed the recorded helpers still running after 2 s: 0 failures in 28 closes at a load
+  average of 315 to 376 (Fisher p = 0.003), each lingering helper gone within 0.1 s of the kill.
+- Commit `50e55c39`. Red: `^artifact-browser-launch$` FAIL 10 PASS 525. In "artifact browser close
+  waits for its unmarked helpers before removing the profile" a helper that only a kill ends made
+  the close wait the whole 10 s and raise "family did not finish cleanup" with the profile kept,
+  and none was killed; the new "a recorded helper that cannot run is killed after the grace, in
+  the deadline (FIX-35)", a real R child stopped with `ps::ps_suspend()` so that a SIGTERM stays
+  pending, gave that error after 10 s with the child alive.
+- Fix: `release(seconds)` (R/artifact-app.R) waits at most 2 s for the recorded helpers; if one
+  still runs it kills them with `proc_kill_signalled()` (`ps_kill()`, pinned to each helper's
+  creation time, as `kill_all()` kills them since D-233) and waits for them in the rest of
+  `seconds`. The family check and the profile's removal after it are unchanged (CI-64): a helper
+  that survives even the kill still raises the error at the deadline and keeps the profile for a
+  retry, as the amended test pins. Idle, 9 helpers settle in 0.06-0.08 s (CI-64), well inside the
+  grace.
+- Green: `^artifact-browser-launch$` PASS 537 (the stopped child's test in about 2.2 s);
+  `^artifact-browser` PASS 2234.
+- Measured under the heavy lock (16 cores, the investigator's open, render and close driver with
+  wrappers that time `release()`'s waits and kill), on `git archive` copies: 32 then 16 busy loops,
+  each ending itself within 540 s, the fix (`50e55c39`) and the base (`0aa55320`) in alternate
+  blocks. The fix: 40 closes at a load average of 103 to 362, none "did not finish cleanup"; in 9
+  one helper still ran after the 2 s grace (2.01-2.10 s), the kill took 0.001-0.006 s and the
+  helper was gone 0-0.085 s later, and those closes took 2.5-3.7 s. The base: 11 closes at 317 to
+  366, 4 failed at the deadline (waits of 9.50-9.68 s), 3 with "did not finish cleanup" and one
+  behind its check's page-load timeout, and the retry of each failed again with "did not finish
+  cleanup". Fisher's exact test, 0 of 40 against 4 of 11: p = 0.0013. A second run, 13 closes of
+  the fix under 32 busy loops at 184 to 273 with the walks timed, also gave none (one kill). Three
+  of the fix's 20 closes under 32 busy loops and one of the 13 ended "The owned headless browser
+  close timed out." before `release()` waited (F2).
+
+### F2 - Process-table walks at a load average of 260 and more (not fixed)
+- In the investigation, at a load average of 280 and more the close's walks of the whole process
+  table (`proc_children()`, `proc_tree()`) took 12-28 s and used up the 10 s deadline by
+  themselves; one driver close at a load average of 245 ended "The owned headless browser close
+  timed out.". FIX-35's runs: 4 of 33 closes under 32 busy loops at a load average of 264 to 354
+  timed out so (14.2-43.4 s), none under 16; the one with the walks timed spent 14.0 s in
+  `proc_children()` at 273 and its retry timed out too. Left for after the release.
+
+### F3 - A failed startup cleanup blocks the browser for the R session
+- Cause (code reading): when `artifact_browser()`'s startup failed and its cleanup close failed
+  too, `artifact_state$browser_pending` kept the lease and every later `artifact_browser()`
+  aborted at its top ("The pending headless browser must finish cleanup before opening another."),
+  so each later session check was HTTP-only; only the unload retried the cleanup
+  (`artifact_browser_close()`, which already handles the lease).
+- Commit `764e1393`. Red: `^artifact-browser-owner$` FAIL 2 PASS 1195: the new "opening retries a
+  pending owner's cleanup and opens once it settles (FIX-35)" saw no retry while the cleanup still
+  failed, and after it would settle, `x$open()` still raised that error.
+- Fix: `artifact_browser()` first retries a pending lease with `artifact_browser_close()` and
+  raises the same error only when the retry fails, the lease kept. A call made while another frame
+  of `artifact_browser()` constructs its browser would now close that owner (gptr makes none; the
+  readiness pump runs no tool), D-271.
+- Green: `^artifact-browser` PASS 2247; the existing tests that open with a lease whose cleanup
+  still fails get the same error class as before.
+
+### Checks
+- On `764e1393` (the code of both fixes; the records commit changes only `dev/`):
+  `^(artifact-|proc-|northstar)` FAIL 0 WARN 0 SKIP 11 PASS 5557 in UTF-8 (204 s) and FAIL 0 WARN
+  0 SKIP 11 PASS 5557 under `LC_ALL=C LANG=C` (234 s), the skips the Windows writer runtime and
+  native probe. Lint of the 3 changed R and test files clean; `document()` gives no diff; `fmt.py`
+  on copies of the records changes nothing and `lintfmt.py` shows only the baseline. No full suite
+  or `R CMD check` ran; the load measurements (F1) took the heavy lock.
+- Deviations: D-271 (amends D-233 and CI-64's settle time). Open: F2. Not run: Linux and Windows.
+  The kill is `kill_all()`'s, `ps_kill()`: SIGTERM, then SIGKILL after 200 ms on Linux, and
+  `TerminateProcess()` on Windows, whose exit the rest of the wait covers; the stopped-child test
+  is written for both (`ps_suspend()` stops a Unix process and suspends a Windows one's threads).
