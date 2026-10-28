@@ -855,7 +855,7 @@
 "fs","file_touch",2,"file_write","path",""
 "fs","is_dir",0,"read","path",""
 "fs","is_file",0,"read","path",""
-"fs","link_create",2,"file_write","path",""
+"fs","link_create",2,"file_write","new_path",""
 "fs","link_delete",3,"file_delete","path",""
 "fs","path",0,"read","",""
 "fs","path_abs",0,"read","",""

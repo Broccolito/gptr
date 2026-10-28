@@ -2635,10 +2635,10 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       }
       return(TRUE)
     }
-    if (name %in% c("file.symlink", "file.link", "Sys.junction")) {
+    if (name %in% c("file.symlink", "file.link", "Sys.junction", "link_create")) {
       # a link to a path outside the project names it from inside (setwd()'s reading), so a
       # delete through it is one outside the project
-      v = risk_fold(risk_arg(a, "from", 1L), kn(ctx))
+      v = risk_fold(risk_arg(a, if (name == "link_create") "path" else "from", 1L), kn(ctx))
       pcs = vapply(v[nzchar(v)], risk_path_cls, "", "read", root)
       pc = risk_cmd_worst(pcs)
       if (length(pc) && !pc %in% c("workspace", "temp", "console")) {
