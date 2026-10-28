@@ -4838,9 +4838,10 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    name (`Sys.getenv()`, a shell's `$NAME`; review round 6): a registered secret that the `env` of `peter$sh()` or
    `peter$script()` hands a child is covered only when the same code reads it by name, as the question for that
    read covers it (D-267). The guard meets `Sys.getenv()` of a registered name in any letter case or through a
-   variable the code only sets to strings, a `$NAME` of one in a command line or Python's `os.environ`, an
-   environment dump, a read of a `.env` or `.Renviron` file or of one `gptr_env()` loaded, and a secret that
-   `env` hands a child (review round 6).
+   variable the code only sets to strings, one of them that name, a `$NAME` of one in a command line or Python's
+   `os.environ`, an environment dump, a read of a `.env` or `.Renviron` file or of one `gptr_env()` loaded (by a
+   function that reads its text, or in a command line or Python), and a secret that `env` hands a child (review
+   round 6).
 8. Approval displays (console, rstudio dialogs, worker-forwarded requests) escape C0/C1 controls except TAB and
    bidi and zero-width characters as `<U+XXXX>`; the one-line prompt names who asks (IC-77), the tool and the
    call's first line, cut to the console width before `(+N more lines)` (an absolute path inside the project
