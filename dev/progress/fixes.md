@@ -7728,6 +7728,59 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   - Open: FIX-28's paste item as round 4 left it, with the drop now at most 0.2 s after a paste's
     read; under `quotes = FALSE` a `!` line's string completes nothing. Not run: Linux and Windows,
     R 4.2 and R-devel, and live models or tmux (the fixes are tested offline).
+- Review round 4, the merge (`claude/v1-fixes` on `0aa55320` merges the round's `claude/v1-fix-win`,
+  `claude/v1-fix-docs4`, `claude/v1-fix-console4`, `claude/v1-fix-browser` and `claude/v1-fix-env`,
+  in that order; the gate branch comes next): the merges' only conflicts were record appends in
+  fixes.md, DEVIATIONS, HANDOFF and PROGRESS, each side kept whole in the order its round ran, and
+  the code files both sides changed and git merged (NEWS, 04, test-perm-gate.R) carry each side's
+  change as it was. The verifiers' leftovers for FIX-34, each test first:
+  - `raw_to_utf8()` (the Windows round's Open item above): it decodes text that is not UTF-8 with
+    `iconv(from = "CP1252", sub = "?")`, so in .env files and, through `read_utf8()`, artifact logs
+    and metadata a byte CP1252 lacks became `?` off Windows and its C1 control on Windows. Red:
+    test-utils-encoding.R "raw_to_utf8() reads a byte CP1252 lacks as ? where iconv() maps it too
+    (FIX-34)" FAIL 1 PASS 416 with test-console-repl.R on the merged code: with the Windows stand-in
+    for `iconv()` the five bytes gave U+0081, U+008D, U+008F, U+0090 and U+009D. Fix, commit
+    `55a51a3f`: with the CP1252 fallback the five bytes become `?` before `iconv()`, as
+    `repl_file_block()` makes them `<xx>`; the stand-in moves from test-console-repl.R to
+    helper-locale.R (`win_iconv()`) for both tests. Green: `^(utils-encoding|console-repl)$`
+    PASS 417 in UTF-8 and PASS 400 SKIP 5 under `LC_ALL=C LANG=C`. No contract states how such a
+    byte reads, so no rule changes.
+  - Completion (the console verifier's notes 1 and 4): NEWS, 04 section 15.10 IC-81 and D-244 say no
+    name holding a control character is offered, and IC-53 item 8 counts C1 controls (U+0080 to
+    U+009F) among them, but round 4's filter dropped only bytes 0x01-0x1f and 0x7f, so `@c1` with
+    U+0085 came back. And, already so on `13a917ff`, the `@` branch sorted `list.files()` with
+    `method = "radix"`, which refuses an unmarked non-ASCII first name ("Character encoding must be
+    UTF-8, Latin-1 or bytes", R 4.6.1 in UTF-8 and in C), so in a folder holding only `café`, `@`
+    completed nothing. Red: test-console-completion.R "no completion holds a line end or another
+    control character (review round 4)", with a C1 name added to every source, and "@ completes a
+    folder whose first name is not ASCII (round 4 merge)": FAIL 6 PASS 199 in UTF-8 and FAIL 5
+    SKIP 1 PASS 199 under `LC_ALL=C LANG=C` (a C1 file name needs a UTF-8 locale). Fix, commit
+    `45a869ba`: the filter also drops a UTF-8 C1 control (`\xc2[\x80-\x9f]`, as bytes), so NEWS,
+    IC-81 and D-244 hold as written; the names are ordered as UTF-8 (`order(as_utf8(files))`) and
+    stay unmarked, as `dir.exists()` in a C locale cannot translate a marked non-ASCII name. Green:
+    `^console-completion$` PASS 205 in UTF-8 and PASS 204 SKIP 1 under `LC_ALL=C LANG=C`.
+  - Records: the Windows round's Open line said the fix needs `gsub(useBytes = TRUE)` to leave its
+    result unmarked, since `iconv()` gives `NA` for a `bytes`-marked string;
+    `iconv(from = "CP1252")` ignores a declared encoding (R 4.6.1 converts a `bytes`-marked string),
+    so it does not, and the line is corrected in place, the read tool's Windows reading marked
+    inferred (`bd4902ce`). The checkpoint's titles and intros name FIX-27..FIX-36 and D-262..D-272
+    (`7921c890`), and the PR placeholders read #93, this branch's PR (`15553922`; FIX-27's and
+    FIX-28's headings named their issues, which their Why lines keep).
+  - Checks on `15553922` (whose code is `45a869ba`'s; the later commits change only `dev/`),
+    `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`: the files whose names start with
+    `console-`, `doc-`, `perm`, `risk`, `rules`, `nested`, `bridge`, `mcp-`, `gptr-`, `session-`,
+    `ckpt-`, `eval-`, `agent-`, `tool-`, `artifact-`, `proc-`, `auth-`, `utils-` or `zzz` FAIL 0
+    WARN 0 SKIP 31 PASS 24922 in UTF-8 (17 min, at load averages of about 45 to 160) and FAIL 1
+    WARN 0 SKIP 63 PASS 24698 under `LC_ALL=C LANG=C` (the skips: Windows only, Python not
+    configured or provisioned, macOS, INFRA-03, {repr} not installed, keyring installed, and under C
+    32 that need a UTF-8 locale). The one failure is test-proc-writer-prototype.R:20, whose
+    `writer-timeout` case ran past its 30 s case deadline (32.6 s) under load, in files no merged
+    branch changed; the file passes alone under `LC_ALL=C LANG=C` (PASS 92), as on a worktree of
+    `0aa55320`. Lint of the 25 R and test files changed since `0aa55320` clean; `document()` no
+    diff; `fmt.py` on copies of the records changes nothing and `lintfmt.py` shows only the
+    baseline. No full suite or `R CMD check` ran, so the heavy lock was not taken.
+  - Open: none new. Not run: Windows (the stand-in gives Windows' `iconv()` reading), Linux, R
+    before 4.6 and R-devel, and live models.
 
 ## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #93)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
