@@ -216,13 +216,15 @@ provider keys: read at the first use of a provider; see \code{\link[=gptr_env]{g
 \code{USERPROFILE}): they place \code{tools::R_user_dir("gptr", "config")}, which holds gptr's
 settings, permission rules, trust decisions and credentials, and your home directory.
 Setting or unsetting one of them from model code changes gptr's own configuration, as does
-a provider key, a \verb{GPTR_*} or \verb{*_BASE_URL} variable, \code{R_ENVIRON_USER}, \code{R_PROFILE_USER},
+a variable a registered provider reads (its key or base-URL variable, such as \code{AWS_REGION}
+for Bedrock), a \verb{GPTR_*} or \verb{*_BASE_URL} variable, \code{R_ENVIRON_USER}, \code{R_PROFILE_USER},
 \code{R_ENVIRON} or \code{R_PROFILE}, whatever the letter case. Every mode but \code{yolo} asks you first,
 \code{auto} included, before \code{Sys.setenv()}, \code{Sys.unsetenv()}, \code{withr::local_envvar()} or
 \code{withr::with_envvar()} of such a name or of a name the classifier cannot read, before
 \code{readRenviron()} and \code{dotenv::load_dot_env()}, and before an \code{os.environ} write in
 \code{peter$py()} or \code{peter$knit("python", code)} code that names one in a string or an upper-case
-word; \link{gptr_security} lists what it does not read.
+word or whose name is not a plain string literal; \link{gptr_security} lists what it does not
+read.
 \item \code{GPTR_WORKER}, \code{GPTR_SUBAGENT_DEPTH}, \code{GPTR_ARTIFACT_PORTS}, \code{GPTR_SHELL_CMD} and the tree
 markers \verb{GPTR_PROC_<id>}: set by gptr in its own child processes only.
 \item \code{GPTR_MCP_TOKEN}: the variable through which the Codex snippet of \code{\link[=gptr_mcp_serve]{gptr_mcp_serve()}} passes

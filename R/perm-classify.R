@@ -1900,8 +1900,9 @@ risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "w
 #'
 #' Paths are classified relative to `root` (`workspace`, `temp`, `outside`, `protected`,
 #' `control`, `instructions`, `critical`, `url`, `wildcard`, `unknown`). Calls of
-#' `peter$sh()`, `system()`, `system2()` (its `env` as the start of the command line) and
-#' `processx::run()` with literal commands are classified with the command table
+#' `peter$sh()`, `system()`, `system2()` (its `env` as the start of the command line),
+#' `processx::run()` (also as `callr::run()`) and `sys::exec_wait()`, `sys::exec_internal()` and
+#' `sys::exec_background()` with literal commands are classified with the command table
 #' (`inst/extdata/risk-commands.csv`), `peter$sql()` by its statements and `peter$py()` by a token
 #' scan. A command the code computes, or a `shell.exec()` file it computes, is a `dynamic` row at
 #' level 3. Plugins and users extend both tables with `risk_rule` records.

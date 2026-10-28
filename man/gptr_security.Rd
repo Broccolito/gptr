@@ -51,20 +51,22 @@ off or loosen it during a run: the safety options are copied when the run starts
 disposable sandboxes.
 
 Changing gptr's own configuration includes model code that sets or unsets an environment
-variable gptr reads as configuration, such as a provider key, or one that moves its
+variable gptr reads as configuration: a key or base-URL variable of a provider gptr has
+registered (such as \code{AWS_REGION}, which places Bedrock's endpoint), or one that moves its
 configuration folder or your home directory, such as \code{HOME}; \link{gptr_options} lists them. The
 classifier reads such a change in \code{Sys.setenv()}, \code{Sys.unsetenv()}, \code{withr::local_envvar()} and
 \code{withr::with_envvar()}, where a name it cannot read counts as one, in \code{readRenviron()} and
 \code{dotenv::load_dot_env()}, and in an \code{os.environ} write in the code of \code{peter$py()} or
-\code{peter$knit("python", code)} that names one in a string or an upper-case word. It does not read
-code in a file R runs (\code{source()}, \code{sys.source()}, \code{eval(parse(file = ))}); \code{Sys.setenv()}
-reached by a computed name, through a list or an environment, or handed to another function
-(\code{get("Sys.setenv")}, \code{baseenv()$Sys.setenv}, \code{with(list(f = Sys.setenv), ...)},
-\code{assign("f", Sys.setenv)}, \code{identity(Sys.setenv)}); a Python write whose name the code
-computes, that reaches \code{os.environ} by another name (\code{e = os.environ}, \code{getattr(os, "environ")})
-or through \code{ctypes}, or that passes \code{os.environ.update()} lower-case keyword names (on Windows
-\code{os.environ.update(home = d)} sets \code{HOME}); or Python run through 'reticulate': such code is
-level 3 or lower, which \code{auto} runs without asking.
+\code{peter$knit("python", code)} that names one in a string or an upper-case word, or whose name (a
+subscript, or the first argument of \code{putenv()}, \code{unsetenv()} or \code{pop()}) is not a plain string
+literal. It does not read code in a file R runs (\code{source()}, \code{sys.source()},
+\code{eval(parse(file = ))}); \code{Sys.setenv()} reached by a computed name, through a list or an
+environment, or handed to another function (\code{get("Sys.setenv")}, \code{baseenv()$Sys.setenv},
+\code{with(list(f = Sys.setenv), ...)}, \code{assign("f", Sys.setenv)}, \code{identity(Sys.setenv)}); a Python
+write that reaches \code{os.environ} by another name (\code{e = os.environ}, \code{getattr(os, "environ")}) or
+through \code{ctypes}, or that passes \code{os.environ.update()} a mapping the code computes or keyword
+names not all in upper case (on Windows \code{os.environ.update(home = d)} sets \code{HOME}); or Python run
+through 'reticulate': such code is level 3 or lower, which \code{auto} runs without asking.
 }
 
 \section{What the gate cannot do}{
@@ -72,7 +74,10 @@ level 3 or lower, which \code{auto} runs without asking.
 The risk levels come from a static classifier (\code{\link[=gptr_risk]{gptr_risk()}}). It is advisory and it is not a
 security boundary: R code can compute function names, call compiled code or load packages
 whose effects the classifier cannot see, and R has no sandbox for code that runs inside your
-session. Deny and ask \verb{sh:} rules see a command computed at run time only in a \code{peter$sh()} or
+session. The classifier reads code as written and does not run it, so code that builds a call,
+a name, a path or a command at run time, or reaches a function by another name, is read only
+as far as the classifier can see; each form this page names as not read is of that kind. Deny
+and ask \verb{sh:} rules see a command computed at run time only in a \code{peter$sh()} or
 \code{peter$bg()} call, which checks the command when it runs. So in \code{auto} and \code{yolo} mode a
 \code{system()}, \code{system2()}, \code{shell()} or \code{shell.exec()} call whose command (for \code{system2()} also its
 arguments and \code{env}) is not a string the classifier can read, such as
@@ -85,17 +90,25 @@ The refusal covers only calls the classifier resolves to these functions: a func
 a computed name or through a list or an environment (\code{get("system")(cmd)},
 \code{baseenv()$system(cmd)}) or handed to a function of your own (\code{g(system)}), \code{eval(parse())}, a
 sourced file, package code and other command runners such as \code{pipe()} or \code{processx::run()}
-still run a computed command unchecked.
+still run a computed command unchecked. A literal command is read when it is given to
+\code{system()}, \code{system2()}, \code{peter$sh()}, \code{processx::run()} (also as \code{callr::run()}),
+\code{sys::exec_wait()}, \code{sys::exec_internal()} or \code{sys::exec_background()}, not when it is given to
+\code{processx::process$new()}, which is level 3.
 
 Paths are placed in the project: a relative path in R code is read in the project directory,
-and a command in the directory it runs in (after a \code{cd}, or the \code{wd} of \code{peter$sh()} or
-\code{processx::run()}), the code a shell or Python runs there (\code{sh -c}, \code{python3 -c}) included;
-running a command in a directory outside the project reads that directory, so \code{manual} asks.
-\code{setwd()}, \code{withr::local_dir()} and \code{withr::with_dir()} to a directory outside the project and
-R's session temporary directory, or to one the code computes, are level 4, because a relative
-path would then name a file outside the project. A drive-relative path such as \code{D:data} counts
-as outside on every OS. The classifier does not follow the working directory changed in other
-ways (such as \code{usethis::local_project()}), nor read the code another interpreter runs
+and a command in the directory it runs in (after a \code{cd} or \code{env -C}, or the \code{wd} of
+\code{peter$sh()} or \code{processx::run()}), the code a shell or Python runs there (\code{sh -c}, \code{cmd /c},
+\code{pwsh -Command}, \code{python3 -c}) included; running a command in a directory outside the project
+reads that directory, so \code{manual} asks. \code{setwd()}, \code{withr::local_dir()}, \code{withr::with_dir()} and
+\code{xfun::in_dir()} to a directory outside the project and R's session temporary directory, or to
+one the code computes, are level 4, because a relative path would then name a file outside the
+project, and so are \code{file.symlink()}, \code{file.link()} and \code{Sys.junction()} of a path outside the
+project, as \code{ln} of one is. \code{getwd()} and the directory \code{setwd()} returns are read as the one
+the code has moved R to, starting from R's working directory when the classifier reads the
+code, so \verb{owd = setwd("data"); ...; setwd(owd)} stays in the project. A drive-relative path
+such as \code{D:data} counts as outside on every OS. The classifier does not follow the working
+directory changed in other ways (such as \code{usethis::local_project()}, \code{get("setwd")} or the \code{wd}
+of \code{callr::r()}), nor read the code another interpreter runs
 (\code{Rscript -e}, \code{perl -e}, \code{node -e}), a path the shell computes (\verb{rm "$f"} in a loop,
 \verb{xargs rm}) or code handed to \code{sh -c} or \code{bash -c} as one word whose spaces are escaped with a
 backslash or written \verb{$IFS} (\verb{sh -c rm\\ -f\\ file}): such a command is level 3, which \code{auto} and
