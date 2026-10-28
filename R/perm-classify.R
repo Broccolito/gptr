@@ -1282,13 +1282,18 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
              has("^(-1|-?0|-?\\$\\{?PPID\\}?|(?i:r|rterm|rgui|rsession|r\\.exe|rscript)|-u)\\z")) {
     add(4L, "critical")
   } else if (p %in% risk_cmd_interpreters) {
-    k = match(TRUE, a %in% c("-c", "-e", "-E", "--eval", "-Command", "-EncodedCommand", "/c",
-                             "/k"), nomatch = 0L)
+    # cmd (/c, /k, /r) and PowerShell (-c, -Command) run every word after the option, in any case
+    joins = p %in% c("cmd", "pwsh", "powershell")
+    k = match(TRUE, if (joins) {
+      tolower(a) %in% c("-c", "-k", "-r", "-command", "-e", "-ec", "-encodedcommand")
+    } else {
+      a %in% c("-c", "-e", "-E", "--eval")
+    }, nomatch = 0L)
     if (has("^(--version|-V|--help)\\z") && length(a) == 1L) {
       add(0L, "read")
     } else if (k > 0L) {
       add(3L, "dynamic")
-      code = a[k + 1L]
+      code = if (joins) paste(a[-seq_len(k)], collapse = " ") else a[k + 1L]
       if (!is.na(code) && startsWith(p, "py")) {
         out[[length(out) + 1L]] = risk_python(code, root, dirs)
       }
