@@ -461,8 +461,8 @@ dispatch_nested = function(name, input, ctx) {
 #' Deny and ask rules on the actual input of a nested sh, bg, write or edit call, which the outer
 #' call's static reading cannot see when the code computes it: the `rules`, `coaching`,
 #' `harness_rules` and coaching children's `fence` policies decide as for the literal call (a shell
-#' command as the `r` code that runs it), the strictest answer winning. Allow answers are not applied: the nested gate never
-#' loosens.
+#' command as the `r` code that runs it), the strictest answer winning. Allow answers are not
+#' applied: the nested gate never loosens.
 #' @return NULL, or perm_check()'s denial.
 #' @noRd
 nested_rules = function(call, run) {
