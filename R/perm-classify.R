@@ -1822,17 +1822,32 @@ risk_python = function(code, root = project_root(), dirs = root) {
     f = risk_flags_bind(f, risk_flags_row("control", "py", 4L, "control"))
   }
   # chdir() (os.chdir(), os.fchdir(), contextlib.chdir()) moves R's working directory too, as
-  # Python runs in R's process: read as setwd() is, a directory that is no plain string literal
-  # one the code computes
-  for (t in regmatches(code_nc, gregexpr("\\bf?chdir\\s*\\(\\K[^)]*", code_nc,
-                                         perl = TRUE))[[1L]]) {
-    d = if (grepl(lit_re, t, perl = TRUE)) {
-      gsub("^\\s*\\w*['\"]|['\"]\\s*\\z", "", t, perl = TRUE)
+  # Python runs in R's process: read as setwd() is, a plain string literal in each directory R
+  # may be in (`here`), any other directory one the code computes (NA). R is then in the
+  # directory an os.chdir() of a literal names when that call is a statement of its own on a line
+  # nothing can run conditionally (unindented, with no `:` and no bracket open before it, in code
+  # with no triple-quoted string), else in it or where it was.
+  lines = strsplit(code_nc, "\n", fixed = TRUE)[[1L]]
+  bl = gsub("'[^'\n]*'|\"[^\"\n]*\"", "''", lines)
+  open = cumsum(nchar(gsub("[^([{]", "", bl)) - nchar(gsub("[^])}]", "", bl)))
+  top = !grepl("'''|\"\"\"", code_nc) & !grepl("^\\s|:", bl) & c(0L, open)[seq_along(bl)] == 0L
+  here = dirs
+  for (i in seq_along(lines)) {
+    for (st in strsplit(lines[i], ";", fixed = TRUE)[[1L]]) {
+      for (t in regmatches(st, gregexpr("\\bf?chdir\\s*\\(\\K[^)]*", st, perl = TRUE))[[1L]]) {
+        d = if (grepl(lit_re, t, perl = TRUE)) {
+          gsub("^\\s*\\w*['\"]|['\"]\\s*\\z", "", t, perl = TRUE)
+        }
+        pc = if (is.null(d)) "unknown" else risk_target(d, "read", root, here)$pc
+        f = risk_flags_bind(f, risk_flags_row(paste0("chdir(", trimws(t), ")"), "py",
+                                              if (pc %in% c("workspace", "temp")) 2L else 4L,
+                                              "session", d %||% NA_character_, pc))
+        to = if (is.null(d)) NA_character_ else if (grepl("^([~/\\\\]|[A-Za-z]:)", d)) d else
+          ifelse(is.na(here), NA_character_, file.path(here, d))
+        sole = top[i] && grepl("^\\s*os\\.chdir\\s*\\([^)]*\\)\\s*\\z", st, perl = TRUE)
+        here = if (sole && !is.null(d)) to else unique(c(here, to))
+      }
     }
-    pc = if (is.null(d)) "unknown" else risk_target(d, "read", root, dirs)$pc
-    f = risk_flags_bind(f, risk_flags_row(paste0("chdir(", trimws(t), ")"), "py",
-                                          if (pc %in% c("workspace", "temp")) 2L else 4L,
-                                          "session", d %||% NA_character_, pc))
   }
   wr = f$category[f$category %in% c("file_write", "file_delete")]
   f = risk_literal_rows(lits, f, "py", root, if (length(wr)) wr[1L] else "read", dirs = dirs)
