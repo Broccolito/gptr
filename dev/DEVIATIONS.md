@@ -7815,7 +7815,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `?gptr_security`: the working directory changed in other ways (`usethis::local_project()`), the
   code another interpreter runs (`Rscript -e`, `perl -e`) and a path the shell computes (`rm "$f"`,
   `xargs rm`), all level 3. A literal `wd` of `processx::run()` is read the same way
-  (`cmd_in_wd()`).
+  (`cmd_in_wd()`). Status 2026-10-27 (the fixes' verifier): so is a `wd` held by a name the code
+  assigns, in each directory the name may hold; a `wd` the code computes is read as the project, as
+  `?gptr_security` now says.
 - Rule (allow): only an `r(fn:NAME,...)` (or `*(fn:...)`) allow rule lifts the refusal, matched
   against the refused rows alone and covering all of them, as only `r(secret:NAME)` lifts the secret
   guard: `r(fn:system)` lets `system(cmd); write.csv(x, "out.csv")` run in auto, while `r`,
@@ -7878,7 +7880,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   test-perm-classify.R "a drive-relative path is outside the project on every OS (review round 4)",
   "a command run in a directory outside the project reads it (review round 4)", "moving R's working
   directory out of the project is level 4 (review round 4)", "a Windows wd is placed as Windows
-  places it, on every OS (review round 4)". Evidence: progress/fixes.md FIX-27.
+  places it, on every OS (review round 4)", "processx::run()'s wd is read as peter$sh()'s (review
+  round 4)". Evidence: progress/fixes.md FIX-27.
 
 ## D-263 - FIX-28 Bracketed paste decides a paste in a T console (2026-10-26)
 - Rule (mode): a T console's call turns bracketed paste on with its character mode. `tty_modes()`

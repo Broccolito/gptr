@@ -6287,6 +6287,48 @@ the driver, screens, events, transcripts and replays without a model are local, 
   `a9fbf0a6`'s code: the gate set FAIL 0 SKIP 13 PASS 8305 in UTF-8 and in C, the console and
   neighbour sets as above, `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290,
   `check-docs.R` 0 problems, spelling clean, lint clean, `document()` no diff.
+- Review round 4, the fixes' verifier on `a2a6a976` (offline, its probes and mutants): every
+  R4-SEC item fixed and no regression; four small findings. (1) `?gptr_security` said that the
+  `wd` of `processx::run()` is read, with no "literal" (the bullet above wrongly said the page says
+  so), and a `wd` held by a name the code assigns was read as the project:
+  `d = "<outside>"; processx::run("rm", c("-rf", "build"), wd = d)` was level 3 and ran in auto
+  and yolo. Red: test-perm-classify.R "processx::run()'s wd is read as peter$sh()'s (review round
+  4)" FAIL 2 on `a2a6a976`'s code (both 3). Fix (`9e88069c`): `by_args()` folds the `wd` with the
+  names the code assigns and reads the command in each directory a name may hold, so
+  `d = "sub"; if (x) d = "<outside>"` is 4 too (the verifier's one-token fix read that one as the
+  project, 3); a `wd` the code computes is still read as the project, which `?gptr_security` and
+  03 section 6.8.1 now say (`5bc15688`, which also mends the early line break in 03's paragraph).
+  Green: `^perm-classify$` FAIL 0 PASS 1006. (2) D-262's Tests line gains that test. (3) The
+  high-performance-r skill's targets recipe restored the working directory with `setwd(old)`, a
+  directory the code computes, so a model following it got a critical question in auto and yolo;
+  it now runs in `withr::with_dir(dir, ...)` (`1293a533`), and the block is level 3
+  (`tar_make()`), formerly 4. (4) Two mutants survived (`7dc93c6b`): `git -C D:other rm -r build`
+  (4) joins the drive-relative test, and `sh -c 'timeout 5 rm -f marker.txt'` and
+  `echo 'rm -f marker.txt' | sh` join the round-4 gate test, each read in its `wd` by only one of
+  the `-c` parse and the literal scan. Without `|| is_drive_rel(dir)` `^perm-classify$` FAILs 1,
+  and without either `dirs` thread `^perm-gate$` FAILs 1; all three were green before.
+- Review round 4, the fixes' verifier, not changed: `sh -c rm\ -f\ <outside file>` (code handed to
+  a shell as one word with escaped spaces) is a "not modelled" level-3 row, so auto and yolo
+  delete the file with no question, with or without a `wd`, as on `13a917ff`; sh's reading drops
+  the escapes and so splits the word, and reading escapes as sh does inside and outside quotes
+  would need a tokenizer of its own. Not yet named in `?gptr_security` (the maintainer's call).
+  The drive-relative rule raises a few unrelated readings, never lowers one: `rm -rf ${X:-build}`
+  with a one-letter name 3 to 4, `readLines("a:b.txt")` 0 to 1, `rm a:b` 3 to 4; and
+  `cd <outside> && git commit -m 'rm -rf build'` is 2 to 4, the literal scan reading the message in
+  the outside directory (round 4's threading). The HANDOFF and PROGRESS Open lists do not yet name
+  round 4's limits; that is the docs merger's.
+- Review round 4, the fixes' verifier, checks on `5bc15688`'s code (the records commit changes
+  only `dev/`): `^(perm|risk|rules|nested|bridge|mcp-|gptr-config|agent-|tool-|session-)` FAIL 0
+  SKIP 13 PASS 8313 in UTF-8 and under `LC_ALL=C LANG=C` (8 more than on `a9fbf0a6`, the new
+  expectations); for the skill file `^(skill-|ext-|context-|env-snapshot|gptr-capture|prompt-)`
+  FAIL 0 SKIP 0 PASS 3887 in UTF-8 and FAIL 0 SKIP 2 PASS 3876 in C; the neighbour set of the
+  round FAIL 0 SKIP 2 PASS 3257 in UTF-8 and FAIL 0 SKIP 4 PASS 3243 in C (a first C run had two
+  errors in test-artifact-app.R, "The owned headless browser family did not finish cleanup";
+  `^artifact-app$` alone FAIL 0 PASS 530 and the set again as stated). Lint clean (the 4 changed
+  R and test files); `document()` changes only `man/gptr_security.Rd`, and a second run nothing;
+  `check-docs.R` 0 problems; spelling clean; `testthat::test_dir("dev/release/tests")` FAIL 0
+  SKIP 0 PASS 290. Not run here: the full suite, `R CMD check`, Linux and Windows hosts, live
+  models.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #86)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
