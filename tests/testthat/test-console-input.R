@@ -891,9 +891,11 @@ test_that("a Ctrl-C or cursor key inside a paste at the prompt's editor is text 
   # in a paste left open, a Ctrl-C read more than 2 s after its last read hands over, as in a run
   now = 0
   local_mocked_bindings(reactor_now = function() now)
-  later = function(t, keys) function() {
-    now <<- t
-    keys
+  later = function(t, keys) {
+    function() {
+      now <<- t
+      keys
+    }
   }
   r = idle_read("a", list("\033[200~b\r", later(1, "\003c"), later(3.5, "\003")), "next")
   expect_identical(r$kept, "\"\"\"\nab\nc\n\"\"\"")
