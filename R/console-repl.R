@@ -482,7 +482,9 @@ console_objects = function(env, all = TRUE) {
 #' Resolve @mentions, words starting with @ (readline's word breaks before it, as for completion,
 #' so an e-mail address stays text) followed by a quoted name or by letters, marks and digits of
 #' any script and `_ . / ~ -`, not ending in a dot (`text` is marked UTF-8, as_utf8(), so they are
-#' read as characters; a name Tab completes in any script reads whole): files (relative to the
+#' read as characters; a name Tab completes in any script reads whole). An unquoted name no file
+#' or object has is read as its leading run of ASCII letters, digits and `_ . / ~ -` when one has
+#' that, as text in a script written without spaces runs on after a name. Files (relative to the
 #' working directory or the project root, or absolute/home paths) become <file> blocks, in order
 #' within the `user_files` budget; syntactic names bound in `env` become context objects passed by
 #' name. `said` names what each mention resolved to, in order (D-244): `@ notes.md (2 lines)`,
@@ -498,10 +500,16 @@ repl_mentions = function(text, env) {
   said = character()
   for (t in unique(toks)) {
     nm = gsub("^@\"?|\"$", "", t)
-    # the file system gets unmarked bytes in a C locale, which cannot translate a marked name
-    cand = fs_path(unique(c(path.expand(fs_path(nm)), file.path(project_root(), nm))))
-    dir = path_info(cand)$isdir
-    hit = cand[dir %in% FALSE]
+    run = regmatches(t, regexpr("^@[A-Za-z0-9_./~-]*[A-Za-z0-9_/~-]", t, perl = TRUE))
+    for (n in unique(c(nm, substring(run, 2L)))) {
+      # the file system gets unmarked bytes in a C locale, which cannot translate a marked name
+      cand = fs_path(unique(c(path.expand(fs_path(n)), file.path(project_root(), n))))
+      dir = path_info(cand)$isdir
+      if (identical(n, nm)) folder = any(dir %in% TRUE)
+      hit = cand[dir %in% FALSE]
+      obj = identical(make.names(n), n) && n %in% console_objects(env)
+      if (length(hit) || obj) break
+    }
     if (length(hit)) {
       shown = as_utf8(path_rel(hit[[1L]]))
       # the line feed that joins the blocks counts too
@@ -509,11 +517,11 @@ repl_mentions = function(text, env) {
                               room = console_files_budget - est_tokens(c(files, ""), "code"))
       files = c(files, block)
       said = c(said, paste0("@ ", shown, " (", attr(block, "said"), ")"))
-    } else if (identical(make.names(nm), nm) && nm %in% console_objects(env)) {
-      objects = c(objects, nm)
-      said = c(said, paste0("@ ", nm, " (", mention_kind(nm, env), ")"))
+    } else if (obj) {
+      objects = c(objects, n)
+      said = c(said, paste0("@ ", n, " (", mention_kind(n, env), ")"))
     } else {
-      said = c(said, paste0("@ ", nm, if (any(dir %in% TRUE)) " is a folder" else " not found",
+      said = c(said, paste0("@ ", nm, if (folder) " is a folder" else " not found",
                             ", sent as text"))
     }
   }
