@@ -159,6 +159,16 @@ is_abs_path = function(path) {
   grepl("^([/\\\\]|[A-Za-z]:[/\\\\])", path)
 }
 
+#' A command (an argv, or one command line) as run in the directory `wd`, as the command
+#' classifier reads it: `cd <wd> && <command>`, an argv quoted into one line; the command itself
+#' when `wd` is absent or "."
+#' @noRd
+cmd_in_wd = function(cmd, wd = NULL) {
+  if (!rlang::is_string(wd) || identical(wd, ".")) return(cmd)
+  if (length(cmd) > 1L) cmd = paste(shQuote(cmd, "sh"), collapse = " ")
+  paste("cd", shQuote(wd, "sh"), "&&", cmd)
+}
+
 #' Normalise one path: absolute, forward slashes, symlinks resolved on the deepest existing
 #' ancestor (macOS /var -> /private/var), "." and ".." removed from the rest
 #' @noRd
