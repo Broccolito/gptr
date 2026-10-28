@@ -448,8 +448,17 @@ test_that("peter's sh, bg and script members are read by the network check (revi
     expect_identical(scan$level, 4L, label = code)
     expect_true("secret_to_network" %in% scan$findings$rule, label = code)
   }
-  # no network program, or no secret: as before
+  # a command held in a variable, or a program name the code writes as a string anywhere
+  # (verification of review round 6)
+  for (code in c(paste0("cmd = c('curl', '-s', '-H', paste0('X-K: ', Sys.getenv('TEST_API_KEY')), ",
+                        "'http://127.0.0.1:9/'); peter$sh(cmd)"),
+                 paste0(v, "p = 'curl'; peter$bg(c(p, '-s', paste0('http://127.0.0.1:9/?k=', v)))"),
+                 paste0(v, "p = 'wget'; system2(p, v)"))) {
+    expect_identical(secret_scan(code)$level, 4L, label = code)
+  }
+  # no network program, no process, or no secret: as before
   expect_identical(secret_scan(paste0(v, "peter$sh(c('wc', '-c'), input = v)"))$level, 3L)
+  expect_identical(secret_scan(paste0(v, "message('use curl'); nchar(v)"))$level, 3L)
   for (code in c("peter$sh(c('curl', '-s', 'http://127.0.0.1:9/'))",
                  "peter$sh(c('cat', 'a.txt'))", "peter$sh('env', env = 'HOME')")) {
     expect_lt(secret_scan(code)$level, 3L, label = code)

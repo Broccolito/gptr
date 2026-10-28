@@ -466,6 +466,10 @@ scan_ns_funs = c("getFromNamespace", "asNamespace", "getNamespace", "loadNamespa
 scan_proc_funs = c("system", "system2", "shell", "run", "process", "r_bg", "r", "run_process",
                    "exec_wait")
 scan_member_funs = c("sh", "bg", "script")
+# Network programs a process may run (the secret-to-network check)
+scan_net_prog_re = paste0("(^|[[:space:];|&(/\\\\'\"])",
+                          "(curl|wget|nc|ncat|scp|ssh|Invoke-WebRequest|iwr)",
+                          "(?:\\.exe)?([[:space:];|&)'\"]|$)")
 scan_dump_cmds = c("env", "printenv", "set", "export", "declare", "Get-ChildItem", "gci", "cat",
                    "type")
 
@@ -584,6 +588,8 @@ secret_scan = function(code, tainted = character()) {
   assigned = character()
   uses = character()
   net = FALSE
+  proc = FALSE
+  strs = character()
   handed = FALSE
   if (grepl("[secret:", code, fixed = TRUE)) add("marker", "[secret:")
   exprs = tryCatch(parse(text = code, keep.source = FALSE), error = function(e) NULL)
@@ -595,6 +601,7 @@ secret_scan = function(code, tainted = character()) {
       uses <<- c(uses, s)
       return(invisible())
     }
+    if (is.character(e)) strs <<- c(strs, e)
     if (!is.call(e)) return(invisible())
     fn = scan_call_name(e)
     pkg = scan_call_pkg(e)
@@ -668,12 +675,7 @@ secret_scan = function(code, tainted = character()) {
       if (dumps) add("env_dump_process", fn)
     }
     # peter's members start processes too; a registered name their `env` passes is a secret sent
-    if (fn %in% c(scan_proc_funs, scan_member_funs) && length(lits)) {
-      net_re = paste0("(^|[[:space:];|&(/\\\\'\"])",
-                       "(curl|wget|nc|ncat|scp|ssh|Invoke-WebRequest|iwr)",
-                       "(?:\\.exe)?([[:space:];|&)'\"]|$)")
-      if (any(grepl(net_re, lits, perl = TRUE, ignore.case = TRUE))) net <<- TRUE
-    }
+    if (fn %in% c(scan_proc_funs, scan_member_funs)) proc <<- TRUE
     if (fn %in% scan_member_funs &&
           any(toupper(scan_strings(args[["env"]])) %in% toupper(registered))) {
       handed <<- TRUE
@@ -685,6 +687,9 @@ secret_scan = function(code, tainted = character()) {
     invisible()
   }
   for (e in exprs) walk(e)
+  # a process the code starts may run a network program any string of the code names, in the
+  # call or in a variable (a command vector); a program name built from pieces is not read
+  if (proc && any(grepl(scan_net_prog_re, strs, perl = TRUE, ignore.case = TRUE))) net = TRUE
   rules = vapply(found, function(f) f[1], "")
   sources = intersect(rules, c("env_dump", "secret_env", "secret_env_registered", "env_dynamic",
                                "secret_file", "keyring", "vault_access", "env_dump_process"))
