@@ -122,32 +122,41 @@ s2_put = function(key, record) {
 
 # ---- replay decisions and replaying fresh blocks (IC-45, IC-46, IC-47) -------------------------
 
-#' The replay decision for a located call (contract 7.15): "replay", "run", "regenerate" or
-#' "skip", or signals `not_recorded`/`stale_block`. The table of architecture 6.9.3 and report 14
-#' section 4.4.2 with the undone row of G7 section 3.8: a block is fresh only when its `prompt=`
-#' and `args=` both match (IC-45). Regeneration needs a driver that can skip the old block
-#' (gptr_source(), knitr, an IDE, Jupyter); under base source()/Rscript it downgrades to replay
-#' with the warning `replay_downgraded` in every mode (architecture 6.9.3: "under base
-#' source()/Rscript, live and stale regeneration downgrade to replay with a warning"), and a
-#' hand-edited block is then not offered for overwriting. An undone block is inert (`#~ `,
-#' `eval=FALSE`), so nothing of it can run twice: `record` regenerates it under every driver
-#' (G7 section 3.8: "regenerate in place (the block becomes live)").
+#' The replay decision for a located call (contract 7.15): "replay", "run", "regenerate", "skip"
+#' or, for a coaching call, "ask", or signals `not_recorded`/`stale_block`. The table of
+#' architecture 6.9.3 and report 14 section 4.4.2 with the undone row of G7 section 3.8: a block
+#' is fresh only when its `prompt=` and `args=` both match (IC-45). Regeneration needs a driver
+#' that can skip the old block (gptr_source(), knitr, an IDE, Jupyter); under base
+#' source()/Rscript it downgrades to replay with the warning `replay_downgraded` in every mode
+#' (architecture 6.9.3: "under base source()/Rscript, live and stale regeneration downgrade to
+#' replay with a warning"), and a hand-edited block is then not offered for overwriting. An
+#' undone block is inert (`#~ `, `eval=FALSE`), so nothing of it can run twice: `record`
+#' regenerates it under every driver (G7 section 3.8: "regenerate in place (the block becomes
+#' live)").
 #' A hand-edited block replays (user code wins) only while its `prompt=` and `args=` match; once
 #' either moved it is stale too (IC-45): `replay` errors, and the other modes regenerate only after
 #' a yes to overwriting it, else downgrade to replay with `replay_downgraded`.
+#' A block is also stale when the coaching of the harness its call runs changed, and a coaching
+#' call's block is stale when its starting harness's did (doc_block_status(); 08 section 3.6).
+#' Coaching costs many runs and is not deterministic, so under `auto` a stale coach block asks
+#' first ("ask": the caller asks, showing the session count) when a person can answer, and is
+#' replayed with `replay_downgraded` otherwise.
 #' `stale_block` is a child of `not_recorded` (contract 2.2).
 #' @noRd
 doc_decide = function(site, prompt_hash, args_hash, mode) {
   mode = check_choice(mode, c("auto", "replay", "live", "record"), "mode")
   b = site$block
   rel = doc_rel(site$path)
+  status = function(h) {
+    doc_block_status(h[setdiff(names(h), "sha")], character(), prompt_hash, args_hash,
+                     site$harness, site$coach)
+  }
   state = if (is.null(b)) {
     "none"
   } else if ((b$status %||% "") %in% c("undone", "user-edited")) {
     b$status
   } else {
-    doc_block_status(b$header[setdiff(names(b$header), "sha")], character(), prompt_hash,
-                     args_hash)
+    status(b$header)
   }
   can_regen = !identical(site$driver %||% "base", "base")
   regen = function() {
@@ -167,8 +176,9 @@ doc_decide = function(site, prompt_hash, args_hash, mode) {
   switch(state,
     none = {
       if (identical(mode, "replay")) {
-        gptr_abort(c(paste0("The peter() call in ", rel, " has no recorded block and replay mode ",
-                            "is on."), "Run it once with replay = \"auto\" to record it."),
+        gptr_abort(c(paste0("The ", if (isTRUE(site$coach)) "gptr_coach" else "peter",
+                            "() call in ", rel, " has no recorded block and replay mode is on."),
+                     "Run it once with replay = \"auto\" to record it."),
                    "not_recorded", document = site$path,
                    prompt = substr(site$template %||% "", 1L, 60L))
       }
@@ -176,8 +186,7 @@ doc_decide = function(site, prompt_hash, args_hash, mode) {
     },
     undone = switch(mode, auto = , replay = "skip", live = "run", record = "regenerate"),
     `user-edited` = {
-      moved = !identical(doc_block_status(b$header[setdiff(names(b$header), "sha")],
-                                          character(), prompt_hash, args_hash), "fresh")
+      moved = !identical(status(b$header), "fresh")
       if (moved && identical(mode, "replay")) stale_error()
       if (!moved && mode %in% c("auto", "replay")) return("replay")
       if (!can_regen) return(regen())
@@ -194,6 +203,14 @@ doc_decide = function(site, prompt_hash, args_hash, mode) {
     },
     stale = {
       if (identical(mode, "replay")) stale_error()
+      if (isTRUE(site$coach) && identical(mode, "auto")) {
+        if (!can_regen) return(regen())
+        if (gptr_can_prompt()) return("ask")
+        gptr_warn(paste0("Block ", b$id, " of ", rel, " is stale; it was replayed, because no ",
+                         "one can confirm coaching again. Run with replay = \"record\" to coach ",
+                         "again."), "replay_downgraded")
+        return("replay")
+      }
       regen()
     },
     if (identical(mode, "live")) regen() else "replay")
@@ -460,7 +477,8 @@ doc_route_match = function(call) {
     site = doc_console_site(session_id = if (is.null(s)) NULL else session_data(s)$id,
                             template = call$template %||% call$prompt,
                             context_labels = doc_context_labels(call$context),
-                            ask = doc_console_may_record(call))
+                            ask = doc_console_may_record(call),
+                            harness = doc_console_harness(call))
     if (!is.null(site)) assign("top_level", TRUE, envir = call)
   }
   if (is.null(site) || is.null(site$path)) return(FALSE)
@@ -520,6 +538,16 @@ doc_route_run = function(call) {
   if (identical(decision, "regenerate")) site = doc_skip_old(site)
   doc_keep(call, if (decision %in% c("record", "regenerate")) site, mode)
   route_pass()
+}
+
+#' Does an expression name peter() or gptr_coach(), or call a harness bound where it runs (08
+#' section 3.6)?
+#' @noRd
+doc_names_head = function(expr, envir) {
+  nms = all.names(expr)
+  if (any(c("peter", "gptr_coach") %in% nms)) return(TRUE)
+  heads = grep("^[A-Za-z.][A-Za-z0-9._]*$", setdiff(nms, all.vars(expr)), value = TRUE)
+  any(vapply(heads, env_harness_bound, NA, envir = envir))
 }
 
 # ---- services (contract 7.0; owned by builtin:documents, IC-34) --------------------------------
@@ -760,12 +788,342 @@ doc_replay_service = function(call) {
   NULL
 }
 
+# ---- coaching calls and harness definitions (P29; 08 section 3.6) ------------------------------
+
+#' The items of a plain-data value as R code: text through doc_str_literal() (never a raw
+#' string), numbers and logicals as R reads them back, lists through doc_r_code(), each item
+#' `name = ` prefixed where named. NULL when the value holds anything else (a function, an
+#' environment, a value with attributes other than names).
+#' @noRd
+doc_r_items = function(x, depth = 0L) {
+  nms = names(x)
+  if (depth > 32L || length(setdiff(names(attributes(x)), "names")) || anyNA(nms)) return(NULL)
+  if (!length(x)) return(character())
+  items = if (is.list(x)) {
+    lapply(x, doc_r_code, depth = depth + 1L)
+  } else if (is.character(x)) {
+    as.list(doc_str_literal(x))
+  } else if (is.logical(x) || is.numeric(x)) {
+    lapply(unname(x), deparse, control = c("keepInteger", "digits17", "keepNA"))
+  }
+  if (is.null(items) || any(vapply(items, is.null, NA))) return(NULL)
+  items = unlist(items)
+  if (is.null(nms)) return(items)
+  key = ifelse(make.names(nms) == nms, nms, doc_str_literal(nms))
+  ifelse(nzchar(nms), paste0(key, " = ", items), items)
+}
+
+#' A plain-data value as one R expression (`list(...)`, `c(...)` or a literal; doc_r_items()),
+#' or NULL when it is not plain data
+#' @noRd
+doc_r_code = function(x, depth = 0L) {
+  if (is.null(x)) return("NULL")
+  items = doc_r_items(x, depth)
+  if (is.null(items)) return(NULL)
+  if (!is.list(x) && length(x) == 1L && is.null(names(x))) return(items)
+  paste0(if (is.list(x)) "list(" else "c(", paste(items, collapse = ", "), ")")
+}
+
+#' A value with every text redacted with the persist profile
+#' @noRd
+doc_redact_text = function(x) {
+  rapply(list(x), function(s) redact(s, "persist"), classes = "character", how = "replace")[[1L]]
+}
+
+#' The value of a parsed literal (08 section 3.6, replay step 2): NULL, one text, number or
+#' logical, and `list()` or `c()` of literals, named or not. Anything else signals an error;
+#' nothing is evaluated (as doc_unquote() reads strings) and text passes as_utf8().
+#' @noRd
+doc_coach_value = function(e, depth = 0L) {
+  if (is.null(e)) return(NULL)
+  if ((is.character(e) || is.numeric(e) || is.logical(e)) && length(e) == 1L) {
+    return(if (is.character(e)) as_utf8(e) else e)
+  }
+  if (depth > 32L || !is.call(e) || !is.symbol(e[[1L]]) ||
+      !as.character(e[[1L]]) %in% c("list", "c")) {
+    stop("not a literal")
+  }
+  args = as.list(e)[-1L]
+  vals = lapply(args, doc_coach_value, depth = depth + 1L)
+  names(vals) = names(args)
+  if (identical(e[[1L]], as.name("list"))) vals else do.call(c, vals)
+}
+
+#' The parts of an assignment `<name> = <value>` or `<name> <- <value>`: list(name, value), else
+#' NULL
+#' @noRd
+doc_assign_parts = function(e) {
+  ok = is.call(e) && length(e) == 3L && is.symbol(e[[1L]]) &&
+    as.character(e[[1L]]) %in% c("=", paste0("<", "-")) && is.symbol(e[[2L]])
+  if (ok) list(name = as.character(e[[2L]]), value = e[[3L]])
+}
+
+#' A coach block body read without evaluating it (08 section 3.6, replay steps 1 and 2): exactly
+#' one `<name> = gptr_tailor(<start>)` or `<name> = gptr_tailor(<start>, coaching = <literal>)`
+#' gives list(name, start, coaching), anything else NULL
+#' @noRd
+doc_coach_walk = function(body) {
+  tryCatch({
+    ex = doc_parse_text(body, keep_source = FALSE)
+    a = if (length(ex) == 1L) doc_assign_parts(ex[[1L]])
+    rhs = a$value
+    nms = names(rhs) %||% rep("", length(rhs))
+    ok = is.call(rhs) && identical(rhs[[1L]], as.name("gptr_tailor")) &&
+      length(rhs) %in% 2:3 && is.symbol(rhs[[2L]]) && nzchar(as.character(rhs[[2L]])) &&
+      !nzchar(nms[2L]) && (length(rhs) == 2L || identical(nms[3L], "coaching"))
+    if (!ok) NULL else list(name = a$name, start = as.character(rhs[[2L]]),
+                            coaching = if (length(rhs) == 3L) doc_coach_value(rhs[[3L]]))
+  }, error = function(e) NULL)
+}
+
+#' The coaching normalised by T6's coaching_validate() (R/gptr-tailor.R, found at call time),
+#' else checked for its four parts; an error of class `coaching` when it is invalid
+#' @noRd
+doc_coach_valid = function(coaching) {
+  validate = ns_fun("coaching_validate")
+  if (is.function(validate)) return(validate(coaching))
+  if (!is.list(coaching) || !all(names(coaching) %in% c("note", "skills", "review", "rules"))) {
+    gptr_abort("The coaching is not a list of note, skills, review and rules.", "coaching")
+  }
+  coaching
+}
+
+#' The coaching hash of T6's coaching_hash() (R/gptr-tailor.R, found at call time)
+#' @noRd
+doc_coach_hash = function(coaching) ns_fun("coaching_hash")(coaching)
+
+#' The assignment that rebuilds a harness from its starting harness `start` and `coaching` (NULL:
+#' the starting harness's own), every text written by doc_str_literal() and redacted with the
+#' persist profile; NULL with a notice unless the text parses back to exactly that assignment and,
+#' with coaching, to the coaching hash `hash` (08 section 3.6, safe writing)
+#' @noRd
+doc_coaching_code = function(name, start, coaching, hash) {
+  head = paste0(deparse(as.name(name), backtick = TRUE), " = gptr_tailor(",
+                deparse(as.name(start), backtick = TRUE))
+  items = if (!is.null(coaching)) doc_r_items(doc_redact_text(coaching))
+  code = if (is.null(coaching)) {
+    paste0(head, ")")
+  } else if (length(items)) {
+    c(paste0(head, ", coaching = list("),
+      paste0("  ", items, c(rep(",", length(items) - 1L), "))")))
+  }
+  w = if (!is.null(code)) doc_coach_walk(code)
+  back = if (!is.null(w$coaching)) {
+    tryCatch(doc_coach_hash(doc_coach_valid(w$coaching)), error = function(e) NA_character_)
+  }
+  if (!is.null(w) && identical(w$name, name) && identical(w$start, start) &&
+      (is.null(coaching) || identical(back, hash))) {
+    return(code)
+  }
+  gptr_inform(paste0("gptr did not record the coaching of ", name, ": its text does not read ",
+                     "back as the same coaching."), "notice")
+  NULL
+}
+
+#' The starting harness a coaching call names: "peter" when `harness` is missing, the name it
+#' gives, else NULL (such a call is not recorded, 08 section 3.6)
+#' @noRd
+doc_coach_start = function(call0) {
+  args = as.list(call0)[-1L]
+  k = match("harness", names(args) %||% character())
+  if (is.na(k)) return("peter")
+  h = args[[k]]
+  if (is.symbol(h) && nzchar(as.character(h))) as.character(h)
+}
+
+#' The name a coaching call's statement assigns, when the statement is exactly `<name> =
+#' gptr_coach(...)` or `<name> <- gptr_coach(...)` for this call (08 section 3.6); else NULL
+#' @noRd
+doc_coach_target = function(site, call) {
+  text = doc_read(site$path)$lines
+  loc = doc_format_get(site$format)$locate(text, site)
+  hit = loc$hit
+  if (is.null(hit) || !isTRUE(loc$top_level)) return(NULL)
+  if (identical(site$format, "ipynb")) {
+    text = nb_cell_lines(nb_parse(text)[["cells"]][[loc$stmt[1L]]])
+  }
+  ex = tryCatch(doc_parse_text(text[hit$stmt1:hit$stmt2], keep_source = FALSE),
+                error = function(e) NULL)
+  a = if (length(ex) == 1L) doc_assign_parts(ex[[1L]])
+  if (!is.null(a) && identical(doc_call_norm(a$value), doc_call_norm(call$sys_call))) a$name
+}
+
+#' The harness a coach block defines (08 section 3.6, replay), with no model, key or process: its
+#' body read by doc_coach_walk(), the coaching validated, and the starting harness it names found
+#' as R finds it from the caller's frame. A body that is not literal coaching gives the call's
+#' starting harness with a notice; the body's own code then defines the result when it runs, as
+#' all recorded code does.
+#' @noRd
+doc_coach_replay = function(site, call) {
+  id = site$block$id
+  w = doc_coach_walk(doc_block_get(site$format, doc_read(site$path)$lines, id)$body)
+  coaching = tryCatch(if (!is.null(w$coaching)) doc_coach_valid(w$coaching),
+                      gptr_error = function(e) e)
+  doc_source_log(site$path, id, "replayed")
+  if (is.null(w) || inherits(coaching, "error")) {
+    gptr_inform(paste0("Block ", id, " of ", doc_rel(site$path), " is not literal coaching: ",
+                       "gptr_coach() returned the starting harness, and the block's code defines ",
+                       "the result."), "notice")
+    return(get(sub(":[^:]*$", "", site$harness), envir = call$envir, mode = "function"))
+  }
+  start = get(w$start, envir = call$envir, mode = "function")
+  tailor = ns_fun("gptr_tailor")
+  if (is.null(coaching)) tailor(start) else tailor(start, coaching = coaching)
+}
+
+#' doc.coach (P29 interface 10; 08 section 3.6): the document decision for a coaching call, which
+#' gptr_coach() asks before anything else. `call` is a call record built as the gateway builds
+#' peter()'s (call_new()): `prompt`, `template` (the literal as written, NULL when computed),
+#' `interp`, `context`, `sys_call` and `nframe` (gptr_coach()'s own sys.call() and sys.nframe()),
+#' `envir` (the caller's frame, where the starting harness is found), `args` with `replay` and
+#' `opts` (`.opts`, of which `record` is read), and `start_hash`, the coaching hash of the
+#' starting harness. Returns list(action, site, harness, reason) with action:
+#' - "replay": a fresh block; `harness` is the harness it builds;
+#' - "ask": a stale block under auto while a person can answer: coach again (then record at
+#'   `site`) only after a yes, else return `harness`, the block's;
+#' - "record": coach, then pass `site` to doc.coach_block;
+#' - "none": coach without recording, `reason` says why (a statement of another shape, once).
+#' Under replay, a recordable call without a fresh block signals not_recorded or stale_block.
+#' @noRd
+doc_coach_service = function(call) {
+  out = function(action, site = NULL, harness = NULL, reason = NULL) {
+    list(action = action, site = site, harness = harness, reason = reason)
+  }
+  if (!is.null(run_current())) return(out("none", reason = "a call from model code"))
+  mode = replay_mode(call$args$replay)
+  start = doc_coach_start(doc_call_norm(call$sys_call))
+  call$start = paste0(start %||% "", ":", call$start_hash %||% "")
+  site = tryCatch(doc_locate(call), error = function(e) NULL)
+  if (is.null(site$path)) return(out("none", reason = "a call in no document"))
+  if (isTRUE(site$console)) {
+    if (!doc_console_may_record(call) || !doc_consent_possible(site$path)) {
+      return(out("none", reason = "a console call that is not recorded"))
+    }
+    return(out("record", site))
+  }
+  top = function(s) isTRUE(s$top_level) && !is.null(s$stmt)
+  if (!top(site)) return(out("none", reason = "a call nested in other code"))
+  site = doc_touch(call, site, "doc.coach", top)
+  site$name = doc_coach_target(site, call)
+  if (is.null(site$name) || is.null(start)) {
+    why = paste0("a coaching call is recorded only as `<name> = gptr_coach(...)`, with `harness` ",
+                 "missing or a name")
+    gptr_inform(paste0("gptr did not record a gptr_coach() call in ", doc_rel(site$path), ": ",
+                       why, "."), "notice", .once = paste0("doc_coach_shape:", path_key(site$path)))
+    return(out("none", reason = why))
+  }
+  decision = doc_decide(site, site$prompt_hash, site$args_hash, mode)
+  if (decision %in% c("replay", "ask")) {
+    if (identical(decision, "ask")) site = doc_skip_old(site)
+    return(out(decision, site, doc_coach_replay(site, call)))
+  }
+  if (identical(decision, "skip")) return(out("none", reason = "an undone block"))
+  if (identical(decision, "regenerate")) site = doc_skip_old(site)
+  doc_keep(call, site, mode)
+  if (is.null(call$doc)) out("none", reason = "no write consent") else out("record", call$doc)
+}
+
+#' doc.coach_block (P29 interface 10; 08 section 3.6): record the result `harness` of a coaching
+#' call at doc.coach's `site` and return the harness the recorded text defines (the one given,
+#' unless a process-wide `document_write` hook patched the block). `record` holds what the block
+#' shows besides the coaching: `model` and `coach` (the run and coach models), `tokens` (input and
+#' output), `cost`, `runs` (one line per run, as gptr_coach() prints them) and `decision` (one
+#' line). A document gets a block of kind `coach` (no session, so no S2 answer) whose body is the
+#' one assignment of doc_coaching_code(), then `## Run` lines and a `## Decision:` line; a console
+#' transcript gets the harness's definition (doc_harness_def()).
+#' @noRd
+doc_coach_block_service = function(site, harness, record) {
+  spec = attr(harness, "gptr_harness", exact = TRUE)
+  if (isTRUE(site$console)) {
+    def = doc_harness_def(spec)
+    if (!is.null(def)) doc_transcript_define(site$path, def)
+    return(harness)
+  }
+  hash = doc_coach_hash(spec$coaching)
+  start = sub(":[^:]*$", "", site$harness)
+  kept = !identical(hash, doc_coaching_of(site$harness))
+  code = doc_coaching_code(site$name, start, if (kept) spec$coaching, hash)
+  if (is.null(code)) return(harness)
+  runs = vapply(as.character(record$runs), doc_one_line, "", USE.NAMES = FALSE)
+  body = c(code, redact(c(paste0("## Run ", runs),
+                          paste0("## Decision: ", doc_one_line(record$decision))), "persist"))
+  header = doc_header_common(site, 1L, record$model)
+  tokens = record$tokens
+  if (is.numeric(tokens) && length(tokens) == 2L && !anyNA(tokens)) {
+    header$tokens = sprintf("%.0f/%.0f", tokens[1L], tokens[2L])
+  }
+  if (is.numeric(record$cost) && length(record$cost) == 1L && !is.na(record$cost)) {
+    header$cost = format(round(record$cost, 4L), scientific = FALSE)
+  }
+  header = c(header, list(kind = "coach", harness = paste0(site$name, ":", hash),
+                          start = site$harness, coach = record$coach,
+                          gptr = as.character(utils::packageVersion("gptr"))))
+  res = doc_upsert(site, structure(body, header = header))
+  if (is.null(res$sha) || identical(res$sha, doc_body_sha(body))) return(harness)
+  queued = doc_state()$docs[[path_key(site$path)]]$upserts
+  ids = vapply(queued, function(u) u$block_id, "")
+  written = if (res$block_id %in% ids) {
+    as.character(queued[[match(res$block_id, ids)]]$lines)
+  } else {
+    doc_block_get(site$format, doc_read(site$path)$lines, res$block_id)$body
+  }
+  w = doc_coach_walk(written)
+  if (is.null(w$coaching)) return(harness)
+  ns_fun("gptr_tailor")(harness, coaching = doc_coach_valid(w$coaching))
+}
+
+#' The definition a console transcript gives a harness the first time it is coached or called (08
+#' section 3.6): `h_<id> = gptr_tailor(peter, <fixed arguments>, coaching = list(...))` through
+#' doc_r_code(), its text redacted with the persist profile; fixed arguments that are not plain
+#' data (functions) are named by a flag line instead. list(head, define), NULL when the coaching
+#' is not plain data.
+#' @noRd
+doc_harness_def = function(spec) {
+  head = paste0("h_", gsub("[^0-9A-Za-z]", "", spec$id %||% ""))
+  args = lapply(as.list(spec$args), doc_redact_text)
+  plain = !vapply(args, function(a) is.null(doc_r_code(a)), NA)
+  coaching = if (!is.null(spec$coaching)) doc_r_code(doc_redact_text(spec$coaching))
+  if (!is.null(spec$coaching) && is.null(coaching)) return(NULL)
+  flag = if (!all(plain)) {
+    paste0("# gptr: ", head, " needs fixed arguments that are not recorded: ",
+           paste(names(args)[!plain], collapse = ", "))
+  }
+  items = c("peter", doc_r_items(args[plain]), if (!is.null(coaching)) {
+    paste0("coaching = ", coaching)
+  })
+  list(head = head, define = c(flag, paste0(head, " = gptr_tailor(",
+                                            paste(items, collapse = ", "), ")")))
+}
+
+#' The definition of the harness a call ran (its `gptr_harness` attribute's name, looked up where
+#' the call was made) for a console transcript, with the `harness=` its blocks carry (`key`, under
+#' the definition's name); NULL for a peter() call
+#' @noRd
+doc_console_harness = function(call) {
+  h = doc_harness_attr(call)
+  if (is.null(h) || !is.environment(call$envir)) return(NULL)
+  f = tryCatch(get0(h$fn, envir = call$envir, mode = "function"), error = function(e) NULL)
+  def = if (inherits(f, "gptr_harness")) doc_harness_def(attr(f, "gptr_harness", exact = TRUE))
+  if (!is.null(def)) def$key = paste0(def$head, ":", h$hash)
+  def
+}
+
+#' Append a harness's definition `def` (doc_harness_def()) to a console transcript, once: not
+#' when the transcript already defines its `h_<id>`
+#' @noRd
+doc_transcript_define = function(path, def, session = NULL) {
+  text = tryCatch(doc_read(path)$lines, error = function(e) character())
+  if (any(startsWith(text, paste0(def$head, " = ")))) return(invisible(FALSE))
+  doc_transcript_append(path, c("", def$define), session)
+}
+
 # ---- hooks --------------------------------------------------------------------------------------
 
 #' agent_end: write the block of a settled top-level run whose run options carry a document site
 #' (contract 7.15). A script document records only runs that ended `idle`; a console transcript,
 #' the history of what happened, records every settled run, one that did not end `idle` with a
-#' last `## Run: <status>` line and no cached answer (IC-49)
+#' last `## Run: <status>` line and no cached answer (IC-49), after the definition of the harness
+#' a harness call ran, the first time (08 section 3.6)
 #' @noRd
 doc_on_agent_end = function(event, ctx) {
   site = event$doc
@@ -782,6 +1140,7 @@ doc_on_agent_end = function(event, ctx) {
     site$session_file = if (kept) doc_rel(d$file)
   }
   turn = if (d$kind %in% c("team", "fanout")) 1L else as.integer(event$turns %||% d$turns)
+  if (!is.null(site$define)) doc_transcript_define(site$path, site, s)
   lines = doc_block_lines(s, turn, site, site$ordinal %||% 1L)
   if (!identical(status, "idle")) {
     lines[length(lines) + 1L] = paste0("## Run: ", status)
@@ -1106,7 +1465,9 @@ doc_blocks_frame = function(rows) {
 #' format's own locator gives it (contract 11.5: the block of its run whose `prompt=` matches,
 #' else the one with its `call=` ordinal), so every step of a pipeline owns its own block; a block
 #' no call owns is stale. A computed prompt cannot be checked without running the call, so its
-#' block reads stale, and the args of a header are taken as they are.
+#' block reads stale, and the args and coaching hashes of a header are taken as they are (a
+#' harness is an object of the session); a gptr_coach() call owns a coach block, any other call
+#' another block.
 #' @noRd
 doc_blocks_text = function(text, fmt) {
   blocks = doc_find_blocks(text)
@@ -1126,7 +1487,9 @@ doc_blocks_text = function(text, fmt) {
     h = b$header[[1L]]
     k = owner[i]
     ph = if (is.na(k)) "" else calls$ph[k]
-    status = doc_block_status(h, doc_block_body(text, b), ph, h[["args"]])
+    coach = !is.na(k) && identical(calls$head[k], "gptr_coach")
+    status = doc_block_status(h, doc_block_body(text, b), ph, h[["args"]],
+                              h[[if (coach) "start" else "harness"]], coach)
     doc_block_row(b$id, paste0(b$start, "-", b$end),
                   if (is.na(k)) NA_character_ else calls$prompt[k], status, h)
   })
@@ -1134,7 +1497,9 @@ doc_blocks_text = function(text, fmt) {
 
 #' Rows of gptr_blocks() for a notebook: the top-level calls of a calling cell own the run of
 #' agent cells right after it one to one, as the ipynb format's locator assigns them
-#' (doc_owner()); an agent cell no call owns is stale
+#' (doc_owner()); an agent cell no call owns is stale. The harness calls counted are those
+#' named in the `harness` metadata of the agent cells, and statuses are read as
+#' doc_blocks_text() reads them.
 #' @noRd
 doc_blocks_ipynb = function(text) {
   nb = nb_parse(text)
@@ -1144,10 +1509,15 @@ doc_blocks_ipynb = function(text) {
   owned = rep(FALSE, length(cells))
   prompt = rep(NA_character_, length(cells))
   ph = rep("", length(cells))
+  coach = rep(FALSE, length(cells))
+  declared = vapply(cells[agent], function(cell) {
+    h = nb_cell_meta(cell)[["harness"]]
+    if (rlang::is_string(h)) sub(":[^:]*$", "", h) else ""
+  }, "", USE.NAMES = FALSE)
   for (i in seq_along(cells)) {
     run = nb_agent_run(agent, i)
     if (agent[i] || !identical(cells[[i]][["cell_type"]], "code") || !length(run)) next
-    calls = doc_calls(nb_cell_lines(cells[[i]]))
+    calls = doc_calls(nb_cell_lines(cells[[i]]), heads = declared)
     top = calls[is.na(calls$block) & !calls$nested, , drop = FALSE]
     metas = lapply(cells[run], nb_cell_meta)
     for (j in seq_len(nrow(top))) {
@@ -1157,11 +1527,13 @@ doc_blocks_ipynb = function(text) {
       owned[at] = TRUE
       prompt[at] = top$prompt[j]
       ph[at] = top$ph[j]
+      coach[at] = identical(top$head[j], "gptr_coach")
     }
   }
   lapply(which(agent), function(i) {
     meta = nb_cell_meta(cells[[i]])
-    status = doc_block_status(meta, nb_cell_lines(cells[[i]]), ph[i], meta[["args"]])
+    status = doc_block_status(meta, nb_cell_lines(cells[[i]]), ph[i], meta[["args"]],
+                              meta[[if (coach[i]) "start" else "harness"]], coach[i])
     doc_block_row(sub("^gptr-", "", ids[i]), paste0("cell ", i), prompt[i], status, meta)
   })
 }
@@ -1344,8 +1716,9 @@ doc_catalog_prune = function() {
 #' Source a history document, regenerating stale blocks without running the old code
 #'
 #' Evaluates `file` top-level expression by expression in `envir`, like [source()]. An expression
-#' that names `peter()` keeps its source references, which locate the call; the others run without
-#' them, so the functions and calls they make hold no part of the document, as at the console. A
+#' that names `peter()` or `gptr_coach()`, or calls a harness bound in `envir`, keeps its source
+#' references, which locate the call; the others run without them, so the functions and calls
+#' they make hold no part of the document, as at the console. A
 #' `peter()` call whose block is fresh replays without calling a model and the block's code then
 #' runs as ordinary R. A call whose block is stale (its prompt or the values interpolated into it
 #' changed), or every call under `replay = "live"` (an undone block runs without being rewritten;
@@ -1393,8 +1766,9 @@ gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = 
   # string literal (a prompt included) into "<U+00E9>" text (IC-62)
   exprs = parse(text = doc$lines, keep.source = TRUE, srcfile = srcfile, encoding = "UTF-8")
   srcs = attr(exprs, "srcref")
-  # srcrefs only locate peter() calls (contract 7.15): the other expressions run from `bare`, so a
-  # closure or a call captured with sys.call() holds no part of the document
+  # srcrefs only locate peter(), gptr_coach() and harness calls (contract 7.15): the other
+  # expressions run from `bare`, so a closure or a call captured with sys.call() holds no part of
+  # the document
   bare = parse(text = doc$lines, keep.source = FALSE, encoding = "UTF-8")
   blocks = doc_find_blocks(doc$lines)
   # The block of each expression, by its parsed lines (srcref fields 7 and 8, as the locator's
@@ -1417,7 +1791,7 @@ gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = 
   for (i in seq_along(exprs)) {
     if (!is.na(owner[i]) && owner[i] %in% st$sources[[depth]]$skip) next
     if (echo) msg_verbatim(paste0("> ", as.character(srcs[[i]])))
-    eval(if ("peter" %in% all.names(bare[[i]])) exprs[i] else bare[i], envir)
+    eval(if (doc_names_head(bare[[i]], envir)) exprs[i] else bare[i], envir)
   }
   acts = st$sources[[depth]]$log
   # A stale block whose call ran live but was not rewritten (no write consent, a locked or

@@ -2339,3 +2339,10 @@ test_that("sidecar call AST limits precede normalization and writer deparsing", 
   expect_silent(doc_sidecar_write(rec))
   expect_identical(doc_sidecar_read(f)$upserts[[1]]$site$anchor$call0, expected)
 })
+
+test_that("the sidecar codec accepts any bare-name call identity and never evaluates it", {
+  expect_identical(doc_sidecar_call("survey_peter(\"Clean\", x)"), quote(survey_peter("Clean", x)))
+  expect_null(doc_sidecar_call("f()(\"Clean\")"))
+  expect_null(doc_sidecar_call("if (TRUE) survey_peter(\"Clean\")"))
+  expect_null(doc_sidecar_call("pkg::survey_peter(\"Clean\")"))
+})

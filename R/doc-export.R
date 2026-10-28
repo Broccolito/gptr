@@ -7,12 +7,13 @@ doc_export_refuse = function(reason) {
 }
 
 #' Count a literal Peter-only chain after R's native pipe rewrite, which may start from one of the
-#' session `handles` (a console transcript's later turns); no argument is evaluated.
+#' session `handles` (a console transcript's later turns); a call of one of `heads` (doc_heads():
+#' harnesses too) counts as Peter's. No argument is evaluated.
 #' @noRd
-doc_export_chain = function(expr, handles = character(), depth = 0L) {
+doc_export_chain = function(expr, handles = character(), depth = 0L, heads = "peter") {
   if (!is.call(expr) || depth > doc_sidecar_bounds()$depth) return(0L)
   head = expr[[1L]]
-  named = identical(head, as.name("peter")) ||
+  named = (is.symbol(head) && as.character(head) %in% heads) ||
     identical(doc_call_norm(head), quote(gptr::peter))
   if (!named) return(0L)
   args = as.list(expr)[-1L]
@@ -20,7 +21,7 @@ doc_export_chain = function(expr, handles = character(), depth = 0L) {
   for (i in seq_along(args)) {
     if (is.symbol(args[[i]]) && !nzchar(as.character(args[[i]]))) return(0L)
   }
-  inner = if (is.call(args[[1L]])) doc_export_chain(args[[1L]], handles, depth + 1L) else 0L
+  inner = if (is.call(args[[1L]])) doc_export_chain(args[[1L]], handles, depth + 1L, heads) else 0L
   handle = is.symbol(args[[1L]]) && as.character(args[[1L]]) %in% handles
   rest = if (inner || handle) args[-1L] else args
   literal = vapply(rest, function(x) {
@@ -112,12 +113,16 @@ doc_export_bind = function(expr, path) {
 doc_export_lines = function(lines, format, path, target) {
   blocks = doc_find_blocks(lines)
   if (isTRUE(attr(blocks, "malformed"))) doc_export_refuse("malformed record markers")
+  if (any(vapply(blocks$header, function(h) identical(h[["kind"]], "coach"), NA))) {
+    doc_export_refuse("a coach block has no session turn to export")
+  }
+  heads = doc_heads(lines)
   if (nrow(blocks) > doc_sidecar_bounds()$upserts) doc_export_refuse("too many records")
   parsed = tryCatch(doc_parse_text(lines), error = function(e) NULL)
   if (is.null(parsed)) doc_export_refuse("invalid R source")
   refs = attr(parsed, "srcref")
   tokens = utils::getParseData(parsed)
-  calls = doc_scan_parse(lines, 0L)
+  calls = doc_scan_parse(lines, 0L, heads)
   calls$block = vapply(calls$line1, function(line) {
     i = which(line > blocks$start & line < blocks$end)
     if (length(i)) blocks$id[i[1L]] else NA_character_
@@ -144,7 +149,8 @@ doc_export_lines = function(lines, format, path, target) {
       binding = as.character(expr[[2L]])
       expr = expr[[3L]]
     }
-    if (!identical(doc_export_chain(expr, unlist(bound)), as.integer(length(rows)))) {
+    if (!identical(doc_export_chain(expr, unlist(bound), heads = heads),
+                   as.integer(length(rows)))) {
       doc_export_refuse("mixed or non-literal Peter expressions")
     }
     overlap = vapply(refs, function(r) r[1L] <= sr[3L] && r[3L] >= sr[1L], NA)
@@ -184,7 +190,7 @@ doc_export_lines = function(lines, format, path, target) {
       if (!is.null(h[["args"]])) doc_export_refuse("interpolated inputs need review")
       if (any(grepl(doc_secret_flag, body, fixed = TRUE))) doc_export_refuse("secret-marked record")
       code = tryCatch(doc_parse_text(body, keep_source = FALSE), error = function(e) NULL)
-      if (is.null(code) || any(all.names(code) %in% c("peter", "gptr_return"))) {
+      if (is.null(code) || any(all.names(code) %in% c(heads, "gptr_return"))) {
         doc_export_refuse("unresolved control calls in recorded code")
       }
       indent = if (separate) {
@@ -242,7 +248,7 @@ doc_export_lines = function(lines, format, path, target) {
       edits[[length(edits) + 1L]] = list(start = sr[1L], end = sr[3L], lines = stmt)
       next
     }
-    if ("peter" %in% all.names(expr)) doc_export_refuse("unresolved Peter references")
+    if (any(heads %in% all.names(expr))) doc_export_refuse("unresolved Peter references")
     set = NULL
     if (is.call(expr) && as.character(expr[[1L]])[1L] %in% c("=", "<-") && length(expr) == 3L &&
         is.symbol(expr[[2L]])) {

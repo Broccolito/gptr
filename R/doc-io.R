@@ -628,8 +628,9 @@ doc_sidecar_meta_ok = function(meta) {
   all(vapply(meta[intersect(c("call", "turn"), names(meta))], ordinal, NA))
 }
 
-#' Decode one call identity, never evaluate it: one peter() call, bare or gptr-qualified.
-#' Nested calls and computed arguments are kept for notebook identity matching.
+#' Decode one call identity, never evaluate it: one call whose head is a syntactic name (peter()
+#' or a harness, 08 section 3.6) or gptr-qualified peter(). Nested calls and computed arguments
+#' are kept for notebook identity matching.
 #' @noRd
 doc_sidecar_call = function(text) {
   if (!rlang::is_string(text) ||
@@ -642,7 +643,8 @@ doc_sidecar_call = function(text) {
   qualified = is.call(head) && length(head) == 3L &&
     (identical(head[[1L]], as.name("::")) || identical(head[[1L]], as.name(":::"))) &&
     identical(head[[2L]], as.name("gptr")) && identical(head[[3L]], as.name("peter"))
-  if (identical(head, as.name("peter")) || isTRUE(qualified)) call else NULL
+  named = is.symbol(head) && identical(make.names(as.character(head)), as.character(head))
+  if (named || isTRUE(qualified)) call else NULL
 }
 
 #' The versioned JSON data of an in-memory record. Runtime sites are narrowed to recovery
