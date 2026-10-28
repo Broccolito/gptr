@@ -5150,8 +5150,9 @@ calls and suggests `GPTR_REPLAY=replay`.
   or the evaluation environment binds it to data (D-252). The gate's `mode` policy runs the same guard on the
   call's code in its evaluation environment (`ctx$envir`) and denies what it refuses in every mode, so no
   person is asked to approve it (D-269). The guard reads `eval(quote(x))` (also `rlang::eval_bare()`,
-  `rlang::eval_tidy()` and `base::quote()`) as `x`, as the classifier does, so `eval(quote(q()))` is refused as
-  `q()` is (review round 6).
+  `rlang::eval_tidy()` and `base::quote()`) as `x`, as the classifier does, so `eval(quote(q()))` is refused as `q()`
+  is, and `do.call()` of a `list()` or `c()` written out and `rlang::exec()` of a function written out as the call they
+  make, so `do.call(eval, list(quote(q())))` is too (review round 6).
 - No shipped prompt text or skill recommends `str()` (it leaves a sticky reference: every `str()` of a large
   object makes the next edit copy; re-verified); the texts recommend `peter$describe(x)`, `dim()`, `head()`. A P07
   test fails when any shipped section or skill mentions `str(`; the high-performance-r skill states the cost.

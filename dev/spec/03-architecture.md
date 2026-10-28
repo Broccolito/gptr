@@ -1476,11 +1476,12 @@ reads (its `auth` names and `compat$base_url_env`, so `AWS_REGION` for Bedrock, 
 the names the `cli-claude` and `cli-codex` child environments keep, such as `CODEX_HOME`), `GPTR_*`, `*_BASE_URL`,
 R's startup variables or a variable that moves the user config directory or the home
 (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in any letter case, those four R functions
-with a name the classifier cannot read (also the names `lapply()`, `Map()` or `do.call()` pass to one handed to them;
-`do.call()` of a `list()` or `c()` of base R written out and `rlang::exec()`, of a function written out the code does
-not bind, are read as the call they make), a Python write whose name (a subscript, the first argument of `putenv()`,
-`unsetenv()`, `pop()`) is not a plain string literal (Python code is read as Python joins a line ending in a backslash
-and a parenthesised `os.environ`), `readRenviron()` and `dotenv::load_dot_env()` [D-272]; writes
+with a name the classifier cannot read (also the names passed to one handed to `lapply()`, `Map()`, `do.call()` or
+another function the classifier knows calls it, such as `sapply()` or `purrr::map()`; `do.call()` of a `list()` or `c()`
+of base R written out and `rlang::exec()`, of a function written out the code does not bind, are read as the call they
+make), a Python write whose name (a subscript, the first argument of `putenv()`, `unsetenv()`, `pop()`) is not a plain
+string literal (Python code is read as Python joins a line ending in a backslash outside a comment and a parenthesised
+`os.environ`), `readRenviron()` and `dotenv::load_dot_env()` [D-272]; writes
 to control-plane paths (`.gptr/settings*.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `agents/`, the
 user config directory, `.Rprofile`, `Makevars`, git hooks) are level 4 and to instruction files (`AGENTS.md`,
 `CLAUDE.md`, `vignette.Rmd`, skills, prompts) level 3 [IC-54]; `peter$sh/script/bg` by the command classifier;
@@ -1540,12 +1541,14 @@ sh does. Since a relative path would then name a file outside the project, `setw
 `withr::with_dir()` and `xfun::in_dir()` to a directory outside the project and `tempdir()`, or to one the code
 computes (`here::here()`, whose root is the here package's, is one), are a level-4 `session` row, which the critical
 guard asks about in auto and yolo, and so is `chdir()` in Python code (`os.chdir()`, `os.fchdir()`,
-`contextlib.chdir()`, which move R's working directory too through 'reticulate': a plain string literal placed in
-the project or `tempdir()` is level 2); a link `file.symlink()`, `file.link()`, `Sys.junction()` or
-`fs::link_create()` makes to a path outside the project is a level-4 `file_delete` row, as `ln`'s source is.
-`eval()`, `rlang::eval_bare()` and `rlang::eval_tidy()` of `quote(x)` read `x`, as `evalq(x)` does, and so does
-the evaluator's guard (below); `do.call()` and `rlang::exec()` of a function and arguments written out read the call
-they make. Not
+`contextlib.chdir()`, which move R's working directory too through 'reticulate': a plain string literal placed in the
+project or `tempdir()` is level 2; a relative one is placed in each directory R may be in, which an `os.chdir()` of a
+literal sets when it is a statement of its own on a line with no indentation, no `:` and no bracket left open, in code
+with no triple-quoted string, and any other `chdir()` adds to); a link `file.symlink()`, `file.link()`, `Sys.junction()`
+or `fs::link_create()` makes to a path outside the project is a level-4 `file_delete` row, as `ln`'s source is.
+`eval()`, `rlang::eval_bare()` and `rlang::eval_tidy()` of `quote(x)` read `x`, as `evalq(x)` does, and so does the
+evaluator's guard (below); `do.call()` and `rlang::exec()` of a function and arguments written out read the call they
+make, in the classifier and in the guard. Not
 followed: the working directory changed in other ways (`usethis::local_project()`, `get("setwd")`, the `wd` of
 `callr::r()`, `env` given `-C` among other short options or as an abbreviated `--chdir`: `env -iC DIR`,
 `env --chd=DIR`), the code another interpreter runs (`Rscript -e`, `perl -e`, `pwsh -CommandWithArgs` or `-cwa`),
@@ -1554,10 +1557,11 @@ the command of `processx::process$new()`, a path the shell computes (`rm "$f"`, 
 needs a tokenizer of its own), all level 3.
 
 In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never runs,
-such as `q()`, `readline()` (also as `eval(quote(q()))`), a read of standard input or a secret marker, with the guard's
-text less its leading "Not run: " and its "Nothing was evaluated." as its reason (the console's row says "not run" and
-the denial ends "Nothing in this call ran.", D-267), so no person is asked to approve code that cannot run; the guard
-stays the evaluator's backstop [D-269].
+such as `q()`, `readline()` (also as `eval(quote(q()))`, `do.call(eval, list(quote(q())))` or
+`rlang::exec(eval, quote(q()))`), a read of standard input or a secret marker, with the guard's text less its leading
+"Not run: " and its "Nothing was evaluated." as its reason (the console's row says "not run" and the denial ends
+"Nothing in this call ran.", D-267), so no person is asked to approve code that cannot run; the guard stays the
+evaluator's backstop [D-269].
 
 `yolo` [IC-78] is the loosest mode (plan < manual < edits < auto < yolo): only the person selects it (`peter(mode =)`,
 `/mode`, user or session settings, `options(gptr.mode)` outside a run); no project file sets it [D-250], nested
