@@ -2266,9 +2266,9 @@ risk_path_exprs = function(a, arg) {
 
 # The base functions the classifier reads as base's: the helpers risk_fold() folds, and c() and
 # list() holding the variables of withr's setters.
-risk_base_helpers = c("stdout", "stderr", "tempdir", "tempfile", "path.expand", "normalizePath",
-                      "file", "gzfile", "bzfile", "xzfile", "c", "file.path", "paste0", "paste",
-                      "list")
+risk_base_helpers = c("stdout", "stderr", "getwd", "setwd", "tempdir", "tempfile", "path.expand",
+                      "normalizePath", "file", "gzfile", "bzfile", "xzfile", "c", "file.path",
+                      "paste0", "paste", "list")
 
 #' A path expression built from literals and the names in `known` (each name's folded values,
 #' NA for one the code computes), folded; NULL when the code computes it, a call of a helper in
