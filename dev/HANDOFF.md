@@ -117,8 +117,10 @@ decisions D-255, D-257, D-258, D-261 and D-262..D-269 and the D-254 amendment ar
 - FIX-36 (#PR): `Sys.setenv()` and `Sys.unsetenv()` of `R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`,
   `APPDATA`, `HOME` or `USERPROFILE`, and a Python `os.environ` write of one, are level 4
   `control`, so in auto too a person is asked before model code moves gptr's config folder or the
-  home, and with them the control paths (D-272); `withr::local_envvar()`, `withr::with_envvar()`
-  and a name the code computes are not covered, for any control variable.
+  home, and with them the control paths (D-272); review round 1: in any letter case, also a name
+  the classifier cannot read (`do.call(Sys.setenv, ...)`), `readRenviron()` and
+  `dotenv::load_dot_env()`; `withr::local_envvar()`, `withr::with_envvar()`, a Python name the
+  code computes, Python run through 'reticulate' and a computed function name are not covered.
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped

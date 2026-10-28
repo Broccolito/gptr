@@ -7606,8 +7606,9 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   control: a write into them is the `outside` path class, level 3, which auto runs, so moving them
   gives model code nothing it lacks (it can write the process-tree markers in `procs/`, the
   pending document sidecars and the refreshed model catalog where they are), and gptr keeps
-  nothing in the data folder. `tests/testthat/setup.R` and `dev/ci/isolated-check.R` isolate these
-  same variables.
+  nothing in the data folder. `tests/testthat/setup.R` and `dev/ci/isolated-check.R` isolate the
+  five with the cache and data folders' `R_USER_*_DIR` and `LOCALAPPDATA`, and isolated-check.R
+  also `XDG_CACHE_HOME` and `XDG_DATA_HOME` (review round 1 corrected "these same variables").
 - Red (`9f44506a`, the tests on `0aa55320`'s code): `^perm-(gate|classify)$` FAIL 55 PASS 1180 in
   UTF-8 and under `LC_ALL=C LANG=C`, `NOT_CRAN=true`, SIGINT at its default. test-perm-classify.R
   "a variable that moves gptr's config folder or the home is control (FIX-36)" fails 40 times: the
@@ -7659,3 +7660,62 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   literal and upper-case word of code that writes the environment, so
   `os.environ["MPLCONFIGDIR"] = os.path.join(os.environ["HOME"], ".mpl")` now asks: an accepted
   false question, as for a provider key.
+- Review round 1 (the verifier on `1ee9f87e`, findings 1 to 5): commits `1bbf7538` (tests),
+  `c4947c9c` (fix), `9c127ed0` (docs) and this record, each test red on `1ee9f87e`'s code first,
+  `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`. The verifier ran each way to change a
+  variable through the classifier, the gate in every mode and a `peter()` run whose person answers
+  no: in auto, after an unasked `do.call(Sys.setenv, list(R_USER_CONFIG_DIR = d))` or
+  `readRenviron(f)`, the next call wrote a file into the real config folder unasked, while
+  `?gptr_options` and NEWS said that auto asks.
+  - A file of variables (finding 1): `readRenviron()` was level 2 `session`, so a file holding
+    `R_USER_CONFIG_DIR=<d>` moved the folder unasked, as it could set a provider key or a
+    `*_BASE_URL`. Fix: its row and a new `dotenv::load_dot_env()` row are level 4 `control`
+    ("sets environment variables from a file"), as `gptr_env()` is.
+  - The letter case (finding 2; inferred, no Windows run): Windows variable names are
+    case-insensitive and Python upper-cases `os.environ` keys there, so `Sys.setenv(appdata = d)`
+    and `Sys.setenv(Home = d)` (level 2) and `os.environ['appdata'] = d` in `peter$py()` code
+    (level 3) set `APPDATA` and `HOME` unasked. Fix: `risk_control_name()`, which the R and the
+    Python rule both call, upper-cases a name before it matches `risk_control_env` and
+    `risk_control_env_re`, on every OS, so `Sys.setenv(gptr_replay = "1")` asks too.
+  - Names it cannot read (finding 3): a name held in a name (`n = "HOME"; Sys.unsetenv(n)`) and
+    `Sys.setenv` handed to `do.call()`, `rlang::exec()`, `Map()`, an alias or `match.fun()` were a
+    level-3 `dynamic` row, which auto runs. Fix, one rule: the branch folds an unnamed argument
+    with the names the code assigns, as a path is folded, and a name it still cannot read is
+    level 4 `control` ("names the code computes"), as it may be one of them. Cost:
+    `do.call(Sys.setenv, list(TZ = "UTC"))` and `lapply(nms, Sys.unsetenv)` ask too; a name it
+    reads does not (`n = "TZ"; Sys.unsetenv(n)`, `Sys.setenv(java_home = )` and
+    `Sys.setenv(tz = )` are level 2).
+  - Red: `^perm-(gate|classify)$` FAIL 25 PASS 1240 in UTF-8 and under `LC_ALL=C LANG=C`.
+    test-perm-classify.R "a control name in any case, unread, or set from a file is control
+    (review round 1)" fails 17 times: 14 R forms are not control (line 601), nor the two Python
+    forms (606), and `n = "TZ"; Sys.unsetenv(n)` is level 3 (612). test-perm-gate.R "auto asks
+    before model code moves gptr's config folder or the home (FIX-36)" fails 8 times: five forms
+    run in auto (line 303), and with `do.call()` and `readRenviron()` added to its run 3 of 5
+    calls ask (321), the variables change (322) and the config folder moves (323).
+  - Green: `^perm-(gate|classify)$` FAIL 0 PASS 1265 in UTF-8 and under `LC_ALL=C LANG=C`; the
+    neighbours (every `perm`, `risk`, `rules`, `nested`, `bridge`, `agent-`, `tool-`, `session-` and
+    `py` file, with `gptr-config`, `auth-secrets`, `secrets`, `injection` and `eval-core`; 33 files)
+    FAIL 0 WARN 0 SKIP 12 PASS 8315 in UTF-8 and FAIL 0 WARN 0 SKIP 14 PASS 8301 under
+    `LC_ALL=C LANG=C` (the skips: native Python not provisioned or configured, Windows only, and two
+    that need a UTF-8 locale); `arch-layers`, `auth-childenv`, `auth-dotenv`, `ckpt-objects`,
+    `gptr-gateway`, `injection-e2e`, `lint-rules`, `mcp-server`, `secrets-e2e` and `zzz` FAIL 0 PASS
+    1640 in UTF-8. Lint of the 5 changed R and test files is clean, and a second `document()`
+    changes nothing.
+  - Docs: `?gptr_options` names what asks and `?gptr_security` also what the classifier does not
+    read; NEWS; 03 section 6.8.1 (its rewrap leaves no short line, the verifier's nit) and 04
+    section 15.4 IC-53 item 3. `document()` changes `gptr_options.Rd` and `gptr_security.Rd`.
+  - Records (findings 4 and 5): the Open list below gains Python run through 'reticulate' and a
+    Python name the code computes (level 3 `session`; D-272 had called it `dynamic`). The "Which
+    variables" line said that setup.R isolates "these same variables", but it leaves
+    `XDG_CACHE_HOME` and `XDG_DATA_HOME`, which `R_USER_CACHE_DIR` and `R_USER_DATA_DIR` outrank:
+    corrected there.
+  - Open, each level 3 or lower, which auto runs, as `?gptr_security` says:
+    `withr::local_envvar()` and `withr::with_envvar()` (level 1 `unlisted`; the verifier saw the
+    change undone when the top-level expression ends); a Python name the code computes
+    (`k = "R_USER_" + "CONFIG_DIR"; os.environ[k] = d`, level 3), an alias of `os.environ`
+    (`e = os.environ; e["HOME"] = d`, level 2) and a lower-case keyword name on Windows
+    (`os.environ.update(home = d)`, level 3); Python run from R through 'reticulate'
+    (`reticulate::py_run_string()`, `reticulate::import("os")$putenv()`, level 3 `dynamic`, which
+    the verifier's child R showed moving the folder); and `Sys.setenv` reached by a computed name
+    or through an environment (`get("Sys.setenv")(HOME = d)`, `baseenv()$Sys.setenv(HOME = d)`,
+    level 3 `dynamic`), the limit `?gptr_security` names for `system()`.

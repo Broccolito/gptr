@@ -8448,3 +8448,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-perm-classify.R "a variable that moves gptr's config folder or the home is control
   (FIX-36)"; test-perm-gate.R "auto asks before model code moves gptr's config folder or the home
   (FIX-36)". Evidence: progress/fixes.md FIX-36.
+- Status 2026-10-27 (review round 1): one rule for an R name the classifier cannot read: a
+  `Sys.setenv()` or `Sys.unsetenv()` whose names it cannot fold, such as a computed name or
+  `Sys.setenv` handed to `do.call()`, is level 4 `control`, not 3 `dynamic`, and a name held in a
+  name the code assigns is folded. Names match in any letter case (`risk_control_name()`), as
+  Windows and Python there read them, on every OS. `readRenviron()` and `dotenv::load_dot_env()`,
+  which set variables from a file, are level 4 `control`. So "a name the code computes" above is
+  closed for R. Still not covered (Open), each level 3 or lower, which auto runs: withr's two
+  functions, a Python name the code computes (level 3 `session`, not `dynamic`), an alias of
+  `os.environ`, Python run through 'reticulate', and `Sys.setenv` reached by a computed name or
+  through an environment (`get("Sys.setenv")`, `baseenv()$Sys.setenv`).
+- Tests (review round 1): test-perm-classify.R "a control name in any case, unread, or set from a
+  file is control (review round 1)"; test-perm-gate.R's FIX-36 test also runs `do.call()` and
+  `readRenviron()`.
