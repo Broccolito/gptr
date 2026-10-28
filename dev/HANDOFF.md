@@ -117,6 +117,12 @@ the D-254 amendment are in `DEVIATIONS.md`:
   refusal's reason drops the guard's `Not run: `; review round 2: a block pasted at its key
   question is asked again, not read as a key, and its echoed last line no longer shares a row
   there either; review round 3: 04's IC-75 and IC-76 state the pause menu's paste rules.
+- FIX-35 (#PR): the owned headless browser's close kills the helpers it recorded that still run
+  after a 2 s grace and waits for them in the rest of its 10 s deadline, so a Chrome renderer the
+  scheduler starves under load no longer fails it with "The owned headless browser family did not
+  finish cleanup." (the full-suite failures below); opening retries a pending browser's failed
+  cleanup, so a failed startup no longer leaves every later session check HTTP-only (D-271,
+  amends D-233).
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
@@ -137,10 +143,12 @@ On `claude/v1-fixes`, locally on macOS, with `NOT_CRAN=true`, the SIGINT reset a
   `risk`, `rules`, `nested`, `bridge`, `gptr-`, `session-`, `ckpt-`, `eval-`, `agent-` and
   `tool-` file, and `copy-ckpt`) FAIL 0 WARN 0 SKIP 44 PASS 16095 under `LC_ALL=C LANG=C`; the
   full suite in UTF-8 under the heavy lock FAIL 9 WARN 0 SKIP 66 PASS 38818 at a load average near
-  215, from three timing files that pass alone (PASS 1236). The review round's CRAN verifier on
-  `0768fb35`: `R CMD check --as-cran` in CRAN mode under `env -i` Status OK with no NOTE in 113 s
-  (tests 14 s), incoming feasibility with remote checks OK, `dev/ci/isolated-check.R check` 0
-  errors, 0 warnings, 0 notes (FAIL 0 SKIP 83 PASS 38716), the URL check 0 problems.
+  215, from three timing files that pass alone (PASS 1236); artifact-app's browser cleanup failure
+  is the kind FIX-35 traces to a renderer starved under load and fixes. The review round's CRAN
+  verifier on `0768fb35`: `R CMD check --as-cran` in CRAN mode under `env -i` Status OK with no
+  NOTE in 113 s (tests 14 s), incoming feasibility with remote checks OK,
+  `dev/ci/isolated-check.R check` 0 errors, 0 warnings, 0 notes (FAIL 0 SKIP 83 PASS 38716), the
+  URL check 0 problems.
 - Review round 1, code `fbde4941`: the same neighbours with every `mcp-` and `arch-` file FAIL 0
   WARN 0 SKIP 16 PASS 17208 in UTF-8 and FAIL 0 WARN 0 SKIP 45 PASS 17010 under
   `LC_ALL=C LANG=C`; the full suite in UTF-8 under the heavy lock FAIL 0 WARN 0 SKIP 66 PASS 38855
@@ -150,7 +158,8 @@ On `claude/v1-fixes`, locally on macOS, with `NOT_CRAN=true`, the SIGINT reset a
   `dev/bench/tokens/run.R --check` OK.
 - Review round 2, code `c03c72db`: the same neighbours FAIL 0 WARN 0 SKIP 45 PASS 17028 under
   `LC_ALL=C LANG=C`; the full suite in UTF-8 under the heavy lock FAIL 1 WARN 0 SKIP 66 PASS 38873
-  (29 min), the one test-artifact-app.R's headless browser cleanup, which passes alone (PASS 707);
+  (29 min), the one test-artifact-app.R's headless browser cleanup, which passes alone (PASS 707),
+  the failure FIX-35 traces to a renderer starved under load and fixes;
   CRAN-mode `R CMD check --as-cran` under `env -i` Status OK with no NOTE (tests 16 s, tarball
   sha256 `154723ba`); lint of the changed files clean, `document()` no diff, `check-docs.R` 0
   problems, `dev/release/tests` PASS 290, the spelling check clean. The round's CRAN verifier on
@@ -267,6 +276,9 @@ Open (found, not fixed):
 - In a terminal that ignores bracketed paste a paste still splits when a read comes more than
   about 145 ms late (IC-76's 0.2 s bound; CI-94, FIX-28).
 - A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).
+- At a load average of 260 and more the owned browser close's process-table walks
+  (`proc_children()`, `proc_tree()`) can take 12-28 s and use up its 10 s deadline: 4 of 33
+  closes under 32 busy loops ended "close timed out" (FIX-35 F2).
 - The macOS row's time grows with its serial pty tests (CI-96).
 - A `process_jsonl` line's events still follow the abort flag (its adapters check the signal
   themselves, 04 section 8.1), and an `inprocess` generator keeps its two calls after it; the

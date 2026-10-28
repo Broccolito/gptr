@@ -4961,6 +4961,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   no readable marker (Linux `setproctitle()` zeroes their environment block, macOS ps reads none),
   so the profile was removed while they still wrote in it (hosted ubuntu, CI-64). Without a deadline
   (the startup unwind, the retained cleanup job) `release()` keeps its single check.
+- Amended by D-271 (FIX-35): `release()` waits at most 2 s for them, kills those still running and
+  waits for them in the rest of the deadline, as a helper starved under load outlasted the 10 s.
 - Limitation (macOS): the background children of a shell that exits by itself, and system binaries
   left by a dead parent (`proc_sweep()`), stay unreachable: no parent link and no readable marker.
 - Contract-visible: 04 section 7.4 `kill_all()` row and 03 section 6.7 amended (the recorded
@@ -8456,3 +8458,56 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-zzz.R "DESCRIPTION carries the fields CRAN and the contract require (IC-72)";
   `dev/release/tests/test-description.R` "description_problems() checks the two fields P25 owns and
   guards the others". Evidence: progress/fixes.md CI-105.
+
+## D-271 - FIX-35 The owned browser's close kills helpers that outlast a 2 s grace (2026-10-27)
+- Rule: the owned headless Chrome's `release(seconds)` waits at most 2 s (`seconds`, if less) for
+  the helpers `close()` recorded by parent link to exit by themselves; if one still runs, it kills
+  the recorded helpers with `proc_kill_signalled()` (`ps::ps_kill()`: on Unix SIGTERM, then
+  SIGKILL after 200 ms; on Windows `TerminateProcess()`; ps handles carry the creation time, so a
+  reused pid is never signalled, and a helper already gone reads `"dead"`) and waits for them in
+  the rest of `seconds`. What follows is unchanged (CI-64): a member still running or unknown
+  raises "The owned headless browser family did not finish cleanup." and keeps the profile for a
+  retry, and the profile is removed only once the family is gone. Without a deadline (`seconds` 0:
+  the startup unwind and the retained cleanup job, which record no helpers) nothing changes. This
+  amends D-233 ("no bound, grace or deadline changes") and CI-64's measurement that the helpers
+  settle in 0.06-0.08 s, which holds on an idle machine only.
+- Rule: `artifact_browser()` first retries a pending lease (a startup whose cleanup close failed)
+  with `artifact_browser_close()`, and raises "The pending headless browser must finish cleanup
+  before opening another." only when that retry fails, the lease kept. Formerly it raised at once,
+  so after such a failure every later session check of the R session was HTTP-only and only the
+  unload retried the cleanup. A call made while another frame of `artifact_browser()` constructs
+  its browser would now close that owner, and the outer frame raises "The cached headless browser
+  changed during construction."; gptr makes no such call (the readiness pump runs no tool). The
+  cost: while the retry keeps failing, each call runs that close before it raises, up to the
+  close's 10 s deadline and longer when F2's walks are slow (the closes that timed out in FIX-35's
+  runs took 14.2 to 43.4 s), where formerly it raised at once.
+- Why: under load the macOS scheduler starves an orphaned Chrome renderer (parent 1, state RN,
+  priority 4, the background band Chrome sets for an idle renderer) after the browser stops, past
+  the shared 10 s close deadline. The round 4 flake investigation's logs (test-artifact-app.R, an
+  open-and-close driver and a probe) hold 13 such failures from 12 closes, one line being a
+  close's retry 120 s later. In each the marker tree was empty and readable and a recorded
+  renderer, runnable at priority 4, lived on under parent 1, in one beside an exiting helper. The
+  families settled 20.6 to 169.5 s after the SIGTERM, so a 30 s deadline would still have missed
+  8 of the 12 closes. The failures came at a load average of 163 to 371: 11 of the 49 closes under
+  16 or 32 busy loops (16 cores, 22%) and 1 of the other 212, under another agent's check at 206;
+  none of the 116 closes logged below 100 failed. Killing the recorded helpers still running after
+  the 2 s grace gave 0 failures in 28 closes under 32 busy loops at a load average of 315 to 385
+  (Fisher p = 0.004 against the 11 of 49), each lingering helper gone within 0.1 s of the kill.
+  FIX-35's own measurement under 32 and 16 busy loops, the fix and the base in alternate blocks:
+  none of the fix's 40 closes (load average 103 to 362) ran out `release()`'s deadline or ended
+  "did not finish cleanup", 9 of them killing one helper, gone within 0.085 s, though 3 ended
+  "close timed out" before `release()` waited (F2); 4 of the base's 11 closes ran out that
+  deadline, 3 with "did not finish cleanup" and one behind its check's page-load timeout (Fisher
+  p = 0.0013).
+- Not changed: at a load average of 260 and more the process-table walks of the close
+  (`proc_children()`, `proc_tree()`) can take 12-28 s (at 280 and more in that investigation) and
+  use up the deadline by themselves; in FIX-35's runs 4 of 33 closes under 32 busy loops ended
+  "close timed out" so, one after 14.0 s in `proc_children()` (FIX-35 F2, Open).
+- Contract-visible: none of 03 and 04 states the owned browser's close or its helpers (D-233's rows
+  are `kill_all()`'s); a session check reports "HTTP-only check: the headless browser failed" less
+  often, after a close or a failed startup under load.
+- Tests: test-artifact-browser-launch.R "artifact browser close waits for its unmarked helpers
+  before removing the profile" (a helper that exits, one killed after the grace and one that
+  survives the kill) and "a recorded helper that cannot run is killed after the grace, in the
+  deadline (FIX-35)" (a stopped R child); test-artifact-browser-owner.R "opening retries a pending
+  owner's cleanup and opens once it settles (FIX-35)". Evidence: progress/fixes.md FIX-35.
