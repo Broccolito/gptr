@@ -8734,3 +8734,20 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `environ` (`my_environ`) is not read as `os.environ` (since round 5 its write through a computed
   key was level 4). Tests: test-risk-forms.R "a Python variable name it cannot read in an
   environment write is control (round 5)". Evidence: progress/fixes.md FIX-36.
+- Status 2026-10-28 (review round 6): the names the `cli-claude` and `cli-codex` child
+  environments keep for the `claude` and `codex` command-line tools (`CLAUDE_CODE_OAUTH_TOKEN`,
+  `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`, `CODEX_HOME`) join the control list, formerly
+  level 2 `session` although `?gptr_options` called a variable a provider reads control.
+  `paste()`, `paste0()`, `file.path()` and `c()` are folded with every argument as R passes it:
+  `paste0()`'s `sep` is a part, `collapse` and `fsep` join the parts, and a `collapse` of a value
+  with several elements is one the code computes (formerly `paste0()` dropped `sep` and `collapse`
+  and `fsep` were parts, so `Sys.unsetenv(x = paste0("R_USER_", sep = "CONFIG_DIR"))` and
+  `file.path("R_USER", "CONFIG_DIR", fsep = "_")` were level 2 `session`). The rule of round 4
+  sees a helper the code binds with `=`, `<-` or `<<-` only: one bound with `assign()`,
+  `delayedAssign()`, `makeActiveBinding()`, `list2env()` or `attach()`, or in a list given to
+  `with()` or `within()`, is read as base R's (level 2 for such a variable name, which auto runs),
+  as `?gptr_security`, `?gptr_risk` and 03 section 6.8.1 now say. Contract-visible: 03 section
+  6.8.1; 04 section 15.4 IC-53 item 3; `?gptr_options`, `?gptr_security`, `?gptr_risk`. Tests:
+  test-risk-forms.R "a variable the claude and codex CLIs keep is control, as a provider's key
+  (round 6)", "paste(), paste0() and file.path() are folded with their arguments as R passes
+  them". Evidence: progress/fixes.md FIX-36.

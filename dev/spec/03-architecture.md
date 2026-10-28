@@ -1491,8 +1491,10 @@ with several elements is one the code computes), the worst value counting: a str
 assignment replaces the name's values unless the code also assigns it with `<<-`, one in a branch, loop or call adds
 its value (and, when first, the binding before the code), and a value the code computes or a loop that assigns the
 name makes it computed [D-211]. A call of one of these helpers (or of a `list()` holding withr's variables) that the
-code assigns, or that the environment the code would run in holds as other than base R's, is one the code computes,
-for a path, a command or a variable name [D-272]. R's working directory is held the same way, from `getwd()` when
+code assigns with `=`, `<-` or `<<-`, or that the environment the code would run in holds as other than base R's, is
+one the code computes, for a path, a command or a variable name; one the code binds otherwise (`assign()`,
+`delayedAssign()`, `makeActiveBinding()`, `list2env()`, `attach()`, a list given to `with()` or `within()`) is read
+as base R's [D-272]. R's working directory is held the same way, from `getwd()` when
 the code is read: `setwd()` and `withr::local_dir()` move it, `withr::with_dir()`, `xfun::in_dir()` and a move in a
 function body leave one the code computes; `getwd()` reads it and `setwd()` returns the one before, both read as the
 helpers above are, so at the code's top level `owd = setwd("data"); ...; setwd(owd)` stays in the project [D-262].
