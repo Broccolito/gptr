@@ -161,7 +161,8 @@ hour and in another mode, whatever that call asks: a script runs the plan with
 `options(gptr.plan_handoff = FALSE)` turns the hand-off off. Critical, secret and control guards
 remain separate. `yolo`, which only you can select, also runs gptr's own configuration functions and
 secret reads; deleting protected files, files outside the project or the project itself,
-`options(gptr.*)` and sending a secret over the network still ask.
+moving the working directory out of the project, `rm(list = ls())`, `options(gptr.*)` and
+sending a secret over the network still ask.
 In `auto` and `yolo`, a `system()` or `system2()` call whose command the code computes is refused:
 the model is told to run the command with `peter$sh()`, whose command the permission rules check
 when it runs.
