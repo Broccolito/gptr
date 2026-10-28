@@ -39,8 +39,9 @@ or the files \code{source()} reads: it decides when gptr asks you, it is not a s
 \details{
 Paths are classified relative to \code{root} (\code{workspace}, \code{temp}, \code{outside}, \code{protected},
 \code{control}, \code{instructions}, \code{critical}, \code{url}, \code{wildcard}, \code{unknown}). Calls of
-\code{peter$sh()}, \code{system()}, \code{system2()} (its \code{env} as the start of the command line) and
-\code{processx::run()} with literal commands are classified with the command table
+\code{peter$sh()}, \code{system()}, \code{system2()} (its \code{env} as the start of the command line),
+\code{processx::run()} (also as \code{callr::run()}) and \code{sys::exec_wait()}, \code{sys::exec_internal()} and
+\code{sys::exec_background()} with literal commands are classified with the command table
 (\code{inst/extdata/risk-commands.csv}), \code{peter$sql()} by its statements and \code{peter$py()} by a token
 scan. A command the code computes, or a \code{shell.exec()} file it computes, is a \code{dynamic} row at
 level 3. A path, command or variable name built with \code{c()}, \code{list()}, \code{paste0()},

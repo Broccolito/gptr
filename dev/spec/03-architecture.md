@@ -1461,7 +1461,7 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
 | 1 | new objects, reads outside the project (a command run in a directory outside it reads that directory [D-262]), calls of unlisted functions from packages outside base/stats/utils/methods/graphics/grDevices/tools [IC-54] | only allowlisted read-only calls run, in a scratch child env (discarded); anything else and other tools deny | ask | ask | allow | allow |
 | 2 | overwriting objects, workspace file writes, network reads, reference mutation | deny | ask | allow `write`/`edit` inside the project, ask for R | allow | allow |
 | 3 | deletes inside the project or of computed paths, processes, installs, overwriting objects above `gptr.protect_size` (100 MB), dynamic code, secret reads, app launches | deny | ask | ask | allow (the secret guard still asks; a computed `system()` command is refused, below) | allow (secret reads too; a computed `system()` command is refused) |
-| 4 | critical: `q()` (denied in every mode and never asked, below), deleting home/root/project/top-level/drive roots or their parents, protected files or any path outside the project and R's session `tempdir()` (`/tmp` counts as outside) [IC-78], `setwd()`, `withr::local_dir()` or `withr::with_dir()` to a directory outside the project and `tempdir()` or one the code computes (`session`) [D-262], secret + network sink; the `control` category (gptr's own configuration exports, `options(gptr.*)`, control-plane files [IC-53, IC-54]) | deny | ask_human | ask_human | ask_human (blocked without a UI) | ask_human, except control rows other than `options(gptr.*)`, which run |
+| 4 | critical: `q()` (denied in every mode and never asked, below), deleting home/root/project/top-level/drive roots or their parents, protected files or any path outside the project and R's session `tempdir()` (`/tmp` counts as outside) [IC-78], `setwd()`, `withr::local_dir()`, `withr::with_dir()` or `xfun::in_dir()` to a directory outside the project and `tempdir()` or one the code computes (`session`), a link to a path outside the project (`file.symlink()`, `file.link()`, `Sys.junction()`, `fs::link_create()`, `ln`) [D-262], secret + network sink; the `control` category (gptr's own configuration exports, `options(gptr.*)`, control-plane files [IC-53, IC-54]) | deny | ask_human | ask_human | ask_human (blocked without a UI) | ask_human, except control rows other than `options(gptr.*)`, which run |
 
 `r` is classified per flagged call by `gptr_risk()` (tables in `inst/extdata/risk-functions.csv` and
 `risk-commands.csv`, extendable by additive `risk_rule` records; a shipped risky-package list (targets, usethis,
@@ -1469,23 +1469,31 @@ devtools, renv, pak, remotes, fs, gert, git2r, gh, googledrive, pins, `aws.*`, `
 httr2/curl request performers) is at least level 2 [18 §2.5 and §7 item 1; IC-54]); gptr's own exports that change
 harness state (`gptr_config`, `gptr_permissions`, `gptr_trust`, `gptr_register`, `gptr_on`, `gptr_mcp_add`, ...)
 are level 4 `control` and also check `run_current()` [IC-53], as are `Sys.setenv()`/`Sys.unsetenv()`,
-`withr::local_envvar()`/`withr::with_envvar()` and a Python `os.environ` write of a provider key, `GPTR_*`,
-`*_BASE_URL`, R's startup variables or a variable that moves the user config directory or the home
+`withr::local_envvar()`/`withr::with_envvar()` and a Python `os.environ` write of a variable a registered provider
+reads (its `auth` names and `compat$base_url_env`, so `AWS_REGION` for Bedrock, and the `bedrock-converse` key pair),
+`GPTR_*`, `*_BASE_URL`, R's startup variables or a variable that moves the user config directory or the home
 (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in any letter case, those four R functions
-with a name the classifier cannot read, `readRenviron()` and `dotenv::load_dot_env()` [D-272]; writes to control-plane
-paths (`.gptr/settings*.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `agents/`, the user config
-directory, `.Rprofile`, `Makevars`, git hooks) are level 4 and to instruction files (`AGENTS.md`, `CLAUDE.md`,
-`vignette.Rmd`, skills, prompts) level 3 [IC-54]; `peter$sh/script/bg` by the command classifier; `peter$py`/`sql` by
-token and keyword classifiers [G5 §5]; MCP tools by server annotations (untrusted unless the server is trusted:
-`readOnlyHint` 0, `destructiveHint = FALSE` 2, none 3); nested `peter()` inherits and only tightens; `ask` is level 0.
+with a name the classifier cannot read, a Python write whose name (a subscript, the first argument of `putenv()`,
+`unsetenv()`, `pop()`) is not a plain string literal, `readRenviron()` and `dotenv::load_dot_env()` [D-272]; writes
+to control-plane paths (`.gptr/settings*.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `agents/`, the
+user config directory, `.Rprofile`, `Makevars`, git hooks) are level 4 and to instruction files (`AGENTS.md`,
+`CLAUDE.md`, `vignette.Rmd`, skills, prompts) level 3 [IC-54]; `peter$sh/script/bg` by the command classifier;
+`peter$py`/`sql` by token and keyword classifiers [G5 §5]; MCP tools by server annotations (untrusted unless the
+server is trusted: `readOnlyHint` 0, `destructiveHint = FALSE` 2, none 3); nested `peter()` inherits and only
+tightens; `ask` is level 0.
 Outside function bodies, a path held in a name the code assigns is folded (literals through `c()`, `file.path()`,
 `paste()`, `paste0()`, `normalizePath()`, `path.expand()`, `tempfile()`), the worst value counting: a straight-line
 assignment replaces the name's values unless the code also assigns it with `<<-`, one in a branch, loop or call adds
 its value (and, when first, the binding before the code), and a value the code computes or a loop that assigns the
 name makes it computed [D-211]. A call of one of these helpers (or of a `list()` holding withr's variables) that the
 code assigns, or that the environment the code would run in holds as other than base R's, is one the code computes,
-for a path, a command or a variable name [D-272]. The classifier is advisory and documented as not a security
-boundary; in-process R cannot be sandboxed [18 §2.5].
+for a path, a command or a variable name [D-272]. R's working directory is held the same way, from `getwd()` when
+the code is read: `setwd()` and `withr::local_dir()` move it, `withr::with_dir()`, `xfun::in_dir()` and a move in a
+function body leave one the code computes; `getwd()` reads it and `setwd()` returns the one before, so at the code's
+top level `owd = setwd("data"); ...; setwd(owd)` stays in the project [D-262]. The classifier is advisory and
+documented as not a security boundary; in-process R cannot be sandboxed [18 §2.5]. It reads code as written and does
+not run it, so code that builds a call, a name, a path or a command at run time, or reaches a function by another
+name, is read only as far as it can see; every form this section names as not read or not followed is of that kind.
 
 In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command
 (`system2()`'s `args` and `env` too [D-267], `shell.exec()`'s file) the classifier cannot fold to literals: a
@@ -1498,18 +1506,24 @@ not resolve to these (a computed name, one reached through a list or an environm
 the user's own) is not refused [D-262].
 
 Paths are placed in the project [D-262]: a relative path in R code is read in the project root, and a command in the
-directories it runs in (each `cd` target, a `peter$sh()` call's `wd`, and a `processx::run()` `wd` the call or a
-name the code assigns holds as a string, each read as a `cd` before it; a `wd` the code computes is read as the
-project root), the code a shell or Python runs there (`sh -c`, `python3 -c`, the literal scan) included; a `cd`
-target is read as `git -C`'s directory is (level 1 outside the project, 3 for a secret directory). A drive-relative
-path (`D:x`, under drive D's own current directory on Windows) is `outside` on every OS, and the second reading of a
-line with a backslash (sh's) places a word that starts with a drive letter as a relative one, as sh does. Since a
-relative path would then name a file outside the project, `setwd()`, `withr::local_dir()` and `withr::with_dir()` to
-a directory outside the project and `tempdir()`, or to one the code computes, are a level-4 `session` row, which the
-critical guard asks about in auto and yolo. Not followed: the working directory changed in other ways
-(`usethis::local_project()`), the code another interpreter runs (`Rscript -e`, `perl -e`), a path the shell computes
-(`rm "$f"`, `xargs rm`) and code handed to `sh -c` as one word whose spaces are escaped with a backslash or written
-`$IFS` (`sh -c rm\ -f\ file`; reading it needs a tokenizer of its own), all level 3.
+directories it runs in (each `cd` and `env -C` target, a `peter$sh()` call's `wd`, and a `wd` of `processx::run()`
+(also as `callr::run()`) the call or a name the code assigns holds as a string, each read as a `cd` before it; a `wd`
+the code computes is read as the project root), the code a shell or Python runs there (`sh -c`, `python3 -c`,
+`cmd /c` and `pwsh -Command`, whose code is every word after the option, the literal scan) included; a `cd` target is
+read as `git -C`'s directory is (level 1 outside the project, 3 for a secret directory). The literal commands of
+`sys::exec_wait()`, `sys::exec_internal()` and `sys::exec_background()` are read as those of `processx::run()`. A
+drive-relative path (`D:x`, under drive D's own current directory on Windows) is `outside` on every OS, and the
+second reading of a line with a backslash (sh's) places a word that starts with a drive letter as a relative one, as
+sh does. Since a relative path would then name a file outside the project, `setwd()`, `withr::local_dir()`,
+`withr::with_dir()` and `xfun::in_dir()` to a directory outside the project and `tempdir()`, or to one the code
+computes, are a level-4 `session` row, which the critical guard asks about in auto and yolo; a link `file.symlink()`,
+`file.link()`, `Sys.junction()` or `fs::link_create()` makes to a path outside the project is a level-4
+`file_delete` row, as `ln`'s source is.
+`eval()`, `rlang::eval_bare()` and `rlang::eval_tidy()` of `quote(x)` read `x`, as `evalq(x)` does. Not
+followed: the working directory changed in other ways (`usethis::local_project()`, `get("setwd")`, the `wd` of
+`callr::r()`), the code another interpreter runs (`Rscript -e`, `perl -e`), the command of `processx::process$new()`,
+a path the shell computes (`rm "$f"`, `xargs rm`) and code handed to `sh -c` as one word whose spaces are escaped
+with a backslash or written `$IFS` (`sh -c rm\ -f\ file`; reading it needs a tokenizer of its own), all level 3.
 
 In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never
 runs, such as `q()`, `readline()`, a read of standard input or a secret marker, with the guard's text less its

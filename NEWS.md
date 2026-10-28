@@ -99,10 +99,11 @@ works on the objects already in memory.
   use `muffleMessage`; the notice respects `gptr.quiet`. Actual billing refusals remain errors.
 * The `yolo` mode (`mode = "yolo"`, `/mode yolo`) runs actions without approval, including
   package installs, writes anywhere and gptr's own configuration functions. A person is still
-  asked before deleting files outside the project or protected files, `rm(list = ls())`,
-  `options(gptr.*)` and sending a secret over the network; a one-time notice says so. The
-  classifier reads code; it is not a sandbox. In every mode, model code that would end or hang
-  the R session, such as `q()` or `readline()`, is refused without a question.
+  asked before deleting files outside the project or protected files, moving the working
+  directory out of the project, `rm(list = ls())`, `options(gptr.*)` and sending a secret over
+  the network; a one-time notice says so. The classifier reads code; it is not a sandbox. In
+  every mode, model code that would end or hang the R session, such as `q()` or `readline()`, is
+  refused without a question.
 * In a terminal, what you type while the agent works is a draft on the bottom row: Enter sends
   it as a steer, which the agent reads at its next step, and Tab as a follow-up, the next prompt
   (setting `type_ahead` swaps the two); Up takes back a message not yet delivered, and

@@ -63,11 +63,12 @@ mode_notice = function(mode) {
   gptr_inform(paste0("Mode yolo: actions run without approval, including package installs, ",
                      "writes anywhere and gptr's own configuration functions. A person is still ",
                      "asked before deleting files outside the project or protected files (.git, ",
-                     ".env, keys), the project or home directory, rm(list = ls()), ",
-                     "options(gptr.*) and sending a secret over the network. system(), ",
-                     "system2(), shell() and shell.exec() calls with a command the code computes ",
-                     "are refused; the model is pointed to peter$sh(). The classifier reads code; ",
-                     "it is not a sandbox."), "notice", .once = "mode_yolo")
+                     ".env, keys), the project or home directory, moving the working directory ",
+                     "out of the project, rm(list = ls()), options(gptr.*) and sending a secret ",
+                     "over the network. system(), system2(), shell() and shell.exec() calls with ",
+                     "a command the code computes are refused; the model is pointed to ",
+                     "peter$sh(). The classifier reads code; it is not a sandbox."), "notice",
+              .once = "mode_yolo")
 }
 
 #' Mockable wrapper of interactive()
@@ -657,13 +658,15 @@ s3_register = function(generic, class, method = NULL) {
 #'   `USERPROFILE`): they place `tools::R_user_dir("gptr", "config")`, which holds gptr's
 #'   settings, permission rules, trust decisions and credentials, and your home directory.
 #'   Setting or unsetting one of them from model code changes gptr's own configuration, as does
-#'   a provider key, a `GPTR_*` or `*_BASE_URL` variable, `R_ENVIRON_USER`, `R_PROFILE_USER`,
+#'   a variable a registered provider reads (its key or base-URL variable, such as `AWS_REGION`
+#'   for Bedrock), a `GPTR_*` or `*_BASE_URL` variable, `R_ENVIRON_USER`, `R_PROFILE_USER`,
 #'   `R_ENVIRON` or `R_PROFILE`, whatever the letter case. Every mode but `yolo` asks you first,
 #'   `auto` included, before `Sys.setenv()`, `Sys.unsetenv()`, `withr::local_envvar()` or
 #'   `withr::with_envvar()` of such a name or of a name the classifier cannot read, before
 #'   `readRenviron()` and `dotenv::load_dot_env()`, and before an `os.environ` write in
 #'   `peter$py()` or `peter$knit("python", code)` code that names one in a string or an upper-case
-#'   word; [gptr_security] lists what it does not read.
+#'   word or whose name is not a plain string literal; [gptr_security] lists what it does not
+#'   read.
 #' - `GPTR_WORKER`, `GPTR_SUBAGENT_DEPTH`, `GPTR_ARTIFACT_PORTS`, `GPTR_SHELL_CMD` and the tree
 #'   markers `GPTR_PROC_<id>`: set by gptr in its own child processes only.
 #' - `GPTR_MCP_TOKEN`: the variable through which the Codex snippet of [gptr_mcp_serve()] passes
