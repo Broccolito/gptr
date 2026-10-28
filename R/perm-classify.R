@@ -1768,9 +1768,9 @@ risk_py_rules = list(
                                  "\\b(remove\\w*|unlink|rmdir|rename\\w*|replace|makedirs|mkdir|",
                                  "symlink|link|chmod|chown|l?ch\\w+|truncate|\\*)\\b")),
   list(2L, "secret", "os\\.environ|getenv\\("),
-  list(3L, "session", paste0("environb?\\s*(\\[", risk_py_sub, "\\]", risk_py_set, "|\\|=)|",
-                             "\\bdel\\s+[\\w.]*environb?\\s*\\[|",
-                             "environb?\\.(update|setdefault|pop|clear|popitem|__setitem__|",
+  list(3L, "session", paste0("\\benvironb?\\s*(\\[", risk_py_sub, "\\]", risk_py_set, "|\\|=)|",
+                             "\\bdel\\s+(?:[\\w.]*\\.)?environb?\\s*\\[|",
+                             "\\benvironb?\\.(update|setdefault|pop|clear|popitem|__setitem__|",
                              "__delitem__)\\(|\\b(putenv|unsetenv)\\s*\\(")),
   list(4L, "critical", paste0("\\bos\\.(_exit|abort|exec\\w*)\\s*\\(|",
                               "\\bos\\.kill(pg)?\\s*\\(\\s*(os\\.get(p?pid|pgrp)\\(\\)|0)\\s*,|",
@@ -1802,13 +1802,13 @@ risk_python = function(code, root = project_root(), dirs = root) {
   # unsetenv(), setdefault(), pop() and the item methods): one that is not a plain string literal
   # (an escape, adjacent literals, a name the code computes) may be a control variable (D-272)
   keys = regmatches(code_nc, gregexpr(paste0(
-    "environb?\\s*\\[\\K", risk_py_sub, "(?=\\]", risk_py_set, ")|",
-    "\\bdel\\s+[\\w.]*environb?\\s*\\[\\K", risk_py_sub, "|",
-    "(\\b(putenv|unsetenv)|environb?\\.(setdefault|pop|__setitem__|__delitem__))\\s*\\(\\K[^,)]*"
+    "\\benvironb?\\s*\\[\\K", risk_py_sub, "(?=\\]", risk_py_set, ")|",
+    "\\bdel\\s+(?:[\\w.]*\\.)?environb?\\s*\\[\\K", risk_py_sub, "|",
+    "\\b(putenv|unsetenv|environb?\\.(setdefault|pop|__setitem__|__delitem__))\\s*\\(\\K[^,)]*"
   ), code_nc, perl = TRUE))[[1L]]
   plain = grepl("^\\s*[bBrRuU]{0,2}('[^'\\\\\n]*'|\"[^\"\\\\\n]*\")\\s*\\z", keys, perl = TRUE)
   if (any(f$category == "session" & f$level == 3L) &&
-      (any(risk_control_name(c(lits, ids))) || grepl("environb?\\.clear\\(", code) ||
+      (any(risk_control_name(c(lits, ids))) || grepl("\\benvironb?\\.clear\\(", code) ||
          !all(plain))) {
     f = risk_flags_bind(f, risk_flags_row("control", "py", 4L, "control"))
   }
