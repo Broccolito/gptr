@@ -6380,6 +6380,25 @@ the driver, screens, events, transcripts and replays without a model are local, 
   before its own end marker (two pauses of 50 ms inside one paste) still sends at a newline of the
   read between; a Ctrl-C typed in the same batch as a paste is dropped. D-263, 04 sections 7.1
   and 15.10 IC-76 and the comments of `console_compose()` and `console_keys()` say so.
+- Review round 4 (the security verifier on `0aa55320`, R4-SEC-4; round 3's F1 with one more
+  split, already so on `7fe6cff5`): a paste whose text ends it early, split right after that
+  marker and again before its own end marker, left a read between that holds no marker and is read
+  with no paste open, so a Ctrl-C byte in it paused the run and the bytes after it answered the
+  pause menu (`f`, then `!file.create('M')` as a follow-up that runs with no Enter); offline with
+  the reads `ESC [ 200 ~ x ESC [ 201 ~`, `\003f\n!file.create('M')\n` and `ESC [ 201 ~`. Red, on
+  `0aa55320`'s code: test-console-typing.R "a read right after a paste's marker holds no Ctrl-C
+  key (review round 4)" FAIL 5 PASS 3 (the paste split once more and twice more each interrupted
+  and left `f\n!cat(1)\n` to the menu, and no steer was sent). Fix, commit `1df6d56b`:
+  `console_keys()` keeps `rd$compose$pasted` after a batch that holds a marker or is read while a
+  paste is open, and drops the Ctrl-C bytes of each batch read after it until an empty read comes;
+  the read between still sends at its newline, a steer the model reads, as D-263's Limits say. It
+  is the verifier's code alternative counted in reads, not time: round 3 found that a 50 ms window
+  never holds between two key batches, while a split needs 50 ms without input and the reactor's
+  next read comes 50 ms after it, so the rest of a paste that stalls up to about 0.1 s is read with
+  no empty read between. Green: the test PASS 8 alone, and the checks in FIX-34's review round 4
+  bullet. Open: after a longer pause inside such a paste a Ctrl-C byte in the read between is
+  still the key, and a Ctrl-C typed within about 0.1 s of a paste's end is dropped. D-263, 04
+  sections 7.1, 15.9 (IC-76's Limits) and 15.10 IC-76 and `console_keys()`'s comment say so.
 
 ## FIX-29 - Transcripts record @file heads and the objects !code lines use (2026-10-26, #PR)
 - Why: issue #85, FIX-20 review items R27 and R29. R27: `gptr_source(replay = "live")` re-asked
@@ -6898,6 +6917,24 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
   a glob's trailing ` *` optional (`^cat( .*)?\z`), so `r(sh:git log *)` matches `git log` but not
   `git logs`. `?gptr_permissions`, 03 section 6.8.2, 04 section 7.11's `rule_match` row and D-267
   say so.
+- Review round 4, an ask rule's reason (the regressions verifier on `0aa55320`, R4-1; the optional
+  half of round 3's F2, already so since `e215b490`): an ask rule's question offers no `[a]lways`
+  rule, but an `a` or `p` typed there read "a and p are not offered: no rule covers these calls",
+  though the ask rule covers the call, and in manual mode the `?` view named the mode, so nothing
+  on screen named the rule (the fake model and GPT-5.6, live). Red: test-perm-gate.R "an ask
+  rule's question says why it offers no [a]lways rule (review round 4)" FAIL 1 PASS 1 on
+  `0aa55320`'s code: a level-0 `wc` in auto, a level-3 `rm` in manual and a nested call's computed
+  `rm` in auto each read "no rule covers these calls". Fix, commit `ed2d7361`: `perm_decision()`
+  (R/perm-gate.R, outside this writer's functions, one line) gives the question an ask rule asks its
+  reason as `no_rule`, `perm_policies()` keeps it when that question drops another policy's rule,
+  the request record carries it (04 section 7.11) and `ui_no_rule()` adds "; an always rule would
+  not stop it", so `a` reads "a and p are not offered: the rule r(sh:touch *) asks; an always rule
+  would not stop it". The nested gate passes the rules policy's own answer, so its question says
+  the same. "no rule covers these calls" stays where no rule can cover the calls (code that
+  `rule_suggest()` cannot read). Not taken: the optional dim row under the question; the reason
+  shows where `a` or `p` is typed, as IC-77 item 3 says. Green: the test PASS 2 alone, and the
+  checks in FIX-34's review round 4 bullet. D-267, 04 sections 7.11 and 15.9 IC-77 and NEWS's
+  console layout bullet say so.
 
 ## FIX-33 - Transcript findings from the live sessions (2026-10-27, #PR)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
@@ -7520,6 +7557,41 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   - Open: unchanged by this round but for FIX-28's narrower paste item. Not run: Linux and
     Windows, and live models (the fixes are tested offline; the verifiers' live and tmux repros
     were not repeated).
+- Review round 4, the console writer's items (verifiers on `0aa55320`; branch
+  `claude/v1-fix-console4`): FIX-28's R4-SEC-4 and FIX-32's R4-1 are in their records; FIX-34's
+  and the checks:
+  - Completion (the regressions verifier, R4-2; already so on `13a917ff`): `console_complete()`
+    passed names holding control characters to readline, so in a project holding the file
+    `bang\n!file.create('A11-MARK')`, Tab on `Look at @ban`, then Enter, sent `Look at @bang` as
+    a prompt and `!file.create('A11-MARK')` as direct R, which made the file (the fake model, auto,
+    tmux). Red: test-console-completion.R "no completion holds a line end or another control
+    character (review round 4)" FAIL 7 PASS 2 on `0aa55320`'s code: names holding a newline, a
+    carriage return or an escape came from every source tried, an object's `$` names, commands,
+    skills, peter's members (`ns.names`), files at `@` and R's completion of a string on a `!`
+    line. Fix, commit `4e443054`: `console_complete()` leaves out every candidate holding a byte
+    0x01-0x1f or 0x7f at its one exit, so the completer readline calls, the composer's Tab and the
+    idle editor's Tab offer none; the byte test (`useBytes`) never fails on a name that is invalid
+    in the locale. With R's default `rc.settings(quotes = TRUE)` a `!` line's string completes
+    through utils' `fileCompletions()`, which the filter reads; with `quotes = FALSE` R hands it to
+    readline's own file name completion, which gptr does not see, as at R's prompt. Windows file
+    names hold no control character, so the test's file half skips there. Green: the test PASS 9
+    alone in UTF-8 and under `LC_ALL=C LANG=C`. 04 section 15.10 IC-81, a status line of D-244
+    (outside this writer's listed records) and NEWS say so.
+  - Checks on `4e443054` (the code of the three fixes; the later commits change only NEWS and
+    `dev/`), `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`: the files whose names start with
+    `console-`, `perm`, `risk`, `rules`, `nested`, `bridge`, `mcp-`, `gptr-config`, `agent-`,
+    `tool-`, `session-` or `repl` FAIL 0 WARN 0 SKIP 14 PASS 11824 in UTF-8 and FAIL 0 WARN 0
+    SKIP 41 PASS 11640 under `LC_ALL=C LANG=C`, at load averages of 66 to 362 (the skips: Windows
+    only, Python not configured or provisioned, macOS, INFRA-03, and under C 27 that need a UTF-8
+    locale); with NEWS, `^zzz$` FAIL 0 PASS 149 in both, `testthat::test_dir("dev/release/tests")`
+    FAIL 0 SKIP 0 PASS 290, `dev/release/check-docs.R` 0 problems and the spelling check clean.
+    Lint of the 8 changed R and test files clean; `document()` no diff (the comments are
+    `@noRd`); `fmt.py` on copies of the records changes nothing and `lintfmt.py` shows only the
+    baseline. No full suite or `R CMD check` ran, so the heavy lock was not taken; no plan and no
+    prompt text changed.
+  - Open: FIX-28's paste item narrows to a pause of more than about 0.1 s, and a Ctrl-C typed
+    within about 0.1 s of a paste's end is dropped. Not run: Linux and Windows, and live models
+    (the fixes are tested offline; the verifiers' live and tmux repros were not repeated).
 
 ## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #PR)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
