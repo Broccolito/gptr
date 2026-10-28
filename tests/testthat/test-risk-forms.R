@@ -112,6 +112,8 @@ test_that("env -C runs its command in that directory, read as a cd (review round
   # Windows' spelling: peter$sh() runs such a line in Git Bash there when it is installed, which
   # drops the backslashes, so it reads as an escape the classifier does not model (3)
   expect_identical(level(paste("env -C", chartr("/", "\\", out), "ls")), 3L)
+  # a delete there is 4 in that spelling too
+  expect_identical(level(paste("env -C", chartr("/", "\\", out), "rm -f marker.txt")), 4L)
   # neighbours: in the project as before
   expect_identical(level("env -C sub rm -f marker.txt"), 3L)
   expect_identical(level("env -C sub ls"), 0L)
