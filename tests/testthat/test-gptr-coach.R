@@ -86,24 +86,24 @@ test_that("Harness2's demo: the coach writes the fix, which is kept (4 runs, 3 c
   expect_s3_class(h, "gptr_harness")
   expect_identical(h$record$decision, "kept")
   expect_match(h$coaching$note, "na.rm", fixed = TRUE)
-  expect_identical(log$calls, list("start", c("coach procedure", "coach domain"),
-                                   c("probe procedure", "probe domain"), "composer", "final"))
+  expect_identical(log$calls, list("start1", c("proc1", "dom1"),
+                                   c("probe-proc1", "probe-dom1"), "compose1", "final1"))
   roles = vapply(log$jobs, function(j) j$role, "")
   expect_identical(c(sum(roles == "run"), sum(roles == "coach")), c(4L, 3L))
-  expect_identical(h$report$results$start$value, NA_real_)
-  expect_identical(h$report$results$final$value, 2)
+  expect_identical(h$report$results$start1$value, NA_real_)
+  expect_identical(h$report$results$final1$value, 2)
   expect_identical(h$record$reason, "delivered as at start; risk 0 <= 0; check TRUE")
   expect_identical(vapply(h$record$runs, function(r) r$label, ""),
-                   c("start", "probe procedure", "probe domain", "final"))
+                   c("start1", "probe-proc1", "probe-dom1", "final1"))
   # only the procedure coach may write rules, and the composer only those proposed
   coaches = Filter(function(j) identical(j$role, "coach"), log$jobs)
   expect_identical(vapply(coaches, function(j) "rules" %in% j$surface, NA, USE.NAMES = FALSE),
                    c(TRUE, FALSE, TRUE))
   expect_identical(coaches[[3L]]$rules_allowed, character())
   # the record holds counts and decisions; the report holds the runs and the replies
-  expect_identical(h$report$results[["coach procedure"]]$value$notes,
+  expect_identical(h$report$results$proc1$value$notes,
                    "The starting run returned NA.")
-  expect_false(h$report$results[["coach domain"]]$value$fell_back)
+  expect_false(h$report$results$dom1$value$fell_back)
 })
 
 test_that("an invalid reply is retried once in the same session; a second failure falls back", {
@@ -111,13 +111,13 @@ test_that("an invalid reply is retried once in the same session; a second failur
   log = local_coach_children()
   bad = '{"note": "<coaching>use na.rm</coaching>", "notes": "x"}'
   h = coach_demo(coach = coach_fake(procedure = c(bad, fix_reply), composer = "not json"))
-  coach = h$report$results[["coach procedure"]]
+  coach = h$report$results$proc1
   expect_identical(coach$turns, 2L)
   expect_match(coach$transcript, "Your reply could not be used", fixed = TRUE)
   expect_match(coach$transcript, "contains a tag of one of gptr's blocks", fixed = TRUE)
   expect_false(coach$value$fell_back)
   expect_match(coach$value$coaching$note, "na.rm", fixed = TRUE)
-  composer = h$report$results$composer
+  composer = h$report$results$compose1
   expect_identical(composer$turns, 2L)
   expect_true(composer$value$fell_back)
   expect_match(composer$value$problems, "not one JSON object", fixed = TRUE)
@@ -125,8 +125,8 @@ test_that("an invalid reply is retried once in the same session; a second failur
   expect_identical(h$record$decision, "not kept")
   expect_identical(h$coaching$note, "")
   h = coach_demo(coach = coach_fake(procedure = bad))
-  expect_true(h$report$results[["coach procedure"]]$value$fell_back)
-  probe = Filter(function(j) identical(j$id, "probe procedure"), log$jobs)
+  expect_true(h$report$results$proc1$value$fell_back)
+  probe = Filter(function(j) identical(j$id, "probe-proc1"), log$jobs)
   expect_length(probe, 2L)
   expect_identical(probe[[2L]]$spec$coaching$note, "")
 })
@@ -136,8 +136,8 @@ test_that("a coach's reply budget: its retry gets only what is left", {
   log = local_coach_children()
   bad = '{"note": "<coaching>x</coaching>", "notes": "x"}'
   h = coach_demo(budget = list(turns = 1L), coach = coach_fake(procedure = c(bad, fix_reply)))
-  expect_identical(h$report$results[["coach procedure"]]$turns, 1L)
-  expect_true(h$report$results[["coach procedure"]]$value$fell_back)
+  expect_identical(h$report$results$proc1$turns, 1L)
+  expect_true(h$report$results$proc1$value$fell_back)
   expect_identical(log$jobs[[2L]]$budget, list(turns = 1L))
 })
 
@@ -149,7 +149,7 @@ test_that("a starting run that needs approval stops the call before any coach", 
                               name = "writer")
   expect_error(gptr_coach("Average x.", x, model = writer, mode = "manual", coach = coach_fake()),
                "stopped for an approval", class = "gptr_error_permission")
-  expect_identical(log$calls, list("start"))
+  expect_identical(log$calls, list("start1"))
 })
 
 test_that("a stale recorded block asks before coaching again; no returns the block's harness", {
@@ -178,11 +178,16 @@ test_that("on a plan route the notice counts its sessions and gives the last rea
   withr::defer(assign("plan", old, envir = pcli_cache))
   pcli_cache$plan = list(`claude-cli` = list(five_hour = 0.15, seven_day = 0.34,
                                             time = Sys.time()))
-  expect_message(coach_plan_notice(c(run = "claude", coach = "api"), c(run = 4L, coach = 3L)),
+  n = c(run = 4L, coach = 3L, judge = 0L)
+  expect_message(coach_plan_notice(c(run = "claude", coach = "api"), n),
                  "4 of these sessions run on your Claude plan, at most two at once")
-  expect_message(coach_plan_notice(c(run = "claude", coach = "claude"), c(run = 4L, coach = 3L)),
+  expect_message(coach_plan_notice(c(run = "claude", coach = "claude"), n),
                  "5-hour window 15% used, weekly 34% used")
-  expect_silent(coach_plan_notice(c(run = "api", coach = "fake"), c(run = 4L, coach = 3L)))
+  expect_silent(coach_plan_notice(c(run = "api", coach = "fake"), n))
+  # at k = 2 the judge runs on the coach model, if it runs
+  n = c(run = 8L, coach = 6L, judge = 1L)
+  expect_message(coach_plan_notice(c(run = "claude", coach = "api"), n), "^8 of these sessions")
+  expect_message(coach_plan_notice(c(run = "api", coach = "claude"), n), "^Up to 7 of these")
 })
 
 test_that("a final that delivers less, or takes a riskier action, is not kept", {
@@ -226,9 +231,10 @@ test_that("every refusal comes before anything starts", {
                  regexp = regexp, class = paste0("gptr_error_", class))
   }
   refused("invalid_argument", harness = function(...) peter(...), regexp = "gptr_tailor")
-  refused("invalid_argument", k = 2L, regexp = "k = 1")
-  refused("invalid_argument", k = 9L)
-  refused("invalid_argument", strategy = "sequential", regexp = "later version")
+  refused("invalid_argument", k = 0L)
+  refused("invalid_argument", k = 6L, regexp = "between 1 and 5")
+  refused("invalid_argument", k = 1.5)
+  refused("invalid_argument", strategy = "serial", regexp = "\"sequential\"")
   refused("invalid_argument", focus = character())
   refused("invalid_argument", surface = c("note", "code"))
   refused("model_refused", coach = "router:pick")
@@ -253,24 +259,24 @@ test_that("a domain coach cannot write rules and the composer cannot add one", {
   h = coach_demo(coach = coach_fake(domain = paste0(rule, '"notes": "x"}'),
                                     composer = paste0(rule, '"note": "Use na.rm.", ',
                                                       '"notes": "x"}')))
-  domain = h$report$results[["coach domain"]]$value
+  domain = h$report$results$dom1$value
   expect_true(domain$fell_back)
   expect_match(domain$problems, "rules", fixed = TRUE)
-  composer = h$report$results$composer$value
+  composer = h$report$results$compose1$value
   expect_true(composer$fell_back)
   expect_match(composer$problems, "no candidate proposed: r(category:install)", fixed = TRUE)
 })
 
 test_that("a plan limit stops the call with the starting harness and a record", {
   local_project()
-  log = local_coach_children(limit = "coach domain")
+  log = local_coach_children(limit = "dom1")
   start = gptr_tailor(peter, coaching = list(note = "Be brief."))
   h = coach_demo(harness = start)
   expect_identical(h$record$decision, "stopped")
   expect_identical(h$record$reason, "stopped at the coaches: plan limit, resets at 3:45pm")
   expect_identical(h$coaching, start$coaching)
   expect_false(identical(harness_spec(h)$id, harness_spec(start)$id))
-  expect_identical(log$calls, list("start", c("coach procedure", "coach domain")))
+  expect_identical(log$calls, list("start1", c("proc1", "dom1")))
 })
 
 test_that("the record holds no data from the runs; $report holds the full report", {
@@ -280,10 +286,10 @@ test_that("the record holds no data from the runs; $report holds the full report
   h = coach_demo(label = canary)
   rec = paste(deparse(h$record), collapse = "\n")
   expect_false(grepl(canary, rec, fixed = TRUE))
-  expect_match(h$report$results$start$transcript, canary, fixed = TRUE)
+  expect_match(h$report$results$start1$transcript, canary, fixed = TRUE)
   expect_match(log$jobs[[2L]]$prompt, canary, fixed = TRUE)
   expect_identical(h$report$record, h$record)
-  expect_identical(names(h$report$candidates), c("procedure", "domain", "composer"))
+  expect_identical(names(h$report$candidates), c("proc1", "dom1", "compose1"))
   expect_named(h$record$runs[[1L]], c("label", "status", "turns", "tokens", "cost", "risk",
                                       "unmet"))
   expect_identical(c(h$record$model, h$record$coach), c("solver/solver-1", "coach/coach-1"))
@@ -316,6 +322,212 @@ test_that("a recorded coaching call replays from its block with no process", {
   expect_identical(coaching_hash(e$mean_peter$coaching), hash)
 })
 
+# ---- k > 1 and sequential (coach_run_jobs() stubbed) ---------------------------------------------
+
+# coach_run_jobs() stubbed: `answer(job)` gives the fields of each job's result; `log` keeps the
+# job ids of each stage and every job
+local_coach_stub = function(answer, .env = parent.frame()) {
+  log = new.env(parent = emptyenv())
+  log$jobs = list()
+  log$calls = list()
+  testthat::local_mocked_bindings(coach_run_jobs = function(jobs, max_active = NULL) {
+    log$jobs = c(log$jobs, jobs)
+    log$calls = c(log$calls, list(vapply(jobs, function(j) j$id, "", USE.NAMES = FALSE)))
+    lapply(jobs, function(job) do.call(child_result_new, c(list(job$id), answer(job))))
+  }, .env = .env)
+  log
+}
+
+# Stubbed sessions: a run returns 2 and answers "ran <its note>", with a transcript canary; a
+# coach proposes the note "<its id> note"; the judge answers as `judge(job)` does (by default it
+# fails)
+coach_answer = function(judge = function(job) list(error = "the judge failed")) {
+  function(job) {
+    if (identical(job$role, "judge")) return(judge(job))
+    if (identical(job$role, "coach")) {
+      return(list(status = "idle", turns = 1L, value = list(
+        coaching = list(note = paste(job$id, "note")), notes = paste(job$id, "notes"),
+        fell_back = FALSE)))
+    }
+    list(status = "idle", turns = 1L, value = 2, text = paste("ran", job$spec$coaching$note),
+         transcript = paste("TRANSCRIPT-CANARY", job$id))
+  }
+}
+
+# A judge that picks the attempt whose answer contains `text`
+judge_picks = function(text) {
+  function(job) {
+    at = regmatches(job$prompt, gregexpr("## Attempt [A-Z]\nAnswer:\n[^\n]*", job$prompt))[[1L]]
+    list(status = "idle", value = list(label = substr(at[grepl(text, at, fixed = TRUE)], 12L, 12L)))
+  }
+}
+
+coach_k = function(...) {
+  x = c(1, NA, 3)
+  gptr_coach("Average x.", x, model = coach_solver(), mode = "auto", coach = coach_fake(), ...)
+}
+
+job_by_id = function(log, id) Find(function(j) identical(j$id, id), log$jobs)
+
+test_that("k = 2 in parallel: the counts, composers that see every probe, labels, the judge", {
+  local_project()
+  local_gptr_options(quiet = FALSE)
+  log = local_coach_stub(coach_answer(judge = judge_picks("compose2")))
+  said = character()
+  h = withCallingHandlers(coach_k(k = 2L), gptr_message = function(m) {
+    said <<- c(said, conditionMessage(m))
+    invokeRestart("muffleMessage")
+  })
+  expect_true(any(grepl(paste0("starts 8 runs of your task and 6 coach sessions, plus up to one ",
+                               "judge session"), said, fixed = TRUE)))
+  expect_identical(log$calls, list(c("start1", "start2"), c("proc1", "dom1", "proc2", "dom2"),
+                                   c("probe-proc1", "probe-dom1", "probe-proc2", "probe-dom2"),
+                                   c("compose1", "compose2"), c("final1", "final2"), "judge"))
+  roles = vapply(log$jobs, function(j) j$role, "")
+  expect_identical(c(sum(roles == "run"), sum(roles == "coach"), sum(roles == "judge")),
+                   c(8L, 6L, 1L))
+  # the coaches are blind to each other and see both starting runs; each composer sees all
+  for (id in c("proc1", "dom2")) {
+    p = job_by_id(log, id)$prompt
+    expect_match(p, "(?s)## Run start1\n.*## Run start2\n", perl = TRUE)
+    expect_false(grepl("Candidate|probe-", p))
+  }
+  for (id in c("compose1", "compose2")) {
+    p = job_by_id(log, id)$prompt
+    for (r in c("start1", "start2", "probe-proc1", "probe-dom1", "probe-proc2", "probe-dom2")) {
+      expect_match(p, paste0("## Run ", r, "\n"), fixed = TRUE)
+    }
+    expect_match(p, "## Candidate dom2\n", fixed = TRUE)
+  }
+  expect_identical(job_by_id(log, "probe-dom2")$spec$coaching$note, "dom2 note")
+  expect_identical(job_by_id(log, "final2")$spec$coaching$note, "compose2 note")
+  # the judge picked final2 among the two that passed
+  expect_identical(h$record$decision, "kept")
+  expect_identical(h$coaching$note, "compose2 note")
+  expect_match(h$record$reason, "^final2, picked by the judge: delivered as at start")
+  label = function(rows) vapply(rows, function(r) r$label, "")
+  expect_identical(label(h$record$runs), c("start1", "start2", "probe-proc1", "probe-dom1",
+                                           "probe-proc2", "probe-dom2", "final1", "final2"))
+  expect_identical(label(h$record$coaches), c("proc1", "dom1", "proc2", "dom2", "compose1",
+                                              "compose2", "judge"))
+  expect_identical(h$record[c("k", "strategy")], list(k = 2L, strategy = "parallel"))
+})
+
+test_that("the judge sees only the passing finals' deliverables, under shuffled labels", {
+  local_project()
+  withr::local_seed(7L)
+  seed = .Random.seed
+  log = local_coach_stub(coach_answer(judge = judge_picks("compose1")))
+  h = coach_k(k = 3L, check = function(r) {
+    "CHECK-CANARY"
+    !grepl("compose3", r$text, fixed = TRUE)
+  })
+  expect_identical(.Random.seed, seed)
+  judge = job_by_id(log, "judge")
+  expect_identical(judge$schema$properties$label$enum, list("A", "B"))
+  expect_null(judge$spec)
+  expect_null(judge$base)
+  p = judge$prompt
+  for (no in c("compose3", "TRANSCRIPT-CANARY", "## Run", "Transcript", "CHECK-CANARY",
+               "proc1 note", "notes", "rules", "harness", "coaching")) {
+    expect_false(grepl(no, p, fixed = TRUE), label = no)
+  }
+  expect_match(p, "# The task\nAverage x.", fixed = TRUE)
+  # the attempts follow the call's own shuffle, and a label names the final shown under it
+  shown = c("compose1", "compose2")[coach_shuffle(paste(coaching_hash(NULL), "Average x."), 2L)]
+  expect_match(p, paste0("## Attempt A\nAnswer:\nran ", shown[[1L]], " note\nValue:\n num 2\n",
+                         "Objects:\nnone\nFiles:\nnone\n## Attempt B\nAnswer:\nran ", shown[[2L]]),
+               fixed = TRUE)
+  expect_identical(h$coaching$note, "compose1 note")
+  expect_match(h$record$reason, "^final1, picked by the judge")
+  # the shuffle repeats for one seed, is a permutation, and differs between seeds
+  expect_identical(coach_shuffle("s", 5L), coach_shuffle("s", 5L))
+  expect_setequal(coach_shuffle("s", 5L), 1:5)
+  expect_false(all(vapply(c("a", "b", "c", "d"), function(s) {
+    identical(coach_shuffle(s, 5L), coach_shuffle("s", 5L))
+  }, NA)))
+})
+
+test_that("a failing judge falls back to the first passing final", {
+  local_project()
+  log = local_coach_stub(coach_answer())
+  h = coach_k(k = 2L)
+  expect_identical(h$record$decision, "kept")
+  expect_identical(h$coaching$note, "compose1 note")
+  expect_match(h$record$reason, "^final1, the first that passed: delivered")
+  expect_match(h$record$notes, "judge: its answer could not be used", fixed = TRUE)
+  log = local_coach_stub(coach_answer(judge = function(job) {
+    list(status = "idle", value = list(label = "Z"))
+  }))
+  h = coach_k(k = 2L)
+  expect_identical(h$coaching$note, "compose1 note")
+})
+
+test_that("none passing keeps the start; one passing needs no judge", {
+  local_project()
+  log = local_coach_stub(coach_answer())
+  start = gptr_tailor(peter, coaching = list(note = "Be brief."))
+  h = coach_k(k = 2L, harness = start, check = function(r) FALSE)
+  expect_identical(h$record$decision, "not kept")
+  expect_identical(h$record$reason, "final1: check returned FALSE; final2: check returned FALSE")
+  expect_identical(h$coaching, start$coaching)
+  expect_null(job_by_id(log, "judge"))
+  h = coach_k(k = 2L, check = function(r) grepl("compose2", r$text, fixed = TRUE))
+  expect_identical(h$coaching$note, "compose2 note")
+  expect_identical(h$record$reason, "final2: delivered as at start; risk 0 <= 0; check TRUE")
+  expect_null(job_by_id(log, "judge"))
+})
+
+test_that("sequential rounds share the starting runs, see earlier rounds and build on them", {
+  local_project()
+  local_gptr_options(quiet = FALSE)
+  log = local_coach_stub(coach_answer())
+  said = character()
+  # round 1's composition fails check, and round 2 still builds on it
+  h = withCallingHandlers(
+    coach_k(k = 2L, strategy = "sequential",
+            check = function(r) !grepl("compose1", r$text, fixed = TRUE)),
+    gptr_message = function(m) {
+      said <<- c(said, conditionMessage(m))
+      invokeRestart("muffleMessage")
+    })
+  expect_true(any(grepl(paste0("starts 8 runs of your task and 6 coach sessions, plus up to one ",
+                               "judge session"), said, fixed = TRUE)))
+  expect_identical(log$calls, list(c("start1", "start2"), c("proc1", "dom1"),
+                                   c("probe-proc1", "probe-dom1"), "compose1", "final1",
+                                   c("proc2", "dom2"), c("probe-proc2", "probe-dom2"), "compose2",
+                                   "final2"))
+  roles = vapply(log$jobs, function(j) j$role, "")
+  expect_identical(c(sum(roles == "run"), sum(roles == "coach")), c(8L, 6L))
+  p1 = job_by_id(log, "proc1")$prompt
+  expect_match(p1, "(?s)## Run start1\n.*## Run start2\n", perl = TRUE)
+  expect_false(grepl("Earlier rounds", p1, fixed = TRUE))
+  for (id in c("dom2", "compose2")) {
+    p = job_by_id(log, id)$prompt
+    expect_match(p, "(?s)## Run start1\n.*## Run start2\n.*# Earlier rounds\n", perl = TRUE)
+    for (seen in c("## Candidate proc1", "## Run probe-proc1", "proc1 notes", "## Candidate dom1",
+                   "## Candidate compose1", "## Run final1")) {
+      expect_match(p, seen, fixed = TRUE)
+    }
+    expect_match(p, "# The current coaching\n{\"note\":\"compose1 note\"", fixed = TRUE)
+    expect_identical(job_by_id(log, id)$base$note, "compose1 note")
+  }
+  expect_match(job_by_id(log, "compose2")$prompt, "# The candidates\n## Candidate proc2",
+               fixed = TRUE)
+  expect_identical(h$coaching$note, "compose2 note")
+  expect_identical(h$record$reason, "final2: delivered as at start; risk 0 <= 0; check TRUE")
+  expect_identical(h$record$strategy, "sequential")
+})
+
+test_that("the judge runs as a tool-less session whose value is its label", {
+  local_project()
+  log = local_coach_children()
+  x = list(models = list(coach = gptr_fake_provider(list('{"label": "B"}'), name = "picker")))
+  res = coach_run_jobs(list(coach_job_judge(x, "Pick one.", c("A", "B"))))
+  expect_identical(res[[1L]][c("status", "value")],
+                   list(status = "idle", value = list(label = "B")))
+})
+
 # ---- real child processes (skipped on CRAN; gptr must be installed for Rscript children) ------
 
 # Children load gptr with loadNamespace(): under R CMD check the installed package is on the
@@ -346,7 +558,7 @@ test_that("the demo in real processes, at most two at once, leaves no child behi
   local_gptr_options(subagents.max_workers = 2L)
   h = coach_demo()
   expect_identical(h$record$decision, "kept")
-  expect_identical(h$report$results$final$value, 2)
+  expect_identical(h$report$results$final1$value, 2)
   expect_match(h$coaching$note, "na.rm", fixed = TRUE)
   jobs = gptr_jobs()
   expect_false(any(jobs$kind == "worker"))
