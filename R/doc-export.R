@@ -180,7 +180,7 @@ doc_export_lines = function(lines, format, path, target) {
       body = doc_block_body(lines, b)
       if (!is.null(h[["status"]]) || !rlang::is_string(h[["sha"]]) ||
           !grepl("^[0-9a-f]{8}$", h[["sha"]]) ||
-          !identical(doc_block_status(h, body, hit$ph, h[["args"]]), "fresh")) {
+          !identical(doc_block_status(h, body, hit$ph, h[["args"]], h[["harness"]]), "fresh")) {
         doc_export_refuse("missing, stale, edited or undone record")
       }
       if (!rlang::is_string(h[["session"]]) || !nzchar(h[["session"]]) ||

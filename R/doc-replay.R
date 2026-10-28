@@ -546,8 +546,8 @@ doc_route_run = function(call) {
 doc_names_head = function(expr, envir) {
   nms = all.names(expr)
   if (any(c("peter", "gptr_coach") %in% nms)) return(TRUE)
-  heads = grep("^[A-Za-z.][A-Za-z0-9._]*$", setdiff(nms, all.vars(expr)), value = TRUE)
-  any(vapply(heads, env_harness_bound, NA, envir = envir))
+  heads = setdiff(nms, all.vars(expr))
+  any(vapply(heads[make.names(heads) == heads], env_harness_bound, NA, envir = envir))
 }
 
 # ---- services (contract 7.0; owned by builtin:documents, IC-34) --------------------------------
@@ -876,19 +876,12 @@ doc_coach_walk = function(body) {
   }, error = function(e) NULL)
 }
 
-#' The coaching normalised by T6's coaching_validate() (R/gptr-tailor.R, found at call time),
-#' else checked for its four parts; an error of class `coaching` when it is invalid
+#' The coaching normalised by coaching_validate() (gptr-tailor.R, a higher layer, so found at
+#' call time); an error of class `coaching` when it is invalid
 #' @noRd
-doc_coach_valid = function(coaching) {
-  validate = ns_fun("coaching_validate")
-  if (is.function(validate)) return(validate(coaching))
-  if (!is.list(coaching) || !all(names(coaching) %in% c("note", "skills", "review", "rules"))) {
-    gptr_abort("The coaching is not a list of note, skills, review and rules.", "coaching")
-  }
-  coaching
-}
+doc_coach_valid = function(coaching) ns_fun("coaching_validate")(coaching)
 
-#' The coaching hash of T6's coaching_hash() (R/gptr-tailor.R, found at call time)
+#' The coaching hash of coaching_hash() (gptr-tailor.R, found at call time)
 #' @noRd
 doc_coach_hash = function(coaching) ns_fun("coaching_hash")(coaching)
 
@@ -971,59 +964,60 @@ doc_coach_replay = function(site, call) {
   if (is.null(coaching)) tailor(start) else tailor(start, coaching = coaching)
 }
 
-#' doc.coach (P29 interface 10; 08 section 3.6): the document decision for a coaching call, which
+#' doc.coach (contract IC-87; 08 section 3.6): the document decision for a coaching call, which
 #' gptr_coach() asks before anything else. `call` is a call record built as the gateway builds
 #' peter()'s (call_new()): `prompt`, `template` (the literal as written, NULL when computed),
 #' `interp`, `context`, `sys_call` and `nframe` (gptr_coach()'s own sys.call() and sys.nframe()),
 #' `envir` (the caller's frame, where the starting harness is found), `args` with `replay` and
-#' `opts` (`.opts`, of which `record` is read), and `start_hash`, the coaching hash of the
-#' starting harness. Returns list(action, site, harness, reason) with action:
+#' `opts` (`.opts`, of which `record` is read), `start_hash`, the coaching hash of the starting
+#' harness, and `offline`, TRUE when every model of the call is offline. Returns
+#' list(action, site, harness) with action:
 #' - "replay": a fresh block; `harness` is the harness it builds;
 #' - "ask": a stale block under auto while a person can answer: coach again (then record at
 #'   `site`) only after a yes, else return `harness`, the block's;
 #' - "record": coach, then pass `site` to doc.coach_block;
-#' - "none": coach without recording, `reason` says why (a statement of another shape, once).
-#' Under replay, a recordable call without a fresh block signals not_recorded or stale_block.
+#' - "none": coach without recording (a statement of another shape says why, once).
+#' Under replay, a recordable call without a fresh block signals not_recorded or stale_block, except
+#' an offline call without a block, which runs, as offline models answer peter() under replay.
 #' @noRd
 doc_coach_service = function(call) {
-  out = function(action, site = NULL, harness = NULL, reason = NULL) {
-    list(action = action, site = site, harness = harness, reason = reason)
+  out = function(action, site = NULL, harness = NULL) {
+    list(action = action, site = site, harness = harness)
   }
-  if (!is.null(run_current())) return(out("none", reason = "a call from model code"))
+  if (!is.null(run_current())) return(out("none"))
   mode = replay_mode(call$args$replay)
   start = doc_coach_start(doc_call_norm(call$sys_call))
   call$start = paste0(start %||% "", ":", call$start_hash %||% "")
   site = tryCatch(doc_locate(call), error = function(e) NULL)
-  if (is.null(site$path)) return(out("none", reason = "a call in no document"))
+  if (is.null(site$path)) return(out("none"))
   if (isTRUE(site$console)) {
-    if (!doc_console_may_record(call) || !doc_consent_possible(site$path)) {
-      return(out("none", reason = "a console call that is not recorded"))
-    }
+    if (!doc_console_may_record(call) || !doc_consent_possible(site$path)) return(out("none"))
     return(out("record", site))
   }
   top = function(s) isTRUE(s$top_level) && !is.null(s$stmt)
-  if (!top(site)) return(out("none", reason = "a call nested in other code"))
+  if (!top(site)) return(out("none"))
   site = doc_touch(call, site, "doc.coach", top)
   site$name = doc_coach_target(site, call)
   if (is.null(site$name) || is.null(start)) {
-    why = paste0("a coaching call is recorded only as `<name> = gptr_coach(...)`, with `harness` ",
-                 "missing or a name")
-    gptr_inform(paste0("gptr did not record a gptr_coach() call in ", doc_rel(site$path), ": ",
-                       why, "."), "notice", .once = paste0("doc_coach_shape:", path_key(site$path)))
-    return(out("none", reason = why))
+    gptr_inform(paste0("gptr did not record a gptr_coach() call in ", doc_rel(site$path), ": a ",
+                       "coaching call is recorded only as `<name> = gptr_coach(...)`, with ",
+                       "`harness` missing or a name."), "notice",
+                .once = paste0("doc_coach_shape:", path_key(site$path)))
+    return(out("none"))
   }
+  if (is.null(site$block) && identical(mode, "replay") && isTRUE(call$offline)) return(out("none"))
   decision = doc_decide(site, site$prompt_hash, site$args_hash, mode)
   if (decision %in% c("replay", "ask")) {
     if (identical(decision, "ask")) site = doc_skip_old(site)
     return(out(decision, site, doc_coach_replay(site, call)))
   }
-  if (identical(decision, "skip")) return(out("none", reason = "an undone block"))
+  if (identical(decision, "skip")) return(out("none"))
   if (identical(decision, "regenerate")) site = doc_skip_old(site)
   doc_keep(call, site, mode)
-  if (is.null(call$doc)) out("none", reason = "no write consent") else out("record", call$doc)
+  if (is.null(call$doc)) out("none") else out("record", call$doc)
 }
 
-#' doc.coach_block (P29 interface 10; 08 section 3.6): record the result `harness` of a coaching
+#' doc.coach_block (contract IC-87; 08 section 3.6): record the result `harness` of a coaching
 #' call at doc.coach's `site` and return the harness the recorded text defines (the one given,
 #' unless a process-wide `document_write` hook patched the block). `record` holds what the block
 #' shows besides the coaching: `model` and `coach` (the run and coach models), `tokens` (input and

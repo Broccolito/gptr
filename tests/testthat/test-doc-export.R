@@ -153,6 +153,14 @@ test_that("Peter export keeps calls active and recorded code inert exactly once"
   expect_identical(export_read(f), bytes)
 })
 
+test_that("a fresh block of a coached harness call exports like a peter() block", {
+  local_project()
+  f = export_fixture(call = "s = h(\"one\")", header = list(harness = "h:1234abcd"))
+  target = file.path(getwd(), "plain.R")
+  expect_identical(gptr_export(f, target), path_norm(target))
+  expect_true(all(c("# s = h(\"one\")", "x = 1") %in% readLines(target)))
+})
+
 test_that("history export keeps quoted notes and UTF-8 output inert and bounded", {
   local_project()
   accent = intToUtf8(0xe9L)

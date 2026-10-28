@@ -31,7 +31,7 @@ user_log_gptr_head = function(head) {
       return(TRUE)
     }
   }
-  is.name(head) && grepl("^[A-Za-z.][A-Za-z0-9._]*$", as.character(head)) &&
+  is.name(head) && make.names(head) == as.character(head) &&
     env_harness_bound(as.character(head), globalenv())
 }
 

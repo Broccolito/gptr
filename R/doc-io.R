@@ -667,7 +667,7 @@ doc_sidecar_data = function(rec) {
         stop("Unsupported call identity")
       }
       a = list(ph = nullable(a$ph), th = nullable(a$th), j = a$j, block = nullable(a$block),
-               label = nullable(a$label), call0 = text)
+               label = nullable(a$label), head = nullable(a$head), call0 = text)
     }
     meta = attr(u$lines, "meta", exact = TRUE)
     if (!is.null(meta) && !doc_sidecar_meta_ok(meta)) {
@@ -725,14 +725,14 @@ doc_sidecar_decode = function(x, path) {
         !string(s$prompt_hash) || !string(s$args_hash)) return(NULL)
     a = s$anchor
     if (!is.null(a)) {
-      if (!object(a, c("ph", "th", "j", "block", "label", "call0")) ||
-          !all(vapply(a[c("ph", "th", "block", "label", "call0")], string, NA)) ||
+      if (!object(a, c("ph", "th", "j", "block", "label", "head", "call0")) ||
+          !all(vapply(a[c("ph", "th", "block", "label", "head", "call0")], string, NA)) ||
           !positive(a$j)) return(NULL)
       call0 = if (!is.null(a$call0)) doc_sidecar_call(a$call0)
       if (!is.null(a$call0) && is.null(call0)) return(NULL)
       s$anchor = list(ph = a$ph %||% NA_character_, th = a$th %||% NA_character_,
                       j = as.integer(a$j), block = a$block %||% NA_character_,
-                      label = a$label %||% NA_character_, call0 = call0)
+                      label = a$label %||% NA_character_, head = a$head, call0 = call0)
     }
     meta = u$meta
     if (!is.null(meta) && (!identical(fmt, "ipynb") || !doc_sidecar_meta_ok(meta) ||

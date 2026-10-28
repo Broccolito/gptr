@@ -171,8 +171,7 @@ doc_body_sha = function(body) {
 #' whitespace around newlines removed
 #' @noRd
 prompt_hash = function(template) {
-  p = as_utf8(paste(as.character(template), collapse = "\n"))
-  p = gsub("[ \t]*\r?\n[ \t]*", "\n", trimws(p))
+  p = text_norm(paste(as.character(template), collapse = "\n"))
   substr(hash_sha256(p), 1L, 12L)
 }
 
@@ -214,7 +213,7 @@ doc_block_status = function(header, body, ph = NULL, ah = NULL, hh = NULL, coach
 #' @noRd
 doc_coaching_of = function(v) {
   if (rlang::is_string(v) && grepl(":", v, fixed = TRUE)) return(sub("^.*:", "", v))
-  tryCatch(ns_fun("coaching_hash")(NULL), error = function(e) NA_character_) %||% NA_character_
+  doc_coach_hash(NULL)
 }
 
 #' Render a marker block (contract 11.5): header, indented non-empty body lines, footer
@@ -249,15 +248,17 @@ doc_heads = function(lines, extra = NULL) {
   m = regmatches(hit, regexec(doc_re_open, hit, perl = TRUE))
   vals = vapply(m[lengths(m) > 0L], function(x) doc_parse_kv(x[4L])[["harness"]] %||% "", "")
   names = sub(":[^:]*$", "", vals)
-  unique(c("peter", "gptr_coach", names[grepl("^[A-Za-z.][A-Za-z0-9._]*$", names)], extra))
+  unique(c("peter", "gptr_coach", names[make.names(names) == names], extra))
 }
 
 #' The heads a format's locate() counts for a site: its own (doc_site_base()) and the head of
-#' its anchored call, which an upsert recovered from a notebook sidecar keeps (doc_sidecar_call())
+#' its anchored call, which an upsert recovered from a sidecar keeps (`head`, or a notebook
+#' anchor's call identity, doc_sidecar_call())
 #' @noRd
 doc_site_heads = function(site) {
   call0 = site[["anchor"]][["call0"]]
-  c(site[["heads"]], if (is.call(call0) && is.symbol(call0[[1L]])) as.character(call0[[1L]]))
+  c(site[["heads"]], site[["anchor"]][["head"]],
+    if (is.call(call0) && is.symbol(call0[[1L]])) as.character(call0[[1L]]))
 }
 
 #' P15's process state `the$doc_pending` (contract 7.0): deferred and pending upserts by
@@ -585,10 +586,13 @@ doc_call_norm = function(x) {
   if (pl) as.pairlist(x) else x
 }
 
-#' Calls that share an anchor's identity (prompt hash, else call-text hash)
+#' Calls that share an anchor's identity: its head, when known, and prompt hash, else call-text
+#' hash. The head keeps the ordinal of a deferred anchor from counting calls of a harness whose
+#' `harness=` header was written after the anchor was taken.
 #' @noRd
-doc_same_calls = function(calls, ph, th = NA_character_) {
+doc_same_calls = function(calls, ph, th = NA_character_, head = NULL) {
   keep = if (!is.na(ph)) calls$ph %in% ph else calls$th %in% th
+  if (!is.null(head)) keep = keep & calls$head %in% head
   calls[keep, , drop = FALSE]
 }
 
@@ -609,9 +613,10 @@ doc_anchor_scope = function(calls, block, label) {
 #' @noRd
 doc_anchor_of = function(calls, t) {
   label = t[["label"]] %||% NA_character_
-  same = doc_same_calls(doc_anchor_scope(calls, t$block, label), t$ph, t$th)
+  same = doc_same_calls(doc_anchor_scope(calls, t$block, label), t$ph, t$th, t$head)
   j = which(same$line1 == t$line1 & same$col1 == t$col1)
-  list(ph = t$ph, th = t$th, j = if (length(j)) j[1L] else 1L, block = t$block, label = label)
+  list(ph = t$ph, th = t$th, j = if (length(j)) j[1L] else 1L, block = t$block, label = label,
+       head = t$head)
 }
 
 #' Re-locate an anchored call in a (possibly edited) text; NULL when it is gone
@@ -619,7 +624,7 @@ doc_anchor_of = function(calls, t) {
 doc_match_anchor = function(calls, anchor) {
   if (is.null(anchor) || !nrow(calls)) return(NULL)
   cls = doc_anchor_scope(calls, anchor[["block"]], anchor[["label"]] %||% NA_character_)
-  same = doc_same_calls(cls, anchor[["ph"]], anchor[["th"]])
+  same = doc_same_calls(cls, anchor[["ph"]], anchor[["th"]], anchor[["head"]])
   if (nrow(same) < anchor[["j"]]) return(NULL)
   same[anchor[["j"]], , drop = FALSE]
 }

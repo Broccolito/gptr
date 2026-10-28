@@ -290,6 +290,12 @@ test_that("gptr_coach() and calls of a harness bound in the global environment a
   expect_equal(user_expr_log(), "other_peter(\"p\")")
 })
 
+test_that("a harness whose name has non-ASCII letters is filtered too", {
+  skip_if_not(isTRUE(l10n_info()[["UTF-8"]]))
+  local_mocked_bindings(env_harness_bound = function(name, envir) identical(name, "étude"))
+  expect_true(user_log_gptr_head(as.name("étude")))
+})
+
 test_that("env_harness_bound() finds a harness binding and forces no promise", {
   e = new.env()
   e$h = structure(function(...) NULL, class = c("gptr_harness", "function"))

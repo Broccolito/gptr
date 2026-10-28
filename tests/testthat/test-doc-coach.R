@@ -1,16 +1,16 @@
-# Tests of plan P29 task T8 (08 sections 1.10 and 3.6): harness calls and coaching calls in
-# documents. Stand-ins route through the document services as the real functions do: a harness
-# call reaches the `document` route as the rewritten peter() call carrying the `gptr_harness`
-# attribute (P29 interface 7), and gptr_coach() builds the call record doc.coach takes
-# (interface 10). gptr_tailor() is always a stand-in here, so the harnesses it makes call the
-# stand-ins; coaching_hash() and coaching_validate() are T6's when loaded, else stand-ins.
+# Harness calls and coaching calls in documents (08 sections 1.10 and 3.6; contract IC-87).
+# Stand-ins route through the document services as the real functions do: a harness call reaches
+# the `document` route as the rewritten peter() call carrying the `gptr_harness` attribute
+# (IC-83), and gptr_coach() builds the call record doc.coach takes. gptr_tailor() is always a
+# stand-in here, so the harnesses it makes call the stand-ins.
 
 coach_hash = function(coaching) ns_fun("coaching_hash")(coaching)
 
 # A sourcing environment with stand-ins for peter(), harnesses, gptr_tailor() and gptr_coach();
 # `log$runs` counts model runs, `log$decision` keeps doc.coach's last answer, `log$result` makes
-# a coaching call's harness and `log$record` its record. `log$console = TRUE` marks the calls as
-# console turns (the attribute the console REPL sets), so a test's own srcrefs never locate them.
+# a coaching call's harness, `log$record` its record, `log$offline = TRUE` marks its models
+# offline, and `log$console = TRUE` marks the calls as console turns (the attribute the console
+# REPL sets), so a test's own srcrefs never locate them.
 coach_world = function(.env = parent.frame()) {
   e = new.env(parent = globalenv())
   log = new.env()
@@ -57,6 +57,7 @@ coach_world = function(.env = parent.frame()) {
     call = call_new(prompt, envir = parent.frame(), args = list(replay = replay),
                     sys_call = turn(sys.call()), nframe = sys.nframe())
     call$start_hash = coach_hash(attr(start, "gptr_harness")$coaching)
+    call$offline = isTRUE(log$offline)
     d = doc_coach_service(call)
     log$decision = d
     if (d$action %in% c("replay", "ask")) return(d$harness)
@@ -72,17 +73,9 @@ coach_world = function(.env = parent.frame()) {
                     runs = c("start: ended normally, 3 turns, risk 1",
                              "final: ended normally, 2 turns, risk 1"),
                     decision = "kept (risk 1 <= 1)")
-  real = ns_fun
-  stub = list(
-    coaching_hash = function(coaching) {
-      substr(hash_sha256(canonical_json(list(schema = 1L, coaching = coaching %||% list()))),
-             1L, 8L)
-    },
-    coaching_validate = function(coaching, surface = NULL) coaching
-  )
+  # the real ns_fun() would find this mock as `ns_fun` and search the wrong environment
   testthat::local_mocked_bindings(ns_fun = function(name) {
-    if (identical(name, "gptr_tailor")) return(e$gptr_tailor)
-    real(name) %||% stub[[name]]
+    if (identical(name, "gptr_tailor")) e$gptr_tailor else get(name, mode = "function")
   }, .env = .env)
   e
 }
@@ -108,6 +101,20 @@ test_that("a harness call and a peter() call with one prompt each own their bloc
   expect_identical(gptr_blocks(f)$status, c("fresh", "fresh"))
 })
 
+test_that("a harness whose name has non-ASCII letters is located and recorded", {
+  skip_if_not(isTRUE(l10n_info()[["UTF-8"]]))
+  local_project()
+  local_gptr_options(record = "auto", replay = "auto")
+  name = "étude"
+  f = file.path(getwd(), "survey.R")
+  writeLines(paste0("b = ", name, "(\"Clean the data\")"), f, useBytes = TRUE)
+  e = coach_world()
+  assign(name, e$gptr_tailor(e$peter, coaching = list(note = "Weights first.")), envir = e)
+  for (i in 1:2) gptr_source(f, envir = e)
+  expect_identical(e$log$runs, 1L)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+})
+
 test_that("under Rscript a harness call is located in its own statement and owns its block", {
   local_project()
   f = file.path(getwd(), "run.R")
@@ -127,6 +134,49 @@ test_that("under Rscript a harness call is located in its own statement and owns
   expect_identical(c(s1$block$id, s2$block$id), c("aaaaaa", "bbbbbb"))
   expect_identical(c(s1$block$status, s2$block$status), c("fresh", "fresh"))
   expect_identical(s2$harness, "survey_peter:1234abcd")
+})
+
+test_that("under Rscript, same-prompt calls each get their deferred block under their statement", {
+  local_project()
+  local_gptr_options(record = "auto")
+  st = doc_state()
+  withr::defer({
+    st$docs = list()
+    doc_lock_release_all()
+  })
+  # the call each head makes as the gateway sees it: a harness's carries the gptr_harness attribute
+  sys_call = function(fn) {
+    if (identical(fn, "peter")) return(quote(peter("Clean")))
+    rw = quote(peter("Clean"))
+    attr(rw, "gptr_harness") = list(fn = fn, hash = "1234abcd", call = call(fn, "Clean"))
+    rw
+  }
+  # written at exit, or recovered from the sidecar of a process that died first
+  for (fns in list(c("h", "peter"), c("h1", "h2"))) for (dead in c(FALSE, TRUE)) {
+    f = file.path(getwd(), paste0(fns[1L], dead, ".R"))
+    stmts = paste0(c("a", "b"), " = ", fns, "(\"Clean\")")
+    writeLines(stmts, f)
+    testthat::local_mocked_bindings(doc_command_args = function() c("R", paste0("--file=", f)))
+    ids = vapply(fns, function(fn) {
+      s = doc_locate(call_new("Clean", sys_call = sys_call(fn), nframe = 0L))
+      doc_upsert(s, structure("x = 1", header = doc_header_common(s, 1L, "m")))$block_id
+    }, "")
+    if (dead) {
+      rec = st$docs[[path_key(f)]]
+      rec$pid = 999999999L
+      doc_sidecar_write(rec)
+      st$docs = list()
+      doc_lock_release_all()
+      testthat::local_mocked_bindings(doc_command_args = function() "R")
+      expect_true(doc_recover(f))
+    } else {
+      doc_pending_flush_all()
+    }
+    lines = readLines(f)
+    b = doc_find_blocks(lines)
+    expect_identical(b$id, unname(ids))
+    expect_identical(lines[b$start - 1L], stmts)
+  }
 })
 
 test_that("a harness call's block is stale once the coaching changes; replay refuses it", {
@@ -266,7 +316,7 @@ test_that("a coaching call is recorded only as `<name> = gptr_coach(...)`, and s
   expect_message(capture.output(source(f, local = e, keep.source = TRUE)),
                  class = "gptr_message_notice")
   expect_identical(e$log$runs, 4L)
-  expect_identical(e$log$decision$action, "none")
+  expect_identical(e$log$decision, list(action = "none", site = NULL, harness = NULL))
   expect_identical(nrow(doc_find_blocks(readLines(f))), 0L)
 })
 
@@ -279,6 +329,11 @@ test_that("replay mode refuses a coaching call that has no recorded block", {
   e = coach_world()
   expect_error(source(f, local = e, keep.source = TRUE), class = "gptr_error_not_recorded")
   expect_identical(e$log$runs, 0L)
+  # offline models answer under replay, as they do for peter(), and nothing is recorded
+  e$log$offline = TRUE
+  source(f, local = e, keep.source = TRUE)
+  expect_identical(c(e$log$runs, nrow(doc_find_blocks(readLines(f)))), c(1L, 0L))
+  expect_identical(e$log$decision$action, "none")
 })
 
 test_that("a stale coach block asks under auto, replays when no one can answer, and recodes", {
