@@ -979,6 +979,13 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       }
     }
   }
+  # a directory the command runs in (git -C, env -C): read as a cd is, and its words there
+  move = function(dir) {
+    tg = risk_target(dir, "read", root, dirs)
+    if (tg$level > 0L) add(tg$level, if (tg$secret) "secret" else "read", dir, tg$pc)
+    dirs <<- unique(c(dirs, if (is_abs_path(dir) || is_drive_rel(dir)) dir else
+      file.path(root, dir)))
+  }
   # level-4 rows of the command a later word starts (what an unread program may run)
   later = function(x, d) {
     j = match(TRUE, vapply(x, risk_cmd_known, logical(1)), nomatch = 0L)
@@ -1043,10 +1050,19 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       if (p %in% c("sudo", "doas", "su")) add(3L, "critical")
       if (identical(p, "xargs")) add(3L, "dynamic")
       drop()
-      j = match(TRUE, vapply(w, risk_cmd_known, logical(1)) | grepl(assign_re, w), nomatch = 0L)
-      if (!j) j = match(FALSE, startsWith(w, "-"), nomatch = length(w) + 1L)
+      # env -C DIR (--chdir) runs the command in DIR
+      val = identical(p, "env") & seq_along(w) %in% (which(w %in% c("-C", "--chdir")) + 1L)
+      j = match(TRUE, (vapply(w, risk_cmd_known, logical(1)) | grepl(assign_re, w)) & !val,
+                nomatch = 0L)
+      if (!j) j = match(FALSE, startsWith(w, "-") | val, nomatch = length(w) + 1L)
       skip = seq_len(j - 1L)
       if (any(nzchar(dyn[skip]))) why("a wrapper option the shell computes")
+      if (identical(p, "env")) {
+        o = w[skip]
+        for (dir in c(o[val[skip]], sub("^(-C|--chdir=)", "", o[grepl("^(-C.|--chdir=.)", o)]))) {
+          move(dir)
+        }
+      }
       control(w[skip][!nzchar(dyn[skip])])
       drop(j - 1L)
       next
@@ -1111,12 +1127,7 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       }
       dir = if (a[1L] %in% c("-C", "--work-tree", "--git-dir") && k == 2L) a[2L] else
         sub("^--(work-tree|git-dir)=?", "", a[1L])[grepl("^--(work-tree|git-dir)=.", a[1L])]
-      if (length(dir)) {
-        tg = risk_target(dir, "read", root, dirs)
-        if (tg$level > 0L) add(tg$level, if (tg$secret) "secret" else "read", dir, tg$pc)
-        dirs = unique(c(dirs, if (is_abs_path(dir) || is_drive_rel(dir)) dir else
-          file.path(root, dir)))
-      }
+      if (length(dir)) move(dir)
       if (k == 2L) tail(sub("^[^=]*=", "", a[2L]))
       a = a[-seq_len(k)]
       da = da[-seq_len(k)]
