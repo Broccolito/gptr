@@ -55,10 +55,16 @@ variable gptr reads as configuration, such as a provider key, or one that moves 
 configuration folder or your home directory, such as \code{HOME}; \link{gptr_options} lists them. The
 classifier reads such a change in \code{Sys.setenv()}, \code{Sys.unsetenv()}, \code{withr::local_envvar()} and
 \code{withr::with_envvar()}, where a name it cannot read counts as one, in \code{readRenviron()} and
-\code{dotenv::load_dot_env()}, and in a \code{peter$py()} \code{os.environ} write that names one. It does not
-read a Python write whose name the code computes, Python run through 'reticulate', or
-\code{Sys.setenv()} reached by a computed name or through an environment (\code{get("Sys.setenv")},
-\code{baseenv()$Sys.setenv}): such code is level 3 or lower, which \code{auto} runs without asking.
+\code{dotenv::load_dot_env()}, and in an \code{os.environ} write in the code of \code{peter$py()} or
+\code{peter$knit("python", code)} that names one in a string or an upper-case word. It does not read
+code in a file R runs (\code{source()}, \code{sys.source()}, \code{eval(parse(file = ))}); \code{Sys.setenv()}
+reached by a computed name, through a list or an environment, or handed to another function
+(\code{get("Sys.setenv")}, \code{baseenv()$Sys.setenv}, \code{with(list(f = Sys.setenv), ...)},
+\code{assign("f", Sys.setenv)}, \code{identity(Sys.setenv)}); a Python write whose name the code
+computes, that reaches \code{os.environ} by another name (\code{e = os.environ}, \code{getattr(os, "environ")})
+or through \code{ctypes}, or that passes \code{os.environ.update()} lower-case keyword names (on Windows
+\code{os.environ.update(home = d)} sets \code{HOME}); or Python run through 'reticulate': such code is
+level 3 or lower, which \code{auto} runs without asking.
 }
 
 \section{What the gate cannot do}{

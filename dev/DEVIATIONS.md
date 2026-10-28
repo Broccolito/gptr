@@ -8581,3 +8581,24 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests (review round 1): test-perm-classify.R "a control name in any case, unread, or set from a
   file is control (review round 1)"; test-perm-gate.R's FIX-36 test also runs `do.call()` and
   `readRenviron()`.
+- Status 2026-10-27 (review round 2): `peter$knit("python", code)`, which runs its code through
+  `peter$py()`, is read as `peter$py()` is, at least level 3 (04 section 9.4's `knit` row;
+  formerly a flat level 3 `process` in R code and in the member's risk), and
+  `withr::local_envvar()` and `withr::with_envvar()` are read as `Sys.setenv()` is (two `withr`
+  rows at level 2 `session`; the names of `...` and of a `c()` or `list()` passed as `.new` or
+  `new`). Formerly withr's two were level 1 `unlisted`, and given a `.local_envir` that is not a
+  running call's frame the change lasted for the session. Still not covered (Open), each level 3
+  or lower, which auto runs: code in a file R runs (`source()`, `sys.source()`,
+  `eval(parse(file = ))`); `Sys.setenv()` reached by a computed name, through a list or an
+  environment, or handed to another function (`get("Sys.setenv")`, `baseenv()$Sys.setenv`,
+  `with(list(f = Sys.setenv), ...)`, `assign("f", Sys.setenv)`, `identity(Sys.setenv)`); a Python
+  write whose name the code computes, that reaches `os.environ` by another name
+  (`e = os.environ`, `getattr(os, "environ")`) or through `ctypes`, or that passes
+  `os.environ.update()` lower-case keyword names; Python run through 'reticulate'.
+- Contract-visible (review round 2): 03 section 6.8.1; 04 sections 9.4 (`knit`) and 15.4 IC-53
+  item 3; `?gptr_options`, `?gptr_security`; NEWS; risk-functions.csv's two `withr` rows.
+- Tests (review round 2): test-perm-classify.R "peter$knit()'s python engine is read as
+  peter$py() is (FIX-36 review round 2)", "withr's variable setters are read as Sys.setenv() is
+  (FIX-36 review round 2)"; test-perm-gate.R "auto asks before peter$knit()'s python moves gptr's
+  config folder (FIX-36 round 2)", "auto asks before withr moves gptr's config folder for the
+  session (FIX-36 round 2)".

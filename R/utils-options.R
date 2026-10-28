@@ -661,8 +661,9 @@ s3_register = function(generic, class, method = NULL) {
 #'   `R_ENVIRON` or `R_PROFILE`, whatever the letter case. Every mode but `yolo` asks you first,
 #'   `auto` included, before `Sys.setenv()`, `Sys.unsetenv()`, `withr::local_envvar()` or
 #'   `withr::with_envvar()` of such a name or of a name the classifier cannot read, before
-#'   `readRenviron()` and `dotenv::load_dot_env()`, and before a `peter$py()` `os.environ` write
-#'   that names one; [gptr_security] lists what it does not read.
+#'   `readRenviron()` and `dotenv::load_dot_env()`, and before an `os.environ` write in
+#'   `peter$py()` or `peter$knit("python", code)` code that names one in a string or an upper-case
+#'   word; [gptr_security] lists what it does not read.
 #' - `GPTR_WORKER`, `GPTR_SUBAGENT_DEPTH`, `GPTR_ARTIFACT_PORTS`, `GPTR_SHELL_CMD` and the tree
 #'   markers `GPTR_PROC_<id>`: set by gptr in its own child processes only.
 #' - `GPTR_MCP_TOKEN`: the variable through which the Codex snippet of [gptr_mcp_serve()] passes

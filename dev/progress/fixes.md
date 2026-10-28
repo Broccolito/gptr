@@ -8303,3 +8303,69 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
     the verifier's child R showed moving the folder); and `Sys.setenv` reached by a computed name
     or through an environment (`get("Sys.setenv")(HOME = d)`, `baseenv()$Sys.setenv(HOME = d)`,
     level 3 `dynamic`), the limit `?gptr_security` names for `system()`.
+- Review round 2 (the verifier on `84e1a025`, findings 1 to 5; on `claude/v1-fixes` after the
+  merge of `claude/v1-fix-gate`, `f5e527ac`, each test red on its parent's code first,
+  `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`). The verifier ran 111 forms through the
+  classifier, the gate in each mode and a `peter()` run whose person answers no, and a two-turn
+  run whose user settings hold a deny `r(fn:file.create)`: five kinds still moved the config
+  folder in auto with no question, and three of them let the next turn's `file.create()` past
+  the rule.
+  - `peter$knit("python", code)` (finding 1): it runs its code through `peter$py()`, but both
+    classifiers gave it a flat level 3 `process` (the `knit` branch of `risk_member_flags()` and
+    `bridge_risk_knit()`), so its `os.environ` write of a control name ran in auto, in the
+    positional and the named form. Red: test-perm-classify.R "peter$knit()'s python engine is read
+    as peter$py() is (FIX-36 review round 2)" and test-perm-gate.R "auto asks before
+    peter$knit()'s python moves gptr's config folder (FIX-36 round 2)": `^perm-(gate|classify)$`
+    FAIL 15 PASS 1367 on `f5e527ac`'s code in UTF-8 and under `LC_ALL=C LANG=C` (nine forms are
+    level 3, line 626, and the member's risk of three, 629; auto allows two, 337, and a run whose
+    person answers no is asked 0 of 3 times, 343). Fix (`d720deed`): the static branch binds
+    `risk_python()`'s rows to its level-3 row, and the member's risk returns the Python reading
+    when it is 3 or more, so code that R computes for the call asks when the call runs; 04 section
+    9.4's `knit` row says so. Green: `^(perm-(gate|classify)|bridge-lang|agent-dispatch)$` FAIL 0
+    SKIP 4 PASS 1774 in UTF-8 and under `LC_ALL=C LANG=C`; knit's `x = 1` stays level 3.
+  - withr (finding 3 and round 1's Open item): `withr::local_envvar()` and `withr::with_envvar()`
+    had no row, so they were level 1 `unlisted`, which auto runs, for every variable. Round 1 said
+    the change is undone when the top-level expression ends; that holds only for the default
+    `.local_envir`: with `new.env()`, `baseenv()`, or `globalenv()` when the run's `envir` is not
+    the global environment, the variable stayed set for the session and the next turn saw the
+    moved folder. Red: test-perm-classify.R "withr's variable setters are read as Sys.setenv() is
+    (FIX-36 review round 2)" and test-perm-gate.R "auto asks before withr moves gptr's config
+    folder for the session (FIX-36 round 2)": `^perm-(gate|classify)$` FAIL 21 PASS 1383 on
+    `d720deed`'s code in UTF-8 and under `LC_ALL=C LANG=C` (11 control forms are not control, line
+    650, and four ordinary ones are level 1, 655; auto allows two, 357; the run asks 0 of 2 times,
+    365, the variable stays changed, 366, the config folder moves, 367, and `x.txt` is made, 368).
+    Fix (`2a31fdbf`): two `withr` rows at level 2 `session`, as `Sys.setenv`'s, and the
+    `Sys.setenv()` branch reads their names (named arguments, and the names of a `c()` or `list()`
+    passed as `.new` or `new`) with its rule: a control name in any case, or a name it cannot read
+    (a `.new` held in a name or computed, an element with no name), is level 4 `control`, any other
+    level 2. `withr::local_envvar(TZ = "UTC")` is level 2, as `Sys.setenv(TZ = "UTC")` is; it was
+    1, so plan mode, which runs level 1 in a scratch environment, now refuses it as it refuses
+    `Sys.setenv()`, and auto, manual and edits decide as before. `?gptr_security`,
+    `?gptr_options`, 03 section 6.8.1 and 04 section 15.4 IC-53 item 3 say so. Green:
+    `^perm-(gate|classify)$` FAIL 0 PASS 1404 in UTF-8 and under `LC_ALL=C LANG=C`.
+  - Docs (findings 2, 4 and 5): `?gptr_security`'s list of what the classifier does not read named
+    neither a file R runs nor the other ways to reach `Sys.setenv()` or `os.environ` that the
+    verifier ran, and `?gptr_options` and NEWS said that gptr asks for any Python write or any
+    model code. The page now names them; `?gptr_options` names the forms read (an `os.environ`
+    write in `peter$py()` or `peter$knit("python", code)` code that names one in a string or an
+    upper-case word), and NEWS the R calls and Python writes it reads instead of "model code". A
+    probe of each named form on `2a31fdbf`'s code gives level 3 or lower: `source()`,
+    `sys.source()`, `eval(parse(file = ))`, `identity(Sys.setenv)()`, `get("Sys.setenv")()`,
+    `baseenv()$Sys.setenv()`, `getattr(os, 'environ')`, `ctypes`, a lower-case keyword and a
+    computed Python name 3, `assign("f", Sys.setenv)` and `e = os.environ` 2,
+    `with(list(f = Sys.setenv), ...)` 1; `os.environ['home']` and `os.environ.update(HOME = )` 4.
+  - Open, each level 3 or lower, which auto runs, as `?gptr_security` says (this replaces round
+    1's list): code in a file R runs (`source()`, `sys.source()`, `eval(parse(file = ))`, so a
+    `writeLines()` of an `.R` file and then `source()` of it); `Sys.setenv()` reached by a computed
+    name, through a list or an environment, or handed to another function (`get("Sys.setenv")`,
+    `baseenv()$Sys.setenv`, `with(list(f = Sys.setenv), ...)`, `assign("f", Sys.setenv)`,
+    `identity(Sys.setenv)`); a Python write whose name the code computes, that reaches
+    `os.environ` by another name (`e = os.environ`, `getattr(os, "environ")`) or through `ctypes`,
+    or that passes `os.environ.update()` lower-case keyword names (on Windows
+    `os.environ.update(home = d)` sets `HOME`; inferred, no Windows run); Python run through
+    'reticulate'.
+- Tests (review round 2): test-perm-classify.R "peter$knit()'s python engine is read as
+  peter$py() is (FIX-36 review round 2)", "withr's variable setters are read as Sys.setenv() is
+  (FIX-36 review round 2)"; test-perm-gate.R "auto asks before peter$knit()'s python moves gptr's
+  config folder (FIX-36 round 2)", "auto asks before withr moves gptr's config folder for the
+  session (FIX-36 round 2)".

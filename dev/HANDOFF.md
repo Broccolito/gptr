@@ -125,11 +125,18 @@ the D-254 amendment are in `DEVIATIONS.md`:
   amends D-233).
 - FIX-36 (#93): `Sys.setenv()` and `Sys.unsetenv()` of `R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`,
   `APPDATA`, `HOME` or `USERPROFILE`, and a Python `os.environ` write of one, are level 4
-  `control`, so in auto too a person is asked before model code moves gptr's config folder or the
+  `control`, so in auto too a person is asked before such a call moves gptr's config folder or the
   home, and with them the control paths (D-272); review round 1: in any letter case, also a name
   the classifier cannot read (`do.call(Sys.setenv, ...)`), `readRenviron()` and
-  `dotenv::load_dot_env()`; `withr::local_envvar()`, `withr::with_envvar()`, a Python name the
-  code computes, Python run through 'reticulate' and a computed function name are not covered.
+  `dotenv::load_dot_env()`; review round 2: also `peter$knit("python", code)`'s code and
+  `withr::local_envvar()` and `withr::with_envvar()`. Not covered, level 3 or lower: code in a file
+  R runs (`source()`, `sys.source()`, `eval(parse(file = ))`); `Sys.setenv()` reached by a
+  computed name, through a list or an environment, or handed to another function
+  (`get("Sys.setenv")`, `baseenv()$Sys.setenv`, `with(list(f = Sys.setenv), ...)`,
+  `assign("f", Sys.setenv)`, `identity(Sys.setenv)`); a Python write whose name the code computes,
+  that reaches `os.environ` by another name (`e = os.environ`, `getattr(os, "environ")`) or
+  through `ctypes`, or that passes `os.environ.update()` lower-case keyword names; Python run
+  through 'reticulate'.
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
