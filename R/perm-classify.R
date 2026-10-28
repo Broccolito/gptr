@@ -960,11 +960,12 @@ risk_cd_word = function(t) {
 }
 
 #' `dirs` and the directory a cd moves to from them (risk_cd_word()): NA for one the shell
-#' computes, a relative one in the first directory
+#' computes (its word `t` holds an expansion or a glob the tokenizer saw, `dyn`), a relative one
+#' in the first directory
 #' @noRd
-risk_cd_dirs = function(dirs, t) {
-  unique(c(dirs, if (grepl("[$`*?[]", t) || identical(t, "-")) NA_character_ else
-    if (is_abs_path(t) || is_drive_rel(t)) t else
+risk_cd_dirs = function(dirs, t, dyn) {
+  computed = (nzchar(dyn) && grepl("[$`*?[]", t)) || identical(t, "-")
+  unique(c(dirs, if (computed) NA_character_ else if (is_abs_path(t) || is_drive_rel(t)) t else
       file.path(sub("/\\z", "", dirs[!is.na(dirs)][1L], perl = TRUE), t)))
 }
 
@@ -998,11 +999,11 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
     }
   }
   # a directory the command runs in (git -C, env -C): read as a cd is, and its words there
-  move = function(dir) {
+  move = function(dir, dyn) {
     dir = risk_cd_word(dir)
     tg = risk_target(dir, "read", root, dirs)
     if (tg$level > 0L) add(tg$level, if (tg$secret) "secret" else "read", dir, tg$pc)
-    dirs <<- risk_cd_dirs(dirs, dir)
+    dirs <<- risk_cd_dirs(dirs, dir, dyn)
   }
   # level-4 rows of the command a later word starts (what an unread program may run)
   later = function(x, d) {
@@ -1077,9 +1078,8 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       if (any(nzchar(dyn[skip]))) why("a wrapper option the shell computes")
       if (identical(p, "env")) {
         o = w[skip]
-        for (dir in c(o[val[skip]], sub("^(-C|--chdir=)", "", o[grepl("^(-C.|--chdir=.)", o)]))) {
-          move(dir)
-        }
+        k = val[skip] | grepl("^(-C.|--chdir=.)", o)
+        for (i in which(k)) move(sub("^(-C|--chdir=)", "", o[i]), dyn[skip][i])
       }
       control(w[skip][!nzchar(dyn[skip])])
       drop(j - 1L)
@@ -1143,9 +1143,10 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
           any(nzchar(da[seq_len(k)]))) {
         why("a git option gptr does not read")
       }
-      dir = if (a[1L] %in% c("-C", "--work-tree", "--git-dir") && k == 2L) a[2L] else
+      j = if (a[1L] %in% c("-C", "--work-tree", "--git-dir") && k == 2L) 2L else 1L
+      dir = if (j == 2L) a[2L] else
         sub("^--(work-tree|git-dir)=?", "", a[1L])[grepl("^--(work-tree|git-dir)=.", a[1L])]
-      if (length(dir)) move(dir)
+      if (length(dir)) move(dir, da[j])
       if (k == 2L) tail(sub("^[^=]*=", "", a[2L]))
       a = a[-seq_len(k)]
       da = da[-seq_len(k)]
@@ -1509,15 +1510,15 @@ risk_cmd_line = function(cmd, root, scan = FALSE, dirs = root) {
     head = risk_cmd_head(w, qd)
     if (tolower(head %if_na% "") %in% c("cd", "pushd", "chdir", "set-location")) {
       i = match(head, w)
-      t = w[-seq_len(i)][!grepl("^-.", w[-seq_len(i)])][1L] %if_na% "~"
-      t = risk_cd_word(t)
+      j = i + match(TRUE, !grepl("^-.", w[-seq_len(i)]))
+      t = risk_cd_word(w[j] %if_na% "~")
       # what runs there reads it, as `ls` does with no operand (git -C's reading)
       tg = risk_target(t, "read", root, dirs)
       if (tg$level > 0L) {
         f = risk_flags_bind(f, risk_flags_row(paste(head, t), head, tg$level,
                                               if (tg$secret) "secret" else "read", t, tg$pc))
       }
-      dirs = risk_cd_dirs(dirs, t)
+      dirs = risk_cd_dirs(dirs, t, d[j] %if_na% "")
       next
     }
     if (scan && (is.na(head) || !risk_cmd_known(head))) next
@@ -1790,6 +1791,12 @@ risk_python = function(code, root = project_root(), dirs = root) {
     return(risk_flags_bind(f, risk_flags_row("not modelled: bytes that are not UTF-8", "py",
                                              3L, "dynamic")))
   }
+  # read as Python reads it: a backslash at a line's end outside a comment joins the next line,
+  # and a name in grouping parentheses, `(os.environ)`, is the name
+  code = gsub("(?m)^((?:[^'\"#\n]|'[^'\n]*'|\"[^\"\n]*\")*(?:'[^'\n]*|\"[^\"\n]*)?)\\\\\r?\n",
+              "\\1", code, perl = TRUE)
+  code = gsub("(?<![\\w.)\\]])\\(\\s*((?:\\w+\\s*\\.\\s*)*environb?)\\s*\\)", "\\1", code,
+              perl = TRUE)
   for (r in risk_py_rules) {
     if (grepl(r[[3L]], code, perl = TRUE)) {
       f = risk_flags_bind(f, risk_flags_row(r[[2L]], "py", r[[1L]], r[[2L]]))
@@ -1808,11 +1815,39 @@ risk_python = function(code, root = project_root(), dirs = root) {
     "\\bdel\\s+(?:[\\w.]*\\.)?environb?\\s*\\[\\K", risk_py_sub, "|",
     "\\b(putenv|unsetenv|environb?\\.(setdefault|pop|__setitem__|__delitem__))\\s*\\(\\K[^,)]*"
   ), code_nc, perl = TRUE))[[1L]]
-  plain = grepl("^\\s*[bBrRuU]{0,2}('[^'\\\\\n]*'|\"[^\"\\\\\n]*\")\\s*\\z", keys, perl = TRUE)
+  lit_re = "^\\s*[bBrRuU]{0,2}('[^'\\\\\n]*'|\"[^\"\\\\\n]*\")\\s*\\z"
   if (any(f$category == "session" & f$level == 3L) &&
       (any(risk_control_name(c(lits, ids))) || grepl("\\benvironb?\\.clear\\(", code) ||
-         !all(plain))) {
+         !all(grepl(lit_re, keys, perl = TRUE)))) {
     f = risk_flags_bind(f, risk_flags_row("control", "py", 4L, "control"))
+  }
+  # chdir() (os.chdir(), os.fchdir(), contextlib.chdir()) moves R's working directory too, as
+  # Python runs in R's process: read as setwd() is, a plain string literal in each directory R
+  # may be in (`here`), any other directory one the code computes (NA). R is then in the
+  # directory an os.chdir() of a literal names when that call is a statement of its own on a line
+  # nothing can run conditionally (unindented, with no `:` and no bracket open before it, in code
+  # with no triple-quoted string), else in it or where it was.
+  lines = strsplit(code_nc, "\n", fixed = TRUE)[[1L]]
+  bl = gsub("'[^'\n]*'|\"[^\"\n]*\"", "''", lines)
+  open = cumsum(nchar(gsub("[^([{]", "", bl)) - nchar(gsub("[^])}]", "", bl)))
+  top = !grepl("'''|\"\"\"", code_nc) & !grepl("^\\s|:", bl) & c(0L, open)[seq_along(bl)] == 0L
+  here = dirs
+  for (i in seq_along(lines)) {
+    for (st in strsplit(lines[i], ";", fixed = TRUE)[[1L]]) {
+      for (t in regmatches(st, gregexpr("\\bf?chdir\\s*\\(\\K[^)]*", st, perl = TRUE))[[1L]]) {
+        d = if (grepl(lit_re, t, perl = TRUE)) {
+          gsub("^\\s*\\w*['\"]|['\"]\\s*\\z", "", t, perl = TRUE)
+        }
+        pc = if (is.null(d)) "unknown" else risk_target(d, "read", root, here)$pc
+        f = risk_flags_bind(f, risk_flags_row(paste0("chdir(", trimws(t), ")"), "py",
+                                              if (pc %in% c("workspace", "temp")) 2L else 4L,
+                                              "session", d %||% NA_character_, pc))
+        to = if (is.null(d)) NA_character_ else if (grepl("^([~/\\\\]|[A-Za-z]:)", d)) d else
+          ifelse(is.na(here), NA_character_, file.path(here, d))
+        sole = top[i] && grepl("^\\s*os\\.chdir\\s*\\([^)]*\\)\\s*\\z", st, perl = TRUE)
+        here = if (sole && !is.null(d)) to else unique(c(here, to))
+      }
+    }
   }
   wr = f$category[f$category %in% c("file_write", "file_delete")]
   f = risk_literal_rows(lits, f, "py", root, if (length(wr)) wr[1L] else "read", dirs = dirs)
@@ -2288,6 +2323,19 @@ risk_fold = function(x, known = NULL, masked = NULL) {
     v = known[[as.character(x)]]
     return(if (!anyNA(v)) v)
   }
+  # withr's local_tempdir() and local_tempfile() name a path in `tmpdir` as tempfile() does (its
+  # formals as written here, whether withr is loaded or not)
+  h = if (is.call(x)) risk_head(x[[1L]])
+  if (identical(h$pkg, "withr") && h$name %in% c("local_tempdir", "local_tempfile")) {
+    a = risk_args(x, if (h$name == "local_tempdir") {
+      function(pattern, tmpdir, fileext, .local_envir, clean) NULL
+    } else {
+      function(new, lines, envir, .local_envir, pattern, tmpdir, fileext) NULL
+    })
+    if (is.null(attr(a, "formals"))) return(NULL)
+    dir = if (is.null(a[["tmpdir"]])) tempdir() else risk_fold(a[["tmpdir"]], known, masked)
+    return(if (!is.null(dir)) file.path(dir, "file"))
+  }
   if (!is.call(x) || !is.symbol(x[[1L]])) return(NULL)
   fn = as.character(x[[1L]])
   if (fn %in% masked) return(NULL)
@@ -2430,10 +2478,13 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   # straight-line assignment replaces them (the code stops at its first error) unless the code
   # assigns the name with <<- (a function may do so later); one in a branch, loop or call adds
   # its value, and the binding before the code when it comes first; a loop that assigns a name
-  # makes it computed. Code in a function body does not read them (it may bind the name). So
-  # for R's working directory (`wd`), which a move in a branch or a function body adds to.
-  known = structure(list(), wd = wd)
-  kn = function(ctx) if (!ctx$def) known
+  # makes it computed. So for R's working directory (`wd`, from `wd0`), which a move in a branch
+  # adds to. A function body and local()'s code bind their own names, read so from their start:
+  # a function's other names are ones the code computes and R is where the code started or has
+  # moved it to, local()'s are the names around it. After them a move in them adds to R's
+  # directory, and a name they assign with <<- adds the values `sup` holds for it.
+  known = structure(list(), wd = wd, wd0 = wd)
+  sup = list()
   bound = risk_bound(exprs)
   # A helper the code binds (to a function or a value it computes), or the session holds as
   # other than base's, is called as one the code computes: risk_fold() folds no call of it.
@@ -2493,6 +2544,28 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     !is.null(r) && !r$name %in% bound$val && !is.null(risk_lookup(r$name, r$pkg))
   }
 
+  # The call do.call(f, list(...)) (or c(...), base R's list() or c()) or rlang::exec(f, ...)
+  # makes of a function written out (literal_fun()) that the code does not bind; else NULL
+  direct_call = function(e, r) {
+    pkg = if (r$name == "exec") "rlang" else "base"
+    if (r$name %in% bound$all || !identical(risk_lookup(r$name, r$pkg)$package, pkg)) return(NULL)
+    a = risk_args(e, r$name, pkg)
+    f = risk_arg(a, if (pkg == "rlang") ".fn" else "what")
+    args = if (pkg == "rlang") a[["..."]] else risk_arg(a, "args")
+    if (pkg == "base") {
+      lst = is.call(args) && isTRUE(risk_head(args[[1L]])$name %in% setdiff(c("c", "list"), masked))
+      if (!lst) return(NULL)
+      args = as.list(args)[-1L]
+    }
+    if (is.character(f) && length(f) == 1L && !is.na(f) && nzchar(f)) {
+      f = as.name(f)
+    } else if (!literal_fun(f)) {
+      return(NULL)
+    }
+    if (is.symbol(f) && as.character(f) %in% bound$all) return(NULL)
+    as.call(c(f, args))
+  }
+
   # A function used by name: called with `e`, or (e = NULL) a value another function calls,
   # read as a call whose arguments the code computes.
   use_fun = function(name, pkg, e, ctx) {
@@ -2535,7 +2608,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   add_path = function(ps, category, level, ctx, label, name) {
     best = list(level = -1L)
     for (p in ps) {
-      v = fold(p, kn(ctx))
+      v = fold(p, known)
       w = v[nzchar(v)]
       cls = vapply(w, risk_path_cls, character(1), category, root)
       pc = if (is.null(v)) "unknown" else if (!length(w)) "console" else risk_cmd_worst(cls)
@@ -2651,7 +2724,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       }
       # processx::run() runs its command in `wd`, read as peter$sh()'s in each directory a name
       # may hold; one the code computes is read as the project
-      wds = if (runner) fold(risk_arg(a, "wd"), kn(ctx))
+      wds = if (runner) fold(risk_arg(a, "wd"), known)
       for (wd in if (length(wds)) as.list(wds) else list(NULL)) {
         f = switch(code[3L], sql = risk_sql(paste(x, collapse = "\n"), root),
                    argv = risk_command(cmd_in_wd(c(x, argv), wd), root),
@@ -2673,7 +2746,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     if (name %in% c("file.symlink", "file.link", "Sys.junction", "link_create")) {
       # a link to a path outside the project names it from inside (setwd()'s reading), so a
       # delete through it is one outside the project
-      v = risk_fold(risk_arg(a, if (name == "link_create") "path" else "from", 1L), kn(ctx))
+      v = risk_fold(risk_arg(a, if (name == "link_create") "path" else "from", 1L), known)
       pcs = vapply(v[nzchar(v)], risk_path_cls, "", "read", root)
       pc = risk_cmd_worst(pcs)
       if (length(pc) && !pc %in% c("workspace", "temp", "console")) {
@@ -2684,10 +2757,16 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     }
     if (name %in% c("setwd", "local_dir", "with_dir", "in_dir")) {
       # out of the project, the paths the gate places in it name files elsewhere
-      v = fold(risk_arg(a, if (name %in% c("setwd", "in_dir")) "dir" else "new", 1L), kn(ctx))
+      v = fold(risk_arg(a, if (name %in% c("setwd", "in_dir")) "dir" else "new", 1L), known)
       # R is then in the directory setwd() and local_dir() move to; in or after with_dir() and
       # in_dir() in one the code computes
       wd = attr(known, "wd")
+      # after a move, a relative directory is one in the directory R is in (one the code computes
+      # when that is); before any, it is read in the project, as every relative path is
+      rel = if (length(v)) !is_abs_path(v) & !is_drive_rel(v) & !startsWith(v, "~")
+      if (any(rel) && !identical(wd, attr(known, "wd0"))) {
+        v = if (!anyNA(wd)) unique(c(v[!rel], as.vector(outer(wd, v[rel], file.path))))
+      }
       attr(known, "owd") <<- wd
       to = if (name %in% c("setwd", "local_dir") && length(v)) v else NA_character_
       attr(known, "wd") <<- if (ctx$seq) to else unique(c(wd, to))
@@ -2712,7 +2791,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
         # the names of Sys.setenv()'s arguments, and the values of Sys.unsetenv()'s x and of
         # Sys.setenv()'s unnamed arguments (which R refuses)
         vals = lapply(if (name == "Sys.setenv") d[!nzchar(dn)] else a[names(a) == "x"], fold,
-                      kn(ctx))
+                      known)
         keys = c(dn[nzchar(dn)], unlist(vals))
         unread = any(vapply(vals, is.null, logical(1)))
       } else {
@@ -2750,7 +2829,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     if (name %in% c("file", "gzfile", "bzfile", "xzfile")) {
       mode = risk_arg(a, "open", 2L)
       if (is.null(mode) || (is.character(mode) && !grepl("[wa+]", mode))) return(FALSE)
-      v = fold(risk_arg(a, "description", 1L), kn(ctx))
+      v = fold(risk_arg(a, "description", 1L), known)
       cls = vapply(v, risk_path_class, character(1), root)
       pc = if (is.null(v)) "unknown" else risk_cmd_worst(cls)
       if (!is.null(v)) add_tg("files", v)
@@ -2815,6 +2894,10 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     }
     if (!is.symbol(node) && !is.character(node)) return(invisible())
     nm = as.character(node)
+    v = if (!is.call(target)) fold(value, known)
+    known[[nm]] <<- if (ctx$seq && op != "<<-" && !nm %in% tg$super) v %||% NA_character_ else
+      unique(c(known[[nm]] %||% NA_character_, v %||% NA_character_))
+    if (op == "<<-") sup[[nm]] <<- unique(c(sup[[nm]], v %||% NA_character_))
     if (ctx$def && op != "<<-") {
       # in a function body only a replacement of a name the code does not bind can reach an
       # object outside it (an environment, by reference)
@@ -2824,9 +2907,6 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       return(invisible())
     }
     add_tg(if (op == "<<-") "super" else "assign", nm)
-    v = if (!is.call(target)) fold(value, kn(ctx))
-    known[[nm]] <<- if (ctx$seq && !nm %in% tg$super) v %||% NA_character_ else
-      unique(c(known[[nm]] %||% NA_character_, v %||% NA_character_))
     if (is.call(target)) add_tg("modify", nm)
     if (op == "<<-") add(ctx, paste(nm, "<<- ..."), "<<-", 2L, "object_write")
     # a plain assignment binds in envir; <<-, assign(), a replacement (of an environment, by
@@ -2860,6 +2940,10 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
         identical(e[[1L]][[1L]], as.name(":::"))) {
       add(ctx, paste0(text(e), " (reaches gptr's internals)"), r$name, 4L, "control")
     }
+    # do.call() and rlang::exec() of a function and arguments written out are that call, read in
+    # their place, as a pipe and eval(quote()) are
+    direct = if (r$name %in% c("do.call", "exec")) direct_call(e, r)
+    if (!is.null(direct)) return(walk(direct, ctx))
     if (r$how == "computed") {
       add(ctx, paste("calls a function the code computes:", text(e[[1L]])), "<computed>", 3L,
           "dynamic")
@@ -2868,7 +2952,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     } else if (r$how == "lambda") {
       walk(e[[1L]], ctx)
     } else if (r$how == "member") {
-      add_rows(risk_member_flags(r$name, e, root, kn(ctx), masked), ctx)
+      add_rows(risk_member_flags(r$name, e, root, known, masked), ctx)
       if (r$name %in% c("sh", "bg", "script")) add_tg("process", paste0(risk_gateway, "$", r$name))
     } else {
       use_fun(r$name, r$pkg, e, ctx)
@@ -2912,6 +2996,18 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       inner$def = TRUE
       a = c(as.list(a[[1L]]), a[-1L])
     }
+    # a function body and local()'s code (in an environment of its own) bind their own names
+    # (`known` above)
+    scope = r$name == "function" || (r$name == "local" && length(a) == 1L &&
+                                       !"local" %in% bound$all)
+    if (scope) {
+      up = known
+      if (r$name == "function") {
+        known <<- structure(list(), wd = unique(c(attr(up, "wd0"), attr(up, "wd"))),
+                            wd0 = attr(up, "wd0"))
+      }
+      inner$seq = TRUE
+    }
     if (r$name %in% risk_quoting_funs) inner$quote = TRUE
     # eval(quote(x)) runs x, as evalq(x) does (also base::quote())
     if (r$name %in% c("eval", "eval_bare", "eval_tidy")) {
@@ -2924,6 +3020,12 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     }
     inner$away = ctx$away || r$name %in% risk_unknown_funs
     for (i in seq_along(a)) if (!identical(a[[i]], quote(expr = ))) walk(a[[i]], inner)
+    if (scope) {
+      wd = attr(known, "wd")
+      known <<- up
+      for (nm in names(sup)) known[[nm]] <<- unique(c(known[[nm]] %||% NA_character_, sup[[nm]]))
+      attr(known, "wd") <<- unique(c(attr(up, "wd"), wd))
+    }
     # after the value is walked, so a use of the name inside it sees the earlier value
     if (r$name %in% risk_assign_ops && length(a) == 2L) {
       note_assign(a[[1L]], r$name, ctx, a[[2L]])

@@ -97,7 +97,8 @@ test_that("eval(quote(x)) is read as x, and xfun::in_dir() as with_dir() (review
 test_that("env -C runs its command in that directory, read as a cd (review round 5)", {
   root = local_project()
   dir.create(file.path(root, "sub"))
-  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  # with "/": sh reads a backslash in a command line as an escape
+  out = path_norm(withr::local_tempdir(tmpdir = dirname(tempdir())))
   sh = registry_get("tool", "sh")
   level = function(cmd) as.integer(sh$risk(list(cmd = cmd, wd = "."), NULL)$level)
   for (cmd in c("env -C %s rm -f marker.txt", "env --chdir=%s rm -f marker.txt",
@@ -108,6 +109,11 @@ test_that("env -C runs its command in that directory, read as a cd (review round
   }
   expect_identical(level(c("env", "-C", out, "rm", "-f", "marker.txt")), 4L)
   expect_identical(level(paste("env -C", out, "ls")), 1L)
+  # Windows' spelling: peter$sh() runs such a line in Git Bash there when it is installed, which
+  # drops the backslashes, so it reads as an escape the classifier does not model (3)
+  expect_identical(level(paste("env -C", chartr("/", "\\", out), "ls")), 3L)
+  # a delete there is 4 in that spelling too
+  expect_identical(level(paste("env -C", chartr("/", "\\", out), "rm -f marker.txt")), 4L)
   # neighbours: in the project as before
   expect_identical(level("env -C sub rm -f marker.txt"), 3L)
   expect_identical(level("env -C sub ls"), 0L)
@@ -164,17 +170,32 @@ test_that("a link to a path outside the project is level 4, as ln's (review roun
                  paste0("file.link(", deparse(file.path(out, "a")), ", 'lnk')"),
                  paste0("Sys.junction(", o, ", 'lnk')"),
                  paste0("file.symlink(to = 'lnk', from = ", o, ")"),
-                 paste0("d = ", o, "; file.symlink(d, 'lnk')"),
-                 paste0("fs::link_create(", o, ", 'lnk')"),
-                 paste0("fs::link_create(new_path = 'lnk', path = ", o, ")"))) {
+                 paste0("d = ", o, "; file.symlink(d, 'lnk')"))) {
     expect_identical(lv(code), 4L, label = code)
   }
   expect_identical(lv(paste0("system('ln -s ", out, " lnk')")), 4L)
   # neighbours: a link to a path in the project or the session's tempdir() is a write
   for (code in c("file.symlink('sub', 'lnk')", "file.symlink(tempdir(), 'lnk')",
-                 "file.link('sub/a', 'b')", "fs::link_create('sub', 'lnk')",
-                 "fs::link_create(tempdir(), 'lnk')")) {
+                 "file.link('sub/a', 'b')")) {
     expect_identical(lv(code), 2L, label = code)
+  }
+  # fs::link_create() as R matches it while fs is loaded, and as written while it is not, where
+  # each unnamed argument may be the path it writes (so new_path is named beside tempdir())
+  matched = risk_args
+  for (fs_loaded in c(TRUE, FALSE)) {
+    local_mocked_bindings(risk_args = function(e, fn, pkg) {
+      if (!identical(fn, "link_create")) return(matched(e, fn, pkg))
+      matched(e, if (fs_loaded) function(path, new_path, symbolic = TRUE) NULL else fn,
+              if (fs_loaded) pkg else NA)
+    })
+    for (code in c(paste0("fs::link_create(", o, ", 'lnk')"),
+                   paste0("fs::link_create(new_path = 'lnk', path = ", o, ")"))) {
+      expect_identical(lv(code), 4L, label = paste(code, "with fs loaded", fs_loaded))
+    }
+    for (code in c("fs::link_create('sub', 'lnk')",
+                   "fs::link_create(tempdir(), new_path = 'lnk')")) {
+      expect_identical(lv(code), 2L, label = paste(code, "with fs loaded", fs_loaded))
+    }
   }
 })
 
@@ -363,4 +384,270 @@ test_that("paste(), paste0() and file.path() are folded with their arguments as 
   }
   expect_identical(lv("unlink(paste0('a', '.csv'))"), lv("unlink('a.csv')"))
   expect_identical(lv(paste0("unlink(file.path(", deparse(out), ", 'x', fsep = '/'))")), 4L)
+})
+
+# A project outside tempdir(), so that its parent is outside the project and tempdir() too
+local_outside_project = function(.env = parent.frame()) {
+  root = path_norm(withr::local_tempdir("gptr-project-", tmpdir = dirname(tempdir()),
+                                        .local_envir = .env))
+  dir.create(file.path(root, "data", "sub"), recursive = TRUE)
+  withr::local_dir(root, .local_envir = .env)
+  withr::local_options(gptr.project_root = root, .local_envir = .env)
+  root
+}
+
+test_that("a relative directory after a move is read in the directory R is in (round 6)", {
+  root = local_outside_project()
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (code in c("setwd('data'); x = read.csv('x.csv'); setwd('..')",
+                 "setwd('data'); setwd('../')", "withr::local_dir('data'); setwd('..')",
+                 "setwd('data/sub'); setwd('../..')",
+                 "setwd('data'); setwd(file.path('..', 'data'))",
+                 "setwd('data'); withr::local_dir('..')")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  # neighbours: out of the project from where R is, or before any move, as before
+  for (code in c("setwd('..')", "setwd('data'); setwd('../..')",
+                 "setwd('data/sub'); setwd('../../..')", "if (p) setwd('data'); setwd('..')",
+                 "setwd(tempdir()); setwd('..')",
+                 "withr::with_dir('data', x); setwd('..')")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+})
+
+test_that("auto and yolo run a move into a folder and back up unasked (review round 6)", {
+  skip_on_cran()
+  root = local_outside_project()
+  writeLines(c("a", "1"), file.path(root, "data", "x.csv"))
+  ui = local_scripted_ui(list())
+  for (mode in c("auto", "yolo")) {
+    for (code in c("setwd('data'); x = read.csv('x.csv'); setwd('..')",
+                   paste("f = function() { owd = setwd('data'); on.exit(setwd(owd));",
+                         "read.csv('x.csv') }; x = f()"))) {
+      fake = local_fake_provider(list(fake_tool("r", code = code), "Done."),
+                                 name = paste0("up-", mode))
+      peter("Read the data.", model = fake, mode = mode, envir = new.env())
+    }
+  }
+  expect_identical(sum(ui$log$method == "permission"), 0L)
+  expect_identical(path_norm(getwd()), root)
+})
+
+test_that("a function body and local() read the names they bind as the top level does (round 6)", {
+  root = local_outside_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  o = deparse(out)
+  # the save-and-restore idiom stays in the project
+  for (code in c("f = function() { owd = setwd('data'); on.exit(setwd(owd)); x }; y = f()",
+                 "local({ owd = setwd('data'); on.exit(setwd(owd)); x })",
+                 "f = function() { owd = getwd(); setwd('data'); setwd(owd) }",
+                 "f = function() { setwd('data'); setwd('..') }")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  # a path a body names is read as at the top level
+  expect_identical(lv(paste0("f = function() { p = ", o, "; unlink(p) }")), 4L)
+  expect_identical(lv(paste0("p = ", o, "; local({ q = p; unlink(q) })")), 4L)
+  # neighbours: a function's other names are ones the code computes, as is a directory saved in a
+  # branch, and a name a body assigns with <<- or local() given an environment adds its value
+  for (code in c("f = function(d) { owd = setwd(d); on.exit(setwd(owd)) }",
+                 "f = function() setwd(owd)", "if (p) { owd = setwd('data'); setwd(owd) }",
+                 paste0("f = function() { owd = setwd(", o, "); on.exit(setwd(owd)) }"),
+                 paste0("p = 'a.csv'; f = function() p <<- ", o, "; f(); unlink(p)"),
+                 paste0("p = ", o, "; local({ p = 'a.csv' }); unlink(p)"),
+                 paste0("p = 'a.csv'; local({ p = ", o, " }, envir = e); unlink(p)"))) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  expect_identical(lv("f = function() unlink(p)"), 3L)
+})
+
+test_that("withr's local_tempdir() and local_tempfile() are folded as tempfile() is (round 6)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (code in c("td = withr::local_tempdir(); setwd(td)", "setwd(withr::local_tempdir())",
+                 "withr::local_dir(withr::local_tempdir())", "setwd(withr::local_tempfile())",
+                 "setwd(withr::local_tempdir('x', tempdir()))",
+                 "setwd(withr::local_tempfile(pattern = 'x', tmpdir = tempdir()))")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  expect_identical(lv("unlink(withr::local_tempfile())"), lv("unlink(tempfile())"))
+  # neighbours: in another directory, or one the code computes, as before
+  for (code in c(paste0("setwd(withr::local_tempdir(tmpdir = ", deparse(out), "))"),
+                 "setwd(withr::local_tempdir(tmpdir = d))", "setwd(local_tempdir())")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+})
+
+test_that("do.call() of a list written out and rlang::exec() are read as the call (round 6)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  o = deparse(file.path(out, "x"))
+  for (p in list(c("do.call(Sys.setenv, list(TZ = 'UTC'))", "Sys.setenv(TZ = 'UTC')"),
+                 c("do.call('Sys.setenv', list(LANG = 'C'))", "Sys.setenv(LANG = 'C')"),
+                 c("base::do.call(Sys.unsetenv, list('TZ'))", "Sys.unsetenv('TZ')"),
+                 c("do.call(withr::local_envvar, list(c(TZ = 'UTC')))",
+                   "withr::local_envvar(c(TZ = 'UTC'))"),
+                 c("rlang::exec(Sys.setenv, TZ = 'UTC')", "Sys.setenv(TZ = 'UTC')"),
+                 c("rlang::exec('Sys.unsetenv', 'TZ')", "Sys.unsetenv('TZ')"),
+                 c(paste0("do.call(unlink, list(", o, "))"), paste0("unlink(", o, ")")),
+                 c("do.call(system, list('ls'))", "system('ls')"))) {
+    expect_identical(lv(p[1L]), lv(p[2L]), label = p[1L])
+  }
+  expect_identical(lv("do.call(Sys.setenv, list(TZ = 'UTC'))"), 2L)
+  expect_identical(lv("rlang::exec(Sys.setenv, R_USER_CONFIG_DIR = 'x')"), 4L)
+  expect_identical(lv(paste0("do.call(unlink, list(", o, "))")), 4L)
+  # neighbours: a setter given names the classifier cannot see is still control (4)
+  for (code in c("lapply('TZ', Sys.unsetenv)", "Map(Sys.setenv, TZ = 'UTC')",
+                 "env = c(TZ = 'UTC'); do.call(Sys.setenv, as.list(env))",
+                 "f = Sys.setenv; do.call(f, list(TZ = 'UTC'))",
+                 "list = function(...) 1; do.call(Sys.setenv, list(TZ = 'UTC'))",
+                 "do.call = function(f, a) 1; do.call(Sys.setenv, list(TZ = 'UTC'))")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+})
+
+test_that("a cd or wd directory written out is read whatever its name holds (review round 6)", {
+  root = local_project()
+  out = path_norm(withr::local_tempdir(tmpdir = dirname(tempdir())))
+  sh = registry_get("tool", "sh")
+  level = function(cmd, wd = ".") as.integer(sh$risk(list(cmd = cmd, wd = wd), NULL)$level)
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (d in file.path(out, c("a[1]", "a*1", "a?1", "a$x", "a`x"))) {
+    q = shQuote(d, "sh")
+    expect_identical(level("rm -f marker.txt", d), 4L, label = d)
+    expect_identical(level("ls", d), 1L, label = d)
+    for (cmd in c("cd %s && rm -f marker.txt", "env -C %s rm -f marker.txt",
+                  "git -C %s rm marker.txt")) {
+      expect_identical(level(sprintf(cmd, q)), 4L, label = sprintf(cmd, q))
+    }
+    expect_identical(lv(paste0("processx::run('rm', c('-f', 'marker.txt'), wd = ", deparse(d),
+                               ")")), 4L, label = d)
+  }
+  # neighbours: a directory the shell expands or globs is one it computes, as before
+  for (cmd in c("cd $X && rm -f marker.txt", "cd \"$X\" && rm -f marker.txt",
+                "cd ou* && rm -f marker.txt", "env -C $X rm -f marker.txt")) {
+    expect_identical(level(cmd), 3L, label = cmd)
+  }
+})
+
+test_that("Python code is read as Python joins its lines and names (review round 6)", {
+  root = local_project()
+  py = function(code) gptr_risk(paste0("peter$py(", deparse(code), ")"), root = root)$level
+  for (code in c("os.environ\\\n['HOME'] = d", "(os.environ)['HOME'] = d",
+                 "( os . environ )['HOME'] = d", "os.environ\\\n.update(R_USER_CONFIG_DIR = d)",
+                 "os.putenv\\\n('AWS_REGION', x)", "del (os.environ)['HOME']",
+                 "os.environ['HO\\\nME'] = d", "# note \\\nos.environ[k] = d",
+                 "# note \\\nos.putenv(k, d)", "# note \\\nos.environ['home'] = d")) {
+    expect_identical(py(paste0("import os\n", code)), 4L, label = code)
+  }
+  knit = paste0("peter$knit('python', ", deparse("import os\nos.environ\\\n['HOME'] = d"), ")")
+  expect_identical(gptr_risk(knit, root = root)$level, 4L)
+  # neighbours: a name that controls nothing, a read and ordinary continued lines, as joined
+  expect_identical(py("import os\nos.environ\\\n['TZ'] = 'UTC'"),
+                   py("import os\nos.environ['TZ'] = 'UTC'"))
+  expect_identical(py("import os\nx = (os.environ)\\\n['HOME']"), 2L)
+  expect_identical(py("x = 1 + \\\n2"), py("x = 1 + 2"))
+  expect_identical(py("import os\nx = dict(os.environ)"), 2L)
+})
+
+test_that("os.chdir() in Python code is read as setwd() is (review round 6)", {
+  root = local_outside_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  py = function(code) gptr_risk(paste0("peter$py(", deparse(code), ")"), root = root)$level
+  for (code in c("os.chdir('..')", paste0("os.chdir(", deparse(out), ")"), "os.chdir(d)",
+                 "os.fchdir(fd)", "posix.chdir('/')", "with contextlib.chdir('..'):\n  pass",
+                 "# note \\\nos.chdir('..')")) {
+    expect_identical(py(paste0("import os\n", code)), 4L, label = code)
+  }
+  knit = paste0("peter$knit('python', ", deparse("import os\nos.chdir('..')"), ")")
+  expect_identical(gptr_risk(knit, root = root)$level, 4L)
+  # neighbours: a folder in the project, as setwd(); a comment runs nothing
+  for (code in c("os.chdir('data')", "os.chdir(\"data/sub\")")) {
+    expect_identical(py(paste0("import os\n", code)), 2L, label = code)
+  }
+  expect_identical(py("x = 1  # os.chdir('..')"), py("x = 1"))
+})
+
+test_that("a relative Python chdir() after a move is read in the directory R is in (round 6)", {
+  root = local_outside_project()
+  py = function(code) gptr_risk(paste0("peter$py(", deparse(code), ")"), root = root)$level
+  for (code in c("os.chdir('data')\nprint(os.getcwd())\nos.chdir('..')",
+                 "os.chdir('data'); os.chdir('..')", "os.chdir('data/sub')\nos.chdir('../..')",
+                 "os.chdir('data')\nos.chdir('sub')\nos.chdir('../..')")) {
+    expect_identical(py(paste0("import os\n", code)), 2L, label = code)
+  }
+  # neighbours: out of the project from where R may be, after a move Python may not make (in a
+  # branch, a block, an expression, a bracket or a string) or into a directory the code computes
+  for (code in c("os.chdir('data')\nos.chdir('../..')", "if p:\n  os.chdir('data')\nos.chdir('..')",
+                 "if p: os.chdir('data')\nos.chdir('..')", "p and os.chdir('data')\nos.chdir('..')",
+                 "os.chdir('data') if p else 0\nos.chdir('..')",
+                 "x = [p and\nos.chdir('data')\n]\nos.chdir('..')",
+                 "s = '''\nos.chdir('data')\n'''\nos.chdir('..')",
+                 "with contextlib.chdir('data'):\n  pass\nos.chdir('..')",
+                 "def f():\n  os.chdir('data')\nos.chdir('..')",
+                 "from contextlib import chdir\nchdir('data')\nos.chdir('..')",
+                 "os.chdir(d)\nos.chdir('data')",
+                 "os.chdir('data')\nos.chdir('..')\nos.chdir('..')")) {
+    expect_identical(py(paste0("import os\n", code)), 4L, label = code)
+  }
+})
+
+test_that("eval(quote(x)) is refused as x is when x would end the session (review round 6)", {
+  blocked = function(code) eval_guard(parse(text = code, keep.source = FALSE))$blocked
+  for (code in c("eval(quote(q('no')))", "base::eval(quote(quit()))",
+                 "rlang::eval_bare(quote(q()))", "eval(base::quote(q()))",
+                 "eval(envir = e, quote(readline('?')))", "rlang::eval_tidy(quote(menu(1)))",
+                 "do.call(eval, list(quote(q())))", "rlang::exec(eval, quote(q()))",
+                 "do.call('eval', list(quote(readline('?'))))",
+                 "rlang::exec(.fn = base::eval, quote(menu(1)))")) {
+    expect_true(length(blocked(code)) > 0L, label = code)
+  }
+  # neighbours: a quote() alone is data, and eval() of other code is not refused
+  for (code in c("x = quote(q())", "eval(quote(x + 1))", "eval(bquote(.(x) + 1))",
+                 "do.call(eval, list(quote(x + 1)))", "do.call(rbind, list(a, b))",
+                 "rlang::exec(paste0, 'a', 'b')", "do.call(eval, quote_list)")) {
+    expect_identical(blocked(code), character(), label = code)
+  }
+  # the model is told and the run goes on, as for readline()
+  root = local_project()
+  withr::local_options(gptr.interactive = FALSE)
+  for (code in c("x = eval(quote(readline('?')))",
+                 "x = do.call(eval, list(quote(readline('?'))))")) {
+    fake = local_fake_provider(list(fake_tool("r", code = code), "Done."))
+    s = peter("Ask me.", model = fake, mode = "auto", envir = new.env())
+    expect_identical(s$status, "idle")
+    expect_match(msg_text(fake_requests(fake)[[2]]$last_results[[1]]),
+                 "^Permission denied: the code calls or refers to readline\\(\\)", label = code)
+  }
+})
+
+test_that("fs's copies and moves write their new_path, with fs loaded or not (review round 6)", {
+  root = local_project()
+  dir.create(file.path(root, "data"))
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  o = deparse(file.path(out, "x"))
+  # fs's formals while fs is loaded, and none while it is not (each unnamed argument may then be
+  # the path written)
+  sigs = list(file_copy = function(path, new_path, overwrite = FALSE) NULL,
+              file_move = function(path, new_path) NULL,
+              dir_copy = function(path, new_path, overwrite = FALSE) NULL)
+  matched = risk_args
+  for (fs_loaded in c(TRUE, FALSE)) {
+    local_mocked_bindings(risk_args = function(e, fn, pkg) {
+      if (!is.character(fn) || !fn %in% names(sigs)) return(matched(e, fn, pkg))
+      matched(e, if (fs_loaded) sigs[[fn]] else fn, if (fs_loaded) pkg else NA)
+    })
+    for (f in names(sigs)) {
+      for (code in c(paste0("fs::", f, "('data', ", o, ")"),
+                     paste0("fs::", f, "(new_path = ", o, ", path = 'data')"))) {
+        expect_identical(lv(code), 3L, label = paste(code, "with fs loaded", fs_loaded))
+      }
+      # neighbours: in the project a write, as before
+      code = paste0("fs::", f, "('data', 'data2')")
+      expect_identical(lv(code), 2L, label = paste(code, "with fs loaded", fs_loaded))
+    }
+  }
 })

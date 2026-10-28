@@ -4819,7 +4819,8 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    `compat$base_url_env`, such as `AWS_REGION`, the `bedrock-converse` key pair, and the names the `cli-claude` and
    `cli-codex` child environments keep, such as `CODEX_HOME`) or of a variable that moves the user config directory
    or the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in
-   any letter case, or of a name the classifier cannot read, `readRenviron()`, `dotenv::load_dot_env()` (D-272),
+   any letter case, or of a name the classifier cannot read (`do.call()` of a `list()` or `c()` written out and
+   `rlang::exec()` read as the call they make, review round 6), `readRenviron()`, `dotenv::load_dot_env()` (D-272),
    `setHook()`, `assignInNamespace()`. These exports also check `run_current()`: called from model code during a
    run they signal `gptr_error_permission` unless the dispatcher approved exactly that call through an
    `ask_human` (a one-shot token on the run). `perm_check()` grants the token on any final allow (IC-78); outside
@@ -5148,7 +5149,10 @@ calls and suggests `GPTR_REPLAY=replay`.
   `match.fun`, `get`, `do.call`, `base::`) as level 4 [12 fact-check]; a value passes when the code assigns it
   or the evaluation environment binds it to data (D-252). The gate's `mode` policy runs the same guard on the
   call's code in its evaluation environment (`ctx$envir`) and denies what it refuses in every mode, so no
-  person is asked to approve it (D-269).
+  person is asked to approve it (D-269). The guard reads `eval(quote(x))` (also `rlang::eval_bare()`,
+  `rlang::eval_tidy()` and `base::quote()`) as `x`, as the classifier does, so `eval(quote(q()))` is refused as `q()`
+  is, and `do.call()` of a `list()` or `c()` written out and `rlang::exec()` of a function written out as the call they
+  make, so `do.call(eval, list(quote(q())))` is too (review round 6).
 - No shipped prompt text or skill recommends `str()` (it leaves a sticky reference: every `str()` of a large
   object makes the next edit copy; re-verified); the texts recommend `peter$describe(x)`, `dim()`, `head()`. A P07
   test fails when any shipped section or skill mentions `str(`; the high-performance-r skill states the cost.
@@ -5523,7 +5527,9 @@ totals line names the model and the context left.
   computes, are a level-4 `session` row, which yolo's critical guard counts (D-262, review round 4); `getwd()` and
   `setwd()`'s value are the directory the code has moved R to, so the save-and-restore idiom stays in the
   project, and a link `file.symlink()`, `file.link()`, `Sys.junction()` or `fs::link_create()` makes to a path
-  outside the project is level 4 (review round 5).
+  outside the project is level 4 (review round 5). After a move a relative directory is read in the one R is in, a
+  function body and `local()` read the names they bind (the idiom stays in the project there too), and Python's
+  `chdir()` in `peter$py()` or `peter$knit("python")` code is read as `setwd()` is (review round 6).
 - `perm_check()` grants the one-shot control tokens on any final allow (IC-53 item 3).
 - The model's `<mode name="yolo">` block reuses auto's text. Entering yolo (a session, `/mode`, a console start)
   shows a one-time `gptr_message_notice` that lists what still asks and says the classifier is not a sandbox.

@@ -591,7 +591,7 @@ test_that("a control name in any case, unread, or set from a file is control (re
     # a name the classifier cannot read: computed, or in a list another function passes on
     "n = 'HOME'; Sys.unsetenv(n)", "Sys.unsetenv(nms)",
     "do.call(Sys.setenv, list(R_USER_CONFIG_DIR = 'elsewhere'))",
-    "do.call('Sys.setenv', list(TZ = 'UTC'))", "rlang::exec(Sys.setenv, HOME = 'elsewhere')",
+    "do.call('Sys.setenv', vars)", "rlang::exec(Sys.setenv, HOME = 'elsewhere')",
     "invisible(Map(Sys.setenv, XDG_CONFIG_HOME = 'elsewhere'))",
     "f = Sys.setenv; f(HOME = 'elsewhere')",
     # variables read from a file

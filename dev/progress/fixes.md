@@ -6602,6 +6602,209 @@ the driver, screens, events, transcripts and replays without a model are local, 
     fmt.py leaves copies of the changed records unchanged and lintfmt.py shows its baseline
     (fixes.md 1, HANDOFF 3, PROGRESS 1, DEVIATIONS 0). Not run: the full suite, `R CMD check`,
     Linux and Windows hosts, R 4.2 and R-devel, live models.
+- Review round 6 (Windows CI): PR #93's Windows check on `3cd3b146` (run 40716225723) failed
+  shard 1/4 on R-release and on oldrel-4 (R 4.2) with the same two failures, both in round 5's
+  test-risk-forms.R; every other job passed (Windows' CRAN mode does not run that file). Branch
+  `claude/v1-fix-win6` from `3cd3b146`; both are test fixes, the product's levels stand.
+  - `env -C <dir> ls` (:110) read 3, not 1. R spells the test's `withr::local_tempdir()` there
+    with backslashes (`D:/a/_temp\file...`), `risk_command()` also reads such a line as sh does,
+    and `risk_sh_gate()` rates an unquoted backslash escape 3, as one it does not model. On
+    Windows `peter$sh()` runs the line in Git Bash when it is installed (`shell_resolve_os()`),
+    which drops the backslashes, so the command does not run where it is written; 3 is stricter
+    than the 1 of reading a directory outside the project, and the `rm` rows stay 4. The test
+    writes the directory with `/` (`path_norm()`) and pins Windows' spelling at 3 on every host
+    (`6e43b975`).
+  - `fs::link_create(tempdir(), 'lnk')` (:177) read 4, not 2, and not because of Windows. fs is
+    no gptr dependency, and `risk_args()` matches a call to its package's formals only while
+    that namespace is loaded, else reads it as written, where each unnamed argument may be the
+    path written (`risk_path_exprs()`): `tempdir()` itself is `critical`, so the write is 4. The
+    file fails so on any OS without fs: against the installed package on macOS in a fresh
+    process, fs unloaded, it fails at :177:5 with 4 and nothing else. The full suites on Linux
+    and macOS passed, so an earlier file loads fs there; shard 1, whose levels are the unloaded
+    reading's, loads it in no file before this one. 4 is stricter than the documented 2: the
+    test gives `link_create()` fs's formals and none on every host (a mocked `risk_args()`, as
+    round 6 does for `Sys.junction()`) and names `new_path` beside `tempdir()` (`60427c7e`).
+  - Red on this Mac, the stand-ins in the test: `^risk-forms$` FAIL 2 PASS 239 with Windows'
+    spelling expected at 1 and the positional neighbour (:114 read 3, :195 "with fs loaded
+    FALSE" 4, CI's values). A scratch harness with `is_windows()` true, `tempdir()` as
+    `D:\a\_temp\Rtmp...`, the withr path as `D:/a/_temp\file...` and a `path_norm_one()` that
+    maps `D:/a/_temp` onto a real directory, as Windows' `normalizePath()` resolves it, gave
+    CI's levels for the old lines (3; 4 with fs unloaded, 2 with it loaded) and 1, 3, 4 and 2
+    for the new ones in both states.
+  - Green on `60427c7e`'s code (the records commit changes only `dev/`):
+    `^(risk-forms|perm-classify|perm-gate|bridge-sh|utils-paths)$` FAIL 0 WARN 0 SKIP 3 PASS 2278
+    in UTF-8 and the same under `LC_ALL=C LANG=C`; test-risk-forms.R against the installed
+    package with fs unloaded passes. Lint of the changed test file clean; `document()` no diff;
+    fmt.py leaves a copy of fixes.md unchanged and lintfmt.py shows its baseline (fixes.md 1,
+    HANDOFF 3, PROGRESS 1, DEVIATIONS 0).
+  - Not changed, found on the way, the maintainer's call: while fs is not loaded an abbreviated
+    argument name is not matched, so `fs::link_create(p = <outside>, n = 'lnk')` reads 2, where
+    `?gptr_security` says 4 and a session with fs loaded reads 4, and so for each row of a
+    package whose namespace is not loaded.
+  - Not run here: Windows hosts and R 4.2. Only PR #93's Windows check proves that shard 1
+    passes, that is that the runner's directory with `/` reads 1 and the file passes there
+    without fs.
+- Review round 6, the gate writer's items (the round 6 verifiers on `3cd3b146`: sec-gate's
+  R6-GATE-1, R6-GATE-2 and R6-GATE-5 and its two notes on `eval(quote(q()))` and Python's
+  `os.chdir()`, regressions' R6-REG-3 and R6-NOTE-1, and win6's verifier; branch
+  `claude/v1-fix-gate6` from `2bb1fcc1`, each test red on the code before its fix first,
+  `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`). FIX-36's review round 6 gate writer's bullet
+  holds R6-GATE-3 and R6-GATE-4.
+  - Red: test-risk-forms.R (`83226600`) on `2bb1fcc1`'s code, `^risk-forms$` FAIL 82 PASS 284 in
+    UTF-8 and under `LC_ALL=C LANG=C`; this record's share: the relative directory after a move 7,
+    withr's temporary folders 7, a `cd` or `wd` word 25, Python's `chdir()` 9, `eval(quote())` 7 and
+    fs's destinations 9. Then test-risk-forms.R (`f71798cb`) on `a0973d86`'s code FAIL 7 PASS 373 in
+    both locales: function bodies and `local()` 7.
+  - The relative directory after a move (R6-GATE-1, R6-REG-3, `9717f384`): `by_args()` read a
+    relative `setwd()` target in the project although it held where the code had moved R, so
+    `setwd("data"); x = read.csv("x.csv"); setwd("..")`, the form GPT-5.6 wrote live, read
+    `setwd("..") (leaves the project)`, level 4, which auto and yolo asked and a run nobody can
+    answer stopped at (level 2 on `13a917ff`). After a move a relative directory given to `setwd()`,
+    `withr::local_dir()`, `withr::with_dir()` or `xfun::in_dir()` is joined to each directory R may
+    be in, one the code computes when that is (after `withr::with_dir()`, which leaves one the code
+    computes, so `withr::with_dir("data", x); setwd("sub")` is 4, 2 before); before any move it is
+    read in the project as before, so the R 4.2 Windows test stays green.
+    `setwd("data"); setwd("../..")` stays 4. Offline with the fake model in auto and yolo, a project
+    outside `tempdir()`, the round trip asks nobody.
+  - Function bodies and `local()` (R6-GATE-5, R6-REG-3, `b6f22118`): round 5 followed names at the
+    code's top level only, so `owd = setwd("data"); on.exit(setwd(owd))` in a function body, where
+    names were not read, or in `local()`, where a name's first value joined the binding before the
+    code, read its saved directory as one the code computes (4, asked in auto and yolo; a knitr
+    document stopped). A function body and `local()`'s code (given no environment) now bind their
+    own names, followed from their start as the top level's are: a function's other names, its
+    formals included, are ones the code computes and R starts where the code started or has moved it
+    to; `local()`'s names start as those around it. After them a move in them adds to R's directory,
+    as before, and a name they assign with `<<-` adds its values outside (the walk keeps them in
+    `sup`), so `p = "a.csv"; f = function() p <<- <outside>; f(); unlink(p)` stays 4. The `kn()`
+    helper, which hid the names from a body, goes. A name a body assigns is now read where it was
+    computed before: `f = function() { p = <outside>; unlink(p) }` is 4 (3 before) and a body's
+    `tempfile()` delete 1 (3); no other classifier test changed. Documented, each level 4: the idiom
+    with the directory saved in a branch, a loop or another call's argument
+    (`if (p) owd = setwd("data")`, `tryCatch(finally = setwd(owd))`), and
+    `lapply(dirs, function(d) withr::with_dir(d, ...))`, a directory the code computes.
+  - withr's temporary folders (R6-GATE-5, `ba95834f`): `risk_fold()` folded `tempfile()` and not
+    `withr::local_tempdir()` or `withr::local_tempfile()`, so `setwd(withr::local_tempdir())` was a
+    directory the code computes (4) and `unlink(withr::local_tempfile())` a computed delete (3).
+    Both name a path in their `tmpdir`, `tempdir()` by default, read with withr's formals as the
+    classifier writes them whether withr is loaded or not; a bare `local_tempdir()` stays computed.
+  - `here::here()` (R6-REG-3, documented): it is not folded, since its root is the here package's,
+    found from marker files and its load state, not gptr's project; `setwd(here::here("data"))`
+    stays 4, now named in `?gptr_security`'s computed-directory sentence and 03 section 6.8.1.
+  - A `cd` or `wd` word (R6-GATE-2, `db2b2242`): `risk_cd_dirs()` grepped a directory's text for
+    `$`, a backquote, `*`, `?` or `[` and made it one the shell computes, so a `wd` that
+    `cmd_in_wd()` quotes or a quoted `cd` target naming a folder outside the project such as
+    `out[1]` placed the command nowhere (level 3; auto and yolo deleted there). The directory is now
+    computed only when the tokenizer saw an expansion or a glob in its word; `move()` passes its
+    word's reading for `env -C` and `git -C`. The test's five folder names read 4 for `rm`, 1 for
+    `ls`, through `peter$sh()`'s `wd`, `cd`, `env -C`, `git -C` and `processx::run()`'s `wd`;
+    `cd $X`, `cd "$X"`, `cd ou*` and `env -C $X` stay 3.
+  - Python's `chdir()` (the sec-gate lens's note, `e4bea33b`): Python runs in R's process, so
+    `peter$py("import os; os.chdir('..')")` moved R's working directory out of the project, a level
+    1 call that auto ran. A call of `chdir()` (`os.chdir()`, `os.fchdir()`, `contextlib.chdir()`) in
+    Python code is a `session` row as `setwd()` is: 2 for a plain string literal placed in the
+    project or `tempdir()`, 4 outside or for a directory the code computes. One rule beside the
+    table, not a table row: a row has one level, and this reading places the literal. A relative
+    literal is read from the directory the code starts in, as a `cd`'s is.
+  - `eval(quote(q()))` (the sec-gate lens's note, `b355c1ca`, outside this branch's files:
+    `R/eval-guard.R`): the evaluator's guard stopped at `quote()`, so since round 5's reading of
+    `eval(quote(x))` as `x` the gate asked a person to approve `q()` at level 4 (on `13a917ff` it
+    ran at 3, and the guard let it through). The guard reads `eval()`, `rlang::eval_bare()` and
+    `rlang::eval_tidy()` of `quote(x)` or `base::quote(x)` as `x`, so the mode policy refuses it in
+    every mode with `q()`'s reason; offline, auto refuses `x = eval(quote(readline('?')))` and the
+    run goes on.
+  - fs's destinations (R6-NOTE-1, `a0973d86`): risk-functions.csv named the source `path` as what
+    `fs::file_copy()`, `fs::file_move()` and `fs::dir_copy()` write, so with fs loaded a copy into a
+    folder outside the project read as a write in the project (2). They write `new_path`, as
+    `fs::link_create()` and base R's two-path rows (`file.copy()`'s `to`, `file.append()`'s `file1`)
+    already read; the other path rows name one path. While fs is not loaded each unnamed argument
+    may still be the path written. The test gives the three fs's formals and none (a mocked
+    `risk_args()`), so its result does not depend on whether fs is loaded. Found, not changed:
+    `file.rename()` and `fs::file_move()` also remove their source, which is not read as a delete (a
+    move of a file outside the project into it is level 2).
+  - win6's verifier (state/win6-verify.json, verdict ok): its optional row is taken (`307287e9`):
+    `env -C` with Windows' backslash spelling deletes at 4, as its `ls` is pinned at 3. Its other
+    note corrects the Windows CI bullet above: that an earlier file loads fs on the Linux and macOS
+    CI jobs is not established; a serial installed-package run of the 157 files before
+    test-risk-forms.R on macOS never loaded fs.
+  - Docs: `?gptr_security` (`6a262830`), 03 section 6.8.1 and 04 sections 15.4 IC-53 item 3, the
+    `eval_guard()` bullet and IC-78 (`9070bfb5`).
+  - Green on `9070bfb5`'s code (the records commit changes only `dev/`):
+    `^(perm|risk|rules|nested|bridge|mcp-|gptr-config|agent-|tool-|session-|py|knit|secrets|auth-)`
+    FAIL 0 WARN 0 SKIP 16 PASS 10459 in UTF-8 (325 s) and the same under `LC_ALL=C LANG=C` (321 s);
+    `^(eval-|ckpt|plan|arch-layers|lint-rules)` with the console-commands, console-repl,
+    utils-options and utils-paths files FAIL 0 WARN 0 SKIP 1 PASS 2169 in UTF-8 and FAIL 0 WARN 0
+    SKIP 7 PASS 2142 under `LC_ALL=C LANG=C` (the 6 more skips need a UTF-8 locale). Against the
+    installed package (`R CMD INSTALL` into a scratch library,
+    `testthat::test_dir(load_package = "installed")`, fs and withr not loaded),
+    `^(risk-forms|perm-classify)$` FAIL 0 PASS 1582 in both locales. Lint of the 3 changed R files
+    and the 2 changed test files clean; `document()` no diff; `check-docs.R` 0 problems; spelling
+    clean; `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290; fmt.py leaves copies of
+    the changed records unchanged and lintfmt.py shows its baseline (fixes.md 1, HANDOFF 3, PROGRESS
+    1, DEVIATIONS 0). Not run: the full suite, `R CMD check`, Linux and Windows hosts, R 4.2 and
+    R-devel, live models.
+  - Open, each documented: the save-and-restore idiom in a branch, a loop or another call's
+    argument, and `setwd(here::here())`, ask in auto and yolo (level 4); a relative literal of
+    Python's `chdir()` after another is read from where the code starts.
+- Review round 6 verification of the gate writer's items (the gate verifier on `ca2b0d8c`, findings
+  2 and 3 and its notes; FIX-36's bullet of the same name holds findings 1 and 4; branch
+  `claude/v1-fix-gate6`, each test red on `ca2b0d8c`'s code first, `NOT_CRAN=true`, the SIGINT
+  reset, a short `TMPDIR`).
+  - Red: test-risk-forms.R (`212519af`) on `ca2b0d8c`'s code, `^risk-forms$` FAIL 13 PASS 399 in
+    UTF-8 and under `LC_ALL=C LANG=C`; this record's share: a relative `chdir()` after a move 4,
+    `do.call()` and `rlang::exec()` of `eval()` 5.
+  - A relative Python `chdir()` after a move (finding 2, `ba2333bf`): `risk_python()` read every
+    relative `chdir()` literal from where the code starts, so `os.chdir('data')`, then
+    `os.chdir('..')` read 4 and asked in auto and yolo, while `?gptr_security` said it is read as
+    `setwd()` is (level 1 on `2bb1fcc1`, not read at all). A literal is now placed in each directory
+    R may be in. An `os.chdir()` of a literal moves R there when it is a statement of its own on a
+    line with no indentation, no `:` and no bracket left open, in code with no triple-quoted string:
+    only then does it run whenever the code after it runs. Any other `chdir()` (in a branch, a block
+    or a function, in an expression, `contextlib.chdir()`, a bare `chdir()` an import names) adds
+    its directory to where R may be, and one the code computes makes a later relative directory one
+    too. The round trip, on lines or after `;`, reads 2; `os.chdir('data')` then `os.chdir('../..')`
+    and the branch, block, function, expression, bracket and string forms stay 4. Offline with the
+    fake model, Python 3 through 'reticulate' and a scripted UI that answers nothing, auto and yolo
+    run the round trip unasked and R ends where it started. The Open item above, that a relative
+    literal of Python's `chdir()` after another is read from where the code starts, is closed.
+  - `do.call()` and `rlang::exec()` of `eval()` (finding 3, `1f6d7cdd`, `R/eval-guard.R`): since
+    `e97a7f5b` and `b355c1ca` the classifier read `do.call(eval, list(quote(q())))` and
+    `rlang::exec(eval, quote(q()))` as `q()`, level 4, but the evaluator's guard unwrapped only a
+    direct `eval(quote())`, so these asked a person to approve `q()` and
+    `x = do.call(eval, list(quote(readline('?'))))` (level 3) ran `readline()` in auto and yolo. The
+    guard now also walks the call that `do.call()` of a `list()` or `c()` written out, or
+    `rlang::exec()`, makes of a function given as a name, `pkg::name` or a string, so these are
+    refused in every mode as `q()` and `readline()` are; `do.call(rbind, list(a, b))`,
+    `do.call(eval, list(quote(x + 1)))` and `do.call(eval, quote_list)` are not. Offline, auto and
+    yolo refuse both `readline()` forms and the run goes on. The same reading refuses
+    `do.call(readLines, list('stdin'))` and `rlang::exec(readLines)`, reads of standard input.
+  - Docs: `?gptr_security` (`3f211148`), 03 section 6.8.1 and 04's `eval_guard()` bullet
+    (`0690ee06`).
+  - Mutation: each fix reverted alone on the head, `^risk-forms$`: `0771e8d3` FAIL 4 (the joins test
+    3, the `chdir()` test 1), `ba2333bf` FAIL 4 (the after-a-move test) and `1f6d7cdd` FAIL 5 (the
+    guard test's forms 4 and its offline run 1).
+  - Green on `1f6d7cdd`'s code (the docs and records commits change no R code):
+    `^(perm|risk|rules|nested|bridge|mcp-|gptr-config|agent-|tool-|session-|py|knit|secrets|auth-)`
+    with the `eval-` files FAIL 0 WARN 0 SKIP 16 PASS 11069 in UTF-8 (357 s) and FAIL 0 WARN 0 SKIP
+    18 PASS 11055 under `LC_ALL=C LANG=C` (357 s); `^(ckpt|plan|arch-layers|lint-rules)` with the
+    console-commands, console-repl, utils-options, utils-paths and doc-knitr files FAIL 0 WARN 0
+    SKIP 1 PASS 1667 in UTF-8 and FAIL 0 WARN 0 SKIP 5 PASS 1654 under `LC_ALL=C LANG=C`; on
+    `0690ee06`, the files that read the help pages with the changed ones,
+    `^(gptr-config|s1-types|agent-background|arch-layers|risk-forms|perm-classify|eval-guard)$`,
+    FAIL 0 WARN 0 SKIP 0 PASS 2871 in both locales. Against the installed package (`R CMD INSTALL`
+    of a git archive into a scratch library, `testthat::test_dir(load_package = "installed")`),
+    `^(risk-forms|perm-classify|eval-guard)$` FAIL 0 SKIP 0 PASS 1764 in both locales, fs not loaded
+    before or after. Lint of the 3 changed R files and the changed test file clean; `document()` no
+    diff; `check-docs.R` 0 problems; spelling clean; `testthat::test_dir("dev/release/tests")` FAIL
+    0 SKIP 0 PASS 290; fmt.py leaves copies of the changed records unchanged and lintfmt.py shows
+    its baseline (fixes.md 1, HANDOFF 3, PROGRESS 1, DEVIATIONS 0); `git merge-tree` with the
+    secret6, console6, trans6, class6 and cons6 branches' tips reports no conflict. Not run: the
+    full suite, `R CMD check`, Linux and Windows hosts, R 4.2 and R-devel, live models.
+  - The verifier's notes, not changed: `withr::with_dir("data", x); setwd("sub")` and
+    `xfun::in_dir()`'s like it stay 4 (documented in round 6); inside `local()`,
+    `list2env(..., globalenv())` reads 3 as `assign(envir = globalenv())` does at the top level;
+    and, on every build, `eval(bquote(q()))` and `eval(expression(q()))` are level 3, code that
+    builds a call, and `file.copy("~/.ssh/id_rsa", "data/k")` is level 2, as a copy's source is not
+    read as a secret read.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #93)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
@@ -9199,3 +9402,57 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
     now say a variable gptr keeps for the tool (its login, its folder or the path of Git Bash), as
     03 and 04 already did.
   - Green and checks: FIX-27's review round 6 verification above.
+- Review round 6, the gate writer's items (the sec-gate verifier on `3cd3b146`, R6-GATE-3 and
+  R6-GATE-4; branch `claude/v1-fix-gate6`, each test red on `2bb1fcc1`'s code first).
+  - Red: this record's share of FAIL 82 (FIX-27's review round 6, the gate writer's items):
+    `do.call()` and `rlang::exec()` 10, Python's joins 8.
+  - `do.call()` and `rlang::exec()` (R6-GATE-4, `e97a7f5b`): a setter used as a value is read as a
+    call whose arguments the code computes, so since round 1's rule
+    `do.call(Sys.setenv, list(TZ = "UTC"))`, `rlang::exec(Sys.setenv, TZ = "UTC")` and
+    `do.call(withr::local_envvar, list(c(TZ = "UTC")))` were level 4 `control`, which auto asked and
+    a run nobody can answer stopped at (3 on `13a917ff`), while `?gptr_security` said a setter
+    handed to another function is level 3 or lower. `do.call()` of a function written out
+    (`literal_fun()`: a string, or a name or `pkg::name` the tables list) that the code does not
+    bind, with a `list()` or `c()` of base R written out, and `rlang::exec()` of such a function,
+    are walked as the call they make, as a pipe and `eval(quote())` are: `TZ` is 2,
+    `R_USER_CONFIG_DIR` stays 4, `do.call(unlink, list(<outside>))` is 4 (3 before) and
+    `do.call(system, list("ls"))` is `system("ls")`, 0, no longer D-262's accepted false refusal,
+    while `do.call(system, list(cmd))` is still refused in auto and yolo. A setter given to
+    `lapply()` or `Map()`, or to `do.call()` with a list the code computes or with a `list` or `c`
+    it binds, still passes names the classifier cannot read: level 4 `control`. Round 1's test row
+    `do.call('Sys.setenv', list(TZ = 'UTC'))` (test-perm-classify.R) reads `TZ` now, so it passes
+    `vars`, a list the classifier cannot read, instead. `?gptr_security` now says which functions
+    pass such names and that a setter handed to one the classifier does not know calls it
+    (`identity()`, `assign()`, a function of your own) is level 3 or lower.
+  - Python's joins (R6-GATE-3, `091d59b5`): the environment rules matched `environ[`,
+    `environ.update(` and `putenv(` with only blanks between, so an `os.environ` write split by a
+    backslash at a line's end, or with `os.environ` in parentheses
+    (`os.environ\<newline>['HOME'] = d`, `(os.environ)['HOME'] = d`, the `update()` and `putenv()`
+    forms), was level 1 or 2 and auto changed `HOME` and `R_USER_CONFIG_DIR` through `peter$py()`
+    and `peter$knit("python")`. `risk_python()` first reads the code as Python joins it: a backslash
+    at a line's end joins the next line, and an `os.environ` or `environb` name in grouping
+    parentheses is the name (a call's parentheses, `dict(os.environ)`, are left alone). The
+    verifier's patch, with that guard added. The forms are level 4 `control`; `os.environ['TZ']`
+    writes, reads and ordinary continued lines read as before.
+  - Green and checks: FIX-27's review round 6, the gate writer's items, above.
+- Review round 6 verification of the gate writer's items (the gate verifier on `ca2b0d8c`, findings
+  1 and 4; branch `claude/v1-fix-gate6`, each test red on `ca2b0d8c`'s code first).
+  - Red: this record's share of FAIL 13 (FIX-27's bullet of the same name): Python's joins 4.
+  - A backslash at the end of a Python comment (finding 1, `0771e8d3`, a regression of `091d59b5`):
+    `risk_python()` joined every backslash at a line's end, but Python never continues a comment, so
+    the line after `# note \` runs as code; joined, it sat in the comment `code_nc` strips, and an
+    `os.environ` write or `chdir()` there went unread (`# note \<newline>os.environ[k] = d` read 3,
+    which auto ran: offline it changed `R_USER_CONFIG_DIR` through 'reticulate'; 4 on `2bb1fcc1`).
+    Only a backslash outside a comment joins now, in or out of a string, as Python joins it: the
+    verifier's patch, with a string left open at the line's end joined too, so
+    `os.environ['HO\<newline>ME'] = d` stays 4. The comment forms read 4 again and offline auto
+    asks; `os.environ\<newline>['HOME'] = d`, the parenthesised, `update()` and `putenv()` forms,
+    `os.environ \<newline> [k] = d` and `x = '#' + \<newline>os.environ[k]` read as before.
+  - The setter's callers (finding 4, docs): `?gptr_security`, 03 section 6.8.1 and D-272 named only
+    `lapply()`, `Map()` and `do.call()` as passing names the classifier cannot read to a setter,
+    though `sapply()`, `vapply()`, `mapply()`, `Filter()`, `Reduce()`, `purrr::map()`,
+    `purrr::walk()` and the other functions it knows call a function (`risk_slot_names`,
+    `risk_hof_args`) do so too (level 4 `control`). They now name another function the classifier
+    knows calls it, such as `sapply()` or `purrr::map()`; `identity(Sys.setenv)` stays level 0, a
+    function it does not know calls one.
+  - Green and checks: FIX-27's bullet of the same name.
