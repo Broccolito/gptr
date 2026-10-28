@@ -2462,10 +2462,13 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   # straight-line assignment replaces them (the code stops at its first error) unless the code
   # assigns the name with <<- (a function may do so later); one in a branch, loop or call adds
   # its value, and the binding before the code when it comes first; a loop that assigns a name
-  # makes it computed. Code in a function body does not read them (it may bind the name). So
-  # for R's working directory (`wd`), which a move in a branch or a function body adds to.
+  # makes it computed. So for R's working directory (`wd`, from `wd0`), which a move in a branch
+  # adds to. A function body and local()'s code bind their own names, read so from their start:
+  # a function's other names are ones the code computes and R is where the code started or has
+  # moved it to, local()'s are the names around it. After them a move in them adds to R's
+  # directory, and a name they assign with <<- adds the values `sup` holds for it.
   known = structure(list(), wd = wd, wd0 = wd)
-  kn = function(ctx) if (!ctx$def) known
+  sup = list()
   bound = risk_bound(exprs)
   # A helper the code binds (to a function or a value it computes), or the session holds as
   # other than base's, is called as one the code computes: risk_fold() folds no call of it.
@@ -2589,7 +2592,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   add_path = function(ps, category, level, ctx, label, name) {
     best = list(level = -1L)
     for (p in ps) {
-      v = fold(p, kn(ctx))
+      v = fold(p, known)
       w = v[nzchar(v)]
       cls = vapply(w, risk_path_cls, character(1), category, root)
       pc = if (is.null(v)) "unknown" else if (!length(w)) "console" else risk_cmd_worst(cls)
@@ -2705,7 +2708,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       }
       # processx::run() runs its command in `wd`, read as peter$sh()'s in each directory a name
       # may hold; one the code computes is read as the project
-      wds = if (runner) fold(risk_arg(a, "wd"), kn(ctx))
+      wds = if (runner) fold(risk_arg(a, "wd"), known)
       for (wd in if (length(wds)) as.list(wds) else list(NULL)) {
         f = switch(code[3L], sql = risk_sql(paste(x, collapse = "\n"), root),
                    argv = risk_command(cmd_in_wd(c(x, argv), wd), root),
@@ -2727,7 +2730,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     if (name %in% c("file.symlink", "file.link", "Sys.junction", "link_create")) {
       # a link to a path outside the project names it from inside (setwd()'s reading), so a
       # delete through it is one outside the project
-      v = risk_fold(risk_arg(a, if (name == "link_create") "path" else "from", 1L), kn(ctx))
+      v = risk_fold(risk_arg(a, if (name == "link_create") "path" else "from", 1L), known)
       pcs = vapply(v[nzchar(v)], risk_path_cls, "", "read", root)
       pc = risk_cmd_worst(pcs)
       if (length(pc) && !pc %in% c("workspace", "temp", "console")) {
@@ -2738,7 +2741,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     }
     if (name %in% c("setwd", "local_dir", "with_dir", "in_dir")) {
       # out of the project, the paths the gate places in it name files elsewhere
-      v = fold(risk_arg(a, if (name %in% c("setwd", "in_dir")) "dir" else "new", 1L), kn(ctx))
+      v = fold(risk_arg(a, if (name %in% c("setwd", "in_dir")) "dir" else "new", 1L), known)
       # R is then in the directory setwd() and local_dir() move to; in or after with_dir() and
       # in_dir() in one the code computes
       wd = attr(known, "wd")
@@ -2772,7 +2775,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
         # the names of Sys.setenv()'s arguments, and the values of Sys.unsetenv()'s x and of
         # Sys.setenv()'s unnamed arguments (which R refuses)
         vals = lapply(if (name == "Sys.setenv") d[!nzchar(dn)] else a[names(a) == "x"], fold,
-                      kn(ctx))
+                      known)
         keys = c(dn[nzchar(dn)], unlist(vals))
         unread = any(vapply(vals, is.null, logical(1)))
       } else {
@@ -2810,7 +2813,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     if (name %in% c("file", "gzfile", "bzfile", "xzfile")) {
       mode = risk_arg(a, "open", 2L)
       if (is.null(mode) || (is.character(mode) && !grepl("[wa+]", mode))) return(FALSE)
-      v = fold(risk_arg(a, "description", 1L), kn(ctx))
+      v = fold(risk_arg(a, "description", 1L), known)
       cls = vapply(v, risk_path_class, character(1), root)
       pc = if (is.null(v)) "unknown" else risk_cmd_worst(cls)
       if (!is.null(v)) add_tg("files", v)
@@ -2875,6 +2878,10 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     }
     if (!is.symbol(node) && !is.character(node)) return(invisible())
     nm = as.character(node)
+    v = if (!is.call(target)) fold(value, known)
+    known[[nm]] <<- if (ctx$seq && op != "<<-" && !nm %in% tg$super) v %||% NA_character_ else
+      unique(c(known[[nm]] %||% NA_character_, v %||% NA_character_))
+    if (op == "<<-") sup[[nm]] <<- unique(c(sup[[nm]], v %||% NA_character_))
     if (ctx$def && op != "<<-") {
       # in a function body only a replacement of a name the code does not bind can reach an
       # object outside it (an environment, by reference)
@@ -2884,9 +2891,6 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       return(invisible())
     }
     add_tg(if (op == "<<-") "super" else "assign", nm)
-    v = if (!is.call(target)) fold(value, kn(ctx))
-    known[[nm]] <<- if (ctx$seq && !nm %in% tg$super) v %||% NA_character_ else
-      unique(c(known[[nm]] %||% NA_character_, v %||% NA_character_))
     if (is.call(target)) add_tg("modify", nm)
     if (op == "<<-") add(ctx, paste(nm, "<<- ..."), "<<-", 2L, "object_write")
     # a plain assignment binds in envir; <<-, assign(), a replacement (of an environment, by
@@ -2932,7 +2936,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     } else if (r$how == "lambda") {
       walk(e[[1L]], ctx)
     } else if (r$how == "member") {
-      add_rows(risk_member_flags(r$name, e, root, kn(ctx), masked), ctx)
+      add_rows(risk_member_flags(r$name, e, root, known, masked), ctx)
       if (r$name %in% c("sh", "bg", "script")) add_tg("process", paste0(risk_gateway, "$", r$name))
     } else {
       use_fun(r$name, r$pkg, e, ctx)
@@ -2976,6 +2980,18 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
       inner$def = TRUE
       a = c(as.list(a[[1L]]), a[-1L])
     }
+    # a function body and local()'s code (in an environment of its own) bind their own names
+    # (`known` above)
+    scope = r$name == "function" || (r$name == "local" && length(a) == 1L &&
+                                       !"local" %in% bound$all)
+    if (scope) {
+      up = known
+      if (r$name == "function") {
+        known <<- structure(list(), wd = unique(c(attr(up, "wd0"), attr(up, "wd"))),
+                            wd0 = attr(up, "wd0"))
+      }
+      inner$seq = TRUE
+    }
     if (r$name %in% risk_quoting_funs) inner$quote = TRUE
     # eval(quote(x)) runs x, as evalq(x) does (also base::quote())
     if (r$name %in% c("eval", "eval_bare", "eval_tidy")) {
@@ -2988,6 +3004,12 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     }
     inner$away = ctx$away || r$name %in% risk_unknown_funs
     for (i in seq_along(a)) if (!identical(a[[i]], quote(expr = ))) walk(a[[i]], inner)
+    if (scope) {
+      wd = attr(known, "wd")
+      known <<- up
+      for (nm in names(sup)) known[[nm]] <<- unique(c(known[[nm]] %||% NA_character_, sup[[nm]]))
+      attr(known, "wd") <<- unique(c(attr(up, "wd"), wd))
+    }
     # after the value is walked, so a use of the name inside it sees the earlier value
     if (r$name %in% risk_assign_ops && length(a) == 2L) {
       note_assign(a[[1L]], r$name, ctx, a[[2L]])
