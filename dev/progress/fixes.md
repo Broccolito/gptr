@@ -7608,6 +7608,73 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
     (`gptr.secret_guard`, in R/utils-options.R) and `?gptr_egress`; 03 sections 6.8.3 and 6.8.4;
     04 sections 7.6, 15.4 IC-53 items 7 and 8, 15.5 IC-57, 15.9 IC-77 and 15.10 IC-82; D-267's
     status line and D-188's.
+- Review round 6 verification, the secret writer's items (the verifier on `eee30f55`: every round
+  6 reproduction fixed, 15 of its 16 mutants red, the suites green in UTF-8 and C; six findings,
+  one a regression of round 6; branch `claude/v1-fix-secret6`, each test red on `eee30f55`'s code
+  first).
+  - Shadowed names (finding 1, `f9cf1ea0`, a regression of round 6): `scan_bindings()` ignores
+    scope, so a function's argument or a data mask named like a variable bound to a string elsewhere
+    read as that string. `n = 'HOME'; f = function(n) Sys.getenv(n); v = f('KEY')` was level 1, and
+    sending `v` with `curl_fetch_memory()` ran in yolo with no question, where `3cd3b146` asked at
+    level 4; so did `with(list(n = 'KEY'), Sys.getenv(n))` and
+    `lapply('KEY', function(n) Sys.getenv(n))`. Rather than read scope, `Sys.getenv()` of a
+    variable none of whose strings names a secret is a name computed at run time again
+    (`env_dynamic`, level 3, 4 with a network call), so a binding read wrongly never lowers a read
+    below `3cd3b146`'s, and one whose strings include a registered name still asks.
+    `v = 'R_LIBS_USER'; Sys.getenv(v)` is level 3 again, as on `3cd3b146`. Red:
+    test-auth-secrets.R "a name bound from a string and a .env file are guarded reads (review
+    round 6)" FAIL 8.
+  - Loaded files in a run (finding 2, `40770c71`): `secret_discover_env()`, at a session start and
+    after an evaluation that sets variables, registered every secret-looking variable again with
+    source `environment`, which replaced `dotenv:<file>`; so `x = readLines('keys.txt')` after
+    `gptr_env('keys.txt')` ran in auto and held the key, and loading the file again no longer
+    superseded its older value. `secret_register()` now keeps the source a value was registered
+    with when the environment finds it again. Red: test-auth-dotenv.R "finding a loaded key in the
+    environment again keeps its file (round 6 verification)" FAIL 3; test-perm-gate.R "auto asks
+    before code reads a secret by .env, a shell's $NAME or a name (round 6)" FAIL 2 (that read in
+    the loop).
+  - New noise (finding 3, `8d7a7fff`): `scan_env_file_re` matched any name holding `.env.`, so
+    `read.csv('doubs.env.csv')` asked in auto, and `risk_secret_guard()` took every secret row of
+    R code whose path was such a file, so `file.exists('.env')` and `file.info('.env')` asked too.
+    A .env file is now `.env`, `.env.<suffix>`, `<name>.env` or `.Renviron`, and in R code only a
+    function that reads a file's text (`scan_read_funs`, which `secret_scan()` uses) makes its read
+    guarded; the walk's folded path still counts, so `f = '.env'; readLines(f)` asks. Red: the same
+    test-auth-secrets.R test FAIL 2; the same test-perm-gate.R test FAIL 3. Cost, recorded: a
+    command line or Python is read word by word, so a mention of `.env` there
+    (`peter$sh('echo .env >> .gitignore')`, a Python comment) asks in auto as a read does.
+  - A network program in a variable (finding 4, `1ddf572f`): the check read only the strings of the
+    process call itself, so `cmd = c('curl', ..., Sys.getenv('KEY'), ...); peter$sh(cmd)` and
+    `p = 'curl'; peter$sh(c(p, ...))` ran in yolo with no question, though FIX-27's refusal steers
+    models to `peter$sh()`. Code that starts a process and holds a string naming a network program
+    anywhere now counts as a network sink; a name built from pieces is not read, as
+    `?gptr_security` now says. Red: test-auth-secrets.R "peter's sh, bg and script members are
+    read by the network check (review round 6)" FAIL 3.
+  - One question (finding 5, `a539786a`): an `r(secret:NAME)` ask rule's question came from
+    `nested_rules()` and the gate then asked again for the same hand-over: auto 2 where `3cd3b146`
+    asked 1, manual 3 where it asked 2. The rules' ask is now one more opinion of `perm_check()`
+    (its `extra`), so a nested call gets one question, the strictest tier winning, as a top-level
+    call does; a deny rule still denies first. Red: test-agent-dispatch.R "an r(secret:) deny or
+    ask rule stops a member handing a child the secret (round 6)" FAIL 4.
+  - Test gap (finding 6, `02a19d34`): the mutant that drops `perm_summary()`'s redaction of code
+    lines and a path stayed green, as `ui_wrap()` redacts again for every UI; the blocked
+    condition's `action` depends on it. test-agent-dispatch.R "a request and a blocked run's
+    condition carry its flagged rows redacted (round 6)" now checks each form of the summary: green
+    on the code, FAIL 4 on that mutant.
+  - Docs (`058b571e`): `?gptr_security` and 04 section 15.4 IC-53 item 7 name the reads exactly (a
+    variable one of whose strings is a registered name; a .env file by its name, read by a function
+    that reads its text or in a command line or Python; a network program any string of code that
+    starts a process names); 03 section 6.8.4 and 04 section 7.6 (`dispatch_nested()`,
+    `perm_check()`'s `extra`) the one question.
+  - Green, `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`, one after the other, the chunks
+    `^(auth-|secrets)`, `^agent-`, `^(mcp-server|console-ui|eval-core)`, `^(perm|rules|nested)`,
+    `^bridge`, `^tool-`, `^session-` and `^(arch-layers|risk-)`: FAIL 0 WARN 0 SKIP 15 PASS 9877 in
+    UTF-8 and FAIL 0 WARN 0 SKIP 19 PASS 9847 under `LC_ALL=C LANG=C`; the 4 changed test files
+    against the installed package (`R CMD INSTALL` into a scratch library,
+    `testthat::test_dir(load_package = "installed")`) FAIL 0 SKIP 0 PASS 1171 in both. Lint of the 8
+    changed R and test files is clean; a second `document()` changes nothing; `check-docs.R` 0
+    problems; `spelling::spell_check_package()` clean. Cost, recorded: code that reads a secret,
+    starts a process and names a network program in any string (a `message()` that says `curl`) asks
+    in yolo.
 
 ## FIX-33 - Transcript findings from the live sessions (2026-10-27, #93)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama

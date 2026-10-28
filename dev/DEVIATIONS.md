@@ -8381,7 +8381,20 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   shows the output of model code it indents, and its warnings, redacted; output it does not indent
   R prints itself, which `?gptr_security` says. The question's dim row reads
   `asks even in auto mode: <reason>`, true of the secret guard's question too, which yolo does not
-  ask (formerly `asks in every mode`; D-188's status line).
+  ask (formerly `asks in every mode`; D-188's status line). Status 2026-10-28 (verification of
+  round 6 on `eee30f55`): `Sys.getenv()` of a variable none of whose strings names a secret is a
+  name computed at run time again (level 3), so a function's argument or a data mask named like a
+  variable bound to a string elsewhere is no longer read as that string (round 6 read
+  `f = function(n) Sys.getenv(n); f('KEY')` after `n = 'HOME'` as level 1, and yolo sent the value
+  over the network with no question, a regression); a key the environment finds again keeps its
+  `dotenv:` source, so a read of a file `gptr_env()` loaded asks in a run too; a .env file is
+  `.env`, `.env.<suffix>`, `<name>.env` or `.Renviron`, and in R code only a function that reads
+  a file's text makes its read guarded, so `file.exists('.env')` and `read.csv('doubs.env.csv')`
+  run in auto again, while a command line or Python that mentions `.env` still asks (a cost);
+  code that starts a process and holds a string naming a network program anywhere counts as a
+  network sink, so a command vector held in a variable sends a secret in yolo only after a
+  question; and an ask rule on a nested hand-over is asked in `perm_check()`'s one question with
+  the call's other reasons (`extra`), not before it.
 - Rule (classifier, PERM-2): `system2()`'s `env` is read as the start of its command line, as
   Unix `system2()` pastes it, unquoted, before the command:
   `system2("ls", env = "A=1; rm -rf build;")` is read as `A=1; rm -rf build; ls` (level 3), and an
@@ -8430,7 +8443,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   verification: 04 section 7.11 (the request record's `summary`) and IC-53 items 7 and 8.
   Verification round 6: 03 sections 6.8.3 and 6.8.4; 04 sections 7.6, 15.4 IC-53 items 7 and 8,
   15.5 IC-57, 15.9 IC-77 and 15.10 IC-82; `?gptr_security`, `?gptr_permissions`, `?gptr_options`
-  (`gptr.secret_guard`) and `?gptr_egress`.
+  (`gptr.secret_guard`) and `?gptr_egress`. Its verification: 03 section 6.8.4; 04 sections 7.6
+  (`dispatch_nested()`, `perm_check()`) and 15.4 IC-53 item 7; `?gptr_security`.
 - Tests: test-perm-rules.R "deny and ask sh: rules match a read-only command; allow needs level 1
   (FIX-32)", "a deny sh: rule stops a read-only command, also one peter$sh() computes (FIX-32)";
   test-perm-classify.R "system2()'s env is read as the start of its command line (FIX-32)";
@@ -8465,7 +8479,10 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   and in a script (round 6)"; test-console-ui.R "a permission question never shows a registered
   secret (review round 6)"; test-eval-core.R "the console shows the output it indents with
   registered secrets redacted (round 6)"; test-perm-rules.R "r(secret:NAME) is the only allow rule
-  that covers a registered secret read". Evidence: progress/fixes.md FIX-32.
+  that covers a registered secret read"; its verification: test-auth-dotenv.R "finding a loaded key
+  in the environment again keeps its file (round 6 verification)", and new cases in the round 6
+  tests of test-auth-secrets.R, test-perm-gate.R and test-agent-dispatch.R above. Evidence:
+  progress/fixes.md FIX-32.
 
 ## D-268 - FIX-33 What a document records and reads back after the live sessions (2026-10-27)
 - Rule (steering lines, security): a block body line is a `## Steer:` or `## Follow-up:` line only
