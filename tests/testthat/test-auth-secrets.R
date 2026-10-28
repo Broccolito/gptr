@@ -352,6 +352,18 @@ test_that("registered environment reads honor named arguments and literal name v
   }
 })
 
+test_that("a registered name read in another letter case is a guarded read (review round 6)", {
+  local_vault()
+  secret_register("FAKEregistered012345", "TEST_API_KEY", "test")
+  # Windows reads environment names in any case; one rule on every OS
+  for (code in c("Sys.getenv('test_api_key')", "Sys.getenv(c('HOME', 'Test_Api_Key'))")) {
+    scan = secret_scan(code)
+    expect_true(scan$guard, label = code)
+    expect_identical(scan$findings$name[scan$findings$rule == "secret_env_registered"],
+                     "TEST_API_KEY", label = code)
+  }
+})
+
 test_that("shell network sinks and container assignments preserve secret taint", {
   local_vault()
   secret_register("FAKEregistered012345", "TEST_API_KEY", "test")

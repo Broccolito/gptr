@@ -580,8 +580,10 @@ secret_scan = function(code, tainted = character()) {
         add("env_dump", "Sys.getenv")
       } else if (!is.null(known)) {
         for (n in known$names) {
-          if (n %in% registered) {
-            add("secret_env_registered", n)
+          # in any letter case, as Windows reads environment names (one rule on every OS)
+          reg = registered[toupper(registered) == toupper(n)]
+          if (length(reg)) {
+            for (r in reg) add("secret_env_registered", r)
           } else if (is_secret_name(n)) {
             add("secret_env", n)
           }
