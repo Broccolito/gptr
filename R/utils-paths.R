@@ -192,7 +192,9 @@ path_norm_one = function(path) {
   rest = character()
   current = path
   while (!file.exists(current)) {
-    parent = dirname(current)
+    # on Windows a UNC path climbs no higher than its share: R < 4.4's dirname("//host") is "."
+    if (is_windows() && grepl("^//[^/]*(/[^/]*)?/?$", current)) break
+    parent = sub("^\\\\\\\\", "//", dirname(current))
     if (identical(parent, current)) break
     rest = c(basename(current), rest)
     current = parent

@@ -1423,6 +1423,51 @@ test_that("a project in a protected folder reads its root as its folders (review
   }
 })
 
+test_that("a UNC path is outside the project as R 4.2 on Windows places it (review round 6)", {
+  root = local_project()
+  dir.create(file.path(root, "sub"))
+  local_mocked_bindings(is_windows = function() TRUE, is_macos = function() FALSE)
+  # path_norm_one() with R 4.2's Win32 dirname() and basename() (src/main/util.c: a leading "//"
+  # becomes "\\", then only "/" splits, so dirname("//host") is "."), no UNC server answering,
+  # and normalizePath() giving a UNC path back as GetFullPathNameW() does
+  unc = function(x) startsWith(gsub("\\", "/", x, fixed = TRUE), "//")
+  fix = function(x) {
+    x = gsub("\\", "/", x, fixed = TRUE)
+    if (startsWith(x, "//")) paste0("\\\\", substring(x, 3L)) else x
+  }
+  trim = function(x) {
+    while (nchar(x) > 1L && endsWith(x, "/") &&
+             (nchar(x) > 3L || substr(x, nchar(x) - 1L, nchar(x) - 1L) != ":")) {
+      x = substr(x, 1L, nchar(x) - 1L)
+    }
+    x
+  }
+  win = new.env(parent = environment(path_norm_one))
+  win$basename = function(path) sub("^.*/", "", sub("/+$", "", fix(path)))
+  win$dirname = function(path) {
+    x = trim(fix(path))
+    i = regexpr("/[^/]*$", x)
+    if (i < 0L) "." else trim(substr(x, 1L, i))
+  }
+  win$file.exists = function(path) !unc(path) && file.exists(path)
+  win$normalizePath = function(path, ...) if (unc(path)) fix(path) else normalizePath(path, ...)
+  norm = path_norm_one
+  environment(norm) = win
+  local_mocked_bindings(path_norm_one = norm)
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (code in c("setwd('//host/share')", "setwd('\\\\\\\\host\\\\share')", "setwd('//x')",
+                 "unlink('//host/share/f')", "file.remove('//host/share/f')",
+                 "withr::with_dir('//host/share', unlink('x'))", "system('rm //host/share/f')")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  expect_identical(lv("readLines('//host/share/f')"), 1L)
+  expect_identical(lv("writeLines('x', '//host/share/f')"), 3L)
+  # neighbours: the project and tempdir()
+  for (code in c("setwd('sub')", "setwd(tempdir())")) expect_identical(lv(code), 2L, label = code)
+  expect_identical(lv("unlink('x')"), 3L)
+  expect_identical(lv("readLines('x')"), 0L)
+})
+
 test_that("processx::run()'s wd is read as peter$sh()'s (review round 4)", {
   root = local_project()
   out = withr::local_tempdir(tmpdir = dirname(tempdir()))
