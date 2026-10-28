@@ -105,3 +105,38 @@ test_that("a claude run in the coaching role acts only through gptr's tools", {
   expect_identical(e$live_answer, 42)
   expect_identical(s$status, "idle")
 })
+
+# ---- coaching sessions on the Codex plan (P29, 08 section 3.7; D-263) ----------------------------
+# The confined exec relies on the coaching preflight, which gptr_coach() runs first: a refusal
+# (an older CLI, a $CODEX_HOME/hooks.json) skips.
+
+skip_codex_preflight = function() {
+  refused = tryCatch(coach_model_kind("codex/default"), gptr_error_model_refused = identity)
+  skip_if(inherits(refused, "condition"), conditionMessage(refused))
+}
+
+test_that("a codex coach has no tools and answers through the strict reply schema", {
+  skip_live_cli("codex")
+  skip_codex_preflight()
+  local_live_role("coach")
+  withr::local_dir(withr::local_tempdir())
+  schema = list(type = "object", properties = list(answer = list(type = "integer")),
+                required = list("answer"))
+  s = peter("Reply with the answer to 6 * 7.", model = "codex/default", envir = new.env(),
+            .opts = list(context = "none", returns = schema))
+  expect_identical(s$status, "idle")
+  expect_equal(s$value$answer, 42)
+})
+
+test_that("a codex run in the coaching role acts only through gptr's tools", {
+  skip_live_cli("codex")
+  skip_codex_preflight()
+  local_live_role("run")
+  withr::local_dir(withr::local_tempdir())
+  e = new.env()
+  s = peter(paste("Call the gptr MCP tool `r` with the code `live_answer = sum(1:10);",
+                  "live_answer`, then reply with the result only."),
+            model = "codex/default", envir = e, mode = "auto", .opts = list(context = "none"))
+  expect_identical(e$live_answer, 55L)
+  expect_identical(s$status, "idle")
+})
