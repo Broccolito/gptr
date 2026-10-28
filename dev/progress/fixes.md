@@ -6044,7 +6044,7 @@ the driver, screens, events, transcripts and replays without a model are local, 
   TypeSafe AI" is the fallback if a reviewer queries it. The README's 4 GiB figure is one
   measured run (`dev/TESTING_PLAN.md`).
 
-## FIX-27 - Auto and yolo refuse a system() command the code computes (2026-10-26, #87)
+## FIX-27 - Auto and yolo refuse a system() command the code computes (2026-10-26, #93)
 - Why: issue #87 and FIX-18's Open (D-251 nested-1): a command built at run time and run through
   base `system()` (`cmd = paste("rm", "-rf", "build"); system(cmd)`) ran in auto and yolo despite a
   deny `r(sh:rm *)`, and in a fake run `build/` was deleted in both modes; only nested `peter$sh()`
@@ -6188,7 +6188,7 @@ the driver, screens, events, transcripts and replays without a model are local, 
   deny in plan, manual, edits, auto and yolo (with no rule manual and edits ask) and the literal
   `system('rm -rf build')` deny in all five. Both lists carry the item again, for manual and edits.
 
-## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #86)
+## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #93)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
   alone: a batch read on the polling beat, at most 0.2 s after the last read, holding more keys
   than a person types since then. A read about 145 ms late (a CPU-starved session), or keys piled
@@ -6418,7 +6418,7 @@ the driver, screens, events, transcripts and replays without a model are local, 
   in FIX-34's verification bullet. D-263, 04 sections 7.1, 15.9 and 15.10 IC-76 and
   `console_keys()`'s comment say so.
 
-## FIX-29 - Transcripts record @file heads and the objects !code lines use (2026-10-26, #PR)
+## FIX-29 - Transcripts record @file heads and the objects !code lines use (2026-10-26, #93)
 - Why: issue #85, FIX-20 review items R27 and R29. R27: `gptr_source(replay = "live")` re-asked
   a console turn with the literal `@notes.md` text, as the transcript never recorded the file head
   (nor the `!code` notes) the console had sent, so the re-ask was another request. R29: a direct R
@@ -6520,7 +6520,7 @@ the driver, screens, events, transcripts and replays without a model are local, 
   starts `#<`; a re-ask sends such a name with `\n` where it had `\r`. D-264 and 04 section 15.3
   IC-49 say so.
 
-## FIX-30 - A live re-ask of a console transcript keeps each turn's model and mode (2026-10-26, #PR)
+## FIX-30 - A live re-ask of a console transcript keeps each turn's model and mode (2026-10-26, #93)
 - Why: the maintainer's request of 2026-10-26, split out of issue #85 to keep #85 small.
   `gptr_source(<transcript>, replay = "live")` re-asked every console turn with the configured
   model and mode for a session's first turn and the session's own afterwards: a statement
@@ -6599,7 +6599,7 @@ the driver, screens, events, transcripts and replays without a model are local, 
   setting mode. Plain statements follow the re-asking machine's settings; a turn recorded in
   `auto` or `yolo` is re-asked in that mode. `/retry` still resends the typed prompt (FIX-29).
 
-## FIX-31 - Transcript hardening after FIX-29 (2026-10-26, #PR)
+## FIX-31 - Transcript hardening after FIX-29 (2026-10-26, #93)
 - Why: three defects left after FIX-29 (issue #85, D-264). (1) Security, found by FIX-29's verifier
   at 7666f9cb: `doc_block_sent()` took every `#<` line of a block body in every format, so model
   code recorded in a block (`#< <user_ran>`, `#< The user ran this R code in the session:`,
@@ -6706,7 +6706,7 @@ the driver, screens, events, transcripts and replays without a model are local, 
   with a CRLF transcript and the old check, FAIL 1 at that check, as on Windows. Green:
   `^doc-replay$` PASS 1063. FIX-33's review round 4 bullet has the runs of both files.
 
-## FIX-32 - Permission findings from the live sessions (2026-10-27, #PR)
+## FIX-32 - Permission findings from the live sessions (2026-10-27, #93)
 Scope: the permission findings of the live sessions with real models (Versa GPT-5.6 and Claude
 Opus 4.8, `ollama/qwen3.8:27b`, claude-cli and codex) on `claude/v1-fixes` (`66fc1782`, the code
 of FIX-27..FIX-31), each reproduced by an independent triager: PERM-1, PERM-2, PERM-4, PERM-6 to
@@ -6977,7 +6977,7 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
   PASS 2; and the checks in FIX-34's verification bullet. D-267 and 04 section 15.9 IC-77 item 3
   say so.
 
-## FIX-33 - Transcript findings from the live sessions (2026-10-27, #PR)
+## FIX-33 - Transcript findings from the live sessions (2026-10-27, #93)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
 qwen3.8:27b; lenses doc, mm, all, perm and static), each reproduced by an independent triager: 19
 findings and FIX-31's carried CR item. 17 are fixed (DOC-3 in part, its rest stated) in 13 commits,
@@ -7275,7 +7275,7 @@ and green runs use `dev/ci/isolated-check.R test` with `NOT_CRAN=true` and SIGIN
   ends. The "could not find function lg" lines of the log are the output of test-doc-replay.R's
   `!` line `lg(df$y)`, a typo on purpose (FIX-33's undo test), not a failure.
 
-## FIX-34 - Console findings from the live sessions (2026-10-27, #PR)
+## FIX-34 - Console findings from the live sessions (2026-10-27, #93)
 Scope: the console findings of the live sessions with real models on `claude/v1-fixes`
 (`66fc1782` and `809ad7e5`, the code of FIX-27..FIX-31), each reproduced by an independent
 triager: STATIC-3, STATIC-4 and MM-6, and the four findings of the bracketed-paste lens,
@@ -7729,7 +7729,7 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     read; under `quotes = FALSE` a `!` line's string completes nothing. Not run: Linux and Windows,
     R 4.2 and R-devel, and live models or tmux (the fixes are tested offline).
 
-## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #PR)
+## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #93)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
   `13a917ff`, which the maintainer approved: "take all of his advice and then update the
   repository". Its DESCRIPTION has the Title "Language Model Agents in Live 'R' Sessions" (D-270)
@@ -7816,7 +7816,7 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   `LC_ALL=C LANG=C`; `check-docs.R` and `check-files.R all --release` 0 problems; the spelling check
   and the lint of R/gptr-gateway.R clean.
 
-## FIX-35 - The owned headless browser's close under load (2026-10-27, #PR)
+## FIX-35 - The owned headless browser's close under load (2026-10-27, #93)
 Scope: the full suite's failures of the owned headless browser's cleanup on `claude/v1-fixes`
 (test-artifact-app.R on `9f015596` and on `c03c72db`, "The owned headless browser family did not
 finish cleanup.", and test-northstar.R:212 in review round 3's verifier run, each recorded as a
@@ -7943,7 +7943,7 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   fixes.md changes nothing and `lintfmt.py` shows only the baseline; no new line passes 100
   columns, has a section sign or splits a code span.
 
-## FIX-36 - Variables that move gptr's own folders are control (2026-10-27, #PR)
+## FIX-36 - Variables that move gptr's own folders are control (2026-10-27, #93)
 - Why: raised by another agent, and the maintainer asked for it before the final integration: in
   auto mode model code could set `R_USER_CONFIG_DIR`, `HOME` or `XDG_CONFIG_HOME` without a
   question. That moves `tools::R_user_dir("gptr", "config")` (`settings.json`, `trust.json`, the

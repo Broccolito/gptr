@@ -23,8 +23,8 @@ input), historical (a dated record, kept as written), code (a script or helper) 
 | Path | Holds | Status |
 |---|---|---|
 | `README.md` | This index. | current |
-| `PROGRESS.md` | Implementation status: the current checkpoint (PRs #88 and #90, FIX-27..FIX-36, 2026-10-27), status table, milestone ledger M0-M5, resume log, execution and recording rules, delivery boundary. | current |
-| `HANDOFF.md` | Working handoff: checkpoints newest first, from PRs #88 and #90 and FIX-27..FIX-36 (2026-10-27) back to 2026-10-11, then an undated summary. | current |
+| `PROGRESS.md` | Implementation status: the current checkpoint (PRs #88, #90 and #93, FIX-27..FIX-36, 2026-10-27), status table, milestone ledger M0-M5, resume log, execution and recording rules, delivery boundary. | current |
+| `HANDOFF.md` | Working handoff: checkpoints newest first, from PRs #88, #90 and #93 (FIX-27..FIX-36, 2026-10-27) back to 2026-10-11, then an undated summary. | current |
 | `DEVIATIONS.md` | Decision and deviation log from D-001 on, in id order. D-194 to D-199, D-217 to D-219, D-256, D-259 and D-260 are unused. | current |
 | `TESTING_PLAN.md` | Validation ledger: live, native and Windows gate results per checkpoint, the rules for recording a case, and the P26 live dogfood matrix (2026-10-17). `.github/workflows/Plan-gates.yaml` and `ci/check-plans.py` name it, so do not move or rename it. | current |
 | `TEST_FIRST_USE.md` | How to test the first-use provider picker with isolated settings. | reference |
