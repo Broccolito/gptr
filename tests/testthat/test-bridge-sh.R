@@ -864,7 +864,8 @@ test_that("a secret handed to a child through env asks as a secret read does (re
   withr::local_envvar(R5_FAKE_KEY = "sk-test-0000")
   secret_register("sk-test-0000", "R5_FAKE_KEY")
   rs = deparse(rscript_path())
-  child = "\"cat(nzchar(Sys.getenv('R5_FAKE_KEY')), nzchar(Sys.getenv('K')))\""
+  # the child builds the name: naming it would read the secret by name (review round 6)
+  child = "\"cat(nzchar(Sys.getenv(paste0('R5_FAKE', '_KEY'))), nzchar(Sys.getenv('K')))\""
   run = function(mode, env, answers = list(), pre = "") {
     ui = local_scripted_ui(answers)
     code = paste0(pre, "x = peter$sh(c(", rs, ", \"-e\", ", child, "), env = ", env, ")$stdout")

@@ -796,7 +796,8 @@ bridge_risk_env = function(r, env) {
   s = bridge_env_secrets(env)
   if (all(nzchar(names(env) %||% character(length(env)))) && !length(s)) return(r)
   list(level = max(3L, as.integer(r$level)), categories = unique(c(r$categories, "secret")),
-       paths = as.character(r$paths), secret_guard = length(s) > 0L, secrets = s)
+       paths = as.character(r$paths), secret_guard = length(s) > 0L || isTRUE(r$secret_guard),
+       secrets = unique(c(as.character(r$secrets), s)))
 }
 
 #' Risk of peter$sh(): the command classifier on the actual command (G5 levels), read as run in
@@ -813,12 +814,13 @@ bridge_risk_script = function(input, ctx) {
                   input$env)
 }
 
-#' Risk of peter$bg(): 3, or the command's level when that is higher
+#' Risk of peter$bg(): 3, or the command's level when that is higher, with its secret reads
 #' @noRd
 bridge_risk_bg = function(input, ctx) {
   r = bridge_risk(bridge_chr(input$cmd), "command")
   list(level = max(3L, as.integer(r$level)), categories = unique(c("process", r$categories)),
-       paths = as.character(r$paths))
+       paths = as.character(r$paths), secret_guard = isTRUE(r$secret_guard),
+       secrets = as.character(r$secrets))
 }
 
 #' Risk of peter$jobs(): 0 to list, 3 to kill

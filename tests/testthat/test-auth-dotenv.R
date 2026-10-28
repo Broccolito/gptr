@@ -309,3 +309,24 @@ test_that("higher-priority empty or invalid dotenv entries mask lower file crede
     expect_identical(redact("FAKElower0123456789"), "[secret:TYPESAFE_API_KEY]")
   }
 })
+
+test_that("finding a loaded key in the environment again keeps its file (round 6 verification)", {
+  skip_on_cran()
+  local_vault()
+  withr::local_envvar(R6_OTHER_TOKEN = NA)
+  d = withr::local_tempdir()
+  f = file.path(d, "keys.txt")
+  writeLines("R6_OTHER_TOKEN=tok-test-1111-old", f)
+  gptr_env(f, quiet = TRUE)
+  # a session start (and an evaluation that sets variables) discovers the exported key again
+  secret_discover_env(c(R6_OTHER_TOKEN = Sys.getenv("R6_OTHER_TOKEN")))
+  mine = Filter(function(e) identical(e$name, "R6_OTHER_TOKEN"), secrets_state()$reg)
+  expect_identical(vapply(mine, function(e) e$source, "", USE.NAMES = FALSE), "dotenv:keys.txt")
+  # so reading the file is still a guarded read, and loading it again supersedes the old value
+  expect_true(secret_scan("x = readLines('keys.txt')")$guard)
+  writeLines("R6_OTHER_TOKEN=tok-test-2222-new", f)
+  gptr_env(f, override = TRUE, quiet = TRUE)
+  mine = Filter(function(e) identical(e$name, "R6_OTHER_TOKEN"), secrets_state()$reg)
+  expect_identical(sum(vapply(mine, function(e) e$active, NA)), 1L)
+  expect_identical(secret_value(secret_lookup("R6_OTHER_TOKEN"), NULL), "tok-test-2222-new")
+})

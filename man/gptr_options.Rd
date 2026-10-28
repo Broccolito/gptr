@@ -118,7 +118,7 @@ nobody can answer: \code{"stop"} ends the run with status \code{blocked} and a
 to answer); \code{"deny"} returns a denial to the model.
 \item \code{gptr.critical_guard} (logical, \code{TRUE}): level-4 actions ask even in \code{auto} mode.
 \item \code{gptr.secret_guard} (logical, \code{TRUE}): reads of registered secrets ask even in \code{auto}
-mode.
+mode; \link{gptr_security} lists the reads.
 \item \code{gptr.protect_size} (bytes, \code{1e8}): overwriting a larger object is a level-3 action.
 \item \code{gptr.plan_handoff} (logical, \code{TRUE}): hand the plan a \code{plan} run proposes, once, to the next
 top-level \code{peter()} call from the same environment, within an hour and in another mode;

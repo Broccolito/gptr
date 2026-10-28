@@ -1615,7 +1615,7 @@ styled and cut as a result's diff, `-` rows of each edit's old text, `+` rows of
 content, `@@` between edits, a patch envelope as its own lines, another tool's other fields as JSON (dim), then
 `(+N more lines; ? shows more)` [cheat-sheet review]. Then come, dim at column 4, the flagged calls one per
 line (highest level first, each cut to the width, at most 5, then `(+N more; ? shows all)`) and an `ask_human`
-request's `asks in every mode: <reason>`, then the question `  ? Allow r?` (`?` blue, the question bold), and under its text the
+request's `asks even in auto mode: <reason>`, then the question `  ? Allow r?` (`?` blue, the question bold), and under its text the
 keys, `    y yes · a always (session) · p always (project) · n no · ? more` (the keys bold, what they do dim; 68
 columns whatever the tool or who asks, wrapped between the options in a narrower console), with C0/C1 controls,
 bidi and zero-width characters escaped as `<U+XXXX>` [IC-53; D-187, D-222]. The answer is read after
@@ -1646,13 +1646,16 @@ and the member's own classification of its actual input (`call_risk()`: a patch'
 at run time, a `peter$sh()` command read as run in its `wd` [D-262]) is no higher either, it runs without a second
 prompt; otherwise it passes the gate [IC-78]. So does a call that reads a registered secret the outer call's
 analysis did not show, such as one the `env` of `peter$sh()` or `peter$script()` hands a child [D-267].
-The command of a `peter$sh()` or `peter$bg()` call meets the deny and ask rules first, whatever its level,
-as the literal call would; allow rules are not applied there, and an ask offers no `[a]lways` rule [D-251].
+The command of a `peter$sh()` or `peter$bg()` call, or the path of a `peter$script()` call, meets the deny and
+ask rules first, whatever its level, as the literal call would, with the registered secrets its `env` hands the
+child, so an `r(secret:NAME)` deny or ask rule stops the hand-over [D-267]; allow rules are not applied there,
+an ask rule is asked in the gate's one question for the call, with its other reasons [D-267], and an ask offers
+no `[a]lways` rule [D-251].
 Base `system()`, `system2()`, `shell()` and `shell.exec()` have no such re-check, so auto and yolo refuse them
 with a computed command (6.8.1) [D-262]. R served to the CLI routes or an MCP client binds the same marker, with
 the served call as the outer call, so its nested calls pass `dispatch_nested()` too; when no pump serves the
-request the idle gate decides each first, a `sh` or `bg` call as the literal call of its command run in its `wd`,
-with the registered secrets its `env` hands the child, and then, when that hand-over meets the secret guard and
+request the idle gate decides each first, a `sh` or `bg` call as the literal call of its command run in its `wd`
+and a `script` call as that of its path, with the registered secrets its `env` hands the child, and then, when that hand-over meets the secret guard and
 the served call's own analysis does not guard every secret handed over, the member call itself, which no
 `r(secret:)` rule covers [D-267].
 Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].

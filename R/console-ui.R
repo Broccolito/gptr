@@ -32,13 +32,15 @@ ui_get = function(session = NULL) {
   ui_wrap(ui)
 }
 
-#' Wrap a UI so that its permission answers are normalised and a remembered one is sent to
-#' builtin:permissions
+#' Wrap a UI so that it is given a request with registered secrets redacted (no question shows
+#' one: its code, change rows, flagged calls and paths, reason, hint and rule), its permission
+#' answers are normalised and a remembered one is sent to builtin:permissions
 #' @noRd
 ui_wrap = function(ui) {
   ask = ui$permission
   ui$permission = function(request) {
-    ans = ui_answer_norm(tryCatch(ask(request), error = function(e) NULL), request)
+    shown = redact(request, "context")
+    ans = ui_answer_norm(tryCatch(ask(shown), error = function(e) NULL), request)
     if (!is.null(ans$remember)) {
       ev_dispatch("permissions:remember",
                   list(scope = ans$remember, tool = request$tool, input = request$input,
@@ -240,8 +242,8 @@ ui_call_shown = function(request) {
 #' console before (+N more lines), D-187) unless the console printed it (ui_call_shown()), at most
 #' 12 rows of the change a path tool makes (ui_request_change()) as a diff, then dim at column 4
 #' the flagged calls one per line, fitted, at most 5 (D-222), and why an `ask_human` request asks
-#' in every mode, then the question, and under its text the keys (a and p only with a rule,
-#' ui_keys())
+#' even in auto mode (yolo runs secret reads), then the question, and under its text the keys (a
+#' and p only with a rule, ui_keys())
 #' @noRd
 ui_permission_lines = function(request) {
   sym = console_style()
@@ -276,7 +278,7 @@ ui_permission_lines = function(request) {
       }), width))
     },
     if (identical(request$tier, "ask_human") && rlang::is_string(why) && nzchar(why)) {
-      sym$dim(console_wrap(paste0("    asks in every mode: ", ui_escape(why)), width))
+      sym$dim(console_wrap(paste0("    asks even in auto mode: ", ui_escape(why)), width))
     },
     paste0("  ", ui_question(ui_permission_question(request), width - 2L)),
     ui_keys(keys, what, width))

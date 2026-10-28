@@ -37,7 +37,9 @@ description of larger objects, and for a piped session its last answer (at most
 \code{gptr.s1_state_max} characters). Do not ask System 1 questions about data that may not leave
 your machine.
 
-Registered secrets are replaced by markers before anything is sent.
+Registered secrets, and their URL-encoded, JSON-escaped and base64 forms, are replaced by
+markers before anything is sent; a copy the code changes in another way, such as reversed or
+cut, is not recognized.
 }
 
 \section{Limiting automatic context}{

@@ -2673,9 +2673,9 @@ blocked hint of `perm_check()`).
 | Function | Contract | Consumers |
 |---|---|---|
 | `dispatch_tools(run, calls)` | executes a turn's tool calls in source order; for each: lookup (unknown, or not in the tools the session offered the model, the frozen array and every `tool_change` addition -> error result `Tool <name> not found`; D-248), `tool_validate()`, `tool_call` hooks, `perm_check()`, checkpointers' `before`, execute (sequential tools through `reactor_enqueue_tool()`; concurrent ones as reactor work), checkpointers' `after`, `tool_result` hooks; never throws; a `length`/`refusal` stop fails every call unrun; returns `list(results = list(<gptr_tool_result>), terminate = lgl(1))` | P06 |
-| `dispatch_nested(name, input, ctx)` | the nested entry for `peter$...` calls made while an `r` evaluation runs: if the outer code's static analysis listed this function at a level no higher than the level approved for the outer call and `call_risk()` of the actual input is no higher either (IC-78) and reads no registered secret the outer analysis did not show (a member's `env` handing one to a child, D-267), runs without a second prompt; otherwise `perm_check()`; the command of a `sh` or `bg` call meets the deny and ask rules first, whatever its level, as the literal call would, an ask offering no `[a]lways` rule (D-251); records into the outer result's `details$nested` (at most 20); returns the tool result's `value` (or signals the tool's error as an R error of class `gptr_error_tool` inside the model's code) | P10, P18, P22, P23 |
+| `dispatch_nested(name, input, ctx)` | the nested entry for `peter$...` calls made while an `r` evaluation runs: if the outer code's static analysis listed this function at a level no higher than the level approved for the outer call and `call_risk()` of the actual input is no higher either (IC-78) and reads no registered secret the outer analysis did not show (a member's `env` handing one to a child, D-267), runs without a second prompt; otherwise `perm_check()`; the command of a `sh` or `bg` call, or the path of a `script` call, meets the deny and ask rules first, whatever its level, as the literal call would, with the registered secrets its `env` hands the child (review round 6), an ask rule asked in `perm_check()`'s one question with the call's other reasons (its `extra`, D-267), offering no `[a]lways` rule (D-251); records into the outer result's `details$nested` (at most 20); returns the tool result's `value` (or signals the tool's error as an R error of class `gptr_error_tool` inside the model's code) | P10, P18, P22, P23 |
 | `tool_validate(tool, input)` | `schema_validate()` of the tool's `parameters`; `{"INVALID_JSON": raw}` when the final strict parse failed | P06, P18 |
-| `perm_check(call, run)` (IC-04, IC-53) | `list(decision = "allow" \| "deny" \| "ask" \| "ask_human" \| "modify", reason = chr(1), input = named list, risk = <gptr_risk> \| NULL, rule = chr(1) \| NULL)`: every `policy` spec's `check(call, ctx)` (deny > ask_human > ask > modify > allow; a throwing policy denies; **no active `mode` policy = ask**, fail closed, unless the run's snapshot has `gptr.unsafe_no_permissions`); a `modify` is re-classified and re-checked once (a second modify denies); an `ask` goes to `permission_request` hooks (first decision; error = deny), then to `ui$permission()` when `gptr_can_prompt()` holds in the run's snapshot; an `ask_human` skips the hooks; without anyone to prompt: `gptr.noninteractive_ask = "stop"` stops the run with status `blocked` (the gateway raises `gptr_error_permission` with `action` and `how_to_allow`, which names where the run's mode came from, `opts$mode_from`, and while knitting says knitting cannot ask instead of "run interactively"), `"deny"` returns a denial the model sees | P06, P20 (through the injected `opts$gate`, IC-33), P18 (server calls) |
+| `perm_check(call, run, extra = NULL)` (IC-04, IC-53) | `list(decision = "allow" \| "deny" \| "ask" \| "ask_human" \| "modify", reason = chr(1), input = named list, risk = <gptr_risk> \| NULL, rule = chr(1) \| NULL)`: every `policy` spec's `check(call, ctx)`, and `extra`, an opinion decided for the call elsewhere (a nested call's ask rule, D-267) (deny > ask_human > ask > modify > allow; a throwing policy denies; **no active `mode` policy = ask**, fail closed, unless the run's snapshot has `gptr.unsafe_no_permissions`); a `modify` is re-classified and re-checked once (a second modify denies); an `ask` goes to `permission_request` hooks (first decision; error = deny), then to `ui$permission()` when `gptr_can_prompt()` holds in the run's snapshot; an `ask_human` skips the hooks; without anyone to prompt: `gptr.noninteractive_ask = "stop"` stops the run with status `blocked` (the gateway raises `gptr_error_permission` with `action` and `how_to_allow`, which names where the run's mode came from, `opts$mode_from`, and while knitting says knitting cannot ask instead of "run interactively"), `"deny"` returns a denial the model sees | P06, P20 (through the injected `opts$gate`, IC-33), P18 (server calls) |
 | `tool_result_message(result, call)` | the `tool_result` message of §4.4 | P06, P20 (through the injected `opts$tool_result`, IC-33) |
 
 Example calls:
@@ -4835,16 +4835,25 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    returning allow for an `ask_human` is ignored with a diagnostic. In yolo (IC-78) control rows other than
    `options(gptr.*)` and secret reads do not reach `ask_human`.
 7. A `modify` decision is re-classified and re-checked once; a second `modify` denies. Only `r(secret:NAME)`
-   rules pre-approve the secret guard, in `r` code: a registered secret that the `env` of `peter$sh()` or
+   rules pre-approve the secret guard, in `r` code every flagged call of which reads one of the named secrets by
+   name (`Sys.getenv()`, a shell's `$NAME`; review round 6): a registered secret that the `env` of `peter$sh()` or
    `peter$script()` hands a child is covered only when the same code reads it by name, as the question for that
-   read covers it (D-267).
+   read covers it (D-267). The guard meets `Sys.getenv()` of a registered name in any letter case or through a
+   variable the code only sets to strings, one of them that name, a `$NAME` of one in a command line or Python's
+   `os.environ`, an environment dump, a read of a `.env` or `.Renviron` file or of one `gptr_env()` loaded (by a
+   function that reads its text, or in a command line or Python), and a secret that `env` hands a child (review
+   round 6).
 8. Approval displays (console, rstudio dialogs, worker-forwarded requests) escape C0/C1 controls except TAB and
    bidi and zero-width characters as `<U+XXXX>`; the one-line prompt names who asks (IC-77), the tool and the
    call's first line, cut to the console width before `(+N more lines)` (an absolute path inside the project
    relative to it), then the flagged calls one per line, highest level first, each cut to the console width, at
    most 5, then `(+N more; ? shows all)`; `[a]`/`[p]` are offered only with a `suggested_rule` (D-187, D-222).
-   A nested call's command and a tool's other inputs shown as JSON are redacted, so a secret that `env` hands a
-   child shows as its marker (D-267).
+   No approval display shows a registered secret: every UI is given the request redacted (the `context`
+   profile: its code, change rows, flagged calls and paths, reason, hint and rule), and the record's `risk` and
+   `summary`, which the `blocked` condition and `run$blocked` carry, are redacted when it is built, so a secret
+   that `env` hands a child or a nested command holds shows as its marker (D-267, review round 6). So does the
+   output of model code the console indents under its call (`eval_echo()`) and a warning it shows; output it
+   does not indent, R prints itself.
    A flag has one shape in the ask and in the `?` view, `[<level> <category>] <call>` (`ui_flags()`), its
    backticked names inline code as in an answer and an object's `<class, size>` the mention line's `(class,
    size)` (P28 Task 49: the ask showed the Markdown and angle brackets and `?` another shape, `[2] file_write
@@ -4918,8 +4927,9 @@ step list before its first action.
   and the ask is shown at the session's next `gptr_wait()` (D-261), whose resumed run opens with a user
   message saying that the user is at the console (D-252); a served request that needs approval
   is denied with how to allow it and a console notice, as is a nested `peter$` call of its R that needs
-  approval (`mcp_nested_gate()`: a `sh` or `bg` call as the literal call of its command run in its `wd`,
-  with the registered secrets its `env` hands the child, then the member call itself when that hand-over meets
+  approval (`mcp_nested_gate()`: a `sh` or `bg` call as the literal call of its command run in its `wd`, a
+  `script` call as that of its path, with the registered secrets its `env` hands the child (review round 6 for
+  `script`), then the member call itself when that hand-over meets
   the secret guard; D-267), without the notice, which the served result would capture for the model.
   Non-interactively both are `blocked`/denied.
 - A background R tool that changed bindings in the user's environment at an idle tick prints one notice.
@@ -5471,7 +5481,7 @@ totals line names the model and the context left.
    tool executes (`console_before_message(tools = TRUE)`).
 2. Who asks: the request record's `agent` (§7.11). The one-line prompt starts
    `  sub-agent <agent> > <tool>  <code>`, the detail view `  sub-agent <agent> wants to use`;
-   an `ask_human` request adds `     asks in every mode: <reason>`; a sub-agent's `ask` question
+   an `ask_human` request adds `     asks even in auto mode: <reason>`; a sub-agent's `ask` question
    starts `sub-agent <agent> asks: ` and its budget question `sub-agent <agent>: `.
 3. Invalid answers: `a`/`p` where nothing can be remembered (level 4, control, the `ask` tool, no
    `suggested_rule`, as for a question an ask rule asks: `perm_policies()` keeps a question's
@@ -5958,7 +5968,7 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     envelope (`patch`, or carried in `edits`) as its own lines, `+` rows of a write's `content`, another tool's other
     fields as JSON, then `    (+N more lines; ? shows more)`; any other input shape shows the call line alone. Before,
     an edit's change showed only after `y` and a write's content never (cheat-sheet review). The flagged
-    rows and `asks in every mode: <reason>` follow, dim at column 4 (later flagged rows under the first's text),
+    rows and `asks even in auto mode: <reason>` follow, dim at column 4 (later flagged rows under the first's text),
     then the question `  ? Allow r?` (`?` blue, the question bold)
     and, under its text, the keys row `    y yes · a always (session) · p always (project) · n no · ? more` (the
     keys bold, what they do dim; `a` and `p` only with a `suggested_rule`). The keys row is 68 columns whatever the

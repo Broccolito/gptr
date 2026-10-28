@@ -414,8 +414,9 @@ risk_net_progs = c("curl", "wget", "http", "https", "invoke-webrequest", "iwr", 
                    "gsutil", "gcloud", "az", "gh", "rclone", "s3cmd", "mail", "sendmail", "mutt")
 
 #' Secret rows of a text read quote-blind (call texts start with "secret:", so no sh or sql
-#' rule written for other rows covers them): an environment dump 2, a secret-looking name
-#' read (P03's is_secret_name()) or a secret file (P03's scan_secret_path_re) 3
+#' rule written for other rows covers them): an environment dump 2, a read of a secret-looking
+#' or registered name (P03's is_secret_name()) or of a secret file (P03's scan_secret_path_re, or
+#' one gptr_env() loaded) 3
 #' @noRd
 risk_secret_rows = function(text, fn) {
   f = risk_flags_empty()
@@ -424,17 +425,31 @@ risk_secret_rows = function(text, fn) {
   }
   m = regmatches(text, gregexpr(risk_env_name_re, text, perl = TRUE))[[1L]]
   nm = unique(sub(risk_env_name_re, "\\1", m, perl = TRUE))
-  nm = nm[is_secret_name(nm)]
+  nm = nm[is_secret_name(nm) | toupper(nm) %in% toupper(secret_registered_names())]
   if (length(nm)) {
     f = risk_flags_bind(f, risk_flags_row(paste("secret:", paste0("$", nm)), fn, 3L, "secret",
                                           nm))
   }
   words = strsplit(gsub("[\"'`=,;:()|&<>@]", " ", text), "\\s+")[[1L]]
-  sec = unique(words[nzchar(words) & grepl(scan_secret_path_re, words, perl = TRUE)])
+  words = words[nzchar(words)]
+  sec = unique(words[grepl(scan_secret_path_re, words, perl = TRUE) | scan_env_file(words)])
   if (length(sec)) {
     f = risk_flags_bind(f, risk_flags_row(paste("secret:", sec), fn, 3L, "secret", sec))
   }
   f
+}
+
+#' The guarded secret reads of flagged rows (G6): a `secret: $NAME` row of a registered name, in
+#' any case (its `secrets`), and a read of a .env or .Renviron file or of one gptr_env() loaded
+#' (P03's scan_env_file()): a text's `secret: <path>` row, or an R call of a function that reads a
+#' file's text (P03's scan_read_funs), not one such as file.exists() that reads none
+#' @noRd
+risk_secret_guard = function(fl) {
+  sec = fl[fl$category %in% "secret" & !is.na(fl$path), , drop = FALSE]
+  reg = secret_registered_names()
+  s = reg[toupper(reg) %in% toupper(sec$path[grepl("secret: $", sec$call, fixed = TRUE)])]
+  read = grepl("secret: ", sec$call, fixed = TRUE) | sec$fn %in% scan_read_funs
+  list(guard = length(s) > 0L || any(scan_env_file(sec$path[read])), secrets = s)
 }
 
 #' A secret read and a network sink in one text: level 4 (P03's secret_to_network)
@@ -2073,8 +2088,8 @@ risk_classify_r = function(code, envir, root) {
                                                   fl$level, "secret"))
   }
   out = risk_new(flags, assigned = c(scan$targets$assign, sec$assigned), sizes = scan$sizes)
-  out$secret_guard = isTRUE(sec$guard)
-  out$secrets = unique(as.character(fl$name[fl$rule == "secret_env_registered"]))
+  out$secret_guard = out$secret_guard || isTRUE(sec$guard)
+  out$secrets = unique(c(out$secrets, as.character(fl$name[fl$rule == "secret_env_registered"])))
   out
 }
 
@@ -2096,11 +2111,12 @@ risk_new = function(flags, kind = "r", assigned = character(), sizes = numeric()
   if (lv < 1L && length(assigned)) lv = 1L
   lv = as.integer(min(max(lv, 0L), 4L))
   hot = flags[flags$level >= 1L, , drop = FALSE]
+  g = risk_secret_guard(flags)
   structure(list(level = lv, label = risk_labels[lv + 1L], categories = unique(hot$category),
                  flagged = flags, paths = unique(flags$path[!is.na(flags$path)]),
-                 secret = "secret" %in% hot$category, secret_guard = FALSE,
+                 secret = "secret" %in% hot$category, secret_guard = g$guard,
                  assigned = unique(assigned), dynamic = "dynamic" %in% hot$category,
-                 sizes = sizes, secrets = character(), kind = kind, parse_error = NULL),
+                 sizes = sizes, secrets = g$secrets, kind = kind, parse_error = NULL),
             class = "gptr_risk")
 }
 

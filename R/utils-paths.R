@@ -176,6 +176,14 @@ cmd_in_wd = function(cmd, wd = NULL) {
   paste("cd", shQuote(wd, "sh"), "&&", cmd)
 }
 
+#' The literal `peter$` call a nested sh or bg call (its command, cmd_in_wd()'s line in its `wd`)
+#' or script call (its path) is read as by the nested gates (dispatch_nested(), mcp_nested_gate())
+#' @noRd
+nested_literal = function(name, input) {
+  arg = if (identical(name, "script")) input$path else cmd_in_wd(unlist(input$cmd), input$wd)
+  paste0("peter$", name, "(", deparse1(arg), ")")
+}
+
 #' Normalise one path: absolute, forward slashes, symlinks resolved on the deepest existing
 #' ancestor (macOS /var -> /private/var), "." and ".." removed from the rest
 #' @noRd

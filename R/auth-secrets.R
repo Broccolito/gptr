@@ -233,6 +233,9 @@ secret_register = function(value, name, source = "user", active = TRUE, origin =
     id = paste0(base_id, "-", collision)
   }
   old = st$reg[[id]]
+  # finding a value in the environment again (a session start) keeps where it came from: the
+  # file gptr_env() loaded it from stays a secret file, and loading it again supersedes it
+  if (identical(source, "environment") && !is.null(old)) source = old$source
   n_chars = nchar(value, allowNA = TRUE)
   if (is.na(n_chars)) n_chars = nchar(value, type = "bytes")
   entry = list(id = id, name = name, source = source, fp = fp, active = active,
@@ -424,7 +427,8 @@ print.gptr_secret = function(x, ...) {
 as.character.gptr_secret = function(x, ...) paste0("[secret:", x$name, "]")
 
 # ---- secret-access classifier (G6 sections 3.8 and 5.4; extends report 18's classifier) ----
-# Levels and secret-guard flags per rule; P11's secret_guard policy and classifier read them.
+# Levels and secret-guard flags per rule; P11's secret_guard policy and classifier read them. A
+# `secret_file` read of a .env or .Renviron file, or of one gptr_env() loaded, is guarded too.
 scan_rules = data.frame(
   rule = c("secret_env_registered", "env_dump", "env_dump_process", "vault_access", "secret_env",
            "env_dynamic", "secret_file", "keyring", "env_write", "marker", "secret_to_network",
@@ -440,6 +444,8 @@ scan_secret_path_re = paste0(
   "(^|[/\\\\])(\\.ssh|\\.aws|\\.codex|\\.claude|\\.gnupg|\\.docker|\\.kube|gcloud)([/\\\\]|$)|",
   "/proc/(self|[0-9]+)/environ"
 )
+# A .env file by its name: `.env`, `.env.<suffix>`, `<name>.env` or `.Renviron` (not `x.env.csv`)
+scan_env_file_re = "(^|[/\\\\])(\\.env(\\.[A-Za-z0-9_-]+)?|[^/\\\\]+\\.env|\\.Renviron)$"
 scan_read_funs = c("readLines", "readRDS", "readChar", "readBin", "scan", "file", "read.table",
                    "read.csv", "read.delim", "readRenviron", "fromJSON", "read_json", "read_yaml",
                    "yaml.load_file", "fread", "read_csv", "read_lines", "read_file", "vroom",
@@ -459,8 +465,51 @@ scan_net_pkgs = c("", "httr2", "httr", "curl", "utils", "base", "gh", "blastula"
 scan_ns_funs = c("getFromNamespace", "asNamespace", "getNamespace", "loadNamespace")
 scan_proc_funs = c("system", "system2", "shell", "run", "process", "r_bg", "r", "run_process",
                    "exec_wait")
+scan_member_funs = c("sh", "bg", "script")
+# Network programs a process may run (the secret-to-network check)
+scan_net_prog_re = paste0("(^|[[:space:];|&(/\\\\'\"])",
+                          "(curl|wget|nc|ncat|scp|ssh|Invoke-WebRequest|iwr)",
+                          "(?:\\.exe)?([[:space:];|&)'\"]|$)")
 scan_dump_cmds = c("env", "printenv", "set", "export", "declare", "Get-ChildItem", "gci", "cat",
                    "type")
+
+#' Does each path name a .env or .Renviron file, or a file gptr_env() loaded (a `dotenv:` source,
+#' by its file name, in any case)? Reading one reads the secrets it holds.
+#' @noRd
+scan_env_file = function(x) {
+  src = vapply(secrets_state()$reg, function(e) e$source, "", USE.NAMES = FALSE)
+  loaded = sub("^dotenv:(.*?)(:shadowed)?$", "\\1", src[startsWith(src, "dotenv:")], perl = TRUE)
+  grepl(scan_env_file_re, x, perl = TRUE, ignore.case = TRUE) |
+    tolower(sub("^.*[/\\\\]", "", x)) %in% tolower(loaded)
+}
+
+#' The string vectors names are bound to: by `=`, `<-` or `<<-`, or as a `for` variable over a
+#' literal vector (scan_env_literals()), where every binding of the name in the code is one; a name
+#' bound otherwise anywhere (a computed value, assign(), a replacement) is left out
+#' @noRd
+scan_bindings = function(exprs) {
+  lit = list()
+  other = character()
+  bind = function(target, value) {
+    v = if (is.symbol(target)) scan_env_literals(value)
+    s = scan_assign_target(target)
+    if (is.null(v)) other <<- c(other, s) else lit[[s]] <<- unique(c(lit[[s]], v$names))
+  }
+  visit = function(e) {
+    if (!is.call(e)) return(invisible())
+    fn = scan_call_name(e)
+    args = as.list(e)[-1L]
+    if (fn %in% c("=", "for", paste0("<", "-"), paste0("<<", "-")) && length(args) >= 2L) {
+      bind(args[[1L]], args[[2L]])
+    }
+    if (fn == "assign") other <<- c(other, unlist(Filter(is.character, args)))
+    if (is.call(e[[1L]])) visit(e[[1L]])
+    for (i in seq_along(args)) if (!identical(args[[i]], quote(expr = ))) visit(args[[i]])
+    invisible()
+  }
+  for (e in exprs) visit(e)
+  lit[setdiff(names(lit), other)]
+}
 
 #' The function name of a call (`f()`, `pkg::f()`, `obj$f()`), or ""
 #' @noRd
@@ -539,8 +588,12 @@ secret_scan = function(code, tainted = character()) {
   assigned = character()
   uses = character()
   net = FALSE
+  proc = FALSE
+  strs = character()
+  handed = FALSE
   if (grepl("[secret:", code, fixed = TRUE)) add("marker", "[secret:")
   exprs = tryCatch(parse(text = code, keep.source = FALSE), error = function(e) NULL)
+  binds = scan_bindings(exprs)
   walk = function(e) {
     if (is.symbol(e)) {
       s = as.character(e)
@@ -548,6 +601,7 @@ secret_scan = function(code, tainted = character()) {
       uses <<- c(uses, s)
       return(invisible())
     }
+    if (is.character(e)) strs <<- c(strs, e)
     if (!is.call(e)) return(invisible())
     fn = scan_call_name(e)
     pkg = scan_call_pkg(e)
@@ -573,19 +627,30 @@ secret_scan = function(code, tainted = character()) {
       arg_names = names(args) %||% rep("", length(args))
       pos = match("x", arg_names)
       if (is.na(pos)) pos = match("", arg_names)
-      known = if (is.na(pos)) list(names = character()) else if (
-        identical(args[[pos]], quote(expr = ))
-      ) NULL else scan_env_literals(args[[pos]])
+      x = if (!is.na(pos)) args[[pos]]
+      known = if (is.na(pos)) list(names = character()) else if (identical(x, quote(expr = ))) {
+        NULL
+      } else if (is.symbol(x) && as.character(x) %in% names(binds)) {
+        list(names = binds[[as.character(x)]])
+      } else {
+        scan_env_literals(x)
+      }
       if (!is.null(known) && !length(known$names)) {
         add("env_dump", "Sys.getenv")
       } else if (!is.null(known)) {
+        before = length(found)
         for (n in known$names) {
-          if (n %in% registered) {
-            add("secret_env_registered", n)
+          # in any letter case, as Windows reads environment names (one rule on every OS)
+          reg = registered[toupper(registered) == toupper(n)]
+          if (length(reg)) {
+            for (r in reg) add("secret_env_registered", r)
           } else if (is_secret_name(n)) {
             add("secret_env", n)
           }
         }
+        # a variable whose strings name no secret may hold one when it runs (a function's
+        # argument, a data mask of the same name): a name computed at run time
+        if (is.symbol(x) && length(found) == before) add("env_dynamic", "Sys.getenv")
       } else {
         add("env_dynamic", "Sys.getenv")
       }
@@ -596,8 +661,9 @@ secret_scan = function(code, tainted = character()) {
       if (any(c("Sys.getenv", "readRenviron") %in% c(lits, syms))) add("env_dynamic", fn)
     }
     if (fn %in% scan_read_funs && length(lits)) {
-      hit = lits[grepl(scan_secret_path_re, lits, perl = TRUE, ignore.case = TRUE)]
-      if (length(hit)) add("secret_file", hit[1])
+      hit = lits[grepl(scan_secret_path_re, lits, perl = TRUE, ignore.case = TRUE) |
+                   scan_env_file(lits)]
+      for (h in unique(hit)) add("secret_file", h)
     }
     if (fn %in% c("key_get", "key_list", "key_get_raw") || pkg == "keyring") add("keyring", fn)
     if (fn %in% scan_proc_funs && length(lits)) {
@@ -607,10 +673,12 @@ secret_scan = function(code, tainted = character()) {
       dumps = any(tolower(lits) %in% tolower(scan_dump_cmds)) ||
         any(grepl(dump_re, lits, perl = TRUE, ignore.case = TRUE))
       if (dumps) add("env_dump_process", fn)
-      net_re = paste0("(^|[[:space:];|&(/\\\\'\"])",
-                       "(curl|wget|nc|ncat|scp|ssh|Invoke-WebRequest|iwr)",
-                       "(?:\\.exe)?([[:space:];|&)'\"]|$)")
-      if (any(grepl(net_re, lits, perl = TRUE, ignore.case = TRUE))) net <<- TRUE
+    }
+    # peter's members start processes too; a registered name their `env` passes is a secret sent
+    if (fn %in% c(scan_proc_funs, scan_member_funs)) proc <<- TRUE
+    if (fn %in% scan_member_funs &&
+          any(toupper(scan_strings(args[["env"]])) %in% toupper(registered))) {
+      handed <<- TRUE
     }
     if (fn %in% scan_net_funs && pkg %in% scan_net_pkgs) net <<- TRUE
     if (fn == "Sys.setenv") add("env_write", paste(names(args), collapse = ","))
@@ -619,12 +687,15 @@ secret_scan = function(code, tainted = character()) {
     invisible()
   }
   for (e in exprs) walk(e)
+  # a process the code starts may run a network program any string of the code names, in the
+  # call or in a variable (a command vector); a program name built from pieces is not read
+  if (proc && any(grepl(scan_net_prog_re, strs, perl = TRUE, ignore.case = TRUE))) net = TRUE
   rules = vapply(found, function(f) f[1], "")
   sources = intersect(rules, c("env_dump", "secret_env", "secret_env_registered", "env_dynamic",
                                "secret_file", "keyring", "vault_access", "env_dump_process"))
   taint_hit = length(intersect(uses, tainted)) > 0L
-  if (net && (length(sources) || taint_hit)) {
-    add(if (length(sources)) "secret_to_network" else "tainted_to_network", "network")
+  if (net && (length(sources) || handed || taint_hit)) {
+    add(if (length(sources) || handed) "secret_to_network" else "tainted_to_network", "network")
   }
   if (!length(found)) {
     findings = data.frame(rule = character(), name = character(), level = integer(),
@@ -635,7 +706,8 @@ secret_scan = function(code, tainted = character()) {
     findings = findings[!duplicated(findings), , drop = FALSE]
     i = match(findings$rule, scan_rules$rule)
     findings$level = scan_rules$level[i]
-    findings$guard = scan_rules$guard[i]
+    findings$guard = scan_rules$guard[i] |
+      (findings$rule == "secret_file" & scan_env_file(findings$name))
     rownames(findings) = NULL
   }
   list(findings = findings,

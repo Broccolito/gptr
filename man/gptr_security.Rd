@@ -39,7 +39,8 @@ cannot), also runs gptr's own configuration functions, writes to R startup files
 \verb{~/.Rprofile} (which can change gptr's options in the next R process) and secret reads without
 asking, and still asks before deleting protected files, files outside the project or the
 project itself, moving the working directory out of the project, \code{rm(list = ls())},
-\verb{options(gptr.*)} and sending a secret over the network; \code{plan} changes nothing. In every mode
+\verb{options(gptr.*)} and sending a secret over the network (see Secrets below); \code{plan} changes
+nothing. In every mode
 \code{r} code that calls \code{q()}, \code{readline()} or another function that would end, pause or hang your R
 session is refused without a question. In \code{auto} and \code{yolo} mode a \code{system()} or \code{system2()}
 call (on Windows also \code{shell()} or \code{shell.exec()}) whose command the code computes is refused
@@ -185,15 +186,35 @@ pull, gptr asks again.
 
 \section{Secrets}{
 
-Keys are held in a private vault and appear in sessions, logs and errors only as markers such
-as \verb{[secret:ANTHROPIC_API_KEY]}. Values are redacted before anything is written or sent: the
-session files, documents, caches, spill files, wire logs and the output of child processes.
+Keys are held in a private vault and appear in sessions, logs, errors and permission questions
+only as markers such as \verb{[secret:ANTHROPIC_API_KEY]}. Values are redacted before anything is
+written or sent: the session files, documents, caches, spill files, wire logs and the output of
+child processes.
+Their URL-encoded, JSON-escaped and base64 forms are redacted too; a copy the code changes in
+another way, such as reversed or cut, is no longer recognized and is not redacted. The console
+shows what model code prints with registered secrets redacted where it indents that output under
+the call, and so are the warnings it shows; where it does not indent it (a console that cannot
+redraw a line, or \code{gptr.verbose} below 2), R prints the output itself, a registered secret
+included, on your screen only.
 gptr never reads the credential files of other tools. Reading a registered secret from model
-code asks even in \code{auto} mode. So does handing one to a child process through the \code{env} of
-\code{peter$sh()} or \code{peter$script()}, by its name or in a value, unless the same code reads that
-secret by name: the question for that read, or an \code{r(secret:NAME)} rule allowing it, covers
-the hand-over too. A key registered after it already appeared in a file (for example pasted
-into a prompt) can be removed from the files with \code{\link[=gptr_scrub]{gptr_scrub()}}; run
+code asks even in \code{auto} mode: \code{Sys.getenv()} of its name in any letter case, or of a variable
+the code only ever sets to strings one of which is its name; \verb{$NAME} or \verb{$\{NAME\}} in a command
+line (\code{system()}, \code{processx::run()}, \code{peter$sh()} and the others above) and \code{os.environ} or
+\code{getenv()} in Python; an environment dump; and a read of a \code{.env} or \code{.Renviron} file (\code{.env},
+\code{.env.local} or \code{name.env}) or of a file \code{\link[=gptr_env]{gptr_env()}} loaded, by a function that reads its text
+such as \code{readLines()}, or in a command line or Python. So does handing one to a child process
+through the \code{env} of \code{peter$sh()} or \code{peter$script()}, by its name or in a value, unless the
+same code reads that secret by name: the question for that read, or an \code{r(secret:NAME)} rule
+allowing it, covers the hand-over too. A name the code computes when it runs (with \code{paste0()},
+through \code{get()} or \code{do.call()}, as a function's argument, or in a variable it sets otherwise or
+only to strings naming no secret) is read at level 3, which \code{auto} runs without asking. Sending
+a secret over the network asks in every mode, \code{yolo} included: code that reads a secret, here
+or in an earlier call, or hands one to a child through \code{env}, and calls an R network function
+such as \code{download.file()} or \code{httr2::req_perform()}, or holds a string naming a network program
+such as \code{curl}, \code{wget} or \code{ssh} and starts a process with \code{system()}, \code{system2()},
+\code{processx::run()}, \code{peter$sh()}, \code{peter$bg()} or \code{peter$script()}; a program name the code
+builds from pieces is not read. A key registered after it already appeared in a file (for
+example pasted into a prompt) can be removed from the files with \code{\link[=gptr_scrub]{gptr_scrub()}}; run
 \code{gptr_scrub(error = TRUE)} before committing to fail when any registered secret remains.
 }
 

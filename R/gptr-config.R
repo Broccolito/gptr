@@ -1638,7 +1638,8 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `~/.Rprofile` (which can change gptr's options in the next R process) and secret reads without
 #' asking, and still asks before deleting protected files, files outside the project or the
 #' project itself, moving the working directory out of the project, `rm(list = ls())`,
-#' `options(gptr.*)` and sending a secret over the network; `plan` changes nothing. In every mode
+#' `options(gptr.*)` and sending a secret over the network (see Secrets below); `plan` changes
+#' nothing. In every mode
 #' `r` code that calls `q()`, `readline()` or another function that would end, pause or hang your R
 #' session is refused without a question. In `auto` and `yolo` mode a `system()` or `system2()`
 #' call (on Windows also `shell()` or `shell.exec()`) whose command the code computes is refused
@@ -1776,15 +1777,35 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' pull, gptr asks again.
 #'
 #' @section Secrets:
-#' Keys are held in a private vault and appear in sessions, logs and errors only as markers such
-#' as `[secret:ANTHROPIC_API_KEY]`. Values are redacted before anything is written or sent: the
-#' session files, documents, caches, spill files, wire logs and the output of child processes.
+#' Keys are held in a private vault and appear in sessions, logs, errors and permission questions
+#' only as markers such as `[secret:ANTHROPIC_API_KEY]`. Values are redacted before anything is
+#' written or sent: the session files, documents, caches, spill files, wire logs and the output of
+#' child processes.
+#' Their URL-encoded, JSON-escaped and base64 forms are redacted too; a copy the code changes in
+#' another way, such as reversed or cut, is no longer recognized and is not redacted. The console
+#' shows what model code prints with registered secrets redacted where it indents that output under
+#' the call, and so are the warnings it shows; where it does not indent it (a console that cannot
+#' redraw a line, or `gptr.verbose` below 2), R prints the output itself, a registered secret
+#' included, on your screen only.
 #' gptr never reads the credential files of other tools. Reading a registered secret from model
-#' code asks even in `auto` mode. So does handing one to a child process through the `env` of
-#' `peter$sh()` or `peter$script()`, by its name or in a value, unless the same code reads that
-#' secret by name: the question for that read, or an `r(secret:NAME)` rule allowing it, covers
-#' the hand-over too. A key registered after it already appeared in a file (for example pasted
-#' into a prompt) can be removed from the files with [gptr_scrub()]; run
+#' code asks even in `auto` mode: `Sys.getenv()` of its name in any letter case, or of a variable
+#' the code only ever sets to strings one of which is its name; `$NAME` or `${NAME}` in a command
+#' line (`system()`, `processx::run()`, `peter$sh()` and the others above) and `os.environ` or
+#' `getenv()` in Python; an environment dump; and a read of a `.env` or `.Renviron` file (`.env`,
+#' `.env.local` or `name.env`) or of a file [gptr_env()] loaded, by a function that reads its text
+#' such as `readLines()`, or in a command line or Python. So does handing one to a child process
+#' through the `env` of `peter$sh()` or `peter$script()`, by its name or in a value, unless the
+#' same code reads that secret by name: the question for that read, or an `r(secret:NAME)` rule
+#' allowing it, covers the hand-over too. A name the code computes when it runs (with `paste0()`,
+#' through `get()` or `do.call()`, as a function's argument, or in a variable it sets otherwise or
+#' only to strings naming no secret) is read at level 3, which `auto` runs without asking. Sending
+#' a secret over the network asks in every mode, `yolo` included: code that reads a secret, here
+#' or in an earlier call, or hands one to a child through `env`, and calls an R network function
+#' such as `download.file()` or `httr2::req_perform()`, or holds a string naming a network program
+#' such as `curl`, `wget` or `ssh` and starts a process with `system()`, `system2()`,
+#' `processx::run()`, `peter$sh()`, `peter$bg()` or `peter$script()`; a program name the code
+#' builds from pieces is not read. A key registered after it already appeared in a file (for
+#' example pasted into a prompt) can be removed from the files with [gptr_scrub()]; run
 #' `gptr_scrub(error = TRUE)` before committing to fail when any registered secret remains.
 #'
 #' @section Data at rest and protected health information (PHI):
@@ -1853,7 +1874,9 @@ NULL
 #' `gptr.s1_state_max` characters). Do not ask System 1 questions about data that may not leave
 #' your machine.
 #'
-#' Registered secrets are replaced by markers before anything is sent.
+#' Registered secrets, and their URL-encoded, JSON-escaped and base64 forms, are replaced by
+#' markers before anything is sent; a copy the code changes in another way, such as reversed or
+#' cut, is not recognized.
 #'
 #' @section Limiting automatic context:
 #' `.opts = list(context = "names")` sends workspace object names, the workspace changes and

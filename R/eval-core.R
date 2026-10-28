@@ -294,8 +294,9 @@ eval_flush = function(st) {
 }
 
 #' Show printed output in the console margin as a tool's result rows are (D-245): each line at
-#' column 4, escaped, dim in the console's colours and cut to its width, written by the writer below
-#' this evaluation with its own sink lifted; a sink the code left on top keeps the output
+#' column 4, registered secrets redacted (as the question above it shows them), escaped, dim in the
+#' console's colours and cut to its width, written by the writer below this evaluation with its own
+#' sink lifted; a sink the code left on top keeps the output
 #' @noRd
 eval_echo = function(st, txt) {
   if (sink.number() != st$sink_n) return(invisible())
@@ -303,6 +304,7 @@ eval_echo = function(st, txt) {
   on.exit(sink(st$con, split = st$split), add = TRUE)
   rlang::local_options(cli.num_colors = st$colors)
   sym = console_style()
+  txt = redact(txt, "context")
   lines = console_escape(strsplit(sub("\n$", "", txt), "\n", fixed = TRUE)[[1L]], FALSE)
   rows = console_cut(paste0("    ", lines), st$width, sym$ellipsis)
   rows = ifelse(nzchar(lines), sym$dim(rows), "")
@@ -498,8 +500,8 @@ eval_on_message = function(st, cnd) {
 
 #' Warning handler: record and muffle; under options(warn = 2) R turns the warning into an error
 #' next. Teed, it shows as it comes, `Warning: <text>`, in the console margin at column 4 with the
-#' output (eval_echo()), else on stderr: R would defer it to its top level, which a console or a run
-#' reaches only when it ends, and name the evaluator's own call
+#' output (eval_echo()), else on stderr, redacted: R would defer it to its top level, which a
+#' console or a run reaches only when it ends, and name the evaluator's own call
 #' @noRd
 eval_on_warning = function(st, cnd) {
   w = getOption("warn", 0)
@@ -512,7 +514,7 @@ eval_on_warning = function(st, cnd) {
     if (isTRUE(st$echo)) {
       eval_echo(st, text)
     } else {
-      gptr_message_write(text, "stderr", from = st$frame)
+      gptr_message_write(redact(text, "context"), "stderr", from = st$frame)
     }
   }
   tryInvokeRestart("muffleWarning")
