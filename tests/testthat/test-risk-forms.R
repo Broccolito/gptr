@@ -1,0 +1,196 @@
+# tests/testthat/test-risk-forms.R -- forms gptr_risk() reads since review round 5 (FIX-27,
+# FIX-36): each is read, or the limit ?gptr_security names stays as it was
+
+test_that("a variable a registered provider reads is control (review round 5)", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)
+  py = function(code) gptr_risk(paste0("peter$py(", deparse(code), ")"), root = root)
+  # Bedrock's base URL, the key pair a bedrock-converse provider signs with, vercel-jev's key
+  for (v in c("AWS_REGION", "AWS_DEFAULT_REGION", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+              "AWS_SESSION_TOKEN", "AI_GATEWAY_API_KEY", "aws_region", "AZURE_OPENAI_ENDPOINT",
+              "TYPESAFE_API_KEY", "VLLM_API_KEY")) {
+    r = lv(paste0("Sys.setenv(", v, " = 'x')"))
+    expect_identical(r$level, 4L, label = v)
+    expect_true("control" %in% r$categories, label = v)
+    expect_identical(py(paste0("import os\nos.environ['", v, "'] = 'x'"))$level, 4L, label = v)
+  }
+  # a provider a person registers: its key and address are gptr's configuration too
+  expect_identical(lv("Sys.setenv(CORP_LLM_TOKEN = 'x')")$level, 2L)
+  off = gptr_register(gptr_provider("corp-r5", api = "openai-completions", base_url = NULL,
+                                    auth = "CORP_LLM_TOKEN",
+                                    compat = list(base_url_env = "CORP_LLM_HOST",
+                                                  base_url_template = "https://{value}/v1")))
+  withr::defer(off())
+  expect_identical(lv("Sys.setenv(CORP_LLM_TOKEN = 'x')")$level, 4L)
+  expect_identical(lv("Sys.unsetenv('CORP_LLM_HOST')")$level, 4L)
+  # neighbours: a variable no provider reads stays a session change
+  for (v in c("TZ", "MY_VAR", "JAVA_HOME", "AWS_PROFILE_NOTE")) {
+    expect_identical(lv(paste0("Sys.setenv(", v, " = 'x')"))$level, 2L, label = v)
+  }
+})
+
+test_that("cmd /c and PowerShell -Command run every word after them (review round 5)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  f = file.path(out, "marker.txt")
+  for (cmd in c(paste("cmd /c del", f), paste("cmd.exe /C rd /s /q", out),
+                paste("cmd /k del", f), paste("cmd /r del", f), paste("CMD /S /C del", f),
+                paste("pwsh -NoProfile -Command Remove-Item", f),
+                paste("powershell -command Remove-Item -Recurse", out),
+                paste("pwsh -c Remove-Item", f))) {
+    expect_identical(lv(paste0("system(", deparse(cmd), ")")), 4L, label = cmd)
+  }
+  expect_identical(lv(paste0("processx::run('cmd', c('/c', 'del', ", deparse(f), "))")), 4L)
+  sh = registry_get("tool", "sh")
+  expect_identical(as.integer(sh$risk(list(cmd = paste("cmd /c del", f), wd = "."), NULL)$level),
+                   4L)
+  # neighbours: the command in the project keeps its level; sh -c still reads one word
+  expect_identical(lv("system('cmd /c del marker.txt')"), 3L)
+  expect_identical(lv("system('cmd /c dir')"), 3L)
+  expect_identical(lv(paste("system('sh -c ls", f, "')")), 3L)
+})
+
+test_that("callr::run() and sys::exec_*() are read as processx::run() is (review round 5)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  args = paste0("('rm', c('-f', ", deparse(file.path(out, "marker.txt")), "))")
+  for (fn in c("processx::run", "callr::run", "sys::exec_wait", "sys::exec_internal",
+               "sys::exec_background")) {
+    expect_identical(lv(paste0(fn, args)), 4L, label = fn)
+    # neighbours: a command in the project reads as processx::run()'s does
+    expect_identical(lv(paste0(fn, "('ls')")), lv("processx::run('ls')"), label = fn)
+    expect_identical(lv(paste0(fn, "('rm', c('-f', 'marker.txt'))")), 3L, label = fn)
+  }
+  expect_identical(lv(paste0("callr::run('rm', c('-f', 'marker.txt'), wd = ", deparse(out), ")")),
+                   4L)
+  # a command the code computes is a dynamic row, as processx::run()'s is
+  expect_identical(lv("sys::exec_wait(cmd)"), 3L)
+})
+
+test_that("eval(quote(x)) is read as x, and xfun::in_dir() as with_dir() (review round 5)", {
+  root = local_project()
+  dir.create(file.path(root, "sub"))
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  o = deparse(out)
+  for (code in c(paste0("eval(quote(setwd(", o, ")))"),
+                 paste0("rlang::eval_bare(quote(setwd(", o, ")))"),
+                 paste0("base::eval(envir = e, quote(unlink(", deparse(file.path(out, "m")), ")))"),
+                 paste0("rlang::eval_tidy(quote(withr::local_dir(", o, ")))"),
+                 paste0("xfun::in_dir(", o, ", unlink('marker.txt'))"), "xfun::in_dir(d, x)")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  # neighbours: in the project, eval()'s own row (3) as evalq()'s; a quote() alone is data
+  expect_identical(lv("eval(quote(setwd('sub')))"), lv("evalq(setwd('sub'))"))
+  expect_identical(lv("eval(quote(unlink('marker.txt')))"), 3L)
+  expect_identical(lv("xfun::in_dir('sub', x)"), 2L)
+  expect_identical(lv(paste0("q = quote(setwd(", o, "))")), 2L)
+})
+
+test_that("env -C runs its command in that directory, read as a cd (review round 5)", {
+  root = local_project()
+  dir.create(file.path(root, "sub"))
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  sh = registry_get("tool", "sh")
+  level = function(cmd) as.integer(sh$risk(list(cmd = cmd, wd = "."), NULL)$level)
+  for (cmd in c("env -C %s rm -f marker.txt", "env --chdir=%s rm -f marker.txt",
+                "env --chdir %s rm -f marker.txt", "env -i -C %s rm -f marker.txt",
+                "env -C%s rm -f marker.txt", "env -C %s sh -c 'rm -f marker.txt'")) {
+    cmd = sprintf(cmd, out)
+    expect_identical(level(cmd), 4L, label = cmd)
+  }
+  expect_identical(level(c("env", "-C", out, "rm", "-f", "marker.txt")), 4L)
+  expect_identical(level(paste("env -C", out, "ls")), 1L)
+  # neighbours: in the project as before
+  expect_identical(level("env -C sub rm -f marker.txt"), 3L)
+  expect_identical(level("env -C sub ls"), 0L)
+})
+
+test_that("a Python variable name it cannot read in an environment write is control (round 5)", {
+  root = local_project()
+  py = function(code) gptr_risk(paste0("peter$py(", deparse(code), ")"), root = root)$level
+  for (code in c("os.environ['\\x48OME'] = d", "os.environ['H' 'OME'] = d",
+                 "os.environ['H'\n  'OME'] = d", "os.environb[b'\\x48OME'] = b'd'",
+                 "os.environ['\\N{LATIN CAPITAL LETTER H}OME'] = d", "os.putenv('H' 'OME', d)",
+                 "k = 'HO' + 'ME'\nos.environ[k] = d", "del os.environ[k]",
+                 "os.environ.pop(k, None)", "os.environ[f'{k}'] = d", "os.unsetenv(k)")) {
+    expect_identical(py(paste0("import os\n", code)), 4L, label = code)
+  }
+  # neighbours: a plain literal name that controls nothing, and reads, as before
+  for (code in c("os.environ['TZ'] = 'UTC'", "os.environ[\"TZ\"] = 'UTC'",
+                 "os.environ.update(TZ = 'UTC')", "os.putenv(b'TZ', b'UTC')")) {
+    expect_identical(py(paste0("import os\n", code)), 3L, label = code)
+  }
+  expect_identical(py("import os\nx = os.environ[k]"), 2L)
+})
+
+test_that("a link to a path outside the project is level 4, as ln's (review round 5)", {
+  root = local_project()
+  dir.create(file.path(root, "sub"))
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  o = deparse(out)
+  for (code in c(paste0("file.symlink(", o, ", 'lnk')"),
+                 paste0("file.link(", deparse(file.path(out, "a")), ", 'lnk')"),
+                 paste0("Sys.junction(", o, ", 'lnk')"), "file.symlink('~', 'lnk')",
+                 paste0("file.symlink(to = 'lnk', from = ", o, ")"),
+                 paste0("d = ", o, "; file.symlink(d, 'lnk')"))) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  expect_identical(lv(paste0("system('ln -s ", out, " lnk')")), 4L)
+  # neighbours: a link to a path in the project or the session's tempdir() is a write
+  for (code in c("file.symlink('sub', 'lnk')", "file.symlink(tempdir(), 'lnk')",
+                 "file.link('sub/a', 'b')")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+})
+
+test_that("getwd() and setwd()'s value are the working directory (review round 5)", {
+  root = local_project()
+  dir.create(file.path(root, "data"))
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  # the save-and-restore idioms stay in the project
+  for (code in c("owd = setwd('data'); x = list.files(); setwd(owd)",
+                 "owd = getwd(); setwd('data'); setwd(owd)",
+                 "setwd(file.path(getwd(), 'data'))",
+                 paste("original_wd = getwd(); data_wd = file.path(original_wd, 'data');",
+                       "setwd(data_wd); x = list.files(); setwd(original_wd)"),
+                 "a = setwd('data'); setwd(a); b = setwd('data'); setwd(b)",
+                 "owd = setwd(tempdir()); setwd(owd)")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  # out of the project, or a directory the code computes, as before
+  for (code in c("setwd(o)", "setwd(file.path(getwd(), '..'))",
+                 "setwd(tempdir()); setwd(file.path(getwd(), '..'))",
+                 "withr::with_dir('data', setwd(file.path(getwd(), '..', '..')))",
+                 "if (x) owd = setwd('data'); setwd(owd)")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  # from a folder in the project: getwd() is where the code has moved R to
+  withr::local_dir(file.path(root, "data"))
+  expect_identical(lv("setwd(file.path(getwd(), '..'))"), 2L)
+  expect_identical(lv("setwd(tempdir()); setwd(file.path(getwd(), '..'))"), 4L)
+  expect_identical(lv("setwd(tempdir()); owd = setwd('x'); setwd(file.path(owd, '..'))"), 4L)
+  # a working directory outside the project is read as such
+  withr::local_dir(out)
+  expect_identical(lv("owd = setwd(file.path(getwd(), 'x')); setwd(owd)"), 4L)
+})
+
+test_that("auto and yolo run the setwd() save-and-restore idiom unasked (review round 5)", {
+  skip_on_cran()
+  root = local_project()
+  dir.create(file.path(root, "data"))
+  writeLines("x", file.path(root, "data", "a.csv"))
+  ui = local_scripted_ui(list())
+  for (mode in c("auto", "yolo")) {
+    code = "owd = setwd('data'); x = list.files(); setwd(owd)"
+    fake = local_fake_provider(list(fake_tool("r", code = code), "Done."),
+                               name = paste0("owd-", mode))
+    peter("List the data.", model = fake, mode = mode, envir = new.env())
+  }
+  expect_identical(sum(ui$log$method == "permission"), 0L)
+  expect_identical(path_norm(getwd()), root)
+})
