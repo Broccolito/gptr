@@ -1193,6 +1193,33 @@ test_that("a carriage return in printed output ends a #> line, as R reads it (re
   expect_identical(gptr_blocks(f)$status, "fresh")
 })
 
+test_that("control characters in output, names and digests are escaped (review round 6)", {
+  expect_identical(doc_format_kv(list(created = "c\033]0;PWNED\a")),
+                   "created=\"c\\u001b]0;PWNED\\u0007\"")
+  out = c("\033c", paste0(intToUtf8(0x202e), "evil"), "\a\b", "tab\there", "[1] 4")
+  expect_identical(doc_output_lines(out), c("#> <U+001B>c", "#> <U+202E>evil",
+                                            "#> <U+0007><U+0008>", "#> tab\there", "#> [1] 4"))
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("library(gptr)", "peter(\"count rows\")"), f)
+  turn = doc_test_turn("cat(\"x\")", outputs = list("\033]0;PWNED\a\033c ok"))
+  turn[[3L]]$message$details$bridge = "#> bg job \033]0;PWNED\a started: sleep 1"
+  objects = list(list(name = "c\033]0;PWNED\a", status = "created"))
+  cp = list(type = "custom", custom_type = "gptr.checkpoint",
+            data = list(tool_call_id = "call_1",
+                        fragments = list(objects = list(id = "f1", turn = 1L, objects = objects))))
+  s = doc_test_session(list(c(turn[1:2], list(cp), turn[3:4])))
+  doc_upsert(doc_file_site(f), doc_block_lines(s, 1L, doc_file_site(f), 1L))
+  txt = gsub("\r\n", "\n", rawToChar(readBin(f, "raw", file.size(f))), fixed = TRUE)
+  expect_false(grepl("[\\x01-\\x08\\x0b-\\x1f\\x7f]", txt, perl = TRUE, useBytes = TRUE))
+  lines = readLines(f)
+  expect_true(all(c("#> <U+001B>]0;PWNED<U+0007><U+001B>c ok",
+                    "#> bg job <U+001B>]0;PWNED<U+0007> started: sleep 1") %in% lines))
+  expect_identical(doc_find_blocks(lines)$header[[1L]]$created, "c\033]0;PWNED\a")
+  expect_identical(gptr_blocks(f)$status, "fresh")
+})
+
 test_that("only gptr's own lines take the block id; steer text and model code keep the token", {
   local_project()
   local_gptr_options(record = "auto")

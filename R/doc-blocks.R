@@ -187,7 +187,9 @@ doc_parse_kv = function(s) {
 }
 
 #' Format header fields in the key order of contract 11.5 (unknown keys last); values that hold
-#' a blank, a line break, a quote, `=` or a backslash are quoted so the header stays one line
+#' a blank, a control character (a line break among them), a quote, `=` or a backslash are
+#' quoted, which escapes each control character (doc_str_literal()), so the header is one line
+#' without them
 #' @noRd
 doc_format_kv = function(x) {
   x = x[!vapply(x, function(v) is.null(v) || !length(v), NA)]
@@ -197,7 +199,7 @@ doc_format_kv = function(x) {
   vals = vapply(names(x), function(k) {
     v = as.character(x[[k]])[1L]
     if (is.na(v)) v = "NA"
-    quote = k %in% doc_quoted_keys || !nzchar(v) || grepl("[ \t\r\n\"=\\\\]", v)
+    quote = k %in% doc_quoted_keys || !nzchar(v) || grepl("[\001-\037 \"=\\\\]", v)
     if (quote) doc_str_literal(v) else v
   }, "")
   paste0(names(x), "=", vals, collapse = " ")
@@ -1158,7 +1160,9 @@ doc_history_code = function(lines) {
 #' Printed output as `#> ` lines of at most 76 characters, then `#> ... (N more lines)` counting
 #' every line not shown. `outputs` is a character vector or a list of output per top-level
 #' expression, each its lines or r_doc_outputs()'s list(lines, n); no line follows a cut one.
-#' Lines end where R reads a line end (doc_split_lines()), whichever evaluator printed them.
+#' Lines end where R reads a line end (doc_split_lines()), whichever evaluator printed them, and
+#' control, bidi and zero-width characters are written `<U+XXXX>` (ui_escape()), as doc_one_line()
+#' writes them.
 #' @noRd
 doc_output_lines = function(outputs, max_lines = NULL, width = 76L) {
   out = character()
@@ -1174,7 +1178,7 @@ doc_output_lines = function(outputs, max_lines = NULL, width = 76L) {
   if (!total) return(character())
   out = utils::head(out, max_lines %||% doc_max_output_lines())
   extra = total - length(out)
-  out = if (length(out)) paste0("#> ", substr(out, 1L, width)) else character()
+  out = if (length(out)) paste0("#> ", substr(ui_escape(out), 1L, width)) else character()
   if (extra > 0L) out = c(out, paste0("#> ... (", extra, " more lines)"))
   out
 }
@@ -1443,8 +1447,8 @@ doc_ran_part = function(det) {
 
 #' Serialize successful canonical or locally served R with the same code, secret and output
 #' rules; a comment line shaped like a steer or a block marker gets one more `#`
-#' (doc_comment_escape()). A local MCP trace does not create or alter the provider's
-#' assistant/tool messages.
+#' (doc_comment_escape()), and a bridge digest is escaped as output is (ui_escape()). A local MCP
+#' trace does not create or alter the provider's assistant/tool messages.
 #' @noRd
 doc_turn_r = function(out, det, args, with_out, plan_mode) {
   if (!identical(det$status %||% "ok", "ok")) return(out)
@@ -1470,7 +1474,7 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
   lines = hist
   if (with_out) lines = c(lines, doc_output_lines(outs))
   if (length(det$bridge)) {
-    dig = as_utf8(as.character(det$bridge))
+    dig = ui_escape(det$bridge)
     lines = c(lines, ifelse(startsWith(dig, "#>"), dig, paste0("#> ", dig)))
   }
   if (length(det$artifacts)) {
