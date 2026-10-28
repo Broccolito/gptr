@@ -6043,3 +6043,82 @@ the driver, screens, events, transcripts and replays without a model are local, 
   'TypeSafe AI' is quoted as a host, not as software or an API (A6's kdps comment); "hosted by
   TypeSafe AI" is the fallback if a reviewer queries it. The README's 4 GiB figure is one
   measured run (`dev/TESTING_PLAN.md`).
+
+## Task CI-105 - Contributor PR #92 and its wording across the repository (2026-10-28, #94)
+- Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
+  `13a917ff`, is merged into `main` as is, with a merge commit. It changes only DESCRIPTION (the
+  Title "Language Model Agents in Live 'R' Sessions", D-270, and a Description that opens "Runs
+  language model agents in an existing 'R' session"), README.Rmd and README.md (rewritten and
+  arranged by task: Installation, Connect a model, Run an analysis, Record and replay an analysis,
+  Return typed decisions, Learn more, Why Peter?, Upgrading from gptr 0.7.0, Installation
+  troubleshooting, License and acknowledgments) and the three one-line Title checks
+  (`description_problems()` in `dev/release/lib.R`, the `dcf_of()` fixture of
+  `dev/release/tests/test-description.R`, test-zzz.R). The maintainer asked that his changes be
+  "proportionally propagated to all of the other elements in the repository that those changes
+  are referring to", with his wording as "the gold standard". This follow-up, #94
+  (`claude/pr92-propagate`, based on his commit), does that: where another place says what his
+  commit changed, it now says it in his words, verbatim where it says the same thing.
+- Red, on `71ae6e39`: `testthat::test_dir("dev/release/tests", filter = "^gptr-release$")` with
+  `NOT_CRAN=true` FAIL 1 SKIP 0 PASS 12: Task 15's spelling test (test-gptr-release.R:47) reports
+  "Naur's (README.Rmd:189, README.md:210)" and "Wason's (README.Rmd:189, README.md:210)".
+- Fix `bff89417`, the three corrections the maintainer approved, the only edits to his text
+  (README.Rmd and `inst/WORDLIST` as in `29461dd6`; README.md rendered again by
+  `dev/release/precompute.R --readme`): (1) "Local-only Ollama inference is on by default;",
+  since that default guards the Ollama route only; (2) `inst/WORDLIST` takes Naur's and Wason's;
+  (3) "Why Peter?" keeps the Naur rationale CLAUDE.md requires with one sentence after his first,
+  "In Naur's spirit, gptr records sessions as runnable documents."
+- Fix `5801ad3b`, the plans and the spec: the new Title in P01's Global Constraints and Task 1
+  (the DESCRIPTION block, its test and the Red step's expected failure), in P25's Global
+  Constraints and Task 5 (the `dcf_of()` fixture and `description_problems()`) and in 05's P01
+  scope (D-270); `dev/README.md` describes gptr in the Description's and the README's words.
+- Fix `4f8573ce`, the package's own summaries: NEWS.md's 1.0.0 opening and cran-comments.md's
+  opening say what gptr is in the Description's words (it "runs language model agents in an
+  existing R session, where generated code can inspect and modify objects already in memory");
+  `?peter` (`R/gptr-gateway.R`, `man/peter.Rd`) says what the model receives as the README does
+  ("size-limited descriptions, previews and tool output that may include data values") and gives
+  the name's rationale in the words of "Why Peter?", pointing at the why-peter vignette;
+  `?gptr_security` (`R/gptr-config.R`, `man/gptr_security.Rd`) and `man/figures/README.md` open
+  with the README's and the Description's sentence. The Rd files are `document()`'s.
+- Fix `34afa7bd`, the vignettes: the getting-started guide (`vignettes/getting-started.Rmd.orig`
+  and its knitted `.Rmd`, the same prose in both, no chunk changed) opens as the README does,
+  its "Connecting a real model" step names the README's three routes (an API key, an existing
+  CLI login, a local Ollama model) in its words, and "The first interactive use of a remote
+  provider asks you to acknowledge the data it receives".
+- Fix `f42b353e`, the site: the cheat sheet's tagline (`pkgdown/assets/cheatsheet.html`) in the
+  README's words, no longer saying that Wason's research inspires the System 1 and System 2
+  roles, and `pkgdown/assets/gptr-cheatsheet.pdf` printed again by `dev/release/cheatsheet-pdf.R`
+  (local Chrome): two pages, the tagline two lines, the rest of the text laid out as before
+  (`pdftotext -layout`). `_pkgdown.yml` and `pkgdown/templates/head.html` hold no summary (the
+  site's description is DESCRIPTION's, which pkgdown fills in).
+- Left as they are: the plans' drafts of the shipped files (P25's Task 2 `?gptr_security`, Task 5
+  getting-started, Task 10 README, Task 11 NEWS and Task 13 cran-comments, P01's Task 1
+  Description), which the shipped files had already replaced before #92 (D-270); P19's goal line
+  and the design specs 00 and 03; `dev/research/`, `dev/progress/`, `dev/TESTING_PLAN.md` and the
+  historical checkpoints of `dev/HANDOFF.md` and `dev/PROGRESS.md`; CLAUDE.md and AGENTS.md, the
+  agents' instructions, which the maintainer keeps; the model's prompts and tool descriptions
+  ("the user's live R session" in `R/prompt-text.R`, `R/tool-r.R` and `R/mcp-server.R`, pinned by
+  test-northstar.R and the token benchmark's baseline), which are behaviour; "live R session" used
+  in passing (`?gptr_mcp_serve`'s title, the mcp vignette, `inst/COPYRIGHTS`); the other vignettes'
+  openings (why-peter, execution-model, language-models, system-one, token-efficiency), which
+  introduce their own topic and agree with his README; the getting-started guide's own first example
+  and its "Where to go next" list, which names the guides by their titles. His README links the
+  system-one guide as "Typed decisions" and script-as-history as "Record, replay and export";
+  his commit renames no guide, so their titles stay. gptr has no package help page.
+- Green, on `f42b353e` (the records commit changes only `dev/*.md`, which `.Rbuildignore` drops):
+  `dev/ci/isolated-check.R document` leaves no diff; `^(zzz)$` (the Title's test) FAIL 0 WARN 0
+  SKIP 0 PASS 149 in UTF-8 and under `LC_ALL=C LANG=C`; `dev/release/tests` with `NOT_CRAN=true`
+  (14 files, 62 tests) FAIL 0 SKIP 0 PASS 290; `spelling::spell_check_package()` "No spelling
+  errors found."; `check-docs.R` and `check-files.R all --release` 0 problems;
+  `precompute.R --readme` 0 problems, `git status` clean after it;
+  `precompute.R --check getting-started` 0 problems, and a knit of getting-started into the tree
+  differed from the committed `.Rmd` only in chunk output (the random session ids and the token
+  counts of the fake provider's requests), not in prose, and was not kept; the plan checks
+  (`dev/ci/check-plans.py`) pass: 28 plans, 1444 blocks, no error finding (info 830, warn 298),
+  770 R blocks with 0 problems, no lints. The docs-cleanup `fmt.py` changes none of the changed
+  `dev/*.md` files but 05, which it changes on the base too, and `lintfmt.py` reports the base's
+  findings (05's two edited lines are 102 and 111 columns, the base's 110 and 110). The full suite
+  and `R CMD check` are #94's CI.
+- Deviations: D-270. Open: PR #93 (`claude/v1-fixes`) holds its own CI-105 and D-270 for #92,
+  written for its own merge of #92, and its own copy of the corrections (`29461dd6`); bringing
+  #93 up to date with `main` meets these, and one copy of each record must go. Whether the
+  system-one and script-as-history guides take his link texts as titles is the maintainer's call.

@@ -7779,3 +7779,26 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   runs the whole plan", "the go-ahead the person sends runs the plan once, in the mode the menu
   chose".
   Evidence: progress/fixes.md FIX-21.
+
+## D-270 - CI-105 The Title and Description from contributor PR #92 (2026-10-28)
+- Rule: DESCRIPTION's Title is "Language Model Agents in Live 'R' Sessions" and its Description
+  the paragraph that opens "Runs language model agents in an existing 'R' session, where
+  generated code can inspect and modify objects already in memory", both from contributor PR #92
+  (Gianmarco Bellucci, commit `71ae6e39`), merged into `main` as is. The Title replaces "Language
+  Model Agents Inside the Live 'R' Session"; the three checks that pin it changed with it in his
+  commit: `description_problems()` in `dev/release/lib.R`, the `dcf_of()` fixture of
+  `dev/release/tests/test-description.R` and test-zzz.R's DESCRIPTION test. P01 (Global
+  Constraints; Task 1's DESCRIPTION, its test and the Red step), P25 (Global Constraints, Task 5)
+  and 05's P01 scope now state the new Title (#94). P01's Task 1 still writes its own first
+  Description, which the shipped one had replaced before #92 (CI-104); this entry wins over it,
+  as over the Description 05 asks of P01 (per research report 13, section 3).
+- Why: the maintainer merged the PR as is and asked that its wording be the gold standard for the
+  rest of the repository (CI-105). The Title has 42 characters, is left unchanged by
+  `tools::toTitleCase()` and has no period; the Description opens with neither the Title nor the
+  package name.
+- Contract-visible: DESCRIPTION's Title and Description, as CRAN, `citation("gptr")` and the
+  package site show them; no section of 03 or 04 names either (IC-72 lists the fields P01 writes
+  without them).
+- Tests: test-zzz.R "DESCRIPTION carries the fields CRAN and the contract require (IC-72)";
+  `dev/release/tests/test-description.R` "description_problems() checks the two fields P25 owns and
+  guards the others". Evidence: progress/fixes.md CI-105.
