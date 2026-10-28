@@ -1526,9 +1526,11 @@ computes, are a level-4 `session` row, which the critical guard asks about in au
 `file_delete` row, as `ln`'s source is.
 `eval()`, `rlang::eval_bare()` and `rlang::eval_tidy()` of `quote(x)` read `x`, as `evalq(x)` does. Not
 followed: the working directory changed in other ways (`usethis::local_project()`, `get("setwd")`, the `wd` of
-`callr::r()`), the code another interpreter runs (`Rscript -e`, `perl -e`), the command of `processx::process$new()`,
-a path the shell computes (`rm "$f"`, `xargs rm`) and code handed to `sh -c` as one word whose spaces are escaped
-with a backslash or written `$IFS` (`sh -c rm\ -f\ file`; reading it needs a tokenizer of its own), all level 3.
+`callr::r()`, `env` given `-C` among other short options or as an abbreviated `--chdir`: `env -iC DIR`,
+`env --chd=DIR`), the code another interpreter runs (`Rscript -e`, `perl -e`, `pwsh -CommandWithArgs` or `-cwa`),
+the command of `processx::process$new()`, a path the shell computes (`rm "$f"`, `xargs rm`) and code handed to
+`sh -c` as one word whose spaces are escaped with a backslash or written `$IFS` (`sh -c rm\ -f\ file`; reading it
+needs a tokenizer of its own), all level 3.
 
 In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never
 runs, such as `q()`, `readline()`, a read of standard input or a secret marker, with the guard's text less its

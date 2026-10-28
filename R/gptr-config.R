@@ -1667,7 +1667,8 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `asNamespace("withr")$local_envvar`, `with(list(f = withr::with_envvar), ...)`,
 #' `assign("f", Sys.unsetenv)`, `identity(withr::local_envvar)`); a Python write that reaches
 #' `os.environ` by another name (`e = os.environ`, `getattr(os, "environ")`) or through `ctypes`, or
-#' that passes `os.environ.update()` a mapping the code computes or keyword names not all in upper
+#' that passes `os.environ.update()` a mapping the code computes, a mapping whose names are not
+#' plain string literals (`{'\x48OME': d}`, `{'H' 'OME': d}`) or keyword names not all in upper
 #' case (on Windows `os.environ.update(home = d)` sets `HOME`); or Python run through 'reticulate':
 #' such code is level 3 or lower, which `auto` runs without asking.
 #'
@@ -1710,13 +1711,14 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' reads the code, so at the top level of the code `owd = setwd("data"); ...; setwd(owd)` stays in
 #' the project. A drive-relative path such as `D:data` counts as outside on every OS. The classifier
 #' does not follow the working directory changed in other ways (such as `usethis::local_project()`,
-#' `get("setwd")` or the `wd` of `callr::r()`), nor read the code another interpreter runs
-#' (`Rscript -e`, `perl -e`, `node -e`), a path the shell computes (`rm "$f"` in a loop, `xargs rm`)
-#' or code handed to `sh -c` or `bash -c` as one word whose spaces are escaped with a backslash or
-#' written `$IFS` (`sh -c rm\ -f\ file`): such a command is level 3, which `auto` and `yolo` run
-#' without a question whatever it deletes. The `wd` of `processx::run()` is read when the call, or a
-#' name the code assigns, holds it as a string; a `wd` the code computes is read as the project
-#' directory.
+#' `get("setwd")`, the `wd` of `callr::r()`, or `env` given `-C` among other short options,
+#' `env -iC DIR`, or as an abbreviated `--chdir`, `env --chd=DIR`), nor read the code another
+#' interpreter runs (`Rscript -e`, `perl -e`, `node -e`, `pwsh -CommandWithArgs` or `-cwa`), a path
+#' the shell computes (`rm "$f"` in a loop, `xargs rm`) or code handed to `sh -c` or `bash -c` as
+#' one word whose spaces are escaped with a backslash or written `$IFS` (`sh -c rm\ -f\ file`):
+#' such a command is level 3, which `auto` and `yolo` run without a question whatever it deletes.
+#' The `wd` of `processx::run()` is read when the call, or a name the code assigns, holds it as a
+#' string; a `wd` the code computes is read as the project directory.
 #'
 #' In `auto` and `yolo` mode a model can delete or overwrite files and objects. Use them only in
 #' projects you can restore (version control, backups, [gptr_rewind()] for recent turns), and run

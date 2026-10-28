@@ -68,7 +68,8 @@ another function (\code{get("Sys.unsetenv")}, \code{baseenv()$Sys.setenv},
 \code{asNamespace("withr")$local_envvar}, \code{with(list(f = withr::with_envvar), ...)},
 \code{assign("f", Sys.unsetenv)}, \code{identity(withr::local_envvar)}); a Python write that reaches
 \code{os.environ} by another name (\code{e = os.environ}, \code{getattr(os, "environ")}) or through \code{ctypes}, or
-that passes \code{os.environ.update()} a mapping the code computes or keyword names not all in upper
+that passes \code{os.environ.update()} a mapping the code computes, a mapping whose names are not
+plain string literals (\code{{'\\x48OME': d}}, \verb{\{'H' 'OME': d\}}) or keyword names not all in upper
 case (on Windows \code{os.environ.update(home = d)} sets \code{HOME}); or Python run through 'reticulate':
 such code is level 3 or lower, which \code{auto} runs without asking.
 }
@@ -113,13 +114,14 @@ read as the one the code has moved R to, starting from R's working directory whe
 reads the code, so at the top level of the code \verb{owd = setwd("data"); ...; setwd(owd)} stays in
 the project. A drive-relative path such as \code{D:data} counts as outside on every OS. The classifier
 does not follow the working directory changed in other ways (such as \code{usethis::local_project()},
-\code{get("setwd")} or the \code{wd} of \code{callr::r()}), nor read the code another interpreter runs
-(\code{Rscript -e}, \code{perl -e}, \code{node -e}), a path the shell computes (\verb{rm "$f"} in a loop, \verb{xargs rm})
-or code handed to \code{sh -c} or \code{bash -c} as one word whose spaces are escaped with a backslash or
-written \verb{$IFS} (\verb{sh -c rm\\ -f\\ file}): such a command is level 3, which \code{auto} and \code{yolo} run
-without a question whatever it deletes. The \code{wd} of \code{processx::run()} is read when the call, or a
-name the code assigns, holds it as a string; a \code{wd} the code computes is read as the project
-directory.
+\code{get("setwd")}, the \code{wd} of \code{callr::r()}, or \code{env} given \code{-C} among other short options,
+\verb{env -iC DIR}, or as an abbreviated \code{--chdir}, \code{env --chd=DIR}), nor read the code another
+interpreter runs (\code{Rscript -e}, \code{perl -e}, \code{node -e}, \code{pwsh -CommandWithArgs} or \code{-cwa}), a path
+the shell computes (\verb{rm "$f"} in a loop, \verb{xargs rm}) or code handed to \code{sh -c} or \code{bash -c} as
+one word whose spaces are escaped with a backslash or written \verb{$IFS} (\verb{sh -c rm\\ -f\\ file}):
+such a command is level 3, which \code{auto} and \code{yolo} run without a question whatever it deletes.
+The \code{wd} of \code{processx::run()} is read when the call, or a name the code assigns, holds it as a
+string; a \code{wd} the code computes is read as the project directory.
 
 In \code{auto} and \code{yolo} mode a model can delete or overwrite files and objects. Use them only in
 projects you can restore (version control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run
