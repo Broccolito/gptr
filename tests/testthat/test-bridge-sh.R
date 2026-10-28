@@ -726,6 +726,14 @@ test_that("an env that hands a child a registered secret meets the secret guard 
     expect_identical(as.integer(r$level), if (length(env) && is.null(names(env))) 3L else 0L)
     expect_false(isTRUE(script$risk(list(path = "a.sh", env = env), NULL)$secret_guard))
   }
+  # a key shorter than gptr.redact_min_chars has no literal to find: its name alone decides
+  withr::local_envvar(R5_SHORT = "abc1")
+  secret_register("abc1", "R5_SHORT")
+  for (env in list("R5_SHORT", "r5_short")) {
+    r = sh$risk(list(cmd = c("git", "status"), env = env), NULL)
+    expect_true(isTRUE(r$secret_guard), label = env)
+    expect_identical(r$secrets, "R5_SHORT")
+  }
 })
 
 test_that("a bridge digest is one line, whatever text the model chose (review round 3)", {
@@ -885,6 +893,26 @@ test_that("a secret handed to a child through env asks as a secret read does (re
   expect_identical(perm_store()$allow, before)
   # an ordinary env runs as before
   expect_identical(run("auto", "c('PATH', LANG = 'C')"), list(x = "FALSE FALSE", asked = 0L))
+  # code that reads the secret by name covers its hand-over: the question for that read, or an
+  # r(secret:) rule allowing that code, as it does when a level-0 command leaves the read the only
+  # flagged call (review round 5 verification)
+  read = "invisible(Sys.getenv('R5_FAKE_KEY'))\n"
+  expect_identical(run("auto", "'R5_FAKE_KEY'", list("y"), read),
+                   list(x = "TRUE FALSE", asked = 1L))
+  skip_if(!nzchar(Sys.which("git")), "git is not installed")
+  gptr_permissions(allow = "r(secret:R5_FAKE_KEY)")
+  git = function(env, pre = "", answers = list()) {
+    ui = local_scripted_ui(answers)
+    code = paste0(pre, "x = peter$sh(c('git', 'status'), env = ", env, ")$status")
+    fake = local_fake_provider(list(fake_tool("r", code = code), fake_text("done")))
+    e = new.env()
+    peter("run it", model = fake, envir = e, mode = "auto")
+    list(ran = is.integer(e$x), asked = sum(ui$log$method == "permission"))
+  }
+  expect_identical(git("c(K = Sys.getenv('R5_FAKE_KEY'))"), list(ran = TRUE, asked = 0L))
+  expect_identical(git("'R5_FAKE_KEY'", read), list(ran = TRUE, asked = 0L))
+  # the rule does not cover a hand-over the code does not read by name
+  expect_identical(git("'R5_FAKE_KEY'", answers = list("n")), list(ran = FALSE, asked = 1L))
 })
 
 test_that("the question for a secret in env shows its marker, never its value (review round 5)", {
