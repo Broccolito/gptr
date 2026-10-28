@@ -446,7 +446,11 @@ repl_file_block = function(path, shown, max_lines = 40L, room = Inf) {
   }
   x = readLines(path, n = max_lines + 1L, warn = FALSE, encoding = "UTF-8")
   bad = !validUTF8(x)
-  x[bad] = iconv(x[bad], "CP1252", "UTF-8", sub = "byte")
+  # the five bytes CP1252 lacks become `<xx>` first, as Windows' iconv() reads them as C1 controls
+  for (g in as.raw(c(0x81, 0x8d, 0x8f, 0x90, 0x9d))) {
+    x[bad] = gsub(rawToChar(g), paste0("<", g, ">"), x[bad], fixed = TRUE, useBytes = TRUE)
+  }
+  x[bad] = iconv(x[bad], "CP1252", "UTF-8")
   more = length(x) > max_lines
   x = redact(clean_terminal(utils::head(x, max_lines)), profile = "context")
   tag = function(cut) paste0(file, if (cut) " truncated=\"true\"", ">")
