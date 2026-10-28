@@ -419,13 +419,44 @@ test_that("auto and yolo run a move into a folder and back up unasked (review ro
   writeLines(c("a", "1"), file.path(root, "data", "x.csv"))
   ui = local_scripted_ui(list())
   for (mode in c("auto", "yolo")) {
-    code = "setwd('data'); x = read.csv('x.csv'); setwd('..')"
-    fake = local_fake_provider(list(fake_tool("r", code = code), "Done."),
-                               name = paste0("up-", mode))
-    peter("Read the data.", model = fake, mode = mode, envir = new.env())
+    for (code in c("setwd('data'); x = read.csv('x.csv'); setwd('..')",
+                   paste("f = function() { owd = setwd('data'); on.exit(setwd(owd));",
+                         "read.csv('x.csv') }; x = f()"))) {
+      fake = local_fake_provider(list(fake_tool("r", code = code), "Done."),
+                                 name = paste0("up-", mode))
+      peter("Read the data.", model = fake, mode = mode, envir = new.env())
+    }
   }
   expect_identical(sum(ui$log$method == "permission"), 0L)
   expect_identical(path_norm(getwd()), root)
+})
+
+test_that("a function body and local() read the names they bind as the top level does (round 6)", {
+  root = local_outside_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  o = deparse(out)
+  # the save-and-restore idiom stays in the project
+  for (code in c("f = function() { owd = setwd('data'); on.exit(setwd(owd)); x }; y = f()",
+                 "local({ owd = setwd('data'); on.exit(setwd(owd)); x })",
+                 "f = function() { owd = getwd(); setwd('data'); setwd(owd) }",
+                 "f = function() { setwd('data'); setwd('..') }")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  # a path a body names is read as at the top level
+  expect_identical(lv(paste0("f = function() { p = ", o, "; unlink(p) }")), 4L)
+  expect_identical(lv(paste0("p = ", o, "; local({ q = p; unlink(q) })")), 4L)
+  # neighbours: a function's other names are ones the code computes, as is a directory saved in a
+  # branch, and a name a body assigns with <<- or local() given an environment adds its value
+  for (code in c("f = function(d) { owd = setwd(d); on.exit(setwd(owd)) }",
+                 "f = function() setwd(owd)", "if (p) { owd = setwd('data'); setwd(owd) }",
+                 paste0("f = function() { owd = setwd(", o, "); on.exit(setwd(owd)) }"),
+                 paste0("p = 'a.csv'; f = function() p <<- ", o, "; f(); unlink(p)"),
+                 paste0("p = ", o, "; local({ p = 'a.csv' }); unlink(p)"),
+                 paste0("p = 'a.csv'; local({ p = ", o, " }, envir = e); unlink(p)"))) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  expect_identical(lv("f = function() unlink(p)"), 3L)
 })
 
 test_that("withr's local_tempdir() and local_tempfile() are folded as tempfile() is (round 6)", {
