@@ -6283,7 +6283,10 @@ the driver, screens, events, transcripts and replays without a model are local, 
   `callr::run()` (processx's `run()` re-exported) and `sys::exec_wait()` have no risk-table row, so
   a literal command through them is an `unlisted` level-1 row, never read
   (`callr::run("rm", c("-rf", "/abs"))` is level 1, so auto and yolo run it with no question);
-  a row each would make them read as `processx::run()` is.
+  a row each would make them read as `processx::run()` is. Rerun of the round's checks on
+  `a9fbf0a6`'s code: the gate set FAIL 0 SKIP 13 PASS 8305 in UTF-8 and in C, the console and
+  neighbour sets as above, `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290,
+  `check-docs.R` 0 problems, spelling clean, lint clean, `document()` no diff.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #86)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
