@@ -6336,6 +6336,20 @@ the driver, screens, events, transcripts and replays without a model are local, 
   `check-docs.R` 0 problems; spelling clean; `testthat::test_dir("dev/release/tests")` FAIL 0
   SKIP 0 PASS 290. Not run here: the full suite, `R CMD check`, Linux and Windows hosts, live
   models.
+- Review round 4, the merge (`claude/v1-fixes` merges `claude/v1-fix-gate` as `f5e527ac`; the
+  fixes' verifier's finding 1, blocking because the help page must name what is not read): the
+  escaped `-c` word above is level 3 also with `$IFS` for a space (`sh -c rm$IFS-f$IFS<file>`) and
+  under `bash -c`, and `?gptr_security` said that the code a shell runs there is read, naming only
+  another interpreter's code and a path the shell computes as unread. A probe on `2a31fdbf`'s code:
+  `peter$sh()` and `system()` of `sh -c rm\ -f\ /zz/marker`, `bash -c rm\ -rf\ /zz` and the
+  `$IFS` form are level 3, as is `sh -c rm\ -f\ marker` with `wd = "/zz"`, while
+  `sh -c 'rm -f /zz/marker'` and `eval rm\ -f\ /zz/marker` are 4. Not fixed: reading the word as
+  sh does needs a tokenizer of its own, one that drops escapes as sh does inside and outside quotes
+  and still keeps a Windows `C:\x` path whole, which is why the line is read twice. Docs:
+  `?gptr_security`'s list of what the classifier does not read names "code handed to `sh -c` or
+  `bash -c` as one word whose spaces are escaped with a backslash or written `$IFS`
+  (`sh -c rm\ -f\ file`)", level 3, which auto and yolo run without a question; 03 section 6.8.1's
+  "Not followed" sentence and D-262's status say the same.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #93)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing

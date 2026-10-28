@@ -1505,8 +1505,9 @@ line with a backslash (sh's) places a word that starts with a drive letter as a 
 relative path would then name a file outside the project, `setwd()`, `withr::local_dir()` and `withr::with_dir()` to
 a directory outside the project and `tempdir()`, or to one the code computes, are a level-4 `session` row, which the
 critical guard asks about in auto and yolo. Not followed: the working directory changed in other ways
-(`usethis::local_project()`), the code another interpreter runs (`Rscript -e`, `perl -e`) and a path the shell
-computes (`rm "$f"`, `xargs rm`), all level 3.
+(`usethis::local_project()`), the code another interpreter runs (`Rscript -e`, `perl -e`), a path the shell computes
+(`rm "$f"`, `xargs rm`) and code handed to `sh -c` as one word whose spaces are escaped with a backslash or written
+`$IFS` (`sh -c rm\ -f\ file`; reading it needs a tokenizer of its own), all level 3.
 
 In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never
 runs, such as `q()`, `readline()`, a read of standard input or a secret marker, with the guard's text less its

@@ -7829,7 +7829,14 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `xargs rm`), all level 3. A literal `wd` of `processx::run()` is read the same way
   (`cmd_in_wd()`). Status 2026-10-27 (the fixes' verifier): so is a `wd` held by a name the code
   assigns, in each directory the name may hold; a `wd` the code computes is read as the project, as
-  `?gptr_security` now says.
+  `?gptr_security` now says. Status 2026-10-27 (the merge of review round 4, the fixes' verifier's
+  finding 1): a literal code word handed to `sh -c` or `bash -c` with its spaces escaped by a
+  backslash or written `$IFS` (`sh -c rm\ -f\ <file>`) is not read, so auto and yolo delete a file
+  outside the project with no question, as on `0aa55320` and `13a917ff`: the tokenizer splits the
+  word at the escaped space and sh's second reading drops the escapes, so the code is `rm` alone, a
+  level-3 row (`eval rm\ -f\ <file>` is 4). A fix needs a tokenizer of its own that reads escapes as
+  sh does inside and outside quotes without breaking Windows `C:\x` paths, which the two readings
+  exist for; `?gptr_security` and 03 section 6.8.1 now name it among what is not followed.
 - Rule (allow): only an `r(fn:NAME,...)` (or `*(fn:...)`) allow rule lifts the refusal, matched
   against the refused rows alone and covering all of them, as only `r(secret:NAME)` lifts the secret
   guard: `r(fn:system)` lets `system(cmd); write.csv(x, "out.csv")` run in auto, while `r`,

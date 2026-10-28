@@ -96,10 +96,12 @@ R's session temporary directory, or to one the code computes, are level 4, becau
 path would then name a file outside the project. A drive-relative path such as \code{D:data} counts
 as outside on every OS. The classifier does not follow the working directory changed in other
 ways (such as \code{usethis::local_project()}), nor read the code another interpreter runs
-(\code{Rscript -e}, \code{perl -e}, \code{node -e}) or a path the shell computes (\verb{rm "$f"} in a loop,
-\verb{xargs rm}): such a command is level 3, which \code{auto} and \code{yolo} run without a question whatever
-it deletes. The \code{wd} of \code{processx::run()} is read when the call, or a name the code assigns,
-holds it as a string; a \code{wd} the code computes is read as the project directory.
+(\code{Rscript -e}, \code{perl -e}, \code{node -e}), a path the shell computes (\verb{rm "$f"} in a loop,
+\verb{xargs rm}) or code handed to \code{sh -c} or \code{bash -c} as one word whose spaces are escaped with a
+backslash or written \verb{$IFS} (\verb{sh -c rm\\ -f\\ file}): such a command is level 3, which \code{auto} and
+\code{yolo} run without a question whatever it deletes. The \code{wd} of \code{processx::run()} is read when
+the call, or a name the code assigns, holds it as a string; a \code{wd} the code computes is read as
+the project directory.
 
 In \code{auto} and \code{yolo} mode a model can delete or overwrite files and objects. Use them only in
 projects you can restore (version control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run
