@@ -4812,15 +4812,15 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    `gptr_trust`, `gptr_init`, `gptr_env`, `gptr_register`, `gptr_reload`, `gptr_on`, `gptr_mcp_add`,
    `gptr_mcp_remove`, `gptr_mcp_serve`, `gptr_login`, `gptr_logout`, `gptr_doc`, `gptr_cache` (prune, clear),
    `gptr_scrub` (`dry_run = FALSE`), and `gptr_resume`, `gptr_fork`, `gptr_steer`, `gptr_cancel`, `gptr_rewind`
-   on a session other than the running one; `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` of
-   `GPTR_*`, `*_BASE_URL`, provider key or R startup names (`R_ENVIRON_USER`, `R_PROFILE_USER`, `R_ENVIRON`,
-   `R_PROFILE`) or of a variable that moves the user config directory or the home (`R_USER_CONFIG_DIR`,
-   `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in any letter case, or of a name the classifier cannot
-   read, `readRenviron()`, `dotenv::load_dot_env()` (D-272), `setHook()`, `assignInNamespace()`. These exports
-   also check `run_current()`: called from model code during a run they signal `gptr_error_permission` unless the
-   dispatcher approved exactly that call through an `ask_human` (a one-shot token on the run). `perm_check()`
-   grants the token on any final allow (IC-78); outside yolo only a person's approval or
-   `gptr.unsafe_no_permissions` allows a control call.
+   on a session other than the running one; `options()` with `gptr.*` names, `Sys.setenv()`/`Sys.unsetenv()` and
+   `withr::local_envvar()`/`withr::with_envvar()` of `GPTR_*`, `*_BASE_URL`, provider key or R startup names
+   (`R_ENVIRON_USER`, `R_PROFILE_USER`, `R_ENVIRON`, `R_PROFILE`) or of a variable that moves the user config
+   directory or the home (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in any
+   letter case, or of a name the classifier cannot read, `readRenviron()`, `dotenv::load_dot_env()` (D-272),
+   `setHook()`, `assignInNamespace()`. These exports also check `run_current()`: called from model code during a
+   run they signal `gptr_error_permission` unless the dispatcher approved exactly that call through an
+   `ask_human` (a one-shot token on the run). `perm_check()` grants the token on any final allow (IC-78); outside
+   yolo only a person's approval or `gptr.unsafe_no_permissions` allows a control call.
 4. Every gateway call made while `run_current()` is non-NULL (any route) inherits the running mode (only
    tightened) and filters; model code continuing an idle user session runs it in the stricter of the two modes.
 5. The parent re-classifies the raw input carried in every forwarded worker `permission_request`; the worker

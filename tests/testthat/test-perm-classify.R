@@ -633,6 +633,29 @@ test_that("peter$knit()'s python engine is read as peter$py() is (FIX-36 review 
   expect_identical(knit$risk(list(engine = "Python", code = "x = 1"), NULL)$level, 3L)
 })
 
+test_that("withr's variable setters are read as Sys.setenv() is (FIX-36 review round 2)", {
+  root = local_project()
+  control = c(
+    "withr::local_envvar(R_USER_CONFIG_DIR = 'elsewhere')", "local_envvar(HOME = 'elsewhere')",
+    "withr::local_envvar(c(xdg_config_home = 'elsewhere'))",
+    "withr::local_envvar(.new = list(APPDATA = 'elsewhere'), action = 'replace')",
+    "withr::local_envvar(TZ = 'UTC', HOME = 'elsewhere', .local_envir = new.env())",
+    "withr::with_envvar(c(HOME = 'elsewhere'), f())",
+    "withr::with_envvar(code = f(), new = list(OPENAI_BASE_URL = 'http://x.test'))",
+    # a name the classifier cannot read
+    "withr::local_envvar(vars)", "withr::with_envvar(vars, f())",
+    "withr::local_envvar(c(vars, TZ = 'UTC'))", "do.call(withr::local_envvar, vars)")
+  for (code in control) {
+    r = gptr_risk(code, root = root)
+    expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
+  }
+  for (code in c("withr::local_envvar(TZ = 'UTC')", "withr::local_envvar(c(LANG = 'C'))",
+                 "withr::with_envvar(c(TZ = 'UTC', MY_VAR = x), f())",
+                 "withr::local_envvar(.new = list(java_home = '/opt/java'), action = 'prefix')")) {
+    expect_identical(gptr_risk(code, root = root)$level, 2L, label = code)
+  }
+})
+
 test_that("a delete keeps file_delete, a control target shows in path_class (IC-78)", {
   root = local_project()
   r = gptr_risk("unlink('.git', recursive = TRUE)", root = root)

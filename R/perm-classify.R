@@ -2577,12 +2577,23 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
         " (leaves the project)"), name, 4L, "session", v[1L] %||% NA_character_, pc)
       return(TRUE)
     }
-    if (name %in% c("Sys.setenv", "Sys.unsetenv")) {
-      vals = lapply(w[!nzchar(nms)], risk_fold, kn(ctx))
-      keys = c(nms[nzchar(nms)], unlist(vals))
+    if (name %in% c("Sys.setenv", "Sys.unsetenv", "local_envvar", "with_envvar")) {
+      if (startsWith(name, "Sys.")) {
+        vals = lapply(w[!nzchar(nms)], risk_fold, kn(ctx))
+        keys = c(nms[nzchar(nms)], unlist(vals))
+        unread = any(vapply(vals, is.null, logical(1)))
+      } else {
+        # withr's: the names of `...` and of `.new` (`new`) written out as c() or list(), which
+        # may otherwise hold any name
+        new = risk_arg(w, if (name == "with_envvar") "new" else ".new", 1L)
+        lst = is.call(new) && isTRUE(risk_head(new[[1L]])$name %in% c("c", "list"))
+        el = if (lst) (names(new) %||% rep("", length(new)))[-1L]
+        keys = c(setdiff(nms, c("", ".new", "new", "code", "action", ".local_envir")), el)
+        unread = !is.null(new) && (!lst || !all(nzchar(el)))
+      }
       if (any(risk_control_name(keys))) {
         add(ctx, label, name, 4L, "control")
-      } else if (any(vapply(vals, is.null, logical(1)))) {
+      } else if (unread) {
         # a name the classifier cannot read may be one of them (D-272)
         add(ctx, paste0(label, " (names the code computes)"), name, 4L, "control")
       } else {
