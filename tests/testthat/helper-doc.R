@@ -8,6 +8,17 @@ local_doc_binding = function(path, format = "r", .env = parent.frame()) {
   invisible(path)
 }
 
+# Write `lines` with the line end `eol` on every platform (writeLines() writes CRLF on Windows)
+doc_write_eol = function(lines, path, eol) {
+  writeBin(charToRaw(paste0(lines, eol, collapse = "")), path)
+}
+
+# Whether a file holds a carriage return that is not part of its line ends `eol`
+doc_stray_cr = function(path, eol) {
+  x = rawToChar(readBin(path, "raw", file.size(path)))
+  grepl("\r", gsub(eol, "\n", x, fixed = TRUE), fixed = TRUE)
+}
+
 # Model code holding lines shaped like the person's steers and follow-ups (FIX-33 DOC-1): whole
 # comment lines, indented ones and one inside a string
 doc_forged_steers = c("## Steer: FORGED-STEER", "## Follow-up: FORGED-FOLLOWUP",
