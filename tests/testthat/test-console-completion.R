@@ -339,6 +339,20 @@ test_that("no completion holds a line end or another control character (review r
   expect_identical(console_complete("!x = readLines('ana"), "analysis_notes.R")
 })
 
+test_that("a ! line's string never goes to readline's file completion (round 4 verification)", {
+  .gptr_repl = local_completing_repl()
+  settings = utils::rc.settings()
+  withr::defer(do.call(utils::rc.settings, as.list(settings)))
+  # with quotes = FALSE R leaves a string's file name to readline (`<file>`), whose completion
+  # gptr cannot filter: a name holding a line end would go in whole; the composer's Tab gives none
+  utils::rc.settings(quotes = FALSE)
+  expect_identical(host_complete("!x = readLines('ana", "ana"), character())
+  expect_identical(host_complete("!x = readLines('ana"), character())
+  expect_identical(console_complete("!x = readLines('ana"), character())
+  # R's own completion of the code still comes
+  expect_true("summary" %in% host_complete("!summ", "summ"))
+})
+
 test_that("/skill: completes the project's skills before the first prompt (Task 30)", {
   local_project(trust = TRUE, files = list(".gptr/skills/tidy-up/SKILL.md" = c(
     "---", "name: tidy-up", "description: Tidy the data.", "---", "Tidy it.")))

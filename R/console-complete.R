@@ -86,7 +86,9 @@ console_complete = function(line, end = nchar(line)) {
 }
 
 #' The custom completer R's completion calls (`custom.completer`, IC-81): it sets `fileName`
-#' FALSE first, as a completion environment without it aborts the readline() call, then gives
+#' FALSE first, as a completion environment without it aborts the readline() call, and again after
+#' console_complete(), so a string on a ! line never goes to readline's own file-name completion
+#' (`rc.settings(quotes = FALSE)`), which would offer a name holding a line end; it gives
 #' console_complete() of the line before the cursor as completions of R's token (readline's word,
 #' or utils' guess in RStudio and Windows), with the caller's completer `prev` (NULL when none) as
 #' the custom one meanwhile, so R's completion of a ! line calls it. RStudio asks with `isConsole`
@@ -115,6 +117,9 @@ console_completer = function(prev, prompt = NULL) {
     if (isFALSE(console)) return(prev(env))
     word = console_trigger(line) %||% ""
     full = console_complete(line)
+    # and again: R's completion of a ! line's string leaves it to readline's file-name completion
+    # under rc.settings(quotes = FALSE), which no filter of gptr's reaches
+    env$fileName = FALSE
     if (!is.null(prompt) && length(full) > 1L) {
       pre = full[[1L]]
       for (x in full[-1L]) while (!startsWith(x, pre)) pre = substr(pre, 1L, nchar(pre) - 1L)
