@@ -105,8 +105,8 @@ ui_request_lines = function(request) {
 #' The change a request with a path and no code makes, as escaped diff rows from its input alone
 #' (the file is never read): each edit's oldText as `-` rows and newText as `+` rows (also given at
 #' the input's top level), `@@` between edits; a patch envelope (`patch`, or carried in `edits`) as
-#' its own lines; a write's content as `+` rows; another tool's other fields as JSON; character()
-#' for any other shape
+#' its own lines; a write's content as `+` rows; another tool's other fields as redacted JSON (a
+#' script's `env` may hand a child a secret); character() for any other shape
 #' @noRd
 ui_request_change = function(request) {
   input = request$input
@@ -138,7 +138,7 @@ ui_request_change = function(request) {
          {
            rest = input[setdiff(names(input), "path")]
            if (!length(rest)) return(character())
-           console_lines(tryCatch(json_encode(rest), error = function(e) ""))
+           console_lines(redact(tryCatch(json_encode(rest), error = function(e) ""), "context"))
          })
 }
 

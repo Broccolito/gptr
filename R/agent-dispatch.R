@@ -778,7 +778,9 @@ perm_request_record = function(call, run, out, risk, tier) {
 }
 
 #' The lines to show for a request: the code (at most 20 lines), a path, a command (a nested
-#' peter$sh() or peter$bg()) followed by its other inputs as JSON, or the input as JSON
+#' peter$sh() or peter$bg()) followed by its other inputs as JSON, or the input as JSON; a command
+#' and JSON are redacted, as a nested call's are values the code computed, such as a secret
+#' handed to a child through `env`
 #' @noRd
 perm_summary = function(call) {
   input = if (is.list(call$input)) call$input else list()
@@ -791,13 +793,13 @@ perm_summary = function(call) {
   path = input[["path"]]
   if (is.character(path)) return(paste0("path: ", path))
   json = function(x) {
-    txt = tryCatch(json_encode(x), error = function(e) "(input not shown)")
+    txt = redact(tryCatch(json_encode(x), error = function(e) "(input not shown)"), "context")
     if (nchar(txt) > 200L) paste0(substr(txt, 1L, 200L), "...") else txt
   }
   cmd = unlist(input[["cmd"]])
   if (is.character(cmd) && length(cmd)) {
     rest = input[names(input) != "cmd"]
-    return(paste(c(cmd, if (length(rest)) json(rest)), collapse = " "))
+    return(paste(c(redact(cmd, "context"), if (length(rest)) json(rest)), collapse = " "))
   }
   json(call$input)
 }
