@@ -1856,6 +1856,8 @@ risk_env_funs = c(environment = "fun", topenv = "envir", fn_env = "fn", get_env 
 risk_code_args = list(
   system = c("command", "1", "sh"), shell = c("cmd", "1", "sh"), pipe = c("description", "1", "sh"),
   system2 = c("command", "1", "sh"), run = c("command", "1", "argv"), fread = c("cmd", "0", "sh"),
+  exec_wait = c("cmd", "1", "argv"), exec_internal = c("cmd", "1", "argv"),
+  exec_background = c("cmd", "1", "argv"),
   dbGetQuery = c("statement", "2", "sql"), dbSendQuery = c("statement", "2", "sql"),
   dbExecute = c("statement", "2", "sql"), dbSendStatement = c("statement", "2", "sql")
 )
@@ -2539,7 +2541,9 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       return(TRUE)
     }
     code = risk_code_args[[name]]
-    if (!is.null(code) && (name != "run" || row$package == "processx")) {
+    # an argv runner of processx (also as callr::run()) or sys: a command and its `args`
+    runner = identical(code[3L], "argv")
+    if (!is.null(code) && (!runner || row$package %in% c("processx", "callr", "sys"))) {
       if (row$category == "process") add_tg("process", name)
       x = risk_arg(a, code[1L], as.integer(code[2L]))
       if (is.null(x) && name == "fread") {
@@ -2549,7 +2553,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       }
       if (is.null(x)) return(FALSE)
       x = risk_fold(x)
-      more = if (name %in% c("system2", "run")) risk_arg(a, "args", 2L)
+      more = if (name == "system2" || runner) risk_arg(a, "args", 2L)
       argv = if (!is.null(more)) risk_fold(more)
       # Unix system2() pastes env, unquoted, before the command: it is shell code too
       env = if (name == "system2") risk_arg(a, "env")
@@ -2560,7 +2564,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       }
       # processx::run() runs its command in `wd`, read as peter$sh()'s in each directory a name
       # may hold; one the code computes is read as the project
-      wds = if (name == "run") risk_fold(risk_arg(a, "wd"), kn(ctx))
+      wds = if (runner) risk_fold(risk_arg(a, "wd"), kn(ctx))
       for (wd in if (length(wds)) as.list(wds) else list(NULL)) {
         f = switch(code[3L], sql = risk_sql(paste(x, collapse = "\n"), root),
                    argv = risk_command(cmd_in_wd(c(x, argv), wd), root),
