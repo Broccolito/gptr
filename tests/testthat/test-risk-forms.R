@@ -210,6 +210,26 @@ test_that("getwd() and setwd()'s value are the working directory (review round 5
   expect_identical(lv("owd = setwd(file.path(getwd(), 'x')); setwd(owd)"), 4L)
 })
 
+test_that("a getwd() or setwd() the code or the session binds is one the code computes (merge)", {
+  root = local_project()
+  dir.create(file.path(root, "data"))
+  lv = function(code, envir = NULL) gptr_risk(code, envir = envir, root = root)$level
+  for (code in c("getwd = function() '~'; setwd(getwd())",
+                 "getwd = function() '~'; owd = getwd(); setwd('data'); setwd(owd)",
+                 "getwd = function() '~'; setwd(file.path(getwd(), 'data'))",
+                 "setwd = function(d) '~'; owd = setwd('x'); base::setwd(owd)")) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  e = new.env()
+  e$getwd = function() "~"
+  expect_identical(lv("owd = getwd(); setwd('data'); setwd(owd)", e), 4L)
+  # base's, and a name bound to a value that is no function, which R passes over
+  for (code in c("setwd(getwd())", "owd = getwd(); setwd('data'); setwd(owd)",
+                 "getwd = 1; setwd(getwd())")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+})
+
 test_that("auto and yolo run the setwd() save-and-restore idiom unasked (review round 5)", {
   skip_on_cran()
   root = local_project()
