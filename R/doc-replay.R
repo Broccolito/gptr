@@ -1073,24 +1073,24 @@ doc_coach_block_service = function(site, harness, record) {
 }
 
 #' The definition a console transcript gives a harness the first time it is coached or called (08
-#' section 3.6): `h_<id> = gptr_tailor(peter, <fixed arguments>, coaching = list(...))` through
-#' doc_r_code(), its text redacted with the persist profile; fixed arguments that are not plain
-#' data (functions) are named by a flag line instead. list(head, define), NULL when the coaching
-#' is not plain data.
+#' section 3.6): `h_<id> = gptr_tailor(peter, <fixed arguments>, rules = list(...),
+#' coaching = list(...))` through doc_r_code(), its text redacted with the persist profile; fixed
+#' arguments that are not plain data (functions) are named by a flag line instead. list(head,
+#' define), NULL when the person's rules or the coaching are not plain data.
 #' @noRd
 doc_harness_def = function(spec) {
   head = paste0("h_", gsub("[^0-9A-Za-z]", "", spec$id %||% ""))
   args = lapply(as.list(spec$args), doc_redact_text)
   plain = !vapply(args, function(a) is.null(doc_r_code(a)), NA)
-  coaching = if (!is.null(spec$coaching)) doc_r_code(doc_redact_text(spec$coaching))
-  if (!is.null(spec$coaching) && is.null(coaching)) return(NULL)
+  data = Filter(Negate(is.null), list(rules = spec$rules, coaching = spec$coaching))
+  code = lapply(data, function(x) doc_r_code(doc_redact_text(x)))
+  if (any(vapply(code, is.null, NA))) return(NULL)
   flag = if (!all(plain)) {
     paste0("# gptr: ", head, " needs fixed arguments that are not recorded: ",
            paste(names(args)[!plain], collapse = ", "))
   }
-  items = c("peter", doc_r_items(args[plain]), if (!is.null(coaching)) {
-    paste0("coaching = ", coaching)
-  })
+  items = c("peter", doc_r_items(args[plain]),
+            if (length(code)) paste0(names(code), " = ", unlist(code)))
   list(head = head, define = c(flag, paste0(head, " = gptr_tailor(",
                                             paste(items, collapse = ", "), ")")))
 }

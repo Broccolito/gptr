@@ -172,7 +172,8 @@ test_that("a continuation loads the coaching factory once per session (gptr_key)
   fake = local_fake_provider(list("one", "two"))
   h = gptr_tailor(peter, coaching = list(note = "Check the units first."))
   key = attr(harness_factory(harness_spec(h)), "gptr_key")
-  expect_identical(key, paste0("gptr_harness:", coaching_hash(harness_spec(h)$coaching)))
+  expect_identical(key, paste0("gptr_harness:", coaching_hash(harness_spec(h)$coaching), ":",
+                               coaching_hash(list(rules = NULL))))
   expect_null(harness_factory(harness_spec(gptr_tailor(peter))))
   s = h("a", model = fake, envir = new.env())
   s |> h("b")
@@ -324,9 +325,6 @@ test_that("coaching_validate() refuses every invalid part by name (08 3.2)", {
     expect_identical(cnd$part, names(bad)[i], label = paste("case", i))
     expect_match(conditionMessage(cnd), names(bad)[i], fixed = TRUE, label = paste("case", i))
   }
-  later = list(never = list(list(rule = "fn:na.omit", why = "keep rows")))
-  expect_error(coaching_validate(list(rules = later)), "later phase", class = "gptr_error_coaching")
-  expect_error(gptr_tailor(peter, rules = later), "later phase", class = "gptr_error_coaching")
   # a surface limits which parts may differ from a base
   base = list(note = "a", skills = list(tips_skill))
   expect_identical(coaching_validate(list(note = "b", skills = list(tips_skill)), "note",
@@ -334,8 +332,12 @@ test_that("coaching_validate() refuses every invalid part by name (08 3.2)", {
   cnd = expect_error(coaching_validate(list(note = "b"), "note", base),
                      class = "gptr_error_coaching")
   expect_identical(cnd$part, "skills")
-  expect_error(coaching_validate(base, c("note", "rules"), base), "later phase",
-               class = "gptr_error_coaching")
+  rules = list(never = list(list(rule = "r(fn:stepAIC)", why = "No stepwise selection.")))
+  expect_identical(coaching_validate(c(base, list(rules = rules)), c("note", "rules"),
+                                     base)$rules, c(rules, list(require = list())))
+  cnd = expect_error(coaching_validate(c(base, list(rules = rules)), "note", base),
+                     class = "gptr_error_coaching")
+  expect_identical(cnd$part, "rules")
   expect_error(coaching_validate(base, "budget", base), class = "gptr_error_coaching")
 })
 
@@ -454,11 +456,14 @@ test_that("print() shows the fixed arguments, the coaching sizes and the record"
     paste0("<gptr_harness ", id, "> built on peter (gptr ", utils::packageVersion("gptr"), ")"),
     paste0("fixed: mode = \"auto\", extensions = list(<function>, \"plugin:x\"), ",
            ".opts = list(max_turns = 3L)"),
-    "coaching: note 3 characters, 1 skill(s), review 2 round(s)",
+    "your rules: none",
+    "coaching: note 3 characters, 1 skill(s), review 2 round(s), rules none",
     "record: none"
   ))
-  expect_identical(capture.output(print(gptr_tailor(peter)))[2:3],
-                   c("fixed: none", "coaching: note 0 characters, 0 skill(s), review none"))
+  rules = list(never = list(list(rule = "r(fn:stepAIC)", why = "No stepwise selection.")))
+  expect_identical(capture.output(print(gptr_tailor(peter, rules = rules)))[2:4],
+                   c("fixed: none", "your rules: 1 never, 0 require",
+                     "coaching: note 0 characters, 0 skill(s), review none, rules none"))
 })
 
 test_that("gptr_tailor() is refused from model code during a run (S12, IC-53)", {
@@ -482,4 +487,302 @@ test_that("gptr_tailor() and gptr_coach() are level 4 control rows (08 3.1)", {
     expect_identical(r$level, 4L, label = f)
     expect_true("control" %in% r$categories, label = f)
   }
+})
+
+# ---------------------------------------------------------- rules (plan P29 T10; 08 1.8, 3.2)
+
+# The text of a session's last tool result
+last_result = function(s) {
+  res = Filter(function(m) identical(m$role, "tool_result"), s$messages)
+  msg_text(res[[length(res)]])
+}
+
+# The ids a session recorded as unmet (its gptr.unmet entries)
+unmet_ids = function(s) {
+  as.character(unlist(lapply(session_data(s)$entries, function(e) {
+    if (identical(e$custom_type, "gptr.unmet")) e$data$ids
+  })))
+}
+
+never_of = function(rule, why = "Not here.") list(never = list(list(rule = rule, why = why)))
+
+need_of = function(...) {
+  list(require = list(utils::modifyList(list(id = "a-need", any = "r(fn:set.seed)",
+                                             text = "Set a seed."), list(...))))
+}
+
+test_that("the nine rules of 08 1.8 match or miss as stated, with the three widenings", {
+  local_gw()
+  # helpers the person defined earlier, as in a workspace
+  e = new.env(parent = globalenv())
+  evalq({
+    to_raw = function(d) write.csv(d, "data/raw/z.csv")
+    save_it = function(d) saveRDS(d, "out.rds")
+    check_survey = function(d) stopifnot(nrow(d) > 0L)
+  }, e)
+  r_call = function(code) list(name = "r", input = list(code = code), risk = gptr_risk(code, e))
+  never = list(
+    "r(category:install)" = c("install.packages('MASS')" = TRUE,
+                              "system('R CMD INSTALL p.tar.gz')" = TRUE,
+                              "peter$sh('R CMD INSTALL .')" = TRUE, "library(MASS)" = FALSE),
+    "write(data/raw/**)" = c("write.csv(d, 'data/raw/a.csv')" = TRUE,
+                             "peter$write('data/raw/a.csv', 'x')" = TRUE,
+                             "system('cp a.csv data/raw/b.csv')" = TRUE, "to_raw(d)" = TRUE,
+                             "write.csv(d, 'data/clean/a.csv')" = FALSE,
+                             "x = read.csv('data/raw/a.csv')" = FALSE),
+    "r(category:network)" = c("x = read.csv('https://example.org/a.csv')" = TRUE,
+                              "download.file('https://example.org/a.csv', 'a.csv')" = TRUE,
+                              "x = read.csv('a.csv')" = FALSE),
+    "r(fn:stepAIC)" = c("fit = MASS::stepAIC(m)" = TRUE, "fit = stepAIC(m)" = TRUE,
+                        "a = AIC(m)" = FALSE))
+  for (rule in names(never)) {
+    for (code in names(never[[rule]])) {
+      expect_identical(coaching_hit(rule_parse(rule), r_call(code)), never[[rule]][[code]],
+                       label = paste(rule, code))
+    }
+  }
+  write = function(path) list(name = "write", input = list(path = path, content = "x"))
+  expect_true(coaching_hit(rule_parse("write(data/raw/**)"), write("data/raw/a.csv")))
+  expect_false(coaching_hit(rule_parse("write(data/raw/**)"), write("data/a.csv")))
+  need = list(
+    list(any = "r(fn:write.csv,saveRDS)", hits = c("write.csv(d, 'a.csv')" = TRUE,
+                                                   "saveRDS(d, 'a.rds')" = TRUE,
+                                                   "save_it(d)" = TRUE,
+                                                   "write.table(d, 'a.txt')" = FALSE)),
+    list(any = "r(fn:set.seed)", hits = c("set.seed(1)" = TRUE, "x = rnorm(1)" = FALSE)),
+    list(any = "r(fn:check_survey)", hits = c("check_survey(d)" = TRUE, "summary(d)" = FALSE)),
+    list(any = list("r(fn:read.csv)", "r(fn:readLines)"), contains = "codebook",
+         hits = c("x = read.csv('codebook.csv')" = TRUE, "x = readLines('doc/codebook.txt')" = TRUE,
+                  "x = read.csv('data.csv')" = FALSE)))
+  for (q in need) {
+    rules = coaching_rules(list(require = list(list(id = "q", any = q$any,
+                                                    contains = q$contains, text = "Do it."))))
+    for (code in names(q$hits)) {
+      expect_identical(harness_require_hit(rules$require[[1L]], r_call(code)), q$hits[[code]],
+                       label = code)
+    }
+  }
+})
+
+test_that("a never rule denies in auto and yolo, in a nested shell call and a sub-agent (S3)", {
+  local_gw()
+  why = "denied by the coaching rule r(category:install): Use the installed packages."
+  h = gptr_tailor(peter, coaching = list(rules = never_of("r(category:install)",
+                                                          "Use the installed packages.")))
+  for (mode in c("auto", "yolo")) {
+    fake = local_fake_provider(list(fake_tool("r", code = "install.packages('nothing')"), "Done."),
+                               name = paste0("never-", mode))
+    s = h("Go.", model = fake, mode = mode, envir = new.env())
+    expect_match(last_result(s), why, fixed = TRUE, label = mode)
+  }
+  nested = "cmd = paste('R CMD', 'INSTALL x.tar.gz'); peter$sh(cmd)"
+  fake = local_fake_provider(list(fake_tool("r", code = nested), "Done."), name = "never-sh")
+  s = h("Go.", model = fake, mode = "yolo", envir = new.env())
+  expect_match(last_result(s), why, fixed = TRUE)
+  local_fake_provider(list(fake_tool("r", code = "install.packages('nothing')"), "Inner."),
+                      name = "never-inner")
+  nest = "s2 = peter('Go.', model = 'never-inner')"
+  outer = local_fake_provider(list(fake_tool("r", code = nest), "Done."), name = "never-outer")
+  e = new.env()
+  h("Go.", model = outer, mode = "auto", envir = e)
+  expect_match(last_result(e$s2), why, fixed = TRUE)
+})
+
+test_that("a requirement is reminded at most twice, then recorded as unmet (08 3.2)", {
+  local_gw()
+  local_gptr_options(quiet = FALSE)
+  last = function(r) msg_text(utils::tail(r$messages, 1L)[[1L]])
+  rules = need_of(id = "save-results", any = "r(fn:write.csv,saveRDS)",
+                  text = "Save the table with write.csv().")
+  h = gptr_tailor(peter, coaching = list(rules = rules))
+  fake = local_fake_provider(list("one", "two", "three", "four"))
+  expect_message({
+    s = h("a", model = fake, envir = new.env())
+  }, "This run finished without: save-results", fixed = TRUE, class = "gptr_message_notice")
+  req = fake_requests(fake)
+  expect_length(req, 3L)
+  expect_match(last(req[[2L]]), "Save the table with write.csv().", fixed = TRUE)
+  expect_match(last(req[[3L]]), "Save the table with write.csv().", fixed = TRUE)
+  expect_identical(unmet_ids(s), "save-results")
+  # never at the turn limit, and the run is still recorded as unmet
+  fake2 = local_fake_provider(list("one", "two"), name = "fake2")
+  s2 = suppressMessages(h("a", model = fake2, envir = new.env(), .opts = list(max_turns = 1L)))
+  expect_length(fake_requests(fake2), 1L)
+  expect_length(session_data(s2)$queue$follow_up, 0L)
+  expect_identical(unmet_ids(s2), "save-results")
+})
+
+test_that("the review and the requirements share one follow-up and the budget of two", {
+  local_gw()
+  local_gptr_options(quiet = TRUE)
+  last = function(r) msg_text(utils::tail(r$messages, 1L)[[1L]])
+  rules = need_of(text = "Call set.seed() first.")
+  h = gptr_tailor(peter, coaching = list(rules = rules,
+                                         review = list(text = "Look again.", rounds = 1L)))
+  fake = local_fake_provider(list("one", "two", "three", "four"))
+  h("a", model = fake, envir = new.env())
+  req = fake_requests(fake)
+  expect_length(req, 3L)
+  expect_match(last(req[[2L]]), "Call set.seed() first.\n\nLook again.", fixed = TRUE)
+  expect_match(last(req[[3L]]), "first.$")
+  # met: only the review, as many rounds as it has
+  h2 = gptr_tailor(peter, coaching = list(rules = rules,
+                                          review = list(text = "Look again.", rounds = 2L)))
+  fake2 = local_fake_provider(list(fake_tool("r", code = "set.seed(1)"), "one", "two", "three",
+                                   "four"), name = "fake2")
+  s = h2("a", model = fake2, envir = new.env(), mode = "auto")
+  req = fake_requests(fake2)
+  expect_length(req, 4L)
+  expect_match(last(req[[3L]]), "): Look again.", fixed = TRUE)
+  expect_match(last(req[[4L]]), "): Look again.", fixed = TRUE)
+  expect_identical(unmet_ids(s), character())
+})
+
+test_that("a requirement is met by a helper from an earlier turn, a plot or a new file", {
+  local_gw()
+  local_gptr_options(quiet = TRUE)
+  writeLines("var,meaning", "codebook.csv")
+  codebook = need_of(any = "r(fn:read.csv,readLines)", contains = "codebook",
+                     text = "Read the codebook.")
+  h = gptr_tailor(peter, mode = "auto", coaching = list(rules = codebook))
+  fake = local_fake_provider(list(fake_tool("r", code = "rd = function(f) read.csv(f)"),
+                                  fake_tool("r", code = "cb = rd('codebook.csv')"), "Done.",
+                                  "again"))
+  # a workspace outside gptr's namespace, as the person's own is
+  s = h("a", model = fake, envir = new.env(parent = globalenv()))
+  expect_length(fake_requests(fake), 3L)
+  expect_identical(unmet_ids(s), character())
+  # a call that failed meets nothing
+  fake2 = local_fake_provider(list(fake_tool("r", code = "x = read.csv('codebook-none.csv')"),
+                                   "Done.", "Done.", "Done."), name = "fake2")
+  expect_identical(unmet_ids(h("a", model = fake2, envir = new.env())), "a-need")
+  # a plot
+  plot_peter = gptr_tailor(peter, mode = "auto",
+                           coaching = list(rules = need_of(any = NULL, made = "plot")))
+  fake3 = local_fake_provider(list(fake_tool("r", code = "plot(1:3)"), "Done.", "again"),
+                              name = "fake3")
+  expect_identical(unmet_ids(plot_peter("a", model = fake3, envir = new.env())), character())
+  # made = "file:...": a file changed during the run, not an older one
+  dir.create("results")
+  writeLines("old", "results/old.csv")
+  Sys.setFileTime("results/old.csv", Sys.time() - 3600)
+  file_peter = gptr_tailor(peter, mode = "auto", coaching = list(
+    rules = need_of(any = NULL, made = "file:results/*.csv", text = "Write results/x.csv.")))
+  fake4 = local_fake_provider(list(fake_tool("r", code = "x = 1"), "Done.", "Done.", "Done."),
+                              name = "fake4")
+  expect_identical(unmet_ids(file_peter("a", model = fake4, envir = new.env())), "a-need")
+  fake5 = local_fake_provider(list(fake_tool("r", code = "write.csv(mtcars, 'results/x.csv')"),
+                                   "Done.", "again"), name = "fake5")
+  expect_identical(unmet_ids(file_peter("a", model = fake5, envir = new.env())), character())
+  expect_length(fake_requests(fake5), 2L)
+})
+
+test_that("a refusal stops the reminders, but a coaching denial does not (08 3.2)", {
+  local_gw()
+  local_gptr_options(quiet = TRUE)
+  review = list(text = "Look again.", rounds = 1L)
+  rules = never_of("r(fn:stepAIC)", "Choose variables by hand.")
+  # a coaching denial: the review still follows
+  h = gptr_tailor(peter, mode = "auto", coaching = list(rules = rules, review = review))
+  fake = local_fake_provider(list(fake_tool("r", code = "fit = stepAIC(m)"), "Done.", "Checked.",
+                                  "more"))
+  s = h("a", model = fake, envir = new.env())
+  expect_match(msg_text(s$messages[[3L]]), "denied by the coaching rule", fixed = TRUE)
+  expect_length(fake_requests(fake), 3L)
+  # your own rule's denial: no review
+  mine = gptr_tailor(peter, mode = "auto", rules = rules, coaching = list(review = review))
+  fake2 = local_fake_provider(list(fake_tool("r", code = "fit = stepAIC(m)"), "Done.", "more"),
+                              name = "fake2")
+  s2 = mine("a", model = fake2, envir = new.env())
+  expect_match(last_result(s2), "denied by your rule r(fn:stepAIC): Choose variables by hand.",
+               fixed = TRUE)
+  expect_length(fake_requests(fake2), 2L)
+})
+
+test_that("your own rules stay in your half: enforced as yours, kept by every coaching", {
+  local_gw()
+  mine = list(never = never_of("r(fn:stepAIC)", "Choose variables by hand.")$never,
+              require = need_of()$require)
+  h = gptr_tailor(peter, mode = "auto", rules = mine)
+  spec = harness_spec(h)
+  expect_identical(spec$rules, mine)
+  expect_null(spec$coaching$rules)
+  # coaching, written by hand or by a coach, never reaches your rules
+  coached = gptr_tailor(h, coaching = list(rules = never_of("r(fn:lm)")))
+  expect_identical(harness_spec(coached)$rules, mine)
+  expect_identical(harness_spec(coached)$coaching$rules,
+                   c(never_of("r(fn:lm)"), list(require = list())))
+  expect_identical(harness_spec(gptr_tailor(h, rules = list()))$rules, NULL)
+  # the factory key covers your rules as well as the coaching
+  key = function(x) attr(harness_factory(harness_spec(x)), "gptr_key")
+  expect_false(identical(key(h), key(gptr_tailor(h, rules = never_of("r(fn:glm)")))))
+  expect_error(gptr_tailor(peter, rules = list(allow = list("r(level<=1)"))), "Your rules",
+               class = "gptr_error_coaching")
+  # a console transcript defines the harness with your rules, and the definition rebuilds them
+  def = doc_harness_def(spec)
+  expect_match(def$define, "rules = list(never = list(list(rule = \"r(fn:stepAIC)\"", fixed = TRUE)
+  back = eval(str2lang(sub("^h_[0-9A-Za-z]+ = ", "", def$define)))
+  expect_identical(harness_spec(back)$rules, mine)
+})
+
+test_that("coaching rules are checked field by field; inert and risky patterns are refused", {
+  local_gw()
+  ok = list(never = never_of("r(category:install)")$never,
+            require = list(list(id = "save-results", any = "r(fn:write.csv,saveRDS)",
+                                text = "Save the table."),
+                           list(id = "codebook", any = list("r(fn:read.csv)", "r(fn:readLines)"),
+                                contains = "codebook", text = "Read it."),
+                           list(id = "a-plot", made = "plot", text = "Plot it."),
+                           list(id = "a-file", made = "file:results/**", text = "Save it.")))
+  got = coaching_validate(list(rules = ok))$rules
+  expect_identical(got$require[[2L]]$any, c("r(fn:read.csv)", "r(fn:readLines)"))
+  ok$require[[2L]]$any = c("r(fn:read.csv)", "r(fn:readLines)")
+  expect_identical(got, ok)
+  expect_null(coaching_validate(list(rules = list(never = list())))$rules)
+  for (fine in c("r(sh:R CMD INSTALL*)", "r(sql:drop)", "write(data/raw/**)", "*(~/.ssh/**)",
+                 "r(fn:peter$sh)", "r(category:unlisted)")) {
+    expect_identical(coaching_rules(never_of(fine))$never[[1L]]$rule, fine, label = fine)
+  }
+  never = function(...) {
+    list(never = list(utils::modifyList(never_of("r(fn:stepAIC)")$never[[1L]], list(...))))
+  }
+  five = lapply(1:5, function(i) list(id = paste0("n", i), any = "r(fn:set.seed)", text = "x"))
+  bad = list(
+    list(allow = list("r(level<=1)")), list(ask = list()), "r(fn:x)",
+    list(never = list(list(rule = "r(fn:x)"))),
+    list(never = rep(never_of("r(fn:x)")$never, 9L)),
+    never(rule = "r(fn:MASS::stepAIC)"), never(rule = "r(category:wizardry)"),
+    never(rule = "r(level<=1)"), never(rule = "r(secret:API_KEY)"), never(rule = "r"),
+    never(rule = "*"), never(rule = "write"), never(rule = "r(*)"), never(rule = "not a rule("),
+    never(rule = paste0("r(fn:", strrep("a", 200L), ")")), never(rule = 1),
+    never(why = strrep("w", 301L)), never(why = "a\u202eb"), never(why = "<tools>"),
+    need_of(any = "r(fn:install.packages)"), need_of(any = "r(fn:system)"),
+    need_of(any = "r(fn:peter$sh)"), need_of(any = "r(fn:dbGetQuery)"),
+    need_of(any = "r(category:file_write)"), need_of(any = "r(sh:ls *)"),
+    need_of(any = "r(sql:select)"), need_of(any = "write(results/**)"),
+    need_of(any = list("r(fn:set.seed)", 1)), need_of(any = character()),
+    need_of(any = rep("r(fn:set.seed)", 20L)),
+    need_of(id = "Save Results"), need_of(id = strrep("a", 201L)), need_of(made = "plot"),
+    need_of(any = NULL), need_of(any = NULL, made = "table"),
+    need_of(any = NULL, made = "file:../x.csv"), need_of(any = NULL, made = "file:~/x.csv"),
+    need_of(any = NULL, made = "file:/etc/x"), need_of(any = NULL, made = "file:"),
+    need_of(contains = strrep("c", 101L)), need_of(text = strrep("t", 501L)),
+    need_of(text = "x\u200by"), need_of(extra = 1),
+    list(require = c(need_of()$require, need_of()$require)), list(require = five))
+  for (i in seq_along(bad)) {
+    cnd = expect_error(coaching_validate(list(rules = bad[[i]])), class = "gptr_error_coaching",
+                       label = paste("case", i))
+    expect_identical(cnd$part, "rules", label = paste("case", i))
+    expect_match(conditionMessage(cnd), "^The coaching's rules ", label = paste("case", i))
+  }
+})
+
+test_that("dir = writes your rules and the coaching's rules", {
+  local_gw()
+  d = file.path(withr::local_tempdir(), "h")
+  gptr_tailor(peter, rules = never_of("r(fn:stepAIC)", "By hand."),
+              coaching = list(rules = need_of(contains = "seed")), dir = d)
+  expect_true("- never `r(fn:stepAIC)`: By hand." %in% readLines(file.path(d, "HARNESS.md")))
+  expect_identical(readLines(file.path(d, "RULES.md")),
+                   "- require a-need (`r(fn:set.seed)`, contains \"seed\"): Set a seed.")
 })
