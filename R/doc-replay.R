@@ -967,7 +967,8 @@ doc_direct_code = function(code) {
 }
 
 #' The header of a direct R line: `# direct R (no model)`, `; <reason>` inside the parentheses (a
-#' status, `uses undone <names>`), then `created=<names>` when it created any
+#' status, `uses undone <names>` with control, bidi and zero-width characters written `<U+XXXX>`),
+#' then `created=<names>` when it created any
 #' @noRd
 doc_direct_header = function(reason = NULL, created = character()) {
   # a name holding a comma would read back as two (doc_created()): it is left out
@@ -1036,7 +1037,7 @@ doc_direct_switch = function(lines) {
     }
     bad = intersect(uses, names(made)[!made])
     on = !length(bad)
-    new = c(doc_direct_header(if (!on) paste("uses undone", paste(bad, collapse = ", ")),
+    new = c(doc_direct_header(if (!on) paste("uses undone", paste(ui_escape(bad), collapse = ", ")),
                               created),
             if (on) raw else ifelse(nzchar(raw), paste0("#~ ", raw), raw))
     if (!identical(new, lines[c(i, seg)])) {
@@ -1067,7 +1068,7 @@ doc_transcript_rescan = function(path, session = NULL) {
   if (!is.list(changed) || !length(changed)) return(invisible(NULL))
   said = vapply(changed, function(ch) {
     if (ch$on) return(paste0("line ", ch$line, " back on"))
-    paste0("line ", ch$line, " off (uses undone ", paste(ch$names, collapse = ", "), ")")
+    paste0("line ", ch$line, " off (uses undone ", paste(ui_escape(ch$names), collapse = ", "), ")")
   }, "")
   gptr_inform(paste0("Direct R in ", doc_rel(path), ": ", paste(said, collapse = ", "), "."),
               "notice")
