@@ -194,3 +194,11 @@ test_that("auto and yolo run the setwd() save-and-restore idiom unasked (review 
   expect_identical(sum(ui$log$method == "permission"), 0L)
   expect_identical(path_norm(getwd()), root)
 })
+
+test_that("the yolo notice names moving the working directory out of the project (round 5)", {
+  local_gptr_options(quiet = FALSE)
+  rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect("message:mode_yolo", ls(the$once)), envir = the$once))
+  expect_message(mode_notice("yolo"), "moving the working directory out of the project",
+                 class = "gptr_message_notice")
+})
