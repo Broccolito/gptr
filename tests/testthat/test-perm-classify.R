@@ -1264,3 +1264,16 @@ test_that("a Windows wd is placed as Windows places it, on every OS (review roun
     expect_identical(level("ls", wd), 1L, label = wd)
   }
 })
+
+test_that("processx::run()'s wd is read as peter$sh()'s (review round 4)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  rm = "processx::run('rm', c('-rf', 'build')"
+  expect_identical(lv(paste0(rm, ", wd = ", deparse(out), ")")), 4L)
+  expect_identical(lv(paste0("processx::run('ls', wd = ", deparse(out), ")")), 1L)
+  # neighbours: in the project, or with no wd or one the code computes, as before
+  for (wd in c("", ", wd = 'sub'", ", wd = '.'", ", wd = d")) {
+    expect_identical(lv(paste0(rm, wd, ")")), 3L, label = wd)
+  }
+})
