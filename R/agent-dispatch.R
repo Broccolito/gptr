@@ -488,14 +488,6 @@ nested_rules = function(call, run, secrets = character()) {
   if (!identical(dec$decision, "allow")) dec
 }
 
-#' The literal `peter$` call a nested sh or bg call (its command, `cmd_in_wd()`'s line in its
-#' `wd`) or script call (its path) is read as
-#' @noRd
-nested_literal = function(name, input) {
-  arg = if (identical(name, "script")) input$path else cmd_in_wd(unlist(input$cmd), input$wd)
-  paste0("peter$", name, "(", deparse1(arg), ")")
-}
-
 #' The id of the next nested call of an outer call: `<outer id>/<k>`, counted past the 20 records
 #' kept in `details$nested`, so that every nested call of a run has its own id
 #' @noRd
