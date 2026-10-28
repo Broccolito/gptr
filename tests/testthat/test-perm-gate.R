@@ -411,6 +411,33 @@ test_that("a peter$sh() command is read as run in its wd (review round 3)", {
   expect_identical(sum(ui$log$method == "permission"), 2L)
 })
 
+test_that("code a shell or Python runs is read in the directory the line moved to (round 4)", {
+  skip_on_cran()
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  writeLines("x", file.path(out, "marker.txt"))
+  sh = registry_get("tool", "sh")
+  level = function(cmd, wd = ".") as.integer(sh$risk(list(cmd = cmd, wd = wd), NULL)$level)
+  cmds = list(c("sh", "-c", "rm -f marker.txt"), "sh -c 'rm -f marker.txt'",
+              "bash -c 'rm -f marker.txt'", "python3 -c 'import os; os.remove(\"marker.txt\")'")
+  for (cmd in cmds) {
+    expect_identical(level(cmd, out), 4L, label = paste(cmd, collapse = " "))
+    expect_identical(level(cmd), 3L, label = paste(cmd, collapse = " "))
+  }
+  line = paste("cd", shQuote(out, "sh"), "&& sh -c 'rm -f marker.txt'")
+  expect_identical(level(line), 4L)
+  expect_identical(gptr_risk(paste0("system(", deparse(line), ")"))$level, 4L)
+  ui = local_scripted_ui(list("n", "n"))
+  for (mode in c("auto", "yolo")) {
+    code = paste0("peter$sh(c('sh', '-c', 'rm -f marker.txt'), wd = ", deparse(out), ")")
+    fake = local_fake_provider(list(fake_tool("r", code = code), "Done."),
+                               name = paste0("shc-", mode))
+    peter("Clean up.", model = fake, mode = mode, envir = new.env())
+  }
+  expect_true(file.exists(file.path(out, "marker.txt")))
+  expect_identical(sum(ui$log$method == "permission"), 2L)
+})
+
 test_that("a question an ask rule raises offers no [a]lways rule (review round 3)", {
   skip_on_cran()
   root = local_project()
