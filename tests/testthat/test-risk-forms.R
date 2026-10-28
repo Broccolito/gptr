@@ -295,7 +295,8 @@ test_that("sys::exec_*()'s std_out and std_err are files it writes, as processx'
   # neighbours: output to R's console or a connection writes no file
   expect_identical(lv("sys::exec_wait('ls', std_out = TRUE)"), lv("processx::run('ls')"))
   expect_identical(lv("sys::exec_wait('ls', std_out = FALSE)"), lv("processx::run('ls')"))
-  # nor does a callback written there, whose code is read as any function's (round 7)
+  # nor does a callback written there, whose code is read as any function's (review round 6
+  # verification)
   for (f in c("function(x) cat(rawToChar(x))", "\\(x) message(rawToChar(x))")) {
     for (code in c(paste0("sys::exec_wait('ls', std_out = ", f, ")"),
                    paste0("sys::exec_background('ls', std_err = ", f, ")"))) {
@@ -343,7 +344,7 @@ test_that("paste(), paste0() and file.path() are folded with their arguments as 
   expect_identical(lv(paste0("unlink(paste0(", deparse(out), ", collapse = '/x'))")), 4L)
   d = paste0("d = 'x'; if (p) d = ", deparse(out), "; ")
   expect_identical(lv(paste0(d, "unlink(paste0(d, collapse = ''))")), lv(paste0(d, "unlink(d)")))
-  # a collapse of literals is only R's value (round 7)
+  # a collapse of literals is only R's value (review round 6 verification)
   for (cmd in c("python3", "R", "bash")) {
     expect_identical(lv(paste0("system(paste(c('", cmd, "', '--version'), collapse = ' '))")),
                      lv(paste0("system('", cmd, " --version')")), label = cmd)
