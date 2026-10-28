@@ -383,9 +383,8 @@ skill_catalog = function(session = NULL, budget = skills_budget()) {
 
 #' Find a registered skill by name: exact, then after `res_norm()` (IC-42)
 #'
-#' Skills of plugins enabled for one session are found through the plugin table: those of
-#' `session`, or of any session when `session` is NULL (the `skill.body` service has no
-#' session argument).
+#' Skills registered for `session` are found too. Skills of plugins enabled for one session are
+#' found through the plugin table: those of `session`, or of any session when `session` is NULL.
 #' @noRd
 skill_find = function(name, session = NULL) {
   sid = ext_session_id(session)
@@ -402,9 +401,13 @@ skill_find = function(name, session = NULL) {
   NULL
 }
 
-#' Does a skill's `SKILL.md` still exist?
+#' Can a found skill be served: it carries its own text, or its `SKILL.md` still exists?
 #' @noRd
-skill_file_ok = function(path) rlang::is_string(path) && file.exists(fs_path(path))
+skill_ok = function(spec) {
+  path = spec[["path"]]
+  !is.null(spec) &&
+    (!is.null(spec[["text"]]) || (rlang::is_string(path) && file.exists(fs_path(path))))
+}
 
 #' Does the registry hold the project skills a sync would register now?
 #'
@@ -424,7 +427,9 @@ skill_project_synced = function() {
 #' The body of a skill (service `skill.body`; contract 7.0)
 #'
 #' Returns `list(text, dir, name)`: the body without frontmatter plus one line naming the
-#' `skill:<name>/<path>` pseudo-paths, the skill directory and the canonical name. Used by
+#' `skill:<name>/<path>` pseudo-paths, the skill directory and the canonical name; a skill that
+#' carries its own `text` returns that text and no directory (08 section 3.2). `session` (a
+#' session or its id) also finds the skills registered for it. Used by
 #' `skills =` preloads and by `read` of `skill:<name>/...` pseudo-paths (P10); it marks the skill
 #' as used for catalog trimming. P08 builds `skills =` preloads before `session_start` syncs, so
 #' a registered skill is served without a sync only while its `SKILL.md` exists and
@@ -437,10 +442,10 @@ skill_project_synced = function() {
 skill_body = function(name, session = NULL) {
   check_string(name, "name")
   spec = skill_find(name, session)
-  if (is.null(spec) || !skill_file_ok(spec[["path"]]) || !skill_project_synced()) {
+  if (!skill_ok(spec) || !skill_project_synced()) {
     skill_sync()
     spec = skill_find(name, session)
-    if (!is.null(spec) && !skill_file_ok(spec[["path"]])) spec = NULL
+    if (!skill_ok(spec)) spec = NULL
   }
   if (is.null(spec)) {
     df = skill_discover()
@@ -466,11 +471,11 @@ skill_body = function(name, session = NULL) {
                "invalid_argument", arg = "skills",
                expected = "a skill name listed by gptr_skills()")
   }
-  fm = frontmatter_read(spec[["path"]])
   res_touch(spec[["name"]])
-  list(text = paste0(fm$body %||% "", "\n\nFiles of this skill: read skill:", spec[["name"]],
-                     "/<path>."),
-       dir = spec[["dir"]], name = spec[["name"]])
+  text = spec[["text"]] %||% paste0(frontmatter_read(spec[["path"]])$body %||% "",
+                                    "\n\nFiles of this skill: read skill:", spec[["name"]],
+                                    "/<path>.")
+  list(text = text, dir = spec[["dir"]], name = spec[["name"]])
 }
 
 #' Text of the `skills` prompt section (T1, order 820): only when `read` is active. A top-level

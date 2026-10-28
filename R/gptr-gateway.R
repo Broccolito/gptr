@@ -605,8 +605,26 @@ gateway_filters_apply = function(call) {
   }
 }
 
-#' Registers the call's specs at rank 0 for the session, loads its extensions and enables named
-#' plugins (IC-69; contract 10.1); gateway_undo() undoes it for a refused call (D-251)
+#' Is `factory` keyed (attribute `gptr_key`, a string) and already loaded for session `sid`? A
+#' continuation passes a harness's factory again (08 section 3.1)
+#' @noRd
+gateway_key_loaded = function(factory, sid) {
+  key = attr(factory, "gptr_key", exact = TRUE)
+  if (!rlang::is_string(key)) return(FALSE)
+  exts = registry_env()$exts
+  for (eid in ls(exts)) {
+    info = get0(eid, envir = exts, inherits = FALSE)
+    if (identical(info$session, sid) &&
+          identical(attr(info$factory, "gptr_key", exact = TRUE), key)) {
+      return(TRUE)
+    }
+  }
+  FALSE
+}
+
+#' Registers the call's specs at rank 0 for the session, loads its extensions (a keyed factory
+#' once per session) and enables named plugins (IC-69; contract 10.1); gateway_undo() undoes it
+#' for a refused call (D-251)
 #' @noRd
 gateway_register = function(call, s) {
   id = session_data(s)$id
@@ -617,7 +635,7 @@ gateway_register = function(call, s) {
   for (sp in specs) gateway_register_spec(sp, id)
   for (ex in gateway_list(call$ids$extensions)) {
     if (is.function(ex)) {
-      ext_load(ex, source = "session", rank = 0L, session = id)
+      if (!gateway_key_loaded(ex, id)) ext_load(ex, source = "session", rank = 0L, session = id)
     } else if (is.character(ex)) {
       f = path_norm(ex)
       if (file.exists(f)) {
@@ -740,7 +758,7 @@ gateway_checks = function(call, s, first, safety) {
                package = "later", feature = "background sessions")
   }
   announce = gateway_filters_apply(call)
-  for (nm in as.character(unlist(call$ids$skills))) ext_service_get("skill.body")(nm)
+  for (nm in as.character(unlist(call$ids$skills))) ext_service_get("skill.body")(nm, d$id)
   prompt = gateway_prompt_secrets(call$prompt)
   announce()
   list(ref = ref, prompt = prompt, images = images)
