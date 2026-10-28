@@ -7814,7 +7814,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   root the outside folder became the project; also on `13a917ff`). Not followed, and named in
   `?gptr_security`: the working directory changed in other ways (`usethis::local_project()`), the
   code another interpreter runs (`Rscript -e`, `perl -e`) and a path the shell computes (`rm "$f"`,
-  `xargs rm`), all level 3.
+  `xargs rm`), all level 3. A literal `wd` of `processx::run()` is read the same way
+  (`cmd_in_wd()`).
 - Rule (allow): only an `r(fn:NAME,...)` (or `*(fn:...)`) allow rule lifts the refusal, matched
   against the refused rows alone and covering all of them, as only `r(secret:NAME)` lifts the secret
   guard: `r(fn:system)` lets `system(cmd); write.csv(x, "out.csv")` run in auto, while `r`,

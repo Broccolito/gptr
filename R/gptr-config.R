@@ -1669,16 +1669,17 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' still run a computed command unchecked.
 #'
 #' Paths are placed in the project: a relative path in R code is read in the project directory,
-#' and a command in the directory it runs in (after a `cd`, or the `wd` of `peter$sh()`), the code
-#' a shell or Python runs there (`sh -c`, `python3 -c`) included; running a command in a directory
-#' outside the project reads that directory, so `manual` asks. `setwd()`, `withr::local_dir()` and
-#' `withr::with_dir()` to a directory outside the project and R's session temporary directory, or
-#' to one the code computes, are level 4, because a relative path would then name a file outside
-#' the project. A drive-relative path such as `D:data` counts as outside on every OS. The
-#' classifier does not follow the working directory changed in other ways (such as
-#' `usethis::local_project()`), nor read the code another interpreter runs (`Rscript -e`,
-#' `perl -e`, `node -e`) or a path the shell computes (`rm "$f"` in a loop, `xargs rm`): such a
-#' command is level 3, which `auto` and `yolo` run without a question whatever it deletes.
+#' and a command in the directory it runs in (after a `cd`, or the `wd` of `peter$sh()` or
+#' `processx::run()`), the code a shell or Python runs there (`sh -c`, `python3 -c`) included;
+#' running a command in a directory outside the project reads that directory, so `manual` asks.
+#' `setwd()`, `withr::local_dir()` and `withr::with_dir()` to a directory outside the project and
+#' R's session temporary directory, or to one the code computes, are level 4, because a relative
+#' path would then name a file outside the project. A drive-relative path such as `D:data` counts
+#' as outside on every OS. The classifier does not follow the working directory changed in other
+#' ways (such as `usethis::local_project()`), nor read the code another interpreter runs
+#' (`Rscript -e`, `perl -e`, `node -e`) or a path the shell computes (`rm "$f"` in a loop,
+#' `xargs rm`): such a command is level 3, which `auto` and `yolo` run without a question whatever
+#' it deletes.
 #'
 #' In `auto` and `yolo` mode a model can delete or overwrite files and objects. Use them only in
 #' projects you can restore (version control, backups, [gptr_rewind()] for recent turns), and run

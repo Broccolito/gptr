@@ -72,16 +72,17 @@ sourced file, package code and other command runners such as \code{pipe()} or \c
 still run a computed command unchecked.
 
 Paths are placed in the project: a relative path in R code is read in the project directory,
-and a command in the directory it runs in (after a \code{cd}, or the \code{wd} of \code{peter$sh()}), the code
-a shell or Python runs there (\code{sh -c}, \code{python3 -c}) included; running a command in a directory
-outside the project reads that directory, so \code{manual} asks. \code{setwd()}, \code{withr::local_dir()} and
-\code{withr::with_dir()} to a directory outside the project and R's session temporary directory, or
-to one the code computes, are level 4, because a relative path would then name a file outside
-the project. A drive-relative path such as \code{D:data} counts as outside on every OS. The
-classifier does not follow the working directory changed in other ways (such as
-\code{usethis::local_project()}), nor read the code another interpreter runs (\code{Rscript -e},
-\code{perl -e}, \code{node -e}) or a path the shell computes (\verb{rm "$f"} in a loop, \verb{xargs rm}): such a
-command is level 3, which \code{auto} and \code{yolo} run without a question whatever it deletes.
+and a command in the directory it runs in (after a \code{cd}, or the \code{wd} of \code{peter$sh()} or
+\code{processx::run()}), the code a shell or Python runs there (\code{sh -c}, \code{python3 -c}) included;
+running a command in a directory outside the project reads that directory, so \code{manual} asks.
+\code{setwd()}, \code{withr::local_dir()} and \code{withr::with_dir()} to a directory outside the project and
+R's session temporary directory, or to one the code computes, are level 4, because a relative
+path would then name a file outside the project. A drive-relative path such as \code{D:data} counts
+as outside on every OS. The classifier does not follow the working directory changed in other
+ways (such as \code{usethis::local_project()}), nor read the code another interpreter runs
+(\code{Rscript -e}, \code{perl -e}, \code{node -e}) or a path the shell computes (\verb{rm "$f"} in a loop,
+\verb{xargs rm}): such a command is level 3, which \code{auto} and \code{yolo} run without a question whatever
+it deletes.
 
 In \code{auto} and \code{yolo} mode a model can delete or overwrite files and objects. Use them only in
 projects you can restore (version control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run

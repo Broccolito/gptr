@@ -1492,7 +1492,8 @@ not resolve to these (a computed name, one reached through a list or an environm
 the user's own) is not refused [D-262].
 
 Paths are placed in the project [D-262]: a relative path in R code is read in the project root, and a command in
-the directories it runs in (each `cd` target, a `peter$sh()` call's `wd` read as a `cd` before it), the code a shell
+the directories it runs in (each `cd` target, a `peter$sh()` call's `wd` and a literal `processx::run()` `wd` read
+as a `cd` before it), the code a shell
 or Python runs there (`sh -c`, `python3 -c`, the literal scan) included; a `cd` target is read as `git -C`'s
 directory is (level 1 outside the project, 3 for a secret directory). A drive-relative path (`D:x`, under drive D's
 own current directory on Windows) is `outside` on every OS, and the second reading of a line with a backslash (sh's)

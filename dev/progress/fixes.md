@@ -6273,6 +6273,17 @@ the driver, screens, events, transcripts and replays without a model are local, 
   row now asks or is refused, and of the 138 rows of `-gate` only two `wd` levels changed (`ls` 0
   to 1, `sh -c rm` 3 to 4). Not run here: the full suite, `R CMD check`, Linux and Windows hosts
   (Windows only through the mocked `path_norm()` test and probe), live models.
+- Review round 4, found on the way: `processx::run("rm", c("-rf", "build"), wd = <outside>)` read
+  its command in the project, level 3, and ran in auto and yolo, the R-code twin of round 3's `wd`
+  gap. Red: test-perm-classify.R "processx::run()'s wd is read as peter$sh()'s (review round 4)"
+  FAIL 2 on `66e5593d`'s code (`rm` 3, `ls` 0). Fix (`ec3a815d`): `by_args()` reads a literal `wd`
+  of `processx::run()` through `cmd_in_wd()`; a computed one keeps the reading in the project, as a
+  computed path does. Green: `^(perm-|bridge-sh|mcp-server|risk|rules|nested)` FAIL 0 SKIP 2
+  PASS 2039. `?gptr_security`, 03 section 6.8.1 and D-262 say so. Not changed, for the maintainer:
+  `callr::run()` (processx's `run()` re-exported) and `sys::exec_wait()` have no risk-table row, so
+  a literal command through them is an `unlisted` level-1 row, never read
+  (`callr::run("rm", c("-rf", "/abs"))` is level 1, so auto and yolo run it with no question);
+  a row each would make them read as `processx::run()` is.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #86)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
