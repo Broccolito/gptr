@@ -113,7 +113,7 @@ works on the objects already in memory.
   line at a time, as typed lines do.
 * R in the Terminal tab of RStudio or Positron is treated as a terminal (completion, pause menu,
   interrupt key). Tab completes only after `@`, `!`, `!!`, `/` and `peter$`, never in plain
-  text.
+  text, and never offers a name that holds a line break or another control character.
 * The console keeps answers, tool calls, notices and prompts in a two-column margin with one
   blank line between them, aligns Markdown tables, keeps nested lists and highlights R code.
   Code blocks in answers are shown as Markdown fences that copy and run as written.
@@ -152,7 +152,8 @@ works on the objects already in memory.
 * The delete guard also covers a path held in a variable assigned from literals, as in
   `p = normalizePath("../x.txt"); file.remove(p)`.
 * Console layout: the approval prompt lists at most five flagged calls, one per line, and offers
-  `a` and `p` only when it has a rule to suggest; result lines and errors wrap in the margin, and a
+  `a` and `p` only when it has a rule to suggest (typed anyway, they say why, such as an ask rule
+  that asks every time); result lines and errors wrap in the margin, and a
   failed `r` call still lists its objects; sub-agent failures give their reason and count, and
   repeated nested prompts are numbered; command output and long prompts stay in the margin;
   Codex commands show without their shell wrapper and Codex messages without a held last word; a

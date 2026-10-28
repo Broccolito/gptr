@@ -2307,7 +2307,7 @@ compaction), so P06's tests run before P07 exists. Every other consumer treats a
 | `gptr_has_human()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive()` and not knitting and not under testthat and not `check_running()`; decides streaming and verbosity only | P06, P08, P14, P15 |
 | `gptr_can_prompt()` | `lgl(1)`: `getOption("gptr.interactive")` if set, else `interactive() \|\| isTRUE(getOption("jupyter.in_kernel"))`, excluding knitr, testthat and `check_running()`; decides every question (IC-43) | P06 (`perm_check()`), P08, P11, P14, P15 |
 | `gptr_is_interactive()`, `gptr_readline(prompt = "", read = readline)`, `stdin_tty()`, `tty_modes(modes = "-g")` | wrappers of `interactive()`, `read(prompt)` (the REPL passes its copy of `readline`, D-183), `isatty(stdin())` and `stty <modes>` on fd 0 (its output, NULL when stty fails) (mockable with `testthat::local_mocked_bindings()`); `paste` and `-paste` among `modes` are gptr's own (D-263): bracketed paste's `ESC [ ? 2004 h` after stty, `ESC [ ? 2004 l` before it, through `gptr_message_write()`, never into a tool's output, and alone they run no stty; `gptr_readline()` records the seconds `read()` waited in `the$readline_secs`, prints a prompt over 200 bytes, or in the console margin one wider than its content row, whole (word-wrapped in the margin, D-225), then reads after `> ` (in the margin too) (IC-75), and reads with the modes a console call saved (`the$tty$saved`, `tty_call()`; bracketed paste off first, D-263), then sets the call's again (IC-76) | P11, P14, P26 |
-| `tty_call(keys)`, `tty_restore(tty = the$tty)`, `tty_question(on)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten -isig min 1 time 0 paste` (bracketed paste on, D-263) for a T console's composer (`keys`; Ctrl-C is a key it reads, `console_keys()` interrupting with `rlang::interrupt()` (a Ctrl-C byte in a batch holding a bracketed-paste marker, or read while a paste is open, is pasted text, FIX-28 review rounds 1 and 3) and the idle editor keeping the draft, as a SIGINT could be lost under load; opost stays on, `min 1` keeps a tool reading stdin waiting, never at an end of input; `tty_isig_on()` and `tty_isig_off()` turn isig on while `eval_open()`'s R code runs, so Ctrl-C interrupts it) or `-echo noflsh` for a D console (SIGINT leaves the line being typed for the pause menu's drain, P28 Task 58); `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails; every switch to the saved modes (`tty_restore()`, `tty_question(TRUE)`, `gptr_readline()`) adds `-paste` where the call's set has `paste`, so readline never reads with the mode on, and `tty_isig_on()` and `tty_isig_off()` leave it on, while `eval_restore()` turns it on again after the code of an evaluation that turned isig on, once its capture is lifted, as GNU readline 8.1+ turns it off when a read of the code ends (FIX-28); `tty_question(TRUE)` switches to the saved modes before a console question's rows are written (`console_before_message(kind = "prompt")`, the pause menu), with `-echo` where readline reads the tty (`console_readline_tty()`, `tty$quiet`) until `gptr_readline()` turns the echo on as readline starts (readline shows what it reads only then) and begins its prompt with `\r\033[K`, which erases a key the terminal echoed in that moment, so a key typed while the rows are written is not echoed before the chevron and again by readline (P28 Tasks 48, 50) and `tty_question(FALSE)` back when it returns (`console_asked()`; the pause menu on every exit, its abort too, so a key typed while the run stops is not echoed, P28 Task 34), so readline starts as soon as the question shows, and `gptr_readline()` switches only outside such a question (review of Tasks 16-21) | P28 |
+| `tty_call(keys)`, `tty_restore(tty = the$tty)`, `tty_question(on)` | the modes of a terminal console call (IC-76, D-243): `tty_call()` saves `stty -g` and sets `-icanon -echo -iexten -isig min 1 time 0 paste` (bracketed paste on, D-263) for a T console's composer (`keys`; Ctrl-C is a key it reads, `console_keys()` interrupting with `rlang::interrupt()` (a Ctrl-C byte in a batch holding a bracketed-paste marker, read while a paste is open, or read right after such a batch with no empty read between, is pasted text, FIX-28 review rounds 1, 3 and 4) and the idle editor keeping the draft, as a SIGINT could be lost under load; opost stays on, `min 1` keeps a tool reading stdin waiting, never at an end of input; `tty_isig_on()` and `tty_isig_off()` turn isig on while `eval_open()`'s R code runs, so Ctrl-C interrupts it) or `-echo noflsh` for a D console (SIGINT leaves the line being typed for the pause menu's drain, P28 Task 58); `the$tty` (an environment: `saved`, `set`, `keys`) holds them until `tty_restore()` restores the saved modes once; a finalizer (`onexit = TRUE`) restores them at `q()`; nothing is set when stty fails; every switch to the saved modes (`tty_restore()`, `tty_question(TRUE)`, `gptr_readline()`) adds `-paste` where the call's set has `paste`, so readline never reads with the mode on, and `tty_isig_on()` and `tty_isig_off()` leave it on, while `eval_restore()` turns it on again after the code of an evaluation that turned isig on, once its capture is lifted, as GNU readline 8.1+ turns it off when a read of the code ends (FIX-28); `tty_question(TRUE)` switches to the saved modes before a console question's rows are written (`console_before_message(kind = "prompt")`, the pause menu), with `-echo` where readline reads the tty (`console_readline_tty()`, `tty$quiet`) until `gptr_readline()` turns the echo on as readline starts (readline shows what it reads only then) and begins its prompt with `\r\033[K`, which erases a key the terminal echoed in that moment, so a key typed while the rows are written is not echoed before the chevron and again by readline (P28 Tasks 48, 50) and `tty_question(FALSE)` back when it returns (`console_asked()`; the pause menu on every exit, its abort too, so a key typed while the run stops is not echoed, P28 Task 34), so readline starts as soon as the question shows, and `gptr_readline()` switches only outside such a question (review of Tasks 16-21) | P28 |
 | `tty_drain_mode()` | the modes to restore (`tty_modes()`; NULL when stty fails) after setting `stty -icanon min 0 time 0` on fd 0, the echo unchanged, so the partial line a canonical terminal holds can be read (mockable); the drain before a question restores them on exit (IC-76, D-243) | P28 |
 | `tty_query(query, ms = 1500)` | `chr(1)`: the terminal's answer to `query` (IC-82, P28 Task 25): `stty -icanon -echo min 0 time 0` on fd 0 (the saved modes restored on exit), `query` written to stdout, then fd 0 read until a DA1 reply (`ESC [ ? ... c`) arrives or `ms` milliseconds pass; `""` when stty fails (mockable); the T REPL's background probe (`repl_background()`) | P28 |
 | `tty_unreply(x)` | `chr`: `x` without OSC replies (`ESC ] ... BEL` or `ST`) and DA1's `ESC [ ? ... c`, so a terminal's late answer to the background probe is never typed text (IC-82; `repl_background()`, `console_compose()`) | P28 |
@@ -2852,7 +2852,9 @@ retained. Permission approval displays keep the separate IC-53 escaping rules.
 
 **Permission request record** (argument of `ui$permission()` and payload of `permission_request`):
 `list(tool = chr(1), input = named list, summary = chr (the lines to show: code preview, paths), risk =
-<gptr_risk> | NULL, reason = chr(1), suggested_rule = chr(1) | NULL, undo_note = chr(1) | NULL (from the
+<gptr_risk> | NULL, reason = chr(1), suggested_rule = chr(1) | NULL, no_rule = chr(1) | NULL (why
+a question offers no `suggested_rule`: the reason of the ask rule that asks it, FIX-32 review round
+4), undo_note = chr(1) | NULL (from the
 `checkpoint.note` service), session = chr(1), turn = int(1), nested = lgl(1), tier = "ask" | "ask_human")`
 (IC-53). IC-77 adds `agent = chr(1)`, who asks: `"main"`, a sub-agent's name, or for a nested
 `peter()` call the first line of its prompt quoted and cut to 30 characters, then ` #k`, its place among the
@@ -5426,6 +5428,12 @@ FIX-28 (D-263) adds bracketed paste to the composer there.
   text), and GNU readline 8.1+ turns the mode off as such a read ends: the call turns it on again
   when the outermost r call that ran it returns (after other code, a `gptr_tool()` function or a
   hook, when the call next sets its modes), so a paste made meanwhile is decided by timing (FIX-28);
+  in a T console, pasted text holding a bracketed-paste end marker (a terminal that does not filter
+  pastes passes one on), with the paste split right after it and again before its own end marker,
+  sends at a newline of the read between, and where the reader read nothing between that read and
+  the marker's (a pause of more than about 0.1 s) a Ctrl-C byte in it is the key, which pauses the
+  run with the bytes after it answering the pause menu, while a Ctrl-C typed within about 0.1 s of
+  a paste's end is dropped (D-263; FIX-28 review rounds 3 and 4);
   R ending during a call (a crash or a kill; `q()` restores the modes) leaves the terminal without
   echo and, in a T console, with bracketed paste on (zsh, fish and bash 5.1+ reset it at their
   prompts; `reset` restores both); a notice ends the streamed row, so the answer goes on in the row
@@ -5450,7 +5458,11 @@ totals line names the model and the context left.
    starts `sub-agent <agent> asks: ` and its budget question `sub-agent <agent>: `.
 3. Invalid answers: `a`/`p` where nothing can be remembered (level 4, control, the `ask` tool, no
    `suggested_rule`, as for a question an ask rule asks: `perm_policies()` keeps a question's
-   `suggested_rule` only when every policy that asks it has one, FIX-32 review round 3) say why; other text gives one row in the console's terms, `not an answer`,
+   `suggested_rule` only when every policy that asks it has one, FIX-32 review round 3) say why,
+   for an ask rule's question its reason (the record's `no_rule`) and
+   `; an always rule would not stop it` (FIX-32 review round 4; it read
+   `no rule covers these calls`, which stays where no rule can cover the calls); other text gives
+   one row in the console's terms, `not an answer`,
    `kept in history ↑` when kept, and the keys allowed (`?` shows the detail view and is not
    counted); after 5, `no valid answer after 5 tries · refused` and a denial with the reason (not
    feedback, cheat-sheet review) `no valid answer was given at the approval prompt`.
@@ -5777,7 +5789,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
     of the reader's `typed` lines, else the newest item the console holds, else `session_unqueue(session,
     "steer")`; when both kinds wait, the kind the composer sent last, `rd$sent`). Tab on a trigger word
     completes it with IC-81's completer (Task 22), several candidates kept as `rd$compose$candidates` until the
-    next key. The live row (IC-82) shows the draft, or the newest message waiting, or the
+    next key. A Ctrl-C byte in a batch holding a bracketed-paste marker, read while a paste is
+    open, or read right after such a batch with no empty read between (`rd$compose$pasted`) is
+    pasted text, never the key (D-263; FIX-28 review rounds 1, 3 and 4).
+    The live row (IC-82) shows the draft, or the newest message waiting, or the
     keys, and is drawn again on every key. A question's drain gives what waits on fd 0 to the composer, so a
     partial line stays the draft, never the history. A draft a run left after status `idle` or `max_turns` stays
     in the composer for the next prompt (Task 21), and readline's read at a prompt empties the
@@ -6056,7 +6071,10 @@ and Task 27 finalised them; `?peter`, `/help` and `vignette("interactive-console
       `gptr_skills()` (as `/skills` lists them, also before the first prompt has registered any; P28 Task 30);
       a word starting with `/skill:` gives `/skill:<name>` for each (P28 Task 77, visual round 3: a bare `/`
       gave 48 words, 19 of them skills, 25 rows of readline's list);
-    - anything else, and a failure: `character(0)` (natural language, `$5`, a bare `$name`, `x$y`, `wow! x`).
+    - anything else, and a failure: `character(0)` (natural language, `$5`, a bare `$name`, `x$y`,
+      `wow! x`); and a word holding a control character never, whatever its source (FIX-34 review
+      round 4: Tab and Enter on a file named `bang\n!file.create('M')` sent its rest as a `!` line,
+      which ran).
   - The adapter: `console_completer(prev)` is R's `custom.completer`. It sets `fileName` to FALSE and `comps`
     to `character()` first (without `fileName` R's readline aborts the `readline()` call), then gives the
     completions of the line before the cursor as completions of R's token (`completion_shift()`: readline's
