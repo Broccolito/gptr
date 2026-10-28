@@ -254,7 +254,7 @@ test_that("the yolo notice names moving the working directory out of the project
                  class = "gptr_message_notice")
 })
 
-test_that("Sys.junction() writes its `to` on every host, with R's formals or as written (round 6)", {
+test_that("Sys.junction() writes its `to`, with R's formals or as written, on any host (round 6)", {
   root = local_project()
   out = withr::local_tempdir(tmpdir = dirname(tempdir()))
   lv = function(code) gptr_risk(code, root = root)$level
