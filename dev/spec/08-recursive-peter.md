@@ -463,7 +463,9 @@ would keep no workspace (R/gptr-gateway.R:117-121).
 1. It takes your call as written, `survey_peter("Clean ...", survey_2026)`.
 2. It replaces the function with `peter`.
 3. It adds the fixed arguments. List-like ones (tool modifiers, `extensions`, `plugins`, `skills`,
-   and `.opts` by name) are combined with yours, and on single values your call wins.
+   and `.opts` by name) are combined with yours, and on single values your call wins. An argument
+   that a wrapper of yours passes on through `...` counts as yours; when it must be combined with
+   a fixed one, the dots are written out, identifiers resolved as `peter()` resolves them.
 4. It adds the coaching and your data rules as one keyed `extensions` factory, built by gptr from
    the validated data (3.2).
 5. It attaches one attribute to the rewritten call, `gptr_harness = list(fn = <the name you
@@ -484,8 +486,10 @@ de-duplicates specs (R/gptr-gateway.R:567-576). Your own keyed factories benefit
 **Fixed arguments are values.** `gptr_tailor()` resolves them once, in your session, when it makes
 the harness. For example, identifiers such as `mode = auto` become `"auto"`. It refuses `+name` and
 `-name` entries in `plugins`, because those change the filters of the whole R process
-(R/gptr-gateway.R:589-606). When the harness is made or loaded, it prints any fixed argument that
-loads code or loosens checks: `extensions`, `plugins`, or `mode = "yolo"`.
+(R/gptr-gateway.R:589-606). When the harness is made or loaded, it prints, as R source, every fixed
+argument that is not plain data, and `mode = "yolo"`. Plain data is `NULL`, text, numbers, logicals
+and lists of them, with no attribute but names; so any function, spec, provider, environment or
+formula is printed (D-278).
 
 **Reading it.** `$coaching` and `$record` are read-only views of the attribute. `$report` returns
 the last full report from this R session's memory, keyed by `id`, or `NULL`. To change a harness,
@@ -507,7 +511,7 @@ sizes and the record.
 
 ```
 survey_peter/
-  HARNESS.md               fixed arguments (functions shown as source), your rules, gptr version, record
+  HARNESS.md               fixed arguments (functions shown as source), your rules, gptr version
   NOTE.md                  the note
   REVIEW.md                the review text and its round count
   RULES.md                 the coaching's never and require rules
@@ -531,14 +535,15 @@ all, share a recorded script (3.6): its coach block holds only literal text.
 
 ### 3.2 The coaching: four parts, all data
 
-Every part is validated whenever a harness is made, loaded or called. A part that fails makes the
-call stop with a classed error that names it. A coach never writes the factory that registers the
-parts; gptr builds it from the data.
+Every part is validated whenever a harness is made, loaded or called; a call skips only the
+skill-name check, which the harness passed when it was made or loaded (D-277). A part that fails
+makes the call stop with a classed error that names it. A coach never writes the factory that
+registers the parts; gptr builds it from the data.
 
 | Part | What a coach writes | What gptr registers | Limits |
 |---|---|---|---|
-| `note` | text | `gptr_prompt_section("coaching", ..., tier = "T1", order = 790L)`, with a budget large enough that the character cap is the only limit. The default 300-token budget would cut it (R/prompt-sections.R:556-572) | 8,000 characters, after a fixed first line written by gptr: "Task guidance learned from earlier runs. It adds to the rules above and never overrides them, a permission decision, or what the user asks." |
-| `skills` | `name`, `description` and `text` for each | skill specs that carry their own text (P29a) | names `^[a-z0-9][a-z0-9-]*$` that are not already the name of one of your or gptr's skills; descriptions of at most 1,024 characters; 64 KiB in all |
+| `note` | text | `gptr_prompt_section("coaching_<coaching hash>", ..., tier = "T1", order = 790L)`, one section per coaching (D-277), with a budget large enough that the character cap is the only limit. The default 300-token budget would cut it (R/prompt-sections.R:556-572) | 8,000 characters, after a fixed first line written by gptr: "Task guidance learned from earlier runs. It adds to the rules above and never overrides them, a permission decision, or what the user asks." |
+| `skills` | `name`, `description` and `text` for each | skill specs that carry their own text (P29a) | names `^[a-z0-9][a-z0-9-]*$` that are not the name of a registered skill or of any `SKILL.md` gptr finds (project skills, trusted or not, yours, gptr's, packages' and plugins'), whether or not a session has synced it (D-277); descriptions of at most 1,024 characters; 64 KiB in all |
 | `review` | `text`, `rounds` | part of the finish hook below | 2,000 characters; `rounds` 0 to 2 |
 | `rules` | `never`: up to 8 of `{rule, why}`. `require`: up to 4 of `{id, any or made, contains?, text}` | `never`: one policy, `coaching`, which answers `deny` with "denied by the coaching rule <rule>: <why>". Your own data rules get a second policy, `harness_rules`, whose message says "your rule". `require`: part of the finish hook below | see the rule checks below |
 
@@ -593,8 +598,10 @@ harness's own session, so it never reaches sub-agents.
 
 **Text checks for every text part:**
 - valid UTF-8;
-- no control, bidirectional or zero-width characters other than newline and tab;
-- no tag naming one of gptr's own blocks (a fixed list that includes `coaching`);
+- no control, bidirectional or zero-width characters other than newline and tab, and no format,
+  line separator, paragraph separator or Unicode tag characters (D-277);
+- no tag naming one of gptr's own blocks (a fixed list that includes `coaching`) or any
+  `coaching_` name;
 - none of gptr's own wordings for a message from the person or an extension
   (R/agent-loop.R:170-181).
 
@@ -609,9 +616,11 @@ session starts, however they are started:
   as their parent. It replaces revision 2's plan to copy policies at R/subagent-backends.R:229,
   which would have missed those children. It also closes the same gap for your own
   `extensions =` policies.
-- `nested_rules()` evaluates every `rules`, `coaching` and `harness_rules` policy and keeps the
-  strictest answer. Today it consults only the first record (R/agent-dispatch.R:466-485). It is
-  also applied to nested `write` and `edit` calls, not only shell calls (:440).
+- `nested_rules()` evaluates every `rules`, `coaching` and `harness_rules` policy, and in a
+  coaching run the `fence` (3.3), and keeps the strictest answer. Today it consults only the first
+  record (R/agent-dispatch.R:466-485). It is also applied to nested `script`, `write` and `edit`
+  calls, not only shell calls (:440), and a shell call's `wd` is part of the code it judges
+  (D-270, D-273).
 
 ### 3.3 Each session in its own R process (NEW)
 
@@ -632,7 +641,8 @@ existing option `gptr.subagents.max_workers`, which defaults to `min(4, cores - 
 path):
 - the harness, with its arguments already resolved to values;
 - your `...`: the interpolated prompt, your objects under their names, and other `peter()`
-  arguments as values;
+  arguments as values. An object without a name R can use, such as the `..2` that `do.call()`
+  gives a value, is bound under a name of its own and passed under its label;
 - the resolved model, with its provider record (base URL, headers, region and compatibility
   settings) resolved in your session. Otherwise Azure, Bedrock and locally configured endpoints
   could not be reached from the child;
@@ -662,11 +672,20 @@ as they are for workers today.
   flag and the streamed events cover sub-agents in one process;
 - makes a fresh folder under its temporary directory to be its working folder and project root;
 - registers a fence policy written by gptr, for the whole child process. It denies:
-  - writes and edits whose classified path lies outside that folder (with the widening above);
-  - `setwd()` outside the folder;
+  - writes and edits whose classified path lies outside the child's temporary folder, which holds
+    the run's folder (with the widening above); a relative path is read from the run's folder;
+  - a change of working folder to anywhere but the run's folder itself, written as an absolute
+    path: `setwd()`, `withr::with_dir()` and `local_dir()`, `xfun::in_dir()`, any `wd =`
+    argument, and `cd`, `pushd`, `chdir` or `Set-Location` in any string of the code. A subfolder
+    is denied too, because after moving into one a `../` path that the classifier resolved inside
+    the folder would lead outside it. So the working folder never moves, and the paths the
+    classifier resolves hold (D-273);
+  - every `peter$script()` call and `script` tool call. R code never shows the interpreter, and a
+    script may start R with code gptr cannot read; `peter$sh("python x.py")` still works (D-273);
   - every call in the `install` category, which gains a row for `R CMD INSTALL` in
     `inst/extdata/risk-commands.csv` (today it is classified as a plain process);
-  - `Rscript -e` and other R child processes whose code gptr cannot read.
+  - `Rscript -e` and other R child processes whose code gptr cannot read;
+  - code gptr cannot classify, and reads of the CLI login files and the keychain (3.7).
 
   The fence is not a sandbox: it cannot fence a path the classifier cannot see;
 - registers hooks that stream, to its standard output, each tool call that actually ran
@@ -674,16 +693,26 @@ as they are for workers today.
   requirement;
 - runs the harness and catches the condition peter signals for `blocked`, `budget`, `max_turns`
   and `error`;
-- writes its result as **plain JSON text** in one fixed shape:
-  - text, status, turns and usage rows;
-  - the rendered transcript, clipped as an untrusted observation, for the coaches and the report;
-  - the realised value and created objects, through `session_value_get()` and never as a session
-    object. Each is `{type, len, data, na, names, dim, levels, tz, nrow}`, where `type` is one of
-    logical, integer, double, character, factor, Date, POSIXct, data.frame, list or summary.
-    Numbers are base64 of `writeBin()` in little-endian order, so they are exact, including `NA`
-    versus `NaN` and `-0`. Anything else is sent as its printed summary;
+- writes its result as **plain JSON text** in one fixed shape, `list(id, status, reason, text,
+  turns, usage, transcript, first_user, risk, refusals, unmet, files, plan, limit, checks, error,
+  value, objects)` (`child_result_new()`):
+  - status, reason, last text, turns and usage rows;
+  - the rendered transcript, clipped as an untrusted observation, for the coaches and the report,
+    and the first user message on its own (`first_user`), which is the task the coaches and the
+    judge see;
   - the highest risk that actually ran, the refusals, the unmet requirements, and the files written
-    to its folder, clipped.
+    to its folder, clipped;
+  - the last plan reading, a plan limit's reset time, the message of a failed CLI check, and the
+    error;
+  - last, the realised value and created objects, through `session_value_get()` and never as a
+    session object. Each is `{type, len, data, na, names, dim, levels, tz, nrow}`, where `type` is
+    one of logical, integer, double, character, factor, Date, POSIXct, data.frame, list or
+    summary. Numbers are base64 of `writeBin()` in little-endian order, so they are exact,
+    including `NA` versus `NaN` and `-0`. Anything else is sent as its printed summary.
+
+  The encoder keeps within the parent's limits on depth and on the number of values, so a value
+  too deep or too large becomes its summary. A result still over 64 MiB is written again with the
+  value and each object as its summary, so every other field arrives (D-279).
 
 **In the parent:**
 - The result is read with gptr's `json_decode()`, which calls `jsonlite::parse_json()` with no
@@ -691,7 +720,10 @@ as they are for workers today.
   `FALSE`, and lists.
 - The parent then caps the file size, the depth and the element counts, rejects unknown keys, and
   rebuilds the allowed kinds itself with `readBin()`, `structure()` and `.POSIXct()`. It sets a
-  class only from the fixed list, so a file can never name a class whose methods would run.
+  class only from the fixed list, so a file can never name a class whose methods would run. It
+  checks the shape of every field (`status` one string, `turns` a whole number, `usage` a data
+  frame with numeric tokens and cost, and so on), so a forged field ends that run as an error and
+  never stops the call.
 - It never calls `readRDS()` or `jsonlite::unserializeJSON()` on a run's output. **So
   `gptr_coach()` works on every R version gptr supports (4.2 and later).**
 - The child's standard output is read by the child entry's own line reader. It parses only its own
@@ -707,7 +739,9 @@ as they are for workers today.
 
   A run that sets out to forge its whole report could still do so. Coaching that is kept is text,
   printed to you in full, and it runs under all of peter's checks.
-- Usage rows are charged to your session row by row.
+- Usage rows that pass gptr's usage check are charged, each request once, to the session of the
+  run the call is part of, or else to the session-less log, so `gptr_usage()` shows what coaching
+  spent.
 
 **Why `.rds` is not used, in plain words.** An `.rds` file is not only data. R's save format can
 also hold a "do this later" note, which R calls a *promise*. Before R 4.4, a file could be built so
@@ -729,8 +763,8 @@ gptr_coach(..., harness = peter, check = NULL, coach = NULL, k = 1L, strategy = 
 arguments, such as `mode`, `model`, `budget` and `tools`. Every run gets them, and `budget` also
 caps each coach session. They apply to this call's runs only and are not kept in the result.
 
-Until phase P29g ships, `surface` defaults to `c("note", "skills", "review")`, and a `"rules"`
-surface or `gptr_tailor(rules =)` is refused with a named reason.
+`surface` defaults to all four parts, `c("note", "skills", "review", "rules")` (P29g shipped with
+the first release; see the settled questions at the end of Part 4).
 No argument of `gptr_coach()` shares a name with one of `peter()`'s.
 
 **First, the document.** Right after `session_control_check()`, in every replay mode, gptr asks the
@@ -750,8 +784,16 @@ on a machine with no keys.
 - any model refused by `replay_guard()` (R/gptr-config.R:1074-1085), checked for every run, coach
   and judge model before any process starts, as the worker backend already does
   (R/subagent-worker.R:410-425). Under `GPTR_REPLAY=replay`, a coaching call that has no fresh block
-  therefore fails here, wherever the call sits: in a function, a loop, or an unbound console;
+  therefore fails here, wherever the call sits: in a function, a loop, or an unbound console. The
+  one exception is a call whose every model is offline (`gptr_fake_provider()`): offline models
+  answer `peter()` under replay, so such a call with no block coaches without recording (D-276);
 - `gptr.unsafe_no_permissions`;
+- a `peter()` argument that a run, one unattended session in another R process, cannot use:
+  `.run`, `background`, `.stdin`, `envir`, `parallel`, `choices`, `levels`, `threshold`,
+  `min_confidence` and `uncertain`, given in `...` or fixed in the harness. The rest are checked as
+  `peter()` checks them: `budget`, `replay` and `.opts` by its own argument check, and tool names
+  unless an extension, a plugin or an MCP server of the run's own session could add the tool
+  (D-275);
 - an object that cannot cross processes;
 - `k` outside 1 to 5 (the range the paper tested), an empty `focus`, or an unknown `surface`
   part.
@@ -765,7 +807,8 @@ or act. After the run, gptr discards any reply from a session that froze a gptr 
 tool. On Claude Code or Codex, the coach session also passes the CLI checks in 3.7. The prompt is
 written by gptr and contains:
 - the job;
-- the task: the first user message of the starting run, including the description of your objects;
+- the task: the whole first user message of the starting run, including the description of your
+  objects;
 - the current coaching, plus the starting harness's fixed arguments and your rules, by name and
   value. Your functions are never shown;
 - each run's status, turns, rendered transcript, coaching denials, unmet requirements, and what it
@@ -784,7 +827,8 @@ The reply is JSON: `{note?, skills?, review?, rules?, notes}`.
 - Rejected outright: parts outside `surface`, and `rules` from any coach other than the procedure
   coach.
 - The composer may keep, drop or merge rules that a candidate proposed and probed, but it may not
-  add new ones.
+  add new ones. Rules are compared by their kind and content, never by their prose, so a `never`
+  rule turned into a `require` rule, or a `require` rule that gains `contains`, is a new rule.
 - gptr validates the reply as in 3.2.
 
 A reply that fails validation, or has no `$value` (a schema mismatch is only a notice,
@@ -845,7 +889,8 @@ pick   = if (!length(ok)) NULL else if (length(ok) > 1) run_judge(ok) else ok[[1
   It ranks the finals in Harness²'s order (delivery, conformance, fidelity, consistency, fitness,
   finish) and answers with one label from an enum. If it fails, the first passing final wins.
 - If every starting run ends `blocked`, the call stops before any coach runs and reports what
-  needed approval.
+  needed approval. If every starting run ended with an error or took no turns, the call stops there
+  too, with the first one's error, since coaching would rest on no evidence (D-275).
 - **Result.**
   - Kept: the starting harness with the new coaching and a new record. gptr prints the coaching in
     full.
@@ -886,9 +931,10 @@ pick   = if (!length(ok)) NULL else if (length(ok) > 1) run_judge(ok) else ok[[1
    slip past a `never` rule, and dead code can satisfy a `require` rule. So `require` is a reminder
    plus a report, not proof.
 4. A run sees only the objects you pass in `...`, not the rest of your workspace or your attached
-   packages. It starts in an empty folder, cannot install packages and cannot write outside its
-   folder, by the routes gptr recognises. Give it data as objects, name files by their full path,
-   and install what it needs first.
+   packages. It starts in an empty folder, cannot install packages, cannot write outside its folder
+   or move to another folder, and cannot run scripts with `peter$script()`, by the routes gptr
+   recognises. Give it data as objects, name files by their full path, and install what it needs
+   first.
 5. A run that forges its own report can lower its reported risk or claim requirements met. The
    parent's safe-direction reading limits this but cannot rule it out. The kept coaching is still
    only text that you read.
@@ -1011,7 +1057,8 @@ recordings, your code wins.
   person can answer. Otherwise it replays with `replay_downgraded`. `record` and `live` coach again.
   This departs from plain `peter()` because of cost and non-determinism.
 - Under `replay`, a coaching call with no fresh block fails in `replay_guard()` before any egress
-  question or process (3.4).
+  question or process (3.4), unless it has no block and every model is offline; then it coaches
+  without recording, as `peter()` lets offline models answer under replay (D-276).
 
 `gptr_export()` refuses a document that holds a coach block, with a named reason, because a coach
 block has no session turn to export.
@@ -1189,7 +1236,8 @@ offers one.
 - **Before starting**, gptr says in plain words:
   - how many sessions it will run on which plan;
   - that they use the plan's 5-hour and weekly limits, which the person's other use shares;
-  - the last plan reading gptr has, with its age;
+  - the last plan reading gptr has, with its age, including readings the coaching runs took
+    (merged when newer, checked and clipped);
   - that dollar figures on the Claude route are what the same tokens would cost on the API, not
     charges, and that Codex reports tokens only.
 
@@ -1231,14 +1279,14 @@ offers one.
 
 Every phase is written test-first with `gptr_fake_provider()`, runs offline, follows house style
 (`=`, `|>`), and adds no Imports. Ids follow the P26 precedent: this file becomes the spec
-amendment, with a plan `dev/plan/P29-recursive-peter.md`, D-262 and IC-83 onward.
+amendment, with a plan `dev/plan/P29-gptr-coach.md`, D-262 and IC-83 onward.
 
 | Phase | What | Main acceptance tests |
 |---|---|---|
 | P29a | Core changes:<br>- skill specs that carry their own text and are found per session (R/skill-discover.R:390-473, R/tool-read.R:435);<br>- a keyed factory loads once per session;<br>- `risk_fn_where()` treats a harness as `peter`, and rebinding a harness is a control action;<br>- ancestors' policies bind every sub-agent;<br>- `nested_rules()` keeps the strictest answer and covers nested writes;<br>- `risk_classify_r()` passes on `calls` and `targets`, including those of earlier helpers;<br>- the `R CMD INSTALL` row;<br>- the `provider_stream()` model flag | a session skill opens in that session only; a keyed factory loads once; `h()` from model code is denied by `r(fn:peter)`; a person's `extensions =` policy binds a nested `peter()`, a team member and a fan-out child; `R CMD INSTALL` is in `install`; a disallowed model is refused mid-run |
 | P29b | `gptr_tailor()`, the note, skills and review (3.1, 3.2), and recording of harness calls (3.6 a) | a harness call behaves like the same `peter()` call and records a block with `harness=`, which replays with zero requests and goes stale when the coaching changes; `survey_peter("X")` and `peter("X")` in one file own separate blocks under `source()`, `gptr_source()`, Rscript, the IDE and a notebook; fixed arguments merge as stated; a continuation loads the coaching once; review counts per run and stays out of sub-agents; every invalid part is refused; `.rds` round-trips; `dir =` writes the files |
 | P29c | the `child` entry and the JSON transport (3.3) | a run returns plain data with exact doubles, factors, Dates and data frames; a closure, environment or unknown class is reduced to a summary; it gets your rules, hooks and endpoint settings (an Azure and a local `base_url` test); an ask ends it `blocked`; writes outside its folder, `setwd()`, `R CMD INSTALL` and `Rscript -e` are denied, in sub-agents too; a worker sub-agent runs inline; a printed fake `ask` line opens no prompt; a forged low risk in a final's file loses to the stream; a forged high risk in a starting run's stream does not raise the ceiling; at most `max_workers` children run; interrupting kills them all |
-| P29d | `gptr_coach()` at `k = 1`, and coach blocks (3.4, 3.6 b) | Harness²'s demo ported: a fake solver that is wrong unless its note holds the fix, and a fake coach that writes it. Also:<br>- exactly 4 runs and 3 coach sessions, with the coaches and the probes run in parallel;<br>- a retry stays in the same session;<br>- an emptier or riskier final is not kept;<br>- `check` decides and never reaches a coach;<br>- every refusal;<br>- a fresh coach block replays with no key, zero requests and zero processes, and rebuilds the same coaching hash;<br>- a note holding `)-"` and R code is written as a string and never runs;<br>- kept and not-kept both replay;<br>- a hand-edited note replays and makes later blocks stale;<br>- under `GPTR_REPLAY=replay`, a coaching call with no fresh block fails before any process starts, even inside a function;<br>- no run data is written |
+| P29d | `gptr_coach()` at `k = 1`, and coach blocks (3.4, 3.6 b) | Harness²'s demo ported: a fake solver that is wrong unless its note holds the fix, and a fake coach that writes it. Also:<br>- exactly 4 runs and 3 coach sessions, with the coaches and the probes run in parallel;<br>- a retry stays in the same session;<br>- an emptier or riskier final is not kept;<br>- `check` decides and never reaches a coach;<br>- every refusal;<br>- a fresh coach block replays with no key, zero requests and zero processes, and rebuilds the same coaching hash;<br>- a note holding `)-"` and R code is written as a string and never runs;<br>- kept and not-kept both replay;<br>- a hand-edited note replays and makes later blocks stale;<br>- under `GPTR_REPLAY=replay`, a coaching call with no fresh block on a model that is not offline fails before any process starts, even inside a function;<br>- no run data is written |
 | P29e | Claude Code and Codex plans (3.7) | **Offline, with gptr's fake CLI.** Each of these is refused: an `init` that lists a built-in tool, an auto-memory path or a plugin; a stream that uses a tool that is not gptr's; a Codex event of another kind; a hook-log denial, or a missing hook start line; a feature that a preflight reports still on; a non-empty `permission_denials`. A Codex warning event is accepted. A second turn on Codex (a coach retry, a review round) starts a fresh `exec`. The plan-limit messages end a `gptr_coach()` call with "stopped at ... plan limit". At most two plan sessions run at once.<br>**Live, per CLI (`GPTR_LIVE_TESTS`).**<br>- A coach from a child process has no tools and returns a valid reply.<br>- A coach told to read `~/.bashrc` and run a command replies with text only.<br>- The CLI saves nothing for the session.<br>- A run in auto mode acts through gptr's tools, and a write outside its folder is refused and reported.<br>- A run that needs approval ends `blocked` at once.<br>- Sign-in works from a child process for each kind of login, including a Codex keyring login. |
 | P29f | `k > 1` and `strategy = "sequential"` | the counts match the formula; composers see every probe; rounds share the starting runs; the judge sees only passing finals under shuffled labels |
 | P29g | coaching rules and your own data rules (3.2) | each of the nine examples in 1.8 matches or misses as stated, including `peter$write`, `system()` and a helper from an earlier turn; a `never` rule denies in auto and yolo, in nested shell calls, and in every kind of sub-agent; a reminder is sent at most twice and never at the turn limit; a `require` rule that saves a file can be kept; an unmet requirement fails `passes()`; only the procedure coach may write rules and the composer cannot add one; inert rules (`fn:pkg::f`, an unknown category) are refused |
@@ -1293,19 +1341,21 @@ R floor stays at 4.2.
 - coaching must work on Claude Code and Codex subscription plans, for runs, coaches and the judge,
   in the first release (3.7, P29e).
 
-**Open questions:**
-1. Should `review` and `rules` be on the default surface before P29h measures them? Proposed: yes.
-   They only add checks and refusals, and the composer drops them when the probes show no help.
-2. Under `auto`, should a stale coach block ask before coaching again? Proposed: yes; the
-   alternatives are to downgrade to replay, or to coach again silently.
-3. Should a coaching call whose result was not kept be recorded? Proposed: yes, so the decision replays.
-4. Should the coaching hash cover only the coaching (proposed), or also plain-data fixed
-   arguments?
-5. On a plan, should at most two sessions run at once (proposed), or one?
-6. On a plan, should `k` be capped, for example at 2? At `k = 5`, one call runs 36 sessions, and
-   Anthropic's plan limits assume "ordinary, individual usage".
-7. When a Claude session starts drawing on paid usage credits, should coaching always stop
-   (proposed), or continue when the person has said so?
+**Questions settled at implementation (2026-10-28):** the maintainer left these to the
+implementer; each answer below is what the code does.
+1. `review` and `rules` are on the default surface. They only add checks and refusals, and the
+   composer drops them when the probes show no help.
+2. Under `auto`, a stale coach block asks before coaching again (`doc.coach` answers `"ask"`), and
+   says how many sessions a new coaching starts. Declining keeps the block's harness.
+3. A coaching call whose result was not kept is recorded, as `<name> = gptr_tailor(<start>)`, so
+   the decision replays. A call stopped at a plan limit is not recorded, because it did not finish.
+4. The coaching hash covers only the coaching (`coaching_hash()`: note, skills, review and rules),
+   not fixed arguments.
+5. On a plan, at most two sessions run at once per plan account (`child_lanes()` in
+   `R/gptr-child.R`); once a plan reports its limit, its later jobs are skipped.
+6. `k` is not capped per route: it is 1 to 5 everywhere, and the call states the session count
+   before it starts, so a person on a plan sees the cost and can decline.
+7. A Claude session drawing on paid usage credits always stops coaching (D-271).
 
 ---
 

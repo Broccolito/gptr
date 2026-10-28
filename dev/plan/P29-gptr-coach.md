@@ -95,14 +95,15 @@ so in its report.
    - `coaching_hash(coaching)` returns 8 hex characters; empty coaching has one constant hash.
    - The rewritten call carries attribute `gptr_harness = list(fn, hash, call)`.
 8. **Child runner (T7).**
-   - `coach_run_jobs(jobs, max_active)` (in `R/gptr-child.R`, area `gptr`, layer L6, so it may call
+   - `coach_run_jobs(jobs)` (in `R/gptr-child.R`, area `gptr`, layer L6, so it may call
      the worker helpers and the harness code) runs each job in its own R process through the new
      `child` bootstrap entry. It returns one plain-data result per job, in order.
    - Each job is `list(id, role = "run" | "coach" | "judge", spec, prompt, objects, args, model,
      schema)`. `spec` is a harness spec; `objects` is a named list; `args` are resolved `peter()`
      argument values; `schema` is for coaches and the judge.
-   - Each result is `list(id, status, reason, text, turns, usage, value, objects, transcript,
-     risk, refusals, unmet, files, plan, limit, checks, error)`, plain data only.
+   - Each result is `list(id, status, reason, text, turns, usage, transcript, first_user, risk,
+     refusals, unmet, files, plan, limit, checks, error, value, objects)`, plain data only (the
+     review fixes added `first_user` and moved `value` and `objects` last; D-279).
    - `plain_encode(x)` and `plain_decode(json)` implement 08 section 3.3's JSON shape.
 9. **Coaching factory (T6, extended by T10).** `harness_factory(spec)` returns a keyed factory that
    registers the note section, the skills and the finish hook. T10 adds the `never` and
@@ -249,7 +250,8 @@ counts (`[ FAIL 0 | WARN 0 | SKIP n | PASS m ]`), and anything left open.
 
 ## Decisions taken during planning (recorded as D-262 onward at integration)
 
-Recorded as D-262..D-272 in dev/DEVIATIONS.md.
+Recorded as D-262..D-272 in dev/DEVIATIONS.md. The adversarial review's fixes are D-273..D-279
+(dev/progress/P29.md, "Review fixes").
 
 - **D-262 Names.** `gptr_tailor()` and `gptr_coach()`, so that both keep the `gptr_` prefix
   (D-28 unchanged). The object class stays `gptr_harness`, because the object is a harness.

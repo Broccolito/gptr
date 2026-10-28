@@ -1449,7 +1449,8 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
   `supervise_default()`: `TRUE` except under `check_running()` (supervisor fifos are a fatal check error
   [13 §2.10]); every long-lived child exits when the parent dies (workers on stdin EOF, EPIPE or a dead parent pid;
   artifacts through their watchdog; CLI children through supervision); tree markers under
-  `R_user_dir("gptr", "cache")/procs/` feed a mandatory orphan sweep at the next load, since SIGTERM skips
+  `R_user_dir("gptr", "cache")/procs/` (under `tempdir()/gptr-procs` while R CMD check runs examples, so an example
+  writes nothing outside `tempdir()` [D-274]) feed a mandatory orphan sweep at the next load, since SIGTERM skips
   finalizers (verified); under check every child-process pool is capped at 2; a requested stop is recorded so a
   later non-zero exit reads `stopped`, not `error` (callr 3.8.0 exits 1 [17 fact-check]); process tables are
   cleaned in `.onUnload` and by finalizers.
@@ -1557,10 +1558,11 @@ A `peter$...` call made while an `r` evaluation runs enters `dispatch_nested()`:
 outer code listed the same function at a level no higher than the level the user approved for the outer call,
 and the member's own classification of its actual input (`call_risk()`: a patch's Delete File, a command computed
 at run time) is no higher either, it runs without a second prompt; otherwise it passes the gate [IC-78].
-The command of a `peter$sh()` or `peter$bg()` call, and the input of a nested `peter$write()` or `peter$edit()`,
-meet the deny and ask rules first, whatever their level, as the literal call would: every policy named `rules`,
-`coaching`, `harness_rules` or `fence` answers and the strictest answer wins; allow answers are not applied there,
-and an ask offers no `[a]lways` rule [D-251, D-269, D-270].
+The command of a `peter$sh()` or `peter$bg()` call, with its working folder, and the input of a nested
+`peter$script()`, `peter$write()` or `peter$edit()`, meet the deny and ask rules first, whatever their level, as the
+literal call would: every policy named `rules`, `coaching`, `harness_rules` or `fence` answers and the strictest
+answer wins; allow answers are not applied there, and an ask offers no `[a]lways` rule
+[D-251, D-269, D-270, D-273].
 Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
 
 #### 6.8.5 Non-interactive runs and plan mode (NS-12)
@@ -2202,23 +2204,23 @@ exactly like `peter()`: class `c("gptr_harness", "function")`, the one-line body
 
 **The call.** `harness_call()` rewrites the person's call to `peter(...)` with the fixed arguments merged and one
 keyed extension factory (`harness_factory()`) added to `extensions`, and evaluates it in the caller's frame, so
-binding sites, `envir`, interpolation, pipes and `gptr_last()` behave as for `peter()` and the document recorder
-sees the call as written. The factory registers, in the harness's session, the note as the `coaching` prompt
-section (T1, order 790), skills that carry their own text, the deny-only policies `coaching` and `harness_rules`,
-and the finish hook that sends the review and the unmet requirements once or twice before peter stops.
-`gateway_register()` loads a factory with the same `gptr_key` once per session, so a continuation does not load it
-twice. Nothing is registered process-wide; a session's policies bind every session started under it [D-269].
+binding sites, `envir`, interpolation, pipes and `gptr_last()` behave as for `peter()` and the document recorder sees
+the call as written. The factory registers, in the harness's session, the note as the prompt section
+`coaching_<coaching hash>` (T1, order 790), skills that carry their own text, the deny-only policies `coaching` and
+`harness_rules`, and the finish hook that sends the review and the unmet requirements once or twice before peter
+stops. `gateway_register()` loads a factory with the same `gptr_key` once per session, so a continuation does not
+load it twice. Nothing is registered process-wide; a session's policies bind every session started under it [D-269].
 
 **Process model.** Every session of a coaching call runs in its own R process, never in the person's.
-`coach_run_jobs()` (`gptr-child.R`) schedules jobs on the worker pool (§6.13), at most two at once per plan
-account, each through the `child` entry of `proc_rscript()` beside `worker_main()`, reusing P19's scheduling,
-registry shipping and provider revival [D-268]. A run's child gets copies of the objects, the resolved arguments
-and model, the person's registry records and rules, and copies of the project's instruction files. It runs
-unattended (`noninteractive_ask = "stop"`, recording off) in a fresh scratch folder that is its working folder and
-project root, with sub-agents inline, a model gate in `provider_stream()` and a process-wide `fence` policy that
-keeps writes, installs, R child processes and login reads out by every route the classifier sees. A coach's child,
-and the judge's, gets no registry and no tool, only its prompt, model and reply schema. Interrupting the call
-kills every child.
+`coach_run_jobs()` (`gptr-child.R`) schedules jobs on the worker pool (§6.13), at most two at once per plan account,
+each through the `child` entry of `proc_rscript()` beside `worker_main()`, reusing P19's scheduling, registry
+shipping and provider revival [D-268]. A run's child gets copies of the objects, the resolved arguments and model,
+the person's registry records and rules, and copies of the project's instruction files. It runs unattended
+(`noninteractive_ask = "stop"`, recording off) in a fresh scratch folder that is its working folder and project root,
+with sub-agents inline, a model gate in `provider_stream()` and a process-wide `fence` policy that keeps writes,
+working-folder changes, installs, R child processes, `peter$script()` and login reads out by every route the
+classifier sees [D-273]. A coach's child, and the judge's, gets no registry and no tool, only its prompt, model and
+reply schema. Interrupting the call kills every child.
 
 **Transport.** Parent to child, a job travels as an `.rds` spec in a private 0700 folder (the trusted direction).
 Child to parent there are two channels, both read as data: event lines on the child's stdout (risk, refusals,
