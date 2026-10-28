@@ -656,6 +656,37 @@ test_that("withr's variable setters are read as Sys.setenv() is (FIX-36 review r
   }
 })
 
+test_that("a variable setter's arguments are matched as R matches them (FIX-36 review round 3)", {
+  root = local_project()
+  # part of `.new`'s or `new`'s name, `.new` exactly before a part of it, Sys.unsetenv()'s x
+  control = c(
+    "withr::local_envvar(.n = list(R_USER_CONFIG_DIR = 'elsewhere'), .local_envir = new.env())",
+    "withr::local_envvar(.ne = c(HOME = 'elsewhere'), .local_envir = globalenv())",
+    "withr::local_envvar(. = list(R_USER_CONFIG_DIR = 'elsewhere'), .local_envir = globalenv())",
+    "withr::with_envvar(code = f(), n = c(R_USER_CONFIG_DIR = 'elsewhere'))",
+    "withr::local_envvar(.n = '1', .new = c(HOME = 'elsewhere'))",
+    "Sys.unsetenv(x = 'R_USER_CONFIG_DIR')", "Sys.unsetenv(x = c('MY_VAR', 'XDG_CONFIG_HOME'))")
+  ordinary = c("withr::local_envvar(TZ = 'UTC')", "withr::with_envvar(c(LANG = 'C'), f())",
+               "withr::local_envvar(.n = list(TZ = 'UTC'))",
+               "withr::with_envvar(f(), n = c(LANG = 'C'))",
+               "withr::local_envvar(.new = list(my_var = '1'), new.env())",
+               "Sys.unsetenv('LC_ALL')", "Sys.unsetenv(x = 'LC_ALL')", "Sys.setenv(TZ = )")
+  check = function() {
+    for (code in control) {
+      r = gptr_risk(code, root = root)
+      expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
+    }
+    for (code in ordinary) expect_identical(gptr_risk(code, root = root)$level, 2L, label = code)
+  }
+  check()
+  # with withr not loaded, by its formals as the classifier writes them
+  matched = risk_args
+  local_mocked_bindings(risk_args = function(e, fn, pkg) {
+    if (!missing(pkg) && identical(pkg, "withr")) as.list(e)[-1L] else matched(e, fn, pkg)
+  })
+  check()
+})
+
 test_that("a delete keeps file_delete, a control target shows in path_class (IC-78)", {
   root = local_project()
   r = gptr_risk("unlink('.git', recursive = TRUE)", root = root)
