@@ -443,6 +443,35 @@ test_that("idle served R reads a nested sh call as run in its wd (review round 4
   expect_true(file.exists(file.path(out, "build", "a.o")))
 })
 
+test_that("served R meets the secret guard when env hands a child a secret (review round 5)", {
+  skip_on_cran()
+  local_project()
+  local_vault()
+  withr::local_envvar(R5_FAKE_KEY = "sk-test-0000")
+  secret_register("sk-test-0000", "R5_FAKE_KEY")
+  child = deparse1(c(rscript_path(), "-e", "cat(nzchar(Sys.getenv('R5_FAKE_KEY')))"))
+  code = function(env) paste0("x = peter$sh(", child, ", env = ", env, ")$stdout")
+  serve = function(target, env) mcp_dispatch_local(r_call(code(env)), target)$result
+  # served while the run's pump runs (a person answers) and to an idle session (nobody can)
+  ui = local_scripted_ui(list("n"))
+  seen = serve_in_run(function(event, ctx) serve(ctx$session, "'R5_FAKE_KEY'"))
+  expect_identical(ui$log$method, "permission")
+  expect_true(seen$out$isError)
+  expect_null(seen$envir$x)
+  idle = local_served_session("auto")
+  res = serve(idle$session, "'R5_FAKE_KEY'")
+  expect_true(res$isError)
+  expect_match(res$content[[1L]]$text, "reads a registered secret", fixed = TRUE)
+  expect_null(idle$envir$x)
+  # yolo hands it over as it reads one; an ordinary env runs in auto
+  yolo = local_served_session("yolo")
+  expect_false(serve(yolo$session, "'R5_FAKE_KEY'")$isError)
+  expect_identical(yolo$envir$x, "TRUE")
+  expect_false(serve(idle$session, "c('PATH', LANG = 'C')")$isError)
+  expect_identical(idle$envir$x, "FALSE")
+  expect_identical(nrow(ui$log), 1L)
+})
+
 test_that("inside a running session the claude route gates through perm_check once", {
   probe = gptr_tool("probe", "Calls the MCP dispatcher the way the claude adapter does.",
                     parameters = list(type = "object",

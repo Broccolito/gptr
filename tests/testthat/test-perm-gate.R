@@ -242,6 +242,38 @@ test_that("the secret guard asks in auto; only r(secret:NAME) pre-approves (G6, 
   expect_identical(gate_decide(gate_r("Sys.getenv()"), gate_ctx("auto")), "allow")
 })
 
+test_that("a member handing a child a registered secret meets the guard; no rule allows it", {
+  skip_on_cran()
+  root = local_project()
+  local_permission_rules()
+  local_vault()
+  withr::local_envvar(R5_FAKE_KEY = "sk-test-0000")
+  secret_register("sk-test-0000", "R5_FAKE_KEY")
+  nested = function(name, input) {
+    tool = registry_get("tool", name)
+    list(id = "c1/1", name = name, input = input, tool = tool, nested = TRUE,
+         risk = tool$risk(input, NULL))
+  }
+  calls = list(nested("sh", list(cmd = c("git", "status"), env = "R5_FAKE_KEY")),
+               nested("script", list(path = "a.sh", env = c(K = "sk-test-0000"))))
+  for (call in calls) {
+    got = vapply(c("manual", "auto", "yolo"), function(m) gate_decide(call, gate_ctx(m)), "")
+    expect_identical(unname(got), c("ask_human", "ask_human", "allow"), label = call$name)
+    # the question offers no [a]lways rule: neither the tool's name nor a secret: rule stops it
+    expect_null(perm_policy_secret(call, gate_ctx("auto"))$suggested_rule)
+  }
+  gptr_permissions(allow = c("r(secret:R5_FAKE_KEY)", "*(secret:R5_FAKE_KEY)", "sh"))
+  for (call in calls) {
+    expect_identical(gate_decide(call, gate_ctx("auto")), "ask_human", label = call$name)
+  }
+  # a level-3 command handed the secret is not allowed in manual by a secret: rule
+  gptr_permissions(remove = "sh")
+  rm = nested("sh", list(cmd = c("rm", "-rf", "data"), env = "R5_FAKE_KEY"))
+  expect_identical(perm_policy_mode(rm, gate_ctx("manual"))$decision, "ask")
+  ok = nested("sh", list(cmd = c("git", "status"), env = "LANG"))
+  expect_identical(gate_decide(ok, gate_ctx("auto")), "allow")
+})
+
 test_that("a value read from a secret may not leave over the network (G6 taint)", {
   root = local_project()
   ctx = gate_ctx("auto")

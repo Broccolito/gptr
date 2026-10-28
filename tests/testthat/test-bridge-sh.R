@@ -700,6 +700,34 @@ test_that("member risks follow the command classifier; script and bg are at leas
   expect_identical(as.integer(set_only$level), 0L)
 })
 
+test_that("an env that hands a child a registered secret meets the secret guard (review round 5)", {
+  skip_on_cran()
+  local_vault()
+  withr::local_envvar(R5_FAKE_KEY = "sk-test-0000", R5_HOLDS = "x-sk-test-0000-y",
+                      R5_PLAIN = "plain-value")
+  secret_register("sk-test-0000", "R5_FAKE_KEY")
+  sh = registry_get("tool", "sh")
+  script = registry_get("tool", "script")
+  # passed by its name in any case (child_env() matches names case-insensitively), passed in
+  # another variable, or set as a value
+  for (env in list("R5_FAKE_KEY", "r5_fake_key", "R5_HOLDS", c(K = "sk-test-0000"),
+                   list("PATH", K = "Bearer sk-test-0000"))) {
+    for (r in list(sh$risk(list(cmd = c("git", "status"), env = env), NULL),
+                   script$risk(list(path = "a.sh", env = env), NULL))) {
+      expect_true(isTRUE(r$secret_guard), label = deparse1(env))
+      expect_identical(r$secrets, "R5_FAKE_KEY")
+      expect_identical(as.integer(r$level), 3L)
+    }
+  }
+  # an ordinary env is as before: a pass-through is level 3, a value set is the command's level
+  for (env in list("PATH", "LANG", "R5_PLAIN", c(LANG = "C"), NULL)) {
+    r = sh$risk(list(cmd = c("git", "status"), env = env), NULL)
+    expect_false(isTRUE(r$secret_guard), label = deparse1(env))
+    expect_identical(as.integer(r$level), if (length(env) && is.null(names(env))) 3L else 0L)
+    expect_false(isTRUE(script$risk(list(path = "a.sh", env = env), NULL)$secret_guard))
+  }
+})
+
 test_that("a bridge digest is one line, whatever text the model chose (review round 3)", {
   seen = new.env()
   local_mocked_bindings(run_current = function() NULL,
@@ -818,4 +846,43 @@ test_that("computed commands are re-checked at run time with the actual command"
   peter("make the marker", model = fake3, envir = new.env(), mode = "auto")
   expect_false(file.exists("marker.txt"))
   expect_true(file.exists("safe.txt"))
+})
+
+test_that("a secret handed to a child through env asks as a secret read does (review round 5)", {
+  skip_on_cran()
+  local_project()
+  local_permission_rules()
+  local_vault()
+  withr::local_envvar(R5_FAKE_KEY = "sk-test-0000")
+  secret_register("sk-test-0000", "R5_FAKE_KEY")
+  rs = deparse(rscript_path())
+  child = "\"cat(nzchar(Sys.getenv('R5_FAKE_KEY')), nzchar(Sys.getenv('K')))\""
+  run = function(mode, env, answers = list(), pre = "") {
+    ui = local_scripted_ui(answers)
+    code = paste0(pre, "x = peter$sh(c(", rs, ", \"-e\", ", child, "), env = ", env, ")$stdout")
+    fake = local_fake_provider(list(fake_tool("r", code = code), fake_text("done")))
+    e = new.env()
+    peter("run it", model = fake, envir = e, mode = mode)
+    list(x = e$x, asked = sum(ui$log$method == "permission"))
+  }
+  # passed through by name, or set from a value the code read by a computed name
+  computed = "v = Sys.getenv(paste0('R5_FAKE', '_KEY'))\n"
+  for (case in list(list("auto", "'R5_FAKE_KEY'", "n", ""),
+                    list("auto", "c(K = v)", "n", computed),
+                    list("manual", "'R5_FAKE_KEY'", c("y", "n"), ""))) {
+    res = run(case[[1L]], case[[2L]], as.list(case[[3L]]), case[[4L]])
+    expect_identical(res$asked, length(case[[3L]]), label = paste(case[1:2], collapse = " "))
+    expect_null(res$x)
+  }
+  # yolo runs a secret read without a question, as for Sys.getenv()
+  expect_identical(run("yolo", "'R5_FAKE_KEY'"), list(x = "TRUE FALSE", asked = 0L))
+  # the code's own read was the question: the same secret in env asks no second one
+  expect_identical(run("auto", "c(K = Sys.getenv('R5_FAKE_KEY'))", list("y")),
+                   list(x = "FALSE TRUE", asked = 1L))
+  # no [a]lways rule is offered, as no rule but r(secret:) stops the guard's question
+  before = perm_store()$allow
+  expect_identical(run("auto", "'R5_FAKE_KEY'", list("a")), list(x = "TRUE FALSE", asked = 1L))
+  expect_identical(perm_store()$allow, before)
+  # an ordinary env runs as before
+  expect_identical(run("auto", "c('PATH', LANG = 'C')"), list(x = "FALSE FALSE", asked = 0L))
 })
