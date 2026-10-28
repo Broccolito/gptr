@@ -203,6 +203,33 @@ test_that(
   }
 })
 
+test_that("opening retries a pending owner's cleanup and opens once it settles (FIX-35)", {
+  skip_on_cran()
+  x = artifact_owner_fixture()
+  x$scope$artifact_state$browser = x$scope$artifact_state$browser_owner = NULL
+  x$state$factory_error = simpleError("controlled attachment failure")
+  x$state$wait_error = simpleError("controlled cleanup wait")
+  expect_error(x$open(), "controlled attachment failure", fixed = TRUE)
+  lease = x$scope$artifact_state$browser_pending
+  expect_identical(lease, list(browser = NULL, owner = x$owner))
+  # While its cleanup still fails, the lease is kept and nothing is launched.
+  seen = tryCatch(x$open(), error = identity)
+  expect_s3_class(seen, "gptr_error_io")
+  expect_match(conditionMessage(seen), "must finish cleanup before opening another", fixed = TRUE)
+  expect_identical(x$state$events, rep(c("process", "wait"), 2L))
+  expect_identical(x$scope$artifact_state$browser_pending, lease)
+  expect_identical(x$state$owner_calls, 1L)
+  x$state$wait_error = NULL
+  x$state$factory_error = NULL
+  b = x$open()
+  expect_identical(b, x$state$constructed)
+  expect_identical(x$state$events, rep(c("process", "wait"), 3L))
+  expect_null(x$scope$artifact_state$browser_pending)
+  expect_identical(x$scope$artifact_state$browser, b)
+  expect_identical(x$scope$artifact_state$browser_owner, x$owner)
+  expect_identical(x$state$owner_calls, 2L)
+})
+
 test_that("foreign remote artifacts and already dead local owners receive no process signal", {
   x = artifact_owner_fixture(remote = TRUE)
   expect_invisible(x$close())

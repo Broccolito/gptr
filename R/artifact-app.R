@@ -869,8 +869,15 @@ artifact_browser_ready = function(owner) {
 #' @noRd
 artifact_browser = function() {
   if (!is.null(artifact_state$browser_pending)) {
-    gptr_abort("The pending headless browser must finish cleanup before opening another.", "io",
-               operation = "open", path = NULL)
+    # Retry the cleanup that failed: its helpers may have exited since (D-271).
+    settled = tryCatch({
+      artifact_browser_close()
+      TRUE
+    }, error = function(e) FALSE, interrupt = function(e) FALSE)
+    if (!settled) {
+      gptr_abort("The pending headless browser must finish cleanup before opening another.", "io",
+                 operation = "open", path = NULL)
+    }
   }
   b = artifact_state$browser
   owner = artifact_state$browser_owner
