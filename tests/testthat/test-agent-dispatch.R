@@ -532,7 +532,7 @@ test_that("a refused call says none of it ran; a nested denial mid-run does not 
 
 test_that("an r(secret:) deny or ask rule stops a member handing a child the secret (round 6)", {
   skip_on_cran()
-  local_project(files = list(s.sh = "whoami"))
+  local_project(files = list(s.sh = "whoami", s.R = "cat('ok')"))
   local_permission_rules()
   local_vault()
   withr::local_envvar(R6_FAKE_KEY = "sk-test-0000-r6")
@@ -565,6 +565,15 @@ test_that("an r(secret:) deny or ask rule stops a member handing a child the sec
     res = run(code, "yolo", list("n"))
     expect_null(res$x)
     expect_identical(res$asked, 1L, label = code)
+  }
+  # a person's yes to the rule's question approves the hand-over, so the secret guard does not
+  # ask again; manual asks for the code first, as without the rule (verification of round 6)
+  for (code in c("peter$sh('echo ok', env = 'R6_FAKE_KEY')$stdout",
+                 "peter$script('s.R', env = 'R6_FAKE_KEY')$stdout")) {
+    res = run(code, "auto", list("y", "y", "y"))
+    expect_match(res$x, "ok", fixed = TRUE, label = code)
+    expect_identical(res$asked, 1L, label = code)
+    expect_identical(run(code, "manual", list("y", "y", "y"))$asked, 2L, label = code)
   }
 })
 

@@ -1629,7 +1629,8 @@ analysis did not show, such as one the `env` of `peter$sh()` or `peter$script()`
 The command of a `peter$sh()` or `peter$bg()` call, or the path of a `peter$script()` call, meets the deny and
 ask rules first, whatever its level, as the literal call would, with the registered secrets its `env` hands the
 child, so an `r(secret:NAME)` deny or ask rule stops the hand-over [D-267]; allow rules are not applied there,
-and an ask offers no `[a]lways` rule [D-251].
+an ask rule is asked in the gate's one question for the call, with its other reasons [D-267], and an ask offers
+no `[a]lways` rule [D-251].
 Base `system()`, `system2()`, `shell()` and `shell.exec()` have no such re-check, so auto and yolo refuse them
 with a computed command (6.8.1) [D-262]. R served to the CLI routes or an MCP client binds the same marker, with
 the served call as the outer call, so its nested calls pass `dispatch_nested()` too; when no pump serves the

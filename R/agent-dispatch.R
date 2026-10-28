@@ -410,7 +410,8 @@ checkpoint_after = function(run, call, ctx, tokens, res) {
 #' its actual input (call_risk(): a patch's Delete File, a computed command) is not above that
 #' level either and reads no registered secret the outer call's did not, runs without a second
 #' prompt; others pass perm_check(). A sh, bg or script call meets the deny and ask rules first,
-#' whatever its level (nested_rules()). Recorded in `details$nested` (at most 20).
+#' whatever its level (nested_rules()); an ask rule's question is perm_check()'s one question, with
+#' the call's other reasons. Recorded in `details$nested` (at most 20).
 #' @noRd
 dispatch_nested = function(name, input, ctx) {
   check_string(name, "name")
@@ -440,16 +441,17 @@ dispatch_nested = function(name, input, ctx) {
     gptr_abort(call$blocked, "tool", tool = name, status = "blocked")
   }
   own = call_risk(call, ctx, run)
-  dec = if (name %in% c("sh", "bg", "script")) nested_rules(call, run, own$secrets)
-  if (!is.null(dec)) {
-    nested_record(run, outer$id, name, tool_error(dec$reason), risk_level(dec$risk))
-    gptr_abort(perm_denial_text(dec), "tool", tool = name, status = "denied")
+  rules = if (name %in% c("sh", "bg", "script")) nested_rules(call, run, own$secrets)
+  if (identical(rules$decision, "deny")) {
+    nested_record(run, outer$id, name, tool_error(rules$reason), risk_level(rules$risk))
+    gptr_abort(perm_denial_text(rules), "tool", tool = name, status = "denied")
   }
   level = nested_listed_level(outer, name)
   secret = isTRUE(own$secret_guard) &&
     !(isTRUE(outer$risk$secret_guard) && all(own$secrets %in% outer$risk$secrets))
-  if (is.null(level) || max(level, risk_level(own)) > call$outer_level || secret) {
-    dec = perm_check(call, run)
+  if (!is.null(rules) || is.null(level) || max(level, risk_level(own)) > call$outer_level ||
+        secret) {
+    dec = perm_check(call, run, rules)
     level = risk_level(dec$risk)
     if (!identical(dec$decision, "allow")) {
       nested_record(run, outer$id, name, tool_error(dec$reason %||% "denied"), level)
@@ -467,7 +469,8 @@ dispatch_nested = function(name, input, ctx) {
 #' policy decides as for the literal call, with the registered `secrets` the member's `env` hands
 #' its child (its own risk), so an `r(secret:NAME)` rule meets the hand-over. Allow rules are not
 #' applied: the nested gate never loosens.
-#' @return NULL, or perm_check()'s denial.
+#' @return NULL, a denial (perm_result()), or an ask rule's decision (any other opinion asks),
+#'   which perm_check() asks with the call's other reasons in one question.
 #' @noRd
 nested_rules = function(call, run, secrets = character()) {
   recs = Filter(function(r) identical(r$name, "rules"),
@@ -480,12 +483,11 @@ nested_rules = function(call, run, secrets = character()) {
   out = ctx_with_source(ctx, recs[[1L]]$source,
                         function() ext_policy_decide(recs[[1L]]$spec, lit, ctx))
   if (is.null(out) || identical(out$decision, "allow")) return(NULL)
-  dec = if (identical(out$decision, "deny")) {
-    perm_result("deny", out$reason, call$input, lit$risk, out$rule)
-  } else {
-    perm_ask(call, run, out, lit$risk)
+  if (identical(out$decision, "deny")) {
+    return(perm_result("deny", out$reason, call$input, lit$risk, out$rule))
   }
-  if (!identical(dec$decision, "allow")) dec
+  out$decision = if (identical(out$decision, "ask_human")) "ask_human" else "ask"
+  out
 }
 
 #' The id of the next nested call of an outer call: `<outer id>/<k>`, counted past the 20 records
@@ -564,29 +566,31 @@ nested_record = function(run, outer_id, name, res, level) {
 #' The permission combination (IC-04, IC-53): policies, `permission_request` hooks (`ask`), the
 #' UI, the non-interactive stop; the risk is recomputed from the raw input. An allowed call gets
 #' the one-shot tokens of its control exports (IC-53 item 3).
+#' @param extra A decision decided elsewhere for the same call (a nested call's ask rule,
+#'   nested_rules()), combined with the policies' as one more opinion, or NULL.
 #' @return `list(decision, reason, input, risk, rule, how)`; the dispatcher executes only "allow".
 #' @noRd
-perm_check = function(call, run) {
-  res = perm_decide(call, run)
+perm_check = function(call, run, extra = NULL) {
+  res = perm_decide(call, run, extra)
   if (identical(res$decision, "allow")) perm_grant_control(run, res$risk)
   res
 }
 
 #' perm_check() before the token grant
 #' @noRd
-perm_decide = function(call, run) {
+perm_decide = function(call, run, extra = NULL) {
   ctx = run_ctx(run)
   snap = run$opts$safety %||% list()
   risk = call_risk(call, ctx, run)
   if (isTRUE(snap$unsafe_no_permissions)) {
     return(perm_result("allow", "gptr.unsafe_no_permissions is set", call$input, risk))
   }
-  out = perm_policies(call, ctx, run, risk)
+  out = perm_policies(call, ctx, run, risk, extra)
   if (identical(out$decision, "modify")) {
     call2 = call
     call2$input = out$input
     risk2 = call_risk(call2, ctx, run)
-    out2 = perm_policies(call2, ctx, run, risk2)
+    out2 = perm_policies(call2, ctx, run, risk2, extra)
     if (identical(out2$decision, "modify")) {
       return(perm_result("deny", "a policy modified the call twice", call$input, risk2, out2$rule))
     }
@@ -622,12 +626,12 @@ perm_rank = function(decision) match(decision, perm_decisions)
 #' Combine every policy's opinion (ext_policy_decide(), fail closed): deny > ask_human > ask >
 #' modify > allow; no active `mode` policy means ask. A question offers the rule of an `[a]lways`
 #' answer only when every policy that asks it does (an ask rule's question offers none, and keeps
-#' that policy's `no_rule`, why)
+#' that policy's `no_rule`, why); `extra` (perm_check()'s) is the first opinion
 #' @noRd
-perm_policies = function(call, ctx, run, risk) {
+perm_policies = function(call, ctx, run, risk, extra = NULL) {
   recs = registry_all_recs("policy", session = run$session)
   call$risk = risk
-  best = NULL
+  best = extra
   for (r in recs) {
     res = ctx_with_source(ctx, r$source, function() ext_policy_decide(r$spec, call, ctx))
     if (is.null(res)) next
