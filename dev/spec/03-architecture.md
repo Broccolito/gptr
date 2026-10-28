@@ -1633,8 +1633,8 @@ with a computed command (6.8.1) [D-262]. R served to the CLI routes or an MCP cl
 the served call as the outer call, so its nested calls pass `dispatch_nested()` too; when no pump serves the
 request the idle gate decides each first, a `sh` or `bg` call as the literal call of its command run in its `wd`,
 with the registered secrets its `env` hands the child, and then, when that hand-over meets the secret guard and
-the served call's own analysis guards other secrets or none, the member call itself, which no `r(secret:)` rule
-covers [D-267].
+the served call's own analysis does not guard every secret handed over, the member call itself, which no
+`r(secret:)` rule covers [D-267].
 Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
 
 #### 6.8.5 Non-interactive runs and plan mode (NS-12)
