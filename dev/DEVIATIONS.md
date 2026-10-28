@@ -7949,6 +7949,20 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `setwd(getwd())` is level 4 (2 on the merged branches, which read it as R's working directory).
   Contract-visible: 03 section 6.8.1. Tests: test-risk-forms.R "a getwd() or setwd() the code or
   the session binds is one the code computes (merge)". Evidence: progress/fixes.md FIX-34's merge.
+- Status 2026-10-28 (review round 6): `Sys.junction()`'s row names `to` again, R's formal, so on
+  Windows, where the function exists, a junction written to a control path is level 4 `control`
+  (round 5's `link` named no formal, which left it 2 there); `sys::exec_wait()`'s and
+  `sys::exec_background()`'s `std_out` and `std_err` are files they write, read as
+  `processx::run()`'s `stdout` is (formerly 0 for an output file outside the project). Not read,
+  each level 3, and now named in `?gptr_security` and 03 section 6.8.1: `env` with `-C` among
+  other short options or as an abbreviated `--chdir`, `pwsh -CommandWithArgs` and `-cwa`, and
+  `os.environ.update()` of a mapping whose names are not plain string literals. Both pages also
+  say that a form they name as not read is code built or reached at run time, code in a file or
+  a package, code another interpreter runs, or a call or argument the classifier has no rule for
+  (round 5 named only the first kind). Contract-visible: 03 section 6.8.1; `?gptr_security`.
+  Tests: test-risk-forms.R "Sys.junction() writes its `to`, with R's formals or as written, on
+  any host (round 6)", "sys::exec_*()'s std_out and std_err are files it writes, as processx's
+  (round 6)". Evidence: progress/fixes.md FIX-27.
 
 ## D-263 - FIX-28 Bracketed paste decides a paste in a T console (2026-10-26)
 - Rule (mode): a T console's call turns bracketed paste on with its character mode. `tty_modes()`

@@ -6535,6 +6535,52 @@ the driver, screens, events, transcripts and replays without a model are local, 
   maintainer's call: in a project inside a protected folder every directory is protected, so
   round 4's gate gives `setwd('.')` and `setwd('sub')` 4 there, as before round 5. Not run here:
   Windows hosts and R 4.2, which only PR #93's oldrel-4 check proves.
+- Review round 6, the class writer's items (the verifiers' final verdicts on round 5's branches:
+  gate5's findings 1 to 4 and 6 on `6a4a7d31`; branch `claude/v1-fix-class6` from `b2ed7033`,
+  each test red on `b2ed7033`'s code first, `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`).
+  FIX-32's and FIX-36's review round 6 bullets hold the round's other items.
+  - Red: test-risk-forms.R and test-mcp-server.R on `b2ed7033`'s code,
+    `^(risk-forms|mcp-server)$` FAIL 37 PASS 407 in UTF-8 and under `LC_ALL=C LANG=C`; this record's
+    share: `Sys.junction()` 5 and sys's output files 9.
+  - `Sys.junction()` (finding 1, `40ad87db`): round 5 named the row's path argument `link`, no
+    formal of R's `Sys.junction(from, to)`, so on Windows, where `risk_args()` matches the real
+    formals, the written path went unread: `Sys.junction("sub", ".git/hooks/x")` read 2 where it
+    is 4 `control`, and a junction written outside the project 2 where it is 3. The row names `to`
+    again and keeps round 5's reading of `from`; the test gives the function R's formals on every
+    host (a mocked `risk_args()`) and checks both readings. Round 5's line above is corrected.
+  - sys's output files (finding 2, `3db43dae`): `by_args()` read a runner's output files as
+    `stdout` and `stderr`, and sys names them `std_out` and `std_err`, so once round 5 read the sys
+    runners' commands `sys::exec_wait("ls", std_out = "<outside>/x")` was 0 (manual and edits had
+    asked), and `std_out = "~/.Rprofile"` too. They are read as `processx::run()`'s `stdout` is:
+    3 outside, 4 `control` for `~/.Rprofile` or `.git/config`, 2 in the project.
+  - The class sentence (finding 3, `b4cee8f3`): `?gptr_security` and 03 section 6.8.1 said each
+    form they name as not read is code that builds a call, a name, a path or a command at run time
+    or reaches a function by another name; some are code in a file or a package (`source()`), code
+    another interpreter runs (`Rscript -e`, Python through 'reticulate', `sh -c rm\ -f\ x`), or a
+    call or argument the classifier has no rule for (`usethis::local_project()`, the `wd` of
+    `callr::r()`). The sentence now names the four kinds.
+  - Dead code (finding 4, `16c436fe`): `read_user()` passed the caller's working directory to the
+    scan of a user function's code, `function(formals) body`, whose body is read as a
+    definition's, where nothing reads it (the verifier's mutant without it stayed green). It is
+    dropped, and round 5's line above that such code starts from the caller's directory is
+    corrected: it reads `getwd()` and `setwd()` as ones the code computes. No test is red: the
+    classifier tests pass before and after.
+  - Named as not read (finding 6, `8fe78025`), each level 3, which auto and yolo run: `env` with
+    `-C` among other short options or as an abbreviated `--chdir` (`env -iC DIR`,
+    `env --chd=DIR`), `pwsh -CommandWithArgs` and `-cwa`, and `os.environ.update()` of a mapping
+    whose names are not plain string literals (`{'\x48OME': d}`, and `{'H' 'OME': d}` beside it).
+    `?gptr_security` and 03 section 6.8.1 name them; D-262's status records the round.
+  - Green on `af045d67`'s code (`416ffd1f` and the records commit change only roxygen comments,
+    `man/` and `dev/`):
+    `^(perm|risk|rules|nested|bridge|mcp-|gptr-config|agent-|tool-|session-|py|knit|secrets|auth-)`
+    FAIL 0 WARN 0 SKIP 16 PASS 10304 in UTF-8 (321 s) and the same under `LC_ALL=C LANG=C`
+    (330 s). Lint of the 4 changed R files and the 2 changed test files clean; `document()` no
+    diff; `check-docs.R` 0 problems; spelling clean; fmt.py leaves copies of the changed records
+    unchanged and lintfmt.py shows its baseline (fixes.md 1, HANDOFF 3, PROGRESS 1, DEVIATIONS 0).
+    `^arch-layers$`, outside that set, fails on `b2ed7033`'s code too: `repl_mentions`
+    (console-repl.R) calls `fs_path` (tool-walk.R), an edge from round 5's console merge that this
+    branch does not touch. Not run: the full suite, `R CMD check`, Linux and Windows hosts, R 4.2
+    and R-devel, live models.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #93)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
@@ -7428,6 +7474,27 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
     reads the secret by name covers its hand-over; 04 sections 7.11 (the request record's `summary`)
     and 15.4 IC-53 items 7 and 8; D-267's status line, corrected in place, and a status line for the
     redacted question.
+- Review round 6, the idle hand-over (the verifier of round 5's secret items on `d64cab89`, V5-1;
+  branch `claude/v1-fix-class6`, `b57fde3e`): in idle served R an `r(secret:NAME)` allow rule
+  covered a secret that the `env` of a level-0 `peter$sh()` hands its child, while
+  `?gptr_permissions`, `?gptr_security`, 04 section 15.4 IC-53 item 7 and D-267 say the rule covers
+  a hand-over only when the same code reads that secret by name. `mcp_nested_gate()` merged the
+  member's guard into the literal `r` call of the command, which the rule's allow arm covers when
+  no other row is flagged, so idle `peter$sh("whoami", env = "NAME")` ran in auto with the key
+  where the loop asks once. The idle gate now decides the literal call (still with the member's
+  secrets, so a deny `r(secret:NAME)` rule stops the hand-over as before) and then, when the guard
+  stands, the member call itself, which no rule for `r` code covers; a secret the served call's own
+  analysis guards drops the member's guard, as `dispatch_nested()` does. 03 section 6.8.4, 04
+  section 15.5 IC-57 and D-267's status say so.
+  - Red: test-mcp-server.R "an r(secret:) rule covers an idle served hand-over if the code reads it
+    (round 6)" FAIL 3 on `b2ed7033`'s code (the hand-over ran: no error, no refusal, `x` set). Its
+    rows for code that reads the secret first and for a deny rule in yolo pass there; the deny rows
+    fail (FAIL 3) when the literal call does not carry the member's secrets.
+  - Observed, not changed: in the loop a deny `r(secret:NAME)` rule does not stop such a hand-over
+    in yolo (offline with the fake model the child ran, no question): `gptr_risk()` of the code
+    flags no secret, and the member call is an `sh` call no `r(...)` rule names. The docs say deny
+    rules match what `gptr_risk()` flags, so they hold; idle served R is the stricter of the two.
+  - Green and checks: FIX-27's review round 6 above.
 
 ## FIX-33 - Transcript findings from the live sessions (2026-10-27, #93)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
@@ -8966,3 +9033,37 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   comma after `XDG_CONFIG_HOME`). Green: the checks in FIX-34's review round 5 records bullet.
   D-272 is unchanged. The finding's optional half (the yolo bullet and the yolo notice) is not in
   this branch.
+- Review round 6, the class writer's items (the verifier of round 5's gate items on `6a4a7d31`,
+  finding 5; the coverage check's last verdict on `a05bad8a`, findings 1 and 2; branch
+  `claude/v1-fix-class6`).
+  - Red: this record's share of FAIL 37 (FIX-27's review round 6): CLI variables 12 and the helpers'
+    own arguments 8.
+  - CLI variables (gate5's finding 5, `98bab0dc`): `risk_control_env()` took a registered
+    provider's `auth` names and `compat$base_url_env`, so `CLAUDE_CODE_OAUTH_TOKEN`,
+    `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, which the `cli-claude` and `cli-codex` child environments
+    keep for the CLIs, were level 2 while `?gptr_options` calls a variable a provider reads control.
+    The list also takes the names those two profiles keep (with `CLAUDE_CODE_GIT_BASH_PATH`), in R
+    and in Python, in any case. `?gptr_options`, `?gptr_security`, 03 section 6.8.1 and 04 section
+    15.4 IC-53 item 3 say so, and round 5's line above that no provider reads `CODEX_HOME` is
+    corrected (`RETICULATE_PYTHON` stays 2).
+  - The helpers' own arguments (finding 2, `d73388b9` and `af045d67`): `risk_fold()` dropped
+    `paste0()`'s `sep`, which R pastes as one more part, and folded `collapse` and `file.path()`'s
+    `fsep` as parts, so `Sys.unsetenv(x = paste0("R_USER_", sep = "CONFIG_DIR"))`,
+    `Sys.unsetenv(file.path("R_USER", "CONFIG_DIR", fsep = "_"))` and the `collapse` forms read 2,
+    `system(paste0("ls", sep = "; rm -rf build"))` 0 where R runs `ls; rm -rf build`, and
+    `setwd(paste0("../..", collapse = "x"))` 2. The fold now calls base's helper on the folded
+    arguments as written, so R matches them. A collapse is also read as each value, since the fold
+    cannot tell a name's several values from a vector: `d73388b9` read such a collapse as one the
+    code computes, which kept a variable name `control` but made a delete of
+    `paste0(d, collapse = "")`, with `d` holding a path outside the project in a branch, 3 (4
+    before); `af045d67` reads the collapsed and each uncollapsed value, so that delete stays 4 and
+    `paste0(c("T", "Z"), collapse = "")` is `TZ`, level 2.
+  - Helper bindings (finding 1, `06a0b79b` and `416ffd1f`, documented): round 4's rule takes the
+    code's helper bindings from `risk_bound()`, which sees `=`, `<-` and `<<-`, formals and `for`
+    variables only, so a helper bound with `assign()`, `delayedAssign()`, `makeActiveBinding()`,
+    `list2env()` or `attach()`, or in a list given to `with()` or `within()`, is folded as base R's
+    (level 2 for such a variable name, which auto runs, and a command read as base's helper builds
+    it). `?gptr_security`, `?gptr_risk`, 03 section 6.8.1 and D-272's status now say which bindings
+    count; reading the others would need each binder's arguments matched and `with()`'s scope, not
+    one small rule.
+  - Green and checks: FIX-27's review round 6 above.
