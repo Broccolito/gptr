@@ -568,6 +568,33 @@ test_that("an r(secret:) deny or ask rule stops a member handing a child the sec
   }
 })
 
+test_that("a request and a blocked run's condition carry its flagged rows redacted (round 6)", {
+  skip_on_cran()
+  local_project()
+  local_permission_rules()
+  local_vault()
+  withr::local_envvar(R6_FAKE_KEY = "sk-test-0000-r6")
+  secret_register("sk-test-0000-r6", "R6_FAKE_KEY")
+  gptr_permissions(ask = "r(sh:echo *)")
+  # a command the code computes holds the key; nobody can answer, so the run stops blocked
+  code = "v = Sys.getenv(paste0('R6_FAKE', '_KEY')); x = peter$sh(c('echo', 'k', v))$stdout"
+  seen = new.env()
+  off = gptr_register(gptr_hook("permission_request", function(event, ctx) {
+    seen$risk = event$risk
+    NULL
+  }))
+  withr::defer(off())
+  fake = local_fake_provider(list(fake_tool("r", code = code), "done"))
+  err = tryCatch(peter("go", model = fake, envir = new.env(), mode = "auto"),
+                 gptr_error_permission = function(e) e)
+  expect_s3_class(err, "gptr_error_permission")
+  for (risk in list(err$risk, seen$risk)) {
+    expect_true(any(grepl("[secret:R6_FAKE_KEY]", risk$flagged$call, fixed = TRUE)))
+    expect_false(any(grepl("sk-test-0000-r6", unlist(risk), fixed = TRUE)))
+  }
+  expect_false(grepl("sk-test-0000-r6", err$action, fixed = TRUE))
+})
+
 test_that("the UI answers asks when the run's snapshot can prompt", {
   local_gptr_options(interactive = TRUE)
   ui = new.env()

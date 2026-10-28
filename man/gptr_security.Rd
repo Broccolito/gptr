@@ -166,9 +166,10 @@ pull, gptr asks again.
 
 \section{Secrets}{
 
-Keys are held in a private vault and appear in sessions, logs and errors only as markers such
-as \verb{[secret:ANTHROPIC_API_KEY]}. Values are redacted before anything is written or sent: the
-session files, documents, caches, spill files, wire logs and the output of child processes.
+Keys are held in a private vault and appear in sessions, logs, errors and permission questions
+only as markers such as \verb{[secret:ANTHROPIC_API_KEY]}. Values are redacted before anything is
+written or sent: the session files, documents, caches, spill files, wire logs and the output of
+child processes.
 Their URL-encoded, JSON-escaped and base64 forms are redacted too; a copy the code changes in
 another way, such as reversed or cut, is no longer recognised and is not redacted.
 gptr never reads the credential files of other tools. Reading a registered secret from model

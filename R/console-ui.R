@@ -32,13 +32,15 @@ ui_get = function(session = NULL) {
   ui_wrap(ui)
 }
 
-#' Wrap a UI so that its permission answers are normalised and a remembered one is sent to
-#' builtin:permissions
+#' Wrap a UI so that it is given a request with registered secrets redacted (no question shows
+#' one: its code, change rows, flagged calls and paths, reason, hint and rule), its permission
+#' answers are normalised and a remembered one is sent to builtin:permissions
 #' @noRd
 ui_wrap = function(ui) {
   ask = ui$permission
   ui$permission = function(request) {
-    ans = ui_answer_norm(tryCatch(ask(request), error = function(e) NULL), request)
+    shown = redact(request, "context")
+    ans = ui_answer_norm(tryCatch(ask(shown), error = function(e) NULL), request)
     if (!is.null(ans$remember)) {
       ev_dispatch("permissions:remember",
                   list(scope = ans$remember, tool = request$tool, input = request$input,

@@ -707,7 +707,7 @@ perm_ask = function(call, run, out, risk) {
   } else {
     perm_blocked_how(run)
   }
-  run$blocked = list(tool = call$name, risk = risk, how_to_allow = how)
+  run$blocked = list(tool = call$name, risk = req$risk, how_to_allow = how)
   # the stored, unsignalled condition of the `blocked` status (04 section 6.1.2; P08 signals it)
   run$condition = if (identical(call$name, "ask")) {
     # the `ask` tool in a run nobody can answer (IC-68, NS-12): gptr_error_noninteractive
@@ -720,7 +720,7 @@ perm_ask = function(call, run, out, risk) {
                           "answer in this run. ", how),
                    "permission",
                    fields = list(action = paste(req$summary, collapse = "\n"), tool = call$name,
-                                 risk = risk, how_to_allow = how, session = run$session))
+                                 risk = req$risk, how_to_allow = how, session = run$session))
   }
   perm_result("deny", "approval is needed and no one can answer in this run", call$input, risk,
               how = "The run stops here.")
@@ -769,7 +769,9 @@ perm_grant_control = function(run, risk) {
 
 #' The permission request record (04 section 7.11); `agent` says who asks (D-188), `tool_call_id`
 #' which call (a nested member call its own, `<outer id>/<k>`), `no_rule` why a question offers no
-#' `suggested_rule` where a policy asks it without one (an ask rule's reason)
+#' `suggested_rule` where a policy asks it without one (an ask rule's reason); its `risk` and
+#' `summary` redacted, as the question, a blocked run's condition and its `run$blocked` show them
+#' (a nested call's flagged rows hold values the code computed); `input` is the call's own
 #' @noRd
 perm_request_record = function(call, run, out, risk, tier) {
   d = run_data(run)
@@ -780,17 +782,16 @@ perm_request_record = function(call, run, out, risk, tier) {
   }
   rule = out$suggested_rule
   list(tool = call$name, tool_call_id = call$id, input = call$input, summary = perm_summary(call),
-       risk = risk, reason = perm_reason(out$reason),
+       risk = redact(risk, "context"), reason = perm_reason(out$reason),
        suggested_rule = if (rlang::is_string(rule)) rule,
        no_rule = if (!rlang::is_string(rule) && rlang::is_string(out$no_rule)) out$no_rule,
        undo_note = if (rlang::is_string(note)) note, session = d$id, turn = d$turns,
        nested = isTRUE(call$nested), tier = tier, agent = agent_label(run))
 }
 
-#' The lines to show for a request: the code (at most 20 lines), a path, a command (a nested
-#' peter$sh() or peter$bg()) followed by its other inputs as JSON, or the input as JSON; a command
-#' and JSON are redacted, as a nested call's are values the code computed, such as a secret
-#' handed to a child through `env`
+#' The lines to show for a request, redacted: the code (at most 20 lines), a path, a command (a
+#' nested peter$sh() or peter$bg()) followed by its other inputs as JSON, or the input as JSON (a
+#' nested call's are values the code computed, such as a secret handed to a child through `env`)
 #' @noRd
 perm_summary = function(call) {
   input = if (is.list(call$input)) call$input else list()
@@ -798,10 +799,10 @@ perm_summary = function(call) {
   if (rlang::is_string(code)) {
     lines = strsplit(code, "\n", fixed = TRUE)[[1L]]
     if (length(lines) > 20L) lines = c(lines[1:20], paste0("+", length(lines) - 20L, " more lines"))
-    return(lines)
+    return(redact(lines, "context"))
   }
   path = input[["path"]]
-  if (is.character(path)) return(paste0("path: ", path))
+  if (is.character(path)) return(redact(paste0("path: ", path), "context"))
   json = function(x) {
     txt = redact(tryCatch(json_encode(x), error = function(e) "(input not shown)"), "context")
     if (nchar(txt) > 200L) paste0(substr(txt, 1L, 200L), "...") else txt

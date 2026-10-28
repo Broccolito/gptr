@@ -4845,8 +4845,10 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    call's first line, cut to the console width before `(+N more lines)` (an absolute path inside the project
    relative to it), then the flagged calls one per line, highest level first, each cut to the console width, at
    most 5, then `(+N more; ? shows all)`; `[a]`/`[p]` are offered only with a `suggested_rule` (D-187, D-222).
-   A nested call's command and a tool's other inputs shown as JSON are redacted, so a secret that `env` hands a
-   child shows as its marker (D-267).
+   No approval display shows a registered secret: every UI is given the request redacted (the `context`
+   profile: its code, change rows, flagged calls and paths, reason, hint and rule), and the record's `risk` and
+   `summary`, which the `blocked` condition and `run$blocked` carry, are redacted when it is built, so a secret
+   that `env` hands a child or a nested command holds shows as its marker (D-267, review round 6).
    A flag has one shape in the ask and in the `?` view, `[<level> <category>] <call>` (`ui_flags()`), its
    backticked names inline code as in an answer and an object's `<class, size>` the mention line's `(class,
    size)` (P28 Task 49: the ask showed the Markdown and angle brackets and `?` another shape, `[2] file_write

@@ -387,6 +387,46 @@ test_that("a and p's reason shows an ask rule's text escaped (review round 4 ver
                    "the rule r(sh:wc *<U+001B>[31m*) asks; an always rule would not stop it")
 })
 
+test_that("a permission question never shows a registered secret (review round 6)", {
+  skip_on_cran()
+  local_project()
+  local_permission_rules()
+  local_vault()
+  key = "sk-test-0000-r6r6"
+  secret_register(key, "R6_FAKE_KEY")
+  crit = ui_request(paste0("peter$sh(c('rm', '-f', '/tmp/zr6-", key, "'))"))
+  code = ui_request(paste0("x = '", key, "'"))
+  code$no_rule = paste0("the rule r(sh:echo ", key, "*) asks")
+  code$undo_note = paste("cannot undo", key)
+  ruled = ui_request("x = 1", rule = paste0("r(sh:echo ", key, "*)"))
+  write = list(tool = "write", input = list(path = "a.txt", content = paste0("a\n", key)),
+               risk = list(level = 2L), reason = key, tier = "ask")
+  edit = list(tool = "edit", input = list(path = "a.txt", oldText = key, newText = "b"),
+              risk = list(level = 2L), reason = "edit", tier = "ask")
+  # every UI is given the request redacted: the console's lines, the ? view, its a and p hint
+  seen = character()
+  ui = ui_wrap(gptr_spec("ui", "r6shown", has_ui = function() TRUE,
+                         select = function(...) NA_integer_,
+                         notify = function(text, level = "info") invisible(NULL),
+                         permission = function(request) {
+                           seen <<- c(seen, ui_permission_lines(request),
+                                      ui_permission_detail(request))
+                           ui_answer("deny")
+                         }))
+  for (req in list(crit, code, write, edit)) ui$permission(req)
+  con = ui_wrap(ui_console_spec())
+  out = c(console_try(function() con$permission(code), c("a", "?", "n"))$shown,
+          console_try(function() con$permission(ruled), "a")$shown)
+  # rows wrap at the console's width: read them as one text
+  shown = gsub("\\s+", " ", paste(cli::ansi_strip(c(seen, out)), collapse = " "))
+  expect_false(grepl(key, shown, fixed = TRUE))
+  for (part in c("x = '[secret:R6_FAKE_KEY]'", "+[secret:R6_FAKE_KEY]", "-[secret:R6_FAKE_KEY]",
+                 "/tmp/zr6-[secret:R6_FAKE_KEY]", "the rule r(sh:echo [secret:R6_FAKE_KEY]*) asks",
+                 "cannot undo [secret:R6_FAKE_KEY]", "allowed r(sh:echo [secret:R6_FAKE_KEY]*)")) {
+    expect_true(grepl(part, shown, fixed = TRUE), label = part)
+  }
+})
+
 test_that("a denial keeps the UI's how; other answers drop it (D-252)", {
   req = ui_request("x = 2")
   expect_identical(ui_answer_norm(list(decision = "deny", how = "Repeat it later."), req),
