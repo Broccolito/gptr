@@ -84,6 +84,7 @@ doc_eol_of = function(txt) {
 }
 
 #' Read a document as lines, keeping its EOL, BOM, final newline and md5 (report 14 doc_read).
+#' A line ends at `\r\n`, `\n` or a lone `\r`, as readLines() and source() read it.
 #' The md5 is that of exactly the bytes read (the same hex as tools::md5sum() of the file), so
 #' any change made on disk during or after the read makes the next checked write a conflict
 #' instead of being overwritten. Signals gptr_error_doc_write (reason "missing" for a missing
@@ -112,10 +113,10 @@ doc_read = function(path) {
   }
   Encoding(txt) = "UTF-8"
   eol = doc_eol_of(txt)
-  final_nl = !nzchar(txt) || endsWith(txt, "\n")
+  final_nl = !nzchar(txt) || grepl("[\r\n]$", txt)
   lines = character()
   if (nzchar(txt)) {
-    l = strsplit(paste0(txt, "\001"), "\r?\n")[[1L]]
+    l = strsplit(paste0(txt, "\001"), "\r\n?|\n")[[1L]]
     l[length(l)] = sub("\001$", "", l[length(l)])
     lines = if (final_nl) l[-length(l)] else l
   }
