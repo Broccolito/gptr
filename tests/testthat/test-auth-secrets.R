@@ -394,6 +394,18 @@ test_that("a name bound from a string and a .env file are guarded reads (review 
     expect_identical(scan$level, 3L, label = code)
   }
   expect_identical(secret_scan("readLines('data/env.txt')")$level, 0L)
+  # a variable whose strings name no secret may hold one when it runs (a function's argument or a
+  # data mask of the same name): a computed name, level 3, and 4 with a network call (verification)
+  send = "; curl::curl_fetch_memory(paste0('http://127.0.0.1:9/?k=', v))"
+  for (code in c("n = 'HOME'; f = function(n) Sys.getenv(n); v = f('TEST_API_KEY')",
+                 "n = 'HOME'; v = with(list(n = 'TEST_API_KEY'), Sys.getenv(n))",
+                 "n = 'HOME'; v = unlist(lapply('TEST_API_KEY', function(n) Sys.getenv(n)))",
+                 "v = 'R_LIBS_USER'; Sys.getenv(v)")) {
+    scan = secret_scan(code)
+    expect_false(scan$guard, label = code)
+    expect_identical(scan$level, 3L, label = code)
+    expect_identical(secret_scan(paste0(code, send))$level, 4L, label = code)
+  }
 })
 
 test_that("shell network sinks and container assignments preserve secret taint", {

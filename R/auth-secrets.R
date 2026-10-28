@@ -627,6 +627,7 @@ secret_scan = function(code, tainted = character()) {
       if (!is.null(known) && !length(known$names)) {
         add("env_dump", "Sys.getenv")
       } else if (!is.null(known)) {
+        before = length(found)
         for (n in known$names) {
           # in any letter case, as Windows reads environment names (one rule on every OS)
           reg = registered[toupper(registered) == toupper(n)]
@@ -636,6 +637,9 @@ secret_scan = function(code, tainted = character()) {
             add("secret_env", n)
           }
         }
+        # a variable whose strings name no secret may hold one when it runs (a function's
+        # argument, a data mask of the same name): a name computed at run time
+        if (is.symbol(x) && length(found) == before) add("env_dynamic", "Sys.getenv")
       } else {
         add("env_dynamic", "Sys.getenv")
       }
