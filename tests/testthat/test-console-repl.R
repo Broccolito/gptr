@@ -503,7 +503,7 @@ test_that("a binary @file is announced, not inlined", {
   expect_identical(men$said, "@ blob.bin (binary, 3 bytes)")
 })
 
-test_that("an @file line that is not UTF-8 is read as CP1252, as the read tool reads it (FIX-34)", {
+test_that("an @file line that is not UTF-8 is read as CP1252, a byte it lacks as <xx> (FIX-34)", {
   root = local_project()
   bytes = c(charToRaw("caf"), as.raw(0xe9), charToRaw(" "), as.raw(0x93), charToRaw("q"),
             as.raw(c(0x94, 0x81)), charToRaw("\ncafé in UTF-8\n"))
@@ -512,6 +512,27 @@ test_that("an @file line that is not UTF-8 is read as CP1252, as the read tool r
   expect_identical(men$files, paste0("<file path=\"lat.txt\">\ncafé “q”<81>\n",
                                      "café in UTF-8\n</file>"))
   expect_identical(men$said, "@ lat.txt (2 lines)")
+})
+
+test_that("the bytes CP1252 lacks read as <xx> where iconv() maps them, as on Windows (FIX-34)", {
+  root = local_project()
+  writeBin(c(charToRaw("a"), as.raw(c(0x81, 0x8d, 0x8f, 0x90, 0x9d, 0x93)), charToRaw("b\n")),
+           file.path(root, "gap.txt"))
+  # Windows' iconv() reads each as the C1 control of its code (U+0081, ...), where macOS's and
+  # glibc's refuse it; a byte-wise stand-in that does so runs in place of iconv()
+  win_iconv = function(x, from, to, sub = NA) {
+    one = function(b) {
+      s = iconv(rawToChar(b), from, to)
+      if (is.na(s)) iconv(rawToChar(b), "latin1", to) else s
+    }
+    vapply(x, function(s) paste(vapply(charToRaw(s), one, ""), collapse = ""), "",
+           USE.NAMES = FALSE)
+  }
+  block = repl_file_block
+  environment(block) = list2env(list(iconv = win_iconv), parent = environment(repl_file_block))
+  want = "<file path=\"gap.txt\">\na<81><8d><8f><90><9d>“b\n</file>"
+  expect_identical(as.character(repl_file_block("gap.txt", "gap.txt")), want)
+  expect_identical(as.character(block("gap.txt", "gap.txt")), want)
 })
 
 test_that("a long @file is marked truncated even when the first cut line is blank", {

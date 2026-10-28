@@ -6659,6 +6659,15 @@ the driver, screens, events, transcripts and replays without a model are local, 
   as `sha` is that of the lines as written; both are also on origin/main 13a917ff, each for its own
   issue. `dev/PROGRESS.md` and `dev/HANDOFF.md` still list the double `/redo` defect as open under
   FIX-29; they are not edited here.
+- Review round 4 (Windows CI, runs 40619750152 and 40619750174 on `0aa55320`): test-doc-replay.R
+  "a comment in a direct R line shaped like another entry stays in its section (FIX-31)" failed
+  in the Windows jobs of R release and oldrel-4 at its check that the transcript holds no carriage
+  return (added by FIX-33's CR item): the test wrote the transcript with `writeLines()`, which
+  writes CRLF on Windows, and the writer keeps a CRLF document's line ends. Commit `89b60208`: the
+  test runs in an LF and in a CRLF transcript on every platform (`doc_write_eol()`) and checks that
+  no carriage return is left outside the transcript's line ends (`doc_stray_cr()`). Red: on macOS
+  with a CRLF transcript and the old check, FAIL 1 at that check, as on Windows. Green:
+  `^doc-replay$` PASS 1063. FIX-33's review round 4 bullet has the runs of both files.
 
 ## FIX-32 - Permission findings from the live sessions (2026-10-27, #PR)
 Scope: the permission findings of the live sessions with real models (Versa GPT-5.6 and Claude
@@ -7181,6 +7190,21 @@ and green runs use `dev/ci/isolated-check.R test` with `NOT_CRAN=true` and SIGIN
   model)" and "re-ask it with their own model (`gptr_source(model =)`)", and README.md is rendered
   again (`precompute.R --readme`, 0 problems). The script-as-history vignette (.Rmd and .orig)
   reads "the others use the model and mode their session has from the turns before".
+- Review round 4 (Windows CI, runs 40619750152 and 40619750174 on `0aa55320`), the carriage
+  return checks: the Windows jobs of R release and oldrel-4 with `NOT_CRAN=true` failed
+  test-doc-blocks.R:1151 and 1156 (DOC-5) and test-doc-replay.R:1316 (the CR item), each
+  `expect_false(grepl("\r", ...))` on the file's bytes. The tests wrote the document with
+  `writeLines()`, which writes CRLF on Windows, and the writer keeps a CRLF document's line ends,
+  so the carriage returns were the document's own; the code is right. Commit `89b60208`: both
+  tests run in an LF and in a CRLF document on every platform (`doc_write_eol()` in
+  helper-doc.R) and check that no carriage return is left outside the document's line ends
+  (`doc_stray_cr()`), which a doubled or a lone carriage return makes fail. Red: the two tests
+  with their setup written in both line ends and the old check, `^doc-(blocks|replay)$` FAIL 3
+  PASS 1528 on macOS, the three CRLF checks, as on Windows. Green: PASS 1531 in UTF-8 and under
+  `LC_ALL=C LANG=C`. The new check still guards DOC-5: with `doc_split_lines()` keeping carriage
+  returns (not committed) the two files gave FAIL 18, the three checks among them in both line
+  ends. The "could not find function lg" lines of the log are the output of test-doc-replay.R's
+  `!` line `lg(df$y)`, a typo on purpose (FIX-33's undo test), not a failure.
 
 ## FIX-34 - Console findings from the live sessions (2026-10-27, #PR)
 Scope: the console findings of the live sessions with real models on `claude/v1-fixes`
@@ -7224,6 +7248,9 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   reads `café`, then CP1252's quotes and `<81>`. The triager's `iconv(sub = "byte")`, as short,
   gave `caf<e9>` for the common case, an Excel CSV on Windows. Valid UTF-8 lines are unchanged.
 - Green: `^console-repl$` PASS 375 in UTF-8 and PASS 362 SKIP 4 under `LC_ALL=C LANG=C`.
+- Status (review round 4, Windows CI): on Windows the line read `café “q”` and U+0081, not `<81>`,
+  until `fd54bee2`; `<81>` now holds on every platform. The read tool does not read such a line
+  the same way (FIX-34's review round 4 bullet below), so the test no longer says it does.
 
 ### MM-6 - /model's switch names the full id a CLI's default runs
 - Commit `daab2a8f`. Red: `^console-commands$` FAIL 5 PASS 170: the switch answered
@@ -7520,6 +7547,50 @@ PASTE-2 in part and PASTE-1 in NEWS only.
   - Open: unchanged by this round but for FIX-28's narrower paste item. Not run: Linux and
     Windows, and live models (the fixes are tested offline; the verifiers' live and tmux repros
     were not repeated).
+- Review round 4 (Windows CI, runs 40619750152 and 40619750174 on `0aa55320`): commits
+  `fd54bee2` and `89b60208` (FIX-33's and FIX-31's records have the second) and this record.
+  - The @file line (STATIC-4): every Windows job of R release and oldrel-4 (R 4.2) that ran
+    test-console-repl.R, `NOT_CRAN=false` included, failed its line 512: the line read
+    `café “q”` and U+0081, not `<81>`. Cause: Windows' `iconv()` maps the five bytes CP1252 lacks
+    (0x81, 0x8d, 0x8f, 0x90 and 0x9d) to the C1 controls of their codes, where macOS's and glibc's
+    refuse them, so `sub = "byte"` gave `<xx>` only off Windows. Red: test-console-repl.R "the
+    bytes CP1252 lacks read as <xx> where iconv() maps them, as on Windows (FIX-34)" FAIL 1 PASS
+    380 on macOS on `0aa55320`'s code: `repl_file_block()`, run with a byte-wise stand-in for
+    Windows' `iconv()` (a copy of it whose environment binds the stand-in), gave `a`, U+0081,
+    U+008D, U+008F, U+0090, U+009D and `“b`, the result Windows gave. Fix: `repl_file_block()`
+    turns the five bytes into `<xx>` text (`gsub(fixed = TRUE, useBytes = TRUE)`) before
+    `iconv()`, so no platform's `iconv()` sees one, and drops `sub = "byte"`, which no byte reaches
+    now. The function's comment already said "a byte it lacks as `<xx>`"; NEWS, `?peter`, 04 and
+    D-269 say nothing of such a byte, so no rule changes. Green: `^console-repl$` PASS 381 in
+    UTF-8 and PASS 368 SKIP 4 under `LC_ALL=C LANG=C`.
+  - The test STATIC-4 added said the line reads "as the read tool reads it", which no platform
+    gives: the read tool decides one encoding per file, and with a byte CP1252 lacks it reads the
+    whole file as latin1 off Windows (on macOS STATIC-4's file read `café`, U+0093, `q`, U+0094,
+    U+0081 and `cafÃ© in UTF-8`) and as CP1252 with U+0081 on Windows. It is now named "an @file
+    line that is not UTF-8 is read as CP1252, a byte it lacks as <xx> (FIX-34)". The read tool is
+    not changed: its edit and write tools encode back to the encoding it decided.
+  - Checks on `89b60208` (this record changes only `dev/`), `NOT_CRAN=true`, the SIGINT reset, a
+    short `TMPDIR`: the changed test files and their neighbours (every `console-`, `doc-`,
+    `tool-read`, `utils-` and `read` file) FAIL 0 WARN 0 SKIP 4 PASS 7551 in UTF-8 and FAIL 0 WARN
+    0 SKIP 33 PASS 7360 under `LC_ALL=C LANG=C` (the skips: INFRA-03, a Windows filesystem, {repr}
+    not installed, and under C 29 that need a UTF-8 locale). Lint of the five changed R and test
+    files clean; `document()` no diff; `fmt.py` on a copy of this record changes nothing and
+    `lintfmt.py` shows only the baseline.
+  - The sweep of the R and test files this branch changed since `13a917ff` for the same classes
+    of Windows assumption found no other: the three carriage return checks were the only checks
+    of a file's bytes after a `writeLines()` setup, and `repl_file_block()` the only `iconv()` of
+    8-bit text. The rest that Windows reaches ran there and passed: `bridge_risk_sh()`'s
+    `shQuote(type = "sh")` builds text for the command classifier only, and test-perm-gate.R's
+    wd test gives it a Windows path under `dirname(tempdir())`; `doc_kept()` compares a plan path
+    with `tempdir()` through `path_inside()`, as test-doc-blocks.R's MM-4 test checks there; the
+    new pty and stty tests of test-console-typing.R skip on Windows, whose console is class L and
+    so never sets terminal modes or bracketed paste.
+  - Open: `raw_to_utf8()` (R/utils-encoding.R, not changed here), which reads .env files and,
+    through `read_utf8()`, artifact logs and metadata, still turns a byte CP1252 lacks into `?` off
+    Windows and into its C1 control on Windows. Not run: Windows (the stand-in gives the result
+    Windows gave in CI; the next Windows run proves the fix there) and R before 4.6. The fix needs
+    `gsub(useBytes = TRUE)` to leave the result of a UTF-8-marked input unmarked, as R 4.6 does and
+    R 4.3.0's NEWS implies for earlier R, since `iconv()` gives `NA` for a `bytes`-marked string.
 
 ## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #PR)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
