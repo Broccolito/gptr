@@ -1180,6 +1180,8 @@ test_that("a block recorded before FIX-33 reads fresh by its untrimmed sha (revi
 
 test_that("a carriage return in printed output ends a #> line, as R reads it (review round 6)", {
   expect_identical(doc_output_lines(list("a\r\nb\rc", "d\r")), c("#> a", "#> b", "#> c", "#> d"))
+  # a byte that is not valid UTF-8 is written <xx> in every locale, as the console shows it
+  expect_identical(doc_output_lines(list("x\xffy\rz", "ok")), c("#> x<ff>y", "#> z", "#> ok"))
   # an evaluator other than eval_r() may keep one, as capture.output() does
   local_project()
   local_gptr_options(record = "auto")

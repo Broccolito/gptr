@@ -1167,7 +1167,7 @@ doc_history_code = function(lines) {
 #' expression, each its lines or r_doc_outputs()'s list(lines, n); no line follows a cut one.
 #' Lines end where R reads a line end (doc_split_lines()), whichever evaluator printed them, and
 #' control, bidi and zero-width characters are written `<U+XXXX>` (ui_escape()), as doc_one_line()
-#' writes them.
+#' writes them; a byte that is not valid UTF-8 is written `<xx>` (console_utf8()).
 #' @noRd
 doc_output_lines = function(outputs, max_lines = NULL, width = 76L) {
   out = character()
@@ -1176,7 +1176,7 @@ doc_output_lines = function(outputs, max_lines = NULL, width = 76L) {
     held = is.list(o) && !is.null(o$n)
     n = if (held) as.integer(o$n) else 0L
     o = as.character(unlist(if (held) o$lines else o, use.names = FALSE))
-    o = unlist(lapply(o, doc_split_lines), use.names = FALSE)
+    o = unlist(lapply(console_utf8(o), doc_split_lines), use.names = FALSE)
     if (length(out) == total) out = c(out, o)
     total = total + max(n, length(o))
   }
