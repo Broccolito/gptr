@@ -537,7 +537,9 @@ test_that("Python code is read as Python joins its lines and names (review round
   py = function(code) gptr_risk(paste0("peter$py(", deparse(code), ")"), root = root)$level
   for (code in c("os.environ\\\n['HOME'] = d", "(os.environ)['HOME'] = d",
                  "( os . environ )['HOME'] = d", "os.environ\\\n.update(R_USER_CONFIG_DIR = d)",
-                 "os.putenv\\\n('AWS_REGION', x)", "del (os.environ)['HOME']")) {
+                 "os.putenv\\\n('AWS_REGION', x)", "del (os.environ)['HOME']",
+                 "os.environ['HO\\\nME'] = d", "# note \\\nos.environ[k] = d",
+                 "# note \\\nos.putenv(k, d)", "# note \\\nos.environ['home'] = d")) {
     expect_identical(py(paste0("import os\n", code)), 4L, label = code)
   }
   knit = paste0("peter$knit('python', ", deparse("import os\nos.environ\\\n['HOME'] = d"), ")")
@@ -555,7 +557,8 @@ test_that("os.chdir() in Python code is read as setwd() is (review round 6)", {
   out = withr::local_tempdir(tmpdir = dirname(tempdir()))
   py = function(code) gptr_risk(paste0("peter$py(", deparse(code), ")"), root = root)$level
   for (code in c("os.chdir('..')", paste0("os.chdir(", deparse(out), ")"), "os.chdir(d)",
-                 "os.fchdir(fd)", "posix.chdir('/')", "with contextlib.chdir('..'):\n  pass")) {
+                 "os.fchdir(fd)", "posix.chdir('/')", "with contextlib.chdir('..'):\n  pass",
+                 "# note \\\nos.chdir('..')")) {
     expect_identical(py(paste0("import os\n", code)), 4L, label = code)
   }
   knit = paste0("peter$knit('python', ", deparse("import os\nos.chdir('..')"), ")")
@@ -567,26 +570,57 @@ test_that("os.chdir() in Python code is read as setwd() is (review round 6)", {
   expect_identical(py("x = 1  # os.chdir('..')"), py("x = 1"))
 })
 
+test_that("a relative Python chdir() after a move is read in the directory R is in (round 6)", {
+  root = local_outside_project()
+  py = function(code) gptr_risk(paste0("peter$py(", deparse(code), ")"), root = root)$level
+  for (code in c("os.chdir('data')\nprint(os.getcwd())\nos.chdir('..')",
+                 "os.chdir('data'); os.chdir('..')", "os.chdir('data/sub')\nos.chdir('../..')",
+                 "os.chdir('data')\nos.chdir('sub')\nos.chdir('../..')")) {
+    expect_identical(py(paste0("import os\n", code)), 2L, label = code)
+  }
+  # neighbours: out of the project from where R may be, after a move Python may not make (in a
+  # branch, a block, an expression, a bracket or a string) or into a directory the code computes
+  for (code in c("os.chdir('data')\nos.chdir('../..')", "if p:\n  os.chdir('data')\nos.chdir('..')",
+                 "if p: os.chdir('data')\nos.chdir('..')", "p and os.chdir('data')\nos.chdir('..')",
+                 "os.chdir('data') if p else 0\nos.chdir('..')",
+                 "x = [p and\nos.chdir('data')\n]\nos.chdir('..')",
+                 "s = '''\nos.chdir('data')\n'''\nos.chdir('..')",
+                 "with contextlib.chdir('data'):\n  pass\nos.chdir('..')",
+                 "def f():\n  os.chdir('data')\nos.chdir('..')",
+                 "from contextlib import chdir\nchdir('data')\nos.chdir('..')",
+                 "os.chdir(d)\nos.chdir('data')",
+                 "os.chdir('data')\nos.chdir('..')\nos.chdir('..')")) {
+    expect_identical(py(paste0("import os\n", code)), 4L, label = code)
+  }
+})
+
 test_that("eval(quote(x)) is refused as x is when x would end the session (review round 6)", {
   blocked = function(code) eval_guard(parse(text = code, keep.source = FALSE))$blocked
   for (code in c("eval(quote(q('no')))", "base::eval(quote(quit()))",
                  "rlang::eval_bare(quote(q()))", "eval(base::quote(q()))",
-                 "eval(envir = e, quote(readline('?')))", "rlang::eval_tidy(quote(menu(1)))")) {
+                 "eval(envir = e, quote(readline('?')))", "rlang::eval_tidy(quote(menu(1)))",
+                 "do.call(eval, list(quote(q())))", "rlang::exec(eval, quote(q()))",
+                 "do.call('eval', list(quote(readline('?'))))",
+                 "rlang::exec(.fn = base::eval, quote(menu(1)))")) {
     expect_true(length(blocked(code)) > 0L, label = code)
   }
   # neighbours: a quote() alone is data, and eval() of other code is not refused
-  for (code in c("x = quote(q())", "eval(quote(x + 1))", "eval(bquote(.(x) + 1))")) {
+  for (code in c("x = quote(q())", "eval(quote(x + 1))", "eval(bquote(.(x) + 1))",
+                 "do.call(eval, list(quote(x + 1)))", "do.call(rbind, list(a, b))",
+                 "rlang::exec(paste0, 'a', 'b')", "do.call(eval, quote_list)")) {
     expect_identical(blocked(code), character(), label = code)
   }
   # the model is told and the run goes on, as for readline()
   root = local_project()
   withr::local_options(gptr.interactive = FALSE)
-  fake = local_fake_provider(list(fake_tool("r", code = "x = eval(quote(readline('?')))"),
-                                  "Done."))
-  s = peter("Ask me.", model = fake, mode = "auto", envir = new.env())
-  expect_identical(s$status, "idle")
-  expect_match(msg_text(fake_requests(fake)[[2]]$last_results[[1]]),
-               "^Permission denied: the code calls or refers to readline\\(\\)")
+  for (code in c("x = eval(quote(readline('?')))",
+                 "x = do.call(eval, list(quote(readline('?'))))")) {
+    fake = local_fake_provider(list(fake_tool("r", code = code), "Done."))
+    s = peter("Ask me.", model = fake, mode = "auto", envir = new.env())
+    expect_identical(s$status, "idle")
+    expect_match(msg_text(fake_requests(fake)[[2]]$last_results[[1]]),
+                 "^Permission denied: the code calls or refers to readline\\(\\)", label = code)
+  }
 })
 
 test_that("fs's copies and moves write their new_path, with fs loaded or not (review round 6)", {
