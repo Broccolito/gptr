@@ -1485,7 +1485,9 @@ user config directory, `.Rprofile`, `Makevars`, git hooks) are level 4 and to in
 server is trusted: `readOnlyHint` 0, `destructiveHint = FALSE` 2, none 3); nested `peter()` inherits and only
 tightens; `ask` is level 0.
 Outside function bodies, a path held in a name the code assigns is folded (literals through `c()`, `file.path()`,
-`paste()`, `paste0()`, `normalizePath()`, `path.expand()`, `tempfile()`), the worst value counting: a straight-line
+`paste()`, `paste0()`, `normalizePath()`, `path.expand()`, `tempfile()`; the first four with every argument as R
+passes it, so `paste0()`'s `sep` is a part and `collapse` and `fsep` join the parts, and a `collapse` of a value
+with several elements is one the code computes), the worst value counting: a straight-line
 assignment replaces the name's values unless the code also assigns it with `<<-`, one in a branch, loop or call adds
 its value (and, when first, the binding before the code), and a value the code computes or a loop that assigns the
 name makes it computed [D-211]. A call of one of these helpers (or of a `list()` holding withr's variables) that the

@@ -312,3 +312,33 @@ test_that("a variable the claude and codex CLIs keep is control, as a provider's
     expect_identical(lv(paste0("Sys.setenv(", v, " = 'x')"))$level, 2L, label = v)
   }
 })
+
+test_that("paste(), paste0() and file.path() are folded with their arguments as R passes them", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  # paste0() has no `sep` (one more part), `collapse` joins the parts, file.path()'s `fsep` too
+  for (code in c("Sys.unsetenv(x = paste0('R_USER_', sep = 'CONFIG_DIR'))",
+                 "Sys.unsetenv(x = paste0('R_USER_CONFIG_DIR', collapse = 'x'))",
+                 "nm = paste('R_USER_CONFIG_DIR', collapse = 'x'); Sys.unsetenv(nm)",
+                 "Sys.unsetenv(file.path('XDG_CONFIG_HOME', fsep = ''))",
+                 "Sys.unsetenv(file.path('R_USER', 'CONFIG_DIR', fsep = '_'))",
+                 # a value with several elements, collapsed, is one the code computes
+                 "n = 'TZ'; if (p) n = 'R_USER_CONFIG_DIR'; Sys.unsetenv(paste(n, collapse = ''))",
+                 "Sys.unsetenv(paste0(c('T', 'Z'), collapse = ''))")) {
+    r = gptr_risk(code, root = root)
+    expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
+  }
+  expect_identical(lv("system(paste0('ls', sep = '; rm -rf build'))"),
+                   lv("system('ls; rm -rf build')"))
+  expect_identical(lv("setwd(paste0('../..', collapse = 'x'))"), 4L)
+  expect_identical(lv(paste0("unlink(paste0(", deparse(out), ", collapse = '/x'))")), 4L)
+  # neighbours: as before
+  for (code in c("Sys.unsetenv(x = paste0('T', 'Z'))", "Sys.unsetenv(paste('T', 'Z', sep = ''))",
+                 "Sys.unsetenv(c(a = 'TZ'))", "Sys.unsetenv(paste0('T', 'Z', collapse = ''))",
+                 "setwd(file.path('data', 'sub'))")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  expect_identical(lv("unlink(paste0('a', '.csv'))"), lv("unlink('a.csv')"))
+  expect_identical(lv(paste0("unlink(file.path(", deparse(out), ", 'x', fsep = '/'))")), 4L)
+})
