@@ -69,7 +69,7 @@ Task evidence written during implementation: what ran, what passed, and the comm
 | Path | Holds | Status |
 |---|---|---|
 | `P01.md`..`P26.md`, `P28.md` | One log per plan: task evidence and plan acceptance. P27 is recorded in `HANDOFF.md` and `PROGRESS.md`. | historical |
-| `fixes.md` | Follow-up fixes made outside plan tasks: FIX-1..FIX-34, PERF-1 and PERF-2, and the hosted-CI rounds from CI-15 on. | current |
+| `fixes.md` | Follow-up fixes made outside plan tasks: FIX-1..FIX-36, PERF-1 and PERF-2, and the hosted-CI rounds from CI-15 on. | current |
 | `infra.md` | Hosted CI, tooling and Linux portability: rounds CI-1 to CI-20. | historical |
 | `simplicity-plan.md`, `simplicity.md` | The D-135 simplicity pass and `peter()` rename: the execution plan, then one section per package. | historical |
 | `rename-inventory.md`, `rename/rename.py` | The D-135 rename survey and the mechanical rename script. | historical |

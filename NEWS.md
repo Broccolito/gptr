@@ -55,10 +55,10 @@ works on the objects already in memory.
 * gptr asks, in `auto` mode too, before a `Sys.setenv()`, `Sys.unsetenv()`,
   `withr::local_envvar()` or `withr::with_envvar()` call, or an `os.environ` write in
   `peter$py()` or `peter$knit("python", code)` code, that sets or unsets `R_USER_CONFIG_DIR`,
-  `XDG_CONFIG_HOME` or `HOME` (on Windows also `APPDATA` or `USERPROFILE`), which move its
-  configuration folder or your home, as it does for a provider key. It also asks before such an
-  R call with a name it cannot read, and before `readRenviron()` and `dotenv::load_dot_env()`;
-  `?gptr_security` lists the changes it does not read.
+  `XDG_CONFIG_HOME`, `HOME`, `APPDATA` or `USERPROFILE` (the last two matter on Windows; gptr asks
+  on every system), which move its configuration folder or your home, as it does for a provider key.
+  It also asks before such an R call with a name it cannot read, and before `readRenviron()` and
+  `dotenv::load_dot_env()`; `?gptr_security` lists the changes it does not read.
 * Scripts and notebooks are the history: code the agent ran is recorded below each `peter()`
   call in `.R`, `.Rmd`, `.qmd` and `.ipynb` documents, also what a call ran before it failed,
   and replays without model calls (`gptr_doc()`, `gptr_source()`, `gptr_blocks()`,

@@ -7926,8 +7926,9 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     CI-104, FIX-27..FIX-34 and D-262..D-269 and their Verified parts this branch's runs; the Open
     lists drop FIX-21's failed `r` call and keep only the open halves of FIX-25's and FIX-31's
     notes, which the Closed lists now name, and add FIX-33's, FIX-34's and this round's open
-    items; FIX-32..FIX-34's headings say "#PR", as GitHub's #92 is another contributor's PR. The
-    docs verifier's optional README and cheat sheet wording is not taken: neither is wrong.
+    items; FIX-32..FIX-34's headings said "#PR" until `15553922` filled them with #93, as
+    GitHub's #92 is another contributor's PR. The docs verifier's optional README and cheat sheet
+    wording is not taken: neither is wrong.
   - Checks on `fbde4941` (the code of every fix; this record changes only `dev/`): the files whose
     names start with `doc-`, `console-`, `perm`, `risk`, `rules`, `nested`, `bridge`, `gptr-`,
     `session-`, `ckpt-`, `eval-`, `agent-`, `tool-`, `mcp-` or `arch-`, and `copy-ckpt`, FAIL 0
@@ -8174,7 +8175,7 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     heavy lock was not taken; no plan and no prompt text changed.
   - Not changed (note N3, for whoever merges): `dev/HANDOFF.md` and `dev/PROGRESS.md` still
     describe the twice-split paste without round 4's Ctrl-C change and name no round 4, and the
-    `#PR` placeholders stay.
+    `#PR` placeholders stay (until `15553922`).
   - Open: FIX-28's paste item as round 4 left it, with the drop now at most 0.2 s after a paste's
     read; under `quotes = FALSE` a `!` line's string completes nothing. Not run: Linux and Windows,
     R 4.2 and R-devel, and live models or tmux (the fixes are tested offline).
@@ -8279,6 +8280,24 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     `R CMD check` ran, so the heavy lock was not taken; no plan, contract or prompt text changed.
   - Open: what Not changed names. Not run: Linux and Windows, R 4.2 and R-devel, and live models
     or tmux (the fix is tested offline; the verifier's tmux repro was not repeated).
+- Review round 5, records (the docs verifier on `fe873436`, R5-D1 to R5-D8; branch
+  `claude/v1-fix-docs5`; docs only, so no test is red): the HANDOFF and PROGRESS intros said that
+  FIX-27..FIX-34 went through three review rounds, and the checkpoint lines of FIX-27, FIX-28,
+  FIX-32 and FIX-34 stopped at round 3, so note N3 above still held. They now say four rounds and
+  name each line's round 4 changes, and the Open item on a pasted Ctrl-C gives round 4's window
+  (within about 0.1 s of a paste's read, at most 0.2 s on the polling beat) and says that after a
+  longer pause inside a split paste a Ctrl-C byte in the read between is still the key
+  (`0a7d507e`). FIX-28's line says that such a byte pauses the run only after a stall of more than
+  about 0.1 s; the finding's text said that it cannot pause the run, which D-263's Limits
+  contradict. FIX-35's line said that close kills the helpers still running after a 2 s grace; it
+  now says, as D-271 does, that close waits up to 2 s and then signals every recorded helper, and
+  FIX-30's and FIX-31's lines take "(#93)" (`02945c0b`). `dev/README.md` names FIX-1..FIX-36 for
+  this file, and the two lines of this record's rounds 1 and 4 that said the headings carry `#PR`
+  now say until `15553922` (`2162781d`). Green: `fmt.py` on copies of HANDOFF, PROGRESS,
+  `dev/README.md` and this file changes nothing and `lintfmt.py` shows only the baseline;
+  `check-docs.R` 0 problems, `spelling::spell_check_package()` clean and
+  `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290, in UTF-8 and under
+  `LC_ALL=C LANG=C`; `document()` no diff. No rule changes.
 
 ## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #93)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
@@ -8896,3 +8915,13 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
     boundary these read as that code does; `os.environ`, a bare `environ` and `posix.environ` read
     as before, and another alias of `os.environ` stays as `?gptr_security` names it.
   - Green and checks: FIX-27's review round 5 verification above.
+- Review round 5, NEWS (the docs verifier on `fe873436`, R5-D9; branch `claude/v1-fix-docs5`):
+  NEWS said "(on Windows also `APPDATA` or `USERPROFILE`)", which reads as if macOS and Linux do
+  not ask for those two, while D-272's one rule asks on every OS: offline on macOS,
+  `gptr_risk("Sys.setenv(APPDATA = 'x')")` and the same call with `USERPROFILE`, `HOME`,
+  `XDG_CONFIG_HOME` or `R_USER_CONFIG_DIR` are level 4 `control`. Docs only, so no test is red:
+  the sentence lists the five names and says the last two matter on Windows and gptr asks on
+  every system, as `?gptr_options` has it (`f9bdc101`; the finding's replacement dropped the
+  comma after `XDG_CONFIG_HOME`). Green: the checks in FIX-34's review round 5 records bullet.
+  D-272 is unchanged. The finding's optional half (the yolo bullet and the yolo notice) is not in
+  this branch.

@@ -4,7 +4,7 @@ PR #88 (branch `claude/v1-prerelease`) merges ten branches into `main` `7e23ebd3
 PRs #78-#83 checkpoint also holds #84 (CI-98: the writer prototype reports an early writer exit),
 and adds CI-103 and the follow-ups that the PR's checks found. PR #90 adds CI-104 (`main`
 `13a917ff`), and the branch `claude/v1-fixes` from it, PR #93, adds FIX-27..FIX-34, merged and
-through three review rounds, CI-105 (contributor PR #92), and FIX-35 and FIX-36. Each has its record
+through four review rounds, CI-105 (contributor PR #92), and FIX-35 and FIX-36. Each has its record
 in `progress/fixes.md`, in id order, and decisions D-255, D-257, D-258, D-261 and D-262..D-272 and
 the D-254 amendment are in `DEVIATIONS.md`:
 
@@ -60,28 +60,37 @@ the D-254 amendment are in `DEVIATIONS.md`:
   not resolve among what the rules and the refusal do not read; review round 3: a `peter$sh()`
   command is read as run in its `wd`, so a delete outside the project through `wd` asks in auto and
   yolo, and the page names those functions as one reached by a computed name or through a list or an
-  environment or handed to a function of your own, as `lapply(cmd, system)` is refused.
+  environment or handed to a function of your own, as `lapply(cmd, system)` is refused; review
+  round 4: the code a shell or Python runs (`sh -c`, `python3 -c`) is read in the directory the line
+  moved to, and a `cd` target is a read of that directory, so a delete run in a directory outside
+  the project asks in auto and yolo and a listing there is level 1; `setwd()`, `withr::local_dir()`
+  and `withr::with_dir()` to a directory outside the project and `tempdir()`, or one the code
+  computes, are level 4; a drive-relative path (`D:x`) is outside on every OS; `processx::run()`'s
+  `wd` is read as `peter$sh()`'s unless the code computes it; `?gptr_security` names what stays
+  unread (another interpreter's code, a path the shell computes, an escaped `sh -c` word).
 - FIX-28 (#93, issue #86): a T console's call turns bracketed paste on in its own modes, so a paste
   is one draft however late the composer reads it; timing stays for terminals without it (D-263,
   amends IC-76); review round 1: a newline after a paste's end in its read stays in the draft, and a
   pasted Ctrl-C is text; review round 3: a key batch that holds a paste marker, or is read while a
   paste is open, holds no Ctrl-C key, and an end marker read with no paste open ends one, the text
-  before it pasted.
+  before it pasted; review round 4: a Ctrl-C byte in the read after such a batch, on the polling
+  beat with no empty read between, is pasted text too, so a Ctrl-C byte in a paste split again
+  before its own end marker pauses the run only after a stall of more than about 0.1 s.
 - FIX-29 (#93, issue #85): a console turn's block records what its prompt was sent with as `#< `
   lines, which a live re-ask sends again without reading the file; headers name what each step
   created (`created=`), and a direct R line that uses an undone step's object is switched off with
   `#~` and back on after `/redo` (D-264, IC-49 amended in place); review round 1: a name holding a
   comma is left out of `created=`; review round 3: a lone carriage return in the text a prompt was
   sent with ends a `#<` line, as R reads it.
-- FIX-30: a console statement ends with `model = "..."` and `mode = "..."` when its turn ran with a
-  model or mode the statement would not get without them (after `/model`, `/mode`, the plan menu,
-  or in a console started as `peter(mode = plan)`), so a live re-ask asks each turn on the model
-  and in the mode its statement names, else its session's from the turns before (D-265, IC-49
+- FIX-30 (#93): a console statement ends with `model = "..."` and `mode = "..."` when its turn ran
+  with a model or mode the statement would not get without them (after `/model`, `/mode`, the plan
+  menu, or in a console started as `peter(mode = plan)`), so a live re-ask asks each turn on the
+  model and in the mode its statement names, else its session's from the turns before (D-265, IC-49
   amended in place); this closes FIX-21's note on the console's starting mode.
-- FIX-31: only the run of lines starting `#<` that opens a console turn's block in an `.R` document
-  is read back, and none from a document with malformed markers; recorded code that would extend
-  the run gets one more `#` (`##<`), as does a comment line of `!` code shaped like a console line,
-  and `/undo`, `/undo`, `/redo`, `/redo` brings back both blocks (D-266, D-264 amended).
+- FIX-31 (#93): only the run of lines starting `#<` that opens a console turn's block in an `.R`
+  document is read back, and none from a document with malformed markers; recorded code that would
+  extend the run gets one more `#` (`##<`), as does a comment line of `!` code shaped like a console
+  line, and `/undo`, `/undo`, `/redo`, `/redo` brings back both blocks (D-266, D-264 amended).
 - FIX-32 (#93): the permission findings of the live sessions: deny and ask rules match a read-only
   command (`r(sh:cat *)` denies `peter$sh("cat f")`); `system2()`'s `env` is read as the start of
   its command; a refused call's text ends "Nothing in this call ran."; the computed-command refusal
@@ -93,7 +102,9 @@ the D-254 amendment are in `DEVIATIONS.md`:
   client meet the rules and the critical guard; review round 2: a nested `peter$sh()` ask shows its
   other inputs, and the idle gate's notice stays out of served R's result; review round 3: a
   question an ask rule asks offers no `[a]lways` rule, and an `sh:` glob ending in ` *` also
-  matches the command alone (`r(sh:sh *)` denies `peter$sh("sh", input = cmd)`).
+  matches the command alone (`r(sh:sh *)` denies `peter$sh("sh", input = cmd)`); review round 4: an
+  `a` or `p` typed at an ask rule's question says which rule asks, escaped, and idle served R reads
+  a nested `peter$sh()` in its `wd`.
 - FIX-33 (#93): the transcript findings of the live sessions. Model code cannot write a steer,
   follow-up or block marker line (one more `#`; only whole comment lines read back), a block that
   would still leave the markers malformed is not written and is named, `sha` ignores trailing
@@ -116,13 +127,17 @@ the D-254 amendment are in `DEVIATIONS.md`:
   round 1: a block pasted at the pause menu's steer or follow-up question is one message, and a
   refusal's reason drops the guard's `Not run: `; review round 2: a block pasted at its key
   question is asked again, not read as a key, and its echoed last line no longer shares a row
-  there either; review round 3: 04's IC-75 and IC-76 state the pause menu's paste rules.
-- FIX-35 (#93): the owned headless browser's close kills the helpers it recorded that still run
-  after a 2 s grace and waits for them in the rest of its 10 s deadline, so a Chrome renderer the
-  scheduler starves under load no longer fails it with "The owned headless browser family did not
-  finish cleanup." (the full-suite failures below); opening retries a pending browser's failed
-  cleanup, so a failed startup no longer leaves every later session check HTTP-only (D-271,
-  amends D-233).
+  there either; review round 3: 04's IC-75 and IC-76 state the pause menu's paste rules; review
+  round 4: completion offers no name holding a control character (C0 or C1), and readline no longer
+  completes a `!` line's string as a file name itself; `@` completion no longer fails in a folder
+  whose first name is not ASCII; an `@file` line's bytes CP1252 lacks read as `<xx>`, and
+  `raw_to_utf8()` reads them as `?`, on every platform.
+- FIX-35 (#93): the owned headless browser's close waits up to 2 s for the helpers it recorded to
+  exit, then, if any still runs, signals every recorded helper (one already gone reads "dead") and
+  waits for them in the rest of its 10 s deadline, so a Chrome renderer the scheduler starves under
+  load no longer fails it with "The owned headless browser family did not finish cleanup." (the
+  full-suite failures below); opening retries a pending browser's failed cleanup, so a failed
+  startup no longer leaves every later session check HTTP-only (D-271, amends D-233).
 - FIX-36 (#93): `Sys.setenv()` and `Sys.unsetenv()` of `R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`,
   `APPDATA`, `HOME` or `USERPROFILE`, and a Python `os.environ` write of one, are level 4
   `control`, so in auto too a person is asked before such a call moves gptr's config folder or the
@@ -309,8 +324,11 @@ Open (found, not fixed):
 - Pasted text holding a paste end marker, in a terminal that does not filter pastes, still sends at
   a newline of a read between when a read ends right after that marker and the rest is split again
   before the paste's own end marker (two pauses of 50 ms inside one paste); a Ctrl-C typed in the
-  same batch as a paste is dropped; and DEL, Ctrl-U and Ctrl-W inside a paste still edit the draft
-  there (FIX-28 review rounds 1 and 3, D-263 Limits).
+  same batch as a paste, or within about 0.1 s of its read (at most 0.2 s on the polling beat), is
+  dropped, while after a longer pause inside a split paste a Ctrl-C byte in the read between is
+  still the key, which pauses the run and lets the bytes after it answer the menu; and DEL, Ctrl-U
+  and Ctrl-W inside a paste still edit the draft there (FIX-28 review rounds 1, 3 and 4, D-263
+  Limits).
 - In a terminal that ignores bracketed paste a paste still splits when a read comes more than
   about 145 ms late (IC-76's 0.2 s bound; CI-94, FIX-28).
 - A Windows security block near 500 ms can cross D-240's 500 ms line between runs (CI-95).
