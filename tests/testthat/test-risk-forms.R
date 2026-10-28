@@ -97,7 +97,8 @@ test_that("eval(quote(x)) is read as x, and xfun::in_dir() as with_dir() (review
 test_that("env -C runs its command in that directory, read as a cd (review round 5)", {
   root = local_project()
   dir.create(file.path(root, "sub"))
-  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  # with "/": sh reads a backslash in a command line as an escape
+  out = path_norm(withr::local_tempdir(tmpdir = dirname(tempdir())))
   sh = registry_get("tool", "sh")
   level = function(cmd) as.integer(sh$risk(list(cmd = cmd, wd = "."), NULL)$level)
   for (cmd in c("env -C %s rm -f marker.txt", "env --chdir=%s rm -f marker.txt",
@@ -108,6 +109,9 @@ test_that("env -C runs its command in that directory, read as a cd (review round
   }
   expect_identical(level(c("env", "-C", out, "rm", "-f", "marker.txt")), 4L)
   expect_identical(level(paste("env -C", out, "ls")), 1L)
+  # Windows' spelling: peter$sh() runs such a line in Git Bash there when it is installed, which
+  # drops the backslashes, so it reads as an escape the classifier does not model (3)
+  expect_identical(level(paste("env -C", chartr("/", "\\", out), "ls")), 3L)
   # neighbours: in the project as before
   expect_identical(level("env -C sub rm -f marker.txt"), 3L)
   expect_identical(level("env -C sub ls"), 0L)
