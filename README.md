@@ -194,8 +194,9 @@ for scores, uncertainty, calibration and a complete offline example.
 
 Start with [Getting
 started](https://broccolito.github.io/gptr/articles/getting-started.html);
-its examples run offline with a scripted `gptr_fake_provider()`. In R,
-open it with `vignette("getting-started", package = "gptr")`.
+its examples run offline with a scripted `gptr_fake_provider()`. With a
+CRAN install, open it in R with
+`vignette("getting-started", package = "gptr")`.
 
 - [Interactive
   console](https://broccolito.github.io/gptr/articles/interactive-console.html):
