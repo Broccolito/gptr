@@ -21,6 +21,9 @@ doc_quoted_keys = "children"
 doc_sent_kinds = c("user_ran", "user_files")
 # a console turn's statement in a transcript, live or undone (IC-49)
 doc_re_console = "^(#~ )?s_[0-9a-f]{6} (=|[|]>) peter\\("
+# a control character, as ui_escape() counts them: C0, DEL and C1, which holds the 8-bit CSI and
+# OSC that a terminal may honour as ESC [ and ESC ]
+doc_re_ctl = "[\u0001-\u001f\u007f-\u009f]"
 
 #' A `## Steer:` or `## Follow-up:` line; a blank text leaves no trailing space for an editor to
 #' trim
@@ -128,9 +131,10 @@ doc_block_sent = function(format, text, b) {
 }
 
 #' A string literal that both R and JSON read back as `x` (Python's json.dumps(ensure_ascii =
-#' False)); non-ASCII characters are kept, which encodeString() escapes in a C locale
+#' False)); non-ASCII characters are kept, which encodeString() escapes in a C locale. A character
+#' matching `ctl` (by default a C0 control, as json.dumps() escapes) is written as a Unicode escape.
 #' @noRd
-doc_str_literal = function(x) {
+doc_str_literal = function(x, ctl = "[\001-\037]") {
   x = as_utf8(as.character(x))
   x = gsub("\\", "\\\\", x, fixed = TRUE)
   x = gsub("\"", "\\\"", x, fixed = TRUE)
@@ -139,8 +143,8 @@ doc_str_literal = function(x) {
   x = gsub("\t", "\\t", x, fixed = TRUE)
   x = gsub("\b", "\\b", x, fixed = TRUE)
   x = gsub("\f", "\\f", x, fixed = TRUE)
-  ctl = gregexpr("[\001-\037]", x, perl = TRUE)
-  regmatches(x, ctl) = lapply(regmatches(x, ctl), function(ch) {
+  hit = gregexpr(ctl, x, perl = TRUE)
+  regmatches(x, hit) = lapply(regmatches(x, hit), function(ch) {
     vapply(ch, function(c) sprintf("\\u%04x", utf8ToInt(c)), "", USE.NAMES = FALSE)
   })
   paste0("\"", x, "\"")
@@ -187,9 +191,9 @@ doc_parse_kv = function(s) {
 }
 
 #' Format header fields in the key order of contract 11.5 (unknown keys last); values that hold
-#' a blank, a control character (a line break among them), a quote, `=` or a backslash are
-#' quoted, which escapes each control character (doc_str_literal()), so the header is one line
-#' without them
+#' a blank, a control character (doc_re_ctl: C0, a line break among them, DEL or C1), a quote, `=`
+#' or a backslash are quoted, which escapes each control character (doc_str_literal()), so the
+#' header is one line without them and starts no terminal sequence
 #' @noRd
 doc_format_kv = function(x) {
   x = x[!vapply(x, function(v) is.null(v) || !length(v), NA)]
@@ -197,10 +201,11 @@ doc_format_kv = function(x) {
   known = intersect(doc_header_keys, names(x))
   x = x[c(known, setdiff(names(x), known))]
   vals = vapply(names(x), function(k) {
-    v = as.character(x[[k]])[1L]
+    v = as_utf8(as.character(x[[k]])[1L])
     if (is.na(v)) v = "NA"
-    quote = k %in% doc_quoted_keys || !nzchar(v) || grepl("[\001-\037 \"=\\\\]", v)
-    if (quote) doc_str_literal(v) else v
+    quote = k %in% doc_quoted_keys || !nzchar(v) || grepl("[ \"=\\\\]", v) ||
+      grepl(doc_re_ctl, v, perl = TRUE)
+    if (quote) doc_str_literal(v, doc_re_ctl) else v
   }, "")
   paste0(names(x), "=", vals, collapse = " ")
 }

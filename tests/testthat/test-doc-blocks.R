@@ -1220,6 +1220,35 @@ test_that("control characters in output, names and digests are escaped (review r
   expect_identical(gptr_blocks(f)$status, "fresh")
 })
 
+test_that("a header value escapes C1 controls and DEL too (review round 6)", {
+  # U+009D and U+009C are the 8-bit OSC and ST, which a terminal may honour as ESC ] and ESC \
+  name = "c\u009d0;PWNED\u009c\u007f"
+  kv = doc_format_kv(list(created = name))
+  expect_identical(kv, "created=\"c\\u009d0;PWNED\\u009c\\u007f\"")
+  expect_identical(doc_parse_kv(kv)$created, name)
+  expect_identical(doc_find_blocks(doc_render_block("aaaaaa", list(created = name),
+                                                    "y = 1"))$header[[1L]]$created, name)
+  # in a block the model's turn wrote, with C1 and DEL in its output as well
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("library(gptr)", "peter(\"count rows\")"), f)
+  turn = doc_test_turn("cat(\"x\")", outputs = list("a\u009b31mred\u007f"))
+  objects = list(list(name = name, status = "created"))
+  cp = list(type = "custom", custom_type = "gptr.checkpoint",
+            data = list(tool_call_id = "call_1",
+                        fragments = list(objects = list(id = "f1", turn = 1L, objects = objects))))
+  s = doc_test_session(list(c(turn[1:2], list(cp), turn[3:4])))
+  doc_upsert(doc_file_site(f), doc_block_lines(s, 1L, doc_file_site(f), 1L))
+  txt = rawToChar(readBin(f, "raw", file.size(f)))
+  expect_false(grepl("[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]|\\xc2[\\x80-\\x9f]", txt,
+                     perl = TRUE, useBytes = TRUE))
+  lines = readLines(f)
+  expect_true("#> a<U+009B>31mred<U+007F>" %in% lines)
+  expect_identical(doc_find_blocks(lines)$header[[1L]]$created, name)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+})
+
 test_that("only gptr's own lines take the block id; steer text and model code keep the token", {
   local_project()
   local_gptr_options(record = "auto")
