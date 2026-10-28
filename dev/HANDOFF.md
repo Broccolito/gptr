@@ -82,15 +82,15 @@ the D-254 amendment are in `DEVIATIONS.md`:
   `#~` and back on after `/redo` (D-264, IC-49 amended in place); review round 1: a name holding a
   comma is left out of `created=`; review round 3: a lone carriage return in the text a prompt was
   sent with ends a `#<` line, as R reads it.
-- FIX-30: a console statement ends with `model = "..."` and `mode = "..."` when its turn ran with a
-  model or mode the statement would not get without them (after `/model`, `/mode`, the plan menu,
-  or in a console started as `peter(mode = plan)`), so a live re-ask asks each turn on the model
-  and in the mode its statement names, else its session's from the turns before (D-265, IC-49
+- FIX-30 (#93): a console statement ends with `model = "..."` and `mode = "..."` when its turn ran
+  with a model or mode the statement would not get without them (after `/model`, `/mode`, the plan
+  menu, or in a console started as `peter(mode = plan)`), so a live re-ask asks each turn on the
+  model and in the mode its statement names, else its session's from the turns before (D-265, IC-49
   amended in place); this closes FIX-21's note on the console's starting mode.
-- FIX-31: only the run of lines starting `#<` that opens a console turn's block in an `.R` document
-  is read back, and none from a document with malformed markers; recorded code that would extend
-  the run gets one more `#` (`##<`), as does a comment line of `!` code shaped like a console line,
-  and `/undo`, `/undo`, `/redo`, `/redo` brings back both blocks (D-266, D-264 amended).
+- FIX-31 (#93): only the run of lines starting `#<` that opens a console turn's block in an `.R`
+  document is read back, and none from a document with malformed markers; recorded code that would
+  extend the run gets one more `#` (`##<`), as does a comment line of `!` code shaped like a console
+  line, and `/undo`, `/undo`, `/redo`, `/redo` brings back both blocks (D-266, D-264 amended).
 - FIX-32 (#93): the permission findings of the live sessions: deny and ask rules match a read-only
   command (`r(sh:cat *)` denies `peter$sh("cat f")`); `system2()`'s `env` is read as the start of
   its command; a refused call's text ends "Nothing in this call ran."; the computed-command refusal
@@ -132,12 +132,12 @@ the D-254 amendment are in `DEVIATIONS.md`:
   completes a `!` line's string as a file name itself; `@` completion no longer fails in a folder
   whose first name is not ASCII; an `@file` line's bytes CP1252 lacks read as `<xx>`, and
   `raw_to_utf8()` reads them as `?`, on every platform.
-- FIX-35 (#93): the owned headless browser's close kills the helpers it recorded that still run
-  after a 2 s grace and waits for them in the rest of its 10 s deadline, so a Chrome renderer the
-  scheduler starves under load no longer fails it with "The owned headless browser family did not
-  finish cleanup." (the full-suite failures below); opening retries a pending browser's failed
-  cleanup, so a failed startup no longer leaves every later session check HTTP-only (D-271,
-  amends D-233).
+- FIX-35 (#93): the owned headless browser's close waits up to 2 s for the helpers it recorded to
+  exit, then, if any still runs, signals every recorded helper (one already gone reads "dead") and
+  waits for them in the rest of its 10 s deadline, so a Chrome renderer the scheduler starves under
+  load no longer fails it with "The owned headless browser family did not finish cleanup." (the
+  full-suite failures below); opening retries a pending browser's failed cleanup, so a failed
+  startup no longer leaves every later session check HTTP-only (D-271, amends D-233).
 - FIX-36 (#93): `Sys.setenv()` and `Sys.unsetenv()` of `R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`,
   `APPDATA`, `HOME` or `USERPROFILE`, and a Python `os.environ` write of one, are level 4
   `control`, so in auto too a person is asked before such a call moves gptr's config folder or the
