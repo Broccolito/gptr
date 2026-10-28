@@ -39,12 +39,14 @@ perm_is_control = function(call, risk) {
 }
 
 #' A policy decision; a question carries the rule an `[a]lways` answer would add (04 7.11), unless
-#' an ask rule (`rule`) asks it, as no allow rule wins over one
+#' an ask rule (`rule`) asks it, as no allow rule wins over one: then `no_rule`, its reason, says
+#' why it offers none
 #' @noRd
 perm_decision = function(decision, reason, call, rule = NULL) {
-  ask = decision %in% c("ask", "ask_human") && is.null(rule)
+  ask = decision %in% c("ask", "ask_human")
   list(decision = decision, reason = reason, rule = rule,
-       suggested_rule = if (ask) rule_suggest(call))
+       suggested_rule = if (ask && is.null(rule)) rule_suggest(call),
+       no_rule = if (ask && !is.null(rule)) reason)
 }
 
 #' Edits mode approves write/edit inside the project and, as Claude Code's acceptEdits does,

@@ -617,7 +617,8 @@ perm_rank = function(decision) match(decision, perm_decisions)
 
 #' Combine every policy's opinion (ext_policy_decide(), fail closed): deny > ask_human > ask >
 #' modify > allow; no active `mode` policy means ask. A question offers the rule of an `[a]lways`
-#' answer only when every policy that asks it does (an ask rule's question offers none)
+#' answer only when every policy that asks it does (an ask rule's question offers none, and keeps
+#' that policy's `no_rule`, why)
 #' @noRd
 perm_policies = function(call, ctx, run, risk) {
   recs = registry_all_recs("policy", session = run$session)
@@ -631,6 +632,7 @@ perm_policies = function(call, ctx, run, risk) {
       best = res
     } else if (identical(res$decision, best$decision) && is.null(res$suggested_rule)) {
       best$suggested_rule = NULL
+      best$no_rule = best$no_rule %||% res$no_rule
     }
   }
   has_mode = any(vapply(recs, function(r) identical(r$name, "mode"), NA))
@@ -754,7 +756,8 @@ perm_grant_control = function(run, risk) {
 }
 
 #' The permission request record (04 section 7.11); `agent` says who asks (D-188), `tool_call_id`
-#' which call (a nested member call its own, `<outer id>/<k>`)
+#' which call (a nested member call its own, `<outer id>/<k>`), `no_rule` why a question offers no
+#' `suggested_rule` where a policy asks it without one (an ask rule's reason)
 #' @noRd
 perm_request_record = function(call, run, out, risk, tier) {
   d = run_data(run)
@@ -767,6 +770,7 @@ perm_request_record = function(call, run, out, risk, tier) {
   list(tool = call$name, tool_call_id = call$id, input = call$input, summary = perm_summary(call),
        risk = risk, reason = perm_reason(out$reason),
        suggested_rule = if (rlang::is_string(rule)) rule,
+       no_rule = if (!rlang::is_string(rule) && rlang::is_string(out$no_rule)) out$no_rule,
        undo_note = if (rlang::is_string(note)) note, session = d$id, turn = d$turns,
        nested = isTRUE(call$nested), tier = tier, agent = agent_label(run))
 }

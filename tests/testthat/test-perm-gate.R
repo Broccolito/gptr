@@ -435,6 +435,36 @@ test_that("a question an ask rule raises offers no [a]lways rule (review round 3
   expect_identical(perm_store()$allow, character())
 })
 
+test_that("an ask rule's question says why it offers no [a]lways rule (review round 4)", {
+  skip_on_cran()
+  root = local_project()
+  local_permission_rules()
+  gptr_permissions(ask = c("r(sh:wc *)", "r(sh:rm *)"))
+  local_gptr_options(interactive = TRUE)
+  why = character()
+  local_service("ui.get", function(session = NULL) {
+    list(has_ui = function() TRUE, permission = function(request) {
+      why <<- c(why, ui_no_rule(request))
+      list(decision = "deny")
+    })
+  })
+  # level 0 in auto, where only the rule asks; level 3 in manual, where the mode asks too; and a
+  # nested call's computed command in auto, which only the rule meets
+  cases = list(auto = "if (FALSE) system('wc -l notes.txt')",
+               manual = "if (FALSE) system('rm -f gone.txt')",
+               auto = "cmd = paste('rm', '-f', 'gone.txt'); peter$sh(cmd)")
+  for (i in seq_along(cases)) {
+    fake = local_fake_provider(list(fake_tool("r", code = cases[[i]]), "Done."),
+                               name = paste0("why-", i))
+    peter("Count.", model = fake, mode = names(cases)[[i]], envir = new.env())
+  }
+  always = "; an always rule would not stop it"
+  expect_identical(why, paste0("the rule r(sh:", c("wc", "rm", "rm"), " *) asks", always))
+  # where no rule covers the calls, as for two commands, it says so
+  req = list(tool = "r", risk = list(level = 3L), suggested_rule = NULL)
+  expect_identical(ui_no_rule(req), "no rule covers these calls")
+})
+
 test_that("the protect_size policy reads the run's snapshot, not the live option (IC-53)", {
   root = local_project()
   e = new.env()
