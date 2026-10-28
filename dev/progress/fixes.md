@@ -6387,6 +6387,36 @@ the driver, screens, events, transcripts and replays without a model are local, 
   before its own end marker (two pauses of 50 ms inside one paste) still sends at a newline of the
   read between; a Ctrl-C typed in the same batch as a paste is dropped. D-263, 04 sections 7.1
   and 15.10 IC-76 and the comments of `console_compose()` and `console_keys()` say so.
+- Review round 4 (the security verifier on `0aa55320`, R4-SEC-4; round 3's F1 with one more
+  split, already so on `7fe6cff5`): a paste whose text ends it early, split right after that
+  marker and again before its own end marker, left a read between that holds no marker and is read
+  with no paste open, so a Ctrl-C byte in it paused the run and the bytes after it answered the
+  pause menu (`f`, then `!file.create('M')` as a follow-up that runs with no Enter); offline with
+  the reads `ESC [ 200 ~ x ESC [ 201 ~`, `\003f\n!file.create('M')\n` and `ESC [ 201 ~`. Red, on
+  `0aa55320`'s code: test-console-typing.R "a read right after a paste's marker holds no Ctrl-C
+  key (review round 4)" FAIL 5 PASS 3 (the paste split once more and twice more each interrupted
+  and left `f\n!cat(1)\n` to the menu, and no steer was sent). Fix, commit `1df6d56b`:
+  `console_keys()` keeps `rd$compose$pasted` after a batch that holds a marker or is read while a
+  paste is open, and drops the Ctrl-C bytes of each batch read after it until an empty read comes;
+  the read between still sends at its newline, a steer the model reads, as D-263's Limits say. It
+  is the verifier's code alternative counted in reads, not time: round 3 found that a 50 ms window
+  never holds between two key batches, while a split needs 50 ms without input and the reactor's
+  next read comes 50 ms after it, so the rest of a paste that stalls up to about 0.1 s is read with
+  no empty read between. Green: the test PASS 8 alone, and the checks in FIX-34's review round 4
+  bullet. Open: after a longer pause inside such a paste a Ctrl-C byte in the read between is
+  still the key, and a Ctrl-C typed within about 0.1 s of a paste's end is dropped. D-263, 04
+  sections 7.1, 15.9 (IC-76's Limits) and 15.10 IC-76 and `console_keys()`'s comment say so.
+- Review round 4 verification (the verifier on `3453599c`, note N1): the window counted reads,
+  not time, so `rd$compose$pasted` held while the reactor did not beat; with `reactor_now` 30 s
+  later, a Ctrl-C read after a paste's batch with no empty read between was still dropped, while
+  D-263 and 04 section 15.9 say "within about 0.1 s". Red: test-console-typing.R "a read off the
+  beat after a paste's marker holds a Ctrl-C key (round 4 verification)" FAIL 1 PASS 1 on
+  `3453599c`'s code (the read 30 s later was read, not interrupted). Fix, commit `e8269800`: the
+  carried flag counts only for a batch on the polling beat (`gap <= 0.2`, the beat that already
+  decides a paste by timing), so the drop holds at most 0.2 s after the paste's read. Green: the
+  test PASS 2 alone; round 4's test PASS 8, round 3's PASS 15 and round 1's PASS 3; and the checks
+  in FIX-34's verification bullet. D-263, 04 sections 7.1, 15.9 and 15.10 IC-76 and
+  `console_keys()`'s comment say so.
 
 ## FIX-29 - Transcripts record @file heads and the objects !code lines use (2026-10-26, #PR)
 - Why: issue #85, FIX-20 review items R27 and R29. R27: `gptr_source(replay = "live")` re-asked
@@ -6917,6 +6947,35 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
 - Review round 4, records (the docs verifier on `0aa55320`, R4D-3): round 1's line named IC-57's
   section as 15.6; IC-57 is in 04 section 15.5, as round 2 says, and the line is corrected in place.
   The vignette sentence this record's deny and ask rules made one-sided is in CI-105's round 4.
+- Review round 4, an ask rule's reason (the regressions verifier on `0aa55320`, R4-1; the optional
+  half of round 3's F2, already so since `e215b490`): an ask rule's question offers no `[a]lways`
+  rule, but an `a` or `p` typed there read "a and p are not offered: no rule covers these calls",
+  though the ask rule covers the call, and in manual mode the `?` view named the mode, so nothing
+  on screen named the rule (the fake model and GPT-5.6, live). Red: test-perm-gate.R "an ask
+  rule's question says why it offers no [a]lways rule (review round 4)" FAIL 1 PASS 1 on
+  `0aa55320`'s code: a level-0 `wc` in auto, a level-3 `rm` in manual and a nested call's computed
+  `rm` in auto each read "no rule covers these calls". Fix, commit `ed2d7361`: `perm_decision()`
+  (R/perm-gate.R, outside this writer's functions, one line) gives the question an ask rule asks its
+  reason as `no_rule`, `perm_policies()` keeps it when that question drops another policy's rule,
+  the request record carries it (04 section 7.11) and `ui_no_rule()` adds "; an always rule would
+  not stop it", so `a` reads "a and p are not offered: the rule r(sh:touch *) asks; an always rule
+  would not stop it". The nested gate passes the rules policy's own answer, so its question says
+  the same. "no rule covers these calls" stays where no rule can cover the calls (code that
+  `rule_suggest()` cannot read). Not taken: the optional dim row under the question; the reason
+  shows where `a` or `p` is typed, as IC-77 item 3 says. Green: the test PASS 2 alone, and the
+  checks in FIX-34's review round 4 bullet. D-267, 04 sections 7.11 and 15.9 IC-77 and NEWS's
+  console layout bullet say so.
+- Review round 4 verification (the verifier on `3453599c`, finding F1): round 4's fix wrote the ask
+  rule's reason, which holds the rule's text, raw into the `a and p are not offered` row, while the
+  `?` view escapes the same reason. `rule_parse()` accepts an ESC, so with
+  `gptr_permissions(ask = "r(sh:wc *\033[31m*)")` the call `peter$sh(c('wc', '-l', 'a\033[31mb'))`
+  turned the row red and the colour ran into its wrapped row (the fake model, auto). Red:
+  test-console-ui.R "a and p's reason shows an ask rule's text escaped (review round 4
+  verification)" FAIL 2 PASS 1 on `3453599c`'s code. Fix, commit `dcb002c3`: `ui_no_rule()`
+  escapes `no_rule` with `ui_escape()`, so the row reads "the rule r(sh:wc *<U+001B>[31m*) asks; an
+  always rule would not stop it". Green: the test PASS 3 alone; round 4's test-perm-gate.R test
+  PASS 2; and the checks in FIX-34's verification bullet. D-267 and 04 section 15.9 IC-77 item 3
+  say so.
 
 ## FIX-33 - Transcript findings from the live sessions (2026-10-27, #PR)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
@@ -7601,6 +7660,73 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     Windows gave in CI; the next Windows run proves the fix there) and R before 4.6. The fix needs
     `gsub(useBytes = TRUE)` to leave the result of a UTF-8-marked input unmarked, as R 4.6 does and
     R 4.3.0's NEWS implies for earlier R, since `iconv()` gives `NA` for a `bytes`-marked string.
+- Review round 4, the console writer's items (verifiers on `0aa55320`; branch
+  `claude/v1-fix-console4`): FIX-28's R4-SEC-4 and FIX-32's R4-1 are in their records; FIX-34's
+  and the checks:
+  - Completion (the regressions verifier, R4-2; already so on `13a917ff`): `console_complete()`
+    passed names holding control characters to readline, so in a project holding the file
+    `bang\n!file.create('A11-MARK')`, Tab on `Look at @ban`, then Enter, sent `Look at @bang` as
+    a prompt and `!file.create('A11-MARK')` as direct R, which made the file (the fake model, auto,
+    tmux). Red: test-console-completion.R "no completion holds a line end or another control
+    character (review round 4)" FAIL 7 PASS 2 on `0aa55320`'s code: names holding a newline, a
+    carriage return or an escape came from every source tried, an object's `$` names, commands,
+    skills, peter's members (`ns.names`), files at `@` and R's completion of a string on a `!`
+    line. Fix, commit `4e443054`: `console_complete()` leaves out every candidate holding a byte
+    0x01-0x1f or 0x7f at its one exit, so the completer readline calls, the composer's Tab and the
+    idle editor's Tab offer none; the byte test (`useBytes`) never fails on a name that is invalid
+    in the locale. With R's default `rc.settings(quotes = TRUE)` a `!` line's string completes
+    through utils' `fileCompletions()`, which the filter reads; with `quotes = FALSE` R hands it to
+    readline's own file name completion, which gptr does not see, as at R's prompt. Windows file
+    names hold no control character, so the test's file half skips there. Green: the test PASS 9
+    alone in UTF-8 and under `LC_ALL=C LANG=C`. 04 section 15.10 IC-81, a status line of D-244
+    (outside this writer's listed records) and NEWS say so.
+  - Checks on `4e443054` (the code of the three fixes; the later commits change only NEWS and
+    `dev/`), `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`: the files whose names start with
+    `console-`, `perm`, `risk`, `rules`, `nested`, `bridge`, `mcp-`, `gptr-config`, `agent-`,
+    `tool-`, `session-` or `repl` FAIL 0 WARN 0 SKIP 14 PASS 11824 in UTF-8 and FAIL 0 WARN 0
+    SKIP 41 PASS 11640 under `LC_ALL=C LANG=C`, at load averages of 66 to 362 (the skips: Windows
+    only, Python not configured or provisioned, macOS, INFRA-03, and under C 27 that need a UTF-8
+    locale); with NEWS, `^zzz$` FAIL 0 PASS 149 in both, `testthat::test_dir("dev/release/tests")`
+    FAIL 0 SKIP 0 PASS 290, `dev/release/check-docs.R` 0 problems and the spelling check clean.
+    Lint of the 8 changed R and test files clean; `document()` no diff (the comments are
+    `@noRd`); `fmt.py` on copies of the records changes nothing and `lintfmt.py` shows only the
+    baseline. No full suite or `R CMD check` ran, so the heavy lock was not taken; no plan and no
+    prompt text changed.
+  - Open: FIX-28's paste item narrows to a pause of more than about 0.1 s, and a Ctrl-C typed
+    within about 0.1 s of a paste's end is dropped. Not run: Linux and Windows, and live models
+    (the fixes are tested offline; the verifiers' live and tmux repros were not repeated).
+- Review round 4 verification, the console writer's items (the verifier on `3453599c`; branch
+  `claude/v1-fix-console4`): finding F1 is in FIX-32's record and note N1 in FIX-28's; FIX-34's
+  note N2 and the checks:
+  - Completion (N2): with `rc.settings(quotes = FALSE)`, R's completion of a string on a `!` line
+    sets `fileName` and gives no candidate, so readline completed the file name itself, which round
+    4's filter never sees; round 4 recorded that as R's prompt behaviour, while NEWS, IC-81 and
+    D-244 said a name holding a control character is never offered. Red: test-console-completion.R
+    "a ! line's string never goes to readline's file completion (round 4 verification)" FAIL 2
+    PASS 2 on `3453599c`'s code (`<file>` from readline's token and from utils' guess). Fix,
+    commit `612c6983`: `console_completer()` sets `fileName` FALSE again after
+    `console_complete()`, so such a string completes nothing at the prompt, as the composer's Tab
+    gave, and NEWS, IC-81 and D-244 hold as written; with the default `quotes = TRUE` nothing
+    changes. Green: the test PASS 4 alone in UTF-8 and under `LC_ALL=C LANG=C`. 04 section 15.10
+    IC-81's adapter and a status line of D-244 say so.
+  - Checks on `612c6983` (the two suites ran on the same code before two new tests' titles were
+    shortened for the lint), `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`:
+    the files whose names start with `console-`, `perm`, `risk`, `rules`, `nested`, `bridge`,
+    `mcp-`, `gptr-config`, `agent-`, `tool-`, `session-`, `repl`, `ext-`, `subagent` or `injection`
+    FAIL 0 WARN 0 SKIP 15 PASS 14927 in UTF-8 and FAIL 0 WARN 0 SKIP 42 PASS 14743 under
+    `LC_ALL=C LANG=C` (the verifier's counts plus the three tests' 9), at load averages of 47 to
+    183 (skips of the kinds round 4's bullet lists); `^zzz$` FAIL 0 PASS 149 in both;
+    `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290; `dev/release/check-docs.R`
+    0 problems and the spelling check clean. Lint of the 6 changed R and test files clean;
+    `document()` no diff (the comments are `@noRd`); `fmt.py` on copies of the records changes
+    nothing and `lintfmt.py` shows only the baseline. No full suite or `R CMD check` ran, so the
+    heavy lock was not taken; no plan and no prompt text changed.
+  - Not changed (note N3, for whoever merges): `dev/HANDOFF.md` and `dev/PROGRESS.md` still
+    describe the twice-split paste without round 4's Ctrl-C change and name no round 4, and the
+    `#PR` placeholders stay.
+  - Open: FIX-28's paste item as round 4 left it, with the drop now at most 0.2 s after a paste's
+    read; under `quotes = FALSE` a `!` line's string completes nothing. Not run: Linux and Windows,
+    R 4.2 and R-devel, and live models or tmux (the fixes are tested offline).
 
 ## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #PR)
 - Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`

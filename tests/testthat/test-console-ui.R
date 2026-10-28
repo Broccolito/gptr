@@ -374,6 +374,19 @@ test_that("a and p are offered only with a suggested rule; a and p say why not (
   expect_null(ui_answer_norm(list(decision = "allow", remember = "session"), req)$remember)
 })
 
+test_that("a and p's reason shows an ask rule's text escaped (review round 4 verification)", {
+  skip_on_cran()
+  root = local_project()
+  # the rule's text is the person's, and a project's trusted settings may hold any byte
+  req = ui_request("x = 2")
+  req$no_rule = "the rule r(sh:wc *\033[31m*) asks"
+  out = console_try(function() ui_console_permission(req), c("a", "y"))
+  expect_identical(out$result, ui_answer("allow"))
+  expect_false(any(grepl("\033", out$shown, fixed = TRUE)))
+  expect_identical(ui_no_rule(req),
+                   "the rule r(sh:wc *<U+001B>[31m*) asks; an always rule would not stop it")
+})
+
 test_that("a denial keeps the UI's how; other answers drop it (D-252)", {
   req = ui_request("x = 2")
   expect_identical(ui_answer_norm(list(decision = "deny", how = "Repeat it later."), req),

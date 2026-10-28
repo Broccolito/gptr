@@ -29,60 +29,66 @@ console_completes = function(stdin = FALSE) {
 #' /, the registered commands, plugin and template commands among them (registered now, as /help
 #' does, D-252), and `/skill:` once where a skill is registered or listed by gptr_skills() (as
 #' /skills lists them, before the first prompt has registered any), after which a word starting
-#' /skill: completes /skill:<name>. Anything else, and a failure, gives character(0).
+#' /skill: completes /skill:<name>. Anything else, and a failure, gives character(0). No source
+#' offers a word holding a control character (a file, object, command or skill name).
 #' @noRd
 console_complete = function(line, end = nchar(line)) {
   line = substr(line, 1L, end)
   word = console_trigger(line)
   rs = console_repl_find()
   if (is.null(word) || !isTRUE(rs$reader$complete)) return(character())
-  tryCatch({
+  cands = tryCatch({
     if (grepl("^\\s*!", line, perl = TRUE)) {
       u = function(f) utils::getFromNamespace(f, "utils")
       u(".assignLinebuffer")(line)
       u(".assignEnd")(nchar(line))
       token = u(".guessTokenFromLine")()
       u(".completeToken")()
-      return(completion_shift(u(".retrieveCompletions")(), token, word))
-    }
-    env = repl_eval_env(rs)
-    obj = regmatches(word, regexec("^@([^$]+)\\$[^$]*$", word))[[1L]]
-    base = sub("^.*/", "", word)
-    cands = if (length(obj)) {
-      if (obj[[2L]] %in% console_objects(env)) {
-        paste0("@", obj[[2L]], "$", utils::.DollarNames(get(obj[[2L]], envir = env), ""),
-               recycle0 = TRUE)
-      }
-    } else if (startsWith(word, "@")) {
-      hidden = grepl("^@?[.]", base)
-      objs = console_objects(env, hidden)
-      dir = sub("[^/]*$", "", substring(word, 2L))
-      where = if (nzchar(dir)) path.expand(dir) else "."
-      files = sort(list.files(where, all.files = hidden, no.. = TRUE), method = "radix")
-      files = paste0(files, ifelse(dir.exists(file.path(where, files)), "/", ""))
-      paste0("@", c(objs[make.names(objs) == objs], paste0(dir, files, recycle0 = TRUE)),
-             recycle0 = TRUE)
-    } else if (startsWith(word, "peter$")) {
-      if (ext_service_has("ns.names")) {
-        paste0("peter$", ext_service_get("ns.names")(""), recycle0 = TRUE)
-      }
+      completion_shift(u(".retrieveCompletions")(), token, word)
     } else {
-      s = rs$session
-      skills = unique(c(registry_names("skill", s), gptr::gptr_skills()$name))
-      if (startsWith(word, "/skill:")) {
-        paste0("/skill:", sort(skills, method = "radix"), recycle0 = TRUE)
+      env = repl_eval_env(rs)
+      obj = regmatches(word, regexec("^@([^$]+)\\$[^$]*$", word))[[1L]]
+      base = sub("^.*/", "", word)
+      cands = if (length(obj)) {
+        if (obj[[2L]] %in% console_objects(env)) {
+          paste0("@", obj[[2L]], "$", utils::.DollarNames(get(obj[[2L]], envir = env), ""),
+                 recycle0 = TRUE)
+        }
+      } else if (startsWith(word, "@")) {
+        hidden = grepl("^@?[.]", base)
+        objs = console_objects(env, hidden)
+        dir = sub("[^/]*$", "", substring(word, 2L))
+        where = if (nzchar(dir)) path.expand(dir) else "."
+        files = sort(list.files(where, all.files = hidden, no.. = TRUE), method = "radix")
+        files = paste0(files, ifelse(dir.exists(file.path(where, files)), "/", ""))
+        paste0("@", c(objs[make.names(objs) == objs], paste0(dir, files, recycle0 = TRUE)),
+               recycle0 = TRUE)
+      } else if (startsWith(word, "peter$")) {
+        if (ext_service_has("ns.names")) {
+          paste0("peter$", ext_service_get("ns.names")(""), recycle0 = TRUE)
+        }
       } else {
-        console_templates_sync()
-        c(paste0("/", sort(registry_names("command", s), method = "radix"), recycle0 = TRUE),
-          if (length(skills)) "/skill:")
+        s = rs$session
+        skills = unique(c(registry_names("skill", s), gptr::gptr_skills()$name))
+        if (startsWith(word, "/skill:")) {
+          paste0("/skill:", sort(skills, method = "radix"), recycle0 = TRUE)
+        } else {
+          console_templates_sync()
+          c(paste0("/", sort(registry_names("command", s), method = "radix"), recycle0 = TRUE),
+            if (length(skills)) "/skill:")
+        }
       }
+      unique(cands[startsWith(cands, word)])
     }
-    unique(cands[startsWith(cands, word)])
   }, error = function(e) character())
+  # readline would send what follows a line end as a line of its own, a ! line as R code
+  cands[!grepl("[\\x01-\\x1f\\x7f]", cands, perl = TRUE, useBytes = TRUE)]
 }
 
 #' The custom completer R's completion calls (`custom.completer`, IC-81): it sets `fileName`
-#' FALSE first, as a completion environment without it aborts the readline() call, then gives
+#' FALSE first, as a completion environment without it aborts the readline() call, and again after
+#' console_complete(), so a string on a ! line never goes to readline's own file-name completion
+#' (`rc.settings(quotes = FALSE)`), which would offer a name holding a line end; it gives
 #' console_complete() of the line before the cursor as completions of R's token (readline's word,
 #' or utils' guess in RStudio and Windows), with the caller's completer `prev` (NULL when none) as
 #' the custom one meanwhile, so R's completion of a ! line calls it. RStudio asks with `isConsole`
@@ -111,6 +117,9 @@ console_completer = function(prev, prompt = NULL) {
     if (isFALSE(console)) return(prev(env))
     word = console_trigger(line) %||% ""
     full = console_complete(line)
+    # and again: R's completion of a ! line's string leaves it to readline's file-name completion
+    # under rc.settings(quotes = FALSE), which no filter of gptr's reaches
+    env$fileName = FALSE
     if (!is.null(prompt) && length(full) > 1L) {
       pre = full[[1L]]
       for (x in full[-1L]) while (!startsWith(x, pre)) pre = substr(pre, 1L, nchar(pre) - 1L)
