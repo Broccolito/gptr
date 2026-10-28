@@ -295,6 +295,15 @@ test_that("sys::exec_*()'s std_out and std_err are files it writes, as processx'
   # neighbours: output to R's console or a connection writes no file
   expect_identical(lv("sys::exec_wait('ls', std_out = TRUE)"), lv("processx::run('ls')"))
   expect_identical(lv("sys::exec_wait('ls', std_out = FALSE)"), lv("processx::run('ls')"))
+  # nor does a callback written there, whose code is read as any function's (round 7)
+  for (f in c("function(x) cat(rawToChar(x))", "\\(x) message(rawToChar(x))")) {
+    for (code in c(paste0("sys::exec_wait('ls', std_out = ", f, ")"),
+                   paste0("sys::exec_background('ls', std_err = ", f, ")"))) {
+      expect_identical(lv(code), lv("sys::exec_wait('ls')"), label = code)
+    }
+  }
+  expect_identical(lv("sys::exec_wait('ls', std_out = function(x) unlink('~/.Rprofile'))"),
+                   lv("unlink('~/.Rprofile')"))
 })
 
 test_that("a variable the claude and codex CLIs keep is control, as a provider's key (round 6)", {

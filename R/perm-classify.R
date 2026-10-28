@@ -2605,13 +2605,15 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     lit = vapply(w, is.character, logical(1))
     if (row$category == "process") {
       # a process left running (wait = FALSE), and the files its stdout and stderr go to (sys
-      # names them std_out and std_err)
+      # names them std_out and std_err, and also takes a callback there: a function written
+      # there is no file)
       wait = risk_arg(a, "wait")
       if (!is.null(wait) && !isTRUE(wait)) {
         add(ctx, paste0(label, " (in the background)"), name, 2L, "process")
       }
       for (x in lapply(c("stdout", "stderr", "std_out", "std_err"), risk_arg, a = a)) {
-        if (!is.null(x) && !is.logical(x) &&
+        fun = is.call(x) && identical(x[[1L]], as.name("function"))
+        if (!is.null(x) && !is.logical(x) && !fun &&
             (name == "system2" || !(identical(x, "|") || identical(x, "2>&1")))) {
           add_path(list(x), "file_write", 2L, ctx, label, name)
         }
