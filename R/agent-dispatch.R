@@ -408,9 +408,9 @@ checkpoint_after = function(run, call, ctx, tokens, res) {
 #' Nested `peter$...` calls made while an `r` evaluation runs (04 section 7.6)
 #' A member listed by the outer call's analysis at or below its approved level, whose own risk of
 #' its actual input (call_risk(): a patch's Delete File, a computed command) is not above that
-#' level either, runs without a second prompt; others pass perm_check(). The command of a sh or bg
-#' call meets the deny and ask rules first, whatever its level. Recorded in `details$nested` (at
-#' most 20).
+#' level either and reads no registered secret the outer call's did not, runs without a second
+#' prompt; others pass perm_check(). The command of a sh or bg call meets the deny and ask rules
+#' first, whatever its level. Recorded in `details$nested` (at most 20).
 #' @noRd
 dispatch_nested = function(name, input, ctx) {
   check_string(name, "name")
@@ -445,8 +445,10 @@ dispatch_nested = function(name, input, ctx) {
     gptr_abort(perm_denial_text(dec), "tool", tool = name, status = "denied")
   }
   level = nested_listed_level(outer, name)
-  own = risk_level(call_risk(call, ctx, run))
-  if (is.null(level) || max(level, own) > call$outer_level) {
+  own = call_risk(call, ctx, run)
+  secret = isTRUE(own$secret_guard) &&
+    !(isTRUE(outer$risk$secret_guard) && all(own$secrets %in% outer$risk$secrets))
+  if (is.null(level) || max(level, risk_level(own)) > call$outer_level || secret) {
     dec = perm_check(call, run)
     level = risk_level(dec$risk)
     if (!identical(dec$decision, "allow")) {
@@ -776,7 +778,9 @@ perm_request_record = function(call, run, out, risk, tier) {
 }
 
 #' The lines to show for a request: the code (at most 20 lines), a path, a command (a nested
-#' peter$sh() or peter$bg()) followed by its other inputs as JSON, or the input as JSON
+#' peter$sh() or peter$bg()) followed by its other inputs as JSON, or the input as JSON; a command
+#' and JSON are redacted, as a nested call's are values the code computed, such as a secret
+#' handed to a child through `env`
 #' @noRd
 perm_summary = function(call) {
   input = if (is.list(call$input)) call$input else list()
@@ -789,13 +793,13 @@ perm_summary = function(call) {
   path = input[["path"]]
   if (is.character(path)) return(paste0("path: ", path))
   json = function(x) {
-    txt = tryCatch(json_encode(x), error = function(e) "(input not shown)")
+    txt = redact(tryCatch(json_encode(x), error = function(e) "(input not shown)"), "context")
     if (nchar(txt) > 200L) paste0(substr(txt, 1L, 200L), "...") else txt
   }
   cmd = unlist(input[["cmd"]])
   if (is.character(cmd) && length(cmd)) {
     rest = input[names(input) != "cmd"]
-    return(paste(c(cmd, if (length(rest)) json(rest)), collapse = " "))
+    return(paste(c(redact(cmd, "context"), if (length(rest)) json(rest)), collapse = " "))
   }
   json(call$input)
 }

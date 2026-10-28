@@ -98,6 +98,7 @@ rule_code_text = function(fl) {
 #' Allow rules with fn/category/sh/sql/secret match only when EVERY flagged call (level >= 1, with a
 #' function name) is covered; deny and ask rules match when ANY is, level 0 included (report 18
 #' section 3.7, D-267). An sh: glob ending ` *` also matches the command alone (`cat *`, `cat`).
+#' An allow secret: rule covers r code only: a tool's risk lists no flagged call to cover.
 #' @noRd
 rule_hit = function(p, call, lst) {
   name = call$name %||% ""
@@ -114,7 +115,7 @@ rule_hit = function(p, call, lst) {
     s = risk$secrets
     if (lst != "allow") return(any(s %in% p$value))
     read = sub("^secret_env(_registered)? ", "", fl$call[fl$level >= 1L])
-    return(length(s) > 0L && all(c(s, read) %in% p$value))
+    return(name == "r" && length(s) > 0L && all(c(s, read) %in% p$value))
   }
   fl = fl[(lst != "allow" | fl$level >= 1L) & (p$kind == "category" | !is.na(fl$fn)), ,
           drop = FALSE]
@@ -147,7 +148,8 @@ rule_match = function(rules, call) {
 #' A rule covering exactly the flagged calls of `call`, or NULL
 #'
 #' Never for level 4, control, the ask tool, code the classifier cannot read (`dynamic`: its
-#' rows name a construct, not what it runs) or shell and SQL text mixed with other calls. A
+#' rows name a construct, not what it runs), shell and SQL text mixed with other calls or a tool
+#' call reading a registered secret (only an `r(secret:)` rule pre-approves one, in r code). A
 #' path tool's rule is its file's directory inside the project and the file itself outside it.
 #' @noRd
 rule_suggest = function(call) {
@@ -163,7 +165,7 @@ rule_suggest = function(call) {
     d = if (grepl("^[~/]", path)) "." else dirname(path)
     return(paste0(name, "(", if (d == ".") path else paste0(d, "/**"), ")"))
   }
-  if (name != "r") return(name)
+  if (name != "r") return(if (!isTRUE(risk$secret_guard)) name)
   if (isTRUE(risk$secret_guard) && length(risk$secrets)) {
     return(paste0("r(secret:", paste(risk$secrets, collapse = ","), ")"))
   }
@@ -300,15 +302,17 @@ perm_control_guard = function(what) {
 #' absolute paths); for `r`, `level<=n`, `fn:name,...` (every flagged function covered),
 #' `category:name,...`, `sh:<command glob>` (`r(sh:git push*)`; a glob ending in ` *` also
 #' matches the command alone, so `r(sh:cat *)` covers `cat` too), `sql:<keywords>`
-#' (`r(sql:select)`) and `secret:NAME` (the only rule that pre-approves a guarded secret read);
-#' MCP tools by name (`mcp__github__*`). Deny rules win over ask rules, which win over allow
-#' rules. Deny and ask rules match any call that [gptr_risk()] flags, a read-only shell command
-#' included (`r(sh:cat *)` denies `peter$sh("cat notes.txt")`); an R function it knows to be
-#' read-only, such as `readLines()`, is not flagged, so `fn:` rules never match it. Allow rules
-#' never loosen plan mode and never pre-approve level-4 (critical or control) actions. In `auto`
-#' and `yolo` mode only an `fn:` rule that names the function, such as `r(fn:system)`, lets
-#' `system()`, `system2()`, `shell()` or `shell.exec()` run a command the code computes, which
-#' those modes otherwise refuse (see [gptr_security]).
+#' (`r(sql:select)`) and `secret:NAME` (the only rule that pre-approves a guarded secret read, in
+#' `r` code; it covers a secret handed to a child through the `env` of `peter$sh()` or
+#' `peter$script()` only when the same code reads that secret by name); MCP tools by name
+#' (`mcp__github__*`). Deny rules win over ask rules, which win over allow rules. Deny and ask
+#' rules match any call that [gptr_risk()] flags, a read-only shell command included
+#' (`r(sh:cat *)` denies `peter$sh("cat notes.txt")`); an R function it knows to be read-only,
+#' such as `readLines()`, is not flagged, so `fn:` rules never match it. Allow rules
+#' never loosen plan mode and never pre-approve level-4 (critical or control) actions. In `auto` and
+#' `yolo` mode only an `fn:` rule that names the function, such as `r(fn:system)`, lets `system()`,
+#' `system2()`, `shell()` or `shell.exec()` run a command the code computes, which those modes
+#' otherwise refuse (see [gptr_security]).
 #'
 #' Scopes: `"session"` is this R process; `"project"` is the user-level file
 #' \file{projects/<hash>.json} in `tools::R_user_dir("gptr", "config")`, personal and never

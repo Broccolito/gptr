@@ -2673,7 +2673,7 @@ blocked hint of `perm_check()`).
 | Function | Contract | Consumers |
 |---|---|---|
 | `dispatch_tools(run, calls)` | executes a turn's tool calls in source order; for each: lookup (unknown, or not in the tools the session offered the model, the frozen array and every `tool_change` addition -> error result `Tool <name> not found`; D-248), `tool_validate()`, `tool_call` hooks, `perm_check()`, checkpointers' `before`, execute (sequential tools through `reactor_enqueue_tool()`; concurrent ones as reactor work), checkpointers' `after`, `tool_result` hooks; never throws; a `length`/`refusal` stop fails every call unrun; returns `list(results = list(<gptr_tool_result>), terminate = lgl(1))` | P06 |
-| `dispatch_nested(name, input, ctx)` | the nested entry for `peter$...` calls made while an `r` evaluation runs: if the outer code's static analysis listed this function at a level no higher than the level approved for the outer call and `call_risk()` of the actual input is no higher either (IC-78), runs without a second prompt; otherwise `perm_check()`; the command of a `sh` or `bg` call meets the deny and ask rules first, whatever its level, as the literal call would, an ask offering no `[a]lways` rule (D-251); records into the outer result's `details$nested` (at most 20); returns the tool result's `value` (or signals the tool's error as an R error of class `gptr_error_tool` inside the model's code) | P10, P18, P22, P23 |
+| `dispatch_nested(name, input, ctx)` | the nested entry for `peter$...` calls made while an `r` evaluation runs: if the outer code's static analysis listed this function at a level no higher than the level approved for the outer call and `call_risk()` of the actual input is no higher either (IC-78) and reads no registered secret the outer analysis did not show (a member's `env` handing one to a child, D-267), runs without a second prompt; otherwise `perm_check()`; the command of a `sh` or `bg` call meets the deny and ask rules first, whatever its level, as the literal call would, an ask offering no `[a]lways` rule (D-251); records into the outer result's `details$nested` (at most 20); returns the tool result's `value` (or signals the tool's error as an R error of class `gptr_error_tool` inside the model's code) | P10, P18, P22, P23 |
 | `tool_validate(tool, input)` | `schema_validate()` of the tool's `parameters`; `{"INVALID_JSON": raw}` when the final strict parse failed | P06, P18 |
 | `perm_check(call, run)` (IC-04, IC-53) | `list(decision = "allow" \| "deny" \| "ask" \| "ask_human" \| "modify", reason = chr(1), input = named list, risk = <gptr_risk> \| NULL, rule = chr(1) \| NULL)`: every `policy` spec's `check(call, ctx)` (deny > ask_human > ask > modify > allow; a throwing policy denies; **no active `mode` policy = ask**, fail closed, unless the run's snapshot has `gptr.unsafe_no_permissions`); a `modify` is re-classified and re-checked once (a second modify denies); an `ask` goes to `permission_request` hooks (first decision; error = deny), then to `ui$permission()` when `gptr_can_prompt()` holds in the run's snapshot; an `ask_human` skips the hooks; without anyone to prompt: `gptr.noninteractive_ask = "stop"` stops the run with status `blocked` (the gateway raises `gptr_error_permission` with `action` and `how_to_allow`, which names where the run's mode came from, `opts$mode_from`, and while knitting says knitting cannot ask instead of "run interactively"), `"deny"` returns a denial the model sees | P06, P20 (through the injected `opts$gate`, IC-33), P18 (server calls) |
 | `tool_result_message(result, call)` | the `tool_result` message of §4.4 | P06, P20 (through the injected `opts$tool_result`, IC-33) |
@@ -2851,7 +2851,8 @@ Choice labels and details escape line feeds, and all other control/bidi/zero-wid
 retained. Permission approval displays keep the separate IC-53 escaping rules.
 
 **Permission request record** (argument of `ui$permission()` and payload of `permission_request`):
-`list(tool = chr(1), input = named list, summary = chr (the lines to show: code preview, paths), risk =
+`list(tool = chr(1), input = named list, summary = chr (the lines to show: code preview, paths, a nested
+command and its other inputs, redacted, D-267), risk =
 <gptr_risk> | NULL, reason = chr(1), suggested_rule = chr(1) | NULL, no_rule = chr(1) | NULL (why
 a question offers no `suggested_rule`: the reason of the ask rule that asks it, FIX-32 review round
 4), undo_note = chr(1) | NULL (from the
@@ -4832,12 +4833,16 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    returning allow for an `ask_human` is ignored with a diagnostic. In yolo (IC-78) control rows other than
    `options(gptr.*)` and secret reads do not reach `ask_human`.
 7. A `modify` decision is re-classified and re-checked once; a second `modify` denies. Only `r(secret:NAME)`
-   rules pre-approve the secret guard.
+   rules pre-approve the secret guard, in `r` code: a registered secret that the `env` of `peter$sh()` or
+   `peter$script()` hands a child is covered only when the same code reads it by name, as the question for that
+   read covers it (D-267).
 8. Approval displays (console, rstudio dialogs, worker-forwarded requests) escape C0/C1 controls except TAB and
    bidi and zero-width characters as `<U+XXXX>`; the one-line prompt names who asks (IC-77), the tool and the
    call's first line, cut to the console width before `(+N more lines)` (an absolute path inside the project
    relative to it), then the flagged calls one per line, highest level first, each cut to the console width, at
    most 5, then `(+N more; ? shows all)`; `[a]`/`[p]` are offered only with a `suggested_rule` (D-187, D-222).
+   A nested call's command and a tool's other inputs shown as JSON are redacted, so a secret that `env` hands a
+   child shows as its marker (D-267).
    A flag has one shape in the ask and in the `?` view, `[<level> <category>] <call>` (`ui_flags()`), its
    backticked names inline code as in an answer and an object's `<class, size>` the mention line's `(class,
    size)` (P28 Task 49: the ask showed the Markdown and angle brackets and `?` another shape, `[2] file_write
@@ -4911,8 +4916,9 @@ step list before its first action.
   and the ask is shown at the session's next `gptr_wait()` (D-261), whose resumed run opens with a user
   message saying that the user is at the console (D-252); a served request that needs approval
   is denied with how to allow it and a console notice, as is a nested `peter$` call of its R that needs
-  approval (`mcp_nested_gate()`: a `sh` or `bg` call as the literal call of its command run in its `wd`;
-  D-267), without the notice, which the served result would capture for the model. Non-interactively both
+  approval (`mcp_nested_gate()`: a `sh` or `bg` call as the literal call of its command run in its `wd`,
+  with the registered secrets its `env` hands the child; D-267), without the notice, which the served result
+  would capture for the model. Non-interactively both
   are `blocked`/denied.
 - A background R tool that changed bindings in the user's environment at an idle tick prints one notice.
 - P04/P19 acceptance: an inline agent calls System 1 while a sibling has a queued tool; the sibling's tool starts
@@ -5569,7 +5575,7 @@ totals line names the model and the context left.
   the loop does, IC-77; `mcp_serve_r()` -> `r_call_new`) are contract edges of the
   layering test (12.2). A served `r` call binds the r tool's marker with the served call as the run's tool
   call, so its nested `peter$` calls pass `dispatch_nested()` as the loop's do (the deny and ask rules on a
-  `sh` or `bg` command, the critical guard, the member's own level); with no pump serving it the idle gate
+  `sh` or `bg` command, the critical and secret guards, the member's own level); with no pump serving it the idle gate
   decides each first (IC-57) (D-267, FIX-32 review round 1). Removed: the `mcp.serve_ensure` service, per-session CLI tokens,
   the codex files-only fallback, the served-run mark and the `-32002` busy error (IC-57, IC-58).
 

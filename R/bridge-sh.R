@@ -771,22 +771,46 @@ bridge_strings = function(description) {
 
 # ---- builtin:bridges -----------------------------------------------------------------------------
 
-#' Risk of peter$sh(): the command classifier on the actual command (G5 levels), read as run in
-#' its `wd` (cmd_in_wd()); passing a variable through to the child (an unnamed `env` element)
-#' reads a secret, level 3
+#' The registered secrets an `env` hands a child: those an unnamed element passes by name
+#' (child_env() matches names in any case) and those the redactor finds in a value the child gets,
+#' a variable passed through or a value set
 #' @noRd
-bridge_risk_sh = function(input, ctx) {
-  r = bridge_risk(cmd_in_wd(bridge_chr(input$cmd), input$wd), "command")
-  env = bridge_chr(input$env)
-  if (all(nzchar(names(env) %||% character(length(env))))) return(r)
-  list(level = max(3L, as.integer(r$level)), categories = unique(c(r$categories, "secret")),
-       paths = as.character(r$paths))
+bridge_env_secrets = function(env) {
+  named = nzchar(names(env) %||% character(length(env)))
+  pass = toupper(env[!named])
+  amb = Sys.getenv()
+  vals = as_utf8(c(unname(env[named]), unname(amb[toupper(names(amb)) %in% pass])))
+  st = secrets_state()
+  held = vapply(st$lits, function(l) any(grepl(l, vals, fixed = TRUE, useBytes = TRUE)), NA,
+                USE.NAMES = FALSE)
+  reg = secret_registered_names()
+  unique(c(reg[toupper(reg) %in% pass], sub("^\\[secret:(.*)\\]$", "\\1", st$marks[held])))
 }
 
-#' Risk of peter$script(): 3 (contract 9.4; the script body is not read)
+#' A member's risk `r` with the `env` its child gets: passing a variable through (an unnamed
+#' element) reads a secret, level 3; handing over a registered secret is a guarded read of it, as
+#' `Sys.getenv()` of its name is (G6)
+#' @noRd
+bridge_risk_env = function(r, env) {
+  env = bridge_chr(env)
+  s = bridge_env_secrets(env)
+  if (all(nzchar(names(env) %||% character(length(env)))) && !length(s)) return(r)
+  list(level = max(3L, as.integer(r$level)), categories = unique(c(r$categories, "secret")),
+       paths = as.character(r$paths), secret_guard = length(s) > 0L, secrets = s)
+}
+
+#' Risk of peter$sh(): the command classifier on the actual command (G5 levels), read as run in
+#' its `wd` (cmd_in_wd()), with its `env`
+#' @noRd
+bridge_risk_sh = function(input, ctx) {
+  bridge_risk_env(bridge_risk(cmd_in_wd(bridge_chr(input$cmd), input$wd), "command"), input$env)
+}
+
+#' Risk of peter$script(): 3 (contract 9.4; the script body is not read), with its `env`
 #' @noRd
 bridge_risk_script = function(input, ctx) {
-  list(level = 3L, categories = "process", paths = as.character(input$path))
+  bridge_risk_env(list(level = 3L, categories = "process", paths = as.character(input$path)),
+                  input$env)
 }
 
 #' Risk of peter$bg(): 3, or the command's level when that is higher

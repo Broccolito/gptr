@@ -700,6 +700,42 @@ test_that("member risks follow the command classifier; script and bg are at leas
   expect_identical(as.integer(set_only$level), 0L)
 })
 
+test_that("an env that hands a child a registered secret meets the secret guard (review round 5)", {
+  skip_on_cran()
+  local_vault()
+  withr::local_envvar(R5_FAKE_KEY = "sk-test-0000", R5_HOLDS = "x-sk-test-0000-y",
+                      R5_PLAIN = "plain-value")
+  secret_register("sk-test-0000", "R5_FAKE_KEY")
+  sh = registry_get("tool", "sh")
+  script = registry_get("tool", "script")
+  # passed by its name in any case (child_env() matches names case-insensitively), passed in
+  # another variable, or set as a value
+  for (env in list("R5_FAKE_KEY", "r5_fake_key", "R5_HOLDS", c(K = "sk-test-0000"),
+                   list("PATH", K = "Bearer sk-test-0000"))) {
+    for (r in list(sh$risk(list(cmd = c("git", "status"), env = env), NULL),
+                   script$risk(list(path = "a.sh", env = env), NULL))) {
+      expect_true(isTRUE(r$secret_guard), label = deparse1(env))
+      expect_identical(r$secrets, "R5_FAKE_KEY")
+      expect_identical(as.integer(r$level), 3L)
+    }
+  }
+  # an ordinary env is as before: a pass-through is level 3, a value set is the command's level
+  for (env in list("PATH", "LANG", "R5_PLAIN", c(LANG = "C"), NULL)) {
+    r = sh$risk(list(cmd = c("git", "status"), env = env), NULL)
+    expect_false(isTRUE(r$secret_guard), label = deparse1(env))
+    expect_identical(as.integer(r$level), if (length(env) && is.null(names(env))) 3L else 0L)
+    expect_false(isTRUE(script$risk(list(path = "a.sh", env = env), NULL)$secret_guard))
+  }
+  # a key shorter than gptr.redact_min_chars has no literal to find: its name alone decides
+  withr::local_envvar(R5_SHORT = "abc1")
+  secret_register("abc1", "R5_SHORT")
+  for (env in list("R5_SHORT", "r5_short")) {
+    r = sh$risk(list(cmd = c("git", "status"), env = env), NULL)
+    expect_true(isTRUE(r$secret_guard), label = env)
+    expect_identical(r$secrets, "R5_SHORT")
+  }
+})
+
 test_that("a bridge digest is one line, whatever text the model chose (review round 3)", {
   seen = new.env()
   local_mocked_bindings(run_current = function() NULL,
@@ -818,4 +854,94 @@ test_that("computed commands are re-checked at run time with the actual command"
   peter("make the marker", model = fake3, envir = new.env(), mode = "auto")
   expect_false(file.exists("marker.txt"))
   expect_true(file.exists("safe.txt"))
+})
+
+test_that("a secret handed to a child through env asks as a secret read does (review round 5)", {
+  skip_on_cran()
+  local_project()
+  local_permission_rules()
+  local_vault()
+  withr::local_envvar(R5_FAKE_KEY = "sk-test-0000")
+  secret_register("sk-test-0000", "R5_FAKE_KEY")
+  rs = deparse(rscript_path())
+  child = "\"cat(nzchar(Sys.getenv('R5_FAKE_KEY')), nzchar(Sys.getenv('K')))\""
+  run = function(mode, env, answers = list(), pre = "") {
+    ui = local_scripted_ui(answers)
+    code = paste0(pre, "x = peter$sh(c(", rs, ", \"-e\", ", child, "), env = ", env, ")$stdout")
+    fake = local_fake_provider(list(fake_tool("r", code = code), fake_text("done")))
+    e = new.env()
+    peter("run it", model = fake, envir = e, mode = mode)
+    list(x = e$x, asked = sum(ui$log$method == "permission"))
+  }
+  # passed through by name, or set from a value the code read by a computed name
+  computed = "v = Sys.getenv(paste0('R5_FAKE', '_KEY'))\n"
+  for (case in list(list("auto", "'R5_FAKE_KEY'", "n", ""),
+                    list("auto", "c(K = v)", "n", computed),
+                    list("manual", "'R5_FAKE_KEY'", c("y", "n"), ""))) {
+    res = run(case[[1L]], case[[2L]], as.list(case[[3L]]), case[[4L]])
+    expect_identical(res$asked, length(case[[3L]]), label = paste(case[1:2], collapse = " "))
+    expect_null(res$x)
+  }
+  # yolo runs a secret read without a question, as for Sys.getenv()
+  expect_identical(run("yolo", "'R5_FAKE_KEY'"), list(x = "TRUE FALSE", asked = 0L))
+  # the code's own read was the question: the same secret in env asks no second one
+  expect_identical(run("auto", "c(K = Sys.getenv('R5_FAKE_KEY'))", list("y")),
+                   list(x = "FALSE TRUE", asked = 1L))
+  # no [a]lways rule is offered, as no rule but r(secret:) stops the guard's question
+  before = perm_store()$allow
+  expect_identical(run("auto", "'R5_FAKE_KEY'", list("a")), list(x = "TRUE FALSE", asked = 1L))
+  expect_identical(perm_store()$allow, before)
+  # an ordinary env runs as before
+  expect_identical(run("auto", "c('PATH', LANG = 'C')"), list(x = "FALSE FALSE", asked = 0L))
+  # code that reads the secret by name covers its hand-over: the question for that read, or an
+  # r(secret:) rule allowing that code, as it does when a level-0 command leaves the read the only
+  # flagged call (review round 5 verification)
+  read = "invisible(Sys.getenv('R5_FAKE_KEY'))\n"
+  expect_identical(run("auto", "'R5_FAKE_KEY'", list("y"), read),
+                   list(x = "TRUE FALSE", asked = 1L))
+  skip_if(!nzchar(Sys.which("git")), "git is not installed")
+  gptr_permissions(allow = "r(secret:R5_FAKE_KEY)")
+  git = function(env, pre = "", answers = list()) {
+    ui = local_scripted_ui(answers)
+    code = paste0(pre, "x = peter$sh(c('git', 'status'), env = ", env, ")$status")
+    fake = local_fake_provider(list(fake_tool("r", code = code), fake_text("done")))
+    e = new.env()
+    peter("run it", model = fake, envir = e, mode = "auto")
+    list(ran = is.integer(e$x), asked = sum(ui$log$method == "permission"))
+  }
+  expect_identical(git("c(K = Sys.getenv('R5_FAKE_KEY'))"), list(ran = TRUE, asked = 0L))
+  expect_identical(git("'R5_FAKE_KEY'", read), list(ran = TRUE, asked = 0L))
+  # the rule does not cover a hand-over the code does not read by name
+  expect_identical(git("'R5_FAKE_KEY'", answers = list("n")), list(ran = FALSE, asked = 1L))
+})
+
+test_that("the question for a secret in env shows its marker, never its value (review round 5)", {
+  skip_on_cran()
+  local_project(files = list(a.sh = "echo hi"))
+  local_permission_rules()
+  local_vault()
+  withr::local_envvar(R5_FAKE_KEY = "sk-test-0000")
+  secret_register("sk-test-0000", "R5_FAKE_KEY")
+  seen = new.env()
+  seen$lines = character()
+  off = gptr_register(gptr_spec("ui", "r5shown", has_ui = function() TRUE,
+                                select = function(...) NA_integer_,
+                                notify = function(text, level = "info") invisible(NULL),
+                                permission = function(request) {
+                                  seen$lines = c(seen$lines, ui_permission_lines(request),
+                                                 ui_permission_detail(request))
+                                  ui_answer("deny")
+                                }))
+  withr::defer(off())
+  withr::local_options(gptr.ui = "r5shown", gptr.interactive = TRUE)
+  read = "v = Sys.getenv(paste0('R5_FAKE', '_KEY'))\n"
+  for (call in c("peter$sh(c('echo', v), env = c(K = v))",
+                 "peter$script('a.sh', env = c(K = paste('Bearer', v)))")) {
+    fake = local_fake_provider(list(fake_tool("r", code = paste0(read, "x = ", call)),
+                                    fake_text("done")))
+    peter("run it", model = fake, envir = new.env(), mode = "auto")
+  }
+  expect_true(any(grepl("echo [secret:R5_FAKE_KEY]", seen$lines, fixed = TRUE)))
+  expect_true(any(grepl("Bearer [secret:R5_FAKE_KEY]", seen$lines, fixed = TRUE)))
+  expect_false(any(grepl("sk-test", seen$lines, fixed = TRUE)))
 })
