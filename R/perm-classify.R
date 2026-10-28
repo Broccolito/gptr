@@ -2578,22 +2578,35 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       return(TRUE)
     }
     if (name %in% c("Sys.setenv", "Sys.unsetenv", "local_envvar", "with_envvar")) {
+      # the arguments as R matches them (exactly, in part before `...`, by position), withr's to
+      # its formals as written here when withr is not loaded; a call R cannot match is read as one
+      # whose names the code computes
+      if (is.null(attr(a, "formals")) && !startsWith(name, "Sys.")) {
+        a = risk_args(as.call(c(as.name(name), w)), switch(name,
+          with_envvar = function(new, code, action) NULL,
+          function(.new, ..., action, .local_envir) NULL))
+      }
+      d = a[["..."]]
+      dn = names(d) %||% rep("", length(d))
       if (startsWith(name, "Sys.")) {
-        vals = lapply(w[!nzchar(nms)], risk_fold, kn(ctx))
-        keys = c(nms[nzchar(nms)], unlist(vals))
+        # the names of Sys.setenv()'s arguments, and the values of Sys.unsetenv()'s x and of
+        # Sys.setenv()'s unnamed arguments (which R refuses)
+        vals = lapply(if (name == "Sys.setenv") d[!nzchar(dn)] else a[names(a) == "x"], risk_fold,
+                      kn(ctx))
+        keys = c(dn[nzchar(dn)], unlist(vals))
         unread = any(vapply(vals, is.null, logical(1)))
       } else {
         # withr's: the names of `...` and of `.new` (`new`) written out as c() or list(), which
         # may otherwise hold any name
-        new = risk_arg(w, if (name == "with_envvar") "new" else ".new", 1L)
+        new = a[[if (name == "with_envvar") "new" else ".new"]]
         lst = is.call(new) && isTRUE(risk_head(new[[1L]])$name %in% c("c", "list"))
         el = if (lst) (names(new) %||% rep("", length(new)))[-1L]
-        keys = c(setdiff(nms, c("", ".new", "new", "code", "action", ".local_envir")), el)
+        keys = c(dn[nzchar(dn)], el)
         unread = !is.null(new) && (!lst || !all(nzchar(el)))
       }
       if (any(risk_control_name(keys))) {
         add(ctx, label, name, 4L, "control")
-      } else if (unread) {
+      } else if (unread || is.null(attr(a, "formals"))) {
         # a name the classifier cannot read may be one of them (D-272)
         add(ctx, paste0(label, " (names the code computes)"), name, 4L, "control")
       } else {
