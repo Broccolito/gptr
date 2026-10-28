@@ -8400,3 +8400,24 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   newlines are text (FIX-34)" and "a bracketed paste at the prompt's editor stays in the draft until
   Enter (D-263)"; test-console-repl.R "a macOS terminal's look at fd 0 erases the row its tty echoed
   a paste on (FIX-34)". Evidence: progress/fixes.md FIX-34.
+
+## D-270 - CI-105 The Title from contributor PR #92 (2026-10-27)
+- Rule: DESCRIPTION's Title is "Language Model Agents in Live 'R' Sessions" (42 characters, left
+  unchanged by `tools::toTitleCase()`, no period), from contributor PR #92 (Gianmarco Bellucci,
+  commit `71ae6e39`), which the maintainer approved on 2026-10-27. It replaces "Language Model
+  Agents Inside the Live 'R' Session" (49 characters), the Title of P01's Global Constraints and
+  Task 1 (the DESCRIPTION and its test), of P25's Global Constraints and Task 5
+  (`description_problems()` and the `dcf_of()` fixture) and of 05's P01 Foundation scope. The
+  three checks that pin it change with it in the PR's commit: `description_problems()` in
+  `dev/release/lib.R`, the `dcf_of()` fixture of `dev/release/tests/test-description.R` and
+  test-zzz.R's DESCRIPTION test. `dev/plan/P01-foundation.md`, `dev/plan/P25-release.md` and
+  `dev/spec/05-plan-decomposition.md` keep the old Title; this entry wins over them.
+- Why: the maintainer approved the PR as a whole ("take all of his advice"). The new Title passes
+  CRAN's incoming feasibility with remote checks (CI-105), and nothing else reads it: no
+  `inst/CITATION`, `_pkgdown.yml` title, Rd page, vignette, cheat sheet, NEWS entry or
+  `cran-comments.md` line names it (the PR's audit).
+- Contract-visible: DESCRIPTION's Title, as CRAN, `citation("gptr")` and the package site show it;
+  no section of 03 or 04 names the Title (IC-72 lists the fields P01 writes without it).
+- Tests: test-zzz.R "DESCRIPTION carries the fields CRAN and the contract require (IC-72)";
+  `dev/release/tests/test-description.R` "description_problems() checks the two fields P25 owns and
+  guards the others". Evidence: progress/fixes.md CI-105.

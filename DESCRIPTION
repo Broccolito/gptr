@@ -1,5 +1,5 @@
 Package: gptr
-Title: Language Model Agents Inside the Live 'R' Session
+Title: Language Model Agents in Live 'R' Sessions
 Version: 1.0.0
 Authors@R: c(
     person("Wanjun", "Gu", , "wanjun.gu@ucsf.edu", role = c("aut", "cre", "cph"),
@@ -9,24 +9,22 @@ Authors@R: c(
     person("Gianmarco", "Bellucci", , "Gianmarco.Bellucci@ucsf.edu", role = "ctb",
            comment = c("Testing", ORCID = "0000-0002-2635-1699"))
   )
-Description: Evaluates model-written code in the calling environment of a
-    running 'R' session, so agents work on objects already in memory instead
-    of reloading data from files or rerunning scripts. One function, peter(),
-    opens a chat in the console or, given a prompt, calls either kind of
-    model: typed decision models (System 1) return logical, character or
-    numeric vectors with probabilities, and conversational models (System 2)
-    run as tool-using agents. Conversational models come from the 'Anthropic'
+Description: Runs language model agents in an existing 'R' session, where
+    generated code can inspect and modify objects already in memory. The
+    peter() function supports interactive chat and programmatic calls.
+    Conversational models use tools and return session objects; typed
+    decision models return logical, character or numeric vectors with
+    associated model probabilities. Supports the 'Anthropic'
     <https://platform.claude.com/docs/en/api/overview>, 'OpenAI'
-    <https://developers.openai.com/api/reference/overview> and
-    'Google Gemini' <https://ai.google.dev/gemini-api/docs> APIs,
-    'OpenAI'-compatible endpoints, local 'Ollama' <https://ollama.com> models
-    and the 'Claude Code' and 'Codex' command line tools; decision models
-    include 'Jev', hosted by 'TypeSafe AI'
-    <https://docs.typesafe.ai/introduction>, and the local 'Clef'. For
-    reproducible research, top-level peter() calls can be recorded, with the
-    code they ran, in 'R' scripts, 'R Markdown' and 'Quarto' documents or
-    'Jupyter' notebooks; with the same data and packages, a recorded script
-    replays without a model or keys, or reruns with another model.
+    <https://developers.openai.com/api/reference/overview> and 'Google Gemini'
+    <https://ai.google.dev/gemini-api/docs> APIs, 'OpenAI'-compatible endpoints,
+    local 'Ollama' <https://ollama.com> models, and the 'Claude Code' and
+    'Codex' command line tools. Decision models include 'Jev', hosted by
+    'TypeSafe AI' <https://docs.typesafe.ai/introduction>, and the local 'Clef'.
+    Top-level agent calls and their executed code can be recorded in 'R'
+    scripts, 'R Markdown' and 'Quarto' documents, or 'Jupyter' notebooks.
+    Recorded 'R' scripts can be replayed without model calls when the required
+    inputs and packages are available.
 License: Apache License (== 2.0)
 URL: https://broccolito.github.io/gptr/,
     https://github.com/Broccolito/gptr

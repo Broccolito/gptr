@@ -662,7 +662,7 @@ description_problems = function(dcf, stage = c("vignettes", "release")) {
   }
   out = character()
   if (!identical(field("Package"), "gptr")) out = c(out, "DESCRIPTION: Package is not gptr")
-  title = "Language Model Agents Inside the Live 'R' Session"
+  title = "Language Model Agents in Live 'R' Sessions"
   if (!identical(field("Title"), title)) out = c(out, "DESCRIPTION: Title differs from P01's")
   if (!identical(field("VignetteBuilder"), "knitr, rmarkdown")) {
     out = c(out, "DESCRIPTION: VignetteBuilder must be knitr, rmarkdown for HTML vignettes")
