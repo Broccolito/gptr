@@ -728,8 +728,14 @@ artifact_browser_launch = function(args) {
                      operation = "close", path = stderr)
         }
       }
-      # Exiting helpers still write in the profile, so wait for them before removing it.
-      proc_wait_exit(held$family, seconds)
+      # Exiting helpers still write in the profile, so wait for them before removing it. Under
+      # load the scheduler can starve an orphaned helper past the deadline, so those still
+      # running after a 2 s grace are killed, then waited for in the rest (D-271).
+      started = proc.time()[["elapsed"]]
+      if (!isTRUE(proc_wait_exit(held$family, min(seconds, 2)))) {
+        proc_kill_signalled(held$family)
+        proc_wait_exit(held$family, seconds - (proc.time()[["elapsed"]] - started))
+      }
       tree = proc_tree(marker)
       if (length(tree) || isTRUE(attr(tree, "unavailable")) ||
           !all(vapply(held$family, proc_handle_alive, NA) %in% FALSE)) {

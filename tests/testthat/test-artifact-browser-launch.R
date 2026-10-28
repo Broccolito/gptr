@@ -502,13 +502,21 @@ test_that("artifact browser directory failure reports its stage and retains retr
 })
 
 test_that("artifact browser close waits for its unmarked helpers before removing the profile", {
-  for (exits in c(0.5, Inf)) {
+  # A helper exits by itself, or only when killed after the 2 s grace (FIX-35), or never.
+  for (mode in c("exits", "killed", "survives")) {
     x = artifact_launch_fixture()
     owner = x$launch(character())
     root = x$state$roots[[1L]]
-    x$state$exits = exits
+    x$state$exits = if (mode == "exits") 0.5 else Inf
     x$state$dead_at = numeric()
     x$state$unlinked_at = numeric()
+    x$state$killed_at = numeric()
+    x$scope$proc_kill_signalled = function(handles) {
+      expect_identical(handles, list("network-service"))
+      x$state$killed_at = c(x$state$killed_at, x$state$clock)
+      if (mode == "killed") x$state$exits = x$state$clock
+      handles
+    }
     # The marker misses Chrome's helpers, so only their parent link records them.
     x$scope$proc_children = function(p) {
       expect_identical(p, x$process)
@@ -535,11 +543,19 @@ test_that("artifact browser close waits for its unmarked helpers before removing
     seen = tryCatch(close(b = NULL, owner = owner, cached = FALSE), error = identity)
     expect_identical(x$state$signals, tools::SIGTERM)
     expect_false(x$state$alive)
-    if (is.finite(exits)) {
+    if (mode == "exits") {
+      expect_true(x$state$dead_at >= 0.5)
+      expect_identical(x$state$killed_at, numeric())
+    } else {
+      # The grace ends 2 s into the wait, at most one 20 ms poll late.
+      expect_length(x$state$killed_at, 1L)
+      expect_true(x$state$killed_at >= 2 && x$state$killed_at <= 2.02)
+    }
+    if (mode != "survives") {
       expect_null(seen)
-      expect_true(x$state$dead_at >= exits)
       expect_identical(x$state$unlinked_at, x$state$dead_at)
       expect_false(dir.exists(root))
+      if (mode == "killed") expect_identical(x$state$dead_at, x$state$killed_at)
     } else {
       expect_s3_class(seen, "gptr_error_io")
       expect_match(conditionMessage(seen), "family did not finish cleanup", fixed = TRUE)
@@ -555,6 +571,30 @@ test_that("artifact browser close waits for its unmarked helpers before removing
     }
     expect_true(all(file.exists(x$state$files)))
   }
+})
+
+test_that("a recorded helper that cannot run is killed after the grace, in the deadline (FIX-35)", {
+  # Under load the scheduler starved an orphaned Chrome renderer past the close deadline. A
+  # stopped child stands in for it: SIGTERM stays pending, so only the kill ends it.
+  x = artifact_launch_fixture()
+  x$scope$proc.time = base::proc.time
+  helper = processx::process$new(rscript_path(), c("--vanilla", "-e", "Sys.sleep(60)"),
+    env = c("current", R_TESTS = ""), cleanup = TRUE)
+  withr::defer(helper$kill())
+  handle = ps::ps_handle(helper$get_pid())
+  ps::ps_suspend(handle)
+  owner = x$launch(character())
+  root = x$state$roots[[1L]]
+  x$scope$proc_children = function(p) list(handle)
+  close = get("artifact_browser_close", envir = environment(artifact_browser))
+  environment(close) = x$scope
+  started = proc.time()[["elapsed"]]
+  seen = tryCatch(close(b = NULL, owner = owner, cached = FALSE), error = identity)
+  elapsed = proc.time()[["elapsed"]] - started
+  expect_null(seen)
+  expect_false(helper$is_alive())
+  expect_true(elapsed >= 2 && elapsed < 10)
+  expect_false(dir.exists(root))
 })
 
 artifact_launch_temp = function(x) {
