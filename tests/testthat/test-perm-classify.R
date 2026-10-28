@@ -464,7 +464,7 @@ test_that("report 18's 101 cases get their levels (18 section 2.5.2, amended)", 
     list("download.file('https://example.com/x.csv', 'x.csv')", 2L),
     list("read.csv('https://example.com/x.csv')", 2L),
     list("source('https://example.com/evil.R')", 3L), list("source('helper.R')", 3L),
-    list("setwd('/')", 2L), list("Sys.setenv(PATH = '')", 2L), list("options(warn = 2)", 2L),
+    list("setwd('/')", 4L), list("Sys.setenv(PATH = '')", 2L), list("options(warn = 2)", 2L),
     list("options('digits')", 0L), list("rm(list = ls())", 4L), list("rm(df)", 2L),
     list("q('no')", 4L), list("quit(save = 'no')", 4L), list("tools::pskill(Sys.getpid())", 4L),
     list("sapply(1:3, q)", 4L), list("x <<- 1", 2L),
@@ -492,7 +492,7 @@ test_that("report 18's 101 cases get their levels (18 section 2.5.2, amended)", 
     list("quote(unlink('x'))", 2L), list("x = 'unlink'; do.call(x, list('a'))", 3L),
     list("f = get('unlink'); f('x')", 3L), list("nm = 'mtcars'; get(nm)", 3L),
     list("\"\\u0075nlink\"('x')", 3L), list("get('unlink', envir = baseenv())('x')", 3L),
-    list("withr::with_dir('/', unlink('x'))", 3L), list("body(f) = quote(unlink('x'))", 2L),
+    list("withr::with_dir('/', unlink('x'))", 4L), list("body(f) = quote(unlink('x'))", 2L),
     list("do.call(paste0('unl', 'ink'), list('a'))", 3L),
     list("eval(as.call(list(as.name('unlink'), 'x')))", 3L),
     list("Sys.setenv(R_LIBS_USER = '/tmp/evil')", 2L), list("this is not R code {", 0L)
@@ -1220,4 +1220,24 @@ test_that("a command run in a directory outside the project reads it (review rou
   expect_identical(lv(paste0("system('cd ", out, " && ls')")), 1L)
   expect_identical(lv("system('cd sub && ls')"), 0L)
   expect_identical(lv("system('cd ~/.ssh && ls')"), 3L)
+})
+
+test_that("moving R's working directory out of the project is level 4 (review round 4)", {
+  root = local_project()
+  dir.create(file.path(root, "sub"))
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  # relative paths, which the gate places in the project, would then name files outside it
+  for (code in c(paste0("setwd(", deparse(out), ")"), "setwd('/')", "setwd(d)",
+                 paste0("p = ", deparse(out), "; setwd(p)"),
+                 paste0("withr::with_dir(", deparse(out), ", x)"), "withr::local_dir(d)")) {
+    r = gptr_risk(code, root = root)
+    expect_identical(r$level, 4L, label = code)
+    expect_identical(r$categories, "session", label = code)
+  }
+  # neighbours: a directory in the project or the session's tempdir() is a session change
+  for (code in c("setwd('sub')", "setwd('.')", "setwd(tempdir())", "withr::local_dir('sub')",
+                 "withr::with_dir(tempdir(), x)")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
 })

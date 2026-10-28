@@ -438,6 +438,23 @@ test_that("code a shell or Python runs is read in the directory the line moved t
   expect_identical(sum(ui$log$method == "permission"), 2L)
 })
 
+test_that("setwd() out of the project asks in auto and yolo (review round 4)", {
+  skip_on_cran()
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  writeLines("x", file.path(out, "marker.txt"))
+  withr::local_dir(getwd())
+  ui = local_scripted_ui(list("n", "n"))
+  for (mode in c("auto", "yolo")) {
+    code = paste0("setwd(", deparse(out), "); unlink('marker.txt')")
+    fake = local_fake_provider(list(fake_tool("r", code = code), "Done."),
+                               name = paste0("setwd-", mode))
+    peter("Clean up.", model = fake, mode = mode, envir = new.env())
+  }
+  expect_true(file.exists(file.path(out, "marker.txt")))
+  expect_identical(sum(ui$log$method == "permission"), 2L)
+})
+
 test_that("a question an ask rule raises offers no [a]lways rule (review round 3)", {
   skip_on_cran()
   root = local_project()

@@ -2552,6 +2552,15 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       }
       return(TRUE)
     }
+    if (name %in% c("setwd", "local_dir", "with_dir")) {
+      # out of the project, the paths the gate places in it name files elsewhere
+      v = risk_fold(risk_arg(a, if (name == "setwd") "dir" else "new", 1L), kn(ctx))
+      pc = if (!length(v)) "unknown" else risk_cmd_worst(vapply(v, risk_path_cls, "", "read", root))
+      if (pc %in% c("workspace", "temp")) return(FALSE)
+      add(ctx, paste0(label, if (!length(v)) " (a directory the code computes)" else
+        " (leaves the project)"), name, 4L, "session", v[1L] %||% NA_character_, pc)
+      return(TRUE)
+    }
     if (name %in% c("Sys.setenv", "Sys.unsetenv")) {
       vals = lapply(w[!nzchar(nms)], risk_fold)
       keys = c(nms[nzchar(nms)], unlist(vals))
