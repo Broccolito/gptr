@@ -62,7 +62,7 @@ Requirements and design.
 | `07-local-ollama.md` | Accepted 2026-10-03 amendment IC-74: Ollama chat and Clef/Clef Flash decision models. | current |
 | `proposals/` | The three competing architectures the design was synthesised from (P-A, P-B, P-C). | stale |
 
-### Progress (`progress/`, 52 files)
+### Progress (`progress/`, 53 files)
 
 Task evidence written during implementation: what ran, what passed, and the commit.
 
@@ -70,6 +70,7 @@ Task evidence written during implementation: what ran, what passed, and the comm
 |---|---|---|
 | `P01.md`..`P26.md`, `P28.md` | One log per plan: task evidence and plan acceptance. P27 is recorded in `HANDOFF.md` and `PROGRESS.md`. | historical |
 | `fixes.md` | Follow-up fixes made outside plan tasks: FIX-1..FIX-36, PERF-1 and PERF-2, and the hosted-CI rounds from CI-15 on. | current |
+| `open-findings.md` | Every finding open on PR #93 when the maintainer paused its review rounds (2026-10-28), by area, with severity, regression, evidence and the proposed fix: the input of the comprehensive review before the CRAN submission. | current |
 | `infra.md` | Hosted CI, tooling and Linux portability: rounds CI-1 to CI-20. | historical |
 | `simplicity-plan.md`, `simplicity.md` | The D-135 simplicity pass and `peter()` rename: the execution plan, then one section per package. | historical |
 | `rename-inventory.md`, `rename/rename.py` | The D-135 rename survey and the mechanical rename script. | historical |
