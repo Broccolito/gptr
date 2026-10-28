@@ -8421,3 +8421,30 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests: test-zzz.R "DESCRIPTION carries the fields CRAN and the contract require (IC-72)";
   `dev/release/tests/test-description.R` "description_problems() checks the two fields P25 owns and
   guards the others". Evidence: progress/fixes.md CI-105.
+
+## D-272 - FIX-36 Variables that move gptr's own folders are control (2026-10-27)
+- Rule: `Sys.setenv()` or `Sys.unsetenv()` in R code, and an `os.environ` write in `peter$py()`
+  code, of `R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME` or `USERPROFILE` is level 4
+  `control`, as one of a provider key, `GPTR_*`, `*_BASE_URL`, `R_ENVIRON_USER`, `R_PROFILE_USER`,
+  `R_ENVIRON` or `R_PROFILE` already was: every mode but yolo asks a person, auto included, and
+  yolo runs it, as it runs gptr's configuration functions (IC-78). The five decide where
+  `tools::R_user_dir("gptr", "config")` (settings, rules, trust decisions, credentials) and
+  `user_home()` (which places `~/.Rprofile`, `~/.Renviron` and `~/.R/Makevars`) resolve, so
+  moving them moved the control path class (IC-54) with them. The names match on every OS, one
+  rule with no OS branch. This amends the control list of D-132 and 03 section 6.8.1 as the code
+  names it (`risk_control_env`), which 04 IC-53 item 3 gave as `GPTR_*` and provider keys only.
+- Rule (not control): the variables of the cache (`R_USER_CACHE_DIR`, `XDG_CACHE_HOME`,
+  `LOCALAPPDATA`) and data (`R_USER_DATA_DIR`, `XDG_DATA_HOME`) folders stay level 2: a write into
+  those folders is the `outside` path class, level 3, so moving them gives model code nothing it
+  cannot do where they are. `R_USER` stays level 2: R reads it for `~` on Windows once, at
+  startup, and gptr never.
+- Formerly each of the five was level 2 `session`, which auto runs, so one call could point gptr
+  at a folder of the model's choice for the next run.
+- Not covered (Open): `withr::local_envvar()` and `withr::with_envvar()` (withr has no row: level
+  1 `unlisted`) and a name the code computes (a level-3 `dynamic` row), for every control
+  variable.
+- Contract-visible: 03 section 6.8.1; 04 section 15.4 IC-53 item 3; `?gptr_options`,
+  `?gptr_security`; NEWS.
+- Tests: test-perm-classify.R "a variable that moves gptr's config folder or the home is control
+  (FIX-36)"; test-perm-gate.R "auto asks before model code moves gptr's config folder or the home
+  (FIX-36)". Evidence: progress/fixes.md FIX-36.
