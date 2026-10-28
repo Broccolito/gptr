@@ -314,29 +314,44 @@ test_that("completion comes only after @, !, !!, / and peter$, in full words (IC
 test_that("no completion holds a line end or another control character (review round 4)", {
   .gptr_repl = local_completing_repl()
   # readline would send what follows a line end as a line of its own, a ! line as R code
-  bad = c("bang\n!cat(1)", "cr\r!cat(1)", "esc\033[2J")
+  bad = c("bang\n!cat(1)", "cr\r!cat(1)", "esc\033[2J", "c1\u0085!cat(1)")
   testthat::local_mocked_bindings(registry_names = function(kind, session = NULL) {
     switch(kind, command = c("mode", bad), skill = c("tidy-data", bad), character())
   })
   local_service("ns.names", function(prefix) c("read", bad))
-  assign("cfg", stats::setNames(list(1, 2, 3, 4), c("ok", bad)), envir = .gptr_repl$envir)
+  assign("cfg", stats::setNames(list(1, 2, 3, 4, 5), c("ok", bad)), envir = .gptr_repl$envir)
   expect_identical(console_complete("@cfg$"), "@cfg$ok")
   expect_identical(console_complete("/"), c("/mode", "/skill:"))
   # the package's own skills are listed too
   skills = console_complete("/skill:")
   expect_true("/skill:tidy-data" %in% skills)
-  expect_false(any(grepl("[\001-\037]", skills, useBytes = TRUE)))
+  expect_false(any(paste0("/skill:", bad) %in% skills))
   expect_identical(console_complete("ask peter$"), "peter$read")
   # names in the working directory, at @ and in a ! line's string (not on Windows, whose file
   # names hold no control character)
   skip_on_os("windows")
-  file.create(bad)
+  file.create(bad[1:3])
   expect_identical(console_complete("look at @"),
                    c("@cfg", "@mtcars_copy", "@my_long_object_name", "@analysis_notes.R",
                      "@data/"))
   expect_identical(console_complete("look at @ban"), character())
   expect_identical(console_complete("!x = readLines('ban"), character())
   expect_identical(console_complete("!x = readLines('ana"), "analysis_notes.R")
+  # a C1 control (U+0080 to U+009F), which a name in a C locale cannot hold
+  skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "a C1 control's file name needs a UTF-8 locale")
+  file.create(bad[[4L]])
+  expect_identical(console_complete("look at @c1"), character())
+})
+
+test_that("@ completes a folder whose first name is not ASCII (round 4 merge)", {
+  .gptr_repl = local_completing_repl()
+  # unmarked UTF-8 bytes, as list.files() gives them, which a radix sort refused as the first name
+  cafe = rawToChar(as.raw(c(0x63, 0x61, 0x66, 0xc3, 0xa9)))
+  dir.create("acc")
+  file.create(file.path("acc", cafe))
+  expect_identical(console_complete("look at @acc/"), paste0("@acc/", cafe))
+  dir.create(file.path("acc", "b"))
+  expect_identical(console_complete("look at @acc/"), c("@acc/b/", paste0("@acc/", cafe)))
 })
 
 test_that("a ! line's string never goes to readline's file completion (round 4 verification)", {

@@ -59,7 +59,10 @@ console_complete = function(line, end = nchar(line)) {
         objs = console_objects(env, hidden)
         dir = sub("[^/]*$", "", substring(word, 2L))
         where = if (nzchar(dir)) path.expand(dir) else "."
-        files = sort(list.files(where, all.files = hidden, no.. = TRUE), method = "radix")
+        files = list.files(where, all.files = hidden, no.. = TRUE)
+        # ordered as UTF-8, as a radix sort refuses an unmarked non-ASCII first name; the names stay
+        # unmarked for dir.exists(), which in a C locale cannot translate a marked one
+        files = files[order(as_utf8(files), method = "radix")]
         files = paste0(files, ifelse(dir.exists(file.path(where, files)), "/", ""))
         paste0("@", c(objs[make.names(objs) == objs], paste0(dir, files, recycle0 = TRUE)),
                recycle0 = TRUE)
@@ -81,8 +84,9 @@ console_complete = function(line, end = nchar(line)) {
       unique(cands[startsWith(cands, word)])
     }
   }, error = function(e) character())
-  # readline would send what follows a line end as a line of its own, a ! line as R code
-  cands[!grepl("[\\x01-\\x1f\\x7f]", cands, perl = TRUE, useBytes = TRUE)]
+  # readline would send what follows a line end as a line of its own, a ! line as R code; C1
+  # controls (U+0080 to U+009F) are left out too
+  cands[!grepl("[\\x01-\\x1f\\x7f]|\\xc2[\\x80-\\x9f]", cands, perl = TRUE, useBytes = TRUE)]
 }
 
 #' The custom completer R's completion calls (`custom.completer`, IC-81): it sets `fileName`
