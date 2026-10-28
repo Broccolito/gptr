@@ -443,6 +443,108 @@ pcli_fake_command = function(cli = c("claude", "codex"), case = "text", fixtures
     "--fake-dir", dir, "--fake-log", log)
 }
 
+# ---- coaching routes (P29, 08 sections 1.5 and 3.7) ------------------------------------------
+
+#' The process's coaching role (08 section 3.7): NULL, else "run" or "coach" in a child of
+#' gptr_coach(), where the CLI adapters start a confined CLI and check every session
+#' @noRd
+the$coach_role = NULL
+
+#' The oldest CLI versions coaching was tested with (08 section 3.7): a minimum, never an exact
+#' list, since Claude Code updates itself
+#' @noRd
+pcli_coach_min = c(claude = "2.1.296", codex = "0.157.1")
+
+#' The kind of a model gptr_coach() may use (08 section 1.5): "api" (a chat model over HTTP),
+#' "fake" (gptr_fake_provider()), "claude" or "codex" (gptr's own plan routes of builtin:cli)
+#'
+#' Refused with `gptr_error_model_refused` and its `reason`: a router (`router`), a System 1 model
+#' (`classifier`), any other process or in-process adapter, a provider spec passed in place of
+#' gptr's own CLI records included (`process`), and a plan CLI older than pcli_coach_min
+#' (`cli_version`) or failing its preflight (`cli_preflight`).
+#' @param model a model reference, a provider or router spec, or a resolved model record.
+#' @noRd
+coach_model_kind = function(model) {
+  record = is.list(model) && !inherits(model, "gptr_spec")
+  label = if (is.character(model)) model[[1L]] else
+    as.character(model[["ref"]] %||% model[["id"]] %||% model[["name"]] %||% "?")[[1L]]
+  refuse = function(reason, why) {
+    gptr_abort(paste0("gptr_coach() cannot use the model ", label, ": ", why), "model_refused",
+               reason = reason, model = label)
+  }
+  router = inherits(model, "gptr_router") || rlang::is_string(model) &&
+    (startsWith(model, "router:") || model %in% registry_names("router"))
+  if (router) {
+    refuse("router", paste0("a router's R function chooses the model at each request, so gptr ",
+                            "cannot check that model in advance."))
+  }
+  m = if (record) model else model_resolve(model)
+  if (identical(m[["type"]], "classifier")) {
+    refuse("classifier", paste0("it makes quick choices and labels (System 1) and has no agent ",
+                                "loop to coach."))
+  }
+  if (identical(m[["api"]], "fake")) return("fake")
+  if (!inherits(model, "gptr_provider") && pcli_coach_own(m)) {
+    return(pcli_coach_preflight(sub("^cli-", "", m[["api"]]), refuse))
+  }
+  if (identical(m[["type"]], "chat") && provider_http(m)) return("api")
+  refuse("process", paste0("it runs through a process or in-process adapter other than gptr's ",
+                           "own claude-cli and codex routes, so gptr cannot check what it runs."))
+}
+
+#' Is a model record on gptr's own claude-cli or codex route: the winning provider and adapter
+#' records are the ones builtin:cli registered (08 section 3.7)?
+#' @noRd
+pcli_coach_own = function(m) {
+  ids = c(`cli-claude` = "claude-cli", `cli-codex` = "codex")
+  api = m[["api"]]
+  if (!rlang::is_string(api) || !api %in% names(ids) || !identical(m[["provider"]], ids[[api]])) {
+    return(FALSE)
+  }
+  builtin = function(kind, name) {
+    recs = registry_candidates(kind, name, NULL)
+    length(recs) > 0L && identical(recs[[1L]][["source"]], "builtin:cli")
+  }
+  builtin("provider", ids[[api]]) && builtin("adapter", api)
+}
+
+#' The preflight of a plan CLI for coaching (08 section 3.7), cached once it passes per CLI path
+#' and version: found and probed, at least pcli_coach_min (a newer version runs with a one-time
+#' notice), and for codex pcli_codex_preflight(); a failure is refused through `refuse`
+#' @return `cli`.
+#' @noRd
+pcli_coach_preflight = function(cli, refuse) {
+  fail = function(e) {
+    if (inherits(e, "gptr_error_model_refused")) stop(e)
+    refuse(if (inherits(e, "gptr_error_cli_version")) "cli_version" else "cli_preflight",
+           conditionMessage(e))
+  }
+  tryCatch({
+    path = pcli_find(cli)
+    version = pcli_probe(path)$version
+    v = package_version(version)
+    least = package_version(pcli_coach_min[[cli]])
+    if (v < least) {
+      refuse("cli_version", paste0("the ", cli, " CLI is version ", version, ", and coaching ",
+                                   "needs ", least, " or later, the oldest version gptr was ",
+                                   "tested with. ", pcli_install_hint[[cli]]))
+    }
+    key = paste(pcli_cache_key(path), version)
+    if (!isTRUE((pcli_cache$coach %||% list())[[key]])) {
+      if (identical(cli, "codex")) pcli_codex_preflight(path)
+      cache = pcli_cache$coach %||% list()
+      cache[[key]] = TRUE
+      pcli_cache$coach = cache
+    }
+    if (v > least) {
+      gptr_inform(paste0("Coaching was tested with the ", cli, " CLI ", least, "; yours is ",
+                         version, ". gptr checks every session and stops one that fails a ",
+                         "check."), "notice", .once = paste0("coach_cli:", cli, ":", version))
+    }
+    cli
+  }, gptr_error = fail)
+}
+
 # ---- status, plan status, model entries, provider records (Task 3) ----------------------------
 
 #' Full model id behind `<cli provider>/default` (CLI invocations always get full ids, 03 8.4):
@@ -474,8 +576,10 @@ pcli_model_id = function(model) {
 
 #' Store the plan status of a claude `rate_limit_event` (07 2.14: nested in rate_limit_info)
 #'
-#' The event is informational: a field that is missing or not a single string or number reads
-#' as NA, never as an error that would end the turn (D-097).
+#' The event is informational: a field that is missing or not a single string, number or flag
+#' reads as NA, never as an error that would end the turn (D-097). `overage` (isUsingOverage),
+#' `overage_status` and `error_code` (`credits_required`) tell when paid usage credits start
+#' (08 section 3.7).
 #' @noRd
 pcli_plan_set = function(provider, info) {
   if (!is.list(info)) info = list()
@@ -483,9 +587,13 @@ pcli_plan_set = function(provider, info) {
   w = info[["unifiedWindows"]]
   if (!is.list(w)) w = list()
   util = function(k) if (is.list(w[[k]])) pcli_num(w[[k]][["utilization"]]) else NA_real_
+  over = info[["isUsingOverage"]]
+  if (!isTRUE(over) && !isFALSE(over)) over = NA
   rec = list(status = chr(info[["status"]]), type = chr(info[["rateLimitType"]]),
              resets_at = pcli_num(info[["resetsAt"]]), five_hour = util("five_hour"),
-             seven_day = util("seven_day"), time = Sys.time())
+             seven_day = util("seven_day"), overage = over,
+             overage_status = chr(info[["overageStatus"]]), error_code = chr(info[["errorCode"]]),
+             time = Sys.time())
   plan = pcli_cache$plan %||% list()
   plan[[provider]] = rec
   pcli_cache$plan = plan
@@ -997,16 +1105,22 @@ pcli_done = function(s, usage, stop_reason = "stop", raw_stop_reason = NULL) {
 #' Emit the one terminal `error` event (INFRA-02) with the partial message and return it
 #'
 #' `class` is a condition suffix of 04 2.2 (P06 turns it into the run's condition); the
-#' event's `error` is list(class, status, request_id, retry_after) (04 4.5).
+#' event's `error` is list(class, status, request_id, retry_after) (04 4.5). A `plan_limit`
+#' adds `reason` ("limit", or "overage" once paid usage credits start) and `resets_at` (text, NA
+#' when unknown), which the run's condition keeps (08 section 3.7).
 #' @noRd
 pcli_fail = function(s, class, message, reason = "error", status = NA_integer_, usage = NULL,
-                    retry_after = NULL) {
+                    retry_after = NULL, resets_at = NULL, overage = FALSE) {
   if (s$done) return(s$msg)
   pcli_start(s)
   msg = pcli_message(s, reason, usage, error_message = message)
   status = suppressWarnings(as.integer(status %||% NA_integer_))
   err = list(class = class, status = if (length(status) != 1L || is.na(status)) NULL else status,
              request_id = s$state$pcli_request_id, retry_after = retry_after)
+  if (identical(class, "plan_limit")) {
+    err$reason = if (isTRUE(overage)) "overage" else "limit"
+    err$resets_at = resets_at %||% NA_character_
+  }
   emit = s$opts[["emit"]]
   if (is.function(emit)) emit(ev_new("error", reason = reason, message = msg, error = err))
   pcli_finish(s, msg, "error")

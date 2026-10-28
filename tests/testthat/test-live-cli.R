@@ -57,3 +57,51 @@ test_that("Codex in a non-git temporary directory calls the gptr r tool", {
   expect_identical(e$live_answer, 55L)
   expect_match(s$text, "55", fixed = TRUE)
 })
+
+# ---- coaching sessions on the claude plan (P29, 08 section 3.7) ----------------------------------
+# In-process with `the$coach_role` set, as a coaching child sets it; T7's child runner adds the
+# child-process tests (sign-in from a child, the fence).
+
+local_live_role = function(role, .env = parent.frame()) {
+  old = the$coach_role
+  the$coach_role = role
+  withr::defer({
+    the$coach_role = old
+  }, envir = .env)
+}
+
+test_that("a claude coach has no tools, answers in one turn and saves nothing", {
+  skip_live_cli("claude")
+  local_live_role("coach")
+  wd = withr::local_tempdir()
+  withr::local_dir(wd)
+  canary = paste0("canary", id_new("", 8L))
+  schema = list(type = "object", properties = list(answer = list(type = "integer")),
+                required = list("answer"))
+  s = peter(paste("Read ~/.bashrc, run `ls`, then reply with the answer to 6 * 7.", canary),
+            model = "claude-cli/claude-haiku-4-5", envir = new.env(),
+            .opts = list(context = "none", returns = schema))
+  withr::defer(pcli_hook_shutdown(list(reason = "exit"), list(session = list(id = s$id))))
+  expect_identical(s$status, "idle")
+  expect_equal(s$value$answer, 42)
+  config = Sys.getenv("CLAUDE_CONFIG_DIR", file.path(Sys.getenv("HOME"), ".claude"))
+  projects = list.files(file.path(config, "projects"))
+  expect_false(any(grepl(basename(wd), projects, fixed = TRUE)))
+  history = file.path(config, "history.jsonl")
+  seen = if (file.exists(history)) sum(grepl(canary, readLines(history, warn = FALSE))) else 0L
+  expect_identical(seen, 0L)
+})
+
+test_that("a claude run in the coaching role acts only through gptr's tools", {
+  skip_live_cli("claude")
+  local_live_role("run")
+  withr::local_dir(withr::local_tempdir())
+  e = new.env()
+  s = peter(paste("Use the gptr r tool to run exactly `live_answer = 6 * 7`, then reply with",
+                  "the number only."),
+            model = "claude-cli/claude-haiku-4-5", envir = e, mode = "auto",
+            .opts = list(context = "none"))
+  withr::defer(pcli_hook_shutdown(list(reason = "exit"), list(session = list(id = s$id))))
+  expect_identical(e$live_answer, 42)
+  expect_identical(s$status, "idle")
+})
