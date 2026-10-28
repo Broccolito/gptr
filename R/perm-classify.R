@@ -1762,7 +1762,10 @@ risk_control_env = c("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "G
                      "TOGETHER_API_KEY", "XAI_API_KEY", "CEREBRAS_API_KEY", "FIREWORKS_API_KEY",
                      "VLLM_API_KEY", "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT",
                      "AWS_BEARER_TOKEN_BEDROCK", "TYPESAFE_API_KEY", "R_ENVIRON_USER",
-                     "R_PROFILE_USER", "R_ENVIRON", "R_PROFILE")
+                     "R_PROFILE_USER", "R_ENVIRON", "R_PROFILE",
+                     # they move gptr's config folder (tools::R_user_dir()) or the home that
+                     # user_home() reads, and with them the control paths (D-272)
+                     "R_USER_CONFIG_DIR", "XDG_CONFIG_HOME", "APPDATA", "HOME", "USERPROFILE")
 risk_control_env_re = "^GPTR_|_BASE_URL\\z"
 
 # ---- the R classifier (03 section 6.8.1, D-132) ---------------------------------------------
