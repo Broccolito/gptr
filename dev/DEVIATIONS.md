@@ -8619,3 +8619,23 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Tests (review round 3): test-perm-classify.R "a variable setter's arguments are matched as R
   matches them (FIX-36 review round 3)"; test-perm-gate.R "auto asks before a named or
   part-named argument moves the folder (FIX-36 round 3)".
+- Status 2026-10-28 (review round 4): a call of a helper the classifier folds (`c()`,
+  `paste0()`, `file.path()` and the others of `risk_base_helpers`, and a `list()` holding withr's
+  variables) is one the code computes when the code assigns the helper's name or the helper found
+  from the environment the code would run in is not base R's: a variable name built with it is
+  one the classifier cannot read, so level 4 `control`, as is a `c()` or `list()` of the code's own
+  passed as withr's `.new` or `new`. Formerly such a call was folded as base R's, so
+  `paste0 = function(...) "R_USER_CONFIG_DIR"` and then `Sys.unsetenv(x = paste0("T", "Z"))`, in
+  one call or in two turns, was level 2 `session`, which auto runs. The same rule makes a command
+  built with such a helper a level-3 `dynamic` row and a `setwd()` directory one the code computes
+  (level 4). Round 2's Open list holds for `Sys.unsetenv()`, `withr::local_envvar()` and
+  `withr::with_envvar()` as it does for `Sys.setenv()`: each reached by a computed name, through a
+  list or an environment, or handed to another function (`get("Sys.unsetenv")`,
+  `asNamespace("withr")$local_envvar`, `with(list(f = withr::with_envvar), ...)`,
+  `assign("f", Sys.unsetenv)`, `identity(withr::local_envvar)`) is level 3 or lower, which auto
+  runs, as `?gptr_security` now says.
+- Contract-visible (review round 4): 03 section 6.8.1; `?gptr_risk`, `?gptr_security`.
+- Tests (review round 4): test-perm-classify.R "a helper the code or the session binds is one the
+  code computes (FIX-36 round 4)" and the round 3 test's rows of an exact `.new` beside a part
+  name; test-perm-gate.R "auto asks before a helper the code or the run binds names the folder
+  (FIX-36 round 4)".
