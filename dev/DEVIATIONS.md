@@ -7949,6 +7949,25 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `setwd(getwd())` is level 4 (2 on the merged branches, which read it as R's working directory).
   Contract-visible: 03 section 6.8.1. Tests: test-risk-forms.R "a getwd() or setwd() the code or
   the session binds is one the code computes (merge)". Evidence: progress/fixes.md FIX-34's merge.
+- Status 2026-10-28 (review round 6): `Sys.junction()`'s row names `to` again, R's formal, so on
+  Windows, where the function exists, a junction written to a control path is level 4 `control`
+  (round 5's `link` named no formal, which left it 2 there); `sys::exec_wait()`'s and
+  `sys::exec_background()`'s `std_out` and `std_err` are files they write, read as
+  `processx::run()`'s `stdout` is (formerly 0 for an output file outside the project). Not read,
+  each level 3, and now named in `?gptr_security` and 03 section 6.8.1: `env` with `-C` among
+  other short options or as an abbreviated `--chdir`, `pwsh -CommandWithArgs` and `-cwa`, and
+  `os.environ.update()` of a mapping whose names are not plain string literals. Both pages also
+  say that a form they name as not read is code built or reached at run time, code in a file or
+  a package, code another interpreter runs, or a call or argument the classifier has no rule for
+  (round 5 named only the first kind). Contract-visible: 03 section 6.8.1; `?gptr_security`.
+  Tests: test-risk-forms.R "Sys.junction() writes its `to`, with R's formals or as written, on
+  any host (round 6)", "sys::exec_*()'s std_out and std_err are files it writes, as processx's
+  (round 6)". Evidence: progress/fixes.md FIX-27.
+- Status 2026-10-28 (review round 6 verification): a function written as sys's `std_out` or
+  `std_err` is a callback, not a file it writes (round 6 read it as a level 2 file write, which
+  manual and edits asked); its code is read as any function's, and a name there stays a file the
+  code computes, level 2. Tests: test-risk-forms.R "sys::exec_*()'s std_out and std_err are files
+  it writes, as processx's (round 6)". Evidence: progress/fixes.md FIX-27.
 
 ## D-263 - FIX-28 Bracketed paste decides a paste in a T console (2026-10-26)
 - Rule (mode): a T console's call turns bracketed paste on with its character mode. `tty_modes()`
@@ -8317,7 +8336,15 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   code and then for the secret, as a nested call above the approved level does. Status 2026-10-28
   (review round 5 verification): the question shows a nested call's command and its other inputs
   redacted (`perm_summary()`, `ui_request_change()`), so a secret handed over in `env` shows as its
-  marker; formerly they showed raw, the key in clear.
+  marker; formerly they showed raw, the key in clear. Status 2026-10-28 (review round 6, V5-1): the
+  idle gate reads a nested `sh` or `bg` call as the literal call of its command with the member's
+  secrets (for the rules), and then, when the hand-over meets the secret guard and the served
+  call's own analysis did not guard the same secrets, the member call itself, as
+  `dispatch_nested()` does. Formerly it merged the member's guard into the literal `r` call, which
+  an `r(secret:NAME)` allow rule covered when the command was level 0, so idle served
+  `peter$sh("whoami", env = "NAME")` handed the child the key in auto with no question, where the
+  loop asks once. Tests: test-mcp-server.R "an r(secret:) rule covers an idle served hand-over if
+  the code reads it (round 6)".
 - Rule (classifier, PERM-2): `system2()`'s `env` is read as the start of its command line, as
   Unix `system2()` pastes it, unquoted, before the command:
   `system2("ls", env = "A=1; rm -rf build;")` is read as `A=1; rm -rf build; ls` (level 3), and an
@@ -8734,3 +8761,32 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `environ` (`my_environ`) is not read as `os.environ` (since round 5 its write through a computed
   key was level 4). Tests: test-risk-forms.R "a Python variable name it cannot read in an
   environment write is control (round 5)". Evidence: progress/fixes.md FIX-36.
+- Status 2026-10-28 (review round 6): the names the `cli-claude` and `cli-codex` child
+  environments keep for the `claude` and `codex` command-line tools (`CLAUDE_CODE_OAUTH_TOKEN`,
+  `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_GIT_BASH_PATH`, `CODEX_HOME`) join the control list, formerly
+  level 2 `session` although `?gptr_options` called a variable a provider reads control.
+  `paste()`, `paste0()`, `file.path()` and `c()` are folded with every argument as R passes it:
+  `paste0()`'s `sep` is a part, `collapse` and `fsep` join the parts, and a `collapse` is also
+  read as each value, which may be one of a name's several values (formerly `paste0()` dropped
+  `sep`, and `collapse` and `fsep` were parts, so `file.path("R_USER", "CONFIG_DIR", fsep = "_")`
+  and `Sys.unsetenv(x = paste0("R_USER_", sep = "CONFIG_DIR"))` were level 2 `session`). The rule
+  of round 4 sees a helper the code binds with `=`, `<-` or `<<-`, as a formal or as a `for`
+  variable only: one bound with `assign()`, `delayedAssign()`, `makeActiveBinding()`,
+  `list2env()` or `attach()`, or in a list given to `with()` or `within()`, is read as base R's
+  (level 2 for such a variable name, which auto runs), as `?gptr_security`, `?gptr_risk` and 03
+  section 6.8.1 now say. Contract-visible: 03 section 6.8.1; 04 section 15.4 IC-53 item 3;
+  `?gptr_options`, `?gptr_security`, `?gptr_risk`. Tests: test-risk-forms.R "a variable the
+  claude and codex CLIs keep is control, as a provider's key (round 6)", "paste(), paste0() and
+  file.path() are folded with their arguments as R passes them". Evidence: progress/fixes.md
+  FIX-36.
+- Status 2026-10-28 (review round 6 verification): a `collapse` in `paste()` or `paste0()` is
+  also read as each value only when a part holds a name or R's working directory (round 6 did so
+  for literals too, which made `system(paste(c("python3", "--version"), collapse = " "))` level 3
+  instead of 0). The rule of round 4 counts a helper's bare name; a helper assigned into an
+  environment (`e$paste0 = f`, `.GlobalEnv[["paste0"]] = f`) is read as base R's, level 2 for such
+  a variable name, as `?gptr_security`, `?gptr_risk` and 03 section 6.8.1 now say.
+  `?gptr_options` and `?gptr_security` call round 6's CLI names the variables gptr keeps for the
+  `claude` or `codex` tool (its login, its folder or the path of Git Bash). Contract-visible: 03
+  section 6.8.1; `?gptr_options`, `?gptr_security`, `?gptr_risk`. Tests: test-risk-forms.R
+  "paste(), paste0() and file.path() are folded with their arguments as R passes them".
+  Evidence: progress/fixes.md FIX-36.

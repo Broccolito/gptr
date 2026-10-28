@@ -1827,7 +1827,8 @@ risk_python = function(code, root = project_root(), dirs = root) {
 }
 
 #' The variables that configure gptr (D-272): a variable a registered provider reads (its keys and
-#' base-URL variables, and the key pair a `bedrock-converse` provider signs with), R's startup
+#' base-URL variables, the key pair a `bedrock-converse` provider signs with, and the variables the
+#' claude and codex CLIs' child environments keep: login, folder, Git Bash path), R's startup
 #' variables, and those that move gptr's config folder (tools::R_user_dir()) or the home that
 #' user_home() reads, and with them the control paths
 #' @noRd
@@ -1837,9 +1838,10 @@ risk_control_env = function() {
     c(if (is.function(a)) attr(a, "gptr_optional_auth", exact = TRUE) else a,
       p[["compat"]][["base_url_env"]])
   })
-  toupper(c(unlist(vars), "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
-            "R_ENVIRON_USER", "R_PROFILE_USER", "R_ENVIRON", "R_PROFILE", "R_USER_CONFIG_DIR",
-            "XDG_CONFIG_HOME", "APPDATA", "HOME", "USERPROFILE"))
+  cli = lapply(c("cli-claude", "cli-codex"), function(x) child_env_profile(x)$keep)
+  toupper(c(unlist(vars), unlist(cli), "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+            "AWS_SESSION_TOKEN", "R_ENVIRON_USER", "R_PROFILE_USER", "R_ENVIRON", "R_PROFILE",
+            "R_USER_CONFIG_DIR", "XDG_CONFIG_HOME", "APPDATA", "HOME", "USERPROFILE"))
 }
 risk_control_env_re = "^GPTR_|_BASE_URL\\z"
 
@@ -1931,9 +1933,13 @@ risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "w
 #' (`inst/extdata/risk-commands.csv`), `peter$sql()` by its statements and `peter$py()` by a token
 #' scan. A command the code computes, or a `shell.exec()` file it computes, is a `dynamic` row at
 #' level 3. A path, command or variable name built with `c()`, `list()`, `paste0()`,
-#' `file.path()` or another helper of base R counts as one the code computes when the code assigns
-#' that helper's name, or when the helper found from `envir` (the global environment when `NULL`)
-#' is not base R's. Plugins and users extend both tables with `risk_rule` records.
+#' `file.path()` or another helper of base R counts as one the code computes when the code binds
+#' that helper's bare name with `=`, `<-` or `<<-`, as a function's argument or as a `for`
+#' variable, or when the helper found from `envir` (the global environment when `NULL`) is not
+#' base R's; a helper the code binds otherwise (with `assign()`, `delayedAssign()`,
+#' `makeActiveBinding()`, `list2env()` or `attach()`, in a list given to `with()` or `within()`,
+#' or into an environment, `e$paste0 = f` or `.GlobalEnv[["paste0"]] = f`) is read as base R's.
+#' Plugins and users extend both tables with `risk_rule` records.
 #'
 #' @param code R code: a character vector, a call or an expression.
 #' @param envir `NULL` or the environment the code would run in. When given, assignments to
@@ -2301,12 +2307,18 @@ risk_fold = function(x, known = NULL, masked = NULL) {
                file = , gzfile = , bzfile = , xzfile = "description")
   if (!is.null(arg)) return(risk_fold(risk_arg(risk_args(x, fn, "base"), arg, 1L), known, masked))
   if (!fn %in% c("c", "file.path", "paste0", "paste")) return()
-  sep = a$sep %||% " "
-  a$sep = NULL
-  parts = lapply(unname(a), risk_fold, known, masked)
-  if (!is.character(sep) || any(vapply(parts, is.null, logical(1)))) return(NULL)
-  switch(fn, c = unlist(parts), file.path = do.call(file.path, parts),
-         paste0 = do.call(paste0, parts), do.call(paste, c(parts, sep = sep)))
+  # every argument as R passes it (paste0()'s `sep` is a part, `collapse` and `fsep` join them)
+  parts = lapply(a, risk_fold, known, masked)
+  if (any(vapply(parts, is.null, logical(1)))) return(NULL)
+  v = tryCatch(unname(do.call(fn, parts, envir = baseenv())), error = function(e) NULL)
+  # a part's values may be the several values a name or R's working directory may hold, which the
+  # fold cannot tell from a vector, so a collapse of one is also read as each value
+  alt = length(all.vars(x)) || any(c("getwd", "setwd") %in% all.names(x))
+  if (length(v) && startsWith(fn, "paste") && !is.null(parts[["collapse"]]) && alt) {
+    parts$collapse = NULL
+    v = unique(c(v, do.call(fn, parts, envir = baseenv())))
+  }
+  v
 }
 
 #' The class of one literal path read, written or deleted by a call of `category`
@@ -2458,8 +2470,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
   # A user function's code, read one level deeper (FALSE when too deep).
   read_user = function(code, label, ctx) {
     if (depth <= 0L) return(FALSE)
-    s = risk_scan(as.expression(list(code)), envir, root, depth - 1L,
-                  attr(kn(ctx), "wd") %||% NA_character_, masked)
+    s = risk_scan(as.expression(list(code)), envir, root, depth - 1L, masked = masked)
     add_rows(s$flags, ctx, prefix = label)
     TRUE
   }
@@ -2595,13 +2606,16 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     nms = names(w) %||% rep("", length(w))
     lit = vapply(w, is.character, logical(1))
     if (row$category == "process") {
-      # a process left running (wait = FALSE), and the files its stdout and stderr go to
+      # a process left running (wait = FALSE), and the files its stdout and stderr go to (sys
+      # names them std_out and std_err, and also takes a callback there: a function written
+      # there is no file)
       wait = risk_arg(a, "wait")
       if (!is.null(wait) && !isTRUE(wait)) {
         add(ctx, paste0(label, " (in the background)"), name, 2L, "process")
       }
-      for (x in list(risk_arg(a, "stdout"), risk_arg(a, "stderr"))) {
-        if (!is.null(x) && !is.logical(x) &&
+      for (x in lapply(c("stdout", "stderr", "std_out", "std_err"), risk_arg, a = a)) {
+        fun = is.call(x) && identical(x[[1L]], as.name("function"))
+        if (!is.null(x) && !is.logical(x) && !fun &&
             (name == "system2" || !(identical(x, "|") || identical(x, "2>&1")))) {
           add_path(list(x), "file_write", 2L, ctx, label, name)
         }

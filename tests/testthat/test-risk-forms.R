@@ -253,3 +253,114 @@ test_that("the yolo notice names moving the working directory out of the project
   expect_message(mode_notice("yolo"), "moving the working directory out of the project",
                  class = "gptr_message_notice")
 })
+
+test_that("Sys.junction() writes its `to`, with R's formals or as written, on any host (round 6)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  check = function() {
+    for (code in c("Sys.junction('sub', '.git/hooks/x')", "Sys.junction('sub', '~/.Rprofile')",
+                   "Sys.junction(to = '.gptr/agents', from = 'sub')")) {
+      r = gptr_risk(code, root = root)
+      expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
+    }
+    expect_identical(lv(paste0("Sys.junction('sub', ", deparse(file.path(out, "x")), ")")), 3L)
+    expect_identical(lv(paste0("Sys.junction(", deparse(out), ", 'lnk')")), 4L)
+    expect_identical(lv("Sys.junction('sub', 'lnk')"), 2L)
+  }
+  check()
+  # with R's formals, as on Windows, where the function exists
+  matched = risk_args
+  local_mocked_bindings(risk_args = function(e, fn, pkg) {
+    matched(e, if (identical(fn, "Sys.junction")) function(from, to) NULL else fn, pkg)
+  })
+  check()
+})
+
+test_that("sys::exec_*()'s std_out and std_err are files it writes, as processx's (round 6)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  for (f in c(file.path(out, "x"), "~/.Rprofile", ".git/config", "x.txt")) {
+    px = c(lv(paste0("processx::run('ls', stdout = ", deparse(f), ")")),
+           lv(paste0("processx::run('ls', stderr = ", deparse(f), ")")))
+    for (fn in c("sys::exec_wait", "sys::exec_background")) {
+      sx = c(lv(paste0(fn, "('ls', std_out = ", deparse(f), ")")),
+             lv(paste0(fn, "('ls', std_err = ", deparse(f), ")")))
+      expect_identical(sx, px, label = paste(fn, f))
+    }
+  }
+  expect_identical(lv(paste0("sys::exec_wait('ls', std_out = ", deparse(file.path(out, "x")), ")")),
+                   3L)
+  # neighbours: output to R's console or a connection writes no file
+  expect_identical(lv("sys::exec_wait('ls', std_out = TRUE)"), lv("processx::run('ls')"))
+  expect_identical(lv("sys::exec_wait('ls', std_out = FALSE)"), lv("processx::run('ls')"))
+  # nor does a callback written there, whose code is read as any function's (review round 6
+  # verification)
+  for (f in c("function(x) cat(rawToChar(x))", "\\(x) message(rawToChar(x))")) {
+    for (code in c(paste0("sys::exec_wait('ls', std_out = ", f, ")"),
+                   paste0("sys::exec_background('ls', std_err = ", f, ")"))) {
+      expect_identical(lv(code), lv("sys::exec_wait('ls')"), label = code)
+    }
+  }
+  expect_identical(lv("sys::exec_wait('ls', std_out = function(x) unlink('~/.Rprofile'))"),
+                   lv("unlink('~/.Rprofile')"))
+})
+
+test_that("a variable the claude and codex CLIs keep is control, as a provider's key (round 6)", {
+  root = local_project()
+  lv = function(code) gptr_risk(code, root = root)
+  py = function(code) gptr_risk(paste0("peter$py(", deparse(code), ")"), root = root)$level
+  for (v in c("CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "codex_home")) {
+    r = lv(paste0("Sys.setenv(", v, " = 'x')"))
+    expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = v)
+    expect_identical(lv(paste0("Sys.unsetenv('", v, "')"))$level, 4L, label = v)
+    expect_identical(py(paste0("import os\nos.environ['", v, "'] = 'x'")), 4L, label = v)
+  }
+  # neighbours: a variable no provider reads stays a session change
+  for (v in c("RETICULATE_PYTHON", "CODEX_NOTE", "TZ")) {
+    expect_identical(lv(paste0("Sys.setenv(", v, " = 'x')"))$level, 2L, label = v)
+  }
+})
+
+test_that("paste(), paste0() and file.path() are folded with their arguments as R passes them", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  # paste0() has no `sep` (one more part), `collapse` joins the parts, file.path()'s `fsep` too
+  for (code in c("Sys.unsetenv(x = paste0('R_USER_', sep = 'CONFIG_DIR'))",
+                 "Sys.unsetenv(x = paste0('R_USER_CONFIG_DIR', collapse = 'x'))",
+                 "nm = paste('R_USER_CONFIG_DIR', collapse = 'x'); Sys.unsetenv(nm)",
+                 "Sys.unsetenv(file.path('XDG_CONFIG_HOME', fsep = ''))",
+                 "Sys.unsetenv(file.path('R_USER', 'CONFIG_DIR', fsep = '_'))",
+                 # a collapse is also read as each value a name may hold
+                 "n = 'TZ'; if (p) n = 'XDG_CONFIG_HOME'; Sys.unsetenv(paste(n, collapse = ''))")) {
+    r = gptr_risk(code, root = root)
+    expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
+  }
+  expect_identical(lv("system(paste0('ls', sep = '; rm -rf build'))"),
+                   lv("system('ls; rm -rf build')"))
+  expect_identical(lv("setwd(paste0('../..', collapse = 'x'))"), 4L)
+  expect_identical(lv(paste0("unlink(paste0(", deparse(out), ", collapse = '/x'))")), 4L)
+  d = paste0("d = 'x'; if (p) d = ", deparse(out), "; ")
+  expect_identical(lv(paste0(d, "unlink(paste0(d, collapse = ''))")), lv(paste0(d, "unlink(d)")))
+  # a collapse of literals is only R's value (review round 6 verification)
+  for (cmd in c("python3", "R", "bash")) {
+    expect_identical(lv(paste0("system(paste(c('", cmd, "', '--version'), collapse = ' '))")),
+                     lv(paste0("system('", cmd, " --version')")), label = cmd)
+  }
+  expect_identical(lv("processx::run(paste(c('python3', '--version'), collapse = ' '))"),
+                   lv("processx::run('python3 --version')"))
+  # while R's working directory, as a name, may hold several values
+  w = "if (p) setwd('sub'); "
+  expect_identical(lv(paste0(w, "unlink(paste0(getwd(), collapse = ''))")),
+                   lv(paste0(w, "unlink(getwd())")))
+  # neighbours: as before
+  for (code in c("Sys.unsetenv(x = paste0('T', 'Z'))", "Sys.unsetenv(paste('T', 'Z', sep = ''))",
+                 "Sys.unsetenv(c(a = 'TZ'))", "Sys.unsetenv(paste0(c('T', 'Z'), collapse = ''))",
+                 "setwd(file.path('data', 'sub'))")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+  expect_identical(lv("unlink(paste0('a', '.csv'))"), lv("unlink('a.csv')"))
+  expect_identical(lv(paste0("unlink(file.path(", deparse(out), ", 'x', fsep = '/'))")), 4L)
+})

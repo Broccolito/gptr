@@ -472,6 +472,35 @@ test_that("served R meets the secret guard when env hands a child a secret (revi
   expect_identical(nrow(ui$log), 1L)
 })
 
+test_that("an r(secret:) rule covers an idle served hand-over if the code reads it (round 6)", {
+  skip_on_cran()
+  local_project()
+  local_vault()
+  local_permission_rules()
+  withr::local_envvar(R5_FAKE_KEY = "sk-test-0000")
+  secret_register("sk-test-0000", "R5_FAKE_KEY")
+  gptr_permissions(allow = "r(secret:R5_FAKE_KEY)")
+  serve = function(target, code) mcp_dispatch_local(r_call(code), target)$result
+  hand = "peter$sh('whoami', env = 'R5_FAKE_KEY')$stdout"
+  # a level-0 command: the rule allows `r` code, never the member that hands the child the key
+  idle = local_served_session("auto")
+  res = serve(idle$session, paste("x =", hand))
+  expect_true(res$isError)
+  expect_match(res$content[[1L]]$text, "reads a registered secret", fixed = TRUE)
+  expect_null(idle$envir$x)
+  # the same code reading the secret by name: the rule allowing that read covers the hand-over
+  res = serve(idle$session, paste("invisible(Sys.getenv('R5_FAKE_KEY')); y =", hand))
+  expect_false(res$isError)
+  expect_true(nzchar(idle$envir$y))
+  # a deny rule for the secret stops the hand-over, in yolo too
+  gptr_permissions(deny = "r(secret:R5_FAKE_KEY)")
+  yolo = local_served_session("yolo")
+  res = serve(yolo$session, paste("z =", hand))
+  expect_true(res$isError)
+  expect_match(res$content[[1L]]$text, "denied by the rule r(secret:R5_FAKE_KEY)", fixed = TRUE)
+  expect_null(yolo$envir$z)
+})
+
 test_that("inside a running session the claude route gates through perm_check once", {
   probe = gptr_tool("probe", "Calls the MCP dispatcher the way the claude adapter does.",
                     parameters = list(type = "object",

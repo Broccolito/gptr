@@ -1472,8 +1472,9 @@ httr2/curl request performers) is at least level 2 [18 §2.5 and §7 item 1; IC-
 harness state (`gptr_config`, `gptr_permissions`, `gptr_trust`, `gptr_register`, `gptr_on`, `gptr_mcp_add`, ...)
 are level 4 `control` and also check `run_current()` [IC-53], as are `Sys.setenv()`/`Sys.unsetenv()`,
 `withr::local_envvar()`/`withr::with_envvar()` and a Python `os.environ` write of a variable a registered provider
-reads (its `auth` names and `compat$base_url_env`, so `AWS_REGION` for Bedrock, and the `bedrock-converse` key pair),
-`GPTR_*`, `*_BASE_URL`, R's startup variables or a variable that moves the user config directory or the home
+reads (its `auth` names and `compat$base_url_env`, so `AWS_REGION` for Bedrock, the `bedrock-converse` key pair, and
+the names the `cli-claude` and `cli-codex` child environments keep, such as `CODEX_HOME`), `GPTR_*`, `*_BASE_URL`,
+R's startup variables or a variable that moves the user config directory or the home
 (`R_USER_CONFIG_DIR`, `XDG_CONFIG_HOME`, `APPDATA`, `HOME`, `USERPROFILE`), in any letter case, those four R functions
 with a name the classifier cannot read, a Python write whose name (a subscript, the first argument of `putenv()`,
 `unsetenv()`, `pop()`) is not a plain string literal, `readRenviron()` and `dotenv::load_dot_env()` [D-272]; writes
@@ -1484,19 +1485,25 @@ user config directory, `.Rprofile`, `Makevars`, git hooks) are level 4 and to in
 server is trusted: `readOnlyHint` 0, `destructiveHint = FALSE` 2, none 3); nested `peter()` inherits and only
 tightens; `ask` is level 0.
 Outside function bodies, a path held in a name the code assigns is folded (literals through `c()`, `file.path()`,
-`paste()`, `paste0()`, `normalizePath()`, `path.expand()`, `tempfile()`), the worst value counting: a straight-line
+`paste()`, `paste0()`, `normalizePath()`, `path.expand()`, `tempfile()`; the first four with every argument as R
+passes it, so `paste0()`'s `sep` is a part and `collapse` and `fsep` join the parts, and a `collapse` is also read
+as each value when a part holds a name or R's working directory), the worst value counting: a straight-line
 assignment replaces the name's values unless the code also assigns it with `<<-`, one in a branch, loop or call adds
 its value (and, when first, the binding before the code), and a value the code computes or a loop that assigns the
-name makes it computed [D-211]. A call of one of these helpers (or of a `list()` holding withr's variables) that the
-code assigns, or that the environment the code would run in holds as other than base R's, is one the code computes,
-for a path, a command or a variable name [D-272]. R's working directory is held the same way, from `getwd()` when
+name makes it computed [D-211]. A call of one of these helpers (or of a `list()` holding withr's variables) whose
+bare name the code binds with `=`, `<-` or `<<-`, as a formal or as a `for` variable, or that the environment the
+code would run in holds as other than base R's, is one the code computes, for a path, a command or a variable name;
+one the code binds otherwise (`assign()`, `delayedAssign()`, `makeActiveBinding()`, `list2env()`, `attach()`, a
+list given to `with()` or `within()`, an assignment into an environment such as `e$paste0 = f`) is read as base
+R's [D-272]. R's working directory is held the same way, from `getwd()` when
 the code is read: `setwd()` and `withr::local_dir()` move it, `withr::with_dir()`, `xfun::in_dir()` and a move in a
 function body leave one the code computes; `getwd()` reads it and `setwd()` returns the one before, both read as the
 helpers above are, so at the code's top level `owd = setwd("data"); ...; setwd(owd)` stays in the project [D-262].
 The classifier is advisory and documented as not a security boundary; in-process R cannot be sandboxed [18 §2.5]. It
 reads code as written and does not run it, so code that builds a call, a name, a path or a command at run time, or
 reaches a function by another name, is read only as far as it can see; every form this section names as not read or
-not followed is of that kind.
+not followed is of that kind, or is code in a file or a package, code another interpreter runs, or a call or
+argument the classifier has no rule for.
 
 In auto and yolo the `mode` policy denies a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command
 (`system2()`'s `args` and `env` too [D-267], `shell.exec()`'s file) the classifier cannot fold to literals: a
@@ -1524,9 +1531,11 @@ computes, are a level-4 `session` row, which the critical guard asks about in au
 `file_delete` row, as `ln`'s source is.
 `eval()`, `rlang::eval_bare()` and `rlang::eval_tidy()` of `quote(x)` read `x`, as `evalq(x)` does. Not
 followed: the working directory changed in other ways (`usethis::local_project()`, `get("setwd")`, the `wd` of
-`callr::r()`), the code another interpreter runs (`Rscript -e`, `perl -e`), the command of `processx::process$new()`,
-a path the shell computes (`rm "$f"`, `xargs rm`) and code handed to `sh -c` as one word whose spaces are escaped
-with a backslash or written `$IFS` (`sh -c rm\ -f\ file`; reading it needs a tokenizer of its own), all level 3.
+`callr::r()`, `env` given `-C` among other short options or as an abbreviated `--chdir`: `env -iC DIR`,
+`env --chd=DIR`), the code another interpreter runs (`Rscript -e`, `perl -e`, `pwsh -CommandWithArgs` or `-cwa`),
+the command of `processx::process$new()`, a path the shell computes (`rm "$f"`, `xargs rm`) and code handed to
+`sh -c` as one word whose spaces are escaped with a backslash or written `$IFS` (`sh -c rm\ -f\ file`; reading it
+needs a tokenizer of its own), all level 3.
 
 In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never
 runs, such as `q()`, `readline()`, a read of standard input or a secret marker, with the guard's text less its
@@ -1623,7 +1632,9 @@ Base `system()`, `system2()`, `shell()` and `shell.exec()` have no such re-check
 with a computed command (6.8.1) [D-262]. R served to the CLI routes or an MCP client binds the same marker, with
 the served call as the outer call, so its nested calls pass `dispatch_nested()` too; when no pump serves the
 request the idle gate decides each first, a `sh` or `bg` call as the literal call of its command run in its `wd`,
-with the registered secrets its `env` hands the child [D-267].
+with the registered secrets its `env` hands the child, and then, when that hand-over meets the secret guard and
+the served call's own analysis guards other secrets or none, the member call itself, which no `r(secret:)` rule
+covers [D-267].
 Nested calls are recorded in the outer result's `details$nested` (at most 20) [06 §4, G5 §5].
 
 #### 6.8.5 Non-interactive runs and plan mode (NS-12)

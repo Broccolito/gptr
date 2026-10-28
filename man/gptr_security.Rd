@@ -52,24 +52,32 @@ disposable sandboxes.
 
 Changing gptr's own configuration includes model code that sets or unsets an environment
 variable gptr reads as configuration: a key or base-URL variable of a provider gptr has
-registered (such as \code{AWS_REGION}, which places Bedrock's endpoint), or one that moves its
-configuration folder or your home directory, such as \code{HOME}; \link{gptr_options} lists them. The
+registered (such as \code{AWS_REGION}, which places Bedrock's endpoint), a variable gptr keeps for
+the \code{claude} or \code{codex} command-line tool (its login, its folder or the path of Git Bash, such
+as \code{CODEX_HOME}), or one that moves its configuration folder or your home directory, such as
+\code{HOME}; \link{gptr_options} lists them. The
 classifier reads such a change in \code{Sys.setenv()}, \code{Sys.unsetenv()}, \code{withr::local_envvar()} and
 \code{withr::with_envvar()}, where a name it cannot read counts as one (also one built with \code{paste0()}
-or another helper of base R that the code or your session replaces), in \code{readRenviron()} and
-\code{dotenv::load_dot_env()}, and in an \code{os.environ} write in the code of \code{peter$py()} or
-\code{peter$knit("python", code)} that names one in a string or an upper-case word, or whose name (a
-subscript, or the first argument of \code{putenv()}, \code{unsetenv()} or \code{pop()}) is not a plain string
-literal. It does not read code in a file R runs (\code{source()}, \code{sys.source()},
-\code{eval(parse(file = ))}); \code{Sys.setenv()}, \code{Sys.unsetenv()}, \code{withr::local_envvar()} or
-\code{withr::with_envvar()} reached by a computed name, through a list or an environment, or handed to
-another function (\code{get("Sys.unsetenv")}, \code{baseenv()$Sys.setenv},
-\code{asNamespace("withr")$local_envvar}, \code{with(list(f = withr::with_envvar), ...)},
-\code{assign("f", Sys.unsetenv)}, \code{identity(withr::local_envvar)}); a Python write that reaches
-\code{os.environ} by another name (\code{e = os.environ}, \code{getattr(os, "environ")}) or through \code{ctypes}, or
-that passes \code{os.environ.update()} a mapping the code computes or keyword names not all in upper
-case (on Windows \code{os.environ.update(home = d)} sets \code{HOME}); or Python run through 'reticulate':
-such code is level 3 or lower, which \code{auto} runs without asking.
+or another helper of base R whose bare name the code binds with \code{=}, \verb{<-} or \verb{<<-}, as a
+function's argument or as a \code{for} variable, or that your session holds as other than base
+R's), in \code{readRenviron()} and \code{dotenv::load_dot_env()}, and in an
+\code{os.environ} write in the code of \code{peter$py()} or \code{peter$knit("python", code)} that names one in
+a string or an upper-case word, or whose name (a subscript, or the first argument of
+\code{putenv()}, \code{unsetenv()} or \code{pop()}) is not a plain string literal. It does not read code in a
+file R runs (\code{source()}, \code{sys.source()}, \code{eval(parse(file = ))}); \code{Sys.setenv()},
+\code{Sys.unsetenv()}, \code{withr::local_envvar()} or \code{withr::with_envvar()} reached by a computed name,
+through a list or an environment, or handed to another function (\code{get("Sys.unsetenv")},
+\code{baseenv()$Sys.setenv}, \code{asNamespace("withr")$local_envvar},
+\code{with(list(f = withr::with_envvar), ...)}, \code{assign("f", Sys.unsetenv)},
+\code{identity(withr::local_envvar)}); a name built with a helper the code binds otherwise (with
+\code{assign()}, \code{delayedAssign()}, \code{makeActiveBinding()}, \code{list2env()} or \code{attach()}, in a list
+given to \code{with()} or \code{within()}, or into an environment, \code{e$paste0 = f} or
+\code{.GlobalEnv[["paste0"]] = f}), which is read as base R's helper builds it; a Python write that
+reaches \code{os.environ} by another name (\code{e = os.environ}, \code{getattr(os, "environ")}) or through
+\code{ctypes}, or that passes \code{os.environ.update()} a mapping the code computes, a mapping whose names
+are not plain string literals (\code{{'\\x48OME': d}}, \verb{\{'H' 'OME': d\}}) or keyword names not all in
+upper case (on Windows \code{os.environ.update(home = d)} sets \code{HOME}); or Python run through
+'reticulate': such code is level 3 or lower, which \code{auto} runs without asking.
 }
 
 \section{What the gate cannot do}{
@@ -79,11 +87,12 @@ security boundary: R code can compute function names, call compiled code or load
 whose effects the classifier cannot see, and R has no sandbox for code that runs inside your
 session. The classifier reads code as written and does not run it, so code that builds a call,
 a name, a path or a command at run time, or reaches a function by another name, is read only
-as far as the classifier can see; each form this page names as not read is of that kind. Deny
-and ask \verb{sh:} rules see a command computed at run time only in a \code{peter$sh()} or
-\code{peter$bg()} call, which checks the command when it runs. So in \code{auto} and \code{yolo} mode a
-\code{system()}, \code{system2()}, \code{shell()} or \code{shell.exec()} call whose command (for \code{system2()} also its
-arguments and \code{env}) is not a string the classifier can read, such as
+as far as the classifier can see. Each form this page names as not read is of that kind, or is
+code in a file or a package, code another interpreter runs, or a call or argument the
+classifier has no rule for. Deny and ask \verb{sh:} rules see a command computed at run time only in
+a \code{peter$sh()} or \code{peter$bg()} call, which checks the command when it runs. So in \code{auto} and
+\code{yolo} mode a \code{system()}, \code{system2()}, \code{shell()} or \code{shell.exec()} call whose command (for
+\code{system2()} also its arguments and \code{env}) is not a string the classifier can read, such as
 \verb{cmd = paste("rm", "-rf", "build"); system(cmd)}, is refused, and the model is told to run the
 command with \code{peter$sh()}; \code{manual} and \code{edits} ask. An allow rule such as \code{r(fn:system)} lets
 such calls run, unchecked by \verb{sh:} rules. Neither the rules nor the refusal read what a shell
@@ -111,13 +120,14 @@ read as the one the code has moved R to, starting from R's working directory whe
 reads the code, so at the top level of the code \verb{owd = setwd("data"); ...; setwd(owd)} stays in
 the project. A drive-relative path such as \code{D:data} counts as outside on every OS. The classifier
 does not follow the working directory changed in other ways (such as \code{usethis::local_project()},
-\code{get("setwd")} or the \code{wd} of \code{callr::r()}), nor read the code another interpreter runs
-(\code{Rscript -e}, \code{perl -e}, \code{node -e}), a path the shell computes (\verb{rm "$f"} in a loop, \verb{xargs rm})
-or code handed to \code{sh -c} or \code{bash -c} as one word whose spaces are escaped with a backslash or
-written \verb{$IFS} (\verb{sh -c rm\\ -f\\ file}): such a command is level 3, which \code{auto} and \code{yolo} run
-without a question whatever it deletes. The \code{wd} of \code{processx::run()} is read when the call, or a
-name the code assigns, holds it as a string; a \code{wd} the code computes is read as the project
-directory.
+\code{get("setwd")}, the \code{wd} of \code{callr::r()}, or \code{env} given \code{-C} among other short options,
+\verb{env -iC DIR}, or as an abbreviated \code{--chdir}, \code{env --chd=DIR}), nor read the code another
+interpreter runs (\code{Rscript -e}, \code{perl -e}, \code{node -e}, \code{pwsh -CommandWithArgs} or \code{-cwa}), a path
+the shell computes (\verb{rm "$f"} in a loop, \verb{xargs rm}) or code handed to \code{sh -c} or \code{bash -c} as
+one word whose spaces are escaped with a backslash or written \verb{$IFS} (\verb{sh -c rm\\ -f\\ file}):
+such a command is level 3, which \code{auto} and \code{yolo} run without a question whatever it deletes.
+The \code{wd} of \code{processx::run()} is read when the call, or a name the code assigns, holds it as a
+string; a \code{wd} the code computes is read as the project directory.
 
 In \code{auto} and \code{yolo} mode a model can delete or overwrite files and objects. Use them only in
 projects you can restore (version control, backups, \code{\link[=gptr_rewind]{gptr_rewind()}} for recent turns), and run
