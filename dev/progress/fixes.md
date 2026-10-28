@@ -6180,6 +6180,99 @@ the driver, screens, events, transcripts and replays without a model are local, 
   environment (`get("system")(cmd)`, `baseenv()$system(cmd)`) or handed to a function of your own
   (`g(system)`), as do 03 section 6.8.1, HANDOFF and PROGRESS. D-262, 03 section 6.8.4 and 04
   section 9.4's `sh` row say so.
+- Review round 4 (the security verifier on `0aa55320`; branch `claude/v1-fix-gate` from `0aa55320`,
+  each test red on the code before its commit, `NOT_CRAN=true`, SIGINT at its default; none of the
+  four is a regression of the branch, all also so on `13a917ff`). R4-SEC-2, code a shell or Python
+  runs: round 3 placed the words of a `peter$sh()` command in its `wd`, but the text the line hands
+  on (an `sh` or `bash -c` argument, a `python3 -c` program, the literal scan of quoted text) was
+  read from the project root, so `peter$sh(c("sh", "-c", "rm -f marker.txt"), wd = <outside>)`, its
+  line forms, `bash -c`, `python3 -c` and `cd <outside> && sh -c '...'` with no `wd` were level 3
+  and deleted the marker in auto and yolo, offline and live with GPT-5.6 and Claude Opus 4.8. Red:
+  test-perm-gate.R "code a shell or Python runs is read in the directory the line moved to (round
+  4)" FAIL 8 on `9735a9a7`'s code (level 3 for the four forms with `wd` and for the `cd` line and
+  its `system()` call, the marker deleted, no question). Fix (`35d5ed58`): the directories
+  `risk_cmd_line()` tracks are threaded through `risk_command()`, `risk_cmd_line()` (now an argument
+  and an attribute `dirs`), `risk_literal_scan()`, `risk_python()` and `risk_literal_rows()`, as
+  `risk_cmd_simple()` already took them; no new rule. Green: `^(perm-|bridge-sh|mcp-server)` FAIL 0
+  SKIP 2 PASS 1973. Not read, now named in `?gptr_security`: the code another interpreter runs
+  (`Rscript -e`, `perl -e`, `node -e`) and a path the shell computes (`rm "$f"` in a loop,
+  `xargs rm`), level 3 with an absolute path outside, as on `13a917ff`; reading R or Perl code
+  inside a command line would be a classifier of its own.
+- Review round 4, R4-SEC-5, a listing with no operand: `peter$sh("ls", wd = <outside>)` (and `du`,
+  `tree`, `grep -r x`, `git status`) was level 0, as its implicit `.` was never read, while
+  `ls <outside>` and `cat f.txt` with that `wd` were level 1, so manual mode listed an outside
+  folder without a question. Red: test-perm-classify.R "a command run in a directory outside the
+  project reads it (review round 4)" FAIL 7 on `35d5ed58`'s code. Fix (`7369450a`): one rule for
+  every program instead of a list of listing commands: a `cd`, `pushd`, `chdir` or `Set-Location`
+  target is a read of that directory, as `git -C`'s already was (level 1 outside the project, 3 for
+  a secret folder, no row in the project or the session's `tempdir()`), so a `wd` outside makes any
+  command level 1 at least. In-project commands and `wd` values gain no row and no work beyond one
+  `risk_target()` per `cd`. Green: `^(perm-|bridge-sh|mcp-server|rules|risk|nested)` FAIL 0 SKIP 2
+  PASS 2000, no existing expectation changed.
+- Review round 4, R4-SEC-3, `setwd()`: the gate places relative paths in the project and
+  `project_root()` follows `getwd()` when nothing pins it, so `setwd(<outside>)` (level 2) let
+  `unlink("marker.txt")`, `file.remove()` or `peter$sh("rm -f marker.txt")`, in the same call or the
+  next, delete outside the project in auto and yolo, and with an unpinned root the outside folder
+  became the project, so even `unlink(<absolute outside path>)` ran. Red: test-perm-classify.R
+  "moving R's working directory out of the project is level 4 (review round 4)" and test-perm-gate.R
+  "setwd() out of the project asks in auto and yolo (review round 4)", with the classifier
+  standard's `setwd('/')` (2 to 4) and `withr::with_dir('/', unlink('x'))` (3 to 4), FAIL 14 on
+  `7369450a`'s code. Fix (`be1f6991`): `by_args()` reads `setwd()`'s `dir` and
+  `withr::local_dir()`'s and `withr::with_dir()`'s `new` (two `withr` rows added to
+  risk-functions.csv, level 2 `session`, as `setwd`'s row; the three notes say when it is 4): a
+  directory outside the project and `tempdir()`, or one the code computes, is a level-4 `session`
+  row, which the critical guard asks about in auto and yolo; inside the project or `tempdir()` the
+  row stays level 2. Chosen over pinning the root for a run and resolving relative paths against
+  `getwd()` (the verifier's option ii), which would touch the run start outside this scope and still
+  need `setwd()` tracked like `cd` inside one call. Ordinary code: `setwd("sub")`, `setwd(".")`,
+  `setwd(tempdir())` and `withr::local_dir("sub")` are unchanged; restoring with a name the code
+  computed (`owd = setwd(tempdir()); setwd(owd)`) and a function that calls `setwd()` on its
+  argument now ask in auto and yolo, one question for the call, and `withr` restores without one.
+  Green:
+  `^(perm-|bridge-sh|mcp-server|ckpt-objects|secrets-e2e|eval-core|artifact-app)` FAIL 0 SKIP 2
+  PASS 3107; the verifier's probe (`test-zr4-setwd.R`, run unchanged) keeps the marker with the root
+  unpinned (asked 2: the `setwd()` and then the `unlink()` of the absolute path).
+- Review round 4, R4-SEC-6, a drive-relative path: `is_abs_path()` needs a separator after the
+  colon, so `D:other` (on Windows a folder under drive D's own current directory) was joined to the
+  project root and a delete under `peter$sh(wd = "D:other")` or of `"D:build"` read level 3, on
+  every host. Red: test-perm-classify.R "a drive-relative path is outside the project on every OS
+  (review round 4)" with the standard's `rm -rf ${X:-~}`, FAIL 9 on `5df1d7f9`'s code. Fix
+  (`9735a9a7`): `is_drive_rel()` (utils-paths.R) marks `^[A-Za-z]:` with no separator after it;
+  `path_class()` calls such a path `outside` on every OS, and a `cd` or `git -C` target keeps it
+  unjoined. `is_abs_path()` keeps its meaning: widening it broke test-tool-walk.R's POSIX case
+  (`C:f.R` is a relative file there) and every tool path. `rm -rf ${X:-~}` becomes level 4 through
+  the brace reading's `X:-~`, which is right, since the default word is the home directory. The
+  verifier's Windows probe then showed a regression of `7369450a` with `9735a9a7`: sh's second
+  reading of a line with a backslash dropped the escapes of a Windows `wd` inside the project
+  (`C:\Users\x y\proj\sub` became `C:Usersx yprojsub`, now drive-relative), so `rm -rf build` read
+  level 4 and `ls` level 1. Red: test-perm-classify.R "a Windows wd is placed as Windows places it,
+  on every OS (review round 4)" (mocked lexical `path_norm()`, `is_windows()` true) FAIL 4 on
+  `be1f6991`'s code. Fix (`00c0edae`): that reading places a word starting with a drive letter as
+  `./C:...`, relative as in sh; the first reading keeps the Windows path. Green:
+  `^(perm-|bridge-sh|mcp-server|utils-paths|tool-walk)` FAIL 0 SKIP 3 PASS 2269; the verifier's
+  `test-zr4-win.R`, run unchanged, gives its levels for every other form on all three OS shapes;
+  `D:other` is now 4, and `ls` with an outside `wd` 1 (R4-SEC-5).
+- Review round 4, docs (`579512bb`): `?gptr_security` names moving the working directory out of the
+  project among what auto and yolo ask, and a paragraph says how paths are placed and what is not
+  followed; 03 section 6.8.1 (levels 1 and 4, a paragraph on placing paths), 04 sections 7.1
+  (`path_class()`), 9.4 (the `sh` row) and 15.9 IC-78; D-262 gains a status line. Unchanged on
+  purpose: the yolo notice (`mode_notice()`), NEWS, the cheat sheet and vignette("execution-model"),
+  whose lists of what yolo asks are examples that point to `?gptr_security`.
+- Review round 4, checks on `579512bb`'s code (the records commit changes only `dev/`):
+  `^(perm|risk|rules|nested|bridge|mcp-|gptr-config|agent-|tool-|session-)` FAIL 0 SKIP 13 PASS 8299
+  in UTF-8 and under `LC_ALL=C LANG=C`; `^(console-|perm-gate|agent-dispatch|repl)` FAIL 0 SKIP 1
+  PASS 4118 in UTF-8 and FAIL 0 SKIP 28 PASS 3934 in C (27 skips need a UTF-8 locale);
+  the files whose names start with `zzz`, `arch-layers`, `utils-paths`, `ckpt-`, `secrets-e2e`,
+  `eval-core`, `artifact-app`, `injection-e2e`, `northstar`, `lint-rules` or `subagent-` FAIL 0
+  SKIP 2 PASS 3257 in UTF-8 and FAIL 0 SKIP 4 PASS 3243 in C (Windows only, and two that need a
+  UTF-8 locale). Lint clean (the 8 changed R and test files); `document()` changes only
+  `man/gptr_security.Rd`, and a second run nothing; `check-docs.R` 0 problems;
+  `spelling::spell_check_package()` clean; `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0
+  PASS 290. The verifier's probes `test-zr4-sh.R` (without its worker test), `-sh3`, `-setwd`,
+  `-rd`, `-win` and `-gate`, copied in for one run and removed: every R4-SEC-1, -2, -3, -5 and -6
+  row now asks or is refused, and of the 138 rows of `-gate` only two `wd` levels changed (`ls` 0
+  to 1, `sh -c rm` 3 to 4). Not run here: the full suite, `R CMD check`, Linux and Windows hosts
+  (Windows only through the mocked `path_norm()` test and probe), live models.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #86)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
@@ -6898,6 +6991,22 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
   a glob's trailing ` *` optional (`^cat( .*)?\z`), so `r(sh:git log *)` matches `git log` but not
   `git logs`. `?gptr_permissions`, 03 section 6.8.2, 04 section 7.11's `rule_match` row and D-267
   say so.
+- Review round 4, the idle gate's `wd` (the security verifier on `0aa55320`, R4-SEC-1, high; not a
+  regression of the branch: on `13a917ff` the nested call ran unchecked, idle or not):
+  `mcp_nested_gate()` built the literal call `peter$sh(<cmd>)` from `input$cmd` alone and never read
+  `input$wd`, so round 3's `wd` reading in `bridge_risk_sh()` did not reach it: in idle served R,
+  `peter$sh(c("rm", "-f", "marker.txt"), wd = <outside>)` and its line form read level 3 and deleted
+  the marker in auto and yolo with no question, while the same call served during a run asked. Red:
+  test-mcp-server.R "idle served R reads a nested sh call as run in its wd (review round 4)" FAIL 9
+  on `0aa55320`'s code (no error and no level-4 denial for the argv and line forms in both modes,
+  the folder deleted). Fix (`5df1d7f9`): one helper, `cmd_in_wd()` (utils-paths.R, L0, so both L4
+  files reach it), builds the `cd <wd> && <command>` line; `bridge_risk_sh()` and
+  `mcp_nested_gate()` both call it, so the idle gate classifies the literal call of the line as run
+  in its `wd` and the rules still read it as the literal call (`peter$bg()` takes no `wd`). Green:
+  `^mcp-server$` FAIL 0 PASS 199; `^(bridge-sh|perm-gate|arch-layers|mcp-recording)$` FAIL 0 SKIP 2
+  PASS 622; the verifier's `test-zr4-sh.R` (run without its worker test) gives "not run" for the
+  idle and served `wd` rows in auto and yolo. 03 section 6.8.4, 04 section 15.5 IC-57 and D-267 say
+  so (`579512bb`).
 
 ## FIX-33 - Transcript findings from the live sessions (2026-10-27, #PR)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
