@@ -4848,7 +4848,9 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
    No approval display shows a registered secret: every UI is given the request redacted (the `context`
    profile: its code, change rows, flagged calls and paths, reason, hint and rule), and the record's `risk` and
    `summary`, which the `blocked` condition and `run$blocked` carry, are redacted when it is built, so a secret
-   that `env` hands a child or a nested command holds shows as its marker (D-267, review round 6).
+   that `env` hands a child or a nested command holds shows as its marker (D-267, review round 6). So does the
+   output of model code the console indents under its call (`eval_echo()`) and a warning it shows; output it
+   does not indent, R prints itself.
    A flag has one shape in the ask and in the `?` view, `[<level> <category>] <call>` (`ui_flags()`), its
    backticked names inline code as in an answer and an object's `<class, size>` the mention line's `(class,
    size)` (P28 Task 49: the ask showed the Markdown and angle brackets and `?` another shape, `[2] file_write

@@ -1762,7 +1762,11 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' written or sent: the session files, documents, caches, spill files, wire logs and the output of
 #' child processes.
 #' Their URL-encoded, JSON-escaped and base64 forms are redacted too; a copy the code changes in
-#' another way, such as reversed or cut, is no longer recognised and is not redacted.
+#' another way, such as reversed or cut, is no longer recognised and is not redacted. The console
+#' shows what model code prints with registered secrets redacted where it indents that output under
+#' the call, and so are the warnings it shows; where it does not indent it (a console that cannot
+#' redraw a line, or `gptr.verbose` below 2), R prints the output itself, unredacted, on your
+#' screen only.
 #' gptr never reads the credential files of other tools. Reading a registered secret from model
 #' code asks even in `auto` mode: `Sys.getenv()` of its name in any letter case, or of a variable
 #' the code only ever sets to strings; `$NAME` or `${NAME}` in a command line (`system()`,
