@@ -4257,7 +4257,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   `  sub-agent <agent> > r  <code>`, detail `sub-agent <agent> wants to use`,
   `     asks in every mode: <reason>` for `ask_human`, `sub-agent <agent> asks: ` (ask tool) and
   `sub-agent <agent>: ` (budget select). `perm_ask()` drops `agent` from the `permission_request`
-  payload (the event keeps its own label).
+  payload (the event keeps its own label). Status 2026-10-28 (verification round 6, R6-SS-8): the
+  `ask_human` row reads `asks even in auto mode: <reason>`, since yolo runs the secret guard's
+  reads without asking (D-267).
 - Invalid answers: `a`/`p` not offered is explained; others
   `Not an answer: '<text>'. Type y, a, n ...`; after five (`?` is none)
   `No valid answer after 5 tries; refused.` with feedback
@@ -8358,7 +8360,28 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   an `r(secret:NAME)` allow rule covered when the command was level 0, so idle served
   `peter$sh("whoami", env = "NAME")` handed the child the key in auto with no question, where the
   loop asks once. Tests: test-mcp-server.R "an r(secret:) rule covers an idle served hand-over if
-  the code reads it (round 6)".
+  the code reads it (round 6)". Status 2026-10-28 (verification round 6, R6-SS-1 to R6-SS-8 and
+  SC-5): the secret guard reads more forms and its rules and texts hold everywhere. Reading a
+  registered secret now also asks in auto through a read of a `.env` or `.Renviron` file or of one
+  `gptr_env()` loaded, a `$NAME`, `${NAME}`, `os.environ` or `getenv()` read of a registered name
+  in a command line or Python (`risk_secret_guard()`, in every kind the classifier reads, so a
+  member's own command too), `Sys.getenv()` of a variable the code only ever sets to strings, and
+  a registered name in any letter case; formerly all four ran in auto (also on `13a917ff`). A name
+  the code computes when it runs stays level 3 without the guard, as `?gptr_security` now says.
+  An allow `r(secret:NAME)` rule applies to `r` code every flagged call of which reads a named
+  secret by name, a shell's `$NAME` included. Sending a secret over the network asks in yolo for
+  `peter$sh()`, `peter$bg()` and `peter$script()` as for `system2()`: their strings name the
+  network program, or their `env` passes a registered name; formerly they ran. A deny or ask
+  `r(secret:NAME)` rule meets a member's hand-over in the loop, in served R during a run and idle,
+  for `sh`, `bg` and `script` (`nested_literal()`, `nested_rules()` with the member's secrets);
+  formerly only idle served `sh` and `bg`, so yolo handed the key over past a deny rule. No
+  permission question shows a registered secret (`ui_wrap()` gives every UI the request redacted)
+  and the record's `risk` and `summary` are redacted when it is built, so the `blocked` condition
+  carries them redacted; formerly a nested call's flagged rows and path showed the key. The console
+  shows the output of model code it indents, and its warnings, redacted; output it does not indent
+  R prints itself, which `?gptr_security` says. The question's dim row reads
+  `asks even in auto mode: <reason>`, true of the secret guard's question too, which yolo does not
+  ask (formerly `asks in every mode`; D-188's status line).
 - Rule (classifier, PERM-2): `system2()`'s `env` is read as the start of its command line, as
   Unix `system2()` pastes it, unquoted, before the command:
   `system2("ls", env = "A=1; rm -rf build;")` is read as `A=1; rm -rf build; ls` (level 3), and an
@@ -8405,6 +8428,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   Review round 5: 03 sections 6.5, 6.8.2 and 6.8.4, 04 sections 7.6, 15.4 IC-53 item 7, 15.5 IC-57
   and 15.9 IC-79, `?gptr_security`, `?gptr_permissions` and NEWS (the secret guard on `env`); its
   verification: 04 section 7.11 (the request record's `summary`) and IC-53 items 7 and 8.
+  Verification round 6: 03 sections 6.8.3 and 6.8.4; 04 sections 7.6, 15.4 IC-53 items 7 and 8,
+  15.5 IC-57, 15.9 IC-77 and 15.10 IC-82; `?gptr_security`, `?gptr_permissions`, `?gptr_options`
+  (`gptr.secret_guard`) and `?gptr_egress`.
 - Tests: test-perm-rules.R "deny and ask sh: rules match a read-only command; allow needs level 1
   (FIX-32)", "a deny sh: rule stops a read-only command, also one peter$sh() computes (FIX-32)";
   test-perm-classify.R "system2()'s env is read as the start of its command line (FIX-32)";
@@ -8427,8 +8453,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   a secret read does (review round 5)", test-perm-gate.R "a member handing a child a registered
   secret meets the guard; no rule allows it", test-mcp-server.R "served R meets the secret guard
   when env hands a child a secret (review round 5)"; its verification: test-bridge-sh.R "the
-  question for a secret in env shows its marker, never its value (review round 5)". Evidence:
-  progress/fixes.md FIX-32.
+  question for a secret in env shows its marker, never its value (review round 5)"; verification
+  round 6: test-auth-secrets.R "a registered name read in another letter case is a guarded read
+  (review round 6)", "a name bound from a string and a .env file are guarded reads (review round
+  6)", "peter's sh, bg and script members are read by the network check (review round 6)" and the
+  G6 table's `.env` rows; test-perm-gate.R "auto asks before code reads a secret by .env, a shell's
+  $NAME or a name (round 6)", "yolo asks before peter$sh() or peter$bg() sends a secret over the
+  network (round 6)"; test-agent-dispatch.R "an r(secret:) deny or ask rule stops a member handing
+  a child the secret (round 6)", "a request and a blocked run's condition carry its flagged rows
+  redacted (round 6)"; test-mcp-server.R "a deny r(secret:) rule stops a served hand-over in a run
+  and in a script (round 6)"; test-console-ui.R "a permission question never shows a registered
+  secret (review round 6)"; test-eval-core.R "the console shows the output it indents with
+  registered secrets redacted (round 6)"; test-perm-rules.R "r(secret:NAME) is the only allow rule
+  that covers a registered secret read". Evidence: progress/fixes.md FIX-32.
 
 ## D-268 - FIX-33 What a document records and reads back after the live sessions (2026-10-27)
 - Rule (steering lines, security): a block body line is a `## Steer:` or `## Follow-up:` line only

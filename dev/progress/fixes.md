@@ -7516,6 +7516,98 @@ fixed, PERM-4 in docs only and PERM-8 and PERM-9 in part; NEWS in `b143f508`.
     flags no secret, and the member call is an `sh` call no `r(...)` rule names. The docs say deny
     rules match what `gptr_risk()` flags, so they hold; idle served R is the stricter of the two.
   - Green and checks: FIX-27's review round 6 above.
+- Review round 6, the secret writer's items (verification round 6 on `3cd3b146`: the secrets
+  lens's R6-SS-1 to R6-SS-8 and the console lens's SC-5; branch `claude/v1-fix-secret6`, each
+  test red on the previous commit's code first). None is a regression of this branch; each is a
+  promise of `?gptr_security` or `?gptr_permissions` the code did not keep, made exact in code
+  where one rule does it and in the text where it does not.
+  - Reads in auto (R6-SS-1, `076fbc90`): `readLines('.env')`, `peter$sh(c('cat', '.env'))`, a
+    shell's `$NAME` (`processx::run('sh', c('-c', 'echo $NAME'))`, `system()`) and
+    `n = 'NAME'; Sys.getenv(n)` read a registered key with no question; a reversed copy reached
+    the provider. A read of a `.env` or `.Renviron` file or of one `gptr_env()` loaded is now a
+    guarded `secret_file` read (`scan_env_file()`); a secret row that reads a registered name by
+    name (`$NAME`, `${NAME}`, `os.environ`, `getenv()`) or reads such a file is a guarded read in
+    every kind the classifier reads (`risk_secret_guard()`, set by `risk_new()`), so a member's
+    own command asks too (`cmd = paste('cat', '.env'); peter$sh(cmd)`, also `peter$bg()`); and
+    `secret_scan()` reads `Sys.getenv()` of a variable the code only ever sets to strings as
+    those strings (`scan_bindings()`). An allow `r(secret:NAME)` rule counts a shell's `$NAME` as
+    a read by name, as the question for it now offers that rule. Outside this writer's files:
+    `bridge_risk_env()` and `bridge_risk_bg()` keep the command's own guard (R/bridge-sh.R), and
+    the round 5 probe children of test-bridge-sh.R and test-mcp-server.R build the name they
+    check, since naming it is now a read. A name computed at run time stays level 3 without the
+    guard; `?gptr_security` now lists the reads, names those forms and says a copy the code
+    changes otherwise than by URL, JSON or base64 encoding is not redacted (`?gptr_egress` too).
+    Red: FAIL 33 (test-auth-secrets.R "a name bound from a string and a .env file are guarded
+    reads (review round 6)" and the G6 table's five `.env` rows, 16; test-perm-gate.R "auto asks
+    before code reads a secret by .env, a shell's $NAME or a name (round 6)", 17), and FAIL 1 for
+    its allow-rule row before the `rule_hit()` change. Cost, recorded: `peter$sh()` and
+    `peter$bg()` children start without registered secrets, so a `$NAME` in their command reads
+    nothing unless `env` passes it; it asks anyway, as a read of the name.
+  - Letter case (R6-SS-5, `200c09e9`): `secret_scan()` compares registered names in any case, as
+    `child_env()` does, one rule on every OS. Red: test-auth-secrets.R "a registered name read
+    in another letter case is a guarded read (review round 6)" FAIL 4.
+  - Network (R6-SS-2, `22fd71f9`): in yolo `peter$sh()` and `peter$bg()` ran
+    `curl -H "X-K: <key>"` with no question, where the `system2()` form, which FIX-27 now refuses
+    and steers to `peter$sh()`, asked at level 4. `secret_scan()`'s network check reads peter's
+    `sh`, `bg` and `script` members as process calls, and a registered name their `env` passes
+    counts as a secret sent. A program name the code computes is not read, as the page now says.
+    Red: FAIL 17 (test-auth-secrets.R "peter's sh, bg and script members are read by the network
+    check (review round 6)" 10; test-perm-gate.R "yolo asks before peter$sh() or peter$bg() sends
+    a secret over the network (round 6)" 7).
+  - Hand-over rules (R6-SS-3, `ec95f836`): a deny `r(secret:NAME)` rule stopped
+    `peter$sh(cmd, env = 'NAME')` only idle; in the loop and in served R during a run yolo handed
+    the key over, auto and manual asked instead, and `peter$script()` ran even idle.
+    `dispatch_nested()` and `mcp_nested_gate()` now read a `sh`, `bg` or `script` call as its
+    literal call (`nested_literal()`: a command in its `wd`, a script's path) with the secrets the
+    member's `env` hands the child, so the rules policy meets the hand-over everywhere; the loop
+    now reads a nested command in its `wd`, as the idle gate does. `nested_literal()` sits beside
+    `cmd_in_wd()` in R/utils-paths.R (`bd80c168`, outside this writer's files), as the layer table
+    lets the idle gate call no other helper of the dispatcher (test-arch-layers.R). Red: FAIL 17
+    (test-agent-dispatch.R "an r(secret:) deny or ask rule stops a member handing a child the
+    secret (round 6)" 16; test-mcp-server.R "a deny r(secret:) rule stops a served hand-over in a
+    run and in a script (round 6)" 1, the run blocked).
+  - Redaction of questions (R6-SS-4 and SC-5, `6438b19d`): the question and the `?` view showed a
+    nested call's flagged rows and path with the key in clear, and so did the
+    `gptr_error_permission`'s `risk`; code lines, change rows, the ask rule's hint, the reason and
+    the rule showed it raw too. One rule: `ui_wrap()` gives every UI the request redacted with the
+    `context` profile, and `perm_request_record()` redacts the record's `risk` and `summary` once,
+    so the `blocked` condition and `run$blocked` carry them redacted; `input` stays the call's
+    own, which the remember channel reads. Red: FAIL 10 (test-console-ui.R "a permission question
+    never shows a registered secret (review round 6)" 8; test-agent-dispatch.R "a request and a
+    blocked run's condition carry its flagged rows redacted (round 6)" 2; hook payloads were
+    already redacted by the event layer).
+  - Console tee (R6-SS-6, `318cc940`): `print(Sys.getenv('KEY'))` showed the key under the
+    question that hid it. What gptr writes of the output (`eval_echo()` in the console margin,
+    and a teed warning) is redacted now, served R included. Output the console does not indent
+    goes to the screen through R's split sink, which no R code can filter, so it is documented,
+    not changed: `?gptr_security` says where the console redacts. Red: test-eval-core.R "the
+    console shows the output it indents with registered secrets redacted (round 6)" FAIL 3.
+  - Mode clause (R6-SS-8, `1dfeb662`): the secret guard's question read
+    `asks in every mode: reads a registered secret ...`, which yolo does not ask; every
+    `ask_human` row now reads `asks even in auto mode: <reason>`. Red: test-console-ui.R "a
+    sub-agent's prompt and detail view name it; ask_human says why (D-188)" FAIL 1.
+  - Allow rule's condition (R6-SS-7, `65412ba4`, docs): `?gptr_permissions` and 04 section 15.4
+    IC-53 item 7 say an allow `r(secret:NAME)` rule covers `r` code only when every call it flags
+    reads one of the named secrets by name; test-perm-rules.R "r(secret:NAME) is the only allow
+    rule that covers a registered secret read" pins it; it passes on the code before, as the
+    change is to the docs.
+  - Green, `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`, chunks run one after the other:
+    `^(auth-|secrets|agent-|mcp-server|console-ui|eval-core|perm|rules|nested|bridge|tool-|session-)`
+    FAIL 0 WARN 0 SKIP 15 PASS 9555 in UTF-8 on `65412ba4`'s code, and FAIL 0 WARN 0 SKIP 19 PASS
+    9525 under `LC_ALL=C LANG=C` on `bd80c168`'s; the files beside them (`arch-layers`, `risk-`,
+    `artifact-`, `injection-e2e`, `lint-rules`, `gptr-config`, `utils-options`, `s11-conformance`,
+    `py`, `knit`, `subagent-`, `northstar`, `zzz`, `cli-`, `console-`) PASS 10479 SKIP 2 in UTF-8,
+    where test-arch-layers.R failed once on the layering that `bd80c168` fixes, after which
+    `^(arch-layers|agent-|mcp-server)` FAIL 0 PASS 1638, and FAIL 0 SKIP 31 PASS 10287 under C. The
+    8 changed test files against the installed package (`R CMD INSTALL` into a scratch library,
+    `testthat::test_dir(load_package = "installed")`): FAIL 0 SKIP 2 PASS 2416 in UTF-8 and FAIL 0
+    SKIP 6 PASS 2386 under C. Lint of the 19 changed R and test files is clean; a second
+    `document()` changes nothing; `check-docs.R` 0 problems; `spelling::spell_check_package()`
+    clean after `dae3285a`, which spells the new text as the package does.
+  - Docs: `?gptr_security` (Permission modes and Secrets), `?gptr_permissions`, `?gptr_options`
+    (`gptr.secret_guard`, in R/utils-options.R) and `?gptr_egress`; 03 sections 6.8.3 and 6.8.4;
+    04 sections 7.6, 15.4 IC-53 items 7 and 8, 15.5 IC-57, 15.9 IC-77 and 15.10 IC-82; D-267's
+    status line and D-188's.
 
 ## FIX-33 - Transcript findings from the live sessions (2026-10-27, #93)
 Scope: the doc writer's items of the live sessions on 809ad7e5 (GPT-5.6, Claude Opus 4.8, Ollama
