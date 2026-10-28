@@ -51,7 +51,14 @@ disposable sandboxes.
 
 Changing gptr's own configuration includes model code that sets or unsets an environment
 variable gptr reads as configuration, such as a provider key, or one that moves its
-configuration folder or your home directory, such as \code{HOME}; \link{gptr_options} lists them.
+configuration folder or your home directory, such as \code{HOME}; \link{gptr_options} lists them. The
+classifier reads such a change in \code{Sys.setenv()} and \code{Sys.unsetenv()}, where a name it cannot
+read counts as one, in \code{readRenviron()} and \code{dotenv::load_dot_env()}, and in a \code{peter$py()}
+\code{os.environ} write that names one. It does not read \code{withr::local_envvar()} or
+\code{withr::with_envvar()}, which change a variable until the call ends, a Python write whose name
+the code computes, Python run through 'reticulate', or \code{Sys.setenv()} reached by a computed
+name or through an environment (\code{get("Sys.setenv")}, \code{baseenv()$Sys.setenv}): such code is
+level 3 or lower, which \code{auto} runs without asking.
 }
 
 \section{What the gate cannot do}{

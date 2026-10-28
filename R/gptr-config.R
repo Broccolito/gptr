@@ -1650,7 +1650,14 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #'
 #' Changing gptr's own configuration includes model code that sets or unsets an environment
 #' variable gptr reads as configuration, such as a provider key, or one that moves its
-#' configuration folder or your home directory, such as `HOME`; [gptr_options] lists them.
+#' configuration folder or your home directory, such as `HOME`; [gptr_options] lists them. The
+#' classifier reads such a change in `Sys.setenv()` and `Sys.unsetenv()`, where a name it cannot
+#' read counts as one, in `readRenviron()` and `dotenv::load_dot_env()`, and in a `peter$py()`
+#' `os.environ` write that names one. It does not read `withr::local_envvar()` or
+#' `withr::with_envvar()`, which change a variable until the call ends, a Python write whose name
+#' the code computes, Python run through 'reticulate', or `Sys.setenv()` reached by a computed
+#' name or through an environment (`get("Sys.setenv")`, `baseenv()$Sys.setenv`): such code is
+#' level 3 or lower, which `auto` runs without asking.
 #'
 #' @section What the gate cannot do:
 #' The risk levels come from a static classifier ([gptr_risk()]). It is advisory and it is not a
