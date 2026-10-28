@@ -7901,6 +7901,29 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   directory out of the project is level 4 (review round 4)", "a Windows wd is placed as Windows
   places it, on every OS (review round 4)", "processx::run()'s wd is read as peter$sh()'s (review
   round 4)". Evidence: progress/fixes.md FIX-27.
+- Status 2026-10-28 (review round 5): the code that `cmd /c`, `/k` or `/r` and `pwsh` or
+  `powershell` `-c` or `-Command` run is every word after the option, in any letter case, and is
+  read whole (formerly its first word, so `cmd /c del <outside file>` was level 3, run in auto and
+  yolo); `env -C DIR` and `env --chdir=DIR` are read as a `cd`, as `git -C` is (formerly level 3);
+  `callr::run()`, which is `processx::run()`, and `sys::exec_wait()`, `sys::exec_internal()` and
+  `sys::exec_background()` read a literal command as `processx::run()` does (formerly level 1
+  `unlisted`); `eval()`, `rlang::eval_bare()` and `rlang::eval_tidy()` of `quote(x)` read `x`, as
+  `evalq()` does (formerly quoted, so `eval(quote(setwd(<outside>)))` was 3); `xfun::in_dir()`
+  joins the `with_dir` rows; and a link `file.symlink()`, `file.link()` or `Sys.junction()` makes
+  to a path outside the project is a level-4 `file_delete` row, as `ln`'s source is (formerly 2,
+  so a relative delete through it in the same call ran in auto). R's working directory is held as
+  a name's paths are (D-211): from `getwd()` when the code is read, moved by `setwd()` and
+  `withr::local_dir()`, one the code computes in or after `withr::with_dir()` and `xfun::in_dir()`
+  and after a move in a branch or a function body; `getwd()` reads it and `setwd()` returns the
+  one before. So `owd = setwd("data"); ...; setwd(owd)` and `setwd(file.path(getwd(), "data"))`
+  are level 2 again (round 4 made them 4, a directory the code computes, which asked in auto and
+  yolo and stopped Rscript and knitr runs), and `setwd(<unknown object>)` stays 4. Not followed,
+  named in `?gptr_security` and 03 section 6.8.1, each level 3 or lower: the command of
+  `processx::process$new()`, `get("setwd")` and the `wd` of `callr::r()`. Both now state the class
+  every form they name as not read belongs to: code that builds a call, a name, a path or a
+  command at run time, or reaches a function by another name, is read only as far as the
+  classifier sees. The yolo notice and NEWS name moving the working directory out of the project.
+  Tests: test-risk-forms.R (review round 5). Evidence: progress/fixes.md FIX-27.
 
 ## D-263 - FIX-28 Bracketed paste decides a paste in a T console (2026-10-26)
 - Rule (mode): a T console's call turns bracketed paste on with its character mode. `tty_modes()`
@@ -8609,3 +8632,19 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (FIX-36 review round 2)"; test-perm-gate.R "auto asks before peter$knit()'s python moves gptr's
   config folder (FIX-36 round 2)", "auto asks before withr moves gptr's config folder for the
   session (FIX-36 round 2)".
+- Status 2026-10-28 (review round 5): the provider names of the control list come from the
+  registry (`risk_control_env()`): every registered provider's `auth` names (an optional key's
+  too) and `compat$base_url_env`, with the key pair a `bedrock-converse` provider signs with
+  (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`), R's startup variables and the
+  five folder variables. So `AWS_REGION` and `AWS_DEFAULT_REGION` (which place Bedrock's endpoint),
+  `AI_GATEWAY_API_KEY` (vercel-jev's key) and the key pair, formerly level 2 `session`, are
+  `control`, as is a variable that a provider the person registers reads. A Python environment
+  write whose name (a subscript, or the first argument of `putenv()`, `unsetenv()`, `setdefault()`,
+  `pop()` or the item methods) is not a plain string literal (an escape, adjacent literals, a name
+  the code computes) is `control`, as an R name the classifier cannot read is; formerly level 3.
+  Still not read, each level 3 or lower: a Python write through an alias of `os.environ` or
+  `ctypes`, or one that passes `os.environ.update()` a mapping the code computes or keyword names
+  not all in upper case. Contract-visible: 03 section 6.8.1; 04 section 15.4 IC-53 item 3;
+  `?gptr_options`, `?gptr_security`. Tests: test-risk-forms.R "a variable a registered provider
+  reads is control (review round 5)", "a Python variable name it cannot read in an environment
+  write is control (round 5)". Evidence: progress/fixes.md FIX-36.
