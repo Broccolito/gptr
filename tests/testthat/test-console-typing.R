@@ -1246,6 +1246,40 @@ test_that("a read right after a paste's marker holds no Ctrl-C key (review round
   expect_identical(res, c("read", "read", "interrupted"))
 })
 
+test_that("a read off the beat after a paste's marker holds a Ctrl-C key (round 4 verification)", {
+  local_console_test()
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  rs = repl_state(s, new.env())
+  rs$sending = quote(peter())
+  rs$reader = console_reader()
+  now = 0
+  local_mocked_bindings(reactor_now = function() now)
+  read = function(chars) {
+    .gptr_repl = rs
+    tryCatch({
+      console_keys(rs$reader, s, chars)
+      "read"
+    }, interrupt = function(e) "interrupted")
+  }
+  # the next read comes 30 s later, as after a reactor an in-process tool held: no paste lasts that
+  # long, so its Ctrl-C is the key (D-263: within about 0.1 s of the paste's marker)
+  res = character()
+  utils::capture.output({
+    res = read("\033[200~x\033[201~")
+    now = 30
+    res = c(res, read("\003"))
+  })
+  expect_identical(res, c("read", "interrupted"))
+  # on the beat it is still pasted text
+  rs$reader = console_reader()
+  utils::capture.output({
+    res = read("\033[200~x\033[201~")
+    now = 30.1
+    res = c(res, read("\003"))
+  })
+  expect_identical(res, c("read", "read"))
+})
+
 test_that("a draft a run left waits for the follow-ups, then continues at the prompt (D-243)", {
   skip_on_cran()
   local_console_test()

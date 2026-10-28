@@ -166,9 +166,9 @@ console_trigger = function(line) {
 #' right after a newline is a key of its own, after the message the newline sent (console_compose()
 #' acts once a batch), as when Enter and Up share a late read. Ctrl-C, a key in character mode
 #' (tty_call()), interrupts as SIGINT would, after the keys before it (in a batch holding a
-#' bracketed-paste marker, read while a paste is open, or read right after such a batch with no
-#' empty read between, `rd$compose$pasted`, it is pasted text, as the text after an early end
-#' marker is); the keys after it in the batch (a further Ctrl-C dropped) are the pause
+#' bracketed-paste marker, read while a paste is open, or read on the beat right after such a batch
+#' with no empty read between, `rd$compose$pasted`, it is pasted text, as the text after an early
+#' end marker is); the keys after it in the batch (a further Ctrl-C dropped) are the pause
 #' menu's answers (`rd$after_interrupt`, console_ahead()), and those it leaves are read here once
 #' it resumes, as if typed after it
 #' @noRd
@@ -179,10 +179,12 @@ console_keys = function(rd, s, chars) {
   paste = gap <= 0.2 && nchar(chars) > 1 + gap / 0.03
   rd$polled = now
   rd$read_at = NULL
-  # a batch holding a bracketed-paste marker, read while a paste is open, or read right after such
-  # a batch with no empty read between (the rest of a paste whose text ended it early, split
-  # again) holds no Ctrl-C key: its Ctrl-C bytes are pasted text, which the composer drops (D-263)
-  pasted = nzchar(chars) && (isTRUE(rd$compose$bracket) || isTRUE(rd$compose$pasted) ||
+  # a batch holding a bracketed-paste marker, read while a paste is open, or read on the beat right
+  # after such a batch with no empty read between (the rest of a paste whose text ended it early,
+  # split again) holds no Ctrl-C key: its Ctrl-C bytes are pasted text, which the composer drops
+  # (D-263)
+  pasted = nzchar(chars) && (isTRUE(rd$compose$bracket) ||
+                               (isTRUE(rd$compose$pasted) && gap <= 0.2) ||
                                grepl("\033\\[20[01]~", paste0(rd$compose$esc, chars)))
   if (pasted) chars = gsub("\003", "", chars, fixed = TRUE)
   ctrl_c = regexpr("\003", chars, fixed = TRUE)
