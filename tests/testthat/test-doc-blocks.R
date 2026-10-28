@@ -1161,6 +1161,96 @@ test_that("an editor's trim and CRLF model code leave a block fresh (FIX-33 DOC-
   }
 })
 
+test_that("a block recorded before FIX-33 reads fresh by its untrimmed sha (review round 6)", {
+  local_project()
+  # the README's second block as main (13a917ff) recorded it: its printed lines end in blanks, and
+  # its sha is that of the body as written
+  body = c("summary(resid(fit))", "#>    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. ",
+           "#> -4.5432 -2.3647 -0.1252  0.0000  1.4096  6.8727 ")
+  h = list(model = "fake/fake-1", date = "2026-10-28", prompt = "9213c370e015", sha = "238961b3",
+           tokens = "3830/12", cost = "0", session = "s7fcce500ad", turn = "2")
+  stmt = "s_7fcce5 |> peter(\"Summarize the residuals in fit.\")"
+  f = file.path(getwd(), "analysis.R")
+  writeLines(c(stmt, doc_render_block("0089da", h, body)), f)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+  # an edit still makes it user-edited
+  writeLines(c(stmt, doc_render_block("0089da", h, c(body[1L], "fit = NULL", body[-1L]))), f)
+  expect_identical(gptr_blocks(f)$status, "user-edited")
+})
+
+test_that("a carriage return in printed output ends a #> line, as R reads it (review round 6)", {
+  expect_identical(doc_output_lines(list("a\r\nb\rc", "d\r")), c("#> a", "#> b", "#> c", "#> d"))
+  # a byte that is not valid UTF-8 is written <xx> in every locale, as the console shows it
+  expect_identical(doc_output_lines(list("x\xffy\rz", "ok")), c("#> x<ff>y", "#> z", "#> ok"))
+  # an evaluator other than eval_r() may keep one, as capture.output() does
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("library(gptr)", "peter(\"count rows\")"), f)
+  out = utils::capture.output(cat("progress 10%\rpwned_by_output = TRUE\n"))
+  s = doc_test_session(list(doc_test_turn("cat(\"progress\")", outputs = list(out))))
+  doc_upsert(doc_file_site(f), doc_block_lines(s, 1L, doc_file_site(f), 1L))
+  expect_true(all(c("#> progress 10%", "#> pwned_by_output = TRUE") %in% readLines(f)))
+  expect_false("pwned_by_output" %in% all.names(parse(f, keep.source = FALSE)))
+  expect_identical(gptr_blocks(f)$status, "fresh")
+})
+
+test_that("control characters in output, names and digests are escaped (review round 6)", {
+  expect_identical(doc_format_kv(list(created = "c\033]0;PWNED\a")),
+                   "created=\"c\\u001b]0;PWNED\\u0007\"")
+  out = c("\033c", paste0(intToUtf8(0x202e), "evil"), "\a\b", "tab\there", "[1] 4")
+  expect_identical(doc_output_lines(out), c("#> <U+001B>c", "#> <U+202E>evil",
+                                            "#> <U+0007><U+0008>", "#> tab\there", "#> [1] 4"))
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("library(gptr)", "peter(\"count rows\")"), f)
+  turn = doc_test_turn("cat(\"x\")", outputs = list("\033]0;PWNED\a\033c ok"))
+  turn[[3L]]$message$details$bridge = "#> bg job \033]0;PWNED\a started: sleep 1"
+  objects = list(list(name = "c\033]0;PWNED\a", status = "created"))
+  cp = list(type = "custom", custom_type = "gptr.checkpoint",
+            data = list(tool_call_id = "call_1",
+                        fragments = list(objects = list(id = "f1", turn = 1L, objects = objects))))
+  s = doc_test_session(list(c(turn[1:2], list(cp), turn[3:4])))
+  doc_upsert(doc_file_site(f), doc_block_lines(s, 1L, doc_file_site(f), 1L))
+  txt = gsub("\r\n", "\n", rawToChar(readBin(f, "raw", file.size(f))), fixed = TRUE)
+  expect_false(grepl("[\\x01-\\x08\\x0b-\\x1f\\x7f]", txt, perl = TRUE, useBytes = TRUE))
+  lines = readLines(f)
+  expect_true(all(c("#> <U+001B>]0;PWNED<U+0007><U+001B>c ok",
+                    "#> bg job <U+001B>]0;PWNED<U+0007> started: sleep 1") %in% lines))
+  expect_identical(doc_find_blocks(lines)$header[[1L]]$created, "c\033]0;PWNED\a")
+  expect_identical(gptr_blocks(f)$status, "fresh")
+})
+
+test_that("a header value escapes C1 controls and DEL too (review round 6)", {
+  # U+009D and U+009C are the 8-bit OSC and ST, which a terminal may honour as ESC ] and ESC \
+  name = "c\u009d0;PWNED\u009c\u007f"
+  kv = doc_format_kv(list(created = name))
+  expect_identical(kv, "created=\"c\\u009d0;PWNED\\u009c\\u007f\"")
+  expect_identical(doc_parse_kv(kv)$created, name)
+  expect_identical(doc_find_blocks(doc_render_block("aaaaaa", list(created = name),
+                                                    "y = 1"))$header[[1L]]$created, name)
+  # in a block the model's turn wrote, with C1 and DEL in its output as well
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("library(gptr)", "peter(\"count rows\")"), f)
+  turn = doc_test_turn("cat(\"x\")", outputs = list("a\u009b31mred\u007f"))
+  objects = list(list(name = name, status = "created"))
+  cp = list(type = "custom", custom_type = "gptr.checkpoint",
+            data = list(tool_call_id = "call_1",
+                        fragments = list(objects = list(id = "f1", turn = 1L, objects = objects))))
+  s = doc_test_session(list(c(turn[1:2], list(cp), turn[3:4])))
+  doc_upsert(doc_file_site(f), doc_block_lines(s, 1L, doc_file_site(f), 1L))
+  txt = rawToChar(readBin(f, "raw", file.size(f)))
+  expect_false(grepl("[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]|\\xc2[\\x80-\\x9f]", txt,
+                     perl = TRUE, useBytes = TRUE))
+  lines = readLines(f)
+  expect_true("#> a<U+009B>31mred<U+007F>" %in% lines)
+  expect_identical(doc_find_blocks(lines)$header[[1L]]$created, name)
+  expect_identical(gptr_blocks(f)$status, "fresh")
+})
+
 test_that("only gptr's own lines take the block id; steer text and model code keep the token", {
   local_project()
   local_gptr_options(record = "auto")

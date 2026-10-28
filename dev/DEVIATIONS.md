@@ -8195,6 +8195,17 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   that used `df`), so a line using it is not switched; a non-ASCII name is matched only in a UTF-8
   locale. The `#<` lines are what was sent, so neither `gptr.doc_output_lines` nor the `doc` setting
   limits them.
+- Status 2026-10-28 (review round 6): a `created=` value holding a control character is quoted,
+  which writes each one as a Unicode escape, so a name the model chose cannot put a terminal
+  sequence into the transcript; printed output and bridge digests write control, bidi and zero-width
+  characters as `<U+XXXX>`, as steer lines do (T6-4). Test: test-doc-blocks.R "control characters in
+  output, names and digests are escaped (review round 6)".
+- Status 2026-10-28 (review round 6 recheck): "control character" in a header value means C0, DEL
+  and C1 (U+0080 to U+009F, which holds the 8-bit CSI and OSC), as `ui_escape()` counts them, and
+  the names of `uses undone <names>`, in the header and in the notice, are written as output is
+  (`<U+XXXX>`). Tests: test-doc-blocks.R "a header value escapes C1 controls and DEL too (review
+  round 6)"; test-doc-replay.R "the undone names a direct R line uses are written escaped (review
+  round 6)".
 - Contract-visible: 04 section 15.3 IC-49, section 11.5 (header key `created`, the body's `#<`
   lines, the transcript row) and section 7.8 (call record binding `sent`); `?gptr_doc`,
   `?gptr_source`, `?gptr_export`, `?gptr_security`; vignette("script-as-history").
@@ -8319,6 +8330,9 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   first turn's block undone and its `s_x = peter()` statement `#~ ` while the second turn's
   `s_x |> peter()` was live, and `source()` stopped with "object 's_xxxxxx' not found" (also on
   origin/main 13a917ff, an open defect FIX-29 recorded).
+- Status 2026-10-28 (review round 6): a read also ends a line at a lone carriage return (D-268),
+  which no line gptr writes holds, so how a line starts is still the same as written and as read
+  back.
 - Contract-visible: 04 section 15.3 IC-49 and section 11.5 (the body and the transcript row);
   `?gptr_doc`; vignette("script-as-history"); D-264's first rule and known limits.
 - Tests: test-doc-blocks.R "only the #< run opening a console turn's block in an .R file is read
@@ -8601,6 +8615,20 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   item `gptr_rewind()` counts as not restored (`not redone` and `failed` too), and `/redo`'s
   heading says "some items were not redone". The README says that `replay = "live"` asks again and
   `model =` picks your own model, as a statement may name its turn's model (D-265).
+- Status 2026-10-28 (review round 6): a block whose `sha` is the hash written before this rule, of
+  the body without each line matching `^[ \t]*## (Steer|Follow-up):( |$)` and nothing trimmed, is
+  fresh too, so a live re-ask regenerates a block main (`13a917ff`) recorded whose printed lines end
+  in blanks, which read `user-edited` (R6-REG-2). Printed output is split into `#>` lines where code
+  is (`doc_split_lines()`), and a document is read so too: `doc_read()` ends a line at a lone `\r`,
+  as `readLines()`, editors and `source()` do, so a pasted line cannot hide the next one from gptr,
+  and every line gptr writes reads back as written (T6-2, T6-3). Tests: test-doc-blocks.R "a block
+  recorded before FIX-33 reads fresh by its untrimmed sha (review round 6)", "a carriage return in
+  printed output ends a #> line, as R reads it (review round 6)"; test-doc-io.R "a lone carriage
+  return ends a line, as source() reads it (review round 6)".
+- Status 2026-10-28 (review round 6 recheck): output that is not valid UTF-8 is written with each
+  invalid byte as `<xx>` (`console_utf8()`) before it is split, in every locale; the split stopped
+  on it in a UTF-8 locale. Test: test-doc-blocks.R "a carriage return in printed output ends a #>
+  line, as R reads it (review round 6)".
 - Contract-visible: 04 section 6.4 (`gptr_source()`'s `model`), section 11.5 (`sha`, the body, the
   plan line, one-line bridge digests), section 15.3 IC-48 and IC-49; 03 section 4.3's signature;
   `?gptr_doc`, `?gptr_source`, `?gptr_export`; vignettes script-as-history and interactive-console;

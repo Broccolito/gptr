@@ -21,6 +21,9 @@ doc_quoted_keys = "children"
 doc_sent_kinds = c("user_ran", "user_files")
 # a console turn's statement in a transcript, live or undone (IC-49)
 doc_re_console = "^(#~ )?s_[0-9a-f]{6} (=|[|]>) peter\\("
+# a control character, as ui_escape() counts them: C0, DEL and C1, which holds the 8-bit CSI and
+# OSC that a terminal may honour as ESC [ and ESC ]
+doc_re_ctl = "[\u0001-\u001f\u007f-\u009f]"
 
 #' A `## Steer:` or `## Follow-up:` line; a blank text leaves no trailing space for an editor to
 #' trim
@@ -128,9 +131,10 @@ doc_block_sent = function(format, text, b) {
 }
 
 #' A string literal that both R and JSON read back as `x` (Python's json.dumps(ensure_ascii =
-#' False)); non-ASCII characters are kept, which encodeString() escapes in a C locale
+#' False)); non-ASCII characters are kept, which encodeString() escapes in a C locale. A character
+#' matching `ctl` (by default a C0 control, as json.dumps() escapes) is written as a Unicode escape.
 #' @noRd
-doc_str_literal = function(x) {
+doc_str_literal = function(x, ctl = "[\001-\037]") {
   x = as_utf8(as.character(x))
   x = gsub("\\", "\\\\", x, fixed = TRUE)
   x = gsub("\"", "\\\"", x, fixed = TRUE)
@@ -139,8 +143,8 @@ doc_str_literal = function(x) {
   x = gsub("\t", "\\t", x, fixed = TRUE)
   x = gsub("\b", "\\b", x, fixed = TRUE)
   x = gsub("\f", "\\f", x, fixed = TRUE)
-  ctl = gregexpr("[\001-\037]", x, perl = TRUE)
-  regmatches(x, ctl) = lapply(regmatches(x, ctl), function(ch) {
+  hit = gregexpr(ctl, x, perl = TRUE)
+  regmatches(x, hit) = lapply(regmatches(x, hit), function(ch) {
     vapply(ch, function(c) sprintf("\\u%04x", utf8ToInt(c)), "", USE.NAMES = FALSE)
   })
   paste0("\"", x, "\"")
@@ -187,7 +191,9 @@ doc_parse_kv = function(s) {
 }
 
 #' Format header fields in the key order of contract 11.5 (unknown keys last); values that hold
-#' a blank, a line break, a quote, `=` or a backslash are quoted so the header stays one line
+#' a blank, a control character (doc_re_ctl: C0, a line break among them, DEL or C1), a quote, `=`
+#' or a backslash are quoted, which escapes each control character (doc_str_literal()), so the
+#' header is one line without them and starts no terminal sequence
 #' @noRd
 doc_format_kv = function(x) {
   x = x[!vapply(x, function(v) is.null(v) || !length(v), NA)]
@@ -195,10 +201,11 @@ doc_format_kv = function(x) {
   known = intersect(doc_header_keys, names(x))
   x = x[c(known, setdiff(names(x), known))]
   vals = vapply(names(x), function(k) {
-    v = as.character(x[[k]])[1L]
+    v = as_utf8(as.character(x[[k]])[1L])
     if (is.na(v)) v = "NA"
-    quote = k %in% doc_quoted_keys || !nzchar(v) || grepl("[ \t\r\n\"=\\\\]", v)
-    if (quote) doc_str_literal(v) else v
+    quote = k %in% doc_quoted_keys || !nzchar(v) || grepl("[ \"=\\\\]", v) ||
+      grepl(doc_re_ctl, v, perl = TRUE)
+    if (quote) doc_str_literal(v, doc_re_ctl) else v
   }, "")
   paste0(names(x), "=", vals, collapse = " ")
 }
@@ -265,11 +272,13 @@ doc_dedent = function(lines, indent) {
 
 #' First 8 hex of sha256 of the body as written, without steering lines (IC-49, doc_steer_lines())
 #' and without the trailing blanks of a line, which an editor may trim, or its carriage return,
-#' which a read drops
+#' which a read drops. `legacy = TRUE` gives the hash written before FIX-33 (D-268): without each
+#' line matching doc_re_steer, nothing trimmed
 #' @noRd
-doc_body_sha = function(body) {
+doc_body_sha = function(body, legacy = FALSE) {
   body = as_utf8(as.character(body))
-  body = sub("[ \t\r]+$", "", body[!doc_steer_lines(body)])
+  body = if (legacy) body[!grepl(doc_re_steer, body)] else
+    sub("[ \t\r]+$", "", body[!doc_steer_lines(body)])
   substr(hash_sha256(paste(body, collapse = "\n")), 1L, 8L)
 }
 
@@ -295,13 +304,17 @@ args_hash = function(interp) {
   substr(hash_sha256(paste(x, collapse = "\n")), 1L, 8L)
 }
 
-#' Status of a block: undone > user-edited (sha) > stale (prompt or args) > fresh. With
-#' `ph = NULL` only undone and user-edited are detected. Header keys are matched exactly.
+#' Status of a block: undone > user-edited (sha, also as written before FIX-33) > stale (prompt or
+#' args) > fresh. With `ph = NULL` only undone and user-edited are detected. Header keys are
+#' matched exactly.
 #' @noRd
 doc_block_status = function(header, body, ph = NULL, ah = NULL) {
   if (identical(header[["status"]], "undone")) return("undone")
   sha = header[["sha"]]
-  if (!is.null(sha) && !identical(sha, doc_body_sha(body))) return("user-edited")
+  if (!is.null(sha) && !identical(sha, doc_body_sha(body)) &&
+      !identical(sha, doc_body_sha(body, legacy = TRUE))) {
+    return("user-edited")
+  }
   if (!is.null(ph)) {
     if (!identical(header[["prompt"]], ph)) return("stale")
     if (!identical(header[["args"]] %||% "", ah %||% "")) return("stale")
@@ -1152,6 +1165,9 @@ doc_history_code = function(lines) {
 #' Printed output as `#> ` lines of at most 76 characters, then `#> ... (N more lines)` counting
 #' every line not shown. `outputs` is a character vector or a list of output per top-level
 #' expression, each its lines or r_doc_outputs()'s list(lines, n); no line follows a cut one.
+#' Lines end where R reads a line end (doc_split_lines()), whichever evaluator printed them, and
+#' control, bidi and zero-width characters are written `<U+XXXX>` (ui_escape()), as doc_one_line()
+#' writes them; a byte that is not valid UTF-8 is written `<xx>` (console_utf8()).
 #' @noRd
 doc_output_lines = function(outputs, max_lines = NULL, width = 76L) {
   out = character()
@@ -1159,15 +1175,15 @@ doc_output_lines = function(outputs, max_lines = NULL, width = 76L) {
   for (o in if (is.list(outputs)) outputs else list(outputs)) {
     held = is.list(o) && !is.null(o$n)
     n = if (held) as.integer(o$n) else 0L
-    o = as_utf8(as.character(unlist(if (held) o$lines else o, use.names = FALSE)))
-    o = unlist(strsplit(o, "\n", fixed = TRUE), use.names = FALSE)
+    o = as.character(unlist(if (held) o$lines else o, use.names = FALSE))
+    o = unlist(lapply(console_utf8(o), doc_split_lines), use.names = FALSE)
     if (length(out) == total) out = c(out, o)
     total = total + max(n, length(o))
   }
   if (!total) return(character())
   out = utils::head(out, max_lines %||% doc_max_output_lines())
   extra = total - length(out)
-  out = if (length(out)) paste0("#> ", substr(out, 1L, width)) else character()
+  out = if (length(out)) paste0("#> ", substr(ui_escape(out), 1L, width)) else character()
   if (extra > 0L) out = c(out, paste0("#> ... (", extra, " more lines)"))
   out
 }
@@ -1436,8 +1452,8 @@ doc_ran_part = function(det) {
 
 #' Serialize successful canonical or locally served R with the same code, secret and output
 #' rules; a comment line shaped like a steer or a block marker gets one more `#`
-#' (doc_comment_escape()). A local MCP trace does not create or alter the provider's
-#' assistant/tool messages.
+#' (doc_comment_escape()), and a bridge digest is escaped as output is (ui_escape()). A local MCP
+#' trace does not create or alter the provider's assistant/tool messages.
 #' @noRd
 doc_turn_r = function(out, det, args, with_out, plan_mode) {
   if (!identical(det$status %||% "ok", "ok")) return(out)
@@ -1463,7 +1479,7 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
   lines = hist
   if (with_out) lines = c(lines, doc_output_lines(outs))
   if (length(det$bridge)) {
-    dig = as_utf8(as.character(det$bridge))
+    dig = ui_escape(det$bridge)
     lines = c(lines, ifelse(startsWith(dig, "#>"), dig, paste0("#> ", dig)))
   }
   if (length(det$artifacts)) {

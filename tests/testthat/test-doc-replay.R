@@ -1276,6 +1276,30 @@ test_that("a direct R line that assigns a name again makes it and does not use i
   }
 })
 
+test_that("the undone names a direct R line uses are written escaped (review round 6)", {
+  # a name the model made, which R reads from the escapes in backquotes
+  name = "d\033]0;PWNED\a\n"
+  failed = c("library(gptr)", "", doc_direct_header("error", name), "#~ assign(nm, 1)")
+  code = "`d\\033]0;PWNED\\a\\n` + 1"
+  expect_identical(all.names(str2lang(code)), c("+", name))
+  off = doc_direct_switch(c(failed, "", doc_direct_header(NULL), code))$lines
+  expect_identical(utils::tail(off, 2L),
+                   c("# direct R (no model; uses undone d<U+001B>]0;PWNED<U+0007><U+000A>)",
+                     paste0("#~ ", code)))
+  expect_identical(doc_direct_switch(off)$lines, off)
+  # and so does the notice that says which lines a rescan switched
+  proj = local_project()
+  local_gptr_options(record = "auto", quiet = FALSE)
+  doc_project_transcript(".gptr/transcripts/t.R")
+  t = file.path(proj, ".gptr", "transcripts", "t.R")
+  dir.create(dirname(t), recursive = TRUE)
+  writeLines(c(failed, "", doc_direct_header(NULL), code), t)
+  expect_message(doc_transcript_rescan(t), paste0(
+    "Direct R in .gptr/transcripts/t.R: line 6 off (uses undone d<U+001B>]0;PWNED<U+0007>",
+    "<U+000A>)."), fixed = TRUE)
+  expect_identical(readLines(t), off)
+})
+
 test_that("a comment in a direct R line shaped like another entry stays in its section (FIX-31)", {
   proj = local_project()
   local_gptr_options(record = "auto")

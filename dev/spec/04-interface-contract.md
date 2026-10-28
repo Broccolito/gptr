@@ -3894,14 +3894,16 @@ BLOCK_CLOSE = ^([ \t]*)# <<< gptr:([0-9a-z]{6,16})[ \t]*$
 HEADER_KV   = ([A-Za-z_][A-Za-z0-9_.]*)=("([^"\\]|\\.)*"|[^ \t]+)
 ```
 
-Values containing spaces are double-quoted with R escapes. Header keys, in this order when present:
+Values containing spaces or control characters (C0, DEL and C1) are double-quoted with R escapes
+(a control character as a Unicode escape; FIX-29 review round 6). Header keys, in this order when
+present:
 
 | Key | Required | Meaning |
 |---|---|---|
 | `model` | yes | canonical `provider/id` that produced the code (System 1: the physical model) |
 | `date` | yes | `YYYY-MM-DD` of the last (re)generation |
 | `prompt` | yes | `prompt_hash()` of the prompt template (12 hex) |
-| `sha` | recommended | first 8 hex of sha256 of the body lines as last written, without steering lines and each line's trailing blanks and carriage return (user-edit detection; FIX-33) |
+| `sha` | recommended | first 8 hex of sha256 of the body lines as last written, without steering lines and each line's trailing blanks and carriage return (user-edit detection; FIX-33); a `sha` written before FIX-33, of the body untrimmed without each line matching a steering line, also matches (review round 6) |
 | `call` | when > 1 | ordinal of the `peter()` call within the statement (pipelines) |
 | `tokens` | optional | `<input>/<output>` of the turn |
 | `cost` | optional | USD, plain number; written whenever the turn's cost is known (`0` for a free route), omitted when unknown (IC-74) |
@@ -3926,9 +3928,9 @@ top-level `gptr_return(<name>)` calls and calls of `record = FALSE` members are 
 `<-` is rewritten to `=` where safe (IC-48), and a whole comment line that reads as a steering line or a block marker
 gets one more `#` (IC-49); `## Steer: <text>` and `## Follow-up: <text>` lines for steering delivered during the turn
 (excluded from `prompt` and `sha`, IC-49); after each such call that printed something, its output as `#> ` lines (at most `gptr.doc_output_lines` lines, else the setting `doc$output_lines`, of 76
-characters, then `#> ... (N more lines)` counting every line not shown), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
+characters, then `#> ... (N more lines)` counting every line not shown; a line ends where R ends one, a lone `\r` too, and control, bidi and zero-width characters are written `<U+XXXX>`, review round 6), not in Rmd/qmd; `## Decision: <note>` lines; bridge digests
 (`#> sh git status --porcelain: exit 0, 6 lines`), one line each (`bridge_emit()` turns the line ends of a job's name or
-an error into a space; FIX-33 review round 3); artifact references (`#> [app] .gptr/artifacts/<id>/app.R`,
+an error into a space; FIX-33 review round 3) and escaped as output is; artifact references (`#> [app] .gptr/artifacts/<id>/app.R`,
 `#> [plot] <path>`); a block whose code needed a secret gets `# gptr: block needs secrets that are not recorded`.
 Code passes `code_for_history()` (literal secrets -> `Sys.getenv("NAME")`). Calls that ran nothing and plan-mode
 code are not recorded (a plan-mode turn gives one `## Plan: <plans path>` line, `## Plan: none kept (gptr_init()
@@ -4683,7 +4685,8 @@ block is undone, in a document whose gptr markers are well formed, holding the `
 then the `user_files` block, each optional, and nothing else; any other run is not read. The
 recorded code's leading lines that start with `#<` get one more `#` (`##<`), in every format, also
 in a block a format error moves into the transcript, so model code cannot extend the run (a read
-drops only a line's trailing carriage return, which keeps how it starts); R reads the same comments,
+ends a line at `\r\n`, `\n` or a lone `\r`, none of which a written line holds, so it keeps how a
+line starts; FIX-33 review round 6); R reads the same comments,
 and `sha` is that of the lines as written. Nor can model code forge a block with a run: a marker
 comment line of recorded code gets one more `#`, and a block whose text would still leave the
 document's markers malformed (a marker line inside a string) is not written; a block that cannot be
@@ -4706,7 +4709,8 @@ read top to bottom: each block and direct R line makes the names of its `created
 `name = value` expressions assign; a direct R line that uses (by `all.names()`, of such an
 expression its value only) a name whose last maker above it is off, other than one it made before in
 the line, is switched off, `#~ ` before each line under `# direct R (no model; uses undone <names>)`,
-and back on when no such name is left (FIX-33: a reassignment is no use).
+and back on when no such name is left (FIX-33: a reassignment is no use); the names are written as
+output is (`<U+XXXX>`; FIX-29 review round 6).
 A rewind makes a block undone only when the path it moves to holds no record that wrote the block
 (FIX-31). A direct R line's section runs from its header to the next line the console writes for
 another entry (a direct R header, a `# /<name>` command line, a session header, a turn's statement
