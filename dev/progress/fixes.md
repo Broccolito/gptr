@@ -7367,3 +7367,59 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     what runs and a function passed as a value, now documented). Not run: Linux and Windows, and
     live models (the fixes are tested offline and, for the pause menu, in tmux with the fake
     model).
+
+## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #PR)
+- Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
+  `13a917ff`, which the maintainer approved: "take all of his advice and then update the
+  repository". Its DESCRIPTION has the Title "Language Model Agents in Live 'R' Sessions" (D-270)
+  and a Description that opens "Runs language model agents in an existing 'R' session". Its README
+  turns the three pillar sections into three bullets and the rest into task sections: Installation
+  (the GitHub and CRAN routes in two chunks), Connect a model (an API key, an existing CLI login, a
+  local Ollama model), Run an analysis (a table of what `session`, `session$text` and `fit` hold,
+  and what `session$value` holds), Record and replay an analysis, Return typed decisions, Learn
+  more, Why Peter?, Upgrading from gptr 0.7.0, Installation troubleshooting, and License and
+  acknowledgments. The three checks that pin the Title change with it (`dev/release/lib.R`,
+  `dev/release/tests/test-description.R`, test-zzz.R).
+- Audit, before the merge: three auditors on `15fd6066`, offline with the fake provider, found the
+  DESCRIPTION accurate (the incoming feasibility check with remote checks Status OK, no NOTE) and
+  the README accurate but for the three points corrected below.
+- Merge `43512914` (`git merge --no-ff origin/pr-92`, which keeps `71ae6e39`, so GitHub marks #92
+  merged): one conflict hunk in README.Rmd, `claude/v1-fixes`' three pillar sections against his
+  three bullets. His bullets stay and the sections go, as in his commit; the one change
+  `claude/v1-fixes` made to them since `13a917ff` (`70e67aac`, FIX-30 and FIX-33: `replay = "live"`
+  asks again, `model =` picks your own model) is carried into his re-ask sentence, which reads "To
+  ask the model again, use `gptr_source("analysis.R", replay = "live")`; `model =` picks your own
+  model." README.md is his side, rendered again in the next commit. DESCRIPTION, `dev/release/lib.R`
+  and the two tests merge without conflict; `claude/v1-fixes` had not changed DESCRIPTION.
+- Red (the merge): `testthat::test_dir("dev/release/tests")` with `NOT_CRAN=true` FAIL 1 SKIP 0
+  PASS 289: Task 15's spelling test (test-gptr-release.R:47) reports "Naur's (README.Rmd:189,
+  README.md:210)" and "Wason's (README.Rmd:189, README.md:210)".
+- Fix `29461dd6`, three corrections: (1) "Local-only Ollama inference is on by default;", since the
+  default `local_only = TRUE` guards the Ollama route only and remote providers run after the
+  egress acknowledgment; (2) `inst/WORDLIST` takes Naur's and Wason's after Naur and Wason, in its
+  sorted head, as Ollama's follows Ollama; (3) "Why Peter?" adds "In Naur's spirit, gptr records
+  sessions as runnable documents." after his first sentence, the Naur rationale CLAUDE.md keeps in
+  the README. `dev/release/precompute.R --readme`: 0 problems; README.md changes in the three
+  paragraphs README.Rmd changed since his commit and nowhere else.
+- Checked against the code at `70e67aac` (FIX-27..FIX-34 came after his base), not changed: no
+  sentence of the README or DESCRIPTION names `system()`, `peter$sh()`, a console transcript or a
+  paste; the replay sentences hold (under `replay = "replay"` no call reaches a model: a stale
+  block is refused before its run). The manual-mode sentence ("actions classified as read-only run
+  directly; actions classified as changes ask for approval unless an existing rule allows them")
+  states the default, where no rule is set; since FIX-32 a deny or ask rule also stops a read-only
+  command, as `?gptr_permissions` says, and the README before the PR said no more. Not taken: the
+  audit's optional "With the CRAN version," before `vignette("getting-started", ...)` (an install
+  from GitHub has no built vignettes, CI-102), a claim the README made before the PR too.
+- Green, on `29461dd6` (the records commit changes only `dev/`): `dev/release/tests` with
+  `NOT_CRAN=true` (14 files, 62 tests) FAIL 0 SKIP 0 PASS 290; `^zzz$` (the Title's test) FAIL 0
+  PASS 149 in UTF-8 and under `LC_ALL=C LANG=C`; `check-files.R all --release` 0 problems;
+  `spelling::spell_check_package()` "No spelling errors found."; `document()` leaves no diff; the
+  lint of the PR's three R files clean. Under the heavy lock, on a `git archive` of `29461dd6`:
+  `R CMD build --compact-vignettes=gs+qpdf` (tarball sha256 `6db4e0aa`), then
+  `R CMD check --as-cran` in CRAN mode under `env -i` (`HOME`, `PATH`, `LANG=en_US.UTF-8`, a short
+  `TMPDIR`, `R_LIBS_USER` and CI-104's `_R_CHECK_` variables): Status OK with no NOTE in 134 s, the
+  tests [14s/18s] (`testthat.R` [13s/14s]), INFO only for 'repr' and the installed size (7.9 Mb);
+  the incoming feasibility step with `_R_CHECK_CRAN_INCOMING_=true` and
+  `_R_CHECK_CRAN_INCOMING_REMOTE_=true` on that tarball ("checking CRAN incoming feasibility ...
+  [3s/18s] OK"): Status OK with no NOTE in 112 s.
+- Deviations: D-270 (the Title; P01, P25 and 05 keep the old one). Open: none new.
