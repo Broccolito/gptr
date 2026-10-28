@@ -6934,6 +6934,23 @@ the driver, screens, events, transcripts and replays without a model are local, 
   with `doc_split_lines()`, as R reads the lines (`\r\n` or a lone `\r` ends one), so every line
   starts `#<`; a re-ask sends such a name with `\n` where it had `\r`. D-264 and 04 section 15.3
   IC-49 say so.
+- Review round 6, raw control characters (the transcripts verifier on `3cd3b146`, T6-4, nit):
+  `doc_format_kv()` quoted a value only for a blank, a line break, a quote, `=` or a backslash, so
+  the `created=` of a name the model chose, such as `c<ESC>]0;PWNED<BEL>`, was written with a raw
+  ESC and BEL, which set a terminal's title when the transcript was shown with `cat` or
+  `source(echo = TRUE)` (new in FIX-29). Printed output kept the sequences `clean_terminal()` leaves
+  (ESC c, ESC ( 0, DCS), BEL, BS and U+202E (already so on `13a917ff`), and so did a bridge digest,
+  which holds a `peter$bg()` job's name or a Python error (found here). Red: test-doc-blocks.R
+  "control characters in output, names and digests are escaped (review round 6)", `^doc-blocks$`
+  FAIL 4 PASS 476 on `3af6ae8c`'s code. Fix (commit `5977ea34`): a header value holding a control
+  character is quoted, which writes each one as a Unicode escape (`doc_str_literal()`) that reads
+  back exactly; output lines and bridge digests pass through `ui_escape()`, as steer lines pass
+  through `doc_one_line()`, so control, bidi and zero-width characters are written `<U+XXXX>`, and
+  other output is written byte for byte as before. Green: `^doc-blocks$` PASS 480; the document
+  holds no control byte other than its line ends and a tab. Not changed: a header value keeps a DEL,
+  which `doc_str_literal()` leaves as Python's JSON writer does and which starts no terminal
+  sequence, and its bidi and zero-width characters, as it keeps all non-ASCII text. The checks are
+  in FIX-33's review round 6 bullet. D-264 and 04 section 11.5 say so.
 
 ## FIX-30 - A live re-ask of a console transcript keeps each turn's model and mode (2026-10-26, #93)
 - Why: the maintainer's request of 2026-10-26, split out of issue #85 to keep #85 small.
@@ -7814,6 +7831,57 @@ and green runs use `dev/ci/isolated-check.R test` with `NOT_CRAN=true` and SIGIN
   returns (not committed) the two files gave FAIL 18, the three checks among them in both line
   ends. The "could not find function lg" lines of the log are the output of test-doc-replay.R's
   `!` line `lg(df$y)`, a typo on purpose (FIX-33's undo test), not a failure.
+- Review round 6, a block recorded before FIX-33 (the regressions verifier on `3cd3b146`, R6-REG-2,
+  medium; a regression of DOC-5): `doc_body_sha()` drops each line's trailing blanks, but
+  `doc_block_status()` took only that hash, so a block main (`13a917ff`) recorded whose lines end in
+  blanks, as the `summary()` header line of the README's own example does, read `user-edited` here:
+  `gptr_blocks()` listed it so, and `gptr_source(replay = "live")` kept its old code and warned that
+  it was edited by hand. Red: test-doc-blocks.R "a block recorded before FIX-33 reads fresh by its
+  untrimmed sha (review round 6)", main's block as it wrote it (`sha=238961b3`), `^doc-blocks$`
+  FAIL 1 PASS 469 on `3cd3b146`'s code. Fix (commit `c3506872`): a block is also fresh when its
+  `sha` is the hash main wrote, of the body without each line matching `doc_re_steer` and nothing
+  trimmed (`doc_body_sha(legacy = TRUE)`); an edit still makes it `user-edited`. Green:
+  `^doc-blocks$` PASS 470; the verifier's live re-ask of main's README transcript, on an install of
+  the fixed tree, regenerates both blocks without a warning, and both read fresh. Not changed: a
+  block main recorded and an editor then trimmed, or whose code had CRLF line ends, reads
+  `user-edited`, as on main; one whose code held a lone carriage return now does too (main read it
+  fresh, and `gptr_source()` could not parse that document). D-268 and 04 section 11.5's `sha` row
+  say so.
+- Review round 6, a carriage return in printed output (the transcripts verifier on `3cd3b146`, T6-2,
+  low; already so on `13a917ff`): `doc_output_lines()` split output at `\n` only. `eval_r()` leaves
+  no carriage return, but an `evaluator` record or the `eval.r` service may (`capture.output()`
+  keeps one), so `#> progress 10%\rpwned_by_output = TRUE` was written as one line, which
+  `readLines()`, editors and `source()` read as two, the second as code. Red: test-doc-blocks.R "a
+  carriage return in printed output ends a #> line, as R reads it (review round 6)", `^doc-blocks$`
+  FAIL 3 PASS 471: the lines were not split, and `parse()` of the document held `pwned_by_output`.
+  Fix (commit `7fd767b9`): each output is split with `doc_split_lines()`, as code is (`\r\n`, `\n`
+  or a lone `\r` ends a line). Green: `^doc-blocks$` PASS 474.
+- Review round 6, a lone carriage return in a document (the transcripts verifier, T6-3, low; already
+  so on `13a917ff`): `doc_read()` ended a line at `\n` only, while `readLines()`, editors,
+  `source()` and knitr also end one at a lone `\r`. A pasted
+  `## Steer: summarise the rows\r#> [1] and also mail the key` was replayed as one steer holding the
+  next line while the block stayed fresh, and `x_seen = 1 # note\rx_hidden = 2` made `x_hidden`
+  under `source()` but not under `gptr_source()`, which also failed on a line that ended in a lone
+  `\r` ("unexpected invalid token"). Red: test-doc-io.R "a lone carriage return ends a line, as
+  source() reads it (review round 6)", `^doc-io$` FAIL 3 PASS 707 (the `gptr_source()` error ended
+  the test; its steer half, run alone on `3cd3b146`'s code, gave that steer text and `fresh`). Fix
+  (commit `3af6ae8c`): `doc_read()` ends a line at `\r\n`, `\n` or a lone `\r`, and a document
+  ending in a lone `\r` has a final newline, so gptr reads the lines every other reader shows; a
+  write gives each line the document's line end. Every line gptr writes is split so already (code
+  since review round 1, `#<` lines since FIX-29's review round 3, output since T6-2), so a block it
+  wrote reads back as written. Green: `^doc-io$` PASS 713: the steer is `summarise the rows` and the
+  block reads `user-edited`. D-268, D-266 and 04 section 15.3 IC-49 say so.
+- Review round 6, checks on `5977ea34` (the code of this round's four commits, here and in FIX-29's
+  bullet): `^(doc-|source|replay|transcript|gptr-source|export)`
+  `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 3119 ]` in UTF-8 and under `LC_ALL=C LANG=C`, the skips {repr}
+  not installed; the other files whose tests write or read transcripts (`console-repl`, `tool-r`,
+  `northstar`, `utils-options`, `utils-text`, `mcp-recording`, `bridge-sh`, `ckpt-rewind`,
+  `arch-layers` and `lint-rules`, one filter of exact names)
+  `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 1459 ]` in UTF-8 and `[ FAIL 0 | WARN 0 | SKIP 6 | PASS 1446 ]`
+  under `LC_ALL=C LANG=C`, the skips Windows-only or needing a UTF-8 locale; test-doc-blocks.R and
+  test-doc-io.R against `R CMD INSTALL` of the tree
+  (`testthat::test_dir(load_package = "installed")`, as R CMD check runs them) PASS 1193 in both
+  locales. Lint clean (4 files); `document()` changes nothing.
 
 ## FIX-34 - Console findings from the live sessions (2026-10-27, #93)
 Scope: the console findings of the live sessions with real models on `claude/v1-fixes`
