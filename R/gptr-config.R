@@ -1679,7 +1679,8 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' ways (such as `usethis::local_project()`), nor read the code another interpreter runs
 #' (`Rscript -e`, `perl -e`, `node -e`) or a path the shell computes (`rm "$f"` in a loop,
 #' `xargs rm`): such a command is level 3, which `auto` and `yolo` run without a question whatever
-#' it deletes.
+#' it deletes. The `wd` of `processx::run()` is read when the call, or a name the code assigns,
+#' holds it as a string; a `wd` the code computes is read as the project directory.
 #'
 #' In `auto` and `yolo` mode a model can delete or overwrite files and objects. Use them only in
 #' projects you can restore (version control, backups, [gptr_rewind()] for recent turns), and run

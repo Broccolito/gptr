@@ -1491,18 +1491,18 @@ reads when it runs (its standard input, variables it expands, a script file), an
 not resolve to these (a computed name, one reached through a list or an environment or handed to a function of
 the user's own) is not refused [D-262].
 
-Paths are placed in the project [D-262]: a relative path in R code is read in the project root, and a command in
-the directories it runs in (each `cd` target, a `peter$sh()` call's `wd` and a literal `processx::run()` `wd` read
-as a `cd` before it), the code a shell
-or Python runs there (`sh -c`, `python3 -c`, the literal scan) included; a `cd` target is read as `git -C`'s
-directory is (level 1 outside the project, 3 for a secret directory). A drive-relative path (`D:x`, under drive D's
-own current directory on Windows) is `outside` on every OS, and the second reading of a line with a backslash (sh's)
-places a word that starts with a drive letter as a relative one, as sh does. Since a relative path would then name a
-file outside the project, `setwd()`, `withr::local_dir()` and `withr::with_dir()` to a directory outside the
-project and `tempdir()`, or to one the code computes, are a level-4 `session` row, which the critical guard asks
-about in auto and yolo. Not followed: the working directory changed in other ways (`usethis::local_project()`), the
-code another interpreter runs (`Rscript -e`, `perl -e`) and a path the shell computes (`rm "$f"`, `xargs rm`), all
-level 3.
+Paths are placed in the project [D-262]: a relative path in R code is read in the project root, and a command in the
+directories it runs in (each `cd` target, a `peter$sh()` call's `wd`, and a `processx::run()` `wd` the call or a
+name the code assigns holds as a string, each read as a `cd` before it; a `wd` the code computes is read as the
+project root), the code a shell or Python runs there (`sh -c`, `python3 -c`, the literal scan) included; a `cd`
+target is read as `git -C`'s directory is (level 1 outside the project, 3 for a secret directory). A drive-relative
+path (`D:x`, under drive D's own current directory on Windows) is `outside` on every OS, and the second reading of a
+line with a backslash (sh's) places a word that starts with a drive letter as a relative one, as sh does. Since a
+relative path would then name a file outside the project, `setwd()`, `withr::local_dir()` and `withr::with_dir()` to
+a directory outside the project and `tempdir()`, or to one the code computes, are a level-4 `session` row, which the
+critical guard asks about in auto and yolo. Not followed: the working directory changed in other ways
+(`usethis::local_project()`), the code another interpreter runs (`Rscript -e`, `perl -e`) and a path the shell
+computes (`rm "$f"`, `xargs rm`), all level 3.
 
 In every mode the `mode` policy denies `r` code that the evaluator's static guard (`eval_guard()`, 6.12) never
 runs, such as `q()`, `readline()`, a read of standard input or a secret marker, with the guard's text less its
