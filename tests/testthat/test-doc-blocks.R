@@ -1178,6 +1178,21 @@ test_that("a block recorded before FIX-33 reads fresh by its untrimmed sha (revi
   expect_identical(gptr_blocks(f)$status, "user-edited")
 })
 
+test_that("a carriage return in printed output ends a #> line, as R reads it (review round 6)", {
+  expect_identical(doc_output_lines(list("a\r\nb\rc", "d\r")), c("#> a", "#> b", "#> c", "#> d"))
+  # an evaluator other than eval_r() may keep one, as capture.output() does
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("library(gptr)", "peter(\"count rows\")"), f)
+  out = utils::capture.output(cat("progress 10%\rpwned_by_output = TRUE\n"))
+  s = doc_test_session(list(doc_test_turn("cat(\"progress\")", outputs = list(out))))
+  doc_upsert(doc_file_site(f), doc_block_lines(s, 1L, doc_file_site(f), 1L))
+  expect_true(all(c("#> progress 10%", "#> pwned_by_output = TRUE") %in% readLines(f)))
+  expect_false("pwned_by_output" %in% all.names(parse(f, keep.source = FALSE)))
+  expect_identical(gptr_blocks(f)$status, "fresh")
+})
+
 test_that("only gptr's own lines take the block id; steer text and model code keep the token", {
   local_project()
   local_gptr_options(record = "auto")

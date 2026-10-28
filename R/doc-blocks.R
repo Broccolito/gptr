@@ -1158,6 +1158,7 @@ doc_history_code = function(lines) {
 #' Printed output as `#> ` lines of at most 76 characters, then `#> ... (N more lines)` counting
 #' every line not shown. `outputs` is a character vector or a list of output per top-level
 #' expression, each its lines or r_doc_outputs()'s list(lines, n); no line follows a cut one.
+#' Lines end where R reads a line end (doc_split_lines()), whichever evaluator printed them.
 #' @noRd
 doc_output_lines = function(outputs, max_lines = NULL, width = 76L) {
   out = character()
@@ -1165,8 +1166,8 @@ doc_output_lines = function(outputs, max_lines = NULL, width = 76L) {
   for (o in if (is.list(outputs)) outputs else list(outputs)) {
     held = is.list(o) && !is.null(o$n)
     n = if (held) as.integer(o$n) else 0L
-    o = as_utf8(as.character(unlist(if (held) o$lines else o, use.names = FALSE)))
-    o = unlist(strsplit(o, "\n", fixed = TRUE), use.names = FALSE)
+    o = as.character(unlist(if (held) o$lines else o, use.names = FALSE))
+    o = unlist(lapply(o, doc_split_lines), use.names = FALSE)
     if (length(out) == total) out = c(out, o)
     total = total + max(n, length(o))
   }
