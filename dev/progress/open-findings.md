@@ -1,20 +1,23 @@
 # Open findings before the comprehensive review
 
-This ledger lists every finding still open on `claude/v1-fixes` (PR #93) at `25f83241`, the merge of
-review round 6's four fix branches with its records, on 2026-10-28. That day the maintainer paused
-the iterative verify-and-fix rounds: what was running was finished and recorded, and nothing found
-since is fixed now (a test that a merge breaks is still fixed, test first). PR #94
-(`claude/pr92-propagate`) carries contributor PR #92's wording through the repository and merges
-into `main` first; `main` is then merged into this branch, and one comprehensive review and one
-comprehensive fix follow before the CRAN submission. This file is that review's input. Its sources:
-round 6's seven lens verdicts, the four fix writers' reports and their verifiers' final verdicts,
-the Windows verdict, PR #94's writer and verifier, the Open lists of `dev/HANDOFF.md` and
-`dev/PROGRESS.md` (which agree), the Open bullets of FIX-27..FIX-36, CI-87, CI-88 and CI-105 in
-`progress/fixes.md`, the status lines of D-262..D-272, the session handoffs of 2026-10-27 and
-2026-10-28, and the release steps not yet done. A row merges every source that names the same item
-and keeps each source id. Fixed items are left out; the last section lists round 6's fixed findings
-by branch. CI-87's and CI-88's notes are closed by CI-99 and CI-101 but for one residual (L-48), and
-CI-93's and FIX-20's other Open notes stay in `progress/fixes.md` (`dev/HANDOFF.md:463`).
+This ledger lists every finding still open on `claude/v1-fixes` (PR #93) at `25f83241`, the records
+commit after review round 6's merge of its four fix branches (`909350e6`), on 2026-10-28. That day
+the maintainer paused the iterative verify-and-fix rounds: what was running was finished and
+recorded, and nothing found since is fixed now (a test that a merge breaks is still fixed, test
+first). PR #94 (`claude/pr92-propagate`) carries contributor PR #92's wording through the repository
+and merges into `main` first; `main` is then merged into this branch, and one comprehensive review
+and one comprehensive fix follow before the CRAN submission. This file is that review's input. Its
+sources: round 6's seven lens verdicts, the four fix writers' reports and their verifiers' final
+verdicts, the Windows verdict, PR #94's writer and verifier, the Open lists of `dev/HANDOFF.md` and
+`dev/PROGRESS.md` (which agree), the Open bullets of FIX-20, FIX-27..FIX-36, CI-87, CI-88, CI-93,
+CI-104 and CI-105 in `progress/fixes.md`, the status, Limits and Not covered lines of D-262..D-272,
+the session handoffs of 2026-10-27 (its sections 3, 4 and 8) and 2026-10-28, and the release steps
+not yet done. A row merges every source that names the same item and keeps each source id. Fixed
+items are left out; the last section lists round 6's fixed findings by branch. CI-87's and CI-88's
+notes are closed by CI-99 and CI-101 but for one residual (L-48). An independent completeness check
+of the first version (`a3d18f40`) added L-62 to L-71 and PW-2, corrected this paragraph and the rows
+V6G-1, V6G-N4, L-5 and L-26 (each re-measured or re-run here), and filled in what other rows had
+left out; row ids are stable, V6S-7 is split into V6S-7a and V6S-7b, and L-53 is folded into L-31.
 
 Each row gives its ids, its severity, whether it is a regression of this branch against `main`
 `13a917ff`, the item, the evidence and the smallest fix its source proposed. Severity is high,
@@ -38,7 +41,10 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   `-Users-wgu-Desktop-gptr--claude-worktrees-gptr-completion-handoff-f802a1/`
   `b4598491-010f-4344-9895-e8aca8beb354/scratchpad`
 
-`B` and `G` are under `/private/tmp` and may not survive a restart; `A` is kept.
+`B` and `G` are under `/private/tmp` and may not survive a restart; `A` is kept. "Probes on an
+install of `a3d18f40`" are this revision's: `gptr_risk()` on a scratch install of that commit with
+an isolated HOME, the project and the outside directory both outside `tempdir()`; the scripts and
+their output are in `A/probes/`.
 
 ## Permission gate
 
@@ -46,10 +52,12 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   `2bb1fcc1` read 4 and `main` reads every `setwd()` 2). `local()` treats a name it assigns into an
   enclosing environment as its own:
   `d = 'data'; local({ assign('d', <outside>, inherits = TRUE) }); setwd(d)` and its
-  `envir = globalenv()`, `envir = parent.frame()` and `pos = 1` forms read 2, `eval()` or `evalq()`
-  with `envir = globalenv()` and `list2env(..., globalenv())` read 3, so auto and yolo move R out of
-  the project unasked (end to end), where `?gptr_security` says yolo asks; the merged code still
-  reads 2. Evidence: `R/perm-classify.R:2916` (only `<<-` adds to `sup`) and `:3037`;
+  `envir = globalenv()`, `envir = parent.frame()` and `pos = 1` forms and
+  `local({ list2env(list(d = <outside>), globalenv()) })` read 2, and `eval()` or `evalq()` with
+  `envir = globalenv()` read 3 (with `unlink(p)` in place of `setwd(d)` every one of these forms
+  reads 3), so auto and yolo move R out of the project unasked (end to end), where `?gptr_security`
+  says yolo asks; the merged code still reads 2 (probed again on an install of `a3d18f40`).
+  Evidence: `R/perm-classify.R:2916` (only `<<-` adds to `sup`) and `:3037`;
   `state/fix6-results.json` "verify6 gate6 round 2" Finding 1 and "verify6 gate6" note (b);
   `B/gate6v/` (`e2e-*.tsv`, `local-assign-fix.diff`); `dev/progress/fixes.md:9121`. Fix (verified in
   a copy): at `:2916` add to `sup` for `op %in% c("<<-", "assign") || isTRUE(ctx$outer)`, after
@@ -86,12 +94,17 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   `state/fix6-results.json` "verify6 gate6 round 2" N2 and N3, "fix6 gate6 round 2" notes. Fix: skip
   a line whose string-blanked text holds no `chdir(` (one line, N2); name the `getcwd()` idiom in
   `?gptr_security` (N3).
-- **V6G-N4** (low; yes, in time). Directory candidates are joined as text and never normalised, so
-  branched relative `setwd()` calls double them: alternating `if (p) setwd('a')` and
-  `if (q) setwd('..')` lines take 0.33 s at 10 lines, 0.89 s at 12 and 2.44 s at 14 (0.02 s before);
-  `risk_python()` on 400 KB of Python takes 0.47 s (0.19 s on `2bb1fcc1`). Evidence:
-  `R/perm-classify.R:2783`; `state/fix6-results.json` "verify6 gate6 round 2" N4 and its timing
-  line. Fix: read a directory with more than about 64 candidates as computed.
+- **V6G-N4** (low to medium; yes, in time). Directory candidates are joined as text and never
+  normalised, and each branched relative `setwd()` doubles them, so the classifier's time about
+  doubles with each such line, and the gate runs it before every `r` call and holds the session
+  meanwhile. Alternating `if (p) setwd('a')` and `if (q) setwd('..')` lines (level 4) take 0.28 s at
+  10 lines, 0.76 s at 12, 2.08 s at 14 and 5.41 s at 16 (0.02 s before); independent lines
+  `if (pK) setwd('dK')` take 0.63 s at 10, 2.62 s at 12, 10.2 s at 14 and 41.7 s at 16 and still
+  read level 2 (the completeness check measured 167 s at 18, so 24 such lines would take hours).
+  `risk_python()` on 400 KB of Python takes 0.47 s (0.19 s on `2bb1fcc1`), and 0.86 s on 564 KB.
+  Evidence: `R/perm-classify.R:2783`; `state/fix6-results.json` "verify6 gate6 round 2" N4 and its
+  timing line; this revision's timings on an install of `a3d18f40` at a load near 20. Fix: read a
+  directory with more than about 64 candidates as computed.
 - **L-1** (low; yes, `main` read every `setwd()` 2; the maintainer's call). In a project inside a
   protected folder (`.git`, `.claude` or `.aws`; Claude Code's worktrees sit in `.claude/worktrees`)
   every directory is protected, so `setwd('.')` and `setwd('sub')` are level 4 and ask in every mode
@@ -113,7 +126,7 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   `dev/HANDOFF.md:320-327`; `dev/DEVIATIONS.md:7889-7904`; `dev/progress/fixes.md:6130-6137`. Fix:
   refusing `pipe()`, `processx::run()` and `fread(cmd =)` too is one word in the function vector,
   the maintainer's call; the rest is documented.
-- **L-4**, also R6-D3 (a) and (b) and the gate6 first verifier's note (c) (low, documented; no). The
+- **L-4**, also R6-D3 (a) and the gate6 first verifier's note (c) (low, documented; no). The
   classifier does not follow a working directory changed other than by `setwd()`,
   `withr::local_dir()`, `withr::with_dir()` or `xfun::in_dir()` (`usethis::local_project()`,
   `get("setwd")`, `callr::r()`'s `wd`), nor read another interpreter's code (`Rscript -e`,
@@ -143,8 +156,36 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   table's package functions as written, as `ba95834f` does for withr's `local_tempdir()`.
 - **L-5** (low; no; the maintainer's call). `file.rename()` and `fs::file_move()` remove their
   source, which is not read as a delete: a move of a file outside the project into it is level 2.
-  Evidence: `dev/HANDOFF.md:344-345`; `state/fix6-results.json` "fix6 gate6" records. Fix: none
-  proposed.
+  The reading also depends on load state, as W6-1's does: `fs::file_move(<outside>/f, 'f')` reads 3
+  while fs is not loaded and 2 once it is (written with `path =` and `new_path =` it reads 2 either
+  way). Evidence: `dev/HANDOFF.md:344-345`; `state/fix6-results.json` "fix6 gate6" records; probes
+  on an install of `a3d18f40`. Fix: none proposed.
+- **L-62**, also FIX-36's Open, D-272's Not covered and R6-D3 (b) (low, documented; no; the
+  maintainer's call). Variable changes the classifier does not read, each level 3 or lower, which
+  auto runs, so they move gptr's config folder or the home unasked: code in a file R runs
+  (`source()`, `sys.source()`, `eval(parse(file = ))`; `writeLines()` of an `.R` file and then
+  `source()` of it reads 3); `Sys.setenv()`, `Sys.unsetenv()`, `withr::local_envvar()` or
+  `withr::with_envvar()` reached by a computed name, through a list or an environment, or handed to
+  a function the classifier does not know calls it (`get("Sys.setenv")`, `baseenv()$Sys.setenv` and
+  `identity(withr::local_envvar)` read 3, `assign("f", Sys.unsetenv)` 2); a Python write through
+  another name for `os.environ` (`e = os.environ` reads 2), through `getattr(os, "environ")` or
+  `ctypes` (3), or an `os.environ.update()` of a mapping the code computes, of names that are not
+  plain string literals (`{'H' 'OME': d}`, 3) or of keyword names not all in upper case (`home = d`,
+  3, which sets `HOME` on Windows); Python run through 'reticulate'. Evidence:
+  `dev/HANDOFF.md:443-453`; `dev/PROGRESS.md:38`; `dev/progress/fixes.md:9589-9598` (round 2's list,
+  which replaced round 1's at `:9528`); `dev/DEVIATIONS.md:8807-8809` and `:8868-8873`;
+  `state/round6-verdicts.json` "r6 docs" R6-D3 (b); probes on an install of `a3d18f40`. Fix: none;
+  documented as a class, the maintainer's call.
+- **L-63**, also D-262's Accepted false refusals and FIX-36's accepted false question (low; yes,
+  costs of this branch's rules on code `main` ran unasked). In auto and yolo
+  `cmd = "ls"; system(cmd)`, `system2("git", c("log", n))`, `system2("ls", character())` and a
+  function defined but never called (`f = function(x) system(x)`) are refused (level 3 `dynamic`),
+  each costing one round trip to `peter$sh()` or an `r(fn:)` rule (`do.call(system, list("ls"))` is
+  no longer refused since R6-GATE-4's fix, `e97a7f5b`). In auto,
+  `os.environ["MPLCONFIGDIR"] = os.path.join(os.environ["HOME"], ".mpl")` in Python and
+  `lapply(nms, Sys.unsetenv)` read level 4 `control` and ask. Evidence:
+  `dev/DEVIATIONS.md:7905-7911`; `dev/progress/fixes.md:9469-9478` and `:9875-9886`; probes on an
+  install of `a3d18f40`. Fix: none; accepted when the rules were written.
 
 ## Secrets and redaction
 
@@ -155,14 +196,14 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   `v = peter$sh(c('cat', '.env'))$stdout` or
   `v = processx::run('sh', c('-c', 'echo $FAKE_API_KEY'))$stdout` followed by
   `curl::curl_fetch_memory()`, `download.file()` or a `curl` command ran with no question, also
-  split over two `r` calls (no taint is recorded). Documented beside it: a network program name the
-  code builds from pieces is not read. Evidence: `R/auth-secrets.R:690-698` (the sources are
-  `secret_scan()`'s own), `R/perm-classify.R:421` (`risk_secret_rows()`),
-  `R/gptr-config.R:1790-1808`; `state/prop-secret6-results.json` "verify6 secret6 final" finding 1;
-  `B/fr6v3/`. Fix: in `secret_scan()`, when the code starts a process, add a source for each
-  registered name a string names as `$NAME` or `${NAME}` (`secret_env_registered`) and for each word
-  `scan_env_file()` matches (`secret_file`), which also taints the assigned names; or narrow the
-  network sentence to reads by `Sys.getenv()`, an R file read or an environment dump.
+  split over two `r` calls (no taint is recorded). The documented limits beside it are L-64.
+  Evidence: `R/auth-secrets.R:690-698` (the sources are `secret_scan()`'s own),
+  `R/perm-classify.R:421` (`risk_secret_rows()`), `R/gptr-config.R:1790-1808`;
+  `state/prop-secret6-results.json` "verify6 secret6 final" finding 1; `B/fr6v3/`. Fix: in
+  `secret_scan()`, when the code starts a process, add a source for each registered name a string
+  names as `$NAME` or `${NAME}` (`secret_env_registered`) and for each word `scan_env_file()`
+  matches (`secret_file`), which also taints the assigned names; or narrow the network sentence to
+  reads by `Sys.getenv()`, an R file read or an environment dump.
 - **V6S-2**, the residual of R6-SS-4 (low; no, `3cd3b146` showed the key in 3 rendered lines). The
   redacted request and condition keep the key in `attr(risk$flagged, "hidden")`, `risk_cmd_line()`'s
   working attribute, which `redact()` and `redact_tree()` do not reach: in yolo with
@@ -190,18 +231,19 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   secret6 final" finding 4; `state/fix6-results.json` "verify6 gate6" note (c);
   `dev/progress/fixes.md:9132-9134`. Fix: one sentence: a read through `lapply()` or another
   function that calls the reader, or of a copy, is not read.
-- **L-6**, also V6S-7's second half (low; yes, new questions on code `main` ran). The round 6
-  guard's recorded costs: a `$NAME` of a registered name in a `peter$sh()` or `peter$bg()` command
-  asks in auto although those children start without registered secrets; a command line or Python
-  that only mentions `.env` (`echo .env >> .gitignore`, a comment) asks in auto; code that reads a
-  secret, starts a process and names a network program in any string (a `message()` that says
-  `curl`) asks in yolo; and, wider than FIX-32 and D-267 say, a computed-name `Sys.getenv()` of an
-  ordinary variable counts as a read, so `v = 'PATH'; Sys.getenv(v)` with `system('echo hi')` and
-  the string `'install curl first'` is level 4 and asks in auto too (3 on `3cd3b146`). Evidence:
-  `dev/HANDOFF.md:359-366`; `dev/progress/fixes.md:7987`; `state/prop-secret6-results.json` "verify6
-  secret6 final" (coverage, New noise; finding 7). Fix: say in FIX-32 and D-267 that a computed-name
-  `Sys.getenv()` counts as a read and asks in auto too; a mention is read word by word, which is the
-  command classifier's side.
+- **L-6**, also V6S-7b, the second half of "verify6 secret6 final" finding 7 (low; yes, new
+  questions on code `main` ran). The round 6 guard's recorded costs: a `$NAME` of a registered name
+  in a `peter$sh()` or `peter$bg()` command asks in auto although those children start without
+  registered secrets; a command line or Python that only mentions `.env` (`echo .env >> .gitignore`,
+  a comment) asks in auto; code that reads a secret, starts a process and names a network program in
+  any string (a `message()` that says `curl`) asks in yolo; and, wider than FIX-32 and D-267 say, a
+  computed-name `Sys.getenv()` of an ordinary variable counts as a read, so
+  `v = 'PATH'; Sys.getenv(v)` with `system('echo hi')` and the string `'install curl first'` is
+  level 4 and asks in auto too (3 on `3cd3b146`). Evidence: `dev/HANDOFF.md:359-366`;
+  `dev/progress/fixes.md:7987`; `state/prop-secret6-results.json` "verify6 secret6 final" (coverage,
+  New noise; finding 7). Fix: say in FIX-32 and D-267 that a computed-name `Sys.getenv()` counts as
+  a read and asks in auto too; a mention is read word by word, which is the command classifier's
+  side.
 - **L-7** (low; no, the cost of a new guard). A registered secret handed to a child through `env`
   asks each time in auto and twice in manual unless the same code reads it by name, and the idle
   gate does not take the level 3 of an ordinary variable passed through. Evidence:
@@ -226,6 +268,20 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   `system('echo $PLAIN_NAME')` for a registered name that does not look secret is level 1 unguarded.
   Evidence: "verify6 secret6 final" finding 6. Fix: one `risk_classify()` assertion with such a
   name.
+- **L-64**, also R6-SS-1's documented part and FIX-32 review round 6 (low, documented; no). Limits
+  of the secret guard that `?gptr_security` states: a registered secret read through a name the code
+  computes when it runs (with `paste0()`, through `get()` or `do.call()`, as a function's argument,
+  or in a variable it sets otherwise) is level 3 with no guard, so auto runs it and the value
+  reaches R (`for (v in c('HOME', 'USER')) Sys.getenv(v)` reads 3); a copy the code changes other
+  than by URL-encoding, JSON-escaping or base64, such as reversed or cut, is not redacted (R6-SS-1
+  saw a reversed key 4 times in the fake provider's requests, with no question in auto); and a
+  network program name the code builds from pieces is not read for the secret-to-network question.
+  Evidence: `R/gptr-config.R:1784-1785`, `:1799-1801` and `:1806-1807`; `dev/HANDOFF.md:362-363`;
+  `state/round6-verdicts.json` "r6 sec-secrets" R6-SS-1; D-267's status of 2026-10-28; probes on an
+  install of `a3d18f40`. Fix: none; documented.
+- **L-68**, FIX-20's Open (low; no). A secret question asked under `.stdin = TRUE` on a tty is shown
+  by the terminal's own echo, before and after FIX-20's echo fix. Evidence:
+  `dev/progress/fixes.md:5053-5054`. Fix: none proposed.
 
 ## Console and paste
 
@@ -265,15 +321,31 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   completes nothing at the prompt, where readline used to offer every file name. Evidence:
   `dev/DEVIATIONS.md:6158-6163`; `dev/progress/fixes.md:8813-8814`. Fix: none proposed.
 - **L-15** (nit; no). Tab offers file names holding U+2028 or U+2029, and `ui_escape()` leaves them,
-  as they are neither C0 nor C1; a transcript's header values keep them too (documented in FIX-29).
-  Evidence: `state/round6-verdicts.json` "r6 sec-console" summary;
-  `dev/progress/fixes.md:7234-7236`. Fix: none proposed.
+  as they are neither C0 nor C1; a transcript's header values keep them too, and keep bidi and
+  zero-width characters, as they keep all non-ASCII text, and its output lines keep a tab
+  (documented in FIX-29 and D-264). Evidence: `state/round6-verdicts.json` "r6 sec-console" summary;
+  `dev/progress/fixes.md:7234-7237`. Fix: none proposed.
 - **L-16** (low; no). R draws no prompt again after a background callback's output, so the person
   types on a row without `> ` (FIX-21 L1). Evidence: `dev/HANDOFF.md:374-375`. Fix: none proposed.
 - **L-17**, also PERM-9's second half and D-267 (b) (nit; no). An approved `system()` child's output
   starts on the frozen `r` row. Evidence: `dev/HANDOFF.md:355`; `dev/progress/fixes.md:7550-7555`.
   Fix: none taken; ending or clearing the row before evaluation drops IC-82's cue or erases the
   child's last line.
+- **L-65**, the rest of D-263's Limits and FIX-28's Open (low, one nit; no). Paste limits L-9 does
+  not name: a tool's own `readline()`, `menu()` or `readLines(stdin())`, and a child process reading
+  the terminal, get the paste markers; a read through GNU readline 8.1+ turns bracketed paste off as
+  it ends (until the outermost `r` call returns, or until the call next sets its modes), so a paste
+  made meanwhile is decided by timing; a kill or a crash leaves paste mode on (zsh, fish and bash
+  5.1+ reset it at their prompts, as does `reset`); after a lone Esc a typed `[`, `[2`, `[20`,
+  `[200` or `[201` waits for the next key and is lost where readline reads first; a paste bracketed
+  just before a hand-over's `ESC [ ? 2004 l` reaches readline with its markers; the prompt's editor
+  drops a pasted Tab that ends a read inside a split paste (nit); and the key loop is quadratic in a
+  paste's size, so a 1 MB paste holds the console for minutes, as before. Evidence:
+  `dev/DEVIATIONS.md:8062-8081`; `dev/progress/fixes.md:6953-6968`. Fix: none proposed.
+- **L-70**, FIX-20's other Open notes (nit; no). `gptr_step()` on a background session relies on the
+  timer to release it (at R's prompt the idle tick releases it at once), and the live row of a
+  `system()` child's output stays smeared (D-253, no runtime change, as the verdict advised).
+  Evidence: `dev/progress/fixes.md:5007-5008` and `:5022-5023`. Fix: none proposed.
 
 ## Transcripts and documents
 
@@ -299,20 +371,29 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   proposed.
 - **R6-REG-2** (residual; nit; no). A block `main` recorded and an editor then trimmed, or whose
   code had CRLF line ends, reads user-edited, as on `main`; one whose code held a lone carriage
-  return now does too (`main` read it fresh but could not source that document). Evidence:
-  `dev/progress/fixes.md:8298-8302`; D-268. Fix: none needed (documented).
+  return now does too (`main` read it fresh but could not source that document). A transcript whose
+  only line ends are lone carriage returns is rewritten with LF line ends once, on gptr's next write
+  to it (a round 6 test asserts it). Evidence: `dev/progress/fixes.md:8298-8302`; D-268;
+  `state/fix6-results.json` "verify6 trans6 round 2" findings. Fix: none needed (documented).
 - **L-18**, also D-264's Known limits (low, documented; no). A later console turn that uses an
   object made by a direct R line that is off still stops `source()`, as the undo kept the object;
   `all.names()` can match a column or formula term of the same name and switch a line off; a name
   reached through a string (`get("fit")`) is not seen; a non-ASCII name is matched only in a UTF-8
-  locale (FIX-29). Evidence: `dev/HANDOFF.md:404-405`; `dev/DEVIATIONS.md:8186-8197`. Fix: none
-  proposed.
+  locale (FIX-29); lines written by hand right after a direct R line switch off with it; a name
+  holding a comma is left out of `created=`, so a line using it is not switched; and the `#<` lines
+  are what was sent, so neither `gptr.doc_output_lines` nor the `doc` setting limits them. Evidence:
+  `dev/HANDOFF.md:404-405`; `dev/DEVIATIONS.md:8186-8197`. Fix: none proposed.
 - **L-19**, also R6-D3 (c) and D-265's Known limits (low, documented; no). A console statement names
   the model and mode of a turn only as D-265 states: a switch during a run applies to the whole
   re-ask, a model given as a provider object is not named on a session's first statement,
   `.opts$thinking`, the budget, tools, skills and `.opts` are not recorded, and a turn recorded in
-  auto or yolo is re-asked in that mode (FIX-30). Evidence: `dev/HANDOFF.md:406-409`;
-  `dev/DEVIATIONS.md:8254-8269`. Fix: none proposed.
+  auto or yolo is re-asked in that mode (FIX-30). D-265 also names: a model named on a re-assignment
+  must resolve when re-asked (`gptr_error_unknown_model` otherwise); under an alias or an unset
+  `model` setting the first statement after `/clear` names the model; a statement deleted or edited
+  by hand is not accounted for; and a replay reconstructed from the document (no session log) does
+  not apply the literals of fresh statements, so a stale statement after them continues the
+  reconstructed session's model. Evidence: `dev/HANDOFF.md:406-409`; `dev/DEVIATIONS.md:8254-8269`.
+  Fix: none proposed.
 - **L-20** (low; no). A line of `!` code that reads as another entry's first line but is not a
   comment still ends its section (FIX-31); a marker line inside a multi-line string of `!` code
   leaves the transcript's markers malformed, which the next block write names (FIX-33). Evidence:
@@ -322,8 +403,10 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   console is retried with the pending notes only (DOC-6); artifact references without `.gptr/` name
   `tempdir()/gptr` (MM-4); code recorded despite `record = false` has no `#>` output (ALL-3);
   claude-cli and codex blocks record `model=claude-cli/default` and `codex/default` (ALL-6); a
-  refused turn records an empty block (PERM-8). Evidence: `dev/HANDOFF.md:413-418`;
-  `dev/progress/fixes.md:8101-8169`. Fix: none proposed.
+  refused turn records an empty block (PERM-8); a live re-ask sends neither a block's steering lines
+  nor an `n <text>` answer, and the new block does not keep them (ALL-1, documented; L-23 is its
+  script-replay twin). Evidence: `dev/HANDOFF.md:413-418`; `dev/progress/fixes.md:8101-8169`. Fix:
+  none proposed.
 - **L-22** (nit; no). An exported transcript keeps its replay note, which names the source
   transcript, and a refusal names no line (FIX-25, FIX-33). Evidence: `dev/HANDOFF.md:386-387`;
   `dev/progress/fixes.md:8120-8121`. Fix: none proposed.
@@ -341,6 +424,10 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   `<gptr>` one, so a replayed ggplot is 1,412 bytes smaller serialized and 768 bytes by
   `env_snap_size()`; an expression that names `peter()` still makes its objects with the document's
   srcrefs (FIX-24). Evidence: `dev/HANDOFF.md:383-385`. Fix: none proposed.
+- **L-69**, FIX-20's Open, found in passing (low; no; to triage). A console transcript with a
+  `{name}` prompt cannot replay without a model: `doc_console_site()` sets `args_hash = NULL`, so
+  its block reads stale under `GPTR_REPLAY=replay`. Evidence: `dev/progress/fixes.md:5173-5175`
+  (R27's evidence, `doc-locate.R`). Fix: none proposed; triage first.
 
 ## Docs and records
 
@@ -352,12 +439,14 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   and vignette corrections (CI-105 review round 4) beside #94's three. A trial merge of #94 into
   `25f83241` conflicts in `R/gptr-gateway.R`, `man/peter.Rd`, `README.Rmd`, `README.md`,
   `pkgdown/assets/gptr-cheatsheet.pdf`, `dev/DEVIATIONS.md`, `dev/HANDOFF.md`, `dev/PROGRESS.md` and
-  `dev/progress/fixes.md`; `origin/main` alone merges clean. Evidence:
-  `dev/progress/fixes.md:9182-9268`; `dev/DEVIATIONS.md:8715-8735`;
-  `state/prop-secret6-results.json` "propagate verify" findings 2 and 3 and "propagate writer
-  (continue)" notes; `git merge-tree --write-tree` of `25f83241` and `4dd36dc9` (2026-10-28). Fix:
-  one copy of each id goes; fold the Why line into Rule; keep both sides' README corrections, then
-  render README.md and the cheat sheet PDF again.
+  `dev/progress/fixes.md` (so does one into `a3d18f40`); `origin/main` alone merges clean, and #94
+  itself merges clean into `main`, whose head `880e7ea4` is #94's merge base, so the order #94, then
+  `main` into this branch, then #93 holds, and the nine conflicts arise only when `main` (with #94)
+  is merged into this branch. Evidence: `dev/progress/fixes.md:9182-9268`;
+  `dev/DEVIATIONS.md:8715-8735`; `state/prop-secret6-results.json` "propagate verify" findings 2 and
+  3 and "propagate writer (continue)" notes; `git merge-tree --write-tree` of `25f83241` and
+  `4dd36dc9` (2026-10-28). Fix: one copy of each id goes; fold the Why line into Rule; keep both
+  sides' README corrections, then render README.md and the cheat sheet PDF again.
 - **PV-4 (a)** (low; n/a; the maintainer's call). PR #92's README links the system-one and
   script-as-history guides as "Typed decisions" and "Record, replay and export", but the vignettes
   keep "System 1 decisions" and "Script as history" (titles, `VignetteIndexEntry`, cross-links,
@@ -380,9 +469,21 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   "inside the live R session"); D-270 wins over them. On #94 spec 05's two edited lines are 102 and
   111 columns (110 and 110 on `main`; 05 is not fmt-clean on `main`). Evidence: "propagate writer
   (continue)" left_unchanged; "propagate verify" finding 5. Fix: none proposed.
-- **V6S-7** (first half; nit; n/a). `dev/progress/fixes.md:7906` is 101 columns, an unbreakable code
-  span holding a test regex; fmt.py and lintfmt.py accept it. Evidence:
-  `state/prop-secret6-results.json` "verify6 secret6 final" finding 7. Fix: none needed.
+- **PW-2** (nit; n/a). The propagation left "live R session" and its variants where the writer
+  judged them to agree with PR #92's wording: the model prompts and tool text ("the user's live R
+  session": `R/prompt-text.R:49` and `:100`, `R/tool-r.R:7`, `R/mcp-server.R:14`,
+  `inst/gptr/skills/high-performance-r/SKILL.md`), which test-northstar.R and the token benchmark's
+  `tests/testthat/fixtures/bench/prefix-baseline.json` pin (L-66); the `?gptr_mcp_serve` title,
+  comments in `R/cli-codex.R` and `R/proc-supervise.R`, `inst/gptr/mcp_relay.R`, the mcp vignette,
+  `inst/COPYRIGHTS:75` and `cran-comments.md:55`; the openings of the why-peter, execution-model,
+  language-models, system-one and script-as-history vignettes; the cheat sheet's h1 and meta
+  description; and `R/doc-formats.R:484` (`:470` on #94). Evidence:
+  `state/prop-secret6-results.json` "propagate writer (continue)" left_unchanged. Fix: none needed
+  unless the maintainer wants the phrase gone; a prompt change must pass the prefix gate.
+- **V6S-7a**, the first half of "verify6 secret6 final" finding 7 (nit; n/a).
+  `dev/progress/fixes.md:7906` is 101 columns, an unbreakable code span holding a test regex; fmt.py
+  and lintfmt.py accept it. Evidence: `state/prop-secret6-results.json` "verify6 secret6 final"
+  finding 7. Fix: none needed.
 - **V6C-4, V6C-5** (nit; n/a). D-264's Tests line does not name test-console-repl.R's round 6 test
   (a lone carriage return ends a `!` note's line), as D-263's lists its own; spec 04 is far from
   fmt-clean on `main`, so fmt.py cannot be held for it. Evidence: `dev/DEVIATIONS.md:8212-8222`;
@@ -402,6 +503,13 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   `G/live/r6-cran/`. Fix: with CI green, set the test time from a quiet run and the re-measured
   count, run win-builder and R-hub on the final tarball (or name the tarball they ran on), and set
   the reverse-dependency date at submission with `cran_comments_set_revdeps()`.
+- **L-67**, CI-104's Open (low; no). Points a CRAN reviewer may raise: the six pages of session S3
+  methods (`print`, `format`, `str` and `summary` of `gptr_session`; `print` and `as.data.frame` of
+  `gptr_session_summary`) have no examples; they are registered methods, not exports, but a reviewer
+  may ask for some (B7). 'TypeSafe AI' is quoted as a host, not as software or an API ("hosted by
+  TypeSafe AI" is the fallback if a reviewer queries it). The README's 4 GiB figure is one measured
+  run (`dev/TESTING_PLAN.md`). Evidence: `dev/progress/fixes.md:6040-6045`. Fix: none proposed;
+  answer if asked.
 - **L-27** (step; n/a). No `R CMD check` has run since round 6's CRAN lens on `3cd3b146`
   (`isolated-check.R check` FAIL 1, R6-CRAN-1). The merged code had the full suite through
   `devtools::test()`, which loads fs and other namespaces and so could not see R6-CRAN-1, and ten
@@ -415,7 +523,12 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   win6's test fixes are proven only by the Windows jobs (shard 1 passing without fs, R 4.2 reading
   as R 4.6). The `main` ruleset requires its 14 checks and a branch up to date with `main`.
   Evidence: `gh pr checks 93` (2026-10-28); `state/win6-verify.json` (Not proven here);
-  `state/ruleset-24955100-after.json`. Fix: merge `main` (after #94), push, and read every job.
+  `state/ruleset-24955100-after.json`; `gh pr view 93`. Fix: merge `main` (after #94), push, and
+  read every job (`gh run rerun <id> --failed` when Ubuntu's apt mirror stalls a job, L-47); and
+  rewrite PR #93's title and body, which still say FIX-27..FIX-34, "three review rounds" and
+  "Checks: In progress: review round 4 ... This section is updated when they finish", and name
+  D-262..D-270 only, so that they cover FIX-35, FIX-36, review rounds 4 to 6, D-271 and D-272 and
+  the final checks.
 - **L-29** (step; n/a). R-hub (Windows R-devel and R-release, Ubuntu gcc 12) and win-builder
   (R-release, R-oldrelease and R-devel, by e-mail through Outlook) on the final tarball; the
   2026-10-26 runs used `e1b6ca59`'s tarball, and win-builder's R-devel run forwarded on 2026-10-27
@@ -423,18 +536,31 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   `SESSION-HANDOFF.md`. Fix: run them after L-27 and L-28.
 - **L-30** (step; n/a). PR #94 (`4dd36dc9`) is open with its CI running (runs 40775715597 and
   40775715751, then 40775753561 and 40775753543, 2026-10-28); after it merges, `main` is merged into
-  this branch (L-26), and #93 merges once its checks pass. Evidence: `gh pr list`, `gh run list`
-  (2026-10-28). Fix: as stated.
+  this branch (L-26), and #93 merges with a merge commit once its checks and the hosted checks
+  (L-29) pass; then `main`'s CI is watched until it is green (section 3 step 8 of the 2026-10-27
+  handoff). Evidence: `gh pr list`, `gh run list` (2026-10-28). Fix: as stated.
 - **L-31** (step; n/a). Cleanup to `main` only, after #93 merges: the spare branches
   `claude/pr92-main` (`d45f7d5b`) and `claude/v1-pr92` (`a59c242d`); every `claude/v1-fix-*` branch
   (browser, class6, cons6, console, console4, console5, console6, doc, docs4, docs5, env, env3,
   gate, gate5, gate6, perm, secret5, secret6, trans6, win, win42 and win6);
   `claude/fix27-system-gate` to `claude/fix31-transcript-hardening`; `claude/v1-fixes` and
-  `claude/pr92-propagate` with their remote branches; their worktrees under `G/v1/` and `G/v1v/`
-  (`fr6-secret6-base`, at `3cd3b146` with two untracked probes, and the detached `pr92-main`). PR
-  #91 (`claude/fix27-system-gate`, FIX-27 alone) is still open; #93 holds it.
+  `claude/pr92-propagate` with their remote branches, and `origin/claude/fix27-system-gate`, the
+  only other remote branch; their worktrees under `G/v1/` and `G/v1v/` (among them
+  `fr6-secret6-base`, at `3cd3b146` with two untracked probes, which the first secret6 verifier left
+  when the session limit cut it off and a second verified from scratch, formerly L-53; and the
+  detached `pr92-main`), then `git worktree prune`; and fast-forward the base checkout to
+  `origin/main` (L-32). PR #91 (`claude/fix27-system-gate`, FIX-27 alone) is still an open draft;
+  #93 holds it, so close it if it does not show merged once #93 merges. Keep both stashes in the
+  base checkout (`stash@{0}` "preserve-main-checkout-uncommitted-2026-10-20 (pre-sync, 718e81e)" and
+  `stash@{1}` "codex-preserve-user-description-before-pr5-20261010"). The script
+  `/Users/wgu/Desktop/gptr-session-archive-2026-10/handoff-2026-10-27/scripts/cleanup3.sh` does the
+  deletions: set `KEEP_RE` and `KEEP_WT_RE` to match nothing, and run `dry` before `run`; delete a
+  branch only after `git merge-base --is-ancestor <b> origin/main`, or, for a spare such as
+  `claude/pr92-main`, after checking that its work is on `main`. Then confirm that `git branch -a`
+  and `gh pr list` show only `main` and nothing open (section 3 step 9 of the 2026-10-27 handoff).
   `claude/p29-gptr-coach` (worktrees `gptr-p29` and `gptr-p29-check`) is other work: ask first.
-  Evidence: `git for-each-ref refs/heads`, `git worktree list`, `gh pr list` (2026-10-28). Fix: as
+  Evidence: `git for-each-ref refs/heads`, `git branch -r`, `git worktree list`, `git stash list`,
+  `gh pr list` (2026-10-28); `state/prop-secret6-results.json` "verify6 secret6 final" ran. Fix: as
   stated.
 - **L-32** (step; n/a). The maintainer's checkout `/Users/wgu/Desktop/gptr` has `main` at `13a917ff`
   (`origin/main` is `880e7ea4`); after the merges, update it, leaving its untracked
@@ -442,6 +568,10 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   `dev/HANDOFF.md:314-316` did for `c0dd52b7`. Fix: as stated.
 - **L-33** (step; n/a). The CRAN submission and P25's live steps are the maintainer's. Evidence:
   `dev/HANDOFF.md:465`. Fix: as stated.
+- **L-71** (step; n/a). Report to the maintainer what changed, the checks and the decisions below,
+  and update the memory files `gptr-session-handoff.md` and `gptr-readme-voice.md` (the README now
+  follows PR #92's structure, which the maintainer approved). Evidence: section 3 step 11 of the
+  2026-10-27 handoff. Fix: as stated.
 
 ## CI and test infrastructure
 
@@ -450,9 +580,12 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   test-http-sse.R:133 (INFRA-23, 20,000 deltas under 1 s of CPU: 1.34 s, job 123068236924) and the
   second test-subagent-team.R:109 (`gptr_parallel()` members run concurrently: 5.90 s of wall time
   where the test allows under five seconds, job 123095981276). Locally the merge `0768fb35`'s full
-  suite at a load near 215 failed 9 tests in three timing files that pass alone. Evidence:
-  `state/extra-ledger-items.md`; `dev/HANDOFF.md:218-223`. Fix: `skip_on_ci()` or a scaled limit, or
-  measure against a calibration loop.
+  suite at a load near 215 failed 9 tests in three timing files that pass alone;
+  test-proc-windows-backpressure.R:529 (a 2 s stdin write timeout) failed 3 times at a load of 67,
+  and fails alike when run alone on `fe873436`'s code; and a timing bound of test-cli-codex.R took
+  16.7 s against 13 s at a load near 260. Evidence: `state/extra-ledger-items.md`;
+  `dev/HANDOFF.md:218-223`; `dev/progress/fixes.md:6526-6529` and `:8193-8194`. Fix: `skip_on_ci()`
+  or a scaled limit, or measure against a calibration loop.
 - **L-35** (gap; n/a). No round 6 lens, writer or verifier ran on Windows, Linux, R 4.2 or R-devel;
   Windows readings come from probes with `is_windows()` mocked and from reading the code. Only PR
   #93's Windows and Ubuntu jobs, win-builder and R-hub can prove them (L-28, L-29). Evidence: the
@@ -470,24 +603,35 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
   writes typed lines raw; not assessed), `gptr_scrub()`, an `.ipynb` written end to end,
   `gptr_export()` of a transcript built to carry forged lines, `peter$sh()`, `peter$bg()`,
   `peter$py()` or a nested `peter()` whose text holds a CR or LF end to end, team block lines and
-  `ran_with` values, and the RStudio, Positron, Jupyter, R.app and Windows consoles. Evidence:
-  not_done of "r6 sec-gate", "r6 sec-secrets", "r6 sec-transcripts" and "r6 sec-console". Fix: cover
-  them in the comprehensive review.
+  `ran_with` values, and the RStudio, Positron, Jupyter, R.app and Windows consoles. The docs lens
+  did not re-drive the scripted-console transcript flows (`#<` lines, `model=` and `mode=`
+  statements, `#~` switching, `/retry` notes) end to end; it checked their docs against the code
+  diff and the Rd and spec text. Evidence: not_done of "r6 sec-gate", "r6 sec-secrets", "r6
+  sec-transcripts", "r6 sec-console" and "r6 docs". Fix: cover them in the comprehensive review.
 - **L-38** (gap; n/a). Live evidence is narrow: the gate and secret checks ran live on GPT-5.6
   (`versa/gpt-5.6-sol-2026-07-09`) and the fake only, since Claude Opus 4.8 refused the delete forms
   and the secret-redacted question even under a test framing or through a helper; p28's S10 and the
   S8 variants other than S8-clocale were not run; Ollama ran only S8; Python was not configured for
   the regressions lens, so the `os.environ` forms ran live only in gate6's verifier (reticulate,
-  fake model); the docs lens drove no real terminal, so IC-76's 0.1 s, 0.2 s and 145 ms bounds were
-  not measured and spec 04 section 15 was sampled. Evidence: not_done of "r6 regressions", "r6
-  sec-gate" and "r6 docs". Fix: none proposed.
+  fake model); the docs lens drove no real terminal, so IC-76's bounds (0.1 s, 0.2 s and 145 ms)
+  were not measured and spec 04 section 15 was sampled; and the gate lens did not use the tmux
+  console driver (its live checks drove `peter()` in Rscript with a scripted UI that answers no).
+  Evidence: not_done of "r6 regressions", "r6 sec-gate" and "r6 docs". Fix: none proposed.
 - **L-39** (gap; n/a). The incoming check's spelling of DESCRIPTION could not run locally (no
   aspell, hunspell or enchant); CRAN's own check runs it. Evidence: "r6 cran" not_done. Fix: none
   needed.
 - **L-40** (low; no). No CRAN-mode test reaches 10 R files (`artifact-registry`, `bridge-lang`,
   `console-jsonl`, `doc-export`, `doc-knitr`, `proc-rscript`, `provider-bedrock`, `s1-emulate`,
-  `s1-ollama`, `tool-search`; CI-93); round 6's covr run counts 9. Evidence:
-  `dev/HANDOFF.md:401-403`; "r6 cran" R6-CRAN-3. Fix: none proposed.
+  `s1-ollama`, `tool-search`; CI-93); round 6's covr run counts 9. CI-93's other Open note, the
+  Windows budget's calibration against win-builder once the new lane has run, stays open too (a
+  hosted runner is not win-builder, and its timed step includes the build). Evidence:
+  `dev/HANDOFF.md:401-403`; `dev/progress/fixes.md:4856-4860`; "r6 cran" R6-CRAN-3. Fix: none
+  proposed.
+- **L-66** (nit; no). The static-prefix gate of architecture 12.7 leaves `standard_core` 1 token to
+  spare (2335 + 2%), so a change of one word to the static prompt (PW-2's text among it) fails the
+  required "token benchmark" check. Evidence: `dev/HANDOFF.md:355-356`;
+  `dev/DEVIATIONS.md:8471-8475`; `dev/progress/fixes.md:7522-7524`;
+  `state/ruleset-24955100-after.json`. Fix: none proposed.
 - **L-41** (low; no). Why the Windows stdin writer exits early is not known: 2 of 1,356 writer cases
   in CI, none in 6,583 measured; a recurrence fails on `writer_failed` in about 5 s, with the
   writer's stderr in the witness (CI-98, CI-101). Evidence: `dev/HANDOFF.md:390-392`. Fix: none
@@ -538,10 +682,6 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
 - **L-52** (low; n/a). Agents decline a lens worded as getting around the gate. Evidence: section 8
   of `NEXT-AGENT-HANDOFF.md`. Fix: word it as a maintainer-requested coverage check with harmless
   commands, and give the lens schema a `carried_out` flag.
-- **L-53** (low; n/a). The session limit cut the first secret6 verifier off; a second verified from
-  scratch, and the cut run's worktree `G/v1v/fr6-secret6-base` (at `3cd3b146`, two untracked probes)
-  is still there. Evidence: `state/prop-secret6-results.json` "verify6 secret6 final" ran. Fix:
-  remove it in L-31.
 - **L-54** (nit; n/a). The four plan checks fail their index step when `R_LIBS_USER` does not hold
   the development library (the findings name testthat's functions as undefined), and
   `check-plans.py` leaves `dev/ci/__pycache__` unless Python runs with `-B`. Evidence:
@@ -563,8 +703,8 @@ is the workflow step inside it. `state/` is `A/state/`, where the round's state 
 
 ## Decisions for the maintainer
 
-Rows above that end in the maintainer's call: L-1, L-3, L-5, V6G-N1, R6-SS-6 and PV-4. These have no
-defect row:
+Rows above that end in the maintainer's call: L-1, L-3, L-5, L-62, V6G-N1, R6-SS-6 and PV-4. These
+have no defect row:
 
 - **PERM-4**, also D-267 (a), section 4 of the 2026-10-27 handoff and the 2026-10-28 session handoff
   (n/a; no). On the codex route Codex's own shell runs outside gptr's gate, rules and secret guard
@@ -615,7 +755,7 @@ fixed on the same branches before their final verdicts, as `progress/fixes.md` r
 | R6-NOTE-1 | gate6 | `a0973d86` |
 | R6-REG-1, R6-CRAN-1 (test; W6-1) | win6 | `60427c7e` |
 | R6-REG-4, R6-CRAN-2 (test) | win6 | `6e43b975`, `307287e9` |
-| R6-SS-1 (residual: V6S-1) | secret6 | `076fbc90`, `f9cf1ea0`, `40770c71`, `8d7a7fff` |
+| R6-SS-1 (residual: V6S-1, L-64) | secret6 | `076fbc90`, `f9cf1ea0`, `40770c71`, `8d7a7fff` |
 | R6-SS-2 | secret6 | `22fd71f9`, `1ddf572f` |
 | R6-SS-3 | secret6 | `ec95f836`, `bd80c168`, `a539786a` |
 | R6-SS-4 (residual: V6S-2), SC-5 | secret6 | `6438b19d`, `02a19d34` |
