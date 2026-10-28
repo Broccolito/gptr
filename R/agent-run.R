@@ -187,12 +187,12 @@ overflow_patterns = c(
 non_overflow_patterns = c("^(Throttling error|Service unavailable):", "rate limit",
                           "too many requests")
 bodyless_overflow_pattern = "^4(?:00|13)\\s*(?:status code)?\\s*\\(no body\\)"
+# a plan's session, weekly or model-family limit ("You've hit your Opus limit"), not a throttle
+plan_limit_pattern = "hit (?:the session|your(?! rate)[^\\n]{0,40}?) limit\\b"
 non_retryable_pattern = paste(c(
   "GoUsageLimitError", "FreeUsageLimitError", "Monthly usage limit reached", "available balance",
   "insufficient_quota", "out of budget", "quota exceeded", "billing",
-  "subscription_sharing_usage_limit_exceeded",
-  # a plan's session, weekly or model-family limit ("You've hit your Opus limit"), not a throttle
-  "hit (?:the session|your(?! rate)[^\\n]{0,40}?) limit\\b"), collapse = "|")
+  "subscription_sharing_usage_limit_exceeded", plan_limit_pattern), collapse = "|")
 retryable_pattern = paste(c(
   "overloaded", "currently experiencing high demand", "rate.?limit", "too many requests", "429",
   "500", "502", "503", "504", "520", "524", "service.?unavailable", "server.?error",

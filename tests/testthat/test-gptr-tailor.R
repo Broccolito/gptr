@@ -164,7 +164,53 @@ test_that("a harness that loads code or loosens checks says so when it is made",
                  fixed = TRUE, class = "gptr_message_notice")
   expect_message(gptr_tailor(peter, mode = "yolo"), "mode = \"yolo\"", fixed = TRUE,
                  class = "gptr_message_notice")
-  expect_no_message(gptr_tailor(peter, mode = "auto"))
+  expect_no_message(gptr_tailor(peter, mode = "auto", model = "fake/fake-1", tools = "-write",
+                                .opts = list(max_turns = 3L)))
+  # loading a harness shows any code it carries, wherever it sits
+  f = withr::local_tempfile(fileext = ".rds")
+  hello = gptr_tool("hello", "Say hello.", execute = function(args, ctx) system("echo hi"))
+  h = suppressMessages(gptr_tailor(peter, tools = hello, mode = "auto",
+                                   uncertain = function(state, answer) NA,
+                                   .opts = list(foo = function() Sys.getenv("HOME"))))
+  saveRDS(h, f)
+  cnd = expect_message(gptr_tailor(readRDS(f)), class = "gptr_message_notice")
+  for (code in c("tools = ", "system(\"echo hi\")", "uncertain = function (state, answer)",
+                 ".opts = list(foo = function ()", "Sys.getenv(\"HOME\")")) {
+    expect_match(conditionMessage(cnd), code, fixed = TRUE, label = code)
+  }
+  expect_false(grepl("mode = ", conditionMessage(cnd), fixed = TRUE))
+})
+
+test_that("a harness called through a wrapper that forwards ... takes the forwarded arguments", {
+  local_gw()
+  local_gptr_options(quiet = TRUE)
+  box = local_tailor_probe()
+  f1 = function(gptr) NULL
+  f2 = function(gptr) NULL
+  mice = data.frame(weight = c(20, 22, 25))
+  h = gptr_tailor(peter, mode = "auto", extensions = f1, .opts = list(max_turns = 3L))
+  w = function(...) h("a", mice, ...)
+  # a forwarded single value wins and the dots stay as written
+  w(mode = "plan")
+  expect_identical(box$calls[[1L]]$ids$mode, "plan")
+  expect_identical(box$calls[[1L]]$ids$extensions, f1)
+  expect_identical(box$calls[[1L]]$labels, "mice")
+  # forwarded list-like arguments combine with the fixed ones
+  w(mode = edits, extensions = f2, .opts = list(context = "none"))
+  got = box$calls[[2L]]
+  expect_identical(got$ids$mode, "edits")
+  expect_identical(got$ids$extensions, list(f1, f2))
+  expect_identical(got$args$opts, list(max_turns = 3L, context = "none"))
+  expect_identical(got$labels, "mice")
+  # the coaching factory joins forwarded extensions
+  h2 = gptr_tailor(peter, coaching = list(note = "Check the units first."))
+  w2 = function(...) h2("a", ...)
+  w2(extensions = f2)
+  exts = box$calls[[3L]]$ids$extensions
+  expect_length(exts, 2L)
+  expect_identical(exts[[1L]], f2)
+  expect_identical(attr(exts[[2L]], "gptr_key"),
+                   attr(harness_factory(harness_spec(h2)), "gptr_key"))
 })
 
 test_that("a continuation loads the coaching factory once per session (gptr_key)", {
@@ -194,7 +240,8 @@ test_that("the note is a T1 section after gptr's first line, never cut at 8,000 
   h = gptr_tailor(peter, coaching = list(note = note))
   h("a", model = fake, envir = new.env())
   t1 = fake_requests(fake)[[1L]]$system$t1
-  expect_match(t1, paste0("<coaching>\n", coaching_first_line, "\n", note, "\n</coaching>"),
+  tag = paste0("coaching_", coaching_hash(harness_spec(h)$coaching))
+  expect_match(t1, paste0("<", tag, ">\n", coaching_first_line, "\n", note, "\n</", tag, ">"),
                fixed = TRUE)
 })
 
@@ -209,6 +256,31 @@ test_that("a coaching skill is listed in the catalog and opens through read", {
   expect_match(req[[1L]]$system$t1,
                "- coach-tips: Tips for this task. [skill:coach-tips/SKILL.md]", fixed = TRUE)
   expect_identical(msg_text(utils::tail(req[[2L]]$messages, 1L)[[1L]]), "Check the units first.")
+})
+
+test_that("a coaching skill takes no skill's name, synced or not, and is checked when made", {
+  withr::defer(res_prune("skills:", character()))
+  local_gw()
+  local_project(files = list(".agents/skills/survey-weights/SKILL.md" = c(
+    "---", "name: survey-weights", "description: Mine.", "---", "My own text.")), trust = TRUE)
+  coached = function(name) list(skills = list(list(name = name, description = "D.", text = "T.")))
+  # before any session has synced the registry: the person's own skill and one of gptr's
+  unsynced = function(code) {
+    local_mocked_bindings(registry_names = function(kind, session = NULL) character())
+    code
+  }
+  for (nm in c("survey-weights", "high-performance-r")) {
+    expect_error(unsynced(gptr_tailor(peter, coaching = coached(nm))),
+                 paste("reuse the skill name", nm), fixed = TRUE, class = "gptr_error_coaching")
+  }
+  # a harness that passed is not refused later because the registry filled
+  h = unsynced(gptr_tailor(peter, coaching = coached("late-tips")))
+  off = gptr_register(gptr_spec("skill", "late-tips", description = "Mine.", text = "Mine."))
+  withr::defer(off())
+  fake = local_fake_provider(list("done"))
+  expect_s3_class(h("a", model = fake, envir = new.env()), "gptr_session")
+  expect_error(gptr_tailor(h), "reuse the skill name late-tips", fixed = TRUE,
+               class = "gptr_error_coaching")
 })
 
 test_that("the review follows a final answer once per round in each run (08 3.2)", {
@@ -277,6 +349,8 @@ test_that("coaching_validate() normalises the four parts and keeps tabs and newl
   expect_identical(co, list(note = "a\n\tb", skills = list(tips_skill),
                             review = list(text = "Again.", rounds = 2L), rules = NULL))
   expect_identical(coaching_validate(list(review = list(text = "x")))$review$rounds, 1L)
+  expect_identical(coaching_validate(list(note = "Caf\u00e9 \u03bc\u4e2d"))$note,
+                   "Caf\u00e9 \u03bc\u4e2d")
 })
 
 test_that("coaching_validate() refuses every invalid part by name (08 3.2)", {
@@ -297,7 +371,13 @@ test_that("coaching_validate() refuses every invalid part by name (08 3.2)", {
     note = list(note = "a\u202eb"),
     note = list(note = "a\001b"),
     note = list(note = "a\rb"),
+    note = list(note = "a\U000E0041b"),
+    note = list(note = "a\u00adb"),
+    note = list(note = "a\u180eb"),
+    note = list(note = "a\u2028b"),
+    note = list(note = "a\u2029b"),
     note = list(note = "See <Coaching> here."),
+    note = list(note = "<coaching_1a2b3c4d>"),
     note = list(note = "</plan>"),
     note = list(note = "<project_instructions a=\"1\">"),
     note = list(note = "<HARNESS>"),
@@ -367,6 +447,10 @@ test_that("coaching_hash() is 8 hex of the normalised coaching; empty coaching h
   expect_false(identical(coaching_hash(a), h0))
   c2 = coaching_validate(list(note = "Line one.\nLine 2."))
   expect_false(identical(coaching_hash(a), coaching_hash(c2)))
+  # one normalisation for the coaching hash and the prompt hash
+  expect_identical(text_norm("  Line one. \r\n\t Line two.  "), "Line one.\nLine two.")
+  expect_identical(prompt_hash(" a \r\n b "),
+                   substr(hash_sha256(text_norm(" a \r\n b ")), 1L, 12L))
 })
 
 test_that("a harness survives saveRDS() and gptr_tailor(readRDS()) rebuilds and checks it", {
@@ -412,6 +496,8 @@ test_that("dir = writes the harness for people to read and returns it invisibly"
   harness = read("HARNESS.md")
   expect_true(any(grepl(harness_spec(h)$id, harness, fixed = TRUE)))
   expect_true("mode = \"auto\"" %in% harness)
+  # a new harness has no record to write
+  expect_false(any(grepl("Record", harness, fixed = TRUE)))
   expect_identical(read("NOTE.md"), co$note)
   expect_true(all(c("Rounds: 2", "Compare with the task.") %in% read("REVIEW.md")))
   expect_identical(read("skills/coach-tips/SKILL.md"),
@@ -723,6 +809,45 @@ test_that("your own rules stay in your half: enforced as yours, kept by every co
   expect_match(def$define, "rules = list(never = list(list(rule = \"r(fn:stepAIC)\"", fixed = TRUE)
   back = eval(str2lang(sub("^h_[0-9A-Za-z]+ = ", "", def$define)))
   expect_identical(harness_spec(back)$rules, mine)
+})
+
+test_that("continuing with another coached harness keeps both harnesses' coaching", {
+  local_gw()
+  h1 = gptr_tailor(peter, mode = "auto", coaching = list(
+    note = "Note ONE.", rules = never_of("r(fn:stepAIC)", "By hand.")))
+  h2 = gptr_tailor(peter, mode = "auto", coaching = list(note = "Note TWO."))
+  fake = local_fake_provider(list("one", "one more", fake_tool("r", code = "fit = stepAIC(m)"),
+                                  "two", "three"))
+  freezes = function() {
+    sum(vapply(prompt_path(s), function(e) identical(e$custom_type, "gptr.frozen"), NA))
+  }
+  s = h1("a", model = fake, envir = new.env())
+  # the same harness again keeps the frozen prompt, so the prompt cache stays warm
+  s |> h1("b")
+  req = fake_requests(fake)
+  expect_identical(req[[2L]]$system, req[[1L]]$system)
+  expect_identical(freezes(), 1L)
+  # a refused call leaves no refreeze behind (D-251)
+  fr = session_data(s)$frozen
+  expect_error(s |> h2("x", tools = c("minimal", "readonly")), "more than one preset",
+               class = "gptr_error_invalid_argument")
+  expect_identical(session_data(s)$frozen, fr)
+  expect_false(session_data(s)$refreeze)
+  local_gptr_options(check_prefix = "error")
+  s |> h2("c")
+  # the first harness's rule still binds: policies all apply, whatever their names
+  expect_match(last_result(s), "denied by the coaching rule r(fn:stepAIC): By hand.", fixed = TRUE)
+  # another harness's factory composes the prompt once afresh (IC-52): each note is its section
+  req = fake_requests(fake)
+  expect_match(req[[3L]]$system$t1, "Note ONE.", fixed = TRUE)
+  expect_match(req[[3L]]$system$t1, "Note TWO.", fixed = TRUE)
+  expect_identical(req[[4L]]$system, req[[3L]]$system)
+  s |> h2("d")
+  expect_identical(fake_requests(fake)[[5L]]$system, req[[3L]]$system)
+  expect_identical(freezes(), 2L)
+  # composing afresh is a stated break of the prompt cache, not a broken prefix
+  breaks = Filter(function(e) identical(e$custom_type, "gptr.cache_break"), prompt_path(s))
+  expect_length(breaks, 0L)
 })
 
 test_that("coaching rules are checked field by field; inert and risky patterns are refused", {

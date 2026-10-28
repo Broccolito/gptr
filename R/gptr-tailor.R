@@ -73,7 +73,7 @@ gptr_tailor = function(x = peter, ..., rules = NULL, coaching = NULL, dir = NULL
   spec$gptr = as.character(utils::packageVersion("gptr"))
   h = harness_from_spec(spec)
   args = spec$args
-  loud = args[intersect(names(args), c("extensions", "plugins"))]
+  loud = args[!vapply(args, harness_plain, NA)]
   if (identical(args[["mode"]], "yolo")) loud$mode = "yolo"
   if (length(loud)) {
     gptr_inform(c("This harness loads code or loosens checks:",
@@ -145,9 +145,9 @@ harness_from_spec = function(spec) {
 }
 
 #' Checks a spec (made, loaded or called): fixed arguments are named peter() arguments without
-#' registry filters, valid rules of the person, valid coaching
+#' registry filters, valid rules of the person, valid coaching (`fresh` as coaching_validate())
 #' @noRd
-harness_spec_check = function(spec) {
+harness_spec_check = function(spec, fresh = TRUE) {
   args = if (is.list(spec)) spec$args %||% list() else NULL
   nms = names(args)
   if (!is.list(args) || (length(args) && (is.null(nms) || !all(nms %in% harness_formals()))) ||
@@ -157,8 +157,8 @@ harness_spec_check = function(spec) {
   }
   harness_plugins_check(args[["plugins"]])
   list(args = args, rules = coaching_rules(spec$rules, "Your"),
-       coaching = coaching_validate(spec$coaching), record = spec$record, id = spec$id,
-       gptr = spec$gptr)
+       coaching = coaching_validate(spec$coaching, fresh = fresh), record = spec$record,
+       id = spec$id, gptr = spec$gptr)
 }
 
 #' Refuses registry filters among fixed plugins (they change the whole R process)
@@ -193,9 +193,8 @@ harness_resolve_args = function(caller, ...) {
   for (i in seq_along(nms)) {
     nm = nms[i]
     e = exprs[[i]]
-    v = if (nm %in% c("model", "mode", "skills", "plugins", "extensions", "tools")) {
-      if (ident_force_needed(e, nm, caller)) ident_value(...elt(i), nm, e) else
-        resolve_identifier(e, nm, caller)
+    v = if (nm %in% harness_idents) {
+      harness_ident(e, nm, caller, function() ...elt(i))
     } else if (identical(nm, "agents")) {
       resolve_agents(e, caller)
     } else {
@@ -204,6 +203,32 @@ harness_resolve_args = function(caller, ...) {
     out[nm] = list(v)
   }
   out
+}
+
+#' The `peter()` arguments that resolve as identifiers (contract 6.1.3)
+#' @noRd
+harness_idents = c("model", "mode", "skills", "plugins", "extensions", "tools")
+
+#' An identifier argument resolved in `caller` as peter() resolves it; `force()` gives its value
+#' when the expression must be evaluated
+#' @noRd
+harness_ident = function(e, nm, caller, force) {
+  if (ident_force_needed(e, nm, caller)) ident_value(force(), nm, e) else
+    resolve_identifier(e, nm, caller)
+}
+
+#' A call's arguments with each `...` written out from the caller's dots: identifiers resolved as
+#' peter() resolves them (it reads no `..i`), every other one as `..i`
+#' @noRd
+harness_expand = function(args, dots, envir) {
+  exprs = as.list(eval(quote(substitute(list(...))), envir))[-1L]
+  nms = names(exprs) %||% rep("", length(exprs))
+  el = lapply(seq_along(exprs), function(i) {
+    if (!nms[i] %in% harness_idents) return(as.name(paste0("..", i)))
+    harness_ident(exprs[[i]], nms[i], envir, function() eval(call("...elt", i), envir))
+  })
+  names(el) = nms
+  do.call(c, lapply(seq_along(args), function(i) if (dots[i]) el else args[i]))
 }
 
 #' Merges fixed arguments: list-like ones combine (`.opts` by name), single values are replaced,
@@ -231,12 +256,22 @@ harness_opts = function(fixed, given) {
 
 #' Calls `peter` as the person called the harness, with the fixed arguments and the coaching
 #' factory added, in the person's frame; the call carries `gptr_harness = list(fn, hash, call)`
-#' for the document recorder (08 sections 3.1 and 3.6)
+#' for the document recorder (08 sections 3.1 and 3.6). An argument a wrapper forwards through
+#' `...` counts as given; the dots are written out only when such an argument must combine.
 #' @noRd
 harness_call = function(fn, call, envir) {
-  spec = harness_spec_check(harness_spec(fn))
+  spec = harness_spec_check(harness_spec(fn), fresh = FALSE)
+  factory = harness_factory(spec)
   args = as.list(call)[-1L]
-  for (nm in names(spec$args)) {
+  dots = vapply(args, identical, NA, quote(...))
+  # ...names() forces no argument
+  fwd = if (any(dots)) eval(quote(...names()), envir)
+  join = c(intersect(names(spec$args), harness_listlike), if (!is.null(factory)) "extensions")
+  if (any(fwd %in% join)) {
+    args = harness_expand(args, dots, envir)
+    fwd = NULL
+  }
+  for (nm in setdiff(names(spec$args), fwd)) {
     v = spec$args[[nm]]
     if (!nm %in% names(args)) {
       args[nm] = list(v)
@@ -246,7 +281,6 @@ harness_call = function(fn, call, envir) {
       args[[nm]] = as.call(list(as.name("c"), v, args[[nm]]))
     }
   }
-  factory = harness_factory(spec)
   if (!is.null(factory)) {
     ext = args[["extensions"]]
     args[["extensions"]] = if (is.null(ext)) factory else as.call(list(as.name("c"), ext, factory))
@@ -346,6 +380,15 @@ harness_label = function(v) {
 #' @noRd
 harness_source = function(v) paste(deparse_code(v), collapse = "\n")
 
+#' Is a fixed argument plain data: NULL, text, numbers, logicals and lists of them, with no
+#' attribute but names? Anything else can carry code (a function, a spec, a provider, a formula)
+#' @noRd
+harness_plain = function(v) {
+  if (length(setdiff(names(attributes(v)), "names"))) return(FALSE)
+  if (is.list(v)) return(all(vapply(v, harness_plain, NA)))
+  is.null(v) || is.character(v) || is.numeric(v) || is.logical(v)
+}
+
 #' One line for a harness record: none, or the decision with its reason and the number of runs
 #' @noRd
 harness_record_text = function(record) {
@@ -369,8 +412,7 @@ harness_write = function(h, dir) {
     paste0("# Harness ", spec$id), "",
     paste0("Built on peter with gptr ", spec$gptr, ". gptr never reads this folder back."), "",
     "## Fixed arguments", "", "```r", if (length(args)) fixed else "# none", "```", "",
-    "## Your rules", "", harness_rules_lines(spec$rules), "",
-    "## Record", "", harness_record_text(spec$record)))
+    "## Your rules", "", harness_rules_lines(spec$rules)))
   write_atomic(file.path(dir, "NOTE.md"), co$note)
   write_atomic(file.path(dir, "REVIEW.md"), if (is.null(co$review)) "No review." else review)
   write_atomic(file.path(dir, "RULES.md"), harness_rules_lines(co$rules))
@@ -393,9 +435,10 @@ coaching_abort = function(part, why, who = "The coaching's") {
 }
 
 #' Checks and normalises coaching to `list(note, skills, review, rules)`, texts redacted; with
-#' `surface`, the parts outside it must equal those of `base`
+#' `surface`, the parts outside it must equal those of `base`; `fresh = FALSE` skips the skill name
+#' check of a harness being called, which passed when it was made or loaded
 #' @noRd
-coaching_validate = function(coaching, surface = NULL, base = NULL) {
+coaching_validate = function(coaching, surface = NULL, base = NULL, fresh = TRUE) {
   co = coaching %||% list()
   parts = c("note", "skills", "review", "rules")
   nms = names(co)
@@ -405,7 +448,7 @@ coaching_validate = function(coaching, surface = NULL, base = NULL) {
                "coaching", part = "coaching")
   }
   out = list(note = coaching_text(co$note %||% "", "note", 8000L),
-             skills = coaching_skills(co$skills %||% list()),
+             skills = coaching_skills(co$skills %||% list(), fresh),
              review = coaching_review(co$review), rules = coaching_rules(co$rules))
   if (is.null(surface)) return(out)
   if (!is.character(surface) || !all(surface %in% parts)) {
@@ -419,9 +462,9 @@ coaching_validate = function(coaching, surface = NULL, base = NULL) {
   out
 }
 
-#' One text part: a valid UTF-8 string of at most `max` characters, without control, bidi or
-#' zero-width characters (newline and tab allowed), tags of gptr's blocks or gptr's wordings;
-#' returned redacted
+#' One text part: a valid UTF-8 string of at most `max` characters, without control, format
+#' (bidi, zero-width, tag), line or paragraph separator characters (newline and tab allowed), tags
+#' of gptr's blocks or gptr's wordings; returned redacted
 #' @noRd
 coaching_text = function(x, part, max, who = "The coaching's") {
   bad = function(why) coaching_abort(part, why, who)
@@ -430,10 +473,13 @@ coaching_text = function(x, part, max, who = "The coaching's") {
   if (!validUTF8(x)) bad("is not valid UTF-8 text")
   if (nchar(x) > max) bad(paste0("is longer than ", format(max, big.mark = ","), " characters"))
   flat = gsub("\n", "", x, fixed = TRUE)
-  if (!identical(ui_escape(flat), flat)) {
+  # literal characters, not \x{}: ASCII text with an ASCII pattern leaves PCRE out of UTF mode
+  hidden = "[\\p{Cf}\\p{Zl}\\p{Zp}\U000E0000-\U000E007F]"
+  if (!identical(ui_escape(flat), flat) || grepl(hidden, flat, perl = TRUE)) {
     bad("contains control, bidirectional or zero-width characters")
   }
-  tags = paste0("(?i)<\\s*/?\\s*(", paste(coaching_tags(), collapse = "|"), ")(?=[\\s/>])")
+  tags = paste0("(?i)<\\s*/?\\s*(", paste(coaching_tags(), collapse = "|"),
+                "|coaching_\\w*)(?=[\\s/>])")
   if (grepl(tags, x, perl = TRUE)) bad("contains a tag of one of gptr's blocks")
   if (any(vapply(coaching_wordings, grepl, NA, x = tolower(x), fixed = TRUE))) {
     bad("imitates gptr's wording for a message from the user or an extension")
@@ -441,13 +487,14 @@ coaching_text = function(x, part, max, who = "The coaching's") {
   redact_hook(x, "persist")
 }
 
-#' The skills part: `list(name, description, text)` each, names new and unique, 64 KiB in all
+#' The skills part: `list(name, description, text)` each, names unique and, with `fresh`, not
+#' the name of a registered skill or of any SKILL.md gptr finds, synced or not; 64 KiB in all
 #' @noRd
-coaching_skills = function(skills) {
+coaching_skills = function(skills, fresh = TRUE) {
   if (!is.list(skills) || is.object(skills)) {
     coaching_abort("skills", "must be a list of list(name, description, text)")
   }
-  taken = if (length(skills)) registry_names("skill") else character()
+  taken = if (fresh && length(skills)) c(registry_names("skill"), skill_discover()$name)
   out = lapply(unname(skills), function(s) {
     if (!is.list(s) || length(s) != 3L || !setequal(names(s), c("name", "description", "text"))) {
       coaching_abort("skills", "must each be list(name, description, text)")
@@ -615,19 +662,20 @@ harness_require_hit = function(q, call) {
 }
 
 #' 8 hex of the sha256 of the coaching, skills sorted by name and texts normalised as
-#' prompt_hash() does (08 section 3.6); empty coaching has one constant hash
+#' prompt_hash() does (text_norm(); 08 section 3.6); empty coaching has one constant hash
 #' @noRd
 coaching_hash = function(coaching) {
   co = coaching %||% list()
-  norm = function(x) gsub("[ \t]*\r?\n[ \t]*", "\n", trimws(as_utf8(x)))
   skills = co$skills %||% list()
   skills = skills[order(vapply(skills, function(s) s$name, ""), method = "radix")]
   skills = lapply(skills, function(s) {
-    list(name = s$name, description = norm(s$description), text = norm(s$text))
+    list(name = s$name, description = text_norm(s$description), text = text_norm(s$text))
   })
   review = co$review
-  if (!is.null(review)) review = list(text = norm(review$text), rounds = as.integer(review$rounds))
-  x = list(schema = 1L, note = norm(co$note %||% ""), skills = skills, review = review,
+  if (!is.null(review)) {
+    review = list(text = text_norm(review$text), rounds = as.integer(review$rounds))
+  }
+  x = list(schema = 1L, note = text_norm(co$note %||% ""), skills = skills, review = review,
            rules = co$rules)
   substr(hash_sha256(canonical_json(x)), 1L, 8L)
 }
@@ -635,9 +683,11 @@ coaching_hash = function(coaching) {
 # ------------------------------------------------------------------ the coaching factory (3.2)
 
 #' The keyed factory that registers a harness's coaching and the person's rules in the session it
-#' is loaded for: the note section, the skills, the `coaching` and `harness_rules` policies and the
-#' finish hook; NULL when there is nothing to register. The key is the coaching hash and the hash
-#' of the person's rules, so a continuation loads it once (gptr_gateway's gateway_key_loaded()).
+#' is loaded for: the note section `coaching_<coaching hash>`, so two harnesses' notes never shadow
+#' each other in one session, the skills, the `coaching` and `harness_rules` policies (policies all
+#' apply, whatever their names) and the finish hook; NULL when there is nothing to register. The
+#' key is the coaching hash and the hash of the person's rules, so a continuation loads it once
+#' (gptr_gateway's gateway_key_loaded()).
 #' @noRd
 harness_factory = function(spec) {
   co = spec$coaching
@@ -648,10 +698,12 @@ harness_factory = function(spec) {
         is.null(mine)) {
     return(NULL)
   }
+  hash = coaching_hash(co)
   structure(function(gptr) {
     if (nzchar(co$note)) {
       # a budget no 8,000-character note reaches: the character cap is the only limit
-      gptr$register(gptr_prompt_section("coaching", paste0(coaching_first_line, "\n", co$note),
+      gptr$register(gptr_prompt_section(paste0("coaching_", hash),
+                                        paste0(coaching_first_line, "\n", co$note),
                                         tier = "T1", order = 790L, budget = 32768L))
     }
     for (s in co$skills) {
@@ -666,7 +718,7 @@ harness_factory = function(spec) {
                                 "your never rules of this harness"))
     }
     if (!is.null(review) || length(need)) harness_finish_hooks(gptr, review, need)
-  }, gptr_key = paste0("gptr_harness:", coaching_hash(co), ":", coaching_hash(list(rules = mine))))
+  }, gptr_key = paste0("gptr_harness:", hash, ":", coaching_hash(list(rules = mine))))
 }
 
 #' A policy that only denies: a call matching a never rule (coaching_hit()) is "denied by <who>

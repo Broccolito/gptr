@@ -174,11 +174,12 @@ arch_kernel_sdk = function() {
 # children (gptr-child.R) are scheduled, registered and revived with P19's worker helpers and
 # carry the person's rules from P11 (section 3.2, IC-86), and a harness's rules (gptr-tailor.R)
 # match calls with P11's rule_hit() and rule_glob_re(), are checked against P11's risk tables and
-# find a made file with P10's bounded walk_tree() (08 section 3.2)
+# find a made file with P10's bounded walk_tree(), and its coaching skills may not take a name
+# P17's skill_discover() lists (08 section 3.2)
 arch_contract_edges = function() {
   gptr_child = c("subagent_schedule", "subagent_limit", "worker_registry", "worker_registry_apply",
                  "worker_spec_revive", "worker_key_provider", "perm_rules_effective",
-                 "rule_hit", "rule_glob_re", "risk_table", "walk_tree")
+                 "rule_hit", "rule_glob_re", "risk_table", "walk_tree", "skill_discover")
   data.frame(
     caller_area = c("ckpt", "subagent", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp", "mcp",
                     "console", "console", "console", "console", "console", "subagent",
