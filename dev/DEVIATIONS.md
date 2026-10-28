@@ -8609,3 +8609,13 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   (FIX-36 review round 2)"; test-perm-gate.R "auto asks before peter$knit()'s python moves gptr's
   config folder (FIX-36 round 2)", "auto asks before withr moves gptr's config folder for the
   session (FIX-36 round 2)".
+- Status 2026-10-28 (review round 3): the arguments of `Sys.setenv()`, `Sys.unsetenv()`,
+  `withr::local_envvar()` and `withr::with_envvar()` are read as R matches them (exactly, then in
+  part before `...`, then by position; withr's formals as the classifier writes them when withr
+  is not loaded), and `Sys.unsetenv()`'s `x` as values, so a part name of `.new` or `new`
+  (`.n =`, `. =`, `n =`) or `Sys.unsetenv(x = )` that names a control variable is level 4
+  `control`, and a call R cannot match counts as one whose names the code computes. Formerly
+  these were level 2 `session`, which auto runs. The rules above and the Open list are unchanged.
+- Tests (review round 3): test-perm-classify.R "a variable setter's arguments are matched as R
+  matches them (FIX-36 review round 3)"; test-perm-gate.R "auto asks before a named or
+  part-named argument moves the folder (FIX-36 round 3)".
