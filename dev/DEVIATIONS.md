@@ -7812,7 +7812,24 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   reads its command as run in its `wd`, a `cd` before it (`bridge_risk_sh()`; an argv is quoted
   into one line), so `peter$sh(c("rm", "-rf", "build"), wd = <outside>)` is level 4 and asks in
   auto and yolo. Formerly it was level 3, the command read in the project, and ran without a
-  question (also on `13a917ff`). `peter$bg()` takes no `wd`.
+  question (also on `13a917ff`). `peter$bg()` takes no `wd`. Status 2026-10-27 (review round 4): the
+  directories a line moves to (each `cd` target, the `wd`) also place the code a shell or Python
+  runs there (`sh -c`, `python3 -c`) and the literal scan, so
+  `peter$sh(c("sh", "-c", "rm -f f"), wd = <outside>)` is level 4 (formerly 3, the code read in the
+  project, and run in auto and yolo); a `cd` target is read as `git -C`'s directory is, so
+  `peter$sh("ls", wd = <outside>)` is level 1 and manual asks (formerly 0); a drive-relative path
+  (`D:x`) is `outside` on every OS (`is_drive_rel()`; formerly joined to the project, level 3), and
+  sh's reading of a line with a backslash places a word that starts with a drive letter as relative,
+  as sh does; and `setwd()`, `withr::local_dir()` and `withr::with_dir()` to a directory outside the
+  project and `tempdir()`, or to one the code computes, are a level-4 `session` row (formerly level
+  2, after which a relative delete outside the project ran in auto and yolo, and with an unpinned
+  root the outside folder became the project; also on `13a917ff`). Not followed, and named in
+  `?gptr_security`: the working directory changed in other ways (`usethis::local_project()`), the
+  code another interpreter runs (`Rscript -e`, `perl -e`) and a path the shell computes (`rm "$f"`,
+  `xargs rm`), all level 3. A literal `wd` of `processx::run()` is read the same way
+  (`cmd_in_wd()`). Status 2026-10-27 (the fixes' verifier): so is a `wd` held by a name the code
+  assigns, in each directory the name may hold; a `wd` the code computes is read as the project, as
+  `?gptr_security` now says.
 - Rule (allow): only an `r(fn:NAME,...)` (or `*(fn:...)`) allow rule lifts the refusal, matched
   against the refused rows alone and covering all of them, as only `r(secret:NAME)` lifts the secret
   guard: `r(fn:system)` lets `system(cmd); write.csv(x, "out.csv")` run in auto, while `r`,
@@ -7863,12 +7880,20 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
 - Contract-visible: 03 sections 6.8.1, 6.8.2 and 6.8.4; 04 sections 7.11 (`builtin_permissions`),
   9.4 (the `sh` member's risk, review round 3) and 15.9 IC-78; `?gptr_security`,
   `?gptr_permissions`, `?gptr_risk`; vignette("execution-model"); NEWS; risk-functions.csv's
-  `shell.exec` note.
+  `shell.exec` note. Review round 4: 03 section 6.8.1 (its levels 1 and 4 and the placing of paths),
+  04 sections 7.1 (`path_class()`), 9.4 (the `sh` row) and 15.9 IC-78; `?gptr_security`;
+  risk-functions.csv's `setwd` row and the two `withr` rows.
 - Tests: test-perm-gate.R "auto and yolo refuse system() with a computed command; peter$sh() meets
   the rules", "only auto and yolo refuse a computed command; a literal one is gated as before";
   test-perm-classify.R "shell.exec() of a file the code computes is a dynamic row (D-262)"; review
-  round 3: test-perm-gate.R "a peter$sh() command is read as run in its wd (review round 3)".
-  Evidence: progress/fixes.md FIX-27.
+  round 3: test-perm-gate.R "a peter$sh() command is read as run in its wd (review round 3)"; review
+  round 4: test-perm-gate.R "code a shell or Python runs is read in the directory the line moved to
+  (round 4)", "setwd() out of the project asks in auto and yolo (review round 4)";
+  test-perm-classify.R "a drive-relative path is outside the project on every OS (review round 4)",
+  "a command run in a directory outside the project reads it (review round 4)", "moving R's working
+  directory out of the project is level 4 (review round 4)", "a Windows wd is placed as Windows
+  places it, on every OS (review round 4)", "processx::run()'s wd is read as peter$sh()'s (review
+  round 4)". Evidence: progress/fixes.md FIX-27.
 
 ## D-263 - FIX-28 Bracketed paste decides a paste in a T console (2026-10-26)
 - Rule (mode): a T console's call turns bracketed paste on with its character mode. `tty_modes()`
@@ -8218,7 +8243,11 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   origin/main 13a917ff). Images that `peter$plot()` or `peter$read()` attach in served R go with
   its result, as in the r tool. Status 2026-10-27 (review round 2): the idle gate writes no console
   notice for a nested call, as the served result captured it for the model (naming the `r` tool);
-  the denial tells the model.
+  the denial tells the model. Status 2026-10-27 (review round 4): the idle gate reads a nested
+  `peter$sh()` as run in its `wd` (the literal call of `cmd_in_wd()`'s line, the helper
+  `bridge_risk_sh()` uses), so idle served `peter$sh(c("rm", "-rf", "build"), wd = <outside>)` is
+  refused at level 4 in auto and yolo; formerly it read the command alone, level 3, and ran (also on
+  `13a917ff`).
 - Rule (classifier, PERM-2): `system2()`'s `env` is read as the start of its command line, as
   Unix `system2()` pastes it, unquoted, before the command:
   `system2("ls", env = "A=1; rm -rf build;")` is read as `A=1; rm -rf build; ls` (level 3), and an
@@ -8261,7 +8290,7 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   and says why, review round 4: the request record's `no_rule`, 7.11);
   03 sections 6.8.1, 6.8.2 and 7.3; `?gptr_permissions`, `?gptr_security`,
   `?gptr_risk`; vignette("language-models"); the cheat sheet's auto and yolo rows and the yolo
-  notice (IC-78).
+  notice (IC-78). Review round 4: 03 section 6.8.4 and 04 section 15.5 IC-57 (the idle gate's `wd`).
 - Tests: test-perm-rules.R "deny and ask sh: rules match a read-only command; allow needs level 1
   (FIX-32)", "a deny sh: rule stops a read-only command, also one peter$sh() computes (FIX-32)";
   test-perm-classify.R "system2()'s env is read as the start of its command line (FIX-32)";
@@ -8278,7 +8307,8 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   test-perm-gate.R "a question an ask rule raises offers no [a]lways rule (review round 3)";
   review round 4: test-perm-gate.R "an ask rule's question says why it offers no [a]lways rule
   (review round 4)", test-console-ui.R "a and p's reason shows an ask rule's text escaped (review
-  round 4 verification)". Evidence: progress/fixes.md FIX-32.
+  round 4 verification)", test-mcp-server.R "idle served R reads a nested sh call as run in its
+  wd (review round 4)". Evidence: progress/fixes.md FIX-32.
 
 ## D-268 - FIX-33 What a document records and reads back after the live sessions (2026-10-27)
 - Rule (steering lines, security): a block body line is a `## Steer:` or `## Follow-up:` line only

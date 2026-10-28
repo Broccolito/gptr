@@ -70,17 +70,17 @@ r = BiocParallel::bplapply(1:8, function(i) i^2, BPPARAM = BiocParallel::SnowPar
 # targets: write _targets.R in the project, then run tar_make()
 dir = tempfile()
 dir.create(dir)
-old = setwd(dir)
-writeLines(c(
-  'library(targets)',
-  'tar_option_set(packages = "stats")',
-  'list(',
-  '  tar_target(raw, data.frame(x = rnorm(100), g = sample(letters[1:3], 100, TRUE))),',
-  '  tar_target(fit, lm(x ~ g, data = raw)),',
-  '  tar_target(summary_tbl, coef(summary(fit)))',
-  ')'), "_targets.R")
-targets::tar_make(reporter = "silent")
-res = targets::tar_read(summary_tbl)
-setwd(old)
+res = withr::with_dir(dir, {
+  writeLines(c(
+    'library(targets)',
+    'tar_option_set(packages = "stats")',
+    'list(',
+    '  tar_target(raw, data.frame(x = rnorm(100), g = sample(letters[1:3], 100, TRUE))),',
+    '  tar_target(fit, lm(x ~ g, data = raw)),',
+    '  tar_target(summary_tbl, coef(summary(fit)))',
+    ')'), "_targets.R")
+  targets::tar_make(reporter = "silent")
+  targets::tar_read(summary_tbl)
+})
 # parallel targets: tar_option_set(controller = crew::crew_controller_local(workers = 2))
 ```

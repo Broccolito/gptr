@@ -272,7 +272,7 @@ test_that("commands follow the classifier standard (D-061)", {
     list(3L, "declare -i n=2"), list(3L, "nice -n \"$N\" ls"), list(3L, "tar czf x.tgz ."),
     list(3L, "docker build ."), list(3L, "pip install -e ."),
     list(3L, "Get-Content notes.txt,.Renviron"), list(3L, "xargs rm -rf <<< '~'"),
-    list(3L, "rm -rf ${X:-~}"), list(3L, "$RM -rf ~"), list(3L, "find . -name '*.log' -delete"),
+    list(4L, "rm -rf ${X:-~}"), list(3L, "$RM -rf ~"), list(3L, "find . -name '*.log' -delete"),
     list(3L, "find . -name '*.o' -exec rm {} +"), list(4L, "rm -rf ~"), list(4L, "rm -rf ."),
     list(4L, "rm -rf *"), list(4L, "rm -rf .gptr"), list(4L, "git clean -fdx"),
     list(4L, "x=~; rm -rf $x"), list(4L, "rm -rf $PWD"), list(4L, "\\rm -rf ~"),
@@ -464,7 +464,7 @@ test_that("report 18's 101 cases get their levels (18 section 2.5.2, amended)", 
     list("download.file('https://example.com/x.csv', 'x.csv')", 2L),
     list("read.csv('https://example.com/x.csv')", 2L),
     list("source('https://example.com/evil.R')", 3L), list("source('helper.R')", 3L),
-    list("setwd('/')", 2L), list("Sys.setenv(PATH = '')", 2L), list("options(warn = 2)", 2L),
+    list("setwd('/')", 4L), list("Sys.setenv(PATH = '')", 2L), list("options(warn = 2)", 2L),
     list("options('digits')", 0L), list("rm(list = ls())", 4L), list("rm(df)", 2L),
     list("q('no')", 4L), list("quit(save = 'no')", 4L), list("tools::pskill(Sys.getpid())", 4L),
     list("sapply(1:3, q)", 4L), list("x <<- 1", 2L),
@@ -492,7 +492,7 @@ test_that("report 18's 101 cases get their levels (18 section 2.5.2, amended)", 
     list("quote(unlink('x'))", 2L), list("x = 'unlink'; do.call(x, list('a'))", 3L),
     list("f = get('unlink'); f('x')", 3L), list("nm = 'mtcars'; get(nm)", 3L),
     list("\"\\u0075nlink\"('x')", 3L), list("get('unlink', envir = baseenv())('x')", 3L),
-    list("withr::with_dir('/', unlink('x'))", 3L), list("body(f) = quote(unlink('x'))", 2L),
+    list("withr::with_dir('/', unlink('x'))", 4L), list("body(f) = quote(unlink('x'))", 2L),
     list("do.call(paste0('unl', 'ink'), list('a'))", 3L),
     list("eval(as.call(list(as.name('unlink'), 'x')))", 3L),
     list("Sys.setenv(R_LIBS_USER = '/tmp/evil')", 2L), list("this is not R code {", 0L)
@@ -1246,4 +1246,103 @@ test_that("system2()'s env is read as the start of its command line (FIX-32)", {
   # neighbours: a known variable and no env keep the reading of the command alone
   expect_identical(lv("system2('ls', '-l', env = 'LC_ALL=C')"), 0L)
   expect_identical(lv("system2('ls', '-l')"), 0L)
+})
+
+test_that("a drive-relative path is outside the project on every OS (review round 4)", {
+  root = local_project()
+  # `D:other` names a folder under drive D's own current folder on Windows: nothing can place it
+  for (p in c("D:other", "d:x/y.csv", "C:build", "C:")) {
+    expect_identical(path_class(p, root), "outside", label = p)
+  }
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv("unlink('D:build', recursive = TRUE)"), 4L)
+  expect_identical(lv("system('cd D:other && rm -rf build')"), 4L)
+  expect_identical(lv("system('git -C D:other rm -r build')"), 4L)
+  sh = registry_get("tool", "sh")
+  for (wd in c("D:other", "C:sub\\dir")) {
+    r = sh$risk(list(cmd = c("rm", "-rf", "build"), wd = wd), NULL)
+    expect_identical(as.integer(r$level), 4L, label = wd)
+  }
+  # neighbours: a path in the project keeps its class and level
+  expect_identical(path_class("build/a.o", root), "workspace")
+  expect_identical(lv("unlink('build', recursive = TRUE)"), 3L)
+})
+
+test_that("a command run in a directory outside the project reads it (review round 4)", {
+  root = local_project()
+  dir.create(file.path(root, "sub"))
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  sh = registry_get("tool", "sh")
+  level = function(cmd, wd = ".") as.integer(sh$risk(list(cmd = cmd, wd = wd), NULL)$level)
+  for (cmd in c("ls", "du", "tree", "grep -r x", "git status", "echo hi")) {
+    expect_identical(level(cmd, out), 1L, label = cmd)
+    # neighbours: run in the project or the session's tempdir() it reads nothing outside
+    expect_identical(level(cmd), 0L, label = cmd)
+    expect_identical(level(cmd, "sub"), 0L, label = cmd)
+    expect_identical(level(cmd, tempdir()), 0L, label = cmd)
+  }
+  lv = function(code) gptr_risk(code, root = root)$level
+  expect_identical(lv(paste0("system('cd ", out, " && ls')")), 1L)
+  expect_identical(lv("system('cd sub && ls')"), 0L)
+  expect_identical(lv("system('cd ~/.ssh && ls')"), 3L)
+})
+
+test_that("moving R's working directory out of the project is level 4 (review round 4)", {
+  root = local_project()
+  dir.create(file.path(root, "sub"))
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  # relative paths, which the gate places in the project, would then name files outside it
+  for (code in c(paste0("setwd(", deparse(out), ")"), "setwd('/')", "setwd(d)",
+                 paste0("p = ", deparse(out), "; setwd(p)"),
+                 paste0("withr::with_dir(", deparse(out), ", x)"), "withr::local_dir(d)")) {
+    r = gptr_risk(code, root = root)
+    expect_identical(r$level, 4L, label = code)
+    expect_identical(r$categories, "session", label = code)
+  }
+  # neighbours: a directory in the project or the session's tempdir() is a session change
+  for (code in c("setwd('sub')", "setwd('.')", "setwd(tempdir())", "withr::local_dir('sub')",
+                 "withr::with_dir(tempdir(), x)")) {
+    expect_identical(lv(code), 2L, label = code)
+  }
+})
+
+test_that("a Windows wd is placed as Windows places it, on every OS (review round 4)", {
+  root = "C:/Users/x y/proj"
+  local_mocked_bindings(is_windows = function() TRUE, is_macos = function() FALSE)
+  # path_norm() as on Windows for paths that do not exist here: absolute, "/", lexical
+  local_mocked_bindings(path_norm = function(path) {
+    vapply(gsub("\\", "/", path, fixed = TRUE), function(p) {
+      path_lexical(if (is_abs_path(p)) p else file.path(root, p))
+    }, "", USE.NAMES = FALSE)
+  }, user_home = function() "C:/Users/x y")
+  withr::local_options(gptr.project_root = root)
+  sh = registry_get("tool", "sh")
+  level = function(cmd, wd) as.integer(sh$risk(list(cmd = cmd, wd = wd), NULL)$level)
+  # sh's reading of a backslash (`C:\Users` is `C:Users`) never makes a drive-relative path
+  for (wd in c("C:\\Users\\x y\\proj\\sub", "c:\\users\\x y\\proj\\sub", "C:/Users/x y/proj")) {
+    expect_identical(level(c("rm", "-rf", "build"), wd), 3L, label = wd)
+    expect_identical(level("ls", wd), 0L, label = wd)
+  }
+  for (wd in c("C:\\Users\\x y\\other", "D:other", "..\\other", "\\\\server\\share\\dir")) {
+    expect_identical(level(c("rm", "-rf", "build"), wd), 4L, label = wd)
+    expect_identical(level("ls", wd), 1L, label = wd)
+  }
+})
+
+test_that("processx::run()'s wd is read as peter$sh()'s (review round 4)", {
+  root = local_project()
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  lv = function(code) gptr_risk(code, root = root)$level
+  rm = "processx::run('rm', c('-rf', 'build')"
+  expect_identical(lv(paste0(rm, ", wd = ", deparse(out), ")")), 4L)
+  expect_identical(lv(paste0("processx::run('ls', wd = ", deparse(out), ")")), 1L)
+  # a name the code gives a literal directory is read in each directory it may hold (round 5)
+  expect_identical(lv(paste0("d = ", deparse(out), "; ", rm, ", wd = d)")), 4L)
+  expect_identical(lv(paste0("d = 'sub'; if (x) d = ", deparse(out), "; ", rm, ", wd = d)")), 4L)
+  expect_identical(lv(paste0("d = 'sub'; ", rm, ", wd = d)")), 3L)
+  # neighbours: in the project, or with no wd or one the code computes, as before
+  for (wd in c("", ", wd = 'sub'", ", wd = '.'", ", wd = d")) {
+    expect_identical(lv(paste0(rm, wd, ")")), 3L, label = wd)
+  }
 })

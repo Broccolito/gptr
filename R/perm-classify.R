@@ -1075,7 +1075,9 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
   }
   # words after a program-running verb or option run as a command line: its level-4 rows
   tail = function(x) {
-    if (length(x)) out[[length(out) + 1L]] <<- risk_literal_scan(paste(x, collapse = " "), root)
+    if (length(x)) {
+      out[[length(out) + 1L]] <<- risk_literal_scan(paste(x, collapse = " "), root, dirs)
+    }
   }
   if (path_prog) {
     add(3L, "process")
@@ -1112,7 +1114,8 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       if (length(dir)) {
         tg = risk_target(dir, "read", root, dirs)
         if (tg$level > 0L) add(tg$level, if (tg$secret) "secret" else "read", dir, tg$pc)
-        dirs = unique(c(dirs, if (is_abs_path(dir)) dir else file.path(root, dir)))
+        dirs = unique(c(dirs, if (is_abs_path(dir) || is_drive_rel(dir)) dir else
+          file.path(root, dir)))
       }
       if (k == 2L) tail(sub("^[^=]*=", "", a[2L]))
       a = a[-seq_len(k)]
@@ -1286,9 +1289,11 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
     } else if (k > 0L) {
       add(3L, "dynamic")
       code = a[k + 1L]
-      if (!is.na(code) && startsWith(p, "py")) out[[length(out) + 1L]] = risk_python(code, root)
+      if (!is.na(code) && startsWith(p, "py")) {
+        out[[length(out) + 1L]] = risk_python(code, root, dirs)
+      }
       if (!is.na(code) && p %in% risk_cmd_shells) {
-        out[[length(out) + 1L]] = risk_command(code, root)
+        out[[length(out) + 1L]] = risk_command(code, root, dirs)
       }
     } else {
       add(3L, "process")
@@ -1419,15 +1424,14 @@ risk_cmd_head = function(w, quoted = rep(FALSE, length(w))) {
   w[!skip][1L]
 }
 
-#' Classify a command line (tokens, redirects, cd, NAME=literal values, simple commands). With
-#' `scan = TRUE` (the literal scan) only commands that start with a known program are read.
-#' Attribute `hidden`: the text the line does not run (risk_sh_tokens()) and the text piped
-#' into a shell.
+#' Classify a command line run from the directories `dirs` (tokens, redirects, cd, NAME=literal
+#' values, simple commands). With `scan = TRUE` (the literal scan) only commands that start with
+#' a known program are read. Attributes `hidden`: the text the line does not run
+#' (risk_sh_tokens()) and the text piped into a shell; `dirs`: `dirs` and those it moves to.
 #' @noRd
-risk_cmd_line = function(cmd, root, scan = FALSE) {
+risk_cmd_line = function(cmd, root, scan = FALSE, dirs = root) {
   cmd = gsub("\\\n", "", cmd, fixed = TRUE)
   f = risk_flags_empty()
-  dirs = root
   vars = c(PWD = ".")
   tok = risk_sh_tokens(cmd)
   hidden = attr(tok, "hidden")
@@ -1471,8 +1475,14 @@ risk_cmd_line = function(cmd, root, scan = FALSE) {
       t = w[-seq_len(i)][!grepl("^-.", w[-seq_len(i)])][1L] %if_na% "~"
       t = sub("^~(?=/|\\z)", user_home(), sub("^\\$(HOME\\b|\\{HOME\\})", "~", t, perl = TRUE),
               perl = TRUE)
+      # what runs there reads it, as `ls` does with no operand (git -C's reading)
+      tg = risk_target(t, "read", root, dirs)
+      if (tg$level > 0L) {
+        f = risk_flags_bind(f, risk_flags_row(paste(head, t), head, tg$level,
+                                              if (tg$secret) "secret" else "read", t, tg$pc))
+      }
       dirs = unique(c(dirs, if (grepl("[$`*?[]", t) || identical(t, "-")) NA_character_ else
-        if (is_abs_path(t)) t else
+        if (is_abs_path(t) || is_drive_rel(t)) t else
           file.path(sub("/\\z", "", dirs[!is.na(dirs)][1L], perl = TRUE), t)))
       next
     }
@@ -1502,30 +1512,33 @@ risk_cmd_line = function(cmd, root, scan = FALSE) {
     }
   }
   if (attr(tok, "bg")) f = risk_flags_bind(f, risk_flags_row(trimws(cmd), "&", 2L, "process"))
-  structure(f, hidden = hidden)
+  structure(f, hidden = hidden, dirs = dirs)
 }
 
 #' The literal scan (D-061 (C), P11-S3): text the reading does not run (quoted strings,
 #' comments, heredoc bodies, text piped into a shell; SQL and Python strings; argv words) is
-#' read as command lines; a command there that starts with a known program and is level 4 is
-#' level 4. Escapes `\n` and `\t` are line breaks; a leading `!` (a git alias) is dropped.
+#' read as command lines run from `dirs`; a command there that starts with a known program and is
+#' level 4 is level 4. Escapes `\n` and `\t` are line breaks; a leading `!` (a git alias) is
+#' dropped.
 #' @noRd
-risk_literal_scan = function(pieces, root, depth = 0L) {
+risk_literal_scan = function(pieces, root, dirs = root, depth = 0L) {
   f = risk_flags_empty()
   if (depth > 2L) return(f)
   pieces = sub("^\\s*!", "", gsub("\\\\[nt]", "\n", pieces, perl = TRUE), perl = TRUE)
   for (p in unique(pieces[nzchar(trimws(pieces))])) {
-    g = risk_cmd_line(p, root, scan = TRUE)
-    h = attr(g, "hidden")
-    f = risk_flags_bind(f, g[g$level >= 4L, , drop = FALSE], risk_literal_scan(h, root, depth + 1L))
+    g = risk_cmd_line(p, root, scan = TRUE, dirs = dirs)
+    f = risk_flags_bind(f, g[g$level >= 4L, , drop = FALSE],
+                        risk_literal_scan(attr(g, "hidden"), root, attr(g, "dirs"), depth + 1L))
   }
   f
 }
 
-#' Classify a command: argv (length > 1) or one command line with shell syntax; a line with a
-#' backslash is also read with sh's escapes dropped (the higher reading counts)
+#' Classify a command run from the directories `dirs`: argv (length > 1) or one command line with
+#' shell syntax; a line with a backslash is also read as sh reads it, its escapes dropped and a
+#' word that starts with a drive letter relative (`C:\x` is `./C:x`, never drive-relative; the
+#' higher reading counts); the text it does not run is read from the directories it moves to
 #' @noRd
-risk_command = function(cmd, root = project_root()) {
+risk_command = function(cmd, root = project_root(), dirs = root) {
   cmd = as_utf8(as.character(cmd))
   cmd[is.na(cmd)] = ""
   if (!length(cmd) || all(!nzchar(cmd))) return(risk_flags_empty())
@@ -1534,21 +1547,25 @@ risk_command = function(cmd, root = project_root()) {
     return(risk_flags_row("not modelled: bytes that are not UTF-8", "", 3L, "dynamic"))
   }
   if (length(cmd) > 1L) {
-    f = risk_cmd_simple(cmd, root, quoted = rep(TRUE, length(cmd)))
+    f = risk_cmd_simple(cmd, root, dirs, quoted = rep(TRUE, length(cmd)))
     hidden = cmd
   } else {
-    f = risk_cmd_line(text, root)
+    f = risk_cmd_line(text, root, dirs = dirs)
     hidden = attr(f, "hidden")
+    moved = attr(f, "dirs")
     if (grepl("\\", text, fixed = TRUE)) {
-      g = risk_cmd_line(gsub("\\\\(.)", "\\1", text, perl = TRUE), root)
+      sh = gsub("(^|[\\s'\"=])(?=[A-Za-z]:)", "\\1./", text, perl = TRUE)
+      g = risk_cmd_line(gsub("\\\\(.)", "\\1", sh, perl = TRUE), root, dirs = dirs)
       f = risk_flags_bind(f, g)
       hidden = c(hidden, attr(g, "hidden"))
+      moved = unique(c(moved, attr(g, "dirs")))
     }
+    dirs = moved
   }
   fn = if (nrow(f)) f$fn[1L] else ""
   if (length(cmd) == 1L) f = risk_flags_bind(f, risk_sh_gate(text, fn))
   if (grepl("{", text, fixed = TRUE)) hidden = c(hidden, gsub("[{},]", " ", text))
-  f = risk_flags_bind(f, risk_literal_scan(hidden, root), risk_secret_rows(text, fn))
+  f = risk_flags_bind(f, risk_literal_scan(hidden, root, dirs), risk_secret_rows(text, fn))
   risk_secret_sink(f, any(risk_net_progs %in% strsplit(tolower(text), "[^a-z0-9_.-]+")[[1L]]))
 }
 
@@ -1556,22 +1573,23 @@ risk_command = function(cmd, root = project_root()) {
 
 #' Rows for the string literals of SQL or Python code, under the statement's row text `call`:
 #' their read levels (a secret file is risk_secret_rows()'s); in code that writes, a literal
-#' whose write (or, in code that deletes, delete) is above 2 takes that level
+#' whose write (or, in code that deletes, delete) is above 2 takes that level; relative paths are
+#' read from the directories `dirs`
 #' @noRd
-risk_literal_rows = function(lits, f, fn, root, call, write = TRUE) {
+risk_literal_rows = function(lits, f, fn, root, call, write = TRUE, dirs = root) {
   lits = unique(lits[nzchar(lits) & !grepl("\n", lits)])
   wr = f$category %in% c("file_write", "file_delete", "object_write")
   top = if (write) max(0L, f$level[wr]) else 0L
   op = if (any(f$category == "file_delete")) "delete" else "write"
   for (t in lits) {
-    rd = risk_target(t, "read", root)
+    rd = risk_target(t, "read", root, dirs)
     # a string literal expands no `$`, `%` or backquote, so it is never a computed path
     if (rd$level > 0L && !rd$secret && rd$pc != "unknown") {
       f = risk_flags_bind(f, risk_flags_row(call, fn, rd$level,
                                             if (identical(rd$pc, "url")) "network" else "read",
                                             t, rd$pc))
     }
-    tg = if (top >= 2L) risk_target(t, op, root) else list(level = 0L)
+    tg = if (top >= 2L) risk_target(t, op, root, dirs) else list(level = 0L)
     if (tg$level > 2L) {
       f = risk_flags_bind(f, risk_flags_row(call, fn, tg$level, if (op == "delete") "file_delete"
                                             else if (tg$pc == "control") "control" else
@@ -1721,9 +1739,10 @@ risk_py_rules = list(
                               "\\bfrom\\s+(os|posix)\\s+import[^\\n]*\\b(_exit|abort|exec\\w*)\\b"))
 )
 
-#' Classify Python code by a token scan (G5); running Python is at least level 1
+#' Classify Python code run from the directories `dirs` by a token scan (G5); running Python is at
+#' least level 1
 #' @noRd
-risk_python = function(code, root = project_root()) {
+risk_python = function(code, root = project_root(), dirs = root) {
   code = paste(as_utf8(as.character(code)), collapse = "\n")
   f = risk_flags_row("runs Python in the persistent session", "py", 1L, "session")
   if (!validUTF8(code)) {
@@ -1745,13 +1764,14 @@ risk_python = function(code, root = project_root()) {
     f = risk_flags_bind(f, risk_flags_row("control", "py", 4L, "control"))
   }
   wr = f$category[f$category %in% c("file_write", "file_delete")]
-  f = risk_literal_rows(lits, f, "py", root, if (length(wr)) wr[1L] else "read")
+  f = risk_literal_rows(lits, f, "py", root, if (length(wr)) wr[1L] else "read", dirs = dirs)
   lists = regmatches(code, gregexpr(paste0("[\\[(]\\s*(?:(['\"])[^'\"\n]*\\1\\s*,\\s*)+",
                                            "(['\"])[^'\"\n]*\\2\\s*,?\\s*[\\])]"), code,
                                     perl = TRUE))[[1L]]
   argv = vapply(regmatches(lists, gregexpr("(['\"])[^'\"\n]*\\1", lists, perl = TRUE)),
                 function(x) paste(substr(x, 2L, nchar(x) - 1L), collapse = " "), "")
-  f = risk_flags_bind(f, risk_literal_scan(c(lits, argv), root), risk_secret_rows(code, "py"))
+  f = risk_flags_bind(f, risk_literal_scan(c(lits, argv), root, dirs),
+                      risk_secret_rows(code, "py"))
   risk_secret_sink(f)
 }
 
@@ -2527,10 +2547,15 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
         add(ctx, paste0(label, " (code the code computes)"), name, max(3L, row$level), "dynamic")
         return(TRUE)
       }
-      f = switch(code[3L], sql = risk_sql(paste(x, collapse = "\n"), root),
-                 argv = risk_command(c(x, argv), root),
-                 risk_command(paste(c(envs, x, argv), collapse = " "), root))
-      add_rows(f, ctx, name, paste0(name, "(): "))
+      # processx::run() runs its command in `wd`, read as peter$sh()'s in each directory a name
+      # may hold; one the code computes is read as the project
+      wds = if (name == "run") risk_fold(risk_arg(a, "wd"), kn(ctx))
+      for (wd in if (length(wds)) as.list(wds) else list(NULL)) {
+        f = switch(code[3L], sql = risk_sql(paste(x, collapse = "\n"), root),
+                   argv = risk_command(cmd_in_wd(c(x, argv), wd), root),
+                   risk_command(paste(c(envs, x, argv), collapse = " "), root))
+        add_rows(f, ctx, name, paste0(name, "(): "))
+      }
       return(TRUE)
     }
     if (name == "options") {
@@ -2541,6 +2566,15 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       } else if (!all(lit)) {
         add(ctx, label, name, 3L, "dynamic")
       }
+      return(TRUE)
+    }
+    if (name %in% c("setwd", "local_dir", "with_dir")) {
+      # out of the project, the paths the gate places in it name files elsewhere
+      v = risk_fold(risk_arg(a, if (name == "setwd") "dir" else "new", 1L), kn(ctx))
+      pc = if (!length(v)) "unknown" else risk_cmd_worst(vapply(v, risk_path_cls, "", "read", root))
+      if (pc %in% c("workspace", "temp")) return(FALSE)
+      add(ctx, paste0(label, if (!length(v)) " (a directory the code computes)" else
+        " (leaves the project)"), name, 4L, "session", v[1L] %||% NA_character_, pc)
       return(TRUE)
     }
     if (name %in% c("Sys.setenv", "Sys.unsetenv")) {

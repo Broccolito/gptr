@@ -424,6 +424,25 @@ test_that("a nested sh or bg call in served R meets the rules and the critical g
   expect_identical(trimws(c(seen$envir$x, idle$envir$x)), c("hi", "hi"))
 })
 
+test_that("idle served R reads a nested sh call as run in its wd (review round 4)", {
+  skip_on_cran()
+  root = local_project()
+  # a directory beyond the project and the session's tempdir() is outside
+  out = withr::local_tempdir(tmpdir = dirname(tempdir()))
+  dir.create(file.path(out, "build"))
+  writeLines("x", file.path(out, "build", "a.o"))
+  for (mode in c("auto", "yolo")) {
+    idle = local_served_session(mode)
+    for (cmd in c("c('rm', '-rf', 'build')", "'rm -rf build'")) {
+      code = paste0("peter$sh(", cmd, ", wd = ", deparse(out), ")")
+      res = mcp_dispatch_local(r_call(code), idle$session)$result
+      expect_true(res$isError, label = paste(mode, cmd))
+      expect_match(res$content[[1L]]$text, "a critical action (level 4)", fixed = TRUE)
+    }
+  }
+  expect_true(file.exists(file.path(out, "build", "a.o")))
+})
+
 test_that("inside a running session the claude route gates through perm_check once", {
   probe = gptr_tool("probe", "Calls the MCP dispatcher the way the claude adapter does.",
                     parameters = list(type = "object",

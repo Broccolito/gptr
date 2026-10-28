@@ -159,6 +159,23 @@ is_abs_path = function(path) {
   grepl("^([/\\\\]|[A-Za-z]:[/\\\\])", path)
 }
 
+#' Is each path drive-relative ("D:x", "D:"), under drive D's own current directory on Windows?
+#' The classifier joins it to no directory and cannot place it: on every OS it is outside.
+#' @noRd
+is_drive_rel = function(path) {
+  grepl("^[A-Za-z]:(?![/\\\\])", path, perl = TRUE)
+}
+
+#' A command (an argv, or one command line) as run in the directory `wd`, as the command
+#' classifier reads it: `cd <wd> && <command>`, an argv quoted into one line; the command itself
+#' when `wd` is absent or "."
+#' @noRd
+cmd_in_wd = function(cmd, wd = NULL) {
+  if (!rlang::is_string(wd) || identical(wd, ".")) return(cmd)
+  if (length(cmd) > 1L) cmd = paste(shQuote(cmd, "sh"), collapse = " ")
+  paste("cd", shQuote(wd, "sh"), "&&", cmd)
+}
+
 #' Normalise one path: absolute, forward slashes, symlinks resolved on the deepest existing
 #' ancestor (macOS /var -> /private/var), "." and ".." removed from the rest
 #' @noRd
@@ -434,6 +451,7 @@ path_class_one = function(path, context) {
   if (is.na(path) || !nzchar(path)) return("unknown")
   if (grepl("^(https?|ftps?|s3|gs)://", path, ignore.case = TRUE)) return("url")
   if (grepl("[*?]", path)) return("wildcard")
+  if (is_drive_rel(path)) return("outside")
   expanded = gsub("\\", "/", path, fixed = TRUE)
   if (!is_abs_path(expanded) && !startsWith(expanded, "~")) {
     expanded = file.path(context$root, expanded)
