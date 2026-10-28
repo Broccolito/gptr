@@ -4919,8 +4919,8 @@ step list before its first action.
   is denied with how to allow it and a console notice, as is a nested `peter$` call of its R that needs
   approval (`mcp_nested_gate()`: a `sh` or `bg` call as the literal call of its command run in its `wd`,
   with the registered secrets its `env` hands the child, then the member call itself when that hand-over meets
-  the secret guard; D-267), without the notice, which the served result would capture for the model. Non-interactively both
-  are `blocked`/denied.
+  the secret guard; D-267), without the notice, which the served result would capture for the model.
+  Non-interactively both are `blocked`/denied.
 - A background R tool that changed bindings in the user's environment at an idle tick prints one notice.
 - P04/P19 acceptance: an inline agent calls System 1 while a sibling has a queued tool; the sibling's tool starts
   only after the first evaluation returns.
