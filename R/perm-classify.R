@@ -960,11 +960,12 @@ risk_cd_word = function(t) {
 }
 
 #' `dirs` and the directory a cd moves to from them (risk_cd_word()): NA for one the shell
-#' computes, a relative one in the first directory
+#' computes (its word `t` holds an expansion or a glob the tokenizer saw, `dyn`), a relative one
+#' in the first directory
 #' @noRd
-risk_cd_dirs = function(dirs, t) {
-  unique(c(dirs, if (grepl("[$`*?[]", t) || identical(t, "-")) NA_character_ else
-    if (is_abs_path(t) || is_drive_rel(t)) t else
+risk_cd_dirs = function(dirs, t, dyn) {
+  computed = (nzchar(dyn) && grepl("[$`*?[]", t)) || identical(t, "-")
+  unique(c(dirs, if (computed) NA_character_ else if (is_abs_path(t) || is_drive_rel(t)) t else
       file.path(sub("/\\z", "", dirs[!is.na(dirs)][1L], perl = TRUE), t)))
 }
 
@@ -998,11 +999,11 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
     }
   }
   # a directory the command runs in (git -C, env -C): read as a cd is, and its words there
-  move = function(dir) {
+  move = function(dir, dyn) {
     dir = risk_cd_word(dir)
     tg = risk_target(dir, "read", root, dirs)
     if (tg$level > 0L) add(tg$level, if (tg$secret) "secret" else "read", dir, tg$pc)
-    dirs <<- risk_cd_dirs(dirs, dir)
+    dirs <<- risk_cd_dirs(dirs, dir, dyn)
   }
   # level-4 rows of the command a later word starts (what an unread program may run)
   later = function(x, d) {
@@ -1077,9 +1078,8 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
       if (any(nzchar(dyn[skip]))) why("a wrapper option the shell computes")
       if (identical(p, "env")) {
         o = w[skip]
-        for (dir in c(o[val[skip]], sub("^(-C|--chdir=)", "", o[grepl("^(-C.|--chdir=.)", o)]))) {
-          move(dir)
-        }
+        k = val[skip] | grepl("^(-C.|--chdir=.)", o)
+        for (i in which(k)) move(sub("^(-C|--chdir=)", "", o[i]), dyn[skip][i])
       }
       control(w[skip][!nzchar(dyn[skip])])
       drop(j - 1L)
@@ -1143,9 +1143,10 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
           any(nzchar(da[seq_len(k)]))) {
         why("a git option gptr does not read")
       }
-      dir = if (a[1L] %in% c("-C", "--work-tree", "--git-dir") && k == 2L) a[2L] else
+      j = if (a[1L] %in% c("-C", "--work-tree", "--git-dir") && k == 2L) 2L else 1L
+      dir = if (j == 2L) a[2L] else
         sub("^--(work-tree|git-dir)=?", "", a[1L])[grepl("^--(work-tree|git-dir)=.", a[1L])]
-      if (length(dir)) move(dir)
+      if (length(dir)) move(dir, da[j])
       if (k == 2L) tail(sub("^[^=]*=", "", a[2L]))
       a = a[-seq_len(k)]
       da = da[-seq_len(k)]
@@ -1509,15 +1510,15 @@ risk_cmd_line = function(cmd, root, scan = FALSE, dirs = root) {
     head = risk_cmd_head(w, qd)
     if (tolower(head %if_na% "") %in% c("cd", "pushd", "chdir", "set-location")) {
       i = match(head, w)
-      t = w[-seq_len(i)][!grepl("^-.", w[-seq_len(i)])][1L] %if_na% "~"
-      t = risk_cd_word(t)
+      j = i + match(TRUE, !grepl("^-.", w[-seq_len(i)]))
+      t = risk_cd_word(w[j] %if_na% "~")
       # what runs there reads it, as `ls` does with no operand (git -C's reading)
       tg = risk_target(t, "read", root, dirs)
       if (tg$level > 0L) {
         f = risk_flags_bind(f, risk_flags_row(paste(head, t), head, tg$level,
                                               if (tg$secret) "secret" else "read", t, tg$pc))
       }
-      dirs = risk_cd_dirs(dirs, t)
+      dirs = risk_cd_dirs(dirs, t, d[j] %if_na% "")
       next
     }
     if (scan && (is.na(head) || !risk_cmd_known(head))) next
