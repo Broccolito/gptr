@@ -7982,6 +7982,31 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   manual and edits asked); its code is read as any function's, and a name there stays a file the
   code computes, level 2. Tests: test-risk-forms.R "sys::exec_*()'s std_out and std_err are files
   it writes, as processx's (round 6)". Evidence: progress/fixes.md FIX-27.
+- Status 2026-10-28 (review round 6, the gate writer): after the code has moved R, a relative
+  directory given to `setwd()`, `withr::local_dir()`, `withr::with_dir()` or `xfun::in_dir()` is
+  read in each directory R may be in, one the code computes when that is (before any move in the
+  project, as every relative path is), so `setwd("data"); ...; setwd("..")` is level 2 (round 4 read
+  it as leaving the project, 4, which auto and yolo asked); a function body and the code of
+  `local()` (given no environment) bind their own names, followed from their start as the top
+  level's are (a function's other names are ones the code computes and R starts where the code
+  started or has moved it to; `local()`'s start as the names around it; a name assigned with `<<-`
+  there adds its values outside), so the save-and-restore idiom stays in the project in a function
+  and in `local()` (4 since round 4); `withr::local_tempdir()` and `withr::local_tempfile()` are
+  folded as `tempfile()` is; a `cd`, `env -C` or `git -C` directory and the `wd` of `peter$sh()` and
+  `processx::run()` are ones the shell computes only when the tokenizer saw an expansion or a glob
+  in the word (a quoted `out[1]` outside the project was level 3, run in auto and yolo; now 4);
+  `chdir()` in Python code (`os.chdir()`, `os.fchdir()`, `contextlib.chdir()`), which moves R's
+  working directory too, is a `session` row as `setwd()` is (formerly level 1); the evaluator's
+  guard reads `eval(quote(x))` as `x`, as the classifier does, so `eval(quote(q()))` is refused in
+  every mode (D-269; since round 5 auto asked a person to approve it at 4); `fs::file_copy()`,
+  `fs::file_move()` and `fs::dir_copy()` write `new_path` (risk-functions.csv named the source, so
+  with fs loaded a copy outside the project was 2); and `do.call(system, list("ls"))` is read as
+  `system("ls")` (D-272's review round 6), so it is no longer an accepted false refusal. Documented,
+  each level 4: the idiom with the directory saved in a branch, a loop or another call's argument,
+  and `setwd(here::here())`, a directory the code computes (here's root, not gptr's).
+  Contract-visible: 03 section 6.8.1, 04 sections 15.4 IC-53 item 3 and IC-78, the `eval_guard()`
+  bullet; `?gptr_security`; risk-functions.csv's three fs rows. Tests: test-risk-forms.R (review
+  round 6). Evidence: progress/fixes.md FIX-27.
 
 ## D-263 - FIX-28 Bracketed paste decides a paste in a T console (2026-10-26)
 - Rule (mode): a T console's call turns bracketed paste on with its character mode. `tty_modes()`
@@ -8804,3 +8829,18 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   section 6.8.1; `?gptr_options`, `?gptr_security`, `?gptr_risk`. Tests: test-risk-forms.R
   "paste(), paste0() and file.path() are folded with their arguments as R passes them".
   Evidence: progress/fixes.md FIX-36.
+- Status 2026-10-28 (review round 6, the gate writer): `do.call()` of a function written out that
+  the code does not bind, with a `list()` or `c()` of base R written out, and `rlang::exec()` of
+  such a function, are read as the call they make, so `do.call(Sys.setenv, list(TZ = "UTC"))` is
+  level 2 `session` (round 1 made it 4 `control`, which auto asked, while `?gptr_security` said
+  level 3 or lower) and `do.call(Sys.setenv, list(R_USER_CONFIG_DIR = d))` stays 4. A setter handed
+  to `lapply()`, `Map()` or a `do.call()` whose list the classifier cannot read still passes names
+  it cannot read, level 4 `control`; one handed to a function the classifier does not know calls it
+  (`identity()`, `assign()`, a function of your own) stays level 3 or lower, as `?gptr_security` now
+  says. Python code is read as Python joins it: a backslash at a line's end joins the next line and
+  a parenthesised `os.environ` or `environb` name is the name, so `os.environ\<newline>['HOME'] = d`
+  and `(os.environ)['HOME'] = d` are `control` (formerly level 1 or 2). Contract-visible: 03 section
+  6.8.1; 04 section 15.4 IC-53 item 3; `?gptr_security`. Tests: test-risk-forms.R "do.call() of a
+  list written out and rlang::exec() are read as the call (round 6)", "Python code is read as Python
+  joins its lines and names (review round 6)"; test-perm-classify.R's round 1 row. Evidence:
+  progress/fixes.md FIX-36.
