@@ -615,6 +615,24 @@ test_that("a control name in any case, unread, or set from a file is control (re
   expect_identical(flags_level(risk_python(py, root)), 3L)
 })
 
+test_that("peter$knit()'s python engine is read as peter$py() is (FIX-36 review round 2)", {
+  root = local_project()
+  knit = registry_get("tool", "knit")
+  for (v in c("R_USER_CONFIG_DIR", "HOME", "appdata")) {
+    py = sprintf("import os\nos.environ['%s'] = 'elsewhere'", v)
+    for (code in sprintf(c("peter$knit('python', %s)", "peter$knit(engine = 'Python', code = %s)",
+                           "peter$knit(code = %s, engine = 'python')"), deparse(py))) {
+      r = gptr_risk(code, root = root)
+      expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = code)
+    }
+    r = knit$risk(list(engine = "python", code = py), NULL)
+    expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = py)
+  }
+  # peter$knit() stays at least level 3 (04 section 9.4)
+  expect_identical(gptr_risk("peter$knit('python', 'x = 1')", root = root)$level, 3L)
+  expect_identical(knit$risk(list(engine = "Python", code = "x = 1"), NULL)$level, 3L)
+})
+
 test_that("a delete keeps file_delete, a control target shows in path_class (IC-78)", {
   root = local_project()
   r = gptr_risk("unlink('.git', recursive = TRUE)", root = root)

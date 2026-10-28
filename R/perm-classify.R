@@ -2824,6 +2824,9 @@ risk_member_flags = function(member, e, root, known = NULL) {
              sql = risk_sql(paste(code, collapse = "\n"), root),
              knit = if (isTRUE(eng %in% c("bash", "sh", "zsh", "powershell", "cmd"))) {
                risk_command(paste(code, collapse = "\n"), root)
+             } else if (isTRUE(tolower(eng) == "python")) {
+               # it runs through peter$py(), at least level 3
+               risk_flags_bind(row(3L), risk_python(paste(code, collapse = "\n"), root))
              } else {
                row(3L)
              },

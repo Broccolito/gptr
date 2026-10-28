@@ -323,6 +323,28 @@ test_that("auto asks before model code moves gptr's config folder or the home (F
   expect_identical(tools::R_user_dir("gptr", "config"), cfg)
 })
 
+test_that("auto asks before peter$knit()'s python moves gptr's config folder (FIX-36 round 2)", {
+  root = local_project(trust = TRUE)
+  before = Sys.getenv("R_USER_CONFIG_DIR", unset = NA, names = TRUE)
+  withr::local_envvar(before)
+  cfg = tools::R_user_dir("gptr", "config")
+  py = paste0("import os\nos.environ['R_USER_CONFIG_DIR'] = ", deparse(withr::local_tempdir()))
+  # the literal code is read in R; code the call computes is read when peter$knit() runs it
+  codes = c(paste0("peter$knit('python', ", deparse(py), ")"),
+            paste0("peter$knit(engine = 'python', code = ", deparse(py), ")"),
+            paste0("p = ", deparse(py), "; peter$knit('python', p)"))
+  for (code in codes[1:2]) {
+    expect_identical(gate_decide(gate_r(code), gate_ctx("auto")), "ask_human", label = code)
+  }
+  skip_on_cran()
+  ui = local_scripted_ui(list("n", "n", "n"))
+  fake = local_fake_provider(c(lapply(codes, function(x) fake_tool("r", code = x)), "Done."))
+  peter("Keep the settings elsewhere.", model = fake, mode = "auto", envir = new.env())
+  expect_identical(sum(ui$log$method == "permission"), 3L)
+  expect_identical(Sys.getenv("R_USER_CONFIG_DIR", unset = NA, names = TRUE), before)
+  expect_identical(tools::R_user_dir("gptr", "config"), cfg)
+})
+
 test_that("a nested auto run started by yolo model code asks before a protected delete", {
   skip_on_cran()
   root = local_project(files = list(".ssh/id_rsa" = "KEY"), trust = TRUE)
