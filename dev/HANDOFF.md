@@ -4,9 +4,9 @@ PR #88 (branch `claude/v1-prerelease`) merges ten branches into `main` `7e23ebd3
 PRs #78-#83 checkpoint also holds #84 (CI-98: the writer prototype reports an early writer exit),
 and adds CI-103 and the follow-ups that the PR's checks found. PR #90 adds CI-104 (`main`
 `13a917ff`), and the branch `claude/v1-fixes` from it, not yet a PR, adds FIX-27..FIX-34, merged
-and through three review rounds. Each has its record in `progress/fixes.md`, in id order, and
-decisions D-255, D-257, D-258, D-261 and D-262..D-269 and the D-254 amendment are in
-`DEVIATIONS.md`:
+and through three review rounds, and CI-105 (contributor PR #92). Each has its record in
+`progress/fixes.md`, in id order, and decisions D-255, D-257, D-258, D-261 and D-262..D-270 and
+the D-254 amendment are in `DEVIATIONS.md`:
 
 - CI-99 (test only): `tests/testthat/setup.R` blanks every host variable that `is_secret_name()`
   accepts, in place of a fixed list of 23, so a host secret such as `CLAUDE_CODE_MESSAGING_TOKEN`
@@ -32,7 +32,10 @@ decisions D-255, D-257, D-258, D-261 and D-262..D-269 and the D-254 amendment ar
   re-ask sentence, and three corrections follow: local-only inference is the Ollama route's
   default, "Why Peter?" keeps the Naur rationale (sessions recorded as runnable documents), and
   `inst/WORDLIST` takes Naur's and Wason's; the CRAN-mode check and the incoming feasibility check
-  are Status OK with no NOTE.
+  are Status OK with no NOTE; review round 4: the README's and the interactive-console vignette's
+  manual-mode sentences say that a permission rule can change what runs and asks, but an allow
+  rule never approves a critical action, "Why Peter?" and `?peter` name Backus-Naur form and
+  Wason's research as what inspired System 1 and System 2, and `vignette()` is for a CRAN install.
 - FIX-21: the bg-1 and plan-execute paths, run live on claude-cli, codex and ollama, and the five
   defects found there fixed: an idle tick's first notice starts a row of its own; only
   `gptr_wait()` continues a waiting session; the resumed run records its call's block; `/exit` names
@@ -200,7 +203,9 @@ Open (found, not fixed):
   (`g(system)`), `eval(parse())`, a sourced file, package code, `pipe()` or `processx::run()`
   still escapes `sh:` rules in auto and yolo, and neither the rules nor the refusal read what a
   shell reads when it runs (its standard input, variables it expands, a script file), as
-  `?gptr_security` says (FIX-27; `system2()`'s `env` is read since FIX-32).
+  `?gptr_security` says; in manual and edits an allow rule such as `r(level<=3)` still lets a
+  computed `system()` run without asking past a deny `sh:` rule, as before (FIX-27; `system2()`'s
+  `env` is read since FIX-32).
 - An approved `system()` child's output starts on the frozen `r` row; Codex's own shell is not
   switched off in the read-only modes; the prefix gate leaves `standard_core` 1 token (FIX-32).
 - A replayed script sends again a steer its run took after the script went on (a run sent to the
