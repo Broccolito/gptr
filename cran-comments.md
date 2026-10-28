@@ -1,10 +1,10 @@
 ## Submission
 
-This is a major update (0.7.0 -> 1.0.0) and a complete rewrite by the same maintainer. gptr is
-now an agent harness that runs language model agents inside the live R session, with hosted
-providers or, optionally, local models served by 'Ollama'. The previous functions
-`get_response()` and `dataframe_to_text()` are removed without deprecation shims; the removal is
-documented in the "Breaking changes" section of NEWS.md.
+This is a major update (0.7.0 -> 1.0.0) and a complete rewrite by the same maintainer. gptr now
+runs language model agents in an existing R session, where generated code can inspect and modify
+objects already in memory. It uses hosted providers or, optionally, local models served by
+'Ollama'. The previous functions `get_response()` and `dataframe_to_text()` are removed without
+deprecation shims; the removal is documented in the "Breaking changes" section of NEWS.md.
 
 License change: gptr 0.7.0 was released under `MIT + file LICENSE`; gptr 1.0.0 is released under
 `Apache License (== 2.0)`, with the agreement of its contributors. Third-party notices for derived
