@@ -1656,9 +1656,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' configuration folder or your home directory, such as `HOME`; [gptr_options] lists them. The
 #' classifier reads such a change in `Sys.setenv()`, `Sys.unsetenv()`, `withr::local_envvar()` and
 #' `withr::with_envvar()`, where a name it cannot read counts as one (also one built with `paste0()`
-#' or another helper of base R that the code binds with `=`, `<-` or `<<-`, as a function's
-#' argument or as a `for` variable, or that your session holds as other than base R's), in
-#' `readRenviron()` and `dotenv::load_dot_env()`, and in an
+#' or another helper of base R whose bare name the code binds with `=`, `<-` or `<<-`, as a
+#' function's argument or as a `for` variable, or that your session holds as other than base
+#' R's), in `readRenviron()` and `dotenv::load_dot_env()`, and in an
 #' `os.environ` write in the code of `peter$py()` or `peter$knit("python", code)` that names one in
 #' a string or an upper-case word, or whose name (a subscript, or the first argument of
 #' `putenv()`, `unsetenv()` or `pop()`) is not a plain string literal. It does not read code in a
@@ -1668,8 +1668,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `baseenv()$Sys.setenv`, `asNamespace("withr")$local_envvar`,
 #' `with(list(f = withr::with_envvar), ...)`, `assign("f", Sys.unsetenv)`,
 #' `identity(withr::local_envvar)`); a name built with a helper the code binds otherwise (with
-#' `assign()`, `delayedAssign()`, `makeActiveBinding()`, `list2env()` or `attach()`, or in a list
-#' given to `with()` or `within()`), which is read as base R's helper builds it; a Python write that
+#' `assign()`, `delayedAssign()`, `makeActiveBinding()`, `list2env()` or `attach()`, in a list
+#' given to `with()` or `within()`, or into an environment, `e$paste0 = f` or
+#' `.GlobalEnv[["paste0"]] = f`), which is read as base R's helper builds it; a Python write that
 #' reaches `os.environ` by another name (`e = os.environ`, `getattr(os, "environ")`) or through
 #' `ctypes`, or that passes `os.environ.update()` a mapping the code computes, a mapping whose names
 #' are not plain string literals (`{'\x48OME': d}`, `{'H' 'OME': d}`) or keyword names not all in

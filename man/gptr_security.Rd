@@ -57,9 +57,9 @@ of the \code{claude} or \code{codex} command-line tool (such as \code{CODEX_HOME
 configuration folder or your home directory, such as \code{HOME}; \link{gptr_options} lists them. The
 classifier reads such a change in \code{Sys.setenv()}, \code{Sys.unsetenv()}, \code{withr::local_envvar()} and
 \code{withr::with_envvar()}, where a name it cannot read counts as one (also one built with \code{paste0()}
-or another helper of base R that the code binds with \code{=}, \verb{<-} or \verb{<<-}, as a function's
-argument or as a \code{for} variable, or that your session holds as other than base R's), in
-\code{readRenviron()} and \code{dotenv::load_dot_env()}, and in an
+or another helper of base R whose bare name the code binds with \code{=}, \verb{<-} or \verb{<<-}, as a
+function's argument or as a \code{for} variable, or that your session holds as other than base
+R's), in \code{readRenviron()} and \code{dotenv::load_dot_env()}, and in an
 \code{os.environ} write in the code of \code{peter$py()} or \code{peter$knit("python", code)} that names one in
 a string or an upper-case word, or whose name (a subscript, or the first argument of
 \code{putenv()}, \code{unsetenv()} or \code{pop()}) is not a plain string literal. It does not read code in a
@@ -69,8 +69,9 @@ through a list or an environment, or handed to another function (\code{get("Sys.
 \code{baseenv()$Sys.setenv}, \code{asNamespace("withr")$local_envvar},
 \code{with(list(f = withr::with_envvar), ...)}, \code{assign("f", Sys.unsetenv)},
 \code{identity(withr::local_envvar)}); a name built with a helper the code binds otherwise (with
-\code{assign()}, \code{delayedAssign()}, \code{makeActiveBinding()}, \code{list2env()} or \code{attach()}, or in a list
-given to \code{with()} or \code{within()}), which is read as base R's helper builds it; a Python write that
+\code{assign()}, \code{delayedAssign()}, \code{makeActiveBinding()}, \code{list2env()} or \code{attach()}, in a list
+given to \code{with()} or \code{within()}, or into an environment, \code{e$paste0 = f} or
+\code{.GlobalEnv[["paste0"]] = f}), which is read as base R's helper builds it; a Python write that
 reaches \code{os.environ} by another name (\code{e = os.environ}, \code{getattr(os, "environ")}) or through
 \code{ctypes}, or that passes \code{os.environ.update()} a mapping the code computes, a mapping whose names
 are not plain string literals (\code{{'\\x48OME': d}}, \verb{\{'H' 'OME': d\}}) or keyword names not all in
