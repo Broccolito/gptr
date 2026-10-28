@@ -21,7 +21,7 @@ test_that("DESCRIPTION carries the fields CRAN and the contract require (IC-72)"
   skip_on_cran()
   d = desc_fields()
   expect_identical(unname(d[["Package"]]), "gptr")
-  expect_identical(unname(d[["Title"]]), "Language Model Agents Inside the Live 'R' Session")
+  expect_identical(unname(d[["Title"]]), "Language Model Agents in Live 'R' Sessions")
   expect_identical(tools::toTitleCase(d[["Title"]]), unname(d[["Title"]]))
   expect_identical(unname(d[["License"]]), "Apache License (== 2.0)")
   expect_identical(unname(d[["Copyright"]]), "file inst/COPYRIGHTS")

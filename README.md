@@ -3,170 +3,236 @@
 
 # gptr <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo-dark.png"/><img src="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo.png" align="right" width="120" height="139" alt="gptr logo"/></picture>
 
-gptr runs language model agents inside your live R session, through one
-function: `peter()`. With a prompt it returns an R object; with no
-prompt it opens a chat in the console.
+gptr runs language model agents in your current R session. Agents can
+analyze objects already in memory and create R objects that you can
+inspect, reuse or modify.
 
-## Your live R session
-
-The agent's R code runs in your R process, in the environment `peter()`
-is called from (at the console, your workspace). It works on the objects
-already in memory, so you do not save data to a file for it or rerun a
-script to rebuild state. What the agent creates, such as a fitted model,
-is an ordinary R object that you and the next prompt can use. The model
-gets a bounded view (`?gptr_egress` has the full list), for example your
-prompt, a workspace listing, a short description of each object you pass
-(class, dimensions, column types, a few values) and the output of the
-code it runs. R computes on the full object. In a measured run, three
-read-only tool calls on a 4 GiB vector kept R's memory peak at 4.2 GiB;
-code that modifies an object follows R's usual copy-on-modify rules.
-
-## System 1 and System 2
-
-gptr works with two kinds of model. System 2 models are conversational:
-they run the agent loop, call tools and return a session that `|>`
-continues. System 1 models are typed decision models: they return an R
-vector with one answer per input (logical for a yes/no question,
-character for `choices`, numeric for `levels`) with the probabilities
-attached. `peter()` picks System 1 or System 2 from the model you pass.
-System 2 runs on Anthropic, OpenAI, Google Gemini, OpenRouter,
-OpenAI-compatible endpoints, Azure, Bedrock, the Claude Code and Codex
-CLIs, and local Ollama models. System 1 runs on TypeSafe AI's Jev, or on
-Clef and Clef Flash through a local Ollama server.
-
-## Sessions as runnable documents
-
-A model-assisted analysis should be as reproducible as one written by
-hand, so gptr records the procedure as it actually ran. Bind an R
-script, R Markdown, Quarto or Jupyter file with `gptr_doc()`, and gptr
-writes the R code the agent ran below each prompt, under a header with
-the model, date, tokens and hashes of the prompt and code. The file is
-the record, and it runs. Rerun it without a model or API key, ask again
-(`replay = "live"`; `model =` picks your own model), or turn a recorded
-`.R` file into an ordinary R script with `gptr_export()`. Records are
-plain files you own; there is no gptr server, account or central store.
-Commit one with your code and data or publish it with a paper: anyone
-with the same data and packages can rerun it to reproduce the analysis,
-or re-ask it with their own model (`gptr_source(model =)`) to replicate
-it. This record is gptr's basis for reproducible scientific computing
-and research.
+- **Work with live R objects.** Continue an analysis across prompts
+  using the same data and intermediate results.
+- **Use agents or typed decisions.** Conversational models return an
+  agent session; decision models return R vectors of logical answers,
+  labels or scores.
+- **Keep a record you can rerun.** Record agent calls and their executed
+  R code alongside your analysis, then replay the code with the required
+  inputs and packages.
 
 ## Installation
 
-Install gptr from CRAN, or the development version from GitHub. It is
-pure R, with no compiled code, and needs R 4.2 or later.
+gptr requires R 4.2 or later and has no compiled code. This README
+describes version 1.0.0.
+
+**Development version from GitHub:**
+
+``` r
+if (!requireNamespace("pak", quietly = TRUE)) install.packages("pak")
+pak::pak("Broccolito/gptr@main")
+```
+
+**Released version from CRAN:**
 
 ``` r
 install.packages("gptr")
-pak::pak("Broccolito/gptr")
 ```
 
-This README describes gptr 1.0.0; if `packageVersion("gptr")` is lower,
-install from GitHub. If pak stops with
-`Subprocess is busy or cannot start`, or a later call reports a missing
-or corrupt `gptr.rdb`, restart R and install again before loading gptr,
-or use `remotes::install_github("Broccolito/gptr")`.
+Choose one route. If `packageVersion("gptr")` is below 1.0.0, install
+from GitHub before following these examples. After installation, load
+the package:
+
+``` r
+library(gptr)
+```
 
 ## Connect a model
 
-Sign in to the Claude Code or Codex CLI outside R, then call `peter()`
-at the console to open a chat. With no model set, it offers those routes
-and saves your choice. For an API provider, load its key from a `.env`
-file and pick a model:
+Choose one of the following routes before running the analysis examples.
+
+**API key.** Put your provider's key in a private `.env` file. For
+example, the Anthropic route needs `ANTHROPIC_API_KEY`:
 
 ``` r
 gptr_env("~/keys/.env")
 gptr_config(model = "anthropic/claude-sonnet-5-5", .scope = "user")
 ```
 
-`gptr_env()` loads keys such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
-`GEMINI_API_KEY` and, for Jev, `TYPESAFE_API_KEY`; `gptr_providers()`
-lists what is configured. The first time you use a remote provider at
-the console, gptr shows what it sends and asks you to acknowledge it.
+This saves the default model for future R sessions. Use
+`.scope = "session"` to limit a setting to the current R process.
+`gptr_providers()` lists configured routes.
 
-With Ollama running and the model pulled, `model = "ollama/qwen3:1.7b"`
-or another installed model with tool calls runs the agent, and
-`model = "ollama/clef-flash"` (Ollama 0.35.1 or later) answers typed
-decisions. gptr never installs Ollama, pulls models or falls back to a
-cloud model.
-
-## A first session
+**Existing CLI login.** Install and sign in to Claude Code or Codex
+outside R, then open the chat:
 
 ``` r
-library(gptr)
+peter()
+```
+
+With no default model set, the console offers the available CLI routes
+and saves your choice. Enter `/exit` to return to R. CLI sign-in is
+separate from API credentials.
+
+**Local Ollama model.** Start Ollama separately and install a chat model
+that supports tool calls. Select an installed model, for example:
+
+``` r
+gptr_config(model = "ollama/qwen3:1.7b", .scope = "session")
+```
+
+gptr does not install Ollama or download models. Local-only inference is
+on by default; a workflow remains local only when every model and tool
+it uses is local.
+
+The first interactive use of a remote provider asks you to acknowledge
+the data it receives. See [Language
+models](https://broccolito.github.io/gptr/articles/language-models.html)
+for provider setup and supported routes.
+
+## Run an analysis
+
+With a model configured, ask for a task and continue the same agent
+session:
+
+``` r
+session = peter("Fit mpg on wt in mtcars and store the model as fit.", mtcars)
+session |> peter("Which cars have the largest residuals in fit?")
+session$text
+coef(fit)
+```
+
+The pipe adds a turn to the same conversation and reuses `fit`. The
+returned objects have different roles:
+
+| Object | What it contains |
+|----|----|
+| `session` | The agent conversation, status and usage, as a `gptr_session` |
+| `session$text` | The latest text answer |
+| `fit` | The fitted R model, available in your workspace |
+
+`session$value` holds the most recent R result selected with
+`gptr_return()`; a turn that selects no result leaves that value
+unchanged.
+
+At the console, agent code runs in your R workspace. R computes on the
+full objects, while the model receives size-limited descriptions,
+previews and tool output that may include data values. R's usual memory
+allocation and copy-on-modify rules apply. See [Execution
+model](https://broccolito.github.io/gptr/articles/execution-model.html)
+and [Data sent to
+providers](https://broccolito.github.io/gptr/reference/gptr_egress.html).
+
+In the default `manual` mode, actions classified as read-only run
+directly; actions classified as changes ask for approval unless an
+existing rule allows them. The check is advisory and provides no
+sandbox; see [Security
+considerations](https://broccolito.github.io/gptr/reference/gptr_security.html)
+or `?gptr_security` in R.
+
+## Record and replay an analysis
+
+Choose a recording file before starting the calls you want to keep. This
+example records a new analysis using R's built-in `mtcars` data:
+
+``` r
 gptr_doc("analysis.R")
 session = peter("Fit mpg on wt in mtcars and store the model as fit.")
-session |> peter("Which cars have the largest residuals in fit?")
+session |> peter("Summarize the residuals in fit.")
 gptr_doc(FALSE)
 ```
 
-The second prompt reuses `fit`, which is now in your workspace, and
-`analysis.R` holds both prompts and the code that ran. In a new R
-session, `gptr_source("analysis.R", replay = "replay")` rebuilds `fit`
-from that file without calling a model. In the default `manual` mode,
-read-only code runs directly and changes to objects or files ask first;
-the check is advisory, not a sandbox (`?gptr_security`).
+gptr writes eligible top-level calls and their executed R code into
+`analysis.R`, with model and execution metadata. These are local files
+you can review and version with your analysis. In a new R session,
+replay the recorded code:
 
-A System 1 model answers with a typed vector:
+``` r
+library(gptr)
+gptr_source("analysis.R", replay = "replay")
+```
+
+Replay makes no model calls. It executes the recorded R code, including
+its side effects, and requires that code's input data, files and
+packages.
+
+To ask the model again, use
+`gptr_source("analysis.R", replay = "live")`. The new run can produce
+different code or results. `gptr_export()` can turn an eligible recorded
+`.R` file into an ordinary R script.
+
+Recording also supports R Markdown, Quarto and Jupyter. See [Record,
+replay and
+export](https://broccolito.github.io/gptr/articles/script-as-history.html)
+for document setup, recording limits and export requirements.
+
+## Return typed decisions
+
+A decision model returns one answer per input: a logical value, a label
+selected with `choices`, or a numeric score defined by `levels`. The
+selected model type determines whether `peter()` returns a decision
+vector or an agent session.
+
+This example uses hosted Jev and requires `TYPESAFE_API_KEY`, which
+`gptr_env()` can load from your key file:
 
 ``` r
 abstracts = c("We randomized 200 adults to drug or placebo.",
               "We followed 5000 nurses for 20 years.")
 is_rct = peter("Is this a randomized trial?", abstracts, model = "jev")
+is_rct
 gptr_prob(is_rct)
 ```
 
-`is_rct` is a logical vector, one answer per abstract, so
-`abstracts[is_rct]` keeps the trials.
+`is_rct` is a logical vector. Here, `gptr_prob()` returns the model's
+probability of `TRUE` for each abstract. It does not establish the
+probability that a classification is correct.
+
+Local Clef and Clef Flash provide typed decisions through Ollama 0.35.1
+or later. gptr calls typed decision models **System 1** and
+conversational agents **System 2**. See [Typed
+decisions](https://broccolito.github.io/gptr/articles/system-one.html)
+for scores, uncertainty, calibration and a complete offline example.
 
 ## Learn more
 
-Start with `vignette("getting-started", package = "gptr")`; its examples
-run offline with `gptr_fake_provider()`. The longer examples are in the
-guides:
+Start with [Getting
+started](https://broccolito.github.io/gptr/articles/getting-started.html);
+its examples run offline with a scripted `gptr_fake_provider()`. In R,
+open it with `vignette("getting-started", package = "gptr")`.
 
-- [Execution
-  model](https://broccolito.github.io/gptr/articles/execution-model.html):
-  what the model receives, memory and large objects.
-- [Language
-  models](https://broccolito.github.io/gptr/articles/language-models.html):
-  providers, keys, CLIs and Ollama.
-- [System 1
-  decisions](https://broccolito.github.io/gptr/articles/system-one.html):
-  choices, scores, thresholds and probabilities, with an offline demo.
-- [Script as
-  history](https://broccolito.github.io/gptr/articles/script-as-history.html):
-  recording, replay and export.
 - [Interactive
   console](https://broccolito.github.io/gptr/articles/interactive-console.html):
-  the chat, steering and slash commands.
-
-Every guide, the function reference and a [cheat
-sheet](https://broccolito.github.io/gptr/cheatsheet.html) are on the
-[package site](https://broccolito.github.io/gptr/).
+  chat, commands and instructions sent while an agent works.
+- [Configuration](https://broccolito.github.io/gptr/articles/configuration.html):
+  defaults, scopes and permissions.
+- [Function
+  reference](https://broccolito.github.io/gptr/reference/index.html) and
+  [cheat sheet](https://broccolito.github.io/gptr/cheatsheet.html).
 
 ## Why Peter?
 
-`peter()` is named for two Peters. Peter Cathcart Wason studied dual
-processes in reasoning with Jonathan Evans; gptr's System 1 and System 2
-refer to that line of work. The labels are software roles: they imply
-nothing about human cognition, and Wason did not introduce them. Peter
-Naur edited the ALGOL 60 report, whose notation is now called
-Backus-Naur Form; in that spirit, gptr records sessions as documents you
-can read and run. The [Why
-Peter?](https://broccolito.github.io/gptr/articles/why-peter.html) guide
-gives the history and sources.
+The name honors Peter Naur's work on readable language definitions and
+Peter Cathcart Wason's research with Jonathan Evans on reasoning. System
+1 and System 2 name software roles in gptr; they imply nothing about
+human cognition. See [Why
+Peter?](https://broccolito.github.io/gptr/articles/why-peter.html) for
+the history and sources.
 
 ## Upgrading from gptr 0.7.0
 
-gptr 1.0.0 is a rewrite. `get_response()` and `dataframe_to_text()` are
-gone: use `peter("your prompt")$text`, and pass a data frame to
-`peter()` as context. See `NEWS.md`.
+gptr 1.0.0 is a rewrite. `get_response()` and `dataframe_to_text()` were
+removed: use `peter("your prompt")$text` and pass a data frame to
+`peter()` as context. See
+[NEWS.md](https://github.com/Broccolito/gptr/blob/main/NEWS.md).
+
+## Installation troubleshooting
+
+If pak reports `Subprocess is busy or cannot start`, or loading gptr
+reports a missing or corrupt `gptr.rdb`, restart R and reinstall before
+loading the package. You can also install from GitHub with
+`remotes::install_github("Broccolito/gptr")` if remotes is installed.
 
 ## License and acknowledgments
 
 gptr is licensed under the Apache License 2.0. Third-party notices are
-in `inst/COPYRIGHTS`.
+in
+[inst/COPYRIGHTS](https://github.com/Broccolito/gptr/blob/main/inst/COPYRIGHTS).
 
 gptr was inspired by Mario Zechner's 'pi' coding agent. The tool
 descriptions, edit guidelines and prompt-template grammar are derived
