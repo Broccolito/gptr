@@ -6393,6 +6393,39 @@ the driver, screens, events, transcripts and replays without a model are local, 
   `unlink("//host/share/f")` reads 3, not 4, and `setwd("//host/share")` 2; a climb that splits
   at `/` itself would close it, but no red test is possible on this host (base R's `dirname()`
   cannot be mocked).
+- Review round 6 (round 5's review): the verifier confirmed round 5's cause, red and fix, and
+  found two more things. (A) Round 5's "no other level changes" was wrong: classing a directory
+  read whole by `path_inside()` dropped the class the project's own path gives its files. In a
+  project under `.git`, `.claude` or `.aws` (Claude Code's worktrees live in `.claude/worktrees`)
+  `list.files('.')`, `list.files()` and `system('ls .')` read 0 where `list.files('sub')` read 2,
+  and `setwd('.')` and `withr::local_dir('.')` 2 where `setwd('sub')` read 4. Red: "a project in
+  a protected folder reads its root as its folders (review round 6)" FAIL 10 on `5e1c35e7`. Fix
+  (`a57a3b9e`): the child stand-in is back, joined with one `/`, so `/` gives `/x`, not the UNC
+  path `//x`; round 5's test now maps `/x` to `D:/x`, as Windows does. (B) Round 5's UNC residual
+  is fixed, and its "no red test is possible" was too strong: a copy of `path_norm_one()` whose
+  enclosing environment defines R 4.2's Win32 `dirname()` and `basename()` (src/main/util.c), a
+  `file.exists()` no UNC server answers and `normalizePath()` as `GetFullPathNameW()` gives it
+  reproduces the bug on any host. Red: "a UNC path is outside the project as R 4.2 on Windows
+  places it (review round 6)" FAIL 9 on `a57a3b9e`: `setwd('//host/share')`,
+  `setwd('\\host\share')` and `setwd('//x')` read 2, `unlink()`, `file.remove()`, the
+  `with_dir()` delete and `system('rm //host/share/f')` 3, `readLines()` 0 and `writeLines()` 2,
+  where R 4.4 reads 4, 4, 1 and 3. Fix (`f53f86d5`): on Windows `path_norm_one()` climbs a UNC
+  path no higher than its share (`//host/share`, `//host`) and writes the leading `\\` of
+  `dirname()` as `//`; POSIX is unchanged. Green: `^perm-classify$` FAIL 0 PASS 1150 (the same
+  test file on the code of `fe873436` FAIL 14, of `5e1c35e7` FAIL 19);
+  `^(perm|risk|rules|utils-paths|bridge|tool-|mcp-)` FAIL 0 SKIP 14 PASS 5193 in UTF-8 and under
+  `LC_ALL=C LANG=C`; the 15 other files that call the classifier or mock `is_windows()` FAIL 0
+  SKIP 10 PASS 5033 under `LC_ALL=C LANG=C` and in UTF-8 FAIL 3 SKIP 9 PASS 5038, all three at
+  test-proc-windows-backpressure.R:529, a 2 s stdin write timeout under load (load average 67),
+  which fails alike when the file is run alone on the code of `fe873436` and passed when run alone
+  here; lint clean (the 3 changed files); `document()` no diff. Differential against `fe873436`
+  (55 codes, 9 project layouts, real, and with the Win32 `dirname()` and `basename()` of R 4.2
+  and of R 4.4): no change in real mode, the two Windows modes now give the same levels, and the
+  only changes are round 5's `/` rows and the UNC rows on R 4.2 and, with the project at `/`,
+  `setwd('/')` 2 and `list.files('/')` 0 on R 4.4 (there `/` is the project). Not changed, the
+  maintainer's call: in a project inside a protected folder every directory is protected, so
+  round 4's gate gives `setwd('.')` and `setwd('sub')` 4 there, as before round 5. Not run here:
+  Windows hosts and R 4.2, which only PR #93's oldrel-4 check proves.
 
 ## FIX-28 - A bracketed paste is one draft however late its reads (2026-10-26, #93)
 - Why: CI-94's remaining limit (IC-76, issue #86). The composer told a paste from typing by timing
