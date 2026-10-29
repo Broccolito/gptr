@@ -420,7 +420,8 @@ user_fun = function(f) {
 }
 
 classify_env = function() {
-  e = new.env(parent = globalenv())
+  # The search path without globalenv(): a workspace `x` would change the levels
+  e = new.env(parent = parent.env(globalenv()))
   e$df = data.frame(a = 1:3)
   e$big = numeric(1e6)
   e$cfg = new.env()
