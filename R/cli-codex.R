@@ -5,16 +5,22 @@
 # P05's usage_new(), the injected opts and declared services only (IC-33). Adapted from the
 # verified exec driver of report 08 section 5.1 (prompt on stdin through a looping writer, JSONL
 # events of section 3.9) with the fixes of its verification log (items 14, 16, 54).
+# Under a coaching role (`the$coach_role`, 08 section 3.7) every exec is confined: ephemeral,
+# read-only, Codex's own tools switched off, gptr's hook in front of every tool, never resumed,
+# and checked before its reply is kept.
+
+#' A TOML basic string
+#' @noRd
+pcli_toml = function(x) paste0("\"", gsub("([\\\\\"])", "\\\\\\1", x), "\"")
 
 #' The `-c` overrides that make gptr's stdio relay Codex's `gptr` MCP server (IC-65, IC-79):
 #' `Rscript --vanilla <mcp_relay.R> <mailbox> <seconds>`, the paths as TOML basic strings; the
 #' relay waits for an answer no longer than the turn's wall clock
 #' @noRd
 pcli_codex_mcp_args = function(dir) {
-  toml = function(x) paste0("\"", gsub("([\\\\\"])", "\\\\\\1", x), "\"")
   relay = system.file("gptr", "mcp_relay.R", package = "gptr", mustWork = TRUE)
-  argv = toml(c("--vanilla", relay, dir, as.character(pcli_turn_seconds())))
-  c("-c", paste0("mcp_servers.gptr.command=", toml(rscript_path())),
+  argv = pcli_toml(c("--vanilla", relay, dir, as.character(pcli_turn_seconds())))
+  c("-c", paste0("mcp_servers.gptr.command=", pcli_toml(rscript_path())),
     "-c", paste0("mcp_servers.gptr.args=[", paste(argv, collapse = ","), "]"),
     "-c", "mcp_servers.gptr.default_tools_approval_mode=\"approve\"",
     "-c", "mcp_servers.gptr.required=true",
@@ -22,17 +28,172 @@ pcli_codex_mcp_args = function(dir) {
     "-c", "mcp_servers.gptr.tool_timeout_sec=3600")
 }
 
-#' The codex argv of IC-65: a new exec, or `exec resume` (which rejects -s and -C, so the sandbox
-#' travels as `-c sandbox_mode=`); `relay` is the exec's mailbox directory
+#' The Codex features a confined exec switches off (08 3.7)
 #' @noRd
-pcli_codex_args = function(model_id, wd, sandbox, relay, resume = NULL) {
-  mcp = pcli_codex_mcp_args(relay)
-  if (is.null(resume)) {
+pcli_codex_off = c("shell_tool", "unified_exec_tty", "view_image", "multi_agent", "apps",
+                   "plugins", "tool_suggest", "image_generation", "memories", "goals",
+                   "sleep_tool", "skill_search", "browser_use", "computer_use")
+
+#' The switches of a confined exec, also given to `codex features list` by the preflight: the
+#' features above off, no web search, user questions, sub-agents or skills, none of Codex's extra
+#' instructions, and no prompt history written
+#' @noRd
+pcli_codex_confine = c(
+  rbind("--disable", pcli_codex_off),
+  rbind("-c", c("web_search=\"disabled\"", "tools.experimental_request_user_input.enabled=false",
+                "agents.enabled=false", "skills.bundled.enabled=false",
+                "skills.include_instructions=false", "cloud.skills.enabled=false",
+                "include_permissions_instructions=false", "include_environment_context=false",
+                "include_apps_instructions=false", "history.persistence=\"none\"")))
+
+#' The codex argv of IC-65: a new exec, or `exec resume` (which rejects -s and -C, so the sandbox
+#' travels as `-c sandbox_mode=`); `relay` is the exec's private folder, the relay's mailbox
+#'
+#' Under a coaching `role` the exec is confined (08 3.7): ephemeral and read-only, Codex's own
+#' tools off, gptr's hook for SessionStart and PreToolUse, and the person's credentials store.
+#' A run keeps gptr's relay; a coach has none and gets the strict reply `schema` file.
+#' @noRd
+pcli_codex_args = function(model_id, wd, sandbox, relay, resume = NULL, role = NULL,
+                           schema = NULL) {
+  mcp = if (!identical(role, "coach")) pcli_codex_mcp_args(relay)
+  if (!is.null(resume)) {
+    return(c("exec", "resume", resume, "--json", "--ignore-user-config", "--skip-git-repo-check",
+             "-m", model_id, mcp, "-c", paste0("sandbox_mode=", sandbox), "-"))
+  }
+  if (is.null(role)) {
     return(c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "-m", model_id,
              "-C", wd, mcp, "--sandbox", sandbox, "-"))
   }
-  c("exec", "resume", resume, "--json", "--ignore-user-config", "--skip-git-repo-check", "-m",
-    model_id, mcp, "-c", paste0("sandbox_mode=", sandbox), "-")
+  c("exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules",
+    "--skip-git-repo-check", "-m", model_id, "-C", wd, mcp, "--sandbox", "read-only",
+    pcli_codex_confine, pcli_codex_hooks(role, relay), pcli_codex_auth_store(),
+    if (!is.null(schema)) c("--output-schema", schema), "-")
+}
+
+#' gptr's hook (inst/gptr/codex_hook.R) for SessionStart, which writes the start line, and
+#' PreToolUse, which allows only gptr's tools in a run and nothing for a coach; its log is in the
+#' exec's private folder. The command runs through Codex's shell (`$SHELL -lc`, cmd.exe on
+#' Windows, which mangles a line holding more than two quotes, so there it has none: short
+#' paths); the bypass flag runs it without Codex's persisted hook trust (08 3.7).
+#' @noRd
+pcli_codex_hooks = function(role, dir) {
+  hook = system.file("gptr", "codex_hook.R", package = "gptr", mustWork = TRUE)
+  paths = c(rscript_path(), hook, dir, dirname(system.file(package = "jsonlite")))
+  win = pcli_is_windows()
+  if (win) {
+    paths = pcli_cmd_paths(paths) %||%
+      gptr_abort(paste0("gptr cannot coach on Codex here: cmd.exe runs gptr's hook, and a path ",
+                        "it needs (R, an R library or the session's temporary folder) holds a ",
+                        "space or a sign cmd.exe reads and has no short (8.3) name. Move it to ",
+                        "a path without them, or set TMPDIR to one."),
+                 "model_refused", reason = "cli_preflight", cli = "codex")
+  }
+  argv = c(paths[[1L]], "--vanilla", paths[[2L]], role, file.path(paths[[3L]], "hook.log"),
+           paths[[4L]])
+  cmd = paste(if (win) argv else shQuote(argv, "sh"), collapse = " ")
+  value = paste0("=[{hooks=[{type=\"command\",command=", pcli_toml(cmd), ",timeout=30}]}]")
+  c("-c", paste0("hooks.SessionStart", value), "-c", paste0("hooks.PreToolUse", value),
+    "--dangerously-bypass-hook-trust")
+}
+
+#' Windows paths that an unquoted cmd.exe line keeps whole: their short (8.3) names with
+#' backslashes, or NULL when one still holds anything but letters, digits and `_.:\~-`
+#' @noRd
+pcli_cmd_paths = function(paths) {
+  short = chartr("/", "\\", utils::shortPathName(paths))
+  if (all(grepl("^[A-Za-z0-9_.:\\\\~-]+$", short))) short
+}
+
+#' The Codex home of the CLI's child environment: its CODEX_HOME, else ~/.codex
+#' @noRd
+pcli_codex_home = function() {
+  home = child_env("cli-codex")["CODEX_HOME"]
+  if (is.na(home) || !nzchar(home)) file.path(user_home(), ".codex") else unname(home)
+}
+
+#' `-c cli_auth_credentials_store=` from the person's `$CODEX_HOME/config.toml`, which
+#' --ignore-user-config skips although a login kept in the OS keyring needs it (08 3.7). Only a
+#' top-level line holding one of Codex's four values is read; anything else passes nothing.
+#' @noRd
+pcli_codex_auth_store = function() {
+  f = file.path(pcli_codex_home(), "config.toml")
+  text = if (file.exists(f)) tryCatch(read_utf8(f)$text, error = function(e) "") else ""
+  lines = strsplit(text, "\n", fixed = TRUE)[[1L]]
+  top = lines[cumsum(grepl("^[[:space:]]*\\[", lines)) == 0L]
+  m = regmatches(top, regexec(paste0("^[[:space:]]*cli_auth_credentials_store[[:space:]]*=",
+                                     "[[:space:]]*[\"']([a-z]+)[\"'][[:space:]]*(#.*)?$"), top))
+  v = vapply(m, function(x) if (length(x)) x[[2L]] else NA_character_, "")
+  v = v[v %in% c("file", "keyring", "auto", "ephemeral")]
+  if (length(v)) c("-c", paste0("cli_auth_credentials_store=", pcli_toml(v[[1L]])))
+}
+
+#' The Codex part of the coaching preflight (08 3.7), after pcli_coach_preflight()'s version
+#' floor: no `$CODEX_HOME/hooks.json` (the bypass flag would run its hooks too), and `codex
+#' features list` with the confined switches, which makes no model call, reporting each
+#' switched-off feature off and `hooks` on (an unknown feature name makes it fail, so a renamed
+#' switch fails closed)
+#' @return TRUE, invisibly; signals `gptr_error_model_refused` (reason `cli_preflight`).
+#' @noRd
+pcli_codex_preflight = function(path) {
+  refuse = function(why) {
+    gptr_abort(paste0("gptr cannot coach on this Codex CLI: ", why), "model_refused",
+               reason = "cli_preflight", cli = "codex")
+  }
+  hooks = file.path(pcli_codex_home(), "hooks.json")
+  if (file.exists(hooks)) {
+    refuse(paste0(hooks, " exists, and the flag that runs gptr's hook would run its hooks ",
+                  "too. Move the file aside to coach on Codex."))
+  }
+  res = pcli_run(path, c("features", "list", pcli_codex_confine))
+  why = pcli_run_failure(res)
+  if (!is.null(why)) refuse(paste0("`codex features list` ", why, " with gptr's switches."))
+  lines = trimws(strsplit(res$stdout %||% "", "\n", fixed = TRUE)[[1L]])
+  rows = strsplit(lines[nzchar(lines)], "[[:space:]]+")
+  state = stats::setNames(vapply(rows, function(r) r[[length(r)]], ""),
+                          vapply(rows, function(r) r[[1L]], ""))
+  want = c(stats::setNames(rep("false", length(pcli_codex_off)), pcli_codex_off), hooks = "true")
+  got = state[names(want)]
+  wrong = names(want)[is.na(got) | got != want]
+  if (length(wrong)) {
+    refuse(paste0("with gptr's switches, `codex features list` shows ",
+                  paste(wrong, collapse = ", "), " in the wrong state (each switched-off ",
+                  "feature must read false, and the hook feature true)."))
+  }
+  invisible(TRUE)
+}
+
+#' A JSON Schema in OpenAI's strict form for `--output-schema` (08 3.7): every object lists all
+#' its keys as required and allows no others, and a key that was optional becomes nullable.
+#' Subschemas under any other keyword are converted too; gptr still validates the reply itself.
+#' @noRd
+pcli_codex_strict = function(x) {
+  if (!is.list(x)) return(x)
+  if (is.null(names(x))) return(lapply(x, pcli_codex_strict))
+  for (k in setdiff(names(x), c("properties", "required", "enum", "const", "default",
+                                "examples"))) {
+    x[[k]] = pcli_codex_strict(x[[k]])
+  }
+  if (!("object" %in% unlist(x[["type"]]) || is.list(x[["properties"]]))) return(x)
+  props = x[["properties"]]
+  if (!length(props)) props = json_obj()
+  req = as.character(unlist(x[["required"]]))
+  for (k in names(props)) {
+    p = pcli_codex_strict(props[[k]])
+    props[[k]] = if (k %in% req) p else pcli_codex_nullable(p)
+  }
+  x$properties = props
+  x$required = I(names(props))
+  x$additionalProperties = FALSE
+  x
+}
+
+#' A subschema that also admits null: "null" joins its type (and null its enum), else anyOf
+#' @noRd
+pcli_codex_nullable = function(x) {
+  if (!is.list(x) || is.null(x[["type"]])) return(list(anyOf = list(x, list(type = "null"))))
+  x$type = I(unique(c(as.character(unlist(x[["type"]])), "null")))
+  if (!is.null(x[["enum"]])) x$enum = c(as.list(x[["enum"]]), list(NULL))
+  x
 }
 
 #' Is Codex's native Windows sandbox ready? `codex sandbox windows` runs a no-op command in it
@@ -256,6 +417,12 @@ pcli_codex_cap = function(par) {
 #' stdin. A fresh thread's prompt carries the instructions and the earlier conversation, so it
 #' is not bounded: on Windows the write blocks until Codex has read it, which Codex does at
 #' once, before its turn starts (D-019 item 5; D-106).
+#'
+#' Under a coaching role (`the$coach_role`: "run", else a coach) the exec is confined and never
+#' resumed: an ephemeral thread is not stored, so each exec carries gptr's instructions and the
+#' whole history. A coach's reply schema (`returns`) goes in strict form to `schema.json` in the
+#' exec's private folder. coach_model_kind() ran the preflight before any coaching process
+#' started; every session is checked (08 3.7).
 #' @noRd
 pcli_codex_build = function(model, context, opts) {
   state = pcli_state(opts)
@@ -264,15 +431,25 @@ pcli_codex_build = function(model, context, opts) {
   pcli_track(opts[["session"]], state)
   path = pcli_find("codex")
   probe = pcli_probe(path)
+  role = the$coach_role
+  if (!is.null(role) && !identical(role, "run")) role = "coach"
   pcli_notice("codex")
   par = pcli_params(context)
-  sandbox = pcli_codex_sandbox(par$mode, path)
+  sandbox = if (is.null(role)) pcli_codex_sandbox(par$mode, path) else "read-only"
   relay = tempfile("gptr-codex-")
   dir.create(relay, mode = "0700")
   state$codex_relay = path_norm(relay)
-  resume = if (isTRUE(probe$resume)) state$codex_thread else NULL
+  state$codex_role = role
+  schema = NULL
+  returns = context[["params"]][["returns"]]
+  if (identical(role, "coach") && !is.null(returns)) {
+    schema = file.path(state$codex_relay, "schema.json")
+    write_utf8(schema, json_encode(pcli_codex_strict(returns)))
+  }
+  resume = if (isTRUE(probe$resume) && is.null(role)) state$codex_thread else NULL
   wd = path_norm(getwd())
-  args = pcli_codex_args(pcli_model_id(model), wd, sandbox, state$codex_relay, resume = resume)
+  args = pcli_codex_args(pcli_model_id(model), wd, sandbox, state$codex_relay, resume = resume,
+                         role = role, schema = schema)
   state$cli_api = "cli-codex"
   state$codex_sandbox = sandbox
   state$codex_cap = pcli_codex_cap(par)
@@ -452,28 +629,112 @@ pcli_codex_warn = function(changed, earlier = FALSE) {
   invisible(changed)
 }
 
-#' End an exec through `end()`, its terminal event: its relay ends first, so no reactor task
-#' outlives the turn, and the control files of a workspace-write exec are checked first and
-#' reported after the event, also when `end()` fails (IC-54, IC-65; D-106)
+#' End an exec through `end()`, its terminal event: its relay ends and its private folder goes
+#' first, so no reactor task outlives the turn, and the control files of a workspace-write exec
+#' are checked first and reported after the event, also when `end()` fails (IC-54, IC-65; D-106)
 #' @noRd
 pcli_codex_end = function(s, end) {
-  if (!is.null(s$relay)) {
-    reactor_cancel(s$relay)
-    unlink(s$state$codex_relay, recursive = TRUE)
-  }
+  if (!is.null(s$relay)) reactor_cancel(s$relay)
+  unlink(s$dir, recursive = TRUE)
   changed = pcli_codex_check(s$state)
   tryCatch(end(), finally = pcli_codex_warn(changed))
 }
 
 #' End an exec with the terminal error event; `kill` first stops the child (turn cap, wall clock,
-#' an aborted run, an R error), so the control files are checked once Codex can no longer write
-#' them and the terminal event (whose done callback runs at once) finds it gone (D-106)
+#' an aborted run, an R error, a failed check), so the control files are checked once Codex can
+#' no longer write them and the terminal event (whose done callback runs at once) finds it gone
+#' (D-106). A provider error whose text, or the exec's last error, names a plan limit ends as
+#' class `plan_limit` with the reset time Codex quoted (08 3.7).
 #' @noRd
 pcli_codex_error = function(s, class, text, reason = "error", status = NA_integer_,
-                           kill = FALSE) {
+                           kill = FALSE, usage = NULL) {
   if (kill) tryCatch(pcli_stop_child(s$state, wait_ack = FALSE), error = function(e) NULL)
   if (s$done) return(s$msg)
-  pcli_codex_end(s, function() pcli_fail(s, class, text, reason = reason, status = status))
+  resets = if (identical(class, "provider")) pcli_codex_limit(c(text, s$last_error))
+  if (!is.null(resets)) class = "plan_limit"
+  pcli_codex_end(s, function() {
+    pcli_fail(s, class, text, reason = reason, status = status, usage = usage, resets_at = resets)
+  })
+}
+
+#' The reset time of a Codex plan limit named in `texts`: the local time Codex quotes after "try
+#' again at", NA when it gives none; NULL when no text names a usage limit, an empty workspace
+#' credit or a spend cap (08 3.7)
+#' @noRd
+pcli_codex_limit = function(texts) {
+  hit = texts[grepl("hit your usage limit|out of credits|spend cap", texts, ignore.case = TRUE)]
+  if (!length(hit)) return(NULL)
+  m = regmatches(hit[[1L]], regexec("try again at ([^.]+)[.]", hit[[1L]], ignore.case = TRUE))
+  if (length(m[[1L]]) == 2L) m[[1L]][[2L]] else NA_character_
+}
+
+#' The kind of an item a confined exec may not report, or NULL: a coach may report only
+#' messages, reasoning and warnings (`error` items), a run also calls of gptr's MCP server; any
+#' other kind, a tool step or one Codex adds later, fails the check (08 3.7)
+#' @noRd
+pcli_codex_outside = function(s, item) {
+  role = s$state$codex_role
+  if (is.null(role)) return(NULL)
+  kind = pcli_chr(item[["type"]]) %||% "untyped"
+  gptr_call = identical(role, "run") && identical(kind, "mcp_tool_call") &&
+    identical(item[["server"]], "gptr")
+  if (kind %in% c("agent_message", "reasoning", "error") || gptr_call) NULL else kind
+}
+
+#' The log of gptr's Codex hook in an exec's private folder: whether its start line is there,
+#' and the tools it denied, one per other line ("codex_tool" when a line names none), so a
+#' garbled line counts against the session
+#' @noRd
+pcli_codex_hook_log = function(dir) {
+  path = file.path(dir, "hook.log")
+  text = if (file.exists(path)) tryCatch(read_utf8(path)$text, error = function(e) "") else ""
+  lines = strsplit(text, "\n", fixed = TRUE)[[1L]]
+  rows = lapply(lines[nzchar(lines)], function(x) tryCatch(json_decode(x), error = function(e) x))
+  start = vapply(rows, function(r) is.list(r) && identical(r[["event"]], "start"), NA)
+  denied = vapply(rows[!start], function(r) {
+    (if (is.list(r)) pcli_chr(r[["tool_name"]])) %||% "codex_tool"
+  }, "")
+  list(start = any(start), denied = denied)
+}
+
+#' The checks of a confined exec whose turn completed (08 3.7), NULL when it passes: the bypass
+#' warning proves the hook flag took effect, the hook's start line that the hook ran; a coach
+#' must have no denial and exactly one message. A run's denials are reported as refused steps.
+#' @noRd
+pcli_codex_coach_check = function(s) {
+  role = s$state$codex_role
+  if (is.null(role)) return(NULL)
+  if (!isTRUE(s$bypass)) {
+    return(paste0("Codex did not confirm --dangerously-bypass-hook-trust, so gptr cannot tell ",
+                  "that its hook was active; gptr discarded the session."))
+  }
+  log = pcli_codex_hook_log(s$dir)
+  if (!log$start) {
+    return("gptr's Codex hook never wrote its start line; gptr discarded the session.")
+  }
+  if (identical(role, "coach")) {
+    if (length(log$denied)) {
+      return(paste0("Codex tried to use a tool in a coaching session, which has none, and gptr's ",
+                    "hook denied it (", paste(log$denied, collapse = ", "), "); gptr discarded ",
+                    "the session."))
+    }
+    if (s$messages != 1L) {
+      return(paste0("Codex sent ", s$messages, " messages, and a coaching session must send ",
+                    "exactly one; gptr discarded the session."))
+    }
+    return(NULL)
+  }
+  emit = s$opts[["emit"]]
+  if (!is.function(emit)) return(NULL)
+  for (i in seq_along(log$denied)) {
+    id = paste0("codex_hook_", i)
+    emit(ev_new("tool_execution_start", tool_call_id = id, tool_name = log$denied[[i]],
+                input = json_obj(), informational = TRUE))
+    emit(ev_new("tool_execution_end", tool_call_id = id, tool_name = log$denied[[i]],
+                is_error = TRUE, elapsed = 0, details = list(), informational = TRUE,
+                refused = "gptr's Codex hook denied it: only gptr's tools may run"))
+  }
+  NULL
 }
 
 #' End an exec of an aborted run as aborted and stop it: once the terminal event has finished
@@ -484,12 +745,17 @@ pcli_codex_abort = function(s) {
   pcli_codex_error(s, "aborted", "The run was aborted.", reason = "aborted", kill = TRUE)
 }
 
-#' One completed item: text, reasoning, or a counted tool step
+#' One completed item: text, a warning, reasoning, or a counted tool step
 #' @noRd
 pcli_codex_item = function(s, item) {
   kind = pcli_chr(item[["type"]]) %||% ""
   if (identical(kind, "agent_message")) {
+    s$messages = s$messages + 1L
     pcli_text_block(s, item[["text"]] %||% "")
+  } else if (identical(kind, "error")) {
+    # a warning; the bypass flag always adds one
+    text = pcli_chr(item[["message"]]) %||% ""
+    if (grepl("--dangerously-bypass-hook-trust", text, fixed = TRUE)) s$bypass = TRUE
   } else if (identical(kind, "reasoning")) {
     text = trimws(pcli_chr(item[["text"]]) %||% "", "right")
     if (nzchar(text)) pcli_text_block(s, text, kind = "thinking")
@@ -508,12 +774,19 @@ pcli_codex_item = function(s, item) {
 #' Dispatch one `codex exec --json` event (08 3.9). A top-level `error` event is noted, not
 #' terminal (the verified driver of 08 5.1 records it and decides at `turn.failed` or the exit).
 #' Fields are read only with the JSON types of 08 3.9; anything else is ignored or unknown.
+#' A confined exec (08 3.7) is stopped at the first item outside gptr's tools, and its completed
+#' turn is kept only when pcli_codex_coach_check() passes.
 #' @noRd
 pcli_codex_event = function(obj, s) {
   type = pcli_chr(obj[["type"]]) %||% ""
   item = obj[["item"]]
   if (!is.list(item)) item = list()
-  if (identical(type, "thread.started")) {
+  outside = if (startsWith(type, "item.")) pcli_codex_outside(s, item)
+  if (!is.null(outside)) {
+    pcli_codex_error(s, "cli_check", paste0("Codex reported a ", outside, " step, which is ",
+                                            "outside gptr's tools, so gptr stopped the session."),
+                     kill = TRUE)
+  } else if (identical(type, "thread.started")) {
     tid = pcli_sid(obj[["thread_id"]])
     if (!is.null(tid)) s$state$codex_thread = tid
     pcli_start(s)
@@ -527,6 +800,8 @@ pcli_codex_event = function(obj, s) {
     pcli_codex_item(s, item)
   } else if (identical(type, "turn.completed")) {
     usage = pcli_codex_usage(obj[["usage"]], s$state)
+    why = pcli_codex_coach_check(s)
+    if (!is.null(why)) return(pcli_codex_error(s, "cli_check", why, usage = usage))
     pcli_codex_end(s, function() pcli_done(s, usage, "stop", "completed"))
   } else if (identical(type, "turn.failed")) {
     why = pcli_codex_why(obj) %||% s$last_error %||% "unknown error"
@@ -586,6 +861,9 @@ pcli_codex_parse = function(model, opts) {
   s$items = 0L
   s$open_tools = character()
   s$last_error = NULL
+  s$messages = 0L
+  s$bypass = FALSE
+  s$dir = s$state$codex_relay
   s$cap = s$state$codex_cap %||% pcli_codex_cap(list())
   push = function(ev) {
     if (s$done) return(TRUE)
@@ -603,6 +881,6 @@ pcli_codex_parse = function(model, opts) {
            if (!is.null(s$last_error)) paste0(" Its last error: ", s$last_error))
   }
   n = pcli_normaliser(s, "codex", push, pcli_codex_error, exited, function() pcli_codex_timeout(s))
-  if (!is.null(s$state$codex_relay)) pcli_codex_relay(s, s$state$codex_relay)
+  if (!is.null(s$dir) && !identical(s$state$codex_role, "coach")) pcli_codex_relay(s, s$dir)
   n
 }

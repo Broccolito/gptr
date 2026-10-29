@@ -963,3 +963,320 @@ test_that("an abort of three running CLI agents leaves no process tree (INFRA-19
   expect_length(fake_log(f, "interrupt"), n)
   expect_all_dead(fake_pids(f))
 })
+
+# ---- coaching sessions (P29, 08 section 3.7) -----------------------------------------------------
+
+# Set the process's coaching role (`the$coach_role`) for the calling test
+local_coach_role = function(role, .env = parent.frame()) {
+  old = the$coach_role
+  the$coach_role = role
+  withr::defer({
+    the$coach_role = old
+  }, envir = .env)
+}
+
+# The flags every coaching session adds after --model
+coach_flags = c("--no-session-persistence", "--permission-prompts", "none", "--settings",
+                '{"autoMemoryEnabled":false}')
+
+# Count the children the adapter stops in the calling test
+local_stop_count = function(.env = parent.frame()) {
+  stopped = new.env()
+  stopped$n = 0L
+  local_mocked_bindings(pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
+    stopped$n = stopped$n + 1L
+    invisible(TRUE)
+  }, .env = .env)
+  stopped
+}
+
+# A normaliser of one turn of a child started in a coaching role
+coach_turn = function(role, .env = parent.frame()) {
+  opts = stub_opts() # nolint: object_usage_linter.
+  opts$state$claude_role = role
+  model = stub_model("claude") # nolint: object_usage_linter.
+  n = local_normaliser(pcli_claude_parse, model, opts, .env = .env) # nolint: object_usage_linter.
+  list(n = n, opts = opts)
+}
+
+# A coach's clean init line, with fields replaced or (NULL) removed
+coach_init = function(...) {
+  init = list(type = "system", subtype = "init", session_id = "s1", tools = list(),
+              mcp_servers = list(), apiKeySource = "none", slash_commands = list(),
+              skills = list(), plugins = list())
+  extra = list(...)
+  init[names(extra)] = extra
+  init
+}
+gptr_server = list(list(name = "gptr", status = "connected"))
+
+# The turn ended with gptr_error_cli_check, its message holding `why`
+expect_check = function(t, why) {
+  ev = t$opts$log$events[[length(t$opts$log$events)]]
+  expect_identical(ev$type, "error")
+  expect_identical(ev$error$class, "cli_check")
+  expect_match(ev$message$error_message, why, fixed = TRUE)
+}
+
+test_that("a coaching role adds the confined flags; a coach gets no MCP server and no tool", {
+  expect_identical(pcli_claude_args("claude-sonnet-5-5", "/t/m.json", "/t/s.md", role = "run"),
+                   c(claude_argv_8_3("/t/m.json", "/t/s.md", "claude-sonnet-5-5"), coach_flags))
+  coach = pcli_claude_args("claude-sonnet-5-5", "/t/m.json", "/t/s.md",
+                           budget = list(turns = 1, cost = 2), role = "coach")
+  expect_identical(coach, c("-p", "--input-format", "stream-json", "--output-format",
+                            "stream-json", "--verbose", "--include-partial-messages", "--tools", "",
+                            "--strict-mcp-config", "--setting-sources", "",
+                            "--disable-slash-commands", "--permission-prompt-tool", "stdio",
+                            "--permission-mode", "default", "--disallowedTools", "*",
+                            "--system-prompt-file", "/t/s.md", "--model", "claude-sonnet-5-5",
+                            coach_flags, "--max-turns", "1", "--max-budget-usd", "2"))
+})
+
+test_that("build() in a coaching role never resumes, turns memory off and replaces the child", {
+  skip_on_cran()
+  local_fake_cli_path("claude", "text")
+  stopped = local_stop_count()
+  local_mocked_bindings(pcli_probe = function(path) list(bare_optout = NULL),
+                        pcli_notice = function(cli) invisible(NULL))
+  msgs = list(msg_user("first"),
+              msg_assistant(list(block_text("answer one")), api = "cli-claude",
+                            provider = "fakeclaude", model = "claude-sonnet-5-5"),
+              msg_user("second"))
+  ctx = list(system = list(t0 = "T0", t1 = ""), messages = msgs)
+  opts = stub_opts()
+  pcli_claude_build(stub_model("claude"), ctx, opts)
+  opts$state$process = stub_process()
+  opts$state$claude_session = "11111111-1111-4111-8111-111111111111"
+  local_coach_role("run")
+  spec = pcli_claude_build(stub_model("claude"), ctx, opts)
+  expect_identical(stopped$n, 1L)
+  expect_false("--resume" %in% spec$start$args)
+  expect_identical(utils::tail(spec$start$args, 5L), coach_flags)
+  expect_identical(spec$start$env, c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1",
+                                     CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1",
+                                     CLAUDE_CODE_SKIP_PROMPT_HISTORY = "1"))
+  # a fresh child carries the whole conversation
+  expect_match(spec$send[[2]]$message$content[[1]]$text, "Assistant: answer one", fixed = TRUE)
+  expect_identical(opts$state$claude_role, "run")
+  local_coach_role("coach")
+  coach = pcli_claude_build(stub_model("claude"),
+                            list(system = list(t0 = "T0", t1 = ""), messages = list(msg_user("Hi")),
+                                 params = list(cli_budget = list(cost = 5))), stub_opts())
+  expect_false(any(c("--mcp-config", "--allowedTools") %in% coach$start$args))
+  expect_identical(utils::tail(coach$start$args, 4L),
+                   c("--max-turns", "1", "--max-budget-usd", "5"))
+  pcli_untrack("s0123456789")
+})
+
+test_that("the claude route asks for `returns` at the end of the user line", {
+  skip_on_cran()
+  local_fake_cli_path("claude", "text")
+  local_mocked_bindings(pcli_probe = function(path) list(bare_optout = NULL),
+                        pcli_notice = function(cli) invisible(NULL))
+  schema = list(type = "object", properties = list(n = list(type = "integer")),
+                required = list("n"))
+  ctx = list(system = list(t0 = "T0", t1 = ""), messages = list(msg_user("Count")),
+             params = list(returns = schema))
+  content = pcli_claude_build(stub_model("claude"), ctx, stub_opts())$send[[2]]$message$content
+  expect_identical(content, list(list(type = "text", text = "Count"),
+                                 list(type = "text", text = adp_returns_instruction(schema))))
+  ctx$params = list()
+  plain = pcli_claude_build(stub_model("claude"), ctx, stub_opts())$send[[2]]$message$content
+  expect_identical(plain, list(list(type = "text", text = "Count")))
+  pcli_untrack("s0123456789")
+})
+
+test_that("the CLI's own plugins pass the coaching check; an installed one does not", {
+  # the three plugins claude 2.1.296 always lists, as its init line gives them
+  own = lapply(c("cc-plugin-agents-md", "cc-plugin-telemetry", "cc-plugin-plugin-authoring"),
+               function(p) list(name = p, path = "builtin", source = paste0(p, "@builtin")))
+  expect_null(pcli_claude_init_check(coach_init(plugins = own), coach = TRUE))
+  expect_null(pcli_claude_init_check(coach_init(plugins = own, tools = list("mcp__gptr__r"),
+                                                mcp_servers = gptr_server), coach = FALSE))
+  mine = c(own, list(list(name = "x", path = "/home/me/.claude/plugins/x", source = "x@m")))
+  expect_identical(pcli_claude_init_check(coach_init(plugins = mine), coach = TRUE),
+                   "it loaded plugins")
+})
+
+test_that("an init line that breaks a coaching check ends the session and stops the CLI", {
+  skip_on_cran()
+  stopped = local_stop_count()
+  other = c(gptr_server, list(list(name = "other", status = "connected")))
+  bad = list(
+    coach = list(coach_init(tools = list("Read")), coach_init(mcp_servers = gptr_server),
+                 coach_init(tools = NULL), coach_init(plugins = list(list(name = "p"))),
+                 coach_init(skills = list("s")), coach_init(slash_commands = list("x")),
+                 coach_init(memory_paths = list(auto = "/m"))),
+    run = list(coach_init(tools = list("mcp__gptr__r", "Bash"), mcp_servers = gptr_server),
+               coach_init(tools = list("mcp__gptr__r"), mcp_servers = other),
+               coach_init(tools = list("mcp__gptr__r"))))
+  for (role in names(bad)) {
+    for (init in bad[[role]]) {
+      t = coach_turn(role)
+      expect_true(push_obj(t$n, init))
+      expect_check(t, "coaching check")
+    }
+  }
+  expect_identical(stopped$n, 10L)
+  ok = list(coach = coach_init(memory_paths = json_obj()),
+            run = coach_init(tools = list("mcp__gptr__r"), mcp_servers = gptr_server))
+  for (role in names(ok)) {
+    t = coach_turn(role)
+    expect_false(push_obj(t$n, ok[[role]]))
+    expect_length(t$opts$log$events, 0L)
+  }
+  expect_identical(stopped$n, 10L)
+})
+
+test_that("a tool outside gptr's or a CLI sub-agent stops a coaching session", {
+  skip_on_cran()
+  stopped = local_stop_count()
+  tool = function(name, parent = NULL) {
+    list(type = "stream_event", parent_tool_use_id = parent,
+         event = list(type = "content_block_start", index = 0L,
+                      content_block = list(type = "tool_use", id = "t1", name = name,
+                                           input = json_obj())))
+  }
+  ask = function(sub, name = "Bash") {
+    list(type = "control_request", request_id = "c1",
+         request = list(subtype = sub, tool_name = name, input = json_obj(), server_name = "gptr",
+                        message = list(jsonrpc = "2.0", id = 1L, method = "tools/list")))
+  }
+  said = list(type = "assistant", message = list(role = "assistant", content = list(
+    list(type = "server_tool_use", id = "t2", name = "web_search", input = json_obj()))))
+  aside = list(type = "stream_event", parent_tool_use_id = "toolu_1",
+               event = list(type = "message_start", message = json_obj()))
+  bad = list(coach = list(tool("mcp__gptr__r"), ask("can_use_tool", "mcp__gptr__r"),
+                          ask("mcp_message"), said, aside),
+             run = list(tool("Bash"), ask("can_use_tool"), said, aside))
+  for (role in names(bad)) {
+    for (obj in bad[[role]]) {
+      t = coach_turn(role)
+      expect_true(push_obj(t$n, obj))
+      expect_check(t, "coaching check")
+      expect_length(t$opts$log$sent, 0L)
+      expect_length(t$opts$log$gated, 0L)
+      expect_length(t$opts$log$dispatched, 0L)
+    }
+  }
+  expect_identical(stopped$n, 9L)
+  # a run acts through gptr's own tools
+  t = coach_turn("run")
+  expect_true(feed_fixture(t$n, "claude-tool.ndjson"))
+  expect_identical(event_types(t$opts)[[length(t$opts$log$events)]], "done")
+  expect_false(push_obj(coach_turn("run")$n, ask("can_use_tool", "mcp__gptr__r")))
+  expect_identical(stopped$n, 9L)
+})
+
+test_that("a coach answers in one turn after a checked init; a run has no permission denials", {
+  skip_on_cran()
+  stopped = local_stop_count()
+  result = function(...) {
+    obj = list(type = "result", subtype = "success", is_error = FALSE, result = "{}",
+               num_turns = 1L, usage = list(input_tokens = 1L))
+    extra = list(...)
+    obj[names(extra)] = extra
+    obj
+  }
+  t = coach_turn("coach")
+  push_obj(t$n, coach_init())
+  expect_true(push_obj(t$n, result(num_turns = 2L)))
+  expect_check(t, "2 turns")
+  t = coach_turn("coach")
+  expect_true(push_obj(t$n, result()))
+  expect_check(t, "init")
+  t = coach_turn("run")
+  push_obj(t$n, coach_init(tools = list("mcp__gptr__r"), mcp_servers = gptr_server))
+  expect_true(push_obj(t$n, result(num_turns = 3L,
+                                   permission_denials = list(list(tool_name = "Bash")))))
+  expect_check(t, "Bash")
+  expect_identical(stopped$n, 3L)
+  t = coach_turn("coach")
+  push_obj(t$n, coach_init())
+  expect_true(push_obj(t$n, result()))
+  expect_identical(event_types(t$opts), c("start", "text_start", "text_delta", "text_end", "done"))
+  expect_identical(msg_text(t$n$message()), "{}")
+})
+
+test_that("a plan limit ends the turn with plan_limit and when the limit resets", {
+  skip_on_cran()
+  withr::local_envvar(TZ = "UTC")
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  stopped = local_stop_count()
+  end = function(text, before = list(), role = NULL) {
+    opts = stub_opts()
+    opts$state$claude_role = role
+    n = local_normaliser(pcli_claude_parse, stub_model("claude"), opts)
+    for (obj in before) push_obj(n, obj)
+    push_obj(n, list(type = "result", subtype = "success", is_error = TRUE, api_error_status = 429L,
+                     result = text, usage = list(input_tokens = 0L)))
+    opts$log$events[[length(opts$log$events)]]$error
+  }
+  for (text in c("You've hit your weekly limit · resets Mon 12:00am",
+                 "You've hit your Opus limit · resets Mon 12:00am",
+                 "You’ve hit your session limit · resets Mon 12:00am")) {
+    err = end(text)
+    expect_identical(err[c("class", "reason", "resets_at")],
+                     list(class = "plan_limit", reason = "limit", resets_at = "Mon 12:00am"))
+  }
+  rejected = list(type = "rate_limit_event",
+                  rate_limit_info = list(status = "rejected", resetsAt = 1790870400,
+                                         rateLimitType = "seven_day"))
+  expect_identical(end("Request failed", list(rejected))[c("class", "resets_at")],
+                   list(class = "plan_limit", resets_at = "2026-10-01 16:00 UTC"))
+  expect_identical(end("You've hit your rate limit, try again shortly")$class, "rate_limit")
+  expect_null(end("Try again shortly")$resets_at)
+  # usage credits stop a coaching session at once, and only a coaching session
+  over = list(type = "rate_limit_event",
+              rate_limit_info = list(status = "allowed", isUsingOverage = TRUE,
+                                     resetsAt = 1790870400))
+  credits = list(type = "rate_limit_event",
+                 rate_limit_info = list(status = "rejected", errorCode = "credits_required"))
+  for (obj in list(over, credits)) {
+    t = coach_turn("run")
+    expect_true(push_obj(t$n, obj))
+    ev = t$opts$log$events[[length(t$opts$log$events)]]
+    expect_identical(ev$error[c("class", "reason")], list(class = "plan_limit", reason = "overage"))
+    expect_match(ev$message$error_message, "usage credits", fixed = TRUE)
+  }
+  expect_identical(stopped$n, 2L)
+  plain = stub_opts()
+  expect_false(push_obj(local_normaliser(pcli_claude_parse, stub_model("claude"), plain), over))
+  expect_length(plain$log$events, 0L)
+  expect_true(pcli_cache$plan$fakeclaude$overage)
+})
+
+test_that("a plan limit through peter() is not retried and signals gptr_error_plan_limit", {
+  skip_on_cran()
+  withr::local_envvar(TZ = "UTC")
+  f = local_fake_cli("claude", "limit")
+  s = peter("Say hello", model = f$model, envir = new.env(), mode = "auto", .run = FALSE)
+  local_cli_cleanup(s)
+  err = expect_error(gptr_wait(s), class = "gptr_error_plan_limit")
+  expect_identical(err$resets_at, "2026-10-01 16:00 UTC")
+  expect_identical(err$reason, "limit")
+  expect_length(fake_log(f, "turn"), 1L)
+})
+
+test_that("a run in the coaching role starts each CLI fresh, with its flags and variables", {
+  skip_on_cran()
+  local_coach_role("run")
+  f = local_fake_cli("claude", "text")
+  s = peter("Say hello", model = f$model, envir = new.env(), mode = "auto")
+  local_cli_cleanup(s)
+  expect_identical(s$text, "Hello from the fake claude CLI.")
+  s |> peter("Again")
+  expect_identical(s$status, "idle")
+  argv = fake_argv(f)
+  expect_length(argv, 2L)
+  for (a in argv) {
+    expect_false("--resume" %in% a)
+    expect_true(all(coach_flags %in% a))
+  }
+  expect_true(all(c("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "CLAUDE_CODE_DISABLE_CLAUDE_MDS",
+                    "CLAUDE_CODE_SKIP_PROMPT_HISTORY") %in% fake_env_names(f)[[2]]))
+  first = first_user_text(fake_log(f, "stdin"), fake_pids(f)[2L])
+  expect_match(first, "Say hello", fixed = TRUE)
+  expect_match(first, "Again", fixed = TRUE)
+})

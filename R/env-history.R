@@ -1,7 +1,7 @@
 # The user's top-level expressions between agent turns (P09; report 12 section 2.C5).
 # A task callback registered while a session with a kept home is live; it never touches `value`.
 # R drops a callback that throws, so nothing it runs may throw on parser output (D-045). peter()
-# calls, the registering one included, are not logged.
+# calls, the registering one included, gptr_coach() and harness calls are not logged.
 
 #' Process-level log of the user's top-level expressions (not run state: the user's own
 #' typing history, the last 20 entries)
@@ -18,13 +18,42 @@ user_log_is_name = function(x, name) {
     identical(as.character(x), name)
 }
 
-#' Is a call head the function peter() (`peter`, `gptr::peter` or `gptr:::peter`)?
+#' Is a call head peter() or gptr_coach() (bare, `gptr::` or `gptr:::`), or a name bound to a
+#' harness in the global environment, where the user's top-level calls are evaluated (08 section
+#' 3.6)?
 #' @noRd
 user_log_gptr_head = function(head) {
-  if (user_log_is_name(head, "peter")) return(TRUE)
-  is.call(head) && length(head) == 3L &&
-    (identical(head[[1L]], as.name("::")) || identical(head[[1L]], as.name(":::"))) &&
-    user_log_is_name(head[[2L]], "gptr") && user_log_is_name(head[[3L]], "peter")
+  for (name in c("peter", "gptr_coach")) {
+    if (user_log_is_name(head, name)) return(TRUE)
+    if (is.call(head) && length(head) == 3L &&
+        (identical(head[[1L]], as.name("::")) || identical(head[[1L]], as.name(":::"))) &&
+        user_log_is_name(head[[2L]], "gptr") && user_log_is_name(head[[3L]], name)) {
+      return(TRUE)
+    }
+  }
+  is.name(head) && make.names(head) == as.character(head) &&
+    env_harness_bound(as.character(head), globalenv())
+}
+
+#' Is `name` bound to a harness (class `gptr_harness`, 08 section 3.1) where a call evaluated in
+#' `envir` finds that function? A promise or an active binding found first is never forced and
+#' counts as no harness; never signals.
+#' @noRd
+env_harness_bound = function(name, envir) {
+  tryCatch({
+    e = envir
+    repeat {
+      if (identical(e, emptyenv())) return(FALSE)
+      if (exists(name, envir = e, inherits = FALSE)) {
+        if (bindingIsActive(name, e) || isTRUE(rlang::env_binding_are_lazy(e, name))) {
+          return(FALSE)
+        }
+        f = get(name, envir = e, inherits = FALSE)
+        if (is.function(f)) return(inherits(f, "gptr_harness"))
+      }
+      e = parent.env(e)
+    }
+  }, error = function(err) FALSE)
 }
 
 #' Classify an expression: "gptr" (calls peter() anywhere), "deep" (nests past 5,000 calls), "show"

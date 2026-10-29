@@ -299,7 +299,7 @@ Final areas, in layer order:
 `doc`, `artifact` (L4); `console` (L5); `gptr` (L6); plus `zzz.R`. `cli` means the subscription-CLI
 providers, never the cli package.
 
-### 3.2 `R/` files (125 files after the Rscript launcher amendment, P26's Bedrock adapter, D-247's `utils-size.R` and P28's composer and completer)
+### 3.2 `R/` files (128 files after the Rscript launcher amendment, P26's Bedrock adapter, D-247's `utils-size.R`, P28's composer and completer and P29's harness, coaching and child files)
 
 Every file has exactly one owning plan (`05-plan-decomposition.md`). "Builtin" names the factory the file
 declares, if any.
@@ -335,7 +335,7 @@ declares, if any.
 | `auth-store.R` | L0 | `auth.json` credential store (0600, lock, keyring references) | - | P03 |
 | `auth-childenv.R` | L0 | child-environment profiles (mcp, worker, cli-claude, cli-codex, helper, artifact) as complete vectors; empty `R_ENVIRON_USER`/`R_PROFILE_USER` files for every profile [IC-60] | - | P03 |
 | `proc-spawn.R` | L0 | G5 process engine: `processx::process$new` with `encoding = "UTF-8"` and file redirection, argv via `os_bytes()`, `.cmd`/`.bat` via `cmd.exe /d /c call` with metacharacter refusal, PowerShell `-EncodedCommand`, non-blocking `write_all()`, line reader, UTF-8 decode with code-page fallback | - | P04 |
-| `proc-rscript.R` | L0 | Fixed private `Rscript --vanilla` worker/artifact entries through processx; complete child environment, explicit libraries and retained owned startup files | - | P04 |
+| `proc-rscript.R` | L0 | Fixed private `Rscript --vanilla` worker, coaching-child (`child`, P29) and artifact entries through processx; complete child environment, explicit libraries and retained owned startup files | - | P04 |
 | `proc-supervise.R` | L0 | `kill_all()` (kill_tree, then Windows `taskkill /F /T`, then group kill), grace periods, process tables, tree markers and the orphan sweep, `pid_alive()` (ps) [IC-59], `gptr_jobs()` [IC-36] | - | P04 |
 | `http-reactor.R` | L0 | the process reactor: curl multi pool, `processx::poll()` over curl fds and pipes, timers, tool FIFO, admission, pump depth and `allow_runs` defaults, `later::run_now(0)` in the outermost pump [IC-57], non-blocking stdin buffers | - | P04 |
 | `http-request.R` | L0 | request spec to curl handle (`pipewait = 0L`, `followlocation = 0L` [IC-64], connect/first-byte/idle timeouts, header handles materialised here only) | - | P04 |
@@ -361,6 +361,9 @@ declares, if any.
 | `gptr-capture.R` | L6 | copy-safe base-R capture: dot facts via leaves, prompt selection, identifier resolution, `{identifier}` interpolation | - | P08 |
 | `gptr-sdk.R` | L6 | `gptr_step()`, `gptr_wait()`, `gptr_steer()`, `gptr_cancel()`, `gptr_on()`, `gptr_return()` | - | P08 |
 | `gptr-config.R` | L6 | settings layers, `gptr_config()`, `gptr_init()`, `gptr_trust()`, egress acknowledgement, settings I/O used by `gptr_permissions()`, `replay_mode()` and `replay_guard()` | - | P08 |
+| `gptr-tailor.R` | L6 | `gptr_tailor()` and the harness object (`gptr_harness`): the call rewrite to `peter()`, merged fixed arguments, `$coaching`/`$record`/`$report`, `print()`, `dir =`; coaching validation, text checks and hash; never and require rules and their matching; the keyed coaching factory and the finish hook [IC-83, IC-85, IC-89] | - | P29 |
+| `gptr-child.R` | L6 | coaching jobs, each in its own R process: `coach_run_jobs()` on the worker pool (two at once per plan account), the `child` entry `child_main()`, the fence, the event stream and its line reader, the plain JSON transport `plain_encode()`/`plain_decode()` read in the safe direction [IC-86] | - | P29 |
+| `gptr-coach.R` | L6 | `gptr_coach()`: the propose, probe, compose loop, parallel or sequential, with its blind judge, the coach texts, evidence and reply schema, the coach's reply check in its child, `passes()`, the record and the report cache [IC-84] | - | P29 |
 | `eval-core.R` | L4 svc | hand-rolled evaluator: parse, capture, per-expression time limit, interrupts, state diff [12 §4.3]; `rng_swap()` [IC-61]; the `evaluator` record `r` | - | P09 |
 | `eval-plots.R` | L4 svc | plot capture and replay to PNG (768x512, res 120) | - | P09 |
 | `eval-guard.R` | L4 svc | static guard (forbidden calls), interactive-function traps, `peter` symbol shim | - | P09 |
@@ -901,6 +904,7 @@ gptr_backend(name, start, poll = NULL, cancel, capabilities = list())
 | Agent-side | 7 | `gptr_return`, `gptr_describe`, `gptr_prob`, `gptr_risk`, `gptr_prompt`, `gptr_redact`, `gptr_preimage` |
 | Extension API | 8 | `gptr_api`, `gptr_register`, `gptr_registry`, `gptr_reload`, `gptr_check`, `gptr_fake_provider`, `gptr_tool_result`, `gptr_spec` |
 | Constructors | 11 | `gptr_tool`, `gptr_provider`, `gptr_adapter`, `gptr_router`, `gptr_hook`, `gptr_policy`, `gptr_agent`, `gptr_command`, `gptr_prompt_section`, `gptr_context_block`, `gptr_backend` |
+| Harnesses and coaching (P29) | 2 | `gptr_tailor`, `gptr_coach` (§6.19) |
 
 ---
 
@@ -1448,7 +1452,8 @@ receives UTF-8-marked strings (width checks fail otherwise [18 fact-check]). A C
   `supervise_default()`: `TRUE` except under `check_running()` (supervisor fifos are a fatal check error
   [13 §2.10]); every long-lived child exits when the parent dies (workers on stdin EOF, EPIPE or a dead parent pid;
   artifacts through their watchdog; CLI children through supervision); tree markers under
-  `R_user_dir("gptr", "cache")/procs/` feed a mandatory orphan sweep at the next load, since SIGTERM skips
+  `R_user_dir("gptr", "cache")/procs/` (under `tempdir()/gptr-procs` while R CMD check runs examples, so an example
+  writes nothing outside `tempdir()` [D-285]) feed a mandatory orphan sweep at the next load, since SIGTERM skips
   finalizers (verified); under check every child-process pool is capped at 2; a requested stop is recorded so a
   later non-zero exit reads `stopped`, not `error` (callr 3.8.0 exits 1 [17 fact-check]); process tables are
   cleaned in `.onUnload` and by finalizers.
@@ -1646,11 +1651,12 @@ and the member's own classification of its actual input (`call_risk()`: a patch'
 at run time, a `peter$sh()` command read as run in its `wd` [D-262]) is no higher either, it runs without a second
 prompt; otherwise it passes the gate [IC-78]. So does a call that reads a registered secret the outer call's
 analysis did not show, such as one the `env` of `peter$sh()` or `peter$script()` hands a child [D-267].
-The command of a `peter$sh()` or `peter$bg()` call, or the path of a `peter$script()` call, meets the deny and
-ask rules first, whatever its level, as the literal call would, with the registered secrets its `env` hands the
-child, so an `r(secret:NAME)` deny or ask rule stops the hand-over [D-267]; allow rules are not applied there,
-an ask rule is asked in the gate's one question for the call, with its other reasons [D-267], and an ask offers
-no `[a]lways` rule [D-251].
+The command of a `peter$sh()` or `peter$bg()` call, with its working folder, or the path of a `peter$script()` call,
+and the input of a nested `peter$write()` or `peter$edit()`, meet the deny and ask rules first, whatever their level,
+as the literal call would, with the registered secrets its `env` hands the child, so an `r(secret:NAME)` deny or ask
+rule stops the hand-over [D-267]: every policy named `rules`, `coaching`, `harness_rules` or `fence` answers and the
+strictest answer wins; allow answers are not applied there, an ask rule is asked in the gate's one question for the
+call, with its other reasons [D-267], and an ask offers no `[a]lways` rule [D-251, D-280, D-281, D-284].
 Base `system()`, `system2()`, `shell()` and `shell.exec()` have no such re-check, so auto and yolo refuse them
 with a computed command (6.8.1) [D-262]. R served to the CLI routes or an MCP client binds the same marker, with
 the served call as the outer call, so its nested calls pass `dispatch_nested()` too; when no pump serves the
@@ -2277,6 +2283,64 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 | 26 loop-owned context management, one overflow retry | §6.11, `agent-run.R`, `prompt-compact.R` | an overflow error triggers one compaction and one retry with a compaction entry; a second overflow surfaces as an error (`test-prompt-compact.R`; P07) |
 | 27 rendering decoupled from transport | §2.2 rule 2, `console-render.R` | the same run gives byte-identical transcripts at verbosity 0, 1 and 2 (`test-console-render.R`; P14) |
 | 28 observability | opt-in redacted JSONL wire log per session (`options(gptr.wire_log = TRUE)`); OpenTelemetry v1.x | one line per request and terminal event, no secrets (`test-http-reactor.R`; P04; secrets grep in P24) |
+
+### 6.19 Coached harnesses: `gptr_tailor()` and `gptr_coach()` (P29) [08]
+
+Design: `dev/spec/08-recursive-peter.md`; contract: `04` §15.11 (IC-83..IC-89). A *harness* is a function called
+exactly like `peter()`: class `c("gptr_harness", "function")`, the one-line body
+`function(...) harness_call(sys.function(), sys.call(), parent.frame())` in gptr's namespace, and one attribute,
+`gptr_harness = list(args, rules, coaching, record, id, gptr)`. Two exports return one:
+
+- `gptr_tailor(x = peter, ..., rules = NULL, coaching = NULL, dir = NULL)` (`gptr-tailor.R`) builds a harness by
+  hand and calls no model: `peter()` arguments fixed as values, the person's own `never` and `require` rules, and
+  *coaching*, data in four parts (a note, skills, a review step, rules).
+- `gptr_coach(..., harness = peter, check = NULL, coach = NULL, k = 1L, strategy = "parallel", ...)`
+  (`gptr-coach.R`) improves the coaching by running the task, after Harness²'s propose, probe, compose loop:
+  starting runs, one blind coach per focus (how peter works; what an expert knows), a probe of each proposal, a
+  composer and a final run. `k`, from 1 to 5, sets how many of each: `"parallel"` runs them in one round, where
+  every composer sees every probe, and `"sequential"` runs `k` rounds, each building on the composition of the
+  round before. That is `k * (2 + focuses)` runs and `k * (1 + focuses)` coach sessions. Code (`coach_passes()`)
+  passes a final only when it ended normally, delivered what the starts delivered, took no riskier kind of action,
+  met every `require` rule and passed the person's `check`. When more than one passes, a blind judge, a tool-less
+  session on the coach model, picks one from what each delivered under labels shuffled from the call's own seed
+  (`coach_shuffle()`); if it cannot, the first that passed is kept. The result is the starting harness with the
+  kept coaching, or unchanged, plus a count-only record.
+
+**The call.** `harness_call()` rewrites the person's call to `peter(...)` with the fixed arguments merged and one
+keyed extension factory (`harness_factory()`) added to `extensions`, and evaluates it in the caller's frame, so
+binding sites, `envir`, interpolation, pipes and `gptr_last()` behave as for `peter()` and the document recorder sees
+the call as written. The factory registers, in the harness's session, the note as the prompt section
+`coaching_<coaching hash>` (T1, order 790), skills that carry their own text, the deny-only policies `coaching` and
+`harness_rules`, and the finish hook that sends the review and the unmet requirements once or twice before peter
+stops. `gateway_register()` loads a factory with the same `gptr_key` once per session, so a continuation does not
+load it twice. Nothing is registered process-wide; a session's policies bind every session started under it [D-280].
+
+**Process model.** Every session of a coaching call runs in its own R process, never in the person's.
+`coach_run_jobs()` (`gptr-child.R`) schedules jobs on the worker pool (§6.13), at most two at once per plan account,
+each through the `child` entry of `proc_rscript()` beside `worker_main()`, reusing P19's scheduling, registry
+shipping and provider revival [D-279]. A run's child gets copies of the objects, the resolved arguments and model,
+the person's registry records and rules, and copies of the project's instruction files. It runs unattended
+(`noninteractive_ask = "stop"`, recording off) in a fresh scratch folder that is its working folder and project root,
+with sub-agents inline, a model gate in `provider_stream()` and a process-wide `fence` policy that keeps writes,
+working-folder changes, installs, R child processes, `peter$script()` and login reads out by every route the
+classifier sees [D-284]. A coach's child, and the judge's, gets no registry and no tool, only its prompt, model and
+reply schema. Interrupting the call kills every child.
+
+**Transport.** Parent to child, a job travels as an `.rds` spec in a private 0700 folder (the trusted direction).
+Child to parent there are two channels, both read as data: event lines on the child's stdout (risk, refusals,
+unmet requirements, a plan limit), read by the entry's own line reader, which opens no prompt; and the result as
+plain JSON (`plain_encode()`), which the parent rebuilds with `plain_decode()` from a fixed list of kinds, never
+with `readRDS()` [D-278]. The two are merged in the safe direction: the worse report for a final, the lower risk
+for a starting run, whose risk is the ceiling of the finals.
+
+**Plan routes.** In a child, `the$coach_role` (`"run"` or `"coach"`) switches the `cli-claude` and `cli-codex`
+adapters (§8.3) to sessions that are unsaved, never resumed and run with the CLI's own tools off, and checks every
+session before its reply is kept; plan limits stop the call without retrying [D-274..D-277, D-282].
+
+**Recording.** A harness call is recorded like a `peter()` call with `harness=<name>:<coaching hash>`. A statement
+`<name> = gptr_coach(...)` is recorded as a coach block whose body is one literal
+`<name> = gptr_tailor(<start>, coaching = list(...))` and one line per run; a closed walker rebuilds the harness from
+it on replay with no model, key or process (§6.9.3; `04` §11.5, IC-87).
 
 ---
 

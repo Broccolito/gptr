@@ -638,8 +638,9 @@ doc_sidecar_meta_ok = function(meta) {
   all(vapply(meta[intersect(c("call", "turn"), names(meta))], ordinal, NA))
 }
 
-#' Decode one call identity, never evaluate it: one peter() call, bare or gptr-qualified.
-#' Nested calls and computed arguments are kept for notebook identity matching.
+#' Decode one call identity, never evaluate it: one call whose head is a syntactic name (peter()
+#' or a harness, 08 section 3.6) or gptr-qualified peter(). Nested calls and computed arguments
+#' are kept for notebook identity matching.
 #' @noRd
 doc_sidecar_call = function(text) {
   if (!rlang::is_string(text) ||
@@ -652,7 +653,8 @@ doc_sidecar_call = function(text) {
   qualified = is.call(head) && length(head) == 3L &&
     (identical(head[[1L]], as.name("::")) || identical(head[[1L]], as.name(":::"))) &&
     identical(head[[2L]], as.name("gptr")) && identical(head[[3L]], as.name("peter"))
-  if (identical(head, as.name("peter")) || isTRUE(qualified)) call else NULL
+  named = is.symbol(head) && identical(make.names(as.character(head)), as.character(head))
+  if (named || isTRUE(qualified)) call else NULL
 }
 
 #' The versioned JSON data of an in-memory record. Runtime sites are narrowed to recovery
@@ -675,7 +677,7 @@ doc_sidecar_data = function(rec) {
         stop("Unsupported call identity")
       }
       a = list(ph = nullable(a$ph), th = nullable(a$th), j = a$j, block = nullable(a$block),
-               label = nullable(a$label), call0 = text)
+               label = nullable(a$label), head = nullable(a$head), call0 = text)
     }
     meta = attr(u$lines, "meta", exact = TRUE)
     if (!is.null(meta) && !doc_sidecar_meta_ok(meta)) {
@@ -733,14 +735,14 @@ doc_sidecar_decode = function(x, path) {
         !string(s$prompt_hash) || !string(s$args_hash)) return(NULL)
     a = s$anchor
     if (!is.null(a)) {
-      if (!object(a, c("ph", "th", "j", "block", "label", "call0")) ||
-          !all(vapply(a[c("ph", "th", "block", "label", "call0")], string, NA)) ||
+      if (!object(a, c("ph", "th", "j", "block", "label", "head", "call0")) ||
+          !all(vapply(a[c("ph", "th", "block", "label", "head", "call0")], string, NA)) ||
           !positive(a$j)) return(NULL)
       call0 = if (!is.null(a$call0)) doc_sidecar_call(a$call0)
       if (!is.null(a$call0) && is.null(call0)) return(NULL)
       s$anchor = list(ph = a$ph %||% NA_character_, th = a$th %||% NA_character_,
                       j = as.integer(a$j), block = a$block %||% NA_character_,
-                      label = a$label %||% NA_character_, call0 = call0)
+                      label = a$label %||% NA_character_, head = a$head, call0 = call0)
     }
     meta = u$meta
     if (!is.null(meta) && (!identical(fmt, "ipynb") || !doc_sidecar_meta_ok(meta) ||

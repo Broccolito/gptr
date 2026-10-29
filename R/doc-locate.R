@@ -34,6 +34,14 @@ doc_srcfile_path = function(sf) {
   full
 }
 
+#' The `gptr_harness` attribute that a harness puts on its rewritten call (08 section 3.1):
+#' list(fn = the name called, hash = its coaching hash, call = the call as written), else NULL
+#' @noRd
+doc_harness_attr = function(call) {
+  h = attr(call$sys_call, "gptr_harness", exact = TRUE)
+  if (is.list(h) && rlang::is_string(h$fn) && rlang::is_string(h$hash) && is.call(h$call)) h
+}
+
 #' Site from a validated srcref of the call or of a calling frame (report 14 section 4.2 step 1):
 #' the statement's text must contain this call. A pipeline forces its inner calls inside the
 #' outer one, so an inner call's own srcref points into the forcing function; the frames below
@@ -53,7 +61,8 @@ doc_site_srcref = function(call, ph, call0) {
     pl = if (!is.null(sf$lines)) as_utf8(sf$lines) else doc_read(path)$lines
     rng = c(sr[7L], sr[8L])
     if (rng[1L] < 1L || rng[2L] > length(pl)) next
-    if (!nrow(doc_call_cands(doc_calls(pl[rng[1L]:rng[2L]]), ph, call0))) next
+    calls = doc_calls(pl[rng[1L]:rng[2L]], heads = doc_harness_attr(call)$fn)
+    if (!nrow(doc_call_cands(calls, ph, call0))) next
     return(list(kind = "srcref", path = path, stmt_at_parse = rng, lines_at_parse = pl))
   }
   NULL
@@ -134,7 +143,7 @@ doc_site_jupyter = function(call, ph, call0) {
     list.files(getwd(), pattern = "[.]ipynb$", full.names = TRUE)
   }
   for (p in cands) {
-    cell = tryCatch(doc_nb_cell(nb_parse(doc_read(p)$lines), ph, call0),
+    cell = tryCatch(doc_nb_cell(nb_parse(doc_read(p)$lines), ph, call0, doc_harness_attr(call)$fn),
                     error = function(e) NA_integer_)
     if (!is.na(cell)) return(list(kind = "jupyter", path = path_norm(p), cell = cell))
   }
@@ -189,7 +198,8 @@ doc_site_ide = function(call, ph, call0) {
   ctx = doc_ide_context()
   if (is.null(ctx) || !nzchar(ctx$path %||% "") || is.null(doc_format_of(ctx$path))) return(NULL)
   contents = as_utf8(as.character(ctx$contents))
-  if (doc_ide_console_focused() && !nrow(doc_call_cands(doc_calls(contents), ph, call0))) {
+  calls = doc_calls(contents, heads = doc_harness_attr(call)$fn)
+  if (doc_ide_console_focused() && !nrow(doc_call_cands(calls, ph, call0))) {
     return(NULL)
   }
   cursor = tryCatch(ctx$selection[[1L]]$range$start[["row"]], error = function(e) NA_integer_)
@@ -209,15 +219,15 @@ doc_counter_next = function(path, key) {
 #' The calling cell of a notebook call, found as in a script: the cell of the first candidate
 #' row among the calls of all code cells that are not agent cells (doc_call_cands()), so a
 #' pipeline step is found in its own cell rather than in an earlier cell holding the same prompt
-#' (contract 11.5; ambiguity 28); NA when no cell holds the call
+#' (contract 11.5; ambiguity 28); NA when no cell holds the call. `heads`: as doc_calls() takes
 #' @noRd
-doc_nb_cell = function(nb, ph, call0) {
+doc_nb_cell = function(nb, ph, call0, heads = NULL) {
   cells = nb[["cells"]]
   agent = nb_is_agent(nb_cell_ids(nb))
   tabs = list()
   for (i in seq_along(cells)) {
     if (agent[i] || !identical(cells[[i]][["cell_type"]], "code")) next
-    calls = doc_calls(nb_cell_lines(cells[[i]]))
+    calls = doc_calls(nb_cell_lines(cells[[i]]), heads = heads)
     if (!nrow(calls)) next
     calls$cell = rep(i, nrow(calls))
     tabs[[length(tabs) + 1L]] = calls
@@ -233,15 +243,15 @@ doc_nb_cell = function(nb, ph, call0) {
 #' (doc_ipynb_locate() narrows the cell's rows to it), and the cell's ordinal `j` among the
 #' calling cells (contract 11.5; ambiguities 27 and 28)
 #' @noRd
-doc_nb_anchor = function(raw, text, ph, call0) {
+doc_nb_anchor = function(raw, text, ph, call0, heads = NULL) {
   cell = raw$cell %||% NA_integer_
   if (is.na(cell)) return(NULL)
   nb = nb_parse(text)
   if (cell > length(nb[["cells"]])) return(NULL)
-  t = doc_call_cands(doc_calls(nb_cell_lines(nb[["cells"]][[cell]])), ph, call0)
+  t = doc_call_cands(doc_calls(nb_cell_lines(nb[["cells"]][[cell]]), heads = heads), ph, call0)
   if (!nrow(t)) return(NULL)
   aph = t$ph[1L]
-  list(ph = aph, th = NA_character_, j = nb_call_ordinal(nb, cell, aph, call0),
+  list(ph = aph, th = NA_character_, j = nb_call_ordinal(nb, cell, aph, call0, heads),
        block = NA_character_, cell = cell, call0 = call0)
 }
 
@@ -251,10 +261,14 @@ doc_nb_anchor = function(raw, text, ph, call0) {
 #' an IDE's cursor
 #' @noRd
 doc_anchor = function(site, raw, text, ph, call0) {
-  if (identical(site$format, "ipynb")) return(doc_nb_anchor(raw, text, ph, call0))
+  if (identical(site$format, "ipynb")) return(doc_nb_anchor(raw, text, ph, call0, site$heads))
   kind = raw$kind
   styled = site$format %in% c("rmd", "qmd")
-  calls = if (styled) doc_rmd_calls(text) else doc_calls(raw$lines_at_parse %||% text)
+  calls = if (styled) {
+    doc_rmd_calls(text, site$heads)
+  } else {
+    doc_calls(raw$lines_at_parse %||% text, heads = site$heads)
+  }
   scope = calls
   if (styled && !is.na(raw$label %||% NA_character_)) {
     scope = calls[calls$label %in% raw$label, , drop = FALSE]
@@ -399,28 +413,37 @@ doc_transcript_target = function(ask = FALSE) {
 }
 
 #' The console site of a call or REPL turn: the transcript target as a document whose turns are
-#' appended (`format` "transcript" for .R targets); NULL when there is no target
+#' appended (`format` "transcript" for .R targets); NULL when there is no target. An `.R`
+#' transcript calls a harness by its definition (`harness`, doc_console_harness(): `head`, the
+#' `h_<id>` name, `define`, its lines, and `key`, `h_<id>:<coaching hash>`; 08 section 3.6).
 #' @noRd
 doc_console_site = function(session_id = NULL, template = NULL, context_labels = character(),
-                            ask = FALSE, session_file = NULL) {
+                            ask = FALSE, session_file = NULL, harness = NULL) {
   target = doc_transcript_target(ask = ask)
   if (is.null(target)) return(NULL)
   fmt = doc_format_of(target)
   if (is.null(fmt) || identical(fmt, "ipynb")) return(NULL)
+  tr = identical(fmt, "r")
   list(kind = "console", path = path_norm(target),
-       format = if (identical(fmt, "r")) "transcript" else fmt, stmt = NULL, expr = NULL,
+       format = if (tr) "transcript" else fmt, stmt = NULL, expr = NULL,
        occurrence = 1L, ordinal = 1L, backend = "transcript", top_level = TRUE, in_block = NULL,
        ide_id = NULL, defer = FALSE, console = TRUE, driver = "console",
        prompt_hash = prompt_hash(template %||% ""), args_hash = NULL, template = template,
        session_id = session_id, session_file = session_file,
-       context_labels = as.character(context_labels), block = NULL, anchor = NULL, indent = "")
+       context_labels = as.character(context_labels), block = NULL, anchor = NULL, indent = "",
+       head = if (tr) harness$head, define = if (tr) harness$define,
+       harness = if (tr) harness$key)
 }
 
 #' The site of a raw location before its statement is found (contract 7.15): format (NA for a
 #' document gptr cannot record into), backend and driver; no statement, anchor or block, and not
-#' top-level. Fields without a value stay in the list as NULL.
+#' top-level. Fields without a value stay in the list as NULL. A harness call's site names the
+#' harness it runs (`harness`, `<name>:<coaching hash>`) and counts its head (`heads`); a
+#' coaching call's (`coach`) names its starting harness (`call$start`, set by doc.coach).
 #' @noRd
 doc_site_base = function(raw, call, ph) {
+  h = doc_harness_attr(call)
+  coach = is.call(call$sys_call) && identical(doc_call_head(call$sys_call), "gptr_coach")
   site = list(kind = raw$kind, path = raw$path,
               format = doc_format_of(raw$path) %||% NA_character_, stmt = NULL,
               expr = raw$expr, occurrence = raw$occurrence %||% 1L, ordinal = 1L,
@@ -430,9 +453,19 @@ doc_site_base = function(raw, call, ph) {
               defer = identical(raw$kind, "rscript"), prompt_hash = ph,
               args_hash = args_hash(call$interp),
               template = call$template %||% call$prompt, block = NULL, anchor = NULL,
-              indent = "", label = raw$label %||% NA_character_)
+              indent = "", label = raw$label %||% NA_character_, coach = coach,
+              harness = if (coach) call$start else if (!is.null(h)) paste0(h$fn, ":", h$hash),
+              heads = h$fn)
   site$driver = doc_driver(site)
   site
+}
+
+#' The name of a call's function: `f` for `f(...)` and `pkg::f(...)`, else NULL
+#' @noRd
+doc_call_head = function(x) {
+  f = x[[1L]]
+  if (is.call(f) && length(f) == 3L && as.character(f[[1L]])[1L] %in% c("::", ":::")) f = f[[3L]]
+  if (is.symbol(f)) as.character(f)
 }
 
 #' Finish a raw location into the site of contract 7.15 (format, backend, driver, anchor,
@@ -444,6 +477,7 @@ doc_site_finish = function(raw, call, ph, call0) {
   if (is.null(fmt) || is.null(spec)) return(NULL)
   site = doc_site_base(raw, call, ph)
   text = if (identical(raw$kind, "ide")) raw$contents else doc_read(site$path)$lines
+  site$heads = doc_heads(text, site$heads)
   anchor = doc_anchor(site, raw, text, ph, call0)
   if (is.null(anchor)) return(NULL)
   site["anchor"] = list(anchor)
@@ -470,7 +504,8 @@ doc_context_labels = function(context) {
 }
 
 #' Locate the calling statement of a peter() call record (contract 7.15): a site list, the
-#' console site when the call is in no document, or NULL. Sets `call$top_level`.
+#' console site when the call is in no document, or NULL. Sets `call$top_level`. A harness call
+#' is located as written (the call and head of its `gptr_harness` attribute, 08 section 3.6).
 #'
 #' The first finder that sees a running document (a srcref, a source() frame, knitr or Quarto,
 #' a notebook, `Rscript --file=`) decides. When none of that document's statements holds the
@@ -484,7 +519,8 @@ doc_context_labels = function(context) {
 doc_locate = function(call) {
   template = call$template %||% call$prompt
   ph = if (rlang::is_string(template)) prompt_hash(template) else NA_character_
-  call0 = doc_call_norm(call$sys_call)
+  h = doc_harness_attr(call)
+  call0 = doc_call_norm(if (is.null(h)) call$sys_call else h$call)
   site = NULL
   nested = FALSE
   finders = list(doc_site_srcref, doc_site_source_frame, doc_site_knitr, doc_site_jupyter,
@@ -506,7 +542,8 @@ doc_locate = function(call) {
     sid = if (is.null(s)) NULL else tryCatch(session_data(s)$id, error = function(e) NULL)
     site = tryCatch(doc_console_site(session_id = sid,
                                      template = if (is.na(ph)) NULL else template,
-                                     context_labels = doc_context_labels(call$context)),
+                                     context_labels = doc_context_labels(call$context),
+                                     harness = doc_console_harness(call)),
                     error = function(e) NULL)
   }
   if (is.environment(call)) assign("top_level", isTRUE(site$top_level), envir = call)

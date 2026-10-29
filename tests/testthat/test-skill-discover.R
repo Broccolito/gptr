@@ -685,3 +685,31 @@ test_that("skill.body does not sync again while the registry holds the current s
   expect_identical(skill_body("high_performance_r")$name, "high-performance-r")
   expect_identical(n, 0L)
 })
+
+test_that("a session's skill with its own text is listed, preloaded and read there only (e2e)", {
+  withr::defer(res_prune("skills:", character()))
+  local_project()
+  tips = function(gptr) {
+    gptr$register(gptr_spec("skill", "coach-tips", description = "Tips for this task.",
+                            text = "Check the units first."))
+  }
+  read_tips = list(fake_tool("read", path = "skill:coach-tips/SKILL.md"), "done")
+  last_text = function(req) msg_text(utils::tail(req$messages, 1L)[[1L]])
+  fake = local_fake_provider(read_tips)
+  peter("Clean the data", skills = "coach-tips", extensions = tips, model = fake,
+        envir = new.env())
+  req = fake_requests(fake)
+  expect_match(req[[1L]]$system$t1,
+               "- coach-tips: Tips for this task. [skill:coach-tips/SKILL.md]", fixed = TRUE)
+  first = paste(unlist(req[[1L]]$messages[[1L]]$content), collapse = "\n")
+  expect_match(first, "<skill_content name=\"coach-tips\">\nCheck the units first.", fixed = TRUE)
+  expect_identical(last_text(req[[2L]]), "Check the units first.")
+  # another session sees none of it
+  other = local_fake_provider(read_tips, name = "other")
+  peter("Clean the data", model = other, envir = new.env())
+  req = fake_requests(other)
+  expect_false(grepl("coach-tips", req[[1L]]$system$t1, fixed = TRUE))
+  expect_match(last_text(req[[2L]]), "Unknown skill: coach-tips", fixed = TRUE)
+  expect_error(peter("x", skills = "coach-tips", model = other, envir = new.env()), "No skill",
+               class = "gptr_error_invalid_argument")
+})

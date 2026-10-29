@@ -1,0 +1,292 @@
+---
+title: "Harnesses and coaching"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Harnesses and coaching}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", error = FALSE)
+old_options = options(gptr.quiet = TRUE, gptr.interactive = FALSE, gptr.record = "off",
+                      cli.unicode = FALSE, cli.num_colors = 1, width = 80)
+```
+
+`peter()` wraps a language model in instructions, tools, skills, permission checks, budgets and
+undo. That wrapping is called a *harness*. A harness of your own helps when you give Peter the
+same kind of task again and again. It can fix the arguments you always pass, tell Peter what to
+know about your data, ask it to check its work before it stops, and set hard rules for the task.
+
+Two functions make one. Both return a harness: a function you call exactly like `peter()`.
+
+- `gptr_tailor()` builds a harness from parts you write. It calls no model and returns at once.
+- `gptr_coach()` improves a harness by running your task several times and keeping the changes
+  that helped. It calls models, runs several sessions and takes minutes.
+
+The tailoring examples run without a model or a key. The coaching examples need a configured
+model and are shown without running them.
+
+## Tailor a harness by hand
+
+`gptr_tailor()` starts from `peter` or from another harness. `...` fixes named `peter()`
+arguments such as `mode`, `model`, `tools`, `budget` or `extensions`. `rules =` holds your own
+hard rules, and `coaching =` holds what gptr gives Peter, in four parts.
+
+```{r}
+library(gptr)
+survey_peter = gptr_tailor(
+  peter,
+  mode = "auto",
+  rules = list(
+    never = list(list(rule = "write(data/raw/**)", why = "The raw data are read-only.")),
+    require = list(list(id = "save-results", any = "r(fn:write.csv,saveRDS)",
+                        text = "Save the final table with write.csv() or saveRDS()."))
+  ),
+  coaching = list(
+    note = "An age of -9 means missing. Recode it to NA before any summary.",
+    skills = list(list(
+      name = "survey-missing-codes",
+      description = "How this survey codes missing values.",
+      text = "Age, income and weight use -9 for missing. Check each one with table() first."
+    )),
+    review = list(text = "Open the result again and compare it with the task.", rounds = 1)
+  )
+)
+survey_peter
+```
+
+**Rules** use the language of `?gptr_permissions`: `r(fn:name)` for a function,
+`r(category:name)` for a kind of action such as `install` or `network`, `r(sh:glob)`,
+`r(sql:keyword)`, or a path glob such as `write(data/raw/**)`. A `never` rule (up to 8) refuses
+a matching call in every mode, also in sub-agents, with "denied by your rule" and your reason. A
+`require` rule (up to 4) names an action that must happen before Peter finishes: `any` patterns,
+optionally with `contains` text the code must hold, or `made = "plot"` or
+`made = "file:results/**"`. When Peter is about to finish without it, gptr sends `text`, at most
+twice, and a run that still lacks it ends with a notice naming `id`. A `require` pattern may name
+only low-risk functions and categories (below level 3 in `gptr_risk()`). Rules read the code
+before it runs, so a path computed at run time can slip past a `never` rule. Treat `require` as a
+reminder and a report, not as proof.
+
+**Coaching** has four parts. The `note` (at most 8,000 characters) is added to Peter's
+instructions on every call, after a fixed line saying that it never overrides the rules, a
+permission decision or your request. `skills` are how-to guides that Peter opens when it needs
+them, named with lower-case letters, digits and hyphens. The `review` text is sent when Peter is
+about to stop, so that it looks again, for 0 to 2 `rounds`. `rules` have the same shape as your
+rules, and their refusals say "denied by the coaching rule". Coaching is plain text and rule
+strings, checked whenever a harness is made, loaded or called.
+
+### Call and change it
+
+```{r, eval = FALSE}
+survey = read.csv("survey.csv")
+session = survey_peter("Clean the survey and tabulate the mean age by site.", survey)
+session |> survey_peter("Add the median age too.")
+```
+
+Each call is the same call as `peter()` with the fixed arguments added, so objects, `envir`,
+`{name}` interpolation, `gptr_last()`, pipes, `lapply()` and `do.call()` work as usual. An
+argument you give in the call wins over a fixed one, except that `tools`, `extensions`,
+`plugins` and `skills` add to the fixed values and `.opts` entries replace them by name. The
+coaching applies only in the sessions the harness starts.
+
+A harness is read-only. Read it with `$coaching`, `$record` and `$report`, and change it by
+making a new one from it. Fixed arguments merge as in a call, and `NULL` drops a fixed single
+value, as in `mode = NULL`. `rules =` and `coaching =` replace the whole part, and
+`rules = list()` drops your rules. To change one coaching part, start from the old coaching:
+
+```{r}
+co = survey_peter$coaching
+co$review = NULL
+quick_peter = gptr_tailor(survey_peter, mode = "edits", coaching = co)
+quick_peter
+```
+
+## Coach a harness
+
+With the default settings, `gptr_coach()` works in five steps:
+
+1. **Try.** The starting harness does your task once.
+2. **Propose.** Two coaches read that run. One looks at how Peter works: its steps, tools,
+   checks and rules. The other adds what an expert in the subject knows. Neither sees the
+   other's work, and neither can read files or act. They only write coaching.
+3. **Probe.** Each proposal does the task once.
+4. **Compose.** A third coach, the composer, compares the runs and keeps the changes that
+   visibly helped. Keeping the starting coaching is an allowed answer.
+5. **Final try.** The composed coaching does the task once more.
+
+Code, not a model, then decides. The new coaching is kept only when the final run ended
+normally, delivered at least what the starting run delivered (a value, objects, files, or else
+text), took no riskier kind of action, met every `require` rule and passed your `check`.
+
+```{r, eval = FALSE}
+survey = data.frame(id = 1:8, age = c(34, 51, -9, 28, 45, -9, 62, 39))
+want = mean(c(34, 51, 28, 45, 62, 39))
+auto_peter = gptr_tailor(peter, mode = "auto")
+mean_peter = gptr_coach(
+  "Ages of -9 are missing. Recode them, then return the mean age with gptr_return().",
+  survey,
+  harness = auto_peter,
+  check = function(r) is.numeric(r$value) && isTRUE(all.equal(r$value, want)),
+  model = "anthropic/claude-sonnet-5-5",
+  coach = "anthropic/claude-opus-5-5",
+  budget = list(cost = 1)
+)
+mean_peter$record$decision
+mean_peter("Ages of -9 are missing. Return the mean age with gptr_return().", new_survey)
+```
+
+`...` takes what you would give the harness: the prompt, your objects, and `peter()` arguments
+such as `mode`, `model`, `budget` or `tools`. They apply to every run of this call only and are
+not kept in the result; to keep a setting, put it in the starting harness, as `auto_peter` does.
+`check` gets `r`, a list with the `text`, `status`, `value` and `objects` of a final run, and
+returns `TRUE` or `FALSE`. It runs only in your R session, and no coach sees it. It is optional,
+but it is the only place where you say what a good result is.
+
+| Argument | What it sets | Default |
+|---|---|---|
+| `harness` | the harness to start from | `peter` |
+| `check` | your test of a final run | none |
+| `coach` | the model of the coaches, the composer and the judge | the runs' model |
+| `k` | how much coaching, 1 to 5 | `1` |
+| `strategy` | `"parallel"` or `"sequential"` | `"parallel"` |
+| `focus` | one proposing coach each: `"procedure"`, `"domain"` or your own words | both |
+| `surface` | the parts of the coaching that may change | all four |
+
+With `"parallel"`, `k` gives `k` starting runs, `k` coaches of each focus and `k` composers that
+each see every probe; when more than one final passes, a blind judge that sees only the task and
+what each final delivered picks one. With `"sequential"`, `k` rounds follow the starting runs,
+each building on the round before. Only the procedure coach writes rules. Coaching with the
+runs' own model at `k = 1` is untested, so `k = 2` or a stronger `coach` model may help.
+
+**Cost.** A call makes `k * (2 + length(focus))` runs of your task and `k * (1 + length(focus))`
+coach sessions, plus up to one judge session when `k > 1`: 4 runs and 3 coach sessions with the
+defaults. A `budget` caps each run and each coach session, so a default call can spend up to
+seven such budgets. gptr prints the count and asks the usual question about sending your data
+to each model before it starts.
+
+**Where it runs.** Every session runs unattended in its own fresh R process, with copies of the
+objects you passed and an empty folder. A run does not see the rest of your workspace or your
+attached packages, and cannot install packages or write outside its folder by the routes gptr
+recognises. Pass data as objects and install what the task needs first. A step that needs your
+approval ends that run as `blocked`, so most tasks need `mode = "auto"`.
+
+**What you get back.** A harness: the starting harness with the new coaching when it was kept
+(gptr prints the coaching in full), otherwise the starting harness and the reason. Its
+`$record` holds the decision and each run's outcome, turns, tokens, cost and risk, but no data
+from your runs. `$report` holds every answer, transcript and coach reply, in this R session
+only. Kept is not proof that the harness does better on new data. Read the coaching before you
+rely on it or share it: it can mention facts from your data.
+
+## Coach on a Claude Code or Codex plan
+
+Coaching works on a Claude Pro or Max plan through Claude Code, and on a ChatGPT plan through
+Codex. Name the plan model for the runs, the coaches, or both, and mix routes as you like:
+
+```{r, eval = FALSE}
+plan_peter = gptr_coach("Recode the missing ages, then return the mean age.", survey,
+                        harness = auto_peter, model = "claude_code", coach = "claude_code")
+mixed_peter = gptr_coach("Recode the missing ages, then return the mean age.", survey,
+                         harness = auto_peter, model = "codex",
+                         coach = "anthropic/claude-opus-5-5")
+```
+
+`"claude_code"` is another name for `"claude-cli"`. With no model configured and no Anthropic,
+OpenAI or Google key, gptr uses Claude Code when it is installed and otherwise Codex, so a
+plan-only setup needs no `model`. Set up the CLI as in [Language models](language-models.html).
+
+- The CLI must be signed in and at least the oldest version gptr was tested with (claude
+  2.1.296, codex-cli 0.157.1). gptr checks every session and discards one that fails.
+- At most two sessions run at once on one plan account. They use your plan's 5-hour and weekly
+  limits, shared with your other use, and gptr says how many will run before it starts. Dollar
+  figures on Claude Code are what the tokens would cost on the API, not charges.
+- At a plan limit, or when a Claude session starts drawing on paid usage credits, gptr starts
+  nothing new and returns the starting harness with the decision `"stopped"` and the reset time.
+  It never waits or resumes by itself.
+- On Codex, its own shell is switched off, so a run acts only through gptr's checked tools.
+  gptr refuses to start when `$CODEX_HOME/hooks.json` exists.
+
+Routers and System 1 decision models are refused as run or coach models. These limits apply only
+inside `gptr_coach()`; a harness you call yourself accepts every model that `peter()` accepts.
+
+## Save, share and reuse
+
+```{r}
+path = tempfile(fileext = ".rds")
+saveRDS(survey_peter, path)
+their_peter = gptr_tailor(readRDS(path))
+their_peter
+```
+
+`gptr_tailor(readRDS(file))` rebuilds the harness with a new id, checks its coaching, and shows
+any fixed argument that loads code or loosens checks, such as `extensions` or `mode = "yolo"`.
+Treat a harness from someone else like an R script from them: functions among its fixed
+arguments run when you call it, and `readRDS()` itself can load packages. A coach block in a
+recorded script (below) holds the coaching as literal text, never your fixed arguments or
+functions.
+
+`dir =` writes the harness out as plain Markdown files for people to read or keep in git. gptr
+never reads that folder back, so keep the `.rds` file or a recorded script to load it again.
+Any harness can start a new coaching call, including one someone else made:
+
+```{r, eval = FALSE}
+gptr_tailor(survey_peter, dir = "survey_peter")
+my_peter = gptr_coach("Clean this year's survey.", survey_2026, harness = their_peter)
+```
+
+## Safety
+
+- Every harness is built on `peter`, with its permission checks, secret guards, budgets and
+  undo. Your rules, hooks and policies travel with it into every run and every sub-agent.
+- Coaching never loosens a check: a `never` rule only refuses, any refusal wins, and a
+  `require` rule only reminds and reports. A coach never writes R code. Only your own fixed
+  arguments, such as `extensions` or `mode = "yolo"`, can load code or loosen checks.
+- Each coaching session runs in its own R process and sends back plain data. Coaches and the
+  judge have no tool that can read or act. While a run is active, model code cannot build,
+  coach or rebind a harness without you.
+- A separate process is not a sandbox. A run in auto mode can still use the network or touch
+  files the risk classifier cannot see, as `peter(mode = "auto")` can. See `?gptr_security`.
+
+## Recording coaching in a script
+
+In a recorded script or notebook ([Script as history](script-as-history.html)), a top-level
+harness call is recorded like a `peter()` call, and its header adds `harness=<name>:<hash>`.
+When the coaching changes, the block becomes stale, as when you edit a prompt. A top-level
+`name = gptr_coach(...)`, with `harness` left out or a plain name, is recorded as a block of
+kind `coach`, whose body rebuilds the result with `gptr_tailor()` and lists each run and the
+decision:
+
+```{r, eval = FALSE}
+mean_peter = gptr_coach("Ages of -9 are missing. ...", survey, harness = auto_peter)
+# >>> gptr:7f3a1c ... kind=coach harness=mean_peter:9c41e2d0 start=auto_peter:5b0e77a1 ...
+mean_peter = gptr_tailor(auto_peter, coaching = list(
+  note = "Recode -9 to NA before you average, and check the result with table().",
+  skills = list(),
+  review = NULL,
+  rules = NULL))
+## Run start1: ended normally, 4 turns, risk 1
+## Run probe-proc1: ended normally, 3 turns, risk 1
+## Run probe-dom1: ended normally, 3 turns, risk 1
+## Run final1: ended normally, 3 turns, risk 1
+## Decision: kept (delivered as at start; risk 1 <= 1)
+# <<< gptr:7f3a1c
+```
+
+On replay, gptr reads the body as literal text without running it and returns the same harness
+with no model, no key and no R process, so `GPTR_REPLAY=replay` still proves that a script makes
+no model call. Define the starting harness earlier in the script, since the body names it. Only
+the coaching and one line per run are written: never your data, transcripts, values or `check`.
+A call that errors or stops at a plan limit writes nothing, and `gptr_export()` refuses a
+document that holds a coach block.
+
+## Read more
+
+- `?gptr_tailor` and `?gptr_coach` for every argument and limit.
+- [Script as history](script-as-history.html) for recording and replay.
+- [Teams and background work](teams-and-background.html) for sub-agents, teams and fan-outs.
+- `?gptr_permissions` for the rule language and `?gptr_security` for the safety model.
+
+```{r cleanup, include = FALSE}
+unlink(path)
+options(old_options)
+```

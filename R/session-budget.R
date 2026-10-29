@@ -392,7 +392,12 @@ run_chain = function(run) {
 run_used = function(run) {
   u = session_data(run$shell)$usage
   u = u[seq_len(nrow(u)) > run$usage_start, , drop = FALSE]
-  u = u[!duplicated(u$request_id), , drop = FALSE]
+  usage_used(u[!duplicated(u$request_id), , drop = FALSE])
+}
+
+#' Tokens, cost and requests of usage rows, the known part column by column (IC-74, D-025)
+#' @noRd
+usage_used = function(u) {
   known = function(col) sum(u[[col]], na.rm = TRUE)
   cols = c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h")
   list(tokens = sum(vapply(cols, known, numeric(1L))), cost = known("cost"), turns = nrow(u))

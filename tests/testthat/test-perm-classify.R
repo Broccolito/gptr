@@ -1559,3 +1559,56 @@ test_that("processx::run()'s wd is read as peter$sh()'s (review round 4)", {
     expect_identical(lv(paste0(rm, wd, ")")), 3L, label = wd)
   }
 })
+
+test_that("an R risk lists every call and the files the code writes, as rules see paths (08 3.2)", {
+  root = local_project()
+  files = function(code, envir = NULL) gptr_risk(code, envir = envir, root = root)$targets$files
+  for (code in c("peter$write('data/raw/a.csv', 'x')", "peter$edit('data/raw/a.csv', 'a', 'b')",
+                 "peter$sh('cp x.csv data/raw/a.csv')", "system('rm data/raw/a.csv')",
+                 "write.csv(d, './data/raw/a.csv')",
+                 "download.file('https://example.org/a.csv', 'data/raw/a.csv')",
+                 paste0("writeLines('x', '", root, "/data/raw/a.csv')"))) {
+    expect_identical(files(code), "data/raw/a.csv", label = code)
+  }
+  expect_identical(files("x = read.csv('in.csv'); summary(x)"), character())
+  r = gptr_risk("x = na.omit(d); plot(x); peter$write('out.txt', 'x')", root = root)
+  expect_true(all(c("na.omit", "plot", "peter$write") %in% r$calls))
+  # a helper defined in an earlier call contributes its calls and targets
+  e = new.env(parent = globalenv())
+  e$save_it = user_fun(function(d) write.csv(d, "data/raw/a.csv"))
+  r = gptr_risk("save_it(df)", envir = e, root = root)
+  expect_identical(r$targets$files, "data/raw/a.csv")
+  expect_true(all(c("save_it", "write.csv") %in% r$calls))
+  expect_identical(gptr_risk("x (", root = root)$calls, character())
+  # a path R cannot translate is kept as written, never an error
+  local_name_locale()
+  expect_identical(files("write.csv(d, 'data/caf\\u00e9.csv')"), "data/café.csv")
+})
+
+test_that("a harness is classified as peter, and rebinding one needs a person (08 3.1)", {
+  root = local_project()
+  e = new.env(parent = globalenv())
+  e$survey_peter = structure(function(...) NULL, class = c("gptr_harness", "function"))
+  for (code in c("survey_peter('Clean the data')", "lapply(c('a', 'b'), survey_peter)")) {
+    r = gptr_risk(code, envir = e, root = root)
+    expect_identical(list(r$level, r$categories, unique(r$flagged$fn)),
+                     list(1L, "network", "peter"), label = code)
+  }
+  for (code in c("survey_peter = function(...) NULL", "survey_peter <<- 1",
+                 "attr(survey_peter, 'gptr_harness') = NULL", "assign('survey_peter', 1)")) {
+    r = gptr_risk(code, envir = e, root = root)
+    expect_identical(r$level, 4L, label = code)
+    expect_true(perm_is_control(list(name = "r"), r), label = code)
+  }
+})
+
+test_that("R CMD INSTALL and REMOVE are installs, in any case and through Rcmd (08 3.3)", {
+  root = local_project()
+  for (code in c("system('R CMD INSTALL mypkg')", "system2('R', c('CMD', 'INSTALL', 'mypkg'))",
+                 "peter$sh('R --vanilla CMD install .')", "system('R CMD REMOVE mypkg')",
+                 "system('Rcmd.exe INSTALL mypkg')")) {
+    r = gptr_risk(code, root = root)
+    expect_identical(list(r$level, r$categories), list(3L, "install"), label = code)
+  }
+  expect_identical(gptr_risk("system('R CMD check .')", root = root)$categories, "process")
+})

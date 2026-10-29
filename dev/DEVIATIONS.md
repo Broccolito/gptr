@@ -8954,3 +8954,273 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   line above and `?gptr_security` named only the first three. Contract-visible: 03 section 6.8.1;
   `?gptr_security`. Tests: test-risk-forms.R "Python code is read as Python joins its lines and
   names (review round 6)". Evidence: progress/fixes.md FIX-36.
+
+## D-273 - P29 Names: gptr_tailor() and gptr_coach(); a harness is class gptr_harness (2026-10-28)
+- Rule: the two new exports are `gptr_tailor()`, which builds a harness by hand, and `gptr_coach()`, which
+  improves a harness's coaching by running the task; both keep the `gptr_` prefix (D-28 unchanged), and `peter()`
+  stays the single gateway (S-1). The object both return is a harness: a function of class
+  `c("gptr_harness", "function")`, called exactly like `peter()`. The starting harness of `gptr_coach()` is
+  `harness =`, and no argument of `gptr_coach()` shares a name with one of `peter()`'s.
+- Contract-visible: 04 sections 14.1 and 15.11 IC-83, IC-84; 03 sections 3.2, 4.4 and 6.19.
+- Tests: test-gptr-tailor.R "gptr_tailor() returns a harness built on peter (08 3.1)"; test-gptr-coach.R
+  "Harness2's demo: the coach writes the fix, which is kept (4 runs, 3 coaches)". Evidence: progress/P29.md
+  Tasks 6 and 9.
+
+## D-274 - P29 Codex coaching with a reduced tool set is a supported route; the live test decides (2026-10-28)
+- Rule: runs, coaches and the judge may use Codex on a ChatGPT plan with Codex's own tools switched off
+  (`pcli_codex_off`, `pcli_codex_confine`), a run acting only through gptr's tools over the relay and a coach with
+  none (IC-88). Whether the ChatGPT-plan backend accepts the reduced tool set and the strict `--output-schema` is
+  decided by the live test. A refused request ends the session with Codex's own error by name ("Codex reported an
+  error: <its text>", class `provider`, or `plan_limit` for a usage limit); gptr never falls back to Codex's own
+  shell.
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-codex.R "a confined exec is ephemeral, read-only, without Codex's own tools, and hooked", "a step
+  outside gptr's tools stops a confined exec at once"; live (2026-10-28, Codex 0.157.1 on a ChatGPT plan):
+  test-live-cli.R "a codex coach has no tools and answers through the strict reply schema" passes, so the
+  backend accepts the reduced tool set and the strict schema, and test-live-coach.R "gptr_coach() on a Codex
+  plan ..." completes a coaching call. Evidence: progress/P29.md Task 5 and Live tests.
+
+## D-275 - P29 Coached Codex runs act without Codex's own shell (2026-10-28)
+- Rule: accepted. A run on Codex acts only through gptr's tools: `r` runs R code and `peter$sh()` reaches the shell
+  through `r`, both risk-checked, fenced and tallied. Any other Codex step fails the session
+  (`gptr_error_cli_check`), and each denial in the hook's log counts as a refused step. The live calibration (08
+  P29h) measures how well runs do this way; the checks are not traded for quality.
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-codex.R "a confined run reports each hook denial as a refused step and still completes";
+  live (2026-10-28): test-live-cli.R "Codex in a non-git temporary directory calls the gptr r tool" and "a codex
+  run in the coaching role acts only through gptr's tools" pass. Evidence: progress/P29.md Task 5 and Live tests.
+
+## D-276 - P29 Codex coaching sessions keep no logs: --ephemeral and history.persistence none (2026-10-28)
+- Rule: every confined exec passes `--ephemeral` and `-c history.persistence="none"` (in `pcli_codex_confine`, so
+  the preflight's `codex features list` runs with it too) and is never resumed: a follow-up (a coach's retry, a
+  review reminder) is a fresh exec that carries gptr's instructions and the whole history. A live test is to look
+  for a canary from the prompt among the files changed under `CODEX_HOME`, by name and match count only; if Codex
+  still writes the prompt, 08 honest limit 7 says so.
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-codex.R "under a coaching role build() never resumes and sends the whole history"; live
+  (2026-10-28): test-live-coach.R "gptr_coach() on a Codex plan leaves no prompt in CODEX_HOME (D-276)" passes:
+  21 to 30 files under `CODEX_HOME` changed across runs and none held the canary, so 08 honest limit 7 needs no
+  amendment. Evidence: progress/P29.md Task 5 and Live tests.
+
+## D-277 - P29 Plan CLIs are checked against a minimum version, never an exact list (2026-10-28)
+- Rule: `pcli_coach_min` is claude 2.1.296 and codex-cli 0.157.1, the oldest versions coaching was tested with.
+  `pcli_coach_preflight()` refuses an older CLI (`gptr_error_model_refused`, reason `cli_version`), runs a newer
+  one with a one-time notice, and caches a passing preflight per CLI path and version. Claude Code updates itself
+  and gptr ships through CRAN, so an exact list would refuse coaching after every update; the per-session checks,
+  which fail closed, protect a newer CLI.
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-common.R "a plan CLI's preflight runs once per path and version; a newer one gets a notice".
+  Evidence: progress/P29.md Task 5.
+
+## D-278 - P29 A coaching run's result is plain JSON, never readRDS() (2026-10-28)
+- Rule: a coaching child writes its result as JSON (`plain_encode()`); the parent reads it with `json_decode()`,
+  caps its size (64 MiB), depth (20), lengths (1e6) and values (1e5), rejects unknown keys and types, and rebuilds
+  only logical, integer, double, character, factor, Date, POSIXct, data frame and list values (`plain_decode()`),
+  anything else arriving as its printed summary. It never calls `readRDS()` or `jsonlite::unserializeJSON()` on a
+  child's output. Reason: an `.rds` file can hold a promise, and before R 4.4 one crafted so that `readRDS()`
+  returns it runs any code when touched (CVE-2024-27322); R 4.4 refuses such a promise only at the top level of the
+  file, and on every version `readRDS()` can load packages the file names and return functions and active
+  bindings that run code. So coaching works on every supported R version (4.2 and later). The job still goes from
+  parent to child as an `.rds` spec in a private 0700 folder (the trusted direction).
+- Contract-visible: 04 section 15.11 IC-86.
+- Tests: test-gptr-child.R "plain data round-trips exactly (08 section 3.3)", "closures, environments, S4 and other
+  classes travel as printed summaries", "the parent refuses unknown keys, types, classes and sizes". Evidence:
+  progress/P29.md Task 7.
+
+## D-279 - P29 The coaching child reuses the worker's helpers through contract edges (2026-10-28)
+- Rule: `R/gptr-child.R` (area `gptr`, L6) starts each job through a new `child` entry of `proc_rscript()` beside
+  `worker_main()` and reuses P19's helpers instead of copying them: `subagent_schedule()`, `subagent_limit()`,
+  `worker_registry()`, `worker_registry_apply()`, `worker_spec_revive()` and `worker_key_provider()`, with P11's
+  `perm_rules_effective()`; `R/gptr-tailor.R` uses P11's `rule_hit()`, `rule_glob_re()` and `risk_table()` and
+  P10's `walk_tree()`. These 11 calls are contract edges of the layering test (`arch_contract_edges()`). The
+  worker's reader of its child's stdout is not reused: the child entry has its own line reader (`child_line()`),
+  because model code can print to that stream.
+- Contract-visible: 04 sections 12.2 and 15.11 IC-86; 03 section 3.2 (128 files).
+- Tests: test-arch-layers.R "the layer table lists the files of architecture section 3.2"; test-proc-rscript.R
+  "the coaching child entry loads the installed namespace as a worker does (P29)". Evidence: progress/P29.md
+  Tasks 7 and 9.
+
+## D-280 - P29 Policies of ancestor sessions bind every sub-agent (2026-10-28)
+- Rule: a session's policies include the rank-0 policies of every ancestor session (`registry_all_recs()` through
+  `registry_session_ancestors()`, which follows `parent_id` with the lookup `session-live.R` installs), and
+  `worker_registry()` ships those of the sessions' ancestors to a worker. So a person's `extensions =` policy and a
+  harness's `coaching` and `harness_rules` policies bind a nested `peter()` from model code, team members, fan-out
+  children, inline sub-agents and workers. Other kinds stay in their session.
+- Rule (every `peter()` call): `nested_rules()` asks every policy named `rules`, `coaching` or `harness_rules`
+  (`perm_strictest()`, the strictest answer wins, allow answers are never applied) about a nested `sh`, `bg`,
+  `write` or `edit` call. Formerly it asked only the first `rules` record, and only for `sh` and `bg`, so the
+  deny and ask rules never saw the actual path of a nested write or edit that the outer approval covered.
+- Contract-visible: 04 sections 7.6 (`dispatch_nested()`) and 15.11 IC-89; 03 section 6.8.4.
+- Tests: test-ext-registry.R "a session meets the rank-0 policies of its ancestors, and no other kind (08 3.2)";
+  test-agent-dispatch.R "a person's extensions = policy binds every session started under theirs", "nested sh,
+  bg, script, write and edit calls meet every rules-like policy"; test-subagent-worker.R "the worker
+  registry ships the rank-0 policies of the sessions' ancestors (08 3.2)". Evidence: progress/P29.md Task 3.
+
+## D-281 - P29 Nested computed commands meet the coaching fence (2026-10-28)
+- Rule: `nested_rules()` also asks a coaching child's `fence` policy, so a nested `sh`, `bg`, `write` or `edit`
+  call whose command or path the outer code computes at run time (`cmd = paste('R CMD', toupper('install'), 'x');
+  peter$sh(cmd)`) meets the fence as the literal call would. The fence (`child_fence_why()`) denies writes and
+  edits outside the child's temporary folder, code gptr cannot read, installs, R child processes, `setwd()` away
+  from the folder, file targets outside it, and reads of the CLI login files and `find-generic-password`. It still
+  fences only what the classifier sees (08 honest limit 1).
+- Contract-visible: 04 sections 7.6 and 15.11 IC-86, IC-89; 03 section 6.8.4.
+- Tests: test-agent-dispatch.R "nested sh, bg, script, write and edit calls meet every rules-like policy" (the
+  fence case); test-gptr-child.R "the fence denies writes outside, moving away from the folder, installs, R
+  processes", "the fence denies reading the CLI login files and the keychain (08 3.7)". Evidence: progress/P29.md
+  Task 9.
+
+## D-282 - P29 Plan limits are never retried; paid usage credits stop coaching (2026-10-28)
+- Rule (every `peter()` call): `run_retryable()` never retries `plan_limit`, `cli_check` or `model_refused`, nor a
+  plan's weekly or model-family limit named in text ("You've hit your Opus limit"); before, only the session limit
+  was excluded. On Claude Code a rejected `rate_limit_event` or such a result text ends the turn as
+  `gptr_error_plan_limit` (`reason = "limit"`, `resets_at`); on Codex an error naming a usage limit, empty credits
+  or a spend cap does, with the time Codex quotes.
+- Rule (coaching): in a coaching child a Claude session that starts drawing on paid usage credits
+  (`isUsingOverage`, or `errorCode` `credits_required`) is stopped at once (`reason = "overage"`). `gptr_coach()`
+  then starts nothing new (that plan's queued jobs end `skipped`), returns the starting harness with decision
+  `stopped` and the reason `stopped at <stage>: plan limit, resets at <time>`, records no block, and never waits for
+  a reset or resumes.
+- Contract-visible: 04 sections 2.2 and 15.11 IC-84, IC-86, IC-88.
+- Tests: test-agent-run.R "weekly and model-family plan limits and gptr's refusals are never retried";
+  test-cli-claude.R "a plan limit ends the turn with plan_limit and when the limit resets", "a plan limit through
+  peter() is not retried and signals gptr_error_plan_limit"; test-cli-codex.R "a Codex plan limit ends the exec as a
+  plan limit with its quoted reset time"; test-gptr-coach.R "a plan limit stops the call with the starting harness
+  and a record". Evidence: progress/P29.md Tasks 5 and 9.
+
+## D-283 - P29 Claude Code honours .opts$returns through the returns instruction (2026-10-28)
+- Rule (every `peter()` call): on the claude-cli route a request with `.opts$returns` ends its user line with
+  gptr's returns instruction (`adp_returns_instruction()`, P12; `pcli_claude_build()`), in every call, not only in
+  coaching. Formerly the route ignored the schema. The CLI has no native structured output, so gptr still reads and
+  validates the reply itself; a coach reply that fails gets one retry (IC-84).
+- Contract-visible: 04 section 15.11 IC-88.
+- Tests: test-cli-claude.R "the claude route asks for `returns` at the end of the user line"; test-live-cli.R "a
+  claude coach has no tools, answers in one turn and saves nothing" (live, pending). Evidence: progress/P29.md
+  Task 5.
+
+## D-284 - P29 A coaching run keeps its working folder and runs no `peter$script()` (2026-10-28)
+- Rule (working folder): the fence (`child_fence_why()`) denies a change of working folder to anywhere but the
+  run's own folder written as an absolute path (`child_home()`): the folder of `setwd()`, `withr::with_dir()`,
+  `withr::local_dir()` and `xfun::in_dir()` (a computed folder, or a changer passed on or named as text, counts as
+  elsewhere), every `wd =` argument, a tool call's input `wd`, and the target of each `cd`, `pushd`, `chdir` or
+  `Set-Location` in any string of the code, inside `sh -c '...'` too (`child_dirs()`, `child_cd()`). A subfolder
+  of the run's folder is denied as well: with one allowed, `with_dir("<run>/a", ...)` and then a `../` path that
+  resolves inside the folder before the move writes outside `tempdir()` after it. So the working folder never
+  moves, and file targets, a relative one now resolved against the run's folder (`project_root()`) and not
+  `getwd()`, hold. Formerly each literal `setwd()` was judged alone against the starting folder, so
+  `setwd(".."); setwd("..")`, `withr::with_dir()` and a shell `cd` escaped the fence. A string of the code that
+  begins with such a command word counts as a move even when it is only data.
+- Rule (scripts): the fence denies every `peter$script` row of `r` code and every `script` tool call ("it runs no
+  script with peter$script(), which may start R with code gptr cannot read"), and `nested_rules()` also judges a
+  nested `script` call and writes a nested `sh` call's `wd` into the code it judges, so a computed call meets the
+  fence as the literal one does. This is stricter than the review's proposal, which denied only an R or unknown
+  interpreter: R code never shows the interpreter, and the precise rule would add two more cross-layer edges
+  (`bridge_script_argv()`, `bridge_chr()`). A run can still use `peter$sh("python x.py")`. Amends D-281.
+- Contract-visible: 04 sections 7.6 (`dispatch_nested()`) and 15.11 IC-86, IC-89; 03 sections 6.8.4 and 6.19; 08
+  sections 3.2, 3.3 and 3.5 (honest limit 4).
+- Tests: test-gptr-child.R "the fence denies writes outside, moving away from the folder, installs, R processes",
+  "a run's child runs no R script and keeps its shell commands in its folder"; test-agent-dispatch.R "nested sh,
+  bg, script, write and edit calls meet every rules-like policy". Evidence: progress/P29.md Review fixes.
+
+## D-285 - P29 Process-tree markers stay in `tempdir()` while R CMD check runs examples (2026-10-28)
+- Rule: `proc_dir()` is `tempdir()/gptr-procs` while `check_running()` is `TRUE` and testthat is not running, else
+  `R_user_dir("gptr", "cache")/procs`, so an example writes nothing outside `tempdir()`. Formerly the `\donttest{}`
+  example of `?gptr_coach`, which `--as-cran` runs, left `procs/` in the user's cache folder through its seven
+  processes, and R CMD check lists new files in that folder. Tests keep the user folder, which `setup.R`
+  redirects: under R CMD check their processes also carry `_R_CHECK_PACKAGE_NAME_`, and a per-process
+  `tempdir()` would hide a child's markers from its parent's sweep.
+- Contract-visible: 04 sections 3.2 (`_R_CHECK_PACKAGE_NAME_`), 7.4 (`proc_spawn()`) and 15.5 IC-60; 03 section
+  6.7; `cran-comments.md`.
+- Tests: test-proc-supervise.R "proc_dir() stays in tempdir() while R CMD check runs the examples". Evidence:
+  progress/P29.md Review fixes.
+
+## D-286 - P29 `gptr_coach()` refuses what a run cannot use and stops when no starting run worked (2026-10-28)
+- Rule (before anything starts): after the `gptr.unsafe_no_permissions` check, `coach_args_check()` refuses
+  `.run`, `background`, `.stdin`, `envir`, `parallel`, `choices`, `levels`, `threshold`, `min_confidence` and
+  `uncertain`, given in `...` or fixed in the harness, as `gptr_error_invalid_argument` with `arg` that name; it
+  checks `budget`, `replay` and `.opts` with `peter()`'s own `gateway_args()`, and tool names with
+  `prompt_tools_check()` when every `tools` entry is a name and no extension or plugin is given, leaving `mcp__`
+  names to the run's session. Formerly these reached every child, whose runs ended `error` (or idle after 0 turns)
+  while the coaches still spent their sessions.
+- Rule (after the starting runs): when every starting run ended `error` or took no turns, the call stops before
+  any coach with `gptr_error_invalid_argument` (`arg = "..."`): "The starting run failed, so gptr did not coach:
+  <the first one's error, else "it ended with an error." or "it took no turns.">". Formerly coaching built from
+  runs that never ran could be kept, since an idle, empty start and an idle, empty final pass `coach_passes()`. The
+  task as given cannot be coached, so the class is `invalid_argument`, and no class is added.
+- Contract-visible: 04 section 15.11 IC-84 (order step 4, loop step 1); 08 section 3.4; `?gptr_coach` (`...`).
+- Tests: test-gptr-coach.R "every refusal comes before anything starts", "starting runs that all failed or took no
+  turns stop the call before any coach", "tool names only a run's session can know are left to the run". Evidence:
+  progress/P29.md Review fixes.
+
+## D-287 - P29 Under replay, an offline coaching call with no block runs unrecorded (2026-10-28)
+- Rule: `gptr_coach()` sets `offline` on the call record it gives `doc.coach`: `TRUE` when `replay_guard()` in replay
+  mode accepts both the runs' model (`model =`, else the harness's fixed model) and the coach model, which the judge
+  also uses; a `NULL` (configured default) model is not offline. Under `replay`, a recordable coaching call with no
+  block whose record is `offline` gets `"none"` from `doc.coach` and coaches without recording, as offline models
+  answer `peter()` under replay. Formerly it signalled `not_recorded`, so the `\donttest{}` example of `?gptr_coach`
+  failed when run as a script under the check variables (forced replay, IC-45). A call with any model that is not
+  offline, a local server included, still signals `not_recorded`, and a stale block still signals `stale_block`.
+- Rule (answer): `doc.coach` returns `list(action, site, harness)`; the `reason` no caller read is gone, and the
+  one case a person must hear about, a statement of another shape, still says why in its notice.
+- Contract-visible: 04 sections 7.0 (`doc.coach`) and 15.11 IC-84 (order step 3), IC-87; 08 sections 3.4 and 3.6.
+- Tests: test-gptr-coach.R "the call record tells the document route whether every model is offline";
+  test-doc-coach.R "replay mode refuses a coaching call that has no recorded block" (and runs it offline).
+  Evidence: progress/P29.md Review fixes.
+
+## D-288 - P29 Coaching data: skill names, hidden characters and one note section per coaching (2026-10-28)
+- Rule (skill names): `coaching_skills()` refuses a coaching skill named like a registered skill or like any
+  `SKILL.md` that `skill_discover()` lists (project skills, trusted or not, the person's, gptr's, packages' and
+  plugins'), checked when a harness is made, loaded or coached (`coaching_validate(fresh = TRUE)`); a harness call
+  skips it (`harness_spec_check(fresh = FALSE)`). Formerly the check read only the registry, which fills when a
+  session syncs: before a sync a coaching skill replaced the person's skill of that name, and after it the same
+  harness was refused on every call. Untrusted project skills count, so trusting the project later cannot let a
+  coaching skill shadow one. `skill_discover()` (P17, L4) is a twelfth contract edge of area `gptr`
+  (`arch_contract_edges()`); amends D-279.
+- Rule (text): `coaching_text()` also refuses format (`\p{Cf}`), line and paragraph separator and tag (U+E0000 to
+  U+E007F) characters, the known way to hide instructions in text people review; console display
+  (`ui_escape()`) is unchanged.
+- Rule (note section): the factory registers the note as the prompt section `coaching_<coaching hash>`, and the
+  tag check refuses any `coaching_` name. Formerly every harness registered `coaching`, and a session keeps one
+  prompt section per name. The policies keep the names `coaching` and `harness_rules`: every policy applies
+  whatever its name, and `nested_rules()` selects them by name.
+- Contract-visible: 04 sections 12.2 (`helper-arch.R`) and 15.11 IC-83, IC-85, IC-86; 03 section 6.19; 08 section
+  3.2.
+- Tests: test-gptr-tailor.R "a coaching skill takes no skill's name, synced or not, and is checked when made",
+  "coaching_validate() refuses every invalid part by name (08 3.2)", "continuing with another coached harness
+  keeps both harnesses' coaching"; test-arch-layers.R "internal calls respect the layer table and the kernel SDK
+  (IC-33)". Evidence: progress/P29.md Review fixes.
+
+## D-289 - P29 A harness shows every fixed argument that is not plain data; HARNESS.md has no record (2026-10-28)
+- Rule (notice): `gptr_tailor()`, also as `gptr_tailor(readRDS(f))`, lists as R source every fixed argument that
+  is not plain data (`harness_plain()`: `NULL`, text, numbers, logicals and lists of them, with no attribute but
+  names), plus `mode = "yolo"`. Formerly it named only `extensions`, `plugins` and `mode = "yolo"`, so a tool's
+  `execute` function, an `uncertain` function, a provider built on a function or a function in `.opts` loaded
+  without a word, although 08 3.1 said loading shows any code the harness carries. `plugins = "name"`, plain
+  text, is no longer announced.
+- Rule (folder): `dir =` writes no record in `HARNESS.md`; `gptr_tailor()` always returns an empty record, so the
+  section always read "none".
+- Contract-visible: 04 section 15.11 IC-83; 08 section 3.1.
+- Tests: test-gptr-tailor.R "a harness that loads code or loosens checks says so when it is made", "dir = writes
+  the harness for people to read and returns it invisibly". Evidence: progress/P29.md Review fixes.
+
+## D-290 - P29 A run's result reaches the parent within the reader's limits (2026-10-28)
+- Rule (encoding): `plain_encode()` keeps within `plain_decode()`'s limits: it counts depth from the result's
+  root and summarises at depth 20, and it threads one value count through the whole result, giving each value the
+  budget less one value for each later sibling, so no result holds more than 1e5 values; a list or data frame
+  that cannot fit becomes its printed summary. `child_result_new()` puts `value` and `objects` last, so every
+  other field is encoded whole first, and `child_main()` writes the result again with the value and each object
+  as its summary when the JSON is over 64 MiB (`plain_max$bytes`). Formerly a large or deep value (a list of
+  150,000 numbers, a 400,000 by 20 data frame) made the parent refuse the whole result, so the run read `error`
+  and its usage was lost. Amends D-278.
+- Rule (reading): `child_read()` checks the shape of every field, not only `status` and `risk`, and refuses a
+  mismatch as `gptr_error_untrusted`, which `child_exit()` turns into an error result for that job alone.
+  Formerly a forged two-element `text`, or `usage` with text columns, stopped the whole `gptr_coach()` call with
+  an error that did not explain itself.
+- Rule (task): the result gains `first_user`, the session's first user message alone (`child_text()`, clipped at
+  50,000 characters), which the coaches and the judge see as the task. Formerly the task was cut from the
+  transcript at the first blank line followed by `## `, which also cut a heading of the person's own prompt.
+- Contract-visible: 04 section 15.11 IC-84, IC-86; 08 section 3.3; the plan's interface 8.
+- Tests: test-gptr-child.R "a value too large or deep for the reader travels as its summary (08 section 3.3)", "a
+  run's result too large for the parent keeps all but its value and objects", "a result whose fields have the
+  wrong shape is refused, as a forged one is", "a run's result holds its first user message on its own";
+  test-gptr-coach.R "the coaches and the judge see the starting run's whole first message as the task". Evidence:
+  progress/P29.md Review fixes.

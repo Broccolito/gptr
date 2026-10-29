@@ -132,6 +132,16 @@ A team, fan-out or `gptr_parallel()` result whose members did not all finish tak
 such member's status, and `$reason` names each one; `agents =` and `parallel =` signal that
 member's condition, with the team as `$session`, when no member finished.
 
+## Coaching runs many sessions
+
+`gptr_coach()` also runs many sessions, but to improve a harness rather than to answer a
+question. With the defaults it runs your task 4 times and starts 3 coach sessions, and it says
+how many before it starts. Each session runs unattended in its own R process, with copies of
+your objects and an empty folder of its own, so it cannot change your objects. A step that needs
+your approval ends that run, so most tasks need `mode = "auto"`. On a Claude Code or Codex plan,
+at most two sessions run at once. The result is a harness, a function you call like `peter()`,
+not the work of the runs. See [Harnesses and coaching](tailor-and-coach.html).
+
 ## Deferred sessions and SDK control
 
 `.run = FALSE` constructs an idle session with queued input without requesting a model yet.

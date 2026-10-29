@@ -556,6 +556,23 @@ test_that("the worker registry ships the filters of each scope by name (IC-69)",
   expect_named(reg$filters, c("user", "project", "session"))
 })
 
+test_that("the worker registry ships the rank-0 policies of the sessions' ancestors (08 3.2)", {
+  local_project()
+  top = session_new("fake/fake-1", "auto", home = new.env())
+  team = session_new("fake/fake-1", "auto", home = new.env(), kind = "team", parent = top)
+  child = session_new("fake/fake-1", "auto", home = new.env(), kind = "child", parent = team)
+  tid = session_data(top)$id
+  ids = c(registry_add(gptr_policy("no_touch", function(call, ctx) NULL), "session", 0L,
+                       session = tid),
+          registry_add(gptr_prompt_section("top_only", "Top."), "session", 0L, session = tid))
+  withr::defer(for (id in ids) registry_remove(id))
+  specs = worker_registry(c(session_data(team)$id, session_data(child)$id))$specs
+  names = vapply(specs, function(r) r$spec$name, "")
+  expect_true(specs[[match("no_touch", names)]]$session)
+  # only policies: what a session sees of its ancestors in process
+  expect_false("top_only" %in% names)
+})
+
 test_that("an explicit worker for a remote model is refused in replay mode before it starts", {
   skip_on_cran()
   local_project()

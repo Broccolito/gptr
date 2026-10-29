@@ -1143,7 +1143,11 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
     }
     return(done())
   }
-  sub_cmd = a[!startsWith(a, "-")][1L] %if_na% "*"
+  ops = a[!startsWith(a, "-")]
+  # R's tools: `R CMD <tool>` and Windows' `Rcmd <tool>`, whose names R matches in any case
+  if (identical(p, "r") && identical(ops[1L], "CMD")) ops = toupper(ops[-1L])
+  if (identical(p, "rcmd")) ops = toupper(ops)
+  sub_cmd = ops[1L] %if_na% "*"
   row = risk_cmd_row(if (identical(p, "[[")) "[" else p, sub_cmd)
   pre = seq_along(a) < match("--", a, nomatch = length(a) + 1L)
   if (!identical(row$level, 0L) && !p %in% c("git", risk_cmd_interpreters, risk_cmd_builds) &&
@@ -1349,7 +1353,7 @@ risk_cmd_simple = function(w, root, dirs = root, dyn = rep("", length(w)),
         out[[length(out) + 1L]] = risk_command(code, root, dirs)
       }
     } else {
-      add(3L, "process")
+      add(max(3L, row$level %||% 3L), row$category %||% "process")
     }
     operands("control")
   } else if (p %in% risk_cmd_builds) {
@@ -2004,7 +2008,9 @@ risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "w
 #'   `flagged` (a data frame with columns `call`, `fn`, `level`, `category`, `path`,
 #'   `path_class`), `paths`, `secret`, `secret_guard`, `assigned`, `dynamic`, and the additive
 #'   fields `sizes` (bytes of overwritten objects, by name), `secrets` (guarded secret names),
-#'   `kind` and `parse_error`.
+#'   `kind`, `parse_error`, `calls` (every function the code calls, including through the
+#'   functions it reads in `envir`) and `targets` (`files`: the files the code writes, deletes
+#'   or downloads to, as permission rules see paths).
 #' @examples
 #' gptr_risk("unlink('data', recursive = TRUE)")$level
 #' gptr_risk("summary(mtcars)")
@@ -2090,6 +2096,15 @@ risk_classify_r = function(code, envir, root) {
   out = risk_new(flags, assigned = c(scan$targets$assign, sec$assigned), sizes = scan$sizes)
   out$secret_guard = out$secret_guard || isTRUE(sec$guard)
   out$secrets = unique(c(out$secrets, as.character(fl$name[fl$rule == "secret_env_registered"])))
+  out$calls = unique(as.character(scan$calls$fn))
+  w = flags$category %in% c("file_write", "file_delete", "network")
+  files = unique(c(scan$targets$files, flags$path[w]))
+  files = files[!is.na(files) & nzchar(files)]
+  # as rules see paths; one R cannot translate (risk_path_class()) is kept as written
+  out$targets = list(files = unique(vapply(files, function(p) {
+    tryCatch(rule_call_path(list(input = list(path = p))), error = function(e) p,
+             warning = function(w) p)
+  }, "", USE.NAMES = FALSE)))
   out
 }
 
@@ -2116,7 +2131,8 @@ risk_new = function(flags, kind = "r", assigned = character(), sizes = numeric()
                  flagged = flags, paths = unique(flags$path[!is.na(flags$path)]),
                  secret = "secret" %in% hot$category, secret_guard = g$guard,
                  assigned = unique(assigned), dynamic = "dynamic" %in% hot$category,
-                 sizes = sizes, secrets = g$secrets, kind = kind, parse_error = NULL),
+                 sizes = sizes, secrets = g$secrets, kind = kind, parse_error = NULL,
+                 calls = character(), targets = list(files = character())),
             class = "gptr_risk")
 }
 
@@ -2201,7 +2217,7 @@ risk_escape = function(x) {
 # ---- the environment the code would run in (never forcing promises; R4) --------------------
 
 #' Where a call head resolves: "fun" (with pkg, or user = TRUE and the function's code), "lazy"
-#' (a promise or an active binding) or "none"
+#' (a promise or an active binding) or "none"; a harness resolves to gptr's peter (with name)
 #' @noRd
 risk_fn_where = function(name, envir) {
   e = envir %||% globalenv()
@@ -2213,6 +2229,9 @@ risk_fn_where = function(name, envir) {
           (!pkg_env && isTRUE(rlang::env_binding_are_lazy(e, name)))) return(list(kind = "lazy"))
       if (exists(name, envir = e, mode = "function", inherits = FALSE)) {
         f = get(name, envir = e, mode = "function", inherits = FALSE)
+        if (inherits(f, "gptr_harness")) {
+          return(list(kind = "fun", pkg = "gptr", name = risk_gateway))
+        }
         top = if (is.primitive(f)) baseenv() else topenv(environment(f))
         if (identical(top, baseenv())) return(list(kind = "fun", pkg = "base"))
         if (isNamespace(top)) return(list(kind = "fun", pkg = getNamespaceName(top)[[1L]]))
@@ -2247,10 +2266,12 @@ risk_binding_info = function(name, envir, inherits) {
   NULL
 }
 
-#' Class and bytes of an object (the closure-free leaf; the workspace's size rule)
+#' Class and bytes of an object (the closure-free leaf; the workspace's size rule), and whether
+#' it is a harness
 #' @noRd
 risk_binding_leaf = function(obj, home) {
-  list(class = class(obj)[1L], bytes = env_snap_size(obj, home))
+  list(class = class(obj)[1L], bytes = env_snap_size(obj, home),
+       harness = inherits(obj, "gptr_harness"))
 }
 
 #' risk_binding_info() with errors caught one frame up
@@ -2534,11 +2555,13 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     t = deparse_code(e, width.cutoff = 80L, nlines = 1L)[1L]
     if (nchar(t) > 80L) paste0(substr(t, 1L, 77L), "...") else t
   }
-  # A user function's code, read one level deeper (FALSE when too deep).
+  # A user function's code, read one level deeper (FALSE when too deep), with its calls and files.
   read_user = function(code, label, ctx) {
     if (depth <= 0L) return(FALSE)
     s = risk_scan(as.expression(list(code)), envir, root, depth - 1L, masked = masked)
     add_rows(s$flags, ctx, prefix = label)
+    add_call(s$calls$fn, s$calls$package, rep(ctx$line, nrow(s$calls)))
+    add_tg("files", s$targets$files)
     TRUE
   }
   # User S3 methods of a generic the code calls (`print.evil` for print()).
@@ -2602,7 +2625,10 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
         }
         return(invisible())
       }
-      if (identical(w$kind, "fun") && !w$pkg %in% risk_base_pkgs) pkg = w$pkg
+      if (identical(w$kind, "fun") && !w$pkg %in% risk_base_pkgs) {
+        pkg = w$pkg
+        name = w$name %||% name
+      }
     }
     row = risk_lookup(name, pkg)
     a = risk_args(e, name, row$package %||% (if (is.na(pkg)) "base" else pkg))
@@ -2934,9 +2960,12 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     }
     if (is.null(info)) return(invisible())
     sizes[[nm]] <<- info$bytes
+    # a harness carries the person's fixed arguments and rules: changing it is control
+    harness = isTRUE(info$harness)
     add(ctx, paste0(if (is.call(target)) "modifies" else "overwrites", " `", nm, "` <",
                     info$class, ", ", risk_bytes(info$bytes), ">"), NA_character_,
-        if (!is.na(info$bytes) && info$bytes > protect) 3L else 2L, "object_write")
+        if (harness) 4L else if (!is.na(info$bytes) && info$bytes > protect) 3L else 2L,
+        if (harness) "control" else "object_write")
   }
 
   walk = function(e, ctx) {
@@ -2951,7 +2980,8 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L, wd 
     if (!is.call(e)) return(invisible())
     r = risk_head(e[[1L]])
     a = as.list(e)[-1L]
-    add_call(r$name, r$pkg, ctx$line)
+    add_call(if (r$how == "member") paste0(risk_gateway, "$", r$name) else r$name, r$pkg,
+             ctx$line)
     if (identical(r$how, "ns") && identical(r$pkg, "gptr") && is.call(e[[1L]]) &&
         identical(e[[1L]][[1L]], as.name(":::"))) {
       add(ctx, paste0(text(e), " (reaches gptr's internals)"), r$name, 4L, "control")
@@ -3158,7 +3188,8 @@ risk_plan_disallowed = function(code, root = project_root()) {
     pkg = calls$package[i]
     if (fn %in% risk_plan_syntax || fn %in% c(risk_gateway, "gptr_describe")) next
     if (identical(pkg, "gptr")) {
-      if (!fn %in% risk_plan_members) bad = c(bad, paste0(gw, fn))
+      m = sub(gw, "", fn, fixed = TRUE)
+      if (!m %in% risk_plan_members) bad = c(bad, paste0(gw, m))
       next
     }
     row = risk_lookup(fn, pkg)

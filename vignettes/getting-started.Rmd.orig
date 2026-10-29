@@ -199,6 +199,7 @@ policy are covered in [Configuration](configuration.html).
 - [System 1 decisions](system-one.html): typed decisions inside `if`, `for` and `while`.
 - [Script as history](script-as-history.html): documents that record and replay agent work.
 - [Extending gptr](extending-gptr.html): tools, policies, hooks and plugins.
+- [Harnesses and coaching](tailor-and-coach.html): your own peter, improved by running your task.
 - [Token efficiency](token-efficiency.html): costs, budgets and compact context.
 - `?gptr_security`, `?gptr_egress` and `?gptr_options`.
 

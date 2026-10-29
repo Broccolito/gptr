@@ -604,11 +604,31 @@ gateway_filters_apply = function(call) {
   }
 }
 
-#' Registers the call's specs at rank 0 for the session, loads its extensions and enables named
-#' plugins (IC-69; contract 10.1); gateway_undo() undoes it for a refused call (D-251)
+#' Is `factory` keyed (attribute `gptr_key`, a string) and already loaded for session `sid`? A
+#' continuation passes a harness's factory again (08 section 3.1)
+#' @noRd
+gateway_key_loaded = function(factory, sid) {
+  key = attr(factory, "gptr_key", exact = TRUE)
+  if (!rlang::is_string(key)) return(FALSE)
+  exts = registry_env()$exts
+  for (eid in ls(exts)) {
+    info = get0(eid, envir = exts, inherits = FALSE)
+    if (identical(info$session, sid) &&
+          identical(attr(info$factory, "gptr_key", exact = TRUE), key)) {
+      return(TRUE)
+    }
+  }
+  FALSE
+}
+
+#' Registers the call's specs at rank 0 for the session, loads its extensions (a keyed factory
+#' once per session; a new one in a frozen session, another harness, asks for one IC-52 refreeze
+#' so that its prompt sections reach the model) and enables named plugins (IC-69; contract 10.1);
+#' gateway_undo() undoes it for a refused call (D-251)
 #' @noRd
 gateway_register = function(call, s) {
-  id = session_data(s)$id
+  d = session_data(s)
+  id = d$id
   specs = list()
   if (inherits(call$ids$model, "gptr_spec")) specs = c(specs, list(call$ids$model))
   for (t in gateway_list(call$ids$tools)) if (inherits(t, "gptr_spec")) specs = c(specs, list(t))
@@ -616,6 +636,11 @@ gateway_register = function(call, s) {
   for (sp in specs) gateway_register_spec(sp, id)
   for (ex in gateway_list(call$ids$extensions)) {
     if (is.function(ex)) {
+      if (gateway_key_loaded(ex, id)) next
+      if (rlang::is_string(attr(ex, "gptr_key", exact = TRUE)) && length(d$frozen)) {
+        d$frozen = NULL
+        d$refreeze = TRUE
+      }
       ext_load(ex, source = "session", rank = 0L, session = id)
     } else if (is.character(ex)) {
       f = path_norm(ex)
@@ -635,13 +660,16 @@ gateway_register = function(call, s) {
   invisible(s)
 }
 
-#' What a call may change before its checks pass: the registrations of a continued session `s`
-#' (a refused new session is dropped with its own) and the R session's registry filters; returns a
-#' function that puts them back (a refused call, D-251)
+#' What a call may change before its checks pass: the registrations and frozen prompt of a
+#' continued session `s` (a refused new session is dropped with its own) and the R session's
+#' registry filters; returns a function that puts them back (a refused call, D-251)
 #' @noRd
 gateway_undo = function(s = NULL) {
   filters = settings_read("session")$filters
-  id = if (!is.null(s)) session_data(s)$id
+  d = if (!is.null(s)) session_data(s)
+  id = d$id
+  frozen = d$frozen
+  refreeze = d$refreeze
   st = gateway_state()
   ids = if (!is.null(id)) get0(id, envir = st$specs, inherits = FALSE) %||% character()
   before = if (!is.null(id)) registry_session_mark(id)
@@ -649,6 +677,8 @@ gateway_undo = function(s = NULL) {
     if (!is.null(id)) {
       registry_session_undo(before, registry_session_mark(id))
       assign(id, ids, envir = st$specs)
+      d$frozen = frozen
+      d$refreeze = refreeze
     }
     if (!identical(settings_read("session")$filters, filters)) {
       settings_write("session", list(filters = filters))
@@ -739,7 +769,7 @@ gateway_checks = function(call, s, first, safety) {
                package = "later", feature = "background sessions")
   }
   announce = gateway_filters_apply(call)
-  for (nm in as.character(unlist(call$ids$skills))) ext_service_get("skill.body")(nm)
+  for (nm in as.character(unlist(call$ids$skills))) ext_service_get("skill.body")(nm, d$id)
   prompt = gateway_prompt_secrets(call$prompt)
   announce()
   list(ref = ref, prompt = prompt, images = images)
@@ -748,10 +778,12 @@ gateway_checks = function(call, s, first, safety) {
 #' Applies a checked continuation's changes: model `ref`, or `.opts$thinking` alone, an explicit
 #' `mode =` (tightened inside a run) and the tools the call adds through session.add_tools
 #' (`before`: the session's tool names before it registered; IC-69). An inherited mode is never
-#' written to the session (IC-53 item 4).
+#' written to the session (IC-53 item 4). A pending refreeze is a stated break of the prompt
+#' cache, so the prefix guard starts over.
 #' @noRd
 gateway_continue_session = function(call, s, cur, ref, before) {
   d = session_data(s)
+  if (isTRUE(d$refreeze)) prefix_reset(s)
   th = call$args$opts$thinking
   if (!is.null(call$ids$model)) {
     if (!identical(ref, d$model)) session_set_model(s, ref, reason = "user")

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>gptr cheatsheet</title>
-<meta name="description" content="Agents in your R session with gptr: setup, the console, peter() calls and pipes, System 1 and System 2 models, providers, recorded documents, tools and extensions.">
+<meta name="description" content="Agents in your R session with gptr: setup, the console, peter() calls and pipes, System 1 and System 2 models, providers, recorded documents, tools, extensions and coached harnesses.">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <script>
   // Follow the site's light switch: pkgdown stores "light", "dark" or "auto"; light by default.
@@ -519,9 +519,43 @@ gptr_wait(b)</dt><dd>Experimental: return at once; also <code>gptr_steer()</code
           <dt>gptr_usage(s, by = "agent")</dt><dd>Tokens and cost by session, agent, model or route.</dd>
         </dl>
       </section>
+    </div>
+  </div>
+  <footer class="foot">
+    <span>gptr 1.0.0 · Apache License 2.0</span>
+    <span class="spacer"></span>
+    <span><a href="https://broccolito.github.io/gptr/">broccolito.github.io/gptr</a> · Updated 2026-10</span>
+  </footer>
+</section>
+
+<section class="sheet">
+  <div class="cols">
+    <div class="col">
+      <section class="panel">
+        <h2>Tailor and coach a harness</h2>
+        <p>A harness is <code>peter()</code> with your arguments, rules and coaching (a note, skills, a review) built in; its rules can only forbid or require more. <code>gptr_coach()</code> runs each session unattended in its own R process, so most tasks need <code>mode = auto</code>.</p>
+        <dl>
+          <dt>h = gptr_tailor(peter, mode = auto,
+  coaching = list(note = "Report units."))</dt><dd>A call's own arguments win; its tools add.</dd>
+          <dt>no = list(list(rule = "r(fn:stepAIC)",
+  why = "No stepwise selection."))
+h = gptr_tailor(h, rules = list(never = no))</dt><dd>Refused in every mode; <code>require</code> asks for a step.</dd>
+          <dt>s = h("Fit mpg on wt.", mtcars); s$text</dt><dd>Call it exactly like <code>peter()</code>, pipes included.</dd>
+          <dt>q = "Average x; gptr_return() it."
+h = gptr_coach(q, x, harness = h,
+  check = function(r) isTRUE(r$value == 2))</dt><dd>New coaching is kept only if it passes <code>check</code>.</dd>
+          <dt>h = gptr_coach(q, x, harness = h,
+  coach = claude_code)</dt><dd>Coaches on a Claude Code plan (or <code>codex</code>).</dd>
+          <dt>gptr_doc("analysis.R")
+h = gptr_coach("Average x.", x, harness = h)</dt><dd>Recorded; a rerun replays it with no model or key.</dd>
+          <dt>saveRDS(h, "h.rds")
+h = gptr_tailor(readRDS("h.rds"))</dt><dd>Share it; loading checks it and shows any code.</dd>
+          <dt>gptr_tailor(h, dir = "my-harness")</dt><dd>Write it as Markdown to read or keep in git.</dd>
+        </dl>
+      </section>
       <section class="panel">
         <h2>Learn more</h2>
-        <p>Guides: <a href="https://broccolito.github.io/gptr/articles/">broccolito.github.io/gptr/articles</a> (start with Getting started). <code>browseVignettes("gptr")</code> lists them only if the install built vignettes (CRAN, <code>R CMD build</code>).</p>
+        <p>Guides: <a href="https://broccolito.github.io/gptr/articles/">broccolito.github.io/gptr/articles</a> (start with Getting started; harnesses: <a href="https://broccolito.github.io/gptr/articles/tailor-and-coach.html">broccolito.github.io/gptr/articles/tailor-and-coach.html</a>). <code>browseVignettes("gptr")</code> lists them only if the install built vignettes (CRAN, <code>R CMD build</code>).</p>
       </section>
     </div>
   </div>

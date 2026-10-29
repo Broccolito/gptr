@@ -38,6 +38,10 @@ reference:
 - title: "Ask Peter"
   contents:
   - peter
+- title: "Harnesses and coaching"
+  contents:
+  - gptr_tailor
+  - gptr_coach
 - title: "Setup and status"
   contents:
   - gptr_init
@@ -140,6 +144,7 @@ articles:
   contents:
   - script-as-history
   - teams-and-background
+  - tailor-and-coach
   - tools-and-artifacts
 - title: "Extend gptr"
   contents:

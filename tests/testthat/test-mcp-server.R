@@ -192,6 +192,34 @@ test_that("the end of a served call that was refused says why it did not run (co
   expect_identical(end$refused, "denied by the rule r(fn:writeLines)")
 })
 
+test_that("a blocked run refuses every further served call at once (P29, 08 section 3.7)", {
+  local_gptr_options(interactive = FALSE, noninteractive_ask = "stop")
+  seen = new.env()
+  seen$ends = list()
+  offs = list(
+    gptr_register(gptr_hook("before_request", function(event, ctx) {
+      if (is.null(seen$first)) {
+        seen$first = mcp_dispatch_local(r_call("writeLines('x', 'y.txt')", id = 7L),
+                                        ctx$session)$result
+        seen$second = mcp_dispatch_local(r_call("1 + 1", id = 8L), ctx$session)$result
+      }
+      NULL
+    })),
+    gptr_register(gptr_hook("tool_execution_end", function(event, ctx) {
+      seen$ends[[length(seen$ends) + 1L]] = event
+      NULL
+    })))
+  withr::defer(for (off in offs) off())
+  expect_error(peter("hello", model = local_fake_provider(list("ok")), envir = new.env(),
+                     mode = "manual"),
+               class = "gptr_error_permission")
+  expect_true(seen$first$isError)
+  expect_true(seen$second$isError)
+  expect_match(seen$second$content[[1L]]$text, "no further tool call runs", fixed = TRUE)
+  end = Filter(function(e) identical(e$tool_call_id, "mcp_8"), seen$ends)[[1L]]
+  expect_match(end$refused, "blocked", fixed = TRUE)
+})
+
 test_that("code served in a live run shows what it prints, as the r tool does (Task 31)", {
   shown = utils::capture.output(serve_in_run(function(event, ctx) {
     withr::local_options(gptr.interactive = TRUE)

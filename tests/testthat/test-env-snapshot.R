@@ -516,7 +516,7 @@ test_that("preloaded skills come from the skill.body service", {
   local_mocked_bindings(
     ext_service_has = function(name) identical(name, "skill.body"),
     ext_service_get = function(name) {
-      function(nm) list(text = "# Skill\nUse data.table.", dir = ".")
+      function(nm, session = NULL) list(text = "# Skill\nUse data.table.", dir = ".")
     }
   )
   b = env_block_skills(fake_ctx(e, call = cl), 10000L)

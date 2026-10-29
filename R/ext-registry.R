@@ -117,6 +117,28 @@ registry_session_owner_set = function(fun) {
   invisible(NULL)
 }
 
+#' Install the upper layer's lookup of a live session's parent id; NULL removes it
+#' @noRd
+registry_session_parent_set = function(fun) {
+  check_function(fun, "fun", null = TRUE)
+  the$registry_session_parent = fun
+  invisible(NULL)
+}
+
+#' The ids of a session's ancestors, nearest first, through the upper layer's parent lookup
+#' @noRd
+registry_session_ancestors = function(sid) {
+  parent = the$registry_session_parent
+  out = character()
+  id = sid
+  while (!is.null(parent) && !is.null(id)) {
+    id = parent(id)
+    if (is.null(id) || id %in% c(sid, out)) break
+    out = c(out, id)
+  }
+  out
+}
+
 # ---- records (contract 5.5, 7.2, 10.1) ----------------------------------------------------------
 
 #' Append an id to an index entry
@@ -176,14 +198,17 @@ registry_sort = function(recs) {
   recs[order(rank, ord)]
 }
 
-#' The records under `key` of an index that session `sid` sees (process records and its own)
-#' and no filter disables; with `activate`, lazy ones are activated first
+#' The records under `key` of an index that session `sid` sees (process records, its own and the
+#' rank-0 records of the sessions `up`) and no filter disables; with `activate`, lazy ones are
+#' activated first
 #' @noRd
-registry_enabled = function(reg, index, key, sid, activate = FALSE) {
+registry_enabled = function(reg, index, key, sid, activate = FALSE, up = character()) {
   pick = function() {
     recs = registry_recs(reg, get0(key, envir = index, inherits = FALSE))
     recs[vapply(recs, function(r) {
-      (is.null(r$session) || identical(r$session, sid)) && !registry_rec_filtered(r, reg)
+      seen = is.null(r$session) || identical(r$session, sid) ||
+        (r$session %in% up && identical(r$rank, 0L))
+      seen && !registry_rec_filtered(r, reg)
     }, NA)]
   }
   lazy = function(recs) vapply(recs, function(r) identical(r$state, "lazy"), NA)
@@ -415,7 +440,9 @@ registry_model_spec = function(ref, sid) {
 }
 
 #' Records of a kind: every record of an `all` kind, ordered; the winner per name otherwise. Lazy
-#' records are activated first, except `tool` placeholders (their declarations feed catalogs; 10.8)
+#' records are activated first, except `tool` placeholders (their declarations feed catalogs; 10.8).
+#' A session's policies include the rank-0 policies of its ancestors, so that a person's or a
+#' harness's policies bind every session started under theirs (08 section 3.2).
 #' @noRd
 registry_all_recs = function(kind, session = NULL) {
   check_string(kind, "kind")
@@ -424,8 +451,9 @@ registry_all_recs = function(kind, session = NULL) {
   registry_enter(reg)
   on.exit(registry_leave(reg), add = TRUE)
   k = kind_get(kind)
+  up = if (identical(kind, "policy")) registry_session_ancestors(sid) else character()
   recs = registry_sort(registry_enabled(reg, reg$by_kind, kind, sid,
-                                        activate = !identical(kind, "tool")))
+                                        activate = !identical(kind, "tool"), up = up))
   if (identical(k$resolve, "all")) {
     of = k$order_field
     if (!is.null(of) && length(recs) > 1L) {

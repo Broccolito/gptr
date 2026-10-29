@@ -14,13 +14,14 @@ doc_block_token = "@@GPTR_BLOCK@@"
 # what a recorded gptr_return(<expression>) assigns, and value= names (doc_rewrite_return())
 doc_value_name = paste0(".gptr_value_", doc_block_token)
 doc_header_keys = c("model", "date", "prompt", "sha", "call", "tokens", "cost", "session", "turn",
-                    "value", "created", "fork", "plan", "status", "args", "kind", "children")
+                    "value", "created", "fork", "plan", "status", "args", "kind", "children",
+                    "harness", "start", "coach", "gptr")
 doc_quoted_keys = "children"
 # the context blocks the console sends with a typed prompt (its !code notes and @file heads),
 # which a block records as `#< ` lines (IC-49)
 doc_sent_kinds = c("user_ran", "user_files")
-# a console turn's statement in a transcript, live or undone (IC-49)
-doc_re_console = "^(#~ )?s_[0-9a-f]{6} (=|[|]>) peter\\("
+# a console turn's statement in a transcript, live or undone, of peter or a harness (IC-49)
+doc_re_console = "^(#~ )?s_[0-9a-f]{6} (=|[|]>) (peter|h_[0-9A-Za-z]+)\\("
 # a control character, as ui_escape() counts them: C0, DEL and C1, which holds the 8-bit CSI and
 # OSC that a terminal may honour as ESC [ and ESC ]
 doc_re_ctl = "[\u0001-\u001f\u007f-\u009f]"
@@ -286,8 +287,7 @@ doc_body_sha = function(body, legacy = FALSE) {
 #' whitespace around newlines removed
 #' @noRd
 prompt_hash = function(template) {
-  p = as_utf8(paste(as.character(template), collapse = "\n"))
-  p = gsub("[ \t]*\r?\n[ \t]*", "\n", trimws(p))
+  p = text_norm(paste(as.character(template), collapse = "\n"))
   substr(hash_sha256(p), 1L, 12L)
 }
 
@@ -304,11 +304,13 @@ args_hash = function(interp) {
   substr(hash_sha256(paste(x, collapse = "\n")), 1L, 8L)
 }
 
-#' Status of a block: undone > user-edited (sha, also as written before FIX-33) > stale (prompt or
-#' args) > fresh. With `ph = NULL` only undone and user-edited are detected. Header keys are
-#' matched exactly.
+#' Status of a block: undone > user-edited (sha, also as written before FIX-33) > stale (prompt,
+#' args, kind or coaching) > fresh. With `ph = NULL` only undone and user-edited are detected.
+#' Header keys are matched exactly. `hh` is the `<name>:<hash>` of the harness the call runs
+#' (NULL: peter) and `coach` tells a coaching call: its block must be of kind `coach` and its
+#' `start=` must have that coaching hash, any other block's `harness=` (08 section 3.6).
 #' @noRd
-doc_block_status = function(header, body, ph = NULL, ah = NULL) {
+doc_block_status = function(header, body, ph = NULL, ah = NULL, hh = NULL, coach = FALSE) {
   if (identical(header[["status"]], "undone")) return("undone")
   sha = header[["sha"]]
   if (!is.null(sha) && !identical(sha, doc_body_sha(body)) &&
@@ -318,8 +320,19 @@ doc_block_status = function(header, body, ph = NULL, ah = NULL) {
   if (!is.null(ph)) {
     if (!identical(header[["prompt"]], ph)) return("stale")
     if (!identical(header[["args"]] %||% "", ah %||% "")) return("stale")
+    if (!identical(identical(header[["kind"]], "coach"), isTRUE(coach))) return("stale")
+    key = if (isTRUE(coach)) "start" else "harness"
+    if (!identical(doc_coaching_of(header[[key]]), doc_coaching_of(hh))) return("stale")
   }
   "fresh"
+}
+
+#' The coaching hash of a `<name>:<hash>` header value; none (peter, whose coaching is empty)
+#' reads as the hash of empty coaching, so `peter(` and an uncoached harness read alike
+#' @noRd
+doc_coaching_of = function(v) {
+  if (rlang::is_string(v) && grepl(":", v, fixed = TRUE)) return(sub("^.*:", "", v))
+  doc_coach_hash(NULL)
 }
 
 #' Render a marker block (contract 11.5): header, indented non-empty body lines, footer
@@ -345,6 +358,27 @@ doc_splice = function(lines, from, to, new) {
 }
 
 # ---- the peter() call scanner, anchors and block ownership (report 14 sections 3.1 and 4.2) ----
+
+#' The call heads a reader of a text counts (08 section 3.6): `peter`, `gptr_coach`, every name
+#' a `harness=` header of the text declares, and `extra` (the head of the call being located)
+#' @noRd
+doc_heads = function(lines, extra = NULL) {
+  hit = lines[grepl("harness=", lines, fixed = TRUE)]
+  m = regmatches(hit, regexec(doc_re_open, hit, perl = TRUE))
+  vals = vapply(m[lengths(m) > 0L], function(x) doc_parse_kv(x[4L])[["harness"]] %||% "", "")
+  names = sub(":[^:]*$", "", vals)
+  unique(c("peter", "gptr_coach", names[make.names(names) == names], extra))
+}
+
+#' The heads a format's locate() counts for a site: its own (doc_site_base()) and the head of
+#' its anchored call, which an upsert recovered from a sidecar keeps (`head`, or a notebook
+#' anchor's call identity, doc_sidecar_call())
+#' @noRd
+doc_site_heads = function(site) {
+  call0 = site[["anchor"]][["call0"]]
+  c(site[["heads"]], site[["anchor"]][["head"]],
+    if (is.call(call0) && is.symbol(call0[[1L]])) as.character(call0[[1L]]))
+}
 
 #' P15's process state `the$doc_pending` (contract 7.0): deferred and pending upserts by
 #' document key (`docs`), document locks held until exit (`held`), whether the exit finalizer is
@@ -381,27 +415,30 @@ doc_setting = function(key, default) {
 doc_calls_empty = function() {
   data.frame(line1 = integer(), col1 = integer(), line2 = integer(), col2 = integer(),
              stmt1 = integer(), stmt2 = integer(), nested = logical(), prompt = character(),
-             n_in_stmt = integer(), text = character(), ident = character(),
+             n_in_stmt = integer(), text = character(), ident = character(), head = character(),
              stringsAsFactors = FALSE)
 }
 
-#' The peter() calls of an R text: positions, statement range, nesting, prompt literal, ordinal
-#' within the statement (report 14 doc_scan_calls, with `prompt =` and named-argument handling),
-#' the call's text and its identity text (`ident`: the text that parses to the call R evaluates,
-#' the whole pipe for the right-hand side of `|>`, the call with `.` inserted as magrittr calls
-#' it for the right-hand side of a magrittr pipe, else the call's text). A text that does not
-#' parse gives no calls and the attribute `parse_error`. Texts of 20 lines or more are remembered
-#' (the 16 most recently used), so every peter() call of a long script locates through one parse.
+#' The calls of an R text whose head is one of `heads` (peter() and harness calls): positions,
+#' statement range, nesting, prompt literal, ordinal within the statement (report 14
+#' doc_scan_calls, with `prompt =` and named-argument handling), the call's text, its identity
+#' text (`ident`: the text that parses to the call R evaluates, the whole pipe for the right-hand
+#' side of `|>`, the call with `.` inserted as magrittr calls it for the right-hand side of a
+#' magrittr pipe, else the call's text) and its head. A text that does not parse gives no calls
+#' and the attribute `parse_error`. Texts of 20 lines or more are remembered (the 16 most
+#' recently used, keyed by the heads too), so every call of a long script locates through one
+#' parse.
 #' @noRd
-doc_scan_calls = function(lines, line_offset = 0L) {
+doc_scan_calls = function(lines, line_offset = 0L, heads = doc_heads(lines)) {
   lines = as_utf8(as.character(lines))
   if (!length(lines)) return(doc_calls_empty())
-  if (length(lines) < 20L) return(doc_scan_parse(lines, line_offset))
+  if (length(lines) < 20L) return(doc_scan_parse(lines, line_offset, heads))
   st = doc_state()
-  key = hash_sha256(paste(c(line_offset, lines), collapse = "\n"))
+  key = hash_sha256(paste(c(line_offset, paste(sort(heads), collapse = " "), lines),
+                          collapse = "\n"))
   res = get0(key, envir = st$scan, inherits = FALSE)
   if (is.null(res)) {
-    res = doc_scan_parse(lines, line_offset)
+    res = doc_scan_parse(lines, line_offset, heads)
     assign(key, res, envir = st$scan)
   }
   st$scan_keys = c(setdiff(st$scan_keys, key), key)
@@ -421,7 +458,7 @@ doc_scan_calls = function(lines, line_offset = 0L) {
 #' into peter() with it: contract 6.1, research 12 D3) runs `lhs %>% peter(q)` as `peter(., q)`
 #' with `.` bound to the left-hand side (doc_dot_ident()).
 #' @noRd
-doc_scan_parse = function(lines, line_offset) {
+doc_scan_parse = function(lines, line_offset, heads = doc_heads(lines)) {
   empty = doc_calls_empty()
   exprs = tryCatch(doc_parse_text(lines), error = function(e) e)
   if (inherits(exprs, "error")) {
@@ -430,7 +467,7 @@ doc_scan_parse = function(lines, line_offset) {
   }
   pd = utils::getParseData(exprs)
   if (is.null(pd) || !nrow(pd)) return(empty)
-  sym = which(pd$token == "SYMBOL_FUNCTION_CALL" & pd$text == "peter")
+  sym = which(pd$token == "SYMBOL_FUNCTION_CALL" & pd$text %in% heads)
   if (!length(sym)) return(empty)
   parent = integer(max(pd$id))
   parent[pd$id] = pd$parent
@@ -468,7 +505,8 @@ doc_scan_parse = function(lines, line_offset) {
     rows[[i]] = data.frame(line1 = pd$line1[cl], col1 = pd$col1[cl], line2 = pd$line2[cl],
                            col2 = pd$col2[cl], stmt1 = pd$line1[top], stmt2 = pd$line2[top],
                            nested = nested, prompt = prompt, n_in_stmt = NA_integer_,
-                           text = text, ident = ident, stringsAsFactors = FALSE)
+                           text = text, ident = ident, head = pd$text[sym[i]],
+                           stringsAsFactors = FALSE)
   }
   res = do.call(rbind, rows)
   res = res[order(res$line1, res$col1, method = "radix"), , drop = FALSE]
@@ -602,12 +640,12 @@ doc_call_prompt = function(pd, call_id, lhs_id = NA_integer_, magrittr = FALSE) 
   as_utf8(positional %||% NA_character_)
 }
 
-#' All peter() calls of an R text with their block, ordinal inside the block, prompt hash (`ph`)
-#' and identity hash (`th`, of the identity text `ident`: the identity of calls with a computed
-#' prompt)
+#' All peter() and harness calls of an R text (doc_heads() with `heads`) with their block,
+#' ordinal inside the block, prompt hash (`ph`) and identity hash (`th`, of the identity text
+#' `ident`: the identity of calls with a computed prompt)
 #' @noRd
-doc_calls = function(lines, blocks = doc_find_blocks(lines)) {
-  calls = doc_scan_calls(lines)
+doc_calls = function(lines, blocks = doc_find_blocks(lines), heads = NULL) {
+  calls = doc_scan_calls(lines, heads = doc_heads(lines, heads))
   n = nrow(calls)
   calls$block = rep(NA_character_, n)
   calls$n_in_block = rep(NA_integer_, n)
@@ -667,10 +705,13 @@ doc_call_norm = function(x) {
   if (pl) as.pairlist(x) else x
 }
 
-#' Calls that share an anchor's identity (prompt hash, else call-text hash)
+#' Calls that share an anchor's identity: its head, when known, and prompt hash, else call-text
+#' hash. The head keeps the ordinal of a deferred anchor from counting calls of a harness whose
+#' `harness=` header was written after the anchor was taken.
 #' @noRd
-doc_same_calls = function(calls, ph, th = NA_character_) {
+doc_same_calls = function(calls, ph, th = NA_character_, head = NULL) {
   keep = if (!is.na(ph)) calls$ph %in% ph else calls$th %in% th
+  if (!is.null(head)) keep = keep & calls$head %in% head
   calls[keep, , drop = FALSE]
 }
 
@@ -691,9 +732,10 @@ doc_anchor_scope = function(calls, block, label) {
 #' @noRd
 doc_anchor_of = function(calls, t) {
   label = t[["label"]] %||% NA_character_
-  same = doc_same_calls(doc_anchor_scope(calls, t$block, label), t$ph, t$th)
+  same = doc_same_calls(doc_anchor_scope(calls, t$block, label), t$ph, t$th, t$head)
   j = which(same$line1 == t$line1 & same$col1 == t$col1)
-  list(ph = t$ph, th = t$th, j = if (length(j)) j[1L] else 1L, block = t$block, label = label)
+  list(ph = t$ph, th = t$th, j = if (length(j)) j[1L] else 1L, block = t$block, label = label,
+       head = t$head)
 }
 
 #' Re-locate an anchored call in a (possibly edited) text; NULL when it is gone
@@ -701,7 +743,7 @@ doc_anchor_of = function(calls, t) {
 doc_match_anchor = function(calls, anchor) {
   if (is.null(anchor) || !nrow(calls)) return(NULL)
   cls = doc_anchor_scope(calls, anchor[["block"]], anchor[["label"]] %||% NA_character_)
-  same = doc_same_calls(cls, anchor[["ph"]], anchor[["th"]])
+  same = doc_same_calls(cls, anchor[["ph"]], anchor[["th"]], anchor[["head"]])
   if (nrow(same) < anchor[["j"]]) return(NULL)
   same[anchor[["j"]], , drop = FALSE]
 }
@@ -803,7 +845,8 @@ doc_located = function(hit, stmt, top) {
 #' @noRd
 doc_owned = function(b, body, stale, site) {
   h = b$header[[1L]]
-  status = doc_block_status(h, body, site[["prompt_hash"]], site[["args_hash"]])
+  status = doc_block_status(h, body, site[["prompt_hash"]], site[["args_hash"]], site[["harness"]],
+                            site[["coach"]])
   if (stale && identical(status, "fresh")) status = "stale"
   list(id = b$id, header = h, status = status, start = b$start, end = b$end)
 }
@@ -811,7 +854,7 @@ doc_owned = function(b, body, stale, site) {
 #' The `r` and `transcript` formats' locate(): the run of blocks after the call's statement, and a
 #' new block after the run or after the blocks of earlier calls of a pipeline
 #' @noRd
-doc_text_locate = function(text, site, calls = doc_calls(text)) {
+doc_text_locate = function(text, site, calls = doc_calls(text, heads = doc_site_heads(site))) {
   hit = doc_match_anchor(calls, site[["anchor"]])
   doc_located(hit, c(hit$stmt1, hit$stmt2), function(out) {
     run = doc_blocks_after(text, hit$stmt2, attr(calls, "blocks") %||% doc_find_blocks(text))
@@ -1292,16 +1335,17 @@ doc_turn_children = function(session, ents) {
   kids[keep[order(created[keep], method = "radix")]]
 }
 
-#' S2 parts of the children a turn created (IC-47): the k-th direct peter() call of the block body
-#' (not inside a loop, function or braces) owns part "n<k>" and the first unused child whose first
-#' prompt has that call's prompt hash; a computed or interpolated prompt takes the next unused
-#' child that no literal call claims. Children of deeper calls get no part (those calls run live
-#' on re-source). `sent` (the child's prompt hash) lets replay check the call it answers.
+#' S2 parts of the children a turn created (IC-47): the k-th direct peter() or harness call
+#' (`heads`, those of the document) of the block body (not inside a loop, function or braces)
+#' owns part "n<k>" and the first unused child whose first prompt has that call's prompt hash; a
+#' computed or interpolated prompt takes the next unused child that no literal call claims.
+#' Children of deeper calls get no part (those calls run live on re-source). `sent` (the child's
+#' prompt hash) lets replay check the call it answers.
 #' @noRd
-doc_nested_parts = function(body, kids) {
+doc_nested_parts = function(body, kids, heads = NULL) {
   out = list()
   if (!length(kids) || !length(body)) return(out)
-  calls = doc_calls(as.character(body))
+  calls = doc_calls(as.character(body), heads = heads)
   direct = calls[!calls$nested, , drop = FALSE]
   if (!nrow(direct)) return(out)
   sent = vapply(kids, function(k) {
@@ -1515,13 +1559,14 @@ doc_session_code = function(session) {
   structure(code, secrets = secrets, value = value)
 }
 
-#' Header facts common to every block
+#' Header facts common to every block; a harness call's block names the harness it ran
+#' (`harness=<name>:<coaching hash>`, 08 section 3.6)
 #' @noRd
 doc_header_common = function(site, call_ordinal, model) {
   list(model = model, date = with_calendar_preserved(format(Sys.Date(), "%Y-%m-%d")),
        prompt = site$prompt_hash %||% prompt_hash(site$template %||% ""),
        call = if (isTRUE(call_ordinal > 1L)) as.integer(call_ordinal) else NULL,
-       args = site$args_hash)
+       args = site$args_hash, harness = if (!isTRUE(site$coach)) site$harness)
 }
 
 #' Does `path`, a session log or plan, outlast this R process? Without .gptr/ they are in
@@ -1577,7 +1622,7 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
   header$created = if (length(tb$created)) paste(tb$created, collapse = ",")
   header$fork = fork
   header$plan = tb$plan_from
-  children = doc_nested_parts(body, doc_turn_children(session, ents))
+  children = doc_nested_parts(body, doc_turn_children(session, ents), site$heads)
   answer = if (!is.null(last)) msg_text(last) else NA_character_
   structure(as.character(body), header = header, session = session, answer = answer,
             children = children)

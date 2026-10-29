@@ -454,7 +454,7 @@ env_block_skills = function(ctx, budget) {
   per = as.integer(max(200L, min(5000L, budget %/% length(skills))))
   parts = character(length(skills))
   for (k in seq_along(skills)) {
-    b = body(skills[k])
+    b = body(skills[k], ctx$session)
     if (is.list(b)) {
       skills[k] = b$name %||% skills[k]
       b = b$text

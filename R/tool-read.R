@@ -425,19 +425,29 @@ process_image_magick = function(b, mime) {
        dims = c(ni$width, ni$height))
 }
 
-#' `skill:<name>/<path>` to a file inside the skill's directory (the `skill.body` service of P17)
+#' `skill:<name>/<path>` to a file inside the skill's directory (the `skill.body` service of P17),
+#' as the running tool's session sees the skill. A skill that carries its own text has only its
+#' `SKILL.md`: the pseudo-path itself, with the text in attribute `text` (08 section 3.2).
 #' @noRd
 skill_file_path = function(name, rel) {
   if (!ext_service_has("skill.body")) {
     gptr_abort(paste0("Skills are not available in this session (skill:", name, ")."),
                "not_available", member = "skill.body", provided_by = "P17")
   }
-  sk = tryCatch(ext_service_get("skill.body")(name), error = function(e) NULL)
+  sk = tryCatch(ext_service_get("skill.body")(name, run_current()$session),
+                error = function(e) NULL)
+  inner = path_lexical(rel)
+  if (is.list(sk) && is.null(sk$dir) && rlang::is_string(sk$text)) {
+    if (!identical(inner, "SKILL.md")) {
+      gptr_abort(paste0("The skill ", name, " has no files besides SKILL.md."),
+                 "invalid_argument", arg = "path", expected = paste0("skill:", name, "/SKILL.md"))
+    }
+    return(structure(paste0("skill:", name, "/SKILL.md"), text = sk$text))
+  }
   if (!is.list(sk) || !is.character(sk$dir) || length(sk$dir) != 1L) {
     gptr_abort(paste0("Unknown skill: ", name), "invalid_argument", arg = "path",
                expected = "skill:<name>/<path> of a visible skill")
   }
-  inner = path_lexical(rel)
   if (is_abs_path(rel) || inner == ".." || startsWith(inner, "../")) {
     gptr_abort(paste0("A skill path must stay inside the skill directory: ", rel),
                "invalid_argument", arg = "path",
@@ -482,6 +492,20 @@ read_decode_lines = function(txt, encoding, lossy) {
        eol = if (crlf) "\r\n" else "\n", lossy = isTRUE(lossy) || bad)
 }
 
+#' Line window of decoded text, in read_window_small()'s shape (a final newline ends the last line)
+#' @noRd
+read_text_lines = function(text, offset, n, encoding = "UTF-8") {
+  lines = split_lines_js(text)
+  if (length(lines) > 1L && !nzchar(lines[length(lines)])) lines = lines[-length(lines)]
+  total = length(lines)
+  last = if (is.null(n)) total else min(total, as.numeric(offset) + n - 1)
+  sel = if (offset > total) character() else lines[offset:last]
+  crlf = any(endsWith(sel, "\r"))
+  sel = utf8_mark(sub("\r$", "", sel, perl = TRUE, useBytes = TRUE))
+  list(binary = FALSE, lines = sel, total = total, encoding = encoding, lossy = FALSE,
+       eol = if (crlf) "\r\n" else "\n")
+}
+
 #' Line window of a file up to 16 MiB: raw newline index, decode and split only the window
 #' The encoding is decided on the whole file; any NUL in a UTF-8 or 8-bit file makes it binary
 #' (ripgrep), found with grepRaw() because rawToChar() silently drops trailing NULs. A final newline
@@ -493,15 +517,7 @@ read_window_small = function(abs, offset, n) {
   bom = sniff_bom(b)
   if (nzchar(bom) && bom != "UTF-8") {
     d = decode_raw(b)
-    lines = split_lines_js(d$text)
-    if (length(lines) > 1L && !nzchar(lines[length(lines)])) lines = lines[-length(lines)]
-    total = length(lines)
-    last = if (is.null(n)) total else min(total, as.numeric(offset) + n - 1)
-    sel = if (offset > total) character() else lines[offset:last]
-    crlf = any(endsWith(sel, "\r"))
-    sel = utf8_mark(sub("\r$", "", sel, perl = TRUE, useBytes = TRUE))
-    return(list(binary = FALSE, lines = sel, total = total, encoding = d$encoding, lossy = FALSE,
-                eol = if (crlf) "\r\n" else "\n"))
+    return(read_text_lines(d$text, offset, n, d$encoding))
   }
   body = if (bom == "UTF-8") b[-(1:3)] else b
   if (length(grepRaw(as.raw(0L), body, fixed = TRUE))) return(list(binary = TRUE))
@@ -710,14 +726,9 @@ read_line_prefix = function(line, max_bytes) {
   as_utf8(rawToChar(utf8_trim_partial(b[seq_len(min(max_bytes, length(b)))])))
 }
 
-#' Shared core of read_file() and peter$read(): kind (text, empty, image, binary), the window and
-#' notices
+#' Size of a readable file, or the Node-style error a read of it gives
 #' @noRd
-read_core = function(path, offset = NULL, limit = NULL, budget_tokens = Inf) {
-  check_string(path, "path")
-  check_number(offset, "offset", min = 0, max = .Machine$integer.max, null = TRUE)
-  check_number(limit, "limit", min = 1, max = .Machine$integer.max, null = TRUE)
-  abs = read_resolve(path)
+read_file_size = function(abs) {
   p = fs_path(abs)
   info = path_info(p)
   if (is.na(info$size)) {
@@ -732,7 +743,20 @@ read_core = function(path, offset = NULL, limit = NULL, budget_tokens = Inf) {
     gptr_abort(paste0("EACCES: permission denied, access '", abs, "'"), "invalid_argument",
                arg = "path", expected = "a readable file")
   }
-  size = info$size
+  info$size
+}
+
+#' Shared core of read_file() and peter$read(): kind (text, empty, image, binary), the window and
+#' notices
+#' @noRd
+read_core = function(path, offset = NULL, limit = NULL, budget_tokens = Inf) {
+  check_string(path, "path")
+  check_number(offset, "offset", min = 0, max = .Machine$integer.max, null = TRUE)
+  check_number(limit, "limit", min = 1, max = .Machine$integer.max, null = TRUE)
+  abs = read_resolve(path)
+  text = attr(abs, "text") # a skill that carries its own text: no file behind the path
+  attr(abs, "text") = NULL
+  size = if (is.null(text)) read_file_size(abs) else nchar(text, type = "bytes")
   start = if (is.null(offset) || offset < 1) 1L else as.integer(offset)
   out = list(kind = "text", path = path, abs = abs, size = size, start = start, total = NA_integer_,
              lines = character(), truncated = FALSE, by = NA_character_,
@@ -744,25 +768,31 @@ read_core = function(path, offset = NULL, limit = NULL, budget_tokens = Inf) {
     out$total = 0L
     return(out)
   }
-  head = read_raw(abs, n = min(size, read_sniff_bytes))
-  mime = detect_image_mime(head[seq_len(min(length(head), image_sniff_bytes))])
-  if (!is.na(mime)) {
-    im = process_image(read_raw(abs), mime)
-    out$kind = "image"
-    shown_mime = if (isTRUE(im$ok)) im$mime else mime
-    out$note = paste(c(paste0("Read image file [", shown_mime, "]"), im$note), collapse = "\n")
-    if (isTRUE(im$ok)) {
-      out$image = block_image(im$data, mime = im$mime, source = "file",
-                              width = as.integer(im$dims[1]), height = as.integer(im$dims[2]))
+  if (is.null(text)) {
+    head = read_raw(abs, n = min(size, read_sniff_bytes))
+    mime = detect_image_mime(head[seq_len(min(length(head), image_sniff_bytes))])
+    if (!is.na(mime)) {
+      im = process_image(read_raw(abs), mime)
+      out$kind = "image"
+      shown_mime = if (isTRUE(im$ok)) im$mime else mime
+      out$note = paste(c(paste0("Read image file [", shown_mime, "]"), im$note), collapse = "\n")
+      if (isTRUE(im$ok)) {
+        out$image = block_image(im$data, mime = im$mime, source = "file",
+                                width = as.integer(im$dims[1]), height = as.integer(im$dims[2]))
+      }
+      return(out)
     }
-    return(out)
+    if (is_binary_raw(head)) {
+      out$kind = "binary"
+      return(out)
+    }
   }
-  if (is_binary_raw(head)) {
-    out$kind = "binary"
-    return(out)
+  n = if (is.null(limit)) tool_max_lines + 1L else as.integer(limit)
+  w = if (is.null(text)) {
+    read_text_window(abs, start, n, cap = read_window_cap)
+  } else {
+    read_text_lines(text, start, n)
   }
-  w = read_text_window(abs, start, if (is.null(limit)) tool_max_lines + 1L else as.integer(limit),
-                       cap = read_window_cap)
   if (isTRUE(w$binary)) {
     out$kind = "binary"
     return(out)

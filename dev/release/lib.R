@@ -2,10 +2,11 @@
 # source this file from the repository root; every *_problems() finder returns the problems
 # found (empty = pass). Self-tests: Rscript --vanilla -e 'testthat::test_dir("dev/release/tests")'
 
-# Public exports in eight groups; gptr_export adds recorded-script export.
+# Public exports in nine groups; gptr_export adds recorded-script export.
 rel_export_groups = function() {
   list(
     "Ask Peter" = "peter",
+    "Harnesses and coaching" = c("gptr_tailor", "gptr_coach"),
     "Setup and status" = c("gptr_init", "gptr_config", "gptr_env", "gptr_trust", "gptr_login",
                            "gptr_logout", "gptr_providers", "gptr_models", "gptr_permissions",
                            "gptr_scrub"),
@@ -42,6 +43,10 @@ rel_rd_groups = function() {
 # The two pages whose examples may all be conditional: a person must sign in, or a loopback
 # server starts (cran-comments.md explains both).
 rel_example_exceptions = function() c("gptr_login", "gptr_mcp_serve")
+
+# The one page whose example sits in \donttest{}: coaching starts seven R processes and takes
+# several seconds (cran-comments.md says so).
+rel_donttest_pages = function() "gptr_coach"
 
 # 04 section 3.1: every option, in table order.
 rel_options = function() {
@@ -90,7 +95,8 @@ rel_article_groups = function() {
   list(
     "Get started" = c("getting-started", "why-peter"),
     "Ask Peter" = c("language-models", "system-one", "interactive-console", "configuration"),
-    "Build workflows" = c("script-as-history", "teams-and-background", "tools-and-artifacts"),
+    "Build workflows" = c("script-as-history", "teams-and-background", "tailor-and-coach",
+                          "tools-and-artifacts"),
     "Extend gptr" = c("skills-and-plugins", "mcp", "extending-gptr"),
     "Understand execution" = c("execution-model", "token-efficiency")
   )
@@ -233,7 +239,8 @@ topic_mentions = function(txt, words) {
 }
 
 docs_problems = function(db, exports = rel_exports(), groups = rel_rd_groups(),
-                         topics = rel_topics(), exceptions = rel_example_exceptions()) {
+                         topics = rel_topics(), exceptions = rel_example_exceptions(),
+                         donttest = rel_donttest_pages()) {
   amap = rd_alias_map(db)
   missing = exports[is.na(amap[exports])]
   out = sprintf("%s: no Rd page has \\alias{%s}", missing, missing)
@@ -256,7 +263,7 @@ docs_problems = function(db, exports = rel_exports(), groups = rel_rd_groups(),
     out = c(out, code_style_problems(rd_examples_code(rd), paste0(p, " examples")))
   }
   for (p in names(db)) {
-    for (tag in c("\\dontrun", "\\donttest")) {
+    for (tag in c("\\dontrun", if (!p %in% donttest) "\\donttest")) {
       if (rd_has_tag(db[[p]], tag)) out = c(out, sprintf("%s: uses %s{}", p, tag))
     }
   }

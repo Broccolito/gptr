@@ -4,7 +4,8 @@
 # over the control protocol (architecture 8.3; contract 8.5,
 # IC-65). L1: besides L0 helpers, the shared helpers of cli-common.R and P05's usage_new() it
 # calls only the injected opts$send, opts$gate and opts$mcp_dispatch and P12's
-# anthropic_normaliser() (IC-33).
+# anthropic_normaliser() and adp_returns_instruction() (IC-33). In a child of gptr_coach()
+# (`the$coach_role`) it starts a confined CLI and checks every session (08 section 3.7).
 # Adapted from the verified driver of report 07 section 5.7 (cc_proto.R: argv, control
 # protocol, notification acks) and its live capture 3.14 (the fixture claude-call2.ndjson).
 
@@ -15,16 +16,24 @@
 #'
 #' A budget value that is not a positive finite number adds no flag (pcli_scalar_num());
 #' `turns` is rounded down (at least 1), `cost` rounded to 4 decimals (at least 0.01), both
-#' written as plain decimal numbers whatever `OutDec` and `digits` say.
+#' written as plain decimal numbers whatever `OutDec` and `digits` say. A coaching `role` (08
+#' section 3.7) adds the flags that keep the session unsaved and without memory or prompts; a
+#' coach gets no MCP server and no tool at all.
 #' @noRd
 pcli_claude_args = function(model_id, mcp_config, system_file, budget = NULL, optout = NULL,
-                           resume = NULL) {
+                           resume = NULL, role = NULL) {
+  coach = identical(role, "coach")
   args = c("-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
            "--include-partial-messages", "--tools", "", "--strict-mcp-config",
-           "--setting-sources", "", "--disable-slash-commands", "--mcp-config", mcp_config,
+           "--setting-sources", "", "--disable-slash-commands",
+           if (!coach) c("--mcp-config", mcp_config),
            "--permission-prompt-tool", "stdio", "--permission-mode", "default",
-           "--allowedTools", "mcp__gptr__*", "--system-prompt-file", system_file,
-           "--model", model_id)
+           if (coach) c("--disallowedTools", "*") else c("--allowedTools", "mcp__gptr__*"),
+           "--system-prompt-file", system_file, "--model", model_id)
+  if (!is.null(role)) {
+    args = c(args, "--no-session-persistence", "--permission-prompts", "none", "--settings",
+             '{"autoMemoryEnabled":false}')
+  }
   turns = pcli_scalar_num(budget[["turns"]])
   cost = pcli_scalar_num(budget[["cost"]])
   if (!is.null(turns)) args = c(args, "--max-turns", pcli_claude_number(max(1, floor(turns))))
@@ -127,6 +136,11 @@ pcli_claude_budgeted = function(flags) {
 #' The turn's lines are written by P05's transport with write_all(); a fresh child's first user
 #' line carries the earlier conversation and the input's images, so it is not bounded. On
 #' Windows that write blocks until the CLI has read it (D-019 item 5).
+#'
+#' In a coaching role (`the$coach_role`, 08 section 3.7) a child serves only that role, is never
+#' resumed (its session is not saved), runs without auto memory, CLAUDE.md files or prompt history,
+#' and a coach answers in one turn. With `params$returns` the user line ends with the returns
+#' instruction (08 section 3.7: the CLI has no native structured output).
 #' @noRd
 pcli_claude_build = function(model, context, opts) {
   state = pcli_state(opts)
@@ -135,11 +149,14 @@ pcli_claude_build = function(model, context, opts) {
   model_id = pcli_model_id(model)
   par = pcli_params(context)
   parts = pcli_split(context[["messages"]] %||% list())
+  role = the$coach_role
   flags = par[c("turns", "cost")]
+  if (identical(role, "coach")) flags$turns = 1
   same_run = identical(state$claude_run, opts[["run"]])
   unbudgeted = !pcli_claude_budgeted(flags) && !pcli_claude_budgeted(state$claude_flags)
   reuse = identical(state$cli_api, "cli-claude") && identical(state$claude_model, model_id) &&
-    pcli_alive(pcli_child(state)) && (same_run || unbudgeted)
+    identical(state$claude_role, role) && pcli_alive(pcli_child(state)) &&
+    (same_run || unbudgeted)
   start = NULL
   send = list()
   resume = NULL
@@ -149,13 +166,21 @@ pcli_claude_build = function(model, context, opts) {
     probe = pcli_probe(path)
     pcli_notice("claude")
     files = pcli_claude_files(state, context, opts[["session"]])
-    resume = state$claude_session
+    resume = if (is.null(role)) state$claude_session
     args = pcli_claude_args(model_id, files$mcp, files$system, budget = flags,
-                           optout = probe$bare_optout, resume = resume)
+                           optout = probe$bare_optout, resume = resume, role = role)
+    # set after the profile drops CLAUDE_CODE_*, so they reach the CLI
+    env = character()
+    if (!is.null(role)) {
+      env = c(CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1",
+              CLAUDE_CODE_SKIP_PROMPT_HISTORY = "1")
+    }
     start = list(command = path[[1L]], args = c(as.character(path[-1L]), args),
-                 env_profile = "cli-claude", env = character(), wd = path_norm(getwd()))
+                 env_profile = "cli-claude", env = env, wd = path_norm(getwd()))
     state$cli_api = "cli-claude"
     state$claude_model = model_id
+    state$claude_role = role
+    state$claude_init_ok = FALSE
     state$claude_run = opts[["run"]]
     state$claude_flags = flags
     # a fresh CLI session's running total_cost_usd starts here; a resumed one goes on (D-200)
@@ -167,6 +192,10 @@ pcli_claude_build = function(model, context, opts) {
   history = pcli_history_text(if (seen) pcli_unseen(parts$prior, model$provider) else parts$prior)
   content = pcli_claude_content(parts$input)
   if (nzchar(history)) content = c(list(list(type = "text", text = history)), content)
+  returns = context[["params"]][["returns"]]
+  if (!is.null(returns)) {
+    content = c(content, list(list(type = "text", text = adp_returns_instruction(returns))))
+  }
   list(start = start, send = c(send, list(pcli_claude_user_line(content))), close_stdin = FALSE)
 }
 
@@ -307,6 +336,96 @@ pcli_claude_stream = function(event, s) {
   invisible(NULL)
 }
 
+#' Names of the tools a line shows the CLI using: a `tool_use`-like block starting in a
+#' stream_event, or in an assistant message
+#' @noRd
+pcli_claude_tool_uses = function(obj) {
+  ev = obj[["event"]]
+  m = obj[["message"]]
+  blocks = if (is.list(ev) && identical(ev[["type"]], "content_block_start")) {
+    list(ev[["content_block"]])
+  } else if (identical(obj[["type"]], "assistant") && is.list(m) && is.list(m[["content"]])) {
+    m[["content"]]
+  }
+  used = character()
+  for (b in blocks) {
+    type = if (is.list(b)) pcli_chr(b[["type"]]) %||% "" else ""
+    if (endsWith(type, "tool_use")) used = c(used, pcli_chr(b[["name"]]) %||% "?")
+  }
+  used
+}
+
+#' Why an init line fails the coaching checks (08 section 3.7), or NULL: a coach has no tool and
+#' no MCP server, a run only gptr's tools and server, and neither loads an installed plugin, skills,
+#' slash commands or auto memory. The CLI's own plugins (`path` "builtin", 2.1.296 lists three)
+#' always load and add no tool, skill or command, so they pass.
+#' @noRd
+pcli_claude_init_check = function(obj, coach) {
+  servers = obj[["mcp_servers"]] %||% list()
+  if (!is.list(obj[["tools"]]) || !is.list(servers)) {
+    return("its init line does not list its tools and MCP servers")
+  }
+  tools = as.character(unlist(obj[["tools"]]))
+  bad = if (coach) tools else tools[!startsWith(tools, "mcp__gptr__")]
+  if (length(bad)) return(paste("it offers the tools", toString(bad)))
+  named = vapply(servers, function(x) if (is.list(x)) pcli_chr(x[["name"]]) %||% "?" else "?", "")
+  if (!identical(named, if (coach) character() else "gptr")) {
+    return(paste("it connected the MCP servers", toString(named)))
+  }
+  plugins = Filter(function(x) !is.list(x) || !identical(x[["path"]], "builtin"), obj[["plugins"]])
+  if (length(plugins)) return("it loaded plugins")
+  for (k in c("skills", "slash_commands")) {
+    if (length(obj[[k]])) return(paste("it loaded", k))
+  }
+  mem = obj[["memory_paths"]]
+  if (!is.null(mem) && !(is.list(mem) && is.null(mem[["auto"]]))) return("its auto memory is on")
+  NULL
+}
+
+#' Why one line of a coaching session fails its checks (08 section 3.7), or NULL. A passing init
+#' line is recorded in `state` (a successful result needs one). Any sub-agent line fails; a
+#' coach may use no tool and get no permission or MCP request, a run uses only gptr's tools and
+#' ends with no permission denial, and a coach answers in one turn.
+#' @noRd
+pcli_claude_check = function(obj, role, state) {
+  coach = identical(role, "coach")
+  type = pcli_chr(obj[["type"]]) %||% ""
+  if (!is.null(obj[["parent_tool_use_id"]])) return("a sub-agent of the CLI wrote to the stream")
+  if (identical(type, "system") && identical(obj[["subtype"]], "init")) {
+    why = pcli_claude_init_check(obj, coach)
+    state$claude_init_ok = is.null(why)
+    return(why)
+  }
+  req = obj[["request"]]
+  if (identical(type, "control_request") && is.list(req)) {
+    sub = pcli_chr(req[["subtype"]]) %||% ""
+    name = pcli_chr(req[["tool_name"]]) %||% "?"
+    if (coach && sub %in% c("can_use_tool", "mcp_message")) {
+      return(paste("the CLI sent a", sub, "request"))
+    }
+    if (identical(sub, "can_use_tool") && !startsWith(name, "mcp__gptr__")) {
+      return(paste("the CLI asked to use", name))
+    }
+  }
+  used = pcli_claude_tool_uses(obj)
+  if (!coach) used = used[!startsWith(used, "mcp__gptr__")]
+  if (length(used)) return(paste("the CLI used", toString(used)))
+  if (!identical(type, "result")) return(NULL)
+  failed = isTRUE(obj[["is_error"]]) || !identical(obj[["subtype"]] %||% "success", "success")
+  if (!failed && !isTRUE(state$claude_init_ok)) return("no init line passed the checks")
+  turns = pcli_num(obj[["num_turns"]])
+  if (coach && !failed && !identical(turns, 1)) {
+    return(paste0("the coach answered in ", format(turns), " turns, not 1"))
+  }
+  denied = obj[["permission_denials"]]
+  if (!coach && length(denied)) {
+    names = vapply(denied, function(d) if (is.list(d)) pcli_chr(d[["tool_name"]]) %||% "?" else "?",
+                   "")
+    return(paste("the CLI denied", toString(names)))
+  }
+  NULL
+}
+
 #' system lines: `init` records the CLI session id and model; an `apiKeySource` other than
 #' "none" stops the turn with gptr_error_billing and the child (07 line 503; IC-65)
 #' @noRd
@@ -385,6 +504,41 @@ pcli_claude_stop = function(raw) {
          pause_turn = "pause", "stop")
 }
 
+#' A rate_limit_event (07 2.14) becomes the plan status; a rejection is kept for the turn's
+#' result (pcli_claude_limit()), and in a coaching session the start of paid usage credits stops
+#' the session at once (08 section 3.7)
+#' @noRd
+pcli_claude_rate = function(obj, s, role) {
+  rec = pcli_plan_set(s$model$provider, obj[["rate_limit_info"]] %||% list())
+  at = if (is.na(rec$resets_at)) NA_character_ else
+    format(.POSIXct(rec$resets_at), "%Y-%m-%d %H:%M %Z")
+  if (identical(rec$status, "rejected")) s$limit_at = at
+  if (is.null(role) || !(isTRUE(rec$overage) || identical(rec$error_code, "credits_required"))) {
+    return(invisible(NULL))
+  }
+  pcli_claude_error(s, "plan_limit", paste0("The claude CLI session started drawing on your ",
+                                            "plan's paid usage credits, so gptr stopped it: ",
+                                            "coaching runs only within your plan's limits."),
+                    kill = TRUE, resets_at = at, overage = TRUE)
+  invisible(NULL)
+}
+
+#' When the plan limit a failed turn hit resets (08 section 3.7): the time of the turn's rejected
+#' rate_limit_event, else the one its text names ("You've hit your Opus limit ... resets 3:45pm"),
+#' else NA; NULL when neither the event nor such a text shows a session, weekly or model limit
+#' @noRd
+pcli_claude_limit = function(s, texts) {
+  hit = grep(plan_limit_pattern, texts, perl = TRUE, ignore.case = TRUE, value = TRUE)
+  if (!length(hit) && is.null(s$limit_at)) return(NULL)
+  at = s$limit_at %||% NA_character_
+  if (is.na(at) && length(hit)) {
+    m = regmatches(hit[[1L]], regexec("resets? (?:at )?([^\\n]+)", hit[[1L]], perl = TRUE,
+                                      ignore.case = TRUE))[[1L]]
+    if (length(m) == 2L) at = trimws(m[[2L]])
+  }
+  at
+}
+
 #' Condition class (04 2.2 suffix) of a failed `result` line
 #' @noRd
 pcli_claude_error_class = function(obj) {
@@ -414,13 +568,16 @@ pcli_claude_result = function(obj, s) {
   detail = as.character(unlist(obj[["errors"]]))
   if (!aborted && !length(detail) && rlang::is_string(text) && nzchar(trimws(text))) detail = text
   if (any(grepl("No conversation found", detail, fixed = TRUE))) s$state$claude_session = NULL
-  cls = if (aborted) "aborted" else pcli_claude_error_class(obj)
+  resets = if (!aborted) pcli_claude_limit(s, c(detail, pcli_chr(text)))
+  cls = if (aborted) "aborted" else if (!is.null(resets)) "plan_limit" else
+    pcli_claude_error_class(obj)
   subtype = pcli_chr(obj[["subtype"]])
   if (identical(subtype, "success")) subtype = "an error"
   what = switch(cls,
                 max_turns = "it reached --max-turns",
                 budget_cost = "the turn is out of budget (--max-budget-usd)",
                 aborted = "the turn was interrupted",
+                plan_limit = "it reached a usage limit of your Claude plan",
                 auth = "it reported an authentication or access error",
                 rate_limit = "it hit a rate limit",
                 overloaded = "the service is overloaded",
@@ -428,15 +585,16 @@ pcli_claude_result = function(obj, s) {
   if (length(detail)) what = paste0(what, ": ", paste(detail, collapse = "; "))
   pcli_fail(s, cls, paste0("The claude CLI ended the turn: ", what, "."),
            reason = if (aborted) "aborted" else "error",
-           status = obj[["api_error_status"]] %||% NA_integer_, usage = usage)
+           status = obj[["api_error_status"]] %||% NA_integer_, usage = usage, resets_at = resets)
 }
 
-#' End a claude turn with its terminal error event (pcli_fail()); `kill` then stops the child,
-#' without an interrupt since the turn is closed by then
+#' End a claude turn with its terminal error event (pcli_fail(), which takes a plan limit's
+#' `resets_at` and `overage`); `kill` then stops the child, without an interrupt since the turn is
+#' closed by then
 #' @noRd
 pcli_claude_error = function(s, class, text, reason = "error", status = NA_integer_,
-                            kill = FALSE) {
-  msg = pcli_fail(s, class, text, reason = reason, status = status)
+                            kill = FALSE, ...) {
+  msg = pcli_fail(s, class, text, reason = reason, status = status, ...)
   if (kill) tryCatch(pcli_stop_child(s$state, wait_ack = FALSE), error = function(e) NULL)
   msg
 }
@@ -465,10 +623,20 @@ pcli_claude_parse = function(model, opts) {
   s = pcli_turn_new(model, opts)
   s$inner = NULL
   s$map = integer()
+  role = s$state$claude_role
   push = function(ev) {
     obj = ev[["obj"]]
     if (!is.list(obj)) return(s$done)
     type = pcli_chr(obj[["type"]]) %||% ""
+    why = if (!is.null(role) && !s$done && !pcli_aborted(s)) {
+      pcli_claude_check(obj, role, s$state)
+    }
+    if (!is.null(why)) {
+      pcli_claude_error(s, "cli_check", paste0("The claude CLI session failed a coaching check: ",
+                                               why, ". gptr stopped it and discarded its reply."),
+                        kill = TRUE)
+      return(TRUE)
+    }
     if (identical(type, "control_request")) pcli_claude_control(obj, s)
     if (s$done || type %in% c("control_response", "control_request")) return(s$done)
     if (pcli_aborted(s)) {
@@ -481,7 +649,7 @@ pcli_claude_parse = function(model, opts) {
     if (identical(type, "system")) {
       pcli_claude_system(obj, s)
     } else if (identical(type, "rate_limit_event")) {
-      pcli_plan_set(model$provider, obj[["rate_limit_info"]] %||% list())
+      pcli_claude_rate(obj, s, role)
     } else if (identical(type, "stream_event")) {
       if (is.null(obj[["parent_tool_use_id"]])) pcli_claude_stream(obj[["event"]], s)
     } else if (identical(type, "result")) {

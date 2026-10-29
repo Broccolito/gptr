@@ -345,6 +345,12 @@ test_that("kind-specific rules: skill, command, setting, redaction, alias, risk,
   expect_error(gptr_spec("skill", "Bad", description = "d"), class = "gptr_error_invalid_spec")
   expect_error(gptr_spec("skill", "ok", description = strrep("x", 1025L)),
                class = "gptr_error_invalid_spec")
+  # a skill may carry its own body instead of a SKILL.md (08 section 3.2), never both
+  expect_identical(gptr_spec("skill", "tips", description = "d", text = "Body.")$text, "Body.")
+  expect_error(gptr_spec("skill", "tips", description = "d", text = 1),
+               class = "gptr_error_invalid_spec")
+  expect_error(gptr_spec("skill", "tips", description = "d", text = "Body.", path = "SKILL.md"),
+               class = "gptr_error_invalid_spec")
   expect_error(gptr_spec("command", "/rows", handler = function(args, ctx) NULL),
                class = "gptr_error_invalid_spec")
   expect_error(gptr_spec("setting", "Panel Size", default = 3L), class = "gptr_error_invalid_spec")

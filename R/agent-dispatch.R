@@ -409,9 +409,9 @@ checkpoint_after = function(run, call, ctx, tokens, res) {
 #' A member listed by the outer call's analysis at or below its approved level, whose own risk of
 #' its actual input (call_risk(): a patch's Delete File, a computed command) is not above that
 #' level either and reads no registered secret the outer call's did not, runs without a second
-#' prompt; others pass perm_check(). A sh, bg or script call meets the deny and ask rules first,
-#' whatever its level (nested_rules()); an ask rule's question is perm_check()'s one question, with
-#' the call's other reasons. Recorded in `details$nested` (at most 20).
+#' prompt; others pass perm_check(). A sh, bg, script, write or edit call meets the deny and ask
+#' rules first, whatever its level (nested_rules()); an ask rule's question is perm_check()'s one
+#' question, with the call's other reasons. Recorded in `details$nested` (at most 20).
 #' @noRd
 dispatch_nested = function(name, input, ctx) {
   check_string(name, "name")
@@ -441,7 +441,9 @@ dispatch_nested = function(name, input, ctx) {
     gptr_abort(call$blocked, "tool", tool = name, status = "blocked")
   }
   own = call_risk(call, ctx, run)
-  rules = if (name %in% c("sh", "bg", "script")) nested_rules(call, run, own$secrets)
+  rules = if (name %in% c("sh", "bg", "script", "write", "edit")) {
+    nested_rules(call, run, own$secrets)
+  }
   if (identical(rules$decision, "deny")) {
     nested_record(run, outer$id, name, tool_error(rules$reason), risk_level(rules$risk))
     gptr_abort(perm_denial_text(rules), "tool", tool = name, status = "denied")
@@ -464,24 +466,28 @@ dispatch_nested = function(name, input, ctx) {
   nested_value(res, name)
 }
 
-#' Deny and ask rules on the actual command of a nested sh or bg call, or the path of a script
-#' call, which the outer call's static reading cannot see when the code computes it: the `rules`
-#' policy decides as for the literal call, with the registered `secrets` the member's `env` hands
-#' its child (its own risk), so an `r(secret:NAME)` rule meets the hand-over. Allow rules are not
-#' applied: the nested gate never loosens.
+#' Deny and ask rules on the actual input of a nested sh, bg, script, write or edit call, which the
+#' outer call's static reading cannot see when the code computes it: the `rules`, `coaching`,
+#' `harness_rules` and coaching children's `fence` policies decide as for the literal call (a sh or
+#' bg command in its working folder, or a script's path, as the `r` code that runs it:
+#' nested_literal()), the strictest answer winning, with the registered `secrets` the member's
+#' `env` hands its child (its own risk), so an `r(secret:NAME)` rule meets the hand-over. Allow
+#' answers are not applied: the nested gate never loosens.
 #' @return NULL, a denial (perm_result()), or an ask rule's decision (any other opinion asks),
 #'   which perm_check() asks with the call's other reasons in one question.
 #' @noRd
 nested_rules = function(call, run, secrets = character()) {
-  recs = Filter(function(r) identical(r$name, "rules"),
+  recs = Filter(function(r) r$name %in% c("rules", "coaching", "harness_rules", "fence"),
                 registry_all_recs("policy", session = run$session))
   if (!length(recs) || isTRUE(run$opts$safety$unsafe_no_permissions)) return(NULL)
   ctx = run_ctx(run)
-  lit = list(name = "r", input = list(code = nested_literal(call$name, call$input)))
+  lit = call
+  if (call$name %in% c("sh", "bg", "script")) {
+    lit = list(name = "r", input = list(code = nested_literal(call$name, call$input)))
+  }
   lit$risk = call_risk(lit, ctx, run)
   lit$risk$secrets = unique(c(lit$risk$secrets, secrets))
-  out = ctx_with_source(ctx, recs[[1L]]$source,
-                        function() ext_policy_decide(recs[[1L]]$spec, lit, ctx))
+  out = perm_strictest(recs, lit, ctx)
   if (is.null(out) || identical(out$decision, "allow")) return(NULL)
   if (identical(out$decision, "deny")) {
     return(perm_result("deny", out$reason, call$input, lit$risk, out$rule))
@@ -623,15 +629,29 @@ perm_reason = function(x) {
 #' @noRd
 perm_rank = function(decision) match(decision, perm_decisions)
 
-#' Combine every policy's opinion (ext_policy_decide(), fail closed): deny > ask_human > ask >
-#' modify > allow; no active `mode` policy means ask. A question offers the rule of an `[a]lways`
-#' answer only when every policy that asks it does (an ask rule's question offers none, and keeps
-#' that policy's `no_rule`, why); `extra` (perm_check()'s) is the first opinion
+#' Combine every policy's opinion (perm_strictest(), with `extra`, perm_check()'s, as the first);
+#' no active `mode` policy means ask
 #' @noRd
 perm_policies = function(call, ctx, run, risk, extra = NULL) {
   recs = registry_all_recs("policy", session = run$session)
   call$risk = risk
-  best = extra
+  best = perm_strictest(recs, call, ctx, extra)
+  has_mode = any(vapply(recs, function(r) identical(r$name, "mode"), NA))
+  if (!has_mode && (is.null(best) || perm_rank(best$decision) < perm_rank("ask"))) {
+    best = list(decision = "ask", reason = "no permission mode policy is active", rule = NULL)
+  }
+  if (is.null(best)) best = list(decision = "allow", reason = "no policy objected", rule = NULL)
+  best$input = best$input %||% call$input
+  best
+}
+
+#' The strictest answer of the policy records `recs` (ext_policy_decide(), fail closed), starting
+#' from `best`: deny > ask_human > ask > modify > allow, an answer without a rule naming its
+#' policy; NULL when none answers. A question offers the rule of an `[a]lways` answer only when
+#' every policy that asks it does (an ask rule's question offers none, and keeps that policy's
+#' `no_rule`, why)
+#' @noRd
+perm_strictest = function(recs, call, ctx, best = NULL) {
   for (r in recs) {
     res = ctx_with_source(ctx, r$source, function() ext_policy_decide(r$spec, call, ctx))
     if (is.null(res)) next
@@ -643,12 +663,6 @@ perm_policies = function(call, ctx, run, risk, extra = NULL) {
       best$no_rule = best$no_rule %||% res$no_rule
     }
   }
-  has_mode = any(vapply(recs, function(r) identical(r$name, "mode"), NA))
-  if (!has_mode && (is.null(best) || perm_rank(best$decision) < perm_rank("ask"))) {
-    best = list(decision = "ask", reason = "no permission mode policy is active", rule = NULL)
-  }
-  if (is.null(best)) best = list(decision = "allow", reason = "no policy objected", rule = NULL)
-  best$input = best$input %||% call$input
   best
 }
 

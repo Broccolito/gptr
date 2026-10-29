@@ -56,14 +56,18 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
 
 ## Examples, tests and vignettes
 
-* Every example runs offline and without keys, and each takes about a second at most. Examples
-  that run a session use the exported scripted model `gptr_fake_provider()`; the only scripted
-  model that runs R code (`?gptr_rewind`) evaluates it in a new environment, and every file an
-  example writes is under `tempdir()`. While `R CMD check` runs the examples, every model call
-  without its own `replay =` argument runs in replay mode, where only offline providers answer; no
-  example passes another value, so no example can reach a model server, remote or local.
-* No example uses `\dontrun{}`, `\donttest{}` or `@examplesIf`. Only two pages keep their
-  examples inside visible `if` guards: `gptr_login()` and `gptr_logout()` under
+* Every example runs offline and without keys, and each takes about a second at most, apart from
+  the one in `\donttest{}` (next point). Examples that run a session use the exported scripted
+  model `gptr_fake_provider()`; scripted models that run R code evaluate it in a new environment
+  (`?gptr_rewind`) or in separate R processes (`?gptr_coach`), and every file an example writes,
+  including the records of the processes it starts, is under `tempdir()`. While `R CMD check`
+  runs the examples, every model call without its own `replay =` argument runs in replay mode,
+  where only offline providers answer; no example passes another value, so no example can reach a
+  model server, remote or local.
+* No example uses `\dontrun{}` or `@examplesIf`, and one uses `\donttest{}`: `gptr_coach()`
+  coaches one scripted model with another, which starts seven R processes and takes several
+  seconds, so its call sits in `\donttest{}`; it still runs offline and without keys. Only two
+  pages keep their examples inside visible `if` guards: `gptr_login()` and `gptr_logout()` under
   `if (interactive())`, because a person enters a key or completes an OAuth sign-in, and
   `gptr_mcp_serve()` under `if (interactive() && ...)`, because it opens a listening loopback
   HTTP port and needs three suggested packages.
@@ -77,7 +81,7 @@ MIT-licensed material are in `inst/COPYRIGHTS`.
   their slowest blocks; GitHub Actions runs the whole suite. The CRAN-mode tests take 14 s here
   (`Running 'testthat.R' [13s/14s]` in the local check). Live provider tests run only when
   `GPTR_LIVE_TESTS` is `"true"`.
-* The 14 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
+* The 15 vignettes are precomputed from `vignettes/*.Rmd.orig` (in the GitHub repository, not in
   the tarball); the shipped `.Rmd` files contain no code chunks, so building them runs no code.
 * Under `R CMD check` every pool of child processes is capped at two.
 
@@ -104,8 +108,8 @@ checking, and the installed size.
 
 ## Installed size
 
-The installed size is 7.9 Mb: R 6.1 Mb and doc 1.2 Mb. R is the byte-compiled code of 125 R
-files, with no data sets and no compiled code; doc holds the 14 HTML vignettes. Current R
+The installed size is 7.9 Mb: R 6.1 Mb and doc 1.2 Mb. R is the byte-compiled code of 128 R
+files, with no data sets and no compiled code; doc holds the 15 HTML vignettes. Current R
 versions report the size as INFO; R 4.2 reports it as a NOTE.
 
 ## Reverse dependencies

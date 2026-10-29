@@ -437,3 +437,21 @@ test_that("an Rscript worker retains check policy and its caller unchanged", {
   after = capture()
   for (name in names(before)) expect_identical(after[[name]], before[[name]], label = name)
 })
+
+test_that("coach_cli_env() gives the plan logins a child needs; the worker passes them on", {
+  local_vault()
+  local_fake_env()
+  withr::local_envvar(CLAUDE_SECURESTORAGE_CONFIG_DIR = "/tmp/claude-secure",
+                      CLAUDE_CODE_GIT_BASH_PATH = NA)
+  claude = coach_cli_env("claude")
+  expect_identical(names(claude), c("CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR",
+                                    "CLAUDE_SECURESTORAGE_CONFIG_DIR"))
+  expect_identical(claude[["CLAUDE_CONFIG_DIR"]], "/tmp/claude-cfg")
+  expect_identical(coach_cli_env("codex"), c(CODEX_HOME = "/tmp/codex-home"))
+  none = structure(character(), names = character())
+  expect_identical(coach_cli_env("api"), none)
+  expect_identical(coach_cli_env("fake"), none)
+  expect_false(any(names(claude) %in% names(child_env("worker"))))
+  expect_identical(child_env("worker", pass = names(claude))[names(claude)], claude)
+  expect_true("CLAUDE_SECURESTORAGE_CONFIG_DIR" %in% names(child_env("cli-claude")))
+})

@@ -10,6 +10,11 @@ text_lines = function(text) {
   strsplit(paste(x, collapse = "\n"), "\n", fixed = TRUE)[[1L]]
 }
 
+#' Text as the frozen hashes read it (prompt_hash(), coaching_hash()): UTF-8, trimmed, CRLF as LF
+#' and no spaces or tabs around a newline
+#' @noRd
+text_norm = function(x) gsub("[ \t]*\r?\n[ \t]*", "\n", trimws(as_utf8(x)))
+
 #' deparse() of code gptr did not build, with the `backtick` base R's default would compute.
 #' That default calls mode(), which deparses a call's head with the same default: R recursion
 #' once per head of a chain such as f(1)(1)...(1), up to the C stack or expressions limit (CI-82).

@@ -200,17 +200,19 @@ doc_rmd_chunks = function(lines) {
   do.call(rbind, res)
 }
 
-#' peter() calls of the R chunks of an Rmd/qmd text, with document line numbers, chunk index and
+#' peter() and harness calls (`heads`: as doc_calls() takes, with those the whole text
+#' declares) of the R chunks of an Rmd/qmd text, with document line numbers, chunk index and
 #' label; attributes `blocks` (marker blocks) and `chunks`
 #' @noRd
-doc_rmd_calls = function(lines) {
+doc_rmd_calls = function(lines, heads = NULL) {
   ch = doc_rmd_chunks(lines)
   blocks = doc_find_blocks(lines)
+  heads = doc_heads(lines, heads)
   out = list()
   for (k in seq_len(nrow(ch))) {
     if (!ch$engine[k] %in% c("r", "R") || ch$end[k] - ch$start[k] < 2L) next
     body = lines[(ch$start[k] + 1L):(ch$end[k] - 1L)]
-    calls = doc_calls(body)
+    calls = doc_calls(body, heads = heads)
     if (!nrow(calls)) next
     shift = ch$start[k]
     calls$line1 = calls$line1 + shift
@@ -244,7 +246,7 @@ doc_lines_between = function(text, a, b) {
 #' chunk's top-level calls (doc_owner()); a new block goes after them
 #' @noRd
 doc_rmd_locate = function(text, site) {
-  calls = doc_rmd_calls(text)
+  calls = doc_rmd_calls(text, doc_site_heads(site))
   hit = doc_match_anchor(calls, site[["anchor"]])
   doc_located(hit, c(hit$stmt1, hit$stmt2), function(out) {
     ch = attr(calls, "chunks")
@@ -439,14 +441,15 @@ doc_r_upsert = function(text, site, lines, block_id) {
 
 #' The transcript statement of a console turn (IC-49): `s_<6 hex> = peter(...)` while this text
 #' holds no live assignment of the session (an undone one is `#~ ` inert), `s_<6 hex> |>
-#' peter(...)` afterwards; after the prompt and context names, `model = "<ref>"` and
-#' `mode = "<mode>"` where the turn's (`ran_with`) differ from what the statement gets without
-#' them (D-265): for an assignment the `model` and `mode` settings, the model kept when
-#' `default_model`; for a pipe `ran_before`, else the settings
+#' peter(...)` afterwards, a harness call calling its `h_<id>` definition instead of peter; after
+#' the prompt and context names, `model = "<ref>"` and `mode = "<mode>"` where the turn's
+#' (`ran_with`) differ from what the statement gets without them (D-265): for an assignment the
+#' `model` and `mode` settings, the model kept when `default_model`; for a pipe `ran_before`,
+#' else the settings
 #' @noRd
 doc_console_statement = function(text, site) {
   var = paste0("s_", substr(sub("^s", "", site[["session_id"]] %||% "s000000"), 1L, 6L))
-  first = !any(startsWith(text, paste0(var, " = peter(")))
+  first = !any(startsWith(text, paste0(var, " = ")))
   named = site[["ran_with"]]
   if (length(named)) {
     was = site[["ran_before"]]
@@ -460,7 +463,8 @@ doc_console_statement = function(text, site) {
   args = paste(c(doc_str_literal(site[["template"]] %||% ""), site[["context_labels"]],
                  if (length(named)) paste0(names(named), " = ", doc_str_literal(named))),
                collapse = ", ")
-  if (first) paste0(var, " = peter(", args, ")") else paste0(var, " |> peter(", args, ")")
+  call = paste0(site[["head"]] %||% "peter", "(", args, ")")
+  if (first) paste0(var, " = ", call) else paste0(var, " |> ", call)
 }
 
 #' Header lines of a transcript session (contract 11.5 transcript row), once per session id, after
@@ -649,16 +653,17 @@ nb_agent_run = function(agent, i) {
   seq_len(n - i) + i
 }
 
-#' Index of the j-th code cell (not an agent cell) calling peter() with this prompt hash, or an
-#' identical call for computed prompts; NA when none
+#' Index of the j-th code cell (not an agent cell) calling peter() (or a head of `heads`, as
+#' doc_calls() takes them) with this prompt hash, or an identical call for computed prompts; NA
+#' when none
 #' @noRd
-nb_find_call_cell = function(nb, ph, call0 = NULL, j = 1L) {
+nb_find_call_cell = function(nb, ph, call0 = NULL, j = 1L, heads = NULL) {
   cells = nb[["cells"]]
   agent = nb_is_agent(nb_cell_ids(nb))
   found = 0L
   for (i in seq_along(cells)) {
     if (agent[i] || !identical(cells[[i]][["cell_type"]], "code")) next
-    calls = doc_calls(nb_cell_lines(cells[[i]]))
+    calls = doc_calls(nb_cell_lines(cells[[i]]), heads = heads)
     if (nrow(doc_call_cands(calls, ph %||% NA_character_, call0))) {
       found = found + 1L
       if (found == j) return(i)
@@ -670,10 +675,10 @@ nb_find_call_cell = function(nb, ph, call0 = NULL, j = 1L) {
 #' Ordinal of calling cell `cell` among the code cells that call peter() with the same prompt
 #' hash (or the same call, for computed prompts): the `j` of a notebook anchor
 #' @noRd
-nb_call_ordinal = function(nb, cell, ph, call0 = NULL) {
+nb_call_ordinal = function(nb, cell, ph, call0 = NULL, heads = NULL) {
   j = 1L
   repeat {
-    k = nb_find_call_cell(nb, ph, call0, j)
+    k = nb_find_call_cell(nb, ph, call0, j, heads)
     if (is.na(k) || k >= cell) return(j)
     j = j + 1L
   }
@@ -727,10 +732,11 @@ doc_ipynb_locate = function(text, site) {
   ph = a[["ph"]] %||% NA_character_
   # by content and ordinal, never by the cell index seen at locate time: agent cells inserted
   # above (earlier pending blocks of the same sync) move the calling cells down
-  cell = nb_find_call_cell(nb, ph, a[["call0"]], a[["j"]] %||% 1L)
+  heads = doc_site_heads(site)
+  cell = nb_find_call_cell(nb, ph, a[["call0"]], a[["j"]] %||% 1L, heads)
   hit = NULL
   if (!is.na(cell)) {
-    calls = doc_calls(nb_cell_lines(cells[[cell]]))
+    calls = doc_calls(nb_cell_lines(cells[[cell]]), heads = heads)
     hit = doc_call_cands(calls, ph, a[["call0"]])[1L, , drop = FALSE]
   }
   doc_located(hit, c(cell, cell), function(out) {
@@ -981,4 +987,8 @@ on_load(ext_service_set("doc.edit", doc_edit_service, provided_by = "P15", built
 on_load(ext_service_set("doc.s1_block", doc_s1_block_service, provided_by = "P15",
                         builtin = "documents"))
 on_load(ext_service_set("doc.replay", doc_replay_service, provided_by = "P15",
+                        builtin = "documents"))
+on_load(ext_service_set("doc.coach", doc_coach_service, provided_by = "P29",
+                        builtin = "documents"))
+on_load(ext_service_set("doc.coach_block", doc_coach_block_service, provided_by = "P29",
                         builtin = "documents"))

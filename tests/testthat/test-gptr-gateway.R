@@ -502,6 +502,30 @@ test_that("a continuation's newer spec replaces the session's older spec of the 
   expect_identical(s$text, "new answer")
 })
 
+test_that("a keyed factory loads once per session; an unkeyed one on every call (08 3.1)", {
+  local_gw()
+  fake = local_fake_provider(list("one", "two", "three"))
+  n = new.env()
+  counting = function(what) {
+    function(gptr) {
+      n[[paste0(what, "_loads")]] = (n[[paste0(what, "_loads")]] %||% 0L) + 1L
+      gptr$register(gptr_hook("agent_start", function(event, ctx) {
+        n[[what]] = (n[[what]] %||% 0L) + 1L
+        NULL
+      }))
+    }
+  }
+  keyed = structure(counting("keyed"), gptr_key = "coaching:1")
+  plain = counting("plain")
+  s = peter("a", model = fake, extensions = list(keyed, plain), envir = new.env())
+  s |> peter("b", extensions = list(keyed, plain))
+  expect_identical(mget(c("keyed_loads", "keyed", "plain_loads", "plain"), n),
+                   list(keyed_loads = 1L, keyed = 2L, plain_loads = 2L, plain = 3L))
+  # the key is per session
+  peter("c", model = fake, extensions = keyed, envir = new.env())
+  expect_identical(c(n$keyed_loads, n$keyed), c(2L, 3L))
+})
+
 test_that("peter('a', mice) and mice |> peter('a') create sessions labelled mice", {
   local_gw()
   local_labels_block()

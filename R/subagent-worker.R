@@ -355,16 +355,19 @@ worker_unserialisable = function(x, seen = new.env(parent = emptyenv()), depth =
 }
 
 #' The records a worker registers again (IC-69): the rank-0 records of the sessions `sids` (the
-#' parent and the proxy) and the user records in registration order, the enabled plugins and the
-#' filters of each scope. A record that cannot be serialised fails the worker with a classed error
-#' naming it.
+#' parent and the proxy), the rank-0 policies of their ancestors (which bind them in process,
+#' registry_all_recs()) and the user records in registration order, the enabled plugins and the
+#' filters of each scope. A record that cannot be serialised fails the worker with a classed
+#' error naming it.
 #' @noRd
 worker_registry = function(sids) {
   reg = registry_env()
+  up = setdiff(unlist(lapply(sids, registry_session_ancestors)), sids)
   recs = registry_recs(reg, ls(reg$recs))
   specs = list()
   for (rec in recs[order(vapply(recs, function(r) as.numeric(r$order), 0))]) {
-    scoped = isTRUE(rec$session %in% sids) && identical(rec$rank, 0L)
+    scoped = identical(rec$rank, 0L) && (isTRUE(rec$session %in% sids) ||
+                                           (isTRUE(rec$session %in% up) && rec$kind == "policy"))
     user = is.null(rec$session) && identical(rec$source, "user")
     if (identical(rec$state, "lazy") || !(scoped || user)) next
     if (worker_unserialisable(rec$spec)) {

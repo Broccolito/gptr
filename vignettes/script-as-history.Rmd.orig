@@ -270,6 +270,22 @@ gptr_doc(FALSE)
 A notebook edited since a pending block was queued may need conflict resolution. Reopening
 or listing a file is not proof that pending blocks were applied successfully.
 
+## Harness calls and coaching calls
+
+A harness made with `gptr_tailor()` or `gptr_coach()` is called like `peter()`, and its
+top-level calls are recorded the same way. Their header adds `harness=<name>:<hash>`, the
+coaching the call used, and the block goes stale when that coaching changes. A top-level
+statement `h = gptr_coach(...)`, whose `harness =` is a name or left out, gets a block with
+`kind=coach`. Its body is one statement that rebuilds the result,
+`h = gptr_tailor(<start>, coaching = list(...))`, or `h = gptr_tailor(<start>)` when no new
+coaching was kept. One `## Run` line per run and a `## Decision:` line follow. Replay rebuilds
+`h` from that text with no model, no key and no extra R process. Under `replay = "auto"`, a
+stale coach block asks before coaching again when you are there, and replays otherwise. The
+block never holds your data, transcripts, values or `check`, but the coaching may mention facts
+from your data, so read it before you commit the script.
+`gptr_export()` refuses a document with a coach block. See
+[Harnesses and coaching](tailor-and-coach.html).
+
 ## Exporting a recorded script
 
 `gptr_export()` reads a synchronized `.R` history and writes a new `.R` file without running

@@ -265,6 +265,21 @@ test_that("session quota errors stop retries without classifying successful cont
   expect_identical(success$stop_reason, "stop")
 })
 
+test_that("weekly and model-family plan limits and gptr's refusals are never retried", {
+  err = list(class = "rate_limit", status = 429L)
+  for (notice in c("You've hit your weekly limit \u00b7 resets Mon 12:00am",
+                   "You've hit your Opus limit", "You've hit your Opus 4.5 limit",
+                   "You\u2019ve hit your usage limit")) {
+    msg = err_msg(paste0("The claude CLI ended the turn: ", notice))
+    expect_false(run_retryable(msg, err), info = notice)
+  }
+  expect_true(run_retryable(err_msg("You've hit your rate limit, try again shortly"), err))
+  for (k in c("plan_limit", "cli_check", "model_refused")) {
+    expect_false(run_retryable(err_msg("Try again shortly"), list(class = k, status = 429L)))
+    expect_identical(provider_classes(list(class = k)), c(k, "provider"))
+  }
+})
+
 test_that(oracle_title(recovery_recs, "R09"), {
   expect_false(run_retryable(err_msg("invalid x-api-key"), list(status = 401L)))
   expect_identical(provider_classes(list(status = 401L)), c("auth", "provider"))
