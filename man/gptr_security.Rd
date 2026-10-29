@@ -4,10 +4,10 @@
 \alias{gptr_security}
 \title{Security considerations}
 \description{
-gptr runs a language model agent inside your R session. The agent reads files, writes files,
-evaluates R code written by the model in the environment you give it and starts processes on
-your behalf. This page describes what gptr does to keep those actions under your control and
-where its protections end. \link{gptr_egress} describes what is sent to model providers.
+gptr runs language model agents in your current R session. An agent reads files, writes
+files, evaluates R code written by the model in the environment you give it and starts
+processes on your behalf. This page describes what gptr does to keep those actions under your
+control and where its protections end. \link{gptr_egress} describes what is sent to model providers.
 }
 \section{Everything happens because you asked}{
 

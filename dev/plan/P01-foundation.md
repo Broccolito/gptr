@@ -40,7 +40,7 @@ IC-63, IC-64, IC-71, IC-72, IC-73), dev/spec/05-plan-decomposition.md (P01).
 requirements, with the exact values of the spec:
 
 - DESCRIPTION (05 P01, IC-72): `Package: gptr`; `Version: 0.99.0.9000`;
-  `Title: Language Model Agents Inside the Live 'R' Session`; `Depends: R (>= 4.2.0)`;
+  `Title: Language Model Agents in Live 'R' Sessions`; `Depends: R (>= 4.2.0)`;
   `License: Apache License (== 2.0)` (no `LICENSE` file; full text in `LICENSE.md`);
   `Copyright: file inst/COPYRIGHTS`; `URL: https://github.com/Broccolito/gptr`;
   `BugReports: https://github.com/Broccolito/gptr/issues`; `Language: en-US`; `Encoding: UTF-8`;
@@ -320,7 +320,7 @@ source_file = function(name) {
 test_that("DESCRIPTION carries the fields CRAN and the contract require (IC-72)", {
   d = desc_fields()
   expect_identical(unname(d[["Package"]]), "gptr")
-  expect_identical(unname(d[["Title"]]), "Language Model Agents Inside the Live 'R' Session")
+  expect_identical(unname(d[["Title"]]), "Language Model Agents in Live 'R' Sessions")
   expect_identical(tools::toTitleCase(d[["Title"]]), unname(d[["Title"]]))
   expect_identical(unname(d[["License"]]), "Apache License (== 2.0)")
   expect_identical(unname(d[["Copyright"]]), "file inst/COPYRIGHTS")
@@ -422,8 +422,8 @@ Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "zzz
 
 Expected: the summary line `[ FAIL 6 | WARN 0 | SKIP 1 | PASS 19 ]`. The `.lintr` test is skipped
 because `.lintr` does not exist yet. The six failures come from the DESCRIPTION, `Authors@R` and
-Imports/Suggests tests: the old Title differs from "Language Model Agents Inside the Live 'R'
-Session", the old DESCRIPTION has no `Copyright`, `URL` or `Language` field, `Authors@R` has no
+Imports/Suggests tests: the old Title differs from "Language Model Agents in Live 'R' Sessions",
+the old DESCRIPTION has no `Copyright`, `URL` or `Language` field, `Authors@R` has no
 Zechner entry (`attempt to select less than one element in get1index`) and there is no `Suggests`
 field (`subscript out of bounds`). The environment test already passes because `setup.R` exists.
 
@@ -435,7 +435,7 @@ Replace the contents of `DESCRIPTION`:
 
 ```text
 Package: gptr
-Title: Language Model Agents Inside the Live 'R' Session
+Title: Language Model Agents in Live 'R' Sessions
 Version: 0.99.0.9000
 Authors@R: c(
     person("Wanjun", "Gu", , "wanjun.gu@ucsf.edu", role = c("aut", "cre", "cph"),

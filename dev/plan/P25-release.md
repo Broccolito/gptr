@@ -49,7 +49,7 @@ Plan-specific requirements, with the exact values of the spec:
   together with the first vignette, Task 5; "a named exception to 'Version is the only DESCRIPTION
   field P25 may change'") and `Version: 1.0.0` (Task 13; P01 wrote `Version: 0.99.0.9000`). Every
   other field is P01's and is only checked:
-  `Title: Language Model Agents Inside the Live 'R' Session`, `Depends: R (>= 4.2.0)`, knitr and
+  `Title: Language Model Agents in Live 'R' Sessions`, `Depends: R (>= 4.2.0)`, knitr and
   rmarkdown in Suggests, none of httr2, R6, S7, evaluate, digest, glue, promises, coro, mirai, fs,
   magrittr or an R LLM package in Imports or Suggests (conventions section 8).
 - **Exports** (03 section 4.4, IC-01, IC-36): 63 names, `peter` plus 62 `gptr_*` names, in eight
@@ -2230,7 +2230,7 @@ Create `dev/release/tests/test-description.R`:
 
 ```r
 dcf_of = function(...) {
-  fields = list(Package = "gptr", Title = "Language Model Agents Inside the Live 'R' Session",
+  fields = list(Package = "gptr", Title = "Language Model Agents in Live 'R' Sessions",
                 Version = "1.0.0", Depends = "R (>= 4.2.0)",
                 Imports = "jsonlite, curl, processx, callr, rlang, cli, yaml, ps",
                 Suggests = "testthat (>= 3.2.0), withr, knitr, rmarkdown",
@@ -2442,7 +2442,7 @@ description_problems = function(dcf, stage = c("vignettes", "release")) {
   }
   out = character()
   if (!identical(field("Package"), "gptr")) out = c(out, "DESCRIPTION: Package is not gptr")
-  title = "Language Model Agents Inside the Live 'R' Session"
+  title = "Language Model Agents in Live 'R' Sessions"
   if (!identical(field("Title"), title)) out = c(out, "DESCRIPTION: Title differs from P01's")
   if (!identical(field("VignetteBuilder"), "knitr")) {
     out = c(out, "DESCRIPTION: VignetteBuilder must be knitr (IC-72)")

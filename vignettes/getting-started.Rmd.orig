@@ -13,12 +13,12 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", error = FALSE,
 old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1, width = 80)
 ```
 
-gptr runs a language model agent inside your R session. It computes on objects you already
-loaded and keeps named results available for the next iteration. A dataset around 4 GB can
-stay in R while the model sees a bounded description and the results its tools report. You
-can revise one analysis step without exporting and reloading the dataset for each turn.
-The same function, `peter()`, is an interactive chat at the console and a programmable call in
-scripts, loops and `if` statements.
+gptr runs language model agents in your current R session. Agents can analyze objects already
+in memory and create R objects that you can inspect, reuse or modify. A dataset around 4 GB can
+stay in R while the model receives size-limited descriptions, previews and tool output that may
+include data values. You can revise one analysis step without exporting and reloading the
+dataset for each turn. The `peter()` function supports interactive chat at the console and
+programmatic calls in scripts, loops and `if` statements.
 
 The [Execution model](execution-model.html) explains what reaches the provider and what still
 costs memory and time. Choose a model in [Language models](language-models.html); the examples
@@ -169,9 +169,10 @@ session |> peter()
 
 ## Connecting a real model
 
-Choose a route explicitly. API providers use their named environment variables, which you can
-load from a private file with `gptr_env()`. Subscription CLI routes use the executable's own
-sign-in; Ollama uses an already-running local server and an installed model.
+Choose one route: an API key, an existing CLI login or a local Ollama model. Put your
+provider's key in a private `.env` file and load it with `gptr_env()`. Sign in to Claude Code
+or Codex outside R; CLI sign-in is separate from API credentials. Start Ollama separately and
+install a chat model that supports tool calls; gptr does not install Ollama or download models.
 [Language models](language-models.html) gives setup examples for each route.
 
 ```{r, eval = FALSE}
@@ -184,8 +185,8 @@ session = peter("Describe the mpg and wt columns.", mtcars)
 session$text
 ```
 
-The first time a provider is used interactively, gptr shows what is sent to it and records your
-acknowledgment; `?gptr_egress` lists what a request contains. For persistent storage, call
+The first interactive use of a remote provider asks you to acknowledge the data it receives;
+`?gptr_egress` lists what a request contains. For persistent storage, call
 `gptr_init("/path/to/project")` to create a `.gptr/` workspace and review its separate trust
 decision. Without a project workspace, session storage is temporary. Defaults and storage
 policy are covered in [Configuration](configuration.html).

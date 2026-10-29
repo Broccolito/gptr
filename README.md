@@ -209,9 +209,8 @@ CRAN install, open it in R with
 
 ## Why Peter?
 
-The name honors Peter Naur's work on readable language definitions
-(Backus-Naur form) and Peter Cathcart Wason's research with Jonathan
-Evans on reasoning, which inspired gptr's System 1 and System 2. In
+The name honors Peter Naur's work on readable language definitions and
+Peter Cathcart Wason's research with Jonathan Evans on reasoning. In
 Naur's spirit, gptr records sessions as runnable documents. System 1 and
 System 2 name software roles in gptr; they imply nothing about human
 cognition. See [Why

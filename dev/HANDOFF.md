@@ -26,16 +26,17 @@ the amendments of D-188, D-233, D-243, D-244, D-251 and D-254 are in `DEVIATIONS
   maintainer's, with no change needed; the Description is rewritten around the three pillars (the
   Title unchanged) and the README describes only the package and its setup, with no folded code
   blocks and four short chunks; the CRAN-mode check is Status OK with no NOTE.
-- CI-105 (#93): contributor PR #92 (Gianmarco Bellucci) is merged with its commit: the Title
-  "Language Model Agents in Live 'R' Sessions" (D-270; the plans keep the old one), a new
-  Description and a README arranged by task. The merge carries `70e67aac`'s `model =` into the
-  re-ask sentence, and three corrections follow: local-only inference is the Ollama route's
-  default, "Why Peter?" keeps the Naur rationale (sessions recorded as runnable documents), and
-  `inst/WORDLIST` takes Naur's and Wason's; the CRAN-mode check and the incoming feasibility check
-  are Status OK with no NOTE; review round 4: the README's and the interactive-console vignette's
-  manual-mode sentences say that a permission rule can change what runs and asks, but an allow
-  rule never approves a critical action, "Why Peter?" and `?peter` name Backus-Naur form and
-  Wason's research as what inspired System 1 and System 2, and `vignette()` is for a CRAN install.
+- CI-105 (#94, #93): contributor PR #92 (Gianmarco Bellucci) is merged into `main` as is, with a
+  merge commit: the Title "Language Model Agents in Live 'R' Sessions" and a new Description
+  (D-270) and a README arranged by task. #94 makes the three approved corrections to his README
+  (local-only inference is the Ollama route's default, "Why Peter?" keeps the Naur rationale,
+  `inst/WORDLIST` takes Naur's and Wason's) and carries his wording into P01, P25 and 05 (the
+  Title), `dev/README.md`, NEWS, `cran-comments.md`, `?peter`, `?gptr_security`, the
+  getting-started guide and the cheat sheet. #93's own merge of #92 had one conflict hunk and
+  carries `70e67aac`'s `model =` into the re-ask sentence; review round 4 on #93: the README's and
+  the interactive-console vignette's manual-mode sentences say that a permission rule can change
+  what runs and asks, but an allow rule never approves a critical action, and `vignette()` is for
+  a CRAN install.
 - FIX-21: the bg-1 and plan-execute paths, run live on claude-cli, codex and ollama, and the five
   defects found there fixed: an idle tick's first notice starts a row of its own; only
   `gptr_wait()` continues a waiting session; the resumed run records its call's block; `/exit` names

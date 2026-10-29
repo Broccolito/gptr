@@ -1,6 +1,6 @@
 # gptr logo
 
-Brand assets for gptr, the agent harness that computes inside the running R session.
+Brand assets for gptr, which runs language model agents in an existing R session.
 
 Default: light (`logo.*`). Dark: `logo-dark.*`.
 

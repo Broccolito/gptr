@@ -11,9 +11,9 @@
 #'
 #' Conversational agents compute in memory: their R tools use the objects already loaded in
 #' `envir`, and later turns can reuse fitted models and intermediate results without saving and
-#' reloading the dataset. Model context contains bounded descriptions and requested results;
-#' R computes on the full local object. Ordinary R allocations, file-backed inputs, checkpoints
-#' and worker transfers still have their usual costs. See
+#' reloading the dataset. R computes on the full objects, while the model receives size-limited
+#' descriptions, previews and tool output that may include data values. Ordinary R allocations,
+#' file-backed inputs, checkpoints and worker transfers still have their usual costs. See
 #' `vignette("execution-model", package = "gptr")` for these boundaries.
 #'
 #' Agent code runs in this R process: a program it starts with `system()` or `system2()` reads
@@ -54,11 +54,10 @@
 #' login is not proof of online access or subscription billing. See
 #' `vignette("interactive-console", package = "gptr")`.
 #'
-#' The name honors Peter Cathcart Wason, whose research with Jonathan Evans distinguished
-#' processes underlying reasoning and introspection and inspired gptr's System 1 and System 2,
-#' and Peter Naur of the Backus-Naur form, in the spirit of
-#' recording sessions as readable, replayable documents. A user object named `peter` hides the
-#' gateway; call `gptr::peter()` then.
+#' The name honors Peter Naur's work on readable language definitions and Peter Cathcart
+#' Wason's research with Jonathan Evans on reasoning. In Naur's spirit, gptr records sessions as
+#' runnable documents. See `vignette("why-peter", package = "gptr")` for the history and
+#' sources. A user object named `peter` hides the gateway; call `gptr::peter()` then.
 #'
 #' @section Sessions and results:
 #' A pipe such as `session |> peter("Explain the result.")` adds work to the same session

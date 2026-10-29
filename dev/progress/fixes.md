@@ -9179,93 +9179,6 @@ PASTE-2 in part and PASTE-1 in NEWS only.
     `lintfmt.py` shows only the baseline. No test failed, so no merge needed a fix. Not run:
     `R CMD check`, Linux and Windows hosts, R 4.2 and R-devel, live models.
 
-## Task CI-105 - Contributor PR #92: the README and DESCRIPTION (2026-10-27, #93)
-- Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
-  `13a917ff`, which the maintainer approved: "take all of his advice and then update the
-  repository". Its DESCRIPTION has the Title "Language Model Agents in Live 'R' Sessions" (D-270)
-  and a Description that opens "Runs language model agents in an existing 'R' session". Its README
-  turns the three pillar sections into three bullets and the rest into task sections: Installation
-  (the GitHub and CRAN routes in two chunks), Connect a model (an API key, an existing CLI login, a
-  local Ollama model), Run an analysis (a table of what `session`, `session$text` and `fit` hold,
-  and what `session$value` holds), Record and replay an analysis, Return typed decisions, Learn
-  more, Why Peter?, Upgrading from gptr 0.7.0, Installation troubleshooting, and License and
-  acknowledgments. The three checks that pin the Title change with it (`dev/release/lib.R`,
-  `dev/release/tests/test-description.R`, test-zzz.R).
-- Audit, before the merge: three auditors on `15fd6066`, offline with the fake provider, found the
-  DESCRIPTION accurate (the incoming feasibility check with remote checks Status OK, no NOTE) and
-  the README accurate but for the three points corrected below.
-- Merge `43512914` (`git merge --no-ff origin/pr-92`, which keeps `71ae6e39`, so GitHub marks #92
-  merged): one conflict hunk in README.Rmd, `claude/v1-fixes`' three pillar sections against his
-  three bullets. His bullets stay and the sections go, as in his commit; the one change
-  `claude/v1-fixes` made to them since `13a917ff` (`70e67aac`, FIX-30 and FIX-33: `replay = "live"`
-  asks again, `model =` picks your own model) is carried into his re-ask sentence, which reads "To
-  ask the model again, use `gptr_source("analysis.R", replay = "live")`; `model =` picks your own
-  model." README.md is his side, rendered again in the next commit. DESCRIPTION, `dev/release/lib.R`
-  and the two tests merge without conflict; `claude/v1-fixes` had not changed DESCRIPTION.
-- Red (the merge): `testthat::test_dir("dev/release/tests")` with `NOT_CRAN=true` FAIL 1 SKIP 0
-  PASS 289: Task 15's spelling test (test-gptr-release.R:47) reports "Naur's (README.Rmd:189,
-  README.md:210)" and "Wason's (README.Rmd:189, README.md:210)".
-- Fix `29461dd6`, three corrections: (1) "Local-only Ollama inference is on by default;", since the
-  default `local_only = TRUE` guards the Ollama route only and remote providers run after the
-  egress acknowledgment; (2) `inst/WORDLIST` takes Naur's and Wason's after Naur and Wason, in its
-  sorted head, as Ollama's follows Ollama; (3) "Why Peter?" adds "In Naur's spirit, gptr records
-  sessions as runnable documents." after his first sentence, the Naur rationale CLAUDE.md keeps in
-  the README. `dev/release/precompute.R --readme`: 0 problems; README.md changes in the three
-  paragraphs README.Rmd changed since his commit and nowhere else.
-- Checked against the code at `70e67aac` (FIX-27..FIX-34 came after his base), not changed: no
-  sentence of the README or DESCRIPTION names `system()`, `peter$sh()`, a console transcript or a
-  paste; the replay sentences hold (under `replay = "replay"` no call reaches a model: a stale
-  block is refused before its run). The manual-mode sentence ("actions classified as read-only run
-  directly; actions classified as changes ask for approval unless an existing rule allows them")
-  states the default, where no rule is set; since FIX-32 a deny or ask rule also stops a read-only
-  command, as `?gptr_permissions` says, and the README before the PR said no more. Not taken: the
-  audit's optional "With the CRAN version," before `vignette("getting-started", ...)` (an install
-  from GitHub has no built vignettes, CI-102), a claim the README made before the PR too.
-- Green, on `29461dd6` (the records commit changes only `dev/`): `dev/release/tests` with
-  `NOT_CRAN=true` (14 files, 62 tests) FAIL 0 SKIP 0 PASS 290; `^zzz$` (the Title's test) FAIL 0
-  PASS 149 in UTF-8 and under `LC_ALL=C LANG=C`; `check-files.R all --release` 0 problems;
-  `spelling::spell_check_package()` "No spelling errors found."; `document()` leaves no diff; the
-  lint of the PR's three R files clean. Under the heavy lock, on a `git archive` of `29461dd6`:
-  `R CMD build --compact-vignettes=gs+qpdf` (tarball sha256 `6db4e0aa`), then
-  `R CMD check --as-cran` in CRAN mode under `env -i` (`HOME`, `PATH`, `LANG=en_US.UTF-8`, a short
-  `TMPDIR`, `R_LIBS_USER` and CI-104's `_R_CHECK_` variables): Status OK with no NOTE in 134 s, the
-  tests [14s/18s] (`testthat.R` [13s/14s]), INFO only for 'repr' and the installed size (7.9 Mb);
-  the incoming feasibility step with `_R_CHECK_CRAN_INCOMING_=true` and
-  `_R_CHECK_CRAN_INCOMING_REMOTE_=true` on that tarball ("checking CRAN incoming feasibility ...
-  [3s/18s] OK"): Status OK with no NOTE in 112 s.
-- Deviations: D-270 (the Title; P01, P25 and 05 keep the old one). Open: none new.
-- Review round 4 (the docs verifier on `0aa55320`, R4D-1 and R4D-5; the regressions verifier, R4-3):
-  three README sentences, the first also in a vignette, were wrong or short; each keeps the
-  contributor's wording but for the smallest change. (1) The manual-mode sentence brought in rules
-  and let them only allow: since FIX-32 a deny or ask rule also stops a read-only command, and an
-  allow rule never approves a level-4 action, so this record's "states the default, where no rule is
-  set" did not hold. A scratch gate test in manual mode (deleted): `peter$sh('cat notes.txt')`
-  allow, deny under `r(sh:cat *)`, ask under an ask rule; `system('rm -f gone.txt')` ask, allow
-  under `r(sh:rm *)`, deny with a deny `r(sh:rm *)` too; `unlink('/etc/gptr-old.csv')` ask_human
-  under `r(level<=4)`; `readLines('notes.txt')` allow under a deny `r(fn:readLines)`, which never
-  matches it. It now reads "actions classified as read-only run directly and actions classified as
-  changes ask for approval, unless a permission rule applies; an allow rule never approves a
-  critical action." The interactive-console vignette's "known read-only actions and actions covered
-  by existing allow rules run directly" takes the same clause in `.Rmd.orig` and `.Rmd`
-  (`8c9d6be8`). Not changed: the cheat sheet's manual row and execution-model's sentence describe
-  the mode alone and name no rule, as the auto and yolo rows and sentences beside them do (a deny
-  rule stops an auto action too), so the PDF is not rebuilt; getting-started's "a change needs
-  approval unless an allow rule already permits it" holds as written. (2) "Why Peter?" named neither
-  Backus-Naur form nor what Wason's research has to do with System 1 and System 2, the rationale
-  CLAUDE.md keeps in the README and `?peter`: it now reads "Peter Naur's work on readable language
-  definitions (Backus-Naur form)" and "on reasoning, which inspired gptr's System 1 and System 2",
-  as the cheat sheet and the why-peter vignette say; `?peter` (R/gptr-gateway.R), which named
-  Backus-Naur form but not System 1 and System 2, takes "and inspired gptr's System 1 and System 2"
-  (`818e9ad0`). (3) `vignette("getting-started", package = "gptr")` followed the GitHub route, which
-  builds no vignettes: `R CMD INSTALL` of a `git archive` of `0aa55320` installs 0 vignettes and the
-  call warns "vignette 'getting-started' not found". It now reads "With a CRAN install, open it in R
-  with ...", the audit's point this record did not take (`bd79ed9e`). Red, green: none (wording).
-  `precompute.R --readme` 0 problems, README.md changing only in the three paragraphs; `document()`
-  changes only `peter.Rd` and then leaves no diff; `dev/release/tests` with `NOT_CRAN=true` FAIL 0
-  SKIP 0 PASS 290; `^(zzz|gptr-gateway|lint-rules)$` FAIL 0 SKIP 0 PASS 684 in UTF-8 and under
-  `LC_ALL=C LANG=C`; `check-docs.R` and `check-files.R all --release` 0 problems; the spelling check
-  and the lint of R/gptr-gateway.R clean.
-
 ## FIX-35 - The owned headless browser's close under load (2026-10-27, #93)
 Scope: the full suite's failures of the owned headless browser's cleanup on `claude/v1-fixes`
 (test-artifact-app.R on `9f015596` and on `c03c72db`, "The owned headless browser family did not
@@ -9922,3 +9835,119 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
     knows calls it, such as `sapply()` or `purrr::map()`; `identity(Sys.setenv)` stays level 0, a
     function it does not know calls one.
   - Green and checks: FIX-27's bullet of the same name.
+
+## Task CI-105 - Contributor PR #92 and its wording across the repository (2026-10-28, #94)
+- Why: contributor PR #92 (Gianmarco Bellucci, `neuroGB`), one commit `71ae6e39` on `main`
+  `13a917ff`, is merged into `main` as is, with a merge commit. It changes only DESCRIPTION (the
+  Title "Language Model Agents in Live 'R' Sessions", D-270, and a Description that opens "Runs
+  language model agents in an existing 'R' session"), README.Rmd and README.md (rewritten and
+  arranged by task: Installation, Connect a model, Run an analysis, Record and replay an analysis,
+  Return typed decisions, Learn more, Why Peter?, Upgrading from gptr 0.7.0, Installation
+  troubleshooting, License and acknowledgments) and the three one-line Title checks
+  (`description_problems()` in `dev/release/lib.R`, the `dcf_of()` fixture of
+  `dev/release/tests/test-description.R`, test-zzz.R). The maintainer asked that his changes be
+  "proportionally propagated to all of the other elements in the repository that those changes
+  are referring to", with his wording as "the gold standard". This follow-up, #94
+  (`claude/pr92-propagate`, based on his commit), does that: where another place says what his
+  commit changed, it now says it in his words, verbatim where it says the same thing.
+- Red, on `71ae6e39`: `testthat::test_dir("dev/release/tests", filter = "^gptr-release$")` with
+  `NOT_CRAN=true` FAIL 1 SKIP 0 PASS 12: Task 15's spelling test (test-gptr-release.R:47) reports
+  "Naur's (README.Rmd:189, README.md:210)" and "Wason's (README.Rmd:189, README.md:210)".
+- Fix `bff89417`, the three corrections the maintainer approved, the only edits to his text
+  (README.Rmd and `inst/WORDLIST` as in `29461dd6`; README.md rendered again by
+  `dev/release/precompute.R --readme`): (1) "Local-only Ollama inference is on by default;",
+  since that default guards the Ollama route only; (2) `inst/WORDLIST` takes Naur's and Wason's;
+  (3) "Why Peter?" keeps the Naur rationale CLAUDE.md requires with one sentence after his first,
+  "In Naur's spirit, gptr records sessions as runnable documents."
+- Fix `5801ad3b`, the plans and the spec: the new Title in P01's Global Constraints and Task 1
+  (the DESCRIPTION block, its test and the Red step's expected failure), in P25's Global
+  Constraints and Task 5 (the `dcf_of()` fixture and `description_problems()`) and in 05's P01
+  scope (D-270); `dev/README.md` describes gptr in the Description's and the README's words.
+- Fix `4f8573ce`, the package's own summaries: NEWS.md's 1.0.0 opening and cran-comments.md's
+  opening say what gptr is in the Description's words (it "runs language model agents in an
+  existing R session, where generated code can inspect and modify objects already in memory");
+  `?peter` (`R/gptr-gateway.R`, `man/peter.Rd`) says what the model receives as the README does
+  ("size-limited descriptions, previews and tool output that may include data values") and gives
+  the name's rationale in the words of "Why Peter?", pointing at the why-peter vignette;
+  `?gptr_security` (`R/gptr-config.R`, `man/gptr_security.Rd`) and `man/figures/README.md` open
+  with the README's and the Description's sentence. The Rd files are `document()`'s.
+- Fix `34afa7bd`, the vignettes: the getting-started guide (`vignettes/getting-started.Rmd.orig`
+  and its knitted `.Rmd`, the same prose in both, no chunk changed) opens as the README does,
+  its "Connecting a real model" step names the README's three routes (an API key, an existing
+  CLI login, a local Ollama model) in its words, and "The first interactive use of a remote
+  provider asks you to acknowledge the data it receives".
+- Fix `f42b353e`, the site: the cheat sheet's tagline (`pkgdown/assets/cheatsheet.html`) in the
+  README's words, no longer saying that Wason's research inspires the System 1 and System 2
+  roles, and `pkgdown/assets/gptr-cheatsheet.pdf` printed again by `dev/release/cheatsheet-pdf.R`
+  (local Chrome): two pages, the tagline two lines, the rest of the text laid out as before
+  (`pdftotext -layout`). `_pkgdown.yml` and `pkgdown/templates/head.html` hold no summary (the
+  site's description is DESCRIPTION's, which pkgdown fills in).
+- Left as they are: the plans' drafts of the shipped files (P25's Task 2 `?gptr_security`, Task 5
+  getting-started, Task 10 README, Task 11 NEWS and Task 13 cran-comments, P01's Task 1
+  Description), which the shipped files had already replaced before #92 (D-270); P19's goal line
+  and the design specs 00 and 03; `dev/research/`, `dev/progress/`, `dev/TESTING_PLAN.md` and the
+  historical checkpoints of `dev/HANDOFF.md` and `dev/PROGRESS.md`; CLAUDE.md and AGENTS.md, the
+  agents' instructions, which the maintainer keeps; the model's prompts and tool descriptions
+  ("the user's live R session" in `R/prompt-text.R`, `R/tool-r.R` and `R/mcp-server.R`, pinned by
+  test-northstar.R and the token benchmark's baseline), which are behaviour; "live R session" used
+  in passing (`?gptr_mcp_serve`'s title, the mcp vignette, `inst/COPYRIGHTS`); the other vignettes'
+  openings (why-peter, execution-model, language-models, system-one, token-efficiency), which
+  introduce their own topic and agree with his README; the getting-started guide's own first example
+  and its "Where to go next" list, which names the guides by their titles. His README links the
+  system-one guide as "Typed decisions" and script-as-history as "Record, replay and export";
+  his commit renames no guide, so their titles stay. gptr has no package help page.
+- Green, on `f42b353e` (the records commit changes only `dev/*.md`, which `.Rbuildignore` drops):
+  `dev/ci/isolated-check.R document` leaves no diff; `^(zzz)$` (the Title's test) FAIL 0 WARN 0
+  SKIP 0 PASS 149 in UTF-8 and under `LC_ALL=C LANG=C`; `dev/release/tests` with `NOT_CRAN=true`
+  (14 files, 62 tests) FAIL 0 SKIP 0 PASS 290; `spelling::spell_check_package()` "No spelling
+  errors found."; `check-docs.R` and `check-files.R all --release` 0 problems;
+  `precompute.R --readme` 0 problems, `git status` clean after it;
+  `precompute.R --check getting-started` 0 problems, and a knit of getting-started into the tree
+  differed from the committed `.Rmd` only in chunk output (the random session ids and the token
+  counts of the fake provider's requests), not in prose, and was not kept; the plan checks
+  (`dev/ci/check-plans.py`) pass: 28 plans, 1444 blocks, no error finding (info 830, warn 298),
+  770 R blocks with 0 problems, no lints. The docs-cleanup `fmt.py` changes none of the changed
+  `dev/*.md` files but 05, which it changes on the base too, and `lintfmt.py` reports the base's
+  findings (05's two edited lines are 102 and 111 columns, the base's 110 and 110). The full suite
+  and `R CMD check` are #94's CI.
+- On #93 (`claude/v1-fixes`), which had merged #92 itself (`43512914`, `git merge --no-ff
+  origin/pr-92`, which keeps `71ae6e39`): one conflict hunk, in README.Rmd, #93's three pillar
+  sections against his three bullets. His bullets stay and the sections go, as in his commit; the
+  one change #93 had made to them (`70e67aac`, FIX-30 and FIX-33: `replay = "live"` asks again,
+  `model =` picks your own model) is carried into his re-ask sentence, "To ask the model again,
+  use `gptr_source("analysis.R", replay = "live")`; `model =` picks your own model." Its copy of
+  the three corrections (`29461dd6`) is the one above.
+- Review round 4 on #93 (the docs verifier on `0aa55320`, R4D-1 and R4D-5; the regressions verifier,
+  R4-3): three README sentences, the first also in a vignette, were wrong or short; each keeps the
+  contributor's wording but for the smallest change. (1) The manual-mode sentence brought in rules
+  and let them only allow: since FIX-32 a deny or ask rule also stops a read-only command, and an
+  allow rule never approves a level-4 action, so this record's "states the default, where no rule is
+  set" did not hold. A scratch gate test in manual mode (deleted): `peter$sh('cat notes.txt')`
+  allow, deny under `r(sh:cat *)`, ask under an ask rule; `system('rm -f gone.txt')` ask, allow
+  under `r(sh:rm *)`, deny with a deny `r(sh:rm *)` too; `unlink('/etc/gptr-old.csv')` ask_human
+  under `r(level<=4)`; `readLines('notes.txt')` allow under a deny `r(fn:readLines)`, which never
+  matches it. It now reads "actions classified as read-only run directly and actions classified as
+  changes ask for approval, unless a permission rule applies; an allow rule never approves a
+  critical action." The interactive-console vignette's "known read-only actions and actions covered
+  by existing allow rules run directly" takes the same clause in `.Rmd.orig` and `.Rmd`
+  (`8c9d6be8`). Not changed: the cheat sheet's manual row and execution-model's sentence describe
+  the mode alone and name no rule, as the auto and yolo rows and sentences beside them do (a deny
+  rule stops an auto action too), so the PDF is not rebuilt; getting-started's "a change needs
+  approval unless an allow rule already permits it" holds as written. (2) "Why Peter?" named neither
+  Backus-Naur form nor what Wason's research has to do with System 1 and System 2, the rationale
+  CLAUDE.md keeps in the README and `?peter`: it now reads "Peter Naur's work on readable language
+  definitions (Backus-Naur form)" and "on reasoning, which inspired gptr's System 1 and System 2",
+  as the cheat sheet and the why-peter vignette say; `?peter` (R/gptr-gateway.R), which named
+  Backus-Naur form but not System 1 and System 2, takes "and inspired gptr's System 1 and System 2"
+  (`818e9ad0`). (3) `vignette("getting-started", package = "gptr")` followed the GitHub route, which
+  builds no vignettes: `R CMD INSTALL` of a `git archive` of `0aa55320` installs 0 vignettes and the
+  call warns "vignette 'getting-started' not found". It now reads "With a CRAN install, open it in R
+  with ...", the audit's point this record did not take (`bd79ed9e`). Red, green: none (wording).
+  `precompute.R --readme` 0 problems, README.md changing only in the three paragraphs; `document()`
+  changes only `peter.Rd` and then leaves no diff; `dev/release/tests` with `NOT_CRAN=true` FAIL 0
+  SKIP 0 PASS 290; `^(zzz|gptr-gateway|lint-rules)$` FAIL 0 SKIP 0 PASS 684 in UTF-8 and under
+  `LC_ALL=C LANG=C`; `check-docs.R` and `check-files.R all --release` 0 problems; the spelling check
+  and the lint of R/gptr-gateway.R clean. The merge of `main` into #93 takes #94's "Why Peter?" and
+  `?peter` name sentences over (2), as for the summaries above.
+- Deviations: D-270. Open: whether the system-one and script-as-history guides take his link texts
+  as titles is the maintainer's call.

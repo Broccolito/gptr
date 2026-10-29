@@ -1,7 +1,7 @@
 # gptr 1.0.0
 
-gptr 1.0.0 is a complete rewrite: an agent harness that runs inside the live R session and
-works on the objects already in memory.
+gptr 1.0.0 is a complete rewrite: it runs language model agents in an existing R session, where
+generated code can inspect and modify objects already in memory.
 
 ## Breaking changes
 
