@@ -24,6 +24,13 @@ amendment are in `DEVIATIONS.md`:
   maintainer's, with no change needed; the Description is rewritten around the three pillars (the
   Title unchanged) and the README describes only the package and its setup, with no folded code
   blocks and four short chunks; the CRAN-mode check is Status OK with no NOTE.
+- CI-105 (#94): contributor PR #92 (Gianmarco Bellucci) is merged into `main` as is, with a merge
+  commit: the Title "Language Model Agents in Live 'R' Sessions" and a new Description (D-270) and
+  a README arranged by task. #94 makes the three approved corrections to his README (local-only
+  inference is the Ollama route's default, "Why Peter?" keeps the Naur rationale, `inst/WORDLIST`
+  takes Naur's and Wason's) and carries his wording into P01, P25 and 05 (the Title),
+  `dev/README.md`, NEWS, `cran-comments.md`, `?peter`, `?gptr_security`, the getting-started
+  guide and the cheat sheet.
 - FIX-21: the bg-1 and plan-execute paths, run live on claude-cli, codex and ollama, and the five
   defects found there fixed: an idle tick's first notice starts a row of its own; only
   `gptr_wait()` continues a waiting session; the resumed run records its call's block; `/exit` names
