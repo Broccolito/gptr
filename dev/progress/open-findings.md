@@ -664,6 +664,11 @@ their output are in `A/probes/`.
   it, and the partial of an abort inside a unit holds what was emitted only for a normaliser that
   records a delta before it emits it (FIX-26, CI-97). Evidence: `dev/HANDOFF.md:455-458`. Fix: none
   proposed.
+- **L-72** (low; no). A timing-sensitive pty test failed on GitHub's `ubuntu-latest (release)`
+  runner: on #93's head `0c61c453` (run 40784878426, job 123174204936) only test-console-typing.R
+  "a terminal: after r code reads through readline a paste is one draft" (FIX-28) failed, at :1600
+  (`pty$wait("REQ 1 [one/two/three]")` was FALSE) and so at :1604; every other job of the run
+  passed. Evidence: the job's log. Fix: as L-34; re-run the failed job.
 
 ## Harness and process
 
