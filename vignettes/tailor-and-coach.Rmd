@@ -193,7 +193,7 @@ to each model before it starts.
 **Where it runs.** Every session runs unattended in its own fresh R process, with copies of the
 objects you passed and an empty folder. A run does not see the rest of your workspace or your
 attached packages, and cannot install packages or write outside its folder by the routes gptr
-recognises. Pass data as objects and install what the task needs first. A step that needs your
+recognizes. Pass data as objects and install what the task needs first. A step that needs your
 approval ends that run as `blocked`, so most tasks need `mode = "auto"`.
 
 **What you get back.** A harness: the starting harness with the new coaching when it was kept
@@ -221,8 +221,8 @@ mixed_peter = gptr_coach("Recode the missing ages, then return the mean age.", s
 OpenAI or Google key, gptr uses Claude Code when it is installed and otherwise Codex, so a
 plan-only setup needs no `model`. Set up the CLI as in [Language models](language-models.html).
 
-- The CLI must be signed in and at least the oldest version gptr was tested with (claude
-  2.1.296, codex-cli 0.157.1). gptr checks every session and discards one that fails.
+- The CLI must be signed in and at least the oldest version gptr was tested with (Claude Code
+  2.1.296, Codex 0.157.1). gptr checks every session and discards one that fails.
 - At most two sessions run at once on one plan account. They use your plan's 5-hour and weekly
   limits, shared with your other use, and gptr says how many will run before it starts. Dollar
   figures on Claude Code are what the tokens would cost on the API, not charges.
