@@ -280,7 +280,8 @@ risk_wipe_class = function(p, root) {
 #' @noRd
 risk_glob_paths = function(p, op) {
   lead = regmatches(p, regexpr("^([A-Za-z]:)?[/\\\\]*", p))
-  parts = strsplit(substring(p, nchar(lead) + 1L), "[/\\\\]")[[1L]]
+  # an empty component (`a//b`) names no directory
+  parts = Filter(nzchar, strsplit(substring(p, nchar(lead) + 1L), "[/\\\\]")[[1L]])
   wild = grepl("[$`*?]|\\[.+\\]|%[A-Za-z_]+%", parts)
   if (!any(wild)) return(p)
   k = max(which(wild))
@@ -288,7 +289,6 @@ risk_glob_paths = function(p, op) {
   rx = paste0("\\[[^]]*\\]|[*?]+|\\$\\{[^}]*\\}|\\$[A-Za-z_0-9@*#?$!-]*|`[^`]*`?|",
               "%[A-Za-z_]+%")
   stand = ifelse(wild, gsub(rx, "x", parts, perl = TRUE), parts)
-  stand[stand == ""] = "x"
   names = risk_guard_names
   if (!grepl("^[.[]", parts[k])) names = names[!startsWith(names, ".")]
   hit = !grepl("[$`%]", parts[k]) & risk_glob_match(parts[k], names)

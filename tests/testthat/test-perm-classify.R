@@ -455,6 +455,15 @@ test_that("text encodings and long glob words are read safely (D-061)", {
   expect_identical(risk_glob_rx(strrep("[", 3L)), "^\\[\\[\\[\\z")
 })
 
+test_that("a doubled slash in a glob word names no directory of its own (review glob-1)", {
+  root = local_project()
+  for (cmd in c("cp x ./.gptr/sett*", "cp x .//.gptr//sett*", "tee .//.Renv* < x")) {
+    expect_identical(flags_level(risk_command(cmd, root)), 4L, label = cmd)
+  }
+  expect_identical(risk_glob_paths("/p/.//*", "delete"), risk_glob_paths("/p/./*", "delete"))
+  expect_identical(risk_glob_paths("a/*//b", "write"), risk_glob_paths("a/*/b", "write"))
+})
+
 # The arrow and magrittr's pipe are built, not typed: model code uses them, gptr's sources do not
 la = paste0("<", "-")
 mp = paste0("%", ">%")
