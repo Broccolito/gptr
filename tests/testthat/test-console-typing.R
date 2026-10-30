@@ -1521,17 +1521,21 @@ test_that("a terminal: a paste during an r call is one draft; no marker shows (F
   skip_on_cran()
   # processx ptys are Unix-only; a Windows console is class L, with no composer
   skip_on_os("windows")
+  # the fake answers the steer whichever request carries it: under load Enter is read before the
+  # run's step boundary (L-72)
   pty = local_pty_r(c(
     "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
     "        gptr.history = FALSE, cli.num_colors = 1L, cli.width = 60L)",
     "fake = gptr_fake_provider(function(req) {",
+    "  ops = Filter(function(m) identical(m$role, 'operator'), req$messages)",
+    "  if (length(ops)) {",
+    "    text = sub('^.*working: ', '', gptr:::msg_text(ops[[1L]]))",
+    "    return(paste0('REQ ', length(ops), ' [', gsub('\\n', '/', text), ']'))",
+    "  }",
     "  if (req$n == 1L) {",
     "    return(list(text = 'run', tool = 'r', input = list(code = 'Sys.sleep(3); zz = 1')))",
     "  }",
-    "  if (req$n == 2L) return(list(text = 'second', delay = 4))",
-    "  ops = Filter(function(m) identical(m$role, 'operator'), req$messages)",
-    "  text = sub('^.*working: ', '', gptr:::msg_text(ops[[1L]]))",
-    "  paste0('REQ ', length(ops), ' [', gsub('\\n', '/', text), ']')",
+    "  list(text = 'second', delay = 4)",
     "})",
     "invisible(peter(model = fake, mode = 'manual', envir = new.env()))"
   ), term = "xterm")
@@ -1572,14 +1576,16 @@ test_that("a terminal: after r code reads through readline a paste is one draft 
     "  x",
     "}",
     "fake = gptr_fake_provider(function(req) {",
+    "  ops = Filter(function(m) identical(m$role, 'operator'), req$messages)",
+    "  if (length(ops)) {",
+    "    text = sub('^.*working: ', '', gptr:::msg_text(ops[[1L]]))",
+    "    return(paste0('REQ ', length(ops), ' [', gsub('\\n', '/', text), ']'))",
+    "  }",
     "  if (req$n == 1L) return(list(text = 'run', tool = 'r', input = list(code = 'x = ask()')))",
     "  if (req$n == 2L) {",
     "    return(list(text = 'NAPPING', tool = 'r', input = list(code = 'Sys.sleep(3); zz = 1')))",
     "  }",
-    "  if (req$n == 3L) return(list(text = 'second', delay = 4))",
-    "  ops = Filter(function(m) identical(m$role, 'operator'), req$messages)",
-    "  text = sub('^.*working: ', '', gptr:::msg_text(ops[[1L]]))",
-    "  paste0('REQ ', length(ops), ' [', gsub('\\n', '/', text), ']')",
+    "  list(text = 'second', delay = 4)",
     "})",
     "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
   ), term = "xterm")
@@ -1770,9 +1776,10 @@ test_that("TERM=dumb: a line being typed at Ctrl-C is kept, never the menu's (vi
     "options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off',",
     "        gptr.history = TRUE)",
     "long = paste(c('BEGIN', sprintf('w%02d', 1:99), 'END'), collapse = ' ')",
-    "fake = gptr_fake_provider(function(req) list(text = long, chunk = 8L, gap = 0.1))",
+    "fake = gptr_fake_provider(function(req) list(text = long, chunk = 8L, gap = 0.5))",
     "invisible(peter(model = fake, mode = 'auto', envir = new.env()))"
   ), term = "dumb")
+  # a stream of about 25 s outlasts any reaction time; the abort ends it
   expect_true(pty$wait("peter[auto]> ", timeout = 120))
   pty$send("ONE\r")
   expect_true(pty$wait("BEGIN"))
