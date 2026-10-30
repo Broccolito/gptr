@@ -188,6 +188,7 @@ nested_literal = function(name, input) {
 #' ancestor (macOS /var -> /private/var), "." and ".." removed from the rest
 #' @noRd
 path_norm_one = function(path) {
+  path = fs_path(path)
   # "~" is expanded before backslashes become slashes, so the result has forward slashes whatever
   # user_home() returns (CI-5, D-111); "~name" is that user's home, as R's file functions expand it
   if (identical(path, "~") || grepl("^~[/\\\\]", path)) {
@@ -219,7 +220,7 @@ path_norm_one = function(path) {
   if (nchar(out) > 1L && endsWith(out, "/") && !grepl("^[A-Za-z]:/$", out)) {
     out = substr(out, 1L, nchar(out) - 1L)
   }
-  out
+  as_utf8(out)
 }
 
 #' Does the last component of each path end in an extension? (R 4.6's rule, without basename())

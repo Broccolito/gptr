@@ -227,6 +227,17 @@ test_that("path_ext() and path_sans_ext() follow R 4.6's rule without basename()
   expect_identical(Encoding(path_sans_ext("caf\u00e9.R")), "UTF-8")
 })
 
+test_that("path helpers take a UTF-8 name in a C locale (F-97)", {
+  root = path_norm(withr::local_tempdir())
+  here = file.path(root, "caf\u00e9 data.txt")
+  gone = file.path(root, "gone \u00e9", "x.txt")
+  writeLines("x", fs_path(here))
+  local_name_locale()
+  expect_true(all(path_inside(c(here, gone), root)))
+  expect_identical(path_rel(c(here, gone), root), c("caf\u00e9 data.txt", "gone \u00e9/x.txt"))
+  expect_identical(path_class(c(here, gone), root), rep("workspace", 2L))
+})
+
 test_that("path_key() lower-cases on Windows and macOS only (IC-51)", {
   local_mocked_bindings(is_windows = function() FALSE, is_macos = function() TRUE)
   expect_identical(path_key("/TMP/Foo"), tolower(path_norm("/TMP/Foo")))
