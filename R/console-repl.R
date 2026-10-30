@@ -626,12 +626,12 @@ console_blocks = function() {
 
 #' `!code` / `!!code`: the user's own R code in the REPL's environment
 #'
-#' The `input` event (source "passthrough") may handle or transform the code first. Errors are
-#' shown on stderr, red, in the console margin at column 4 with what the code printed (eval_echo());
-#' there a block that showed anything ends with a blank row, as a command's output does. `!code`
-#' leaves a note for the next prompt. The `console:direct` channel tells transcript writers (P15)
-#' what ran and the objects it created (the evaluator's diff, also of a line that failed). A
-#' gptr_wait() in the code waits through console_wait() (`.gptr_console_wait`).
+#' The `input` event (source "passthrough") may handle or transform the code first. The code's own
+#' output, messages and warnings print as R prints them; only an error, on stderr, red, at column 4,
+#' and the blank row that ends a block that showed anything, as a command's output does, use the
+#' console margin. `!code` leaves a note for the next prompt. The `console:direct` channel tells
+#' transcript writers (P15) what ran and the objects it created (the evaluator's diff, also of a
+#' line that failed). A gptr_wait() in the code waits through console_wait() (`.gptr_console_wait`).
 #' @noRd
 repl_passthrough = function(rs, text) {
   noted = !startsWith(text, "!!")
