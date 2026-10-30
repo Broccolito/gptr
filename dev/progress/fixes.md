@@ -10876,9 +10876,10 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
 - F-142 (medium; R6-CRAN-3, L-40; DEC-56, DEC-60, DEC-61): `cran-comments.md` was stale on every
   measured number. It now gives the CRAN-mode check of this head (local macOS,
   `R CMD check --as-cran` under `env -i` with `NOT_CRAN` unset and CRAN's timing thresholds: Status
-  OK with no NOTE in 144 s, `testthat.R` [20s/20s], FAIL 0 SKIP 954 PASS 3466, both manuals) and of
-  CI on `4cf922a4` (Ubuntu R-devel [33s/33s], its check 256 s of 480; Windows release 92 s, its
-  check 494 s of 600), "all but 12" of the R files (covr over the 35-file list at `f690afc7`), the
+  OK with no NOTE in 144 s, `testthat.R` [20s/20s], FAIL 0 SKIP 954 PASS 3466, both manuals;
+  FIX-51 sets `1cd31f4c`'s, 146 s and PASS 3497) and of CI on `4cf922a4` (Ubuntu R-devel
+  [33s/33s], its check 256 s of 480; Windows release 92 s, its check 494 s of 600), "all but 12"
+  of the R files (covr over the 35-file list at `f690afc7`), the
   installed size by platform (8.0 Mb on macOS, 7.7 Mb on Ubuntu R-devel, 7.6 Mb on Windows: R 5.7 to
   6.1 Mb, doc 1.3 to 1.4 Mb), R 4.2's NOTE with its job's 11.1 Mb (that job, like every full-suite
   job, keeps the package source, `R_KEEP_PKG_SOURCE=yes`), and the `gptr_coach` example's time
@@ -11296,14 +11297,16 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   blocking gptr call at top level (another `peter()`, `gptr_source()`, `gptr_wait()` or
   `gptr_step()` on another session) runs its tool calls, in auto R code and file writes
   (`probe-step.R`). The contract makes this the design, so the behaviour is kept: 04 section 6.5
-  has `gptr_step()` pump the reactor until its turns end, not hold the run after them; section
-  8.2's `reactor_pump()` row and section 15.5 IC-57 give a pump with `run_current()` NULL
-  `allow_runs = NULL`, every run's FIFO tools; section 7.21's `bg_register()` row has R tools of
-  background runs wait for the next blocking gptr call. Only an idle tick (`bg_tick()`) and a
-  System 1 or nested pump keep other runs' tools queued (a System 1 call left the stepped run's
-  tool queued in a scratch probe). `?gptr_step` says so in its details, and that `gptr_wait()`
-  finishes the run first and `gptr_cancel()` stops it. No new test: test-http-reactor.R holds
-  that a top-level pump runs any run's FIFO tools (IC-57).
+  has `gptr_step()` pump the reactor until its turns end and is silent on holding the run after
+  them, and the other sections keep it running: section 5.1 (the reactor holds a running session
+  until it settles), section 8.2's `reactor_pump()` row (with `run_current()` NULL, `allow_runs`
+  is NULL, every run's FIFO tools), section 7.21's `bg_register()` row (R tools of background
+  runs wait for the next blocking gptr call) and section 15.5 IC-57. Only an idle tick
+  (`bg_tick()`) and a nested pump keep other runs' tools queued: a System 1 call nested in an `r`
+  evaluation passes the ids it waits for, while a top-level one may pump them (a System 1 call
+  left the stepped run's tool queued in a scratch probe). `?gptr_step` says so in its details, and
+  that `gptr_wait()` finishes the run first and `gptr_cancel()` stops it. No new test:
+  test-http-reactor.R holds that a top-level pump runs any run's FIFO tools (IC-57).
 - L3 (low; `0d9a86db`): in a non-interactive R with no `gptr_doc()` binding and `record = "ask"`,
   `gptr_source(replay = "record")` ran its calls live, wrote no block and returned an empty table
   in silence (`probe-record.R`): `doc_keep()` drops a site that cannot get consent and said so
@@ -11332,3 +11335,49 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
   the tests, user state isolated as `isolated-check.R` does) FAIL 0 SKIP 0 PASS 2053 in both
   locales; `^(s1-emulate|cli-)`, where `"length"` also ends turns, FAIL 0 SKIP 1 PASS 1803.
 - Ledger rows: none (the findings came from the live run). Deviations: none. Open: none.
+
+## FIX-51 - ggsave()'s folder; records of FIX-49, FIX-50, CI-107, the live run (2026-10-30, #93)
+- Why (FIX-49's Open): `ggplot2::ggsave('p.png', p, path = d)` read 2 workspace for `'p.png'`,
+  with ggplot2 loaded or not, and writes into `d`: the gate under-read a write outside the project,
+  and a coaching run could write outside its scratch folder this way.
+- Fix `dc7dd505` (R/perm-classify.R, `inst/extdata/risk-functions.csv`, 04 section 11.15): the
+  ggsave row's path argument is `path/filename`. For a `folder/file` row `risk_path_exprs()` reads
+  the file argument as before and, when the call passes the folder argument, joins the two with
+  `file.path()`, which the classifier folds. So `path = '/elsewhere'` reads 3 outside
+  (`/elsewhere/p.png`), `path = d` unknown (the fence refuses it), `path = tempdir()` 1 temp,
+  `ggsave('settings.json', p, path = '.gptr')` 4 control, and `path = 'figs'` 2 workspace
+  (`figs/p.png`); a call without `path` reads its file as before. The fence reads the classifier's
+  flags and targets, so it needed no change. A row with no `/` is read as before.
+- Tests: test-perm-classify.R "ggsave() writes its file in its path folder, with ggplot2 loaded or
+  not (FIX-51)" (10 failures before the fix); test-gptr-child.R "the fence denies writes outside,
+  ..." gains `ggsave()` to a folder outside (deny) and to `sub` (allow), and "the fence refuses R
+  code that writes to a path or calls a function it computes" gains `path = d` (2 failures before
+  the fix, run against `dc7dd505` with the old classifier and row).
+- Records: IC-86 and 08 section 3.5 limit 4 say that the coaching fence refuses dynamic rows and
+  writes to unknown or computed paths (F-58, FIX-49), with F-58's residual as a documented limit
+  (`write.csv('a', file.path(d, 'x.csv'))` reads `'a'`, a workspace write, and passes); D-297's
+  F-58 rule is edited in place: landed in FIX-49, with that residual. `dev/HANDOFF.md` and
+  `dev/PROGRESS.md` name FIX-49, FIX-50 and FIX-51, CI-107's hosted runs (on `1cd31f4c` 17.8
+  minutes of wall clock for R-CMD-check.yaml and 14.0 for Windows-check.yaml, the slowest job macOS
+  shard 3 at 17.5, all 43 checks green; on `8c0d1d0a` all 43 green) and the live release run on
+  `1cd31f4c` (live-coach and live-cli 58 of 58, the 1143 s stream at the highest effort not cut,
+  sessions on three models, a replay with 0 requests, no secret in 306 scanned files), and the
+  Open and Remaining lists follow. FIX-50's L2 names the contract sections that keep a stepped run
+  running and the nested and top-level System 1 cases. `cran-comments.md` gives the CRAN-mode
+  check on `1cd31f4c` (Status OK, 0 errors, 0 warnings, 0 notes in 146 s at low load; the tests
+  FAIL 0 SKIP 954 PASS 3497 in about 20 s; installed size 8.0 to 8.1 Mb, R 6.1, doc 1.3), the
+  incoming check's one NOTE (the 404 of `articles/tailor-and-coach.html`, which resolves once
+  `main`'s pkgdown deploys) and the reverse dependencies queried on 2026-10-30 (none); HANDOFF's
+  and FIX-48's 3466 name 3497 beside it.
+- Checks (local macOS): `^(perm-|risk|gptr-child)`, 6 files, FAIL 0 SKIP 0 PASS 2799 in UTF-8 and
+  under `LC_ALL=C LANG=C`; the 2 changed test files against the installed package (`R CMD INSTALL`
+  into a scratch library, `testthat::test_dir(load_package = "installed")`, user state isolated as
+  `isolated-check.R` does) FAIL 0 SKIP 0 PASS 1694 in both locales; `lintr::lint()` of the changed
+  R and test files no lints; `testthat::test_dir("dev/release/tests")` FAIL 0 SKIP 0 PASS 300;
+  `spelling::spell_check_package()` "No spelling errors found."; `check-files.R all` and
+  `check-files.R cran-comments` 0 problems; `dev/ci/check-plans.py` passes (29 plans, 1444 blocks,
+  no error finding, info 839, warn 462; 770 R blocks with 0 problems; no lints).
+- Ledger rows closed: live-9 (its results do not include the Windows job with Codex, F-59, which
+  stays a release step); the F-58 row names FIX-51 and the residual. Deviations: D-297 edited in
+  place. Open: F-58's residual (documented, a design change for the maintainer: each row's path
+  position) and the rest of FIX-49's Open.

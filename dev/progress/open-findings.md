@@ -605,8 +605,10 @@ Rows the review of `f690afc7` and its fix pass add, each with its status.
   its working folder, through code with a computed path or name: the decided fence rule (DEC-24)
   refused writes to literal paths through `write.csv()` and its kin and was reverted (`d3bef645`).
   Status: fixed (F-58, FIX-49): the classifier reads the literal path, `d3bef645` is reverted, and
-  the fence refuses dynamic and unknown-path rows; FIX-49's Open lists what is left (a literal
-  option passed by position, `ggsave()`'s `path`).
+  the fence refuses dynamic and unknown-path rows; `ggsave()`'s `path` is read as the folder of the
+  write (FIX-51). Left, a documented limit (IC-86, 08 section 3.5 limit 4, D-297): where R cannot
+  place the path argument by position, a non-empty literal passed by position is read as the path,
+  so `write.csv('a', file.path(d, 'x.csv'))` passes the fence.
 - **F-6 residual** (low; n/a). `assign()` or `list2env()` rebinding a saved directory name inside a
   loop after `setwd(owd)` is read is seen in walk order only, so that `setwd(owd)` may read 3.
   Status: fixed (F-6 residual, FIX-49); a name the code computes for them stays open (FIX-49).
@@ -640,7 +642,11 @@ Rows the review of `f690afc7` and its fix pass add, each with its status.
 - **live-9** (step; n/a). This pass changed the fence, the Codex hook and the transport, so
   live-coach and live-cli run again (records-4), with one live request at the highest reasoning
   effort for the 90 s idle timeout (F-132, DEC-41) and the Windows job once on a host with Codex for
-  the hook (F-59, DEC-27). Status: open, a release step (Remaining, step 3).
+  the hook (F-59, DEC-27). Status: closed (the live release run on `1cd31f4c`, which included the
+  F-58 fence): live-coach and live-cli 58 of 58, the stream at the highest reasoning effort (1143 s)
+  not cut by the idle timeout, sessions on three models, a replay with 0 requests, and no secret in
+  the 306 files scanned; its four findings are FIX-50. Its results do not include the Windows job
+  with Codex (F-59), which stays a release step (D-297, HANDOFF's Remaining, step 3).
 - **ack-1** (nit; no). Internal error texts in `R/proc-spawn.R` and `R/http-reactor.R` still say
   "acknowledgement", which tests match; not user documentation, and the spell check is clean.
   Status: fixed (ack-1, FIX-49): they say "acknowledgment".

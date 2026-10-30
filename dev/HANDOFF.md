@@ -7,9 +7,10 @@ and adds CI-103 and the follow-ups that the PR's checks found. PR #90 adds CI-10
 through six review rounds, CI-105 (contributor PR #92), FIX-35 and FIX-36, then P29 (`gptr_tailor()`
 and `gptr_coach()`: plan `plan/P29-gptr-coach.md`, log `progress/P29.md`, contract IC-83..IC-89,
 D-273..D-290), merged into #93, the comprehensive review and fix pass (FIX-37..FIX-48, CI-106,
-D-291..D-300) and CI-107. Each has its record in `progress/fixes.md`, in id order, and decisions
-D-255, D-257, D-258, D-261 and D-262..D-300 and the amendments of D-188, D-211, D-233, D-239, D-243,
-D-244, D-245, D-251, D-254, D-262, D-284 and D-289 are in `DEVIATIONS.md`:
+D-291..D-300), CI-107, FIX-49 (the last fix lanes), the live release run with FIX-50, and FIX-51.
+Each has its record in `progress/fixes.md`, in id order, and decisions D-255, D-257, D-258, D-261
+and D-262..D-300 and the amendments of D-188, D-211, D-233, D-239, D-243, D-244, D-245, D-251,
+D-254, D-262, D-284 and D-289 are in `DEVIATIONS.md`:
 
 - CI-99 (test only): `tests/testthat/setup.R` blanks every host variable that `is_secret_name()`
   accepts, in place of a fixed list of 23, so a host secret such as `CLAUDE_CODE_MESSAGING_TOKEN`
@@ -226,14 +227,34 @@ D-244, D-245, D-251, D-254, D-262, D-284 and D-289 are in `DEVIATIONS.md`:
   merging and plugin ranks (FIX-44, D-299); providers (FIX-46); documents (FIX-40); the console
   (FIX-39, D-296); the cheat sheet, guides, README and NEWS (FIX-47); the CI lanes' time and test
   timing bounds (CI-106); the records and the regeneration (FIX-48; D-300 records the decisions
-  taken without code). F-58, the fence rule for computed paths and functions, is held back (D-297).
-- CI-107 (not yet run on GitHub): every job of `R-CMD-check.yaml` and `Windows-check.yaml` has 20
-  minutes, a gate 5. The whole offline suite runs only in gated shards (Ubuntu `LC_ALL=C` 4, macOS
-  5, the connection gate 9, Windows release 10); `ubuntu-latest (release)` gates the connection
+  taken without code). F-58, the fence rule for computed paths and functions, was held back
+  (D-297) and landed in FIX-49.
+- CI-107: every job of `R-CMD-check.yaml` and `Windows-check.yaml` has 20 minutes, a gate 5. The
+  whole offline suite runs only in gated shards (Ubuntu `LC_ALL=C` 4, macOS 5, the connection gate
+  9, Windows release 10); `ubuntu-latest (release)` gates the connection
   shards and `ubuntu-latest (devel)` the CRAN-mode R-devel job, which, like copy-safety, installs
   no Suggests, so a cold R-devel cache no longer builds duckdb for an hour; the other rows check
   with CRAN's test list. About 380 job-minutes, against 570, and about 20 minutes of wall clock,
-  estimated (D-239 amended).
+  estimated (D-239 amended). Its first hosted run, on `1cd31f4c`, took 17.8 minutes of wall clock
+  for `R-CMD-check.yaml` and 14.0 for `Windows-check.yaml`, the slowest job macOS shard 3 at 17.5,
+  all 43 checks green; on `8c0d1d0a` all 43 are green too.
+- FIX-49, the last fix lanes (copy, fence, ckpt, merged with CI-107's lane as `aaf09eb5`): an
+  inline function forwarded through a wrapper, also from a call made off the call stack, and a
+  worker's shipped objects are no longer copied on the next edit (copy-1, copy-2); F-58: the
+  classifier reads the literal path of `write.csv()` and its kin, and the coaching fence refuses
+  dynamic rows and writes to unknown or computed paths (D-297); a doubled slash in a glob word
+  (glob-1), `assign()` and `list2env()` in loops (F-6 residual), the checkpoint baseline's classing
+  cost (F-80) and the spelling of three error texts (ack-1).
+- The live release run on `1cd31f4c` (ledger live-9, with the F-58 fence): live-coach and live-cli
+  58 of 58, the stream at the highest reasoning effort (1143 s) not cut by the 90 s idle timeout
+  (F-132), sessions on three models, a replay with 0 requests, and no secret in the 306 files
+  scanned. Its four findings are FIX-50: the coaching record and projection count cache tokens
+  (L1); `?gptr_step` says that a stepped session's run goes on in later blocking gptr calls, the
+  contract's design (L2); `replay = "record"` without write consent says that nothing was recorded
+  (L3); a turn cut at the output limit gives a notice (L4).
+- FIX-51: the classifier reads `ggplot2::ggsave()`'s `path` as the folder of the write, so a plot
+  saved outside the project reads as such and a coaching run can no longer write outside its
+  scratch folder that way; the records follow FIX-49, FIX-50, CI-107 and the live run.
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
@@ -322,9 +343,16 @@ On `claude/v1-fixes`, locally on macOS, with `NOT_CRAN=true`, the SIGINT reset a
   Windows-check.yaml run 41080141232, every job, the CRAN-mode checks in 256 s (Ubuntu R-devel, 480
   s budget) and 494 s (Windows release, 600 s); locally `R CMD check --as-cran` in CRAN mode under
   `env -i` on a `git archive` of the head (`ddd84502`, the code of `4cf922a4`), Status OK with no
-  NOTE in 144 s, the tests [20s/20s] (FAIL 0 SKIP 954 PASS 3466), both manuals, installed size 8.0
-  Mb; `check-docs.R`, `check-files.R all` and `check-examples.R` (61 pages) 0 problems; FIX-48 has
-  the rest. Each lane's red and green runs are in its FIX entry.
+  NOTE in 144 s, the tests [20s/20s] (FAIL 0 SKIP 954 PASS 3466; PASS 3497 on `1cd31f4c`, next),
+  both manuals, installed size 8.0 Mb; `check-docs.R`, `check-files.R all` and `check-examples.R`
+  (61 pages) 0 problems; FIX-48 has the rest. Each lane's red and green runs are in its FIX entry.
+- FIX-49 and CI-107, on `1cd31f4c`: CI green, all 43 checks; locally the CRAN-mode
+  `R CMD check --as-cran` Status OK, 0 errors, 0 warnings, 0 notes in 146 s at low load, the tests
+  FAIL 0 SKIP 954 PASS 3497 in about 20 s, installed size 8.0 to 8.1 Mb (R 6.1, doc 1.3); the
+  incoming check's only NOTE is the 404 of
+  `https://broccolito.github.io/gptr/articles/tailor-and-coach.html`, which resolves once `main`'s
+  pkgdown deploys; reverse dependencies none (queried 2026-10-30). FIX-50 and FIX-51 have their
+  own checks; CI on `8c0d1d0a` (FIX-50) is green, all 43 checks.
 
 For PR #88, on the merged code `556acb00`, locally on macOS:
 
@@ -362,27 +390,27 @@ and its man pages, the cheat sheet, NEWS, vignettes, `inst/WORDLIST` and `dev/`,
 Open (found, not fixed). Every finding still open is a row of `progress/open-findings.md` with its
 status: the comprehensive fix pass closed 32 rows and added 16. In short:
 
-- F-58: in auto a coaching run can write outside its folder or move its working folder through code
-  with a computed path or name; the decided fence rule refused writes to literal paths and is
-  reverted until a gate item fixes the classifier (D-297).
-- Copy-safety: an inline function forwarded through a wrapper of `peter()` or a harness keeps the
-  wrapper's frame, and `worker_ship_objects()`'s `mget()` keeps the caller's objects referenced, so
-  both copy them on the next edit (ledger copy-1, copy-2).
+- F-58's residual: where R cannot place the path argument by position, a non-empty literal passed
+  by position is read as the path, so `write.csv('a', file.path(d, 'x.csv'))` passes the coaching
+  fence, a documented limit (IC-86, 08 section 3.5 limit 4, D-297). The rest of FIX-49's Open: the
+  fence also refuses ordinary computed-function forms such as `Filter(Negate(is.null), l)`, and
+  `assign()` or `list2env()` with a computed name is not followed.
+- Copy-safety: an inline function written in a function frame that also binds the object still
+  copies it on the next edit, as R's lexical scoping requires (FIX-49).
 - The classifier's documented limits (L-3's and L-4's rest, L-62) and accepted costs (L-63, L-6,
-  L-7), F-6's residual in loops, and the gate writer's unrecorded note on `risk_glob_paths()`
-  (glob-1).
+  L-7); F-6's residual in loops and glob-1 are fixed (FIX-49).
 - P29: a run that leaves very many large objects can still pass 64 MiB after the fallback and is
   refused; a positional `wd` of a direct R call and code the classifier cannot read stay outside the
   fence (08 honest limit 1); coaching spend inside a run is not in the session file (F-64); P29h is
   not built (deferred, D-300).
 - The console's paste and terminal limits (L-9..L-17, L-65), the transcripts' (L-18..L-25, V6T-3,
   R6-REG-2), the Windows stdin writer (L-41, L-42), L-44, L-45, L-49, L-66 (the prefix gate's one
-  token), the checkpoint baseline's classing cost, agent-9 and runtime-10.
+  token), agent-9 and runtime-10 (the checkpoint baseline's classing cost is fixed, FIX-49).
 - Gaps: Windows, Linux, R 4.2 and R-devel only through CI; the forms and consoles L-37 names; narrow
   live evidence (L-38); no aspell here (L-39).
-- CI: CI-107's layout has not run on GitHub; its first run confirms the estimates, macOS's heaviest
-  shard (about 17 minutes) and a gate's reading of a partial re-run; deadline bounds of
-  test-proc-rscript-native.R fail at loads of 300 to 400 (wall-1).
+- CI: CI-107's layout is green on GitHub (macOS shard 3 at 17.5 of its 20 minutes); a gate's
+  reading of a partial re-run is still to be seen; deadline bounds of test-proc-rscript-native.R
+  fail at loads of 300 to 400 (wall-1).
 - The maintainer's: PERM-4 (Codex's own shell in the read-only modes) and PV-4 (b): CLAUDE.md and
   AGENTS.md lines 3 and 30, whose text the ledger row prepares (DEC-57).
 
@@ -390,11 +418,10 @@ Remaining, in this order (F-156, DEC-59):
 
 1. On the final head: `dev/ci/isolated-check.R check`, the CRAN-mode `R CMD check --as-cran` under
    `env -i` and the full suite (L-27).
-2. Push, read every job until green, then rewrite PR #93's title and body to cover FIX-27..FIX-48,
-   CI-106, CI-107, P29, D-262..D-300 and the checks (L-28).
-3. Run `GPTR_LIVE_TESTS` live-coach and live-cli again, since this pass changed the fence, the hook
-   and the transport; one live request at the highest reasoning effort for the 90 s idle timeout
-   (F-132); the Windows job once on a host with Codex for the hook (F-59) (ledger live-9).
+2. Push, read every job until green, then rewrite PR #93's title and body to cover FIX-27..FIX-51,
+   CI-106, CI-107, P29, D-262..D-300, the live run and the checks (L-28).
+3. The Windows job once on a host with Codex for the hook (F-59, D-297); live-coach, live-cli and
+   the request at the highest reasoning effort (F-132) ran on `1cd31f4c` (ledger live-9, closed).
 4. Merge #93, wait for the pkgdown deploy, confirm that `articles/tailor-and-coach.html` returns 200
    (the README links it), then run the incoming check with remote URLs, win-builder and R-hub on the
    final tarball and set `cran-comments.md`'s hosted results and reverse-dependency date
