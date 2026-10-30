@@ -908,13 +908,14 @@ test_that("a rewind makes abandoned blocks inert and notes it in the console tra
                                      block = "def456", action = "insert",
                                      backend = "transcript")))
   from = session_data(s)$leaf
-  # every item gptr_rewind() counts as not restored (review round 3)
-  rep = c("restored x", "y not restored", "object fit2: not redone (it was not undone)",
+  # every item gptr_rewind() counts as not restored, by its action (review round 3, F-96)
+  rep = c("object x: restored", "file failed_x.txt: removed",
+          "object y: not restored (no stored copy)", "object fit2: not redone (it was not undone)",
           "checkpointer z: failed (boom)")
   doc_on_session_tree(list(from = from, to = root, report = rep), list(session = s))
   expect_identical(readLines(f)[3], "#~ x = 1")
   expect_identical(utils::tail(readLines(t), 1),
-                   "# /rewind: 1 item restored or removed, 3 not restored")
+                   "# /rewind: 2 items restored or removed, 3 not restored")
   ents = session_data(s)$entries
   expect_identical(ents[[length(ents)]]$data$action, "undone")
 })

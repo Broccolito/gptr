@@ -1284,7 +1284,7 @@ doc_on_session_tree = function(event, ctx) {
   mark(gone[!key(gone) %in% key(pick(to))], TRUE)
   mark(pick(setdiff(to, from)), FALSE)
   rep = as.character(event$report %||% character())
-  bad = sum(grepl("not restored|not redone|conflict|failed", rep))
+  bad = sum(grepl(": (not |conflict|failed)", rep))
   n = length(rep) - bad
   # a console line (doc_re_entry), so it ends a direct R line's section
   note = paste0("# /rewind: ", n, if (n == 1L) " item" else " items", " restored or removed, ",
