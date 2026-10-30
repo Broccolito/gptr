@@ -42,6 +42,27 @@ test_that("plain data round-trips exactly (08 section 3.3)", {
   expect_null(plain_rt(NULL))
 })
 
+test_that("a value the reader cannot rebuild exactly travels as its summary, never refused", {
+  latin = "caf\xe9"
+  Encoding(latin) = "latin1"
+  bytes = "caf\xc3\xa9"
+  Encoding(bytes) = "bytes"
+  exact = list(latin = latin, now = .POSIXct(1.5e9), utc = .POSIXct(1.5e9, tz = "UTC"),
+               df = data.frame(a = 1:3), named = c(a = 1, b = 2))
+  for (k in names(exact)) expect_identical(plain_rt(exact[[k]]), exact[[k]], label = k)
+  shown = list(na_level = addNA(factor(c("a", NA))), ordered = factor("a", ordered = TRUE),
+               bytes = bytes, native = rawToChar(as.raw(c(0x61, 0xff))),
+               dimnames = matrix(1:4, 2L, dimnames = list(c("a", "b"), NULL)),
+               rownames = mtcars[1:2, 1:2], subset = data.frame(a = 1:3)[2:3, , drop = FALSE],
+               na_name = stats::setNames(1:2, c("a", NA)),
+               bad_name = stats::setNames(list(1), rawToChar(as.raw(0xff))))
+  path = withr::local_tempfile(fileext = ".json")
+  writeLines(json_encode(plain_encode(child_result_new("a", status = "idle", objects = shown))),
+             path)
+  res = child_read(path)
+  for (k in names(shown)) expect_match(res$objects[[k]], "^<", label = k)
+})
+
 test_that("closures, environments, S4 and other classes travel as printed summaries", {
   x = list(f = function(x) x + 1, e = new.env(), s4 = methods::getClass("numeric"),
            fit = stats::lm(mpg ~ wt, data = mtcars), dt = as.difftime(1, units = "secs"))

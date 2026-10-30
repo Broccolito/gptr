@@ -15,9 +15,10 @@ plain_max = list(depth = 20L, len = 1e6, nodes = 1e5, summary = 2000L, bytes = 6
 
 #' A value as plain JSON-ready data (08 section 3.3): `{type, len, data, na, names, dim, levels,
 #' tz, nrow}`. Numbers are base64 of little-endian writeBin(), so they stay exact (NA, NaN, -0);
-#' anything else, or a value nested or sized beyond plain_max, is its printed summary. Depth and
-#' values count from the first call, as plain_decode() counts them: a value may use `max` values
-#' less one for each later sibling, so a list of many values ends in summaries.
+#' anything else, a value these keys do not rebuild exactly (plain_exact()), or a value nested or
+#' sized beyond plain_max, is its printed summary. Depth and values count from the first call, as
+#' plain_decode() counts them: a value may use `max` values less one for each later sibling, so a
+#' list of many values ends in summaries.
 #' @noRd
 plain_encode = function(x, depth = 0L, max = plain_max$nodes,
                         seen = new.env(parent = emptyenv())) {
@@ -33,6 +34,7 @@ plain_encode = function(x, depth = 0L, max = plain_max$nodes,
         MoreArgs = list(depth = depth + 1L, seen = seen))
   }
   if (is.data.frame(x)) {
+    if (!plain_exact(x, "data.frame")) return(plain_summary(x))
     cols = each(unclass(x))
     if (any(vapply(cols, function(c) identical(c$type, "summary"), NA))) {
       seen$n = n0 + 1L
@@ -48,17 +50,33 @@ plain_encode = function(x, depth = 0L, max = plain_max$nodes,
   } else if (is.double(x) && (inherits(x, "Date") || inherits(x, "POSIXct"))) {
     if (inherits(x, "Date")) "Date" else "POSIXct"
   }
-  if (!length(type)) return(plain_summary(x))
+  if (!length(type) || !plain_exact(x, type)) return(plain_summary(x))
   out = list(type = type, len = length(x), data = switch(type,
     character = I(replace(as.character(x), is.na(x), "")),
     list = each(x),
     plain_bin(if (is.double(x)) as.double(x) else as.integer(x))))
   if (type == "character" && anyNA(x)) out$na = I(which(is.na(as.character(x))))
-  if (!is.null(names(x))) out$names = I(replace(names(x), is.na(names(x)), ""))
+  if (!is.null(names(x))) out$names = I(names(x))
   if (!is.null(dim(x))) out$dim = I(dim(x))
   if (type == "factor") out$levels = I(levels(x))
-  if (type == "POSIXct") out$tz = c(as.character(attr(x, "tzone")), "")[[1L]]
+  if (type == "POSIXct") out$tz = attr(x, "tzone")
   out
+}
+
+#' Do the plain keys rebuild a value of `type` exactly? Not with dimnames, an ordered factor's
+#' class, a data frame's own row names or more than one time zone, nor with NA names or levels,
+#' or text that is neither latin1 nor valid UTF-8 (text marked as bytes included)
+#' @noRd
+plain_exact = function(x, type) {
+  text = function(s) {
+    !anyNA(s) && all(Encoding(s) == "latin1" | (Encoding(s) != "bytes" & validUTF8(s)))
+  }
+  text(names(x) %||% character()) && switch(type,
+    data.frame = .row_names_info(x) <= 0L,
+    is.null(dimnames(x)) && (is.null(attr(x, "tzone")) || rlang::is_string(attr(x, "tzone"))) &&
+      (type != "character" || text(x[!is.na(x)])) &&
+      (type != "factor" || (identical(oldClass(x), "factor") && text(levels(x)) &&
+                              !anyDuplicated(levels(x)))))
 }
 
 #' Little-endian bytes of an integer or double vector, as base64
@@ -177,7 +195,7 @@ plain_numbers = function(node, type, len) {
       structure(v, levels = lv, class = "factor")
     },
     Date = structure(v, class = "Date"),
-    POSIXct = .POSIXct(v, tz = plain_chr(node$tz %||% "", 1L)),
+    POSIXct = .POSIXct(v, tz = if (!is.null(node$tz)) plain_chr(node$tz, 1L)),
     v)
 }
 
