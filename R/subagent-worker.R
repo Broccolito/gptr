@@ -409,13 +409,8 @@ worker_ship_objects = function(names, base) {
 worker_spec_values = function(w, home) {
   w$objects = worker_ship_objects(w$object_names, home)
   if (!length(w$objects)) return(w)
-  bytes = serialize(w$objects, NULL, ascii = FALSE, refhook = worker_refhook)
-  for (e in secrets_state()$reg) {
-    v = get(e$id, envir = vault_env(), inherits = FALSE)
-    if (isTRUE(e$redact) && length(grepRaw(charToRaw(v), bytes, fixed = TRUE))) {
-      w$secrets = c(w$secrets, list(list(name = e$name, value = v)))
-    }
-  }
+  w$secrets = secrets_held(list(serialize(w$objects, NULL, ascii = FALSE,
+                                          refhook = worker_refhook)))
   w
 }
 

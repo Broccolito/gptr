@@ -254,6 +254,20 @@ secret_register = function(value, name, source = "user", active = TRUE, origin =
   structure(list(id = id, name = name, fp = fp, origin = entry$origin), class = "gptr_secret")
 }
 
+#' The registered secrets that redact and whose values occur in one of `bytes`, raw vectors of
+#' the data a child process is sent, as `list(name, value)`: the child registers them inactive,
+#' so it redacts them too, and no other key travels (D-295, IC-70)
+#' @noRd
+secrets_held = function(bytes) {
+  out = list()
+  for (e in secrets_state()$reg) {
+    v = get(e$id, envir = vault_env(), inherits = FALSE)
+    held = vapply(bytes, function(b) length(grepRaw(charToRaw(v), b, fixed = TRUE)) > 0L, NA)
+    if (isTRUE(e$redact) && any(held)) out = c(out, list(list(name = e$name, value = v)))
+  }
+  out
+}
+
 #' Run several registrations and emit one aggregated secret_registered event
 #' @noRd
 secret_register_batch = function(source, fun) {

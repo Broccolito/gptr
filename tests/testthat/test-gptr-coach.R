@@ -763,6 +763,20 @@ test_that("the demo in real processes, at most two at once, leaves no child behi
   expect_false(any(jobs$kind == "worker"))
 })
 
+# Only the registered secrets that a child's jobs hold travel, as for a worker: a spec file
+# carries no other key (D-295, IC-70)
+test_that("a coaching child is sent only the registered secrets its jobs hold (D-295, IC-70)", {
+  local_vault()
+  key = "sk-coachfake-0123456789abcdef"
+  secret_register(key, "COACH_FAKE_KEY")
+  secret_register("sk-otherfake-0123456789abcdef", "OTHER_FAKE_KEY")
+  f = withr::local_tempfile(fileext = ".rds")
+  save_rds(list(cfg = list(token = key)), f)
+  run = list(id = "start1", role = "run", prompt = "Show cfg.", file = f)
+  expect_identical(child_secrets(list(run)), list(list(name = "COACH_FAKE_KEY", value = key)))
+  expect_identical(child_secrets(list(list(id = "c1", role = "coach", prompt = "x"))), list())
+})
+
 test_that("a registered secret in a run's objects reaches its child's model redacted (D-295)", {
   local_worker_lib()
   local_project()

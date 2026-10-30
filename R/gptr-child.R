@@ -211,8 +211,8 @@ plain_numbers = function(node, type, len) {
 #' safe reading of the run's report); a coach's `surface`, `base` and `rules_allowed` are read by
 #' coach_child_reply(). Children run on the worker pool, at most two at once per plan account;
 #' once a plan reports its limit, its later jobs are not started (status `skipped`). Each child
-#' registers this R session's secrets, so it redacts them. Interrupting this call kills every
-#' child.
+#' registers this R session's secrets that the jobs hold, so it redacts them (child_secrets()).
+#' Interrupting this call kills every child.
 #' @param jobs A list of jobs.
 #' @return One plain-data result per job, in order: `list(id, status, reason, text, turns,
 #'   usage, value, objects, transcript, risk, refusals, unmet, files, plan, limit, checks,
@@ -226,11 +226,12 @@ coach_run_jobs = function(jobs) {
   ctx$kinds = vapply(jobs, function(j) coach_model_kind(j$model), "")
   ctx$out = vector("list", length(jobs))
   ctx$limits = list()
-  ctx$base = list(options = child_options(), parent = proc_self(), secrets = child_secrets())
+  ctx$base = list(options = child_options(), parent = proc_self())
   if (any(vapply(jobs, function(j) identical(j$role, "run"), NA))) {
     ctx$run = list(registry = worker_registry(character()), rules = child_rules(),
                    instructions = child_instructions())
   }
+  ctx$base$secrets = child_secrets(jobs, ctx$run)
   items = lapply(child_lanes(ctx$kinds), function(ix) {
     force(ix)
     list(pool = "worker", start = function() child_lane(ctx, ix))
@@ -520,14 +521,14 @@ child_options = function() {
   c(opts, list(gptr.replay = replay_mode()))
 }
 
-#' The registered secrets that redact, which a child registers before it runs, so it redacts them
-#' in the objects it was sent and in all it writes or sends (D-295)
+#' The registered secrets that the jobs and the run data `...` hold, their objects files included,
+#' which a child registers inactive before it runs, so it redacts them in what it was sent and in
+#' all it writes or sends; no other key travels, as for a worker (D-295, IC-70)
 #' @noRd
-child_secrets = function() {
-  lapply(unname(Filter(function(e) isTRUE(e$redact), secrets_state()$reg)), function(e) {
-    c(e[c("name", "source", "active", "origin")],
-      list(value = get(e$id, envir = vault_env(), inherits = FALSE)))
-  })
+child_secrets = function(jobs, ...) {
+  files = unique(unlist(lapply(jobs, function(j) j$file)))
+  secrets_held(c(list(serialize(list(jobs, ...), NULL, ascii = FALSE, refhook = worker_refhook)),
+                 lapply(files, function(f) readBin(f, "raw", file.size(f)))))
 }
 
 #' The provider record a model reference names, sent to a coach's child when the person
@@ -579,7 +580,7 @@ child_main = function(spec_path, result_path, out = NULL) {
   the$rules_session = p$rules
   the$coach_role = if (run) "run" else "coach"
   the$model_gate = coach_model_kind
-  for (sec in p$secrets) secret_register(sec$value, sec$name, sec$source, sec$active, sec$origin)
+  for (sec in p$secrets) secret_register(sec$value, sec$name, source = "parent", active = FALSE)
   cs = new.env(parent = emptyenv())
   cs$out = out %||% tryCatch(processx::conn_create_fd(1L, close = FALSE),
                              error = function(e) stdout())
