@@ -514,7 +514,9 @@ test_that("compaction event fixtures remove every hook on return and error", {
 
 # Added (FIX-37, F-91, D-298): after a threshold compaction the next one waits for 20% of the
 # threshold, not of the window, so compact_at = 20000 on a 1e6-token window compacts again near
-# 1.2 x 20000 tokens (it used to wait for 20% of the window, about 200k tokens more).
+# 1.2 x 20000 tokens (it used to wait for 20% of the window, about 200k tokens more, which 30
+# turns of about 5k tokens do not reach). The turn of each compaction depends on the size of the
+# system prompt, which differs with the packages installed, so the test runs until the second.
 test_that("compact_at bounds the context after the first compaction on a large window", {
   skip_on_cran()
   local_project()
@@ -530,7 +532,11 @@ test_that("compact_at bounds the context after the first compaction on a large w
   off = gptr_register(fake)
   withr::defer(off())
   s = peter("turn 1", model = "bigwin/bigwin-1", mode = "auto", envir = new.env())
-  for (i in 2:10) s = peter(s, paste("turn", i))
+  i = 1L
+  while (length(compaction_entries(s)) < 2L && i < 30L) {
+    i = i + 1L
+    s = peter(s, paste("turn", i))
+  }
   before = vapply(compaction_entries(s), function(e) as.numeric(e$tokens_before), 0)
   expect_length(before, 2L)
   expect_true(all(before < 1.3 * 20000))
