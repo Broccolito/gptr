@@ -16,6 +16,7 @@ gptr_*.tar.gz
 
 /dev/.library/
 /dev/.validation/
+__pycache__/
 /tmp/
 /local-materials/
 /dev/research/10-cli-login-status.md
