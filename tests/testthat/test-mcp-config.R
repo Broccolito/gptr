@@ -328,6 +328,20 @@ test_that("foreign servers that differ only in env, headers or cwd stay apart (F
   expect_length(unique(vapply(specs[nm], mcp_cache_key, "")), 6L)
 })
 
+test_that("an empty env or headers object is the same server as none (F-109)", {
+  home = local_mcp_home()
+  local_project()
+  write_atomic(file.path(home, ".claude.json"), paste0('{"mcpServers": {',
+    '"a": {"command": "x", "args": [], "env": {}},',
+    '"h": {"type": "http", "url": "https://mcp.example.org/mcp", "headers": {}}}}'))
+  write_json_file(file.path(home, ".cursor", "mcp.json"), list(mcpServers = list(
+    a = list(command = "x"), h = list(url = "https://mcp.example.org/mcp"))))
+  specs = mcp_config_all()
+  expect_setequal(names(specs), c("a", "h"))
+  expect_identical(specs$a$also_in, "cursor:user")
+  expect_identical(specs$h$also_in, "cursor:user")
+})
+
 test_that("colliding foreign names are made unique; no entry is lost (F-110)", {
   home = local_mcp_home()
   proj = local_project()

@@ -517,7 +517,10 @@ mcp_config_all = function(project = project_root()) {
     }
   }
   ids = c("transport", "command", "args", "url", "env", "headers", "cwd")
-  fp = vapply(all, function(s) canonical_json(lapply(s[intersect(ids, names(s))], as.list)), "")
+  fp = vapply(all, function(s) {
+    x = s[intersect(ids, names(s))]
+    canonical_json(lapply(x[lengths(x) > 0L], as.list))
+  }, "")
   keep = list()
   seen_fp = character()
   seen_name = character()
