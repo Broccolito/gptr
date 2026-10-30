@@ -454,6 +454,19 @@ test_that("a value without a label R can use is bound under a name of its own", 
   expect_match(res$first_user, "<attached name=\"..2\">", fixed = TRUE)
 })
 
+test_that("two objects under one label are bound under two names", {
+  skip_on_cran()
+  local_project()
+  expect_identical(child_bind(c("a", "a", "Xa")), c("a", "Xa.1", "Xa"))
+  # gptr_coach("Add them.", x, x = y) labels both objects `x`
+  fake = gptr_fake_provider(list(fake_tool("r", code = "s = c(x, Xx)"), "done"), name = "twofake")
+  res = child_local(list(id = "d", role = "run", prompt = "Add them.",
+                         objects = list(x = 1, x = 2), args = list(mode = "auto"),
+                         model = fake))$res
+  expect_identical(res$status, "idle")
+  expect_identical(res$objects, list(s = c(1, 2)))
+})
+
 test_that("a run's result holds its first user message on its own", {
   skip_on_cran()
   local_project()

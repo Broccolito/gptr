@@ -626,12 +626,12 @@ child_main = function(spec_path, result_path, out = NULL) {
 }
 
 #' The names a job's objects are bound under in its child: their labels, but a label R cannot
-#' use as a symbol (`..2`, which do.call() gives a value, `...` or "") gets a name of its own;
-#' child_call() passes such an object under its label
+#' use as a symbol (`..2`, which do.call() gives a value, `...` or "") or one an earlier object
+#' has gets a name of its own; child_call() passes such an object under its label
 #' @noRd
 child_bind = function(labels) {
   labels = labels %||% character()
-  bad = grepl("^([.][.]([.]|[0-9]+))?$", labels)
+  bad = grepl("^([.][.]([.]|[0-9]+))?$", labels) | duplicated(labels)
   labels[bad] = utils::tail(make.unique(c(labels, paste0("X", labels[bad]))), sum(bad))
   labels
 }
