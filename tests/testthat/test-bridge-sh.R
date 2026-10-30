@@ -221,6 +221,15 @@ test_that("stderr stays separate, exits are reported and check = TRUE raises", {
                class = "gptr_error_invalid_argument")
 })
 
+test_that("peter$sh() output past 64 MiB ends with the status line", {
+  skip_on_cran()
+  x = bridge_sh(r_cmd("x = strrep(paste0(strrep('a', 99), '\\n'), 1e5); for (i in 1:20) cat(x)"),
+                merge = TRUE)
+  expect_lte(nchar(x$stdout, type = "bytes"), 64 * 1024^2 + 100)
+  view = bridge_cmd_view(x)
+  expect_true("[output exceeded 64 MB; process tree killed]" %in% view)
+})
+
 test_that("input reaches stdin as lines, as CSV or as bytes; env sets variables", {
   skip_on_cran()
   x = bridge_sh(r_cmd("cat(rev(readLines(file('stdin'))), sep = '\\n')"), input = c("a", "b", "c"))

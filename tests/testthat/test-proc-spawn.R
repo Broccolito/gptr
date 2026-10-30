@@ -170,6 +170,22 @@ test_that("proc_run() passes a 2 MB stdin payload complete and enforces its time
   expect_lt(slow$elapsed, 10)
 })
 
+test_that("proc_run() output past 64 MiB keeps its head and tail and a status line", {
+  skip_on_cran()
+  code = "x = strrep(paste0(strrep('a', 99), '\\n'), 1e5); cat('first\\n'); for (i in 1:20) cat(x)"
+  res = proc_run(rscript_path(), c("--vanilla", "-e", code), timeout = 60)
+  expect_false(res$timed_out)
+  expect_lte(nchar(res$stdout, type = "bytes"), 64 * 1024^2 + 100)
+  expect_true(startsWith(res$stdout, "first\naaa"))
+  expect_true(endsWith(res$stdout, "a\n[output exceeded 64 MB; process tree killed]\n"))
+  # cut inside characters and before a partial one, the text stays UTF-8
+  f = withr::local_tempfile()
+  writeBin(c(charToRaw(strrep("日", 24e6)), as.raw(0xe6)), f)
+  text = proc_read_text(f)
+  expect_true(startsWith(text, "日日"))
+  expect_true(endsWith(text, "日日\n[output exceeded 64 MB; process tree killed]\n"))
+})
+
 test_that("line_reader() returns complete lines and the final unterminated line at EOF", {
   skip_on_cran()
   # "a" CRLF "b" LF "c" on the pipe (on Windows "b" also ends with CRLF: text-mode stdout)
