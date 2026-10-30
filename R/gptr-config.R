@@ -1670,11 +1670,12 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `check = TRUE` or `check_login = TRUE` contacts the providers or starts the `claude` and
 #' `codex` status commands. In every mode
 #' `r` code that calls `q()`, `readline()` or another function that would end, pause or hang your R
-#' session is refused without a question. In `auto` and `yolo` mode a `system()` or `system2()`
-#' call (on Windows also `shell()` or `shell.exec()`) whose command the code computes is refused
-#' (see below). When nobody can answer a question (Rscript, knitr, a scheduled job) the run stops
-#' with status `blocked` and a `gptr_error_permission` condition that says how to allow the action,
-#' unless you set `options(gptr.noninteractive_ask = "deny")`. Model code cannot switch the gate
+#' session is refused without a question. In `auto` and `yolo` mode a `system()`, `system2()`,
+#' `pipe()`, `processx::run()` or `data.table::fread(cmd =)` call (on Windows also `shell()` or
+#' `shell.exec()`) whose command the code computes is refused (see below). When nobody can answer a
+#' question (Rscript, knitr, a scheduled job) the run stops with status `blocked` and a
+#' `gptr_error_permission` condition that says how to allow the action, unless you set
+#' `options(gptr.noninteractive_ask = "deny")`. Model code cannot switch the gate
 #' off or loosen it during a run: the safety options are copied when the run starts. Only the option
 #' `gptr.unsafe_no_permissions`, set by you outside a run, removes the gate, and it is meant for
 #' disposable sandboxes.
@@ -1726,8 +1727,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' (`glue::glue("{unlink(d)}")`, `stringr::str_glue()`, `cli::cli_text()`) runs when the text is
 #' formatted and is not read. Deny and ask `sh:` rules see a command computed at run time only in
 #' a `peter$sh()` or `peter$bg()` call, which checks the command when it runs. So in `auto` and
-#' `yolo` mode a `system()`, `system2()`, `shell()` or `shell.exec()` call whose command (for
-#' `system2()` also its arguments and `env`) is not a string the classifier can read, such as
+#' `yolo` mode a `system()`, `system2()`, `shell()`, `shell.exec()`, `pipe()`, `processx::run()`
+#' or `data.table::fread(cmd =)` call whose command (for `system2()` also its arguments and `env`)
+#' is not a string the classifier can read, such as
 #' `cmd = paste("rm", "-rf", "build"); system(cmd)`, is refused, and the model is told to run the
 #' command with `peter$sh()`; `manual` and `edits` ask. An allow rule such as `r(fn:system)` lets
 #' such calls run, unchecked by `sh:` rules. Neither the rules nor the refusal read what a shell
@@ -1736,9 +1738,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' The refusal covers only calls the classifier resolves to these functions: a function reached by
 #' a computed name or through a list or an environment (`get("system")(cmd)`,
 #' `baseenv()$system(cmd)`) or handed to a function of your own (`g(system)`), `eval(parse())`, a
-#' sourced file, package code and other command runners such as `pipe()` or `processx::run()`
-#' still run a computed command unchecked. A literal command is read when it is given to
-#' `system()`, `system2()`, `peter$sh()`, `processx::run()` (also as `callr::run()`),
+#' sourced file, package code and other command runners such as `processx::process$new()` or
+#' `sys::exec_wait()` still run a computed command unchecked. A literal command is read when it is
+#' given to `system()`, `system2()`, `peter$sh()`, `processx::run()` (also as `callr::run()`),
 #' `sys::exec_wait()`, `sys::exec_internal()` or `sys::exec_background()`, not when it is given to
 #' `processx::process$new()`, which is level 3. A command line in a quoted string is read as one
 #' the code runs, so `system("echo 'rm -rf /'")` reads level 4, as `system("ssh host 'rm -rf ~'")`
@@ -1750,11 +1752,12 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `python3 -c`) included; running a command in a directory outside the project reads that
 #' directory, so `manual` asks. `setwd()`, `withr::local_dir()`, `withr::with_dir()` and
 #' `xfun::in_dir()` to a directory outside the project and R's session temporary directory (which
-#' `tempdir()`, `tempfile()`, `withr::local_tempdir()` and `withr::local_tempfile()` name), or to
-#' one the code computes (such as `here::here("data")`, whose root is the 'here' package's, not
-#' gptr's), are level 4, because a relative path would then name a file outside the project, and
-#' so are `file.symlink()`, `file.link()`, `Sys.junction()` and `fs::link_create()` of a path
-#' outside the project, as `ln` of one is; `chdir()` in the code of `peter$py()` or
+#' `tempdir()`, `tempfile()`, `withr::local_tempdir()` and `withr::local_tempfile()` name), and
+#' `setwd()` and `withr::local_dir()` to one the code computes (such as `here::here(d)`;
+#' `here::here()` of literal parts is read in the project), are level 4, because a relative path
+#' would then name a file outside the project, and so are `file.symlink()`, `file.link()`,
+#' `Sys.junction()` and `fs::link_create()` of a path outside the project, as `ln` of one is;
+#' `chdir()` in the code of `peter$py()` or
 #' `peter$knit("python", code)` (`os.chdir()`, `os.fchdir()`, `contextlib.chdir()`), which moves
 #' R's working directory too, is read as `setwd()` is. After the code has moved R, a relative
 #' directory given to these functions is read in the directory R is in, so
@@ -1762,7 +1765,8 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' `os.chdir("..")` in Python when each is a statement of its own on a line with no indentation, no
 #' `:` and no bracket left open, in code with no triple-quoted string (after any other `chdir()` a
 #' relative directory is read both in the directory R was in and in the one that `chdir()` names);
-#' before any move it is read in the project. Python's restore idiom
+#' before any move it is read in the project. Python comments are not read as code, except in
+#' code with a triple-quoted string, which is read with its comments. Python's restore idiom
 #' `cwd = os.getcwd(); os.chdir("data"); os.chdir(cwd)` returns to a directory the code computes,
 #' so it asks even in `auto` and `yolo`.
 #' `getwd()` and the directory `setwd()` returns are read
@@ -1771,11 +1775,16 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' assign are followed (a name assigned with `<<-` or `assign()` counts, outside them, as one the
 #' code computes), a function's other names count as ones the code computes, and R starts where
 #' the code started or has moved it to. So `owd = setwd("data"); ...; setwd(owd)` stays in the
-#' project at the top level of the code, in a function (with `on.exit(setwd(owd))`) and in
-#' `local()`; a directory saved in a branch, a loop or another call's argument
-#' (`if (p) owd = setwd("data")`, or `setwd(owd)` in `tryCatch(finally = )`), and a relative one
-#' after `withr::with_dir()` or `xfun::in_dir()`, count as ones the code computes. A drive-relative
-#' path such as `D:data` counts as outside on every OS.
+#' project at the top level of the code, in a function (with `on.exit(setwd(owd))`), in `local()`
+#' and in `tryCatch(finally = setwd(owd))`. A directory the code computes that R moves back from
+#' is level 3: that of `withr::with_dir()` or `xfun::in_dir()`, and one saved with a plain
+#' `owd = setwd()` or `owd = getwd()` in a branch or a loop (`if (p) owd = setwd("data")`), but only
+#' for `setwd(owd)` in the scope that saved it and only when the code binds that name no other way
+#' anywhere (to another value, as a loop variable or a function's argument, with `<<-` or
+#' `assign()`, or by an assignment in `eval()` or `with()`); otherwise `setwd(owd)` to a directory
+#' the code computes stays level 4. A relative directory after `withr::with_dir()` or
+#' `xfun::in_dir()` counts as one the code computes. A drive-relative path such as `D:data` counts
+#' as outside on every OS.
 #' The classifier does not follow the working directory changed in other ways (such as
 #' `usethis::local_project()`, `get("setwd")`, the `wd` of `callr::r()`, or `env` given `-C` among
 #' other short options, `env -iC DIR`, or as an abbreviated `--chdir`, `env --chd=DIR`), nor read
@@ -1838,8 +1847,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #' code asks even in `auto` mode: `Sys.getenv()` of its name in any letter case, or of a variable
 #' the code only ever sets to strings one of which is its name; `$NAME` or `${NAME}` in a command
 #' line (`system()`, `processx::run()`, `peter$sh()` and the others above) and `os.environ` or
-#' `getenv()` in Python; an environment dump; and a read of a `.env` or `.Renviron` file (`.env`,
-#' `.env.local` or `name.env`) or of a file [gptr_env()] loaded, by a function that reads its text
+#' `getenv()` in Python; an environment dump (`Sys.getenv()`, `ps::ps_environ()`); and a read of a
+#' `.env` or `.Renviron` file (`.env`, `.env.local` or `name.env`), of a file named `auth.json`
+#' (gptr's credential store) or of a file [gptr_env()] loaded, by a function that reads its text
 #' such as `readLines()`, or in a command line or Python. So does handing one to a child process
 #' through the `env` of `peter$sh()` or `peter$script()`, by its name or in a value, unless the
 #' same code reads that secret by name: the question for that read, or an `r(secret:NAME)` rule

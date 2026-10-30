@@ -45,11 +45,12 @@ nothing, though a call it reads as read-only can still use the network or start 
 \code{check = TRUE} or \code{check_login = TRUE} contacts the providers or starts the \code{claude} and
 \code{codex} status commands. In every mode
 \code{r} code that calls \code{q()}, \code{readline()} or another function that would end, pause or hang your R
-session is refused without a question. In \code{auto} and \code{yolo} mode a \code{system()} or \code{system2()}
-call (on Windows also \code{shell()} or \code{shell.exec()}) whose command the code computes is refused
-(see below). When nobody can answer a question (Rscript, knitr, a scheduled job) the run stops
-with status \code{blocked} and a \code{gptr_error_permission} condition that says how to allow the action,
-unless you set \code{options(gptr.noninteractive_ask = "deny")}. Model code cannot switch the gate
+session is refused without a question. In \code{auto} and \code{yolo} mode a \code{system()}, \code{system2()},
+\code{pipe()}, \code{processx::run()} or \code{data.table::fread(cmd =)} call (on Windows also \code{shell()} or
+\code{shell.exec()}) whose command the code computes is refused (see below). When nobody can answer a
+question (Rscript, knitr, a scheduled job) the run stops with status \code{blocked} and a
+\code{gptr_error_permission} condition that says how to allow the action, unless you set
+\code{options(gptr.noninteractive_ask = "deny")}. Model code cannot switch the gate
 off or loosen it during a run: the safety options are copied when the run starts. Only the option
 \code{gptr.unsafe_no_permissions}, set by you outside a run, removes the gate, and it is meant for
 disposable sandboxes.
@@ -103,8 +104,9 @@ from model code is refused when it runs). The code in the braces of a 'glue' or 
 (\code{glue::glue("{unlink(d)}")}, \code{stringr::str_glue()}, \code{cli::cli_text()}) runs when the text is
 formatted and is not read. Deny and ask \verb{sh:} rules see a command computed at run time only in
 a \code{peter$sh()} or \code{peter$bg()} call, which checks the command when it runs. So in \code{auto} and
-\code{yolo} mode a \code{system()}, \code{system2()}, \code{shell()} or \code{shell.exec()} call whose command (for
-\code{system2()} also its arguments and \code{env}) is not a string the classifier can read, such as
+\code{yolo} mode a \code{system()}, \code{system2()}, \code{shell()}, \code{shell.exec()}, \code{pipe()}, \code{processx::run()}
+or \code{data.table::fread(cmd =)} call whose command (for \code{system2()} also its arguments and \code{env})
+is not a string the classifier can read, such as
 \verb{cmd = paste("rm", "-rf", "build"); system(cmd)}, is refused, and the model is told to run the
 command with \code{peter$sh()}; \code{manual} and \code{edits} ask. An allow rule such as \code{r(fn:system)} lets
 such calls run, unchecked by \verb{sh:} rules. Neither the rules nor the refusal read what a shell
@@ -113,9 +115,9 @@ reads when it runs: its standard input (\code{system("sh", input = cmd)},
 The refusal covers only calls the classifier resolves to these functions: a function reached by
 a computed name or through a list or an environment (\code{get("system")(cmd)},
 \code{baseenv()$system(cmd)}) or handed to a function of your own (\code{g(system)}), \code{eval(parse())}, a
-sourced file, package code and other command runners such as \code{pipe()} or \code{processx::run()}
-still run a computed command unchecked. A literal command is read when it is given to
-\code{system()}, \code{system2()}, \code{peter$sh()}, \code{processx::run()} (also as \code{callr::run()}),
+sourced file, package code and other command runners such as \code{processx::process$new()} or
+\code{sys::exec_wait()} still run a computed command unchecked. A literal command is read when it is
+given to \code{system()}, \code{system2()}, \code{peter$sh()}, \code{processx::run()} (also as \code{callr::run()}),
 \code{sys::exec_wait()}, \code{sys::exec_internal()} or \code{sys::exec_background()}, not when it is given to
 \code{processx::process$new()}, which is level 3. A command line in a quoted string is read as one
 the code runs, so \code{system("echo 'rm -rf /'")} reads level 4, as \code{system("ssh host 'rm -rf ~'")}
@@ -127,11 +129,12 @@ a command in the directory it runs in (after a \code{cd} or \code{env -C}, or th
 \code{python3 -c}) included; running a command in a directory outside the project reads that
 directory, so \code{manual} asks. \code{setwd()}, \code{withr::local_dir()}, \code{withr::with_dir()} and
 \code{xfun::in_dir()} to a directory outside the project and R's session temporary directory (which
-\code{tempdir()}, \code{tempfile()}, \code{withr::local_tempdir()} and \code{withr::local_tempfile()} name), or to
-one the code computes (such as \code{here::here("data")}, whose root is the 'here' package's, not
-gptr's), are level 4, because a relative path would then name a file outside the project, and
-so are \code{file.symlink()}, \code{file.link()}, \code{Sys.junction()} and \code{fs::link_create()} of a path
-outside the project, as \code{ln} of one is; \code{chdir()} in the code of \code{peter$py()} or
+\code{tempdir()}, \code{tempfile()}, \code{withr::local_tempdir()} and \code{withr::local_tempfile()} name), and
+\code{setwd()} and \code{withr::local_dir()} to one the code computes (such as \code{here::here(d)};
+\code{here::here()} of literal parts is read in the project), are level 4, because a relative path
+would then name a file outside the project, and so are \code{file.symlink()}, \code{file.link()},
+\code{Sys.junction()} and \code{fs::link_create()} of a path outside the project, as \code{ln} of one is;
+\code{chdir()} in the code of \code{peter$py()} or
 \code{peter$knit("python", code)} (\code{os.chdir()}, \code{os.fchdir()}, \code{contextlib.chdir()}), which moves
 R's working directory too, is read as \code{setwd()} is. After the code has moved R, a relative
 directory given to these functions is read in the directory R is in, so
@@ -139,7 +142,8 @@ directory given to these functions is read in the directory R is in, so
 \code{os.chdir("..")} in Python when each is a statement of its own on a line with no indentation, no
 \code{:} and no bracket left open, in code with no triple-quoted string (after any other \code{chdir()} a
 relative directory is read both in the directory R was in and in the one that \code{chdir()} names);
-before any move it is read in the project. Python's restore idiom
+before any move it is read in the project. Python comments are not read as code, except in
+code with a triple-quoted string, which is read with its comments. Python's restore idiom
 \verb{cwd = os.getcwd(); os.chdir("data"); os.chdir(cwd)} returns to a directory the code computes,
 so it asks even in \code{auto} and \code{yolo}.
 \code{getwd()} and the directory \code{setwd()} returns are read
@@ -148,11 +152,16 @@ the code. A function body and the code of \code{local()} are read as code of the
 assign are followed (a name assigned with \verb{<<-} or \code{assign()} counts, outside them, as one the
 code computes), a function's other names count as ones the code computes, and R starts where
 the code started or has moved it to. So \verb{owd = setwd("data"); ...; setwd(owd)} stays in the
-project at the top level of the code, in a function (with \code{on.exit(setwd(owd))}) and in
-\code{local()}; a directory saved in a branch, a loop or another call's argument
-(\code{if (p) owd = setwd("data")}, or \code{setwd(owd)} in \code{tryCatch(finally = )}), and a relative one
-after \code{withr::with_dir()} or \code{xfun::in_dir()}, count as ones the code computes. A drive-relative
-path such as \code{D:data} counts as outside on every OS.
+project at the top level of the code, in a function (with \code{on.exit(setwd(owd))}), in \code{local()}
+and in \code{tryCatch(finally = setwd(owd))}. A directory the code computes that R moves back from
+is level 3: that of \code{withr::with_dir()} or \code{xfun::in_dir()}, and one saved with a plain
+\code{owd = setwd()} or \code{owd = getwd()} in a branch or a loop (\code{if (p) owd = setwd("data")}), but only
+for \code{setwd(owd)} in the scope that saved it and only when the code binds that name no other way
+anywhere (to another value, as a loop variable or a function's argument, with \verb{<<-} or
+\code{assign()}, or by an assignment in \code{eval()} or \code{with()}); otherwise \code{setwd(owd)} to a directory
+the code computes stays level 4. A relative directory after \code{withr::with_dir()} or
+\code{xfun::in_dir()} counts as one the code computes. A drive-relative path such as \code{D:data} counts
+as outside on every OS.
 The classifier does not follow the working directory changed in other ways (such as
 \code{usethis::local_project()}, \code{get("setwd")}, the \code{wd} of \code{callr::r()}, or \code{env} given \code{-C} among
 other short options, \verb{env -iC DIR}, or as an abbreviated \code{--chdir}, \code{env --chd=DIR}), nor read
@@ -221,8 +230,9 @@ gptr never reads the credential files of other tools. Reading a registered secre
 code asks even in \code{auto} mode: \code{Sys.getenv()} of its name in any letter case, or of a variable
 the code only ever sets to strings one of which is its name; \verb{$NAME} or \verb{$\{NAME\}} in a command
 line (\code{system()}, \code{processx::run()}, \code{peter$sh()} and the others above) and \code{os.environ} or
-\code{getenv()} in Python; an environment dump; and a read of a \code{.env} or \code{.Renviron} file (\code{.env},
-\code{.env.local} or \code{name.env}) or of a file \code{\link[=gptr_env]{gptr_env()}} loaded, by a function that reads its text
+\code{getenv()} in Python; an environment dump (\code{Sys.getenv()}, \code{ps::ps_environ()}); and a read of a
+\code{.env} or \code{.Renviron} file (\code{.env}, \code{.env.local} or \code{name.env}), of a file named \code{auth.json}
+(gptr's credential store) or of a file \code{\link[=gptr_env]{gptr_env()}} loaded, by a function that reads its text
 such as \code{readLines()}, or in a command line or Python. So does handing one to a child process
 through the \code{env} of \code{peter$sh()} or \code{peter$script()}, by its name or in a value, unless the
 same code reads that secret by name: the question for that read, or an \code{r(secret:NAME)} rule
