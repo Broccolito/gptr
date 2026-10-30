@@ -368,6 +368,22 @@ test_that("a patch that names one file in two operations is refused and writes n
   expect_identical(rd(file.path(td, "a.R")), "a = 1\nb = 2\n")
 })
 
+# Added (FIX-37, F-128): a patch reads an operation's `move` by its exact name; `op$move` of an
+# update without a move partially matched its `move_to`
+test_that("a patch update, with or without a move, reads no field by a partial name", {
+  td = withr::local_tempdir()
+  put_file(td, "m.R", "keep = 1\n")
+  withr::local_options(warnPartialMatchDollar = TRUE)
+  env = function(...) {
+    paste(c("*** Begin Patch", "*** Update File: m.R", ..., "@@", "-keep = 1", "+keep = 2",
+            "*** End Patch"), collapse = "\n")
+  }
+  expect_no_warning(patch_apply(env(), root = td))
+  put_file(td, "m.R", "keep = 1\n")
+  expect_no_warning(patch_apply(env("*** Move to: moved.R"), root = td))
+  expect_identical(rd(file.path(td, "moved.R")), "keep = 2\n")
+})
+
 test_that("a hunk line without a prefix and an update without hunks are invalid patches", {
   skip_on_cran()
   td = withr::local_tempdir()

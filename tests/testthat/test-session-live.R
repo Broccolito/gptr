@@ -206,6 +206,35 @@ test_that("a file locked by another live process is not resumed and leaves no li
   expect_error(gptr_resume(id, envir = new.env()), class = "gptr_error_split_brain")
 })
 
+# Added (FIX-37, F-104, D-298): an idle attached session touches its pid file only while a run is
+# live, so a heartbeat older than 24 h does not make a holder stale that its pid and creation time
+# prove alive; the age test stays for a holder that cannot be checked (no creation time)
+test_that("a live holder keeps its lock after 24 h idle; an unverifiable one does not", {
+  skip_on_cran()
+  local_store()
+  p = processx::process$new(rscript_path(), c("--vanilla", "-e", "Sys.sleep(30)"),
+                           supervise = supervise_default())
+  withr::defer(p$kill())
+  s = test_session()
+  session_append(s, entry_custom("test.note", list(i = 1L)))
+  file = session_data(s)$file
+  last = test_session()
+  rm(s)
+  invisible(gc())
+  pid_file = file.path(lock_path(file), "pid")
+  created = as.numeric(ps::ps_create_time(ps::ps_handle(p$get_pid())))
+  dir.create(lock_path(file), showWarnings = FALSE)
+  write_atomic(pid_file, c(as.character(p$get_pid()), format(created, digits = 17)))
+  Sys.setFileTime(pid_file, Sys.time() - 25 * 3600)
+  expect_true(lock_held_elsewhere(file))
+  expect_error(gptr_resume(file, envir = new.env()), class = "gptr_error_split_brain")
+  expect_identical(gptr_last(), last)
+  write_atomic(pid_file, c(as.character(p$get_pid()), "NA"))
+  expect_true(lock_held_elsewhere(file))
+  Sys.setFileTime(pid_file, Sys.time() - 25 * 3600)
+  expect_false(lock_held_elsewhere(file))
+})
+
 # ---- FIX-1: a GC-time session shutdown is deferred out of registry iteration --------------------
 # A dead session's finalizer runs at whatever allocation triggers the collection. It releases the
 # lock and leaves the live index at once, but its session_shutdown (hooks, record drop) waits for

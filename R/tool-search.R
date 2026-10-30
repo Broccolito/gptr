@@ -172,6 +172,10 @@ search_basename = function(paths) as_utf8(sub("(?s)^.*/", "", paths, perl = TRUE
 grep_candidates = function(root, glob = NULL, sort = "path") {
   if (!dir.exists(fs_path(root))) {
     info = path_info(fs_path(root))
+    if (isTRUE(info$size > grep_max_file)) {
+      return(list(files = character(), labels = character(), sizes = numeric(),
+                  skipped_big = 1L, mtime = info$mtime[0L]))
+    }
     return(list(files = root, labels = search_basename(root), sizes = info$size,
                 skipped_big = 0L, mtime = info$mtime))
   }

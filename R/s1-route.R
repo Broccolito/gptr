@@ -755,7 +755,7 @@ s1_log_usage = function(target, res, session, started) {
   rid = if (length(rids)) rids[1L] else NULL
   u = res[["usage"]]
   s1_usage_log(target$model, route, u[["input"]], u[["output"]], rid, s1_session_id(session),
-               started, as.numeric(difftime(Sys.time(), started, units = "secs")))
+               started, max(0, as.numeric(difftime(Sys.time(), started, units = "secs"))))
   invisible(NULL)
 }
 

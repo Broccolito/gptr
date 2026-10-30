@@ -395,13 +395,18 @@ session_text = function(s) {
   d$last_text
 }
 
-#' Each child's report under `### <name> (<model>)`; a child that did not end idle says
+#' Each child's report under `### <name> (<model>)`, the model its `gptr.subagent` entry names (a
+#' worker's proxy session has model `worker/worker`); a child that did not end idle says
 #' `(ended with status <status>)` first, as in the agent_reports block
 #' @noRd
 session_child_reports = function(d) {
+  models = list()
+  for (e in d$entries) {
+    if (identical(e$custom_type, "gptr.subagent")) models[[e$data$child]] = e$data$model
+  }
   parts = vapply(names(d$children), function(nm) {
     cd = session_data(d$children[[nm]])
-    paste0("### ", nm, " (", cd$model, ")\n",
+    paste0("### ", nm, " (", models[[cd$id]] %||% cd$model, ")\n",
            if (!identical(cd$status, "idle")) paste0("(ended with status ", cd$status, ")\n"),
            if (is.na(cd$last_text)) "" else cd$last_text)
   }, "")
@@ -1419,7 +1424,7 @@ replay_mark = function(s, block, header, text, advance) {
   if (block %in% d$seen) return(invisible(s))
   turn = if (advance && !replay_holds_block(d, block)) d$turns + 1L else d$turns
   session_append(s, entry_custom("gptr.replay", compact(list(
-    doc = header$doc %||% d$doc$path, block = block, mode = header$mode %||% "replay",
+    doc = header$doc %||% d$doc$path, block = block, mode = header[["mode"]] %||% "replay",
     turn = turn, value = header$value))))
   d$seen = c(d$seen, block)
   d$turns = turn

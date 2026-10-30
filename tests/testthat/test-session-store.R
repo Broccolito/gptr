@@ -786,6 +786,41 @@ test_that("gptr_sessions() shows created and updated in one time zone (FIX-11)",
   expect_lt(abs(as.numeric(diff(shown), units = "secs")), 60)
 })
 
+# Added (FIX-37, F-105): the head and tail windows widen (to 4 MiB) until they hold a complete
+# user line, so a long instructions file in the first lines or a turn of many tool calls no
+# longer leaves title or turns NA
+test_that("gptr_sessions() finds the title and turns past the first and last 64 KiB", {
+  skip_on_cran()
+  rule = paste("Rule:", strrep("keep functions small and documented. ", 3))
+  local_project(files = list(AGENTS.md = c("# Project rules", rep(rule, 490))), trust = TRUE)
+  local_gptr_options(mode = "auto")
+  s = peter("my real first prompt", model = gptr_fake_provider(list("ok")), envir = new.env())
+  expect_gt(sum(nchar(readLines(s$file, n = 3L), "bytes")), 65536)
+  call = fake_tool("r", code = paste0("x = 1\n# ", strrep("analysis note ", 150), "\nprint(1:30)"))
+  long = peter("first", model = gptr_fake_provider(c(rep(list(call), 45), list("finished"))),
+               envir = new.env())
+  rows = gptr_sessions()
+  expect_identical(rows$title[rows$id == s$id], "my real first prompt")
+  expect_identical(rows$turns[rows$id == long$id], 1L)
+  expect_identical(rows$title[rows$id == long$id], "first")
+})
+
+# Added (FIX-37, F-134): a live session's row takes its status from the live object; the file's
+# tail tells only idle or interrupted, so a run stopped on its budget listed as interrupted
+test_that("gptr_sessions() shows a live session's own status, such as budget", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(mode = "auto")
+  reply = c(fake_tool("r", code = "1"), list(usage = usage_new(input = 3000, output = 100)))
+  cnd = expect_error(peter("go", model = gptr_fake_provider(list(reply)),
+                           budget = list(tokens = 6000), envir = new.env()),
+                     class = "gptr_error_budget")
+  s = cnd$session
+  expect_identical(s$status, "budget")
+  rows = gptr_sessions()
+  expect_identical(rows$status[rows$id == s$id], "budget")
+})
+
 test_that("gptr_resume() returns the live object for an id, a path or NULL", {
   s = stored_run()
   expect_identical(gptr_resume(s$id), s)

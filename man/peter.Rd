@@ -131,7 +131,7 @@ Terminal statuses become conditions carrying the session as \verb{$session}: \co
 \code{gptr_error_max_turns}. A team (\verb{agents =}) or fan-out (\verb{parallel =}) takes the
 status of its first member that did not end idle, with \verb{$reason} naming each such member; when
 no member ended idle it signals that member's condition with the team as \verb{$session}. A call
-whose model cannot be reached (no egress acknowledgement, replay mode, a disabled provider, a
+whose model cannot be reached (no egress acknowledgment, replay mode, a disabled provider, a
 missing key) is refused before its run: no turn, no model or mode switch, no new
 \code{\link[=gptr_last]{gptr_last()}} and no \verb{$session}. So is a call with an unknown plugin or \verb{skills =} name,
 \code{.opts$images} its model does not take, or a secret-looking prompt you decline to send. A piped

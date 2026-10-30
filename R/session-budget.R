@@ -476,7 +476,8 @@ budget_unpriced = function(run) {
 #' `unknown` and adds the known cost to a count of the requests of unknown cost
 #' (`$1.2000 + 1 request of unknown cost`). A known zero, such as the metered charge of a local
 #' model, stays zero. Rows without a session, agent, model or route (process-level System 1
-#' calls) form the `NA` group.
+#' calls) form the `NA` group. On `claude-cli` models, billed to a Claude plan, the dollar figures
+#' are the CLI's API-equivalent estimate, not a charge; cost limits use them.
 #'
 #' The detailed component ledger contains estimates; its sum can differ from provider-reported
 #' usage. A run's token budget checks estimated next-input tokens and recorded usage before

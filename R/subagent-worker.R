@@ -277,7 +277,9 @@ worker_watch_tick = function(io, run) {
 #'
 #' Answers come from the parent through the `worker` UI (so a human is assumed present); nothing
 #' is rendered; replay mode and project root are the parent's. The agent's system text and the
-#' isolation policy arrive with the proxy session's rank-0 records in `spec$registry`.
+#' isolation policy arrive with the proxy session's rank-0 records in `spec$registry`. The
+#' parent's secrets that the shipped objects hold are registered inactive, so they are redacted
+#' and the child resolves no credential it did not get in its environment (D-295).
 #' @param spec_path The spec file (save_rds()).
 #' @param result_path Where the status and the exports are saved.
 #' @return The final status, invisibly.
@@ -288,6 +290,9 @@ worker_main = function(spec_path, result_path) {
   old = options(gptr.interactive = TRUE, gptr.ui = "worker", gptr.quiet = TRUE,
                 gptr.verbose = 0L, gptr.replay = st$replay, gptr.project_root = st$project_root)
   on.exit(options(old), add = TRUE)
+  secret_register_batch("parent", function() {
+    for (x in spec$secrets) secret_register(x$value, x$name, source = "parent", active = FALSE)
+  })
   io = worker_io_open()
   on.exit(close(io$input), add = TRUE)
   io$parent = spec$parent
@@ -394,6 +399,24 @@ worker_ship_objects = function(names, base) {
     }
   }
   mget(names, envir = base, inherits = TRUE)
+}
+
+#' The worker spec `w` with the values of its objects, read from `home`, and, when they hold any,
+#' `secrets`: the parent's registered secrets whose values occur in those objects, so the child
+#' redacts them too (D-295). Only those values travel, as they already do inside the objects: a
+#' spec file carries no other key (IC-70).
+#' @noRd
+worker_spec_values = function(w, home) {
+  w$objects = worker_ship_objects(w$object_names, home)
+  if (!length(w$objects)) return(w)
+  bytes = serialize(w$objects, NULL, ascii = FALSE, refhook = worker_refhook)
+  for (e in secrets_state()$reg) {
+    v = get(e$id, envir = vault_env(), inherits = FALSE)
+    if (isTRUE(e$redact) && length(grepRaw(charToRaw(v), bytes, fixed = TRUE))) {
+      w$secrets = c(w$secrets, list(list(name = e$name, value = v)))
+    }
+  }
+  w
 }
 
 #' The provider whose key a worker gets in its environment: one registered for the process that
@@ -590,8 +613,7 @@ worker_spawn = function(st) {
   dir.create(st$dir, mode = "0700")
   spec_path = file.path(st$dir, "spec.rds")
   st$result_path = file.path(st$dir, "result.rds")
-  save_rds(c(w, list(objects = worker_ship_objects(w$object_names, st$home))), spec_path,
-           refhook = worker_refhook)
+  save_rds(worker_spec_values(w, st$home), spec_path, refhook = worker_refhook)
   marker = proc_marker_new()
   set = c(GPTR_WORKER = "1", GPTR_SUBAGENT_DEPTH = as.character(w$depth),
           GPTR_PROJECT_ROOT = w$settings$project_root)

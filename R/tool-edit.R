@@ -629,7 +629,7 @@ patch_apply = function(envelope, root = project_root()) {
   for (n in seq_along(ops)) {
     ops[[n]]$abs = resolve(ops[[n]]$path)
     if (!is.null(ops[[n]]$move_to)) ops[[n]]$move = resolve(ops[[n]]$move_to)
-    k = unique(vapply(c(ops[[n]]$abs, ops[[n]]$move), patch_key, "", fold = fold,
+    k = unique(vapply(c(ops[[n]]$abs, ops[[n]][["move"]]), patch_key, "", fold = fold,
                       USE.NAMES = FALSE))
     d = k[k %in% keys]
     if (length(d)) {
@@ -659,14 +659,14 @@ patch_apply = function(envelope, root = project_root()) {
       }
       return(list(op = op, abs = abs))
     }
-    if (!is.null(op$move) && dir.exists(fs_path(op$move))) {
+    if (!is.null(op[["move"]]) && dir.exists(fs_path(op[["move"]]))) {
       gptr_abort(paste0("Could not move file: ", op$path, " to ", op$move_to,
                         ". Error code: EISDIR."), "invalid_argument", arg = "edits",
                  expected = "a file path to move to")
     }
     src = edit_source(abs, op$path)
     cp = edit_compute(abs, op$path, patch_hunk_edits(op, src$text), src = src)
-    list(op = op, abs = abs, cp = cp, move = op$move)
+    list(op = op, abs = abs, cp = cp, move = op[["move"]])
   })
   diffs = character()
   tags = character()
