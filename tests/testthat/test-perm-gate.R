@@ -343,8 +343,9 @@ test_that("auto asks before code reads a secret by .env, a shell's $NAME or a na
   }
   # in the loop, also a command the code computes for peter$sh() or peter$bg(), and the file
   # gptr_env() loaded after the session finds its key in the environment (verification)
-  ui = local_scripted_ui(as.list(rep("n", 6L)))
+  ui = local_scripted_ui(as.list(rep("n", 7L)))
   codes = c(reads[c(1L, 2L, 6L)], "cmd = paste('cat', '.env'); x = peter$sh(cmd)$stdout",
+            "cmd = paste('cat', '.env'); x = peter$sh(cmd, env = 'HOME')$stdout",
             "cmd = paste('cat', '.env'); x = peter$bg(cmd)", "x = readLines('keys.txt')")
   for (code in codes) {
     fake = local_fake_provider(list(fake_tool("r", code = code), fake_text("done")))
@@ -352,7 +353,7 @@ test_that("auto asks before code reads a secret by .env, a shell's $NAME or a na
     peter("read it", model = fake, envir = e, mode = "auto")
     expect_null(e$x)
   }
-  expect_identical(sum(ui$log$method == "permission"), 6L)
+  expect_identical(sum(ui$log$method == "permission"), 7L)
 })
 
 test_that("yolo asks before peter$sh() or peter$bg() sends a secret over the network (round 6)", {
