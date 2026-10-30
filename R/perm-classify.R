@@ -1827,12 +1827,13 @@ risk_python = function(code, root = project_root(), dirs = root) {
               "\\1", code, perl = TRUE)
   code = gsub("(?<![\\w.)\\]])\\(\\s*((?:\\w+\\s*\\.\\s*)*environb?)\\s*\\)", "\\1", code,
               perl = TRUE)
+  # the token rules read the code without its comments
+  code_nc = gsub("(?m)^((?:[^'\"#\n]|'[^'\n]*'|\"[^\"\n]*\")*)#.*", "\\1", code, perl = TRUE)
   for (r in risk_py_rules) {
-    if (grepl(r[[3L]], code, perl = TRUE)) {
+    if (grepl(r[[3L]], code_nc, perl = TRUE)) {
       f = risk_flags_bind(f, risk_flags_row(r[[2L]], "py", r[[1L]], r[[2L]]))
     }
   }
-  code_nc = gsub("(?m)^((?:[^'\"#\n]|'[^'\n]*'|\"[^\"\n]*\")*)#.*", "\\1", code, perl = TRUE)
   m = regmatches(code_nc, gregexpr("'([^'\\\\\n]|\\\\.)*'|\"([^\"\\\\\n]|\\\\.)*\"",
                                    code_nc, perl = TRUE))[[1L]]
   lits = substr(m, 2L, nchar(m) - 1L)
@@ -1862,7 +1863,8 @@ risk_python = function(code, root = project_root(), dirs = root) {
   open = cumsum(nchar(gsub("[^([{]", "", bl)) - nchar(gsub("[^])}]", "", bl)))
   top = !grepl("'''|\"\"\"", code_nc) & !grepl("^\\s|:", bl) & c(0L, open)[seq_along(bl)] == 0L
   here = dirs
-  for (i in seq_along(lines)) {
+  # a line whose chdir( is in a string moves nothing
+  for (i in which(grepl("\\bf?chdir\\s*\\(", bl, perl = TRUE))) {
     for (st in strsplit(lines[i], ";", fixed = TRUE)[[1L]]) {
       for (t in regmatches(st, gregexpr("\\bf?chdir\\s*\\(\\K[^)]*", st, perl = TRUE))[[1L]]) {
         d = if (grepl(lit_re, t, perl = TRUE)) {

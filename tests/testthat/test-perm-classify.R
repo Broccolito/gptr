@@ -233,6 +233,19 @@ test_that("the Python classifier scans tokens; running Python is at least level 
   for (cs in cases) expect_identical(flags_level(risk_python(cs[[2]])), cs[[1]], label = cs[[2]])
 })
 
+test_that("Python comments and a chdir( in a string are no code (D-294)", {
+  root = local_project()
+  py = function(code) risk_python(code, root)
+  for (code in c("print('call os.chdir(d) first')", "# os.remove('/tmp/x')",
+                 "x = 1  # subprocess.run('rm -rf ~', shell=True)")) {
+    f = py(code)
+    expect_identical(list(flags_level(f), unique(f$category)), list(1L, "session"), label = code)
+  }
+  expect_identical(flags_level(py("import subprocess\nsubprocess.run('rm -rf ~', shell = True)")),
+                   4L)
+  expect_identical(flags_level(py("import os\nos.chdir('/')")), 4L)
+})
+
 test_that("flag rows bind without duplicates", {
   a = risk_flags_row("x", "f", 2L, "file_write")
   b = risk_flags_bind(a, a, risk_flags_empty())
