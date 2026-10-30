@@ -596,7 +596,7 @@ reactor_stdin_drop = function(r, p, message) {
     if (!is.null(writer)) {
       failed = tryCatch(proc_writer_ack(writer, b), error = identity)
       if (inherits(failed, "error")) {
-        reactor_stdin_fail(r, key, b, "Invalid child stdin acknowledgement at exit.",
+        reactor_stdin_fail(r, key, b, "Invalid child stdin acknowledgment at exit.",
                            cause = failed)
         return(invisible(NULL))
       }

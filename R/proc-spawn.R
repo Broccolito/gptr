@@ -1208,13 +1208,13 @@ proc_writer_ack = function(st, b) {
     acks = list.files(st$dir, pattern = pattern, full.names = TRUE)
     if (length(acks)) {
       if (!proc_writer_valid(st$dir, st$canonical, st$marker, acks)) {
-        gptr_abort("Invalid stdin writer acknowledgement.", "io", operation = "write", path = NULL)
+        gptr_abort("Invalid stdin writer acknowledgment.", "io", operation = "write", path = NULL)
       }
       sizes = file.size(acks)
       pos = as.numeric(sub(".*-", "", basename(acks[[length(acks)]])))
       if (anyNA(sizes) || any(sizes != 0) || !is.finite(pos) ||
           pos < st$pending$accepted || pos > st$pending$size) {
-        gptr_abort("The stdin writer acknowledgement is not empty or out of range.",
+        gptr_abort("The stdin writer acknowledgment is not empty or out of range.",
                    "io", operation = "write", path = NULL)
       }
       b$pos = b$pos + pos - st$pending$accepted
