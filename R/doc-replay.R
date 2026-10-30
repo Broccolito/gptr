@@ -93,16 +93,26 @@ s2_key = function(doc, block, part = "", prompt = "", args = "") {
                                   prompt = prompt %||% "", args = args %||% "")))
 }
 
+#' Where the S2 answers of a document are kept: `rel`, its path relative to its own project, which
+#' keys name, and `root`, that project's workspace, so a replay run from another directory finds
+#' them; a document in no workspace keeps the working directory's (doc_rel(), doc_root())
+#' @noRd
+doc_s2_home = function(path) {
+  ws = workspace_dir(dirname(path_norm(path)))
+  if (is.null(ws)) return(list(rel = doc_rel(path), root = doc_root()))
+  list(rel = path_rel(path, dirname(ws)), root = ws)
+}
+
 #' The S2 file of a key: `<root>/cache/s2/<2 hex>/<sha256>.json`
 #' @noRd
-s2_path = function(key) {
-  file.path(doc_root(), "cache", "s2", substr(key, 1L, 2L), paste0(key, ".json"))
+s2_path = function(key, root = doc_root()) {
+  file.path(root, "cache", "s2", substr(key, 1L, 2L), paste0(key, ".json"))
 }
 
 #' Read an S2 record (NULL on a miss, and for a file that is not a JSON object)
 #' @noRd
-s2_get = function(key) {
-  f = s2_path(key)
+s2_get = function(key, root = doc_root()) {
+  f = s2_path(key, root)
   if (!file.exists(f)) return(NULL)
   x = tryCatch(json_decode(read_utf8(f)$text), error = function(e) NULL)
   if (is.list(x) && !is.null(names(x))) x else NULL
@@ -112,9 +122,9 @@ s2_get = function(key) {
 #' date}` plus any provenance the caller adds (IC-74: provider, model digest, locality, image
 #' digests), kept as given; the answer is redacted with the persist profile at ingress
 #' @noRd
-s2_put = function(key, record) {
+s2_put = function(key, record, root = doc_root()) {
   record$answer = redact(as_utf8(record$answer %||% ""), "persist")
-  f = s2_path(key)
+  f = s2_path(key, root)
   dir.create(dirname(f), recursive = TRUE, showWarnings = FALSE)
   write_atomic(f, json_encode(record))
   invisible(f)
@@ -352,8 +362,9 @@ doc_replay_header = function(header, site, mode) {
 doc_replay_call = function(call, site, mode = "replay") {
   b = site$block
   h = b$header
-  rel = doc_rel(site$path)
-  answer = doc_s2_answer(s2_get(s2_key(rel, b$id, "", h$prompt %||% "", h$args %||% "")))
+  home = doc_s2_home(site$path)
+  answer = doc_s2_answer(s2_get(s2_key(home$rel, b$id, "", h$prompt %||% "", h$args %||% ""),
+                                home$root))
   header = doc_replay_header(h, site, mode)
   doc = doc_replay_doc(site, call, b$id, answer)
   s = if (!is.null(call$session)) {
@@ -380,8 +391,9 @@ doc_run_block_nested = function(call, site, mode) {
   rel = doc_rel(site$path)
   parent = tryCatch(doc_block_get("r", doc_read(site$path)$lines, site$in_block)$header,
                     error = function(e) NULL) %||% list()
-  rec = s2_get(s2_key(rel, site$in_block, paste0("n", site$ordinal), parent$prompt %||% "",
-                      parent$args %||% ""))
+  home = doc_s2_home(site$path)
+  rec = s2_get(s2_key(home$rel, site$in_block, paste0("n", site$ordinal), parent$prompt %||% "",
+                      parent$args %||% ""), home$root)
   asked = call$prompt %||% call$template %||% site$template
   if (!is.null(rec$sent) && rlang::is_string(asked) && !identical(rec$sent, prompt_hash(asked))) {
     rec = NULL
@@ -417,11 +429,12 @@ doc_replay_team = function(call, site, mode) {
   b = site$block
   h = b$header
   rel = doc_rel(site$path)
+  home = doc_s2_home(site$path)
   pairs = strsplit(strsplit(h$children %||% "", ",", fixed = TRUE)[[1L]], ":", fixed = TRUE)
   texts = character()
   for (kv in pairs) {
     if (!length(kv) %in% 2:3 || !all(nzchar(kv))) next
-    rec = s2_get(s2_key(rel, b$id, kv[1L], h$prompt %||% "", h$args %||% ""))
+    rec = s2_get(s2_key(home$rel, b$id, kv[1L], h$prompt %||% "", h$args %||% ""), home$root)
     answer = doc_s2_answer(rec)
     child_header = list(model = rec$model %||% h$model, session = kv[2L],
                         turn = as.character(rec$turn %||% 1L), doc = rel, mode = mode)
@@ -1768,8 +1781,9 @@ doc_blocks_ipynb = function(text) {
 
 #' Inspect, prune or clear gptr's caches
 #'
-#' `info` lists the System 1 answer cache, the System 2 answer cache used for replay, temporary
-#' spill files and unapplied document sidecars (deferred or pending blocks; a second row lists
+#' `info` lists the System 1 answer cache (held in memory for the R session while there is no
+#' `.gptr/`), the System 2 answer cache used for replay, temporary spill files and unapplied
+#' document sidecars (deferred or pending blocks; a second row lists
 #' those of documents outside any `.gptr/`, kept in the user cache; they are never removed here:
 #' apply them with `gptr_doc(path, sync = TRUE)`). `prune` removes System 2 answers
 #' whose block is neither in its document nor queued for it in a sidecar, System 1 answers unused
@@ -1782,7 +1796,7 @@ doc_blocks_ipynb = function(text) {
 #' @param action `"info"`, `"prune"` or `"clear"`.
 #' @param kind `"all"`, `"s1"`, `"s2"` or `"tmp"`.
 #' @return `info`: a `gptr_cache_info` data frame with columns `kind`, `entries`, `bytes`,
-#'   `oldest`, `path`. `prune` and `clear`: the number of files removed, invisibly.
+#'   `oldest`, `path`. `prune` and `clear`: the number of entries removed, invisibly.
 #' @export
 #' @examples
 #' proj = tempfile("proj")
@@ -1843,7 +1857,8 @@ doc_cache_info = function(kinds) {
   row = function(k, f, path) {
     info = file.info(f, extra_cols = FALSE)
     mtime = info$mtime[!is.na(info$mtime)]
-    data.frame(kind = k, entries = length(f), bytes = sum(info$size, na.rm = TRUE),
+    n = length(f) + if (identical(k, "s1")) length(doc_s1_memory()) else 0L
+    data.frame(kind = k, entries = n, bytes = sum(info$size, na.rm = TRUE),
                oldest = if (length(mtime)) min(mtime) else with_calendar_preserved(as.POSIXct(NA)),
                path = path, stringsAsFactors = FALSE)
   }
@@ -1861,12 +1876,15 @@ doc_spill_days = function() {
   if (is.numeric(d) && length(d) == 1L && !is.na(d) && d >= 0) as.numeric(d) else 7
 }
 
-#' Remove the files of a cache kind; `prune = TRUE` keeps what is still in use (S1 answers used
-#' within 90 days, S2 answers of existing blocks, temporary files younger than spill_days)
+#' Remove the files of a cache kind, and on a clear the System 1 answers held in memory
+#' (doc_s1_memory()); `prune = TRUE` keeps what is still in use (S1 answers used within 90 days,
+#' S2 answers of existing blocks, temporary files younger than spill_days). The number removed.
 #' @noRd
 doc_cache_remove = function(kind, prune = TRUE) {
+  mem = if (identical(kind, "s1") && !prune) length(doc_s1_memory()) else 0L
+  if (mem) the$s1_cache = NULL
   f = doc_cache_files(kind)
-  if (!length(f)) return(0L)
+  if (!length(f)) return(mem)
   if (prune) {
     age = as.numeric(difftime(Sys.time(), file.info(f, extra_cols = FALSE)$mtime, units = "days"))
     memo = new.env(parent = emptyenv())
@@ -1877,7 +1895,15 @@ doc_cache_remove = function(kind, prune = TRUE) {
                   rep(TRUE, length(f)))
     f = f[!keep]
   }
-  as.integer(sum(suppressWarnings(file.remove(f))))
+  mem + as.integer(sum(suppressWarnings(file.remove(f))))
+}
+
+#' The keys of the System 1 answers s1-cache.R holds in memory (`the$s1_cache`) while there is no
+#' workspace
+#' @noRd
+doc_s1_memory = function() {
+  m = if (is.null(workspace_dir())) the$s1_cache
+  if (is.environment(m)) ls(m, all.names = TRUE) else character()
 }
 
 #' Does an S2 record still belong to a block of a document? A record that cannot be read, or that

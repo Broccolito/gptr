@@ -1996,22 +1996,25 @@ doc_after_write = function(site, res, block_lines) {
   }
   ph = header$prompt %||% ""
   ah = header$args %||% ""
+  home = doc_s2_home(site$path)
   answer = attr(block_lines, "answer")
   if (length(answer) && !is.na(answer[1L])) {
-    s2_put(s2_key(rel, res$block_id, "", ph, ah),
-           list(block = res$block_id, doc = rel, part = "", prompt = ph, model = header$model,
-                answer = answer[1L], usage = header$tokens, cost = header$cost,
-                session = header$session, turn = header$turn, date = header$date))
+    s2_put(s2_key(home$rel, res$block_id, "", ph, ah),
+           list(block = res$block_id, doc = home$rel, part = "", prompt = ph,
+                model = header$model, answer = answer[1L], usage = header$tokens,
+                cost = header$cost, session = header$session, turn = header$turn,
+                date = header$date), home$root)
   }
   kids = attr(block_lines, "children") %||% list()
   for (nm in names(kids)) {
     k = kids[[nm]]
     text = k[["text"]]
     if (!length(text) || is.na(text[1L])) next
-    rec = list(block = res$block_id, doc = rel, part = nm, prompt = ph, model = k$model,
+    rec = list(block = res$block_id, doc = home$rel, part = nm, prompt = ph, model = k$model,
                answer = text[1L], session = k$session, turn = k$turn %||% 1L,
                date = header$date, sent = k$sent)
-    s2_put(s2_key(rel, res$block_id, nm, ph, ah), rec[!vapply(rec, is.null, NA)])
+    s2_put(s2_key(home$rel, res$block_id, nm, ph, ah), rec[!vapply(rec, is.null, NA)],
+           home$root)
   }
   doc_source_log(site$path, res$block_id, if (isTRUE(site$regenerate)) "regenerated" else "ran")
   invisible(NULL)
