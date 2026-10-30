@@ -809,6 +809,25 @@ test_that("provider_stream() puts the returns schema on the wire (INFRA-25)", {
   expect_identical(msg_text(out$msg), "{\"n\":32}")
 })
 
+test_that("a stream cut inside its last event ends as a retryable network failure", {
+  skip_on_cran()
+  local_scripted_provider(api)
+  full = anthropic_sse_text("ok")
+  # the body ends inside the data of message_stop, after the stop reason arrived
+  wire = local_scripted_wire(list(substr(full, 1L, nchar(full) - 10L)))
+  out = new.env(parent = emptyenv())
+  out$msg = NULL
+  out$err = NULL
+  provider_stream(model_resolve("scripted/scripted-1"), ctx_fixture(list(msg_user("hi"))), list(),
+                  emit = function(ev) if (identical(ev$type, "error")) out$err = ev$error,
+                  done = function(msg) out$msg = msg)
+  reactor_pump(until = function() !is.null(out$msg), timeout = 10)
+  expect_identical(out$err$class, "network")
+  expect_identical(out$msg$error_message, "The Anthropic stream ended before message_stop.")
+  expect_true(run_retryable(out$msg, out$err))
+  expect_length(wire$requests, 1L)
+})
+
 test_that("returns = through the run loop: a typed value and the tool calls kept (INFRA-25)", {
   skip_on_cran()
   local_gptr_options(unsafe_no_permissions = TRUE)

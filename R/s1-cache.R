@@ -20,14 +20,15 @@ s1_cache_swap = function(env = new.env(parent = emptyenv())) {
   invisible(old)
 }
 
-#' Keep `cache/s1/.gitignore` in line with the `cache_commit` setting
+#' Keep `cache/s1/.gitignore` in line with the `cache_commit` setting (best effort, as the
+#' cache itself)
 #' @noRd
 s1_cache_ignore = function(dir) {
   path = file.path(dir, ".gitignore")
   commit = setting_get("cache_commit", default = list(s1 = TRUE))
   keep = if (is.list(commit)) commit[["s1"]] else NULL
   if (isFALSE(keep)) {
-    if (!file.exists(path)) write_atomic(path, "*")
+    if (!file.exists(path)) tryCatch(write_atomic(path, "*"), error = function(e) NULL)
   } else if (file.exists(path) && identical(trimws(read_utf8(path)$text), "*")) {
     unlink(path)
   }
@@ -35,7 +36,8 @@ s1_cache_ignore = function(dir) {
 }
 
 #' The per-project salt: "" without a workspace, else `cache/s1/salt` (32 hex, created once from
-#' RNG-free id bits; committed with the cache, IC-70)
+#' RNG-free id bits; committed with the cache, IC-70). A salt that cannot be stored serves the
+#' one call, so no record is ever keyed unsalted.
 #' @noRd
 s1_cache_salt = function(ws = workspace_dir()) {
   if (is.null(ws)) return("")
@@ -49,9 +51,12 @@ s1_cache_salt = function(ws = workspace_dir()) {
     }
   }
   salt = id_new("", 32L)
-  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
-  write_atomic(path, salt)
-  s1_cache_ignore(dir)
+  stored = tryCatch({
+    dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+    write_atomic(path, salt)
+    TRUE
+  }, error = function(e) FALSE)
+  if (stored) s1_cache_ignore(dir)
   salt
 }
 
@@ -129,7 +134,8 @@ s1_cache_get = function(key) {
 }
 
 #' Store a cache record: in memory before a workspace exists, else an atomic JSON file; an NA key
-#' stores nothing
+#' stores nothing, and a file that cannot be written (a read-only checkout, a full disk) neither:
+#' the cache is best effort, so the answers just paid for are kept
 #' @noRd
 s1_cache_put = function(key, record) {
   if (!s1_cache_usable(key)) return(invisible(NULL))
@@ -139,9 +145,12 @@ s1_cache_put = function(key, record) {
     return(invisible(key))
   }
   path = s1_cache_path(ws, key)
-  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
-  write_atomic(path, json_encode(record))
-  invisible(key)
+  text = json_encode(record)
+  tryCatch({
+    dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+    write_atomic(path, text)
+    invisible(key)
+  }, error = function(e) invisible(NULL))
 }
 
 #' A finite number, or NULL (JSON null) when it is unknown

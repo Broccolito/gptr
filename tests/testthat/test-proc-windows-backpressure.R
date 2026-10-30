@@ -166,7 +166,9 @@ writer_cold_control = function(case, inject = NULL, parent = list(), outcome =
   if (case == "blocked") "timeout" else if (is.null(inject) && !length(parent)) "complete" else
     "io") {
   root = withr::local_tempdir()
-  old = options(gptr.stdin_timeout = 2, gptr.supervise = FALSE)
+  # a timeout case needs the short bound; any other gets room for a saturated CPU (L-48)
+  limit = if (outcome == "timeout") 2 else 20
+  old = options(gptr.stdin_timeout = limit, gptr.supervise = FALSE)
   on.exit(options(old), add = TRUE)
   rscript = rscript_path()
   p = NULL
@@ -269,7 +271,7 @@ writer_cold_control = function(case, inject = NULL, parent = list(), outcome =
   })
   b = r$stdin[[key]]
   t0 = reactor_now()
-  deadline = t0 + 10
+  deadline = t0 + limit + 8
   state = NULL
   repeat {
     drain(r, key, b)
@@ -284,7 +286,7 @@ writer_cold_control = function(case, inject = NULL, parent = list(), outcome =
   search = readRDS(file.path(root, "actor-search.rds"))
   expect_identical(seen$args[[2L]], "--default-packages=NULL")
   expect_identical(search, c(".GlobalEnv", "Autoloads", "package:base"))
-  expect_identical(b$limit, 2)
+  expect_identical(b$limit, limit)
   if (outcome == "timeout") {
     expect_s3_class(b$error, "gptr_error_timeout")
     expect_identical(b$error$seconds, 2)

@@ -146,11 +146,16 @@ test_that("retry limits and attempt counters reject malformed configuration", {
     expect_error(retry_backoff(attempt), class = "gptr_error_invalid_argument")
   }
   expect_true(is.finite(retry_backoff(1e12)))
-  for (limit in list(NA_real_, Inf, -1, "2", c(1, 2))) {
+  for (limit in list(NA_real_, -1, "2", c(1, 2))) {
     withr::with_options(list(gptr.max_retry_delay = limit), {
       expect_error(retry_classify(429L, list()), class = "gptr_error_invalid_argument")
     })
   }
+  # Inf waits out any retry-after the server asks for
+  withr::with_options(list(gptr.max_retry_delay = Inf), {
+    expect_identical(retry_classify(500L, list(), NULL)$class, c("overloaded", "provider"))
+    expect_identical(retry_classify(429L, list(`retry-after` = "86400"))$delay, 86400)
+  })
   expect_false(retry_classify(600L, list())$retry)
 })
 
@@ -278,7 +283,7 @@ test_that("retry cooldown does not exhaust a positive long-lived request window"
   clock$now = 103
   expect_true(ratelimit_admit("rl-cooldown"))
   expect_equal(ratelimit_get("rl-cooldown")$req_remaining, 4)
-  for (cap in list(NA_real_, Inf, -1, "2", c(1, 2), 1 + 1i)) {
+  for (cap in list(NA_real_, -1, "2", c(1, 2), 1 + 1i)) {
     withr::with_options(list(gptr.max_retry_delay = cap), {
       expect_error(ratelimit_update("rl-cooldown", list(`retry-after` = "1")),
                    class = "gptr_error_invalid_argument")

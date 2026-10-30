@@ -1711,7 +1711,7 @@ gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
   }
   ctg = catalog_get()
   idx = ctg$index
-  keep = rep(TRUE, nrow(idx))
+  keep = !idx$provider %in% provider_internal()
   if (!is.null(provider)) keep = keep & idx$provider == provider
   first = character()
   if (!is.null(query)) {
