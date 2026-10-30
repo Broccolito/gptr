@@ -48,8 +48,8 @@ changed), or every call under \code{replay = "live"} (an undone block runs witho
 \code{replay = "record"} regenerates it), asks the model again and rewrites its block in place, and
 the old block is skipped, which base \code{source()} cannot do. Only that block is regenerated: a
 later turn of the same session keeps its block, answered in the old turn's context, so re-ask
-it with \code{replay = "record"} when it depends on the turn that changed. Only blank lines may
-separate a call from its blocks (see \code{\link[=gptr_doc]{gptr_doc()}}). A console turn is asked again with
+it with \code{replay = "live"} on that call when it depends on the turn that changed. Only blank
+lines may separate a call from its blocks (see \code{\link[=gptr_doc]{gptr_doc()}}). A console turn is asked again with
 what the console sent with it, from its block's \verb{#< } lines (the \verb{@file} heads and \code{!} notes;
 see \code{\link[=gptr_doc]{gptr_doc()}}): the request is the same even when the file changed or is gone. It is asked
 with the model and in the mode its statement names, else those its session has from the turns
