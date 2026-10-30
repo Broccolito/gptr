@@ -49,7 +49,7 @@ made to `03` and `05` so that the three documents agree.
 
 | Id | Decision | Reason / evidence |
 |---|---|---|
-| IC-01 | **63 exports**: the 62 of `03` §4.4 plus the S3 generic `gptr_preimage()` (P16). | `03` §6.16 and §11.1 promise "plugins add `gptr_preimage()` S3 methods"; delayed registration `S3method(gptr::gptr_preimage, cls)` from a package that only Suggests gptr needs an exported, documented generic, exactly like `gptr_describe()` [G7 §4.6, G1 §3.1 row 13]. |
+| IC-01 | **Exports**: those of `03` section 4.4 plus the S3 generic `gptr_preimage()` (P16); NAMESPACE holds the count. | `03` sections 6.16 and 11.1 promise "plugins add `gptr_preimage()` S3 methods"; delayed registration `S3method(gptr::gptr_preimage, cls)` from a package that only Suggests gptr needs an exported, documented generic, exactly like `gptr_describe()` [G7 section 4.6, G1 section 3.1 row 13]. |
 | IC-02 | (amended by IC-34/IC-69: 38 kinds in all, P02 defines 37 and P22 adds `interpreter`; §10.2.) A 31st registry kind, **`route`** [experimental], carries the gateway routes (classifier, nested, console, team, fan-out, document, continue, new). P02 defines 30 kinds (the 29 of `03` §11.1 other than `interpreter`, plus `route`); P22 defines `interpreter` through the `kind` meta-kind. | `03` §2.2 rule 1 and 05 "Registration without shared lists" require routes to be registry records contributed by their owning plans; no kind existed for them. |
 | IC-03 | Event names follow D-25's rule (Pi-derived where the semantics match): **`session_shutdown`** replaces `session_end`, **`session_before_compact`** / **`session_compact`** replace `pre_compact` / `post_compact`. | D-25, G1 §3.2 (Pi's names); `03` §5.4 used Claude-style names that D-25 reserves for the v1.x importer. |
 | IC-04 | The permission **combination** `perm_check()` (policies, `permission_request` hooks, UI, non-interactive stop) lives in `agent-dispatch.R` (P06); `perm-gate.R` (P11) owns the built-in **policies** (mode table, rules, critical guard, secret guard, protect size) and `builtin:permissions`; the UI's `permission()` method (console prompt) is in `console-ui.R` (P11). | `03` §3.2 gave "policy combination" to P11 while P06's dispatcher must already gate fail-closed at M1; the split keeps the kernel complete and the policies pluggable (S-11). |
@@ -265,6 +265,9 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `secret_found` | - | `findings` (df, no values) | P03 (`gptr_scrub(error = TRUE)`) | persisted files contain a registered secret (IC-70) |
 | `redaction_limit` | - | `limit` (characters, no input) | P03 (`redact_stream()`) | an unresolved sensitive candidate exceeds the hold-back cap; the stream fails closed |
 | `doc_write` | - | `path`, `reason` | P15 | a document write failed or was blocked and the caller asked for strictness |
+| `doc_export` | - | `reason` | `gptr_export()` (P15, `doc-export.R`) | every refusal of an export; the reason names what blocks it, never input content |
+| `io` | - | `operation`, `path` | `artifact-app.R` (P23), `auth-childenv.R` | a private file or folder could not be made, or the owned headless browser could not start or finish its cleanup |
+| `state_restore` | - | `env_restored`, `package` or `member` (`mcp_serve` adds `stopped`, `refs_released`) | `auth-oauth.R`, `bridge-lang.R`, `mcp-server.R`, `tool-read.R`, `utils-hash.R` | the environment a dependency's setup changed could not be restored, or a served MCP stop could not be confirmed |
 | `s1` | - | `status`, `error_type`, `request_id`, `model` | P13 | System 1 failure, parent of the next rows |
 | `s1_auth`, `s1_validation`, `s1_rate_limit`, `s1_overloaded`, `s1_connection`, `s1_response` | `s1` | as `s1` | P13 | classified as in 04 §4.12 (scalar calls; vectorised calls give `NA` + one warning) |
 | `s1_uncertain` | `s1` | `index`, `names` (`NULL` for unnamed input), `confidence`, `prob`, `min_confidence`, `value` (every answer) | P13 | `uncertain = "stop"` inside the uncertain band; the message names the first ten inputs |
@@ -276,7 +279,7 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `cli_missing` | - | `cli` | P20 | the `claude`/`codex` binary was not found |
 | `cli_version` | - | `cli`, `found`, `required` | P20 | below the minimum version |
 | `coaching` | - | `part` (`note`, `skills`, `review`, `rules`, `coaching` or `surface`) | `coaching_validate()`, `coaching_rules()` (P29) through `gptr_tailor()`, a harness call, `gptr_coach()` and a coach block's replay | coaching or a person's rules that fail a check; the message names the part (IC-85, IC-89) |
-| `model_refused` | - (`provider` when it ends a run) | `reason` (`router`, `classifier`, `process`, `cli_version`, `cli_preflight`), `model` or `cli` | `coach_model_kind()`, `pcli_codex_preflight()` and, on Windows, `pcli_codex_hooks()` (P29), also as a coaching child's model gate | a model `gptr_coach()` may not use; on Windows, a path of the Codex hook command with no short (8.3) form free of spaces and cmd.exe signs (`cli_preflight`, IC-88) |
+| `model_refused` | - (`provider` when it ends a run) | `reason` (`router`, `classifier`, `process`, `cli_version`, `cli_preflight`), `model` or `cli` | `coach_model_kind()`, `pcli_codex_preflight()` and, on Windows, `pcli_codex_hooks()` (P29), also as a coaching child's model gate | a model `gptr_coach()` may not use; on Windows, a path of the Codex hook command with no short (8.3) form free of spaces and of the signs PowerShell or cmd.exe read (`cli_preflight`, IC-88) |
 | `plan_limit` | `provider` | as `provider`, + `reason` (`limit`, `overage`), `resets_at` (text, `NA` when unknown) | `cli-claude`, `cli-codex` (P29) | a Claude or ChatGPT plan's session, weekly or model limit, or, in a coaching child, a Claude session drawing on paid usage credits; never retried (IC-88, D-282) |
 | `cli_check` | `provider` | as `provider` | `cli-claude`, `cli-codex` under `the$coach_role` (P29) | a coaching session failed a per-session check; the CLI is stopped and its reply discarded (IC-88) |
 | `process` | - | `command`, `status`, `stderr` (tail, redacted) | P04, P22 | a child exited non-zero with `check = TRUE` |
@@ -287,16 +290,19 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `token_regression` | - | `fixture`, `metric`, `baseline`, `value` | `dev/bench` (P24) | a benchmark ratchet failed |
 | `internal` | - | `detail` | any | a broken invariant (a bug) |
 
-Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `deprecated` (P02), `two_prompts` (P08;
-two unnamed string literals), `partial_name` (P08; a named context dot abbreviates a `peter()` argument its value
-fits, D-251), `replay_downgraded` (P15; live/stale regeneration downgraded under `source()`),
-`doc_conflict` (P15; md5 conflict after three attempts), `s1_errors` (P13; failed elements in a vectorised call;
-field `errors`),
-`readline_limit` (P14), `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only
-when `options(gptr.check_prefix = "warn")`), `secret_late` (P03; a newly registered secret already occurs in live
-session entries; field `counts`), `untrusted_setting` (P08; `gptr_config()` saved keys an untrusted project does
-not apply; fields `keys`, `path`; D-250), `unknown_model_setting` (P08; `gptr_config()` saved a model setting
-that does not resolve; fields `key`, `ref`; D-250).
+Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `deprecated` (P02),
+`two_prompts` (P08; two unnamed string literals), `partial_name` (P08; a named context dot
+abbreviates a `peter()` argument its value fits, D-251), `replay_downgraded` (P15; live/stale
+regeneration downgraded under `source()`), `doc_conflict` (P15; md5 conflict after three attempts),
+`s1_errors` (P13; failed elements in a vectorised call; field `errors`), `readline_limit` (P14),
+`plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only when
+`options(gptr.check_prefix = "warn")`), `secret_late` (P03; a newly registered secret already occurs
+in live session entries; field `counts`), `untrusted_setting` (P08; `gptr_config()` saved keys an
+untrusted project does not apply; fields `keys`, `path`; D-250), `unknown_model_setting` (P08;
+`gptr_config()` saved a model setting that does not resolve; fields `key`, `ref`; D-250),
+`state_restore` (as the error, when a setup failed and its environment could not be restored
+either), `cli_sandbox` (P20, `cli-codex.R`; Codex's Windows sandbox is not ready, so the route runs
+read-only, or a check of the project's control files after a Codex turn found changes).
 
 Messages (`gptr_message_<name>`): `alias_shadowed` (P08), `plan_handoff` (P11), `egress_ack` (P08, IC-71), `s1_split` (P13; once per
 session when a data frame is split into several states, naming `I(x)`),
@@ -1023,7 +1029,7 @@ All are `c("gptr_<name>", "gptr_listing", "data.frame")`, built by `new_listing(
 
 ---
 
-## 6. Exported API (63 names)
+## 6. Exported API
 
 Every export has roxygen docs with `@param`, `@return` and an `@examples` block that runs offline on CRAN: examples
 use `gptr_fake_provider()`, `envir = new.env()`, `tempfile()` directories and never keys, network, processes or
@@ -1608,6 +1614,20 @@ Conditions: `invalid_argument` (unknown id), `artifact`, `missing_package` (shin
 ```r
 gptr_artifacts()                      # an empty listing when no artifact exists
 ```
+
+#### `gptr_export()` — P15, `doc-export.R` [stable]
+
+```r
+gptr_export(file, to, format = c("r", "peter"))
+```
+
+Writes a deterministic copy of a synchronized, recorded document to `to`: `"r"` keeps each block's
+recorded R with its Peter statement commented, `"peter"` keeps the statements active (D-258).
+`format` is matched exactly (`check_choice()`). Every named argument of an exported Peter statement
+must be one literal, a top-level `<name> = gptr_tailor(...)` statement is ordinary code, and a
+refusal is `gptr_error_doc_export` naming what blocks it, the first non-literal argument included
+(section 15.3 IC-49, section 15.11 IC-87, FIX-40). Model code cannot call it during a run
+(`doc_control_guard()`).
 
 
 ### 6.5 Session SDK
@@ -3004,7 +3024,7 @@ plugin_resolve("gptrpanel")
 | Function | File | Contract | Consumers |
 |---|---|---|---|
 | `builtin_mcp(gptr)` | `mcp-namespace.R` | registers the `mcp` namespace provider, the `mcp` section (T1, order 840), per-tool `direct` tool specs at session freeze, `mcp_server` specs from configs, the services `mcp.catalog`, `mcp.dispatch_local` | P02 load |
-| `mcp_config_all(project = project_root())` | `mcp-config.R` | list of server specs (§11.7 shape) with `source`, `trusted`, `also_in` | P18 |
+| `mcp_config_all(project = project_root())` | `mcp-config.R` | list of server specs (section 11.7 shape) with `source`, `trusted`, `also_in`; foreign entries merge when transport, command, args, url, env, headers and cwd agree (a field of length 0 counts as absent), a colliding name becomes `<harness>_<name>`, then `_2`, `_3` until unique, and in an untrusted project every project source ranks after every user source (D-299) | P18 |
 | `mcp_connect(spec)` | `mcp-client.R` | a `gptr_mcp_conn` (era probe with `gptr.mcp_probe_timeout`, cached per spec hash for 7 days; stdio through `proc_spawn()` with `child_env("mcp")` + the spec's expanded `env`, stderr read by gptr and appended redacted to `tempdir()/gptr/mcp-logs/` unless `gptr.mcp_debug`, IC-70; HTTP on the reactor with `followlocation = 0L`) | P18 |
 | `mcp_tools(conn, refresh = FALSE)` | `mcp-client.R` | list of `list(name, title, description, input_schema, annotations)` (paginated; disk cache `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json`) | P18 |
 | `mcp_call(conn, tool, args, timeout = NULL, on_progress = NULL)` | `mcp-client.R` | `list(content, structured, is_error, text, images, elapsed)`; progress re-arms the idle timer; timeouts and interrupts send `notifications/cancelled`; MRTR at most 5 rounds (elicitation through `ui$questions()`, roots = the project directory, sampling refused) | P18 |
@@ -3377,10 +3397,12 @@ P28 Task 43); a `length`/`refusal` stop: `Tool call not executed: the response s
 
 ### 9.3 The system prompt
 
-Sections are `prompt_section` specs (§10.2) rendered at freeze in ascending `order`: the `preamble` untagged, every
-other section wrapped as `<name>\n...\n</name>`, sections joined by one blank line. T0 = sections with `tier =
-"T0"`, T1 = `tier = "T1"`; the frozen blocks never change during a session (mid-session changes are appended
-operator section patches: `Updated system prompt section "<name>":\n\n<section>` or `Removed system prompt section
+Sections are `prompt_section` specs (section 10.2) rendered at freeze in ascending `order`: the
+`preamble` untagged, every other section wrapped as `<name>\n...\n</name>`, sections joined by one
+blank line. T0 = sections with `tier =
+"T0"`, T1 = `tier = "T1"`; the frozen blocks never change during a session, but for IC-85's refreeze
+(D-291) (mid-session changes are appended operator section patches:
+`Updated system prompt section "<name>":\n\n<section>` or `Removed system prompt section
 "<name>".`). `{s1}` is replaced by the configured System 1 alias (`jev`).
 
 | Section | Tier | Order | Budget | Included when | Registered by |
@@ -3517,9 +3539,9 @@ the remaining `r` budget when called inside `r`.
 | Path | Rank | Source string | Lifetime |
 |---|---|---|---|
 | call arguments: `peter(..., tools = list(spec))`, `model = <spec>`, `agents =`, session hooks `gptr_on(s, ...)` | 0 | `session` | the session |
-| trusted project: `.gptr/` resources, `.gptr/extensions/*.R`, project settings `plugins` | 1 | `project` | the process (re-read by `gptr_reload()`) |
-| user: `gptr_register()`, user directories, user settings `plugins` | 3 | `user` | the process |
-| plugins (packages, directories, `.claude-plugin` bundles) | 5 | `plugin:<name>` | the process; removed when the package unloads |
+| trusted project: `.gptr/` resources, `.gptr/extensions/*.R` | 1 | `project` | the process (re-read by `gptr_reload()`) |
+| user: `gptr_register()`, user directories | 3 | `user` | the process |
+| plugins (packages, directories, `.claude-plugin` bundles; those the user and trusted project `plugins` settings name, a `./` or `../` entry found from the project root, D-299) | 5 | `plugin:<name>` | the process; removed when the package unloads |
 | built-ins (`builtin_<name>()` factories) | 6 | `builtin:<name>` | the process |
 
 Same `(kind, name)`: the lowest rank wins; ties: the first registered, with a `collision` diagnostic when the
@@ -3748,15 +3770,17 @@ Hook-injected context (returned `blocks`, `text` of transforms) is capped at 10,
 
 ### 10.9 API 1.0 surface and versioning
 
-API 1.0 consists of: the 63 exports (§6); the kinds and fields of §10.2; the events, payload fields and handler
-returns of §10.4; the API object (§10.5) and `ctx` (§10.6) members; the dispatch semantics (§10.7); the manifest
-format (§11.12); the record shapes a plugin sees (§4). `gptr_api()$version` is `1.0` and changes only when this
-surface changes: MINOR releases are additive (new kinds, events, members, optional fields; handlers ignore unknown
-payload fields, validators accept unknown spec fields); MAJOR releases break and require the CRAN notice period to
-reverse dependencies found with `tools::package_dependencies(reverse = TRUE, which = "most")`. Deprecation: a
-deprecated member warns once per session (`gptr_warning_deprecated`; `options(gptr.deprecations = "error")` for
-plugin CI) and lives at least one MINOR release and six months. Items marked [experimental] may change in a MINOR
-release.
+API 1.0 consists of: the exports (section 6, counted by NAMESPACE); the kinds and fields of
+section 10.2; the events, payload fields and handler returns of section 10.4; the API object
+(section 10.5) and `ctx` (section 10.6) members; the dispatch semantics (section 10.7); the manifest
+format (section 11.12); the record shapes a plugin sees (section 4). `gptr_api()$version` is `1.0`
+and changes only when this surface changes: MINOR releases are additive (new kinds, events, members,
+optional fields; handlers ignore unknown payload fields, validators accept unknown spec fields);
+MAJOR releases break and require the CRAN notice period to reverse dependencies found with
+`tools::package_dependencies(reverse = TRUE, which = "most")`. Deprecation: a deprecated member
+warns once per session (`gptr_warning_deprecated`; `options(gptr.deprecations = "error")` for plugin
+CI) and lives at least one MINOR release and six months. Items marked [experimental] may change in a
+MINOR release.
 
 
 ---
@@ -3882,15 +3906,17 @@ only in a trusted project; its allow, transcript and record keys are ignored wit
 
 ### 11.4 Session files
 
-`<workspace root>/sessions/<YYYYmmddTHHMMSS>_<session id>.jsonl`: the header line (§4.7), then entries (§4.6),
-one JSON object per line, appended open-append-close (`file(path, "ab")` opened, written, flushed and closed per
-entry or per batch inside `suspendInterrupts()`; no connection outlives a gptr call; IC-59), `persist`-redacted
-at ingress, never rewritten (except by an explicit `gptr_scrub(dry_run = FALSE)`, IC-70). The first entry of every
-session is `gptr.frozen`. A fork's file is created at its first own message and starts with the copied path (ids
-kept, `parentId` re-chained). A resume on a file whose last byte is not LF first appends `"\n"` and a
-`gptr.recovered` entry; readers skip any unparsable line with a diagnostic. Lock: directory `<file>.lock/` with a
-file `pid` holding the pid and the process creation time, touched every 10 minutes while the session is live; a
-lock is stale when `pid_alive()` (ps) is `FALSE` or its heartbeat is older than 24 h.
+`<workspace root>/sessions/<YYYYmmddTHHMMSS>_<session id>.jsonl`: the header line (section 4.7),
+then entries (section 4.6), one JSON object per line, appended open-append-close (`file(path, "ab")`
+opened, written, flushed and closed per entry or per batch inside `suspendInterrupts()`; no
+connection outlives a gptr call; IC-59), `persist`-redacted at ingress, never rewritten (except by
+an explicit `gptr_scrub(dry_run = FALSE)`, IC-70). The first entry of every session is
+`gptr.frozen`. A fork's file is created at its first own message and starts with the copied path
+(ids kept, `parentId` re-chained). A resume on a file whose last byte is not LF first appends `"\n"`
+and a `gptr.recovered` entry; readers skip any unparsable line with a diagnostic. Lock: directory
+`<file>.lock/` with a file `pid` holding the pid and the process creation time, touched every 10
+minutes while the session is live; a lock is stale when `pid_alive()` (ps) is `FALSE`, or, for a
+holder whose pid and creation time cannot be checked, when its heartbeat is older than 24 h (D-298).
 
 ### 11.5 History-document blocks (D-08; report 14 §3 grammar)
 
@@ -4044,7 +4070,7 @@ under `egress` (§11.2).
 | Spill files (P01) | `<root>/cache/tmp/gptr-output-<id>.txt` | the out id | redacted full text |
 | Deferred document writes (P15) | `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json` (`<root>` the document's project `.gptr/`; outside one `R_user_dir("gptr", "cache")/pending/`, D-249) | document path | `list(doc, base_md5, upserts = list(list(block_id, lines, site)), session, pid, time)` (IC-51); never pruned automatically |
 | Model catalog (P05) | `R_user_dir("gptr", "cache")/models.json`, `models.etag` | ETag (sent only for a cache of the current `converter`) | the refreshed catalog (§11.10 shape) |
-| MCP tool lists (P18) | `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json` | `hash_sha256(canonical_json(command + args, or URL origin + path))` | `{"tools", "fetched_at", "ttl_ms", "cache_scope"}` (not stored when `cacheScope` is `private` and credentials are not the user's own) |
+| MCP tool lists (P18) | `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json` | `hash_sha256(canonical_json(command + args, plus env and cwd when present; or URL origin + path, plus headers when present))` (D-299) | `{"tools", "fetched_at", "ttl_ms", "cache_scope"}` (not stored when `cacheScope` is `private` and credentials are not the user's own) |
 | MCP era (P18) | `R_user_dir("gptr", "cache")/mcp-era/<hash>.json` | as above | `{"era": "modern" \| "legacy", "version", "date"}`, 7-day expiry |
 | Serialised entries (P06/P07) | memory (`live$memo`) | `<entry id>\|<api>\|<same model>\|<caps hash>` | the entry's JSON text for that api |
 | Object sizes (P09) | memory | `<address>\|<length>\|<class>` | `object.size()` |
@@ -4225,7 +4251,7 @@ fake$log$requests[[2]]$last_results
 | `helper-fake.R` (P01) | `fake_text(text, ...)`; `fake_tool(name, ..., .text = NULL, .id = NULL)` (a reply calling tool `name` with input `list(...)`); `fake_tools(...)` (each argument `list(name, input)`); `fake_error(message = "overloaded", status = 529L, after = 0L)`; `local_fake_provider(script, name = "fake", type = "chat", .env = parent.frame())` (registers with `gptr_register()` and unregisters on exit; returns the spec); `fake_requests(spec)` (the request log); `local_project(files = list(), gptr = TRUE, trust = FALSE, .env = parent.frame())` (a temporary project directory made the working directory with `withr::local_dir()`, a `.gptr/` skeleton created directly (no dependency on `gptr_init()`), `files` = named list of relative path -> content, `trust = TRUE` records trust in the redirected user config; returns the path); `local_gptr_options(..., .env = parent.frame())` (`withr::local_options()` with `gptr.` prefixed names) |
 | `helper-tracemem.R` (P01) | `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)`: writes a script that loads gptr (`library(gptr)` when installed, else `pkgload::load_all()` of the source tree; that call exists only in the generated script text, never as package or test code, IC-71), evaluates `setup` (chr: code creating `object`, e.g. `big = runif(5e6)`), `tracemem(object)` with output to a file, `action` (chr: the gptr code under test; with `in_run_edit = TRUE` the fake provider's `r` call runs `edit` inside the run, IC-41), then `edit`; runs it with `c(rscript_path(), "--vanilla", <script>)` through processx (IC-60); counts `tracemem[` lines after `action`; passes when the count is at most `allow`; skips on CRAN and when `!capabilities("profmem")`; returns the count invisibly |
 | `helper-mock-server.R` + `fixtures/mock_server.R` (P01) | `local_mock_server(scenario, ..., .env = parent.frame())` -> `list(url, port, log = function() df(time, method, path, headers (redacted), body, disconnected), stop = function(), provider = <spec:provider with offline = TRUE>)`; a base-R `serverSocket()`/`socketSelect()` server run with `rscript_path()` through processx; it listens on every interface (base R has no host argument), so it answers only paths carrying a per-run token and lives for one test; skips on CRAN (IC-71). The returned provider record is `offline = TRUE` so `GPTR_REPLAY=replay` does not block it (IC-45). Scenarios: `stream` (Anthropic-shaped SSE: `n = 12` text events every `interval = 0.25` s), `slow`, `ttft` (`delay` before the first byte), `hold_headers`, `stall` (events then silence), `bytes_per_10s` (`duration`), `overload` (an overloaded SSE `error` event before the first delta, then success after `attempts`), `status` (`status`, `body`, optional `retry_after`, `succeed_after`), `spend_cap`, `truncated` (connection closed mid-stream), `parallel_tools`, `openai_responses`, `chat_completions`, `gemini` (per-adapter stream shapes, P12), `systemone` (JSON answers from `answers = function(body)`), `json` (a fixed body), `redirect` (a 307 to a second origin that logs any key bytes, IC-64) |
-| `helper-arch.R` (P01) | `arch_layer_table()` -> df(`file`, `layer`) from §3.2 of `03`; `arch_fun_map()` -> df(`fun`, `file`) built by parsing the files under `R/` (found through `testthat::test_path("..", "..", "R")` or the check directory's `00_pkg_src`; the test skips with a message when absent); `arch_allowed()` -> the `03` §2.2 matrix; `arch_kernel_sdk()` -> the IC-33 allowlist; `arch_services()` -> the §7.0 service table (literal `ext_service_get("<name>")` calls are mapped to the providing plan; an undeclared name fails); `arch_contract_edges()` -> df(`caller_area`, `callee`), the cross-area calls the contract names by consumer although IC-33's kernel SDK omits them, among them the 12 of area `gptr` (P29: `subagent_schedule`, `subagent_limit`, `worker_registry`, `worker_registry_apply`, `worker_spec_revive`, `worker_key_provider`, `perm_rules_effective`, `rule_hit`, `rule_glob_re`, `risk_table`, `walk_tree`, `skill_discover`; IC-85, IC-86, D-279, D-288) |
+| `helper-arch.R` (P01) | `arch_layer_table()` -> df(`file`, `layer`) from section 3.2 of `03`; `arch_fun_map()` -> df(`fun`, `file`) built by parsing the files under `R/` (found through `testthat::test_path("..", "..", "R")` or the check directory's `00_pkg_src`; the test skips with a message when absent); `arch_allowed()` -> the `03` section 2.2 matrix; `arch_kernel_sdk()` -> the IC-33 allowlist; `arch_services()` -> the section 7.0 service table (literal `ext_service_get("<name>")` calls are mapped to the providing plan; an undeclared name fails); `arch_contract_edges()` -> df(`caller_area`, `callee`), the cross-area calls the contract names by consumer although IC-33's kernel SDK omits them, among them the 12 of area `gptr` (P29: `subagent_schedule`, `subagent_limit`, `worker_registry`, `worker_registry_apply`, `worker_spec_revive`, `worker_key_provider`, `perm_rules_effective`, `rule_hit`, `rule_glob_re`, `risk_table`, `walk_tree`, `skill_discover`; IC-85, IC-86, D-279, D-288) and the 2 of area `mcp` (P18's `mcp_file_update()` calls P08's `trust_holds` and `trust_carry`; IC-52, D-299) |
 | `helper-scripted-ui.R` (P11) | `local_scripted_ui(answers = list(), .env = parent.frame())` -> an environment with `log` (df `method`, `prompt`, `answer`) and `remaining()`; registers a `scripted` UI, sets `options(gptr.ui = "scripted", gptr.interactive = TRUE)`. Queue items: for `permission()`: `"y"`, `"a"` (always, session), `"p"` (always, project), `"n"`, `list(decision = "deny", feedback = chr(1))`, `"abort"`; for `select()`: int; for `input()`: chr(1); for `questions()`: a named list |
 | `helper-mcp-server.R` + `fixtures/mcp/server.R` (P18) | `local_mcp_fixture(era = c("modern", "legacy"), transport = c("stdio", "http"), tools = c("echo", "add", "slow", "fail", "elicit"), n_extra = 0L, .env = parent.frame())` -> `list(spec, log = function() df, stop = function())`; a pure-R server speaking the chosen era; `n_extra` adds generated tools (catalog budget tests) |
 
@@ -4375,10 +4401,10 @@ class-list pointer). `06-review-resolution.md` lists every change by issue. Main
 | P18 | `gptr_login`, `gptr_logout`, `gptr_mcp`, `gptr_mcp_add`, `gptr_mcp_remove`, `gptr_mcp_serve` |
 | P19 | `gptr_parallel` |
 | P23 | `gptr_artifacts` |
-| P29 | `gptr_tailor`, `gptr_coach` (§15.11) |
 
-Total (IC-36): 1 + 18 + 3 + 1 + 2 + 5 + 1 + 10 + 1 + 2 + 1 + 4 + 3 + 3 + 6 + 1 + 1 = 63 (P08's 10 names are
-`peter` plus 9 `gptr_*`; `gptr_map()` is internal, `gptr_scrub()` is new). The P29 row postdates this total.
+Total (IC-36): 1 + 18 + 3 + 1 + 2 + 5 + 1 + 10 + 1 + 2 + 1 + 4 + 3 + 3 + 6 + 1 + 1 = 63 (P08's 10
+names are `peter` plus 9 `gptr_*`; `gptr_map()` is internal, `gptr_scrub()` is new). P29 adds
+`gptr_tailor` and `gptr_coach` (section 15.11); the total predates them.
 
 ---
 
@@ -4810,15 +4836,21 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
   Only skills from user directories, installed packages and trusted projects enter the T1 catalog.
   Project-file updates are no longer
   operator messages but user-role `project_instructions_update` context blocks; `context_block` `authority = "operator"` is allowed only for records of rank >= 3.
-- `trust.json` records a `fingerprint` (sha256 over the sorted paths and contents of the trust-gated files:
-  `.gptr/settings.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `APPEND_SYSTEM.md`, `agents/`, an
-  auto-discovered `.env`). On a mismatch the changed resources are treated as untrusted: interactively the
-  changed files are listed and the question asked again; non-interactively they are ignored with a notice.
-  gptr's own writes re-fingerprint.
-- `gptr_resume(path)` of a file whose header `cwd` differs from the project root, or that git tracks, rebuilds
-  with a freshly frozen prompt from the current settings and marks the prior user turns `source = "imported"`.
-  File restores (rewind) are confined to the project root and `tempdir()`; a restore outside needs an
-  `ask_human` per path.
+- `trust.json` records a `fingerprint` (sha256 over the sorted paths and contents of the trust-gated
+  files: `.gptr/settings.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`,
+  `APPEND_SYSTEM.md`, `agents/`, an auto-discovered `.env`, and the project MCP files of other
+  applications, `.mcp.json`, `.codex/config.toml`, `.cursor/mcp.json`, `.vscode/mcp.json` and
+  `.pi/mcp.json`, D-299). On a mismatch the changed resources are treated as untrusted:
+  interactively the changed files are listed and the question asked again; non-interactively they
+  are ignored with a notice. gptr's own writes re-fingerprint: `trust_holds()` before the write and
+  `trust_carry()` after it, in `settings_write()` and in P18's `mcp_file_update()` behind
+  `gptr_mcp_add()` and `gptr_mcp_remove()` at project scope (D-299).
+- `gptr_resume(path)` of a file whose header `cwd` differs from the project root, or that git
+  tracks, rebuilds with a freshly frozen prompt from the current settings and marks the prior user
+  turns `source = "imported"`. File restores (rewind) are confined to the project root and
+  `tempdir()`; a restore outside needs an `ask_human` per path. The same refreeze follows a
+  continuation that loads a keyed extension factory new to a frozen session (IC-85); this is the one
+  case where a session's frozen blocks change, an exception to section 9.3 (D-291).
 
 **IC-53 The permission kernel cannot be reconfigured by model code.** (safe-1, req-16, safe-6, safe-18)
 
@@ -4956,6 +4988,9 @@ step list before its first action.
   the secret guard; D-267), without the notice, which the served result would capture for the model.
   Non-interactively both are `blocked`/denied.
 - A background R tool that changed bindings in the user's environment at an idle tick prints one notice.
+- A tool-name rule (`gptr_permissions(deny = "script")`) names a tool the model calls, never a
+  `peter$` member, served or not, so it does not stop a member call; the member's command or path
+  meets the rules as the literal call would (D-294).
 - P04/P19 acceptance: an inline agent calls System 1 while a sibling has a queued tool; the sibling's tool starts
   only after the first evaluation returns.
 
@@ -4979,11 +5014,14 @@ CLI child evaluates in the fork overlay and a plan-mode parent gates in plan mod
   `store_read()` skips any unparsable line with a diagnostic and re-parents the children of missing ids to the
   nearest valid ancestor in projection.
 - **Locks**: `<file>.lock/pid` holds the pid and the process creation time; a lock is stale when
-  `pid_alive(pid, create_time)` is `FALSE` or its heartbeat is older than 24 h; the reactor touches the file every
-  10 minutes while the session is live. `pid_alive()` (P04, `proc-supervise.R`) is
-  `ps::ps_is_running(ps::ps_handle(pid))` plus a creation-time comparison against pid reuse. **ps joins Imports**
-  (it is already in the dependency closure through processx; the closure does not grow). `tools::pskill()` is
-  never used as a liveness probe (on Windows it always calls `TerminateProcess`; lint rule).
+  `pid_alive(pid, create_time)` is `FALSE`, or, only for a holder whose pid and creation time cannot
+  be checked, when its heartbeat is older than 24 h, so a live idle holder keeps its lock
+  (`lock_is_live()`; `ckpt_foreign_lock()` reads it alike for `ckpt_gc()`; D-298); the reactor
+  touches the file every 10 minutes while the session is live. `pid_alive()` (P04,
+  `proc-supervise.R`) is `ps::ps_is_running(ps::ps_handle(pid))` plus a creation-time comparison
+  against pid reuse. **ps joins Imports** (it is already in the dependency closure through processx;
+  the closure does not grow). `tools::pskill()` is never used as a liveness probe (on Windows it
+  always calls `TerminateProcess`; lint rule).
 - Tests: `nrow(showConnections())` unchanged after `peter()` returns, errors or is interrupted; 300 sessions kept in
   a list; CI runs `devtools::test()` with `_R_CHECK_CONNECTIONS_LEFT_OPEN_=true`; INFRA-13 extended: SIGKILL
   mid-append, resume, three appends, all present and the tree connected.
@@ -5267,14 +5305,18 @@ calls and suggests `GPTR_REPLAY=replay`.
   the API object, lazy activation and `hook_add()` carry `session`, every staged `registry_add()` receives it,
   and the session's records are removed at `session_shutdown` and by its finalizer. P02/P17 test: a factory passed
   through `extensions =` is invisible to the next `peter()` call.
-- **Workers inherit the registry**: the worker spec gains `registry = list(specs = <rank-0 session specs and
-  rank-3 user specs>, plugins = <enabled plugins with ranks>, filters = chr)`; `worker_main()` re-registers them
-  first. Functions from package namespaces serialise by reference; closures from the global environment are shipped
-  with their environments (documented); a registry serialises by reference and reads back in the worker as the
-  empty environment, so a closure that reaches it (an extension's API object) ships none of its records (IC-70,
-  D-177); a spec that cannot be serialised makes an explicit `backend = "worker"`
-  fail with `gptr_error_invalid_argument` naming it, and `auto` stays inline. P19 acceptance: a plugin `r` member
-  and a `gptr_fake_provider()` spec work inside a worker.
+- **Workers inherit the registry**: the worker spec gains
+  `registry = list(specs = <rank-0 session specs and
+  rank-3 user specs>, plugins = <enabled plugins with ranks>, filters = chr)`; `worker_main()`
+  re-registers them first. Functions from package namespaces serialise by reference; closures from
+  the global environment are shipped with their environments (documented); a registry serialises by
+  reference and reads back in the worker as the empty environment, so a closure that reaches it (an
+  extension's API object) ships none of its records (IC-70, D-177); a spec that cannot be serialised
+  makes an explicit `backend = "worker"` fail with `gptr_error_invalid_argument` naming it, and
+  `auto` stays inline. The spec also carries, as `secrets`, the registered redacting secrets whose
+  values occur in the shipped objects (`secrets_held()`), which `worker_main()` registers inactive
+  before its session starts, so the worker redacts them and no other key travels (D-295). P19
+  acceptance: a plugin `r` member and a `gptr_fake_provider()` spec work inside a worker.
 - **Token extension points**: `gptr_check(x, error = FALSE, tokens = FALSE)`; `tokens = TRUE` reports a plugin's
   declaration cost and the printed-result cost of each member on its examples. Truncation policies and catalog
   formatters are recorded as v1.x kinds (§1.3 of `03`). The append-only transcript is why Pi's `context` message
@@ -5295,9 +5337,12 @@ calls and suggests `GPTR_REPLAY=replay`.
   through `redact_stream("persist")`; raw redirect files are deleted at process exit; MCP logs live in
   `tempdir()/gptr/mcp-logs/` unless `options(gptr.mcp_debug = TRUE)`. `test-secrets-e2e.R` greps these sinks, the
   deferred-write sidecars and the worker spec and result files.
-- System 1 cache values store `question_sha256`, never the question, and `input_hash` = sha256 of a per-project
-  salt (`.gptr/cache/s1/salt`, committed, RNG-free id bits) concatenated with the canonical input; the cache key
-  includes the salt. `transcripts/` is gitignored by default. The Security considerations page mentions PHI.
+- System 1 cache values store `question_sha256`, never the question, and `input_hash` = sha256 of a
+  per-project salt (`.gptr/cache/s1/salt`, committed, RNG-free id bits) concatenated with the
+  canonical input; the cache key includes the salt. The cache, salt and `.gitignore` writes are best
+  effort: a write that fails keeps the call's answers and usage row, and a salt that cannot be
+  stored serves that one call, so no record is keyed unsalted (FIX-46). `transcripts/` is gitignored
+  by default. The Security considerations page mentions PHI.
 
 **IC-71 Smaller contract fixes.**
 
@@ -5313,7 +5358,7 @@ calls and suggests `GPTR_REPLAY=replay`.
 | OAuth | refuse AS metadata without `code_challenge_methods_supported` or without S256; validate `iss` (RFC 9207) when advertised; own callback reader keeping `iss`; state and redirect checks; negative mock cases in P18 [16 §4 item 8, fact-check] | fid-17 |
 | frontmatter | scalars of the string keys (`name`, `description`, `version`, `model`, `tools`, `argument-hint`) keep their source text (YAML 1.1 turns `yes`/`on`/`1.0` into logicals and numbers; verified) | fid-19 |
 | describers | methods for classes of packages outside Suggests (Matrix, SeuratObject, SingleCellExperiment, arrow, ggplot2) use only base generics, `methods::slot()`/`slotNames()`, `attr()`, `dim()`, guarded by `isNamespaceLoaded()`; never `pkg::fun()` | cran-21 |
-| compaction floor | at freeze the post-compaction floor (static prefix + project instructions + re-injection budgets + 634) is compared with the threshold; if it is not below it, skill and project re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `tools = "minimal"` (`context = "names"` does not lower the floor) [D-250]; an unknown window still checks a finite `compact_at` floor, and an insufficient cap (an unknown window, or a threshold equal to the cap alone) is reported as `arg = "compact_at"` [D-250]; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the window, or 20% of the finite effective cap for an unknown window with finite measured current and post-checkpoint counts compared on the same current estimator-multiplier basis (missing multiplier defaults to 1; invalid multiplier/counts provide no growth evidence); a `plan-cli` reply's usage (a turn's sum over the CLI's model calls) anchors no projection and updates no multiplier, and a CLI model triggers neither rule [D-202] | safe-20 |
+| compaction floor | at freeze the post-compaction floor (static prefix + project instructions + re-injection budgets + 634) is compared with the threshold; if it is not below it, skill and project re-injection budgets are cut to 25% of the threshold, and if still not below, the model is refused for the preset with `gptr_error_invalid_argument` suggesting `tools = "minimal"` (`context = "names"` does not lower the floor) [D-250]; an unknown window still checks a finite `compact_at` floor, and an insufficient cap (an unknown window, or a threshold equal to the cap alone) is reported as `arg = "compact_at"` [D-250]; after a threshold compaction, further threshold compactions wait until the context grew by 20% of the threshold (`min(window, threshold)`, D-298), or 20% of the finite effective cap for an unknown window with finite measured current and post-checkpoint counts compared on the same current estimator-multiplier basis (missing multiplier defaults to 1; invalid multiplier/counts provide no growth evidence); a `plan-cli` reply's usage (a turn's sum over the CLI's model calls) anchors no projection and updates no multiplier, and a CLI model triggers neither rule [D-202] | safe-20 |
 | concurrent writers | read-modify-write of `auth.json`, settings, trust, MCP and user-level project files (and the OAuth refresh) under one short `mkdir` lock (`<file>.lock/`, pid + creation time, 50 x 100 ms retries); a lock is stale when `pid_alive()` is `FALSE` or it is older than 30 s, never when it has vanished (the taker retries); checkpoint blob GC prunes only blobs unreferenced by every session file of the project and older than `gptr.checkpoint_days`, and skips while another live pid holds a session lock in the project | safe-17 |
 | artifact access | each launch gets a 128-bit token (`openssl::rand_bytes(16)`, else `/dev/urandom` on Unix; on Windows without openssl no token and a notice); the wrapper app rejects sessions whose URL lacks `gptr_token=<hex>`; the handle's URL carries it; static checks flag reads of `secret_file` paths at level 3 | safe-22 |
 | knobs | one knob per limit: options `gptr.subagents.max_depth`, `.max_active`, `.max_workers`, `.max_cli`, `.max_tasks` mirror the settings keys; `gptr.max_active` is HTTP transfers only; `gptr_parallel(max_active = NULL)` defaults to `gptr.subagents.max_active` | cons-20 |
@@ -6426,19 +6471,23 @@ single gateway and gains no argument, option, `.opts` key or setting. Code: `gpt
   any other function is refused (`gptr_error_invalid_argument`, `arg = "x"`, naming `gptr_tailor(peter, ...)`).
 - It first calls `session_control_check("gptr_tailor")`; `gptr_tailor` and `gptr_coach` are level 4 `control` rows
   of `risk-functions.csv`, so model code reaches neither during a run without a person (IC-53).
-- `...` holds named `peter()` arguments only (`harness_formals()`), each once (`harness_resolve_args()`):
-  `model`, `mode`, `skills`, `plugins`, `extensions` and `tools` resolve as identifiers in the caller as `peter()`
-  resolves them (§6.1.3; `mode = auto` is `"auto"`), `agents` through `resolve_agents()`, the rest are values.
-  An unnamed or unknown argument, a duplicate, or a `"+name"`/`"-name"` filter in `plugins`
-  (`harness_plugins_check()`, a filter changes every later call of the R session) is
-  `gptr_error_invalid_argument`.
+- `...` holds named `peter()` arguments only (`harness_formals()`), each once
+  (`harness_resolve_args()`): `model`, `mode`, `skills`, `plugins`, `extensions` and `tools` resolve
+  as identifiers in the caller as `peter()` resolves them (section 6.1.3; `mode = auto` is
+  `"auto"`), `agents` through `resolve_agents()`, the rest are values. `prompt` is not among them
+  (each call's task; D-297), so fixing it is refused like an unknown argument. An unnamed or unknown
+  argument, a duplicate, or a `"+name"`/`"-name"` filter in `plugins` (`harness_plugins_check()`, a
+  filter changes every later call of the R session) is `gptr_error_invalid_argument`.
 - Merge over `x`'s fixed arguments (`harness_merge()`): `tools`, `extensions`, `plugins` and `skills` combine
   (`ident_combine()`), `.opts` entries replace by name, other values replace, and `NULL` drops a fixed single value.
   `rules =` and `coaching =` replace `x`'s when not `NULL`.
-- A `notice` ("This harness loads code or loosens checks:") lists, as R source (`harness_source()`), every fixed
-  argument that is not plain data (`harness_plain()`: `NULL`, text, numbers, logicals and lists of them, with no
-  attribute but names; so any function, spec, provider, environment or formula) and `mode = "yolo"`, also when a
-  harness is loaded with `gptr_tailor(readRDS(f))` (D-289).
+- A `notice` ("This harness loads code or loosens checks:") lists, as R source (`harness_source()`),
+  every fixed argument that is not plain data (`harness_plain()`: `NULL`, text, numbers, logicals
+  and lists of them, with no attribute but names; so any function, spec, provider, environment or
+  formula) and `mode = "yolo"`, and always the fixed `extensions` and `plugins`, text included (a
+  file path there is R code sourced on every call), and a fixed `.opts` holding `system` (D-297),
+  also when a harness is loaded with `gptr_tailor(readRDS(f))` (D-289). A provider shows as
+  `<provider id>`; registered secrets in these lines, in `print()` and in `HARNESS.md` are redacted.
 - `gptr_tailor(readRDS(f))` reads the attribute, rebuilds the standard body and checks the spec
   (`harness_spec_check()`: fixed arguments named `peter()` formals, a string `id`, no plugin filters, the rules and
   the coaching valid); a damaged spec is `gptr_error_invalid_argument` ("This is not a valid harness"). It cannot
@@ -6447,18 +6496,22 @@ single gateway and gains no argument, option, `.opts` key or setting. Code: `gpt
   which is always empty here, D-289), `NOTE.md`,
   `REVIEW.md`, `RULES.md` and `skills/<name>/SKILL.md` with `write_atomic()` (`harness_write()`), returns the
   harness invisibly, and is never read back.
-- The call (`harness_call(fn, call, envir)`): the spec is checked again (`harness_spec_check(spec, fresh = FALSE)`,
-  IC-85); a fixed argument the call omits is added, a given `.opts` is merged by name over the fixed one (the call
-  wins), a given list-like argument becomes `c(<fixed>, <given>)`, and for other arguments the call wins; the
-  coaching factory (IC-85) is appended to `extensions`; the head is replaced by the `peter` function. An argument
-  a wrapper forwards through `...` counts as given (its name read with `...names()`, which forces nothing); when
-  one must combine with a list-like fixed argument, or `extensions` with the factory, `harness_expand()` writes
-  the dots out: identifier arguments (`harness_idents`) resolved in the caller as `peter()` resolves them
-  (`harness_ident()`, which `harness_resolve_args()` shares), every other dot as `..i`, so no formal is matched
-  twice. The new call carries the attribute
+- The call (`harness_call(fn, call, envir)`): the spec is checked again
+  (`harness_spec_check(spec, fresh = FALSE)`, IC-85); a fixed argument the call omits is added, a
+  given `.opts` is merged by name over the fixed one (the call wins), a given list-like argument
+  becomes `c(<fixed>, <given>)`, and for other arguments the call wins; the coaching factory (IC-85)
+  is appended to `extensions`; the head is replaced by the `peter` function. An argument a wrapper
+  forwards through `...` counts as given (its name read with `...names()`, which forces nothing);
+  when one must combine with a list-like fixed argument, or `extensions` with the factory,
+  `harness_expand()` writes the dots out: identifier arguments (`harness_idents`) resolved in the
+  caller as `peter()` resolves them (`harness_ident()`, which `harness_resolve_args()` shares), a
+  literal dot as written (a prompt is still interpolated in the caller), every other dot as `..i`,
+  named by the label `peter()` would give it as context unless that label is a `peter()` formal, so
+  no formal is matched twice and interpolation and labels are those of a direct call. The new call
+  carries the attribute
   `gptr_harness = list(fn = <the head as text>, hash = coaching_hash(<coaching>), call = <the call as written>)`
-  for the recorder (IC-87) and is evaluated in the caller's frame, so binding sites, `envir`, `{name}`
-  interpolation, `gptr_last()`, pipes, `lapply()` and `do.call()` behave as for `peter()`.
+  for the recorder (IC-87) and is evaluated in the caller's frame, so binding sites, `envir`,
+  `{name}` interpolation, `gptr_last()`, pipes, `lapply()` and `do.call()` behave as for `peter()`.
 - Views: `$.gptr_harness` and `[[.gptr_harness` give `coaching`, `record` and `report` (the last full report of
   this R session, `the$coach_reports[[id]]`, or `NULL`); any other name is `gptr_error_unknown_member`. `$<-` and
   `[[<-` are `gptr_error_readonly` (`object = "gptr_harness"`).
@@ -6471,12 +6524,13 @@ single gateway and gains no argument, option, `.opts` key or setting. Code: `gpt
 
 **IC-84 `gptr_coach()`** (P29 Tasks 9 and 11).
 - `gptr_coach(..., harness = peter, check = NULL, coach = NULL, k = 1L, strategy = "parallel", focus = c("procedure",
-  "domain"), surface = c("note", "skills", "review", "rules"))`. `...` is what the harness would get: named `peter()`
-  formals are resolved as in IC-83 (identifiers in the caller; every other argument is its own promise's value,
-  `...elt()`, so dots a wrapper forwards keep their frames) and apply to every run of this call only (`budget` also
-  caps each coach session and the judge); the rest is split as `peter()` captures a call (`coach_task()`: the prompt,
-  literal or interpolated, and the context objects by label). No argument shares a name with one of `peter()`'s,
-  which is why `strategy` is not called `mode`.
+  "domain"), surface = c("note", "skills", "review", "rules"))`. `...` is what the harness would
+  get: named `peter()` formals are resolved as in IC-83 (identifiers in the caller; every other
+  argument is its own promise's value, `...elt()`, so dots a wrapper forwards keep their frames) and
+  apply to every run of this call only (`budget` also caps each coach session and the judge, also
+  when the starting harness fixes it); the rest is split as `peter()` captures a call
+  (`coach_task()`: the prompt, literal or interpolated, and the context objects by label). No
+  argument shares a name with one of `peter()`'s, which is why `strategy` is not called `mode`.
 - Order of a call:
   1. `session_control_check("gptr_coach")`; `harness_spec(harness)` (peter or a harness); `coach` resolved as a
      model identifier; `check` a function or `NULL`.
@@ -6491,13 +6545,17 @@ single gateway and gains no argument, option, `.opts` key or setting. Code: `gpt
      unless it has no block and the call record's `offline` is `TRUE` (`replay_guard()` accepts the runs' model and
      the coach model, which the judge also uses; a `NULL` model is not offline): `doc.coach` then answers `"none"`
      and the call coaches unrecorded, as offline models answer `peter()` under replay (D-287).
-  4. `options(gptr.unsafe_no_permissions = TRUE)` is `gptr_error_permission`. Then `coach_args_check()` (D-286):
-     `.run`, `background`, `.stdin`, `envir`, `parallel`, `choices`, `levels`, `threshold`, `min_confidence` and
-     `uncertain`, given or fixed in the harness, are `gptr_error_invalid_argument` with `arg` that name
-     ("gptr_coach() runs your task as one unattended session in another R process, so it does not take
-     `<name> =`."); `budget`, `replay` and `.opts` are checked by `peter()`'s own `gateway_args()`; tool names
-     by `prompt_tools_check()`, only when every `tools` entry is a name and neither the call nor the harness gives
-     `extensions` or `plugins`, and never for `mcp__` names, which a run's session could add.
+  4. `options(gptr.unsafe_no_permissions = TRUE)` is `gptr_error_permission`; the starting coaching
+     is checked (`coaching_validate()`) before any process starts. Then `coach_args_check()`
+     (D-286), after `plugins_sync()`, so the tools of settings plugins and user extension files are
+     known: `.run`, `background`, `.stdin`, `envir`, `parallel`, `choices`, `levels`, `threshold`,
+     `min_confidence` and `uncertain`, given or fixed in the harness, are
+     `gptr_error_invalid_argument` with `arg` that name ("gptr_coach() runs your task as one
+     unattended session in another R process, so it does not take `<name> =`."); `budget`, `replay`
+     and `.opts` are checked by `peter()`'s own `gateway_args()`; tool names by
+     `prompt_tools_check()`, only when every `tools` entry is a name and neither the call nor the
+     harness gives `extensions` or `plugins`, and never for `mcp__` names, which a run's session
+     could add.
   5. `coach_models()`: `coach_model_kind()` (IC-88) for the runs' model (`model =`, else the harness's fixed
      `model`, else the configured default) and the coach model (`coach`, else the runs'), each refused with
      `gptr_error_model_refused`; with the configured default the message adds
@@ -6593,13 +6651,16 @@ single gateway and gains no argument, option, `.opts` key or setting. Code: `gpt
   sessions are not billed, and the judge is billed as a coach session) and `date`. The full report,
   `list(record, results, candidates, coaching)`, goes to `the$coach_reports[[<new id>]]` (the last 5 are kept) and
   is read as `h$report`.
-- Spend and plan readings, after each stage (results are untrusted): `coach_charge()` charges each result's usage
-  rows that pass `usage_rows_check()`, each `request_id` once, to the session of the run the call is part of
-  (`usage_add()` on `run_current()$shell`, which also charges its ancestors), else to the session-less log
-  (`usage_log_append()`), so `gptr_usage()` shows what coaching spent; `coach_plan_merge()` keeps a result's
-  `plan` reading of `claude-cli` or `codex` in `pcli_cache$plan` when its `time` is one finite `POSIXct`, not in
-  the future and newer than the kept one, rebuilt from checked fields (`pcli_chr()`, `pcli_num()`) with
-  `five_hour` and `seven_day` at most 1 and `overage` `TRUE`, `FALSE` or `NA` (IC-88's plan notice reads it).
+- Spend and plan readings, after each stage (results are untrusted): `coach_charge()` charges each
+  result's usage rows that pass `usage_rows_check()`, each `request_id` once, to the session of the
+  run the call is part of (`usage_add()` on `run_current()$shell`, which also charges its
+  ancestors), else to the session-less log (`usage_log_append()`), so `gptr_usage()` shows what
+  coaching spent. These rows are kept in memory only: `usage_add_durable()` takes only rows the
+  receiving session owns, so a resumed session lacks the coaching spend charged inside a run
+  (FIX-42). `coach_plan_merge()` keeps a result's `plan` reading of `claude-cli` or `codex` in
+  `pcli_cache$plan` when its `time` is one finite `POSIXct`, not in the future and newer than the
+  kept one, rebuilt from checked fields (`pcli_chr()`, `pcli_num()`) with `five_hour` and
+  `seven_day` at most 1 and `overage` `TRUE`, `FALSE` or `NA` (IC-88's plan notice reads it).
 - Recording: when `doc.coach` answered `"record"` or `"ask"` and the decision is not `"stopped"`, the result is
   `doc.coach_block(site, h, coach_doc_record(record, out))`, the harness the written block defines (IC-87). A call
   that errors or is interrupted writes nothing.
@@ -6629,16 +6690,26 @@ single gateway and gains no argument, option, `.opts` key or setting. Code: `gpt
 - Hash: `coaching_hash(coaching)` is the first 8 hex of `hash_sha256(canonical_json(list(schema = 1L, note,
   skills, review, rules)))`, skills sorted by name and texts normalised by `text_norm()` (`utils-text.R`), which
   `prompt_hash()` shares; empty coaching has one constant hash, and the gptr version is not part of it.
-- Factory: `harness_factory(spec)` is `NULL` when the coaching is empty and the person has no rules; else a factory
-  with attribute `gptr_key = "gptr_harness:<coaching hash>:<hash of the person's rules>"`, which
-  `gateway_register()` loads at most once per session (`gateway_key_loaded()`; any keyed factory, IC-69). It
-  registers at rank 0 in the harness's session (IC-89's policies also bind the sessions it starts): the note as
+- Factory: `harness_factory(spec)` is `NULL` when the coaching is empty and the person has no rules;
+  else a factory with attribute
+  `gptr_key = "gptr_harness:<coaching hash>:<hash of the person's rules>"`, which
+  `gateway_register()` loads at most once per session (`gateway_key_loaded()`; any keyed factory,
+  IC-69). A keyed factory that `gateway_register()` loads into a session whose prompt is already
+  frozen (another harness on a continuation, or the same harness in a fork or resumed session this
+  process has not loaded it for) clears `.d$frozen` and sets `.d$refreeze` (IC-52). The next request
+  is then composed afresh and carries every loaded harness's note and skills. A refused call
+  restores both (D-251). A continuation with a harness already loaded keeps the frozen prompt. A
+  pending refreeze is a stated break of the prompt cache: `gateway_continue_session()` calls
+  `prefix_reset()`, so no `cache_break` is recorded. The fresh composition uses the continuing
+  call's preset and tool modifiers, so a fixed `tools = "-write"` leaves `write` out of the refrozen
+  prompt while the tool stays registered and callable (D-291). It registers at rank 0 in the
+  harness's session (IC-89's policies also bind the sessions it starts): the note as
   `gptr_prompt_section("coaching_<coaching hash>", <first line> + note, tier = "T1", order = 790L, budget =
-  32768L)`, one section per coaching, so two harnesses' notes in one session never share a name (D-288), the first
-  line being `coaching_first_line` (before the person's `APPEND_SYSTEM.md` at 800); each skill as
-  `gptr_spec("skill", name, description = , text = )`; the policies of IC-89, which keep the names `coaching` and
-  `harness_rules` (every policy applies whatever its name, and `nested_rules()` selects them by name); and the
-  finish hook.
+  32768L)`, one section per coaching, so two harnesses' notes in one session never share a name
+  (D-288), the first line being `coaching_first_line` (before the person's `APPEND_SYSTEM.md` at
+  800); each skill as `gptr_spec("skill", name, description = , text = )`; the policies of IC-89,
+  which keep the names `coaching` and `harness_rules` (every policy applies whatever its name, and
+  `nested_rules()` selects them by name); and the finish hook.
 - Skills with text (Task 1): a `skill` spec may hold `text` in place of `path` and `dir` (§10.2 row 8); `skill.body`
   takes `session` (§7.0, §7.17).
 - Finish hook (`harness_finish_hooks(gptr, review, need)`, `need` the person's and the coaching's `require` rules):
@@ -6652,24 +6723,34 @@ single gateway and gains no argument, option, `.opts` key or setting. Code: `gpt
   `This run finished without: <ids>` and a `gptr.unmet` custom entry. A run's status never changes.
 
 **IC-86 Coaching children and the plain JSON transport** (P29 Task 7, D-278, D-279, D-284, D-290).
-- `coach_run_jobs(jobs)` (`gptr-child.R`) runs each job in its own R process and returns one result per job, in
-  order. A job is `list(id, role = "run" | "coach" | "judge", spec, prompt, objects, args, model, schema, budget,
-  direction)` (`direction` `"final"`, the default, or `"start"`; a coach's `surface`, `base` and `rules_allowed` are
-  read by `coach_child_reply()`). A result is `list(id, status, reason, text, turns, usage, transcript, first_user,
-  risk, refusals, unmet, files, plan, limit, checks, error, value, objects)` (`child_result_new()`), plain data only;
-  `value` and `objects` come last, so the encoder keeps every other field whole (D-290).
+- `coach_run_jobs(jobs)` (`gptr-child.R`) runs each job in its own R process and returns one result
+  per job, in order. A job is
+  `list(id, role = "run" | "coach" | "judge", spec, prompt, objects, args, model, schema, budget,
+  direction)` (`direction` `"final"`, the default, or `"start"`; a coach's `surface`, `base` and
+  `rules_allowed` are read by `coach_child_reply()`); a run's objects travel in its field `file`
+  instead, one RDS file per call that `coach_objects_write()` writes once and every run's
+  `child_main()` reads with `worker_refhook` (FIX-42). A result is
+  `list(id, status, reason, text, turns, usage, transcript, first_user,
+  risk, refusals, unmet, files, plan, limit, checks, error, objects, value)` (`child_result_new()`),
+  plain data only; `objects` and then `value` come last, so the encoder keeps every other field
+  whole and only the value becomes a summary when the reader's count runs out (D-290). A result that
+  cannot be encoded, or merged, ends its job with the summary result or an error result (FIX-41).
 - Scheduling: `child_lanes()` gives each job a lane, but at most two lanes per plan account (`claude`, `codex`);
   lanes run on the worker pool through `subagent_schedule()` with `max_total = subagent_limit("worker")` (the option
   `gptr.subagents.max_workers`). Once a plan reports a limit, its later jobs are not started (status `skipped`,
   reason `plan limit`). Each child has a `gptr_jobs()` row `coaching <role> <id>`; stopping it, or interrupting the
   call, kills the child and ends it and its lane's later jobs `aborted`.
-- What is sent, parent to child (the trusted direction): `spec.rds` written with `save_rds(refhook = worker_refhook)`
-  in a private 0700 folder that is also the child's `TMPDIR`, holding the job, the gptr options of `child_options()`
-  (`critical_guard`, `secret_guard`, `protect_size`, `max_turns`, the `subagents.*` limits and the replay mode)
-  and the parent's pid; for a run also `worker_registry(character())`, the person's effective rules with
-  project-relative path globs anchored to the project (`child_rules()`) and copies of the project's instruction
-  files (`child_instructions()`); for a coach or the judge, in their place, only the provider spec of a provider
-  the person registered (`child_provider()`). The environment is
+- What is sent, parent to child (the trusted direction): `spec.rds` written with
+  `save_rds(refhook = worker_refhook)` in a private 0700 folder that is also the child's `TMPDIR`,
+  holding the job, the gptr options of `child_options()` (`critical_guard`, `secret_guard`,
+  `protect_size`, `max_turns`, the `subagents.*` limits and the replay mode), the parent's pid and,
+  as `secrets`, the registered secrets whose values the jobs and their objects file hold
+  (`secrets_held()`), which `child_main()` registers inactive, so the child redacts them and
+  resolves no credential with them (D-295); for a run also `worker_registry(character())`, the
+  person's effective rules with project-relative path globs anchored to the project
+  (`child_rules()`) and copies of the project's instruction files (`child_instructions()`); for a
+  coach or the judge, in their place, only the provider spec of a provider the person registered
+  (`child_provider()`). The environment is
   `child_env("worker", pass = names(coach_cli_env(kind)), set = c(TMPDIR = ...), provider = <its key>)`
   (`worker_key_provider(model)`).
 - Child entry: `proc_rscript("child", list(spec_path, result_path), ...)`, whose bootstrap loads the installed
@@ -6688,20 +6769,25 @@ single gateway and gains no argument, option, `.opts` key or setting. Code: `gpt
   and `.opts$returns = schema`; every call passes the prompt as interpolated in the parent
   (`.opts$interpolate = FALSE`) and the objects by name, an object bound under a name of its own as a named
   argument under its label.
-- Fence (`child_fence()`, a policy for the whole child process; `child_fence_why()`): it denies any call whose input
-  `wd` is not the run's folder written as an absolute path; `read`, `grep` and `edit` of a CLI login file
-  (`child_login()`: `.credentials.json` in `CLAUDE_CONFIG_DIR`, `auth.json` in `CODEX_HOME`, by default `~/.claude`
-  and `~/.codex`); `write` and `edit` outside the child's temporary folder; every `script` call; `r` code without a
-  classification; R code whose flagged paths name a login file or that calls `find-generic-password`; any `install`
-  row (including `R CMD INSTALL`, `R CMD REMOVE` and `Rcmd`); a `peter$script` row (D-284); R child processes (callr
-  functions, `R` or `Rscript` in a `process` or `dynamic` row); a change of working folder to anywhere but the run's
-  folder itself, written as an absolute path (`child_home()`, D-284), read from the parsed code by `child_dirs()`:
-  the folder of `setwd()`, `withr::with_dir()`/`local_dir()` and `xfun::in_dir()`, matched as R matches arguments (a
-  computed folder, or a changer passed on or named as text, counts as elsewhere), every `wd =` argument, and the
-  target of each `cd`, `pushd`, `chdir` or `Set-Location` in any string of the code, inside `sh -c '...'` too
-  (`child_cd()`); and classified file targets outside the temporary folder, a relative one resolved against the run's
-  folder (`project_root()`). Since the working folder never moves, the targets the classifier resolves hold. It
-  fences only what the classifier sees.
+- Fence (`child_fence()`, a policy for the whole child process; `child_fence_why()`): it denies any
+  call whose input `wd` is not the run's folder written as an absolute path; `read`, `grep` and
+  `edit` of a CLI login file (`child_login()`: `.credentials.json` in `CLAUDE_CONFIG_DIR`,
+  `auth.json` in `CODEX_HOME`, by default `~/.claude` and `~/.codex`); `write` and `edit` outside
+  the child's temporary folder; every `script` call; `r` code without a classification; R code whose
+  flagged paths name a login file or that calls `find-generic-password`; any `install` row
+  (including `R CMD INSTALL`, `R CMD REMOVE` and `Rcmd`); a `peter$script` row (D-284); R child
+  processes (callr functions, `R` or `Rscript` in a `process` or `dynamic` row); a change of working
+  folder to anywhere but the run's folder itself, written as an absolute path (`child_home()`,
+  D-284), read from the parsed code by `child_dirs()`: the folder of `setwd()`,
+  `withr::with_dir()`/`local_dir()` and `xfun::in_dir()`, matched as R matches arguments (a computed
+  folder counts as elsewhere; a changer's name is a move only where R calls it, where `do.call()`,
+  `match.fun()` or `get()` names it, or where the classifier reads it passed on as a value that
+  leaves the project or goes to a folder the code computes, D-297), every `wd =` argument, and the
+  target of each `cd`, `pushd`, `chdir` or `Set-Location` (in any letter case) in any string of the
+  code, inside `sh -c '...'` too (`child_cd()`); and classified file targets outside the temporary
+  folder, a relative one resolved against the run's folder (`project_root()`). Since the working
+  folder never moves, the targets the classifier resolves hold. It fences only what the classifier
+  sees.
 - Result (`child_outcome()`): status, reason, last text, turns, usage rows, the value (`session_value_get()`), the
   objects created or changed in the run's environment (`child_objects()`, never forcing a promise or an active
   binding), the transcript (`child_transcript()`, clipped at 50,000 characters), risk, refusals, unmet ids (the
@@ -6718,22 +6804,28 @@ single gateway and gains no argument, option, `.opts` key or setting. Code: `gpt
   `reason`), `"unmet"` (`id`) and `"limit"` (`resets_at`). The parent reads it with its own line reader
   (`child_line()`), not the worker's: other lines are ignored, none opens a question or a permission prompt,
   strings are clipped at 2,000 characters and at most 1,000 refusals and unmet ids are kept.
-- Plain JSON (`plain_encode()`, `plain_decode()`): a value is `{type, len, data, na, names, dim, levels, tz,
-  nrow}`, `type` one of `logical`, `integer`, `double`, `character`, `factor`, `Date`, `POSIXct`, `data.frame`,
-  `list` or `summary`; numbers are base64 of little-endian `writeBin()`, so doubles stay exact (`NA`, `NaN`, `-0`);
-  anything else (S4, other classes, at depth 20 or longer than 1e6) is its printed summary, clipped at 2,000
-  characters. The encoder keeps within the reader's limits (`plain_max`): it counts depth and values from the
-  result's root, threads one value count through the whole result and leaves each value room for one value per
-  later sibling, so a list or data frame that would pass 1e5 values becomes its summary (D-290). The parent reads
-  a result with `child_read()`: at most 64 MiB (`plain_max$bytes`), `json_decode()`, then `plain_decode()`, which
-  rejects unknown keys and types, more than 1e5 values, nesting deeper than 20, and malformed numbers, names,
-  levels or dims, and rebuilds the kinds itself with `readBin()`, `structure()` and `.POSIXct()`; a result must
-  have only the result's keys, each in its shape: `status`, `text`, `transcript` and `first_user` one string,
-  `reason` and `error` `NULL` or one string, `turns` one whole number of at least 0, `risk` one whole number from 0
-  to 4, `usage` `NULL` or a data frame with numeric `input`, `output` and `cost`, `objects` a list whose elements
-  are all named, `refusals` a list, `unmet` and `checks` character, `files` `NULL` or a data frame and `limit`
-  `NULL` or a list. A refusal is `gptr_error_untrusted` (`what = "coaching result"`), which `child_exit()` turns
-  into an error result for that job alone. `readRDS()` and `jsonlite::unserializeJSON()` are never called on a
+- Plain JSON (`plain_encode()`, `plain_decode()`): a value is
+  `{type, len, data, na, names, dim, levels, tz,
+  nrow}`, `type` one of `logical`, `integer`, `double`, `character`, `factor`, `Date`, `POSIXct`,
+  `data.frame`, `list` or `summary`; numbers are base64 of little-endian `writeBin()`, so doubles
+  stay exact (`NA`, `NaN`, `-0`); anything else (S4, other classes, at depth 20 or longer than 1e6),
+  and any value these keys cannot rebuild exactly (`plain_exact()`: dimnames, an ordered or NA-level
+  factor, a data frame with its own row names, NA names, bytes or invalid text), is its printed
+  summary, printed under `max.print = 200` and clipped at 2,000 characters; a POSIXct keeps an
+  absent `tzone` (FIX-41). The encoder keeps within the reader's limits (`plain_max`): it counts
+  depth and values from the result's root, threads one value count through the whole result and
+  leaves each value room for one value per later sibling, so a list or data frame that would pass
+  1e5 values becomes its summary (D-290). The parent reads a result with `child_read()`: at most 64
+  MiB (`plain_max$bytes`), `json_decode()`, then `plain_decode()`, which rejects unknown keys and
+  types, more than 1e5 values, nesting deeper than 20, and malformed numbers, names, levels or dims,
+  and rebuilds the kinds itself with `readBin()`, `structure()` and `.POSIXct()`; a result must have
+  only the result's keys, each in its shape: `status`, `text`, `transcript` and `first_user` one
+  string, `reason` and `error` `NULL` or one string, `turns` one whole number of at least 0, `risk`
+  one whole number from 0 to 4, `usage` `NULL` or a data frame with numeric `input`, `output` and
+  `cost`, `objects` a list whose elements are all named, `refusals` a list, `unmet` and `checks`
+  character, `files` `NULL` or a data frame and `limit` `NULL` or a list. A refusal is
+  `gptr_error_untrusted` (`what = "coaching result"`), which `child_exit()` turns into an error
+  result for that job alone. `readRDS()` and `jsonlite::unserializeJSON()` are never called on a
   child's output (D-278).
 - Safe direction (`child_merge()`): the file and the stream are merged, keeping every refusal and unmet id and,
   for risk, the higher of the two for a final and the lower for a starting run, whose risk is the ceiling the
@@ -6833,27 +6925,34 @@ single gateway and gains no argument, option, `.opts` key or setting. Code: `gpt
   `gptr_error_billing` (IC-65).
 - `.opts$returns` on the claude route (every `peter()` call, D-283): `pcli_claude_build()` appends
   `adp_returns_instruction(returns)` to the user line; gptr still validates the reply.
-- Codex (`cli-codex.R`). With a role, `pcli_codex_args()` builds `codex exec --json --ephemeral --ignore-user-config
-  --ignore-rules --skip-git-repo-check -m <model> -C <folder> --sandbox read-only`, then `pcli_codex_confine`
-  (`--disable` for each of `pcli_codex_off`, the 14 features `shell_tool`, `unified_exec_tty`, `view_image`,
-  `multi_agent`, `apps`, `plugins`, `tool_suggest`, `image_generation`, `memories`, `goals`, `sleep_tool`,
-  `skill_search`, `browser_use` and `computer_use`, and `-c` for web search off, no user questions, agents and skills
-  off, no permission, environment or apps instructions and `history.persistence="none"`), gptr's hook for
+- Codex (`cli-codex.R`). With a role, `pcli_codex_args()` builds
+  `codex exec --json --ephemeral --ignore-user-config
+  --ignore-rules --skip-git-repo-check -m <model> -C <folder> --sandbox read-only`, then
+  `pcli_codex_confine` (`--disable` for each of `pcli_codex_off`, the 14 features `shell_tool`,
+  `unified_exec_tty`, `view_image`, `multi_agent`, `apps`, `plugins`, `tool_suggest`,
+  `image_generation`, `memories`, `goals`, `sleep_tool`, `skill_search`, `browser_use` and
+  `computer_use`, and `-c` for web search off, no user questions, agents and skills off, no
+  permission, environment or apps instructions and `history.persistence="none"`), gptr's hook for
   `SessionStart` and `PreToolUse` (`inst/gptr/codex_hook.R`, with `--dangerously-bypass-hook-trust`;
-  `pcli_codex_hooks()`: the argv quoted for `sh`, but on Windows, where cmd.exe runs the command and mangles a line
-  holding more than two quotes, unquoted short (8.3) paths with backslashes (`pcli_cmd_paths()`), a path that keeps a
-  space or a cmd.exe sign being `gptr_error_model_refused` with `reason = "cli_preflight"`), the person's
-  `cli_auth_credentials_store` from `$CODEX_HOME/config.toml` (`pcli_codex_auth_store()`), for a coach
-  `--output-schema` with the schema in strict form (`pcli_codex_strict()`), and `-`. A run keeps gptr's relay
-  (`pcli_codex_mcp_args()`); a coach has none. Never `exec resume`: a follow-up is a fresh exec that carries the
-  instructions and the whole history (D-276).
-- The hook (`codex_hook.R`) writes a start line for `SessionStart`; for `PreToolUse` it allows only a run's
-  `mcp__gptr__*` tools and denies everything else, logging the tool's name, with exit status 2; input it cannot
-  read is denied. Checks: an item other than a message, reasoning or an `error`-type warning (and, for a run, a
-  call of gptr's MCP server) stops the exec at once (`pcli_codex_outside()`); a completed turn is kept only with the
-  bypass warning, the hook's start line and, for a coach, no denial and exactly one message
-  (`pcli_codex_coach_check()`). A run's hook denials are reported as refused steps. A failed turn is a provider error
-  quoting Codex (`Codex reported an error: ...`), never a fall-back to Codex's own shell (D-274, D-275).
+  `pcli_codex_hooks()`: the argv quoted for `sh`, but on Windows, where Codex's shell, PowerShell or
+  cmd.exe, runs the command and a line holding quotes does not run as written, unquoted short (8.3)
+  paths with backslashes (`pcli_cmd_paths()`), a path that keeps a space or a sign those shells read
+  being `gptr_error_model_refused` with `reason = "cli_preflight"`), the person's
+  `cli_auth_credentials_store` from `$CODEX_HOME/config.toml` (`pcli_codex_auth_store()`), for a
+  coach `--output-schema` with the schema in strict form (`pcli_codex_strict()`), and `-`. A run
+  keeps gptr's relay (`pcli_codex_mcp_args()`); a coach has none. Never `exec resume`: a follow-up
+  is a fresh exec that carries the instructions and the whole history (D-276).
+- The hook (`codex_hook.R`) writes a start line for `SessionStart`; for `PreToolUse` it allows only
+  a run's `mcp__gptr__*` tools and denies everything else, logging the tool's name, by printing
+  Codex's `PreToolUse` decision (`hookSpecificOutput` with `permissionDecision` `"deny"` and its
+  reason) on stdout with exit status 0, which no shell changes (PowerShell reports a status of 2 as
+  1, which does not block; D-297); input it cannot read is denied. Checks: an item other than a
+  message, reasoning or an `error`-type warning (and, for a run, a call of gptr's MCP server) stops
+  the exec at once (`pcli_codex_outside()`); a completed turn is kept only with the bypass warning,
+  the hook's start line and, for a coach, no denial and exactly one message
+  (`pcli_codex_coach_check()`). A run's hook denials are reported as refused steps. A failed turn is
+  a provider error quoting Codex (`Codex reported an error: ...`), never a fall-back to Codex's own
+  shell (D-274, D-275).
 - Logins: `coach_cli_env(kind)` (`auth-childenv.R`) returns the set variables of the route profile's `keep` list
   (`cli-claude`: `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`, `CLAUDE_SECURESTORAGE_CONFIG_DIR`,
   `CLAUDE_CODE_GIT_BASH_PATH`; `cli-codex`: `CODEX_HOME`), none for `api` and `fake`; `coach_run_jobs()` passes them

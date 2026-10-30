@@ -481,15 +481,19 @@ with `peter()`.
 that a call is a continuation without evaluating its first argument, which could run a pipeline
 twice. Instead `gateway_register()` (R/gptr-gateway.R:612-637) gets one change: it skips a factory
 with a `gptr_key` attribute that is already loaded for that session. That is how it already
-de-duplicates specs (R/gptr-gateway.R:567-576). Your own keyed factories benefit too.
+de-duplicates specs (R/gptr-gateway.R:567-576). Your own keyed factories benefit too. A factory new
+to a session whose prompt is already frozen, such as another harness on a continuation, refreezes
+the prompt: the next request is composed afresh with every loaded harness's coaching and the
+continuing call's tool modifiers (D-291).
 
 **Fixed arguments are values.** `gptr_tailor()` resolves them once, in your session, when it makes
 the harness. For example, identifiers such as `mode = auto` become `"auto"`. It refuses `+name` and
 `-name` entries in `plugins`, because those change the filters of the whole R process
 (R/gptr-gateway.R:589-606). When the harness is made or loaded, it prints, as R source, every fixed
-argument that is not plain data, and `mode = "yolo"`. Plain data is `NULL`, text, numbers, logicals
-and lists of them, with no attribute but names; so any function, spec, provider, environment or
-formula is printed (D-289).
+argument that is not plain data, and `mode = "yolo"`, and always the fixed `extensions` and
+`plugins` and a fixed `.opts` holding `system`. `prompt` cannot be fixed: it is each call's task
+(D-297). Plain data is `NULL`, text, numbers, logicals and lists of them, with no attribute but
+names; so any function, spec, provider, environment or formula is printed (D-289).
 
 **Reading it.** `$coaching` and `$record` are read-only views of the attribute. `$report` returns
 the last full report from this R session's memory, keyed by `id`, or `NULL`. To change a harness,
@@ -640,9 +644,10 @@ existing option `gptr.subagents.max_workers`, which defaults to `min(4, cores - 
 **Sent to a run's child** (as data, in a private 0700 folder, over the trusted parent-to-child
 path):
 - the harness, with its arguments already resolved to values;
-- your `...`: the interpolated prompt, your objects under their names, and other `peter()`
-  arguments as values. An object without a name R can use, such as the `..2` that `do.call()`
-  gives a value, is bound under a name of its own and passed under its label;
+- your `...`: the interpolated prompt, your objects under their names (written once per call to one
+  file that every run reads), and other `peter()` arguments as values. An object without a name R
+  can use, such as the `..2` that `do.call()` gives a value, is bound under a name of its own and
+  passed under its label;
 - the resolved model, with its provider record (base URL, headers, region and compatibility
   settings) resolved in your session. Otherwise Azure, Bedrock and locally configured endpoints
   could not be reached from the child;
@@ -651,7 +656,9 @@ path):
 - copies of your project's instruction files;
 - the gptr options children never receive today: `critical_guard`, `secret_guard`,
   `protect_size`, `max_turns`, the `subagents.*` limits, and your `replay` mode;
-- the parent's pid, so that an orphaned child exits.
+- the parent's pid, so that an orphaned child exits;
+- the registered secrets whose values the job and its objects hold, which the child registers to
+  redact only, so they reach no model raw and resolve no credential (D-295).
 
 A **coach's child** receives no registry, no extensions and no tools: only the coach's prompt, its
 model and the reply schema.
@@ -665,9 +672,11 @@ as they are for workers today.
 **In the child,** `child_main()` (NEW, internal):
 - sets `gptr.interactive = FALSE` and `noninteractive_ask = "stop"`, so a step that needs a person
   ends the run `blocked` (R/agent-dispatch.R:689-710). It also turns recording off;
-- sets an internal flag that makes `provider_stream()`, the one function every model request goes
-  through, refuse a model outside the allowed kinds (1.5). This covers a router's choice and its
-  fallback, `ctx$set_model()`, sub-agents with their own model, System 1 emulation and compaction;
+- sets an internal flag that makes `provider_stream()`, the one function every chat model request
+  goes through, refuse a model outside the allowed kinds (1.5). System 1 classifier calls do not go
+  through it, so a run may call System 1: they send only the judged values and keep the egress check
+  (D-300). This covers a router's choice and its fallback, `ctx$set_model()`, sub-agents with their
+  own model, System 1 emulation and compaction;
 - runs every sub-agent inline: `backend = "worker"` is rewritten to `"inline"`, so the fence, the
   flag and the streamed events cover sub-agents in one process;
 - makes a fresh folder under its temporary directory to be its working folder and project root;
@@ -676,10 +685,12 @@ as they are for workers today.
     the run's folder (with the widening above); a relative path is read from the run's folder;
   - a change of working folder to anywhere but the run's folder itself, written as an absolute
     path: `setwd()`, `withr::with_dir()` and `local_dir()`, `xfun::in_dir()`, any `wd =`
-    argument, and `cd`, `pushd`, `chdir` or `Set-Location` in any string of the code. A subfolder
-    is denied too, because after moving into one a `../` path that the classifier resolved inside
-    the folder would lead outside it. So the working folder never moves, and the paths the
-    classifier resolves hold (D-284);
+    argument, and `cd`, `pushd`, `chdir` or `Set-Location` (in any letter case) in any string of the
+    code. A changer's name counts as a move only where R calls it, where `do.call()`, `match.fun()`
+    or `get()` names it, or where the classifier reads it passed on as a value that leaves the
+    project or goes to a folder the code computes (D-297). A subfolder is denied too, because after
+    moving into one a `../` path that the classifier resolved inside the folder would lead outside
+    it. So the working folder never moves, and the paths the classifier resolves hold (D-284);
   - every `peter$script()` call and `script` tool call. R code never shows the interpreter, and a
     script may start R with code gptr cannot read; `peter$sh("python x.py")` still works (D-284);
   - every call in the `install` category, which gains a row for `R CMD INSTALL` in
@@ -708,7 +719,9 @@ as they are for workers today.
     session object. Each is `{type, len, data, na, names, dim, levels, tz, nrow}`, where `type` is
     one of logical, integer, double, character, factor, Date, POSIXct, data.frame, list or
     summary. Numbers are base64 of `writeBin()` in little-endian order, so they are exact,
-    including `NA` versus `NaN` and `-0`. Anything else is sent as its printed summary.
+    including `NA` versus `NaN` and `-0`. Anything else is sent as its printed summary, and so is a
+    value these keys cannot rebuild exactly: dimnames, an ordered or NA-level factor, a data frame
+    with its own row names, `NA` names, bytes or invalid text. A POSIXct keeps an absent `tzone`.
 
   The encoder keeps within the parent's limits on depth and on the number of values, so a value
   too deep or too large becomes its summary. A result still over 64 MiB is written again with the
@@ -741,7 +754,8 @@ as they are for workers today.
   printed to you in full, and it runs under all of peter's checks.
 - Usage rows that pass gptr's usage check are charged, each request once, to the session of the
   run the call is part of, or else to the session-less log, so `gptr_usage()` shows what coaching
-  spent.
+  spent. Those rows stay in memory: the session file takes only rows its own session made, so a
+  resumed session lacks the coaching spend charged inside a run.
 
 **Why `.rds` is not used, in plain words.** An `.rds` file is not only data. R's save format can
 also hold a "do this later" note, which R calls a *promise*. Before R 4.4, a file could be built so
@@ -933,8 +947,9 @@ pick   = if (!length(ok)) NULL else if (length(ok) > 1) run_judge(ok) else ok[[1
 4. A run sees only the objects you pass in `...`, not the rest of your workspace or your attached
    packages. It starts in an empty folder, cannot install packages, cannot write outside its folder
    or move to another folder, and cannot run scripts with `peter$script()`, by the routes gptr
-   recognises. Give it data as objects, name files by their full path, and install what it needs
-   first.
+   recognises. A write to a path the code computes, or through a function the code computes, is not
+   refused yet (D-297). Give it data as objects, name files by their full path, and install what it
+   needs first.
 5. A run that forges its own report can lower its reported risk or claim requirements met. The
    parent's safe-direction reading limits this but cannot rule it out. The kept coaching is still
    only text that you read.
@@ -950,7 +965,7 @@ pick   = if (!length(ok)) NULL else if (length(ok) > 1) run_judge(ok) else ok[[1
      or the macOS keychain, through ways the fence cannot see. The fence denies the ways gptr
      recognises (3.7).
 8. Harness² measured re-running the *same* task. Whether coaching on one dataset helps on the next
-   is untested; phase P29h measures it.
+   is untested; phase P29h, which would measure it, is deferred after 1.0 (D-300).
 
 ### 3.6 Recording harness calls and coaching (NEW)
 
@@ -1222,10 +1237,10 @@ offers one.
 - **Runs:** gptr's MCP relay is kept, so the run acts only through gptr's tools, and every action
   passes gptr's gate, the fence, the rules and the risk tally. Any tool event other than a call to
   gptr's MCP server makes the run invalid. Each denial in the hook log counts as a refusal.
-- **Not yet verified** (needs the live tests in P29e):
-  - whether the ChatGPT-plan backend accepts the reduced tool set and the strict schema;
-  - how well a run does without Codex's own shell;
-  - whether Codex writes logs that contain the prompt despite `--ephemeral`.
+- **Verified live** (2026-10-28, Codex 0.157.1 on a ChatGPT plan): the backend accepts the reduced
+  tool set and the strict schema (D-274), and Codex wrote no file holding the prompt despite
+  `--ephemeral` (D-276). **Not yet measured:** how well a run does without Codex's own shell (P29h,
+  deferred).
 - **Later, and cleaner for ChatGPT plans:** OpenAI's "Sign in with ChatGPT", which it offers for
   open-source tools that run locally. On that route gptr would call the model itself, as on any
   API route. It is not built yet.
@@ -1290,20 +1305,21 @@ amendment, with a plan `dev/plan/P29-gptr-coach.md`, D-273 and IC-83 onward.
 | P29e | Claude Code and Codex plans (3.7) | **Offline, with gptr's fake CLI.** Each of these is refused: an `init` that lists a built-in tool, an auto-memory path or a plugin; a stream that uses a tool that is not gptr's; a Codex event of another kind; a hook-log denial, or a missing hook start line; a feature that a preflight reports still on; a non-empty `permission_denials`. A Codex warning event is accepted. A second turn on Codex (a coach retry, a review round) starts a fresh `exec`. The plan-limit messages end a `gptr_coach()` call with "stopped at ... plan limit". At most two plan sessions run at once.<br>**Live, per CLI (`GPTR_LIVE_TESTS`).**<br>- A coach from a child process has no tools and returns a valid reply.<br>- A coach told to read `~/.bashrc` and run a command replies with text only.<br>- The CLI saves nothing for the session.<br>- A run in auto mode acts through gptr's tools, and a write outside its folder is refused and reported.<br>- A run that needs approval ends `blocked` at once.<br>- Sign-in works from a child process for each kind of login, including a Codex keyring login. |
 | P29f | `k > 1` and `strategy = "sequential"` | the counts match the formula; composers see every probe; rounds share the starting runs; the judge sees only passing finals under shuffled labels |
 | P29g | coaching rules and your own data rules (3.2) | each of the nine examples in 1.8 matches or misses as stated, including `peter$write`, `system()` and a helper from an earlier turn; a `never` rule denies in auto and yolo, in nested shell calls, and in every kind of sub-agent; a reminder is sent at most twice and never at the turn limit; a `require` rule that saves a file can be kept; an unmet requirement fails `passes()`; only the procedure coach may write rules and the composer cannot add one; inert rules (`fn:pkg::f`, an unknown category) are refused |
-| P29h | live calibration (dev only, `dev/bench/coach/`) | on 2 or 3 real tasks with deterministic checks: coach on one dataset, then compare the starting and coached harness on new data, three runs each, with cost, on an API key and on each plan. It decides whether the later items are worth building |
+| P29h | live calibration (dev only, `dev/bench/coach/`; deferred after 1.0 and not built, D-300) | on 2 or 3 real tasks with deterministic checks: coach on one dataset, then compare the starting and coached harness on new data, three runs each, with cost, on an API key and on each plan. It decides whether the later items are worth building |
 | later | only if P29h shows a need | best-of-k as a coaching part; "before X, do Y" ordering rules; sub-agent definitions as coaching; routers with a declared list of models; copying chosen project files into each run's folder |
 | later | on its own merits | Sign in with ChatGPT, a route where gptr calls the model itself on a ChatGPT plan |
 
 **Separate items for the maintainer** (not part of P29):
-- **The worker backend reads its child's result with `readRDS()`** (R/subagent-worker.R:515-518),
-  from a process where model code ran. On R 4.2 and 4.3 that is the CVE-2024-27322 pattern. On every
-  version, the exported objects can carry code by design. The status and text could move to the
-  JSON line the worker already sends (:318). For the exports, either document the trust they
-  require or gate them on R 4.4 or later.
-- **`risk_control_env`** (R/perm-classify.R:1760-1766) lacks `R_USER_CONFIG_DIR`,
-  `R_USER_DATA_DIR`, `HOME` and `XDG_CONFIG_HOME`. So in `auto` mode, `Sys.setenv()` of any of them
-  is allowed, and it moves gptr's whole configuration. This affects ordinary `peter()` calls, not
-  coaching.
+- **The worker backend reads its child's result with `readRDS()`** (R/subagent-worker.R:537),
+  from a process where model code ran. Documented in `?gptr_security` and kept by decision (D-300),
+  with a ledger row. On R 4.2 and 4.3 that is the CVE-2024-27322 pattern. On every version, the
+  exported objects can carry code by design. The status and text could move to the JSON line the
+  worker already sends (:318). For the exports, either document the trust they require or gate them
+  on R 4.4 or later.
+- **`risk_control_env`** lacked `R_USER_CONFIG_DIR`, `HOME` and `XDG_CONFIG_HOME`, so in `auto` mode
+  `Sys.setenv()` of one moved gptr's whole configuration. Fixed by FIX-36 (D-272):
+  `risk_control_env()` (R/perm-classify.R:1906-1916) holds them, `APPDATA` and `USERPROFILE`; the
+  data folder (`R_USER_DATA_DIR`) moves nothing gptr keeps.
 
 **Footprint:**
 - two new exports, taking the count from 64 to 66: `gptr_tailor` and `gptr_coach`. Both keep the
