@@ -81,7 +81,8 @@ code.
 
 \itemize{
 \item \code{gptr.connect_timeout} (seconds, \code{20}), \code{gptr.first_byte_timeout} (seconds, \code{120}) and
-\code{gptr.idle_timeout} (seconds, \code{90}): network timeouts.
+\code{gptr.idle_timeout} (seconds, \code{90}): network timeouts. High-effort reasoning on OpenAI or
+Google may need \code{options(gptr.idle_timeout = 300)}.
 \item \code{gptr.max_retry_delay} (seconds, \code{60}): a longer \code{retry-after} from a provider fails at
 once.
 \item \code{gptr.max_attempts} (integer, \code{4}): transport attempts per request.
@@ -99,7 +100,9 @@ command-line tools.
 \section{Evaluation and tools}{
 
 \itemize{
-\item \code{gptr.r_timeout} (seconds, \code{3600}): time limit of the \code{r} tool when nobody is present.
+\item \code{gptr.r_timeout} (seconds, \code{3600}): time limit of the \code{r} tool when nobody is present. It
+stops R code that is computing; in a non-interactive R it does not end \code{Sys.sleep()} or
+\code{system()}, which \code{peter$sh(timeout = )} does for a command.
 \item \code{gptr.r_output_tokens} (integer, \code{4000}): estimated tokens of one \code{r} result.
 \item \code{gptr.r_max_images} (integer, \code{3}): plot images attached to one \code{r} result.
 \item \code{gptr.helper_output_tokens} (integer, \code{1500}): printed size of \verb{peter$} helper results.

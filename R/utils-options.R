@@ -555,7 +555,8 @@ s3_register = function(generic, class, method = NULL) {
 #'
 #' @section Transport and processes:
 #' - `gptr.connect_timeout` (seconds, `20`), `gptr.first_byte_timeout` (seconds, `120`) and
-#'   `gptr.idle_timeout` (seconds, `90`): network timeouts.
+#'   `gptr.idle_timeout` (seconds, `90`): network timeouts. High-effort reasoning on OpenAI or
+#'   Google may need `options(gptr.idle_timeout = 300)`.
 #' - `gptr.max_retry_delay` (seconds, `60`): a longer `retry-after` from a provider fails at
 #'   once.
 #' - `gptr.max_attempts` (integer, `4`): transport attempts per request.
@@ -569,7 +570,9 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.cli_turn_timeout` (seconds, `3600`): wall-clock time per command-line turn.
 #'
 #' @section Evaluation and tools:
-#' - `gptr.r_timeout` (seconds, `3600`): time limit of the `r` tool when nobody is present.
+#' - `gptr.r_timeout` (seconds, `3600`): time limit of the `r` tool when nobody is present. It
+#'   stops R code that is computing; in a non-interactive R it does not end `Sys.sleep()` or
+#'   `system()`, which `peter$sh(timeout = )` does for a command.
 #' - `gptr.r_output_tokens` (integer, `4000`): estimated tokens of one `r` result.
 #' - `gptr.r_max_images` (integer, `3`): plot images attached to one `r` result.
 #' - `gptr.helper_output_tokens` (integer, `1500`): printed size of `peter$` helper results.
