@@ -117,9 +117,9 @@ tty_modes = function(modes = "-g") {
 #' Set the terminal modes of a console call (IC-76, D-243), the saved ones (`stty -g`) kept: a T
 #' console's composer reads keys as typed, `-icanon -echo -iexten -isig min 1 time 0` (Ctrl-C is a
 #' key it reads, as a signal could be lost under load; opost stays on, and `min 1` keeps a tool
-#' that reads stdin waiting, never at an end of input); a D console turns the echo off and keeps
-#' what is typed at SIGINT (`-echo noflsh`; `keys` FALSE), so the pause menu's drain keeps a line
-#' being typed (policy_menu()). `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which
+#' that reads stdin waiting, never at an end of input); a D console turns the echo off
+#' (`-echo`; `keys` FALSE). Both keep what is typed at SIGINT (`noflsh`; for a T console while R
+#' code runs with isig on), so the pause menu's drain keeps a line being typed (policy_menu()). `the$tty` holds `saved`, `set` and `keys` until tty_restore(), which
 #' also runs at q() (a finalizer, onexit); nothing is set when stty fails. A T console's set also
 #' turns bracketed paste on (`paste`, D-263), and every return to the saved modes (tty_restore(),
 #' tty_question(), gptr_readline()) turns it off first, so readline never reads with it on: GNU
@@ -134,7 +134,7 @@ tty_call = function(keys) {
   tty$saved = saved
   tty$keys = keys
   tty$set = if (keys) {
-    c("-icanon", "-echo", "-iexten", "-isig", "min", "1", "time", "0", "paste")
+    c("-icanon", "-echo", "-iexten", "-isig", "noflsh", "min", "1", "time", "0", "paste")
   } else {
     c("-echo", "noflsh")
   }
