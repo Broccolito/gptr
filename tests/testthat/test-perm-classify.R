@@ -1174,8 +1174,8 @@ test_that("a for loop over a vector and a listing of a folder are read as its fi
                  "unlink(list.files(tempdir(), full.names = TRUE))")) {
     expect_true(lv(code) <= 1L, label = code)
   }
-  # neighbours: a folder in the project, names alone, a computed folder and a deleter handed to
-  # lapply()
+  # neighbours: a folder in the project, names alone, a computed folder and a deleter lapply()
+  # calls
   for (code in c("file.remove(list.files('output', full.names = TRUE))",
                  "file.remove(list.files('~'))", "file.remove(list.files(d, full.names = TRUE))",
                  "lapply(fs, unlink)", "for (f in fs) unlink(f)")) {
