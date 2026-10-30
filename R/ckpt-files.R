@@ -94,19 +94,18 @@ ckpt_store_get = function(hash, dest, store = ckpt_store_root()) {
 }
 
 #' Does another live process hold a session lock (`<file>.lock/pid`: pid, creation time; P06)?
-#' A lock without a pid file is not held; a readable holder is held while P06's lock_is_live()
-#' says so, and an unreadable pid while the file is younger than 24 h.
+#' A lock without a pid file is not held. As P06's lock_is_live() reads it, a holder its pid and
+#' creation time prove alive holds past a 24 h heartbeat (D-298); one that cannot be checked, or
+#' an unreadable pid, holds while the file is younger than 24 h.
 #' @noRd
 ckpt_foreign_lock = function(session_files) {
   for (f in file.path(paste0(session_files, ".lock"), "pid")) {
-    if (!file.exists(f)) next
-    h = lock_holder(dirname(f))
-    if (is.null(h) || is.na(h$pid)) {
-      age = as.numeric(Sys.time()) - as.numeric(file.mtime(f))
-      if (!is.na(age) && age <= 24 * 3600) return(TRUE)
-      next
-    }
-    if (!lock_is_mine(h) && lock_is_live(h)) return(TRUE)
+    age = as.numeric(Sys.time()) - as.numeric(file.mtime(f))
+    if (is.na(age)) next
+    x = suppressWarnings(as.numeric(readLines(f, warn = FALSE, encoding = "UTF-8")))
+    if (identical(x[1L], as.numeric(Sys.getpid()))) next
+    alive = if (is.na(x[1L])) NA else proc_pid_valid(x[1L]) && proc_identity(x[1L], x[2L])$alive
+    if (isTRUE(alive) && is.finite(x[2L]) || !isFALSE(alive) && age <= 24 * 3600) return(TRUE)
   }
   FALSE
 }
