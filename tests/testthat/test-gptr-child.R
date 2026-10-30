@@ -248,6 +248,29 @@ test_that("the fence denies writes outside, moving away from the folder, install
   expect_identical(r("m = mean(1:3)"), "allow")
 })
 
+test_that("the fence reads a folder changer's name as a move only where R calls it", {
+  run = path_norm(withr::local_tempdir())
+  withr::local_options(gptr.project_root = run)
+  withr::local_dir(run)
+  r = function(code) {
+    call = list(name = "r", input = list(code = code), risk = gptr_risk(code))
+    child_fence(call, NULL)$decision %||% "allow"
+  }
+  for (code in c("in_dir = 'data'; d = read.csv(file.path(in_dir, 'x.csv'))", "x = 'setwd'",
+                 "with_dir = 1", "local_dir = c(a = 1); local_dir[['a']]")) {
+    expect_identical(r(code), "allow", label = code)
+  }
+  far = path_norm(tempdir())
+  for (code in c("setwd('/x')", "do.call('setwd', list('/x'))", "f = match.fun('setwd')",
+                 sprintf("do.call(setwd, list('%s'))", far), "lapply(dirs, setwd)",
+                 "Map('setwd', dirs)", "f = withr::with_dir",
+                 "system(\"pwsh -c 'Set-Location /tmp; echo x > pwn'\")",
+                 # a text whose first word is cd reads as a shell command (D-284)
+                 "labs = c('cd', 'ab')")) {
+    expect_identical(r(code), "deny", label = code)
+  }
+})
+
 test_that("a run's child: a fresh folder, the fence in the run and its sub-agent, events", {
   skip_on_cran()
   local_project()

@@ -712,7 +712,10 @@ child_fence_why = function(call) {
   if (any(rproc)) return("it starts no other R process, whose code gptr cannot read")
   code = tryCatch(parse(text = paste(unlist(call$input$code), collapse = "\n"),
                         keep.source = FALSE), error = function(e) NULL)
-  if (!all(vapply(child_dirs(code), child_home, NA))) return(stay)
+  # a changer the classifier reads leaving the project or to a folder the code computes, as
+  # when it is passed to lapply()
+  moved = fl$fn %in% names(child_chdir) & !is.na(fl$path_class)
+  if (any(moved) || !all(vapply(child_dirs(code), child_home, NA))) return(stay)
   files = as.character(unlist(call$risk$targets$files))
   # rule_call_path() writes an absolute path as "//path" (Unix) or "/C:/path" (Windows), and
   # one inside the run's folder relative to it
@@ -728,17 +731,16 @@ child_fence_why = function(call) {
 child_chdir = c(setwd = "dir", with_dir = "new", local_dir = "new", in_dir = "dir")
 
 #' The folders R code moves to, each as written or NA when computed: the folder of setwd() and of
-#' withr's and xfun's directory changers (NA when one is passed on or named as text), every
-#' `wd =` argument (peter$sh(), processx), and where each cd, pushd, chdir or Set-Location in the
-#' code's strings goes
+#' withr's and xfun's directory changers called by name, NA for one named to do.call(),
+#' match.fun() or get(), every `wd =` argument (peter$sh(), processx), and where each cd, pushd,
+#' chdir or Set-Location in the code's strings goes. A changer passed on as a value is the
+#' classifier's to read (child_fence_why()).
 #' @noRd
 child_dirs = function(e) {
   lit = function(x) if (rlang::is_string(x)) x else NA_character_
   if (is.character(e)) {
-    cd = tryCatch(unlist(lapply(e[!is.na(e)], child_cd)), error = function(err) NA_character_)
-    return(c(cd, if (any(e %in% names(child_chdir))) NA_character_))
+    return(tryCatch(unlist(lapply(e[!is.na(e)], child_cd)), error = function(err) NA_character_))
   }
-  if (is.symbol(e)) return(if (as.character(e) %in% names(child_chdir)) NA_character_)
   if (!is.call(e) && !is.pairlist(e) && !is.expression(e)) return(character())
   parts = as.list(e)
   out = character()
@@ -747,13 +749,19 @@ child_dirs = function(e) {
     if (is.call(fn) && (identical(fn[[1L]], quote(`::`)) || identical(fn[[1L]], quote(`:::`)))) {
       fn = fn[[3L]]
     }
-    arg = if (is.symbol(fn)) unname(child_chdir[as.character(fn)]) else NA_character_
+    fn = if (is.symbol(fn)) as.character(fn) else ""
+    arg = c(child_chdir, do.call = "what", match.fun = "FUN", get = "x")[fn]
     if (!is.na(arg)) {
-      # the folder argument as R matches it: by its name, else the first unnamed one
+      # the folder (or function) argument as R matches it: by its name, else the first unnamed one
       sig = function(...) NULL
       formals(sig) = c(stats::setNames(alist(x = ), arg), alist(... = ))
-      out = lit(tryCatch(as.list(match.call(sig, e))[[arg]], error = function(err) NULL))
-      parts = parts[-1L]
+      v = tryCatch(as.list(match.call(sig, e))[[arg]], error = function(err) NULL)
+      if (fn %in% names(child_chdir)) {
+        out = lit(v)
+        parts = parts[-1L]
+      } else if ((is.symbol(v) || rlang::is_string(v)) && as.character(v) %in% names(child_chdir)) {
+        out = NA_character_
+      }
     }
     if ("wd" %in% names(parts)) out = c(out, lit(parts[["wd"]]))
   }
@@ -762,16 +770,16 @@ child_dirs = function(e) {
 
 #' Where the cd, pushd, chdir or Set-Location commands of a text go ("~" without a folder). Each
 #' piece between shell separators or quotes is read as a command after leading keywords, wrappers
-#' and assignments, so a cd inside `sh -c '...'` counts too; the names fold case only on
-#' Windows, whose shells do
+#' and assignments, so a cd inside `sh -c '...'` counts too; cd, pushd and chdir fold case only on
+#' Windows, whose shells do, and PowerShell's Set-Location everywhere
 #' @noRd
 child_cd = function(cmd) {
   out = character()
   lead = "^((then|do|else|!|builtin|command|exec|env|sudo|nohup|time|[A-Za-z_]\\w*=\\S*)\\s+)*"
   for (s in sub(lead, "", trimws(strsplit(cmd, "[;&|\n(){}`'\"]")[[1L]]), perl = TRUE)) {
     w = strsplit(s, "\\s+")[[1L]]
-    if (length(w) && (if (is_windows()) tolower(w[[1L]]) else w[[1L]]) %in%
-          c("cd", "pushd", "chdir", "set-location")) {
+    if (length(w) && ((if (is_windows()) tolower(w[[1L]]) else w[[1L]]) %in%
+                        c("cd", "pushd", "chdir") || tolower(w[[1L]]) == "set-location")) {
       to = w[-1L][!grepl("^-.", w[-1L])][1L]
       out = c(out, if (is.na(to)) "~" else to)
     }
