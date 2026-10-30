@@ -670,11 +670,12 @@ child_call = function(job, run) {
 
 #' The `fence` policy of a coaching child (08 sections 3.3 and 3.7): denies writes and edits
 #' outside the child's temporary folder (which holds its scratch folder), R code whose classified
-#' file targets lie outside it, a change of working folder to anywhere but the scratch folder
-#' itself (child_dirs()), installs, R child processes whose code gptr cannot read (and
-#' peter$script(), whose interpreter may be R), and reads of a CLI's login file or of the macOS
-#' keychain. The working folder never moves, so the targets the classifier resolves from it hold.
-#' It fences only what the classifier sees.
+#' file targets lie outside it, that writes or deletes a path it computes or that calls a
+#' function it computes, a change of working folder to anywhere but the scratch folder itself
+#' (child_dirs()), installs, R child processes whose code gptr cannot read (and peter$script(),
+#' whose interpreter may be R), and reads of a CLI's login file or of the macOS keychain. The
+#' working folder never moves, so the targets the classifier resolves from it hold. It fences
+#' only what the classifier sees.
 #' @noRd
 child_fence = function(call, ctx) {
   why = child_fence_why(call)
@@ -710,6 +711,10 @@ child_fence_why = function(call) {
   rproc = fl$category %in% c("process", "dynamic") &
     (fl$fn %in% callr | grepl(prog, fl$call, perl = TRUE, ignore.case = TRUE))
   if (any(rproc)) return("it starts no other R process, whose code gptr cannot read")
+  if ("dynamic" %in% fl$category) return("it runs only code gptr can read")
+  if (any(fl$category %in% c("file_write", "file_delete") & fl$path_class %in% "unknown")) {
+    return("it writes only to paths gptr can read")
+  }
   code = tryCatch(parse(text = paste(unlist(call$input$code), collapse = "\n"),
                         keep.source = FALSE), error = function(e) NULL)
   # a changer the classifier reads leaving the project or to a folder the code computes, as
