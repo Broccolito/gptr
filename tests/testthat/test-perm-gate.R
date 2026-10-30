@@ -382,6 +382,21 @@ test_that("yolo asks before peter$sh() or peter$bg() sends a secret over the net
   expect_identical(sum(ui$log$method == "permission"), 3L)
 })
 
+test_that("a risk keeps no copy of the text a command does not run (review F-21)", {
+  root = local_project()
+  local_vault()
+  withr::local_envvar(F21_FAKE_KEY = "sk-test-0000-f21")
+  secret_register("sk-test-0000-f21", "F21_FAKE_KEY")
+  # a nested peter$sh() call is gated at its own risk, the command's
+  sh = registry_get("tool", "sh")
+  for (r in list(risk_classify("touch '/tmp/sk-test-0000-f21.txt'", root = root, kind = "command"),
+                 sh$risk(list(cmd = "touch '/tmp/sk-test-0000-f21.txt'"), NULL))) {
+    expect_identical(sort(names(attributes(r$flagged))), c("class", "names", "row.names"))
+    shown = capture.output(str(redact(r, "context")))
+    expect_false(any(grepl("sk-test-0000-f21", shown, fixed = TRUE)))
+  }
+})
+
 test_that("a value read from a secret may not leave over the network (G6 taint)", {
   root = local_project()
   ctx = gate_ctx("auto")

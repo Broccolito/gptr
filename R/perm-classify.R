@@ -2145,6 +2145,9 @@ risk_new = function(flags, kind = "r", assigned = character(), sizes = numeric()
   lv = as.integer(min(max(lv, 0L), 4L))
   hot = flags[flags$level >= 1L, , drop = FALSE]
   g = risk_secret_guard(flags)
+  # the working attributes of risk_cmd_line(), which hold text redaction does not reach
+  attr(flags, "hidden") = NULL
+  attr(flags, "dirs") = NULL
   structure(list(level = lv, label = risk_labels[lv + 1L], categories = unique(hot$category),
                  flagged = flags, paths = unique(flags$path[!is.na(flags$path)]),
                  secret = "secret" %in% hot$category, secret_guard = g$guard,
