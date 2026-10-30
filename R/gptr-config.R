@@ -27,13 +27,14 @@ gateway_state = function() {
 
 # ------------------------------------------------------------------ core settings (contract 11.2)
 
-#' The core settings of contract section 11.2 as plain records
+#' The core settings of contract section 11.2 as plain records; an object's `fields` give the
+#' type of each known field, then its choices
 #' @noRd
 settings_core = function() {
   rec = function(name, default, type, description, choices = NULL, tighten = NULL,
-                 scope = "both") {
+                 scope = "both", fields = NULL) {
     list(name = name, default = default, type = type, description = description,
-         choices = choices, tighten = tighten, scope = scope)
+         choices = choices, tighten = tighten, scope = scope, fields = fields)
   }
   list(
     rec("version", 1L, "int", "Settings file format version."),
@@ -55,22 +56,31 @@ settings_core = function() {
         choices = c("ask", "file", "active-document", "off")),
     rec("plugins", character(), "chrs", "Plugins enabled for every session."),
     rec("filters", character(), "chrs", "Registry filters such as -builtin:mcp."),
-    rec("skills", list(budget = 1500L), "object", "Skill paths and catalog budget."),
+    rec("skills", list(budget = 1500L), "object", "Skill paths and catalog budget.",
+        fields = list(paths = "chrs", budget = "int")),
     rec("mcp", list(exposure = "r", budget = 1500L,
                     import = c("claude-code", "claude-desktop", "codex", "cursor", "vscode", "pi")),
-        "object", "MCP exposure, catalog budget and imported configurations."),
+        "object", "MCP exposure, catalog budget and imported configurations.",
+        fields = list(exposure = c("choice", "r", "direct", "deferred", "hidden"),
+                      budget = "int", import = "chrs")),
     rec("subagents", list(max_depth = 1L, max_active = 8L, max_workers = NULL, max_cli = 4L,
-                          max_tasks = 8L), "object", "Sub-agent limits."),
+                          max_tasks = 8L), "object", "Sub-agent limits.",
+        fields = list(max_depth = "int", max_active = "int", max_workers = "int",
+                      max_cli = "int", max_tasks = "int")),
     rec("output_tokens", NULL, "int_or_null", "Maximum output tokens per request."),
     rec("plot", list(width = 768L, height = 512L, res = 120L), "object",
-        "Size of plots sent to the model."),
+        "Size of plots sent to the model.",
+        fields = list(width = "int", height = "int", res = "int")),
     rec("budget", list(tokens = 2000000, cost = 5, turns = NULL), "object",
-        "Budget per top-level call; null disables a limit."),
-    rec("cache", list(ttl = "gap"), "object", "Prompt-cache tail TTL policy."),
+        "Budget per top-level call; null disables a limit.",
+        fields = list(tokens = "num_or_null", cost = "num_or_null", turns = "int")),
+    rec("cache", list(ttl = "gap"), "object", "Prompt-cache tail TTL policy.",
+        fields = list(ttl = c("choice", "gap", "5m", "1h"))),
     rec("compactor", "checkpoint", "chr", "Compactor used at the threshold."),
     rec("compact_at", 200000, "num_or_null", "Compaction soft cap in tokens."),
     rec("checkpoint", "on", "choice", "Checkpoints for undo.", choices = c("on", "files", "off")),
-    rec("doc", list(outputs = TRUE, output_lines = 12L), "object", "Recorded output lines."),
+    rec("doc", list(outputs = TRUE, output_lines = 12L), "object", "Recorded output lines.",
+        fields = list(outputs = "flag", output_lines = "int")),
     rec("cache_commit", list(s1 = TRUE, s2 = FALSE), "object", "Which caches are committed."),
     rec("ui", NULL, "chr_or_null", "UI backend name."),
     rec("frontend", NULL, "chr_or_null", "Console front end name."),
@@ -88,10 +98,11 @@ settings_core = function() {
 
 #' A validator for one core setting (the `validate` field of its `setting` spec)
 #' @noRd
-setting_validator = function(name, type, choices = NULL) {
+setting_validator = function(name, type, choices = NULL, fields = NULL) {
   force(name)
   force(type)
   force(choices)
+  force(fields)
   function(value) {
     switch(type,
       int = as.integer(check_number(value, name, min = 0, int = TRUE)),
@@ -101,9 +112,10 @@ setting_validator = function(name, type, choices = NULL) {
       chr = check_string(value, name),
       chr_or_null = check_string(value, name, null = TRUE),
       ident = check_string(value, name, null = TRUE),
+      flag = check_flag(value, name),
       choice = gateway_choice(value, choices, name),
       chrs = as.character(check_strings(value, name)),
-      object = settings_check_object(value, name),
+      object = settings_check_object(value, name, fields),
       providers = settings_check_providers(value, name),
       value)
   }
@@ -113,12 +125,19 @@ setting_validator = function(name, type, choices = NULL) {
 #' @noRd
 settings_is_object = function(x) is.list(x) && !is.object(x) && (!length(x) || !is.null(names(x)))
 
-#' Checks that a setting value is a JSON object with non-empty names
+#' Checks that a setting value is a JSON object with non-empty names whose `fields` (type, then
+#' choices) hold valid values; a null field is kept (it removes the field from lower layers)
 #' @noRd
-settings_check_object = function(value, name) {
+settings_check_object = function(value, name, fields = NULL) {
   if (!settings_is_object(value) || !all(nzchar(names(value)))) {
     gptr_abort(paste0("The setting `", name, "` takes a named list (a JSON object)."),
                "invalid_argument", arg = name, expected = "a named list")
+  }
+  for (k in intersect(names(fields), names(value))) {
+    f = fields[[k]]
+    if (!is.null(value[[k]])) {
+      value[k] = list(setting_validator(paste0(name, ".", k), f[1L], f[-1L])(value[[k]]))
+    }
   }
   value
 }
@@ -141,7 +160,7 @@ settings_check_providers = function(value, name) {
 gateway_setting_specs = function() {
   lapply(settings_core(), function(x) {
     gptr_spec("setting", x$name, default = x$default, description = x$description,
-              scope = x$scope, validate = setting_validator(x$name, x$type, x$choices),
+              scope = x$scope, validate = setting_validator(x$name, x$type, x$choices, x$fields),
               tighten = x$tighten)
   })
 }
@@ -158,7 +177,7 @@ settings_core_spec = function(key) {
   for (x in settings_core()) {
     if (identical(x$name, key)) {
       return(list(name = x$name, default = x$default, scope = x$scope, tighten = x$tighten,
-                  validate = setting_validator(x$name, x$type, x$choices)))
+                  validate = setting_validator(x$name, x$type, x$choices, x$fields)))
     }
   }
   NULL
