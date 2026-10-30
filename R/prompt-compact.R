@@ -106,8 +106,9 @@ compact_user_sources = c("prompt", "pipe", "steer", "follow_up", "repl", "parent
                          "imported")
 
 #' Harness state for the checkpoint (contract 7.7), merged with the latest compaction's state
-#' Files and skills come from `read`/`write`/`edit` calls and `skill_content` blocks in order; a
-#' call whose result is an error contributes nothing (one without a result counts).
+#' Files and skills come from `read`/`write`/`edit` calls and `skill_content` blocks in order (an
+#' edit's files from its result's `details$files` when it holds them: a patch envelope); a call
+#' whose result is an error contributes nothing (one without a result counts).
 #' @noRd
 extract_state = function(entries) {
   todo = prompt_since_compaction(entries)
@@ -176,6 +177,17 @@ extract_state = function(entries) {
         hit = which(f_open & !is.na(f_id) & f_id == id)
         f_open[hit] = FALSE
         f_ok[hit] = !isTRUE(m$is_error)
+        # an edit given as a patch envelope names its files in its result, not in `path`
+        files = m$details$files
+        if (length(hit) && isTRUE(f_ok[hit[1L]]) && is.character(files) && length(files)) {
+          f_ok[hit] = FALSE
+          k = length(files)
+          f_id = c(f_id, rep(id, k))
+          f_what = c(f_what, rep(f_what[hit[1L]], k))
+          f_value = c(f_value, path_rel(files))
+          f_open = c(f_open, rep(FALSE, k))
+          f_ok = c(f_ok, rep(TRUE, k))
+        }
       }
       if (!identical(m$tool_name, "r") || isTRUE(m$is_error)) next
       dt = m$details
