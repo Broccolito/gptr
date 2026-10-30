@@ -375,6 +375,26 @@ test_that("every shipped level-0 command row has a read-only reading (D-061)", {
   expect_identical(flags_level(risk_command("mytool --any thing", root)), 0L)
 })
 
+test_that("a long quoted word is read in time linear in its length (review F-13)", {
+  skip_on_cran()
+  root = local_project()
+  took = function(n) {
+    cmd = paste0("echo '", strrep("aB+/", n / 4), "' > data/blob.txt")
+    system.time({
+      r = risk_classify(cmd, root = root, kind = "command")
+    })[["elapsed"]]
+  }
+  t1 = took(1e5)
+  t2 = took(2e5)
+  expect_lt(t2, 30)
+  expect_lt(t2 / max(t1, 0.05), 3)
+  tk = risk_sh_tokens("a 'b c'd \"e\\\"f\" 2>&1 >out x[1] $'q' # c\nls | wc")
+  expect_identical(as.vector(tk), c("a", "b cd", "e\"f", "\0012>&", "1", "\001>", "out", "x[1]",
+                                    "q", "\001;", "ls", "\001|", "wc"))
+  expect_identical(attr(tk, "hidden"), c("b c", "e\"f", "q", " c"))
+  expect_identical(attr(tk, "dyn")[8L], "g")
+})
+
 test_that("text encodings and long glob words are read safely (D-061)", {
   skip_on_cran()
   root = local_project()

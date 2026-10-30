@@ -732,35 +732,45 @@ risk_sh_tokens = function(cmd) {
     cmd = paste0(substr(cmd, 1L, m - 1L), "<<\001", cap(2L), cap(3L), "\n", tail)
   }
   ch = strsplit(cmd, "", fixed = TRUE)[[1L]]
-  out = character()
-  dyn = character()
-  quo = logical()
-  cur = ""
+  n = length(ch)
+  # a word keeps the characters marked in `use` from `from` on (quotes and escapes dropped), and
+  # a quoted piece those from `pfrom`: each is pasted once, as growing it per character is
+  # quadratic in its length; tokens fill vectors of the most there can be
+  use = logical(n)
+  text = function(a, b) if (b >= a) paste(ch[a:b][use[a:b]], collapse = "") else ""
+  later = rev(cumsum(rev(ch == "]")))
+  out = character(n + 1L)
+  dyn = character(n + 1L)
+  quo = logical(n + 1L)
+  k = 0L
+  from = 1L
+  pfrom = 1L
   has = FALSE
   d = ""
   qd = FALSE
   q = ""
-  piece = ""
   bg = FALSE
   i = 1L
-  n = length(ch)
   mark = function(x) if (!grepl(x, d, fixed = TRUE)) d <<- paste0(d, x)
+  add = function(x, dx, qx) {
+    k <<- k + 1L
+    out[k] <<- x
+    dyn[k] <<- dx
+    quo[k] <<- qx
+  }
   push = function() {
     if (has) {
-      out <<- c(out, cur)
-      dyn <<- c(dyn, if (cur %in% c("[", "[[", "]", "]]")) "" else d)
-      quo <<- c(quo, qd)
+      cur = text(from, min(i, n))
+      add(cur, if (cur %in% c("[", "[[", "]", "]]")) "" else d, qd)
     }
-    cur <<- ""
+    from <<- i + 1L
     has <<- FALSE
     d <<- ""
     qd <<- FALSE
   }
   op = function(x) {
     push()
-    out <<- c(out, paste0("\001", x))
-    dyn <<- c(dyn, "")
-    quo <<- c(quo, FALSE)
+    add(paste0("\001", x), "", FALSE)
   }
   while (i <= n) {
     c1 = ch[i]
@@ -768,30 +778,27 @@ risk_sh_tokens = function(cmd) {
     if (identical(q, "'")) {
       if (identical(c1, "'")) {
         q = ""
-        hidden = c(hidden, piece)
+        hidden = c(hidden, text(pfrom, i - 1L))
       } else {
-        cur = paste0(cur, c1)
-        piece = paste0(piece, c1)
+        use[i] = TRUE
       }
     } else if (identical(q, "\"")) {
       if (identical(c1, "\"")) {
         q = ""
-        hidden = c(hidden, piece)
+        hidden = c(hidden, text(pfrom, i - 1L))
       } else {
         if (identical(c1, "\\") && c2 %in% c("\"", "\\", "$", "`")) {
-          c1 = c2
           i = i + 1L
         } else if (c1 %in% c("$", "`")) {
           mark("q")
         }
-        cur = paste0(cur, c1)
-        piece = paste0(piece, c1)
+        use[i] = TRUE
       }
     } else if (c1 %in% c("'", "\"")) {
       q = c1
       has = TRUE
       qd = TRUE
-      piece = ""
+      pfrom = i + 1L
     } else if (identical(c1, "$") && c2 %in% c("'", "\"")) {
       has = TRUE
     } else if (c1 %in% c(" ", "\t")) {
@@ -818,8 +825,8 @@ risk_sh_tokens = function(cmd) {
       bg = TRUE
       op(";")
     } else if (c1 %in% c(">", "<") || (c1 %in% c("1", "2") && identical(c2, ">") && !has)) {
-      if (grepl("^([0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})\\z", cur, perl = TRUE) && !nzchar(d)) {
-        cur = ""
+      if (grepl("^([0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})\\z", text(from, i - 1L), perl = TRUE) &&
+          !nzchar(d)) {
         has = FALSE
       }
       push()
@@ -839,20 +846,19 @@ risk_sh_tokens = function(cmd) {
       }
       op(o)
     } else {
-      cur = paste0(cur, c1)
+      use[i] = TRUE
       has = TRUE
       if (c1 %in% c("$", "`")) mark("$")
-      if (c1 %in% c("*", "?") || (identical(c1, "[") && any(ch[seq.int(i, n)] == "]"))) {
-        mark("g")
-      }
+      if (c1 %in% c("*", "?") || (identical(c1, "[") && later[i] > 0L)) mark("g")
     }
     i = i + 1L
   }
-  if (nzchar(q)) hidden = c(hidden, piece)
+  if (nzchar(q)) hidden = c(hidden, text(pfrom, n))
   push()
   # `bg`: a lone `&` (not `&&`, `>&` or `|&`) runs the command before it in the background; sh
   # such as dash reads `&>` as `&` then `>`
-  structure(out, dyn = dyn, quoted = quo, hidden = hidden, bg = bg)
+  structure(out[seq_len(k)], dyn = dyn[seq_len(k)], quoted = quo[seq_len(k)], hidden = hidden,
+            bg = bg)
 }
 
 #' Split tokens into simple commands (words, dyn, quoted, piped_in, pipe_from: the words of
