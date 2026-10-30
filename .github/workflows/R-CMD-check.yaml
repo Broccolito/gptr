@@ -1,10 +1,12 @@
 # CRAN's check matrix plus the contract's jobs (IC-59, IC-72, IC-73); the Windows rows run in
 # Windows-check.yaml. A push's checks should finish in about 20 minutes: the whole offline suite
-# (NOT_CRAN=true) runs only on Ubuntu release, Ubuntu under LC_ALL=C, macOS and the connection
-# gate, each as shards behind a gate job that carries the required name, and the other rows check
-# as CRAN does. Every job and every step that checks or tests has a time limit, so a hang fails
-# fast with its log. rcmdcheck reports success when R CMD check aborts early, so every check job
-# also requires the log's Status line.
+# (NOT_CRAN=true) runs only as shards (R CMD check on Ubuntu under LC_ALL=C and on macOS, and the
+# connection gate on Ubuntu release), each behind a gate job that carries the required name, and
+# the other rows check as CRAN does. R-devel builds its dependencies from source, so its jobs
+# install only Depends and Imports and the tools they run. Every job has a 20-minute limit and
+# every step that checks or tests a shorter one, so a hang fails fast with its log. rcmdcheck
+# reports success when R CMD check aborts early, so every check job also requires the log's Status
+# line.
 on:
   push:
     branches: [main]
@@ -20,9 +22,10 @@ concurrency:
 permissions: read-all
 
 jobs:
-  release:
+  # Linux release's R CMD check of the whole suite
+  c-locale:
     runs-on: ubuntu-latest
-    name: ubuntu-latest (release, shard ${{ matrix.shard }}/4)
+    name: ubuntu-latest (release, LC_ALL=C, shard ${{ matrix.shard }}/4)
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -30,6 +33,8 @@ jobs:
         shard: [1, 2, 3, 4]
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      LC_ALL: C
+      LANG: C
       R_KEEP_PKG_SOURCE: yes
       _R_CHECK_THINGS_IN_OTHER_DIRS_: true
       _R_CHECK_CRAN_INCOMING_: false
@@ -103,24 +108,6 @@ jobs:
         shell: bash
         run: grep '^Status:' check/gptr.Rcheck/00check.log
 
-  c-locale:
-    runs-on: ubuntu-latest
-    name: ubuntu-latest (release, LC_ALL=C, shard ${{ matrix.shard }}/4)
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    env:
-      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
-      LC_ALL: C
-      LANG: C
-      _R_CHECK_CRAN_INCOMING_: false
-      TESTTHAT_PARALLEL: true
-      GPTR_CI_TEST_SHARD: ${{ matrix.shard }}/4
-      _R_CHECK_USE_CODETOOLS_: ${{ matrix.shard == 1 }}
-    steps: *shard-steps
-
   macos:
     runs-on: macos-latest
     name: macos-latest (release, shard ${{ matrix.shard }}/5)
@@ -141,8 +128,8 @@ jobs:
       _R_CHECK_USE_CODETOOLS_: false
     steps: *shard-steps
 
-  # The full suite with the connection table compared before and after each shard's tests
-  # (devtools::test in one process, so serial)
+  # The full suite on Ubuntu release in UTF-8, with the connection table compared before and after
+  # each shard's tests (devtools::test in one process, so serial)
   connections:
     runs-on: ubuntu-latest
     name: connections left open (shard ${{ matrix.shard }}/9)
@@ -176,7 +163,7 @@ jobs:
   gates:
     runs-on: ubuntu-latest
     name: ${{ matrix.name }}
-    needs: [release, c-locale, macos, connections]
+    needs: [c-locale, macos, connections, cran-mode]
     # A skipped required check counts as passing, so each gate always runs and fails closed. A
     # matrix job's result is success only when the latest attempt of each of its shards passed.
     if: always()
@@ -185,26 +172,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {name: 'ubuntu-latest (release)', result: '${{ needs.release.result }}'}
+          - {name: 'ubuntu-latest (release)', result: '${{ needs.connections.result }}'}
           - {name: 'ubuntu-latest (release, LC_ALL=C)', result: '${{ needs.c-locale.result }}'}
           - {name: 'macos-latest (release)', result: '${{ needs.macos.result }}'}
           - {name: 'connections left open', result: '${{ needs.connections.result }}'}
+          - {name: 'ubuntu-latest (devel)', result: '${{ needs.cran-mode.result }}'}
     steps:
-      - name: Fail unless every shard passed
+      - name: Fail unless the gated job passed
         run: test '${{ matrix.result }}' = success
 
   # CRAN's own test list (tests/testthat.R), examples and vignettes
   cran-check:
     runs-on: ubuntu-latest
     name: ubuntu-latest (${{ matrix.config.name || matrix.config.r }})
-    timeout-minutes: ${{ matrix.config.minutes || 20 }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         config:
-          # R-devel builds every dependency from source when its cache is cold (50-70 minutes
-          # after an R-devel internals change); a warm run takes about 6
-          - {r: 'devel', http-user-agent: 'release', minutes: 75}
           - {r: 'oldrel-1'}
           - {r: 'oldrel-4'}
           - {r: 'release', name: 'release, no Suggests', dependencies: '"hard"'}
@@ -212,6 +197,8 @@ jobs:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       NOT_CRAN: false
       R_KEEP_PKG_SOURCE: yes
+      # The no-Suggests row checks without them
+      _R_CHECK_FORCE_SUGGESTS_: false
       _R_CHECK_THINGS_IN_OTHER_DIRS_: true
       _R_CHECK_CRAN_INCOMING_: false
     steps:
@@ -220,7 +207,6 @@ jobs:
       - uses: r-lib/actions/setup-r@v2
         with:
           r-version: ${{ matrix.config.r }}
-          http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
       - uses: ./.github/actions/system-libraries
       - uses: r-lib/actions/setup-r-dependencies@v2
@@ -262,16 +248,18 @@ jobs:
         shell: bash
         run: grep '^Status:' check/gptr.Rcheck/00check.log
 
+  # R-devel, gated as ubuntu-latest (devel). CRAN's timing thresholds; a NOTE fails, and so does a
+  # check over 480 s, under the 600 s at which CRAN's pretest flags a package (CI-93). R-devel
+  # builds every dependency from source when its cache is cold (duckdb alone took 62 minutes), so
+  # it checks without Suggests, which R reports as INFO, not a NOTE.
   cran-mode:
     runs-on: ubuntu-latest
     name: ubuntu-latest (devel, NOT_CRAN=false)
-    # R-devel's cold dependency cache, as in cran-check
-    timeout-minutes: 75
-    # CRAN's timing thresholds; a NOTE fails, and so does a check over 480 s, under the 600 s at
-    # which CRAN's pretest flags a package (CI-93)
+    timeout-minutes: 20
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       NOT_CRAN: false
+      _R_CHECK_FORCE_SUGGESTS_: false
       _R_CHECK_THINGS_IN_OTHER_DIRS_: true
       _R_CHECK_CRAN_INCOMING_: false
       _R_CHECK_TEST_TIMING_CPU_TO_ELAPSED_THRESHOLD_: 2.5
@@ -291,7 +279,8 @@ jobs:
         env:
           PKG_SYSREQS: 'false'
         with:
-          extra-packages: any::rcmdcheck
+          dependencies: '"hard"'
+          extra-packages: any::rcmdcheck any::testthat any::knitr any::rmarkdown
           needs: check
       - name: Prepare exact Linux suite-root evidence
         if: runner.os == 'Linux'
@@ -333,11 +322,11 @@ jobs:
       - name: Fail unless R CMD check wrote its status
         run: grep '^Status:' check/gptr.Rcheck/00check.log
 
+  # Without Suggests, as cran-mode; the copy tests that need shiny or duckdb run in the full suite
   copy-safety:
     runs-on: ubuntu-latest
     name: copy-safety (${{ matrix.r }})
-    # R-devel's cold dependency cache, as in cran-check
-    timeout-minutes: ${{ matrix.r == 'devel' && 75 || 20 }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -355,12 +344,13 @@ jobs:
         env:
           PKG_SYSREQS: 'false'
         with:
-          extra-packages: any::devtools
+          dependencies: '"hard"'
+          extra-packages: any::testthat any::pkgload
       - name: Copy-safety suites
         timeout-minutes: 16
         run: |
           Rscript --vanilla -e 'stopifnot(capabilities("profmem"))'
-          Rscript --vanilla -e 'devtools::test(filter = "copy", stop_on_failure = TRUE)'
+          Rscript --vanilla -e 'testthat::test_local(filter = "copy", stop_on_failure = TRUE)'
 
   bench:
     runs-on: ubuntu-latest

@@ -228,13 +228,21 @@ test_that("each check main requires is the name of exactly one hosted job (CI-10
 test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-72, IC-73)", {
   skip_on_cran()
   jobs = ci_jobs("R-CMD-check.yaml")
-  expect_setequal(names(jobs), c("release", "c-locale", "macos", "connections", "gates",
-                                 "cran-check", "cran-mode", "copy-safety", "bench"))
+  expect_setequal(names(jobs), c("c-locale", "macos", "connections", "gates", "cran-check",
+                                 "cran-mode", "copy-safety", "bench"))
   expect_identical(jobs[["c-locale"]]$env[["LC_ALL"]], "C")
   rows = jobs[["cran-check"]]$strategy$matrix$config
-  expect_identical(vapply(rows, function(x) x$r, ""), c("devel", "oldrel-1", "oldrel-4", "release"))
-  # without Suggests: Depends and Imports, and what tests and vignettes need
-  expect_identical(rows[[4L]]$dependencies, "\"hard\"")
+  expect_identical(vapply(rows, function(x) x$r, ""), c("oldrel-1", "oldrel-4", "release"))
+  # Without Suggests (Depends and Imports, and what the check runs), so R CMD check must not demand
+  # them; R-devel's jobs install the same way, because a cold cache builds them from source
+  expect_identical(rows[[3L]]$dependencies, "\"hard\"")
+  expect_false(jobs[["cran-check"]]$env[["_R_CHECK_FORCE_SUGGESTS_"]])
+  expect_false(jobs[["cran-mode"]]$env[["_R_CHECK_FORCE_SUGGESTS_"]])
+  for (name in c("cran-mode", "copy-safety")) {
+    uses = vapply(jobs[[name]]$steps, function(s) s$uses %||% "", "")
+    deps = jobs[[name]]$steps[[which(startsWith(uses, "r-lib/actions/setup-r-dependencies@"))]]
+    expect_identical(deps$with$dependencies, "\"hard\"", label = name)
+  }
   expect_false(jobs[["cran-check"]]$env[["NOT_CRAN"]])
   expect_false(jobs[["cran-mode"]]$env[["NOT_CRAN"]])
   expect_setequal(unlist(jobs[["copy-safety"]]$strategy$matrix$r), c("release", "devel"))
@@ -251,18 +259,13 @@ test_that("hosted CI jobs and steps are bounded and a crashed R CMD check cannot
   check = ci_jobs("R-CMD-check.yaml")
   windows = ci_jobs("Windows-check.yaml")
   jobs = c(check, windows)
-  # A hung run fails at its job's limit: 20 minutes, 5 for a gate and 75 for R-devel, which builds
-  # every dependency from source when its cache is cold
+  # A hung run fails at its job's limit: 20 minutes, and 5 for a gate
   minutes = vapply(jobs, function(job) format(job[["timeout-minutes"]] %||% NA), "")
   expect_identical(minutes, c(
-    release = "20", `c-locale` = "20", macos = "20", connections = "20", gates = "5",
-    `cran-check` = "${{ matrix.config.minutes || 20 }}", `cran-mode` = "75",
-    `copy-safety` = "${{ matrix.r == 'devel' && 75 || 20 }}", bench = "20",
+    `c-locale` = "20", macos = "20", connections = "20", gates = "5", `cran-check` = "20",
+    `cran-mode` = "20", `copy-safety` = "20", bench = "20",
     shards = "20", gate = "5", `oldrel-4` = "20", cran = "20"
   ))
-  rows = check[["cran-check"]]$strategy$matrix$config
-  expect_identical(lengths(lapply(rows, function(x) x$minutes)), c(1L, 0L, 0L, 0L))
-  expect_identical(rows[[1L]][c("r", "minutes")], list(r = "devel", minutes = 75L))
   # Each step that checks or runs R has its own, shorter limit, so a hang fails with its log
   for (name in names(jobs)) {
     for (step in jobs[[name]]$steps) {
@@ -273,8 +276,7 @@ test_that("hosted CI jobs and steps are bounded and a crashed R CMD check cannot
     }
   }
   # rcmdcheck reported success when R CMD check aborted before writing a status line
-  for (name in c("release", "c-locale", "macos", "cran-check", "cran-mode", "shards", "oldrel-4",
-                 "cran")) {
+  for (name in c("c-locale", "macos", "cran-check", "cran-mode", "shards", "oldrel-4", "cran")) {
     steps = jobs[[name]]$steps
     uses = vapply(steps, function(s) s$uses %||% "", "")
     runs = vapply(steps, function(s) s$run %||% "", "")
@@ -285,7 +287,7 @@ test_that("hosted CI jobs and steps are bounded and a crashed R CMD check cannot
     expect_true(length(guard) == 1L && all(guard > check_step), label = name)
   }
   # Windows R before 4.5.0 has no file.info() owner columns, which this check variable needs
-  expect_true(check$release$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]])
+  expect_true(check[["c-locale"]]$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]])
   expect_true(windows$shards$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]])
   expect_false(windows[["oldrel-4"]]$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]])
 })
@@ -322,7 +324,7 @@ test_that("each sharded lane's required context gates the latest attempt of its 
   skip_on_cran()
   check = ci_jobs("R-CMD-check.yaml")
   windows = ci_jobs("Windows-check.yaml")
-  lanes = c(check[c("release", "c-locale", "macos", "connections")], windows["shards"])
+  lanes = c(check[c("c-locale", "macos", "connections")], windows["shards"])
   for (lane in names(lanes)) {
     n = length(lanes[[lane]]$strategy$matrix$shard)
     expect_identical(unlist(lanes[[lane]]$strategy$matrix$shard), seq_len(n), label = lane)
@@ -331,12 +333,20 @@ test_that("each sharded lane's required context gates the latest attempt of its 
                 label = lane)
   }
   # A skipped required check counts as passing, so a gate always runs and fails closed; a matrix
-  # job's result counts the latest attempt of each row
+  # job's result counts the latest attempt of each row. Ubuntu release's whole suite runs in the
+  # connection gate's shards, and R-devel's check in cran-mode.
   gates = check$gates
-  expect_identical(gates$needs, c("release", "c-locale", "macos", "connections"))
+  expect_identical(gates$needs, c("c-locale", "macos", "connections", "cran-mode"))
   expect_identical(gates[["if"]], "always()")
-  expect_identical(vapply(gates$strategy$matrix$include, function(x) x$result, ""),
-                   sprintf("${{ needs.%s.result }}", gates$needs))
+  include = gates$strategy$matrix$include
+  expect_identical(
+    stats::setNames(vapply(include, function(x) x$result, ""), vapply(include, `[[`, "", "name")),
+    c(`ubuntu-latest (release)` = "${{ needs.connections.result }}",
+      `ubuntu-latest (release, LC_ALL=C)` = "${{ needs.c-locale.result }}",
+      `macos-latest (release)` = "${{ needs.macos.result }}",
+      `connections left open` = "${{ needs.connections.result }}",
+      `ubuntu-latest (devel)` = "${{ needs.cran-mode.result }}")
+  )
   expect_identical(gates$steps[[1L]]$run, "test '${{ matrix.result }}' = success")
   expect_identical(windows$gate[c("needs", "if")], list(needs = "shards", `if` = "always()"))
   expect_identical(windows$gate$steps[[1L]]$run, "test '${{ needs.shards.result }}' = success")
