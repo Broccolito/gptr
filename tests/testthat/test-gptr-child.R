@@ -495,6 +495,31 @@ test_that("a run's result too large for the parent keeps all but its value and o
   expect_match(res$objects$big, "^<character>")
 })
 
+test_that("a run's result R cannot encode keeps all but its value and objects", {
+  skip_on_cran()
+  local_project()
+  real = json_encode
+  box = new.env(parent = emptyenv())
+  box$n = 0L
+  # a value whose JSON is over R's string limit (2^31 - 1 bytes) fails in json_encode()
+  testthat::local_mocked_bindings(json_encode = function(x, pretty = FALSE) {
+    if (is.list(x) && "first_user" %in% unlist(x[["names"]])) {
+      box$n = box$n + 1L
+      if (box$n == 1L) stop("R character strings are limited to 2^31-1 bytes")
+    }
+    real(x, pretty)
+  })
+  fake = gptr_fake_provider(list(fake_tool("r", code = "big = 1:3; gptr_return(big)"),
+                                 "kept text"), name = "hugefake")
+  res = child_local(list(id = "h", role = "run", prompt = "Make it big.",
+                         args = list(mode = "auto"), model = fake))$res
+  expect_identical(box$n, 2L)
+  expect_identical(res$status, "idle")
+  expect_identical(res$text, "kept text")
+  expect_match(res$value, "^<integer>")
+  expect_match(res$objects$big, "^<integer>")
+})
+
 test_that("a run that needs approval ends blocked", {
   skip_on_cran()
   local_project()

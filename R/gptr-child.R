@@ -613,9 +613,10 @@ child_main = function(spec_path, result_path, out = NULL) {
   if (!is.null(reply)) out = reply$out
   res = child_outcome(job, out, env, objects, cs, dir, before)
   if (!is.null(reply) && identical(res$status, "idle")) res$value = reply$value
-  json = json_encode(plain_encode(res))
-  if (nchar(json, "bytes") > plain_max$bytes) {
-    # too large for the parent to read: the value and each object travel as their summaries
+  json = tryCatch(json_encode(plain_encode(res)), error = function(e) NULL)
+  if (is.null(json) || nchar(json, "bytes") > plain_max$bytes) {
+    # too large for the parent to read, or for R to encode: the value and each object travel as
+    # their summaries
     shown = function(v) if (!is.null(v)) plain_summary(v)$data
     res$value = shown(res$value)
     res$objects = lapply(res$objects, shown)
