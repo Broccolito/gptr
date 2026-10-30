@@ -2328,13 +2328,16 @@ risk_args = function(e, fn, pkg) {
 }
 
 #' The expression a call passes for formal `name` (its default when R matched the call and
-#' `default` is set); for an unmatched call, else its `pos`-th unnamed argument
+#' `default` is set); for an unmatched call (a namespace not loaded), else the first argument
+#' named with a part of `name`, as R may match it, else its `pos`-th unnamed argument
 #' @noRd
 risk_arg = function(a, name, pos = 0L, default = FALSE) {
   nms = names(a) %||% rep("", length(a))
   if (name %in% nms) return(a[[match(name, nms)]])
   fm = attr(a, "formals")
   if (!is.null(fm)) return(if (default && !identical(fm[[name]], quote(expr = ))) fm[[name]])
+  part = which(nzchar(nms) & startsWith(name, nms))
+  if (length(part)) return(a[[part[1L]]])
   un = a[!nzchar(nms)]
   if (pos >= 1L && length(un) >= pos) un[[pos]]
 }

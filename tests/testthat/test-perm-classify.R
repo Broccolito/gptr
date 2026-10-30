@@ -1173,6 +1173,24 @@ test_that("a for loop over a vector and a listing of a folder are read as its fi
   }
 })
 
+test_that("an argument named in part is read while its namespace is not loaded (review F-18)", {
+  root = local_project()
+  dir.create(file.path(root, "sub"))
+  o = deparse(withr::local_tempdir(tmpdir = dirname(tempdir())))
+  lv = function(code) gptr_risk(code, root = root)$level
+  # fs's formals are not known while fs is not loaded
+  matched = risk_args
+  local_mocked_bindings(risk_args = function(e, fn, pkg) {
+    matched(e, fn, if (identical(fn, "link_create")) NA else pkg)
+  })
+  for (code in c(paste0("fs::link_create(p = ", o, ", n = 'lnk')"),
+                 paste0("fs::link_create(n = 'lnk', pa = ", o, ")"),
+                 paste0("fs::link_create(", o, ", 'lnk')"))) {
+    expect_identical(lv(code), 4L, label = code)
+  }
+  expect_identical(lv("fs::link_create(p = 'sub', n = 'lnk')"), 2L)
+})
+
 test_that("routes to gptr's namespace are control or dynamic (IC-53, D-132)", {
   root = local_project()
   for (code in c("environment(gptr_config)", "dplyr::mutate(df, across(p, gptr_config))",
