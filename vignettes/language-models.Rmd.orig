@@ -73,6 +73,9 @@ session = peter("Explain the relationship between mpg and wt.", mtcars)
 session$text
 ```
 
+A reply that falls silent for 90 seconds once it has started ends with a timeout; high-effort
+reasoning on OpenAI or Google may need `options(gptr.idle_timeout = 300)`.
+
 At first interactive use of a remote route, gptr asks you to acknowledge the data sent to it.
 For unattended jobs, acknowledge the specific provider beforehand at user scope:
 
@@ -176,7 +179,9 @@ your session declares to every model, and the console shows their tool calls and
 line of each reasoning step while they run; Codex's answer arrives whole, since `codex exec`
 does not stream text. First use asks for an acknowledgment. gptr
 checks required CLI flags and rejects incompatible versions. The Claude plan route is experimental and opt-in; review `?gptr_security`
-and the provider's terms before choosing it.
+and the provider's terms before choosing it. On `claude-cli`, dollar figures (the footer,
+`gptr_usage()`, block headers) are the CLI's API-equivalent estimate, not a charge; a `cost`
+budget counts them.
 
 `gptr_coach()` can run its sessions on either route, so a plan with no API key is enough to
 coach a harness. On a plan it runs at most two sessions at once. When a plan limit is reached,
@@ -203,7 +208,7 @@ it does not install, start or update Ollama, pull models or fall back to a cloud
 
 Conversational models return sessions. Clef and Clef Flash are native decision models, require
 Ollama 0.35.1 or later, and return logical, choice or score vectors. Their calls do not run an
-agent conversation. See [System 1 decisions](system-one.html). A local model does not keep a
+agent conversation. See [Typed decisions](system-one.html). A local model does not keep a
 later cloud call or network tool local.
 
 ## Work with a session
@@ -285,8 +290,9 @@ session$status
 declared
 tools, first message and token estimates; it does not report the current request's budgets.
 Catalog prices and estimates are planning aids, and missing usage remains unknown. See
-[Token efficiency](token-efficiency.html) for limits and [Script as history](script-as-history.html)
-for recording and replay that removes repeated model calls.
+[Token efficiency](token-efficiency.html) for limits and
+[Record, replay and export](script-as-history.html) for recording and replay that removes
+repeated model calls.
 
 ```{r cleanup, include = FALSE}
 options(old_options)

@@ -263,7 +263,8 @@ session = peter("Report a distance of 3 metres.", extensions = units)
 session
 ```
 
-For recorded workflows that others can replay, see [Script as history](script-as-history.html).
+For recorded workflows that others can replay, see
+[Record, replay and export](script-as-history.html).
 
 ```{r cleanup, include = FALSE}
 options(old_options)

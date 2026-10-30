@@ -72,7 +72,8 @@ generated code can inspect and modify objects already in memory.
   session has from the turns before, else with the `model` and `mode` settings of the session
   that re-asks); code the model wrote is never sent again as your context or your steer. A `!`
   line that uses an object of an undone turn is turned off (`#~ `) and back on after `/redo`, so
-  `source()` does not stop there, and `/retry` sends the undone turn's `!` notes again.
+  `source()` does not stop there, and `/retry` sends a turn's `!` notes again when that turn is
+  the latest message sent.
   `gptr_export()` turns such a transcript into an ordinary R script.
 * `gptr_init()` creates a `.gptr/` project workspace with the project instructions file
   `.gptr/vignette.Rmd`; `gptr_config()` and `gptr_trust()` manage settings and trust.
@@ -112,10 +113,10 @@ generated code can inspect and modify objects already in memory.
   session the run starts (a `peter()` call from the agent's code, team members, fan-out children
   and workers). A nested `peter$sh()`, `peter$write()` or `peter$edit()` whose command or path
   the agent's code computes meets every deny and ask rule, and the strictest answer wins.
-* A weekly or model-family limit on a Claude or ChatGPT plan is no longer retried, and reaching
+* A weekly or model-family limit on a Claude or ChatGPT plan is not retried, and reaching
   any plan limit on the `claude-cli` or `codex` route signals `gptr_error_plan_limit`, with the
   time the limit resets when the CLI says it.
-* `.opts$returns` now works on Claude Code (`claude-cli`): gptr asks for the reply's shape at
+* `.opts$returns` works on Claude Code (`claude-cli`): gptr asks for the reply's shape at
   the end of the prompt and checks the reply itself.
 * An extension factory with a `gptr_key` attribute (a string) loads once per session, so
   passing it again when you continue the session does not load it twice.
@@ -140,7 +141,10 @@ generated code can inspect and modify objects already in memory.
   package installs, writes anywhere and gptr's own configuration functions. A person is still
   asked before deleting files outside the project or protected files, moving the working
   directory out of the project, `rm(list = ls())`, `options(gptr.*)` and sending a secret over
-  the network; a one-time notice says so. The classifier reads code; it is not a sandbox. In
+  the network; a one-time notice says so. `setwd()` or `withr::local_dir()` to a directory the
+  code computes, such as `setwd(here::here(d))`, counts as such a move, in `auto` too;
+  `here::here()` of literal parts and a computed directory R moves back from, as with
+  `withr::with_dir()`, do not. The classifier reads code; it is not a sandbox. In
   every mode, model code that would end or hang the R session, such as `q()` or `readline()`, is
   refused without a question.
 * In a terminal, what you type while the agent works is a draft on the bottom row: Enter sends
@@ -207,79 +211,75 @@ generated code can inspect and modify objects already in memory.
   cut code block says so inside its fence; wide pipe tables stream verbatim; `/model` and
   `/status` name the model behind a CLI's `default`.
 * `gptr_models(refresh = TRUE)` reads each models.dev price tier once, so models with a
-  200k-token price tier resolve and a 272k tier no longer gains a premium from 200k tokens. A
-  catalog refreshed by an earlier build is set aside until the next refresh downloads it again.
+  200k-token price tier resolve and a 272k tier gains no premium from 200k tokens.
 * A model alias with no model in the catalog is an unknown model, not a guess: offline,
-  `model = "gemini"` (Google's newest Gemini Pro) no longer runs Gemini Flash and asks for
-  `gptr_models(refresh = TRUE)` or a `provider/id`.
+  `model = "gemini"` (Google's newest Gemini Pro) asks for `gptr_models(refresh = TRUE)` or a
+  `provider/id`.
 * Models whose catalog gives the whole context window as their output limit (common after
-  `gptr_models(refresh = TRUE)`, for example MiniMax-M3 and gpt-oss-120b) are no longer refused
-  as too small: gptr reserves and requests at most half the window for output. A `compact_at`
-  too small for the preset is named as the cause instead of the model, and the hint reads
-  `tools = "minimal"`.
+  `gptr_models(refresh = TRUE)`, for example MiniMax-M3 and gpt-oss-120b) are not refused as
+  too small: gptr reserves and requests at most half the window for output. A `compact_at` too
+  small for the preset is named as the cause, and the hint reads `tools = "minimal"`.
 * An Ollama model refused for missing or outdated discovery names
   `gptr_models(provider = "ollama", refresh = TRUE)` as the remedy, not the internal
   `model_prepare()`.
 * `peter(model = "ollama/<model>")` asks the Ollama server about that model before its first
-  request in each R session, as System 1 calls already did, instead of refusing until
-  `gptr_models(provider = "ollama", refresh = TRUE)` had run. A saved default Ollama model now
-  works in a new session.
+  request in each R session, as System 1 calls do, so a saved default Ollama model works in a
+  new session.
 * An unknown `provider/id` on a route the catalog lists no models for yet (before a refresh,
   for example OpenRouter, Groq, xAI or Azure) says that `gptr_models(refresh = TRUE)` downloads
   them from models.dev.
 * `gptr_provider()` and `gptr_spec("model")` accept a model's `prices` as a list of price records
   as well as a data frame, as `gptr_config(providers =)` does, and check the table when the spec
-  is built, naming the field, instead of failing at the first call.
+  is built, naming the field.
 * A provider without a valid base URL, such as `azure/` before `AZURE_OPENAI_ENDPOINT` is set, names
   the variable that sets it (or `providers$<id>$base_url` in `gptr_config()`).
 * An unnamed list in a higher settings layer, such as a provider's `models` set with
   `gptr_config(.scope = "session")` or `options(gptr.providers =)`, replaces the one in a lower
-  layer (for example the user file) instead of being ignored; named lists still merge.
+  layer (for example the user file); named lists merge.
 * `gptr_config()` warns when it saves a setting to a project that is not trusted and so does not
   apply it (for example `providers` or `model`), naming `gptr_trust()` and `.scope = "session"`;
   settings that only tighten, such as `mode = plan` or `deny` rules, stay silent (a `permissions`
   write names only its `allow` rules).
 * `gptr_config(model = opuss)` (or `small_model`, `system1`) warns when the name is not a model
-  gptr knows in this session, as the console's `/model` already checked, with the reason and how
+  gptr knows in this session, as the console's `/model` does, with the reason and how
   to undo it; the value is still saved, since a provider registered later or a catalog refresh
   can make it valid.
-* `gptr_init()` no longer writes `"mode": "manual"` and `"record": "ask"` into
-  `.gptr/settings.json`, which overrode a user-level `mode = auto` or `record = "auto"` in every
-  initialized project. In a project made by an earlier build, delete those two keys from the file
+* `gptr_init()` writes no `mode` or `record` into `.gptr/settings.json`, so a user-level
+  `mode = auto` or `record = "auto"` applies in every initialized project. In a project made by
+  a development build from GitHub, delete `"mode": "manual"` and `"record": "ask"` from that file
   to let your user settings apply.
-* A trusted project's `mode` applies, so `gptr_config(mode = auto)` in a trusted project no longer
-  saves a value that is silently ignored; an untrusted project still only tightens the mode, and
-  `context` and `record` still only tighten in any project. A project cannot select `yolo`:
+* A trusted project's `mode` applies, so `gptr_config(mode = auto)` in a trusted project takes
+  effect; an untrusted project only tightens the mode, and `context` and `record` only tighten in
+  any project. A project cannot select `yolo`:
   `gptr_config(mode = yolo)` at project scope is refused, naming `.scope = "user"` and `"session"`.
 * Providers declared with `api = "bedrock-converse"` send thinking levels
   (`.opts = list(thinking =)` or a `:high` suffix) to a Claude model whose record declares
   `capabilities = list(adaptive_thinking = TRUE, effort = TRUE)` (Claude 4.6 and later; see
-  `?gptr_provider`); formerly every level was dropped without a word. Any other model, an
-  undeclared Claude record included, still runs without thinking and now says so once.
+  `?gptr_provider`). Any other model, an undeclared Claude record included, runs without
+  thinking and says so once.
 * A string that is not one of an argument's choices, such as `.opts = list(thinking = "ultra")`,
   is reported as such ("the string given is not one of them", with "Did you mean" when it differs
-  from a choice only in case) instead of "not a character of length 1".
-* A thinking level the model does not offer still becomes the nearest one it has, and gptr now
-  says so once per model and level: for example `"opus:off"` runs at `low`, and `thinking = "max"`
+  from a choice only in case).
+* A thinking level the model does not offer becomes the nearest one it has, and gptr says so
+  once per model and level: for example `"opus:off"` runs at `low`, and `thinking = "max"`
   on a model whose levels end at `high` runs at `high`. `?gptr_provider` documents
   `thinking_levels`; a reasoning model declared without it gets `off` to `high`.
-* A known name, such as a model alias or a built-in tool, still wins over a variable of the same
-  name, and gptr now says so when the variable holds a spec the argument takes (a provider or
-  router for `model`, a tool for `tools`), as it did for a character value: after
+* A known name, such as a model alias or a built-in tool, wins over a variable of the same name,
+  and gptr says so when the variable holds a character value or a spec the argument takes (a
+  provider or router for `model`, a tool for `tools`): after
   `opus = gptr_fake_provider(...)`, `model = opus` uses the alias and suggests `!!opus`.
 * `choices`, `levels`, `threshold`, `min_confidence` and `uncertain` given to a conversational
-  model, also with `agents =` or `parallel =`, are refused, naming the argument; they were ignored,
-  and the call returned a session on which `sum()`, `[` and `gptr_prob()` then failed. Use a
-  decision model such as `jev`; after `gptr_config(system1 = "emulate:<ref>")`, `model = jev` runs
-  it through a chat model. A decision model, which ignored `agents =` and `parallel =`, refuses
-  them: it answers every input in one call.
+  model, also with `agents =` or `parallel =`, are refused, naming the argument. Use a decision
+  model such as `jev`; after `gptr_config(system1 = "emulate:<ref>")`, `model = jev` runs it
+  through a chat model. A decision model refuses `agents =` and `parallel =`: it answers every
+  input in one call.
 * The `uncertain = "stop"` error names the uncertain inputs (the first ten) and carries their
-  positions (`$index`), `$names` and `$confidence`, the confidence the band tests, and every answer
-  (`$value`), which it used to discard; `$prob` is unchanged.
+  positions (`$index`), `$names` and `$confidence`, the confidence the band tests, every answer
+  (`$value`) and `$prob`.
 * `as.data.frame()` of a System 1 score names its probability columns by level (`p_<level>`), as
-  `gptr_prob(x, "probabilities")` and choices do; they were `p_0`, `p_1`, ...
+  `gptr_prob(x, "probabilities")` and choices do.
 * `choices` given as a factor, or `.opts = list(output = "factor")`, return a plain factor without
-  probabilities, as `?peter`, `?gptr_prob` and the System 1 vignette now say. When elements fail,
+  probabilities, as `?peter`, `?gptr_prob` and the System 1 vignette say. When elements fail,
   the factor keeps `attr(x, "meta")$errors`, which the failure warning points to.
 
 # gptr 0.7.0

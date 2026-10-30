@@ -110,8 +110,8 @@ their prompts.
 
 ``` r
 session = gptr_parallel(
-  planner = peter("Plan the analysis."),
-  review = peter("Review the inputs."),
+  planner = peter("Plan the analysis.", envir = new.env()),
+  review = peter("Review the inputs.", envir = new.env()),
   max_active = 2
 )
 session$planner$text
@@ -123,8 +123,10 @@ also pass `.list =` a named list of sessions created with `.run = FALSE`. Member
 not collide with session accessors such as `text` or `status`. A member must be idle with
 queued input, rather than an already completed call passed by variable.
 
-Each member retains its own model and workspace, but member `tools =`, `budget =` and
-per-run `.opts` (including `max_turns`) are not applied. Members share the call's budget. Set
+Each member retains its own model. A member without `envir =` evaluates in the caller's
+environment, which it shares with the other members, so give each one `envir = new.env()` to
+keep their objects apart. Member `tools =`, `budget =` and per-run `.opts` (including
+`max_turns`) are not applied. Members share the call's budget. Set
 applicable defaults before launch or run under an enclosing budget; see
 [Token efficiency](token-efficiency.html). `on_error = "return"` keeps failed members for
 inspection; `"stop"` signals the first failed member's condition after all members settle.
@@ -233,10 +235,12 @@ registered checkpointers, with conflicts and unsupported changes reported. It do
 arbitrary external services or uncaptured side effects. Check the report and restored data.
 Assigning a session to another name keeps the same object; use `gptr_fork()` for a branch.
 
-For a top-level team or fan-out call in a designated history document, the code of each child
-that exports objects or returns a value with `gptr_return()` is recorded under that statement.
-Replay reconstructs the children and reruns that code, so the exported objects and each child's
-`$value` (`f$value` of a fan-out) come back without a model call. Recording, answer caches and
+For a top-level team (`agents =`) or fan-out (`parallel =`) call in a designated history
+document, the code of each child that exports objects or returns a value with `gptr_return()` is
+recorded under that statement. Replay reconstructs the children and reruns that code, so the
+exported objects and each child's `$value` (`f$value` of a fan-out) come back without a model
+call. `gptr_parallel()` records nothing, since its members are nested calls: use `agents =` or
+`parallel =` for a team a document should replay. Recording, answer caches and
 usable blocks must be present; a narrative team report alone is not a replayable workflow.
-See [Script as history](script-as-history.html) for recording and summary recipes, and
+See [Record, replay and export](script-as-history.html) for recording and summary recipes, and
 [Token efficiency](token-efficiency.html) for shared budgets and usage.

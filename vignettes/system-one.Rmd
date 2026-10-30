@@ -1,8 +1,8 @@
 ---
-title: "System 1 decisions"
+title: "Typed decisions"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{System 1 decisions}
+  %\VignetteIndexEntry{Typed decisions}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -154,7 +154,7 @@ list(included = included, review = review)
 
 The same function can live in an ordinary R file. A call inside a function or loop does not
 own a recorded document block. A matching System 1 cache entry can avoid another request;
-that is distinct from document replay. See [Script as history](script-as-history.html).
+that is distinct from document replay. See [Record, replay and export](script-as-history.html).
 
 `uncertain = "stop"` signals `gptr_error_s1_uncertain`. `TRUE` or `FALSE` supply a yes/no
 fallback; a function `function(state, answer)` can return one replacement of the answer's
@@ -238,7 +238,7 @@ do not become calibrated merely by returning probabilities. Emulated answers hav
 `calibrated = FALSE`. Slicing a typed result keeps its probabilities aligned.
 
 Matching answers are cached per input and question. With a `.gptr/` workspace the System 1
-cache is durable; without one it lives under the session's temporary workspace. Cache
+cache is durable; without one it is held in memory for the R session. Cache
 identity also depends on the model and answer options. Changed model identity, live mode or
 a missing entry can require a request. A mutable local model without verified immutable
 identity cannot promise durable reuse. Use `gptr_cache()` to inspect the cache.

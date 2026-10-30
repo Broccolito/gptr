@@ -212,4 +212,4 @@ the connection. See [Execution model](execution-model.html) for the provider con
 The server exposes tools, not an MCP resource or prompt catalog. Stop it with `server$stop()`
 or `gptr_mcp_serve(stop = TRUE)` when finished.
 For interactive approvals and recorded R work, see [Interactive console](interactive-console.html)
-and [Script as history](script-as-history.html).
+and [Record, replay and export](script-as-history.html).

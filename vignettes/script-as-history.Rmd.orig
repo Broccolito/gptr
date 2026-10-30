@@ -1,8 +1,8 @@
 ---
-title: "Script as history"
+title: "Record, replay and export"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Script as history}
+  %\VignetteIndexEntry{Record, replay and export}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -102,7 +102,9 @@ gptr_doc(FALSE)
 
 A missing block makes a model request, and the executed code is recorded below the call: of
 an `r` call that stopped part-way, the expressions that ran, and code that changed your objects
-even where the model passed `record = false`, which leaves out only inspection.
+even where the model passed `record = false`, which leaves out only inspection. Only blank lines
+may separate a call from its block: after a comment line in between, the call is asked again and
+writes a new block, while the old block's code still runs.
  The header identifies the block, model, date and prompt hash; the body hash identifies
 its recorded code. `## Decision:` retains a model-supplied note, and `#>` retains bounded
 output. A note is a model explanation, not proof that the code is correct. `## Steer:` and
@@ -214,9 +216,11 @@ recorded R code safe to repeat. Verify data paths, dependencies, outputs and sid
 
 `gptr_blocks()` marks a block `fresh`, `stale`, `user-edited` or `undone`. Changed prompts or
 interpolated values can invalidate replay; the listing alone cannot evaluate runtime
-interpolation. Hand-edited code is recognized by its changed hash. Undone code stays visible
-as inert comments. Keep the associated answer cache if the replayed calls need their text or
-values; the code block and the cache are different parts of the record.
+interpolation. Blocks are independent: when a stale turn is regenerated, the later turns of its
+session stay fresh and replay, so ask a later turn that depends on it again, for example with
+`replay = "live"` on that call. Hand-edited code is recognized by its changed hash. Undone code
+stays visible as inert comments. Keep the associated answer cache if the replayed calls need
+their text or values; the code block and the cache are different parts of the record.
 
 `gptr_cache()` reports System 1 and System 2 answer caches, temporary spill files and pending
 sidecars. `gptr_cache("prune")` removes entries no longer in use or beyond their retention
@@ -405,7 +409,7 @@ This returns **model-generated output**, not an exported or validated script. Sa
 reviewed code, then run it in a fresh environment with the intended inputs and verify its
 outputs.
 
-See [System 1 decisions](system-one.html) for typed decisions and
+See [Typed decisions](system-one.html) for typed decisions and
 [Teams and background work](teams-and-background.html) for orchestration and SDK control.
 
 ```{r offline-history-functions, include = FALSE}
