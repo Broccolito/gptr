@@ -374,8 +374,10 @@ test_that("a patch update, with or without a move, reads no field by a partial n
   td = withr::local_tempdir()
   put_file(td, "m.R", "keep = 1\n")
   withr::local_options(warnPartialMatchDollar = TRUE)
-  env = function(...) paste(c("*** Begin Patch", "*** Update File: m.R", ..., "@@", "-keep = 1",
-                              "+keep = 2", "*** End Patch"), collapse = "\n")
+  env = function(...) {
+    paste(c("*** Begin Patch", "*** Update File: m.R", ..., "@@", "-keep = 1", "+keep = 2",
+            "*** End Patch"), collapse = "\n")
+  }
   expect_no_warning(patch_apply(env(), root = td))
   put_file(td, "m.R", "keep = 1\n")
   expect_no_warning(patch_apply(env("*** Move to: moved.R"), root = td))
