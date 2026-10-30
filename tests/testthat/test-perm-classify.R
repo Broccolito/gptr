@@ -244,6 +244,14 @@ test_that("Python comments and a chdir( in a string are no code (D-294)", {
   expect_identical(flags_level(py("import subprocess\nsubprocess.run('rm -rf ~', shell = True)")),
                    4L)
   expect_identical(flags_level(py("import os\nos.chdir('/')")), 4L)
+  # neighbours: a # in a string (a triple-quoted one, or after an escaped quote) is no comment
+  for (s in c("s = '''\nx # y''' ; ", "s = 'it\\'s # y' ; ")) {
+    for (cs in list(c("network", "import requests; requests.get('http://x')"),
+                    c("dynamic", "getattr(__import__('os'), 'system')('ls')"),
+                    c("file_delete", "import os; os.remove('/etc/hosts')"))) {
+      expect_true(cs[1] %in% py(paste0(s, cs[2]))$category, label = paste0(s, cs[2]))
+    }
+  }
 })
 
 test_that("flag rows bind without duplicates", {

@@ -1828,8 +1828,11 @@ risk_python = function(code, root = project_root(), dirs = root) {
               "\\1", code, perl = TRUE)
   code = gsub("(?<![\\w.)\\]])\\(\\s*((?:\\w+\\s*\\.\\s*)*environb?)\\s*\\)", "\\1", code,
               perl = TRUE)
-  # the token rules read the code without its comments
-  code_nc = gsub("(?m)^((?:[^'\"#\n]|'[^'\n]*'|\"[^\"\n]*\")*)#.*", "\\1", code, perl = TRUE)
+  # the scans read the code without its comments; a triple-quoted string may hold a #, so code
+  # with one is read whole
+  code_nc = if (grepl("'''|\"\"\"", code)) code else
+    gsub("(?m)^((?:[^'\"#\n]|'(?:[^'\\\\\n]|\\\\.)*'|\"(?:[^\"\\\\\n]|\\\\.)*\")*)#.*", "\\1", code,
+         perl = TRUE)
   for (r in risk_py_rules) {
     if (grepl(r[[3L]], code_nc, perl = TRUE)) {
       f = risk_flags_bind(f, risk_flags_row(r[[2L]], "py", r[[1L]], r[[2L]]))
