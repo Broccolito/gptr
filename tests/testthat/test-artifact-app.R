@@ -872,6 +872,10 @@ test_that("undo and redo move current and report each artifact", {
   expect_true(dir.exists(artifact_version_dir("ck", 2L)))
   expect_identical(artifact_ckpt_redo(frag[1], NULL, FALSE), "artifact ck: current version 2")
   expect_identical(as.integer(artifact_meta_read("ck")$current), 2L)
+  running = list(modifyList(frag[[1L]], list(running_before = TRUE)))
+  local_mocked_bindings(artifact_relaunch = function(...) stop("no port"))
+  expect_identical(artifact_ckpt_undo(running, NULL, FALSE),
+                   "artifact ck: not relaunched (current version 1)")
   failed = list(restorable = FALSE, reason = "boom")
   expect_identical(artifact_ckpt_undo(failed, NULL, FALSE), "artifacts: not restored (boom)")
   expect_identical(artifact_ckpt_describe(failed), "artifacts: not restored (boom)")

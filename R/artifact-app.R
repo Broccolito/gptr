@@ -1701,8 +1701,10 @@ artifact_ckpt_move = function(fragment, ctx, side) {
     artifact_set_current(r$id, n)
     line = paste0(head, "current version ", n)
     if (!isTRUE(r[[paste0("running_", side)]])) return(line)
-    failed = inherits(try(artifact_relaunch(r$id, n, ctx), silent = TRUE), "try-error")
-    paste0(line, if (failed) " (relaunch failed)" else " (relaunched)")
+    if (inherits(try(artifact_relaunch(r$id, n, ctx), silent = TRUE), "try-error")) {
+      return(paste0(head, "not relaunched (current version ", n, ")"))
+    }
+    paste0(line, " (relaunched)")
   }, character(1))
 }
 

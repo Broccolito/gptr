@@ -663,7 +663,8 @@ gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversatio
     return(invisible(s))
   }
   report = ckpt_rewind_apply(tree, ops, specs, ctx, force, plan$item)
-  bad = report[grepl("not restored|not redone|conflict|failed", report)]
+  # an item failed when its action says so right after a ": " (its name may hold the same words)
+  bad = report[grepl(": (not |conflict|failed)", report)]
   entry = list(type = "custom", custom_type = "gptr.rewind",
                data = list(from = from, to = tgt$target, keep = tgt$keep, restore = restore,
                            report = I(report), undone = I(ops$undo), redone = I(ops$redo)))
