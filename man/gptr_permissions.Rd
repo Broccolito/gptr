@@ -29,20 +29,24 @@ Lists the permission rules in effect, or adds and removes rules. A rule is \code
 (\verb{write(results/**)}, relative to the project root; \verb{~/...} for the home; \verb{//...} for other
 absolute paths); for \code{r}, \code{level<=n}, \verb{fn:name,...} (every flagged function covered),
 \verb{category:name,...}, \verb{sh:<command glob>} (\verb{r(sh:git push*)}; a glob ending in \verb{ *} also
-matches the command alone, so \verb{r(sh:cat *)} covers \code{cat} too), \verb{sql:<keywords>}
-(\code{r(sql:select)}) and \code{secret:NAME} (the only rule that pre-approves a guarded secret read: an
-allow rule covers \code{r} code only when every call it flags reads one of the named secrets by name,
-with \code{Sys.getenv()} or a shell's \verb{$NAME}; it covers a secret handed to a child through the \code{env}
-of \code{peter$sh()} or \code{peter$script()} only when the same code reads that secret by name, while a
-deny or ask \code{secret:NAME} rule meets every such hand-over); MCP tools by name
-(\verb{mcp__github__*}). Deny rules win over ask rules, which win over allow rules. Deny and ask
+matches the command alone, so \verb{r(sh:cat *)} covers \code{cat} too; a glob matches the command as
+written, in any case on macOS and Windows, so it misses options placed before a subcommand, as
+in \verb{git -C dir push}), \verb{sql:<keywords>} (\code{r(sql:select)}) and \code{secret:NAME} (the only rule
+that pre-approves a guarded secret read: an allow rule covers \code{r} code only when every call it
+flags reads one of the named secrets by name, with \code{Sys.getenv()} or a shell's \verb{$NAME}; it
+covers a secret handed to a child through the \code{env} of \code{peter$sh()} or \code{peter$script()} only
+when the same code reads that secret by name, while a deny or ask \code{secret:NAME} rule meets every
+such hand-over); MCP tools by name (\verb{mcp__github__*}). A tool name names a tool the model calls,
+never a \verb{peter$} member, served or not: \code{r(fn:peter$script)} names \code{peter$script()} in \code{r} code.
+Deny rules win over ask rules, which win over allow rules. Deny and ask
 rules match any call that \code{\link[=gptr_risk]{gptr_risk()}} flags, a read-only shell command included
 (\verb{r(sh:cat *)} denies \code{peter$sh("cat notes.txt")}); an R function it knows to be read-only,
 such as \code{readLines()}, is not flagged, so \verb{fn:} rules never match it. Allow rules
 never loosen plan mode and never pre-approve level-4 (critical or control) actions. In \code{auto} and
 \code{yolo} mode only an \verb{fn:} rule that names the function, such as \code{r(fn:system)}, lets \code{system()},
-\code{system2()}, \code{shell()} or \code{shell.exec()} run a command the code computes, which those modes
-otherwise refuse (see \link{gptr_security}).
+\code{system2()}, \code{shell()}, \code{shell.exec()}, \code{pipe()}, \code{processx::run()} (\code{r(fn:run)}) or
+\code{data.table::fread(cmd =)} run a command the code computes, which those modes otherwise refuse
+(see \link{gptr_security}).
 }
 \details{
 Scopes: \code{"session"} is this R process; \code{"project"} is the user-level file
