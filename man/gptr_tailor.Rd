@@ -10,8 +10,8 @@ gptr_tailor(x = peter, ..., rules = NULL, coaching = NULL, dir = NULL)
 \item{x}{\code{peter} or a harness to start from.}
 
 \item{...}{Named \code{peter()} arguments to fix, resolved now as \code{peter()} resolves them (so
-\code{mode = auto} is \code{"auto"}). \code{plugins} cannot hold \code{"+name"} or \code{"-name"} filters, which would
-change the whole R session.}
+\code{mode = auto} is \code{"auto"}); \code{prompt} is each call's task and cannot be fixed. \code{plugins} cannot
+hold \code{"+name"} or \code{"-name"} filters, which would change the whole R session.}
 
 \item{rules}{\code{NULL} to keep your rules of \code{x}, else your own hard rules, which no coaching
 changes: \code{list(never, require)}. \code{never} holds up to 8 \code{list(rule, why)}: a call that matches
@@ -31,8 +31,10 @@ functions or categories rated below level 3. \code{contains} is text the call's 
 \code{list(name, description, text)} with names such as \code{"survey-weights"}, descriptions of at most
 1,024 characters and 64 KiB in all; \code{review} \code{list(text, rounds)} with at most 2,000
 characters and 0 to 2 rounds (default 1); \code{rules} as \code{rules} above, refused with "denied by
-the coaching rule". The texts may not hold control or hidden characters, tags of gptr's own
-prompt blocks, or gptr's wording for a message from you or an extension.}
+the coaching rule". The texts may not hold control characters, zero-width or other format
+characters (so text in a script or an emoji sequence that needs a zero-width joiner cannot
+appear), tags of gptr's own prompt blocks, or gptr's wording for a message from you or an
+extension.}
 
 \item{dir}{A folder to write the harness to for people to read or keep in git (\code{HARNESS.md},
 \code{NOTE.md}, \code{REVIEW.md}, \code{RULES.md} and \verb{skills/<name>/SKILL.md}). gptr never reads it back.}
@@ -58,9 +60,9 @@ Arguments you give in a call win over the fixed ones, except that \code{tools}, 
 same rule applies when you tailor a harness again; \code{NULL} drops a fixed single value.
 
 To share a harness, save it with \code{\link[=saveRDS]{saveRDS()}}. Treat a harness from someone else like an R
-script from them: functions among its fixed arguments run when you call it. Load it with
-\code{gptr_tailor(readRDS(file))}, which rebuilds it, checks its coaching and shows any code it
-carries.
+script from them: functions among its fixed arguments, and the extension files it names, run
+when you call it. Load it with \code{gptr_tailor(readRDS(file))}, which rebuilds it, checks its
+coaching and shows the code, extensions and plugins it fixes and any system prompt it replaces.
 }
 \examples{
 fake = gptr_fake_provider(list("The data has 32 rows.", "Checked: 32 rows."))

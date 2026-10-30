@@ -108,6 +108,14 @@ for (label in names(copy_rows)) {
   })
 }
 
+test_that("no copy of big after a harness call, direct and through a wrapper that combines", {
+  setup = c(copy_setup, "f1 = function(gptr) NULL",
+            "h = suppressMessages(gptr_tailor(peter, model = fake, extensions = f1))")
+  expect_no_copy(setup, "s = h('describe', big)", label = "a harness")
+  expect_no_copy(setup, c("w = function(...) h(...)", "s = w('describe', big, extensions = f1)"),
+                 label = "a harness through a wrapper whose extensions combine")
+})
+
 # gptr_coach() refuses gptr.unsafe_no_permissions, so its row has a setup of its own; its runs
 # are R processes, called directly and through a wrapper
 test_that("no copy of big after gptr_coach('Count big.', big)", {
