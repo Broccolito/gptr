@@ -2108,15 +2108,17 @@ risk_classify_r = function(code, envir, root) {
   out
 }
 
-#' P03's secret scan with a safe fallback shape
+#' P03's secret scan; one that fails on code that parses may miss a secret sent to the network,
+#' so it is a guarded level-4 finding (code that does not parse never runs: no finding)
 #' @noRd
 risk_secret_scan = function(text, tainted = character()) {
-  empty = list(findings = data.frame(rule = character(), name = character(), level = integer(),
-                                     guard = logical(), stringsAsFactors = FALSE),
-               level = 0L, guard = FALSE, assigned = character())
   res = tryCatch(secret_scan(text, tainted = as.character(tainted)), error = function(e) NULL)
-  if (is.null(res) || !is.data.frame(res$findings)) return(empty)
-  res
+  if (is.data.frame(res$findings)) return(res)
+  bad = is.expression(eval_parse(paste(text, collapse = "\n")))
+  f = data.frame(rule = "secret_scan_failed", name = "", level = 4L, guard = TRUE,
+                 stringsAsFactors = FALSE)
+  list(findings = f[seq_len(bad), , drop = FALSE], level = if (bad) 4L else 0L, guard = bad,
+       assigned = character())
 }
 
 #' Build a gptr_risk object from flag rows

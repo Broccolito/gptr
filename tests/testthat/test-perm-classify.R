@@ -913,6 +913,16 @@ test_that("secret rules come from P03's secret_scan() (G6 section 3.8)", {
   expect_identical(r$secrets, character())
 })
 
+test_that("a secret scan that fails on code that parses is a guarded level 4 (D-295)", {
+  root = local_project()
+  local_mocked_bindings(secret_scan = function(...) stop("a scan bug"))
+  r = gptr_risk("x = 1", root = root)
+  expect_identical(list(r$level, r$secret_guard, r$flagged$call),
+                   list(4L, TRUE, "secret_scan_failed"))
+  expect_identical(gptr_risk("x (", root = root)$label, "invalid")
+  expect_identical(nrow(risk_secret_scan("x (")$findings), 0L)
+})
+
 test_that("gptr_risk() validates its arguments and returns the contract fields (5.11)", {
   expect_error(gptr_risk(1), class = "gptr_error_invalid_argument")
   expect_error(gptr_risk("x", envir = list()), class = "gptr_error_invalid_argument")

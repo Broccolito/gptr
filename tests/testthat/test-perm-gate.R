@@ -242,6 +242,16 @@ test_that("the secret guard asks in auto; only r(secret:NAME) pre-approves (G6, 
   expect_identical(gate_decide(gate_r("Sys.getenv()"), gate_ctx("auto")), "allow")
 })
 
+test_that("a secret scan that fails asks a person in auto and yolo (D-295)", {
+  root = local_project()
+  local_permission_rules()
+  local_mocked_bindings(secret_scan = function(...) stop("a scan bug"))
+  code = "v = Sys.getenv('GITHUB_PAT'); httr2::req_perform(httr2::request(v))"
+  for (m in c("auto", "yolo")) {
+    expect_identical(gate_decide(gate_r(code), gate_ctx(m)), "ask_human", label = m)
+  }
+})
+
 test_that("a member handing a child a registered secret meets the guard; no rule allows it", {
   skip_on_cran()
   root = local_project()
