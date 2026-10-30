@@ -693,6 +693,25 @@ test_that("coaching spend reaches gptr_usage(), each request once", {
   expect_setequal(added, paste0("q-", c("start1", "proc1", "dom1", "probe", "compose1", "final1")))
 })
 
+test_that("the record and the plan projection count cache tokens, as gptr_usage() does", {
+  local_project()
+  cached = function(id) {
+    u = usage_of(id)
+    u$cache_read = 1000
+    u$cache_write_5m = 200
+    u
+  }
+  answer = coach_answer()
+  log = local_coach_stub(function(job) c(answer(job), list(usage = cached(paste0("q-", job$id)))))
+  h = coach_k()
+  expect_identical(h$record$runs[[1L]]$tokens, 1310)
+  expect_identical(h$record$tokens, c(7 * 1300, 7 * 10))
+  local_gptr_options(quiet = FALSE)
+  x = list(models = list(kinds = c(run = "claude", coach = "claude")), n = c(run = 4, coach = 3))
+  expect_message(coach_projection(x, list(list(usage = cached("q-1")))),
+                 "used 1.3k tokens; the whole call may use about 9.2k", fixed = TRUE)
+})
+
 test_that("inside a run, coaching spend is charged to the run's session; a forged row is not", {
   local_project()
   s = peter("Hi.", model = gptr_fake_provider(list("Hello.")))

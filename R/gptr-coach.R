@@ -946,12 +946,14 @@ coach_budget_left = function(budget, s) {
 
 # ---- the record, the report and the document (08 sections 1.6 and 3.6) --------------------------
 
-#' The input tokens, output tokens and cost of a result's usage rows (cost NA when unknown)
+#' The input tokens (cache reads and writes included, as usage_used() counts them), output tokens
+#' and cost of a result's usage rows (cost NA when unknown)
 #' @noRd
 coach_usage = function(r) {
   u = r$usage
   if (!is.data.frame(u) || !nrow(u)) return(c(input = 0, output = 0, cost = 0))
-  c(input = sum(u$input, na.rm = TRUE), output = sum(u$output, na.rm = TRUE), cost = sum(u$cost))
+  out = sum(u$output, na.rm = TRUE)
+  c(input = usage_used(u)$tokens - out, output = out, cost = sum(u$cost))
 }
 
 #' The record of a coaching call, with no data from its runs: per run and coach session its
