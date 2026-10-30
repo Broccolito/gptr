@@ -1471,6 +1471,22 @@ test_that("a command run in a directory outside the project reads it (review rou
   expect_identical(lv("system('cd ~/.ssh && ls')"), 3L)
 })
 
+test_that("a relative cd moves from the directory the line moved to last (D-294)", {
+  root = local_project()
+  lv = function(cmd) risk_classify(cmd, root = root, kind = "command")
+  for (cmd in c("cd .gptr && cd extensions && echo x > guard.R",
+                "cd .git && cd hooks && echo x > pre-commit")) {
+    r = lv(cmd)
+    expect_identical(list(r$level, "control" %in% r$categories), list(4L, TRUE), label = cmd)
+  }
+  for (cmd in c("cd data && ls && cd .. && rm -rf build",
+                "mkdir -p build && cd build && cmake .. && make && cd .. && rm -rf build")) {
+    expect_true(lv(cmd)$level < 4L, label = cmd)
+  }
+  # the folders a line may be in are kept: a later command is read in each
+  expect_identical(lv("cd sub && rm -rf ../../build")$level, 4L)
+})
+
 test_that("moving R's working directory out of the project is level 4 (review round 4)", {
   root = local_project()
   dir.create(file.path(root, "sub"))

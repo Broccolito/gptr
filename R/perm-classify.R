@@ -976,12 +976,13 @@ risk_cd_word = function(t) {
 
 #' `dirs` and the directory a cd moves to from them (risk_cd_word()): NA for one the shell
 #' computes (its word `t` holds an expansion or a glob the tokenizer saw, `dyn`), a relative one
-#' in the first directory
+#' in the last directory the line moved to (the folders before it are kept, as a cd after `;`
+#' may fail)
 #' @noRd
 risk_cd_dirs = function(dirs, t, dyn) {
   computed = (nzchar(dyn) && grepl("[$`*?[]", t)) || identical(t, "-")
   unique(c(dirs, if (computed) NA_character_ else if (is_abs_path(t) || is_drive_rel(t)) t else
-      file.path(sub("/\\z", "", dirs[!is.na(dirs)][1L], perl = TRUE), t)))
+      file.path(sub("/\\z", "", utils::tail(dirs[!is.na(dirs)], 1L), perl = TRUE), t)))
 }
 
 #' Classify one simple command run from the directories `dirs`; `dyn` and `quoted` come from
