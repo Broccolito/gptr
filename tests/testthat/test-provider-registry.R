@@ -2099,6 +2099,12 @@ test_that("gptr_providers() lists providers with fingerprints and no I/O", {
   expect_error(gptr_providers(check = "yes"), class = "gptr_error_invalid_argument")
 })
 
+test_that("the sub-agent worker proxy is listed neither as a provider nor as a model", {
+  expect_false(is.null(provider_get("worker")))
+  expect_false("worker" %in% gptr_providers()$id)
+  expect_identical(nrow(gptr_models(provider = "worker")), 0L)
+})
+
 test_that("gptr_providers(check = TRUE) probes models endpoints without credentials", {
   urls = new.env()
   urls$seen = character()

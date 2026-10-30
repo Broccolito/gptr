@@ -1323,6 +1323,15 @@ provider_egress = function(p) {
   if (identical(eg[[p[["id"]] %||% p[["name"]]]], "ack")) "ack" else "needed"
 }
 
+#' The providers of gptr's own plumbing (the worker proxy of builtin:subagents): no route a
+#' person can name, so neither listing shows them
+#' @noRd
+provider_internal = function(reg = tryCatch(gptr_registry("provider"),
+                                            gptr_error = function(e) NULL)) {
+  if (is.null(reg)) return(character())
+  reg$name[reg$source == "builtin:subagents" & reg$state == "active"]
+}
+
 #' A provider for the listing: its effective record, else the registered record with the
 #' settings condition as `err` (NULL when the record disappeared)
 #' @noRd
@@ -1400,12 +1409,12 @@ provider_listing_row = function(id, p, err, check, reg, idx) {
 gptr_providers = function(check = FALSE, check_login = FALSE) {
   check_flag(check, "check")
   check_flag(check_login, "check_login")
-  ids = sort(registry_names("provider"), method = "radix")
+  reg = tryCatch(gptr_registry("provider"), gptr_error = function(e) NULL)
+  ids = setdiff(sort(registry_names("provider"), method = "radix"), provider_internal(reg))
   provs = lapply(ids, provider_listing_get)
   keep = !vapply(provs, function(x) is.null(x$p), NA)
   ids = ids[keep]
   provs = provs[keep]
-  reg = tryCatch(gptr_registry("provider"), gptr_error = function(e) NULL)
   idx = tryCatch(catalog_get()$index, gptr_error = function(e) NULL)
   rows = Map(function(id, x) provider_listing_row(id, x$p, x$err, check, reg, idx), ids, provs)
   col = function(f) vapply(rows, function(r) r[[f]], "", USE.NAMES = FALSE)
