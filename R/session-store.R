@@ -672,6 +672,9 @@ gptr_sessions = function(project = TRUE) {
   live = live_all()
   live_ids = vapply(live, function(x) session_data(x)$id, "")
   df$live = df$id %in% live_ids
+  # a file's tail tells only idle or interrupted; a live session knows its status (budget, ...)
+  df$status[df$live] = vapply(live[match(df$id[df$live], live_ids)],
+                              function(x) session_data(x)$status, "")
   if (!project) {
     for (x in live[!(live_ids %in% df$id)]) df = rbind(df, session_live_summary(x))
   }
@@ -700,38 +703,49 @@ session_live_summary = function(s) {
              live = TRUE, stringsAsFactors = FALSE)
 }
 
-#' One row of gptr_sessions() from the head and the tail of a file
+#' One row of gptr_sessions() from the head and the tail of a file. Each window widens from 64
+#' KiB to 4 MiB until it holds a user line (a long instructions file or a turn of many tool calls
+#' fills 64 KiB).
 #' @noRd
 session_file_summary = function(path) {
-  head = file_chunk_lines(path, from_end = FALSE)
-  if (!length(head)) return(NULL)
-  hdr = tryCatch(json_decode(head[[1L]]), error = function(e) NULL)
-  if (!is.list(hdr) || !identical(hdr$type, "session")) return(NULL)
-  title = NA_character_
-  for (line in head[-1L]) {
-    obj = tryCatch(json_decode(line), error = function(e) NULL)
-    if (is.list(obj) && identical(obj$type, "message") && identical(obj$message$role, "user")) {
-      title = substr(json_user_text(obj$message), 1L, 60L)
-      break
+  size = file.size(path)
+  for (n in 4^(8:11)) {
+    head = file_chunk_lines(path, from_end = FALSE, n = n)
+    hdr = if (length(head)) tryCatch(json_decode(head[[1L]]), error = function(e) NULL)
+    if (is.list(hdr) && !identical(hdr$type, "session")) return(NULL)
+    title = NA_character_
+    for (line in head[-1L]) {
+      obj = tryCatch(json_decode(line), error = function(e) NULL)
+      if (is.list(obj) && identical(obj$type, "message") && identical(obj$message$role, "user")) {
+        title = substr(json_user_text(obj$message), 1L, 60L)
+        break
+      }
     }
+    if (!is.na(title) || n >= size) break
   }
-  model = NA_character_
-  status = "idle"
-  turns = NA_integer_
-  last = NULL
-  tail = file_chunk_lines(path, from_end = TRUE)
-  for (line in rev(tail)) {
-    obj = tryCatch(json_decode(line), error = function(e) NULL)
-    if (!is.list(obj)) next
-    if (is.null(last) && identical(obj$customType, "gptr.container_end")) last = obj
-    if (!identical(obj$type, "message")) next
-    m = obj$message
-    if (is.null(last)) last = obj
-    if (is.na(model) && identical(m$role, "assistant")) model = paste0(m$provider, "/", m$model)
-    if (identical(m$role, "user")) {
-      turns = as.integer(obj$gptr$turn %||% NA_integer_)
-      break
+  if (!is.list(hdr)) return(NULL)
+  for (n in 4^(8:11)) {
+    model = NA_character_
+    status = "idle"
+    turns = NA_integer_
+    last = NULL
+    user = FALSE
+    tail = file_chunk_lines(path, from_end = TRUE, n = n)
+    for (line in rev(tail)) {
+      obj = tryCatch(json_decode(line), error = function(e) NULL)
+      if (!is.list(obj)) next
+      if (is.null(last) && identical(obj$customType, "gptr.container_end")) last = obj
+      if (!identical(obj$type, "message")) next
+      m = obj$message
+      if (is.null(last)) last = obj
+      if (is.na(model) && identical(m$role, "assistant")) model = paste0(m$provider, "/", m$model)
+      if (identical(m$role, "user")) {
+        turns = as.integer(obj$gptr$turn %||% NA_integer_)
+        user = TRUE
+        break
+      }
     }
+    if (user || n >= size) break
   }
   if (!is.null(last)) {
     m = last$message
@@ -763,9 +777,9 @@ json_user_text = function(m) {
   paste(txt[nzchar(txt)], collapse = " ")
 }
 
-#' Complete lines of the first or last 64 KiB of a file
+#' Complete lines of the first or last `n` bytes of a file
 #' @noRd
-file_chunk_lines = function(path, from_end = FALSE, n = 65536) {
+file_chunk_lines = function(path, from_end, n) {
   size = file.size(path)
   if (is.na(size) || size == 0) return(character())
   k = min(size, n)
