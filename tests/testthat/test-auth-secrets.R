@@ -253,7 +253,7 @@ test_that("invalid URL authorities are rejected without conversion warnings", {
 })
 
 # G6 section 5.4 (test_classify.R): 40 cases, each list(code, level, secret guard). A .env or
-# .Renviron file is a guarded read since review round 6.
+# .Renviron file is a guarded read since review round 6, a file named auth.json since FIX-37.
 scan_cases = list(
   list("summary(mtcars)", 0L, FALSE),
   list("Sys.getenv('HOME')", 0L, FALSE),
@@ -271,7 +271,7 @@ scan_cases = list(
   list("readLines('.env')", 3L, TRUE),
   list("readLines('~/Downloads/jev-key.env')", 3L, TRUE),
   list("readRenviron('~/.Renviron')", 3L, TRUE),
-  list("jsonlite::fromJSON('~/.codex/auth.json')", 3L, FALSE),
+  list("jsonlite::fromJSON('~/.codex/auth.json')", 3L, TRUE),
   list("readLines('~/.ssh/id_ed25519')", 3L, FALSE),
   list("read.csv('data/.env.production')", 3L, TRUE),
   list("readLines('/proc/self/environ')", 3L, FALSE),
@@ -496,6 +496,77 @@ test_that("known shell environment dumps include PowerShell and command case var
   }
   for (command in c("echo hello", "Get-ChildItem .", "dir", "ls -la")) {
     expect_identical(secret_scan(paste0("system('", command, "')"))$level, 0L)
+  }
+})
+
+test_that("an empty argument is read as R reads it and never stops the scan (FIX-37)", {
+  local_vault()
+  secret_register("FAKEregistered012345", "TEST_API_KEY", "test")
+  # an empty x of Sys.getenv() is a missing x: every variable, as with none
+  for (code in c("Sys.getenv(x = )", "Sys.getenv(, 'a')", "base::Sys.getenv(, '')",
+                 "quote(Sys.getenv(, ''))")) {
+    expect_true("env_dump" %in% secret_scan(code)$findings$rule, label = code)
+    scan = secret_scan(paste0(code, "; v = Sys.getenv('TEST_API_KEY')"))
+    expect_true("secret_env_registered" %in% scan$findings$rule, label = code)
+    expect_true(scan$guard, label = code)
+    expect_identical(scan$assigned, "v", label = code)
+  }
+  app = c("library(shiny)", "quote(Sys.getenv(x = ))",
+          "shinyApp(fluidPage(), function(input, output) NULL)")
+  expect_named(artifact_static_check(app), c("ok", "stage", "messages", "packages"))
+})
+
+test_that("ps::ps_environ() and ps_environ_raw() are environment dumps (FIX-37)", {
+  local_vault()
+  secret_register("FAKEregistered012345", "TEST_API_KEY", "test")
+  send = "; httr2::req_perform(httr2::request(paste0('http://127.0.0.1:9/?k=', v)))"
+  for (code in c("v = ps::ps_environ()[['TEST_API_KEY']]", "v = ps::ps_environ_raw()",
+                 "v = ps_environ(ps::ps_handle())", "f = ps::ps_environ; v = f()")) {
+    scan = secret_scan(code)
+    expect_identical(scan$level, 3L, label = code)
+    expect_true(scan$guard, label = code)
+    expect_true("v" %in% scan$assigned, label = code)
+    expect_true("secret_to_network" %in% secret_scan(paste0(code, send))$findings$rule,
+                label = code)
+  }
+})
+
+test_that("a command line that reads a registered secret or a .env file is a source (FIX-37)", {
+  local_vault()
+  secret_register("FAKEregistered012345", "TEST_API_KEY", "test")
+  send = "curl::curl_fetch_memory(paste0('http://127.0.0.1:9/?k=', v))"
+  reads = c("v = system('echo $TEST_API_KEY', intern = TRUE)",
+            "v = system2('echo', '${test_api_key}', stdout = TRUE)",
+            "v = processx::run('sh', c('-c', 'echo \"$TEST_API_KEY\"'))$stdout",
+            "v = peter$sh(c('cat', '.env'))$stdout",
+            "cmd = c('cat', 'config/.env.local'); v = peter$sh(cmd)$stdout")
+  for (code in reads) {
+    scan = secret_scan(code)
+    expect_identical(scan$level, 3L, label = code)
+    expect_true(scan$guard, label = code)
+    expect_true("v" %in% scan$assigned, label = code)
+    expect_true("secret_to_network" %in% secret_scan(paste(code, send, sep = "; "))$findings$rule,
+                label = code)
+    # split over two calls, the send is of a tainted name
+    expect_identical(secret_scan(send, tainted = scan$assigned)$level, 4L, label = code)
+  }
+  expect_identical(secret_scan(reads[[1L]])$findings$name, "TEST_API_KEY")
+  # no process, another or a longer name, or no .env file: no source
+  for (code in c("v = '$TEST_API_KEY'", "v = system('echo $HOME', intern = TRUE)",
+                 "v = system('echo $TEST_API_KEY_OLD', intern = TRUE)",
+                 "v = peter$sh(c('cat', 'doubs.env.csv'))$stdout")) {
+    expect_identical(secret_scan(code)$level, 0L, label = code)
+  }
+})
+
+test_that("gptr's credential store is a guarded read, through a computed path too (FIX-37)", {
+  local_vault()
+  for (code in c("readLines(file.path(tools::R_user_dir('gptr', 'config'), 'auth.json'))",
+                 "jsonlite::fromJSON('~/.config/R/gptr/auth.json')")) {
+    scan = secret_scan(code)
+    expect_identical(scan$level, 3L, label = code)
+    expect_true(scan$guard, label = code)
+    expect_true(gptr_risk(code)$secret_guard, label = code)
   }
 })
 

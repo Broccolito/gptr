@@ -428,7 +428,8 @@ as.character.gptr_secret = function(x, ...) paste0("[secret:", x$name, "]")
 
 # ---- secret-access classifier (G6 sections 3.8 and 5.4; extends report 18's classifier) ----
 # Levels and secret-guard flags per rule; P11's secret_guard policy and classifier read them. A
-# `secret_file` read of a .env or .Renviron file, or of one gptr_env() loaded, is guarded too.
+# `secret_file` read of a .env or .Renviron file, of gptr's credential store auth.json or of one
+# gptr_env() loaded is guarded too.
 scan_rules = data.frame(
   rule = c("secret_env_registered", "env_dump", "env_dump_process", "vault_access", "secret_env",
            "env_dynamic", "secret_file", "keyring", "env_write", "marker", "secret_to_network",
@@ -444,8 +445,10 @@ scan_secret_path_re = paste0(
   "(^|[/\\\\])(\\.ssh|\\.aws|\\.codex|\\.claude|\\.gnupg|\\.docker|\\.kube|gcloud)([/\\\\]|$)|",
   "/proc/(self|[0-9]+)/environ"
 )
-# A .env file by its name: `.env`, `.env.<suffix>`, `<name>.env` or `.Renviron` (not `x.env.csv`)
-scan_env_file_re = "(^|[/\\\\])(\\.env(\\.[A-Za-z0-9_-]+)?|[^/\\\\]+\\.env|\\.Renviron)$"
+# A .env file by its name: `.env`, `.env.<suffix>`, `<name>.env` or `.Renviron` (not `x.env.csv`),
+# and gptr's credential store `auth.json` wherever R_user_dir() puts it
+scan_env_file_re = paste0("(^|[/\\\\])(\\.env(\\.[A-Za-z0-9_-]+)?|[^/\\\\]+\\.env|\\.Renviron|",
+                          "auth\\.json)$")
 scan_read_funs = c("readLines", "readRDS", "readChar", "readBin", "scan", "file", "read.table",
                    "read.csv", "read.delim", "readRenviron", "fromJSON", "read_json", "read_yaml",
                    "yaml.load_file", "fread", "read_csv", "read_lines", "read_file", "vroom",
@@ -463,6 +466,8 @@ scan_ns_ops = c("::", paste0("::", ":"))
 scan_assign_ops = c("=", "assign", paste0("<", "-"), paste0("<<", "-"))
 scan_net_pkgs = c("", "httr2", "httr", "curl", "utils", "base", "gh", "blastula", "websocket")
 scan_ns_funs = c("getFromNamespace", "asNamespace", "getNamespace", "loadNamespace")
+# Every variable of a process, as Sys.getenv() returns them
+scan_environ_funs = c("ps_environ", "ps_environ_raw")
 scan_proc_funs = c("system", "system2", "shell", "run", "process", "r_bg", "r", "run_process",
                    "exec_wait")
 scan_member_funs = c("sh", "bg", "script")
@@ -473,8 +478,9 @@ scan_net_prog_re = paste0("(^|[[:space:];|&(/\\\\'\"])",
 scan_dump_cmds = c("env", "printenv", "set", "export", "declare", "Get-ChildItem", "gci", "cat",
                    "type")
 
-#' Does each path name a .env or .Renviron file, or a file gptr_env() loaded (a `dotenv:` source,
-#' by its file name, in any case)? Reading one reads the secrets it holds.
+#' Does each path name a .env or .Renviron file, gptr's credential store auth.json, or a file
+#' gptr_env() loaded (a `dotenv:` source, by its file name, in any case)? Reading one reads the
+#' secrets it holds.
 #' @noRd
 scan_env_file = function(x) {
   src = vapply(secrets_state()$reg, function(e) e$source, "", USE.NAMES = FALSE)
@@ -598,6 +604,7 @@ secret_scan = function(code, tainted = character()) {
     if (is.symbol(e)) {
       s = as.character(e)
       if (s %in% c("Sys.getenv", "readRenviron", "key_get")) add("env_dynamic", s)
+      if (s %in% scan_environ_funs) add("env_dump", s)
       uses <<- c(uses, s)
       return(invisible())
     }
@@ -627,9 +634,11 @@ secret_scan = function(code, tainted = character()) {
       arg_names = names(args) %||% rep("", length(args))
       pos = match("x", arg_names)
       if (is.na(pos)) pos = match("", arg_names)
+      # an empty x is a missing one: every variable
+      if (!is.na(pos) && identical(args[[pos]], quote(expr = ))) pos = NA
       x = if (!is.na(pos)) args[[pos]]
-      known = if (is.na(pos)) list(names = character()) else if (identical(x, quote(expr = ))) {
-        NULL
+      known = if (is.na(pos)) {
+        list(names = character())
       } else if (is.symbol(x) && as.character(x) %in% names(binds)) {
         list(names = binds[[as.character(x)]])
       } else {
@@ -655,6 +664,7 @@ secret_scan = function(code, tainted = character()) {
         add("env_dynamic", "Sys.getenv")
       }
     }
+    if (fn %in% scan_environ_funs) add("env_dump", fn)
     if (fn %in% c("do.call", "get", "match.fun", "exec", "Map", "lapply", "sapply", "vapply")) {
       syms = character()
       for (i in seq_along(args)) if (is.symbol(args[[i]])) syms = c(syms, as.character(args[[i]]))
@@ -690,6 +700,14 @@ secret_scan = function(code, tainted = character()) {
   # a process the code starts may run a network program any string of the code names, in the
   # call or in a variable (a command vector); a program name built from pieces is not read
   if (proc && any(grepl(scan_net_prog_re, strs, perl = TRUE, ignore.case = TRUE))) net = TRUE
+  # ... and read a registered secret ($NAME, ${NAME}, in any case) or a .env file it names
+  if (proc) {
+    m = unlist(regmatches(strs, gregexpr(risk_env_name_re, strs, perl = TRUE)))
+    nm = toupper(sub(risk_env_name_re, "\\1", m, perl = TRUE))
+    for (r in registered[toupper(registered) %in% nm]) add("secret_env_registered", r)
+    words = unlist(strsplit(gsub("[\"'`=,;:()|&<>@]", " ", strs), "\\s+"))
+    for (w in unique(words[scan_env_file(words)])) add("secret_file", w)
+  }
   rules = vapply(found, function(f) f[1], "")
   sources = intersect(rules, c("env_dump", "secret_env", "secret_env_registered", "env_dynamic",
                                "secret_file", "keyring", "vault_access", "env_dump_process"))
