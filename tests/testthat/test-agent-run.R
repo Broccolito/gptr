@@ -2608,3 +2608,18 @@ test_that("status numbers in an error text match only as whole numbers", {
   expect_identical(cnd$session$status, "error")
   expect_length(fake_requests(fake), 1L)
 })
+
+# Added (FIX-50, L4): a turn that ends at the model's output limit ends the run normally, with a
+# notice; a turn that ends otherwise has none
+test_that("a turn cut at the output limit says so in one notice", {
+  local_project()
+  local_gptr_options(quiet = FALSE)
+  fake = local_fake_provider(list(list(text = "The mean of x is", stop = "length"), "Done."))
+  said = function(code) sum(grepl("output limit", testthat::capture_messages(code), fixed = TRUE))
+  s = NULL
+  expect_identical(said({
+    s = peter("Average x.", model = fake, envir = new.env())
+  }), 1L)
+  expect_identical(s$status, "idle")
+  expect_identical(said(peter(s, "Again.")), 0L)
+})

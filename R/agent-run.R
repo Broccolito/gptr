@@ -1091,11 +1091,15 @@ run_take = function(run, which) {
   lapply(items, queue_item_message, which, relay = isTRUE(run$requested))
 }
 
-#' The loop's finish_turn hook: a blocked gate or an abort ends the run
+#' The loop's finish_turn hook: a blocked gate or an abort ends the run; a turn that ended at the
+#' model's output limit is a notice
 #' @noRd
 run_finish_turn = function(run, turn) {
   if (!is.null(run$blocked)) return(list(action = "end", reason = "blocked"))
   if (isTRUE(run$signal$aborted)) return(list(action = "end", reason = "aborted"))
+  if (identical(turn$message$stop_reason, "length")) {
+    gptr_inform("The reply stopped at the model's output limit, so it may be incomplete.", "notice")
+  }
   NULL
 }
 
