@@ -1823,7 +1823,9 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
 #'   committing.
 #' - `.gptr/cache/s2/` (answer text for replay), `.gptr/transcripts/` (console transcripts),
 #'   `.gptr/checkpoints/` (pre-images of objects and files) and the data snapshots of artifacts
-#'   (`.gptr/artifacts/<id>/v<n>/data/`) are excluded from git by default.
+#'   (`.gptr/artifacts/<id>/v<n>/data/`) are excluded from git by default. The checkpoints never
+#'   hold a copy of a protected file or one that configures R or gptr (`.env`, `.Renviron`, keys
+#'   under `.ssh/`).
 #' - `.gptr/plans/` (plans proposed in `plan` mode) and the `app.R` of each artifact are
 #'   committed by default; they can quote data values the model saw.
 #' - Documents you record into keep the model's code and up to `gptr.doc_output_lines` lines of

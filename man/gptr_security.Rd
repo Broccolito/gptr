@@ -235,7 +235,9 @@ keeps a \code{.gitignore} in \verb{cache/s1/}), or clear it with \code{gptr_cach
 committing.
 \item \verb{.gptr/cache/s2/} (answer text for replay), \verb{.gptr/transcripts/} (console transcripts),
 \verb{.gptr/checkpoints/} (pre-images of objects and files) and the data snapshots of artifacts
-(\verb{.gptr/artifacts/<id>/v<n>/data/}) are excluded from git by default.
+(\verb{.gptr/artifacts/<id>/v<n>/data/}) are excluded from git by default. The checkpoints never
+hold a copy of a protected file or one that configures R or gptr (\code{.env}, \code{.Renviron}, keys
+under \verb{.ssh/}).
 \item \verb{.gptr/plans/} (plans proposed in \code{plan} mode) and the \code{app.R} of each artifact are
 committed by default; they can quote data values the model saw.
 \item Documents you record into keep the model's code and up to \code{gptr.doc_output_lines} lines of

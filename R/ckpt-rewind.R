@@ -225,7 +225,7 @@ ckpt_on_agent_end = function(st, ctx) {
   }
   if (is.null(ck$gc_done)) {
     ck$gc_done = TRUE
-    ckpt_gc()
+    ckpt_gc(dirname(ckpt_store_root(ck$files$root %||% project_root())))
   }
   NULL
 }
@@ -575,11 +575,14 @@ ckpt_ext_state = function(s = NULL) {
 #' random-number state and effects outside R (network, databases, processes) are not restored.
 #' `s$last_rewind$report` lists each object, file and state item once, by its outcome after the
 #' whole rewind; items that were not restored raise the warning `gptr_warning_rewind_partial`.
-#' Files outside the project and `tempdir()` are restored only after you confirm each path. After
-#' a full restore the model is told nothing (the next request's prefix is byte-identical to the
-#' earlier request at the target); after a partial one the next prompt carries a short `<rewind>`
-#' block listing what was not restored. Model code may rewind another session only when you
-#' approve that call.
+#' Protected files and files that configure R or gptr (`.env`, `.Renviron`, `.Rprofile`,
+#' `renv.lock`, keys under `.ssh/`; see [gptr_security]) are never copied to the checkpoint store,
+#' so a turn's edit or deletion of one is not undone. Directories are not tracked: an empty
+#' directory a turn created stays. Files outside the project and `tempdir()` are restored only
+#' after you confirm each path. After a full restore the model is told nothing (the next
+#' request's prefix is byte-identical to the earlier request at the target); after a partial one
+#' the next prompt carries a short `<rewind>` block listing what was not restored. Model code may
+#' rewind another session only when you approve that call.
 #'
 #' @param s A `gptr_session`.
 #' @param turn Integer. Negative counts back from the last turn (`-1` undoes the last turn); `0`
