@@ -735,7 +735,9 @@ doc_sidecar_decode = function(x, path) {
         !string(s$prompt_hash) || !string(s$args_hash)) return(NULL)
     a = s$anchor
     if (!is.null(a)) {
-      if (!object(a, c("ph", "th", "j", "block", "label", "head", "call0")) ||
+      keys = c("ph", "th", "j", "block", "label", "head", "call0")
+      # an earlier build wrote anchors without `head`
+      if (!(object(a, keys) || object(a, setdiff(keys, "head"))) ||
           !all(vapply(a[c("ph", "th", "block", "label", "head", "call0")], string, NA)) ||
           !positive(a$j)) return(NULL)
       call0 = if (!is.null(a$call0)) doc_sidecar_call(a$call0)

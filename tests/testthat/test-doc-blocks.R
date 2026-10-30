@@ -892,7 +892,8 @@ test_that("an overlay fork's block is wrapped in local() on its gptr_resume(bloc
   lines = doc_block_lines(f, 2L, list(format = "r", template = "Try 10%"), 1L)
   expect_identical(as.character(lines),
                    c("local({", "  qc_flags = 2",
-                     paste0("}, envir = gptr_resume(block = \"", doc_block_token, "\")$envir)")))
+                     paste0("}, envir = gptr::gptr_resume(block = \"", doc_block_token,
+                            "\")$envir)")))
   expect_identical(attr(lines, "header")$fork, "s0123456789:1")
 })
 
@@ -913,15 +914,28 @@ test_that("a team block has one line per child, child overlays and export assign
   lines = doc_block_lines(team, 1L, list(format = "r", template = "Review"), 1L)
   code_id = session_data(td$children$code)$id
   stats_id = session_data(td$children$stats)$id
+  home = paste0("gptr::gptr_resume(block = \"", doc_block_token, "\", child = \"code\")$envir")
   expect_identical(as.character(lines), c(
     "## Agent code (openai/gpt-5.5): Two bugs.", "local({", "  fixed = TRUE",
-    paste0("}, envir = gptr_resume(block = \"", doc_block_token, "\", child = \"code\")$envir)"),
-    paste0("fixed = gptr_resume(block = \"", doc_block_token, "\", child = \"code\")$envir$fixed"),
+    paste0("}, envir = ", home, ")"), paste0("fixed = ", home, "$fixed"),
     "## Agent stats (anthropic/claude-opus-5-5): Looks fine."))
   h = attr(lines, "header")
   expect_identical(h$kind, "team")
   expect_identical(h$children, paste0("code:", code_id, ",stats:", stats_id))
   expect_named(attr(lines, "children"), c("code", "stats"))
+  # the block's usage is its members' (doc_test_turn(): 250 in, 30 out, no cost)
+  expect_identical(h[c("tokens", "cost")], list(tokens = "250/30", cost = "0"))
+  td$children$stats = kid("stats", "anthropic/claude-opus-5-5", "Looks fine.", code = "y = 1")
+  priced = doc_test_turn("z = 1")
+  priced[[4L]]$message$usage$cost$total = 0.25
+  td$children$fan = doc_test_session(list(priced))
+  h = attr(doc_block_lines(team, 1L, list(format = "r", template = "Review"), 1L), "header")
+  expect_identical(h[c("tokens", "cost")], list(tokens = "750/90", cost = "0.25"))
+  priced[[2L]]$message$usage = NULL
+  td$children$fan = doc_test_session(list(priced))
+  h = attr(doc_block_lines(team, 1L, list(format = "r", template = "Review"), 1L), "header")
+  expect_null(h$tokens)
+  expect_null(h$cost)
 })
 
 # ---- Task 3 adaptations (IC-48, IC-62, IC-74, G6 5.6; dev/DEVIATIONS.md D-068) ----------------
@@ -1019,7 +1033,8 @@ test_that("a local model keeps its tag and unknown usage is never summed (IC-74)
 test_that("wrapped code keeps multi-line strings; team children without text or with secrets", {
   expect_identical(doc_wrap_local(c("x = \"a", "b\"", "y = 1")),
                    c("local({", "  x = \"a", "b\"", "  y = 1",
-                     paste0("}, envir = gptr_resume(block = \"", doc_block_token, "\")$envir)")))
+                     paste0("}, envir = gptr::gptr_resume(block = \"", doc_block_token,
+                            "\")$envir)")))
   team = doc_test_session(list(), kind = "fanout")
   td = session_data(team)
   quiet = doc_test_session(list())
@@ -1272,11 +1287,11 @@ test_that("only gptr's own lines take the block id; steer text and model code ke
     paste("## Steer:", steer)))
   expect_identical(b$header[[1L]]$value, paste0(".gptr_value_", id))
   wrapped = doc_fill_id(c(doc_wrap_local("tok = \"@@GPTR_BLOCK@@\"", child = "code"),
-                          paste0("tok = gptr_resume(block = \"", doc_block_token,
+                          paste0("tok = gptr::gptr_resume(block = \"", doc_block_token,
                                  "\", child = \"code\")$envir$tok")), "abc123")
+  home = "gptr::gptr_resume(block = \"abc123\", child = \"code\")$envir"
   expect_identical(wrapped, c("local({", "  tok = \"@@GPTR_BLOCK@@\"",
-                              "}, envir = gptr_resume(block = \"abc123\", child = \"code\")$envir)",
-                              "tok = gptr_resume(block = \"abc123\", child = \"code\")$envir$tok"))
+                              paste0("}, envir = ", home, ")"), paste0("tok = ", home, "$tok")))
 })
 
 test_that("a hand-edited block is kept unless regenerating, and hooks can block or patch", {
@@ -1520,4 +1535,55 @@ test_that("a local model keeps its tag in the block and S2, and answers are reda
   expect_length(files, 2L)
   expect_false(any(grepl("FAKEtoken", unlist(lapply(files, readLines, encoding = "UTF-8")),
                          fixed = TRUE)))
+})
+
+# ---- comprehensive fix pass (FIX-37) -------------------------------------------------------------
+
+test_that("gptr_blocks() reads a coached harness's block called by peter() as stale", {
+  local_project()
+  h = paste0("h:", "1234abcd")
+  blank = paste0("h:", doc_coach_hash(NULL))
+  block = function(id, prompt, harness) {
+    doc_render_block(id, list(model = "m", prompt = prompt_hash(prompt),
+                              sha = doc_body_sha("x = 1"), harness = harness), "x = 1")
+  }
+  f = file.path(getwd(), "coached.R")
+  writeLines(c("s = h(\"one\")", block("aaaaaa", "one", h), "s = peter(\"two\")",
+               block("bbbbbb", "two", h), "s = peter(\"three\")", block("cccccc", "three", blank)),
+             f)
+  expect_identical(gptr_blocks(f)$status, c("fresh", "stale", "fresh"))
+  agent = function(id, prompt) {
+    list(cell_type = "code", execution_count = NULL, id = paste0("gptr-", id),
+         metadata = list(gptr = list(id = id, model = "m", prompt = prompt_hash(prompt),
+                                     sha = doc_body_sha("x = 1"), harness = h)),
+         outputs = list(), source = list("x = 1"))
+  }
+  nb = list(cells = list(list(cell_type = "code", execution_count = NULL, id = "c1",
+                              metadata = json_obj(), outputs = list(),
+                              source = list("h(\"one\")\n", "peter(\"two\")")),
+                         agent("aaaaaa", "one"), agent("bbbbbb", "two")),
+            metadata = json_obj(), nbformat = 4L, nbformat_minor = 5L)
+  f = file.path(getwd(), "coached.ipynb")
+  writeLines(json_encode(nb, pretty = TRUE), f)
+  expect_identical(gptr_blocks(f)$status, c("fresh", "stale"))
+})
+
+test_that("a gptr::-only script records gptr::gptr_resume() and replays without gptr attached", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "flag = d$mt > 20"), fake_text("Flagged."),
+                         fake_tool("r", code = "flag = d$mt > 10"), fake_text("Tried 10.")))
+  f = file.path(x$root, "qc.R")
+  writeLines(c("qc = gptr::peter(\"Flag rows of d\", d)",
+               "low = gptr::gptr_fork(qc) |> gptr::peter(\"Try a cut-off of 10\")"), f)
+  for (mode in c("auto", "replay")) {
+    e = new.env(parent = baseenv())
+    e$d = data.frame(mt = c(5, 12, 25))
+    gptr_source(f, replay = mode, envir = e)
+    expect_identical(e$flag, c(FALSE, FALSE, TRUE), info = mode)
+  }
+  b = doc_find_blocks(readLines(f))
+  expect_identical(get("flag", gptr_resume(block = b$id[2])$envir), c(FALSE, TRUE, TRUE))
+  expect_identical(doc_block_body(readLines(f), b[2, ])[3],
+                   paste0("}, envir = gptr::gptr_resume(block = \"", b$id[2], "\")$envir)"))
+  expect_length(fake_requests(x$fake), 4L)
 })

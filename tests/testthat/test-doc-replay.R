@@ -3291,7 +3291,7 @@ test_that("a fan-out block records each child's code and value, so replay restor
   expect_match(r$block$header[[1L]]$children, paste0("^a:", sid, ":m,b:", sid, ":m$"))
   body = doc_block_body(r$txt, r$block)
   for (nm in c("a", "b")) {
-    expect_true(any(body == paste0("}, envir = gptr_resume(block = \"", r$block$id,
+    expect_true(any(body == paste0("}, envir = gptr::gptr_resume(block = \"", r$block$id,
                                    "\", child = \"", nm, "\")$envir)")))
   }
   expect_true(any(body == "  m = mean(.x[[1]])"))
@@ -3421,7 +3421,7 @@ test_that("re-sourcing NS-3 twice keeps the main line and the fork's overlay apa
   expect_match(readLines(f)[b$start[3]], " fork=s[0-9a-f]{10}:2", perl = TRUE)
   fork_body = doc_block_body(readLines(f), b[3, ])
   expect_identical(fork_body[1], "local({")
-  expect_identical(fork_body[3], paste0("}, envir = gptr_resume(block = \"", b$id[3],
+  expect_identical(fork_body[3], paste0("}, envir = gptr::gptr_resume(block = \"", b$id[3],
                                         "\")$envir)"))
   e2 = new.env(parent = globalenv())
   e2$d = data.frame(mt = c(5, 12, 18, 25))
@@ -3823,4 +3823,91 @@ test_that("an open notebook is never written; gptr_doc(sync = TRUE) applies it (
   cells = nb_parse(doc_read(nb)$lines)$cells
   expect_match(cells[[4]]$id, "^gptr-[0-9a-f]{6}$")
   expect_identical(unlist(cells[[4]]$source), "m = mean(mtcars$mpg)")
+})
+
+# ---- comprehensive fix pass (FIX-37) -------------------------------------------------------------
+
+test_that("a harness definition after a direct R line is not part of that line's section", {
+  local_project()
+  def = c("# gptr: h_1a2b3c4d needs fixed arguments that are not recorded: extensions",
+          "h_1a2b3c4d = gptr_tailor(peter, coaching = list(note = \"Be terse.\"))")
+  lines = c(doc_direct_fixture(file.path(getwd(), "t.R"), undone = TRUE),
+            "", "# direct R (no model) created=q", "q = fit + 1", "", def,
+            "", "s_ab12cd |> h_1a2b3c4d(\"make y\")")
+  res = doc_direct_switch(lines)
+  expect_identical(utils::tail(res$lines, 7L),
+                   c("# direct R (no model; uses undone fit) created=q", "#~ q = fit + 1", "", def,
+                     "", "s_ab12cd |> h_1a2b3c4d(\"make y\")"))
+  e = new.env(parent = globalenv())
+  e$library = function(...) invisible(NULL)
+  e$peter = function(...) invisible(NULL)
+  e$gptr_tailor = function(...) function(...) "ran"
+  utils::capture.output(source(exprs = parse(text = res$lines, keep.source = FALSE), local = e))
+  expect_true(is.function(e$h_1a2b3c4d))
+})
+
+test_that("a name holding ') ' in a direct R line's header switches off no other line (V6T-1)", {
+  made = doc_format_kv(list(created = "a) created=zz,b", status = "undone"))
+  lines = c("library(gptr)",
+            paste0("# >>> gptr:aaaaaa model=fake/fake-1 prompt=000000000000 sha=00000000 ", made),
+            "#~ x = 1", "# <<< gptr:aaaaaa", "", "# direct R (no model)", "y = `a) created=zz` + b",
+            "", "# direct R (no model)", "w = zz")
+  once = doc_direct_switch(lines)
+  expect_identical(once$lines[6], "# direct R (no model; uses undone a<U+0029> created=zz, b)")
+  twice = doc_direct_switch(once$lines)
+  expect_identical(twice$changed, list())
+  expect_identical(utils::tail(twice$lines, 2L), c("# direct R (no model)", "w = zz"))
+})
+
+test_that("S2 answers are keyed and kept by the document's project, wherever replay runs", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "n = nrow(d)"), fake_text("d has 4 rows.")))
+  withr::local_options(gptr.project_root = NULL)
+  withr::local_envvar(GPTR_PROJECT_ROOT = "")
+  old = mget(c("live", "replay_blocks"), envir = the)
+  withr::defer(list2env(old, envir = the))
+  f = file.path(x$root, "a.R")
+  writeLines("s = peter(\"Count the rows of d\", d)", f)
+  e = new.env(parent = globalenv())
+  e$d = data.frame(a = 1:4)
+  gptr_source(f, envir = e)
+  the$live = new.env(parent = emptyenv())
+  the$replay_blocks = new.env(parent = emptyenv())
+  withr::local_dir(dirname(x$root))
+  expect_null(workspace_dir())
+  e = new.env(parent = globalenv())
+  e$d = data.frame(a = 1:4)
+  gptr_source(f, replay = "replay", envir = e)
+  expect_identical(e$s$text, "d has 4 rows.")
+  expect_length(fake_requests(x$fake), 2L)
+})
+
+test_that("without .gptr/, gptr_cache() counts and clears the System 1 answers in memory", {
+  local_project(gptr = FALSE)
+  old = s1_cache_swap()
+  withr::defer(s1_cache_swap(old))
+  key = strrep("ab", 32L)
+  s1_cache_put(key, list(key = key, answer = "yes"))
+  expect_identical(gptr_cache("info", "s1")$entries[1L], 1L)
+  expect_identical(gptr_cache("prune", "s1"), 0L)
+  expect_identical(gptr_cache("clear", "s1"), 1L)
+  expect_null(s1_cache_get(key))
+  expect_identical(gptr_cache("info", "s1")$entries[1L], 0L)
+})
+
+test_that("a console prompt with {name} records its args= hash and replays (L-69)", {
+  skip_on_cran()
+  x = local_doc_e2e(list(fake_tool("r", code = "x = 1"), fake_text("Made one.")))
+  con = doc_console_repl(x)
+  con$run("!nm = \"one\"")
+  con$run("make {nm}")
+  b = doc_find_blocks(readLines(con$t))
+  expect_match(b$header[[1L]]$args, "^[0-9a-f]{8}$")
+  expect_identical(gptr_blocks(con$t)$status, "fresh")
+  e = new.env(parent = globalenv())
+  e$library = function(...) invisible(NULL)
+  out = gptr_source(con$t, replay = "replay", envir = e)
+  expect_identical(out$action, "replayed")
+  expect_identical(e$x, 1)
+  expect_length(fake_requests(x$fake), 2L)
 })

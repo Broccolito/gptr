@@ -16,11 +16,12 @@ gptr_cache(
 }
 \value{
 \code{info}: a \code{gptr_cache_info} data frame with columns \code{kind}, \code{entries}, \code{bytes},
-\code{oldest}, \code{path}. \code{prune} and \code{clear}: the number of files removed, invisibly.
+\code{oldest}, \code{path}. \code{prune} and \code{clear}: the number of entries removed, invisibly.
 }
 \description{
-\code{info} lists the System 1 answer cache, the System 2 answer cache used for replay, temporary
-spill files and unapplied document sidecars (deferred or pending blocks; a second row lists
+\code{info} lists the System 1 answer cache (held in memory for the R session while there is no
+\verb{.gptr/}), the System 2 answer cache used for replay, temporary spill files and unapplied
+document sidecars (deferred or pending blocks; a second row lists
 those of documents outside any \verb{.gptr/}, kept in the user cache; they are never removed here:
 apply them with \code{gptr_doc(path, sync = TRUE)}). \code{prune} removes System 2 answers
 whose block is neither in its document nor queued for it in a sidecar, System 1 answers unused

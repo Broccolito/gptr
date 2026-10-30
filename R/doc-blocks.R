@@ -335,6 +335,15 @@ doc_coaching_of = function(v) {
   doc_coach_hash(NULL)
 }
 
+#' The harness a reader that runs nothing takes a call of `head` to run (doc_block_status()'s
+#' `hh`): the block header's `harness=` when it names that head, else none (peter), so a block a
+#' coached harness recorded reads stale under `peter(`
+#' @noRd
+doc_head_harness = function(header, head) {
+  hh = header[["harness"]]
+  if (rlang::is_string(hh) && identical(sub(":[^:]*$", "", hh), head)) hh
+}
+
 #' Render a marker block (contract 11.5): header, indented non-empty body lines, footer
 #' @noRd
 doc_render_block = function(id, header = list(), body = character(), indent = "") {
@@ -1246,13 +1255,15 @@ doc_string_tails = function(lines) {
 
 #' Wrap body lines for an overlay fork or a team child (IC-46, IC-47); the block id is filled in
 #' when the block is written (doc_block_token). Lines inside a multi-line string keep their text.
+#' The home is `gptr::gptr_resume()`, so a script that calls gptr only through `gptr::` replays.
 #' @noRd
 doc_wrap_local = function(body, child = NULL) {
   if (!length(body)) return(character())
   target = if (is.null(child)) {
-    paste0("gptr_resume(block = \"", doc_block_token, "\")")
+    paste0("gptr::gptr_resume(block = \"", doc_block_token, "\")")
   } else {
-    paste0("gptr_resume(block = \"", doc_block_token, "\", child = ", doc_str_literal(child), ")")
+    paste0("gptr::gptr_resume(block = \"", doc_block_token, "\", child = ",
+           doc_str_literal(child), ")")
   }
   pad = nzchar(body) & !doc_string_tails(body)
   body[pad] = paste0("  ", body[pad])
@@ -1542,21 +1553,46 @@ doc_turn_r = function(out, det, args, with_out, plan_mode) {
 
 #' Recorded code of every turn of a (child) session, without outputs or comment lines (team
 #' blocks); attribute `secrets` when a marker stays in it, `value` the name the latest turn that
-#' designated one gave (as a block's `value=`), else none
+#' designated one gave (as a block's `value=`), else none, and `usage` its turns' tokens and cost
+#' (doc_usage_add())
 #' @noRd
 doc_session_code = function(session) {
   d = session_data(session)
   code = character()
   secrets = FALSE
   value = NULL
+  usage = doc_usage_none
   for (k in seq_len(d$turns %||% 0L)) {
     tb = doc_turn_body(doc_turn_entries(session, k), with_out = FALSE,
                        plan_mode = identical(d$mode, "plan"))
     code = c(code, tb$code)
     secrets = secrets || tb$secrets
     value = tb$value %||% value
+    usage = doc_usage_add(usage, tb)
   }
-  structure(code, secrets = secrets, value = value)
+  structure(code, secrets = secrets, value = value, usage = usage)
+}
+
+# no usage yet (doc_usage_add())
+doc_usage_none = list(tokens = c(0, 0), tokens_known = TRUE, cost = 0, cost_known = TRUE)
+
+#' The tokens and cost of two usages (doc_turn_body()'s fields: `tokens`, `tokens_known`, `cost`,
+#' `cost_known`); a total is known only when both are
+#' @noRd
+doc_usage_add = function(a, b) {
+  list(tokens = a$tokens + b$tokens, tokens_known = a$tokens_known && b$tokens_known,
+       cost = a$cost + b$cost, cost_known = a$cost_known && b$cost_known)
+}
+
+#' A block header with the `tokens=` and `cost=` of a usage (doc_usage_add()): tokens when known
+#' and not zero, cost when known
+#' @noRd
+doc_usage_header = function(header, usage) {
+  if (usage$tokens_known && any(usage$tokens > 0)) {
+    header$tokens = sprintf("%.0f/%.0f", usage$tokens[1L], usage$tokens[2L])
+  }
+  if (usage$cost_known) header$cost = format(round(usage$cost, 4L), scientific = FALSE)
+  header
 }
 
 #' Header facts common to every block; a harness call's block names the harness it ran
@@ -1611,11 +1647,7 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
   body = redact(body, "persist")
   last = tb$last
   model = if (!is.null(last)) paste0(last$provider, "/", last$model) else d$model
-  header = doc_header_common(site, call_ordinal, model)
-  if (tb$tokens_known && any(tb$tokens > 0)) {
-    header$tokens = sprintf("%.0f/%.0f", tb$tokens[1L], tb$tokens[2L])
-  }
-  if (tb$cost_known) header$cost = format(round(tb$cost, 4L), scientific = FALSE)
+  header = doc_usage_header(doc_header_common(site, call_ordinal, model), tb)
   header$session = d$id
   header$turn = as.integer(turn)
   header$value = tb$value
@@ -1630,7 +1662,8 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
 
 #' The lines of a team or fan-out block (IC-47): one `## Agent` line per child in name order;
 #' children with exports or a designated value get their code in a child overlay, plus one
-#' assignment per export; `children=` holds `<name>:<session id>[:<value name>]` per child
+#' assignment per export; `children=` holds `<name>:<session id>[:<value name>]` per child, and
+#' `tokens=` and `cost=` the children's sums
 #' @noRd
 doc_team_block_lines = function(team, site, call_ordinal) {
   d = session_data(team)
@@ -1640,6 +1673,7 @@ doc_team_block_lines = function(team, site, call_ordinal) {
   children = list()
   ids = character()
   secrets = FALSE
+  usage = doc_usage_none
   for (nm in nms) {
     cd = session_data(kids[[nm]])
     txt = cd$last_text
@@ -1653,13 +1687,14 @@ doc_team_block_lines = function(team, site, call_ordinal) {
                                              doc_one_line(first))))
     exports = as.character(cd$exports %||% character())
     code = doc_session_code(kids[[nm]])
+    usage = doc_usage_add(usage, attr(code, "usage"))
     value = attr(code, "value")
     if (length(exports) || !is.null(value)) {
       secrets = secrets || isTRUE(attr(code, "secrets"))
       body = c(body, doc_wrap_local(as.character(code), child = nm))
     }
     if (length(exports)) {
-      body = c(body, paste0(exports, " = gptr_resume(block = \"", doc_block_token,
+      body = c(body, paste0(exports, " = gptr::gptr_resume(block = \"", doc_block_token,
                             "\", child = ", doc_str_literal(nm), ")$envir$", exports))
     }
     children[[nm]] = list(text = txt, session = cd$id, model = cd$model,
@@ -1668,7 +1703,7 @@ doc_team_block_lines = function(team, site, call_ordinal) {
   }
   if (secrets) body = c(doc_secret_flag, body)
   model = if (length(nms)) session_data(kids[[nms[1L]]])$model else d$model
-  header = doc_header_common(site, call_ordinal, model)
+  header = doc_usage_header(doc_header_common(site, call_ordinal, model), usage)
   header$session = d$id
   header$turn = 1L
   header$kind = d$kind
@@ -1893,7 +1928,7 @@ doc_upsert_fallback = function(site, up, backend) {
   }
   s = up$session
   tsite = doc_console_site(session_id = if (is.null(s)) NULL else session_data(s)$id,
-                           template = site$template)
+                           template = site$template, args = site$args_hash)
   if (is.null(tsite)) return(failed)
   up$block_id = NULL
   res = tryCatch(doc_file_upsert(doc_format_get("transcript"), tsite, up),
@@ -1961,22 +1996,25 @@ doc_after_write = function(site, res, block_lines) {
   }
   ph = header$prompt %||% ""
   ah = header$args %||% ""
+  home = doc_s2_home(site$path)
   answer = attr(block_lines, "answer")
   if (length(answer) && !is.na(answer[1L])) {
-    s2_put(s2_key(rel, res$block_id, "", ph, ah),
-           list(block = res$block_id, doc = rel, part = "", prompt = ph, model = header$model,
-                answer = answer[1L], usage = header$tokens, cost = header$cost,
-                session = header$session, turn = header$turn, date = header$date))
+    s2_put(s2_key(home$rel, res$block_id, "", ph, ah),
+           list(block = res$block_id, doc = home$rel, part = "", prompt = ph,
+                model = header$model, answer = answer[1L], usage = header$tokens,
+                cost = header$cost, session = header$session, turn = header$turn,
+                date = header$date), home$root)
   }
   kids = attr(block_lines, "children") %||% list()
   for (nm in names(kids)) {
     k = kids[[nm]]
     text = k[["text"]]
     if (!length(text) || is.na(text[1L])) next
-    rec = list(block = res$block_id, doc = rel, part = nm, prompt = ph, model = k$model,
+    rec = list(block = res$block_id, doc = home$rel, part = nm, prompt = ph, model = k$model,
                answer = text[1L], session = k$session, turn = k$turn %||% 1L,
                date = header$date, sent = k$sent)
-    s2_put(s2_key(rel, res$block_id, nm, ph, ah), rec[!vapply(rec, is.null, NA)])
+    s2_put(s2_key(home$rel, res$block_id, nm, ph, ah), rec[!vapply(rec, is.null, NA)],
+           home$root)
   }
   doc_source_log(site$path, res$block_id, if (isTRUE(site$regenerate)) "regenerated" else "ran")
   invisible(NULL)

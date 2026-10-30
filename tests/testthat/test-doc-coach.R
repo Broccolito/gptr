@@ -73,10 +73,11 @@ coach_world = function(.env = parent.frame()) {
                     runs = c("start: ended normally, 3 turns, risk 1",
                              "final: ended normally, 2 turns, risk 1"),
                     decision = "kept (risk 1 <= 1)")
-  # the real ns_fun() would find this mock as `ns_fun` and search the wrong environment
+  # the real ns_fun() would find this mock as `ns_fun` and search the wrong environment; a coach
+  # block calls gptr::gptr_tailor(), and a script that never attaches gptr gptr::gptr_coach()
   testthat::local_mocked_bindings(ns_fun = function(name) {
     if (identical(name, "gptr_tailor")) e$gptr_tailor else get(name, mode = "function")
-  }, .env = .env)
+  }, gptr_tailor = e$gptr_tailor, gptr_coach = e$gptr_coach, .env = .env)
   e
 }
 
@@ -216,7 +217,8 @@ test_that("a coaching call is recorded as a coach block and replays from it with
   expect_identical(h$gptr, as.character(utils::packageVersion("gptr")))
   expect_null(h$session)
   body = doc_block_body(lines, b[1, ])
-  expect_true(startsWith(body[1], "survey_peter = gptr_tailor(peter, coaching = list("))
+  expect_true(startsWith(body[1],
+                         "survey_peter = gptr::gptr_tailor(gptr::peter, coaching = list("))
   expect_identical(body[grepl("^##", body)],
                    c("## Run start: ended normally, 3 turns, risk 1",
                      "## Run final: ended normally, 2 turns, risk 1",
@@ -228,6 +230,29 @@ test_that("a coaching call is recorded as a coach block and replays from it with
   expect_identical(coach_hash(coaching_of(e$log$decision$harness)), hash)
   expect_identical(coach_hash(coaching_of(e$survey_peter)), hash)
   expect_length(list.files(file.path(getwd(), ".gptr", "cache", "s2"), recursive = TRUE), 0L)
+})
+
+test_that("a coach block replays in a script that calls gptr only through gptr::", {
+  local_project()
+  local_gptr_options(record = "auto", replay = "auto")
+  f = file.path(getwd(), "coach.R")
+  writeLines(c("survey_peter = gptr::gptr_coach(\"Clean the survey\")",
+               "note = attr(survey_peter, \"gptr_harness\")$coaching$note"), f)
+  e = coach_world()
+  for (mode in c("auto", "replay")) {
+    script = new.env(parent = baseenv())
+    gptr_source(f, replay = mode, envir = script)
+    expect_identical(script$note, "Read the codebook first.", info = mode)
+  }
+  expect_identical(e$log$decision$action, "replay")
+  expect_identical(e$log$runs, 1L)
+  # a block written before FIX-37 names gptr_tailor() and peter unqualified, and still replays
+  writeLines(sub("gptr::gptr_tailor(gptr::peter", "gptr_tailor(peter", readLines(f), fixed = TRUE),
+             f)
+  script = new.env(parent = e)
+  gptr_source(f, replay = "replay", envir = script)
+  expect_identical(script$note, "Read the codebook first.")
+  expect_identical(e$log$runs, 1L)
 })
 
 test_that("coaching text that ends its string and adds R code is written as one string", {
@@ -259,7 +284,8 @@ test_that("a coaching call whose result was not kept replays as the starting har
   lines = readLines(f)
   b = doc_find_blocks(lines)
   start = coach_hash(coaching_of(e$auto_peter))
-  expect_identical(doc_block_body(lines, b[1, ])[1], "survey_peter = gptr_tailor(auto_peter)")
+  expect_identical(doc_block_body(lines, b[1, ])[1],
+                   "survey_peter = gptr::gptr_tailor(auto_peter)")
   expect_identical(b$header[[1]][c("harness", "start")],
                    list(harness = paste0("survey_peter:", start),
                         start = paste0("auto_peter:", start)))

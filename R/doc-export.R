@@ -9,7 +9,8 @@ doc_export_refuse = function(reason) {
 #' Count a literal Peter-only chain after R's native pipe rewrite, which may start from one of the
 #' session `handles` (a console transcript's later turns); after the prompt an argument may also be
 #' an unnamed object name (a console turn's @objects); a call of one of `heads` (doc_heads():
-#' harnesses too) counts as Peter's. No argument is evaluated.
+#' harnesses too) counts as Peter's. No argument is evaluated. A chain refused for a named argument
+#' that is not one literal is 0 with that name as attribute `arg`.
 #' @noRd
 doc_export_chain = function(expr, handles = character(), depth = 0L, heads = "peter") {
   if (!is.call(expr) || depth > doc_sidecar_bounds()$depth) return(0L)
@@ -31,7 +32,10 @@ doc_export_chain = function(expr, handles = character(), depth = 0L, heads = "pe
     is.null(x) || (is.atomic(x) && length(x) == 1L && !is.na(x)) ||
       (i > 1L && is.symbol(x) && !named[i])
   }, NA)
-  if (!all(literal) || !any(vapply(rest, is.character, NA))) return(0L)
+  if (!all(literal) || !any(vapply(rest, is.character, NA))) {
+    bad = c(attr(inner, "arg"), names(rest)[!literal & named])
+    return(structure(0L, arg = if (length(bad)) bad[[1L]]))
+  }
   1L + inner
 }
 
@@ -167,9 +171,11 @@ doc_export_lines = function(lines, format, path, target) {
       binding = as.character(expr[[2L]])
       expr = expr[[3L]]
     }
-    if (!identical(doc_export_chain(expr, unlist(bound), heads = heads),
-                   as.integer(length(rows)))) {
-      doc_export_refuse("mixed or non-literal Peter expressions")
+    n = doc_export_chain(expr, unlist(bound), heads = heads)
+    if (!identical(as.integer(n), length(rows))) {
+      arg = attr(n, "arg")
+      doc_export_refuse(paste0("mixed or non-literal Peter expressions",
+                               if (!is.null(arg)) paste0(" (argument `", ui_escape(arg), "`)")))
     }
     overlap = vapply(refs, function(r) r[1L] <= sr[3L] && r[3L] >= sr[1L], NA)
     if (sum(overlap) != 1L) doc_export_refuse("shared-line Peter statements")
@@ -198,7 +204,8 @@ doc_export_lines = function(lines, format, path, target) {
       body = doc_block_body(lines, b)
       if (!is.null(h[["status"]]) || !rlang::is_string(h[["sha"]]) ||
           !grepl("^[0-9a-f]{8}$", h[["sha"]]) ||
-          !identical(doc_block_status(h, body, hit$ph, h[["args"]], h[["harness"]]), "fresh")) {
+          !identical(doc_block_status(h, body, hit$ph, h[["args"]], doc_head_harness(h, hit$head)),
+                     "fresh")) {
         doc_export_refuse("missing, stale, edited or undone record")
       }
       if (!rlang::is_string(h[["session"]]) || !nzchar(h[["session"]]) ||
@@ -273,7 +280,12 @@ doc_export_lines = function(lines, format, path, target) {
       edits[[length(edits) + 1L]] = list(start = sr[1L], end = sr[3L], lines = stmt)
       next
     }
-    if (any(heads %in% doc_export_names(expr))) doc_export_refuse("unresolved Peter references")
+    # a harness definition, `<name> = gptr_tailor(...)`, is ordinary code (08 section 3.6)
+    def = doc_assign_parts(expr)$value
+    if (!(is.call(def) && identical(doc_call_head(def), "gptr_tailor")) &&
+        any(heads %in% doc_export_names(expr))) {
+      doc_export_refuse("unresolved Peter references")
+    }
     set = NULL
     if (is.call(expr) && as.character(expr[[1L]])[1L] %in% c("=", "<-") && length(expr) == 3L &&
         is.symbol(expr[[2L]])) {
@@ -310,7 +322,10 @@ doc_export_lines = function(lines, format, path, target) {
 #' @details Only bare or symbol-assigned literal Peter calls and Peter-only native pipelines
 #' are admitted; a pipeline may start from a session handle an earlier Peter statement assigned,
 #' as the later turns of a console transcript do, and after its prompt a call may name objects
-#' without argument names, as a console turn's `@objects` are written. Distinct statements sharing
+#' without argument names, as a console turn's `@objects` are written. Every named argument must
+#' be one literal (a string, number, logical or `NULL`), so a call with `agents = list(...)`,
+#' `budget = list()` or `envir = new.env()` is refused, and the refusal names that argument.
+#' A harness definition, `<name> = gptr_tailor(...)`, is ordinary code. Distinct statements sharing
 #' a line (including semicolon-separated statements), mixed pipelines, nested or computed calls,
 #' pending writes, missing or edited blocks, secret markers and interpolated-input hashes are
 #' refused. An undone block that no statement owns, a console turn that `/undo` or `/retry` undid
@@ -356,7 +371,7 @@ doc_export_lines = function(lines, format, path, target) {
 #' unlink(c(input, output))
 gptr_export = function(file, to, format = c("r", "peter")) {
   doc_control_guard("gptr_export")
-  format = match.arg(format)
+  format = check_choice(format, c("r", "peter"), "format")
   path = doc_file_arg(file, "r", "an existing .R document")
   check_string(to, "to")
   if (!identical(doc_format_of(to), "r") || any(doc_sidecar_exists(to))) {

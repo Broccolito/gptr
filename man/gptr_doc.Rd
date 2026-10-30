@@ -46,7 +46,10 @@ killed. Such blocks wait in the \verb{.gptr/} of the document's project, else in
 }
 \details{
 Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
-or functions do not. A block records the R code the agent ran: of a call that stopped part-way,
+or functions do not. Only blank lines may separate a call's statement from its blocks: after a
+comment or code line between them the blocks belong to no call, so the call is asked again and
+gets a new block while the old block's code still runs. A block records the R code the agent
+ran: of a call that stopped part-way,
 the expressions that ran, and code that changed your objects even where the model passed
 \code{record = false}, which leaves out only inspection. Binding supplies recording consent even
 when automatic recording is off, but \code{.opts = list(record = FALSE)} suppresses recording for
