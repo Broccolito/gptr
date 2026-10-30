@@ -36,18 +36,23 @@ printing) is the team's own answer, \code{team$value} its own value once a turn 
 and each member's answer stays at \verb{team$<name>$text}.
 }
 \details{
-Members evaluate R code in their own environment (\verb{envir =}) with their own random-number
-stream, and share one budget, as one \code{peter()} call does. A member's \verb{tools =}, \verb{budget =} and
-the run options in its \code{.opts} (such as \code{max_turns}) are not applied.
+Members evaluate R code in the environment their \verb{envir =} names, with their own
+random-number stream, and share one budget, as one \code{peter()} call does. A member without
+\verb{envir =} runs in the caller's environment, which it shares with the other members, so members
+that assign the same name overwrite each other: give each its own \code{envir = new.env()}. A
+member's \verb{tools =}, \verb{budget =} and the run options in its \code{.opts} (such as \code{max_turns}) are not
+applied.
 
 Use \code{peter(..., agents = list(...))} for named roles on one task, or \verb{parallel =} for one
-task per input element. Those routes start new foreground children and cannot be deferred
-as members here. A team report is model-generated output; inspect child statuses and
-workspace results before continuing the team with a synthesis prompt.
+task per input element. Those routes start new foreground children, cannot be deferred as
+members here, and make a recorded team; the members of \code{gptr_parallel()} are nested calls that
+record nothing, so a history document (see \code{\link[=gptr_doc]{gptr_doc()}}) that holds one cannot replay or
+export it. A team report is model-generated output; inspect child statuses and workspace
+results before continuing the team with a synthesis prompt.
 }
 \examples{
 fake = gptr_fake_provider(list("ok"))
-session = gptr_parallel(planner = peter("Plan it", model = fake),
-                        review = peter("Review it", model = fake))
+session = gptr_parallel(planner = peter("Plan it", model = fake, envir = new.env()),
+                        review = peter("Review it", model = fake, envir = new.env()))
 names(session$children)
 }
