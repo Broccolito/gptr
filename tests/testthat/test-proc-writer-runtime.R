@@ -104,7 +104,7 @@ test_that("writer ACK validation rejects corrupt and regressing acceptance", {
   skip_on_cran()
   x = rw_local_state()
   path = file.path(x$st$dir, "ack-000000000001-000003")
-  range = "^The stdin writer acknowledgement is not empty or out of range[.]$"
+  range = "^The stdin writer acknowledgment is not empty or out of range[.]$"
   writeBin(as.raw(1), path)
   expect_error(proc_writer_ack(x$st, x$b), range, class = "gptr_error_io")
   expect_identical(x$b$pos, 0L)
@@ -115,7 +115,7 @@ test_that("writer ACK validation rejects corrupt and regressing acceptance", {
   expect_identical(x$b$pos, 0L)
   unlink(path)
   dir.create(path)
-  expect_error(proc_writer_ack(x$st, x$b), "^Invalid stdin writer acknowledgement[.]$",
+  expect_error(proc_writer_ack(x$st, x$b), "^Invalid stdin writer acknowledgment[.]$",
     class = "gptr_error_io")
   expect_identical(x$b$pos, 0L)
 })
@@ -156,9 +156,9 @@ test_that("writer acknowledgement failure at target exit keeps its fixed cause",
   testthat::local_mocked_bindings(is_windows = function() TRUE,
     proc_writer_get = function(p) x$st, proc_writer_stop = function(p) TRUE)
   reactor_stdin_drop(r, x$b$p, "The child exited before stdin was delivered.")
-  expect_identical(conditionMessage(x$b$error), "Invalid child stdin acknowledgement at exit.")
+  expect_identical(conditionMessage(x$b$error), "Invalid child stdin acknowledgment at exit.")
   expect_identical(x$b$error$writer_cause,
-    "The stdin writer acknowledgement is not empty or out of range.")
+    "The stdin writer acknowledgment is not empty or out of range.")
   expect_length(ls(r$stdin), 0L)
 })
 
