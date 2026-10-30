@@ -5076,6 +5076,16 @@ Contract-visible and Tests lines; evidence is in `dev/progress/`.
   pass only when the latest attempt of each of their version's four shards recorded `success` in its
   `windows-status-<r>-<n>` artifact. Every attempt records its job status, so a failed re-run
   replaces an earlier pass, and "Re-run failed jobs" keeps the passed shards' records.
+- Amended by CI-107 (2026-10-30): Windows release runs as ten serial shards
+  `windows-latest (release, shard <n>/10)` without vignettes, examples or R's code analysis (the
+  cran and oldrel-4 jobs check the whole package), and `windows-latest (oldrel-4)` is one check
+  with CRAN's test list. The gate `windows-latest (release)` passes only when `needs.shards.result`
+  is `success`, which counts the latest attempt of each shard, in place of the status artifacts.
+  `GPTR_CI_TEST_SHARD` shards the full-suite lanes of every OS (Ubuntu `LC_ALL=C` 4, macOS 5, the
+  connection gate 9), the native list stays Windows-only, and a shard's log names each file with
+  its time. Tests: test-zzz.R "each check main requires is the name of exactly one hosted job
+  (CI-107)" and "each sharded lane's required context gates the latest attempt of its shards
+  (CI-107)".
 - Contract-visible: none. Amends architecture section 3.5, spec 05 P01, 00-index section 5.1, P25
   Task 15 and P27 A1-A2: both workflows must pass.
 - Tests: test-zzz.R "the CI workflow mirrors CRAN ...", "hosted CI jobs are bounded ...", "Windows

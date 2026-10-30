@@ -11010,3 +11010,128 @@ commits, each test red on `0aa55320`'s code first, `NOT_CRAN=true`, SIGINT at it
 - Ledger rows closed: L-46 (F-135), L-54 (F-139); L-34, L-48 and L-72 with FIX-39, FIX-41 and
   FIX-46. Deviations: none. Open: the four serial lanes run 42 to 61 minutes; the maintainer asked
   for every CI job to end within 20 minutes, which CI-107, a CI redesign by another agent, takes up.
+
+## Task CI-107 - Every CI job ends within 20 minutes, a push's checks in about 20 (2026-10-30, #93)
+- Why (ledger ci-20): the maintainer asked that no CI job run longer than 20 minutes and that one
+  push's CI take about 20 minutes. On `4cf922a4` (R-CMD-check run 41080141377, Windows-check run
+  41080141232, all green) the jobs took: connections left open 61.2 minutes (its test step 58.2,
+  serial `devtools::test()`), macos-latest (release) 54.7 (check 51.3, serial), ubuntu-latest
+  (release, no Suggests) 46.0, (release, LC_ALL=C) 42.5, oldrel-1 29.8, devel 29.7, oldrel-4 26.6,
+  release 26.3 (check 24.7, two workers), copy-safety 7.5 (release) and 9.5 (devel), the eight
+  Windows shards 22.6 to 31.1 (`setup-r` up to 5.1) and Windows cran 11.9: about 570 job-minutes,
+  under job limits of 45 to 120 minutes. What was slow: the whole offline suite (about 42,000
+  expectations) ran in full about ten times per push, serially in four of the lanes; and R-devel's
+  jobs installed every Suggests, which a cold cache builds from source: in run 40194723481
+  (2026-10-25) duckdb alone took 62 minutes, and cran-mode took 70.3, ubuntu-latest (devel) 65.9
+  and copy-safety (devel) 57.0.
+- Fix `a0ff82e6` and `94c968ea` (`.github/workflows/*`, `tests/testthat.R`,
+  `tests/testthat/ci-shard.R`, `dev/ci/check-connections.R`, their tests):
+  - The whole offline suite (NOT_CRAN=true) runs only as shards: `R CMD check` on Ubuntu release
+    under `LC_ALL=C` (4 shards, two testthat workers, serial before; with Ubuntu release's
+    `R_KEEP_PKG_SOURCE` and `_R_CHECK_THINGS_IN_OTHER_DIRS_`), on macOS (5 serial shards, GitHub's
+    macOS concurrency) and on Windows release (10 serial shards, the native fixtures in shard 1),
+    and the connection gate on Ubuntu release in UTF-8 (9 shards: `check-connections.R` runs its
+    shard's files, `ci_shard_filter(ci_shard_files())`, and compares the connection table per
+    shard; the leak proof runs in shard 1). `GPTR_CI_TEST_SHARD` shards every OS; with it unset, or
+    NOT_CRAN not "true", `tests/testthat.R` runs as before. A shard's `test_check()` uses the
+    progress reporter, so its log names each file and its time, and the shard fails unless each of
+    its files recorded a result. Shards after the first build without vignettes and check with
+    `--ignore-vignettes --no-examples` and `_R_CHECK_USE_CODETOOLS_=false` (R's code analysis, 100
+    to 150 s a check); shard 1 checks the whole package, but macOS skips the code analysis in every
+    shard, and Windows also the vignettes and examples, which its cran and oldrel-4 jobs check.
+  - The 14 required names and the ruleset are unchanged, and each name is reported by exactly one
+    job. The matrix job `gates` reports `ubuntu-latest (release)` and `connections left open`
+    (both over the connection shards), `ubuntu-latest (release, LC_ALL=C)`,
+    `macos-latest (release)` and `ubuntu-latest (devel)` (over the cran-mode job, in place of a
+    second R-devel check); Windows-check's `gate` reports `windows-latest (release)`. A gate always
+    runs, since a skipped required check counts as passing, and passes only when
+    `needs.<job>.result` is `success`, which counts the latest attempt of each matrix row; this
+    replaces D-239's status artifacts.
+  - The other rows check as CRAN does (NOT_CRAN=false, CRAN's test list, examples and vignettes,
+    `--as-cran`, a WARNING fails): `cran-check` for Ubuntu oldrel-1, oldrel-4 and release without
+    Suggests (`dependencies: '"hard"'` with rcmdcheck, testthat, knitr and rmarkdown, and
+    `_R_CHECK_FORCE_SUGGESTS_: false`, which `a0ff82e6` had dropped, so that row would have stopped
+    at "Package suggested but not available"), and windows-latest (oldrel-4)
+    (`_R_CHECK_THINGS_IN_OTHER_DIRS_=false` as before).
+  - R-devel within 20 minutes: `ubuntu-latest (devel, NOT_CRAN=false)` installs Depends, Imports,
+    rcmdcheck, testthat, knitr and rmarkdown and checks with `_R_CHECK_FORCE_SUGGESTS_: false`; R
+    reports the absent Suggests as INFO, so its NOTE rule and its 480 s budget stay. copy-safety
+    (release and devel) installs Depends, Imports, testthat and pkgload and runs
+    `testthat::test_local(filter = "copy")` in place of `devtools::test()`. What is left to build
+    takes minutes, by estimate, not duckdb's hour, so a cold cache fits.
+  - Limits: every job of the two push workflows has 20 minutes and each gate 5; every step that
+    checks or runs R has 16 (bench's 10, the leak proof 5). After a failed check step a shard prints
+    its test output so far, which check-r-package's own step does not do after a time limit. The
+    manual workflows: pkgdown's build 20 (its build step 15), Plan-gates 20 (plan-check 12),
+    callr-native-environment 20, Optional-integrations 20 (at most 12.6 measured), rscript-native
+    20 (at most 14.9), rhub 20 a job (none before; at most 9.4); Exact-tarball's producer 20 (at
+    most 7.0) and check 45 (36.5 on Windows on 2026-10-19, before D-240), while its
+    dependency-profiles keeps 300, because each profile's controller deadline of 7500 s
+    (`dev/ci/exact-profile.py`) must fire first (32.7 measured), with 10 to 20 for its network
+    installs; windows-by-file's by-file mode 150 (was 300; 84 to 87 on 2026-10-19 and 10-20), its
+    optional mode 45 and its RSS comparison 300 (its own step 255).
+- Estimates, from per-file times: Linux from the connections job's log; macOS from a local serial
+  installed-package run (FAIL 0 PASS 42243 in 1650 s) scaled to each lane's measured total;
+  Windows from the macOS times with test-console-typing.R's set to 0, the best fit to the four
+  measured Windows shards of run 41080141232 (14.0, 16.1, 16.5 and 13.3 test minutes), since its
+  pty tests skip on Windows. Each job adds its setup and the check's own steps: 3.4 minutes on
+  Linux, 4.9 on macOS, 5.4 on Windows and 2.9 for a connection shard, and a whole check in shard 1
+  about 2 to 3 more.
+  - Shard test minutes: `LC_ALL=C` 4.5 6.5 5.1 3.9; macOS 8.6 7.9 12.4 7.6 9.3; connections 7.9
+    4.2 7.5 10.0 7.0 6.1 5.5 6.9 3.1; Windows 3.7 6.3 5.2 5.5 9.4 7.6 6.5 7.1 4.6 4.2, plus 3.0 for
+    the native fixtures in shard 1.
+  - Jobs: `LC_ALL=C` 7.3 to 10.8 minutes, macOS 12.5 to 17.3, connections 6.0 to 12.9, Windows 9.6
+    to 14.8, the CRAN-mode, copy-safety and bench jobs 4 to 12 (warm); 43 jobs, 6 of them gates,
+    about 380 job-minutes against about 570.
+  - Wall clock, longest first on 20 runners: about 21 minutes when the 5 macOS jobs count toward
+    the 20, about 19 when they do not.
+  - Rebalancing: macOS's shard 3 (test-console-typing.R's 4.5 of its 12.4 test minutes) stays over
+    15 minutes. A 6th macOS shard would queue behind GitHub's 5 macOS runners, and dealing the five
+    dominant files first (console-typing, session-store, http-request, subagent-team, bridge-sh)
+    keeps the heaviest macOS shard at 11.9 to 13.1, so `ci_shard_files()` stays a plain
+    round-robin. Windows' shard 7, 17.5 minutes on the macOS weights, is about 12 on the fitted
+    ones, and 8 Windows shards would put shard 1 near 19.
+- Coverage dropped on purpose: Ubuntu R-devel, oldrel-1, oldrel-4 and release without Suggests and
+  Windows oldrel-4 run CRAN's test list, not the whole suite (without Suggests, 35 of 210 files now
+  exercise the paths for absent packages); Ubuntu release's whole suite in UTF-8 runs through
+  `devtools::test()` in the connection shards, and its `R CMD check` only under `LC_ALL=C`; R-devel
+  checks without Suggests, so its CRAN-mode check skips their tests and its 480 s budget measures
+  less than CRAN's check (Windows release's 600 s check keeps every Suggests), and copy-safety's
+  three tests that need shiny or duckdb skip in that job (every full-suite lane runs them); no
+  Windows shard runs examples, vignettes or R's code analysis, macOS runs no code analysis, and
+  shards 2 and up skip vignettes and examples; the sharded lanes build without
+  `--compact-vignettes` (the CRAN-mode jobs keep it), and the CRAN-list rows upload no snapshots;
+  the connection table is compared per shard process, not over the whole suite.
+- Tests:
+  - test-zzz.R: "each check main requires is the name of exactly one hosted job (CI-107)" expands
+    the matrices, with a negative control; "hosted CI jobs and steps are bounded and a crashed R
+    CMD check cannot pass (CI-107)" pins each job's 20 minutes (a gate 5) and the 16-minute step
+    bound; "the CI workflow mirrors CRAN ..." pins `_R_CHECK_FORCE_SUGGESTS_` false for cran-check
+    and cran-mode (red on `a0ff82e6`, where it is NULL) and the `"hard"` dependencies of cran-mode
+    and copy-safety; "each sharded lane's required context gates the latest attempt of its shards
+    (CI-107)" pins the job each gate reads; "CI shards run each test file once ..." covers
+    `ci_shard_filter()`; the CI-19 time test is replaced. test-check-connections.R: "the gate runs
+    the files its filter selects ...", red on the old gate (FAIL 1 PASS 6).
+  - Results, locally on macOS: `^zzz$` FAIL 0 PASS 179 in UTF-8 and under `LC_ALL=C LANG=C`, and
+    the same against the installed package; test-check-connections.R PASS 10; `dev/release/tests`
+    PASS 300; dev/bench/tests/test-perf.R PASS 12; lint of test-zzz.R clean; every workflow and
+    action parses (R's yaml, anchors expanded).
+  - Expanded by script, each of the 14 required names comes from exactly one job of the 43 the
+    push workflows run. Each lane's shards cover every test file once, and each shard's filter
+    selects exactly its files (Ubuntu 53, 53, 52 and 52; macOS 42 each; connections 23 or 24;
+    Windows 20 each of the 200 ordinary files). Under a stub harness `tests/testthat.R` calls
+    `test_check()` as before whenever GPTR_CI_TEST_SHARD is unset or NOT_CRAN is not "true".
+  - Stand-ins for the R-devel jobs on R 4.6.1, with a library of only the hard dependencies and
+    each job's tools: the CRAN-mode check (`NOT_CRAN=false`, `--as-cran`, CRAN's thresholds,
+    `_R_CHECK_FORCE_SUGGESTS_=false`) Status OK with 0 NOTE, the dependency check INFO, 244 s with
+    the build; `testthat::test_local(filter = "copy")` FAIL 0 SKIP 3 PASS 153 in 351 s.
+  - From `a0ff82e6`'s writer: shards 2/40 and 37/40 passed through tests/testthat.R and
+    check-connections.R, a shard holding a file-level `skip()` failed as it should, and a shard's
+    `R CMD check` with `--ignore-vignettes --no-examples` and the code analysis off gave Status OK.
+- Deviations: D-239 amended (ten Windows release shards behind `needs.shards.result`, Windows
+  oldrel-4 one check, `GPTR_CI_TEST_SHARD` on every OS).
+- Open: not yet run on GitHub. The first run confirms the estimates (its logs give per-file times
+  on every OS), macOS's heaviest shard at about 17 minutes, and that a gate re-run after "Re-run
+  failed jobs" reads the latest attempt of each shard. R-devel's `setup-r` took 7.0 and 12.5
+  minutes in two sampled runs (40444185578, 40324291531), so a slow R-devel download can still use
+  most of a 20-minute job.

@@ -6,10 +6,10 @@ and adds CI-103 and the follow-ups that the PR's checks found. PR #90 adds CI-10
 `13a917ff`), and the branch `claude/v1-fixes` from it, PR #93, adds FIX-27..FIX-34, merged and
 through six review rounds, CI-105 (contributor PR #92), FIX-35 and FIX-36, then P29 (`gptr_tailor()`
 and `gptr_coach()`: plan `plan/P29-gptr-coach.md`, log `progress/P29.md`, contract IC-83..IC-89,
-D-273..D-290), merged into #93, and the comprehensive review and fix pass (FIX-37..FIX-48, CI-106,
-D-291..D-300). Each has its record in `progress/fixes.md`, in id order, and decisions D-255, D-257,
-D-258, D-261 and D-262..D-300 and the amendments of D-188, D-211, D-233, D-243, D-244, D-245, D-251,
-D-254, D-262, D-284 and D-289 are in `DEVIATIONS.md`:
+D-273..D-290), merged into #93, the comprehensive review and fix pass (FIX-37..FIX-48, CI-106,
+D-291..D-300) and CI-107. Each has its record in `progress/fixes.md`, in id order, and decisions
+D-255, D-257, D-258, D-261 and D-262..D-300 and the amendments of D-188, D-211, D-233, D-239, D-243,
+D-244, D-245, D-251, D-254, D-262, D-284 and D-289 are in `DEVIATIONS.md`:
 
 - CI-99 (test only): `tests/testthat/setup.R` blanks every host variable that `is_secret_name()`
   accepts, in place of a fixed list of 23, so a host secret such as `CLAUDE_CODE_MESSAGING_TOKEN`
@@ -227,6 +227,13 @@ D-254, D-262, D-284 and D-289 are in `DEVIATIONS.md`:
   (FIX-39, D-296); the cheat sheet, guides, README and NEWS (FIX-47); the CI lanes' time and test
   timing bounds (CI-106); the records and the regeneration (FIX-48; D-300 records the decisions
   taken without code). F-58, the fence rule for computed paths and functions, is held back (D-297).
+- CI-107 (not yet run on GitHub): every job of `R-CMD-check.yaml` and `Windows-check.yaml` has 20
+  minutes, a gate 5. The whole offline suite runs only in gated shards (Ubuntu `LC_ALL=C` 4, macOS
+  5, the connection gate 9, Windows release 10); `ubuntu-latest (release)` gates the connection
+  shards and `ubuntu-latest (devel)` the CRAN-mode R-devel job, which, like copy-safety, installs
+  no Suggests, so a cold R-devel cache no longer builds duckdb for an hour; the other rows check
+  with CRAN's test list. About 380 job-minutes, against 570, and about 20 minutes of wall clock,
+  estimated (D-239 amended).
 
 From the PRs #78-#83 Open list these fix the test vault's fixed key list (CI-87, by CI-99), the
 writer's startup order (CI-88, CI-101), bg-1 and plan-execute not run live (FIX-21), the skipped
@@ -373,8 +380,8 @@ status: the comprehensive fix pass closed 32 rows and added 16. In short:
   token), the checkpoint baseline's classing cost, agent-9 and runtime-10.
 - Gaps: Windows, Linux, R 4.2 and R-devel only through CI; the forms and consoles L-37 names; narrow
   live evidence (L-38); no aspell here (L-39).
-- CI: the four serial lanes take 42 to 61 minutes, and the maintainer asked that no CI job run
-  longer than 20 minutes: CI-107, a CI redesign by another agent, takes it up; deadline bounds of
+- CI: CI-107's layout has not run on GitHub; its first run confirms the estimates, macOS's heaviest
+  shard (about 17 minutes) and a gate's reading of a partial re-run; deadline bounds of
   test-proc-rscript-native.R fail at loads of 300 to 400 (wall-1).
 - The maintainer's: PERM-4 (Codex's own shell in the read-only modes) and PV-4 (b): CLAUDE.md and
   AGENTS.md lines 3 and 30, whose text the ledger row prepares (DEC-57).
@@ -384,7 +391,7 @@ Remaining, in this order (F-156, DEC-59):
 1. On the final head: `dev/ci/isolated-check.R check`, the CRAN-mode `R CMD check --as-cran` under
    `env -i` and the full suite (L-27).
 2. Push, read every job until green, then rewrite PR #93's title and body to cover FIX-27..FIX-48,
-   CI-106, P29, D-262..D-300 and the checks (L-28).
+   CI-106, CI-107, P29, D-262..D-300 and the checks (L-28).
 3. Run `GPTR_LIVE_TESTS` live-coach and live-cli again, since this pass changed the fence, the hook
    and the transport; one live request at the highest reasoning effort for the 90 s idle timeout
    (F-132); the Windows job once on a host with Codex for the hook (F-59) (ledger live-9).

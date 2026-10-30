@@ -183,13 +183,14 @@ git rev-parse HEAD
 ```
 
 Expected, for both workflows: `status` `completed`, `conclusion` `success`, `headSha` equal to
-`HEAD`. The jobs: `R-CMD-check` (macOS release; Ubuntu devel, release, oldrel-1, oldrel-4),
-`no-suggests`, `c-locale` (`LC_ALL=C`), `copy-safety` (release, devel), `connections`
-(`_R_CHECK_CONNECTIONS_LEFT_OPEN_=true`) and `bench` (token ratchet; P24 appends three steps,
-including the INFRA suite under 60 s); in `Windows-check.yaml`, four shards each of Windows release
-and oldrel-4 and their gates `windows-latest (release)` and `windows-latest (oldrel-4)`. Before P07
-the `bench` job prints that `run.R` does not exist yet, and before P08 `copy-safety` prints that no
-`test-copy-*.R` suite exists. Then tag the milestone.
+`HEAD`. The jobs (CI-107): in `R-CMD-check.yaml`, the shards of `c-locale` (`LC_ALL=C`),
+`macos` and `connections` (the connection-table comparison, IC-59) with their `gates`, which also
+gate `cran-mode` as `ubuntu-latest (devel)`, `cran-check` (Ubuntu oldrel-1, oldrel-4, release
+without Suggests), `cran-mode`, `copy-safety` (release, devel) and `bench` (token ratchet; P24
+appends three steps, including the INFRA suite under 60 s); in `Windows-check.yaml`, ten shards of
+Windows release and their gate `windows-latest (release)`, `windows-latest (oldrel-4)` and `cran`.
+Before P07 the `bench` job prints that `run.R` does not exist yet, and before P08 `copy-safety`
+prints that no `test-copy-*.R` suite exists. Then tag the milestone.
 
 ### 5.2 Milestone-specific checks
 

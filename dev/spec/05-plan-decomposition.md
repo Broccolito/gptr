@@ -168,6 +168,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
     copy-safety job running `devtools::test(filter = "copy")` on R-release and R-devel, a job running
     `devtools::test()` with `_R_CHECK_CONNECTIONS_LEFT_OPEN_=true` (IC-59), and a `bench` job that installs
     rtiktoken and runs `Rscript --vanilla dev/bench/tokens/run.R --check` once P07 adds the runner (IC-73).
+    CI-107 runs the full suite in gated shards and gives every job 20 minutes (03 section 3.5).
   - R files: `aaa-state.R` (collates first: `the`, `on_load()`, `on_unload()`, the bootstrap service table, the
     redaction hook, the internal `%||%`; IC-32, IC-34), `utils-conditions.R`, `utils-hash.R`, `utils-encoding.R`,
     `utils-options.R`, `utils-paths.R`, `utils-text.R`, `utils-tokens.R`, `json-encode.R`, `json-partial.R`,
