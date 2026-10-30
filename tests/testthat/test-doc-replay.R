@@ -2920,6 +2920,27 @@ test_that("no such notice without a binding, for the bound script, record FALSE 
   expect_length(fake_requests(x$fake), 8L)
 })
 
+test_that("replay = \"record\" without write consent says once that nothing was recorded", {
+  x = local_doc_e2e(rep(list(fake_tool("r", code = "x = 1"), fake_text("x is one.")), 3L),
+                     record = NULL)
+  local_gptr_options(interactive = FALSE, quiet = FALSE)
+  f = file.path(x$root, "rec.R")
+  writeLines('s = peter("Compute x.")', f)
+  said = paste0("gptr did not record into rec.R: no write consent. Call gptr_doc(\"rec.R\") or ",
+                "set options(gptr.record = \"auto\") to record.")
+  src = function(replay) {
+    e = new.env(parent = globalenv())
+    msgs = testthat::capture_messages(gptr_source(f, replay = replay, envir = e))
+    expect_identical(e$x, 1)
+    sum(grepl(said, msgs, fixed = TRUE))
+  }
+  expect_identical(src("auto"), 0L)
+  expect_identical(src("record"), 1L)
+  expect_identical(src("record"), 0L)
+  expect_identical(readLines(f), 's = peter("Compute x.")')
+  expect_length(fake_requests(x$fake), 6L)
+})
+
 test_that("per-call record FALSE suppresses a System 1 document summary", {
   root = local_project()
   local_gptr_options(record = "auto", replay = "auto", interactive = FALSE)

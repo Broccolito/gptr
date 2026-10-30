@@ -29,6 +29,16 @@ doc_consent = function(path, ask = TRUE) {
   yes
 }
 
+#' Says once per document that gptr did not record into it for want of write consent, and how to
+#' give it (the gptr_doc() call names the document as it resolves from the working directory)
+#' @noRd
+doc_no_consent = function(path) {
+  gptr_inform(paste0("gptr did not record into ", doc_rel(path), ": no write consent. Call ",
+                     "gptr_doc(", doc_str_literal(path_rel(path, getwd())), ") or set ",
+                     "options(gptr.record = \"auto\") to record."), "notice",
+              .once = paste0("doc_consent:", path_key(path)))
+}
+
 #' Could consent still be given for a document (without asking now)? Consent exists, or a human
 #' can answer and nothing refuses it (decides whether the route keeps a site for recording)
 #' @noRd
@@ -535,8 +545,9 @@ doc_skip_undone = function(site) {
 
 #' Keep `site` in `call$doc` for recording when the call may record: not in replay mode and write
 #' consent can still be given (IC-45); else NULL. A call that cannot record because gptr_doc()
-#' bound another document says so once per document (without a binding it stays silent); the
-#' gptr_doc() it suggests names the document as gptr_doc() resolves it, from the working directory.
+#' bound another document says so once per document; without a binding it stays silent, except
+#' under replay = "record", which asked to record (doc_no_consent()). The gptr_doc() it suggests
+#' names the document as gptr_doc() resolves it, from the working directory.
 #' @noRd
 doc_keep = function(call, site, mode) {
   may = !is.null(site) && !isFALSE(call$args$opts$record) && !identical(mode, "replay")
@@ -548,6 +559,8 @@ doc_keep = function(call, site, mode) {
                        "that holds them; run gptr_doc(",
                        doc_str_literal(path_rel(site$path, getwd())), ") to record them there."),
                 "notice", .once = paste0("doc_other_binding:", path_key(site$path)))
+  } else if (may && !ok && identical(mode, "record")) {
+    doc_no_consent(site$path)
   }
   assign("doc", if (ok) site else NULL, envir = call)
 }
@@ -1992,7 +2005,9 @@ doc_catalog_prune = function() {
 #' must be available there; `model` asks a `peter()` or harness call with another one. A re-ask
 #' does not send the `## Steer:` and `## Follow-up:` lines of a turn or the text of an approval
 #' answered `n <text>`, and the new block does not keep them. Direct R lines a transcript turned
-#' off are comments and do not run.
+#' off are comments and do not run. A block is written only with write consent (see
+#' [gptr_doc()]); a call that cannot be recorded still runs, and under `replay = "record"` a
+#' notice says that gptr did not record it.
 #'
 #' Replay executes the recorded R code, including its ordinary side effects. It does not
 #' freeze package versions, supply external inputs or validate the analysis. This function

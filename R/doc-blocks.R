@@ -1880,10 +1880,7 @@ doc_upsert = function(site, block_lines, block_id = NULL) {
   fmt = doc_format_get(site$format %||% doc_format_of(site$path))
   if (is.null(fmt)) return(invisible(none))
   if (!doc_consent(site$path)) {
-    rel = doc_rel(site$path)
-    gptr_inform(paste0("gptr did not record into ", rel, ": no write consent. Call gptr_doc(\"",
-                       rel, "\") or set options(gptr.record = \"auto\") to record."), "notice",
-                .once = paste0("doc_consent:", path_key(site$path)))
+    doc_no_consent(site$path)
     return(invisible(none))
   }
   up = list(block_id = block_id %||% site$block_id, lines = as.character(block_lines),

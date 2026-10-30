@@ -58,7 +58,9 @@ them only where they differed from what it gets without them (see \code{\link[=g
 must be available there; \code{model} asks a \code{peter()} or harness call with another one. A re-ask
 does not send the \verb{## Steer:} and \verb{## Follow-up:} lines of a turn or the text of an approval
 answered \verb{n <text>}, and the new block does not keep them. Direct R lines a transcript turned
-off are comments and do not run.
+off are comments and do not run. A block is written only with write consent (see
+\code{\link[=gptr_doc]{gptr_doc()}}); a call that cannot be recorded still runs, and under \code{replay = "record"} a
+notice says that gptr did not record it.
 }
 \details{
 Replay executes the recorded R code, including its ordinary side effects. It does not
