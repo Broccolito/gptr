@@ -320,8 +320,9 @@ perm_control_guard = function(what) {
 #' such as `readLines()`, is not flagged, so `fn:` rules never match it. Allow rules
 #' never loosen plan mode and never pre-approve level-4 (critical or control) actions. In `auto` and
 #' `yolo` mode only an `fn:` rule that names the function, such as `r(fn:system)`, lets `system()`,
-#' `system2()`, `shell()` or `shell.exec()` run a command the code computes, which those modes
-#' otherwise refuse (see [gptr_security]).
+#' `system2()`, `shell()`, `shell.exec()`, `pipe()`, `processx::run()` (`r(fn:run)`) or
+#' `data.table::fread(cmd =)` run a command the code computes, which those modes otherwise refuse
+#' (see [gptr_security]).
 #'
 #' Scopes: `"session"` is this R process; `"project"` is the user-level file
 #' \file{projects/<hash>.json} in `tools::R_user_dir("gptr", "config")`, personal and never

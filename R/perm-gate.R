@@ -63,14 +63,15 @@ perm_edits_ok = function(call, risk) {
           fl$category == "file_write" & fl$path_class %in% c("workspace", "temp"))
 }
 
-#' The first of system(), system2(), shell() and shell.exec() whose command the code computes
-#' (a `dynamic` row that is no reading of a command), unless an `r(fn:)` allow rule covers all
-#' such rows (D-262); NULL when there is none
+#' The first of system(), system2(), shell(), shell.exec(), pipe(), processx::run() and
+#' data.table::fread(cmd =) whose command the code computes (a `dynamic` row that is no reading
+#' of a command), unless an `r(fn:)` allow rule covers all such rows (D-262); NULL when there is
+#' none
 #' @noRd
 perm_computed_cmd = function(call) {
   fl = call$risk$flagged
-  fl = fl[fl$fn %in% c("system", "system2", "shell", "shell.exec") & fl$category == "dynamic" &
-            rule_code_text(fl) == fl$call, , drop = FALSE]
+  fl = fl[fl$fn %in% c("system", "system2", "shell", "shell.exec", "pipe", "run", "fread") &
+            fl$category == "dynamic" & rule_code_text(fl) == fl$call, , drop = FALSE]
   if (!nrow(fl)) return(NULL)
   allow = rule_match(perm_rules_effective(), list(name = call$name, risk = risk_new(fl)))$allow
   if (!any(vapply(allow, function(r) rule_parse(r)$kind == "fn", NA))) fl$fn[1L]

@@ -973,6 +973,12 @@ test_that("only auto and yolo refuse a computed command; a literal one is gated 
   for (code in c("system('ls')", "system2('ls', '-la')")) {
     expect_identical(decide(code), rep("allow", 5L), label = code)
   }
+  # pipe(), processx::run() and data.table::fread(cmd =) run a command too (D-293)
+  for (code in c("cmd = 'ls'; con = pipe(cmd)", "cmd = 'ls'; processx::run(cmd)",
+                 "data.table::fread(cmd = cmd)")) {
+    expect_identical(decide(code)[4:5], c("deny", "deny"), label = code)
+  }
+  expect_identical(decide("con = pipe('ls')")[4:5], c("allow", "allow"))
   for (code in c("system('rm -rf build')", "system('ls | xargs rm')",
                  "system('sleep 1', wait = FALSE)", "shell.exec('report.pdf')", "peter$sh(cmd)")) {
     expect_identical(decide(code), c("deny", "ask", "ask", "allow", "allow"), label = code)
