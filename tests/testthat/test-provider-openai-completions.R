@@ -298,6 +298,20 @@ test_that("a string error, object arguments and a bare Mistral thinking string a
   expect_identical(r$message$content[[1L]]$thinking, "Hmm.")
 })
 
+test_that("two tool calls that share a stream index but not an id stay two calls", {
+  skip_on_cran()
+  call = function(id, code) {
+    chat_chunk(paste0('{"tool_calls":[{"index":0,"id":"', id, '","type":"function",',
+                      '"function":{"name":"r","arguments":"{\\"code\\":\\"', code, '\\"}"}}]}'))
+  }
+  r = chat_run(c(call("call_a", "1"), call("call_b", "2"), chat_chunk("{}", '"tool_calls"'),
+                 "[DONE]"))
+  calls = Filter(function(b) identical(b$type, "tool_call"), r$message$content)
+  expect_identical(vapply(calls, function(b) b$id, ""), c("call_a", "call_b"))
+  expect_identical(lapply(calls, function(b) b$arguments), list(list(code = "1"),
+                                                                 list(code = "2")))
+})
+
 test_that("an error chunk before any delta is handed to the transport's retry (09 2.4, 08 3.5)", {
   skip_on_cran()
   # OpenRouter's mid-stream error chunk before content: the transport may restart the request
